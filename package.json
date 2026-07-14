@@ -5,7 +5,9 @@
   "scripts": {
     "dev:web": "node tools/scripts/dev-web.mjs",
     "dev:mobile": "node tools/scripts/dev-mobile.mjs",
-    "deploy": "node tools/scripts/deploy.mjs"
+    "deploy": "node tools/scripts/deploy.mjs",
+    "deploy:staging": "node tools/scripts/deploy.mjs staging",
+    "deploy:production": "node tools/scripts/deploy.mjs production"
   },
   "private": true,
   "devDependencies": {

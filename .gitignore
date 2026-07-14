@@ -43,10 +43,17 @@ Thumbs.db
 .env.local
 .env.*.local
 
-# Deploy secrets (see deploy/*.example for templates)
-/deploy/.env
-/deploy/.env.frontend
-/deploy/.env.backend
+# Deploy secrets (see .env.deploy.*.example and tools/deploy/*.example for templates)
+.env.deploy
+.env.deploy.*
+!.env.deploy.*.example
+/tools/deploy/.env
+/tools/deploy/.env.frontend
+/tools/deploy/.env.frontend.*
+!/tools/deploy/.env.frontend.example
+/tools/deploy/.env.backend
+/tools/deploy/.env.backend.*
+!/tools/deploy/.env.backend.example
 
 .nx/cache
 .nx/workspace-data

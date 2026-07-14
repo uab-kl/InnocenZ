@@ -57,7 +57,7 @@ No image tarball is transferred — the server pulls images directly from Docker
 1. Docker Desktop installed and running.
 2. `docker login` once, with push access to the `juneyou` Docker Hub namespace.
 3. An SSH key already trusted by the server (`ssh-copy-id user@host`, or the public key already in the server's `~/.ssh/authorized_keys`).
-4. Create `.env.local` at the repo root (git-ignored):
+4. Create `.env.deploy` at the repo root (git-ignored — kept separate from `.env.local` so deploy credentials don't mix with local dev settings):
    ```
    DEPLOY_HOST=your.server.ip
    DEPLOY_USER=your-ssh-user
