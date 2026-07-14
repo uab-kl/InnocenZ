@@ -5,7 +5,7 @@
 #   docker build -f apps/backend/Dockerfile -t innocenz-backend .
 
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@10.2.1 --activate
 WORKDIR /app
 
 # ---- deps: install workspace dependencies -----------------------------
@@ -27,7 +27,7 @@ RUN pnpm nx run @org/backend:prune
 
 # ---- runner: minimal production image -----------------------------------
 FROM node:22-alpine AS runner
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@10.2.1 --activate
 WORKDIR /app
 ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nestjs

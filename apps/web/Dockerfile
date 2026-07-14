@@ -5,7 +5,7 @@
 #   docker build -f apps/web/Dockerfile -t innocenz-web .
 
 FROM node:22-alpine AS base
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@10.2.1 --activate
 WORKDIR /app
 
 # ---- deps: install workspace dependencies -----------------------------

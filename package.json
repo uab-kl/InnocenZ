@@ -2,6 +2,7 @@
   "name": "@org/source",
   "version": "0.0.0",
   "license": "MIT",
+  "packageManager": "pnpm@10.2.1",
   "scripts": {
     "dev:web": "node tools/scripts/dev-web.mjs",
     "dev:mobile": "node tools/scripts/dev-mobile.mjs",
