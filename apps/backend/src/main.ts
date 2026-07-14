@@ -40,7 +40,8 @@ async function bootstrap() {
   const app = await NestFactory.create(AppModule);
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix);
-  const requestedPort = Number(process.env.PORT) || 7777;
+  const requestedPort =
+    Number(process.env.PORT) || Number(process.env.BACKEND_PORT) || 7777;
   const port = await findFreePort(requestedPort);
   if (port !== requestedPort) {
     Logger.warn(`Port ${requestedPort} is in use, using ${port} instead.`);

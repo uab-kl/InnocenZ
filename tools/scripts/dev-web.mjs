@@ -3,14 +3,32 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { config as loadEnv } from 'dotenv';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const webRoot = path.join(root, 'apps/web');
 const isWin = process.platform === 'win32';
 const children = [];
 
-const WEB_PORT_START = 3000;
-const BACKEND_PORT_START = 7777;
+// Load root env files (later files override earlier ones). Process env wins.
+loadEnv({ path: path.join(root, '.env') });
+loadEnv({ path: path.join(root, '.env.local'), override: true });
+
+function envPort(name, fallback) {
+  const raw = process.env[name];
+  if (raw == null || raw === '') return fallback;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(`Invalid ${name}=${raw}. Expected an integer port 1-65535.`);
+  }
+  return port;
+}
+
+const WEB_PORT_START = envPort('WEB_PORT', 3000);
+const BACKEND_PORT_START = envPort('BACKEND_PORT', 7777);
+const API_URL =
+  process.env.NEXT_PUBLIC_API_URL?.trim() ||
+  `http://localhost:${BACKEND_PORT_START}/api`;
 
 const colors = {
   web: '\x1b[36m', // cyan
@@ -95,11 +113,16 @@ process.on('SIGTERM', () => shutdown(0));
 
 const webPort = await findFreePort(WEB_PORT_START);
 const backendPort = await findFreePort(BACKEND_PORT_START, new Set([webPort]));
+const publicApiUrl =
+  backendPort === BACKEND_PORT_START
+    ? API_URL
+    : `http://localhost:${backendPort}/api`;
 
 console.log(`
-${colors.bold}InnocenZ web + backend${colors.reset}
+${colors.bold}Web (frontend) + backend${colors.reset}
   ${colors.web}frontend${colors.reset}  http://localhost:${webPort}
   ${colors.backend}backend${colors.reset}   http://localhost:${backendPort}/api
+  ${colors.backend}api url${colors.reset}   ${publicApiUrl}
 `);
 
 if (webPort !== WEB_PORT_START) {
@@ -116,7 +139,10 @@ const backend = spawnProc(
   process.execPath,
   [nxCli, 'run', '@org/backend:serve', '--tui=false'],
   {
-    env: { PORT: String(backendPort) },
+    env: {
+      PORT: String(backendPort),
+      BACKEND_PORT: String(backendPort),
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   }
 );
@@ -132,6 +158,11 @@ const web = spawnProc(
   [nextCli, 'dev', '-p', String(webPort)],
   {
     cwd: webRoot,
+    env: {
+      PORT: String(webPort),
+      WEB_PORT: String(webPort),
+      NEXT_PUBLIC_API_URL: publicApiUrl,
+    },
     stdio: ['ignore', 'pipe', 'pipe'],
   }
 );
