@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "license": "MIT",
   "scripts": {
-    "dev:web": "nx run-many -t dev serve -p @org/web @org/backend --parallel",
+    "dev:web": "node tools/scripts/dev-web.mjs",
     "dev:mobile": "node tools/scripts/dev-mobile.mjs"
   },
   "private": true,
