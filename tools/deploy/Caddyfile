@@ -1,0 +1,7 @@
+innocenz.duckdns.org {
+	reverse_proxy frontend:3000
+}
+
+api.innocenz.duckdns.org {
+	reverse_proxy backend:7777
+}

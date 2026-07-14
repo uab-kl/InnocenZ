@@ -1,0 +1,2 @@
+deploy folder - 
+Pls placed in server that u want to deploy, run ./deploy every times

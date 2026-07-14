@@ -1,0 +1,22 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: apps/backend/Dockerfile
+    image: ${BACKEND_IMAGE:-juneyou/innocenz-backend:latest}
+    restart: unless-stopped
+    ports:
+      - '${BACKEND_PORT:-7777}:7777'
+
+  frontend:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.innocenz.duckdns.org/api}
+    image: ${FRONTEND_IMAGE:-juneyou/innocenz-frontend:latest}
+    restart: unless-stopped
+    ports:
+      - '${WEB_PORT:-3000}:3000'
+    depends_on:
+      - backend

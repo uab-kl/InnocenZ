@@ -1,0 +1,44 @@
+services:
+  caddy:
+    image: caddy:2-alpine
+    container_name: innocenz-caddy
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - innocenz-network
+
+  frontend:
+    image: ${FRONTEND_IMAGE}
+    container_name: innocenz-frontend
+    restart: unless-stopped
+    env_file:
+      - .env.frontend
+    environment:
+      NODE_ENV: production
+    networks:
+      - innocenz-network
+
+  backend:
+    image: ${BACKEND_IMAGE}
+    container_name: innocenz-backend
+    restart: unless-stopped
+    env_file:
+      - .env.backend
+    environment:
+      NODE_ENV: production
+    networks:
+      - innocenz-network
+
+networks:
+  innocenz-network:
+    external: true
+
+volumes:
+  caddy_data:
+  caddy_config:

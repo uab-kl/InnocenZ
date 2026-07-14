@@ -1,0 +1,9 @@
+node_modules
+**/node_modules
+**/dist
+**/.next
+.git
+.nx/cache
+.nx/workspace-data
+tmp
+*.log

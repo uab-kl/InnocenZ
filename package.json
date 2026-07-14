@@ -4,7 +4,8 @@
   "license": "MIT",
   "scripts": {
     "dev:web": "node tools/scripts/dev-web.mjs",
-    "dev:mobile": "node tools/scripts/dev-mobile.mjs"
+    "dev:mobile": "node tools/scripts/dev-mobile.mjs",
+    "deploy": "node tools/scripts/deploy.mjs"
   },
   "private": true,
   "devDependencies": {
