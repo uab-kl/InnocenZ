@@ -1,0 +1,16 @@
+diff --git a/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js b/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js
+index 81d54ad8d743fb77bb16cea9c6b6c87556351a0a..77e144d3c3a8c6603a760e0afe8e939f62978155 100644
+--- a/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js
++++ b/src/private/components/virtualview/VirtualViewExperimentalNativeComponent.js
+@@ -91,9 +91,9 @@ type VirtualViewExperimentalNativeProps = $ReadOnly<{
+   onModeChange?: ?DirectEventHandler<NativeModeChangeEvent>,
+ }>;
+ 
+-export default codegenNativeComponent<VirtualViewExperimentalNativeProps>(
++export default (codegenNativeComponent<VirtualViewExperimentalNativeProps>(
+   'VirtualViewExperimental',
+   {
+     interfaceOnly: true,
+   },
+-) as HostComponent<VirtualViewExperimentalNativeProps>;
++): HostComponent<VirtualViewExperimentalNativeProps>);

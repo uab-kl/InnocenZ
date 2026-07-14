@@ -4,7 +4,7 @@
   "license": "MIT",
   "scripts": {
     "dev:web": "nx run-many -t dev serve -p @org/web @org/backend --parallel",
-    "dev:mobile": "nx run-many -t start serve -p @org/mobile @org/backend --parallel"
+    "dev:mobile": "node tools/scripts/dev-mobile.mjs"
   },
   "private": true,
   "devDependencies": {
@@ -32,6 +32,7 @@
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
     "babel-jest": "~30.3.0",
+    "concurrently": "^10.0.3",
     "jest": "~30.3.0",
     "jest-environment-jsdom": "~30.3.0",
     "jest-environment-node": "~30.3.0",
@@ -57,7 +58,16 @@
       "nx",
       "sharp",
       "unrs-resolver"
-    ]
+    ],
+    "overrides": {
+      "react": "19.2.7",
+      "react-dom": "19.2.7",
+      "expo": "55.0.27",
+      "react-native": "0.83.6"
+    },
+    "patchedDependencies": {
+      "react-native@0.83.6": "patches/react-native@0.83.6.patch"
+    }
   },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
@@ -65,8 +75,8 @@
     "@nestjs/platform-express": "^11.0.0",
     "expo": "~55.0.26",
     "next": "~16.1.6",
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
+    "react": "19.2.7",
+    "react-dom": "19.2.7",
     "react-native": "0.83.6",
     "reflect-metadata": "^0.2.0",
     "rxjs": "^7.8.0"
