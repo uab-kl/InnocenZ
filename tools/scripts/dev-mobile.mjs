@@ -60,7 +60,7 @@ if (!mobileOnly) {
   const nxCli = resolveBin('nx', 'dist', 'bin', 'nx.js');
   const backend = spawnProc(
     process.execPath,
-    [nxCli, 'run', '@org/backend:serve', '--tui=false'],
+    [nxCli, 'run', 'innocenz-backend:dev', '--tui=false'],
     { stdio: ['ignore', 'pipe', 'pipe'] }
   );
 
