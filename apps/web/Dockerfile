@@ -23,7 +23,11 @@ RUN pnpm install --frozen-lockfile
 # dependency tree (not the whole workspace's combined node_modules) into an
 # isolated directory.
 FROM base AS builder
+# This workspace uses node-linker=hoisted (see .npmrc), so pnpm materializes
+# both a root node_modules and a per-package one (with .bin shims like
+# vite) — both must be carried over from the deps stage.
 COPY --from=deps /app/node_modules ./node_modules
+COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
 # VITE_* vars are inlined into the client bundle at build time, so the
 # backend's public URL must be known here, not just at container run time.
