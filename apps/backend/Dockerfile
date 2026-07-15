@@ -13,7 +13,9 @@ FROM base AS deps
 COPY pnpm-lock.yaml pnpm-workspace.yaml package.json ./
 COPY apps/web/package.json apps/web/package.json
 COPY apps/backend/package.json apps/backend/package.json
+COPY apps/mobile/package.json apps/mobile/package.json
 COPY packages ./packages
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile
 
 # ---- builder: build + prune to a self-contained, deployable dist folder --
@@ -33,6 +35,7 @@ ENV NODE_ENV=production
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nestjs
 
 COPY --from=builder /app/apps/backend/dist .
+COPY --from=builder /app/patches ./patches
 RUN pnpm install --prod --frozen-lockfile
 
 USER nestjs

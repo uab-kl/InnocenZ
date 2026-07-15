@@ -83,6 +83,17 @@
       }
     }
   },
+  "pnpm": {
+    "overrides": {
+      "react": "19.2.7",
+      "react-dom": "19.2.7",
+      "expo": "55.0.27",
+      "react-native": "0.83.6"
+    },
+    "patchedDependencies": {
+      "react-native@0.83.6": "patches/react-native@0.83.6.patch"
+    }
+  },
   "dependencies": {
     "@nestjs/common": "^11.0.0",
     "@nestjs/core": "^11.0.0",

@@ -11,7 +11,9 @@ import { config as loadEnv } from 'dotenv';
 // never needs a git checkout of this repo, only Docker + `docker login`
 // access to the same Docker Hub namespace.
 //
-// Usage: pnpm deploy staging | pnpm deploy production
+// Usage: pnpm deploy:staging | pnpm deploy:production
+// (`pnpm deploy` alone is reserved by pnpm itself, so this can't be
+// `pnpm deploy <env>` — use the colon-suffixed scripts instead.)
 // Prerequisite: `docker login` on this machine (image push needs it).
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
@@ -53,6 +55,18 @@ const NEXT_PUBLIC_API_URL =
 const deployDir = path.join(root, 'tools/deploy');
 const sshTarget = `${DEPLOY_USER}@${DEPLOY_HOST}`;
 
+// Every deploy also gets an immutable `<env>-<sha>` tag alongside the
+// floating `<env>` tag, so a bad deploy can be rolled back to a known
+// image instead of whatever last happened to be pushed to the floating tag.
+const GIT_SHA = execFileSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: root })
+  .toString()
+  .trim();
+function versionTagFor(image) {
+  return `${image.slice(0, image.lastIndexOf(':'))}:${envName}-${GIT_SHA}`;
+}
+const FRONTEND_VERSION_IMAGE = versionTagFor(FRONTEND_IMAGE);
+const BACKEND_VERSION_IMAGE = versionTagFor(BACKEND_IMAGE);
+
 // tools/deploy/.env.(frontend|backend).<env> hold real values/secrets and are
 // git-ignored; fall back to the committed .example templates on first deploy.
 function resolveDeployFile(baseName) {
@@ -72,8 +86,13 @@ run('docker', ['compose', 'build'], {
   env: { ...process.env, NEXT_PUBLIC_API_URL, FRONTEND_IMAGE, BACKEND_IMAGE },
 });
 
+run('docker', ['tag', FRONTEND_IMAGE, FRONTEND_VERSION_IMAGE]);
+run('docker', ['tag', BACKEND_IMAGE, BACKEND_VERSION_IMAGE]);
+
 run('docker', ['push', FRONTEND_IMAGE]);
+run('docker', ['push', FRONTEND_VERSION_IMAGE]);
 run('docker', ['push', BACKEND_IMAGE]);
+run('docker', ['push', BACKEND_VERSION_IMAGE]);
 
 const generatedEnvContent = `FRONTEND_IMAGE=${FRONTEND_IMAGE}\nBACKEND_IMAGE=${BACKEND_IMAGE}\n`;
 const generatedEnvPath = path.join(os.tmpdir(), `innocenz-deploy-${envName}.env`);
@@ -110,7 +129,7 @@ try {
   run('ssh', ['-p', DEPLOY_SSH_PORT, sshTarget, remoteCommand]);
 
   console.log(
-    `\nDeployed [${envName}].\n  web     https://${DEPLOY_DOMAIN}\n  backend https://api.${DEPLOY_DOMAIN}/api`
+    `\nDeployed [${envName}] @ ${GIT_SHA}.\n  web     https://${DEPLOY_DOMAIN}\n  backend https://api.${DEPLOY_DOMAIN}/api\n  images  ${FRONTEND_VERSION_IMAGE}, ${BACKEND_VERSION_IMAGE}`
   );
 } finally {
   fs.rmSync(generatedEnvPath, { force: true });
