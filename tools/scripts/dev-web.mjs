@@ -1,6 +1,5 @@
 import { createServer } from 'node:net';
 import { spawn } from 'node:child_process';
-import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { config as loadEnv } from 'dotenv';
@@ -25,9 +24,9 @@ function envPort(name, fallback) {
 }
 
 const WEB_PORT_START = envPort('WEB_PORT', 3000);
-const BACKEND_PORT_START = envPort('BACKEND_PORT', 7777);
+const BACKEND_PORT_START = envPort('BACKEND_PORT', 7780);
 const API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.trim() ||
+  process.env.VITE_API_URL?.trim() ||
   `http://localhost:${BACKEND_PORT_START}/api`;
 
 const colors = {
@@ -60,16 +59,6 @@ async function findFreePort(startPort, reserved = new Set()) {
     port += 1;
   }
   return port;
-}
-
-function resolveBin(packageName, ...binParts) {
-  const candidate = path.join(root, 'node_modules', packageName, ...binParts);
-  if (!fs.existsSync(candidate)) {
-    throw new Error(
-      `Cannot find ${packageName} CLI at ${candidate}. Run \`pnpm install\` from the repo root, then retry.`
-    );
-  }
-  return candidate;
 }
 
 function spawnProc(command, args, options = {}) {
@@ -132,18 +121,17 @@ if (backendPort !== BACKEND_PORT_START) {
   console.log(`Port ${BACKEND_PORT_START} is in use, using ${backendPort} for backend.`);
 }
 
-const nxCli = resolveBin('nx', 'dist', 'bin', 'nx.js');
-const nextCli = resolveBin('next', 'dist', 'bin', 'next');
-
 const backend = spawnProc(
-  process.execPath,
-  [nxCli, 'run', '@org/backend:serve', '--tui=false'],
+  'pnpm',
+  ['--filter', 'innocenz-backend', 'run', 'dev'],
   {
     env: {
+      NODE_ENV: process.env.NODE_ENV ?? 'development',
       PORT: String(backendPort),
       BACKEND_PORT: String(backendPort),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: isWin,
   }
 );
 backend.stdout?.on('data', (chunk) => prefixOutput('backend', colors.backend, chunk, 'stdout'));
@@ -154,16 +142,17 @@ backend.on('exit', (code) => {
 });
 
 const web = spawnProc(
-  process.execPath,
-  [nextCli, 'dev', '-p', String(webPort)],
+  'pnpm',
+  ['--filter', 'innocenz-admin', 'run', 'dev', '--', '--port', String(webPort)],
   {
     cwd: webRoot,
     env: {
       PORT: String(webPort),
       WEB_PORT: String(webPort),
-      NEXT_PUBLIC_API_URL: publicApiUrl,
+      VITE_API_URL: publicApiUrl,
     },
     stdio: ['ignore', 'pipe', 'pipe'],
+    shell: isWin,
   }
 );
 web.stdout?.on('data', (chunk) => prefixOutput('web', colors.web, chunk, 'stdout'));

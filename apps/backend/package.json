@@ -1,108 +1,55 @@
 {
-  
-  "name": "@org/backend",
-  "version": "0.0.1",
+  "name": "innocenz-backend",
   "private": true,
-  "nx": {
-    "targets": {
-      "build": {
-        "executor": "nx:run-commands",
-        "options": {
-          "command": "webpack-cli build",
-          "env": {
-            "NODE_ENV": "production"
-          },
-          "cwd": "apps/backend"
-        },
-        "configurations": {
-          "development": {
-            "env": {
-              "NODE_ENV": "development"
-            }
-          }
-        }
-      },
-      "prune-lockfile": {
-        "dependsOn": [
-          "build"
-        ],
-        "cache": true,
-        "executor": "@nx/js:prune-lockfile",
-        "outputs": [
-          "{workspaceRoot}/apps/backend/dist/package.json",
-          "{workspaceRoot}/apps/backend/dist/pnpm-lock.yaml"
-        ],
-        "options": {
-          "buildTarget": "build"
-        }
-      },
-      "copy-workspace-modules": {
-        "dependsOn": [
-          "build"
-        ],
-        "cache": true,
-        "outputs": [
-          "{workspaceRoot}/apps/backend/dist/workspace_modules"
-        ],
-        "executor": "@nx/js:copy-workspace-modules",
-        "options": {
-          "buildTarget": "build"
-        }
-      },
-      "prune": {
-        "dependsOn": [
-          "prune-lockfile",
-          "copy-workspace-modules"
-        ],
-        "executor": "nx:noop"
-      },
-      "serve": {
-        "continuous": true,
-        "executor": "@nx/js:node",
-        "defaultConfiguration": "development",
-        "dependsOn": [
-          "build"
-        ],
-        "options": {
-          "buildTarget": "@org/backend:build",
-          "runBuildTargetDependencies": false
-        },
-        "configurations": {
-          "development": {
-            "buildTarget": "@org/backend:build:development"
-          },
-          "production": {
-            "buildTarget": "@org/backend:build:production"
-          }
-        }
-      },
-      "test": {
-        "options": {
-          "passWithNoTests": true
-        }
-      }
-    }
-  },
-  "pnpm": {
-    "overrides": {
-      "react": "19.2.7",
-      "react-dom": "19.2.7",
-      "expo": "55.0.27",
-      "react-native": "0.83.6"
-    },
-    "patchedDependencies": {
-      "react-native@0.83.6": "patches/react-native@0.83.6.patch"
-    }
-  },
-  "dependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
-    "@nestjs/platform-express": "^11.0.0",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.0",
-    "tslib": "^2.3.0"
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/main.ts src/**/*.ts",
+    "start": "node dist/main.js",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --minify --format=esm --outfile=dist/main.js --packages=external --alias:@=./src --alias:graphql/error=graphql/error/index.js",
+    "migrate": "drizzle-kit generate && drizzle-kit migrate --config=drizzle.migrate.config.ts && tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
+    "migrate:deploy": "drizzle-kit migrate --config=drizzle.migrate.config.ts && tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
+    "db:reset": "node scripts/reset-migrations.mjs && drizzle-kit migrate --config=drizzle.migrate.config.ts && tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
+    "db:seed": "tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
+    "initialize": "node scripts/setup-env.mjs",
+    "test": "vitest"
   },
   "devDependencies": {
-    "@nestjs/testing": "^11.0.0"
+    "@types/bcrypt": "^6.0.0",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^2.1.0",
+    "@types/node": "^25.0.9",
+    "@types/pg": "^8.16.0",
+    "drizzle-kit": "^0.31.8",
+    "esbuild": "^0.27.2",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3",
+    "vite-tsconfig-paths": "^6.0.4",
+    "vitest": "^4.0.17"
+  },
+  "dependencies": {
+    "@apollo/server": "^5.3.0",
+    "@as-integrations/express5": "^1.1.2",
+    "@graphql-tools/merge": "^9.1.7",
+    "@graphql-tools/schema": "^10.0.31",
+    "@graphql-tools/utils": "^11.0.0",
+    "@t3-oss/env-core": "^0.13.10",
+    "bcrypt": "^6.0.0",
+    "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
+    "drizzle-orm": "^0.45.1",
+    "express": "^5.2.1",
+    "graphql": "^16.12.0",
+    "helmet": "^8.1.0",
+    "jsonwebtoken": "^9.0.3",
+    "multer": "^2.2.0",
+    "pg": "^8.17.2",
+    "winston": "^3.19.0",
+    "zod": "^4.3.5"
+  },
+  "_moduleAliases": {
+    "@": "src"
   }
 }

@@ -1,0 +1,1 @@
+ALTER TYPE "main"."billing_cycle" ADD VALUE 'weekly' BEFORE 'monthly';

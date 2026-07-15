@@ -50,7 +50,10 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.frontend_tags }}
           build-args: |
-            NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL_STAGING }}
+            VITE_API_URL=${{ secrets.VITE_API_URL_STAGING }}
+            VITE_GRAPHQL_ENDPOINT=${{ secrets.VITE_GRAPHQL_ENDPOINT_STAGING }}
+            VITE_OUTLET_ROLE_ID=${{ secrets.VITE_OUTLET_ROLE_ID_STAGING }}
+            VITE_AGENCY_ROLE_ID=${{ secrets.VITE_AGENCY_ROLE_ID_STAGING }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 

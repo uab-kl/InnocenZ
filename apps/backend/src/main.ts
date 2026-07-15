@@ -1,55 +1,260 @@
-/**
- * This is not a production server yet!
- * This is only a minimal backend to get started.
- */
+import 'dotenv/config';
 
-import { createServer } from 'net';
-import { Logger } from '@nestjs/common';
-import { NestFactory } from '@nestjs/core';
-import { AppModule } from './app/app.module';
+import http from 'node:http';
+import path from 'node:path';
+import { spawn } from 'node:child_process';
+import express from 'express';
+import helmet from 'helmet';
+import cors from 'cors';
+import { ApolloServer } from '@apollo/server';
+import { ApolloServerPluginLandingPageLocalDefault } from '@apollo/server/plugin/landingPage/default';
+import { expressMiddleware } from '@as-integrations/express5';
+import { makeExecutableSchema } from '@graphql-tools/schema';
 
-function canBind(port: number, host: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    const server = createServer();
-    server.once('error', () => resolve(false));
-    server.once('listening', () => server.close(() => resolve(true)));
-    server.listen(port, host);
+import { typeDefs, resolvers } from '@/graphql';
+import { createContext, GraphQLContext } from '@/graphql/context';
+import { auditLogPlugin } from '@/graphql/audit.plugin';
+import { applyDirectives } from '@/graphql/directives';
+import v1Router from '@/router/v1.js';
+import { requestLoggerMiddleware } from './middlewares/request-logger';
+import { platformAuditMiddleware } from './middlewares/platform-audit';
+import { env } from './env';
+import { logger } from './util/logger';
+import { initAdmin } from './scripts/init-admin';
+import { initRoles } from './scripts/init-roles';
+import { seedRbac } from './scripts/seed-rbac';
+import { ensureProfileImageDir } from './util/profile-image';
+import { registerAllAuditOldDataFetchers } from './features/audit-log/audit-log.wrapper';
+
+ensureProfileImageDir();
+registerAllAuditOldDataFetchers();
+
+const app = express();
+
+const frontendOrigin = env.FRONTEND_URL.replace(/\/en\/?$/, '').replace(/\/$/, '');
+
+const corsOptions: cors.CorsOptions = {
+  origin: (origin, callback) => {
+    if (!origin) {
+      callback(null, true);
+      return;
+    }
+
+    const allowedOrigins = new Set([
+      frontendOrigin,
+      'http://localhost:3000',
+      'http://localhost:3001',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:3001',
+      'https://innocenz.duckdns.org',
+      'https://studio.apollographql.com',
+    ]);
+
+    if (allowedOrigins.has(origin)) {
+      callback(null, true);
+      return;
+    }
+
+    if (
+      env.NODE_ENV === 'development' &&
+      /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin)
+    ) {
+      callback(null, true);
+      return;
+    }
+
+    callback(new Error(`CORS blocked for origin: ${origin}`));
+  },
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin'],
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          'https://apollo-server-landing-page.cdn.apollographql.com',
+          'https://embeddable-sandbox.cdn.apollographql.com',
+          'https://cdn.jsdelivr.net',
+        ],
+        styleSrc: [
+          "'self'",
+          "'unsafe-inline'",
+          'https://fonts.googleapis.com',
+          'https://apollo-server-landing-page.cdn.apollographql.com',
+          'https://cdn.jsdelivr.net',
+        ],
+        imgSrc: ["'self'", 'data:', 'https://apollo-server-landing-page.cdn.apollographql.com'],
+        fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+        frameSrc: [
+          "'self'",
+          'https://sandbox.embed.apollographql.com',
+          'https://explorer.embed.apollographql.com',
+        ],
+        connectSrc: ["'self'", 'https://*.apollographql.com'],
+      },
+    },
+    crossOriginEmbedderPolicy: false,
+  }),
+);
+app.use(requestLoggerMiddleware);
+app.use('/img', express.static(path.join(process.cwd(), 'public', 'img')));
+app.use(express.json());
+app.use(express.urlencoded({ extended: true }));
+app.use(platformAuditMiddleware);
+
+app.use('/api/v1', v1Router);
+
+const PORT = env.PORT;
+const MIGRATE_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
+
+function cleanCliOutput(value?: string): string | undefined {
+  if (!value) return undefined;
+  let s = value.replace(/\r/g, '\n');
+  s = s
+    .replace(/\x1B\[[0-?]*[ -/]*[@-~]/g, '')
+    .replace(/\x1B\][^\x07]*(?:\x07|\x1B\\)/g, '')
+    .replace(/\x1B[@-Z\\-_]/g, '');
+  s = s
+    .split('\n')
+    .map((line) => line.trimEnd())
+    .join('\n')
+    .trim();
+  return s.length ? s : undefined;
+}
+
+async function runMigrations(): Promise<void> {
+  const drizzleKit = path.join(process.cwd(), 'node_modules', 'drizzle-kit', 'bin.cjs');
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [drizzleKit, 'migrate', '--config', 'drizzle.migrate.config.ts'],
+        {
+          env: { ...process.env, CI: 'true' },
+          stdio: ['ignore', 'pipe', 'pipe'],
+        },
+      );
+
+      let stdout = '';
+      let stderr = '';
+
+      child.stdout?.on('data', (chunk) => {
+        stdout += String(chunk);
+        if (stdout.length > MIGRATE_MAX_BUFFER_BYTES) {
+          stdout = stdout.slice(-MIGRATE_MAX_BUFFER_BYTES);
+        }
+      });
+
+      child.stderr?.on('data', (chunk) => {
+        stderr += String(chunk);
+        if (stderr.length > MIGRATE_MAX_BUFFER_BYTES) {
+          stderr = stderr.slice(-MIGRATE_MAX_BUFFER_BYTES);
+        }
+      });
+
+      child.on('error', reject);
+      child.on('close', (code) => {
+        if (code === 0) return resolve();
+        const error = new Error(`Migration command failed with exit code ${code}`) as Error & {
+          stdout?: string;
+          stderr?: string;
+        };
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      });
+    });
+    logger.info('Migrations completed successfully');
+  } catch (error) {
+    const e = error as NodeJS.ErrnoException & { stdout?: string; stderr?: string };
+    logger.warn('Migrations did not complete cleanly', {
+      message: e.message,
+      stdout: cleanCliOutput(e.stdout),
+      stderr: cleanCliOutput(e.stderr),
+    });
+  }
+}
+
+async function startApolloServer(): Promise<void> {
+  let schema = makeExecutableSchema({ typeDefs, resolvers });
+  schema = applyDirectives(schema);
+
+  const apolloServer = new ApolloServer<GraphQLContext>({
+    schema,
+    introspection: true,
+    plugins: [
+      auditLogPlugin(),
+      ApolloServerPluginLandingPageLocalDefault({
+        embed: true,
+        includeCookies: true,
+      }),
+    ],
+    formatError: (formattedError) => {
+      logger.error('[GraphQL Error]', {
+        message: formattedError.message,
+        code: formattedError.extensions?.code,
+        path: formattedError.path,
+      });
+
+      return {
+        message: formattedError.message,
+        extensions: {
+          code: formattedError.extensions?.code,
+        },
+      };
+    },
   });
-}
 
-// A port can appear free on one bind scope (0.0.0.0) while another process
-// holds it on another (127.0.0.1), which causes silent connection resets
-// instead of a clean "port in use" error — so both are checked.
-async function isPortFree(port: number): Promise<boolean> {
-  const [wildcardFree, loopbackFree] = await Promise.all([
-    canBind(port, '0.0.0.0'),
-    canBind(port, '127.0.0.1'),
-  ]);
-  return wildcardFree && loopbackFree;
-}
+  await apolloServer.start();
+  logger.info('Apollo Server started');
 
-async function findFreePort(startPort: number): Promise<number> {
-  let port = startPort;
-  while (!(await isPortFree(port))) {
-    port += 1;
-  }
-  return port;
-}
-
-async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  const globalPrefix = 'api';
-  app.setGlobalPrefix(globalPrefix);
-  const requestedPort =
-    Number(process.env.PORT) || Number(process.env.BACKEND_PORT) || 7777;
-  const port = await findFreePort(requestedPort);
-  if (port !== requestedPort) {
-    Logger.warn(`Port ${requestedPort} is in use, using ${port} instead.`);
-  }
-  await app.listen(port);
-  Logger.log(
-    `🚀 Application is running on: http://localhost:${port}/${globalPrefix}`,
+  app.use(
+    '/graphql',
+    cors<cors.CorsRequest>(corsOptions),
+    express.json(),
+    expressMiddleware(apolloServer, {
+      context: createContext,
+    }),
   );
+
+  logger.info('GraphQL endpoint available at /graphql');
 }
 
-bootstrap();
+async function bootstrap(): Promise<void> {
+  await startApolloServer();
+
+  const server = http.createServer(app);
+
+  server.listen(Number(PORT), () => {
+    logger.info(`Server is listening on port ${PORT}...`);
+  });
+
+  void (async () => {
+    if (env.NODE_ENV === 'production') {
+      logger.info('Running migrations...');
+      await runMigrations();
+    }
+
+    try {
+      await initRoles();
+      await seedRbac();
+      await initAdmin();
+    } catch (error) {
+      logger.error('Failed to initialize seed data', error);
+    }
+  })();
+}
+
+bootstrap().catch((error) => {
+  logger.error('Failed to start server', error);
+  process.exit(1);
+});

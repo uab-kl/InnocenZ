@@ -13,22 +13,16 @@
   "private": true,
   "devDependencies": {
     "@expo/cli": "~55.0.11",
-    "@nestjs/schematics": "^11.0.0",
-    "@nestjs/testing": "^11.0.0",
     "@nx/expo": "^23.0.1",
     "@nx/jest": "23.0.1",
     "@nx/js": "23.0.1",
-    "@nx/nest": "^23.0.1",
-    "@nx/next": "^23.0.1",
     "@nx/node": "23.0.1",
     "@nx/web": "23.0.1",
-    "@nx/webpack": "23.0.1",
     "@swc-node/register": "1.11.1",
     "@swc/cli": "~0.8.0",
     "@swc/core": "1.15.8",
     "@swc/helpers": "0.5.18",
     "@swc/jest": "~0.2.38",
-    "@tailwindcss/postcss": "^4.3.2",
     "@testing-library/dom": "10.4.0",
     "@testing-library/react": "16.3.0",
     "@types/jest": "~30.0.0",
@@ -45,19 +39,18 @@
     "metro-resolver": "~0.83.0",
     "nx": "23.0.1",
     "prettier": "^3.8.1",
-    "tailwindcss": "^4.3.2",
     "ts-jest": "^29.4.0",
     "ts-node": "10.9.1",
     "tslib": "^2.3.0",
-    "typescript": "~6.0.3",
-    "webpack": "^5.101.3",
-    "webpack-cli": "^7.0.0",
-    "webpack-dev-server": "^5.2.1"
+    "typescript": "~6.0.3"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
+      "@apollo/protobufjs",
       "@parcel/watcher",
       "@swc/core",
+      "bcrypt",
+      "esbuild",
       "less",
       "nx",
       "sharp",
@@ -74,15 +67,9 @@
     }
   },
   "dependencies": {
-    "@nestjs/common": "^11.0.0",
-    "@nestjs/core": "^11.0.0",
-    "@nestjs/platform-express": "^11.0.0",
     "expo": "~55.0.26",
-    "next": "~16.1.6",
     "react": "19.2.7",
     "react-dom": "19.2.7",
-    "react-native": "0.83.6",
-    "reflect-metadata": "^0.2.0",
-    "rxjs": "^7.8.0"
+    "react-native": "0.83.6"
   }
 }

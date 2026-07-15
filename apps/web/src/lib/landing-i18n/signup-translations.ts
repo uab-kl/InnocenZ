@@ -1,0 +1,415 @@
+export interface SignupDisclaimerCopy {
+	title: string
+	body: string
+}
+
+export interface SignupTranslations {
+	meta: {
+		title: string
+		description: string
+	}
+	aside: {
+		description: string
+		rightsReserved: string
+	}
+	backToLogin: string
+	heading: {
+		line1: string
+		line2: string
+		sub: string
+	}
+	sections: {
+		accountType: string
+		companyInfo: string
+		contactInfo: string
+		loginCredentials: string
+		packageEnrollment: string
+		branding: string
+		acknowledgements: string
+		terms: string
+	}
+	accountTypes: {
+		outlet: { title: string; description: string }
+		agency: { title: string; description: string }
+	}
+	fields: {
+		companyName: { label: string; placeholder: string }
+		companyRegistrationOld: { label: string; placeholder: string }
+		companyRegistrationNew: { label: string; placeholder: string }
+		companyAddress: { label: string; placeholder: string }
+		personInCharge: { label: string; placeholder: string }
+		phoneNum: { label: string; placeholder: string }
+		email: { label: string; placeholder: string; description: string }
+		loginEmail: { label: string; placeholder: string; description: string }
+		password: { label: string; placeholder: string }
+		confirmPassword: { label: string; placeholder: string }
+		package: { label: string; placeholder: string }
+		logo: { label: string; uploadTitle: string; uploadHint: string }
+	}
+	acknowledgements: {
+		personalInfo: SignupDisclaimerCopy
+		declarationOfTruth: SignupDisclaimerCopy
+		informationSharing: SignupDisclaimerCopy
+		terms: SignupDisclaimerCopy
+		termsCheckboxPrefix: string
+		termsCheckboxLink: string
+		done: string
+	}
+	buttons: {
+		createAccount: string
+		creating: string
+	}
+	footer: {
+		alreadyHaveAccount: string
+		signIn: string
+	}
+	errors: {
+		registrationFailed: string
+		internalServerError: string
+		unexpected: string
+	}
+	validation: {
+		companyNameRequired: string
+		companyNameMax: string
+		companyRegistrationOldRequired: string
+		companyRegistrationNewRequired: string
+		registrationNumberMax: string
+		companyAddressRequired: string
+		companyAddressMax: string
+		personInChargeRequired: string
+		personInChargeMax: string
+		phoneRequired: string
+		phoneMax: string
+		emailRequired: string
+		emailInvalid: string
+		loginEmailRequired: string
+		loginEmailInvalid: string
+		passwordRequired: string
+		passwordMin: string
+		confirmPasswordRequired: string
+		passwordsMismatch: string
+		packageRequired: string
+		logoRequired: string
+		logoMaxSize: string
+		logoImageType: string
+		ackPersonalInfo: string
+		ackDeclarationOfTruth: string
+		ackInformationSharing: string
+		acceptTerms: string
+	}
+}
+
+export const signupTranslations: Record<'en' | 'zh', SignupTranslations> = {
+	en: {
+		meta: {
+			title: 'Sign up — InnocenZ',
+			description:
+				'Create an InnocenZ account as an Outlet or PR Agency.',
+		},
+		aside: {
+			description:
+				'Join InnocenZ as an Outlet or PR Agency. Complete your company profile, choose a package, and start managing rosters, shifts, and payroll from one secure portal.',
+			rightsReserved: 'All rights reserved.',
+		},
+		backToLogin: 'Back to login',
+		heading: {
+			line1: 'Create your',
+			line2: 'account',
+			sub: 'Sign up as an Outlet or PR Agency with your company details and preferred package.',
+		},
+		sections: {
+			accountType: 'Account type',
+			companyInfo: 'Company information',
+			contactInfo: 'Contact information',
+			loginCredentials: 'Login credentials',
+			packageEnrollment: 'Package enrollment',
+			branding: 'Branding',
+			acknowledgements: 'Acknowledgements',
+			terms: 'Terms and Conditions',
+		},
+		accountTypes: {
+			outlet: {
+				title: 'Outlet',
+				description:
+					'Venue operators managing floor staff, shifts, and nightly sales.',
+			},
+			agency: {
+				title: 'PR Agency',
+				description:
+					'PR agencies managing rosters, workforce, and payroll across venues.',
+			},
+		},
+		fields: {
+			companyName: {
+				label: 'Company name',
+				placeholder: 'Registered company name',
+			},
+			companyRegistrationOld: {
+				label: 'Old company registration number',
+				placeholder: 'e.g. 123456-A',
+			},
+			companyRegistrationNew: {
+				label: 'New company registration number',
+				placeholder: 'e.g. 202401012345',
+			},
+			companyAddress: {
+				label: 'Company address',
+				placeholder: 'Full registered business address',
+			},
+			personInCharge: {
+				label: 'Person in charge',
+				placeholder: 'Full name of primary contact',
+			},
+			phoneNum: {
+				label: 'Contact number',
+				placeholder: '+60123456789',
+			},
+			email: {
+				label: 'Email',
+				placeholder: 'contact@company.com',
+				description: 'Business contact email for account correspondence.',
+			},
+			loginEmail: {
+				label: 'Email login ID',
+				placeholder: 'you@company.com',
+				description: 'This email will be used to sign in to your portal.',
+			},
+			password: {
+				label: 'Password',
+				placeholder: 'Minimum 8 characters',
+			},
+			confirmPassword: {
+				label: 'Confirm password',
+				placeholder: 'Re-enter your password',
+			},
+			package: {
+				label: 'Package to enroll',
+				placeholder: 'Select a pricing package',
+			},
+			logo: {
+				label: 'Outlet / agency image or logo',
+				uploadTitle: 'Upload logo or venue image',
+				uploadHint: 'PNG, JPG, or WEBP up to 2 MB · Required',
+			},
+		},
+		acknowledgements: {
+			personalInfo: {
+				title: 'Personal Information Disclaimer',
+				body: 'Your company registration documents, business contact details, and registered address are stored securely on InnocenZ. Only InnocenZ compliance staff and authorized platform operators supporting your outlet or agency account can access this data — other outlets, agencies, and PR professionals cannot view your private business records.',
+			},
+			declarationOfTruth: {
+				title: 'Declaration of Truth',
+				body: 'I declare that all company information and documents submitted on behalf of this outlet or agency are true, current, and accurate. I understand that false or misleading statements may result in account suspension or removal from the platform.',
+			},
+			informationSharing: {
+				title: 'Outlet & Agency Information Sharing',
+				body: 'Your outlet or agency profile may be shared with linked PR agencies and workforce participants on InnocenZ for rostering, shift coordination, payroll, and compliance purposes. Information shared is limited to what is required to operate bookings, shifts, and payment vouchers on the platform.',
+			},
+			terms: {
+				title: 'Terms & Conditions',
+				body: 'I agree to InnocenZ platform rules, shift sealing, commission transparency, and dispute processes as described in the InnocenZ Outlet & Agency terms. Continued use of the platform constitutes acceptance of updates to these terms.',
+			},
+			termsCheckboxPrefix: 'I have read and agree to the',
+			termsCheckboxLink: 'Terms & Conditions',
+			done: 'Done',
+		},
+		buttons: {
+			createAccount: 'Create account',
+			creating: 'Creating account…',
+		},
+		footer: {
+			alreadyHaveAccount: 'Already have an account?',
+			signIn: 'Sign in',
+		},
+		errors: {
+			registrationFailed: 'Registration failed. Please try again.',
+			internalServerError: 'Internal server error.',
+			unexpected: 'An unexpected error occurred. Please try again.',
+		},
+		validation: {
+			companyNameRequired: 'Company name is required',
+			companyNameMax: 'Company name must be 150 characters or fewer',
+			companyRegistrationOldRequired:
+				'Old company registration number is required',
+			companyRegistrationNewRequired:
+				'New company registration number is required',
+			registrationNumberMax: 'Registration number is too long',
+			companyAddressRequired: 'Company address is required',
+			companyAddressMax: 'Company address must be 500 characters or fewer',
+			personInChargeRequired: 'Person in charge is required',
+			personInChargeMax: 'Name must be 100 characters or fewer',
+			phoneRequired: 'Please enter a valid contact number',
+			phoneMax: 'Contact number is too long',
+			emailRequired: 'Email is required',
+			emailInvalid: 'Please enter a valid email address',
+			loginEmailRequired: 'Email login ID is required',
+			loginEmailInvalid: 'Please enter a valid email login ID',
+			passwordRequired: 'Password is required',
+			passwordMin: 'Password must be at least 8 characters',
+			confirmPasswordRequired: 'Please confirm your password',
+			passwordsMismatch: 'Passwords do not match',
+			packageRequired: 'Please select a package',
+			logoRequired: 'Outlet / agency image or logo is required',
+			logoMaxSize: 'Logo must be 2 MB or smaller',
+			logoImageType: 'Logo must be an image file',
+			ackPersonalInfo: 'Please acknowledge the Personal Information Disclaimer',
+			ackDeclarationOfTruth: 'Please acknowledge the Declaration of Truth',
+			ackInformationSharing:
+				'Please acknowledge Outlet & Agency Information Sharing',
+			acceptTerms: 'You must accept the Terms & Conditions',
+		},
+	},
+	zh: {
+		meta: {
+			title: '注册 — InnocenZ',
+			description: '创建 InnocenZ 门店或 PR 代理账户。',
+		},
+		aside: {
+			description:
+				'以门店或 PR 代理身份加入 InnocenZ。完善公司资料、选择套餐，并在一个安全门户中管理排班、班次与薪资。',
+			rightsReserved: '版权所有。',
+		},
+		backToLogin: '返回登录',
+		heading: {
+			line1: '创建您的',
+			line2: '账户',
+			sub: '以门店或 PR 代理身份注册，填写公司资料并选择套餐。',
+		},
+		sections: {
+			accountType: '账户类型',
+			companyInfo: '公司信息',
+			contactInfo: '联系信息',
+			loginCredentials: '登录凭据',
+			packageEnrollment: '套餐注册',
+			branding: '品牌标识',
+			acknowledgements: '确认事项',
+			terms: '条款与条件',
+		},
+		accountTypes: {
+			outlet: {
+				title: '门店',
+				description: '管理现场员工、班次与每晚营收的门店运营方。',
+			},
+			agency: {
+				title: 'PR 代理',
+				description: '跨门店管理排班、人力与薪资的 PR 代理。',
+			},
+		},
+		fields: {
+			companyName: {
+				label: '公司名称',
+				placeholder: '注册公司名称',
+			},
+			companyRegistrationOld: {
+				label: '旧公司注册号',
+				placeholder: '例如 123456-A',
+			},
+			companyRegistrationNew: {
+				label: '新公司注册号',
+				placeholder: '例如 202401012345',
+			},
+			companyAddress: {
+				label: '公司地址',
+				placeholder: '完整注册营业地址',
+			},
+			personInCharge: {
+				label: '负责人',
+				placeholder: '主要联系人全名',
+			},
+			phoneNum: {
+				label: '联系电话',
+				placeholder: '+60123456789',
+			},
+			email: {
+				label: '电子邮箱',
+				placeholder: 'contact@company.com',
+				description: '用于账户通信的业务联系邮箱。',
+			},
+			loginEmail: {
+				label: '登录邮箱',
+				placeholder: 'you@company.com',
+				description: '此邮箱将用于登录您的门户。',
+			},
+			password: {
+				label: '密码',
+				placeholder: '至少 8 个字符',
+			},
+			confirmPassword: {
+				label: '确认密码',
+				placeholder: '再次输入密码',
+			},
+			package: {
+				label: '注册套餐',
+				placeholder: '选择定价套餐',
+			},
+			logo: {
+				label: '门店 / 代理图片或标志',
+				uploadTitle: '上传标志或门店图片',
+				uploadHint: 'PNG、JPG 或 WEBP，最大 2 MB · 必填',
+			},
+		},
+		acknowledgements: {
+			personalInfo: {
+				title: '个人信息免责声明',
+				body: '您的公司注册文件、业务联系方式和注册地址均安全存储于 InnocenZ。仅 InnocenZ 合规人员及获授权支持您门店或代理账户的平台运营人员可访问此数据——其他门店、代理及 PR 专业人士无法查看您的私人商业记录。',
+			},
+			declarationOfTruth: {
+				title: '真实性声明',
+				body: '本人声明代表此门店或代理提交的所有公司信息和文件均真实、最新且准确。本人理解虚假或误导性陈述可能导致账户暂停或从平台移除。',
+			},
+			informationSharing: {
+				title: '门店与代理信息共享',
+				body: '您的门店或代理资料可能会与 InnocenZ 上关联的 PR 代理和劳动力参与者共享，用于排班、班次协调、薪资及合规目的。共享信息仅限于运营预订、班次和支付凭证所需范围。',
+			},
+			terms: {
+				title: '条款与条件',
+				body: '本人同意 InnocenZ 平台规则、班次封存、佣金透明及争议处理流程，如 InnocenZ 门店与代理条款所述。继续使用平台即表示接受条款更新。',
+			},
+			termsCheckboxPrefix: '本人已阅读并同意',
+			termsCheckboxLink: '条款与条件',
+			done: '完成',
+		},
+		buttons: {
+			createAccount: '创建账户',
+			creating: '正在创建账户…',
+		},
+		footer: {
+			alreadyHaveAccount: '已有账户？',
+			signIn: '登录',
+		},
+		errors: {
+			registrationFailed: '注册失败，请重试。',
+			internalServerError: '服务器内部错误。',
+			unexpected: '发生意外错误，请重试。',
+		},
+		validation: {
+			companyNameRequired: '公司名称为必填项',
+			companyNameMax: '公司名称不能超过 150 个字符',
+			companyRegistrationOldRequired: '旧公司注册号为必填项',
+			companyRegistrationNewRequired: '新公司注册号为必填项',
+			registrationNumberMax: '注册号过长',
+			companyAddressRequired: '公司地址为必填项',
+			companyAddressMax: '公司地址不能超过 500 个字符',
+			personInChargeRequired: '负责人为必填项',
+			personInChargeMax: '姓名不能超过 100 个字符',
+			phoneRequired: '请输入有效的联系电话',
+			phoneMax: '联系电话过长',
+			emailRequired: '电子邮箱为必填项',
+			emailInvalid: '请输入有效的电子邮箱',
+			loginEmailRequired: '登录邮箱为必填项',
+			loginEmailInvalid: '请输入有效的登录邮箱',
+			passwordRequired: '密码为必填项',
+			passwordMin: '密码至少需要 8 个字符',
+			confirmPasswordRequired: '请确认密码',
+			passwordsMismatch: '两次输入的密码不一致',
+			packageRequired: '请选择套餐',
+			logoRequired: '门店 / 代理图片或标志为必填项',
+			logoMaxSize: '标志文件不能超过 2 MB',
+			logoImageType: '标志必须是图片文件',
+			ackPersonalInfo: '请确认个人信息免责声明',
+			ackDeclarationOfTruth: '请确认真实性声明',
+			ackInformationSharing: '请确认门店与代理信息共享',
+			acceptTerms: '您必须接受条款与条件',
+		},
+	},
+}

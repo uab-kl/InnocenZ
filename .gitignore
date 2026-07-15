@@ -70,6 +70,14 @@ Thumbs.db
 .next
 out
 
+# Vite / TanStack Start / Nitro (apps/web)
+.nitro
+.tanstack
+.output
+.vinxi
+__unconfig*
+.env.staging
+
 test-output
 
 # Expo

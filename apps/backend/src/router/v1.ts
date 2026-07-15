@@ -1,0 +1,42 @@
+import express from 'express';
+import { authRoutes } from '@/features/auth/index.js';
+import { healthRoutes } from '@/features/health/index.js';
+import userRoutes from '@/features/user/user.routes.js';
+import { rbacRoutes } from '@/features/rbac/index.js';
+import subscriptionRoutes from '@/features/subscription/subscription.routes.js';
+import subscriptionFeatureRoutes from '@/features/subscription-feature/subscription-feature.routes.js';
+import limitTypeRoutes from '@/features/limit-type/limit-type.routes.js';
+import agencyRoutes from '@/features/agency/agency.routes.js';
+import outletRoutes from '@/features/outlet/outlet.routes.js';
+import commissionConfigRoutes from '@/features/commission/commission-config.routes.js';
+import platformConfigRoutes from '@/features/platform-config/platform-config.routes.js';
+import memberSubscriptionRoutes from '@/features/member-subscription/member-subscription.routes.js';
+import outletTransactionRoutes from '@/features/outlet-transaction/outlet-transaction.routes.js';
+import adminRequestRoutes from '@/features/admin-request/admin-request.routes.js';
+import specialServiceRoutes from '@/features/special-service/special-service.routes.js';
+import { platformAuditMiddleware } from '@/middlewares/platform-audit.js';
+import authenticateJWT from '@/middlewares/authenticate-jwt.js';
+import { requireAdmin } from '@/middlewares/require-role.js';
+
+const v1Router = express.Router();
+
+v1Router.use(platformAuditMiddleware);
+
+v1Router.use('/health', healthRoutes);
+v1Router.use('/auth', authRoutes);
+v1Router.use(authenticateJWT);
+v1Router.use('/user', userRoutes);
+v1Router.use('/rbac', rbacRoutes);
+v1Router.use('/subscription', subscriptionRoutes);
+v1Router.use('/subscription-feature', subscriptionFeatureRoutes);
+v1Router.use('/limit-type', limitTypeRoutes);
+v1Router.use('/agency', agencyRoutes);
+v1Router.use('/outlet', outletRoutes);
+v1Router.use('/commission-config', commissionConfigRoutes);
+v1Router.use('/platform-config', requireAdmin, platformConfigRoutes);
+v1Router.use('/member-subscription', memberSubscriptionRoutes);
+v1Router.use('/outlet-transaction', outletTransactionRoutes);
+v1Router.use('/admin-request', adminRequestRoutes);
+v1Router.use('/special-service', specialServiceRoutes);
+
+export default v1Router;

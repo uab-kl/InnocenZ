@@ -1,0 +1,94 @@
+import { MainSchema } from '@/db/db.schema';
+import { numeric, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { OutletTable } from '@/features/outlet/outlet.model.js';
+import { AgencyTable } from '@/features/agency/agency.model.js';
+
+export const specialServiceCategoryValues = [
+  'transportation',
+  'delivery',
+  'wardrobe',
+  'makeup',
+  'vip_escort',
+  'uniform',
+  'emergency_cover',
+  'training',
+  'others',
+] as const;
+export type SpecialServiceCategory = (typeof specialServiceCategoryValues)[number];
+export const specialServiceCategoryEnum = MainSchema.enum(
+  'special_service_category',
+  specialServiceCategoryValues,
+);
+
+export const specialServiceStatusValues = [
+  'open',
+  'assigned',
+  'in_progress',
+  'completed',
+  'cancelled',
+] as const;
+export type SpecialServiceStatus = (typeof specialServiceStatusValues)[number];
+export const specialServiceStatusEnum = MainSchema.enum(
+  'special_service_status',
+  specialServiceStatusValues,
+);
+
+export const specialServiceInitiatedByValues = ['outlet', 'agency'] as const;
+export type SpecialServiceInitiatedBy = (typeof specialServiceInitiatedByValues)[number];
+export const specialServiceInitiatedByEnum = MainSchema.enum(
+  'special_service_initiated_by',
+  specialServiceInitiatedByValues,
+);
+
+export const specialServiceAdminAcceptedValues = [
+  'n_a',
+  'pending',
+  'accepted',
+  'declined',
+] as const;
+export type SpecialServiceAdminAccepted = (typeof specialServiceAdminAcceptedValues)[number];
+export const specialServiceAdminAcceptedEnum = MainSchema.enum(
+  'special_service_admin_accepted',
+  specialServiceAdminAcceptedValues,
+);
+
+// Special-service orders / job postings. Outlet-initiated posts go live immediately;
+// agency-initiated posts require admin accept/decline before they proceed.
+export const SpecialServiceTable = MainSchema.table('special_service', {
+  id: uuid('id').defaultRandom().notNull().primaryKey(),
+  outletId: uuid('outlet_id').references(() => OutletTable.id, { onDelete: 'cascade' }),
+  outletName: varchar('outlet_name', { length: 255 }).notNull(),
+  title: varchar('title', { length: 255 }).notNull(),
+  category: specialServiceCategoryEnum('category').notNull().default('others'),
+  description: text('description'),
+  budget: numeric('budget', { precision: 12, scale: 2 }),
+  currency: varchar('currency', { length: 8 }).notNull().default('MYR'),
+  status: specialServiceStatusEnum('status').notNull().default('open'),
+  initiatedBy: specialServiceInitiatedByEnum('initiated_by').notNull().default('outlet'),
+  adminAccepted: specialServiceAdminAcceptedEnum('admin_accepted').notNull().default('n_a'),
+  postingAgencyId: uuid('posting_agency_id').references(() => AgencyTable.id, {
+    onDelete: 'set null',
+  }),
+  postingAgencyName: varchar('posting_agency_name', { length: 255 }),
+  assignedAgencyId: uuid('assigned_agency_id').references(() => AgencyTable.id, {
+    onDelete: 'set null',
+  }),
+  assignedAgencyName: varchar('assigned_agency_name', { length: 255 }),
+  scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: varchar('created_by').notNull(),
+  updatedBy: varchar('updated_by').notNull(),
+});
+
+export type SpecialService = typeof SpecialServiceTable.$inferSelect;
+export type SpecialServiceInsertType = typeof SpecialServiceTable.$inferInsert;
+
+export type SpecialServiceFilter = {
+  outletId?: string;
+  status?: SpecialServiceStatus;
+  category?: SpecialServiceCategory;
+  assignedAgencyId?: string;
+  initiatedBy?: SpecialServiceInitiatedBy;
+  adminAccepted?: SpecialServiceAdminAccepted;
+};
