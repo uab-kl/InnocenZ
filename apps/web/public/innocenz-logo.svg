@@ -1,0 +1,30 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 520 300" fill="none" role="img" aria-label="InnocenZ — Work · Flow · Elegance">
+  <defs>
+    <linearGradient id="izLogoGold" x1="260" y1="18" x2="260" y2="108" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6d98f"/>
+      <stop offset="0.55" stop-color="#d8ab57"/>
+      <stop offset="1" stop-color="#a9762b"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Petal crown mark -->
+  <g transform="translate(215 16) scale(0.75)" stroke="url(#izLogoGold)" stroke-width="2.6" stroke-linejoin="round" stroke-linecap="round" fill="none">
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(-36 60 95)"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(-18 60 95)"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(18 60 95)"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(36 60 95)"/>
+  </g>
+
+  <!-- Wordmark -->
+  <text x="260" y="205" text-anchor="middle"
+        font-family="'Playfair Display', 'Cormorant Garamond', Georgia, 'Times New Roman', serif"
+        font-size="62" font-weight="700" letter-spacing="1" fill="#e6c785">
+    InnocenZ
+  </text>
+
+  <!-- Tagline -->
+  <text x="260" y="242" text-anchor="middle"
+        font-family="'Sora', 'Manrope', system-ui, sans-serif"
+        font-size="14" letter-spacing="7" fill="#b08f57">WORK · FLOW · ELEGANCE</text>
+</svg>

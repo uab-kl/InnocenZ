@@ -1,4 +1,4 @@
-import { Key, LayoutGrid, Shield } from 'lucide-react'
+import { Key, LayoutGrid, Shield } from 'lucide-react';
 
 export const rbacSections = [
   {
@@ -22,11 +22,11 @@ export const rbacSections = [
     href: '/admin/rbac/module',
     icon: LayoutGrid,
   },
-] as const
+] as const;
 
-export type RbacSection = (typeof rbacSections)[number]
-export type RbacSectionKey = RbacSection['key']
+export type RbacSection = (typeof rbacSections)[number];
+export type RbacSectionKey = RbacSection['key'];
 
 export function getRbacSectionByKey(key: string) {
-  return rbacSections.find((section) => section.key === key)
+  return rbacSections.find((section) => section.key === key);
 }

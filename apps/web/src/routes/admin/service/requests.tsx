@@ -1,10 +1,10 @@
 import {
-	keepPreviousData,
-	useMutation,
-	useQuery,
-	useQueryClient,
-} from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
 import {
 	AlertCircle,
 	CheckCircle2,
@@ -60,11 +60,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import {
-	formatDate,
-	formatNumber,
-	formatPrice,
-	getErrorMessage,
-} from "@/lib/utils";
+  formatDate,
+  formatNumber,
+  formatPrice,
+  getErrorMessage,
+} from '@/lib/utils';
 import {
 	type AdminRequest,
 	type AdminRequestStatus,
@@ -80,24 +80,24 @@ import {
 import { fetchSubscriptions } from "@/services/subscription";
 import type { Subscription } from "@/services/subscription";
 
-export const Route = createFileRoute("/admin/service/requests")({
-	component: RequestsPage,
-	head: () => ({
-		meta: [{ title: "Plan Request — Innocenz Admin" }],
-	}),
+export const Route = createFileRoute('/admin/service/requests')({
+  component: RequestsPage,
+  head: () => ({
+    meta: [{ title: 'Plan Request — Innocenz Admin' }],
+  }),
 });
 
 const PAGE_SIZE = 10;
 
-type StatusFilter = "all" | AdminRequestStatus;
-type RoleFilter = "all" | SubscriberType;
-type TypeFilter = "all" | AdminRequestType;
+type StatusFilter = 'all' | AdminRequestStatus;
+type RoleFilter = 'all' | SubscriberType;
+type TypeFilter = 'all' | AdminRequestType;
 
 const requestTypeLabels: Record<AdminRequestType, string> = {
-	pos_integration_quote: "POS quote",
-	plan_change: "Plan change",
-	contact: "Contact",
-	other: "Other",
+  pos_integration_quote: 'POS quote',
+  plan_change: 'Plan change',
+  contact: 'Contact',
+  other: 'Other',
 };
 
 const statusBadgeColors: Record<AdminRequestStatus, string> = {
@@ -189,8 +189,8 @@ function showFixedPlanPrice(
 }
 
 function RequestsPage() {
-	const { logout } = useAuth();
-	const queryClient = useQueryClient();
+  const { logout } = useAuth();
+  const queryClient = useQueryClient();
 
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
@@ -206,19 +206,19 @@ function RequestsPage() {
 	const requestedDatesParam = datesToQueryParam(requestedDates);
 	if (requestedDatesParam) queryParams.dates = requestedDatesParam;
 
-	const requestsQuery = useQuery({
-		queryKey: ["admin-requests", queryParams],
-		queryFn: () => fetchAdminRequests(queryParams, logout),
-		placeholderData: keepPreviousData,
-		staleTime: 30_000,
-		retry: 2,
-	});
+  const requestsQuery = useQuery({
+    queryKey: ['admin-requests', queryParams],
+    queryFn: () => fetchAdminRequests(queryParams, logout),
+    placeholderData: keepPreviousData,
+    staleTime: 30_000,
+    retry: 2,
+  });
 
-	const summaryQuery = useQuery({
-		queryKey: ["admin-requests", "negotiated-summary"],
-		queryFn: () => fetchNegotiatedSummary(logout),
-		staleTime: 30_000,
-	});
+  const summaryQuery = useQuery({
+    queryKey: ['admin-requests', 'negotiated-summary'],
+    queryFn: () => fetchNegotiatedSummary(logout),
+    staleTime: 30_000,
+  });
 
 	// Resolve currentPlanId -> plan (name + fixed price) for each request row.
 	const plansQuery = useQuery({
@@ -231,19 +231,19 @@ function RequestsPage() {
 		(plansQuery.data?.data ?? []).map((plan) => [plan.id, plan]),
 	);
 
-	const contactedMutation = useMutation({
-		mutationFn: (id: string) => markRequestContacted(id, logout),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
-			toast.success(response.message || "Marked as contacted");
-		},
-		onError: (error) => {
-			toast.error(
-				toMutationError(error, "Failed to mark as contacted")?.message ??
-					"Failed to mark as contacted",
-			);
-		},
-	});
+  const contactedMutation = useMutation({
+    mutationFn: (id: string) => markRequestContacted(id, logout),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['admin-requests'] });
+      toast.success(response.message || 'Marked as contacted');
+    },
+    onError: (error) => {
+      toast.error(
+        toMutationError(error, 'Failed to mark as contacted')?.message ??
+          'Failed to mark as contacted',
+      );
+    },
+  });
 
 	const resolveMutation = useMutation({
 		mutationFn: ({
@@ -298,26 +298,26 @@ function RequestsPage() {
 		resolveMutation.isPending ||
 		updateFieldsMutation.isPending;
 
-	const summaryCards = [
-		{
-			key: "outlet",
-			label: "Outlet quotes",
-			total: summary?.byRole.outlet.total ?? 0,
-			count: summary?.byRole.outlet.count ?? 0,
-		},
-		{
-			key: "agency",
-			label: "Agency quotes",
-			total: summary?.byRole.agency.total ?? 0,
-			count: summary?.byRole.agency.count ?? 0,
-		},
-		{
-			key: "total",
-			label: "Total negotiated",
-			total: summary?.totals.total ?? 0,
-			count: summary?.totals.count ?? 0,
-		},
-	];
+  const summaryCards = [
+    {
+      key: 'outlet',
+      label: 'Outlet quotes',
+      total: summary?.byRole.outlet.total ?? 0,
+      count: summary?.byRole.outlet.count ?? 0,
+    },
+    {
+      key: 'agency',
+      label: 'Agency quotes',
+      total: summary?.byRole.agency.total ?? 0,
+      count: summary?.byRole.agency.count ?? 0,
+    },
+    {
+      key: 'total',
+      label: 'Total negotiated',
+      total: summary?.totals.total ?? 0,
+      count: summary?.totals.count ?? 0,
+    },
+  ];
 
 	return (
 		<PageShell>
@@ -327,21 +327,21 @@ function RequestsPage() {
 				description="Plan requests from outlets and agencies. Plan-change rows show the previous plan. Only outlet POS quotes and agency Custom-tier changes are negotiable — set the quote after Resolve. All other plan changes use the fixed previous-plan price."
 			/>
 
-			<div className="grid gap-4 sm:grid-cols-3">
-				{summaryCards.map((card) => (
-					<Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
-						<CardHeader className="pb-2">
-							<CardDescription>{card.label}</CardDescription>
-							<CardTitle className="text-2xl">
-								RM {formatPrice(card.total)}
-							</CardTitle>
-						</CardHeader>
-						<CardContent className="text-xs text-muted-foreground">
-							{formatNumber(card.count)} resolved with a price
-						</CardContent>
-					</Card>
-				))}
-			</div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        {summaryCards.map((card) => (
+          <Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
+            <CardHeader className="pb-2">
+              <CardDescription>{card.label}</CardDescription>
+              <CardTitle className="text-2xl">
+                RM {formatPrice(card.total)}
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground">
+              {formatNumber(card.count)} resolved with a price
+            </CardContent>
+          </Card>
+        ))}
+      </div>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
@@ -369,26 +369,26 @@ function RequestsPage() {
 								}}
 							/>
 
-							<Select
-								value={typeFilter}
-								onValueChange={(value) => {
-									setTypeFilter(value as TypeFilter);
-									setPage(1);
-								}}
-							>
-								<SelectTrigger className="sm:w-40" aria-label="Filter by type">
-									<SelectValue placeholder="All Types" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All Types</SelectItem>
-									<SelectItem value="pos_integration_quote">
-										POS quote
-									</SelectItem>
-									<SelectItem value="plan_change">Plan change</SelectItem>
-									<SelectItem value="contact">Contact</SelectItem>
-									<SelectItem value="other">Other</SelectItem>
-								</SelectContent>
-							</Select>
+              <Select
+                value={typeFilter}
+                onValueChange={(value) => {
+                  setTypeFilter(value as TypeFilter);
+                  setPage(1);
+                }}
+              >
+                <SelectTrigger className="sm:w-40" aria-label="Filter by type">
+                  <SelectValue placeholder="All Types" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Types</SelectItem>
+                  <SelectItem value="pos_integration_quote">
+                    POS quote
+                  </SelectItem>
+                  <SelectItem value="plan_change">Plan change</SelectItem>
+                  <SelectItem value="contact">Contact</SelectItem>
+                  <SelectItem value="other">Other</SelectItem>
+                </SelectContent>
+              </Select>
 
 							<Select
 								value={statusFilter}
@@ -586,53 +586,53 @@ function RequestsPage() {
 						</Table>
 					</div>
 
-					{pagination && pagination.totalCount > 0 && (
-						<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-							<div>
-								Showing{" "}
-								<span className="font-medium">
-									{formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
-								</span>{" "}
-								-{" "}
-								<span className="font-medium">
-									{formatNumber(
-										Math.min(
-											pagination.page * PAGE_SIZE,
-											pagination.totalCount,
-										),
-									)}
-								</span>{" "}
-								of{" "}
-								<span className="font-medium">
-									{formatNumber(pagination.totalCount)}
-								</span>{" "}
-								requests
-							</div>
-							<div className="flex items-center gap-2">
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={!pagination.hasPrevPage || requestsQuery.isFetching}
-									onClick={() => setPage((value) => value - 1)}
-								>
-									Previous
-								</Button>
-								<span>
-									Page {pagination.page} of {pagination.totalPages}
-								</span>
-								<Button
-									variant="outline"
-									size="sm"
-									disabled={!pagination.hasNextPage || requestsQuery.isFetching}
-									onClick={() => setPage((value) => value + 1)}
-								>
-									Next
-								</Button>
-							</div>
-						</div>
-					)}
-				</CardContent>
-			</Card>
+          {pagination && pagination.totalCount > 0 && (
+            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+              <div>
+                Showing{' '}
+                <span className="font-medium">
+                  {formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
+                </span>{' '}
+                -{' '}
+                <span className="font-medium">
+                  {formatNumber(
+                    Math.min(
+                      pagination.page * PAGE_SIZE,
+                      pagination.totalCount,
+                    ),
+                  )}
+                </span>{' '}
+                of{' '}
+                <span className="font-medium">
+                  {formatNumber(pagination.totalCount)}
+                </span>{' '}
+                requests
+              </div>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!pagination.hasPrevPage || requestsQuery.isFetching}
+                  onClick={() => setPage((value) => value - 1)}
+                >
+                  Previous
+                </Button>
+                <span>
+                  Page {pagination.page} of {pagination.totalPages}
+                </span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!pagination.hasNextPage || requestsQuery.isFetching}
+                  onClick={() => setPage((value) => value + 1)}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
 			<Sheet
 				open={editRequest != null}

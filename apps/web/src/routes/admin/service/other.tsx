@@ -1,10 +1,10 @@
 import {
-	keepPreviousData,
-	useMutation,
-	useQuery,
-	useQueryClient,
-} from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query';
+import { createFileRoute } from '@tanstack/react-router';
 import {
 	AlertCircle,
 	CheckCircle2,
@@ -64,83 +64,83 @@ import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
-	adminApproveJob,
-	adminDeclineJob,
-	fetchAdminPendingJobs,
-	fetchSpecialServiceSummary,
-	fetchSpecialServices,
-	type SpecialService,
-	type SpecialServiceCategory,
-	type SpecialServiceInitiatedBy,
-	type SpecialServiceStatus,
-	type SpecialServicesQueryParams,
-	type UpdateSpecialServiceInput,
-	updateSpecialService,
-	updateSpecialServiceStatus,
-} from "@/services/special-service";
+  adminApproveJob,
+  adminDeclineJob,
+  fetchAdminPendingJobs,
+  fetchSpecialServiceSummary,
+  fetchSpecialServices,
+  type SpecialService,
+  type SpecialServiceCategory,
+  type SpecialServiceInitiatedBy,
+  type SpecialServiceStatus,
+  type SpecialServicesQueryParams,
+  type UpdateSpecialServiceInput,
+  updateSpecialService,
+  updateSpecialServiceStatus,
+} from '@/services/special-service';
 
-export const Route = createFileRoute("/admin/service/other")({
-	component: SpecialServicesPage,
-	head: () => ({
-		meta: [{ title: "Jobs & Special Services — Innocenz Admin" }],
-	}),
+export const Route = createFileRoute('/admin/service/other')({
+  component: SpecialServicesPage,
+  head: () => ({
+    meta: [{ title: 'Jobs & Special Services — Innocenz Admin' }],
+  }),
 });
 
 const PAGE_SIZE = 10;
 
-type ViewMode = "all" | "pending_review";
-type StatusFilter = "all" | SpecialServiceStatus;
-type CategoryFilter = "all" | SpecialServiceCategory;
-type SourceFilter = "all" | SpecialServiceInitiatedBy;
+type ViewMode = 'all' | 'pending_review';
+type StatusFilter = 'all' | SpecialServiceStatus;
+type CategoryFilter = 'all' | SpecialServiceCategory;
+type SourceFilter = 'all' | SpecialServiceInitiatedBy;
 
 const STATUSES: SpecialServiceStatus[] = [
-	"open",
-	"assigned",
-	"in_progress",
-	"completed",
-	"cancelled",
+  'open',
+  'assigned',
+  'in_progress',
+  'completed',
+  'cancelled',
 ];
 
 const CATEGORIES: SpecialServiceCategory[] = [
-	"transportation",
-	"delivery",
-	"wardrobe",
-	"makeup",
-	"vip_escort",
-	"uniform",
-	"emergency_cover",
-	"training",
-	"others",
+  'transportation',
+  'delivery',
+  'wardrobe',
+  'makeup',
+  'vip_escort',
+  'uniform',
+  'emergency_cover',
+  'training',
+  'others',
 ];
 
 const categoryLabels: Record<SpecialServiceCategory, string> = {
-	transportation: "Transportation",
-	delivery: "Deliveries",
-	wardrobe: "Wardrobe & styling",
-	makeup: "Makeup & grooming",
-	vip_escort: "VIP escort",
-	uniform: "Uniform & documents",
-	emergency_cover: "Emergency cover",
-	training: "Training top-up",
-	others: "Others",
+  transportation: 'Transportation',
+  delivery: 'Deliveries',
+  wardrobe: 'Wardrobe & styling',
+  makeup: 'Makeup & grooming',
+  vip_escort: 'VIP escort',
+  uniform: 'Uniform & documents',
+  emergency_cover: 'Emergency cover',
+  training: 'Training top-up',
+  others: 'Others',
 };
 
 const statusLabels: Record<SpecialServiceStatus, string> = {
-	open: "Open",
-	assigned: "Assigned",
-	in_progress: "In progress",
-	completed: "Completed",
-	cancelled: "Cancelled",
+  open: 'Open',
+  assigned: 'Assigned',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
 };
 
 const statusBadgeColors: Record<SpecialServiceStatus, string> = {
-	open: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
-	assigned: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
-	in_progress:
-		"border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
-	completed:
-		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
-	cancelled: "border-muted-foreground/30 bg-muted text-muted-foreground",
+  open: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
+  assigned: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400',
+  in_progress:
+    'border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender',
+  completed:
+    'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
+  cancelled: 'border-muted-foreground/30 bg-muted text-muted-foreground',
 };
 
 const sourceNameOf = (record: SpecialService) =>
@@ -151,9 +151,17 @@ const sourceNameOf = (record: SpecialService) =>
 const formatBudget = (budget: string | null) =>
 	budget != null && budget.trim() !== "" ? `RM ${budget}` : "—";
 
+const sourceNameOf = (record: SpecialService) =>
+	record.initiatedBy === "agency"
+		? record.postingAgencyName || ""
+		: record.outletName;
+
+const formatBudget = (budget: string | null) =>
+	budget != null && budget.trim() !== "" ? `RM ${budget}` : "—";
+
 function SpecialServicesPage() {
-	const { logout } = useAuth();
-	const queryClient = useQueryClient();
+  const { logout } = useAuth();
+  const queryClient = useQueryClient();
 
 	const [viewMode, setViewMode] = useState<ViewMode>("all");
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -196,69 +204,69 @@ function SpecialServicesPage() {
 		retry: 2,
 	});
 
-	const summaryQuery = useQuery({
-		queryKey: ["special-services", "summary"],
-		queryFn: () => fetchSpecialServiceSummary(logout),
-		staleTime: 30_000,
-	});
+  const summaryQuery = useQuery({
+    queryKey: ['special-services', 'summary'],
+    queryFn: () => fetchSpecialServiceSummary(logout),
+    staleTime: 30_000,
+  });
 
-	const pendingCountQuery = useQuery({
-		queryKey: ["special-services", "admin-pending", "count"],
-		queryFn: () => fetchAdminPendingJobs({ page: 1, pageSize: 1 }, logout),
-		staleTime: 30_000,
-	});
+  const pendingCountQuery = useQuery({
+    queryKey: ['special-services', 'admin-pending', 'count'],
+    queryFn: () => fetchAdminPendingJobs({ page: 1, pageSize: 1 }, logout),
+    staleTime: 30_000,
+  });
 
-	const statusMutation = useMutation({
-		mutationFn: ({
-			id,
-			status,
-		}: {
-			id: string;
-			status: SpecialServiceStatus;
-		}) => updateSpecialServiceStatus(id, status, logout),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			toast.success(response.message || "Status updated");
-		},
-		onError: (error) => {
-			toast.error(
-				toMutationError(error, "Failed to update status")?.message ??
-					"Failed to update status",
-			);
-		},
-	});
+  const statusMutation = useMutation({
+    mutationFn: ({
+      id,
+      status,
+    }: {
+      id: string;
+      status: SpecialServiceStatus;
+    }) => updateSpecialServiceStatus(id, status, logout),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['special-services'] });
+      toast.success(response.message || 'Status updated');
+    },
+    onError: (error) => {
+      toast.error(
+        toMutationError(error, 'Failed to update status')?.message ??
+          'Failed to update status',
+      );
+    },
+  });
 
-	const approveMutation = useMutation({
-		mutationFn: (id: string) => adminApproveJob(id, logout),
-		onMutate: (id) => setActionId(id),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			toast.success(response.message || "Job posting approved");
-		},
-		onError: (error) => {
-			toast.error(
-				toMutationError(error, "Failed to approve job")?.message ??
-					"Failed to approve job",
-			);
-		},
-		onSettled: () => setActionId(null),
-	});
+  const approveMutation = useMutation({
+    mutationFn: (id: string) => adminApproveJob(id, logout),
+    onMutate: (id) => setActionId(id),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['special-services'] });
+      toast.success(response.message || 'Job posting approved');
+    },
+    onError: (error) => {
+      toast.error(
+        toMutationError(error, 'Failed to approve job')?.message ??
+          'Failed to approve job',
+      );
+    },
+    onSettled: () => setActionId(null),
+  });
 
-	const declineMutation = useMutation({
-		mutationFn: (id: string) => adminDeclineJob(id, logout),
-		onMutate: (id) => setActionId(id),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			toast.success(response.message || "Job posting declined");
-		},
-		onError: (error) => {
-			toast.error(
-				toMutationError(error, "Failed to decline job")?.message ??
-					"Failed to decline job",
-			);
-		},
-		onSettled: () => setActionId(null),
-	});
+  const declineMutation = useMutation({
+    mutationFn: (id: string) => adminDeclineJob(id, logout),
+    onMutate: (id) => setActionId(id),
+    onSuccess: (response) => {
+      queryClient.invalidateQueries({ queryKey: ['special-services'] });
+      toast.success(response.message || 'Job posting declined');
+    },
+    onError: (error) => {
+      toast.error(
+        toMutationError(error, 'Failed to decline job')?.message ??
+          'Failed to decline job',
+      );
+    },
+    onSettled: () => setActionId(null),
+  });
 
 	const fieldsMutation = useMutation({
 		mutationFn: ({
@@ -278,18 +286,18 @@ function SpecialServicesPage() {
 		},
 	});
 
-	const records = servicesQuery.data?.data ?? [];
-	const pagination = servicesQuery.data?.pagination;
-	const showLoading = servicesQuery.isLoading && records.length === 0;
-	const summary = summaryQuery.data?.data;
-	const pendingCount = pendingCountQuery.data?.pagination.totalCount ?? 0;
+  const records = servicesQuery.data?.data ?? [];
+  const pagination = servicesQuery.data?.pagination;
+  const showLoading = servicesQuery.isLoading && records.length === 0;
+  const summary = summaryQuery.data?.data;
+  const pendingCount = pendingCountQuery.data?.pagination.totalCount ?? 0;
 
-	const summaryCards: Array<{ key: SpecialServiceStatus; label: string }> = [
-		{ key: "open", label: "Open" },
-		{ key: "assigned", label: "Assigned" },
-		{ key: "in_progress", label: "In progress" },
-		{ key: "completed", label: "Completed" },
-	];
+  const summaryCards: Array<{ key: SpecialServiceStatus; label: string }> = [
+    { key: 'open', label: 'Open' },
+    { key: 'assigned', label: 'Assigned' },
+    { key: 'in_progress', label: 'In progress' },
+    { key: 'completed', label: 'Completed' },
+  ];
 
 	return (
 		<PageShell>
@@ -299,32 +307,32 @@ function SpecialServicesPage() {
 				description="Browse orders and agency jobs. Click a row to open the editor and update details or status. Use the filters to narrow by source, category, or status."
 			/>
 
-			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-				<Card
-					className="cursor-pointer border-amber-500/30 bg-card transition-colors hover:bg-amber-500/5"
-					onClick={() => {
-						setViewMode("pending_review");
-						setPage(1);
-					}}
-				>
-					<CardHeader className="pb-2">
-						<CardDescription>Pending review</CardDescription>
-						<CardTitle className="text-2xl text-amber-600 dark:text-amber-400">
-							{formatNumber(pendingCount)}
-						</CardTitle>
-					</CardHeader>
-				</Card>
-				{summaryCards.map((card) => (
-					<Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
-						<CardHeader className="pb-2">
-							<CardDescription>{card.label}</CardDescription>
-							<CardTitle className="text-2xl">
-								{formatNumber(summary?.[card.key] ?? 0)}
-							</CardTitle>
-						</CardHeader>
-					</Card>
-				))}
-			</div>
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+        <Card
+          className="cursor-pointer border-amber-500/30 bg-card transition-colors hover:bg-amber-500/5"
+          onClick={() => {
+            setViewMode('pending_review');
+            setPage(1);
+          }}
+        >
+          <CardHeader className="pb-2">
+            <CardDescription>Pending review</CardDescription>
+            <CardTitle className="text-2xl text-amber-600 dark:text-amber-400">
+              {formatNumber(pendingCount)}
+            </CardTitle>
+          </CardHeader>
+        </Card>
+        {summaryCards.map((card) => (
+          <Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
+            <CardHeader className="pb-2">
+              <CardDescription>{card.label}</CardDescription>
+              <CardTitle className="text-2xl">
+                {formatNumber(summary?.[card.key] ?? 0)}
+              </CardTitle>
+            </CardHeader>
+          </Card>
+        ))}
+      </div>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>

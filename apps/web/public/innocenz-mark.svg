@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120" fill="none" role="img" aria-label="InnocenZ">
+  <defs>
+    <linearGradient id="izPetalGold" x1="60" y1="18" x2="60" y2="98" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#f6d98f"/>
+      <stop offset="0.55" stop-color="#d8ab57"/>
+      <stop offset="1" stop-color="#a9762b"/>
+    </linearGradient>
+  </defs>
+  <g stroke="url(#izPetalGold)" stroke-width="2.2" stroke-linejoin="round" stroke-linecap="round" fill="none">
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(-36 60 95)"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(-18 60 95)"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(18 60 95)"/>
+    <path d="M60 20 C 69 44 69 71 60 95 C 51 71 51 44 60 20 Z" transform="rotate(36 60 95)"/>
+  </g>
+</svg>
