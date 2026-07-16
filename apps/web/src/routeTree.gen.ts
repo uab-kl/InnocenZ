@@ -30,6 +30,7 @@ import { Route as adminServiceRequestsRouteImport } from './routes/(admin)/servi
 import { Route as adminServiceOtherRouteImport } from './routes/(admin)/service/other'
 import { Route as adminRbacRoleRouteImport } from './routes/(admin)/rbac/role'
 import { Route as adminRbacPermissionRouteImport } from './routes/(admin)/rbac/permission'
+import { Route as adminRbacPendingRouteImport } from './routes/(admin)/rbac/pending'
 import { Route as adminRbacModuleRouteImport } from './routes/(admin)/rbac/module'
 import { Route as adminBusinessSubscriptionRouteImport } from './routes/(admin)/business/subscription'
 import { Route as adminBusinessPlanRouteImport } from './routes/(admin)/business/plan'
@@ -144,6 +145,11 @@ const adminRbacPermissionRoute = adminRbacPermissionRouteImport.update({
   path: '/permission',
   getParentRoute: () => adminRbacRouteRoute,
 } as any)
+const adminRbacPendingRoute = adminRbacPendingRouteImport.update({
+  id: '/pending',
+  path: '/pending',
+  getParentRoute: () => adminRbacRouteRoute,
+} as any)
 const adminRbacModuleRoute = adminRbacModuleRouteImport.update({
   id: '/module',
   path: '/module',
@@ -188,6 +194,7 @@ export interface FileRoutesByFullPath {
   '/business/plan': typeof adminBusinessPlanRoute
   '/business/subscription': typeof adminBusinessSubscriptionRoute
   '/rbac/module': typeof adminRbacModuleRoute
+  '/rbac/pending': typeof adminRbacPendingRoute
   '/rbac/permission': typeof adminRbacPermissionRoute
   '/rbac/role': typeof adminRbacRoleRoute
   '/service/other': typeof adminServiceOtherRoute
@@ -214,6 +221,7 @@ export interface FileRoutesByTo {
   '/business/plan': typeof adminBusinessPlanRoute
   '/business/subscription': typeof adminBusinessSubscriptionRoute
   '/rbac/module': typeof adminRbacModuleRoute
+  '/rbac/pending': typeof adminRbacPendingRoute
   '/rbac/permission': typeof adminRbacPermissionRoute
   '/rbac/role': typeof adminRbacRoleRoute
   '/service/other': typeof adminServiceOtherRoute
@@ -243,6 +251,7 @@ export interface FileRoutesById {
   '/(admin)/business/plan': typeof adminBusinessPlanRoute
   '/(admin)/business/subscription': typeof adminBusinessSubscriptionRoute
   '/(admin)/rbac/module': typeof adminRbacModuleRoute
+  '/(admin)/rbac/pending': typeof adminRbacPendingRoute
   '/(admin)/rbac/permission': typeof adminRbacPermissionRoute
   '/(admin)/rbac/role': typeof adminRbacRoleRoute
   '/(admin)/service/other': typeof adminServiceOtherRoute
@@ -272,6 +281,7 @@ export interface FileRouteTypes {
     | '/business/plan'
     | '/business/subscription'
     | '/rbac/module'
+    | '/rbac/pending'
     | '/rbac/permission'
     | '/rbac/role'
     | '/service/other'
@@ -298,6 +308,7 @@ export interface FileRouteTypes {
     | '/business/plan'
     | '/business/subscription'
     | '/rbac/module'
+    | '/rbac/pending'
     | '/rbac/permission'
     | '/rbac/role'
     | '/service/other'
@@ -326,6 +337,7 @@ export interface FileRouteTypes {
     | '/(admin)/business/plan'
     | '/(admin)/business/subscription'
     | '/(admin)/rbac/module'
+    | '/(admin)/rbac/pending'
     | '/(admin)/rbac/permission'
     | '/(admin)/rbac/role'
     | '/(admin)/service/other'
@@ -494,6 +506,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof adminRbacPermissionRouteImport
       parentRoute: typeof adminRbacRouteRoute
     }
+    '/(admin)/rbac/pending': {
+      id: '/(admin)/rbac/pending'
+      path: '/pending'
+      fullPath: '/rbac/pending'
+      preLoaderRoute: typeof adminRbacPendingRouteImport
+      parentRoute: typeof adminRbacRouteRoute
+    }
     '/(admin)/rbac/module': {
       id: '/(admin)/rbac/module'
       path: '/module'
@@ -562,12 +581,14 @@ const adminBusinessRouteRouteWithChildren =
 
 interface adminRbacRouteRouteChildren {
   adminRbacModuleRoute: typeof adminRbacModuleRoute
+  adminRbacPendingRoute: typeof adminRbacPendingRoute
   adminRbacPermissionRoute: typeof adminRbacPermissionRoute
   adminRbacRoleRoute: typeof adminRbacRoleRoute
 }
 
 const adminRbacRouteRouteChildren: adminRbacRouteRouteChildren = {
   adminRbacModuleRoute: adminRbacModuleRoute,
+  adminRbacPendingRoute: adminRbacPendingRoute,
   adminRbacPermissionRoute: adminRbacPermissionRoute,
   adminRbacRoleRoute: adminRbacRoleRoute,
 }
