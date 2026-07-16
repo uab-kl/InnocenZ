@@ -1,5 +1,5 @@
 import { useForm } from "@tanstack/react-form";
-import { Link, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import axios from "axios";
 import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
 import { useState } from "react";
@@ -21,6 +21,13 @@ import {
 	InputGroupInput,
 } from "@/components/ui/input-group";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
+import { fetchProfile } from "@/lib/auth/use-profile";
+
+const ROLE_DASHBOARD: Record<string, string> = {
+	admin: "/admin/dashboard",
+	agency: "/agency/dashboard",
+	outlet: "/outlet/dashboard",
+};
 
 export const Route = createFileRoute("/login")({
 	component: RouteComponent,
@@ -61,7 +68,9 @@ function RouteComponent() {
 					email: value.email,
 					password: value.password,
 				});
-				window.location.assign("/dashboard");
+				const profile = await fetchProfile();
+				const role = profile.roles[0]?.toLowerCase();
+				window.location.assign((role && ROLE_DASHBOARD[role]) || "/no-access");
 			} catch (err) {
 				if (axios.isAxiosError(err)) {
 					if (!err.response) {
@@ -119,7 +128,7 @@ function RouteComponent() {
 					Back to home
 				</a>
 
-				<div className="mx-auto w-full max-w-[580px]">
+				<div className="mx-auto w-full max-w-145">
 					<div className="mb-10 flex justify-center lg:hidden">
 						<BrandLogo variant="stacked" size="hero" showTagline showMotto />
 					</div>
@@ -213,7 +222,7 @@ function RouteComponent() {
 													<InputGroupAddon align="inline-start">
 														<MaterialIcon
 															name="lock"
-															className="!text-3xl text-royal-gold"
+															className="text-3xl! text-royal-gold"
 														/>
 													</InputGroupAddon>
 													<InputGroupInput
@@ -245,7 +254,7 @@ function RouteComponent() {
 																name={
 																	showPassword ? "visibility_off" : "visibility"
 																}
-																className="!text-3xl text-muted-foreground"
+																className="text-3xl! text-muted-foreground"
 															/>
 														</InputGroupButton>
 													</InputGroupAddon>
@@ -320,9 +329,7 @@ function RouteComponent() {
 
 					<p className="login-footer mt-10 text-center text-foreground/55 lg:hidden">
 						© {new Date().getFullYear()}{" "}
-						<span className="brand-wordmark text-gradient-royal">
-							InnocenZ
-						</span>
+						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
 						. All rights reserved.
 					</p>
 				</div>

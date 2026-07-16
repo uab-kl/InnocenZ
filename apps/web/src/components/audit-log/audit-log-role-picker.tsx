@@ -42,7 +42,7 @@ export function AuditLogRolePicker() {
 									className="h-auto min-h-28 flex-col gap-3 px-6 py-8"
 									asChild
 								>
-									<Link to="/audit-log/$role" params={{ role: role.slug }}>
+									<Link to="/admin/audit-log/$role" params={{ role: role.slug }}>
 										<Icon className="h-6 w-6 text-lavender" />
 										<span className="text-lg font-medium">{role.label}</span>
 									</Link>
@@ -57,7 +57,7 @@ export function AuditLogRolePicker() {
 							className="h-auto min-h-28 w-[calc(50%-0.5rem)] flex-col gap-3 px-6 py-8"
 							asChild
 						>
-							<Link to="/audit-log/$role" params={{ role: lastRole.slug }}>
+							<Link to="/admin/audit-log/$role" params={{ role: lastRole.slug }}>
 								<LastIcon className="h-6 w-6 text-lavender" />
 								<span className="text-lg font-medium">{lastRole.label}</span>
 							</Link>

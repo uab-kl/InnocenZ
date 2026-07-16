@@ -76,7 +76,7 @@ function NotificationBell() {
 
 	return (
 		<Link
-			to="/service/requests"
+			to="/admin/service/requests"
 			aria-label={`Notifications: ${count} pending request${count === 1 ? "" : "s"}`}
 			className="relative inline-flex h-9 w-9 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
 		>
@@ -219,13 +219,13 @@ export function Header() {
 						</DropdownMenuLabel>
 						<DropdownMenuSeparator />
 						<DropdownMenuItem asChild>
-							<Link to="/profile">
+							<Link to="/admin/profile">
 								<UserIcon className="h-4 w-4" />
 								<span>Profile</span>
 							</Link>
 						</DropdownMenuItem>
 						<DropdownMenuItem asChild>
-							<Link to="/settings">
+							<Link to="/admin/settings">
 								<Settings className="h-4 w-4" />
 								<span>Settings</span>
 							</Link>
