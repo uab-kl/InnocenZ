@@ -2,8 +2,10 @@ name: Deploy Staging
 
 on:
   push:
-    branches:
-      - staging
+    tags:
+      - 'v*'
+      - 'staging-*'
+      - 'beta-*'
 
 permissions:
   contents: read

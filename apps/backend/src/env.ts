@@ -8,7 +8,10 @@ export const env = createEnv({
       .transform((val) => Number(val))
       .pipe(z.number().min(1).max(65535))
       .default(3000),
-    NODE_ENV: z.enum(['development', 'production', 'test']),
+    NODE_ENV: z
+      .string()
+      .trim()
+      .pipe(z.enum(['development', 'production', 'test'])),
     JWT_ALGORITHM: z
       .enum(['HS256', 'RS256', 'ES256', 'PS256', 'ES384', 'PS384', 'ES512', 'PS512'])
       .default('RS256'),
