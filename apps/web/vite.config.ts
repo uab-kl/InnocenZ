@@ -1,13 +1,11 @@
-import { defineConfig } from 'vite'
-import { devtools } from '@tanstack/devtools-vite'
-import { paraglideVitePlugin } from '@inlang/paraglide-js'
-
-import { tanstackStart } from '@tanstack/react-start/plugin/vite'
-
-import viteReact, { reactCompilerPreset } from '@vitejs/plugin-react'
-import babel from '@rolldown/plugin-babel'
-import tailwindcss from '@tailwindcss/vite'
-import { nitro } from 'nitro/vite'
+import { paraglideVitePlugin } from '@inlang/paraglide-js';
+import babel from '@rolldown/plugin-babel';
+import tailwindcss from '@tailwindcss/vite';
+import { devtools } from '@tanstack/devtools-vite';
+import { tanstackStart } from '@tanstack/react-start/plugin/vite';
+import viteReact, { reactCompilerPreset } from '@vitejs/plugin-react';
+import { nitro } from 'nitro/vite';
+import { defineConfig } from 'vite';
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
@@ -17,6 +15,15 @@ const config = defineConfig({
       project: './project.inlang',
       outdir: './src/paraglide',
       strategy: ['url', 'baseLocale'],
+      urlPatterns: [
+        {
+          pattern: ':protocol://:domain(.*)::port?/:path(.*)?',
+          localized: [
+            ['en', ':protocol://:domain(.*)::port?/en/:path(.*)?'],
+            ['cn', ':protocol://:domain(.*)::port?/cn/:path(.*)?'],
+          ],
+        },
+      ],
     }),
     nitro({ rollupConfig: { external: [/^@sentry\//] } }),
     tailwindcss(),
@@ -24,6 +31,6 @@ const config = defineConfig({
     viteReact(),
     babel({ presets: [reactCompilerPreset()] }),
   ],
-})
+});
 
-export default config
+export default config;

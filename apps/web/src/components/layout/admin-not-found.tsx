@@ -1,6 +1,6 @@
-import { Link } from '@tanstack/react-router'
-import { FileQuestion, LayoutDashboard } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Link } from '@tanstack/react-router';
+import { FileQuestion, LayoutDashboard } from 'lucide-react';
+import { Button } from '@/components/ui/button';
 
 export function AdminNotFoundPage() {
   return (
@@ -12,10 +12,7 @@ export function AdminNotFoundPage() {
           </div>
 
           <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-full border border-primary/30 bg-primary/15">
-            <FileQuestion
-              className="h-9 w-9 text-primary"
-              strokeWidth={1.5}
-            />
+            <FileQuestion className="h-9 w-9 text-primary" strokeWidth={1.5} />
           </div>
         </div>
 
@@ -28,13 +25,20 @@ export function AdminNotFoundPage() {
           page might have been removed or the URL might be incorrect.
         </p>
 
-        <Button asChild size="lg" className="mt-8 h-11 gap-2.5 px-8 text-white dark:text-[#1a1726]">
-          <Link to="/dashboard" className="text-inherit [&_svg]:text-inherit">
+        <Button
+          asChild
+          size="lg"
+          className="mt-8 h-11 gap-2.5 px-8 text-white dark:text-[#1a1726]"
+        >
+          <Link
+            to="/admin/dashboard"
+            className="text-inherit [&_svg]:text-inherit"
+          >
             <LayoutDashboard className="h-4 w-4" />
             Back to dashboard
           </Link>
         </Button>
       </div>
     </div>
-  )
+  );
 }
