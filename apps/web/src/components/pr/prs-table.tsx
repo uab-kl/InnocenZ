@@ -18,6 +18,11 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import {
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@/components/ui/popover";
+import {
 	Select,
 	SelectContent,
 	SelectItem,
@@ -107,10 +112,7 @@ export function PrsTable({
 								aria-label="Search PRs by name, email, or agency"
 							/>
 						</div>
-						<Select
-							value={agencyFilter}
-							onValueChange={onAgencyFilterChange}
-						>
+						<Select value={agencyFilter} onValueChange={onAgencyFilterChange}>
 							<SelectTrigger className="sm:w-52" aria-label="Filter by agency">
 								<SelectValue placeholder="All agencies" />
 							</SelectTrigger>
@@ -202,26 +204,57 @@ export function PrsTable({
 										<TableCell>{user.phoneNum || "—"}</TableCell>
 										<TableCell>
 											{user.agencies.length === 0 ? (
-												<span className="text-sm text-muted-foreground">
-													—
-												</span>
+												<span className="text-sm text-muted-foreground">—</span>
 											) : (
-												<div className="flex flex-wrap gap-1.5">
-													{user.agencies.map((agency) => (
+												<div className="flex max-w-[300px] flex-wrap items-center gap-1.5">
+													{user.agencies.slice(0, 2).map((agency) => (
 														<Badge
 															key={agency.id}
 															variant="outline"
-															className="font-normal"
-															title={agency.code}
+															className="max-w-[170px] font-normal"
+															title={`${agency.name} (${agency.code})`}
 														>
-															{agency.name}
-															{user.agencies.length > 1 ? (
-																<span className="ml-1 text-muted-foreground">
-																	({agency.code})
-																</span>
-															) : null}
+															<span className="truncate">{agency.name}</span>
+															<span className="ml-1 shrink-0 text-muted-foreground">
+																{agency.code}
+															</span>
 														</Badge>
 													))}
+													{user.agencies.length > 2 && (
+														<Popover>
+															<PopoverTrigger asChild>
+																<button
+																	type="button"
+																	className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+																>
+																	+{user.agencies.length - 2} more
+																</button>
+															</PopoverTrigger>
+															<PopoverContent
+																align="start"
+																className="w-64 p-2"
+															>
+																<p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+																	All agencies ({user.agencies.length})
+																</p>
+																<ul className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+																	{user.agencies.map((agency) => (
+																		<li
+																			key={agency.id}
+																			className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+																		>
+																			<span className="truncate">
+																				{agency.name}
+																			</span>
+																			<span className="shrink-0 font-mono text-xs text-muted-foreground">
+																				{agency.code}
+																			</span>
+																		</li>
+																	))}
+																</ul>
+															</PopoverContent>
+														</Popover>
+													)}
 												</div>
 											)}
 										</TableCell>

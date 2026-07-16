@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+import { DonutChart, type DonutSlice } from "@/components/ui/donut-chart";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
@@ -29,7 +30,9 @@ import { type AuditLog, fetchAuditLogs } from "@/services/audit-log";
 import { fetchOutlets, type Outlet } from "@/services/outlet";
 import {
 	fetchAdminPendingJobs,
+	fetchSpecialServiceSummary,
 	type SpecialService,
+	type SpecialServiceStatus,
 } from "@/services/special-service";
 
 export const Route = createFileRoute("/(admin)/dashboard")({
@@ -77,6 +80,26 @@ const STATUS_META: Record<string, { label: string; tone: Tone }> = {
 	inactive: { label: "Inactive", tone: "muted" },
 	suspended: { label: "Suspended", tone: "danger" },
 };
+
+// Breakdown-donut colours, keyed to design tokens (light/dark aware).
+const ORG_STATUS_COLOR = {
+	active: "var(--signal-live)",
+	pending: "var(--signal-warn)",
+	suspended: "var(--destructive)",
+	inactive: "var(--muted-foreground)",
+} as const;
+
+const JOB_STATUS_META: {
+	key: SpecialServiceStatus;
+	label: string;
+	color: string;
+}[] = [
+	{ key: "open", label: "Open", color: "var(--lavender)" },
+	{ key: "assigned", label: "Assigned", color: "var(--chart-3)" },
+	{ key: "in_progress", label: "In progress", color: "var(--signal-warn)" },
+	{ key: "completed", label: "Completed", color: "var(--signal-live)" },
+	{ key: "cancelled", label: "Cancelled", color: "var(--muted-foreground)" },
+];
 
 type RegRow = {
 	id: string;
@@ -216,6 +239,41 @@ function DashboardComponent() {
 		staleTime: 60_000,
 	});
 
+	// Remaining status buckets so the breakdown donuts show the full picture.
+	const inactiveAgenciesQuery = useQuery({
+		queryKey: ["dashboard", "inactive-agencies-count"],
+		queryFn: () =>
+			fetchAgencies({ status: "inactive", page: 1, pageSize: 1 }, logout),
+		staleTime: 60_000,
+	});
+
+	const suspendedAgenciesQuery = useQuery({
+		queryKey: ["dashboard", "suspended-agencies-count"],
+		queryFn: () =>
+			fetchAgencies({ status: "suspended", page: 1, pageSize: 1 }, logout),
+		staleTime: 60_000,
+	});
+
+	const inactiveOutletsQuery = useQuery({
+		queryKey: ["dashboard", "inactive-outlets-count"],
+		queryFn: () =>
+			fetchOutlets({ status: "inactive", page: 1, pageSize: 1 }, logout),
+		staleTime: 60_000,
+	});
+
+	const suspendedOutletsQuery = useQuery({
+		queryKey: ["dashboard", "suspended-outlets-count"],
+		queryFn: () =>
+			fetchOutlets({ status: "suspended", page: 1, pageSize: 1 }, logout),
+		staleTime: 60_000,
+	});
+
+	const jobsSummaryQuery = useQuery({
+		queryKey: ["dashboard", "jobs-summary"],
+		queryFn: () => fetchSpecialServiceSummary(logout),
+		staleTime: 60_000,
+	});
+
 	const recentAgenciesQuery = useQuery({
 		queryKey: ["dashboard", "recent-agencies"],
 		queryFn: () => fetchAgencies({ page: 1, pageSize: 6 }, logout),
@@ -247,6 +305,115 @@ function DashboardComponent() {
 	const activeAgencyCount =
 		activeAgenciesQuery.data?.pagination.totalCount ?? 0;
 	const activeOutletCount = activeOutletsQuery.data?.pagination.totalCount ?? 0;
+	const inactiveAgencyCount =
+		inactiveAgenciesQuery.data?.pagination.totalCount ?? 0;
+	const suspendedAgencyCount =
+		suspendedAgenciesQuery.data?.pagination.totalCount ?? 0;
+	const inactiveOutletCount =
+		inactiveOutletsQuery.data?.pagination.totalCount ?? 0;
+	const suspendedOutletCount =
+		suspendedOutletsQuery.data?.pagination.totalCount ?? 0;
+
+	const agencyBreakdown: DonutSlice[] = [
+		{
+			key: "active",
+			label: "Active",
+			value: activeAgencyCount,
+			color: ORG_STATUS_COLOR.active,
+		},
+		{
+			key: "pending",
+			label: "Pending",
+			value: agencyCount,
+			color: ORG_STATUS_COLOR.pending,
+		},
+		{
+			key: "suspended",
+			label: "Suspended",
+			value: suspendedAgencyCount,
+			color: ORG_STATUS_COLOR.suspended,
+		},
+		{
+			key: "inactive",
+			label: "Inactive",
+			value: inactiveAgencyCount,
+			color: ORG_STATUS_COLOR.inactive,
+		},
+	];
+	const outletBreakdown: DonutSlice[] = [
+		{
+			key: "active",
+			label: "Active",
+			value: activeOutletCount,
+			color: ORG_STATUS_COLOR.active,
+		},
+		{
+			key: "pending",
+			label: "Pending",
+			value: outletCount,
+			color: ORG_STATUS_COLOR.pending,
+		},
+		{
+			key: "suspended",
+			label: "Suspended",
+			value: suspendedOutletCount,
+			color: ORG_STATUS_COLOR.suspended,
+		},
+		{
+			key: "inactive",
+			label: "Inactive",
+			value: inactiveOutletCount,
+			color: ORG_STATUS_COLOR.inactive,
+		},
+	];
+	const jobsByStatus = jobsSummaryQuery.data?.data;
+	const jobsBreakdown: DonutSlice[] = JOB_STATUS_META.map((meta) => ({
+		key: meta.key,
+		label: meta.label,
+		value: jobsByStatus?.[meta.key] ?? 0,
+		color: meta.color,
+	}));
+
+	const agencyBreakdownLoading =
+		activeAgenciesQuery.isLoading ||
+		pendingAgenciesQuery.isLoading ||
+		suspendedAgenciesQuery.isLoading ||
+		inactiveAgenciesQuery.isLoading;
+	const outletBreakdownLoading =
+		activeOutletsQuery.isLoading ||
+		pendingOutletsQuery.isLoading ||
+		suspendedOutletsQuery.isLoading ||
+		inactiveOutletsQuery.isLoading;
+
+	const breakdowns: {
+		id: string;
+		title: string;
+		slices: DonutSlice[];
+		centerLabel: string;
+		isLoading: boolean;
+	}[] = [
+		{
+			id: "agencies",
+			title: "PR Agencies by status",
+			slices: agencyBreakdown,
+			centerLabel: "agencies",
+			isLoading: agencyBreakdownLoading,
+		},
+		{
+			id: "outlets",
+			title: "Outlets by status",
+			slices: outletBreakdown,
+			centerLabel: "outlets",
+			isLoading: outletBreakdownLoading,
+		},
+		{
+			id: "jobs",
+			title: "Jobs by status",
+			slices: jobsBreakdown,
+			centerLabel: "jobs",
+			isLoading: jobsSummaryQuery.isLoading,
+		},
+	];
 
 	const systemOk = ![
 		pendingAgenciesQuery,
@@ -502,6 +669,33 @@ function DashboardComponent() {
 					<KpiCard key={card.id} {...card} />
 				))}
 			</div>
+
+			{/* Platform breakdown — status distribution donuts */}
+			<section className="overflow-hidden rounded-2xl border bg-card">
+				<div className="border-b px-6 py-5">
+					<h2 className="text-lg font-extrabold">Platform breakdown</h2>
+					<p className="mt-0.5 text-[13px] text-muted-foreground">
+						Live status distribution across organizations and jobs.
+					</p>
+				</div>
+				<div className="grid grid-cols-1 divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">
+					{breakdowns.map((b) => (
+						<div key={b.id} className="px-6 py-6">
+							<h3 className="mb-4 text-[13.5px] font-bold text-foreground">
+								{b.title}
+							</h3>
+							{b.isLoading ? (
+								<div className="flex h-[168px] items-center gap-2 text-sm text-muted-foreground">
+									<Loader2 className="h-4 w-4 animate-spin" />
+									Loading…
+								</div>
+							) : (
+								<DonutChart slices={b.slices} centerLabel={b.centerLabel} />
+							)}
+						</div>
+					))}
+				</div>
+			</section>
 
 			{/* Middle: action items + right rail */}
 			<div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_360px] xl:grid-rows-[auto_auto]">
