@@ -13,10 +13,32 @@ import { Route as SignupRouteImport } from './routes/signup'
 import { Route as NotFoundRouteImport } from './routes/not-found'
 import { Route as NoAccessRouteImport } from './routes/no-access'
 import { Route as LoginRouteImport } from './routes/login'
+import { Route as OutletRouteRouteImport } from './routes/outlet/route'
 import { Route as AgencyRouteRouteImport } from './routes/agency/route'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as OutletIndexRouteImport } from './routes/outlet/index'
+import { Route as AgencyIndexRouteImport } from './routes/agency/index'
+import { Route as OutletWorkspaceRouteImport } from './routes/outlet/workspace'
+import { Route as OutletSubscriptionRouteImport } from './routes/outlet/subscription'
+import { Route as OutletSpecialServiceRouteImport } from './routes/outlet/special-service'
+import { Route as OutletSettingsRouteImport } from './routes/outlet/settings'
+import { Route as OutletRatingsRouteImport } from './routes/outlet/ratings'
+import { Route as OutletProfileRouteImport } from './routes/outlet/profile'
+import { Route as OutletHistoryRouteImport } from './routes/outlet/history'
 import { Route as OutletDashboardRouteImport } from './routes/outlet/dashboard'
+import { Route as OutletBookingsRouteImport } from './routes/outlet/bookings'
+import { Route as OutletBillingRouteImport } from './routes/outlet/billing'
+import { Route as AgencySubscriptionRouteImport } from './routes/agency/subscription'
+import { Route as AgencySpecialServiceRouteImport } from './routes/agency/special-service'
+import { Route as AgencyRosterRouteImport } from './routes/agency/roster'
+import { Route as AgencyPvRouteImport } from './routes/agency/pv'
+import { Route as AgencyPrsRouteImport } from './routes/agency/prs'
+import { Route as AgencyProfileRouteImport } from './routes/agency/profile'
+import { Route as AgencyPendingRouteImport } from './routes/agency/pending'
+import { Route as AgencyOutletsRouteImport } from './routes/agency/outlets'
+import { Route as AgencyLiveRouteImport } from './routes/agency/live'
+import { Route as AgencyHistoryRouteImport } from './routes/agency/history'
 import { Route as AgencyDashboardRouteImport } from './routes/agency/dashboard'
 import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
 import { Route as AdminProfileRouteImport } from './routes/admin/profile'
@@ -61,6 +83,11 @@ const LoginRoute = LoginRouteImport.update({
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OutletRouteRoute = OutletRouteRouteImport.update({
+  id: '/outlet',
+  path: '/outlet',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AgencyRouteRoute = AgencyRouteRouteImport.update({
   id: '/agency',
   path: '/agency',
@@ -76,10 +103,115 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const OutletIndexRoute = OutletIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const AgencyIndexRoute = AgencyIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const OutletWorkspaceRoute = OutletWorkspaceRouteImport.update({
+  id: '/workspace',
+  path: '/workspace',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletSubscriptionRoute = OutletSubscriptionRouteImport.update({
+  id: '/subscription',
+  path: '/subscription',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletSpecialServiceRoute = OutletSpecialServiceRouteImport.update({
+  id: '/special-service',
+  path: '/special-service',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletSettingsRoute = OutletSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletRatingsRoute = OutletRatingsRouteImport.update({
+  id: '/ratings',
+  path: '/ratings',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletProfileRoute = OutletProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletHistoryRoute = OutletHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
 const OutletDashboardRoute = OutletDashboardRouteImport.update({
-  id: '/outlet/dashboard',
-  path: '/outlet/dashboard',
-  getParentRoute: () => rootRouteImport,
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletBookingsRoute = OutletBookingsRouteImport.update({
+  id: '/bookings',
+  path: '/bookings',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletBillingRoute = OutletBillingRouteImport.update({
+  id: '/billing',
+  path: '/billing',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const AgencySubscriptionRoute = AgencySubscriptionRouteImport.update({
+  id: '/subscription',
+  path: '/subscription',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencySpecialServiceRoute = AgencySpecialServiceRouteImport.update({
+  id: '/special-service',
+  path: '/special-service',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyRosterRoute = AgencyRosterRouteImport.update({
+  id: '/roster',
+  path: '/roster',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyPvRoute = AgencyPvRouteImport.update({
+  id: '/pv',
+  path: '/pv',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyPrsRoute = AgencyPrsRouteImport.update({
+  id: '/prs',
+  path: '/prs',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyProfileRoute = AgencyProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyPendingRoute = AgencyPendingRouteImport.update({
+  id: '/pending',
+  path: '/pending',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyOutletsRoute = AgencyOutletsRouteImport.update({
+  id: '/outlets',
+  path: '/outlets',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyLiveRoute = AgencyLiveRouteImport.update({
+  id: '/live',
+  path: '/live',
+  getParentRoute: () => AgencyRouteRoute,
+} as any)
+const AgencyHistoryRoute = AgencyHistoryRouteImport.update({
+  id: '/history',
+  path: '/history',
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
 const AgencyDashboardRoute = AgencyDashboardRouteImport.update({
   id: '/dashboard',
@@ -206,6 +338,7 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
+  '/outlet': typeof OutletRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -218,7 +351,28 @@ export interface FileRoutesByFullPath {
   '/admin/profile': typeof AdminProfileRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/agency/dashboard': typeof AgencyDashboardRoute
+  '/agency/history': typeof AgencyHistoryRoute
+  '/agency/live': typeof AgencyLiveRoute
+  '/agency/outlets': typeof AgencyOutletsRoute
+  '/agency/pending': typeof AgencyPendingRoute
+  '/agency/profile': typeof AgencyProfileRoute
+  '/agency/prs': typeof AgencyPrsRoute
+  '/agency/pv': typeof AgencyPvRoute
+  '/agency/roster': typeof AgencyRosterRoute
+  '/agency/special-service': typeof AgencySpecialServiceRoute
+  '/agency/subscription': typeof AgencySubscriptionRoute
+  '/outlet/billing': typeof OutletBillingRoute
+  '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/dashboard': typeof OutletDashboardRoute
+  '/outlet/history': typeof OutletHistoryRoute
+  '/outlet/profile': typeof OutletProfileRoute
+  '/outlet/ratings': typeof OutletRatingsRoute
+  '/outlet/settings': typeof OutletSettingsRoute
+  '/outlet/special-service': typeof OutletSpecialServiceRoute
+  '/outlet/subscription': typeof OutletSubscriptionRoute
+  '/outlet/workspace': typeof OutletWorkspaceRoute
+  '/agency/': typeof AgencyIndexRoute
+  '/outlet/': typeof OutletIndexRoute
   '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
   '/admin/business/history': typeof AdminBusinessHistoryRoute
   '/admin/business/plan': typeof AdminBusinessPlanRoute
@@ -238,7 +392,6 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
-  '/agency': typeof AgencyRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -250,7 +403,28 @@ export interface FileRoutesByTo {
   '/admin/profile': typeof AdminProfileRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/agency/dashboard': typeof AgencyDashboardRoute
+  '/agency/history': typeof AgencyHistoryRoute
+  '/agency/live': typeof AgencyLiveRoute
+  '/agency/outlets': typeof AgencyOutletsRoute
+  '/agency/pending': typeof AgencyPendingRoute
+  '/agency/profile': typeof AgencyProfileRoute
+  '/agency/prs': typeof AgencyPrsRoute
+  '/agency/pv': typeof AgencyPvRoute
+  '/agency/roster': typeof AgencyRosterRoute
+  '/agency/special-service': typeof AgencySpecialServiceRoute
+  '/agency/subscription': typeof AgencySubscriptionRoute
+  '/outlet/billing': typeof OutletBillingRoute
+  '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/dashboard': typeof OutletDashboardRoute
+  '/outlet/history': typeof OutletHistoryRoute
+  '/outlet/profile': typeof OutletProfileRoute
+  '/outlet/ratings': typeof OutletRatingsRoute
+  '/outlet/settings': typeof OutletSettingsRoute
+  '/outlet/special-service': typeof OutletSpecialServiceRoute
+  '/outlet/subscription': typeof OutletSubscriptionRoute
+  '/outlet/workspace': typeof OutletWorkspaceRoute
+  '/agency': typeof AgencyIndexRoute
+  '/outlet': typeof OutletIndexRoute
   '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
   '/admin/business/history': typeof AdminBusinessHistoryRoute
   '/admin/business/plan': typeof AdminBusinessPlanRoute
@@ -272,6 +446,7 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
+  '/outlet': typeof OutletRouteRouteWithChildren
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -284,7 +459,28 @@ export interface FileRoutesById {
   '/admin/profile': typeof AdminProfileRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/agency/dashboard': typeof AgencyDashboardRoute
+  '/agency/history': typeof AgencyHistoryRoute
+  '/agency/live': typeof AgencyLiveRoute
+  '/agency/outlets': typeof AgencyOutletsRoute
+  '/agency/pending': typeof AgencyPendingRoute
+  '/agency/profile': typeof AgencyProfileRoute
+  '/agency/prs': typeof AgencyPrsRoute
+  '/agency/pv': typeof AgencyPvRoute
+  '/agency/roster': typeof AgencyRosterRoute
+  '/agency/special-service': typeof AgencySpecialServiceRoute
+  '/agency/subscription': typeof AgencySubscriptionRoute
+  '/outlet/billing': typeof OutletBillingRoute
+  '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/dashboard': typeof OutletDashboardRoute
+  '/outlet/history': typeof OutletHistoryRoute
+  '/outlet/profile': typeof OutletProfileRoute
+  '/outlet/ratings': typeof OutletRatingsRoute
+  '/outlet/settings': typeof OutletSettingsRoute
+  '/outlet/special-service': typeof OutletSpecialServiceRoute
+  '/outlet/subscription': typeof OutletSubscriptionRoute
+  '/outlet/workspace': typeof OutletWorkspaceRoute
+  '/agency/': typeof AgencyIndexRoute
+  '/outlet/': typeof OutletIndexRoute
   '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
   '/admin/business/history': typeof AdminBusinessHistoryRoute
   '/admin/business/plan': typeof AdminBusinessPlanRoute
@@ -307,6 +503,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/agency'
+    | '/outlet'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -319,7 +516,28 @@ export interface FileRouteTypes {
     | '/admin/profile'
     | '/admin/settings'
     | '/agency/dashboard'
+    | '/agency/history'
+    | '/agency/live'
+    | '/agency/outlets'
+    | '/agency/pending'
+    | '/agency/profile'
+    | '/agency/prs'
+    | '/agency/pv'
+    | '/agency/roster'
+    | '/agency/special-service'
+    | '/agency/subscription'
+    | '/outlet/billing'
+    | '/outlet/bookings'
     | '/outlet/dashboard'
+    | '/outlet/history'
+    | '/outlet/profile'
+    | '/outlet/ratings'
+    | '/outlet/settings'
+    | '/outlet/special-service'
+    | '/outlet/subscription'
+    | '/outlet/workspace'
+    | '/agency/'
+    | '/outlet/'
     | '/admin/audit-log/$role'
     | '/admin/business/history'
     | '/admin/business/plan'
@@ -339,7 +557,6 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
-    | '/agency'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -351,7 +568,28 @@ export interface FileRouteTypes {
     | '/admin/profile'
     | '/admin/settings'
     | '/agency/dashboard'
+    | '/agency/history'
+    | '/agency/live'
+    | '/agency/outlets'
+    | '/agency/pending'
+    | '/agency/profile'
+    | '/agency/prs'
+    | '/agency/pv'
+    | '/agency/roster'
+    | '/agency/special-service'
+    | '/agency/subscription'
+    | '/outlet/billing'
+    | '/outlet/bookings'
     | '/outlet/dashboard'
+    | '/outlet/history'
+    | '/outlet/profile'
+    | '/outlet/ratings'
+    | '/outlet/settings'
+    | '/outlet/special-service'
+    | '/outlet/subscription'
+    | '/outlet/workspace'
+    | '/agency'
+    | '/outlet'
     | '/admin/audit-log/$role'
     | '/admin/business/history'
     | '/admin/business/plan'
@@ -372,6 +610,7 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/agency'
+    | '/outlet'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -384,7 +623,28 @@ export interface FileRouteTypes {
     | '/admin/profile'
     | '/admin/settings'
     | '/agency/dashboard'
+    | '/agency/history'
+    | '/agency/live'
+    | '/agency/outlets'
+    | '/agency/pending'
+    | '/agency/profile'
+    | '/agency/prs'
+    | '/agency/pv'
+    | '/agency/roster'
+    | '/agency/special-service'
+    | '/agency/subscription'
+    | '/outlet/billing'
+    | '/outlet/bookings'
     | '/outlet/dashboard'
+    | '/outlet/history'
+    | '/outlet/profile'
+    | '/outlet/ratings'
+    | '/outlet/settings'
+    | '/outlet/special-service'
+    | '/outlet/subscription'
+    | '/outlet/workspace'
+    | '/agency/'
+    | '/outlet/'
     | '/admin/audit-log/$role'
     | '/admin/business/history'
     | '/admin/business/plan'
@@ -406,11 +666,11 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
+  OutletRouteRoute: typeof OutletRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
   NoAccessRoute: typeof NoAccessRoute
   NotFoundRoute: typeof NotFoundRoute
   SignupRoute: typeof SignupRoute
-  OutletDashboardRoute: typeof OutletDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -443,6 +703,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/outlet': {
+      id: '/outlet'
+      path: '/outlet'
+      fullPath: '/outlet'
+      preLoaderRoute: typeof OutletRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/agency': {
       id: '/agency'
       path: '/agency'
@@ -464,12 +731,159 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/outlet/': {
+      id: '/outlet/'
+      path: '/'
+      fullPath: '/outlet/'
+      preLoaderRoute: typeof OutletIndexRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/agency/': {
+      id: '/agency/'
+      path: '/'
+      fullPath: '/agency/'
+      preLoaderRoute: typeof AgencyIndexRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/outlet/workspace': {
+      id: '/outlet/workspace'
+      path: '/workspace'
+      fullPath: '/outlet/workspace'
+      preLoaderRoute: typeof OutletWorkspaceRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/subscription': {
+      id: '/outlet/subscription'
+      path: '/subscription'
+      fullPath: '/outlet/subscription'
+      preLoaderRoute: typeof OutletSubscriptionRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/special-service': {
+      id: '/outlet/special-service'
+      path: '/special-service'
+      fullPath: '/outlet/special-service'
+      preLoaderRoute: typeof OutletSpecialServiceRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/settings': {
+      id: '/outlet/settings'
+      path: '/settings'
+      fullPath: '/outlet/settings'
+      preLoaderRoute: typeof OutletSettingsRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/ratings': {
+      id: '/outlet/ratings'
+      path: '/ratings'
+      fullPath: '/outlet/ratings'
+      preLoaderRoute: typeof OutletRatingsRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/profile': {
+      id: '/outlet/profile'
+      path: '/profile'
+      fullPath: '/outlet/profile'
+      preLoaderRoute: typeof OutletProfileRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/history': {
+      id: '/outlet/history'
+      path: '/history'
+      fullPath: '/outlet/history'
+      preLoaderRoute: typeof OutletHistoryRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
     '/outlet/dashboard': {
       id: '/outlet/dashboard'
-      path: '/outlet/dashboard'
+      path: '/dashboard'
       fullPath: '/outlet/dashboard'
       preLoaderRoute: typeof OutletDashboardRouteImport
-      parentRoute: typeof rootRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/bookings': {
+      id: '/outlet/bookings'
+      path: '/bookings'
+      fullPath: '/outlet/bookings'
+      preLoaderRoute: typeof OutletBookingsRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/billing': {
+      id: '/outlet/billing'
+      path: '/billing'
+      fullPath: '/outlet/billing'
+      preLoaderRoute: typeof OutletBillingRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/agency/subscription': {
+      id: '/agency/subscription'
+      path: '/subscription'
+      fullPath: '/agency/subscription'
+      preLoaderRoute: typeof AgencySubscriptionRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/special-service': {
+      id: '/agency/special-service'
+      path: '/special-service'
+      fullPath: '/agency/special-service'
+      preLoaderRoute: typeof AgencySpecialServiceRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/roster': {
+      id: '/agency/roster'
+      path: '/roster'
+      fullPath: '/agency/roster'
+      preLoaderRoute: typeof AgencyRosterRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/pv': {
+      id: '/agency/pv'
+      path: '/pv'
+      fullPath: '/agency/pv'
+      preLoaderRoute: typeof AgencyPvRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/prs': {
+      id: '/agency/prs'
+      path: '/prs'
+      fullPath: '/agency/prs'
+      preLoaderRoute: typeof AgencyPrsRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/profile': {
+      id: '/agency/profile'
+      path: '/profile'
+      fullPath: '/agency/profile'
+      preLoaderRoute: typeof AgencyProfileRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/pending': {
+      id: '/agency/pending'
+      path: '/pending'
+      fullPath: '/agency/pending'
+      preLoaderRoute: typeof AgencyPendingRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/outlets': {
+      id: '/agency/outlets'
+      path: '/outlets'
+      fullPath: '/agency/outlets'
+      preLoaderRoute: typeof AgencyOutletsRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/live': {
+      id: '/agency/live'
+      path: '/live'
+      fullPath: '/agency/live'
+      preLoaderRoute: typeof AgencyLiveRouteImport
+      parentRoute: typeof AgencyRouteRoute
+    }
+    '/agency/history': {
+      id: '/agency/history'
+      path: '/history'
+      fullPath: '/agency/history'
+      preLoaderRoute: typeof AgencyHistoryRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
     '/agency/dashboard': {
       id: '/agency/dashboard'
@@ -731,25 +1145,79 @@ const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
 
 interface AgencyRouteRouteChildren {
   AgencyDashboardRoute: typeof AgencyDashboardRoute
+  AgencyHistoryRoute: typeof AgencyHistoryRoute
+  AgencyLiveRoute: typeof AgencyLiveRoute
+  AgencyOutletsRoute: typeof AgencyOutletsRoute
+  AgencyPendingRoute: typeof AgencyPendingRoute
+  AgencyProfileRoute: typeof AgencyProfileRoute
+  AgencyPrsRoute: typeof AgencyPrsRoute
+  AgencyPvRoute: typeof AgencyPvRoute
+  AgencyRosterRoute: typeof AgencyRosterRoute
+  AgencySpecialServiceRoute: typeof AgencySpecialServiceRoute
+  AgencySubscriptionRoute: typeof AgencySubscriptionRoute
+  AgencyIndexRoute: typeof AgencyIndexRoute
 }
 
 const AgencyRouteRouteChildren: AgencyRouteRouteChildren = {
   AgencyDashboardRoute: AgencyDashboardRoute,
+  AgencyHistoryRoute: AgencyHistoryRoute,
+  AgencyLiveRoute: AgencyLiveRoute,
+  AgencyOutletsRoute: AgencyOutletsRoute,
+  AgencyPendingRoute: AgencyPendingRoute,
+  AgencyProfileRoute: AgencyProfileRoute,
+  AgencyPrsRoute: AgencyPrsRoute,
+  AgencyPvRoute: AgencyPvRoute,
+  AgencyRosterRoute: AgencyRosterRoute,
+  AgencySpecialServiceRoute: AgencySpecialServiceRoute,
+  AgencySubscriptionRoute: AgencySubscriptionRoute,
+  AgencyIndexRoute: AgencyIndexRoute,
 }
 
 const AgencyRouteRouteWithChildren = AgencyRouteRoute._addFileChildren(
   AgencyRouteRouteChildren,
 )
 
+interface OutletRouteRouteChildren {
+  OutletBillingRoute: typeof OutletBillingRoute
+  OutletBookingsRoute: typeof OutletBookingsRoute
+  OutletDashboardRoute: typeof OutletDashboardRoute
+  OutletHistoryRoute: typeof OutletHistoryRoute
+  OutletProfileRoute: typeof OutletProfileRoute
+  OutletRatingsRoute: typeof OutletRatingsRoute
+  OutletSettingsRoute: typeof OutletSettingsRoute
+  OutletSpecialServiceRoute: typeof OutletSpecialServiceRoute
+  OutletSubscriptionRoute: typeof OutletSubscriptionRoute
+  OutletWorkspaceRoute: typeof OutletWorkspaceRoute
+  OutletIndexRoute: typeof OutletIndexRoute
+}
+
+const OutletRouteRouteChildren: OutletRouteRouteChildren = {
+  OutletBillingRoute: OutletBillingRoute,
+  OutletBookingsRoute: OutletBookingsRoute,
+  OutletDashboardRoute: OutletDashboardRoute,
+  OutletHistoryRoute: OutletHistoryRoute,
+  OutletProfileRoute: OutletProfileRoute,
+  OutletRatingsRoute: OutletRatingsRoute,
+  OutletSettingsRoute: OutletSettingsRoute,
+  OutletSpecialServiceRoute: OutletSpecialServiceRoute,
+  OutletSubscriptionRoute: OutletSubscriptionRoute,
+  OutletWorkspaceRoute: OutletWorkspaceRoute,
+  OutletIndexRoute: OutletIndexRoute,
+}
+
+const OutletRouteRouteWithChildren = OutletRouteRoute._addFileChildren(
+  OutletRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AdminRouteRoute: AdminRouteRouteWithChildren,
   AgencyRouteRoute: AgencyRouteRouteWithChildren,
+  OutletRouteRoute: OutletRouteRouteWithChildren,
   LoginRoute: LoginRoute,
   NoAccessRoute: NoAccessRoute,
   NotFoundRoute: NotFoundRoute,
   SignupRoute: SignupRoute,
-  OutletDashboardRoute: OutletDashboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

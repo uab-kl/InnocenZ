@@ -1,0 +1,126 @@
+import {
+  getOutletRule,
+  type AgencyRosterSlot,
+} from '@agency-portal/lib/agency-demo';
+import type { PrShiftOffer } from '@agency-portal/lib/pr-demo';
+import {
+  DEFAULT_PR_AGENCY_NAME,
+  formatRMPlain,
+} from '@agency-portal/lib/pr-demo';
+import {
+  OUTLET_GPS,
+  mapsDirectionsUrl,
+  type GeoCoord,
+} from '@agency-portal/lib/gps-locations';
+
+export type PrShiftOutletBrief = {
+  name: string;
+  event: string;
+  address: string;
+  streetAddress: string;
+  shiftTime: string;
+  shiftDate: string;
+  dressCode: string;
+  distance: string;
+  mapsUrl: string;
+  directionsUrl: string;
+  estPayout: string;
+  agencyNote?: string;
+  heroGradient: string;
+  opsContact?: string;
+  rating: string;
+  vip: boolean;
+};
+
+const OUTLET_META: Record<
+  string,
+  { gradient: string; street: string; dressCode: string; opsContact: string }
+> = {
+  'Velvet 23': {
+    gradient: 'linear-gradient(145deg,#2d1f4a 0%,#120a1c 48%,#8a5e22 100%)',
+    street: '23, Jalan Changkat, Bukit Bintang, 50200 Kuala Lumpur',
+    dressCode: 'Black elegant',
+    opsContact: 'Ops · Ahmad Razif',
+  },
+  'Onyx KL': {
+    gradient: 'linear-gradient(145deg,#1a2332 0%,#0a0e14 50%,#4a5568 100%)',
+    street: '88, Jalan P. Ramlee, Kuala Lumpur City Centre',
+    dressCode: 'Cocktail attire',
+    opsContact: 'Floor · Sarah Lim',
+  },
+  'Urban Soul': {
+    gradient: 'linear-gradient(145deg,#1f2937 0%,#0f1419 50%,#7c3aed 100%)',
+    street: 'Lot 12, Bukit Bintang Walk, Kuala Lumpur',
+    dressCode: 'Smart casual',
+    opsContact: 'Host · Daniel Ng',
+  },
+  'Bear Lounge': {
+    gradient: 'linear-gradient(145deg,#3d2817 0%,#1a1008 50%,#b45309 100%)',
+    street: '45, Changkat Bukit Bintang, Kuala Lumpur',
+    dressCode: 'Brand uniform',
+    opsContact: 'Manager · Priya K.',
+  },
+  Mermate: {
+    gradient: 'linear-gradient(145deg,#0c4a6e 0%,#082f49 50%,#22d3ee 100%)',
+    street: 'Level 3, Pavilion KL, 168 Jalan Bukit Bintang',
+    dressCode: 'Formal gown',
+    opsContact: 'Events · Michelle T.',
+  },
+};
+
+const DEFAULT_META = OUTLET_META['Velvet 23'];
+
+/** Check-in hero — agency assigns; outlets may request PRs but cannot assign directly. */
+export function getPrCheckInAssignmentLabel(
+  slot: AgencyRosterSlot | undefined,
+): string {
+  if (!slot) return "Tonight's shift";
+  const agency =
+    slot.agencyAssignment?.agencyName ??
+    slot.outletSwap?.agencyName ??
+    DEFAULT_PR_AGENCY_NAME;
+  if (slot.status === 'outlet-pending') {
+    return 'Outlet requested you · pending agency & PR approval';
+  }
+  if (slot.status === 'assignment-pending' || slot.status === 'scheduled') {
+    return `Agency assigned · ${agency}`;
+  }
+  return `Agency assigned · ${agency}`;
+}
+
+export function getPrShiftOutletBrief(
+  offer: PrShiftOffer,
+  opts?: {
+    shiftDateLabel?: string;
+    rosterSlot?: AgencyRosterSlot | null;
+    prCoord?: GeoCoord;
+  },
+): PrShiftOutletBrief {
+  const gps = OUTLET_GPS[offer.outlet] ?? OUTLET_GPS['Velvet 23'];
+  const meta = OUTLET_META[offer.outlet] ?? DEFAULT_META;
+  const outletCoord = { lat: gps.lat, lng: gps.lng };
+  const directionsUrl = opts?.prCoord
+    ? mapsDirectionsUrl(opts.prCoord, outletCoord)
+    : `https://www.google.com/maps?q=${gps.lat},${gps.lng}`;
+  const rule = getOutletRule(offer.outlet);
+  const estWages = rule.wagePerHour;
+
+  return {
+    name: offer.outlet,
+    event: offer.event,
+    address: gps.address,
+    streetAddress: meta.street,
+    shiftTime: offer.time,
+    shiftDate: opts?.shiftDateLabel ?? '',
+    dressCode: meta.dressCode,
+    distance: offer.distance,
+    mapsUrl: `https://www.google.com/maps?q=${gps.lat},${gps.lng}`,
+    directionsUrl,
+    estPayout: `${formatRMPlain(estWages)} shift pay · RM ${rule.wagePerHour.toLocaleString('en-MY')}/shift`,
+    agencyNote: opts?.rosterSlot?.agencyAssignment?.agencyNote,
+    heroGradient: meta.gradient,
+    opsContact: meta.opsContact,
+    rating: offer.rating,
+    vip: offer.vip,
+  };
+}
