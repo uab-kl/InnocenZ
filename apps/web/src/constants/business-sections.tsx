@@ -5,14 +5,14 @@ export const businessSections = [
 		key: "plan",
 		title: "Plan",
 		description: "Manage agency plans, limit types, and billing.",
-		href: "/business/plan",
+		href: "/admin/business/plan",
 		icon: CreditCard,
 	},
 	{
 		key: "history",
 		title: "History",
 		description: "Who subscribed and when — outlets and agencies, by date.",
-		href: "/business/history",
+		href: "/admin/business/history",
 		icon: History,
 	},
 ] as const;

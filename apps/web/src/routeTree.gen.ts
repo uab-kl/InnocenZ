@@ -11,31 +11,35 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as NotFoundRouteImport } from './routes/not-found'
+import { Route as NoAccessRouteImport } from './routes/no-access'
 import { Route as LoginRouteImport } from './routes/login'
-import { Route as adminRouteRouteImport } from './routes/(admin)/route'
+import { Route as AgencyRouteRouteImport } from './routes/agency/route'
+import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as adminSettingsRouteImport } from './routes/(admin)/settings'
-import { Route as adminProfileRouteImport } from './routes/(admin)/profile'
-import { Route as adminDashboardRouteImport } from './routes/(admin)/dashboard'
-import { Route as adminUserManagementRouteRouteImport } from './routes/(admin)/user-management/route'
-import { Route as adminRbacRouteRouteImport } from './routes/(admin)/rbac/route'
-import { Route as adminBusinessRouteRouteImport } from './routes/(admin)/business/route'
-import { Route as adminAuditLogRouteRouteImport } from './routes/(admin)/audit-log/route'
-import { Route as adminAuditLogIndexRouteImport } from './routes/(admin)/audit-log/index'
-import { Route as adminUserManagementPrRouteImport } from './routes/(admin)/user-management/pr'
-import { Route as adminUserManagementOutletRouteImport } from './routes/(admin)/user-management/outlet'
-import { Route as adminUserManagementAgencyRouteImport } from './routes/(admin)/user-management/agency'
-import { Route as adminUserManagementAdminRouteImport } from './routes/(admin)/user-management/admin'
-import { Route as adminServiceRequestsRouteImport } from './routes/(admin)/service/requests'
-import { Route as adminServiceOtherRouteImport } from './routes/(admin)/service/other'
-import { Route as adminRbacRoleRouteImport } from './routes/(admin)/rbac/role'
-import { Route as adminRbacPermissionRouteImport } from './routes/(admin)/rbac/permission'
-import { Route as adminRbacPendingRouteImport } from './routes/(admin)/rbac/pending'
-import { Route as adminRbacModuleRouteImport } from './routes/(admin)/rbac/module'
-import { Route as adminBusinessSubscriptionRouteImport } from './routes/(admin)/business/subscription'
-import { Route as adminBusinessPlanRouteImport } from './routes/(admin)/business/plan'
-import { Route as adminBusinessHistoryRouteImport } from './routes/(admin)/business/history'
-import { Route as adminAuditLogRoleRouteImport } from './routes/(admin)/audit-log/$role'
+import { Route as OutletDashboardRouteImport } from './routes/outlet/dashboard'
+import { Route as AgencyDashboardRouteImport } from './routes/agency/dashboard'
+import { Route as AdminSettingsRouteImport } from './routes/admin/settings'
+import { Route as AdminProfileRouteImport } from './routes/admin/profile'
+import { Route as AdminDashboardRouteImport } from './routes/admin/dashboard'
+import { Route as AdminUserManagementRouteRouteImport } from './routes/admin/user-management/route'
+import { Route as AdminRbacRouteRouteImport } from './routes/admin/rbac/route'
+import { Route as AdminBusinessRouteRouteImport } from './routes/admin/business/route'
+import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log/route'
+import { Route as AdminAuditLogIndexRouteImport } from './routes/admin/audit-log/index'
+import { Route as AdminUserManagementPrRouteImport } from './routes/admin/user-management/pr'
+import { Route as AdminUserManagementOutletRouteImport } from './routes/admin/user-management/outlet'
+import { Route as AdminUserManagementAgencyRouteImport } from './routes/admin/user-management/agency'
+import { Route as AdminUserManagementAdminRouteImport } from './routes/admin/user-management/admin'
+import { Route as AdminServiceRequestsRouteImport } from './routes/admin/service/requests'
+import { Route as AdminServiceOtherRouteImport } from './routes/admin/service/other'
+import { Route as AdminRbacRoleRouteImport } from './routes/admin/rbac/role'
+import { Route as AdminRbacPermissionRouteImport } from './routes/admin/rbac/permission'
+import { Route as AdminRbacPendingRouteImport } from './routes/admin/rbac/pending'
+import { Route as AdminRbacModuleRouteImport } from './routes/admin/rbac/module'
+import { Route as AdminBusinessSubscriptionRouteImport } from './routes/admin/business/subscription'
+import { Route as AdminBusinessPlanRouteImport } from './routes/admin/business/plan'
+import { Route as AdminBusinessHistoryRouteImport } from './routes/admin/business/history'
+import { Route as AdminAuditLogRoleRouteImport } from './routes/admin/audit-log/$role'
 
 const SignupRoute = SignupRouteImport.update({
   id: '/signup',
@@ -47,13 +51,24 @@ const NotFoundRoute = NotFoundRouteImport.update({
   path: '/not-found',
   getParentRoute: () => rootRouteImport,
 } as any)
+const NoAccessRoute = NoAccessRouteImport.update({
+  id: '/no-access',
+  path: '/no-access',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
   getParentRoute: () => rootRouteImport,
 } as any)
-const adminRouteRoute = adminRouteRouteImport.update({
-  id: '/(admin)',
+const AgencyRouteRoute = AgencyRouteRouteImport.update({
+  id: '/agency',
+  path: '/agency',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRouteRoute = AdminRouteRouteImport.update({
+  id: '/admin',
+  path: '/admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
@@ -61,300 +76,341 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const adminSettingsRoute = adminSettingsRouteImport.update({
-  id: '/settings',
-  path: '/settings',
-  getParentRoute: () => adminRouteRoute,
+const OutletDashboardRoute = OutletDashboardRouteImport.update({
+  id: '/outlet/dashboard',
+  path: '/outlet/dashboard',
+  getParentRoute: () => rootRouteImport,
 } as any)
-const adminProfileRoute = adminProfileRouteImport.update({
-  id: '/profile',
-  path: '/profile',
-  getParentRoute: () => adminRouteRoute,
-} as any)
-const adminDashboardRoute = adminDashboardRouteImport.update({
+const AgencyDashboardRoute = AgencyDashboardRouteImport.update({
   id: '/dashboard',
   path: '/dashboard',
-  getParentRoute: () => adminRouteRoute,
+  getParentRoute: () => AgencyRouteRoute,
 } as any)
-const adminUserManagementRouteRoute =
-  adminUserManagementRouteRouteImport.update({
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminProfileRoute = AdminProfileRouteImport.update({
+  id: '/profile',
+  path: '/profile',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminUserManagementRouteRoute =
+  AdminUserManagementRouteRouteImport.update({
     id: '/user-management',
     path: '/user-management',
-    getParentRoute: () => adminRouteRoute,
+    getParentRoute: () => AdminRouteRoute,
   } as any)
-const adminRbacRouteRoute = adminRbacRouteRouteImport.update({
+const AdminRbacRouteRoute = AdminRbacRouteRouteImport.update({
   id: '/rbac',
   path: '/rbac',
-  getParentRoute: () => adminRouteRoute,
+  getParentRoute: () => AdminRouteRoute,
 } as any)
-const adminBusinessRouteRoute = adminBusinessRouteRouteImport.update({
+const AdminBusinessRouteRoute = AdminBusinessRouteRouteImport.update({
   id: '/business',
   path: '/business',
-  getParentRoute: () => adminRouteRoute,
+  getParentRoute: () => AdminRouteRoute,
 } as any)
-const adminAuditLogRouteRoute = adminAuditLogRouteRouteImport.update({
+const AdminAuditLogRouteRoute = AdminAuditLogRouteRouteImport.update({
   id: '/audit-log',
   path: '/audit-log',
-  getParentRoute: () => adminRouteRoute,
+  getParentRoute: () => AdminRouteRoute,
 } as any)
-const adminAuditLogIndexRoute = adminAuditLogIndexRouteImport.update({
+const AdminAuditLogIndexRoute = AdminAuditLogIndexRouteImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => adminAuditLogRouteRoute,
+  getParentRoute: () => AdminAuditLogRouteRoute,
 } as any)
-const adminUserManagementPrRoute = adminUserManagementPrRouteImport.update({
+const AdminUserManagementPrRoute = AdminUserManagementPrRouteImport.update({
   id: '/pr',
   path: '/pr',
-  getParentRoute: () => adminUserManagementRouteRoute,
+  getParentRoute: () => AdminUserManagementRouteRoute,
 } as any)
-const adminUserManagementOutletRoute =
-  adminUserManagementOutletRouteImport.update({
+const AdminUserManagementOutletRoute =
+  AdminUserManagementOutletRouteImport.update({
     id: '/outlet',
     path: '/outlet',
-    getParentRoute: () => adminUserManagementRouteRoute,
+    getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
-const adminUserManagementAgencyRoute =
-  adminUserManagementAgencyRouteImport.update({
+const AdminUserManagementAgencyRoute =
+  AdminUserManagementAgencyRouteImport.update({
     id: '/agency',
     path: '/agency',
-    getParentRoute: () => adminUserManagementRouteRoute,
+    getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
-const adminUserManagementAdminRoute =
-  adminUserManagementAdminRouteImport.update({
+const AdminUserManagementAdminRoute =
+  AdminUserManagementAdminRouteImport.update({
     id: '/admin',
     path: '/admin',
-    getParentRoute: () => adminUserManagementRouteRoute,
+    getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
-const adminServiceRequestsRoute = adminServiceRequestsRouteImport.update({
+const AdminServiceRequestsRoute = AdminServiceRequestsRouteImport.update({
   id: '/service/requests',
   path: '/service/requests',
-  getParentRoute: () => adminRouteRoute,
+  getParentRoute: () => AdminRouteRoute,
 } as any)
-const adminServiceOtherRoute = adminServiceOtherRouteImport.update({
+const AdminServiceOtherRoute = AdminServiceOtherRouteImport.update({
   id: '/service/other',
   path: '/service/other',
-  getParentRoute: () => adminRouteRoute,
+  getParentRoute: () => AdminRouteRoute,
 } as any)
-const adminRbacRoleRoute = adminRbacRoleRouteImport.update({
+const AdminRbacRoleRoute = AdminRbacRoleRouteImport.update({
   id: '/role',
   path: '/role',
-  getParentRoute: () => adminRbacRouteRoute,
+  getParentRoute: () => AdminRbacRouteRoute,
 } as any)
-const adminRbacPermissionRoute = adminRbacPermissionRouteImport.update({
+const AdminRbacPermissionRoute = AdminRbacPermissionRouteImport.update({
   id: '/permission',
   path: '/permission',
-  getParentRoute: () => adminRbacRouteRoute,
+  getParentRoute: () => AdminRbacRouteRoute,
 } as any)
-const adminRbacPendingRoute = adminRbacPendingRouteImport.update({
+const AdminRbacPendingRoute = AdminRbacPendingRouteImport.update({
   id: '/pending',
   path: '/pending',
-  getParentRoute: () => adminRbacRouteRoute,
+  getParentRoute: () => AdminRbacRouteRoute,
 } as any)
-const adminRbacModuleRoute = adminRbacModuleRouteImport.update({
+const AdminRbacModuleRoute = AdminRbacModuleRouteImport.update({
   id: '/module',
   path: '/module',
-  getParentRoute: () => adminRbacRouteRoute,
+  getParentRoute: () => AdminRbacRouteRoute,
 } as any)
-const adminBusinessSubscriptionRoute =
-  adminBusinessSubscriptionRouteImport.update({
+const AdminBusinessSubscriptionRoute =
+  AdminBusinessSubscriptionRouteImport.update({
     id: '/subscription',
     path: '/subscription',
-    getParentRoute: () => adminBusinessRouteRoute,
+    getParentRoute: () => AdminBusinessRouteRoute,
   } as any)
-const adminBusinessPlanRoute = adminBusinessPlanRouteImport.update({
+const AdminBusinessPlanRoute = AdminBusinessPlanRouteImport.update({
   id: '/plan',
   path: '/plan',
-  getParentRoute: () => adminBusinessRouteRoute,
+  getParentRoute: () => AdminBusinessRouteRoute,
 } as any)
-const adminBusinessHistoryRoute = adminBusinessHistoryRouteImport.update({
+const AdminBusinessHistoryRoute = AdminBusinessHistoryRouteImport.update({
   id: '/history',
   path: '/history',
-  getParentRoute: () => adminBusinessRouteRoute,
+  getParentRoute: () => AdminBusinessRouteRoute,
 } as any)
-const adminAuditLogRoleRoute = adminAuditLogRoleRouteImport.update({
+const AdminAuditLogRoleRoute = AdminAuditLogRoleRouteImport.update({
   id: '/$role',
   path: '/$role',
-  getParentRoute: () => adminAuditLogRouteRoute,
+  getParentRoute: () => AdminAuditLogRouteRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/agency': typeof AgencyRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
   '/signup': typeof SignupRoute
-  '/audit-log': typeof adminAuditLogRouteRouteWithChildren
-  '/business': typeof adminBusinessRouteRouteWithChildren
-  '/rbac': typeof adminRbacRouteRouteWithChildren
-  '/user-management': typeof adminUserManagementRouteRouteWithChildren
-  '/dashboard': typeof adminDashboardRoute
-  '/profile': typeof adminProfileRoute
-  '/settings': typeof adminSettingsRoute
-  '/audit-log/$role': typeof adminAuditLogRoleRoute
-  '/business/history': typeof adminBusinessHistoryRoute
-  '/business/plan': typeof adminBusinessPlanRoute
-  '/business/subscription': typeof adminBusinessSubscriptionRoute
-  '/rbac/module': typeof adminRbacModuleRoute
-  '/rbac/pending': typeof adminRbacPendingRoute
-  '/rbac/permission': typeof adminRbacPermissionRoute
-  '/rbac/role': typeof adminRbacRoleRoute
-  '/service/other': typeof adminServiceOtherRoute
-  '/service/requests': typeof adminServiceRequestsRoute
-  '/user-management/admin': typeof adminUserManagementAdminRoute
-  '/user-management/agency': typeof adminUserManagementAgencyRoute
-  '/user-management/outlet': typeof adminUserManagementOutletRoute
-  '/user-management/pr': typeof adminUserManagementPrRoute
-  '/audit-log/': typeof adminAuditLogIndexRoute
+  '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
+  '/admin/business': typeof AdminBusinessRouteRouteWithChildren
+  '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
+  '/admin/user-management': typeof AdminUserManagementRouteRouteWithChildren
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/agency/dashboard': typeof AgencyDashboardRoute
+  '/outlet/dashboard': typeof OutletDashboardRoute
+  '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
+  '/admin/business/history': typeof AdminBusinessHistoryRoute
+  '/admin/business/plan': typeof AdminBusinessPlanRoute
+  '/admin/business/subscription': typeof AdminBusinessSubscriptionRoute
+  '/admin/rbac/module': typeof AdminRbacModuleRoute
+  '/admin/rbac/pending': typeof AdminRbacPendingRoute
+  '/admin/rbac/permission': typeof AdminRbacPermissionRoute
+  '/admin/rbac/role': typeof AdminRbacRoleRoute
+  '/admin/service/other': typeof AdminServiceOtherRoute
+  '/admin/service/requests': typeof AdminServiceRequestsRoute
+  '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
+  '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
+  '/admin/user-management/pr': typeof AdminUserManagementPrRoute
+  '/admin/audit-log/': typeof AdminAuditLogIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/agency': typeof AgencyRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
   '/signup': typeof SignupRoute
-  '/business': typeof adminBusinessRouteRouteWithChildren
-  '/rbac': typeof adminRbacRouteRouteWithChildren
-  '/user-management': typeof adminUserManagementRouteRouteWithChildren
-  '/dashboard': typeof adminDashboardRoute
-  '/profile': typeof adminProfileRoute
-  '/settings': typeof adminSettingsRoute
-  '/audit-log/$role': typeof adminAuditLogRoleRoute
-  '/business/history': typeof adminBusinessHistoryRoute
-  '/business/plan': typeof adminBusinessPlanRoute
-  '/business/subscription': typeof adminBusinessSubscriptionRoute
-  '/rbac/module': typeof adminRbacModuleRoute
-  '/rbac/pending': typeof adminRbacPendingRoute
-  '/rbac/permission': typeof adminRbacPermissionRoute
-  '/rbac/role': typeof adminRbacRoleRoute
-  '/service/other': typeof adminServiceOtherRoute
-  '/service/requests': typeof adminServiceRequestsRoute
-  '/user-management/admin': typeof adminUserManagementAdminRoute
-  '/user-management/agency': typeof adminUserManagementAgencyRoute
-  '/user-management/outlet': typeof adminUserManagementOutletRoute
-  '/user-management/pr': typeof adminUserManagementPrRoute
-  '/audit-log': typeof adminAuditLogIndexRoute
+  '/admin/business': typeof AdminBusinessRouteRouteWithChildren
+  '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
+  '/admin/user-management': typeof AdminUserManagementRouteRouteWithChildren
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/agency/dashboard': typeof AgencyDashboardRoute
+  '/outlet/dashboard': typeof OutletDashboardRoute
+  '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
+  '/admin/business/history': typeof AdminBusinessHistoryRoute
+  '/admin/business/plan': typeof AdminBusinessPlanRoute
+  '/admin/business/subscription': typeof AdminBusinessSubscriptionRoute
+  '/admin/rbac/module': typeof AdminRbacModuleRoute
+  '/admin/rbac/pending': typeof AdminRbacPendingRoute
+  '/admin/rbac/permission': typeof AdminRbacPermissionRoute
+  '/admin/rbac/role': typeof AdminRbacRoleRoute
+  '/admin/service/other': typeof AdminServiceOtherRoute
+  '/admin/service/requests': typeof AdminServiceRequestsRoute
+  '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
+  '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
+  '/admin/user-management/pr': typeof AdminUserManagementPrRoute
+  '/admin/audit-log': typeof AdminAuditLogIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/(admin)': typeof adminRouteRouteWithChildren
+  '/admin': typeof AdminRouteRouteWithChildren
+  '/agency': typeof AgencyRouteRouteWithChildren
   '/login': typeof LoginRoute
+  '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
   '/signup': typeof SignupRoute
-  '/(admin)/audit-log': typeof adminAuditLogRouteRouteWithChildren
-  '/(admin)/business': typeof adminBusinessRouteRouteWithChildren
-  '/(admin)/rbac': typeof adminRbacRouteRouteWithChildren
-  '/(admin)/user-management': typeof adminUserManagementRouteRouteWithChildren
-  '/(admin)/dashboard': typeof adminDashboardRoute
-  '/(admin)/profile': typeof adminProfileRoute
-  '/(admin)/settings': typeof adminSettingsRoute
-  '/(admin)/audit-log/$role': typeof adminAuditLogRoleRoute
-  '/(admin)/business/history': typeof adminBusinessHistoryRoute
-  '/(admin)/business/plan': typeof adminBusinessPlanRoute
-  '/(admin)/business/subscription': typeof adminBusinessSubscriptionRoute
-  '/(admin)/rbac/module': typeof adminRbacModuleRoute
-  '/(admin)/rbac/pending': typeof adminRbacPendingRoute
-  '/(admin)/rbac/permission': typeof adminRbacPermissionRoute
-  '/(admin)/rbac/role': typeof adminRbacRoleRoute
-  '/(admin)/service/other': typeof adminServiceOtherRoute
-  '/(admin)/service/requests': typeof adminServiceRequestsRoute
-  '/(admin)/user-management/admin': typeof adminUserManagementAdminRoute
-  '/(admin)/user-management/agency': typeof adminUserManagementAgencyRoute
-  '/(admin)/user-management/outlet': typeof adminUserManagementOutletRoute
-  '/(admin)/user-management/pr': typeof adminUserManagementPrRoute
-  '/(admin)/audit-log/': typeof adminAuditLogIndexRoute
+  '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
+  '/admin/business': typeof AdminBusinessRouteRouteWithChildren
+  '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
+  '/admin/user-management': typeof AdminUserManagementRouteRouteWithChildren
+  '/admin/dashboard': typeof AdminDashboardRoute
+  '/admin/profile': typeof AdminProfileRoute
+  '/admin/settings': typeof AdminSettingsRoute
+  '/agency/dashboard': typeof AgencyDashboardRoute
+  '/outlet/dashboard': typeof OutletDashboardRoute
+  '/admin/audit-log/$role': typeof AdminAuditLogRoleRoute
+  '/admin/business/history': typeof AdminBusinessHistoryRoute
+  '/admin/business/plan': typeof AdminBusinessPlanRoute
+  '/admin/business/subscription': typeof AdminBusinessSubscriptionRoute
+  '/admin/rbac/module': typeof AdminRbacModuleRoute
+  '/admin/rbac/pending': typeof AdminRbacPendingRoute
+  '/admin/rbac/permission': typeof AdminRbacPermissionRoute
+  '/admin/rbac/role': typeof AdminRbacRoleRoute
+  '/admin/service/other': typeof AdminServiceOtherRoute
+  '/admin/service/requests': typeof AdminServiceRequestsRoute
+  '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
+  '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
+  '/admin/user-management/pr': typeof AdminUserManagementPrRoute
+  '/admin/audit-log/': typeof AdminAuditLogIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/admin'
+    | '/agency'
     | '/login'
+    | '/no-access'
     | '/not-found'
     | '/signup'
-    | '/audit-log'
-    | '/business'
-    | '/rbac'
-    | '/user-management'
-    | '/dashboard'
-    | '/profile'
-    | '/settings'
-    | '/audit-log/$role'
-    | '/business/history'
-    | '/business/plan'
-    | '/business/subscription'
-    | '/rbac/module'
-    | '/rbac/pending'
-    | '/rbac/permission'
-    | '/rbac/role'
-    | '/service/other'
-    | '/service/requests'
-    | '/user-management/admin'
-    | '/user-management/agency'
-    | '/user-management/outlet'
-    | '/user-management/pr'
-    | '/audit-log/'
+    | '/admin/audit-log'
+    | '/admin/business'
+    | '/admin/rbac'
+    | '/admin/user-management'
+    | '/admin/dashboard'
+    | '/admin/profile'
+    | '/admin/settings'
+    | '/agency/dashboard'
+    | '/outlet/dashboard'
+    | '/admin/audit-log/$role'
+    | '/admin/business/history'
+    | '/admin/business/plan'
+    | '/admin/business/subscription'
+    | '/admin/rbac/module'
+    | '/admin/rbac/pending'
+    | '/admin/rbac/permission'
+    | '/admin/rbac/role'
+    | '/admin/service/other'
+    | '/admin/service/requests'
+    | '/admin/user-management/admin'
+    | '/admin/user-management/agency'
+    | '/admin/user-management/outlet'
+    | '/admin/user-management/pr'
+    | '/admin/audit-log/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
+    | '/admin'
+    | '/agency'
     | '/login'
+    | '/no-access'
     | '/not-found'
     | '/signup'
-    | '/business'
-    | '/rbac'
-    | '/user-management'
-    | '/dashboard'
-    | '/profile'
-    | '/settings'
-    | '/audit-log/$role'
-    | '/business/history'
-    | '/business/plan'
-    | '/business/subscription'
-    | '/rbac/module'
-    | '/rbac/pending'
-    | '/rbac/permission'
-    | '/rbac/role'
-    | '/service/other'
-    | '/service/requests'
-    | '/user-management/admin'
-    | '/user-management/agency'
-    | '/user-management/outlet'
-    | '/user-management/pr'
-    | '/audit-log'
+    | '/admin/business'
+    | '/admin/rbac'
+    | '/admin/user-management'
+    | '/admin/dashboard'
+    | '/admin/profile'
+    | '/admin/settings'
+    | '/agency/dashboard'
+    | '/outlet/dashboard'
+    | '/admin/audit-log/$role'
+    | '/admin/business/history'
+    | '/admin/business/plan'
+    | '/admin/business/subscription'
+    | '/admin/rbac/module'
+    | '/admin/rbac/pending'
+    | '/admin/rbac/permission'
+    | '/admin/rbac/role'
+    | '/admin/service/other'
+    | '/admin/service/requests'
+    | '/admin/user-management/admin'
+    | '/admin/user-management/agency'
+    | '/admin/user-management/outlet'
+    | '/admin/user-management/pr'
+    | '/admin/audit-log'
   id:
     | '__root__'
     | '/'
-    | '/(admin)'
+    | '/admin'
+    | '/agency'
     | '/login'
+    | '/no-access'
     | '/not-found'
     | '/signup'
-    | '/(admin)/audit-log'
-    | '/(admin)/business'
-    | '/(admin)/rbac'
-    | '/(admin)/user-management'
-    | '/(admin)/dashboard'
-    | '/(admin)/profile'
-    | '/(admin)/settings'
-    | '/(admin)/audit-log/$role'
-    | '/(admin)/business/history'
-    | '/(admin)/business/plan'
-    | '/(admin)/business/subscription'
-    | '/(admin)/rbac/module'
-    | '/(admin)/rbac/pending'
-    | '/(admin)/rbac/permission'
-    | '/(admin)/rbac/role'
-    | '/(admin)/service/other'
-    | '/(admin)/service/requests'
-    | '/(admin)/user-management/admin'
-    | '/(admin)/user-management/agency'
-    | '/(admin)/user-management/outlet'
-    | '/(admin)/user-management/pr'
-    | '/(admin)/audit-log/'
+    | '/admin/audit-log'
+    | '/admin/business'
+    | '/admin/rbac'
+    | '/admin/user-management'
+    | '/admin/dashboard'
+    | '/admin/profile'
+    | '/admin/settings'
+    | '/agency/dashboard'
+    | '/outlet/dashboard'
+    | '/admin/audit-log/$role'
+    | '/admin/business/history'
+    | '/admin/business/plan'
+    | '/admin/business/subscription'
+    | '/admin/rbac/module'
+    | '/admin/rbac/pending'
+    | '/admin/rbac/permission'
+    | '/admin/rbac/role'
+    | '/admin/service/other'
+    | '/admin/service/requests'
+    | '/admin/user-management/admin'
+    | '/admin/user-management/agency'
+    | '/admin/user-management/outlet'
+    | '/admin/user-management/pr'
+    | '/admin/audit-log/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  adminRouteRoute: typeof adminRouteRouteWithChildren
+  AdminRouteRoute: typeof AdminRouteRouteWithChildren
+  AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
   LoginRoute: typeof LoginRoute
+  NoAccessRoute: typeof NoAccessRoute
   NotFoundRoute: typeof NotFoundRoute
   SignupRoute: typeof SignupRoute
+  OutletDashboardRoute: typeof OutletDashboardRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -373,6 +429,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof NotFoundRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/no-access': {
+      id: '/no-access'
+      path: '/no-access'
+      fullPath: '/no-access'
+      preLoaderRoute: typeof NoAccessRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/login': {
       id: '/login'
       path: '/login'
@@ -380,11 +443,18 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(admin)': {
-      id: '/(admin)'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof adminRouteRouteImport
+    '/agency': {
+      id: '/agency'
+      path: '/agency'
+      fullPath: '/agency'
+      preLoaderRoute: typeof AgencyRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/admin': {
+      id: '/admin'
+      path: '/admin'
+      fullPath: '/admin'
+      preLoaderRoute: typeof AdminRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -394,263 +464,292 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/(admin)/settings': {
-      id: '/(admin)/settings'
-      path: '/settings'
-      fullPath: '/settings'
-      preLoaderRoute: typeof adminSettingsRouteImport
-      parentRoute: typeof adminRouteRoute
+    '/outlet/dashboard': {
+      id: '/outlet/dashboard'
+      path: '/outlet/dashboard'
+      fullPath: '/outlet/dashboard'
+      preLoaderRoute: typeof OutletDashboardRouteImport
+      parentRoute: typeof rootRouteImport
     }
-    '/(admin)/profile': {
-      id: '/(admin)/profile'
-      path: '/profile'
-      fullPath: '/profile'
-      preLoaderRoute: typeof adminProfileRouteImport
-      parentRoute: typeof adminRouteRoute
-    }
-    '/(admin)/dashboard': {
-      id: '/(admin)/dashboard'
+    '/agency/dashboard': {
+      id: '/agency/dashboard'
       path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof adminDashboardRouteImport
-      parentRoute: typeof adminRouteRoute
+      fullPath: '/agency/dashboard'
+      preLoaderRoute: typeof AgencyDashboardRouteImport
+      parentRoute: typeof AgencyRouteRoute
     }
-    '/(admin)/user-management': {
-      id: '/(admin)/user-management'
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/profile': {
+      id: '/admin/profile'
+      path: '/profile'
+      fullPath: '/admin/profile'
+      preLoaderRoute: typeof AdminProfileRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/dashboard': {
+      id: '/admin/dashboard'
+      path: '/dashboard'
+      fullPath: '/admin/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/user-management': {
+      id: '/admin/user-management'
       path: '/user-management'
-      fullPath: '/user-management'
-      preLoaderRoute: typeof adminUserManagementRouteRouteImport
-      parentRoute: typeof adminRouteRoute
+      fullPath: '/admin/user-management'
+      preLoaderRoute: typeof AdminUserManagementRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
-    '/(admin)/rbac': {
-      id: '/(admin)/rbac'
+    '/admin/rbac': {
+      id: '/admin/rbac'
       path: '/rbac'
-      fullPath: '/rbac'
-      preLoaderRoute: typeof adminRbacRouteRouteImport
-      parentRoute: typeof adminRouteRoute
+      fullPath: '/admin/rbac'
+      preLoaderRoute: typeof AdminRbacRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
-    '/(admin)/business': {
-      id: '/(admin)/business'
+    '/admin/business': {
+      id: '/admin/business'
       path: '/business'
-      fullPath: '/business'
-      preLoaderRoute: typeof adminBusinessRouteRouteImport
-      parentRoute: typeof adminRouteRoute
+      fullPath: '/admin/business'
+      preLoaderRoute: typeof AdminBusinessRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
-    '/(admin)/audit-log': {
-      id: '/(admin)/audit-log'
+    '/admin/audit-log': {
+      id: '/admin/audit-log'
       path: '/audit-log'
-      fullPath: '/audit-log'
-      preLoaderRoute: typeof adminAuditLogRouteRouteImport
-      parentRoute: typeof adminRouteRoute
+      fullPath: '/admin/audit-log'
+      preLoaderRoute: typeof AdminAuditLogRouteRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
-    '/(admin)/audit-log/': {
-      id: '/(admin)/audit-log/'
+    '/admin/audit-log/': {
+      id: '/admin/audit-log/'
       path: '/'
-      fullPath: '/audit-log/'
-      preLoaderRoute: typeof adminAuditLogIndexRouteImport
-      parentRoute: typeof adminAuditLogRouteRoute
+      fullPath: '/admin/audit-log/'
+      preLoaderRoute: typeof AdminAuditLogIndexRouteImport
+      parentRoute: typeof AdminAuditLogRouteRoute
     }
-    '/(admin)/user-management/pr': {
-      id: '/(admin)/user-management/pr'
+    '/admin/user-management/pr': {
+      id: '/admin/user-management/pr'
       path: '/pr'
-      fullPath: '/user-management/pr'
-      preLoaderRoute: typeof adminUserManagementPrRouteImport
-      parentRoute: typeof adminUserManagementRouteRoute
+      fullPath: '/admin/user-management/pr'
+      preLoaderRoute: typeof AdminUserManagementPrRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
     }
-    '/(admin)/user-management/outlet': {
-      id: '/(admin)/user-management/outlet'
+    '/admin/user-management/outlet': {
+      id: '/admin/user-management/outlet'
       path: '/outlet'
-      fullPath: '/user-management/outlet'
-      preLoaderRoute: typeof adminUserManagementOutletRouteImport
-      parentRoute: typeof adminUserManagementRouteRoute
+      fullPath: '/admin/user-management/outlet'
+      preLoaderRoute: typeof AdminUserManagementOutletRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
     }
-    '/(admin)/user-management/agency': {
-      id: '/(admin)/user-management/agency'
+    '/admin/user-management/agency': {
+      id: '/admin/user-management/agency'
       path: '/agency'
-      fullPath: '/user-management/agency'
-      preLoaderRoute: typeof adminUserManagementAgencyRouteImport
-      parentRoute: typeof adminUserManagementRouteRoute
+      fullPath: '/admin/user-management/agency'
+      preLoaderRoute: typeof AdminUserManagementAgencyRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
     }
-    '/(admin)/user-management/admin': {
-      id: '/(admin)/user-management/admin'
+    '/admin/user-management/admin': {
+      id: '/admin/user-management/admin'
       path: '/admin'
-      fullPath: '/user-management/admin'
-      preLoaderRoute: typeof adminUserManagementAdminRouteImport
-      parentRoute: typeof adminUserManagementRouteRoute
+      fullPath: '/admin/user-management/admin'
+      preLoaderRoute: typeof AdminUserManagementAdminRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
     }
-    '/(admin)/service/requests': {
-      id: '/(admin)/service/requests'
+    '/admin/service/requests': {
+      id: '/admin/service/requests'
       path: '/service/requests'
-      fullPath: '/service/requests'
-      preLoaderRoute: typeof adminServiceRequestsRouteImport
-      parentRoute: typeof adminRouteRoute
+      fullPath: '/admin/service/requests'
+      preLoaderRoute: typeof AdminServiceRequestsRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
-    '/(admin)/service/other': {
-      id: '/(admin)/service/other'
+    '/admin/service/other': {
+      id: '/admin/service/other'
       path: '/service/other'
-      fullPath: '/service/other'
-      preLoaderRoute: typeof adminServiceOtherRouteImport
-      parentRoute: typeof adminRouteRoute
+      fullPath: '/admin/service/other'
+      preLoaderRoute: typeof AdminServiceOtherRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
-    '/(admin)/rbac/role': {
-      id: '/(admin)/rbac/role'
+    '/admin/rbac/role': {
+      id: '/admin/rbac/role'
       path: '/role'
-      fullPath: '/rbac/role'
-      preLoaderRoute: typeof adminRbacRoleRouteImport
-      parentRoute: typeof adminRbacRouteRoute
+      fullPath: '/admin/rbac/role'
+      preLoaderRoute: typeof AdminRbacRoleRouteImport
+      parentRoute: typeof AdminRbacRouteRoute
     }
-    '/(admin)/rbac/permission': {
-      id: '/(admin)/rbac/permission'
+    '/admin/rbac/permission': {
+      id: '/admin/rbac/permission'
       path: '/permission'
-      fullPath: '/rbac/permission'
-      preLoaderRoute: typeof adminRbacPermissionRouteImport
-      parentRoute: typeof adminRbacRouteRoute
+      fullPath: '/admin/rbac/permission'
+      preLoaderRoute: typeof AdminRbacPermissionRouteImport
+      parentRoute: typeof AdminRbacRouteRoute
     }
-    '/(admin)/rbac/pending': {
-      id: '/(admin)/rbac/pending'
+    '/admin/rbac/pending': {
+      id: '/admin/rbac/pending'
       path: '/pending'
-      fullPath: '/rbac/pending'
-      preLoaderRoute: typeof adminRbacPendingRouteImport
-      parentRoute: typeof adminRbacRouteRoute
+      fullPath: '/admin/rbac/pending'
+      preLoaderRoute: typeof AdminRbacPendingRouteImport
+      parentRoute: typeof AdminRbacRouteRoute
     }
-    '/(admin)/rbac/module': {
-      id: '/(admin)/rbac/module'
+    '/admin/rbac/module': {
+      id: '/admin/rbac/module'
       path: '/module'
-      fullPath: '/rbac/module'
-      preLoaderRoute: typeof adminRbacModuleRouteImport
-      parentRoute: typeof adminRbacRouteRoute
+      fullPath: '/admin/rbac/module'
+      preLoaderRoute: typeof AdminRbacModuleRouteImport
+      parentRoute: typeof AdminRbacRouteRoute
     }
-    '/(admin)/business/subscription': {
-      id: '/(admin)/business/subscription'
+    '/admin/business/subscription': {
+      id: '/admin/business/subscription'
       path: '/subscription'
-      fullPath: '/business/subscription'
-      preLoaderRoute: typeof adminBusinessSubscriptionRouteImport
-      parentRoute: typeof adminBusinessRouteRoute
+      fullPath: '/admin/business/subscription'
+      preLoaderRoute: typeof AdminBusinessSubscriptionRouteImport
+      parentRoute: typeof AdminBusinessRouteRoute
     }
-    '/(admin)/business/plan': {
-      id: '/(admin)/business/plan'
+    '/admin/business/plan': {
+      id: '/admin/business/plan'
       path: '/plan'
-      fullPath: '/business/plan'
-      preLoaderRoute: typeof adminBusinessPlanRouteImport
-      parentRoute: typeof adminBusinessRouteRoute
+      fullPath: '/admin/business/plan'
+      preLoaderRoute: typeof AdminBusinessPlanRouteImport
+      parentRoute: typeof AdminBusinessRouteRoute
     }
-    '/(admin)/business/history': {
-      id: '/(admin)/business/history'
+    '/admin/business/history': {
+      id: '/admin/business/history'
       path: '/history'
-      fullPath: '/business/history'
-      preLoaderRoute: typeof adminBusinessHistoryRouteImport
-      parentRoute: typeof adminBusinessRouteRoute
+      fullPath: '/admin/business/history'
+      preLoaderRoute: typeof AdminBusinessHistoryRouteImport
+      parentRoute: typeof AdminBusinessRouteRoute
     }
-    '/(admin)/audit-log/$role': {
-      id: '/(admin)/audit-log/$role'
+    '/admin/audit-log/$role': {
+      id: '/admin/audit-log/$role'
       path: '/$role'
-      fullPath: '/audit-log/$role'
-      preLoaderRoute: typeof adminAuditLogRoleRouteImport
-      parentRoute: typeof adminAuditLogRouteRoute
+      fullPath: '/admin/audit-log/$role'
+      preLoaderRoute: typeof AdminAuditLogRoleRouteImport
+      parentRoute: typeof AdminAuditLogRouteRoute
     }
   }
 }
 
-interface adminAuditLogRouteRouteChildren {
-  adminAuditLogRoleRoute: typeof adminAuditLogRoleRoute
-  adminAuditLogIndexRoute: typeof adminAuditLogIndexRoute
+interface AdminAuditLogRouteRouteChildren {
+  AdminAuditLogRoleRoute: typeof AdminAuditLogRoleRoute
+  AdminAuditLogIndexRoute: typeof AdminAuditLogIndexRoute
 }
 
-const adminAuditLogRouteRouteChildren: adminAuditLogRouteRouteChildren = {
-  adminAuditLogRoleRoute: adminAuditLogRoleRoute,
-  adminAuditLogIndexRoute: adminAuditLogIndexRoute,
+const AdminAuditLogRouteRouteChildren: AdminAuditLogRouteRouteChildren = {
+  AdminAuditLogRoleRoute: AdminAuditLogRoleRoute,
+  AdminAuditLogIndexRoute: AdminAuditLogIndexRoute,
 }
 
-const adminAuditLogRouteRouteWithChildren =
-  adminAuditLogRouteRoute._addFileChildren(adminAuditLogRouteRouteChildren)
+const AdminAuditLogRouteRouteWithChildren =
+  AdminAuditLogRouteRoute._addFileChildren(AdminAuditLogRouteRouteChildren)
 
-interface adminBusinessRouteRouteChildren {
-  adminBusinessHistoryRoute: typeof adminBusinessHistoryRoute
-  adminBusinessPlanRoute: typeof adminBusinessPlanRoute
-  adminBusinessSubscriptionRoute: typeof adminBusinessSubscriptionRoute
+interface AdminBusinessRouteRouteChildren {
+  AdminBusinessHistoryRoute: typeof AdminBusinessHistoryRoute
+  AdminBusinessPlanRoute: typeof AdminBusinessPlanRoute
+  AdminBusinessSubscriptionRoute: typeof AdminBusinessSubscriptionRoute
 }
 
-const adminBusinessRouteRouteChildren: adminBusinessRouteRouteChildren = {
-  adminBusinessHistoryRoute: adminBusinessHistoryRoute,
-  adminBusinessPlanRoute: adminBusinessPlanRoute,
-  adminBusinessSubscriptionRoute: adminBusinessSubscriptionRoute,
+const AdminBusinessRouteRouteChildren: AdminBusinessRouteRouteChildren = {
+  AdminBusinessHistoryRoute: AdminBusinessHistoryRoute,
+  AdminBusinessPlanRoute: AdminBusinessPlanRoute,
+  AdminBusinessSubscriptionRoute: AdminBusinessSubscriptionRoute,
 }
 
-const adminBusinessRouteRouteWithChildren =
-  adminBusinessRouteRoute._addFileChildren(adminBusinessRouteRouteChildren)
+const AdminBusinessRouteRouteWithChildren =
+  AdminBusinessRouteRoute._addFileChildren(AdminBusinessRouteRouteChildren)
 
-interface adminRbacRouteRouteChildren {
-  adminRbacModuleRoute: typeof adminRbacModuleRoute
-  adminRbacPendingRoute: typeof adminRbacPendingRoute
-  adminRbacPermissionRoute: typeof adminRbacPermissionRoute
-  adminRbacRoleRoute: typeof adminRbacRoleRoute
+interface AdminRbacRouteRouteChildren {
+  AdminRbacModuleRoute: typeof AdminRbacModuleRoute
+  AdminRbacPendingRoute: typeof AdminRbacPendingRoute
+  AdminRbacPermissionRoute: typeof AdminRbacPermissionRoute
+  AdminRbacRoleRoute: typeof AdminRbacRoleRoute
 }
 
-const adminRbacRouteRouteChildren: adminRbacRouteRouteChildren = {
-  adminRbacModuleRoute: adminRbacModuleRoute,
-  adminRbacPendingRoute: adminRbacPendingRoute,
-  adminRbacPermissionRoute: adminRbacPermissionRoute,
-  adminRbacRoleRoute: adminRbacRoleRoute,
+const AdminRbacRouteRouteChildren: AdminRbacRouteRouteChildren = {
+  AdminRbacModuleRoute: AdminRbacModuleRoute,
+  AdminRbacPendingRoute: AdminRbacPendingRoute,
+  AdminRbacPermissionRoute: AdminRbacPermissionRoute,
+  AdminRbacRoleRoute: AdminRbacRoleRoute,
 }
 
-const adminRbacRouteRouteWithChildren = adminRbacRouteRoute._addFileChildren(
-  adminRbacRouteRouteChildren,
+const AdminRbacRouteRouteWithChildren = AdminRbacRouteRoute._addFileChildren(
+  AdminRbacRouteRouteChildren,
 )
 
-interface adminUserManagementRouteRouteChildren {
-  adminUserManagementAdminRoute: typeof adminUserManagementAdminRoute
-  adminUserManagementAgencyRoute: typeof adminUserManagementAgencyRoute
-  adminUserManagementOutletRoute: typeof adminUserManagementOutletRoute
-  adminUserManagementPrRoute: typeof adminUserManagementPrRoute
+interface AdminUserManagementRouteRouteChildren {
+  AdminUserManagementAdminRoute: typeof AdminUserManagementAdminRoute
+  AdminUserManagementAgencyRoute: typeof AdminUserManagementAgencyRoute
+  AdminUserManagementOutletRoute: typeof AdminUserManagementOutletRoute
+  AdminUserManagementPrRoute: typeof AdminUserManagementPrRoute
 }
 
-const adminUserManagementRouteRouteChildren: adminUserManagementRouteRouteChildren =
+const AdminUserManagementRouteRouteChildren: AdminUserManagementRouteRouteChildren =
   {
-    adminUserManagementAdminRoute: adminUserManagementAdminRoute,
-    adminUserManagementAgencyRoute: adminUserManagementAgencyRoute,
-    adminUserManagementOutletRoute: adminUserManagementOutletRoute,
-    adminUserManagementPrRoute: adminUserManagementPrRoute,
+    AdminUserManagementAdminRoute: AdminUserManagementAdminRoute,
+    AdminUserManagementAgencyRoute: AdminUserManagementAgencyRoute,
+    AdminUserManagementOutletRoute: AdminUserManagementOutletRoute,
+    AdminUserManagementPrRoute: AdminUserManagementPrRoute,
   }
 
-const adminUserManagementRouteRouteWithChildren =
-  adminUserManagementRouteRoute._addFileChildren(
-    adminUserManagementRouteRouteChildren,
+const AdminUserManagementRouteRouteWithChildren =
+  AdminUserManagementRouteRoute._addFileChildren(
+    AdminUserManagementRouteRouteChildren,
   )
 
-interface adminRouteRouteChildren {
-  adminAuditLogRouteRoute: typeof adminAuditLogRouteRouteWithChildren
-  adminBusinessRouteRoute: typeof adminBusinessRouteRouteWithChildren
-  adminRbacRouteRoute: typeof adminRbacRouteRouteWithChildren
-  adminUserManagementRouteRoute: typeof adminUserManagementRouteRouteWithChildren
-  adminDashboardRoute: typeof adminDashboardRoute
-  adminProfileRoute: typeof adminProfileRoute
-  adminSettingsRoute: typeof adminSettingsRoute
-  adminServiceOtherRoute: typeof adminServiceOtherRoute
-  adminServiceRequestsRoute: typeof adminServiceRequestsRoute
+interface AdminRouteRouteChildren {
+  AdminAuditLogRouteRoute: typeof AdminAuditLogRouteRouteWithChildren
+  AdminBusinessRouteRoute: typeof AdminBusinessRouteRouteWithChildren
+  AdminRbacRouteRoute: typeof AdminRbacRouteRouteWithChildren
+  AdminUserManagementRouteRoute: typeof AdminUserManagementRouteRouteWithChildren
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminProfileRoute: typeof AdminProfileRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminServiceOtherRoute: typeof AdminServiceOtherRoute
+  AdminServiceRequestsRoute: typeof AdminServiceRequestsRoute
 }
 
-const adminRouteRouteChildren: adminRouteRouteChildren = {
-  adminAuditLogRouteRoute: adminAuditLogRouteRouteWithChildren,
-  adminBusinessRouteRoute: adminBusinessRouteRouteWithChildren,
-  adminRbacRouteRoute: adminRbacRouteRouteWithChildren,
-  adminUserManagementRouteRoute: adminUserManagementRouteRouteWithChildren,
-  adminDashboardRoute: adminDashboardRoute,
-  adminProfileRoute: adminProfileRoute,
-  adminSettingsRoute: adminSettingsRoute,
-  adminServiceOtherRoute: adminServiceOtherRoute,
-  adminServiceRequestsRoute: adminServiceRequestsRoute,
+const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminAuditLogRouteRoute: AdminAuditLogRouteRouteWithChildren,
+  AdminBusinessRouteRoute: AdminBusinessRouteRouteWithChildren,
+  AdminRbacRouteRoute: AdminRbacRouteRouteWithChildren,
+  AdminUserManagementRouteRoute: AdminUserManagementRouteRouteWithChildren,
+  AdminDashboardRoute: AdminDashboardRoute,
+  AdminProfileRoute: AdminProfileRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminServiceOtherRoute: AdminServiceOtherRoute,
+  AdminServiceRequestsRoute: AdminServiceRequestsRoute,
 }
 
-const adminRouteRouteWithChildren = adminRouteRoute._addFileChildren(
-  adminRouteRouteChildren,
+const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
+  AdminRouteRouteChildren,
+)
+
+interface AgencyRouteRouteChildren {
+  AgencyDashboardRoute: typeof AgencyDashboardRoute
+}
+
+const AgencyRouteRouteChildren: AgencyRouteRouteChildren = {
+  AgencyDashboardRoute: AgencyDashboardRoute,
+}
+
+const AgencyRouteRouteWithChildren = AgencyRouteRoute._addFileChildren(
+  AgencyRouteRouteChildren,
 )
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  adminRouteRoute: adminRouteRouteWithChildren,
+  AdminRouteRoute: AdminRouteRouteWithChildren,
+  AgencyRouteRoute: AgencyRouteRouteWithChildren,
   LoginRoute: LoginRoute,
+  NoAccessRoute: NoAccessRoute,
   NotFoundRoute: NotFoundRoute,
   SignupRoute: SignupRoute,
+  OutletDashboardRoute: OutletDashboardRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

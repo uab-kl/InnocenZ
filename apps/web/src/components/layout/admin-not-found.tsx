@@ -29,7 +29,7 @@ export function AdminNotFoundPage() {
         </p>
 
         <Button asChild size="lg" className="mt-8 h-11 gap-2.5 px-8 text-white dark:text-[#1a1726]">
-          <Link to="/dashboard" className="text-inherit [&_svg]:text-inherit">
+          <Link to="/admin/dashboard" className="text-inherit [&_svg]:text-inherit">
             <LayoutDashboard className="h-4 w-4" />
             Back to dashboard
           </Link>

@@ -58,14 +58,14 @@ export const sidebarSections: SidebarSection[] = [
 			{
 				key: "sidebar-dashboard",
 				title: "Dashboard",
-				href: "/dashboard",
+				href: "/admin/dashboard",
 				icon: LayoutDashboard,
 				allowedPermission: ["*"],
 			},
 			{
 				key: "sidebar-settings",
 				title: "Settings",
-				href: "/settings",
+				href: "/admin/settings",
 				icon: Settings,
 				allowedPermission: ["*"],
 			},
@@ -98,14 +98,14 @@ export const sidebarSections: SidebarSection[] = [
 			{
 				key: "sidebar-service-requests",
 				title: "Plan Request",
-				href: "/service/requests",
+				href: "/admin/service/requests",
 				icon: Handshake,
 				allowedPermission: ["*"],
 			},
 			{
 				key: "sidebar-service-other",
 				title: "Jobs & Special Services",
-				href: "/service/other",
+				href: "/admin/service/other",
 				icon: LayoutGrid,
 				allowedPermission: ["*"],
 			},
@@ -129,7 +129,7 @@ export const sidebarSections: SidebarSection[] = [
 			{
 				key: "sidebar-audit-log",
 				title: "Audit Log",
-				href: "/audit-log",
+				href: "/admin/audit-log",
 				icon: FileText,
 				allowedPermission: ["*"],
 			},
@@ -141,7 +141,7 @@ export const allNavigationItems: NavLinkSchemaType[] = [
 	{
 		key: "sidebar-dashboard",
 		title: "Dashboard",
-		href: "/dashboard",
+		href: "/admin/dashboard",
 		icon: LayoutDashboard,
 		allowedPermission: ["*"],
 		variant: "default",
@@ -149,7 +149,7 @@ export const allNavigationItems: NavLinkSchemaType[] = [
 	{
 		key: "sidebar-user-management",
 		title: "User",
-		href: "/user-management/admin",
+		href: "/admin/user-management/admin",
 		icon: Users,
 		allowedPermission: ["*"],
 		variant: "default",
@@ -165,7 +165,7 @@ export const allNavigationItems: NavLinkSchemaType[] = [
 	{
 		key: "sidebar-rbac",
 		title: "RBAC",
-		href: "/rbac/role",
+		href: "/admin/rbac/role",
 		icon: Shield,
 		allowedPermission: ["*"],
 		variant: "default",
@@ -181,7 +181,7 @@ export const allNavigationItems: NavLinkSchemaType[] = [
 	{
 		key: "sidebar-audit-log",
 		title: "Audit Log",
-		href: "/audit-log",
+		href: "/admin/audit-log",
 		icon: FileText,
 		allowedPermission: ["*"],
 		variant: "default",
