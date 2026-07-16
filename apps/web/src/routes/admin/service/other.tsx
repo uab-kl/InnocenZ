@@ -151,14 +151,6 @@ const sourceNameOf = (record: SpecialService) =>
 const formatBudget = (budget: string | null) =>
 	budget != null && budget.trim() !== "" ? `RM ${budget}` : "—";
 
-const sourceNameOf = (record: SpecialService) =>
-	record.initiatedBy === "agency"
-		? record.postingAgencyName || ""
-		: record.outletName;
-
-const formatBudget = (budget: string | null) =>
-	budget != null && budget.trim() !== "" ? `RM ${budget}` : "—";
-
 function SpecialServicesPage() {
   const { logout } = useAuth();
   const queryClient = useQueryClient();
