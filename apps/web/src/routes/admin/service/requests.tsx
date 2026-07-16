@@ -1,12 +1,13 @@
 import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+	keepPreviousData,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
 import {
 	AlertCircle,
+	ArrowRight,
 	CheckCircle2,
 	Handshake,
 	Loader2,
@@ -15,11 +16,11 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { PageHeader, PageShell } from "@/components/admin/page-header";
 import {
 	DateMultiFilter,
 	datesToQueryParam,
 } from "@/components/admin/date-multi-filter";
+import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { SourceToggle } from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -60,11 +61,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import {
-  formatDate,
-  formatNumber,
-  formatPrice,
-  getErrorMessage,
-} from '@/lib/utils';
+	formatDate,
+	formatNumber,
+	formatPrice,
+	getErrorMessage,
+} from "@/lib/utils";
 import {
 	type AdminRequest,
 	type AdminRequestStatus,
@@ -77,27 +78,35 @@ import {
 	type SubscriberType,
 	updateAdminRequest,
 } from "@/services/admin-request";
-import { fetchSubscriptions } from "@/services/subscription";
 import type { Subscription } from "@/services/subscription";
+import { fetchSubscriptions } from "@/services/subscription";
 
-export const Route = createFileRoute('/admin/service/requests')({
-  component: RequestsPage,
-  head: () => ({
-    meta: [{ title: 'Plan Request — Innocenz Admin' }],
-  }),
+export const Route = createFileRoute("/admin/service/requests")({
+	component: RequestsPage,
+	head: () => ({
+		meta: [{ title: "Plan Request — Innocenz Admin" }],
+	}),
 });
 
 const PAGE_SIZE = 10;
 
-type StatusFilter = 'all' | AdminRequestStatus;
-type RoleFilter = 'all' | SubscriberType;
-type TypeFilter = 'all' | AdminRequestType;
+type StatusFilter = "all" | AdminRequestStatus;
+type RoleFilter = "all" | SubscriberType;
+
+// This inbox holds exactly two request kinds:
+//  • outlet  → "Integrate with POS" add-on quote ("Request admin quote")
+//  • agency  → Custom (151+ PV) tier "Renegotiate Price"
+const INBOX_TYPES: AdminRequestType[] = [
+	"pos_integration_quote",
+	"custom_renegotiation",
+];
 
 const requestTypeLabels: Record<AdminRequestType, string> = {
-  pos_integration_quote: 'POS quote',
-  plan_change: 'Plan change',
-  contact: 'Contact',
-  other: 'Other',
+	pos_integration_quote: "POS quote",
+	custom_renegotiation: "Custom",
+	plan_change: "Plan change",
+	contact: "Contact",
+	other: "Other",
 };
 
 const statusBadgeColors: Record<AdminRequestStatus, string> = {
@@ -105,6 +114,12 @@ const statusBadgeColors: Record<AdminRequestStatus, string> = {
 		"border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
 	contacted: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
 	resolved:
+		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+	// Plan-change statuses — rows live on /admin/service/plan-changes, kept here
+	// so the shared status map stays exhaustive.
+	declined: "border-red-500/30 bg-red-500/10 text-red-600 dark:text-red-400",
+	direct: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
+	approved:
 		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
 };
 
@@ -119,10 +134,7 @@ const roleLabels: Record<SubscriberType, string> = {
 	agency: "Agency",
 };
 
-// The Quoted (RM) price is admin-negotiable only for:
-//  • outlet POS-integration quotes, and
-//  • agency plan-changes on the Custom (151+ PV) tier.
-// All other plan-change rows ride the previous plan's fixed price.
+/** The subscriber's current tier — the "From plan" side of the request. */
 function planForRequest(
 	request: AdminRequest,
 	planById: Map<string, Subscription>,
@@ -132,93 +144,79 @@ function planForRequest(
 		: undefined;
 }
 
-function requestedPlanForRequest(
-	request: AdminRequest,
-	planById: Map<string, Subscription>,
-): Subscription | undefined {
-	return request.requestedPlanId
-		? planById.get(request.requestedPlanId)
-		: undefined;
-}
-
-/** Plan-change: tier before the switch. Other types: — */
-function previousPlanLabel(
+/** From plan = the tier the subscriber is on right now. */
+function fromPlanLabel(
 	request: AdminRequest,
 	planById: Map<string, Subscription>,
 ): string {
-	if (request.type !== "plan_change") return "—";
 	return planForRequest(request, planById)?.name ?? "—";
 }
 
-/** Plan-change: requested tier. Other types: their current subscription tier. */
-function currentPlanLabel(
-	request: AdminRequest,
-	planById: Map<string, Subscription>,
-): string {
-	if (request.type === "plan_change") {
-		return requestedPlanForRequest(request, planById)?.name ?? "—";
-	}
-	return planForRequest(request, planById)?.name ?? "—";
+/** To plan = what the request is for: the POS add-on or the Custom tier. */
+function toPlanLabel(request: AdminRequest): string {
+	if (request.type === "pos_integration_quote") return "Integrate with POS";
+	if (request.type === "custom_renegotiation") return "Custom";
+	return "—";
 }
 
-function isPriceNegotiable(
-	request: AdminRequest,
-	plan?: Subscription,
-): boolean {
-	if (request.subscriberType === "outlet" && request.type === "pos_integration_quote") {
+// Only two combos carry a price on this page: outlet POS-integration quotes
+// and agency Custom (151+ PV) renegotiations. Everything else shows no price.
+function isPriceNegotiable(request: AdminRequest): boolean {
+	if (
+		request.subscriberType === "outlet" &&
+		request.type === "pos_integration_quote"
+	) {
 		return true;
 	}
 	return (
 		request.subscriberType === "agency" &&
-		request.type === "plan_change" &&
-		plan?.name === "Custom"
+		request.type === "custom_renegotiation"
 	);
 }
 
-/** Negotiated quote is entered/updated only after the request is resolved. */
-function canEditQuote(request: AdminRequest, plan?: Subscription): boolean {
-	return isPriceNegotiable(request, plan) && request.status === "resolved";
-}
-
-function showFixedPlanPrice(
-	request: AdminRequest,
-	plan?: Subscription,
-): boolean {
-	if (!plan || isPriceNegotiable(request, plan)) return false;
-	return request.type === "plan_change";
+/**
+ * The estimate can be negotiated/changed while the request is open; Resolve
+ * finalises it (defaulting to the current plan's actual price if left empty).
+ */
+function canEditQuote(request: AdminRequest): boolean {
+	return isPriceNegotiable(request) && request.status !== "resolved";
 }
 
 function RequestsPage() {
-  const { logout } = useAuth();
-  const queryClient = useQueryClient();
+	const { logout } = useAuth();
+	const queryClient = useQueryClient();
 
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [roleFilter, setRoleFilter] = useState<RoleFilter>("all");
-	const [typeFilter, setTypeFilter] = useState<TypeFilter>("all");
 	const [requestedDates, setRequestedDates] = useState<Date[]>([]);
 	const [page, setPage] = useState(1);
 	const [editRequest, setEditRequest] = useState<AdminRequest | null>(null);
 
-	const queryParams: AdminRequestsQueryParams = { page, pageSize: PAGE_SIZE };
+	// Only the two inbox kinds are listed here — plan changes have their own
+	// page, and contact/other requests are not part of this flow.
+	const queryParams: AdminRequestsQueryParams = {
+		page,
+		pageSize: PAGE_SIZE,
+		types: INBOX_TYPES,
+	};
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;
-	if (typeFilter !== "all") queryParams.type = typeFilter;
 	const requestedDatesParam = datesToQueryParam(requestedDates);
 	if (requestedDatesParam) queryParams.dates = requestedDatesParam;
 
-  const requestsQuery = useQuery({
-    queryKey: ['admin-requests', queryParams],
-    queryFn: () => fetchAdminRequests(queryParams, logout),
-    placeholderData: keepPreviousData,
-    staleTime: 30_000,
-    retry: 2,
-  });
+	const requestsQuery = useQuery({
+		queryKey: ["admin-requests", queryParams],
+		queryFn: () => fetchAdminRequests(queryParams, logout),
+		placeholderData: keepPreviousData,
+		staleTime: 30_000,
+		retry: 2,
+	});
 
-  const summaryQuery = useQuery({
-    queryKey: ['admin-requests', 'negotiated-summary'],
-    queryFn: () => fetchNegotiatedSummary(logout),
-    staleTime: 30_000,
-  });
+	const summaryQuery = useQuery({
+		queryKey: ["admin-requests", "negotiated-summary"],
+		queryFn: () => fetchNegotiatedSummary(logout),
+		staleTime: 30_000,
+	});
 
 	// Resolve currentPlanId -> plan (name + fixed price) for each request row.
 	const plansQuery = useQuery({
@@ -231,19 +229,19 @@ function RequestsPage() {
 		(plansQuery.data?.data ?? []).map((plan) => [plan.id, plan]),
 	);
 
-  const contactedMutation = useMutation({
-    mutationFn: (id: string) => markRequestContacted(id, logout),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['admin-requests'] });
-      toast.success(response.message || 'Marked as contacted');
-    },
-    onError: (error) => {
-      toast.error(
-        toMutationError(error, 'Failed to mark as contacted')?.message ??
-          'Failed to mark as contacted',
-      );
-    },
-  });
+	const contactedMutation = useMutation({
+		mutationFn: (id: string) => markRequestContacted(id, logout),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
+			toast.success(response.message || "Marked as contacted");
+		},
+		onError: (error) => {
+			toast.error(
+				toMutationError(error, "Failed to mark as contacted")?.message ??
+					"Failed to mark as contacted",
+			);
+		},
+	});
 
 	const resolveMutation = useMutation({
 		mutationFn: ({
@@ -298,50 +296,50 @@ function RequestsPage() {
 		resolveMutation.isPending ||
 		updateFieldsMutation.isPending;
 
-  const summaryCards = [
-    {
-      key: 'outlet',
-      label: 'Outlet quotes',
-      total: summary?.byRole.outlet.total ?? 0,
-      count: summary?.byRole.outlet.count ?? 0,
-    },
-    {
-      key: 'agency',
-      label: 'Agency quotes',
-      total: summary?.byRole.agency.total ?? 0,
-      count: summary?.byRole.agency.count ?? 0,
-    },
-    {
-      key: 'total',
-      label: 'Total negotiated',
-      total: summary?.totals.total ?? 0,
-      count: summary?.totals.count ?? 0,
-    },
-  ];
+	const summaryCards = [
+		{
+			key: "outlet",
+			label: "Outlet quotes",
+			total: summary?.byRole.outlet.total ?? 0,
+			count: summary?.byRole.outlet.count ?? 0,
+		},
+		{
+			key: "agency",
+			label: "Agency quotes",
+			total: summary?.byRole.agency.total ?? 0,
+			count: summary?.byRole.agency.count ?? 0,
+		},
+		{
+			key: "total",
+			label: "Total negotiated",
+			total: summary?.totals.total ?? 0,
+			count: summary?.totals.count ?? 0,
+		},
+	];
 
 	return (
 		<PageShell>
 			<PageHeader
 				icon={Handshake}
 				title="Plan Request"
-				description="Plan requests from outlets and agencies. Plan-change rows show the previous plan. Only outlet POS quotes and agency Custom-tier changes are negotiable — set the quote after Resolve. All other plan changes use the fixed previous-plan price."
+				description="Two request kinds land here: outlets asking for an Integrate-with-POS quote, and agencies renegotiating the Custom (151+ PV) tier. Negotiate or change the estimate before Resolve — once resolved the price is final."
 			/>
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        {summaryCards.map((card) => (
-          <Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
-            <CardHeader className="pb-2">
-              <CardDescription>{card.label}</CardDescription>
-              <CardTitle className="text-2xl">
-                RM {formatPrice(card.total)}
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="text-xs text-muted-foreground">
-              {formatNumber(card.count)} resolved with a price
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+			<div className="grid gap-4 sm:grid-cols-3">
+				{summaryCards.map((card) => (
+					<Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
+						<CardHeader className="pb-2">
+							<CardDescription>{card.label}</CardDescription>
+							<CardTitle className="text-2xl">
+								RM {formatPrice(card.total)}
+							</CardTitle>
+						</CardHeader>
+						<CardContent className="text-xs text-muted-foreground">
+							{formatNumber(card.count)} resolved with a price
+						</CardContent>
+					</Card>
+				))}
+			</div>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
@@ -368,27 +366,6 @@ function RequestsPage() {
 									setPage(1);
 								}}
 							/>
-
-              <Select
-                value={typeFilter}
-                onValueChange={(value) => {
-                  setTypeFilter(value as TypeFilter);
-                  setPage(1);
-                }}
-              >
-                <SelectTrigger className="sm:w-40" aria-label="Filter by type">
-                  <SelectValue placeholder="All Types" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">All Types</SelectItem>
-                  <SelectItem value="pos_integration_quote">
-                    POS quote
-                  </SelectItem>
-                  <SelectItem value="plan_change">Plan change</SelectItem>
-                  <SelectItem value="contact">Contact</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                </SelectContent>
-              </Select>
 
 							<Select
 								value={statusFilter}
@@ -433,8 +410,8 @@ function RequestsPage() {
 									<TableHead className="w-[100px]">Role</TableHead>
 									<TableHead>Type</TableHead>
 									<TableHead className="w-[220px]">Remarks</TableHead>
-									<TableHead>Previous plan</TableHead>
-									<TableHead>Current plan</TableHead>
+									<TableHead>From plan</TableHead>
+									<TableHead>To plan</TableHead>
 									<TableHead>Quoted (RM)</TableHead>
 									<TableHead className="w-[110px]">Status</TableHead>
 									<TableHead className="w-[170px]">Requested</TableHead>
@@ -484,10 +461,9 @@ function RequestsPage() {
 								) : (
 									records.map((request) => {
 										const plan = planForRequest(request, planById);
-										const previousPlan = previousPlanLabel(request, planById);
-										const currentPlan = currentPlanLabel(request, planById);
-										const negotiable = isPriceNegotiable(request, plan);
-										const fixed = showFixedPlanPrice(request, plan);
+										const fromPlan = fromPlanLabel(request, planById);
+										const toPlan = toPlanLabel(request);
+										const negotiable = isPriceNegotiable(request);
 
 										return (
 											<TableRow
@@ -537,32 +513,45 @@ function RequestsPage() {
 													)}
 												</TableCell>
 												<TableCell className="font-medium">
-													{previousPlan}
+													{fromPlan}
 												</TableCell>
 												<TableCell className="font-medium">
-													{currentPlan}
-													{request.type === "plan_change" &&
-														request.status !== "resolved" &&
-														currentPlan !== "—" && (
-															<div className="text-[11px] text-muted-foreground">
-																Requested
-															</div>
-														)}
+													{toPlan}
+													{negotiable && request.status !== "resolved" && (
+														<div className="text-[11px] text-muted-foreground">
+															Requested
+														</div>
+													)}
 												</TableCell>
 												<TableCell>
 													{request.quotedAmount ? (
-														<span>RM {formatPrice(request.quotedAmount)}</span>
-													) : negotiable && request.status !== "resolved" ? (
-														<span className="text-sm text-muted-foreground">
-															Set after resolve
-														</span>
-													) : fixed && plan ? (
 														<div className="flex flex-col leading-tight">
-															<span>RM {formatPrice(plan.price)}</span>
-															<span className="text-[11px] text-muted-foreground">
-																Fixed price
+															<span>
+																RM {formatPrice(request.quotedAmount)}
 															</span>
+															{request.status !== "resolved" && (
+																<span className="text-[11px] text-muted-foreground">
+																	Estimate
+																</span>
+															)}
 														</div>
+													) : negotiable ? (
+														request.status === "resolved" &&
+														plan &&
+														plan.name !== "Custom" ? (
+															<div className="flex flex-col leading-tight">
+																<span>RM {formatPrice(plan.price)}</span>
+																<span className="text-[11px] text-muted-foreground">
+																	From plan
+																</span>
+															</div>
+														) : (
+															<span className="text-sm text-muted-foreground">
+																{request.status === "resolved"
+																	? "—"
+																	: "Set before resolve"}
+															</span>
+														)
 													) : (
 														<span className="text-muted-foreground">—</span>
 													)}
@@ -586,53 +575,53 @@ function RequestsPage() {
 						</Table>
 					</div>
 
-          {pagination && pagination.totalCount > 0 && (
-            <div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
-              <div>
-                Showing{' '}
-                <span className="font-medium">
-                  {formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
-                </span>{' '}
-                -{' '}
-                <span className="font-medium">
-                  {formatNumber(
-                    Math.min(
-                      pagination.page * PAGE_SIZE,
-                      pagination.totalCount,
-                    ),
-                  )}
-                </span>{' '}
-                of{' '}
-                <span className="font-medium">
-                  {formatNumber(pagination.totalCount)}
-                </span>{' '}
-                requests
-              </div>
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.hasPrevPage || requestsQuery.isFetching}
-                  onClick={() => setPage((value) => value - 1)}
-                >
-                  Previous
-                </Button>
-                <span>
-                  Page {pagination.page} of {pagination.totalPages}
-                </span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={!pagination.hasNextPage || requestsQuery.isFetching}
-                  onClick={() => setPage((value) => value + 1)}
-                >
-                  Next
-                </Button>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+					{pagination && pagination.totalCount > 0 && (
+						<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+							<div>
+								Showing{" "}
+								<span className="font-medium">
+									{formatNumber((pagination.page - 1) * PAGE_SIZE + 1)}
+								</span>{" "}
+								-{" "}
+								<span className="font-medium">
+									{formatNumber(
+										Math.min(
+											pagination.page * PAGE_SIZE,
+											pagination.totalCount,
+										),
+									)}
+								</span>{" "}
+								of{" "}
+								<span className="font-medium">
+									{formatNumber(pagination.totalCount)}
+								</span>{" "}
+								requests
+							</div>
+							<div className="flex items-center gap-2">
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={!pagination.hasPrevPage || requestsQuery.isFetching}
+									onClick={() => setPage((value) => value - 1)}
+								>
+									Previous
+								</Button>
+								<span>
+									Page {pagination.page} of {pagination.totalPages}
+								</span>
+								<Button
+									variant="outline"
+									size="sm"
+									disabled={!pagination.hasNextPage || requestsQuery.isFetching}
+									onClick={() => setPage((value) => value + 1)}
+								>
+									Next
+								</Button>
+							</div>
+						</div>
+					)}
+				</CardContent>
+			</Card>
 
 			<Sheet
 				open={editRequest != null}
@@ -645,8 +634,8 @@ function RequestsPage() {
 						<RequestEditForm
 							key={editRequest.id}
 							request={editRequest}
-							previousPlan={previousPlanLabel(editRequest, planById)}
-							currentPlan={currentPlanLabel(editRequest, planById)}
+							fromPlan={fromPlanLabel(editRequest, planById)}
+							toPlan={toPlanLabel(editRequest)}
 							plan={planForRequest(editRequest, planById)}
 							isSaving={isSaving}
 							onSaveRemarks={(id, remarks) =>
@@ -670,8 +659,8 @@ function RequestsPage() {
 
 interface RequestEditFormProps {
 	request: AdminRequest;
-	previousPlan: string;
-	currentPlan: string;
+	fromPlan: string;
+	toPlan: string;
 	plan: Subscription | undefined;
 	isSaving: boolean;
 	onSaveRemarks: (id: string, remarks: string | null) => Promise<unknown>;
@@ -683,8 +672,8 @@ interface RequestEditFormProps {
 
 function RequestEditForm({
 	request,
-	previousPlan,
-	currentPlan,
+	fromPlan,
+	toPlan,
 	plan,
 	isSaving,
 	onSaveRemarks,
@@ -693,11 +682,25 @@ function RequestEditForm({
 	onResolve,
 	onDone,
 }: RequestEditFormProps) {
-	const negotiable = isPriceNegotiable(request, plan);
-	const editableQuote = canEditQuote(request, plan);
-	const fixed = showFixedPlanPrice(request, plan);
+	const negotiable = isPriceNegotiable(request);
+	const editableQuote = canEditQuote(request);
 	const [remarks, setRemarks] = useState(request.remarks ?? "");
 	const [quote, setQuote] = useState(request.quotedAmount ?? "");
+
+	// Estimated After price for the reminder: the live estimate wins, then the
+	// saved quote, then the current plan's actual price (Custom stays negotiated).
+	const rawQuote = String(quote).trim();
+	const parsedQuote = Number(rawQuote);
+	const estimateLabel =
+		rawQuote !== "" && !Number.isNaN(parsedQuote) && parsedQuote >= 0
+			? `RM ${formatPrice(parsedQuote)}`
+			: request.quotedAmount
+				? `RM ${formatPrice(request.quotedAmount)}`
+				: request.type === "pos_integration_quote" && plan
+					? `RM ${formatPrice(plan.price)}`
+					: negotiable
+					? "Set before resolve"
+						: "—";
 
 	const remarksChanged = remarks.trim() !== (request.remarks ?? "").trim();
 	const quoteChanged =
@@ -748,9 +751,22 @@ function RequestEditForm({
 	}
 
 	async function handleResolve() {
+		// Resolve finalises the price. Custom renegotiations must carry an
+		// entered amount; POS quotes can default to the outlet's current tier.
 		let amount: number | undefined;
-		if (fixed && plan?.price) {
-			amount = Number(plan.price);
+		if (negotiable) {
+			if (rawQuote !== "") {
+				if (Number.isNaN(parsedQuote) || parsedQuote < 0) {
+					toast.error("Enter a valid non-negative amount");
+					return;
+				}
+				amount = parsedQuote;
+			} else if (request.type === "custom_renegotiation") {
+				toast.error("Set a Custom price before resolving");
+				return;
+			} else if (plan && plan.name !== "Custom" && plan.price) {
+				amount = Number(plan.price);
+			}
 		}
 		try {
 			await persistRemarks();
@@ -797,18 +813,52 @@ function RequestEditForm({
 						<dd className="text-right">{requestTypeLabels[request.type]}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Previous plan</dt>
-						<dd className="text-right">{previousPlan}</dd>
+						<dt className="text-muted-foreground">From plan</dt>
+						<dd className="text-right">{fromPlan}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">Current plan</dt>
-						<dd className="text-right">{currentPlan}</dd>
+						<dt className="text-muted-foreground">To plan</dt>
+						<dd className="text-right">{toPlan}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">Requested</dt>
 						<dd className="text-right">{formatDate(request.createdAt)}</dd>
 					</div>
 				</dl>
+
+				{/* Before/after price reminder — the estimate stays negotiable until Resolve. */}
+				<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3">
+					<div className="flex items-center gap-2">
+						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-3 py-2">
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+								Before · From plan
+							</p>
+							<p className="font-medium">{fromPlan}</p>
+							<p className="text-sm text-muted-foreground">
+								{plan
+									? plan.name === "Custom"
+										? "Negotiated"
+										: `RM ${formatPrice(plan.price)}`
+									: "—"}
+							</p>
+						</div>
+						<ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
+						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-3 py-2">
+							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+								After · To plan
+							</p>
+							<p className="font-medium">{toPlan}</p>
+							<p className="text-sm text-muted-foreground">{estimateLabel}</p>
+						</div>
+					</div>
+					<p className="text-[11px] text-muted-foreground">
+						{negotiable
+							? request.status === "resolved"
+								? "Resolved — the price is final."
+								: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
+							: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
+					</p>
+				</div>
 
 				<div className="space-y-1.5">
 					<Label htmlFor="request-remarks">Remarks</Label>
@@ -836,7 +886,10 @@ function RequestEditForm({
 								onChange={(e) => setQuote(e.target.value)}
 							/>
 							<p className="text-[11px] text-muted-foreground">
-								Resolved — set or update the negotiated price here, then Save.
+								Estimate — negotiate or change it before Resolve.
+								{request.type === "pos_integration_quote" && plan
+									? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
+									: ""}
 							</p>
 						</>
 					) : negotiable ? (
@@ -845,22 +898,16 @@ function RequestEditForm({
 								id="request-quote"
 								readOnly
 								className="bg-muted/40"
-								value="—"
+								value={
+									request.quotedAmount
+										? formatPrice(request.quotedAmount)
+										: plan && plan.name !== "Custom"
+											? formatPrice(plan.price)
+											: "—"
+								}
 							/>
 							<p className="text-[11px] text-muted-foreground">
-								Resolve first — then you can set the quoted price.
-							</p>
-						</>
-					) : fixed && plan ? (
-						<>
-							<Input
-								id="request-quote"
-								readOnly
-								className="bg-muted/40"
-								value={formatPrice(plan.price)}
-							/>
-							<p className="text-[11px] text-muted-foreground">
-								Fixed by the {previousPlan} plan — applied on Resolve.
+								Resolved — the price is final.
 							</p>
 						</>
 					) : request.quotedAmount ? (

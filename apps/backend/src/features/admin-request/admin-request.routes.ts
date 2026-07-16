@@ -17,6 +17,9 @@ router.get('/', requireAdmin, adminRequestController.list.bind(adminRequestContr
 router.get('/:id', requireAdmin, adminRequestController.getById.bind(adminRequestController));
 router.patch('/:id/contacted', requireAdmin, adminRequestController.markContacted.bind(adminRequestController));
 router.patch('/:id/resolve', requireAdmin, adminRequestController.resolve.bind(adminRequestController));
+// Outlet plan-change approval flow (agency plan changes are 'direct' — no approval).
+router.patch('/:id/approve', requireAdmin, adminRequestController.approve.bind(adminRequestController));
+router.patch('/:id/decline', requireAdmin, adminRequestController.decline.bind(adminRequestController));
 router.patch('/:id', requireAdmin, adminRequestController.update.bind(adminRequestController));
 
 export default router;

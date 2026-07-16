@@ -120,6 +120,27 @@
       "when": 1784500000000,
       "tag": "0016_admin_request_requested_plan",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1784217956847,
+      "tag": "0017_admin_request_declined_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1784218825747,
+      "tag": "0018_admin_request_direct_approved_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1784222551278,
+      "tag": "0019_admin_request_custom_renegotiation_type",
+      "breakpoints": true
     }
   ]
 }

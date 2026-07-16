@@ -11,6 +11,8 @@ export const CreateAdminRequestSchema = z.object({
   contactEmail: z.email().max(255).optional().nullable(),
   contactPhone: z.string().max(50).optional().nullable(),
   currentPlanId: z.uuid().optional().nullable(),
+  /** Plan-change only: the tier the subscriber is switching to. */
+  requestedPlanId: z.uuid().optional().nullable(),
   message: z.string().max(2000).optional().nullable(),
 });
 
