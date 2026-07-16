@@ -24,6 +24,11 @@ type PrSeed = {
   username: string;
   email: string;
   phoneNum: string;
+  /** Legal name + ID document captured on the user_profile record. */
+  firstName: string;
+  lastName: string;
+  idType: 'NRIC' | 'Passport' | 'Work permit';
+  idNo: string;
   /** Agency codes; first is also written to user_profile.agencyId as primary. */
   agencyCodes: string[];
 };
@@ -33,30 +38,50 @@ const PRS: PrSeed[] = [
     username: 'Nurul Aina',
     email: 'pr.nurul@innocenz.demo',
     phoneNum: '+60123456801',
+    firstName: 'Nurul Aina',
+    lastName: 'binti Rahman',
+    idType: 'NRIC',
+    idNo: '920310-14-5521',
     agencyCodes: ['AGY001'],
   },
   {
     username: 'Haziq Iskandar',
     email: 'pr.haziq@innocenz.demo',
     phoneNum: '+60123456802',
+    firstName: 'Muhammad Haziq',
+    lastName: 'bin Iskandar',
+    idType: 'NRIC',
+    idNo: '900715-10-6033',
     agencyCodes: ['AGY001', 'AGY002'],
   },
   {
     username: 'Mei Ling Tan',
     email: 'pr.meiling@innocenz.demo',
     phoneNum: '+60123456803',
+    firstName: 'Tan Mei',
+    lastName: 'Ling',
+    idType: 'NRIC',
+    idNo: '880522-08-5142',
     agencyCodes: ['AGY002'],
   },
   {
     username: 'Arjun Kumar',
     email: 'pr.arjun@innocenz.demo',
     phoneNum: '+60123456804',
+    firstName: 'Arjun',
+    lastName: 'Kumar a/l Suresh',
+    idType: 'NRIC',
+    idNo: '950101-14-5389',
     agencyCodes: ['AGY002', 'AGY003'],
   },
   {
     username: 'Sofia Chong',
     email: 'pr.sofia@innocenz.demo',
     phoneNum: '+60123456805',
+    firstName: 'Sofia',
+    lastName: 'Chong Wei Xin',
+    idType: 'Passport',
+    idNo: 'A12345678',
     agencyCodes: ['AGY001', 'AGY003'],
   },
 ];
@@ -117,6 +142,11 @@ export async function seedSamplePrs(): Promise<void> {
 
     await db.insert(UserProfileTable).values({
       userId: user.id,
+      firstName: pr.firstName,
+      lastName: pr.lastName,
+      idType: pr.idType,
+      idNo: pr.idNo,
+      verificationStatus: 'verified',
       underAgency: Boolean(primaryAgencyId),
       agencyId: primaryAgencyId ?? null,
       createdBy: ACTOR,

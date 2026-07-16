@@ -26,4 +26,5 @@ export const UpdateAdminRequestSchema = z.object({
   subscriberName: z.string().min(1).max(255).optional(),
   message: z.string().max(2000).optional().nullable(),
   remarks: z.string().max(2000).optional().nullable(),
+  quotedAmount: z.coerce.number().nonnegative().optional().nullable(),
 });

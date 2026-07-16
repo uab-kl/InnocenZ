@@ -47,6 +47,10 @@ export class MemberSubscriptionControllerClass {
       from: parseDate(req.query.from),
       to: parseDate(req.query.to),
       dates: dates && dates.length > 0 ? dates : undefined,
+      search:
+        typeof req.query.search === 'string' && req.query.search.trim().length > 0
+          ? req.query.search.trim()
+          : undefined,
     };
   }
 

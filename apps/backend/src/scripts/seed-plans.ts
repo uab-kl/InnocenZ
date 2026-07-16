@@ -10,27 +10,33 @@ import { logger } from '@/util/logger';
 const ACTOR = 'system';
 
 type RoleName = 'outlet' | 'agency';
-type PlanSeed = { name: string; price: string; billingCycle: BillingCycle; role: RoleName };
+type PlanSeed = {
+  name: string;
+  price: string;
+  billingCycle: BillingCycle;
+  role: RoleName;
+  coverage: string;
+};
 
 // Full plan catalog taken from the InnocenZ prototype subscription screens.
 // Outlet = monthly fixed tiers (RM/month); Agency = weekly usage-based tiers (RM/week).
 // Agency "Custom" is the 151+ PV/week "Renegotiate Price" tier — price stays 0 and the
 // actual figure is captured per deal in admin_request.quoted_amount.
 const PLANS: PlanSeed[] = [
-  // Outlet — monthly
-  { name: 'Essential', price: '999.00', billingCycle: 'monthly', role: 'outlet' },
-  { name: 'Plus', price: '1699.00', billingCycle: 'monthly', role: 'outlet' },
-  { name: 'Pro', price: '2999.00', billingCycle: 'monthly', role: 'outlet' },
-  { name: 'Enterprise', price: '3999.00', billingCycle: 'monthly', role: 'outlet' },
-  { name: 'Scale', price: '6999.00', billingCycle: 'monthly', role: 'outlet' },
-  { name: 'Premier', price: '9999.00', billingCycle: 'monthly', role: 'outlet' },
-  // Agency — weekly
-  { name: 'Starter', price: '125.00', billingCycle: 'weekly', role: 'agency' },
-  { name: 'Plus', price: '250.00', billingCycle: 'weekly', role: 'agency' },
-  { name: 'Growth', price: '500.00', billingCycle: 'weekly', role: 'agency' },
-  { name: 'Enterprise', price: '1000.00', billingCycle: 'weekly', role: 'agency' },
-  { name: 'Scale', price: '1500.00', billingCycle: 'weekly', role: 'agency' },
-  { name: 'Custom', price: '0.00', billingCycle: 'weekly', role: 'agency' },
+  // Outlet — monthly (PRs/day capacity)
+  { name: 'Essential', price: '999.00', billingCycle: 'monthly', role: 'outlet', coverage: '5 PRs/day' },
+  { name: 'Plus', price: '1699.00', billingCycle: 'monthly', role: 'outlet', coverage: '6–10 PRs/day' },
+  { name: 'Pro', price: '2999.00', billingCycle: 'monthly', role: 'outlet', coverage: '11–25 PRs/day' },
+  { name: 'Enterprise', price: '3999.00', billingCycle: 'monthly', role: 'outlet', coverage: '26–50 PRs/day' },
+  { name: 'Scale', price: '6999.00', billingCycle: 'monthly', role: 'outlet', coverage: '51–100 PRs/day' },
+  { name: 'Premier', price: '9999.00', billingCycle: 'monthly', role: 'outlet', coverage: '101+ PRs/day' },
+  // Agency — weekly (PV/week volume)
+  { name: 'Starter', price: '125.00', billingCycle: 'weekly', role: 'agency', coverage: '5 PV/week' },
+  { name: 'Plus', price: '250.00', billingCycle: 'weekly', role: 'agency', coverage: '6–10 PV/week' },
+  { name: 'Growth', price: '500.00', billingCycle: 'weekly', role: 'agency', coverage: '11–25 PV/week' },
+  { name: 'Enterprise', price: '1000.00', billingCycle: 'weekly', role: 'agency', coverage: '26–75 PV/week' },
+  { name: 'Scale', price: '1500.00', billingCycle: 'weekly', role: 'agency', coverage: '76–150 PV/week' },
+  { name: 'Custom', price: '0.00', billingCycle: 'weekly', role: 'agency', coverage: '151+ PV/week' },
 ];
 
 async function getRoleId(roleName: RoleName): Promise<string | null> {
@@ -71,6 +77,7 @@ export async function seedPlans(): Promise<void> {
         .set({
           price: plan.price,
           billingCycle: plan.billingCycle,
+          coverage: plan.coverage,
           status: 'active',
           updatedBy: ACTOR,
           updatedAt: new Date(),
@@ -87,6 +94,7 @@ export async function seedPlans(): Promise<void> {
         name: plan.name,
         price: plan.price,
         billingCycle: plan.billingCycle,
+        coverage: plan.coverage,
         status: 'active',
         createdBy: ACTOR,
         updatedBy: ACTOR,

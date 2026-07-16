@@ -28,6 +28,7 @@ export interface AdminRequest {
 	contactEmail: string | null;
 	contactPhone: string | null;
 	currentPlanId: string | null;
+	requestedPlanId: string | null;
 	message: string | null;
 	remarks: string | null;
 	status: AdminRequestStatus;
@@ -44,6 +45,7 @@ export interface AdminRequestsQueryParams {
 	type?: AdminRequestType;
 	status?: AdminRequestStatus;
 	subscriberType?: SubscriberType;
+	dates?: string;
 	page?: number;
 	pageSize?: number;
 }
@@ -82,6 +84,7 @@ export async function fetchAdminRequests(
 		type: params.type,
 		status: params.status,
 		subscriberType: params.subscriberType,
+		dates: params.dates,
 		page: params.page,
 		pageSize: params.pageSize,
 	});
@@ -143,6 +146,7 @@ export interface UpdateAdminRequestInput {
 	subscriberName?: string;
 	message?: string | null;
 	remarks?: string | null;
+	quotedAmount?: number | null;
 }
 
 export async function updateAdminRequest(

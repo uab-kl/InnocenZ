@@ -2,6 +2,7 @@ import { and, desc, eq, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
+import { buildMultiDayWhere } from '@/util/filter-date-format.js';
 import {
   SpecialService,
   SpecialServiceFilter,
@@ -26,6 +27,10 @@ export class SpecialServiceRepositoryClass {
     if (filter?.initiatedBy) conditions.push(eq(SpecialServiceTable.initiatedBy, filter.initiatedBy));
     if (filter?.adminAccepted)
       conditions.push(eq(SpecialServiceTable.adminAccepted, filter.adminAccepted));
+    const requestedOn = buildMultiDayWhere(SpecialServiceTable.createdAt, filter?.dates);
+    if (requestedOn) conditions.push(requestedOn);
+    const scheduledOn = buildMultiDayWhere(SpecialServiceTable.scheduledFor, filter?.scheduledDates);
+    if (scheduledOn) conditions.push(scheduledOn);
     return conditions.length > 0 ? and(...conditions) : undefined;
   }
 

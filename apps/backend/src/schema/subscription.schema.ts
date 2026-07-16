@@ -6,6 +6,7 @@ export const SubscriptionSchema = z.object({
   price: z.coerce.number().nonnegative(),
   billingCycle: z.enum(billingCycleValues).default('monthly'),
   status: z.string().default('active'),
+  coverage: z.string().max(100).optional().nullable(),
   roleIds: z.array(z.uuid()).optional(),
 });
 

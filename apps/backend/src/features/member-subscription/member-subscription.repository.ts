@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, or, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, lte, or, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -32,6 +32,7 @@ export class MemberSubscriptionRepositoryClass {
     if (filter?.subscriberId) conditions.push(eq(MemberSubscriptionTable.subscriberId, filter.subscriberId));
     if (filter?.subscriptionId) conditions.push(eq(MemberSubscriptionTable.subscriptionId, filter.subscriptionId));
     if (filter?.status) conditions.push(eq(MemberSubscriptionTable.status, filter.status));
+    if (filter?.search) conditions.push(ilike(MemberSubscriptionTable.subscriberName, `%${filter.search}%`));
 
     if (filter?.dates && filter.dates.length > 0) {
       const dayClauses = filter.dates

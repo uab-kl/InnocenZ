@@ -1,19 +1,21 @@
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
-import { format } from "date-fns";
 import {
 	AlertCircle,
-	Calendar as CalendarIcon,
 	History as HistoryIcon,
 	Loader2,
 	RefreshCw,
-	X,
+	Search,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import {
+	DateMultiFilter,
+	datesToQueryParam,
+} from "@/components/admin/date-multi-filter";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { SourceToggle } from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
 import {
 	Card,
 	CardContent,
@@ -21,11 +23,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
-import {
-	Popover,
-	PopoverContent,
-	PopoverTrigger,
-} from "@/components/ui/popover";
+import { Input } from "@/components/ui/input";
 import {
 	Select,
 	SelectContent,
@@ -82,16 +80,6 @@ const subscriberTypeColors: Record<SubscriberType, string> = {
 	agency: "border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
 };
 
-function formatSelectedDatesLabel(dates: Date[]): string {
-	if (dates.length === 0) return "Select date(s)";
-	const sorted = [...dates].sort((a, b) => a.getTime() - b.getTime());
-	if (sorted.length === 1) return format(sorted[0]!, "dd MMM yyyy");
-	if (sorted.length === 2) {
-		return `${format(sorted[0]!, "dd MMM")} · ${format(sorted[1]!, "dd MMM yyyy")}`;
-	}
-	return `${sorted.length} dates selected`;
-}
-
 function HistoryPage() {
 	const { logout } = useAuth();
 
@@ -99,7 +87,18 @@ function HistoryPage() {
 		useState<SubscriberTypeFilter>("all");
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [selectedDates, setSelectedDates] = useState<Date[]>([]);
+	const [searchInput, setSearchInput] = useState("");
+	const [search, setSearch] = useState("");
 	const [page, setPage] = useState(1);
+
+	// Debounce the search box so a keystroke doesn't fire a request each time.
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setSearch(searchInput.trim());
+			setPage(1);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [searchInput]);
 
 	const queryParams: MemberSubscriptionsQueryParams = {
 		page,
@@ -108,12 +107,9 @@ function HistoryPage() {
 	if (subscriberTypeFilter !== "all")
 		queryParams.subscriberType = subscriberTypeFilter;
 	if (statusFilter !== "all") queryParams.status = statusFilter;
-	if (selectedDates.length > 0) {
-		queryParams.dates = [...selectedDates]
-			.map((date) => format(date, "yyyy-MM-dd"))
-			.sort()
-			.join(",");
-	}
+	if (search) queryParams.search = search;
+	const datesParam = datesToQueryParam(selectedDates);
+	if (datesParam) queryParams.dates = datesParam;
 
 	const historyQuery = useQuery({
 		queryKey: ["member-subscriptions", queryParams],
@@ -139,7 +135,7 @@ function HistoryPage() {
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
-					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
 								Subscription History
@@ -153,22 +149,25 @@ function HistoryPage() {
 						</div>
 
 						<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
-							<Select
+							<SourceToggle
+								className="sm:mr-auto"
 								value={subscriberTypeFilter}
-								onValueChange={(value) => {
-									setSubscriberTypeFilter(value as SubscriberTypeFilter);
+								onChange={(value) => {
+									setSubscriberTypeFilter(value);
 									resetToFirstPage();
 								}}
-							>
-								<SelectTrigger className="sm:w-36" aria-label="Filter by role">
-									<SelectValue placeholder="All Roles" />
-								</SelectTrigger>
-								<SelectContent>
-									<SelectItem value="all">All Roles</SelectItem>
-									<SelectItem value="outlet">Outlet</SelectItem>
-									<SelectItem value="agency">Agency</SelectItem>
-								</SelectContent>
-							</Select>
+							/>
+
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={searchInput}
+									onChange={(event) => setSearchInput(event.target.value)}
+									placeholder="Search outlet or agency..."
+									className="pl-8"
+									aria-label="Search outlet or agency"
+								/>
+							</div>
 
 							<Select
 								value={statusFilter}
@@ -192,61 +191,14 @@ function HistoryPage() {
 								</SelectContent>
 							</Select>
 
-							<div className="flex items-center gap-1.5">
-								<Popover>
-									<PopoverTrigger asChild>
-										<Button
-											variant="outline"
-											className="justify-start font-normal sm:min-w-48"
-											aria-label="Filter by subscribed date"
-										>
-											<CalendarIcon className="text-muted-foreground" />
-											<span className="truncate">
-												{formatSelectedDatesLabel(selectedDates)}
-											</span>
-										</Button>
-									</PopoverTrigger>
-									<PopoverContent className="w-auto p-0" align="end">
-										<Calendar
-											mode="multiple"
-											selected={selectedDates}
-											onSelect={(dates) => {
-												setSelectedDates(dates ?? []);
-												resetToFirstPage();
-											}}
-											numberOfMonths={1}
-										/>
-										{selectedDates.length > 0 && (
-											<div className="border-t border-border p-2">
-												<Button
-													variant="ghost"
-													size="sm"
-													className="w-full"
-													onClick={() => {
-														setSelectedDates([]);
-														resetToFirstPage();
-													}}
-												>
-													Clear dates
-												</Button>
-											</div>
-										)}
-									</PopoverContent>
-								</Popover>
-								{selectedDates.length > 0 && (
-									<Button
-										variant="ghost"
-										size="icon-sm"
-										aria-label="Clear date filter"
-										onClick={() => {
-											setSelectedDates([]);
-											resetToFirstPage();
-										}}
-									>
-										<X className="h-4 w-4" />
-									</Button>
-								)}
-							</div>
+							<DateMultiFilter
+								selectedDates={selectedDates}
+								onChange={(dates) => {
+									setSelectedDates(dates);
+									resetToFirstPage();
+								}}
+								ariaLabel="Filter by subscribed date"
+							/>
 						</div>
 					</div>
 				</CardHeader>

@@ -46,6 +46,8 @@ export interface MemberSubscriptionsQueryParams {
 	to?: string;
 	/** Comma-separated YYYY-MM-DD days to match exactly. */
 	dates?: string;
+	/** Case-insensitive partial match on the subscriber (outlet/agency) name. */
+	search?: string;
 	page?: number;
 	pageSize?: number;
 }
@@ -71,6 +73,7 @@ export async function fetchMemberSubscriptions(
 		from: params.from,
 		to: params.to,
 		dates: params.dates,
+		search: params.search,
 		page: params.page,
 		pageSize: params.pageSize,
 	});

@@ -52,4 +52,6 @@ export type MemberSubscriptionFilter = {
   to?: Date;
   /** Exact calendar days (YYYY-MM-DD) — subscriptions whose startedAt falls on any of these days. */
   dates?: string[];
+  /** Case-insensitive partial match on the subscriber (outlet/agency) name. */
+  search?: string;
 };

@@ -93,6 +93,7 @@ export class SubscriptionControllerClass {
             price: parsed.data.price.toFixed(2),
             billingCycle: parsed.data.billingCycle as BillingCycle,
             status: parsed.data.status,
+            coverage: parsed.data.coverage ?? null,
             createdBy: actor,
             updatedBy: actor,
           },
@@ -130,6 +131,7 @@ export class SubscriptionControllerClass {
       if (parsed.data.price !== undefined) updatePayload.price = parsed.data.price.toFixed(2);
       if (parsed.data.billingCycle !== undefined) updatePayload.billingCycle = parsed.data.billingCycle;
       if (parsed.data.status !== undefined) updatePayload.status = parsed.data.status;
+      if (parsed.data.coverage !== undefined) updatePayload.coverage = parsed.data.coverage;
 
       const data = await db.transaction(async (tx) => {
         const subscription = await this.subscriptionRepository.updateSubscription(id, updatePayload, tx);

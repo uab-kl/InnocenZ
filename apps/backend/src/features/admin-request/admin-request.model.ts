@@ -23,6 +23,10 @@ export const AdminRequestTable = MainSchema.table('admin_request', {
   contactEmail: varchar('contact_email', { length: 255 }),
   contactPhone: varchar('contact_phone', { length: 50 }),
   currentPlanId: uuid('current_plan_id').references(() => SubscriptionTable.id, { onDelete: 'set null' }),
+  /** Plan-change only: the tier the subscriber is switching to. */
+  requestedPlanId: uuid('requested_plan_id').references(() => SubscriptionTable.id, {
+    onDelete: 'set null',
+  }),
   message: text('message'),
   // Admin-authored notes about the request so other admins can refer to what was asked.
   remarks: text('remarks'),
@@ -45,4 +49,6 @@ export type AdminRequestFilter = {
   type?: AdminRequestType;
   status?: AdminRequestStatus;
   subscriberType?: 'outlet' | 'agency';
+  /** Match rows requested on any of these calendar days (createdAt). */
+  dates?: string[];
 };

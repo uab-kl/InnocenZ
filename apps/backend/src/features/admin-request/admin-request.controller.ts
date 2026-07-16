@@ -10,6 +10,7 @@ import { Error } from '@/error/index.js';
 import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
+import { parseDatesQuery } from '@/util/filter-date-format.js';
 
 export class AdminRequestControllerClass {
   constructor(private repository: AdminRequestRepositoryClass) {}
@@ -22,6 +23,7 @@ export class AdminRequestControllerClass {
         type: req.query.type as AdminRequestType | undefined,
         status: req.query.status as AdminRequestStatus | undefined,
         subscriberType: req.query.subscriberType as 'outlet' | 'agency' | undefined,
+        dates: parseDatesQuery(req.query.dates),
       };
       const { records, totalCount } = await this.repository.listPaginated({ filter, page, pageSize });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -128,6 +130,12 @@ export class AdminRequestControllerClass {
       }
       if (parsed.data.message !== undefined) payload.message = parsed.data.message;
       if (parsed.data.remarks !== undefined) payload.remarks = parsed.data.remarks;
+      if (parsed.data.quotedAmount !== undefined) {
+        payload.quotedAmount =
+          parsed.data.quotedAmount === null
+            ? null
+            : parsed.data.quotedAmount.toFixed(2);
+      }
 
       const record = await this.repository.update(existing.id, payload);
       if (!record) {

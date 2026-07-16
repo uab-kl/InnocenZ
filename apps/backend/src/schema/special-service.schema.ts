@@ -48,6 +48,8 @@ export const UpdateSpecialServiceSchema = z.object({
   initiatedBy: z.enum(specialServiceInitiatedByValues).optional(),
   budget: z.coerce.number().nonnegative().optional().nullable(),
   scheduledFor: z.coerce.date().optional().nullable(),
+  // Free-text third party the admin found to fulfil the job (optional).
+  assignedAgencyName: z.string().max(255).optional().nullable(),
 });
 
 export const SpecialServiceFilterQuerySchema = z.object({

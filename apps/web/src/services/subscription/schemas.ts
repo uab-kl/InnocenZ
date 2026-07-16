@@ -7,6 +7,7 @@ export const SubscriptionSchema = z.object({
   price: z.coerce.number().nonnegative('Price must be 0 or more'),
   billingCycle: z.enum(billingCycleValues).default('monthly'),
   status: z.enum(['active', 'inactive']).default('active'),
+  coverage: z.string().max(100).optional().nullable(),
   roleIds: z.array(z.string().uuid()).default([]),
 })
 

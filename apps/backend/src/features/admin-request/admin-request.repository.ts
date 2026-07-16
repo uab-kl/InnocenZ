@@ -2,6 +2,7 @@ import { and, desc, eq, isNotNull, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
+import { buildMultiDayWhere } from '@/util/filter-date-format.js';
 import {
   AdminRequest,
   AdminRequestFilter,
@@ -22,6 +23,8 @@ export class AdminRequestRepositoryClass {
     if (filter?.type) conditions.push(eq(AdminRequestTable.type, filter.type));
     if (filter?.status) conditions.push(eq(AdminRequestTable.status, filter.status));
     if (filter?.subscriberType) conditions.push(eq(AdminRequestTable.subscriberType, filter.subscriberType));
+    const requestedOn = buildMultiDayWhere(AdminRequestTable.createdAt, filter?.dates);
+    if (requestedOn) conditions.push(requestedOn);
     return conditions.length > 0 ? and(...conditions) : undefined;
   }
 

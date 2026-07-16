@@ -62,6 +62,10 @@ export interface SpecialServicesQueryParams {
 	outletId?: string;
 	initiatedBy?: SpecialServiceInitiatedBy;
 	adminAccepted?: SpecialServiceAdminAccepted;
+	/** Filter by requested calendar day(s) — createdAt. */
+	dates?: string;
+	/** Filter by scheduled calendar day(s) — scheduledFor. */
+	scheduledDates?: string;
 	page?: number;
 	pageSize?: number;
 }
@@ -97,6 +101,8 @@ export async function fetchSpecialServices(
 		outletId: params.outletId,
 		initiatedBy: params.initiatedBy,
 		adminAccepted: params.adminAccepted,
+		dates: params.dates,
+		scheduledDates: params.scheduledDates,
 		page: params.page,
 		pageSize: params.pageSize,
 	});
@@ -112,13 +118,20 @@ export async function fetchSpecialServices(
 }
 
 export async function fetchAdminPendingJobs(
-	params: { page?: number; pageSize?: number } = {},
+	params: {
+		page?: number;
+		pageSize?: number;
+		dates?: string;
+		scheduledDates?: string;
+	} = {},
 	onRefreshFail: () => void,
 ): Promise<SpecialServicesApiResponse> {
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
 		page: params.page,
 		pageSize: params.pageSize,
+		dates: params.dates,
+		scheduledDates: params.scheduledDates,
 	});
 	const response = await client.get<SpecialServicesApiResponse>(
 		`/special-service/admin/pending${queryString}`,
@@ -185,6 +198,7 @@ export interface UpdateSpecialServiceInput {
 	initiatedBy?: SpecialServiceInitiatedBy;
 	budget?: number | null;
 	scheduledFor?: string | null;
+	assignedAgencyName?: string | null;
 }
 
 export async function updateSpecialService(

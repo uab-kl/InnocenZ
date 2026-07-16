@@ -1,12 +1,12 @@
 import {
 	AlertCircle,
+	Ban,
 	Building2,
 	CheckCircle2,
 	ChevronDown,
 	ChevronRight,
 	Loader2,
 	RefreshCw,
-	Ban,
 	Search,
 } from "lucide-react";
 import { Fragment, useState } from "react";
@@ -37,6 +37,7 @@ import {
 } from "@/components/ui/table";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Agency, AgencyPagination } from "@/services/agency";
+import { AgencyDetails } from "./agency-details";
 import { OrgMembersPanel } from "./org-members-panel";
 import {
 	ORG_STATUSES,
@@ -228,7 +229,9 @@ export function AgenciesTable({
 														{agency.contactName || "—"}
 													</div>
 													<div className="text-xs text-muted-foreground">
-														{agency.contactEmail || agency.contactPhone || "—"}
+														{[agency.contactEmail, agency.contactPhone]
+															.filter(Boolean)
+															.join(" · ") || "—"}
 													</div>
 												</TableCell>
 												<TableCell>
@@ -292,7 +295,11 @@ export function AgenciesTable({
 											</TableRow>
 											{expanded && (
 												<TableRow>
-													<TableCell colSpan={7} className="bg-muted/20 px-6">
+													<TableCell
+														colSpan={7}
+														className="space-y-4 bg-muted/20 px-6 py-4"
+													>
+														<AgencyDetails agency={agency} />
 														<OrgMembersPanel orgId={agency.id} kind="agency" />
 													</TableCell>
 												</TableRow>

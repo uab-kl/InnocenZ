@@ -21,6 +21,7 @@ export interface Subscription {
   price: string
   billingCycle: BillingCycle
   status: SubscriptionStatus
+  coverage: string | null
   roles: SubscriptionRoleSummary[]
   createdAt: string
   updatedAt: string

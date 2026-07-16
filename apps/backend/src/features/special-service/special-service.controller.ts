@@ -17,6 +17,7 @@ import { Error } from '@/error/index.js';
 import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
+import { parseDatesQuery } from '@/util/filter-date-format.js';
 
 export class SpecialServiceControllerClass {
   constructor(private repository: SpecialServiceRepositoryClass) {}
@@ -29,6 +30,8 @@ export class SpecialServiceControllerClass {
       assignedAgencyId: req.query.assignedAgencyId as string | undefined,
       initiatedBy: req.query.initiatedBy as SpecialServiceInitiatedBy | undefined,
       adminAccepted: req.query.adminAccepted as SpecialServiceAdminAccepted | undefined,
+      dates: parseDatesQuery(req.query.dates),
+      scheduledDates: parseDatesQuery(req.query.scheduledDates),
     };
   }
 
@@ -67,7 +70,12 @@ export class SpecialServiceControllerClass {
       const page = Number(req.query.page ?? 1);
       const pageSize = Number(req.query.pageSize ?? 50);
       const { records, totalCount } = await this.repository.listPaginated({
-        filter: { initiatedBy: 'agency', adminAccepted: 'pending' },
+        filter: {
+          initiatedBy: 'agency',
+          adminAccepted: 'pending',
+          dates: parseDatesQuery(req.query.dates),
+          scheduledDates: parseDatesQuery(req.query.scheduledDates),
+        },
         page,
         pageSize,
       });
@@ -227,6 +235,9 @@ export class SpecialServiceControllerClass {
       }
       if (parsed.data.scheduledFor !== undefined) {
         payload.scheduledFor = parsed.data.scheduledFor;
+      }
+      if (parsed.data.assignedAgencyName !== undefined) {
+        payload.assignedAgencyName = parsed.data.assignedAgencyName;
       }
       const record = await this.repository.update(existing.id, payload);
       if (!record) {

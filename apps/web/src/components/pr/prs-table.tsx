@@ -1,12 +1,16 @@
 import {
 	AlertCircle,
+	Check,
 	CheckCircle2,
+	ChevronDown,
+	ChevronsUpDown,
 	Loader2,
 	Megaphone,
 	RefreshCw,
 	Search,
 	XCircle,
 } from "lucide-react";
+import { useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -112,19 +116,11 @@ export function PrsTable({
 								aria-label="Search PRs by name, email, or agency"
 							/>
 						</div>
-						<Select value={agencyFilter} onValueChange={onAgencyFilterChange}>
-							<SelectTrigger className="sm:w-52" aria-label="Filter by agency">
-								<SelectValue placeholder="All agencies" />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="all">All agencies</SelectItem>
-								{agencies.map((agency) => (
-									<SelectItem key={agency.id} value={agency.id}>
-										{agency.name}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
+						<AgencyFilterCombobox
+							agencies={agencies}
+							value={agencyFilter}
+							onChange={onAgencyFilterChange}
+						/>
 						<Select
 							value={statusFilter}
 							onValueChange={(value) =>
@@ -150,6 +146,7 @@ export function PrsTable({
 						<TableHeader>
 							<TableRow>
 								<TableHead>Display Name</TableHead>
+								<TableHead>Legal name</TableHead>
 								<TableHead>Email</TableHead>
 								<TableHead>Phone</TableHead>
 								<TableHead>Agencies</TableHead>
@@ -160,7 +157,7 @@ export function PrsTable({
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={6} className="h-32">
+									<TableCell colSpan={7} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>Loading PR users…</span>
@@ -169,7 +166,7 @@ export function PrsTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={6} className="h-32">
+									<TableCell colSpan={7} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -187,7 +184,7 @@ export function PrsTable({
 								</TableRow>
 							) : users.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={6} className="h-32">
+									<TableCell colSpan={7} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Megaphone className="h-6 w-6" />
 											<span>No PR users found</span>
@@ -200,63 +197,23 @@ export function PrsTable({
 										<TableCell className="font-medium">
 											{user.displayName}
 										</TableCell>
+										<TableCell>
+											{user.legalName ? (
+												<div className="font-medium">{user.legalName}</div>
+											) : (
+												<span className="text-sm text-muted-foreground">—</span>
+											)}
+											{user.idNo && (
+												<div className="font-mono text-xs text-muted-foreground">
+													{user.idType ? `${user.idType} · ` : ""}
+													{user.idNo}
+												</div>
+											)}
+										</TableCell>
 										<TableCell>{user.email || "—"}</TableCell>
 										<TableCell>{user.phoneNum || "—"}</TableCell>
 										<TableCell>
-											{user.agencies.length === 0 ? (
-												<span className="text-sm text-muted-foreground">—</span>
-											) : (
-												<div className="flex max-w-[300px] flex-wrap items-center gap-1.5">
-													{user.agencies.slice(0, 2).map((agency) => (
-														<Badge
-															key={agency.id}
-															variant="outline"
-															className="max-w-[170px] font-normal"
-															title={`${agency.name} (${agency.code})`}
-														>
-															<span className="truncate">{agency.name}</span>
-															<span className="ml-1 shrink-0 text-muted-foreground">
-																{agency.code}
-															</span>
-														</Badge>
-													))}
-													{user.agencies.length > 2 && (
-														<Popover>
-															<PopoverTrigger asChild>
-																<button
-																	type="button"
-																	className="inline-flex items-center rounded-full border border-border bg-muted/40 px-2 py-0.5 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-																>
-																	+{user.agencies.length - 2} more
-																</button>
-															</PopoverTrigger>
-															<PopoverContent
-																align="start"
-																className="w-64 p-2"
-															>
-																<p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
-																	All agencies ({user.agencies.length})
-																</p>
-																<ul className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
-																	{user.agencies.map((agency) => (
-																		<li
-																			key={agency.id}
-																			className="flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
-																		>
-																			<span className="truncate">
-																				{agency.name}
-																			</span>
-																			<span className="shrink-0 font-mono text-xs text-muted-foreground">
-																				{agency.code}
-																			</span>
-																		</li>
-																	))}
-																</ul>
-															</PopoverContent>
-														</Popover>
-													)}
-												</div>
-											)}
+											<PrAgenciesCell agencies={user.agencies} />
 										</TableCell>
 										<TableCell>
 											<Badge
@@ -320,5 +277,159 @@ export function PrsTable({
 				)}
 			</CardContent>
 		</Card>
+	);
+}
+
+// Searchable agency filter: many agencies are hard to scan in a plain Select,
+// so this combobox lets the admin type to narrow the list before picking one.
+function AgencyFilterCombobox({
+	agencies,
+	value,
+	onChange,
+}: {
+	agencies: Agency[];
+	value: string;
+	onChange: (value: string) => void;
+}) {
+	const [open, setOpen] = useState(false);
+	const [query, setQuery] = useState("");
+
+	const selected = agencies.find((agency) => agency.id === value);
+	const label = value === "all" ? "All agencies" : (selected?.name ?? "Agency");
+
+	const needle = query.trim().toLowerCase();
+	const filtered = needle
+		? agencies.filter(
+				(agency) =>
+					agency.name.toLowerCase().includes(needle) ||
+					agency.agencyCode?.toLowerCase().includes(needle),
+			)
+		: agencies;
+
+	const pick = (next: string) => {
+		onChange(next);
+		setOpen(false);
+		setQuery("");
+	};
+
+	return (
+		<Popover
+			open={open}
+			onOpenChange={(next) => {
+				setOpen(next);
+				if (!next) setQuery("");
+			}}
+		>
+			<PopoverTrigger asChild>
+				<Button
+					variant="outline"
+					role="combobox"
+					aria-expanded={open}
+					aria-label="Filter by agency"
+					className="justify-between font-normal sm:w-52"
+				>
+					<span className="truncate">{label}</span>
+					<ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+				</Button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-56 p-0">
+				<div className="border-b p-2">
+					<div className="relative">
+						<Search className="pointer-events-none absolute top-1/2 left-2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+						<Input
+							value={query}
+							onChange={(e) => setQuery(e.target.value)}
+							placeholder="Search agencies…"
+							className="h-8 pl-7"
+							aria-label="Search agencies"
+						/>
+					</div>
+				</div>
+				<ul className="max-h-64 overflow-y-auto p-1">
+					<li>
+						<button
+							type="button"
+							onClick={() => pick("all")}
+							className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+						>
+							All agencies
+							{value === "all" && <Check className="h-4 w-4 shrink-0" />}
+						</button>
+					</li>
+					{filtered.map((agency) => (
+						<li key={agency.id}>
+							<button
+								type="button"
+								onClick={() => pick(agency.id)}
+								className="flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-muted"
+							>
+								<span className="truncate">{agency.name}</span>
+								<span className="flex shrink-0 items-center gap-1.5">
+									<span className="font-mono text-xs text-muted-foreground">
+										{agency.agencyCode}
+									</span>
+									{value === agency.id && <Check className="h-4 w-4" />}
+								</span>
+							</button>
+						</li>
+					))}
+					{filtered.length === 0 && (
+						<li className="px-2 py-3 text-center text-sm text-muted-foreground">
+							No agencies found
+						</li>
+					)}
+				</ul>
+			</PopoverContent>
+		</Popover>
+	);
+}
+
+// The Agencies column truncates long names, so every PR gets a dropdown button
+// that reveals the full name + code of each agency it belongs to.
+function PrAgenciesCell({ agencies }: { agencies: PrUser["agencies"] }) {
+	if (agencies.length === 0) {
+		return <span className="text-sm text-muted-foreground">—</span>;
+	}
+
+	const [first] = agencies;
+	const extra = agencies.length - 1;
+	const plural = agencies.length === 1 ? "agency" : "agencies";
+
+	return (
+		<Popover>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					aria-label={`Show ${agencies.length} ${plural} for this PR`}
+					className="inline-flex max-w-[260px] items-center gap-1.5 rounded-md border border-border bg-muted/30 px-2 py-1 text-sm transition-colors hover:bg-muted"
+				>
+					<span className="truncate">{first.name}</span>
+					{extra > 0 && (
+						<span className="shrink-0 rounded-full bg-(--lavender-soft)/30 px-1.5 text-xs font-medium text-muted-foreground">
+							+{extra}
+						</span>
+					)}
+					<ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+				</button>
+			</PopoverTrigger>
+			<PopoverContent align="start" className="w-72 p-2">
+				<p className="mb-1.5 px-1 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">
+					Agencies ({agencies.length})
+				</p>
+				<ul className="flex max-h-64 flex-col gap-0.5 overflow-y-auto">
+					{agencies.map((agency) => (
+						<li
+							key={agency.id}
+							className="flex items-start justify-between gap-3 rounded-md px-2 py-1.5 text-sm hover:bg-muted"
+						>
+							<span className="min-w-0 break-words">{agency.name}</span>
+							<span className="shrink-0 font-mono text-xs text-muted-foreground">
+								{agency.code}
+							</span>
+						</li>
+					))}
+				</ul>
+			</PopoverContent>
+		</Popover>
 	);
 }

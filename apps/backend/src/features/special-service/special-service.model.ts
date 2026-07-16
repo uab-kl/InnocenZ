@@ -91,4 +91,8 @@ export type SpecialServiceFilter = {
   assignedAgencyId?: string;
   initiatedBy?: SpecialServiceInitiatedBy;
   adminAccepted?: SpecialServiceAdminAccepted;
+  /** Match rows requested on any of these calendar days (createdAt). */
+  dates?: string[];
+  /** Match rows scheduled on any of these calendar days (scheduledFor). */
+  scheduledDates?: string[];
 };

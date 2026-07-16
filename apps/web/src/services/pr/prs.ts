@@ -10,15 +10,18 @@ import type {
 	PrUsersQueryParams,
 } from "./types";
 
-function mapPrUser(
-	user: BackendUser,
-	agencies: PrAgencyRef[] = [],
-): PrUser {
+function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 	return {
 		id: user.id,
 		email: user.email ?? "",
 		phoneNum: user.phoneNum ?? "",
 		displayName: user.username,
+		legalName: [user.profile?.firstName, user.profile?.lastName]
+			.filter(Boolean)
+			.join(" ")
+			.trim(),
+		idType: user.profile?.idType ?? null,
+		idNo: user.profile?.idNo ?? null,
 		status: user.status,
 		agencies,
 		createdAt: user.createdAt,
@@ -32,6 +35,8 @@ function matchesSearch(user: PrUser, search: string): boolean {
 	const q = search.toLowerCase();
 	return (
 		user.displayName.toLowerCase().includes(q) ||
+		user.legalName.toLowerCase().includes(q) ||
+		(user.idNo?.toLowerCase().includes(q) ?? false) ||
 		user.email.toLowerCase().includes(q) ||
 		user.phoneNum.toLowerCase().includes(q) ||
 		user.agencies.some(
@@ -110,7 +115,9 @@ export async function fetchPrUsers(
 		);
 	}
 	if (params.search?.trim()) {
-		mapped = mapped.filter((user) => matchesSearch(user, params.search!.trim()));
+		mapped = mapped.filter((user) =>
+			matchesSearch(user, params.search!.trim()),
+		);
 	}
 
 	if (!needsClientFilter) {

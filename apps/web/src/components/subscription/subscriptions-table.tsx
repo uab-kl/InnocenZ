@@ -8,6 +8,10 @@ import {
 	RefreshCw,
 	XCircle,
 } from "lucide-react";
+import {
+	SourceToggle,
+	type SourceValue,
+} from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,7 +36,6 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
 	formatDate,
 	formatNumber,
@@ -51,6 +54,50 @@ import type {
 export type SubscriptionStatusFilter = "all" | SubscriptionStatus;
 export type BillingCycleFilter = "all" | BillingCycle;
 export type SubscriptionRoleFilter = "all" | string;
+
+// Volume tier per plan, taken from the InnocenZ prototype rate cards. Keyed by
+// role because "Plus"/"Enterprise"/"Scale" exist for both with different ranges
+// and units: agency bills weekly on PV volume, outlet monthly on PRs/day.
+const PLAN_COVERAGE: Record<string, Record<string, string>> = {
+	agency: {
+		Starter: "5 PV/week",
+		Plus: "6–10 PV/week",
+		Growth: "11–25 PV/week",
+		Enterprise: "26–75 PV/week",
+		Scale: "76–150 PV/week",
+		Custom: "151+ PV/week",
+	},
+	outlet: {
+		Essential: "5 PRs/day",
+		Plus: "6–10 PRs/day",
+		Pro: "11–25 PRs/day",
+		Enterprise: "26–50 PRs/day",
+		Scale: "51–100 PRs/day",
+		Premier: "101+ PRs/day",
+	},
+};
+
+function coverageFor(sub: Subscription): string {
+	for (const role of sub.roles) {
+		const byName = PLAN_COVERAGE[role.roleName];
+		if (byName?.[sub.name]) return byName[sub.name];
+	}
+	return "—";
+}
+
+function hasRole(sub: Subscription, roleName: string): boolean {
+	return sub.roles.some((role) => role.roleName === roleName);
+}
+
+/** Agency Custom (151+ PV/week) is priced per deal — not a fixed catalog price. */
+function isAgencyCustomPlan(sub: Subscription): boolean {
+	return sub.name === "Custom" && hasRole(sub, "agency");
+}
+
+function priceLabelFor(sub: Subscription): string {
+	if (isAgencyCustomPlan(sub)) return "Renegotiate price";
+	return formatPrice(sub.price);
+}
 
 interface SubscriptionsTableProps {
 	subscriptions: Subscription[];
@@ -97,10 +144,30 @@ export function SubscriptionsTable({
 }: SubscriptionsTableProps) {
 	const showLoading = isLoading && subscriptions.length === 0;
 
+	// Show the cheapest plan first. Sort is applied to the current page (all
+	// plans fit on one page), so the lowest price always sits on top.
+	const sortedSubscriptions = [...subscriptions].sort(
+		(a, b) => Number(a.price) - Number(b.price),
+	);
+
+	// The plans role filter is keyed by role id; map it to/from outlet/agency so
+	// it can share the same toggle as the other admin pages.
+	const agencyRoleId = roleOptions.find((r) => r.roleName === "agency")?.id;
+	const outletRoleId = roleOptions.find((r) => r.roleName === "outlet")?.id;
+	const roleSourceValue: SourceValue =
+		roleFilter === agencyRoleId
+			? "agency"
+			: roleFilter === outletRoleId
+				? "outlet"
+				: "all";
+
+	const showOutletPosAddonRow =
+		roleSourceValue === "outlet" && !showLoading && !isError;
+
 	return (
 		<Card className="border-(--lavender-soft)/40 bg-card">
 			<CardHeader>
-				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+				<div className="space-y-4">
 					<div>
 						<CardTitle className="flex items-center gap-2">
 							Plans
@@ -112,21 +179,17 @@ export function SubscriptionsTable({
 					</div>
 
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-						<Tabs
-							value={roleFilter}
-							onValueChange={(value) =>
-								onRoleFilterChange(value as SubscriptionRoleFilter)
-							}
-						>
-							<TabsList aria-label="Filter by role">
-								<TabsTrigger value="all">All Roles</TabsTrigger>
-								{roleOptions.map((role) => (
-									<TabsTrigger key={role.id} value={role.id}>
-										{formatRoleLabel(role.roleName)}
-									</TabsTrigger>
-								))}
-							</TabsList>
-						</Tabs>
+						<SourceToggle
+							className="sm:mr-auto"
+							value={roleSourceValue}
+							onChange={(value) => {
+								if (value === "agency")
+									onRoleFilterChange(agencyRoleId ?? "all");
+								else if (value === "outlet")
+									onRoleFilterChange(outletRoleId ?? "all");
+								else onRoleFilterChange("all");
+							}}
+						/>
 
 						<Select
 							value={billingCycleFilter}
@@ -180,16 +243,17 @@ export function SubscriptionsTable({
 								<TableHead>Name</TableHead>
 								<TableHead>Roles</TableHead>
 								<TableHead>Price (RM)</TableHead>
+								<TableHead>Coverage</TableHead>
 								<TableHead>Billing Cycle</TableHead>
 								<TableHead className="w-[120px]">Status</TableHead>
-								<TableHead className="w-[180px]">Created</TableHead>
+								<TableHead className="w-[180px]">Last edited</TableHead>
 								<TableHead className="w-[80px]" />
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>Loading plans...</span>
@@ -198,7 +262,7 @@ export function SubscriptionsTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -216,7 +280,7 @@ export function SubscriptionsTable({
 								</TableRow>
 							) : subscriptions.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<CreditCard className="h-6 w-6" />
 											<span>No plans found</span>
@@ -224,58 +288,115 @@ export function SubscriptionsTable({
 									</TableCell>
 								</TableRow>
 							) : (
-								subscriptions.map((sub) => (
-									<TableRow key={sub.id}>
-										<TableCell className="font-medium">{sub.name}</TableCell>
-										<TableCell>
-											{sub.roles.length > 0 ? (
-												<div className="flex flex-wrap gap-1.5">
-													{sub.roles.map((role) => (
-														<Badge
-															key={role.id}
-															variant="outline"
-															className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
-														>
-															{formatRoleLabel(role.roleName)}
-														</Badge>
-													))}
-												</div>
-											) : (
-												<span className="text-sm text-muted-foreground">—</span>
-											)}
-										</TableCell>
-										<TableCell>{formatPrice(sub.price)}</TableCell>
-										<TableCell className="capitalize">
-											{sub.billingCycle}
-										</TableCell>
-										<TableCell>
-											<Badge
-												variant="outline"
-												className={`${statusColors[sub.status] ?? statusColors.inactive} flex w-fit items-center gap-1 capitalize`}
-											>
-												{sub.status === "active" ? (
-													<CheckCircle2 className="h-3 w-3" />
+								<>
+									{sortedSubscriptions.map((sub) => (
+										<TableRow key={sub.id}>
+											<TableCell className="font-medium">{sub.name}</TableCell>
+											<TableCell>
+												{sub.roles.length > 0 ? (
+													<div className="flex flex-wrap gap-1.5">
+														{sub.roles.map((role) => (
+															<Badge
+																key={role.id}
+																variant="outline"
+																className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
+															>
+																{formatRoleLabel(role.roleName)}
+															</Badge>
+														))}
+													</div>
 												) : (
-													<XCircle className="h-3 w-3" />
+													<span className="text-sm text-muted-foreground">—</span>
 												)}
-												{sub.status}
-											</Badge>
-										</TableCell>
-										<TableCell className="text-muted-foreground text-sm">
-											{formatDate(sub.createdAt)}
-										</TableCell>
-										<TableCell>
-											<Button
-												variant="ghost"
-												size="icon"
-												onClick={() => onEditClick(sub)}
-												aria-label={`Edit ${sub.name}`}
+											</TableCell>
+											<TableCell
+												className={
+													isAgencyCustomPlan(sub)
+														? "text-sm text-muted-foreground italic"
+														: undefined
+												}
 											>
-												<Pencil className="h-4 w-4" />
-											</Button>
-										</TableCell>
-									</TableRow>
-								))
+												{priceLabelFor(sub)}
+											</TableCell>
+											<TableCell className="text-sm text-muted-foreground">
+												{sub.coverage || coverageFor(sub)}
+											</TableCell>
+											<TableCell className="capitalize">
+												{sub.billingCycle}
+											</TableCell>
+											<TableCell>
+												<Badge
+													variant="outline"
+													className={`${statusColors[sub.status] ?? statusColors.inactive} flex w-fit items-center gap-1 capitalize`}
+												>
+													{sub.status === "active" ? (
+														<CheckCircle2 className="h-3 w-3" />
+													) : (
+														<XCircle className="h-3 w-3" />
+													)}
+													{sub.status}
+												</Badge>
+											</TableCell>
+											<TableCell className="text-muted-foreground text-sm">
+												{formatDate(sub.updatedAt)}
+											</TableCell>
+											<TableCell>
+												<Button
+													variant="ghost"
+													size="icon"
+													onClick={() => onEditClick(sub)}
+													aria-label={`Edit ${sub.name}`}
+												>
+													<Pencil className="h-4 w-4" />
+												</Button>
+											</TableCell>
+										</TableRow>
+									))}
+									{showOutletPosAddonRow && (
+										<TableRow className="bg-muted/20 hover:bg-muted/20">
+											<TableCell className="font-medium">
+												<div className="flex flex-wrap items-center gap-2">
+													<span>Integrate with POS</span>
+													<Badge
+														variant="outline"
+														className="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+													>
+														Add-on
+													</Badge>
+												</div>
+											</TableCell>
+											<TableCell>
+												<Badge
+													variant="outline"
+													className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
+												>
+													{formatRoleLabel("outlet")}
+												</Badge>
+											</TableCell>
+											<TableCell className="text-sm text-muted-foreground italic">
+												Call to get price
+											</TableCell>
+											<TableCell className="text-sm text-muted-foreground">
+												POS sync add-on
+											</TableCell>
+											<TableCell className="text-sm text-muted-foreground">
+												—
+											</TableCell>
+											<TableCell>
+												<Badge
+													variant="outline"
+													className="border-violet-500/30 bg-violet-500/10 text-violet-600 dark:text-violet-400"
+												>
+													Add-on
+												</Badge>
+											</TableCell>
+											<TableCell className="text-sm text-muted-foreground">
+												—
+											</TableCell>
+											<TableCell />
+										</TableRow>
+									)}
+								</>
 							)}
 						</TableBody>
 					</Table>

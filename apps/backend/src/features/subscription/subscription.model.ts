@@ -11,6 +11,8 @@ export const SubscriptionTable = MainSchema.table('subscription', {
     price: decimal('price', { precision: 10, scale: 2 }).notNull(),
     billingCycle: billingCycleEnum('billing_cycle').notNull().default('monthly'),
     status: varchar('status').notNull().default('active'),
+    // Free-text volume tier shown on the plan (e.g. "11–25 PV/week", "5 PRs/day").
+    coverage: varchar('coverage', { length: 100 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

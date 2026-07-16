@@ -1,5 +1,36 @@
-import { and, gte, lte, SQL } from 'drizzle-orm';
+import { and, gte, lte, or, SQL } from 'drizzle-orm';
 import type { AnyColumn } from 'drizzle-orm';
+
+const ISO_DAY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Parse `dates=2026-07-16,2026-07-20` from a list/query filter. */
+export function parseDatesQuery(value: unknown): string[] | undefined {
+  if (typeof value !== 'string' || value.length === 0) return undefined;
+  const dates = value
+    .split(',')
+    .map((part) => part.trim())
+    .filter((part) => ISO_DAY_RE.test(part));
+  return dates.length > 0 ? dates : undefined;
+}
+
+function dayBounds(isoDay: string): { start: Date; end: Date } | null {
+  if (!ISO_DAY_RE.test(isoDay)) return null;
+  const start = new Date(`${isoDay}T00:00:00`);
+  const end = new Date(`${isoDay}T23:59:59.999`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return { start, end };
+}
+
+/** Match rows whose timestamp falls on any of the given calendar days (inclusive). */
+export function buildMultiDayWhere(column: AnyColumn, dates?: string[]): SQL | undefined {
+  if (!dates || dates.length === 0) return undefined;
+  const dayClauses = dates
+    .map((day) => dayBounds(day))
+    .filter((bounds): bounds is { start: Date; end: Date } => bounds !== null)
+    .map(({ start, end }) => and(gte(column, start), lte(column, end)));
+  if (dayClauses.length === 0) return undefined;
+  return or(...dayClauses)!;
+}
 
 export function parseFilterDate(value: Date | string | null | undefined): Date | undefined {
     if (value == null || value === '') return undefined;

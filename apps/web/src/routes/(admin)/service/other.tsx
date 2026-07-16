@@ -10,12 +10,20 @@ import {
 	CheckCircle2,
 	LayoutGrid,
 	Loader2,
+	Pencil,
 	RefreshCw,
 	XCircle,
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import {
+	DateMultiFilter,
+	DateSingleFilter,
+	datesToQueryParam,
+} from "@/components/admin/date-multi-filter";
+import { SourceToggle } from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -26,6 +34,7 @@ import {
 	CardTitle,
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
 	Select,
 	SelectContent,
@@ -34,6 +43,15 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import {
+	Sheet,
+	SheetClose,
+	SheetContent,
+	SheetDescription,
+	SheetFooter,
+	SheetHeader,
+	SheetTitle,
+} from "@/components/ui/sheet";
+import {
 	Table,
 	TableBody,
 	TableCell,
@@ -41,6 +59,7 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
@@ -124,6 +143,14 @@ const statusBadgeColors: Record<SpecialServiceStatus, string> = {
 	cancelled: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
+const sourceNameOf = (record: SpecialService) =>
+	record.initiatedBy === "agency"
+		? record.postingAgencyName || ""
+		: record.outletName;
+
+const formatBudget = (budget: string | null) =>
+	budget != null && budget.trim() !== "" ? `RM ${budget}` : "—";
+
 function SpecialServicesPage() {
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
@@ -132,29 +159,37 @@ function SpecialServicesPage() {
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
 	const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>("all");
 	const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
+	const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
+	const [requestedDates, setRequestedDates] = useState<Date[]>([]);
 	const [page, setPage] = useState(1);
 	const [actionId, setActionId] = useState<string | null>(null);
-	const [draftBudgets, setDraftBudgets] = useState<Record<string, string>>({});
-	const [draftTitles, setDraftTitles] = useState<Record<string, string>>({});
-	const [draftSources, setDraftSources] = useState<Record<string, string>>({});
-	const [draftDescriptions, setDraftDescriptions] = useState<
-		Record<string, string>
-	>({});
+	const [editRecord, setEditRecord] = useState<SpecialService | null>(null);
 
 	const queryParams: SpecialServicesQueryParams = { page, pageSize: PAGE_SIZE };
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (categoryFilter !== "all") queryParams.category = categoryFilter;
 	if (sourceFilter !== "all") queryParams.initiatedBy = sourceFilter;
+	const scheduledDatesParam = datesToQueryParam(scheduledDates);
+	if (scheduledDatesParam) queryParams.scheduledDates = scheduledDatesParam;
+	const requestedDatesParam = datesToQueryParam(requestedDates);
+	if (requestedDatesParam) queryParams.dates = requestedDatesParam;
 
 	const isPendingView = viewMode === "pending_review";
+	const dateFilterParams = {
+		dates: requestedDatesParam,
+		scheduledDates: scheduledDatesParam,
+	};
 
 	const servicesQuery = useQuery({
 		queryKey: isPendingView
-			? ["special-services", "admin-pending", { page, pageSize: PAGE_SIZE }]
+			? ["special-services", "admin-pending", { page, pageSize: PAGE_SIZE, ...dateFilterParams }]
 			: ["special-services", queryParams],
 		queryFn: () =>
 			isPendingView
-				? fetchAdminPendingJobs({ page, pageSize: PAGE_SIZE }, logout)
+				? fetchAdminPendingJobs(
+						{ page, pageSize: PAGE_SIZE, ...dateFilterParams },
+						logout,
+					)
 				: fetchSpecialServices(queryParams, logout),
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
@@ -231,29 +266,8 @@ function SpecialServicesPage() {
 			...input
 		}: { id: string } & UpdateSpecialServiceInput) =>
 			updateSpecialService(id, input, logout),
-		onMutate: ({ id }) => setActionId(id),
-		onSuccess: (response, variables) => {
+		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["special-services"] });
-			setDraftBudgets((prev) => {
-				const next = { ...prev };
-				delete next[variables.id];
-				return next;
-			});
-			setDraftTitles((prev) => {
-				const next = { ...prev };
-				delete next[variables.id];
-				return next;
-			});
-			setDraftSources((prev) => {
-				const next = { ...prev };
-				delete next[variables.id];
-				return next;
-			});
-			setDraftDescriptions((prev) => {
-				const next = { ...prev };
-				delete next[variables.id];
-				return next;
-			});
 			toast.success(response.message || "Order updated");
 		},
 		onError: (error) => {
@@ -262,59 +276,7 @@ function SpecialServicesPage() {
 					"Failed to update order",
 			);
 		},
-		onSettled: () => setActionId(null),
 	});
-
-	const saveBudget = (id: string, original: string | null) => {
-		const raw = (draftBudgets[id] ?? original ?? "").trim();
-		const originalNorm = original ?? "";
-		if (raw === originalNorm) return;
-		if (raw === "") {
-			fieldsMutation.mutate({ id, budget: null });
-			return;
-		}
-		const parsed = Number(raw);
-		if (Number.isNaN(parsed) || parsed < 0) {
-			toast.error("Enter a valid non-negative budget");
-			return;
-		}
-		fieldsMutation.mutate({ id, budget: parsed });
-	};
-
-	const sourceNameOf = (record: SpecialService) =>
-		record.initiatedBy === "agency"
-			? record.postingAgencyName || ""
-			: record.outletName;
-
-	const saveTitle = (record: SpecialService) => {
-		const next = (draftTitles[record.id] ?? record.title).trim();
-		if (!next || next === record.title) return;
-		fieldsMutation.mutate({ id: record.id, title: next });
-	};
-
-	const saveSource = (record: SpecialService) => {
-		const next = (draftSources[record.id] ?? sourceNameOf(record)).trim();
-		if (!next || next === sourceNameOf(record)) return;
-		if (record.initiatedBy === "agency") {
-			fieldsMutation.mutate({ id: record.id, postingAgencyName: next });
-		} else {
-			fieldsMutation.mutate({ id: record.id, outletName: next });
-		}
-	};
-
-	const saveDescription = (record: SpecialService) => {
-		const next = (
-			draftDescriptions[record.id] ??
-			record.description ??
-			""
-		).trim();
-		const original = (record.description ?? "").trim();
-		if (next === original) return;
-		fieldsMutation.mutate({
-			id: record.id,
-			description: next === "" ? null : next,
-		});
-	};
 
 	const records = servicesQuery.data?.data ?? [];
 	const pagination = servicesQuery.data?.pagination;
@@ -334,7 +296,7 @@ function SpecialServicesPage() {
 			<PageHeader
 				icon={LayoutGrid}
 				title="Jobs & Special Services"
-				description="Edit Title, Source, Category, and Budget inline — press Enter or leave a field to save. Category “Other” opens a description field."
+				description="Browse orders and agency jobs. Click a row to open the editor and update details or status. Use the filters to narrow by source, category, or status."
 			/>
 
 			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
@@ -366,7 +328,7 @@ function SpecialServicesPage() {
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
-					<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
 								{isPendingView ? "Agency job postings" : "All orders"}
@@ -382,6 +344,17 @@ function SpecialServicesPage() {
 						</div>
 
 						<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+							{!isPendingView && (
+								<SourceToggle
+									className="sm:mr-auto"
+									value={sourceFilter}
+									onChange={(value) => {
+										setSourceFilter(value);
+										setPage(1);
+									}}
+								/>
+							)}
+
 							<Select
 								value={viewMode}
 								onValueChange={(value) => {
@@ -403,26 +376,6 @@ function SpecialServicesPage() {
 
 							{!isPendingView && (
 								<>
-									<Select
-										value={sourceFilter}
-										onValueChange={(value) => {
-											setSourceFilter(value as SourceFilter);
-											setPage(1);
-										}}
-									>
-										<SelectTrigger
-											className="sm:w-40"
-											aria-label="Filter by source"
-										>
-											<SelectValue placeholder="All Sources" />
-										</SelectTrigger>
-										<SelectContent>
-											<SelectItem value="all">All Sources</SelectItem>
-											<SelectItem value="outlet">Outlet</SelectItem>
-											<SelectItem value="agency">Agency</SelectItem>
-										</SelectContent>
-									</Select>
-
 									<Select
 										value={categoryFilter}
 										onValueChange={(value) => {
@@ -470,6 +423,25 @@ function SpecialServicesPage() {
 									</Select>
 								</>
 							)}
+
+							<DateMultiFilter
+								selectedDates={scheduledDates}
+								onChange={(dates) => {
+									setScheduledDates(dates);
+									setPage(1);
+								}}
+								ariaLabel="Filter by scheduled date"
+								emptyLabel="Scheduled for"
+							/>
+							<DateMultiFilter
+								selectedDates={requestedDates}
+								onChange={(dates) => {
+									setRequestedDates(dates);
+									setPage(1);
+								}}
+								ariaLabel="Filter by requested date"
+								emptyLabel="Requested time"
+							/>
 						</div>
 					</div>
 				</CardHeader>
@@ -482,9 +454,10 @@ function SpecialServicesPage() {
 									<TableHead>Title</TableHead>
 									<TableHead>Source</TableHead>
 									<TableHead className="w-[180px]">Category</TableHead>
-									<TableHead>Budget (RM)</TableHead>
-									<TableHead>Assigned Agency</TableHead>
-									<TableHead className="w-[130px]">Scheduled</TableHead>
+									<TableHead>Budget</TableHead>
+									<TableHead>Third Party</TableHead>
+									<TableHead className="w-[150px]">Scheduled For</TableHead>
+									<TableHead className="w-[160px]">Requested Time</TableHead>
 									{isPendingView ? (
 										<TableHead className="w-[200px]">Actions</TableHead>
 									) : (
@@ -495,7 +468,7 @@ function SpecialServicesPage() {
 							<TableBody>
 								{showLoading ? (
 									<TableRow>
-										<TableCell colSpan={7} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
 												<span>Loading…</span>
@@ -504,7 +477,7 @@ function SpecialServicesPage() {
 									</TableRow>
 								) : servicesQuery.isError ? (
 									<TableRow>
-										<TableCell colSpan={7} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
@@ -526,7 +499,7 @@ function SpecialServicesPage() {
 									</TableRow>
 								) : records.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={7} className="h-32">
+										<TableCell colSpan={8} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<LayoutGrid className="h-6 w-6" />
 												<span>
@@ -541,71 +514,29 @@ function SpecialServicesPage() {
 									records.map((record) => {
 										const busy = actionId === record.id;
 										return (
-											<TableRow key={record.id}>
-												<TableCell>
-													<Input
-														className="h-8 min-w-[160px] font-medium"
-														aria-label={`Title for ${record.id}`}
-														disabled={busy && fieldsMutation.isPending}
-														value={draftTitles[record.id] ?? record.title}
-														onChange={(e) =>
-															setDraftTitles((prev) => ({
-																...prev,
-																[record.id]: e.target.value,
-															}))
-														}
-														onBlur={() => saveTitle(record)}
-														onKeyDown={(e) => {
-															if (e.key === "Enter") e.currentTarget.blur();
-														}}
-													/>
+											<TableRow
+												key={record.id}
+												className="cursor-pointer"
+												onClick={() => setEditRecord(record)}
+											>
+												<TableCell className="font-medium">
+													{record.title}
 												</TableCell>
 												<TableCell>
-													<div className="flex flex-col gap-1.5">
-														<Input
-															className="h-8 min-w-[130px]"
-															aria-label={`Source for ${record.title}`}
-															disabled={busy && fieldsMutation.isPending}
-															value={
-																draftSources[record.id] ?? sourceNameOf(record)
-															}
-															onChange={(e) =>
-																setDraftSources((prev) => ({
-																	...prev,
-																	[record.id]: e.target.value,
-																}))
-															}
-															onBlur={() => saveSource(record)}
-															onKeyDown={(e) => {
-																if (e.key === "Enter") e.currentTarget.blur();
-															}}
-														/>
-														<Select
-															value={record.initiatedBy}
-															disabled={busy && fieldsMutation.isPending}
-															onValueChange={(value) =>
-																fieldsMutation.mutate({
-																	id: record.id,
-																	initiatedBy:
-																		value as SpecialServiceInitiatedBy,
-																})
-															}
+													<div className="flex flex-col gap-1">
+														<span className="text-sm">
+															{sourceNameOf(record) || "—"}
+														</span>
+														<Badge
+															variant="outline"
+															className="w-fit capitalize text-muted-foreground"
 														>
-															<SelectTrigger
-																className="h-8 w-[110px]"
-																aria-label={`Role type for ${record.title}`}
-															>
-																<SelectValue />
-															</SelectTrigger>
-															<SelectContent>
-																<SelectItem value="outlet">Outlet</SelectItem>
-																<SelectItem value="agency">Agency</SelectItem>
-															</SelectContent>
-														</Select>
+															{record.initiatedBy}
+														</Badge>
 													</div>
 												</TableCell>
 												<TableCell>
-													<div className="flex min-w-[160px] flex-col gap-1.5">
+													<div className="flex flex-col gap-1">
 														<Badge
 															variant="outline"
 															className="w-fit border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender"
@@ -613,66 +544,18 @@ function SpecialServicesPage() {
 															{categoryLabels[record.category] ??
 																record.category}
 														</Badge>
-														{record.category === "others" && (
-															<Input
-																className="h-8"
-																placeholder="Describe other…"
-																aria-label={`Other category description for ${record.title}`}
-																disabled={busy && fieldsMutation.isPending}
-																value={
-																	draftDescriptions[record.id] ??
-																	record.description ??
-																	""
-																}
-																onChange={(e) =>
-																	setDraftDescriptions((prev) => ({
-																		...prev,
-																		[record.id]: e.target.value,
-																	}))
-																}
-																onBlur={() => saveDescription(record)}
-																onKeyDown={(e) => {
-																	if (e.key === "Enter") e.currentTarget.blur();
-																}}
-															/>
-														)}
+														{record.category === "others" &&
+															record.description && (
+																<span className="line-clamp-2 text-xs text-muted-foreground">
+																	{record.description}
+																</span>
+															)}
 													</div>
 												</TableCell>
-												<TableCell>
-													<div className="flex items-center gap-1">
-														<span className="text-xs text-muted-foreground">
-															RM
-														</span>
-														<Input
-															type="number"
-															min={0}
-															step="0.01"
-															inputMode="decimal"
-															className="h-8 w-[110px]"
-															placeholder="0.00"
-															aria-label={`Budget for ${record.title}`}
-															disabled={busy && fieldsMutation.isPending}
-															value={
-																draftBudgets[record.id] ?? record.budget ?? ""
-															}
-															onChange={(e) =>
-																setDraftBudgets((prev) => ({
-																	...prev,
-																	[record.id]: e.target.value,
-																}))
-															}
-															onBlur={() =>
-																saveBudget(record.id, record.budget)
-															}
-															onKeyDown={(e) => {
-																if (e.key === "Enter") {
-																	e.currentTarget.blur();
-																}
-															}}
-														/>
-													</div>
+												<TableCell className="text-sm">
+													{formatBudget(record.budget)}
 												</TableCell>
-												<TableCell className="text-muted-foreground">
+												<TableCell className="text-sm text-muted-foreground">
 													{record.assignedAgencyName ?? "—"}
 												</TableCell>
 												<TableCell className="text-sm text-muted-foreground">
@@ -680,7 +563,13 @@ function SpecialServicesPage() {
 														? formatDate(record.scheduledFor)
 														: "—"}
 												</TableCell>
-												<TableCell>
+												<TableCell className="text-sm text-muted-foreground">
+													{formatDate(record.createdAt)}
+												</TableCell>
+												<TableCell
+													onClick={(e) => e.stopPropagation()}
+													onKeyDown={(e) => e.stopPropagation()}
+												>
 													{isPendingView ? (
 														<div className="flex flex-wrap gap-2">
 															<Button
@@ -714,36 +603,23 @@ function SpecialServicesPage() {
 															</Button>
 														</div>
 													) : (
-														<Select
-															value={record.status}
-															onValueChange={(value) =>
-																statusMutation.mutate({
-																	id: record.id,
-																	status: value as SpecialServiceStatus,
-																})
-															}
-														>
-															<SelectTrigger
-																className="h-8 w-[150px]"
-																aria-label={`Status for ${record.title}`}
+														<div className="flex items-center gap-2">
+															<Badge
+																variant="outline"
+																className={`${statusBadgeColors[record.status]} w-fit`}
 															>
-																<SelectValue>
-																	<Badge
-																		variant="outline"
-																		className={`${statusBadgeColors[record.status]} w-fit`}
-																	>
-																		{statusLabels[record.status]}
-																	</Badge>
-																</SelectValue>
-															</SelectTrigger>
-															<SelectContent>
-																{STATUSES.map((status) => (
-																	<SelectItem key={status} value={status}>
-																		{statusLabels[status]}
-																	</SelectItem>
-																))}
-															</SelectContent>
-														</Select>
+																{statusLabels[record.status]}
+															</Badge>
+															<Button
+																size="icon"
+																variant="ghost"
+																className="h-8 w-8"
+																aria-label={`Edit ${record.title}`}
+																onClick={() => setEditRecord(record)}
+															>
+																<Pencil className="h-4 w-4" />
+															</Button>
+														</div>
 													)}
 												</TableCell>
 											</TableRow>
@@ -801,6 +677,308 @@ function SpecialServicesPage() {
 					)}
 				</CardContent>
 			</Card>
+
+			<Sheet
+				open={editRecord != null}
+				onOpenChange={(open) => {
+					if (!open) setEditRecord(null);
+				}}
+			>
+				<SheetContent side="right" className="w-full sm:max-w-md">
+					{editRecord && (
+						<OrderEditForm
+							key={editRecord.id}
+							record={editRecord}
+							isSaving={fieldsMutation.isPending || statusMutation.isPending}
+							onSaveFields={(id, input) =>
+								fieldsMutation.mutateAsync({ id, ...input })
+							}
+							onSaveStatus={(id, status) =>
+								statusMutation.mutateAsync({ id, status })
+							}
+							onDone={() => setEditRecord(null)}
+						/>
+					)}
+				</SheetContent>
+			</Sheet>
 		</PageShell>
+	);
+}
+
+interface OrderEditFormProps {
+	record: SpecialService;
+	isSaving: boolean;
+	onSaveFields: (
+		id: string,
+		input: UpdateSpecialServiceInput,
+	) => Promise<unknown>;
+	onSaveStatus: (id: string, status: SpecialServiceStatus) => Promise<unknown>;
+	onDone: () => void;
+}
+
+function OrderEditForm({
+	record,
+	isSaving,
+	onSaveFields,
+	onSaveStatus,
+	onDone,
+}: OrderEditFormProps) {
+	const [title, setTitle] = useState(record.title);
+	const [initiatedBy, setInitiatedBy] = useState<SpecialServiceInitiatedBy>(
+		record.initiatedBy,
+	);
+	const [sourceName, setSourceName] = useState(sourceNameOf(record));
+	const [category, setCategory] = useState<SpecialServiceCategory>(
+		record.category,
+	);
+	const [description, setDescription] = useState(record.description ?? "");
+	const [budget, setBudget] = useState(record.budget ?? "");
+	const [thirdParty, setThirdParty] = useState(record.assignedAgencyName ?? "");
+	const [status, setStatus] = useState<SpecialServiceStatus>(record.status);
+	const [scheduledFor, setScheduledFor] = useState<Date | undefined>(() =>
+		record.scheduledFor ? new Date(record.scheduledFor) : undefined,
+	);
+
+	function sameCalendarDay(a: Date | undefined, b: Date | undefined): boolean {
+		if (!a && !b) return true;
+		if (!a || !b) return false;
+		return format(a, "yyyy-MM-dd") === format(b, "yyyy-MM-dd");
+	}
+
+	async function handleSubmit(event: React.FormEvent) {
+		event.preventDefault();
+
+		const input: UpdateSpecialServiceInput = {};
+
+		const trimmedTitle = title.trim();
+		if (!trimmedTitle) {
+			toast.error("Title is required");
+			return;
+		}
+		if (trimmedTitle !== record.title) input.title = trimmedTitle;
+
+		if (initiatedBy !== record.initiatedBy) input.initiatedBy = initiatedBy;
+
+		const trimmedSource = sourceName.trim();
+		if (initiatedBy === "agency") {
+			if (trimmedSource !== (record.postingAgencyName ?? "").trim()) {
+				input.postingAgencyName = trimmedSource === "" ? null : trimmedSource;
+			}
+		} else if (trimmedSource !== record.outletName.trim()) {
+			input.outletName = trimmedSource;
+		}
+
+		if (category !== record.category) input.category = category;
+
+		const trimmedDesc = description.trim();
+		if (trimmedDesc !== (record.description ?? "").trim()) {
+			input.description = trimmedDesc === "" ? null : trimmedDesc;
+		}
+
+		const rawBudget = String(budget).trim();
+		if (rawBudget !== (record.budget ?? "").trim()) {
+			if (rawBudget === "") {
+				input.budget = null;
+			} else {
+				const parsed = Number(rawBudget);
+				if (Number.isNaN(parsed) || parsed < 0) {
+					toast.error("Enter a valid non-negative budget");
+					return;
+				}
+				input.budget = parsed;
+			}
+		}
+
+		const trimmedThirdParty = thirdParty.trim();
+		if (trimmedThirdParty !== (record.assignedAgencyName ?? "").trim()) {
+			input.assignedAgencyName =
+				trimmedThirdParty === "" ? null : trimmedThirdParty;
+		}
+
+		const prevScheduled = record.scheduledFor
+			? new Date(record.scheduledFor)
+			: undefined;
+		if (!sameCalendarDay(scheduledFor, prevScheduled)) {
+			input.scheduledFor = scheduledFor
+				? format(scheduledFor, "yyyy-MM-dd")
+				: null;
+		}
+
+		try {
+			if (Object.keys(input).length > 0) {
+				await onSaveFields(record.id, input);
+			}
+			if (status !== record.status) {
+				await onSaveStatus(record.id, status);
+			}
+			onDone();
+		} catch {
+			// Error toasts are surfaced by the mutation onError handlers.
+		}
+	}
+
+	return (
+		<form onSubmit={handleSubmit} className="flex min-h-0 flex-1 flex-col">
+			<SheetHeader>
+				<SheetTitle>Edit order</SheetTitle>
+				<SheetDescription>
+					Update the order details or status, then save your changes.
+				</SheetDescription>
+			</SheetHeader>
+
+			<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
+				<div className="space-y-1.5">
+					<Label htmlFor="order-title">Title</Label>
+					<Input
+						id="order-title"
+						value={title}
+						onChange={(e) => setTitle(e.target.value)}
+					/>
+				</div>
+
+				<div className="grid grid-cols-2 gap-3">
+					<div className="space-y-1.5">
+						<Label htmlFor="order-source-type">Source type</Label>
+						<Select
+							value={initiatedBy}
+							onValueChange={(value) =>
+								setInitiatedBy(value as SpecialServiceInitiatedBy)
+							}
+						>
+							<SelectTrigger id="order-source-type">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								<SelectItem value="outlet">Outlet</SelectItem>
+								<SelectItem value="agency">Agency</SelectItem>
+							</SelectContent>
+						</Select>
+					</div>
+					<div className="space-y-1.5">
+						<Label htmlFor="order-source-name">
+							{initiatedBy === "agency" ? "Agency name" : "Outlet name"}
+						</Label>
+						<Input
+							id="order-source-name"
+							value={sourceName}
+							onChange={(e) => setSourceName(e.target.value)}
+						/>
+					</div>
+				</div>
+
+				<div className="space-y-1.5">
+					<Label htmlFor="order-category">Category</Label>
+					<Select
+						value={category}
+						onValueChange={(value) =>
+							setCategory(value as SpecialServiceCategory)
+						}
+					>
+						<SelectTrigger id="order-category">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent>
+							{CATEGORIES.map((option) => (
+								<SelectItem key={option} value={option}>
+									{categoryLabels[option]}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				</div>
+
+				<div className="space-y-1.5">
+					<Label htmlFor="order-description">
+						Description
+						{category === "others" ? " (required for “Others”)" : ""}
+					</Label>
+					<Textarea
+						id="order-description"
+						rows={3}
+						placeholder="Add details for this order…"
+						value={description}
+						onChange={(e) => setDescription(e.target.value)}
+					/>
+				</div>
+
+				<div className="grid grid-cols-2 gap-3">
+					<div className="space-y-1.5">
+						<Label htmlFor="order-budget">Budget (RM)</Label>
+						<Input
+							id="order-budget"
+							type="number"
+							min={0}
+							step="0.01"
+							inputMode="decimal"
+							placeholder="0.00"
+							value={budget}
+							onChange={(e) => setBudget(e.target.value)}
+						/>
+					</div>
+					<div className="space-y-1.5">
+						<Label htmlFor="order-status">Status</Label>
+						<Select
+							value={status}
+							onValueChange={(value) =>
+								setStatus(value as SpecialServiceStatus)
+							}
+						>
+							<SelectTrigger id="order-status">
+								<SelectValue />
+							</SelectTrigger>
+							<SelectContent>
+								{STATUSES.map((option) => (
+									<SelectItem key={option} value={option}>
+										{statusLabels[option]}
+									</SelectItem>
+								))}
+							</SelectContent>
+						</Select>
+					</div>
+				</div>
+
+				<div className="space-y-1.5">
+					<Label htmlFor="order-third-party">Third party (optional)</Label>
+					<Input
+						id="order-third-party"
+						placeholder="Who's supporting this — vendor or partner name…"
+						value={thirdParty}
+						onChange={(e) => setThirdParty(e.target.value)}
+					/>
+					<p className="text-[11px] text-muted-foreground">
+						Who you found to support this category. Leave blank if none yet.
+					</p>
+				</div>
+
+				<div className="space-y-1.5">
+					<Label>Scheduled for</Label>
+					<DateSingleFilter
+						value={scheduledFor}
+						onChange={setScheduledFor}
+						ariaLabel="Scheduled for date"
+						emptyLabel="Select date"
+					/>
+				</div>
+
+				<dl className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3 text-sm">
+					<div className="flex items-center justify-between gap-2">
+						<dt className="text-muted-foreground">Requested time</dt>
+						<dd className="text-right">{formatDate(record.createdAt)}</dd>
+					</div>
+				</dl>
+			</div>
+
+			<SheetFooter className="flex-row justify-end gap-2">
+				<SheetClose asChild>
+					<Button type="button" variant="outline">
+						Cancel
+					</Button>
+				</SheetClose>
+				<Button type="submit" disabled={isSaving}>
+					{isSaving && <Loader2 className="mr-1 h-4 w-4 animate-spin" />}
+					Save changes
+				</Button>
+			</SheetFooter>
+		</form>
 	);
 }
