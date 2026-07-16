@@ -19,8 +19,14 @@ export class AdminRequestControllerClass {
     try {
       const page = Number(req.query.page ?? 1);
       const pageSize = Number(req.query.pageSize ?? 10);
+      // ?type= accepts one value or a comma-separated whitelist
+      // (e.g. pos_integration_quote,custom_renegotiation for the Plan Request inbox).
+      const rawType = req.query.type as string | undefined;
       const filter: AdminRequestFilter = {
-        type: req.query.type as AdminRequestType | undefined,
+        type: rawType?.includes(',')
+          ? (rawType.split(',') as AdminRequestType[])
+          : (rawType as AdminRequestType | undefined),
+        excludeType: req.query.excludeType as AdminRequestType | undefined,
         status: req.query.status as AdminRequestStatus | undefined,
         subscriberType: req.query.subscriberType as 'outlet' | 'agency' | undefined,
         dates: parseDatesQuery(req.query.dates),
@@ -39,10 +45,14 @@ export class AdminRequestControllerClass {
     }
   }
 
-  // Pending-request count for the admin notification bell.
-  async pendingCount(_req: Request, res: Response) {
+  // Pending-request count for the admin notification bell / sidebar badges.
+  // Optional ?type= / ?excludeType= narrow the count (e.g. plan_change only).
+  async pendingCount(req: Request, res: Response) {
     try {
-      const count = await this.repository.countPending();
+      const count = await this.repository.countPending({
+        type: req.query.type as AdminRequestType | undefined,
+        excludeType: req.query.excludeType as AdminRequestType | undefined,
+      });
       res.status(200).json({ success: true, message: 'OK', data: { pending: count } });
     } catch (error) {
       logger.error('[AdminRequestController.pendingCount] Error:', error);
@@ -77,8 +87,14 @@ export class AdminRequestControllerClass {
         contactEmail: parsed.data.contactEmail ?? null,
         contactPhone: parsed.data.contactPhone ?? null,
         currentPlanId: parsed.data.currentPlanId ?? null,
+        requestedPlanId: parsed.data.requestedPlanId ?? null,
         message: parsed.data.message ?? null,
-        status: 'pending',
+        // Agency plan changes are applied automatically (by PR count) and only
+        // logged here as 'direct'; outlet plan changes wait for admin approval.
+        status:
+          parsed.data.type === 'plan_change' && parsed.data.subscriberType === 'agency'
+            ? 'direct'
+            : 'pending',
         createdBy: actor,
         updatedBy: actor,
       });
@@ -166,6 +182,54 @@ export class AdminRequestControllerClass {
       res.status(200).json({ success: true, message: 'Request resolved', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.resolve] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  // Approve an outlet plan change. The price follows the to-plan from now on —
+  // the frontend passes the to-plan price as quotedAmount so it is stamped here.
+  async approve(req: Request, res: Response) {
+    try {
+      const parsed = ResolveAdminRequestSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+      const existing = await this.repository.getById(paramId(req.params.id));
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (existing.type !== 'plan_change') {
+        return res.status(400).json({ success: false, message: 'Only plan changes can be approved', data: null });
+      }
+      const payload: Parameters<AdminRequestRepositoryClass['update']>[1] = {
+        status: 'approved',
+        updatedBy: getActor(req),
+      };
+      if (parsed.data.quotedAmount !== undefined) payload.quotedAmount = parsed.data.quotedAmount.toFixed(2);
+
+      const record = await this.repository.update(existing.id, payload);
+      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(200).json({ success: true, message: 'Plan change approved', data: record });
+    } catch (error) {
+      logger.error('[AdminRequestController.approve] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  // Decline an outlet plan change — the subscriber stays on the from-plan.
+  async decline(req: Request, res: Response) {
+    try {
+      const existing = await this.repository.getById(paramId(req.params.id));
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (existing.type !== 'plan_change') {
+        return res.status(400).json({ success: false, message: 'Only plan changes can be declined', data: null });
+      }
+      const record = await this.repository.update(existing.id, {
+        status: 'declined',
+        updatedBy: getActor(req),
+      });
+      if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      res.status(200).json({ success: true, message: 'Plan change declined', data: record });
+    } catch (error) {
+      logger.error('[AdminRequestController.decline] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

@@ -53,6 +53,7 @@ import { Route as AdminUserManagementOutletRouteImport } from './routes/admin/us
 import { Route as AdminUserManagementAgencyRouteImport } from './routes/admin/user-management/agency'
 import { Route as AdminUserManagementAdminRouteImport } from './routes/admin/user-management/admin'
 import { Route as AdminServiceRequestsRouteImport } from './routes/admin/service/requests'
+import { Route as AdminServicePlanChangesRouteImport } from './routes/admin/service/plan-changes'
 import { Route as AdminServiceOtherRouteImport } from './routes/admin/service/other'
 import { Route as AdminRbacRoleRouteImport } from './routes/admin/rbac/role'
 import { Route as AdminRbacPermissionRouteImport } from './routes/admin/rbac/permission'
@@ -287,6 +288,11 @@ const AdminServiceRequestsRoute = AdminServiceRequestsRouteImport.update({
   path: '/service/requests',
   getParentRoute: () => AdminRouteRoute,
 } as any)
+const AdminServicePlanChangesRoute = AdminServicePlanChangesRouteImport.update({
+  id: '/service/plan-changes',
+  path: '/service/plan-changes',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
 const AdminServiceOtherRoute = AdminServiceOtherRouteImport.update({
   id: '/service/other',
   path: '/service/other',
@@ -382,6 +388,7 @@ export interface FileRoutesByFullPath {
   '/admin/rbac/permission': typeof AdminRbacPermissionRoute
   '/admin/rbac/role': typeof AdminRbacRoleRoute
   '/admin/service/other': typeof AdminServiceOtherRoute
+  '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
@@ -434,6 +441,7 @@ export interface FileRoutesByTo {
   '/admin/rbac/permission': typeof AdminRbacPermissionRoute
   '/admin/rbac/role': typeof AdminRbacRoleRoute
   '/admin/service/other': typeof AdminServiceOtherRoute
+  '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
@@ -490,6 +498,7 @@ export interface FileRoutesById {
   '/admin/rbac/permission': typeof AdminRbacPermissionRoute
   '/admin/rbac/role': typeof AdminRbacRoleRoute
   '/admin/service/other': typeof AdminServiceOtherRoute
+  '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
@@ -547,6 +556,7 @@ export interface FileRouteTypes {
     | '/admin/rbac/permission'
     | '/admin/rbac/role'
     | '/admin/service/other'
+    | '/admin/service/plan-changes'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
@@ -599,6 +609,7 @@ export interface FileRouteTypes {
     | '/admin/rbac/permission'
     | '/admin/rbac/role'
     | '/admin/service/other'
+    | '/admin/service/plan-changes'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
@@ -654,6 +665,7 @@ export interface FileRouteTypes {
     | '/admin/rbac/permission'
     | '/admin/rbac/role'
     | '/admin/service/other'
+    | '/admin/service/plan-changes'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
@@ -983,6 +995,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminServiceRequestsRouteImport
       parentRoute: typeof AdminRouteRoute
     }
+    '/admin/service/plan-changes': {
+      id: '/admin/service/plan-changes'
+      path: '/service/plan-changes'
+      fullPath: '/admin/service/plan-changes'
+      preLoaderRoute: typeof AdminServicePlanChangesRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
     '/admin/service/other': {
       id: '/admin/service/other'
       path: '/service/other'
@@ -1124,6 +1143,7 @@ interface AdminRouteRouteChildren {
   AdminProfileRoute: typeof AdminProfileRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminServiceOtherRoute: typeof AdminServiceOtherRoute
+  AdminServicePlanChangesRoute: typeof AdminServicePlanChangesRoute
   AdminServiceRequestsRoute: typeof AdminServiceRequestsRoute
 }
 
@@ -1136,6 +1156,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminProfileRoute: AdminProfileRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminServiceOtherRoute: AdminServiceOtherRoute,
+  AdminServicePlanChangesRoute: AdminServicePlanChangesRoute,
   AdminServiceRequestsRoute: AdminServiceRequestsRoute,
 }
 

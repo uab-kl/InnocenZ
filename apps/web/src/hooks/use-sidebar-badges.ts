@@ -27,9 +27,17 @@ export function useSidebarBadges(): Record<string, number> {
 		staleTime: 30_000,
 	});
 
+	// Plan changes live on their own page, so the Plan Request badge excludes
+	// them and the Plan Change badge counts only pending outlet switches.
 	const pendingRequests = useQuery({
-		queryKey: ["dashboard", "pending-requests-count"],
-		queryFn: () => fetchPendingCount(logout),
+		queryKey: ["dashboard", "pending-requests-count", "without-plan-changes"],
+		queryFn: () => fetchPendingCount(logout, { excludeType: "plan_change" }),
+		staleTime: 30_000,
+	});
+
+	const pendingPlanChanges = useQuery({
+		queryKey: ["dashboard", "pending-plan-changes-count"],
+		queryFn: () => fetchPendingCount(logout, { type: "plan_change" }),
 		staleTime: 30_000,
 	});
 
@@ -43,6 +51,7 @@ export function useSidebarBadges(): Record<string, number> {
 		"sidebar-user-agency": pendingAgencies.data?.pagination.totalCount ?? 0,
 		"sidebar-user-outlet": pendingOutlets.data?.pagination.totalCount ?? 0,
 		"sidebar-service-requests": pendingRequests.data?.pending ?? 0,
+		"sidebar-service-plan-changes": pendingPlanChanges.data?.pending ?? 0,
 		"sidebar-service-other": pendingJobs.data?.pagination.totalCount ?? 0,
 	};
 }

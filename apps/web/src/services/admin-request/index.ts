@@ -1,12 +1,24 @@
 import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 
+// 'pos_integration_quote' = outlet "Integrate with POS → Request admin quote";
+// 'custom_renegotiation' = agency Custom (151+ PV) "Renegotiate Price".
 export type AdminRequestType =
 	| "pos_integration_quote"
+	| "custom_renegotiation"
 	| "plan_change"
 	| "contact"
 	| "other";
-export type AdminRequestStatus = "pending" | "contacted" | "resolved";
+// Plan-change lifecycle: outlet switches sit as 'pending' until the admin marks
+// them 'approved' or 'declined'; agency switches are auto-applied and logged as
+// 'direct'. Other request types use pending → contacted → resolved.
+export type AdminRequestStatus =
+	| "pending"
+	| "contacted"
+	| "resolved"
+	| "declined"
+	| "direct"
+	| "approved";
 export type SubscriberType = "outlet" | "agency";
 
 export interface AdminRequestPagination {
@@ -43,6 +55,10 @@ export interface AdminRequest {
 
 export interface AdminRequestsQueryParams {
 	type?: AdminRequestType;
+	/** Whitelist of types — serialized as a comma list into ?type=. */
+	types?: AdminRequestType[];
+	/** Exclude a single type from the results (e.g. plan_change). */
+	excludeType?: AdminRequestType;
 	status?: AdminRequestStatus;
 	subscriberType?: SubscriberType;
 	dates?: string;
@@ -81,7 +97,8 @@ export async function fetchAdminRequests(
 ): Promise<AdminRequestsApiResponse> {
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
-		type: params.type,
+		type: params.types?.length ? params.types.join(",") : params.type,
+		excludeType: params.excludeType,
 		status: params.status,
 		subscriberType: params.subscriberType,
 		dates: params.dates,
@@ -165,12 +182,48 @@ export async function updateAdminRequest(
 
 export async function fetchPendingCount(
 	onRefreshFail: () => void,
+	params: { type?: AdminRequestType; excludeType?: AdminRequestType } = {},
 ): Promise<{ pending: number }> {
 	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		type: params.type,
+		excludeType: params.excludeType,
+	});
 	const response = await client.get<{
 		success: boolean;
 		message: string;
 		data: { pending: number };
-	}>("/admin-request/pending-count");
+	}>(`/admin-request/pending-count${queryString}`);
 	return response.data.data ?? { pending: 0 };
+}
+
+// Approve an outlet plan change. Pass the to-plan price so it is stamped as the
+// price the subscriber pays from now on.
+export async function approvePlanChange(
+	id: string,
+	quotedAmount: number | undefined,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: AdminRequest }> {
+	const client = getClient(onRefreshFail);
+	const body = quotedAmount === undefined ? {} : { quotedAmount };
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: AdminRequest;
+	}>(`/admin-request/${id}/approve`, body);
+	return response.data;
+}
+
+// Decline an outlet plan change — the subscriber stays on the from-plan.
+export async function declinePlanChange(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: AdminRequest }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: AdminRequest;
+	}>(`/admin-request/${id}/decline`);
+	return response.data;
 }

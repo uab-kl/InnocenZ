@@ -1,4 +1,4 @@
-import { and, desc, eq, isNotNull, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, ne, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -20,7 +20,14 @@ export type NegotiatedByRoleRow = {
 export class AdminRequestRepositoryClass {
   private buildConditions(filter?: AdminRequestFilter): SQL | undefined {
     const conditions: SQL[] = [];
-    if (filter?.type) conditions.push(eq(AdminRequestTable.type, filter.type));
+    if (filter?.type) {
+      conditions.push(
+        Array.isArray(filter.type)
+          ? inArray(AdminRequestTable.type, filter.type)
+          : eq(AdminRequestTable.type, filter.type),
+      );
+    }
+    if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
     if (filter?.status) conditions.push(eq(AdminRequestTable.status, filter.status));
     if (filter?.subscriberType) conditions.push(eq(AdminRequestTable.subscriberType, filter.subscriberType));
     const requestedOn = buildMultiDayWhere(AdminRequestTable.createdAt, filter?.dates);
@@ -101,12 +108,23 @@ export class AdminRequestRepositoryClass {
     }
   }
 
-  async countPending(): Promise<number> {
+  async countPending(
+    filter?: Pick<AdminRequestFilter, 'type' | 'excludeType'>,
+  ): Promise<number> {
     try {
+      const conditions: SQL[] = [eq(AdminRequestTable.status, 'pending')];
+      if (filter?.type) {
+        conditions.push(
+          Array.isArray(filter.type)
+            ? inArray(AdminRequestTable.type, filter.type)
+            : eq(AdminRequestTable.type, filter.type),
+        );
+      }
+      if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
       const [row] = await db
         .select({ value: sql<number>`count(*)::int` })
         .from(AdminRequestTable)
-        .where(eq(AdminRequestTable.status, 'pending'));
+        .where(and(...conditions));
       return Number(row?.value ?? 0);
     } catch (error) {
       logger.error('[AdminRequestRepository.countPending] Error:', error);
