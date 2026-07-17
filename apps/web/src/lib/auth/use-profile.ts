@@ -16,6 +16,7 @@ interface MeResponse {
   phoneNum: string | null;
   username: string;
   status: string;
+  profileImage?: string | null;
   roles: { id: string; roleName: string }[];
   permissions: {
     moduleId: string;
@@ -48,6 +49,7 @@ export async function fetchProfile(): Promise<User> {
     displayName: profile.username,
     contactNo: profile.phoneNum ?? '',
     isActive: profile.status.toLowerCase() === 'active',
+    profileImage: profile.profileImage ?? null,
     roles: profile.roles.map((r) => r.roleName),
     readPermission: profile.permissions
       .filter((p) => p.permissionType === 'read')

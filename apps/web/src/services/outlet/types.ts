@@ -9,6 +9,7 @@ export type OutletMemberSubRole = "owner" | "finance" | "operations_head";
 export interface Outlet {
 	id: string;
 	name: string;
+	logoImage: string | null;
 	addressLine1: string | null;
 	addressLine2: string | null;
 	postcode: string | null;
@@ -38,6 +39,9 @@ export interface OutletMember {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	username?: string;
+	email?: string | null;
+	phoneNum?: string | null;
 }
 
 export interface OutletPagination {

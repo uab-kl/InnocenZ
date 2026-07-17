@@ -15,6 +15,7 @@ function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 		id: user.id,
 		email: user.email ?? "",
 		phoneNum: user.phoneNum ?? "",
+		profileImage: user.profileImage ?? null,
 		displayName: user.username,
 		legalName: [user.profile?.firstName, user.profile?.lastName]
 			.filter(Boolean)
@@ -22,6 +23,13 @@ function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 			.trim(),
 		idType: user.profile?.idType ?? null,
 		idNo: user.profile?.idNo ?? null,
+		gender: user.profile?.gender ?? null,
+		race: user.profile?.race ?? null,
+		dob: user.profile?.dob ?? null,
+		nationality: user.profile?.nationality ?? null,
+		portfolioPhotos: user.profile?.portfolioPhotos ?? [],
+		comcardHeightCm: user.profile?.comcardHeightCm ?? null,
+		comcardWeightKg: user.profile?.comcardWeightKg ?? null,
 		status: user.status,
 		agencies,
 		createdAt: user.createdAt,

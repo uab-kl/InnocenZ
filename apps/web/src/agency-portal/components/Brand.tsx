@@ -19,12 +19,10 @@ export function InnocenZLogoHorizontal({ className }: { className?: string }) {
   return (
     <div className={cn('iz-logo-horizontal', className)}>
       <img
-        src={publicAssetPath(INNOCENZ_LOGO_PATH)}
-        alt=""
-        aria-hidden
-        className="iz-logo-horizontal__mark"
+        src={publicAssetPath(INNOCENZ_LOGO_HORIZONTAL_PATH)}
+        alt="InnocenZ"
+        className="iz-logo-horizontal__img"
       />
-      <InnocenZWordmark className="iz-logo-horizontal__wordmark" />
     </div>
   );
 }

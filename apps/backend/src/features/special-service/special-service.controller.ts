@@ -22,6 +22,10 @@ import { parseDatesQuery } from '@/util/filter-date-format.js';
 export class SpecialServiceControllerClass {
   constructor(private repository: SpecialServiceRepositoryClass) {}
 
+  private parseOrder(req: Request): 'asc' | 'desc' {
+    return req.query.order === 'asc' ? 'asc' : 'desc';
+  }
+
   private buildFilter(req: Request): SpecialServiceFilter {
     return {
       outletId: req.query.outletId as string | undefined,
@@ -43,6 +47,7 @@ export class SpecialServiceControllerClass {
         filter: this.buildFilter(req),
         page,
         pageSize,
+        order: this.parseOrder(req),
       });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
@@ -78,6 +83,7 @@ export class SpecialServiceControllerClass {
         },
         page,
         pageSize,
+        order: this.parseOrder(req),
       });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({

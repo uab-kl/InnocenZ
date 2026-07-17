@@ -9,6 +9,16 @@ import { defineConfig } from 'vite';
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  server: {
+    // Serve backend static assets same-origin in local dev so profile/gallery
+    // images are not blocked by Cross-Origin-Resource-Policy.
+    proxy: {
+      '/img': {
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:7777',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     devtools(),
     paraglideVitePlugin({

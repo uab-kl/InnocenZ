@@ -15,6 +15,7 @@ export const outletMemberSubRoleEnum = MainSchema.enum('outlet_member_sub_role',
 export const OutletTable = MainSchema.table('outlet', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   name: varchar('name', { length: 255 }).notNull(),
+  logoImage: varchar('logo_image'),
   addressLine1: varchar('address_line_1', { length: 255 }),
   addressLine2: varchar('address_line_2', { length: 255 }),
   postcode: varchar('postcode', { length: 20 }),
