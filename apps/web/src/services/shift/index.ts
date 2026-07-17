@@ -1,0 +1,151 @@
+import { getClient } from "@/lib/axios-v1";
+import { buildQueryParams } from "@/lib/build-query-params";
+
+export type ShiftStatus = "draft" | "open" | "confirmed" | "sealed";
+export type ShiftEventKind = "normal" | "special";
+
+export interface ShiftPagination {
+	page: number;
+	pageSize: number;
+	totalCount: number;
+	totalPages: number;
+	hasNextPage: boolean;
+	hasPrevPage: boolean;
+}
+
+export interface Shift {
+	id: string;
+	agencyId: string;
+	outletId: string;
+	shiftDate: string;
+	slot: string | null;
+	eventName: string | null;
+	eventKind: ShiftEventKind;
+	languages: string | null;
+	quantity: number;
+	filled: number;
+	preferredRating: number | null;
+	// numeric(12,2) columns are serialized as strings by the backend.
+	payPerHour: string;
+	estimatedCost: string;
+	liveSales: string;
+	status: ShiftStatus;
+	createdAt: string;
+	updatedAt: string;
+	createdBy: string;
+	updatedBy: string;
+}
+
+export interface ShiftsQueryParams {
+	outletId?: string;
+	status?: ShiftStatus;
+	eventKind?: ShiftEventKind;
+	fromDate?: string;
+	toDate?: string;
+	// Admin-only; agency callers are pinned to their own agency server-side.
+	agencyId?: string;
+	page?: number;
+	pageSize?: number;
+}
+
+export interface ShiftsApiResponse {
+	success: boolean;
+	message: string;
+	pagination: ShiftPagination;
+	data: Shift[];
+}
+
+export interface CreateShiftInput {
+	agencyId?: string;
+	outletId: string;
+	shiftDate: string;
+	slot?: string;
+	eventName?: string;
+	eventKind?: ShiftEventKind;
+	languages?: string;
+	quantity?: number;
+	filled?: number;
+	preferredRating?: number;
+	payPerHour?: number;
+	estimatedCost?: number;
+	liveSales?: number;
+}
+
+export type UpdateShiftInput = Partial<CreateShiftInput> & {
+	status?: ShiftStatus;
+};
+
+export async function fetchShifts(
+	params: ShiftsQueryParams = {},
+	onRefreshFail: () => void,
+): Promise<ShiftsApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		outletId: params.outletId,
+		status: params.status,
+		eventKind: params.eventKind,
+		fromDate: params.fromDate,
+		toDate: params.toDate,
+		agencyId: params.agencyId,
+		page: params.page,
+		pageSize: params.pageSize,
+	});
+	const response = await client.get<ShiftsApiResponse>(`/shift${queryString}`);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+		pagination: response.data.pagination,
+	};
+}
+
+export async function fetchShift(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<Shift> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: Shift;
+	}>(`/shift/${id}`);
+	return response.data.data;
+}
+
+export async function createShift(
+	input: CreateShiftInput,
+	onRefreshFail: () => void,
+): Promise<Shift> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: Shift;
+	}>("/shift", input);
+	return response.data.data;
+}
+
+export async function updateShift(
+	id: string,
+	input: UpdateShiftInput,
+	onRefreshFail: () => void,
+): Promise<Shift> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<{
+		success: boolean;
+		message: string;
+		data: Shift;
+	}>(`/shift/${id}`, input);
+	return response.data.data;
+}
+
+export async function removeShift(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.delete<{ success: boolean; message: string }>(
+		`/shift/${id}`,
+	);
+	return response.data;
+}

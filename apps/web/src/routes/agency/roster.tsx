@@ -17,6 +17,7 @@ import {
 } from '@agency-portal/components/agency/RosterShiftTable';
 import { OutletSection } from '@agency-portal/components/outlet/OutletSection';
 import { useStore } from '@agency-portal/lib/store';
+import { useRosterSlots } from '@agency-portal/hooks/use-roster-slots';
 import {
   OUTLET_NAMES,
   rosterPageDisplayStatus,
@@ -113,10 +114,20 @@ function AgencyRoster() {
     () => scopeToAgency(allAgencyPRs, activeAgencyId),
     [allAgencyPRs, activeAgencyId],
   );
-  const agencyRoster = useMemo(
+  const [planningDate, setPlanningDate] = useState(DEFAULT_ROSTER_DATE_ISO);
+  const weekStartIso = mondayOfWeek(planningDate);
+  const weekDays = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
+  // Planning view reads live backend data; live view keeps the demo store.
+  const backendRoster = useRosterSlots({
+    fromDate: weekStartIso,
+    toDate: weekDays[weekDays.length - 1] ?? weekStartIso,
+  });
+  const demoAgencyRoster = useMemo(
     () => rosterSlotsForAgency(allAgencyRoster, allAgencyPRs, activeAgencyId),
     [allAgencyRoster, allAgencyPRs, activeAgencyId],
   );
+  const agencyRoster =
+    viewMode === 'planning' ? backendRoster.slots : demoAgencyRoster;
   const prCheckInMeta = useStore((s) => s.prCheckInMeta);
   const prSubRole = useStore((s) => s.prSubRole);
   const editRosterSlot = useStore((s) => s.editRosterSlot);
@@ -133,7 +144,6 @@ function AgencyRoster() {
     (s) => s.syncLivePrCheckInToRoster,
   );
   const syncOutletRequestRoster = useStore((s) => s.syncOutletRequestRoster);
-  const [planningDate, setPlanningDate] = useState(DEFAULT_ROSTER_DATE_ISO);
   const [shiftFilters, setShiftFilters] = useState<RosterShiftFilterState>(
     EMPTY_ROSTER_SHIFT_FILTERS,
   );
@@ -154,8 +164,6 @@ function AgencyRoster() {
   );
 
   const liveDateIso = DEFAULT_ROSTER_DATE_ISO;
-  const weekStartIso = mondayOfWeek(planningDate);
-  const weekDays = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
 
   const dateFiltered = useMemo(
     () =>
