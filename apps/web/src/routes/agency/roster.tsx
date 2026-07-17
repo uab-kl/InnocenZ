@@ -19,6 +19,10 @@ import { OutletSection } from '@agency-portal/components/outlet/OutletSection';
 import { useStore } from '@agency-portal/lib/store';
 import { useRosterSlots } from '@agency-portal/hooks/use-roster-slots';
 import {
+  assignmentStatusFromRoster,
+  useRosterMutations,
+} from '@agency-portal/hooks/use-roster-mutations';
+import {
   OUTLET_NAMES,
   rosterPageDisplayStatus,
   rosterSlotsForAgency,
@@ -153,6 +157,31 @@ function AgencyRoster() {
   const [approveSwapId, setApproveSwapId] = useState<string | null>(null);
   const [replacementPick, setReplacementPick] = useState('');
   const canAssign = agencyCan(agencySubRole, 'assignShifts');
+
+  // Phase 2: in planning view the by-id write actions hit the backend (a slot's
+  // id is the shift-assignment id); the live view keeps its demo store actions.
+  const rosterMut = useRosterMutations();
+  const isPlanning = viewMode === 'planning';
+  const handleCancelSlot = (slotId: string) =>
+    isPlanning ? rosterMut.cancel.mutate(slotId) : cancelRosterShift(slotId);
+  const handleFlagNoShow = (slotId: string) =>
+    isPlanning
+      ? rosterMut.flagNoShow.mutate(slotId)
+      : flagRosterAttendance(slotId, 'no-show');
+  const handleFlagLate = (slotId: string) => {
+    // No backend field for 'late' yet; keep demo behaviour in live view only.
+    if (!isPlanning) flagRosterAttendance(slotId, 'late');
+  };
+  const handleEditSave = (slotId: string, patch: Partial<AgencyRosterSlot>) => {
+    if (isPlanning) {
+      const status = patch.status
+        ? assignmentStatusFromRoster(patch.status)
+        : undefined;
+      if (status) rosterMut.setStatus.mutate({ id: slotId, status });
+      return;
+    }
+    editRosterSlot(slotId, patch);
+  };
 
   useEffect(() => {
     syncLivePrCheckInToRoster();
@@ -606,8 +635,8 @@ function AgencyRoster() {
             commissionOnlyRates={outletWorkspace.commissionOnlyRates}
             canAssign={canAssign}
             onEdit={openEdit}
-            onFlagLate={(id) => flagRosterAttendance(id, 'late')}
-            onFlagNoShow={(id) => flagRosterAttendance(id, 'no-show')}
+            onFlagLate={handleFlagLate}
+            onFlagNoShow={handleFlagNoShow}
             onCancelPrSwap={declinePrSwapRequest}
           />
         </OutletSection>
@@ -618,7 +647,7 @@ function AgencyRoster() {
           slot={editSlot}
           onClose={() => setEditId(null)}
           onSave={(patch) => {
-            editRosterSlot(editSlot.id, patch);
+            handleEditSave(editSlot.id, patch);
             setEditId(null);
           }}
           onRequestOutletSwap={(targetOutlet, note) => {
@@ -642,7 +671,7 @@ function AgencyRoster() {
             setEditId(null);
           }}
           onCancelShift={() => {
-            cancelRosterShift(editSlot.id);
+            handleCancelSlot(editSlot.id);
             setEditId(null);
           }}
         />
