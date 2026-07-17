@@ -41,6 +41,12 @@ import { AdminRequestRepositoryClass } from '@/features/admin-request/admin-requ
 import { AdminRequestControllerClass } from '@/features/admin-request/admin-request.controller.js';
 import { SpecialServiceRepositoryClass } from '@/features/special-service/special-service.repository.js';
 import { SpecialServiceControllerClass } from '@/features/special-service/special-service.controller.js';
+import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
+import { PrControllerClass } from '@/features/pr/pr.controller.js';
+import { ShiftRepositoryClass } from '@/features/shift/shift.repository.js';
+import { ShiftControllerClass } from '@/features/shift/shift.controller.js';
+import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
+import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
 
 export const jwtController = new JwtControllerClass();
 export const userRoleRepository = new UserRoleRepositoryClass();
@@ -101,3 +107,12 @@ export const adminRequestController = new AdminRequestControllerClass(adminReque
 
 export const specialServiceRepository = new SpecialServiceRepositoryClass();
 export const specialServiceController = new SpecialServiceControllerClass(specialServiceRepository);
+
+export const prRepository = new PrRepositoryClass();
+export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository);
+
+export const shiftRepository = new ShiftRepositoryClass();
+export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository);
+
+export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
+export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository);
