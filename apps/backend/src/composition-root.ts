@@ -47,6 +47,8 @@ import { ShiftRepositoryClass } from '@/features/shift/shift.repository.js';
 import { ShiftControllerClass } from '@/features/shift/shift.controller.js';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
 import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
+import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
+import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shift-assignment.controller.js';
 
 export const jwtController = new JwtControllerClass();
 export const userRoleRepository = new UserRoleRepositoryClass();
@@ -116,3 +118,6 @@ export const shiftController = new ShiftControllerClass(shiftRepository, agencyM
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository);
+
+export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
+export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository);

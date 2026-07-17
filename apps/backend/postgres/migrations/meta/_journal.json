@@ -141,6 +141,13 @@
       "when": 1784500000003,
       "tag": "0019_add_payment_voucher",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784500000004,
+      "tag": "0020_add_shift_assignment",
+      "breakpoints": true
     }
   ]
 }
