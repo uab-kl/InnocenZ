@@ -140,6 +140,30 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
+  /**
+   * Whether a voucher already exists for this PR + week (idempotency guard for
+   * the weekly generation job, so re-running never double-pays).
+   */
+  async existsForPrWeek(agencyId: string, prId: string, weekStart: string): Promise<boolean> {
+    try {
+      const [row] = await db
+        .select({ id: PaymentVoucherTable.id })
+        .from(PaymentVoucherTable)
+        .where(
+          and(
+            eq(PaymentVoucherTable.agencyId, agencyId),
+            eq(PaymentVoucherTable.prId, prId),
+            eq(PaymentVoucherTable.weekStart, weekStart),
+          ),
+        )
+        .limit(1);
+      return !!row;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.existsForPrWeek] Error:', error);
+      throw error;
+    }
+  }
+
   async remove(id: string): Promise<boolean> {
     try {
       const [row] = await db

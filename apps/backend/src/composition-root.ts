@@ -49,6 +49,7 @@ import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/paymen
 import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shift-assignment.controller.js';
+import { PaymentVoucherGeneratorClass } from '@/features/payment-voucher/payment-voucher-generator.js';
 
 export const jwtController = new JwtControllerClass();
 export const userRoleRepository = new UserRoleRepositoryClass();
@@ -121,3 +122,5 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(paymen
 
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository);
+
+export const paymentVoucherGenerator = new PaymentVoucherGeneratorClass(shiftAssignmentRepository, paymentVoucherRepository, prRepository);

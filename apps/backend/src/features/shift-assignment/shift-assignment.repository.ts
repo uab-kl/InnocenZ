@@ -3,6 +3,7 @@ import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable } from '@/features/shift/shift.model';
+import { OutletTable } from '@/features/outlet/outlet.model';
 import {
   ShiftAssignmentTable,
   ShiftAssignmentInsertType,
@@ -124,6 +125,7 @@ export class ShiftAssignmentRepositoryClass {
       assignment: ShiftAssignmentType;
       shiftDate: string;
       outletId: string;
+      outletName: string | null;
       slot: string | null;
       eventName: string | null;
     }>
@@ -135,11 +137,13 @@ export class ShiftAssignmentRepositoryClass {
           assignment: ShiftAssignmentTable,
           shiftDate: ShiftTable.shiftDate,
           outletId: ShiftTable.outletId,
+          outletName: OutletTable.name,
           slot: ShiftTable.slot,
           eventName: ShiftTable.eventName,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
         .where(
           and(
             eq(ShiftAssignmentTable.agencyId, agencyId),
@@ -152,6 +156,27 @@ export class ShiftAssignmentRepositoryClass {
       return rows;
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.listCompletedForAgencyWeek] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Distinct agency IDs that have any completed assignment in [fromDate, toDate]. */
+  async listAgencyIdsWithCompletedInRange(fromDate: string, toDate: string): Promise<string[]> {
+    try {
+      const rows = await db
+        .selectDistinct({ agencyId: ShiftAssignmentTable.agencyId })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.status, 'completed'),
+            gte(ShiftTable.shiftDate, fromDate),
+            lte(ShiftTable.shiftDate, toDate),
+          ),
+        );
+      return rows.map((r) => r.agencyId);
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listAgencyIdsWithCompletedInRange] Error:', error);
       throw error;
     }
   }
