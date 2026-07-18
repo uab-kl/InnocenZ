@@ -9,6 +9,7 @@ import {
   FieldLabel,
 } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
+import { PasswordInput } from '@/components/ui/password-input'
 import {
   Sheet,
   SheetContent,
@@ -160,9 +161,8 @@ export function CreateAdminSheet({
                     <FieldLabel htmlFor="create-admin-password">
                       Password
                     </FieldLabel>
-                    <Input
+                    <PasswordInput
                       id="create-admin-password"
-                      type="password"
                       placeholder="Minimum 6 characters"
                       value={field.state.value}
                       onBlur={field.handleBlur}
@@ -171,6 +171,7 @@ export function CreateAdminSheet({
                       }
                       disabled={isSubmitting}
                       aria-invalid={isInvalid}
+                      autoComplete="new-password"
                     />
                     {isInvalid && (
                       <FieldError
