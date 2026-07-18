@@ -15,6 +15,7 @@ import {
 } from "@/constants/links";
 import { useSidebarBadges } from "@/hooks/use-sidebar-badges";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
@@ -62,23 +63,24 @@ export function Sidebar() {
 			collapsible="icon"
 		>
 			<SidebarHeader className="border-b border-sidebar-border/60 py-4">
-				<div className="flex items-center justify-center gap-2.5 px-2">
-					{collapsed ? (
-						<img
-							src="/innocenz-logo.png"
-							alt="InnocenZ"
-							width={40}
-							height={40}
-							className="h-10 w-10 shrink-0 rounded-full object-contain"
-						/>
-					) : (
-						<img
-							src="/innocenz-logo-horizontal.png"
-							alt="InnocenZ"
-							width={180}
-							height={40}
-							className="h-9 w-auto max-w-full object-contain object-left"
-						/>
+				<div
+					className={cn(
+						"flex items-center px-2",
+						collapsed ? "justify-center" : "gap-2.5",
+					)}
+				>
+					<img
+						src={LANDING_IMAGES.innocenzLogo}
+						alt="InnocenZ"
+						width={40}
+						height={40}
+						decoding="async"
+						className="h-10 w-10 shrink-0 rounded-full object-contain ring-2 ring-royal-gold/45"
+					/>
+					{!collapsed && (
+						<span className="brand-wordmark text-gradient-royal text-[1.375rem] leading-none tracking-tight">
+							InnocenZ
+						</span>
 					)}
 				</div>
 			</SidebarHeader>

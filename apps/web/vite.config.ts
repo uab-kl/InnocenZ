@@ -10,10 +10,15 @@ import { defineConfig } from 'vite';
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
   server: {
-    // Serve backend static assets same-origin in local dev so profile/gallery
-    // images are not blocked by Cross-Origin-Resource-Policy.
+    // Proxy only backend-owned /img paths so Vite can still serve marketing
+    // assets from apps/web/public/img (landing, UAB badge, etc.).
+    // Profile/gallery images stay same-origin to avoid CORP blocks.
     proxy: {
-      '/img': {
+      '^/img/(users|pr|outlets|agencies)(/|$)': {
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:7777',
+        changeOrigin: true,
+      },
+      '/img/blank-profile-picture.png': {
         target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:7777',
         changeOrigin: true,
       },

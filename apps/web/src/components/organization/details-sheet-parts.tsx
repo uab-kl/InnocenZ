@@ -29,8 +29,8 @@ export function apiAssetUrl(
 	if (!path || path === DEFAULT_PROFILE_IMAGE) return undefined;
 	if (/^https?:\/\//.test(path) || path.startsWith("data:")) return path;
 	const normalized = path.startsWith("/") ? path : `/${path}`;
-	// In local Vite, /img is proxied to the API — keep same-origin so gallery
-	// photos and logos always load without CORP issues.
+	// In local Vite, backend /img paths (users/pr/outlets/agencies) are proxied
+	// same-origin so gallery photos and logos load without CORP issues.
 	if (import.meta.env.DEV && normalized.startsWith("/img/")) {
 		return normalized;
 	}
