@@ -50,6 +50,7 @@ import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log
 import { Route as AdminAuditLogIndexRouteImport } from './routes/admin/audit-log/index'
 import { Route as AdminUserManagementPrRouteImport } from './routes/admin/user-management/pr'
 import { Route as AdminUserManagementOutletRouteImport } from './routes/admin/user-management/outlet'
+import { Route as AdminUserManagementLegacyMemberRouteImport } from './routes/admin/user-management/legacy-member'
 import { Route as AdminUserManagementAgencyRouteImport } from './routes/admin/user-management/agency'
 import { Route as AdminUserManagementAdminRouteImport } from './routes/admin/user-management/admin'
 import { Route as AdminServiceRequestsRouteImport } from './routes/admin/service/requests'
@@ -271,6 +272,12 @@ const AdminUserManagementOutletRoute =
     path: '/outlet',
     getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
+const AdminUserManagementLegacyMemberRoute =
+  AdminUserManagementLegacyMemberRouteImport.update({
+    id: '/legacy-member',
+    path: '/legacy-member',
+    getParentRoute: () => AdminUserManagementRouteRoute,
+  } as any)
 const AdminUserManagementAgencyRoute =
   AdminUserManagementAgencyRouteImport.update({
     id: '/agency',
@@ -392,6 +399,7 @@ export interface FileRoutesByFullPath {
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
   '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log/': typeof AdminAuditLogIndexRoute
@@ -445,6 +453,7 @@ export interface FileRoutesByTo {
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
   '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log': typeof AdminAuditLogIndexRoute
@@ -502,6 +511,7 @@ export interface FileRoutesById {
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
   '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log/': typeof AdminAuditLogIndexRoute
@@ -560,6 +570,7 @@ export interface FileRouteTypes {
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
+    | '/admin/user-management/legacy-member'
     | '/admin/user-management/outlet'
     | '/admin/user-management/pr'
     | '/admin/audit-log/'
@@ -613,6 +624,7 @@ export interface FileRouteTypes {
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
+    | '/admin/user-management/legacy-member'
     | '/admin/user-management/outlet'
     | '/admin/user-management/pr'
     | '/admin/audit-log'
@@ -669,6 +681,7 @@ export interface FileRouteTypes {
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
+    | '/admin/user-management/legacy-member'
     | '/admin/user-management/outlet'
     | '/admin/user-management/pr'
     | '/admin/audit-log/'
@@ -974,6 +987,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUserManagementOutletRouteImport
       parentRoute: typeof AdminUserManagementRouteRoute
     }
+    '/admin/user-management/legacy-member': {
+      id: '/admin/user-management/legacy-member'
+      path: '/legacy-member'
+      fullPath: '/admin/user-management/legacy-member'
+      preLoaderRoute: typeof AdminUserManagementLegacyMemberRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
+    }
     '/admin/user-management/agency': {
       id: '/admin/user-management/agency'
       path: '/agency'
@@ -1117,6 +1137,7 @@ const AdminRbacRouteRouteWithChildren = AdminRbacRouteRoute._addFileChildren(
 interface AdminUserManagementRouteRouteChildren {
   AdminUserManagementAdminRoute: typeof AdminUserManagementAdminRoute
   AdminUserManagementAgencyRoute: typeof AdminUserManagementAgencyRoute
+  AdminUserManagementLegacyMemberRoute: typeof AdminUserManagementLegacyMemberRoute
   AdminUserManagementOutletRoute: typeof AdminUserManagementOutletRoute
   AdminUserManagementPrRoute: typeof AdminUserManagementPrRoute
 }
@@ -1125,6 +1146,7 @@ const AdminUserManagementRouteRouteChildren: AdminUserManagementRouteRouteChildr
   {
     AdminUserManagementAdminRoute: AdminUserManagementAdminRoute,
     AdminUserManagementAgencyRoute: AdminUserManagementAgencyRoute,
+    AdminUserManagementLegacyMemberRoute: AdminUserManagementLegacyMemberRoute,
     AdminUserManagementOutletRoute: AdminUserManagementOutletRoute,
     AdminUserManagementPrRoute: AdminUserManagementPrRoute,
   }

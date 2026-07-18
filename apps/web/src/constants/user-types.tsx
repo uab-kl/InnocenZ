@@ -1,4 +1,4 @@
-import { Building2, Megaphone, Shield, Store } from 'lucide-react';
+import { Archive, Building2, Megaphone, Shield, Store } from 'lucide-react';
 
 export const userTypes = [
   {
@@ -29,6 +29,14 @@ export const userTypes = [
     description: 'View PR accounts registered on the platform.',
     href: '/admin/user-management/pr',
     icon: Megaphone,
+  },
+  {
+    key: 'legacy-member',
+    title: 'Legacy Member',
+    description:
+      'Review suspended agencies and outlets, and inactive PRs, segmented by role.',
+    href: '/admin/user-management/legacy-member',
+    icon: Archive,
   },
 ] as const;
 

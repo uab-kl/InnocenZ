@@ -38,18 +38,18 @@ type Seed = {
 };
 
 const SEEDS: Seed[] = [
-  { outletName: 'Neon Sky Club', title: 'VIP escort — Saturday night', category: 'vip_escort', budget: '3500.00', status: 'open', scheduledFor: '2026-07-19' },
-  { outletName: 'Velvet Lounge', title: 'Shift pickup & late-night return', category: 'transportation', budget: '2000.00', status: 'assigned', thirdParty: 'MetroRide Transport', scheduledFor: '2026-07-18' },
-  { outletName: 'Aurora Rooftop', title: 'Emergency floor cover before event', category: 'emergency_cover', budget: '1200.00', status: 'in_progress', thirdParty: 'RapidCover Staffing', scheduledFor: '2026-07-15' },
-  { outletName: 'Skyline Bar', title: 'Soft glam makeup crew', category: 'makeup', budget: '5000.00', status: 'completed', thirdParty: 'Glow & Co Makeup Studio', scheduledFor: '2026-07-05' },
-  { outletName: 'Neon Sky Club', title: 'Uniform & documents run', category: 'uniform', budget: '800.00', status: 'open', scheduledFor: '2026-07-25' },
-  { outletName: 'Velvet Lounge', title: 'Coat check staff', category: 'others', budget: '600.00', status: 'cancelled' },
+  { outletName: 'Velvet 23', title: 'VIP escort — Saturday night', category: 'vip_escort', budget: '3500.00', status: 'open', scheduledFor: '2026-07-19' },
+  { outletName: 'Urban Soul', title: 'Shift pickup & late-night return', category: 'transportation', budget: '2000.00', status: 'assigned', thirdParty: 'MetroRide Transport', scheduledFor: '2026-07-18' },
+  { outletName: 'Mermate', title: 'Emergency floor cover before event', category: 'emergency_cover', budget: '1200.00', status: 'in_progress', thirdParty: 'RapidCover Staffing', scheduledFor: '2026-07-15' },
+  { outletName: 'Bear Lounge', title: 'Soft glam makeup crew', category: 'makeup', budget: '5000.00', status: 'completed', thirdParty: 'Glow & Co Makeup Studio', scheduledFor: '2026-07-05' },
+  { outletName: 'Velvet 23', title: 'Uniform & documents run', category: 'uniform', budget: '800.00', status: 'open', scheduledFor: '2026-07-25' },
+  { outletName: 'Urban Soul', title: 'Coat check staff', category: 'others', budget: '600.00', status: 'cancelled' },
   // Agency-initiated postings — these route through admin accept/decline first.
   // adminAccepted: 'pending' = the "Pending review" queue in the admin page.
-  { outletName: 'Neon Sky Club', title: 'PR transport pool — Friday', category: 'transportation', budget: '1500.00', status: 'open', initiatedBy: 'agency', postingAgency: 'Prime Talent Agency', adminAccepted: 'pending', scheduledFor: '2026-07-24' },
-  { outletName: 'Aurora Rooftop', title: 'Glam team for gala night', category: 'makeup', budget: '4000.00', status: 'open', initiatedBy: 'agency', postingAgency: 'Starlight Staffing', adminAccepted: 'pending', scheduledFor: '2026-07-26' },
-  { outletName: 'Velvet Lounge', title: 'Wardrobe styling top-up', category: 'wardrobe', budget: '2500.00', status: 'assigned', initiatedBy: 'agency', postingAgency: 'Elite Crew Co', adminAccepted: 'accepted', thirdParty: 'Atelier Threads', scheduledFor: '2026-07-20' },
-  { outletName: 'Skyline Bar', title: 'Training top-up session', category: 'training', budget: '900.00', status: 'cancelled', initiatedBy: 'agency', postingAgency: 'Prime Talent Agency', adminAccepted: 'declined' },
+  { outletName: 'Velvet 23', title: 'PR transport pool — Friday', category: 'transportation', budget: '1500.00', status: 'open', initiatedBy: 'agency', postingAgency: 'Atlas Agency', adminAccepted: 'pending', scheduledFor: '2026-07-24' },
+  { outletName: 'Mermate', title: 'Glam team for gala night', category: 'makeup', budget: '4000.00', status: 'open', initiatedBy: 'agency', postingAgency: 'Delta Agency', adminAccepted: 'pending', scheduledFor: '2026-07-26' },
+  { outletName: 'Urban Soul', title: 'Wardrobe styling top-up', category: 'wardrobe', budget: '2500.00', status: 'assigned', initiatedBy: 'agency', postingAgency: 'Starline PR', adminAccepted: 'accepted', thirdParty: 'Atelier Threads', scheduledFor: '2026-07-20' },
+  { outletName: 'Bear Lounge', title: 'Training top-up session', category: 'training', budget: '900.00', status: 'cancelled', initiatedBy: 'agency', postingAgency: 'Atlas Agency', adminAccepted: 'declined' },
 ];
 
 async function outletIdByName(name: string): Promise<string | null> {

@@ -5,6 +5,7 @@ import { uploadProfileImage } from '@/middlewares/upload-profile-image';
 const router = Router();
 
 router.get('', userController.list.bind(userController));
+router.patch('/:id', userController.updateProfile.bind(userController));
 router.post('/:id/profile-image', (req, res, next) => {
   uploadProfileImage.single('profileImage')(req, res, (err) => {
     if (err) {

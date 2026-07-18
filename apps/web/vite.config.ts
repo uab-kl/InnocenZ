@@ -9,6 +9,21 @@ import { defineConfig } from 'vite';
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
+  server: {
+    // Proxy only backend-owned /img paths so Vite can still serve marketing
+    // assets from apps/web/public/img (landing, UAB badge, etc.).
+    // Profile/gallery images stay same-origin to avoid CORP blocks.
+    proxy: {
+      '^/img/(users|pr|outlets|agencies)(/|$)': {
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:7777',
+        changeOrigin: true,
+      },
+      '/img/blank-profile-picture.png': {
+        target: process.env.VITE_API_PROXY_TARGET ?? 'http://localhost:7777',
+        changeOrigin: true,
+      },
+    },
+  },
   plugins: [
     devtools(),
     paraglideVitePlugin({

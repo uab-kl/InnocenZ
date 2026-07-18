@@ -334,7 +334,7 @@ function RequestsPage() {
 								RM {formatPrice(card.total)}
 							</CardTitle>
 						</CardHeader>
-						<CardContent className="text-xs text-muted-foreground">
+						<CardContent className="text-sm text-muted-foreground">
 							{formatNumber(card.count)} resolved with a price
 						</CardContent>
 					</Card>
@@ -472,11 +472,11 @@ function RequestsPage() {
 												onClick={() => setEditRequest(request)}
 											>
 												<TableCell>
-													<div className="font-medium">
+													<div className="text-base font-medium">
 														{request.subscriberName}
 													</div>
 													{request.contactName && (
-														<div className="text-xs text-muted-foreground">
+														<div className="text-sm text-muted-foreground">
 															{request.contactName}
 														</div>
 													)}
@@ -503,34 +503,34 @@ function RequestsPage() {
 												</TableCell>
 												<TableCell className="max-w-[220px]">
 													{request.remarks ? (
-														<span className="line-clamp-2 text-sm">
+														<span className="line-clamp-2 text-base">
 															{request.remarks}
 														</span>
 													) : (
-														<span className="text-sm text-muted-foreground">
+														<span className="text-base text-muted-foreground">
 															—
 														</span>
 													)}
 												</TableCell>
-												<TableCell className="font-medium">
+												<TableCell className="text-base font-medium">
 													{fromPlan}
 												</TableCell>
-												<TableCell className="font-medium">
+												<TableCell className="text-base font-medium">
 													{toPlan}
 													{negotiable && request.status !== "resolved" && (
-														<div className="text-[11px] text-muted-foreground">
+														<div className="text-sm text-muted-foreground">
 															Requested
 														</div>
 													)}
 												</TableCell>
-												<TableCell>
+												<TableCell className="text-base">
 													{request.quotedAmount ? (
 														<div className="flex flex-col leading-tight">
 															<span>
 																RM {formatPrice(request.quotedAmount)}
 															</span>
 															{request.status !== "resolved" && (
-																<span className="text-[11px] text-muted-foreground">
+																<span className="text-sm text-muted-foreground">
 																	Estimate
 																</span>
 															)}
@@ -541,12 +541,12 @@ function RequestsPage() {
 														plan.name !== "Custom" ? (
 															<div className="flex flex-col leading-tight">
 																<span>RM {formatPrice(plan.price)}</span>
-																<span className="text-[11px] text-muted-foreground">
+																<span className="text-sm text-muted-foreground">
 																	From plan
 																</span>
 															</div>
 														) : (
-															<span className="text-sm text-muted-foreground">
+															<span className="text-base text-muted-foreground">
 																{request.status === "resolved"
 																	? "—"
 																	: "Set before resolve"}
@@ -564,7 +564,7 @@ function RequestsPage() {
 														{request.status}
 													</Badge>
 												</TableCell>
-												<TableCell className="text-muted-foreground text-sm">
+												<TableCell className="text-base text-muted-foreground">
 													{formatDate(request.createdAt)}
 												</TableCell>
 											</TableRow>
@@ -576,7 +576,7 @@ function RequestsPage() {
 					</div>
 
 					{pagination && pagination.totalCount > 0 && (
-						<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 							<div>
 								Showing{" "}
 								<span className="font-medium">
@@ -629,7 +629,7 @@ function RequestsPage() {
 					if (!open) setEditRequest(null);
 				}}
 			>
-				<SheetContent side="right" className="w-full sm:max-w-md">
+				<SheetContent side="right" className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
 					{editRequest && (
 						<RequestEditForm
 							key={editRequest.id}
@@ -789,7 +789,7 @@ function RequestEditForm({
 
 			<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
 				{/* Immutable record of the originating Outlet/Agency action. */}
-				<dl className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3 text-sm">
+				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">Who</dt>
 						<dd className="text-right font-medium">{request.subscriberName}</dd>
@@ -827,14 +827,14 @@ function RequestEditForm({
 				</dl>
 
 				{/* Before/after price reminder — the estimate stays negotiable until Resolve. */}
-				<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3">
+				<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
 					<div className="flex items-center gap-2">
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-3 py-2">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
 								Before · From plan
 							</p>
-							<p className="font-medium">{fromPlan}</p>
-							<p className="text-sm text-muted-foreground">
+							<p className="text-lg font-medium">{fromPlan}</p>
+							<p className="text-base text-muted-foreground">
 								{plan
 									? plan.name === "Custom"
 										? "Negotiated"
@@ -842,16 +842,16 @@ function RequestEditForm({
 									: "—"}
 							</p>
 						</div>
-						<ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-3 py-2">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+						<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
 								After · To plan
 							</p>
-							<p className="font-medium">{toPlan}</p>
-							<p className="text-sm text-muted-foreground">{estimateLabel}</p>
+							<p className="text-lg font-medium">{toPlan}</p>
+							<p className="text-base text-muted-foreground">{estimateLabel}</p>
 						</div>
 					</div>
-					<p className="text-[11px] text-muted-foreground">
+					<p className="text-base text-muted-foreground">
 						{negotiable
 							? request.status === "resolved"
 								? "Resolved — the price is final."
@@ -885,7 +885,7 @@ function RequestEditForm({
 								value={quote}
 								onChange={(e) => setQuote(e.target.value)}
 							/>
-							<p className="text-[11px] text-muted-foreground">
+							<p className="text-sm text-muted-foreground">
 								Estimate — negotiate or change it before Resolve.
 								{request.type === "pos_integration_quote" && plan
 									? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
@@ -897,7 +897,7 @@ function RequestEditForm({
 							<Input
 								id="request-quote"
 								readOnly
-								className="bg-muted/40"
+								className="bg-muted/40 text-base"
 								value={
 									request.quotedAmount
 										? formatPrice(request.quotedAmount)
@@ -906,7 +906,7 @@ function RequestEditForm({
 											: "—"
 								}
 							/>
-							<p className="text-[11px] text-muted-foreground">
+							<p className="text-sm text-muted-foreground">
 								Resolved — the price is final.
 							</p>
 						</>
@@ -927,8 +927,8 @@ function RequestEditForm({
 					)}
 				</div>
 
-				<div className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3">
-					<div className="flex items-center justify-between gap-2 text-sm">
+				<div className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
+					<div className="flex items-center justify-between gap-2 text-base">
 						<span className="text-muted-foreground">Status</span>
 						<Badge
 							variant="outline"

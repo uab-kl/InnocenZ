@@ -15,6 +15,7 @@ import {
 } from "@/constants/links";
 import { useSidebarBadges } from "@/hooks/use-sidebar-badges";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
+import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { cn } from "@/lib/utils";
 
 export function Sidebar() {
@@ -62,13 +63,23 @@ export function Sidebar() {
 			collapsible="icon"
 		>
 			<SidebarHeader className="border-b border-sidebar-border/60 py-4">
-				<div className="flex items-center justify-center gap-2 px-2">
-					<div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-gold-light to-gold-deep text-ink text-base font-bold shadow-[0_0_20px_rgba(212,175,55,0.3)]">
-						Z
-					</div>
+				<div
+					className={cn(
+						"flex items-center px-2",
+						collapsed ? "justify-center" : "gap-2.5",
+					)}
+				>
+					<img
+						src={LANDING_IMAGES.innocenzLogo}
+						alt="InnocenZ"
+						width={40}
+						height={40}
+						decoding="async"
+						className="h-10 w-10 shrink-0 rounded-full object-contain ring-2 ring-royal-gold/45"
+					/>
 					{!collapsed && (
-						<span className="text-sm font-semibold tracking-tight text-sidebar-foreground">
-							Innocen<span className="text-gold">Z</span>
+						<span className="brand-wordmark text-gradient-royal text-[1.375rem] leading-none tracking-tight">
+							InnocenZ
 						</span>
 					)}
 				</div>
@@ -76,7 +87,7 @@ export function Sidebar() {
 
 			<SidebarContent className="relative">
 				<ScrollArea className="h-full px-2 py-3">
-					<nav aria-label="Admin navigation" className="space-y-4">
+					<nav aria-label="Admin navigation" className="space-y-5">
 						{sidebarSections.map((section) => (
 							<SidebarSectionGroup
 								key={section.key}
@@ -131,7 +142,7 @@ function SidebarSectionGroup({
 					<span>{section.label}</span>
 					<ChevronDown
 						className={cn(
-							"h-3.5 w-3.5 shrink-0 transition-transform duration-200",
+							"h-4 w-4 shrink-0 transition-transform duration-200",
 							open && "rotate-180",
 						)}
 					/>
@@ -139,7 +150,7 @@ function SidebarSectionGroup({
 			)}
 
 			{open && (
-				<ul className={cn("space-y-0.5", collapsed && "space-y-1")}>
+				<ul className={cn("space-y-1", collapsed && "space-y-1.5")}>
 					{visibleItems.map((item) => {
 						const badge = badges[item.key] ?? item.badge;
 						return (
@@ -153,7 +164,7 @@ function SidebarSectionGroup({
 										collapsed && "justify-center px-2",
 									)}
 								>
-									<item.icon className="h-[18px] w-[18px] shrink-0" />
+									<item.icon className="h-[22px] w-[22px] shrink-0" />
 									{!collapsed && (
 										<>
 											<span className="flex-1 truncate">{item.title}</span>

@@ -173,7 +173,7 @@ export function RoleSheet({
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
       <SheetContent
-        className={`flex w-full flex-col ${isManage ? 'sm:max-w-lg' : 'sm:max-w-md'}`}
+        className="flex w-full flex-col sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
       >
         <SheetHeader className="border-b border-border pb-4">
           <div className="flex items-start gap-3 pr-8">

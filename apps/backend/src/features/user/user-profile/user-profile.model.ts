@@ -1,4 +1,4 @@
-import { boolean, date, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { boolean, date, integer, jsonb, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { UserTable } from '@/features/user/user.model';
 
@@ -22,6 +22,11 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   firstName: varchar('first_name', { length: 100 }),
   lastName: varchar('last_name', { length: 100 }),
   nationality: varchar('nationality', { length: 100 }),
+  gender: varchar('gender', { length: 20 }),
+  race: varchar('race', { length: 50 }),
+  portfolioPhotos: jsonb('portfolio_photos').$type<string[]>(),
+  comcardHeightCm: integer('comcard_height_cm'),
+  comcardWeightKg: integer('comcard_weight_kg'),
   idType: idTypeEnum('id_type'),
   idNo: varchar('id_no', { length: 32 }),
   dob: date('dob'),
@@ -63,6 +68,11 @@ export type UserProfileResponse = {
   firstName: string | null;
   lastName: string | null;
   nationality: string | null;
+  gender: string | null;
+  race: string | null;
+  portfolioPhotos: string[] | null;
+  comcardHeightCm: number | null;
+  comcardWeightKg: number | null;
   idType: IdType | null;
   idNo: string | null;
   dob: string | null;
@@ -94,6 +104,11 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     firstName: null,
     lastName: null,
     nationality: null,
+    gender: null,
+    race: null,
+    portfolioPhotos: null,
+    comcardHeightCm: null,
+    comcardWeightKg: null,
     idType: null,
     idNo: null,
     dob: null,
@@ -126,6 +141,11 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     firstName: profile.firstName,
     lastName: profile.lastName,
     nationality: profile.nationality,
+    gender: profile.gender,
+    race: profile.race,
+    portfolioPhotos: profile.portfolioPhotos,
+    comcardHeightCm: profile.comcardHeightCm,
+    comcardWeightKg: profile.comcardWeightKg,
     idType: profile.idType,
     idNo: profile.idNo,
     dob: profile.dob,

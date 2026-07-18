@@ -461,11 +461,11 @@ function PlanChangesPage() {
 												onClick={() => setEditRequest(request)}
 											>
 												<TableCell>
-													<div className="font-medium">
+													<div className="text-base font-medium">
 														{request.subscriberName}
 													</div>
 													{request.contactName && (
-														<div className="text-xs text-muted-foreground">
+														<div className="text-sm text-muted-foreground">
 															{request.contactName}
 														</div>
 													)}
@@ -482,29 +482,29 @@ function PlanChangesPage() {
 														<span className="text-muted-foreground">—</span>
 													)}
 												</TableCell>
-												<TableCell className="font-medium">
+												<TableCell className="text-base font-medium">
 													{fromPlan?.name ?? "—"}
 												</TableCell>
-												<TableCell className="font-medium">
+												<TableCell className="text-base font-medium">
 													{toPlan?.name ?? "—"}
 													{status === "pending" && toPlan && (
-														<div className="text-[11px] text-muted-foreground">
+														<div className="text-sm text-muted-foreground">
 															Requested
 														</div>
 													)}
 												</TableCell>
-												<TableCell>
+												<TableCell className="text-base">
 													{price.amount != null ? (
 														<div className="flex flex-col leading-tight">
 															<span>RM {formatPrice(price.amount)}</span>
 															{price.note && (
-																<span className="text-[11px] text-muted-foreground">
+																<span className="text-sm text-muted-foreground">
 																	{price.note}
 																</span>
 															)}
 														</div>
 													) : price.note ? (
-														<span className="text-sm text-muted-foreground">
+														<span className="text-base text-muted-foreground">
 															{price.note}
 														</span>
 													) : (
@@ -519,7 +519,7 @@ function PlanChangesPage() {
 														{statusLabels[status]}
 													</Badge>
 												</TableCell>
-												<TableCell className="text-muted-foreground text-sm">
+												<TableCell className="text-base text-muted-foreground">
 													{formatDate(request.createdAt)}
 												</TableCell>
 											</TableRow>
@@ -531,7 +531,7 @@ function PlanChangesPage() {
 					</div>
 
 					{pagination && pagination.totalCount > 0 && (
-						<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+						<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 							<div>
 								Showing{" "}
 								<span className="font-medium">
@@ -584,7 +584,7 @@ function PlanChangesPage() {
 					if (!open) setEditRequest(null);
 				}}
 			>
-				<SheetContent side="right" className="w-full sm:max-w-md">
+				<SheetContent side="right" className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
 					{editRequest && (
 						<PlanChangeEditForm
 							key={editRequest.id}
@@ -690,7 +690,7 @@ function PlanChangeEditForm({
 
 			<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
 				{/* Immutable record of the originating Outlet/Agency action. */}
-				<dl className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3 text-sm">
+				<dl className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">Who</dt>
 						<dd className="text-right font-medium">{request.subscriberName}</dd>
@@ -716,29 +716,29 @@ function PlanChangeEditForm({
 				</dl>
 
 				{/* Before/after reminder — from-plan price rides until approve, then to-plan. */}
-				<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3">
+				<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
 					<div className="flex items-center gap-2">
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-3 py-2">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
 								Before · From plan
 							</p>
-							<p className="font-medium">{fromPlan?.name ?? "—"}</p>
-							<p className="text-sm text-muted-foreground">
+							<p className="text-lg font-medium">{fromPlan?.name ?? "—"}</p>
+							<p className="text-base text-muted-foreground">
 								{planPriceLabel(request, fromPlan, null)}
 							</p>
 						</div>
-						<ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground" />
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-3 py-2">
-							<p className="text-[11px] uppercase tracking-wide text-muted-foreground">
+						<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
 								After · To plan
 							</p>
-							<p className="font-medium">{toPlan?.name ?? "—"}</p>
-							<p className="text-sm text-muted-foreground">
+							<p className="text-lg font-medium">{toPlan?.name ?? "—"}</p>
+							<p className="text-base text-muted-foreground">
 								{planPriceLabel(request, toPlan, request.quotedAmount)}
 							</p>
 						</div>
 					</div>
-					<p className="text-[11px] text-muted-foreground">
+					<p className="text-base text-muted-foreground">
 						{status === "direct"
 							? "Switched automatically by PR count — the price follows the to-plan."
 							: needsApproval
@@ -760,8 +760,8 @@ function PlanChangeEditForm({
 					/>
 				</div>
 
-				<div className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3">
-					<div className="flex items-center justify-between gap-2 text-sm">
+				<div className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
+					<div className="flex items-center justify-between gap-2 text-base">
 						<span className="text-muted-foreground">Status</span>
 						<Badge
 							variant="outline"

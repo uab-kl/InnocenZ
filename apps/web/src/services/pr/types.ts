@@ -13,6 +13,8 @@ export interface PrUser {
 
 	phoneNum: string;
 
+	profileImage: string | null;
+
 	displayName: string;
 
 	legalName: string;
@@ -20,6 +22,20 @@ export interface PrUser {
 	idType: string | null;
 
 	idNo: string | null;
+
+	gender: string | null;
+
+	race: string | null;
+
+	dob: string | null;
+
+	nationality: string | null;
+
+	portfolioPhotos: string[];
+
+	comcardHeightCm: number | null;
+
+	comcardWeightKg: number | null;
 
 	status: string;
 

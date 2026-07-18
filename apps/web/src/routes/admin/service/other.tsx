@@ -1,12 +1,15 @@
 import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
-import { createFileRoute } from '@tanstack/react-router';
+	keepPreviousData,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
+import { createFileRoute } from "@tanstack/react-router";
+import { format } from "date-fns";
 import {
 	AlertCircle,
+	ArrowDown,
+	ArrowUp,
 	CheckCircle2,
 	LayoutGrid,
 	Loader2,
@@ -16,13 +19,12 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
-import { format } from "date-fns";
-import { PageHeader, PageShell } from "@/components/admin/page-header";
 import {
 	DateMultiFilter,
 	DateSingleFilter,
 	datesToQueryParam,
 } from "@/components/admin/date-multi-filter";
+import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { SourceToggle } from "@/components/admin/source-toggle";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -64,83 +66,83 @@ import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
-  adminApproveJob,
-  adminDeclineJob,
-  fetchAdminPendingJobs,
-  fetchSpecialServiceSummary,
-  fetchSpecialServices,
-  type SpecialService,
-  type SpecialServiceCategory,
-  type SpecialServiceInitiatedBy,
-  type SpecialServiceStatus,
-  type SpecialServicesQueryParams,
-  type UpdateSpecialServiceInput,
-  updateSpecialService,
-  updateSpecialServiceStatus,
-} from '@/services/special-service';
+	adminApproveJob,
+	adminDeclineJob,
+	fetchAdminPendingJobs,
+	fetchSpecialServiceSummary,
+	fetchSpecialServices,
+	type SpecialService,
+	type SpecialServiceCategory,
+	type SpecialServiceInitiatedBy,
+	type SpecialServiceStatus,
+	type SpecialServicesQueryParams,
+	type UpdateSpecialServiceInput,
+	updateSpecialService,
+	updateSpecialServiceStatus,
+} from "@/services/special-service";
 
-export const Route = createFileRoute('/admin/service/other')({
-  component: SpecialServicesPage,
-  head: () => ({
-    meta: [{ title: 'Jobs & Special Services — Innocenz Admin' }],
-  }),
+export const Route = createFileRoute("/admin/service/other")({
+	component: SpecialServicesPage,
+	head: () => ({
+		meta: [{ title: "Jobs & Special Services — Innocenz Admin" }],
+	}),
 });
 
 const PAGE_SIZE = 10;
 
-type ViewMode = 'all' | 'pending_review';
-type StatusFilter = 'all' | SpecialServiceStatus;
-type CategoryFilter = 'all' | SpecialServiceCategory;
-type SourceFilter = 'all' | SpecialServiceInitiatedBy;
+type ViewMode = "all" | "pending_review";
+type StatusFilter = "all" | SpecialServiceStatus;
+type CategoryFilter = "all" | SpecialServiceCategory;
+type SourceFilter = "all" | SpecialServiceInitiatedBy;
 
 const STATUSES: SpecialServiceStatus[] = [
-  'open',
-  'assigned',
-  'in_progress',
-  'completed',
-  'cancelled',
+	"open",
+	"assigned",
+	"in_progress",
+	"completed",
+	"cancelled",
 ];
 
 const CATEGORIES: SpecialServiceCategory[] = [
-  'transportation',
-  'delivery',
-  'wardrobe',
-  'makeup',
-  'vip_escort',
-  'uniform',
-  'emergency_cover',
-  'training',
-  'others',
+	"transportation",
+	"delivery",
+	"wardrobe",
+	"makeup",
+	"vip_escort",
+	"uniform",
+	"emergency_cover",
+	"training",
+	"others",
 ];
 
 const categoryLabels: Record<SpecialServiceCategory, string> = {
-  transportation: 'Transportation',
-  delivery: 'Deliveries',
-  wardrobe: 'Wardrobe & styling',
-  makeup: 'Makeup & grooming',
-  vip_escort: 'VIP escort',
-  uniform: 'Uniform & documents',
-  emergency_cover: 'Emergency cover',
-  training: 'Training top-up',
-  others: 'Others',
+	transportation: "Transportation",
+	delivery: "Deliveries",
+	wardrobe: "Wardrobe & styling",
+	makeup: "Makeup & grooming",
+	vip_escort: "VIP escort",
+	uniform: "Uniform & documents",
+	emergency_cover: "Emergency cover",
+	training: "Training top-up",
+	others: "Others",
 };
 
 const statusLabels: Record<SpecialServiceStatus, string> = {
-  open: 'Open',
-  assigned: 'Assigned',
-  in_progress: 'In progress',
-  completed: 'Completed',
-  cancelled: 'Cancelled',
+	open: "Open",
+	assigned: "Assigned",
+	in_progress: "In progress",
+	completed: "Completed",
+	cancelled: "Cancelled",
 };
 
 const statusBadgeColors: Record<SpecialServiceStatus, string> = {
-  open: 'border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400',
-  assigned: 'border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400',
-  in_progress:
-    'border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender',
-  completed:
-    'border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400',
-  cancelled: 'border-muted-foreground/30 bg-muted text-muted-foreground',
+	open: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
+	assigned: "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400",
+	in_progress:
+		"border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender",
+	completed:
+		"border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+	cancelled: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
 const sourceNameOf = (record: SpecialService) =>
@@ -152,8 +154,8 @@ const formatBudget = (budget: string | null) =>
 	budget != null && budget.trim() !== "" ? `RM ${budget}` : "—";
 
 function SpecialServicesPage() {
-  const { logout } = useAuth();
-  const queryClient = useQueryClient();
+	const { logout } = useAuth();
+	const queryClient = useQueryClient();
 
 	const [viewMode, setViewMode] = useState<ViewMode>("all");
 	const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
@@ -161,11 +163,16 @@ function SpecialServicesPage() {
 	const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
 	const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
 	const [requestedDates, setRequestedDates] = useState<Date[]>([]);
+	const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 	const [page, setPage] = useState(1);
 	const [actionId, setActionId] = useState<string | null>(null);
 	const [editRecord, setEditRecord] = useState<SpecialService | null>(null);
 
-	const queryParams: SpecialServicesQueryParams = { page, pageSize: PAGE_SIZE };
+	const queryParams: SpecialServicesQueryParams = {
+		page,
+		pageSize: PAGE_SIZE,
+		order: sortOrder,
+	};
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (categoryFilter !== "all") queryParams.category = categoryFilter;
 	if (sourceFilter !== "all") queryParams.initiatedBy = sourceFilter;
@@ -178,11 +185,16 @@ function SpecialServicesPage() {
 	const dateFilterParams = {
 		dates: requestedDatesParam,
 		scheduledDates: scheduledDatesParam,
+		order: sortOrder,
 	};
 
 	const servicesQuery = useQuery({
 		queryKey: isPendingView
-			? ["special-services", "admin-pending", { page, pageSize: PAGE_SIZE, ...dateFilterParams }]
+			? [
+					"special-services",
+					"admin-pending",
+					{ page, pageSize: PAGE_SIZE, ...dateFilterParams },
+				]
 			: ["special-services", queryParams],
 		queryFn: () =>
 			isPendingView
@@ -196,69 +208,69 @@ function SpecialServicesPage() {
 		retry: 2,
 	});
 
-  const summaryQuery = useQuery({
-    queryKey: ['special-services', 'summary'],
-    queryFn: () => fetchSpecialServiceSummary(logout),
-    staleTime: 30_000,
-  });
+	const summaryQuery = useQuery({
+		queryKey: ["special-services", "summary"],
+		queryFn: () => fetchSpecialServiceSummary(logout),
+		staleTime: 30_000,
+	});
 
-  const pendingCountQuery = useQuery({
-    queryKey: ['special-services', 'admin-pending', 'count'],
-    queryFn: () => fetchAdminPendingJobs({ page: 1, pageSize: 1 }, logout),
-    staleTime: 30_000,
-  });
+	const pendingCountQuery = useQuery({
+		queryKey: ["special-services", "admin-pending", "count"],
+		queryFn: () => fetchAdminPendingJobs({ page: 1, pageSize: 1 }, logout),
+		staleTime: 30_000,
+	});
 
-  const statusMutation = useMutation({
-    mutationFn: ({
-      id,
-      status,
-    }: {
-      id: string;
-      status: SpecialServiceStatus;
-    }) => updateSpecialServiceStatus(id, status, logout),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['special-services'] });
-      toast.success(response.message || 'Status updated');
-    },
-    onError: (error) => {
-      toast.error(
-        toMutationError(error, 'Failed to update status')?.message ??
-          'Failed to update status',
-      );
-    },
-  });
+	const statusMutation = useMutation({
+		mutationFn: ({
+			id,
+			status,
+		}: {
+			id: string;
+			status: SpecialServiceStatus;
+		}) => updateSpecialServiceStatus(id, status, logout),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["special-services"] });
+			toast.success(response.message || "Status updated");
+		},
+		onError: (error) => {
+			toast.error(
+				toMutationError(error, "Failed to update status")?.message ??
+					"Failed to update status",
+			);
+		},
+	});
 
-  const approveMutation = useMutation({
-    mutationFn: (id: string) => adminApproveJob(id, logout),
-    onMutate: (id) => setActionId(id),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['special-services'] });
-      toast.success(response.message || 'Job posting approved');
-    },
-    onError: (error) => {
-      toast.error(
-        toMutationError(error, 'Failed to approve job')?.message ??
-          'Failed to approve job',
-      );
-    },
-    onSettled: () => setActionId(null),
-  });
+	const approveMutation = useMutation({
+		mutationFn: (id: string) => adminApproveJob(id, logout),
+		onMutate: (id) => setActionId(id),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["special-services"] });
+			toast.success(response.message || "Job posting approved");
+		},
+		onError: (error) => {
+			toast.error(
+				toMutationError(error, "Failed to approve job")?.message ??
+					"Failed to approve job",
+			);
+		},
+		onSettled: () => setActionId(null),
+	});
 
-  const declineMutation = useMutation({
-    mutationFn: (id: string) => adminDeclineJob(id, logout),
-    onMutate: (id) => setActionId(id),
-    onSuccess: (response) => {
-      queryClient.invalidateQueries({ queryKey: ['special-services'] });
-      toast.success(response.message || 'Job posting declined');
-    },
-    onError: (error) => {
-      toast.error(
-        toMutationError(error, 'Failed to decline job')?.message ??
-          'Failed to decline job',
-      );
-    },
-    onSettled: () => setActionId(null),
-  });
+	const declineMutation = useMutation({
+		mutationFn: (id: string) => adminDeclineJob(id, logout),
+		onMutate: (id) => setActionId(id),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["special-services"] });
+			toast.success(response.message || "Job posting declined");
+		},
+		onError: (error) => {
+			toast.error(
+				toMutationError(error, "Failed to decline job")?.message ??
+					"Failed to decline job",
+			);
+		},
+		onSettled: () => setActionId(null),
+	});
 
 	const fieldsMutation = useMutation({
 		mutationFn: ({
@@ -278,18 +290,18 @@ function SpecialServicesPage() {
 		},
 	});
 
-  const records = servicesQuery.data?.data ?? [];
-  const pagination = servicesQuery.data?.pagination;
-  const showLoading = servicesQuery.isLoading && records.length === 0;
-  const summary = summaryQuery.data?.data;
-  const pendingCount = pendingCountQuery.data?.pagination.totalCount ?? 0;
+	const records = servicesQuery.data?.data ?? [];
+	const pagination = servicesQuery.data?.pagination;
+	const showLoading = servicesQuery.isLoading && records.length === 0;
+	const summary = summaryQuery.data?.data;
+	const pendingCount = pendingCountQuery.data?.pagination.totalCount ?? 0;
 
-  const summaryCards: Array<{ key: SpecialServiceStatus; label: string }> = [
-    { key: 'open', label: 'Open' },
-    { key: 'assigned', label: 'Assigned' },
-    { key: 'in_progress', label: 'In progress' },
-    { key: 'completed', label: 'Completed' },
-  ];
+	const summaryCards: Array<{ key: SpecialServiceStatus; label: string }> = [
+		{ key: "open", label: "Open" },
+		{ key: "assigned", label: "Assigned" },
+		{ key: "in_progress", label: "In progress" },
+		{ key: "completed", label: "Completed" },
+	];
 
 	return (
 		<PageShell>
@@ -299,32 +311,32 @@ function SpecialServicesPage() {
 				description="Browse orders and agency jobs. Click a row to open the editor and update details or status. Use the filters to narrow by source, category, or status."
 			/>
 
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-        <Card
-          className="cursor-pointer border-amber-500/30 bg-card transition-colors hover:bg-amber-500/5"
-          onClick={() => {
-            setViewMode('pending_review');
-            setPage(1);
-          }}
-        >
-          <CardHeader className="pb-2">
-            <CardDescription>Pending review</CardDescription>
-            <CardTitle className="text-2xl text-amber-600 dark:text-amber-400">
-              {formatNumber(pendingCount)}
-            </CardTitle>
-          </CardHeader>
-        </Card>
-        {summaryCards.map((card) => (
-          <Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
-            <CardHeader className="pb-2">
-              <CardDescription>{card.label}</CardDescription>
-              <CardTitle className="text-2xl">
-                {formatNumber(summary?.[card.key] ?? 0)}
-              </CardTitle>
-            </CardHeader>
-          </Card>
-        ))}
-      </div>
+			<div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
+				<Card
+					className="cursor-pointer border-amber-500/30 bg-card transition-colors hover:bg-amber-500/5"
+					onClick={() => {
+						setViewMode("pending_review");
+						setPage(1);
+					}}
+				>
+					<CardHeader className="pb-2">
+						<CardDescription>Pending review</CardDescription>
+						<CardTitle className="text-2xl text-amber-600 dark:text-amber-400">
+							{formatNumber(pendingCount)}
+						</CardTitle>
+					</CardHeader>
+				</Card>
+				{summaryCards.map((card) => (
+					<Card key={card.key} className="border-(--lavender-soft)/40 bg-card">
+						<CardHeader className="pb-2">
+							<CardDescription>{card.label}</CardDescription>
+							<CardTitle className="text-2xl">
+								{formatNumber(summary?.[card.key] ?? 0)}
+							</CardTitle>
+						</CardHeader>
+					</Card>
+				))}
+			</div>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
 				<CardHeader>
@@ -457,7 +469,30 @@ function SpecialServicesPage() {
 									<TableHead>Budget</TableHead>
 									<TableHead>Third Party</TableHead>
 									<TableHead className="w-[150px]">Scheduled For</TableHead>
-									<TableHead className="w-[160px]">Requested Time</TableHead>
+									<TableHead className="w-[160px]">
+										<button
+											type="button"
+											className="flex items-center gap-1 transition-colors hover:text-foreground"
+											onClick={() => {
+												setSortOrder((order) =>
+													order === "desc" ? "asc" : "desc",
+												);
+												setPage(1);
+											}}
+											aria-label={
+												sortOrder === "desc"
+													? "Sorted by requested time, newest first — click for oldest first"
+													: "Sorted by requested time, oldest first — click for newest first"
+											}
+										>
+											Requested Time
+											{sortOrder === "desc" ? (
+												<ArrowDown className="h-3.5 w-3.5" />
+											) : (
+												<ArrowUp className="h-3.5 w-3.5" />
+											)}
+										</button>
+									</TableHead>
 									{isPendingView ? (
 										<TableHead className="w-[200px]">Actions</TableHead>
 									) : (
@@ -684,7 +719,10 @@ function SpecialServicesPage() {
 					if (!open) setEditRecord(null);
 				}}
 			>
-				<SheetContent side="right" className="w-full sm:max-w-md">
+				<SheetContent
+					side="right"
+					className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+				>
 					{editRecord && (
 						<OrderEditForm
 							key={editRecord.id}
@@ -724,10 +762,6 @@ function OrderEditForm({
 	onDone,
 }: OrderEditFormProps) {
 	const [title, setTitle] = useState(record.title);
-	const [initiatedBy, setInitiatedBy] = useState<SpecialServiceInitiatedBy>(
-		record.initiatedBy,
-	);
-	const [sourceName, setSourceName] = useState(sourceNameOf(record));
 	const [category, setCategory] = useState<SpecialServiceCategory>(
 		record.category,
 	);
@@ -756,17 +790,6 @@ function OrderEditForm({
 			return;
 		}
 		if (trimmedTitle !== record.title) input.title = trimmedTitle;
-
-		if (initiatedBy !== record.initiatedBy) input.initiatedBy = initiatedBy;
-
-		const trimmedSource = sourceName.trim();
-		if (initiatedBy === "agency") {
-			if (trimmedSource !== (record.postingAgencyName ?? "").trim()) {
-				input.postingAgencyName = trimmedSource === "" ? null : trimmedSource;
-			}
-		} else if (trimmedSource !== record.outletName.trim()) {
-			input.outletName = trimmedSource;
-		}
 
 		if (category !== record.category) input.category = category;
 
@@ -836,34 +859,35 @@ function OrderEditForm({
 					/>
 				</div>
 
-				<div className="grid grid-cols-2 gap-3">
-					<div className="space-y-1.5">
-						<Label htmlFor="order-source-type">Source type</Label>
-						<Select
-							value={initiatedBy}
-							onValueChange={(value) =>
-								setInitiatedBy(value as SpecialServiceInitiatedBy)
-							}
-						>
-							<SelectTrigger id="order-source-type">
-								<SelectValue />
-							</SelectTrigger>
-							<SelectContent>
-								<SelectItem value="outlet">Outlet</SelectItem>
-								<SelectItem value="agency">Agency</SelectItem>
-							</SelectContent>
-						</Select>
+				<div className="space-y-1.5">
+					<div className="grid grid-cols-2 gap-3">
+						<div className="space-y-1.5">
+							<Label htmlFor="order-role">Role</Label>
+							<Input
+								id="order-role"
+								value={record.initiatedBy === "agency" ? "Agency" : "Outlet"}
+								readOnly
+								disabled
+							/>
+						</div>
+						<div className="space-y-1.5">
+							<Label htmlFor="order-source-name">
+								{record.initiatedBy === "agency"
+									? "Agency name"
+									: "Outlet name"}
+							</Label>
+							<Input
+								id="order-source-name"
+								value={sourceNameOf(record) || "—"}
+								readOnly
+								disabled
+							/>
+						</div>
 					</div>
-					<div className="space-y-1.5">
-						<Label htmlFor="order-source-name">
-							{initiatedBy === "agency" ? "Agency name" : "Outlet name"}
-						</Label>
-						<Input
-							id="order-source-name"
-							value={sourceName}
-							onChange={(e) => setSourceName(e.target.value)}
-						/>
-					</div>
+					<p className="text-sm text-muted-foreground">
+						Role and requester name are set by whoever submitted the order and
+						cannot be changed.
+					</p>
 				</div>
 
 				<div className="space-y-1.5">
@@ -945,7 +969,7 @@ function OrderEditForm({
 						value={thirdParty}
 						onChange={(e) => setThirdParty(e.target.value)}
 					/>
-					<p className="text-[11px] text-muted-foreground">
+					<p className="text-sm text-muted-foreground">
 						Who you found to support this category. Leave blank if none yet.
 					</p>
 				</div>
@@ -960,7 +984,7 @@ function OrderEditForm({
 					/>
 				</div>
 
-				<dl className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-3 text-sm">
+				<dl className="space-y-2 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4 text-base">
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">Requested time</dt>
 						<dd className="text-right">{formatDate(record.createdAt)}</dd>

@@ -96,9 +96,69 @@ export class UserControllerClass {
     }
   }
 
+  async updateProfile(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const actorId = req.user?.id;
+
+      // Admins may only edit their own account from the profile page for now.
+      if (!actorId || actorId !== id) {
+        return res.status(403).json({
+          success: false,
+          message: Error.UNAUTHORIZED,
+          data: null,
+        });
+      }
+
+      const username =
+        typeof req.body?.username === 'string' ? req.body.username.trim() : '';
+      if (!username || username.length < 2 || username.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Display name must be between 2 and 100 characters',
+          data: null,
+        });
+      }
+
+      const existingUser = await this.userRepository.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const updatedUser = await this.userRepository.updateUser(
+        { username, updatedBy: getActor(req) },
+        id,
+      );
+
+      if (!updatedUser) {
+        return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+
+      const profile = await this.userProfileRepository.getByUserId(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Profile updated',
+        data: withUserProfile(updatedUser, profile),
+      });
+    } catch (error) {
+      logger.error('[UserController.updateProfile] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async uploadProfileImage(req: Request, res: Response) {
     try {
       const id = paramId(req.params.id);
+      const actorId = req.user?.id;
+
+      if (!actorId || actorId !== id) {
+        return res.status(403).json({
+          success: false,
+          message: Error.UNAUTHORIZED,
+          data: null,
+        });
+      }
 
       if (!req.file) {
         return res.status(400).json({

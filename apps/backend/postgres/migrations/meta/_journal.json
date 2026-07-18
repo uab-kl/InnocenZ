@@ -141,6 +141,20 @@
       "when": 1784222551278,
       "tag": "0019_admin_request_custom_renegotiation_type",
       "breakpoints": true
+    },
+    {
+      "idx": 20,
+      "version": "7",
+      "when": 1784267548970,
+      "tag": "0020_user_profile_pr_showcase",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784268900000,
+      "tag": "0021_outlet_logo_image",
+      "breakpoints": true
     }
   ]
 }

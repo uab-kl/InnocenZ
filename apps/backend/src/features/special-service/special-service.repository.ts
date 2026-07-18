@@ -1,4 +1,4 @@
-import { and, desc, eq, sql, SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -38,9 +38,11 @@ export class SpecialServiceRepositoryClass {
     filter?: SpecialServiceFilter;
     page: number;
     pageSize: number;
+    /** Sort by requested time (createdAt). Defaults to newest first. */
+    order?: 'asc' | 'desc';
   }): Promise<{ records: SpecialService[]; totalCount: number }> {
     try {
-      const { filter, page, pageSize } = params;
+      const { filter, page, pageSize, order = 'desc' } = params;
       const whereClause = this.buildConditions(filter);
 
       const [countRow] = await db
@@ -53,7 +55,11 @@ export class SpecialServiceRepositoryClass {
         .select()
         .from(SpecialServiceTable)
         .where(whereClause)
-        .orderBy(desc(SpecialServiceTable.createdAt))
+        .orderBy(
+          order === 'asc'
+            ? asc(SpecialServiceTable.createdAt)
+            : desc(SpecialServiceTable.createdAt),
+        )
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 

@@ -5,6 +5,13 @@ import type { AdminUser } from "./types";
 export interface BackendUserProfile {
 	firstName: string | null;
 	lastName: string | null;
+	nationality: string | null;
+	gender: string | null;
+	race: string | null;
+	dob: string | null;
+	portfolioPhotos: string[] | null;
+	comcardHeightCm: number | null;
+	comcardWeightKg: number | null;
 	idType: string | null;
 	idNo: string | null;
 }
@@ -13,6 +20,7 @@ export interface BackendUser {
 	id: string;
 	email: string | null;
 	phoneNum: string | null;
+	profileImage?: string | null;
 	username: string;
 	status: string;
 	profile?: BackendUserProfile | null;

@@ -20,7 +20,9 @@ export async function fetchOutlets(
 		page: params.page,
 		pageSize: params.pageSize,
 	});
-	const response = await client.get<OutletsApiResponse>(`/outlet${queryString}`);
+	const response = await client.get<OutletsApiResponse>(
+		`/outlet${queryString}`,
+	);
 	return {
 		success: response.data.success,
 		message: response.data.message,
@@ -29,12 +31,23 @@ export async function fetchOutlets(
 	};
 }
 
+export async function fetchOutletById(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<OutletApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<OutletApiResponse>(`/outlet/${id}`);
+	return response.data;
+}
+
 export async function approveOutlet(
 	id: string,
 	onRefreshFail: () => void,
 ): Promise<OutletApiResponse> {
 	const client = getClient(onRefreshFail);
-	const response = await client.patch<OutletApiResponse>(`/outlet/${id}/approve`);
+	const response = await client.patch<OutletApiResponse>(
+		`/outlet/${id}/approve`,
+	);
 	return response.data;
 }
 
@@ -43,7 +56,9 @@ export async function suspendOutlet(
 	onRefreshFail: () => void,
 ): Promise<OutletApiResponse> {
 	const client = getClient(onRefreshFail);
-	const response = await client.patch<OutletApiResponse>(`/outlet/${id}/suspend`);
+	const response = await client.patch<OutletApiResponse>(
+		`/outlet/${id}/suspend`,
+	);
 	return response.data;
 }
 

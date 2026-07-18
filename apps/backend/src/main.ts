@@ -101,6 +101,8 @@ app.use(
         connectSrc: ["'self'", 'https://*.apollographql.com'],
       },
     },
+    // Allow the web app (different origin/port) to display /img/* assets.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
     crossOriginEmbedderPolicy: false,
   }),
 );

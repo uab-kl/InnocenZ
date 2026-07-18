@@ -2,13 +2,11 @@ import {
 	AlertCircle,
 	Ban,
 	CheckCircle2,
-	ChevronDown,
-	ChevronRight,
+	Eye,
 	Loader2,
 	RefreshCw,
 	Store,
 } from "lucide-react";
-import { Fragment, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +33,6 @@ import {
 } from "@/components/ui/table";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Outlet, OutletPagination } from "@/services/outlet";
-import { OrgMembersPanel } from "./org-members-panel";
 import {
 	ORG_STATUSES,
 	type OrgStatusFilter,
@@ -58,6 +55,7 @@ interface OutletsTableProps {
 	onRetry: () => void;
 	onApprove: (id: string) => void;
 	onSuspend: (id: string) => void;
+	onSelect: (outlet: Outlet) => void;
 	actionId: string | null;
 }
 
@@ -76,9 +74,9 @@ export function OutletsTable({
 	onRetry,
 	onApprove,
 	onSuspend,
+	onSelect,
 	actionId,
 }: OutletsTableProps) {
-	const [expandedId, setExpandedId] = useState<string | null>(null);
 	const showLoading = isLoading && outlets.length === 0;
 
 	return (
@@ -93,8 +91,8 @@ export function OutletsTable({
 							)}
 						</CardTitle>
 						<CardDescription>
-							Review signup applications, approve active outlets, or suspend
-							venues.
+							Click a row to open venue details. Review signup applications,
+							approve active outlets, or suspend venues.
 						</CardDescription>
 					</div>
 
@@ -172,7 +170,6 @@ export function OutletsTable({
 								</TableRow>
 							) : (
 								outlets.map((outlet) => {
-									const expanded = expandedId === outlet.id;
 									const busy = actionId === outlet.id;
 									const location = [
 										outlet.addressLine1,
@@ -182,108 +179,98 @@ export function OutletsTable({
 										.filter(Boolean)
 										.join(", ");
 									return (
-										<Fragment key={outlet.id}>
-											<TableRow>
-												<TableCell>
-													<Button
-														variant="ghost"
-														size="icon"
-														className="h-8 w-8"
-														aria-label={
-															expanded ? "Collapse members" : "Expand members"
-														}
-														onClick={() =>
-															setExpandedId(expanded ? null : outlet.id)
-														}
-													>
-														{expanded ? (
-															<ChevronDown className="h-4 w-4" />
-														) : (
-															<ChevronRight className="h-4 w-4" />
-														)}
-													</Button>
-												</TableCell>
-												<TableCell className="font-medium">
-													{outlet.name}
-												</TableCell>
-												<TableCell className="max-w-[220px] text-sm text-muted-foreground">
-													{location || "—"}
-												</TableCell>
-												<TableCell className="text-sm">
-													<div>{outlet.ssmNo || "—"}</div>
-													{outlet.businessLicense && (
-														<div className="text-xs text-muted-foreground">
-															{outlet.businessLicense}
-														</div>
-													)}
-												</TableCell>
-												<TableCell>
-													<Badge
-														variant="outline"
-														className={orgStatusBadgeColors[outlet.status]}
-													>
-														{orgStatusLabels[outlet.status]}
-													</Badge>
-												</TableCell>
-												<TableCell className="text-sm text-muted-foreground">
-													{formatDate(outlet.createdAt)}
-												</TableCell>
-												<TableCell>
-													<div className="flex flex-wrap gap-2">
-														{outlet.status === "pending_review" && (
-															<Button
-																size="sm"
-																disabled={busy}
-																onClick={() => onApprove(outlet.id)}
-															>
-																{busy ? (
-																	<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-																)}
-																Approve
-															</Button>
-														)}
-														{outlet.status === "active" && (
-															<Button
-																size="sm"
-																variant="outline"
-																disabled={busy}
-																onClick={() => onSuspend(outlet.id)}
-															>
-																{busy ? (
-																	<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<Ban className="mr-1 h-3.5 w-3.5" />
-																)}
-																Suspend
-															</Button>
-														)}
-														{outlet.status === "suspended" && (
-															<Button
-																size="sm"
-																disabled={busy}
-																onClick={() => onApprove(outlet.id)}
-															>
-																{busy ? (
-																	<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-																)}
-																Reactivate
-															</Button>
-														)}
+										<TableRow
+											key={outlet.id}
+											className="cursor-pointer"
+											onClick={() => onSelect(outlet)}
+										>
+											<TableCell>
+												<Button
+													variant="ghost"
+													size="icon"
+													className="h-8 w-8"
+													aria-label="View outlet details"
+													onClick={(e) => {
+														e.stopPropagation();
+														onSelect(outlet);
+													}}
+												>
+													<Eye className="h-4 w-4" />
+												</Button>
+											</TableCell>
+											<TableCell className="font-medium text-base">
+												{outlet.name}
+											</TableCell>
+											<TableCell className="max-w-[280px] whitespace-normal text-base text-muted-foreground">
+												{location || "—"}
+											</TableCell>
+											<TableCell className="text-base">
+												<div>{outlet.ssmNo || "—"}</div>
+												{outlet.businessLicense && (
+													<div className="text-sm text-muted-foreground">
+														{outlet.businessLicense}
 													</div>
-												</TableCell>
-											</TableRow>
-											{expanded && (
-												<TableRow>
-													<TableCell colSpan={7} className="bg-muted/20 px-6">
-														<OrgMembersPanel orgId={outlet.id} kind="outlet" />
-													</TableCell>
-												</TableRow>
-											)}
-										</Fragment>
+												)}
+											</TableCell>
+											<TableCell>
+												<Badge
+													variant="outline"
+													className={`text-sm ${orgStatusBadgeColors[outlet.status]}`}
+												>
+													{orgStatusLabels[outlet.status]}
+												</Badge>
+											</TableCell>
+											<TableCell className="text-base text-muted-foreground">
+												{formatDate(outlet.createdAt)}
+											</TableCell>
+											<TableCell onClick={(e) => e.stopPropagation()}>
+												<div className="flex flex-wrap gap-2">
+													{outlet.status === "pending_review" && (
+														<Button
+															size="sm"
+															disabled={busy}
+															onClick={() => onApprove(outlet.id)}
+														>
+															{busy ? (
+																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+															) : (
+																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+															)}
+															Approve
+														</Button>
+													)}
+													{outlet.status === "active" && (
+														<Button
+															size="sm"
+															variant="outline"
+															disabled={busy}
+															onClick={() => onSuspend(outlet.id)}
+														>
+															{busy ? (
+																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+															) : (
+																<Ban className="mr-1 h-3.5 w-3.5" />
+															)}
+															Suspend
+														</Button>
+													)}
+													{outlet.status === "suspended" && (
+														<Button
+															size="sm"
+															disabled={busy}
+															onClick={() => onApprove(outlet.id)}
+														>
+															{busy ? (
+																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+															) : (
+																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+															)}
+															Reactivate
+														</Button>
+													)}
+												</div>
+											</TableCell>
+										</TableRow>
 									);
 								})
 							)}
@@ -292,7 +279,7 @@ export function OutletsTable({
 				</div>
 
 				{pagination && pagination.totalCount > 0 && (
-					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 						<div>
 							Showing{" "}
 							<span className="font-medium">

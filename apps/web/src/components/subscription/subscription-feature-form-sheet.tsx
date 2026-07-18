@@ -94,7 +94,7 @@ export function SubscriptionFeatureFormSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
         <SheetHeader className="shrink-0 border-b border-border">
           <div className="flex items-start gap-3 pr-8">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--lavender-soft)/50 bg-(--lavender-soft)/20 text-lavender">
@@ -137,7 +137,7 @@ export function SubscriptionFeatureFormSheet({
                   <li>· <span className="text-foreground">PV per active PR per week</span> → 1 PV</li>
                   <li>· <span className="text-foreground">Max PV per week</span> → 25 PV / week</li>
                 </ul>
-                <p className="mt-2 text-muted-foreground text-xs">
+                <p className="mt-2 text-muted-foreground text-sm">
                   &quot;PVs issued last payroll week&quot; is usage data from payroll — not set here.
                 </p>
               </div>
@@ -231,11 +231,11 @@ export function SubscriptionFeatureFormSheet({
                       <p className="font-medium text-foreground">Limit on this plan</p>
                       <p className="mt-1 text-foreground">{limitSummary}</p>
                       {selectedLimitType.description && (
-                        <p className="mt-1 text-muted-foreground text-xs">
+                        <p className="mt-1 text-muted-foreground text-sm">
                           {selectedLimitType.description}
                         </p>
                       )}
-                      <p className="mt-2 text-muted-foreground text-xs">
+                      <p className="mt-2 text-muted-foreground text-sm">
                         To change the number, edit the limit type on the Limit Types tab
                         (default value field).
                       </p>

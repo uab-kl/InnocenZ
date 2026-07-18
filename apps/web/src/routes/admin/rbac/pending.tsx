@@ -38,6 +38,7 @@ type PendingHref =
 
 type PendingRow = {
 	id: string;
+	rawId: string;
 	kind: "agency" | "outlet" | "request" | "job";
 	typeLabel: string;
 	icon: typeof Building2;
@@ -105,6 +106,7 @@ function PendingApprovalsPage() {
 		...(agenciesQuery.data?.data ?? []).map(
 			(a: Agency): PendingRow => ({
 				id: `agency-${a.id}`,
+				rawId: a.id,
 				kind: "agency",
 				typeLabel: "PR Agency",
 				icon: Building2,
@@ -118,6 +120,7 @@ function PendingApprovalsPage() {
 		...(outletsQuery.data?.data ?? []).map(
 			(o: Outlet): PendingRow => ({
 				id: `outlet-${o.id}`,
+				rawId: o.id,
 				kind: "outlet",
 				typeLabel: "Outlet",
 				icon: Store,
@@ -131,6 +134,7 @@ function PendingApprovalsPage() {
 		...(requestsQuery.data?.data ?? []).map(
 			(r: AdminRequest): PendingRow => ({
 				id: `request-${r.id}`,
+				rawId: r.id,
 				kind: "request",
 				typeLabel: "Plan request",
 				icon: Handshake,
@@ -144,6 +148,7 @@ function PendingApprovalsPage() {
 		...(jobsQuery.data?.data ?? []).map(
 			(j: SpecialService): PendingRow => ({
 				id: `job-${j.id}`,
+				rawId: j.id,
 				kind: "job",
 				typeLabel: "Job posting",
 				icon: LayoutGrid,
@@ -216,12 +221,30 @@ function PendingApprovalsPage() {
 								{row.date}
 							</div>
 							<div className="md:text-right">
-								<Link
-									to={row.href}
-									className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
-								>
-									Review →
-								</Link>
+								{row.kind === "agency" ? (
+									<Link
+										to="/admin/user-management/agency"
+										search={{ focus: row.rawId }}
+										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
+									>
+										Review →
+									</Link>
+								) : row.kind === "outlet" ? (
+									<Link
+										to="/admin/user-management/outlet"
+										search={{ focus: row.rawId }}
+										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
+									>
+										Review →
+									</Link>
+								) : (
+									<Link
+										to={row.href}
+										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
+									>
+										Review →
+									</Link>
+								)}
 							</div>
 						</div>
 					))

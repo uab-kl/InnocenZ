@@ -391,7 +391,7 @@ export function LimitTypeFormSheet({
 
   return (
     <Sheet open={open} onOpenChange={handleOpenChange}>
-      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-lg">
+      <SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
         <SheetHeader className="shrink-0 border-b border-border">
           <div className="flex items-start gap-3 pr-8">
             <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--lavender-soft)/50 bg-(--lavender-soft)/20 text-lavender">
@@ -461,7 +461,7 @@ export function LimitTypeFormSheet({
                       )}
                     >
                       <span className="block text-sm font-medium">{template.label}</span>
-                      <span className="mt-0.5 block text-muted-foreground text-xs">
+                      <span className="mt-0.5 block text-muted-foreground text-sm">
                         {template.hint}
                       </span>
                     </button>
@@ -516,7 +516,7 @@ export function LimitTypeFormSheet({
                     />
                     <FieldDescription>
                       Unique ID for the system. Use lowercase letters, numbers, and
-                      underscores only (e.g. <code className="text-xs">max_users</code>).
+                      underscores only (e.g. <code className="text-sm">max_users</code>).
                     </FieldDescription>
                     <FieldError errors={field.state.meta.errors} />
                   </Field>
