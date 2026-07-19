@@ -1,6 +1,7 @@
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
 import { RosterAddPrDialog } from "@agency-portal/components/agency/RosterAddPrDialog";
 import { RosterAddShiftDialog } from "@agency-portal/components/agency/RosterAddShiftDialog";
+import { RosterAssignDialog } from "@agency-portal/components/agency/RosterAssignDialog";
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
 import { RosterShiftFilters } from "@agency-portal/components/agency/RosterShiftFilters";
 import {
@@ -162,6 +163,7 @@ function AgencyRoster() {
 	const [replacementPick, setReplacementPick] = useState("");
 	const [addShiftOpen, setAddShiftOpen] = useState(false);
 	const [addPrOpen, setAddPrOpen] = useState(false);
+	const [assignOpen, setAssignOpen] = useState(false);
 	const canAssign = agencyCan(agencySubRole, "assignShifts");
 
 	// Phase 2: in planning view the by-id write actions hit the backend (a slot's
@@ -537,6 +539,13 @@ function AgencyRoster() {
 							>
 								+ Add PR
 							</button>
+							<button
+								type="button"
+								className="iz-btn iz-btn-primary mt-2 w-full"
+								onClick={() => setAssignOpen(true)}
+							>
+								+ Assign PR
+							</button>
 						</>
 					)}
 					<div className="iz-roster-planning-panel">
@@ -696,6 +705,14 @@ function AgencyRoster() {
 						handleCancelSlot(editSlot.id);
 						setEditId(null);
 					}}
+					onUnassign={
+						isPlanning
+							? () => {
+									rosterMut.unassign.mutate(editSlot.id);
+									setEditId(null);
+								}
+							: undefined
+					}
 				/>
 			)}
 
@@ -759,6 +776,13 @@ function AgencyRoster() {
 			/>
 
 			<RosterAddPrDialog open={addPrOpen} onClose={() => setAddPrOpen(false)} />
+
+			<RosterAssignDialog
+				open={assignOpen}
+				onClose={() => setAssignOpen(false)}
+				fromDate={weekStartIso}
+				toDate={weekDays[weekDays.length - 1] ?? weekStartIso}
+			/>
 		</div>
 	);
 }
@@ -770,6 +794,7 @@ function EditRosterModal({
 	onRequestOutletSwap,
 	onReassignToOpenShift,
 	onCancelShift,
+	onUnassign,
 }: {
 	slot: AgencyRosterSlot;
 	onClose: () => void;
@@ -777,6 +802,8 @@ function EditRosterModal({
 	onRequestOutletSwap: (targetOutlet: string, note: string) => void;
 	onReassignToOpenShift: (target: AgencyOutletAvailableShift) => void;
 	onCancelShift: () => void;
+	/** Planning view only: hard-delete the assignment row (frees the slot). */
+	onUnassign?: () => void;
 }) {
 	const shifts = useStore((s) => s.shifts);
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
@@ -793,6 +820,7 @@ function EditRosterModal({
 	const [reassignShiftId, setReassignShiftId] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
+	const [unassignConfirmOpen, setUnassignConfirmOpen] = useState(false);
 	const shiftPreview = `${shiftStart} — ${shiftEnd}`;
 	const swapTargets = OUTLET_NAMES.filter((o) => o !== slot.outlet);
 	const releasedEarly = Boolean(slot.checkedOutAt);
@@ -1078,6 +1106,28 @@ function EditRosterModal({
 					</div>
 				)}
 
+				{onUnassign && (
+					<div className="mt-4 rounded-xl border border-[rgba(255,117,117,.25)] bg-[rgba(255,117,117,.06)] p-3">
+						<div className="flex items-center gap-1.5 iz-tiny font-bold uppercase tracking-wide text-[var(--destructive)]">
+							<Trash2 className="h-3.5 w-3.5" />
+							Remove assignment
+						</div>
+						<p className="iz-tiny iz-muted mt-1">
+							Unassign {slot.prName} from this shift. The assignment is deleted
+							and the slot reopens — use this to undo an assignment, not to
+							cancel a confirmed shift.
+						</p>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft mt-3 w-full !border-[var(--iz-red)] !text-[var(--iz-red)] !text-xs"
+							disabled={busy}
+							onClick={() => setUnassignConfirmOpen(true)}
+						>
+							Remove assignment
+						</button>
+					</div>
+				)}
+
 				<div className="iz-sheet-actions">
 					<button
 						type="button"
@@ -1126,6 +1176,40 @@ function EditRosterModal({
 						}}
 					>
 						Cancel shift
+					</button>
+				</div>
+			</IzSheet>
+
+			<IzSheet
+				open={unassignConfirmOpen}
+				onClose={() => !busy && setUnassignConfirmOpen(false)}
+			>
+				<IzCardTitle>Remove this assignment?</IzCardTitle>
+				<p className="iz-tiny iz-muted mb-3">
+					{slot.prName} at{" "}
+					<strong className="text-[var(--iz-txt)]">{slot.outlet}</strong> ·{" "}
+					{slot.date} · {slot.shift}. The assignment row is deleted and the slot
+					reopens. This cannot be undone.
+				</p>
+				<div className="flex gap-2">
+					<button
+						type="button"
+						className="iz-btn iz-btn-soft flex-1"
+						disabled={busy}
+						onClick={() => setUnassignConfirmOpen(false)}
+					>
+						Keep assignment
+					</button>
+					<button
+						type="button"
+						className="iz-btn iz-btn-danger flex-1"
+						disabled={busy}
+						onClick={() => {
+							setBusy(true);
+							onUnassign?.();
+						}}
+					>
+						Remove
 					</button>
 				</div>
 			</IzSheet>
