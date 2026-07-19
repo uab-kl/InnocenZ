@@ -1,6 +1,7 @@
 import { PortalShell } from '@agency-portal/components/portal/PortalShell';
 import { Toasts } from '@agency-portal/components/Toasts';
 import { buildBlankPortalReset } from '@agency-portal/lib/demo-seed';
+import { getOutletIdentity } from '@agency-portal/lib/outlet-identity';
 import {
   canAccessOutletPath,
   getOutletDefaultRoute,
@@ -36,6 +37,19 @@ function OutletLayout() {
   useEffect(() => {
     if (getPortalSessionKind() === 'real') {
       useStore.setState(buildBlankPortalReset());
+      // The blank reset wipes outletOwner / sub-role to demo defaults every
+      // mount; re-apply the persisted real identity so it survives reloads.
+      const identity = getOutletIdentity();
+      if (identity) {
+        useStore.getState().setOutletSubRole(identity.subRole);
+        useStore.setState((st) => ({
+          outletOwner: { ...st.outletOwner, orgName: identity.outletName },
+          outletWorkspace: {
+            ...st.outletWorkspace,
+            outletName: identity.outletName,
+          },
+        }));
+      }
     }
     setMounted(true);
   }, []);

@@ -1,14 +1,25 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
-import { OutletMemberTable, OutletMemberInsertType, OutletMemberType } from './outlet.model';
+import { OutletMemberTable, OutletMemberInsertType, OutletMemberType, OutletTable } from './outlet.model';
 
 export type OutletMemberEnriched = OutletMemberType & {
   username: string;
   email: string | null;
   phoneNum: string | null;
+};
+
+/** One outlet membership joined to its outlet — used to resolve a signed-in
+ * operator's own outlet + role at session start (mirrors the agency side). */
+export type OutletMembershipWithOutlet = {
+  membershipId: string;
+  userId: string;
+  outletId: string;
+  outletName: string;
+  subRole: OutletMemberType['subRole'];
+  status: string;
 };
 
 export class OutletMemberRepositoryClass {
@@ -127,6 +138,38 @@ export class OutletMemberRepositoryClass {
         .where(eq(OutletMemberTable.userId, userId));
     } catch (error) {
       logger.error('[OutletMemberRepository.listByUser] Error:', error);
+      return [];
+    }
+  }
+
+  /** Memberships (joined to their outlet) for the given users — resolves a
+   * signed-in operator's own outlet + role at session start. */
+  async listMembershipsByUserIds(
+    userIds: string[],
+    options: { status?: string } = {},
+  ): Promise<OutletMembershipWithOutlet[]> {
+    if (userIds.length === 0) return [];
+    try {
+      const conditions = [inArray(OutletMemberTable.userId, userIds)];
+      if (options.status) {
+        conditions.push(eq(OutletMemberTable.status, options.status));
+      }
+      const rows = await db
+        .select({
+          membershipId: OutletMemberTable.id,
+          userId: OutletMemberTable.userId,
+          outletId: OutletMemberTable.outletId,
+          outletName: OutletTable.name,
+          subRole: OutletMemberTable.subRole,
+          status: OutletMemberTable.status,
+        })
+        .from(OutletMemberTable)
+        .innerJoin(OutletTable, eq(OutletTable.id, OutletMemberTable.outletId))
+        .where(and(...conditions))
+        .orderBy(OutletTable.name);
+      return rows;
+    } catch (error) {
+      logger.error('[OutletMemberRepository.listMembershipsByUserIds] Error:', error);
       return [];
     }
   }

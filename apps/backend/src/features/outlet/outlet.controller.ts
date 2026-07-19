@@ -44,6 +44,36 @@ export class OutletControllerClass {
     }
   }
 
+  /** Batch lookup: outlets linked to the given users. Resolves the signed-in
+   * operator's own outlet + role at session start (mirrors agency memberships). */
+  async listMemberships(req: Request, res: Response) {
+    try {
+      const raw = (req.query.userIds as string | undefined) ?? '';
+      const userIds = raw
+        .split(',')
+        .map((id) => id.trim())
+        .filter(Boolean);
+      if (userIds.length === 0) {
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
+      if (userIds.length > 200) {
+        return res.status(400).json({
+          success: false,
+          message: 'At most 200 userIds can be requested at once',
+          data: null,
+        });
+      }
+      const status = (req.query.status as string | undefined) ?? 'active';
+      const memberships = await this.outletMemberRepository.listMembershipsByUserIds(userIds, {
+        status: status === 'all' ? undefined : status,
+      });
+      res.status(200).json({ success: true, message: 'OK', data: memberships });
+    } catch (error) {
+      logger.error('[OutletController.listMemberships] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const outlet = await this.outletRepository.getById(paramId(req.params.id));

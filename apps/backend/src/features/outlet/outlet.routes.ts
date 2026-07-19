@@ -6,6 +6,8 @@ const router = Router();
 
 // Outlet CRUD
 router.get('/', outletController.list.bind(outletController));
+// Must precede `/:id` so "memberships" isn't captured as an outlet id.
+router.get('/memberships', outletController.listMemberships.bind(outletController));
 router.get('/:id', outletController.getById.bind(outletController));
 router.post('/', outletController.create.bind(outletController));
 router.put('/:id', outletController.update.bind(outletController));

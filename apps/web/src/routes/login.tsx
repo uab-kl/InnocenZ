@@ -104,7 +104,11 @@ function RouteComponent() {
           return;
         }
         if (role === 'outlet') {
-          await startOutletRealSession(value.email);
+          await startOutletRealSession({
+            id: profile.id,
+            email: profile.email || value.email,
+            displayName: profile.displayName,
+          });
           window.location.assign('/outlet');
           return;
         }

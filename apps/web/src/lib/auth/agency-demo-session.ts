@@ -1,4 +1,5 @@
 import type { AgencySessionIdentity } from '@agency-portal/lib/agency-identity';
+import type { OutletSessionIdentity } from '@agency-portal/lib/outlet-identity';
 import { saveAuthTokens } from '@/lib/auth/auth-storage';
 import { kickToLogin } from '@/lib/auth/guards';
 
@@ -160,17 +161,64 @@ export async function startAgencyRealSession(profile: {
   }
 }
 
-/** Start a REAL outlet session — same contract as startAgencyRealSession. */
-export async function startOutletRealSession(email: string): Promise<void> {
+/**
+ * Start a REAL outlet session — same contract as startAgencyRealSession.
+ * Resolves the operator's real outlet identity + sub-role from their backend
+ * membership, seeds the client store with it, blanks the demo slices, and marks
+ * the session `real`. The resolved identity is persisted (localStorage) so the
+ * portal shell can re-apply it after each per-mount blank reset. On any
+ * resolution failure we fall back to the blank owner identity rather than
+ * blocking sign-in.
+ */
+export async function startOutletRealSession(profile: {
+  id: string;
+  email: string;
+  displayName: string;
+}): Promise<void> {
   setPortalSessionKind('real');
-  const normalized = email.trim().toLowerCase();
-  const [{ useStore }, { buildBlankPortalReset }] = await Promise.all([
-    import('@agency-portal/lib/store'),
-    import('@agency-portal/lib/demo-seed'),
-  ]);
+  const normalized = profile.email.trim().toLowerCase();
+  const [{ useStore }, { buildBlankPortalReset }, identityLib, outletSvc] =
+    await Promise.all([
+      import('@agency-portal/lib/store'),
+      import('@agency-portal/lib/demo-seed'),
+      import('@agency-portal/lib/outlet-identity'),
+      import('@/services/outlet'),
+    ]);
+
+  let identity: OutletSessionIdentity | null = null;
+  try {
+    const res = await outletSvc.fetchOutletMembershipsForUser(
+      profile.id,
+      kickToLogin,
+    );
+    const primary = identityLib.pickPrimaryMembership(res.data);
+    if (primary) identity = identityLib.identityFromMembership(primary);
+  } catch {
+    identity = null;
+  }
+
   const store = useStore.getState();
-  store.signIn(normalized, normalized);
+  store.signIn(profile.displayName || normalized, normalized);
   store.setRole('vendor');
-  store.setOutletSubRole('outlet_owner');
   useStore.setState(buildBlankPortalReset());
+
+  if (identity) {
+    const resolved = identity;
+    identityLib.saveOutletIdentity(resolved);
+    store.setOutletSubRole(resolved.subRole);
+    useStore.setState((st) => ({
+      outletOwner: {
+        ...st.outletOwner,
+        orgName: resolved.outletName,
+        email: normalized,
+      },
+      outletWorkspace: {
+        ...st.outletWorkspace,
+        outletName: resolved.outletName,
+      },
+    }));
+  } else {
+    identityLib.clearOutletIdentity();
+    store.setOutletSubRole('outlet_owner');
+  }
 }

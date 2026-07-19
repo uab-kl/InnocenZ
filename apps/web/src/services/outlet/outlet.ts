@@ -3,6 +3,7 @@ import { buildQueryParams } from "@/lib/build-query-params";
 import type {
 	OutletApiResponse,
 	OutletMembersApiResponse,
+	OutletMembershipsApiResponse,
 	OutletsApiResponse,
 	OutletsQueryParams,
 } from "./types";
@@ -60,6 +61,30 @@ export async function suspendOutlet(
 		`/outlet/${id}/suspend`,
 	);
 	return response.data;
+}
+
+/**
+ * All active outlet memberships for a single user, across every sub-role. Used
+ * to resolve the signed-in operator's own outlet + role at session start
+ * (mirrors fetchAgencyMembershipsForUser).
+ */
+export async function fetchOutletMembershipsForUser(
+	userId: string,
+	onRefreshFail: () => void,
+): Promise<OutletMembershipsApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		userIds: userId,
+		status: "active",
+	});
+	const response = await client.get<OutletMembershipsApiResponse>(
+		`/outlet/memberships${queryString}`,
+	);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
 }
 
 export async function fetchOutletMembers(
