@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { useOutletSubscription } from '@agency-portal/hooks/use-outlet-subscription';
 import { useStore } from '@agency-portal/lib/store';
 import {
   formatOutletPlanPrPickerRule,
@@ -153,10 +154,17 @@ function OutletSubscriptionPage() {
   const cancelPosIntegrationQuoteRequest = useStore(
     (s) => s.cancelPosIntegrationQuoteRequest,
   );
-  const billingHistory = useStore((s) => s.outletSubscriptionBilling);
+  const demoBilling = useStore((s) => s.outletSubscriptionBilling);
   const updateOutletPaymentCard = useStore((s) => s.updateOutletPaymentCard);
   const toast = useStore((s) => s.toast);
   const canEdit = outletCan(outletSubRole, 'editSettings');
+  // Real login → backend billing ledger + real POS-quote create (see the hook).
+  const backend = useOutletSubscription();
+  const [quoteSentLocal, setQuoteSentLocal] = useState(false);
+
+  // Billing history: real ledger when backed, demo invoices otherwise. The plan
+  // rate-card + payment card stay on demo data (see the hook's docstring).
+  const billingHistory = backend.backed ? backend.billingHistory : demoBilling;
 
   const outletName = tonightShiftOutletName(shifts);
   const currentPlan = getOutletSubscriptionPlan(outletOwner.subscriptionPlanId);
@@ -169,6 +177,34 @@ function OutletSubscriptionPage() {
       ),
     [posIntegrationQuoteRequests, outletName],
   );
+  // The outlet can't READ admin_requests (admin-only route), so in a real
+  // session the "request sent" pill is an optimistic local flag.
+  const quotePending = backend.backed ? quoteSentLocal : posQuotePending;
+
+  const handleRequestQuote = () => {
+    if (backend.backed) {
+      backend
+        .requestPosQuote({ email: outletOwner.email, phone: outletOwner.mobile })
+        .then(() => {
+          setQuoteSentLocal(true);
+          toast('POS integration request sent to admin', 'success');
+        })
+        .catch(() => toast('Could not send request — try again', 'warn'));
+      return;
+    }
+    requestPosIntegrationQuote();
+  };
+
+  const handleCancelQuote = () => {
+    if (backend.backed) {
+      // Admin still holds the request (no outlet delete route); clear the
+      // local indicator only.
+      setQuoteSentLocal(false);
+      toast('POS integration request withdrawn', 'info');
+      return;
+    }
+    cancelPosIntegrationQuoteRequest();
+  };
 
   const todayIso = isoKeyFromDate(new Date());
   const namedPrsToday = useMemo(
@@ -300,10 +336,10 @@ function OutletSubscriptionPage() {
             key={addon.id}
             addon={addon}
             canEdit={canEdit}
-            quotePending={posQuotePending}
+            quotePending={quotePending}
             contactLine={contactLine}
-            onRequestQuote={requestPosIntegrationQuote}
-            onCancelQuote={cancelPosIntegrationQuoteRequest}
+            onRequestQuote={handleRequestQuote}
+            onCancelQuote={handleCancelQuote}
           />
         ))}
       </div>
