@@ -2,6 +2,7 @@ import type {
 	AgencyRosterSlot,
 	RosterSlotStatus,
 } from "@agency-portal/lib/agency-demo";
+import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -30,6 +31,40 @@ function rosterStatusFromAssignment(
 		default:
 			return "scheduled";
 	}
+}
+
+// The backend shift `slot` is free text; only treat it as a time window when it
+// actually looks like one ("HH:MM"), so label-only slots don't get fake times.
+const TIME_WINDOW_RE = /\d{1,2}:\d{2}/;
+
+function shiftWindow(slot: string | null): { start: string; end: string } {
+	if (slot && TIME_WINDOW_RE.test(slot)) {
+		const { shiftStart, shiftEnd } = parseShiftWindow(slot);
+		return { start: shiftStart, end: shiftEnd };
+	}
+	return { start: "", end: "" };
+}
+
+function minutesOf(hhmm: string): number | null {
+	const [h, m] = hhmm.split(":").map(Number);
+	if (!Number.isFinite(h) || !Number.isFinite(m)) return null;
+	return h * 60 + m;
+}
+
+// Estimated payout so the payout filter has something to compare: window hours
+// (wrapping past midnight) times the shift's hourly rate. Undefined when the
+// window or rate can't be parsed.
+function estPayoutFor(
+	window: { start: string; end: string },
+	payPerHour: string,
+): number | undefined {
+	const start = minutesOf(window.start);
+	const end = minutesOf(window.end);
+	const pay = Number(payPerHour);
+	if (start == null || end == null || !Number.isFinite(pay)) return undefined;
+	let mins = end - start;
+	if (mins <= 0) mins += 24 * 60;
+	return (mins / 60) * pay;
 }
 
 /**
@@ -80,6 +115,7 @@ export function useRosterSlots(params: { fromDate: string; toDate: string }) {
 		for (const a of assignments) {
 			const shift = shiftById.get(a.shiftId);
 			if (!shift) continue;
+			const window = shiftWindow(shift.slot);
 			result.push({
 				id: a.id,
 				prId: a.prId,
@@ -88,8 +124,9 @@ export function useRosterSlots(params: { fromDate: string; toDate: string }) {
 				date: shift.shiftDate,
 				dateIso: shift.shiftDate,
 				shift: shift.slot ?? shift.eventName ?? "",
-				shiftStart: "",
-				shiftEnd: "",
+				shiftStart: window.start,
+				shiftEnd: window.end,
+				estPayout: estPayoutFor(window, shift.payPerHour),
 				status: rosterStatusFromAssignment(a.status),
 				checkedInAt: a.checkInAt ?? undefined,
 				checkedOutAt: a.checkOutAt ?? undefined,

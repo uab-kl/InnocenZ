@@ -4,7 +4,13 @@ import type {
 	AgencyRosterSlot,
 	RosterSlotStatus,
 } from "@agency-portal/lib/agency-demo";
-import type { RosterTimetableFilterState } from "@agency-portal/lib/roster-shift-filters";
+import { getPrScheduleState } from "@agency-portal/lib/roster-availability";
+import {
+	filterRosterShifts,
+	type RosterTimetableFilterState,
+	rosterShiftFiltersActive,
+	timetableSlotMatches,
+} from "@agency-portal/lib/roster-shift-filters";
 import {
 	dayColumnLabel,
 	weekDayIsos,
@@ -105,16 +111,18 @@ export function RosterBackendTimetable({
 		[outletsQuery.data],
 	);
 
-	// One slot per (PR, day); apply the outlet filter here so filtered slots read
-	// as free cells rather than vanishing rows.
+	const shiftFiltersOn = rosterShiftFiltersActive(filters);
+
+	// One slot per (PR, day). Filter matching is applied per-cell below via
+	// timetableSlotMatches, so a slot that fails the active filters reads as a
+	// free/assignable cell rather than removing the whole row.
 	const slotByPrDay = useMemo(() => {
 		const map = new Map<string, AgencyRosterSlot>();
 		for (const slot of roster) {
-			if (filters.outlet && slot.outlet !== filters.outlet) continue;
 			map.set(`${slot.prId}__${slot.dateIso}`, slot);
 		}
 		return map;
-	}, [roster, filters.outlet]);
+	}, [roster]);
 
 	// Open backend shifts (remaining capacity, not sealed) grouped by day.
 	const openShiftsByDay = useMemo(() => {
@@ -130,18 +138,38 @@ export function RosterBackendTimetable({
 		return map;
 	}, [shiftsQuery.data, outletNameById, filters.outlet]);
 
+	// Row filter mirrors the demo timetable's filterTimetablePrs, adapted to
+	// backend PRs: name/nickname search, the scheduled/free toggle, and — when
+	// any shift filter is active — keep only PRs with a matching slot or a free
+	// day. prType only offers "agency" and every backend PR is agency-scoped, so
+	// it never excludes anyone here.
 	const prRows = useMemo(() => {
 		const q = filters.nameQuery.trim().toLowerCase();
 		return (prsQuery.data?.data ?? [])
-			.filter((p) => {
-				if (!q) return true;
-				return (
-					p.name.toLowerCase().includes(q) ||
-					(p.nickname?.toLowerCase().includes(q) ?? false)
+			.filter((pr) => {
+				if (
+					q &&
+					!(
+						pr.name.toLowerCase().includes(q) ||
+						(pr.nickname?.toLowerCase().includes(q) ?? false)
+					)
+				) {
+					return false;
+				}
+				const weekSlots = roster.filter(
+					(s) => s.prId === pr.id && days.includes(s.dateIso),
 				);
+				const matchingSlots = filterRosterShifts(weekSlots, filters);
+				const hasFreeDay = days.some(
+					(d) => getPrScheduleState(pr.id, roster, d) === "free",
+				);
+				if (filters.showPrs === "scheduled") return matchingSlots.length > 0;
+				if (filters.showPrs === "free") return hasFreeDay;
+				if (shiftFiltersOn) return matchingSlots.length > 0 || hasFreeDay;
+				return true;
 			})
 			.sort((a, b) => a.name.localeCompare(b.name));
-	}, [prsQuery.data, filters.nameQuery]);
+	}, [prsQuery.data, roster, days, filters, shiftFiltersOn]);
 
 	const weekLabel = weekRangeLabel(weekStartIso);
 	const loading = prsQuery.isLoading || shiftsQuery.isLoading;
@@ -234,7 +262,15 @@ export function RosterBackendTimetable({
 											</div>
 										</th>
 										{days.map((dateIso) => {
-											const slot = slotByPrDay.get(`${pr.id}__${dateIso}`);
+											const rawSlot = slotByPrDay.get(`${pr.id}__${dateIso}`);
+											// A slot that fails the active filters reads as free, so
+											// the outlet/status/payout/time filters narrow the grid.
+											const slot =
+												rawSlot &&
+												(!shiftFiltersOn ||
+													timetableSlotMatches(rawSlot, filters))
+													? rawSlot
+													: undefined;
 											if (slot) {
 												const tone = toneFor(slot.status);
 												return (
