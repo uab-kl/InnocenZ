@@ -1,0 +1,181 @@
+/**
+ * PR session state — signs in against the backend auth API and exposes the
+ * logged-in user (`/auth/me`) to the app. Token persists across reloads on
+ * web via localStorage; native keeps it in memory for the dev session.
+ */
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { Platform } from 'react-native';
+import {
+  ApiError,
+  fetchMe,
+  fetchMemberships,
+  login,
+  phoneCandidates,
+  updateUserProfile,
+  uploadUserProfileImage,
+  type AgencyMembership,
+  type Me,
+  type ProfileUpdate,
+} from './api';
+
+const TOKEN_KEY = 'iz-pr-token';
+
+/** Minimal web storage surface — the RN tsconfig has no `dom` lib. */
+type WebStorage = {
+  getItem(key: string): string | null;
+  setItem(key: string, value: string): void;
+  removeItem(key: string): void;
+};
+
+function webStorage(): WebStorage | null {
+  if (Platform.OS !== 'web') return null;
+  return (globalThis as { localStorage?: WebStorage }).localStorage ?? null;
+}
+
+function readStoredToken(): string | null {
+  try {
+    return webStorage()?.getItem(TOKEN_KEY) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredToken(token: string | null) {
+  try {
+    if (token) webStorage()?.setItem(TOKEN_KEY, token);
+    else webStorage()?.removeItem(TOKEN_KEY);
+  } catch {
+    /* storage unavailable — in-memory session only */
+  }
+}
+
+type SessionState = {
+  me: Me | null;
+  token: string | null;
+  /** Active PR agency memberships from /agency/memberships (admin data). */
+  agencies: AgencyMembership[];
+  booting: boolean;
+  signIn: (identifier: string, password: string) => Promise<void>;
+  signOut: () => void;
+  updateProfile: (patch: ProfileUpdate) => Promise<void>;
+  uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
+  refreshMe: () => Promise<void>;
+};
+
+const SessionContext = createContext<SessionState | null>(null);
+
+export function SessionProvider({ children }: { children: React.ReactNode }) {
+  const [me, setMe] = useState<Me | null>(null);
+  const [token, setToken] = useState<string | null>(null);
+  const [agencies, setAgencies] = useState<AgencyMembership[]>([]);
+  const [booting, setBooting] = useState(true);
+
+  // Agencies come from the same membership rows the admin PR list shows.
+  useEffect(() => {
+    if (!token || !me) {
+      setAgencies([]);
+      return;
+    }
+    let cancelled = false;
+    fetchMemberships(token, me.id)
+      .then((rows) => {
+        if (!cancelled) setAgencies(rows.filter((r) => r.status === 'active'));
+      })
+      .catch(() => {
+        /* non-fatal — profile falls back to the agency-tie flag */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, me]);
+
+  useEffect(() => {
+    const stored = readStoredToken();
+    if (!stored) {
+      setBooting(false);
+      return;
+    }
+    setToken(stored);
+    fetchMe(stored)
+      .then(setMe)
+      .catch(() => {
+        writeStoredToken(null);
+        setToken(null);
+      })
+      .finally(() => setBooting(false));
+  }, []);
+
+  const signIn = useCallback(async (identifier: string, password: string) => {
+    const candidates = phoneCandidates(identifier);
+    let lastError: unknown = new ApiError('Invalid credentials', 401);
+    for (const candidate of candidates) {
+      try {
+        const result = await login(candidate, password);
+        const user = await fetchMe(result.accessToken);
+        writeStoredToken(result.accessToken);
+        setToken(result.accessToken);
+        setMe(user);
+        return;
+      } catch (error) {
+        lastError = error;
+        if (!(error instanceof ApiError) || (error.status !== 400 && error.status !== 401)) {
+          throw error;
+        }
+      }
+    }
+    throw lastError;
+  }, []);
+
+  const signOut = useCallback(() => {
+    writeStoredToken(null);
+    setToken(null);
+    setMe(null);
+  }, []);
+
+  const refreshMe = useCallback(async () => {
+    if (!token) return;
+    const user = await fetchMe(token);
+    setMe(user);
+  }, [token]);
+
+  const updateProfile = useCallback(
+    async (patch: ProfileUpdate) => {
+      if (!token || !me) throw new ApiError('Not signed in', 401);
+      const updated = await updateUserProfile(token, me.id, patch);
+      setMe(updated);
+    },
+    [token, me],
+  );
+
+  const uploadAvatar = useCallback(
+    async (file: Blob, filename = 'avatar.jpg') => {
+      if (!token || !me) throw new ApiError('Not signed in', 401);
+      const updated = await uploadUserProfileImage(token, me.id, file, filename);
+      setMe(updated);
+    },
+    [token, me],
+  );
+
+  const value = useMemo(
+    () => ({
+      me,
+      token,
+      agencies,
+      booting,
+      signIn,
+      signOut,
+      updateProfile,
+      uploadAvatar,
+      refreshMe,
+    }),
+    [me, token, agencies, booting, signIn, signOut, updateProfile, uploadAvatar, refreshMe],
+  );
+
+  return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;
+}
+
+export function useSession(): SessionState {
+  const ctx = useContext(SessionContext);
+  if (!ctx) throw new Error('useSession must be used inside SessionProvider');
+  return ctx;
+}

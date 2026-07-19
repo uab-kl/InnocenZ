@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "innocenz-admin", "dev"],
       "port": 3000
+    },
+    {
+      "name": "mobile",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/scripts/dev-mobile.mjs"],
+      "port": 8081
     }
   ]
 }

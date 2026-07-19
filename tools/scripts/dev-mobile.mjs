@@ -9,6 +9,25 @@ const isWin = process.platform === 'win32';
 const mobileOnly = process.argv.includes('--mobile-only');
 const children = [];
 
+// Minimal root .env reader (process env wins) — mirrors dev-web.mjs behaviour
+// without requiring the dotenv package at the workspace root.
+function readRootEnv() {
+  const vars = {};
+  for (const file of ['.env', '.env.local']) {
+    const envPath = path.join(root, file);
+    if (!fs.existsSync(envPath)) continue;
+    for (const line of fs.readFileSync(envPath, 'utf8').split(/\r?\n/)) {
+      const match = /^\s*([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)\s*$/.exec(line);
+      if (match) vars[match[1]] = match[2];
+    }
+  }
+  return { ...vars, ...process.env };
+}
+
+const rootEnv = readRootEnv();
+const backendPort = rootEnv.BACKEND_PORT?.trim() || '7777';
+const apiUrl = rootEnv.VITE_API_URL?.trim() || `http://localhost:${backendPort}/api`;
+
 function resolveBin(packageName, ...binParts) {
   const candidates = [
     path.join(root, 'node_modules', packageName, ...binParts),
@@ -61,7 +80,11 @@ if (!mobileOnly) {
   const backend = spawnProc(
     process.execPath,
     [nxCli, 'run', 'innocenz-backend:dev', '--tui=false'],
-    { stdio: ['ignore', 'pipe', 'pipe'] }
+    {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      // Backend env.ts reads PORT; root .env only defines BACKEND_PORT.
+      env: { PORT: backendPort, NODE_ENV: rootEnv.NODE_ENV ?? 'development' },
+    }
   );
 
   const prefixLine = (chunk, stream) => {
@@ -87,6 +110,9 @@ const expoCli = resolveBin('expo', 'bin', 'cli');
 const expo = spawnProc(process.execPath, [expoCli, 'start'], {
   cwd: mobileRoot,
   stdio: 'inherit',
+  // Inlined into the app bundle — points the PR app at the same backend the
+  // admin portal uses (see apps/mobile/src/lib/api.ts).
+  env: { EXPO_PUBLIC_API_URL: apiUrl },
 });
 
 expo.on('exit', (code) => shutdown(code ?? 0));
