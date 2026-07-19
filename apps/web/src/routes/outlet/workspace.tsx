@@ -8,6 +8,7 @@ import {
 import { OutletSection } from '@agency-portal/components/outlet/OutletSection';
 import { WorkspaceTierRatesEditor } from '@agency-portal/components/outlet/WorkspaceTierRatesEditor';
 import { PenaltyRulesEditor } from '@agency-portal/components/outlet/PenaltyRulesEditor';
+import { useOutletWorkspace } from '@agency-portal/hooks/use-outlet-workspace';
 import { useStore } from '@agency-portal/lib/store';
 import { outletCan } from '@agency-portal/lib/outlet-rbac';
 import { OutletDrinkMenuEditor } from '@agency-portal/components/outlet/OutletDrinkMenuEditor';
@@ -115,15 +116,20 @@ function OutletWorkspacePage() {
   const outletSubRole = useStore((s) => s.outletSubRole);
   const outletWorkspace = useStore((s) => s.outletWorkspace);
   const saveOutletWorkspace = useStore((s) => s.saveOutletWorkspace);
+  const toast = useStore((s) => s.toast);
   const canEdit = outletCan(outletSubRole, 'manageWorkspace');
-  const [draft, setDraft] = useState(outletWorkspace);
+  // Real login → backend workspace (rates persist via PUT); demo store otherwise.
+  const backend = useOutletWorkspace();
+  const source =
+    backend.backed && backend.workspace ? backend.workspace : outletWorkspace;
+  const [draft, setDraft] = useState(source);
   const draftDirtyRef = useRef(false);
 
   useEffect(() => {
     if (!draftDirtyRef.current) {
-      setDraft(outletWorkspace);
+      setDraft(source);
     }
-  }, [outletWorkspace]);
+  }, [source]);
 
   useEffect(() => {
     const scrollToServiceEntitlement = () => {
@@ -336,7 +342,16 @@ function OutletWorkspacePage() {
           type="button"
           className="iz-btn iz-btn-primary mt-5"
           onClick={() => {
-            saveOutletWorkspace(draft);
+            if (backend.backed) {
+              backend
+                .save(draft)
+                .then(() => toast('Workspace saved', 'success'))
+                .catch(() =>
+                  toast('Could not save workspace — try again', 'warn'),
+                );
+            } else {
+              saveOutletWorkspace(draft);
+            }
             draftDirtyRef.current = false;
           }}
         >
