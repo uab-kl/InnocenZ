@@ -1,7 +1,11 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useMemo, useRef, useState } from 'react';
+import { SecuritySettingsSheets } from '@agency-portal/components/auth/SecuritySettingsSheets';
+import {
+  IzCard,
+  IzPageTitle,
+  IzSectionLabel,
+} from '@agency-portal/components/iz/ui';
 import { AppTopbar } from '@agency-portal/components/Nav';
-import { useStore } from '@agency-portal/lib/store';
+import { useAgencyProfile } from '@agency-portal/hooks/use-agency-profile';
 import type {
   AgencyFinanceHead,
   AgencyOwnerSettings,
@@ -11,15 +15,11 @@ import {
   agencyWeeklyPvCount,
   ownedByAgency,
 } from '@agency-portal/lib/agency-demo';
-import { getPreviousWeekSundayIso } from '@agency-portal/lib/demo-clock';
 import { getAgencyManagedPvs } from '@agency-portal/lib/agency-payroll';
 import { agencyCan } from '@agency-portal/lib/agency-rbac';
-import {
-  IzCard,
-  IzPageTitle,
-  IzSectionLabel,
-} from '@agency-portal/components/iz/ui';
-import { SecuritySettingsSheets } from '@agency-portal/components/auth/SecuritySettingsSheets';
+import { getPreviousWeekSundayIso } from '@agency-portal/lib/demo-clock';
+import { useStore } from '@agency-portal/lib/store';
+import { createFileRoute } from '@tanstack/react-router';
 import {
   Building2,
   Camera,
@@ -30,6 +30,7 @@ import {
   User,
   X,
 } from 'lucide-react';
+import { useMemo, useRef, useState } from 'react';
 
 export const Route = createFileRoute('/agency/profile')({
   component: AgencyProfile,
@@ -53,6 +54,8 @@ function AgencyProfile() {
   const saveAgencyOwner = useStore((s) => s.saveAgencyOwner);
   const agencySubRole = useStore((s) => s.agencySubRole);
   const toast = useStore((s) => s.toast);
+  // Real login → overlay the real agency identity in read mode (see the hook).
+  const profile = useAgencyProfile();
   const [editing, setEditing] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
   const [draft, setDraft] = useState(agencyOwner);
@@ -61,8 +64,21 @@ function AgencyProfile() {
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const canEdit = agencyCan(agencySubRole, 'editSettings');
 
-  const owner = editing ? draft : agencyOwner;
-  const finance = editing ? financeDraft : agencyFinanceHead;
+  // Read mode overlays the real backend identity (overlay carries only defined
+  // fields, so demo values fill any gaps); editing uses the local draft. The
+  // backend has no agency-update endpoint, so edits do not persist there.
+  const owner =
+    !editing && profile.backed && profile.owner
+      ? { ...agencyOwner, ...profile.owner }
+      : editing
+        ? draft
+        : agencyOwner;
+  const finance =
+    !editing && profile.backed && profile.finance
+      ? { ...agencyFinanceHead, ...profile.finance }
+      : editing
+        ? financeDraft
+        : agencyFinanceHead;
   const payrollWeekStartIso = getPreviousWeekSundayIso();
   const issuedWeeklyPv = useMemo(
     () =>
@@ -88,9 +104,10 @@ function AgencyProfile() {
     setFinanceDraft((d) => ({ ...d, ...patch }));
 
   const startEdit = () => {
-    setDraft({ ...agencyOwner });
-    setFinanceDraft({ ...agencyFinanceHead });
-    setInviteEmail(agencyFinanceHead.email);
+    // Seed the edit form from the real identity when available.
+    setDraft({ ...agencyOwner, ...(profile.owner ?? {}) });
+    setFinanceDraft({ ...agencyFinanceHead, ...(profile.finance ?? {}) });
+    setInviteEmail(profile.finance?.email ?? agencyFinanceHead.email);
     setEditing(true);
   };
 
