@@ -9,7 +9,7 @@ import {
 	rosterSlotDisplayPayout,
 } from "@agency-portal/components/agency/RosterShiftTable";
 import { RosterTimetableFilters } from "@agency-portal/components/agency/RosterTimetableFilters";
-import { RosterWeeklyTimetable } from "@agency-portal/components/agency/RosterWeeklyTimetable";
+import { RosterBackendTimetable } from "@agency-portal/components/agency/RosterBackendTimetable";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import {
 	LabelWithIcon,
@@ -559,14 +559,16 @@ function AgencyRoster() {
 							shiftCount={timetableShiftCount}
 							totalShifts={weekShiftTotal}
 						/>
-						<RosterWeeklyTimetable
+						<RosterBackendTimetable
 							weekStartIso={weekStartIso}
 							roster={agencyRoster}
-							agencyPRs={agencyPRs}
 							filters={timetableFilters}
 							canAssign={canAssign}
 							onEditSlot={openEdit}
 							onWeekChange={setPlanningDate}
+							onAssign={(shiftId, prId) =>
+								rosterMut.assign.mutate({ shiftId, prId })
+							}
 							todayIso={DEFAULT_ROSTER_DATE_ISO}
 						/>
 					</div>
