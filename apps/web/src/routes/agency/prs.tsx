@@ -14,10 +14,10 @@ import {
   collectAgencyPrLanguages,
   languagesFromPr,
   resolveAgencyPrPhoto,
-  scopeToAgency,
   sortAgencyPrsByName,
 } from '@agency-portal/lib/agency-demo';
 import { agencyCan } from '@agency-portal/lib/agency-rbac';
+import { useAgencyPrs } from '@agency-portal/hooks/use-agency-prs';
 import {
   IzCard,
   IzCardTitle,
@@ -81,19 +81,18 @@ export const Route = createFileRoute('/agency/prs')({
 function AgencyManagePRs() {
   const { pr: prFromSearch } = Route.useSearch();
   const navigate = useNavigate({ from: '/agency/prs' });
-  const allAgencyPRs = useStore((s) => s.agencyPRs);
-  const activeAgencyId = useStore((s) => s.activeAgencyId);
-  const agencyPRs = useMemo(
-    () => scopeToAgency(allAgencyPRs, activeAgencyId),
-    [allAgencyPRs, activeAgencyId],
-  );
+  // Manage-PR reads real backend PRs (mapped to the demo shape) and writes the
+  // backend-backed actions; demo-only sections below still read the demo store.
+  const {
+    prs: agencyPRs,
+    saveProfile: updateAgencyPrProfile,
+    suspend: suspendAgencyPr,
+    detach: detachAgencyPr,
+  } = useAgencyPrs();
   const shiftHistory = useStore((s) => s.shiftHistory);
   const ratings = useStore((s) => s.ratings);
   const agencySubRole = useStore((s) => s.agencySubRole);
-  const suspendAgencyPr = useStore((s) => s.suspendAgencyPr);
-  const detachAgencyPr = useStore((s) => s.detachAgencyPr);
   const requestAgencyPrDetach = useStore((s) => s.requestAgencyPrDetach);
-  const updateAgencyPrProfile = useStore((s) => s.updateAgencyPrProfile);
   const rawPenaltyRules = useStore((s) => s.outletWorkspace.penaltyRules);
   const penalizedPrs = useMemo(() => {
     const rules = normalizePenaltyRules(rawPenaltyRules);

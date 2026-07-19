@@ -60,6 +60,18 @@ export interface CreatePrPersonnelInput {
 	icNo?: string;
 }
 
+// All fields optional; `status` (active/inactive/pending/suspended) is settable
+// on update but not on create. Agency callers cannot move a PR between agencies.
+export interface UpdatePrPersonnelInput {
+	name?: string;
+	nickname?: string;
+	tier?: string;
+	status?: string;
+	phone?: string;
+	email?: string;
+	icNo?: string;
+}
+
 export async function fetchPrPersonnel(
 	params: PrPersonnelQueryParams = {},
 	onRefreshFail: () => void,
@@ -95,4 +107,26 @@ export async function createPrPersonnel(
 		data: PrPersonnel;
 	}>("/pr", input);
 	return response.data.data;
+}
+
+export async function updatePrPersonnel(
+	id: string,
+	input: UpdatePrPersonnelInput,
+	onRefreshFail: () => void,
+): Promise<PrPersonnel> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<{
+		success: boolean;
+		message: string;
+		data: PrPersonnel;
+	}>(`/pr/${id}`, input);
+	return response.data.data;
+}
+
+export async function removePrPersonnel(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<void> {
+	const client = getClient(onRefreshFail);
+	await client.delete(`/pr/${id}`);
 }
