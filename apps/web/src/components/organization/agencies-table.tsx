@@ -3,13 +3,11 @@ import {
 	Ban,
 	Building2,
 	CheckCircle2,
-	ChevronDown,
-	ChevronRight,
+	Eye,
 	Loader2,
 	RefreshCw,
 	Search,
 } from "lucide-react";
-import { Fragment, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -37,8 +35,6 @@ import {
 } from "@/components/ui/table";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Agency, AgencyPagination } from "@/services/agency";
-import { AgencyDetails } from "./agency-details";
-import { OrgMembersPanel } from "./org-members-panel";
 import {
 	ORG_STATUSES,
 	type OrgStatusFilter,
@@ -63,6 +59,7 @@ interface AgenciesTableProps {
 	onRetry: () => void;
 	onApprove: (id: string) => void;
 	onSuspend: (id: string) => void;
+	onSelect: (agency: Agency) => void;
 	actionId: string | null;
 }
 
@@ -83,9 +80,9 @@ export function AgenciesTable({
 	onRetry,
 	onApprove,
 	onSuspend,
+	onSelect,
 	actionId,
 }: AgenciesTableProps) {
-	const [expandedId, setExpandedId] = useState<string | null>(null);
 	const showLoading = isLoading && agencies.length === 0;
 
 	return (
@@ -100,8 +97,8 @@ export function AgenciesTable({
 							)}
 						</CardTitle>
 						<CardDescription>
-							Expand a row to see linked PRs. Search agencies or filter by
-							status.
+							Click a row to open agency details and linked PRs. Search agencies
+							or filter by status.
 						</CardDescription>
 					</div>
 
@@ -191,120 +188,105 @@ export function AgenciesTable({
 								</TableRow>
 							) : (
 								agencies.map((agency) => {
-									const expanded = expandedId === agency.id;
 									const busy = actionId === agency.id;
 									return (
-										<Fragment key={agency.id}>
-											<TableRow>
-												<TableCell>
-													<Button
-														variant="ghost"
-														size="icon"
-														className="h-8 w-8"
-														aria-label={
-															expanded ? "Collapse PR list" : "Expand PR list"
-														}
-														onClick={() =>
-															setExpandedId(expanded ? null : agency.id)
-														}
-													>
-														{expanded ? (
-															<ChevronDown className="h-4 w-4" />
-														) : (
-															<ChevronRight className="h-4 w-4" />
-														)}
-													</Button>
-												</TableCell>
-												<TableCell>
-													<div className="font-medium">{agency.name}</div>
-													<div className="text-xs text-muted-foreground">
-														SSM {agency.ssmNo}
-													</div>
-												</TableCell>
-												<TableCell className="font-mono text-sm">
-													{agency.agencyCode}
-												</TableCell>
-												<TableCell>
-													<div className="text-sm">
-														{agency.contactName || "—"}
-													</div>
-													<div className="text-xs text-muted-foreground">
-														{[agency.contactEmail, agency.contactPhone]
-															.filter(Boolean)
-															.join(" · ") || "—"}
-													</div>
-												</TableCell>
-												<TableCell>
-													<Badge
-														variant="outline"
-														className={orgStatusBadgeColors[agency.status]}
-													>
-														{orgStatusLabels[agency.status]}
-													</Badge>
-												</TableCell>
-												<TableCell className="text-sm text-muted-foreground">
-													{formatDate(agency.createdAt)}
-												</TableCell>
-												<TableCell>
-													<div className="flex flex-wrap gap-2">
-														{agency.status === "pending_review" && (
-															<Button
-																size="sm"
-																disabled={busy}
-																onClick={() => onApprove(agency.id)}
-															>
-																{busy ? (
-																	<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-																)}
-																Approve
-															</Button>
-														)}
-														{agency.status === "active" && (
-															<Button
-																size="sm"
-																variant="outline"
-																disabled={busy}
-																onClick={() => onSuspend(agency.id)}
-															>
-																{busy ? (
-																	<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<Ban className="mr-1 h-3.5 w-3.5" />
-																)}
-																Suspend
-															</Button>
-														)}
-														{agency.status === "suspended" && (
-															<Button
-																size="sm"
-																disabled={busy}
-																onClick={() => onApprove(agency.id)}
-															>
-																{busy ? (
-																	<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
-																) : (
-																	<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
-																)}
-																Reactivate
-															</Button>
-														)}
-													</div>
-												</TableCell>
-											</TableRow>
-											{expanded && (
-												<TableRow>
-													<TableCell
-														colSpan={7}
-														className="space-y-4 bg-muted/20 px-6 py-4"
-													>
-														<AgencyDetails agency={agency} />
-														<OrgMembersPanel orgId={agency.id} kind="agency" />
-													</TableCell>
-												</TableRow>
-											)}
-										</Fragment>
+										<TableRow
+											key={agency.id}
+											className="cursor-pointer"
+											onClick={() => onSelect(agency)}
+										>
+											<TableCell>
+												<Button
+													variant="ghost"
+													size="icon"
+													className="h-8 w-8"
+													aria-label="View agency details"
+													onClick={(e) => {
+														e.stopPropagation();
+														onSelect(agency);
+													}}
+												>
+													<Eye className="h-4 w-4" />
+												</Button>
+											</TableCell>
+											<TableCell>
+												<div className="text-base font-medium">{agency.name}</div>
+												<div className="text-sm text-muted-foreground">
+													SSM {agency.ssmNo}
+												</div>
+											</TableCell>
+											<TableCell className="font-mono text-base">
+												{agency.agencyCode}
+											</TableCell>
+											<TableCell>
+												<div className="text-base">
+													{agency.contactName || "—"}
+												</div>
+												<div className="text-sm text-muted-foreground">
+													{[agency.contactEmail, agency.contactPhone]
+														.filter(Boolean)
+														.join(" · ") || "—"}
+												</div>
+											</TableCell>
+											<TableCell>
+												<Badge
+													variant="outline"
+													className={`text-sm ${orgStatusBadgeColors[agency.status]}`}
+												>
+													{orgStatusLabels[agency.status]}
+												</Badge>
+											</TableCell>
+											<TableCell className="text-base text-muted-foreground">
+												{formatDate(agency.createdAt)}
+											</TableCell>
+											<TableCell onClick={(e) => e.stopPropagation()}>
+												<div className="flex flex-wrap gap-2">
+													{agency.status === "pending_review" && (
+														<Button
+															size="sm"
+															disabled={busy}
+															onClick={() => onApprove(agency.id)}
+														>
+															{busy ? (
+																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+															) : (
+																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+															)}
+															Approve
+														</Button>
+													)}
+													{agency.status === "active" && (
+														<Button
+															size="sm"
+															variant="outline"
+															disabled={busy}
+															onClick={() => onSuspend(agency.id)}
+														>
+															{busy ? (
+																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+															) : (
+																<Ban className="mr-1 h-3.5 w-3.5" />
+															)}
+															Suspend
+														</Button>
+													)}
+													{agency.status === "suspended" && (
+														<Button
+															size="sm"
+															disabled={busy}
+															onClick={() => onApprove(agency.id)}
+														>
+															{busy ? (
+																<Loader2 className="mr-1 h-3.5 w-3.5 animate-spin" />
+															) : (
+																<CheckCircle2 className="mr-1 h-3.5 w-3.5" />
+															)}
+															Reactivate
+														</Button>
+													)}
+												</div>
+											</TableCell>
+										</TableRow>
 									);
 								})
 							)}
@@ -313,7 +295,7 @@ export function AgenciesTable({
 				</div>
 
 				{pagination && pagination.totalCount > 0 && (
-					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 						<div>
 							Showing{" "}
 							<span className="font-medium">

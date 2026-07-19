@@ -1,5 +1,9 @@
-CREATE TYPE "main"."payment_voucher_status" AS ENUM('pending_review', 'sent', 'signed', 'paid', 'disputed');--> statement-breakpoint
-CREATE TABLE "main"."payment_voucher_line" (
+DO $$ BEGIN
+ CREATE TYPE "main"."payment_voucher_status" AS ENUM('pending_review', 'sent', 'signed', 'paid', 'disputed');
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;--> statement-breakpoint
+CREATE TABLE IF NOT EXISTS "main"."payment_voucher_line" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"voucher_id" uuid NOT NULL,
 	"line_date" date,
@@ -11,7 +15,7 @@ CREATE TABLE "main"."payment_voucher_line" (
 	"sort_order" integer DEFAULT 0 NOT NULL
 );
 --> statement-breakpoint
-CREATE TABLE "main"."payment_voucher" (
+CREATE TABLE IF NOT EXISTS "main"."payment_voucher" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"agency_id" uuid NOT NULL,
 	"pr_id" uuid,
@@ -41,6 +45,18 @@ CREATE TABLE "main"."payment_voucher" (
 	"updated_by" varchar NOT NULL
 );
 --> statement-breakpoint
-ALTER TABLE "main"."payment_voucher_line" ADD CONSTRAINT "payment_voucher_line_voucher_id_payment_voucher_id_fk" FOREIGN KEY ("voucher_id") REFERENCES "main"."payment_voucher"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "main"."payment_voucher" ADD CONSTRAINT "payment_voucher_agency_id_agency_id_fk" FOREIGN KEY ("agency_id") REFERENCES "main"."agency"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "main"."payment_voucher" ADD CONSTRAINT "payment_voucher_pr_id_pr_id_fk" FOREIGN KEY ("pr_id") REFERENCES "main"."pr"("id") ON DELETE set null ON UPDATE no action;
+DO $$ BEGIN
+ ALTER TABLE "main"."payment_voucher_line" ADD CONSTRAINT "payment_voucher_line_voucher_id_payment_voucher_id_fk" FOREIGN KEY ("voucher_id") REFERENCES "main"."payment_voucher"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "main"."payment_voucher" ADD CONSTRAINT "payment_voucher_agency_id_agency_id_fk" FOREIGN KEY ("agency_id") REFERENCES "main"."agency"("id") ON DELETE cascade ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;--> statement-breakpoint
+DO $$ BEGIN
+ ALTER TABLE "main"."payment_voucher" ADD CONSTRAINT "payment_voucher_pr_id_pr_id_fk" FOREIGN KEY ("pr_id") REFERENCES "main"."pr"("id") ON DELETE set null ON UPDATE no action;
+EXCEPTION
+ WHEN duplicate_object THEN null;
+END $$;

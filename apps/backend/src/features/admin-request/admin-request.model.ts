@@ -3,11 +3,30 @@ import { numeric, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
 import { subscriberTypeEnum } from '@/features/member-subscription/member-subscription.model.js';
 
-export const adminRequestTypeValues = ['pos_integration_quote', 'plan_change', 'contact', 'other'] as const;
+// 'pos_integration_quote' = outlet "Integrate with POS → Request admin quote";
+// 'custom_renegotiation' = agency Custom (151+ PV) "Renegotiate Price".
+// These two are the Plan Request inbox; 'plan_change' has its own page.
+export const adminRequestTypeValues = [
+  'pos_integration_quote',
+  'custom_renegotiation',
+  'plan_change',
+  'contact',
+  'other',
+] as const;
 export type AdminRequestType = (typeof adminRequestTypeValues)[number];
 export const adminRequestTypeEnum = MainSchema.enum('admin_request_type', adminRequestTypeValues);
 
-export const adminRequestStatusValues = ['pending', 'contacted', 'resolved'] as const;
+// Plan-change statuses: outlet switches wait as 'pending' until the admin marks
+// them 'approved' or 'declined'; agency switches are applied automatically by PR
+// count and are recorded as 'direct' (no approval step).
+export const adminRequestStatusValues = [
+  'pending',
+  'contacted',
+  'resolved',
+  'declined',
+  'direct',
+  'approved',
+] as const;
 export type AdminRequestStatus = (typeof adminRequestStatusValues)[number];
 export const adminRequestStatusEnum = MainSchema.enum('admin_request_status', adminRequestStatusValues);
 
@@ -46,7 +65,10 @@ export type AdminRequest = typeof AdminRequestTable.$inferSelect;
 export type AdminRequestInsertType = typeof AdminRequestTable.$inferInsert;
 
 export type AdminRequestFilter = {
-  type?: AdminRequestType;
+  /** One type, or a whitelist of types (e.g. the Plan Request inbox pair). */
+  type?: AdminRequestType | AdminRequestType[];
+  /** Exclude a single type (e.g. plan_change, which has its own page). */
+  excludeType?: AdminRequestType;
   status?: AdminRequestStatus;
   subscriberType?: 'outlet' | 'agency';
   /** Match rows requested on any of these calendar days (createdAt). */

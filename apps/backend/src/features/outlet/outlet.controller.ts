@@ -151,7 +151,7 @@ export class OutletControllerClass {
       const outletId = paramId(req.params.id);
       const existing = await this.outletRepository.getById(outletId);
       if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      const members = await this.outletMemberRepository.listByOutlet(outletId);
+      const members = await this.outletMemberRepository.listByOutletWithUser(outletId);
       res.status(200).json({ success: true, message: 'OK', data: members });
     } catch (error) {
       logger.error('[OutletController.listMembers] Error:', error);

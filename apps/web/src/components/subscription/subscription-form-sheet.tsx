@@ -1,6 +1,6 @@
 import { useForm } from "@tanstack/react-form";
 import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, CreditCard, Loader2, Plus, X } from "lucide-react";
+import { AlertCircle, Check, CreditCard, Loader2, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,7 +27,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { useAuth } from "@/lib/auth-context";
-import { formatRoleLabel, getErrorMessage } from "@/lib/utils";
+import { cn, formatRoleLabel, getErrorMessage } from "@/lib/utils";
 import { fetchRoles } from "@/services/rbac";
 import type { RbacRole } from "@/services/rbac/types";
 import type { Subscription } from "@/services/subscription";
@@ -151,7 +151,7 @@ export function SubscriptionFormSheet({
 
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>
-			<SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-md">
+			<SheetContent className="flex w-full flex-col gap-0 overflow-hidden p-0 sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
 				<SheetHeader className="shrink-0 border-b border-border">
 					<div className="flex items-start gap-3 pr-8">
 						<div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-(--lavender-soft)/50 bg-(--lavender-soft)/20 text-lavender">
@@ -179,7 +179,7 @@ export function SubscriptionFormSheet({
 					}}
 				>
 					<div className="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4">
-						<FieldGroup className="gap-6">
+						<FieldGroup className="gap-4">
 							<form.Field name="name">
 								{(field) => {
 									const isInvalid =
@@ -208,8 +208,8 @@ export function SubscriptionFormSheet({
 
 							<Field>
 								<FieldLabel>Roles</FieldLabel>
-								<p className="mb-3 text-sm text-muted-foreground">
-									Select which roles can use this plan.
+								<p className="text-sm text-muted-foreground">
+									Tap the roles that can use this plan.
 								</p>
 								{rolesQuery.isLoading ? (
 									<div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -226,7 +226,7 @@ export function SubscriptionFormSheet({
 									</p>
 								) : (
 									<SubscriptionRolePicker
-										roleRows={roleRows}
+										selected={roleRows.filter(Boolean)}
 										availableRoles={availableRoles}
 										disabled={isSubmitting}
 										onChange={syncRoleRows}
@@ -234,64 +234,66 @@ export function SubscriptionFormSheet({
 								)}
 							</Field>
 
-							<form.Field name="price">
-								{(field) => {
-									const isInvalid =
-										field.state.meta.isTouched && field.state.value < 0;
-									return (
-										<Field data-invalid={isInvalid}>
-											<FieldLabel htmlFor="sub-price">Price (RM)</FieldLabel>
-											<Input
-												id="sub-price"
-												type="number"
-												min="0"
-												step="0.01"
-												placeholder="0.00"
+							<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+								<form.Field name="price">
+									{(field) => {
+										const isInvalid =
+											field.state.meta.isTouched && field.state.value < 0;
+										return (
+											<Field data-invalid={isInvalid}>
+												<FieldLabel htmlFor="sub-price">Price (RM)</FieldLabel>
+												<Input
+													id="sub-price"
+													type="number"
+													min="0"
+													step="0.01"
+													placeholder="0.00"
+													value={field.state.value}
+													onBlur={field.handleBlur}
+													onChange={(e) =>
+														field.handleChange(Number(e.target.value))
+													}
+													disabled={isSubmitting}
+													aria-invalid={isInvalid}
+												/>
+												{isInvalid && (
+													<FieldError
+														errors={[{ message: "Price must be 0 or more" }]}
+													/>
+												)}
+											</Field>
+										);
+									}}
+								</form.Field>
+
+								<form.Field name="billingCycle">
+									{(field) => (
+										<Field>
+											<FieldLabel htmlFor="sub-billing-cycle">
+												Billing Cycle
+											</FieldLabel>
+											<Select
 												value={field.state.value}
-												onBlur={field.handleBlur}
-												onChange={(e) =>
-													field.handleChange(Number(e.target.value))
+												onValueChange={(value) =>
+													field.handleChange(
+														value as "weekly" | "monthly" | "annually",
+													)
 												}
 												disabled={isSubmitting}
-												aria-invalid={isInvalid}
-											/>
-											{isInvalid && (
-												<FieldError
-													errors={[{ message: "Price must be 0 or more" }]}
-												/>
-											)}
+											>
+												<SelectTrigger id="sub-billing-cycle">
+													<SelectValue placeholder="Select billing cycle" />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="weekly">Weekly</SelectItem>
+													<SelectItem value="monthly">Monthly</SelectItem>
+													<SelectItem value="annually">Annually</SelectItem>
+												</SelectContent>
+											</Select>
 										</Field>
-									);
-								}}
-							</form.Field>
-
-							<form.Field name="billingCycle">
-								{(field) => (
-									<Field>
-										<FieldLabel htmlFor="sub-billing-cycle">
-											Billing Cycle
-										</FieldLabel>
-										<Select
-											value={field.state.value}
-											onValueChange={(value) =>
-												field.handleChange(
-													value as "weekly" | "monthly" | "annually",
-												)
-											}
-											disabled={isSubmitting}
-										>
-											<SelectTrigger id="sub-billing-cycle">
-												<SelectValue placeholder="Select billing cycle" />
-											</SelectTrigger>
-											<SelectContent>
-												<SelectItem value="weekly">Weekly</SelectItem>
-												<SelectItem value="monthly">Monthly</SelectItem>
-												<SelectItem value="annually">Annually</SelectItem>
-											</SelectContent>
-										</Select>
-									</Field>
-								)}
-							</form.Field>
+									)}
+								</form.Field>
+							</div>
 
 							<form.Field name="coverage">
 								{(field) => {
@@ -354,7 +356,7 @@ export function SubscriptionFormSheet({
 													disabled={isSubmitting}
 												>
 													<SelectTrigger
-														className="flex-1"
+														className="w-36"
 														aria-label="Coverage period"
 													>
 														<SelectValue />
@@ -371,7 +373,7 @@ export function SubscriptionFormSheet({
 													</SelectContent>
 												</Select>
 											</div>
-											<p className="text-xs text-muted-foreground">
+											<p className="text-sm text-muted-foreground">
 												{field.state.value ? (
 													<>
 														Shown on the plan as{" "}
@@ -392,7 +394,7 @@ export function SubscriptionFormSheet({
 							<form.Field name="status">
 								{(field) => (
 									<Field>
-										<div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
+										<div className="flex items-center justify-between gap-4 rounded-lg border border-border px-4 py-3">
 											<div className="space-y-1">
 												<FieldLabel htmlFor="sub-status">
 													Active Status
@@ -456,84 +458,51 @@ export function SubscriptionFormSheet({
 }
 
 function SubscriptionRolePicker({
-	roleRows,
+	selected,
 	availableRoles,
 	disabled,
 	onChange,
 }: {
-	roleRows: string[];
+	selected: string[];
 	availableRoles: RbacRole[];
 	disabled: boolean;
 	onChange: (rows: string[]) => void;
 }) {
-	const selectedElsewhere = (roleId: string, rowIndex: number) =>
-		roleRows.some((id, index) => index !== rowIndex && id === roleId);
-
-	const canAddRow = roleRows.length < availableRoles.length;
+	const toggle = (roleId: string) => {
+		onChange(
+			selected.includes(roleId)
+				? selected.filter((id) => id !== roleId)
+				: [...selected, roleId],
+		);
+	};
 
 	return (
-		<div className="space-y-2">
-			{roleRows.map((roleId, index) => {
-				const options = availableRoles.filter(
-					(role) =>
-						role.roleId === roleId || !selectedElsewhere(role.roleId, index),
-				);
-
+		<div className="flex flex-wrap gap-2">
+			{availableRoles.map((role) => {
+				const on = selected.includes(role.roleId);
 				return (
-					<div key={`role-row-${index}`} className="flex items-center gap-2">
-						<Select
-							value={roleId || undefined}
-							onValueChange={(value) => {
-								const next = [...roleRows];
-								next[index] = value;
-								onChange(next);
-							}}
-							disabled={disabled}
-						>
-							<SelectTrigger
-								className="flex-1"
-								aria-label={`Role ${index + 1}`}
-							>
-								<SelectValue placeholder="Select role" />
-							</SelectTrigger>
-							<SelectContent>
-								{options.map((role) => (
-									<SelectItem key={role.roleId} value={role.roleId}>
-										{formatRoleLabel(role.roleName)}
-									</SelectItem>
-								))}
-							</SelectContent>
-						</Select>
-
-						<Button
-							type="button"
-							variant="outline"
-							size="icon"
-							className="shrink-0"
-							disabled={disabled || roleRows.length === 1}
-							onClick={() => {
-								const next = roleRows.filter((_, i) => i !== index);
-								onChange(next.length > 0 ? next : [""]);
-							}}
-							aria-label="Remove role"
-						>
-							<X className="h-4 w-4" />
-						</Button>
-					</div>
+					<button
+						key={role.roleId}
+						type="button"
+						disabled={disabled}
+						aria-pressed={on}
+						onClick={() => toggle(role.roleId)}
+						className={cn(
+							"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
+							on
+								? "border-(--lavender-soft) bg-(--lavender-soft)/25 text-lavender"
+								: "border-border text-muted-foreground hover:border-(--lavender-soft)/60 hover:text-foreground",
+						)}
+					>
+						{on ? (
+							<Check className="h-3.5 w-3.5" />
+						) : (
+							<Plus className="h-3.5 w-3.5" />
+						)}
+						{formatRoleLabel(role.roleName)}
+					</button>
 				);
 			})}
-
-			<Button
-				type="button"
-				variant="outline"
-				size="sm"
-				className="w-full"
-				disabled={disabled || !canAddRow}
-				onClick={() => onChange([...roleRows, ""])}
-			>
-				<Plus className="mr-2 h-4 w-4" />
-				Add role
-			</Button>
 		</div>
 	);
 }

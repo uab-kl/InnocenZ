@@ -125,28 +125,63 @@
       "idx": 17,
       "version": "7",
       "when": 1784500000001,
-      "tag": "0017_add_pr_and_admin_request_plan",
+      "tag": "0017_admin_request_declined_status",
       "breakpoints": true
     },
     {
       "idx": 18,
       "version": "7",
       "when": 1784500000002,
-      "tag": "0018_add_shift",
+      "tag": "0018_admin_request_direct_approved_status",
       "breakpoints": true
     },
     {
       "idx": 19,
       "version": "7",
       "when": 1784500000003,
-      "tag": "0019_add_payment_voucher",
+      "tag": "0019_admin_request_custom_renegotiation_type",
       "breakpoints": true
     },
     {
       "idx": 20,
       "version": "7",
       "when": 1784500000004,
-      "tag": "0020_add_shift_assignment",
+      "tag": "0020_user_profile_pr_showcase",
+      "breakpoints": true
+    },
+    {
+      "idx": 21,
+      "version": "7",
+      "when": 1784500000005,
+      "tag": "0021_outlet_logo_image",
+      "breakpoints": true
+    },
+    {
+      "idx": 22,
+      "version": "7",
+      "when": 1784500000006,
+      "tag": "0022_add_pr_and_admin_request_plan",
+      "breakpoints": true
+    },
+    {
+      "idx": 23,
+      "version": "7",
+      "when": 1784500000007,
+      "tag": "0023_add_shift",
+      "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1784500000008,
+      "tag": "0024_add_payment_voucher",
+      "breakpoints": true
+    },
+    {
+      "idx": 25,
+      "version": "7",
+      "when": 1784500000009,
+      "tag": "0025_add_shift_assignment",
       "breakpoints": true
     }
   ]

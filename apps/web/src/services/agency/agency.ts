@@ -5,8 +5,8 @@ import type {
 	AgenciesQueryParams,
 	AgencyApiResponse,
 	AgencyMembersApiResponse,
-	AgencyMembersQueryParams,
 	AgencyMembershipsApiResponse,
+	AgencyMembersQueryParams,
 } from "./types";
 
 export async function fetchAgencies(
@@ -21,7 +21,9 @@ export async function fetchAgencies(
 		page: params.page,
 		pageSize: params.pageSize,
 	});
-	const response = await client.get<AgenciesApiResponse>(`/agency${queryString}`);
+	const response = await client.get<AgenciesApiResponse>(
+		`/agency${queryString}`,
+	);
 	return {
 		success: response.data.success,
 		message: response.data.message,
@@ -30,12 +32,23 @@ export async function fetchAgencies(
 	};
 }
 
+export async function fetchAgencyById(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<AgencyApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<AgencyApiResponse>(`/agency/${id}`);
+	return response.data;
+}
+
 export async function approveAgency(
 	id: string,
 	onRefreshFail: () => void,
 ): Promise<AgencyApiResponse> {
 	const client = getClient(onRefreshFail);
-	const response = await client.patch<AgencyApiResponse>(`/agency/${id}/approve`);
+	const response = await client.patch<AgencyApiResponse>(
+		`/agency/${id}/approve`,
+	);
 	return response.data;
 }
 
@@ -44,7 +57,9 @@ export async function suspendAgency(
 	onRefreshFail: () => void,
 ): Promise<AgencyApiResponse> {
 	const client = getClient(onRefreshFail);
-	const response = await client.patch<AgencyApiResponse>(`/agency/${id}/suspend`);
+	const response = await client.patch<AgencyApiResponse>(
+		`/agency/${id}/suspend`,
+	);
 	return response.data;
 }
 

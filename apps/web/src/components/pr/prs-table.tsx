@@ -65,6 +65,7 @@ interface PrsTableProps {
 	onAgencyFilterChange: (value: string) => void;
 	onPageChange: (page: number) => void;
 	onRetry: () => void;
+	onSelect: (user: PrUser) => void;
 }
 
 export function PrsTable({
@@ -85,6 +86,7 @@ export function PrsTable({
 	onAgencyFilterChange,
 	onPageChange,
 	onRetry,
+	onSelect,
 }: PrsTableProps) {
 	const showLoading = isLoading && users.length === 0;
 
@@ -193,42 +195,46 @@ export function PrsTable({
 								</TableRow>
 							) : (
 								users.map((user) => (
-									<TableRow key={user.id}>
-										<TableCell className="font-medium">
+									<TableRow
+										key={user.id}
+										className="cursor-pointer"
+										onClick={() => onSelect(user)}
+									>
+										<TableCell className="text-base font-medium">
 											{user.displayName}
 										</TableCell>
 										<TableCell>
 											{user.legalName ? (
-												<div className="font-medium">{user.legalName}</div>
+												<div className="text-base font-medium">{user.legalName}</div>
 											) : (
-												<span className="text-sm text-muted-foreground">—</span>
+												<span className="text-base text-muted-foreground">—</span>
 											)}
 											{user.idNo && (
-												<div className="font-mono text-xs text-muted-foreground">
+												<div className="font-mono text-sm text-muted-foreground">
 													{user.idType ? `${user.idType} · ` : ""}
 													{user.idNo}
 												</div>
 											)}
 										</TableCell>
-										<TableCell>{user.email || "—"}</TableCell>
-										<TableCell>{user.phoneNum || "—"}</TableCell>
+										<TableCell className="text-base">{user.email || "—"}</TableCell>
+										<TableCell className="text-base">{user.phoneNum || "—"}</TableCell>
 										<TableCell>
 											<PrAgenciesCell agencies={user.agencies} />
 										</TableCell>
 										<TableCell>
 											<Badge
 												variant="outline"
-												className={`${statusColors[user.status] ?? statusColors.inactive} flex w-fit items-center gap-1 capitalize`}
+												className={`${statusColors[user.status] ?? statusColors.inactive} flex w-fit items-center gap-1 text-sm capitalize`}
 											>
 												{user.status === "active" ? (
-													<CheckCircle2 className="h-3 w-3" />
+													<CheckCircle2 className="h-3.5 w-3.5" />
 												) : (
-													<XCircle className="h-3 w-3" />
+													<XCircle className="h-3.5 w-3.5" />
 												)}
 												{user.status}
 											</Badge>
 										</TableCell>
-										<TableCell className="text-sm text-muted-foreground">
+										<TableCell className="text-base text-muted-foreground">
 											{formatDate(user.createdAt)}
 										</TableCell>
 									</TableRow>
@@ -239,7 +245,7 @@ export function PrsTable({
 				</div>
 
 				{pagination && pagination.totalCount > 0 && (
-					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
+					<div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
 						<div>
 							Showing{" "}
 							<span className="font-medium">

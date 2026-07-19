@@ -1,5 +1,5 @@
 {
-  "id": "ed1cd07a-814a-4571-b05d-2229d9e32c8b",
+  "id": "84960210-b075-4157-87d5-615eaeb6cc8b",
   "prevId": "25033db5-b9b6-45ea-8082-e8103c8b25f8",
   "version": "7",
   "dialect": "postgresql",
@@ -1409,139 +1409,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "main.pr": {
-      "name": "pr",
-      "schema": "main",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agency_id": {
-          "name": "agency_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "nickname": {
-          "name": "nickname",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tier": {
-          "name": "tier",
-          "type": "pr_tier",
-          "typeSchema": "main",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'tier_1'"
-        },
-        "status": {
-          "name": "status",
-          "type": "pr_status",
-          "typeSchema": "main",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "phone": {
-          "name": "phone",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ic_no": {
-          "name": "ic_no",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "pr_agency_id_agency_id_fk": {
-          "name": "pr_agency_id_agency_id_fk",
-          "tableFrom": "pr",
-          "tableTo": "agency",
-          "schemaTo": "main",
-          "columnsFrom": [
-            "agency_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "pr_user_id_user_id_fk": {
-          "name": "pr_user_id_user_id_fk",
-          "tableFrom": "pr",
-          "tableTo": "user",
-          "schemaTo": "main",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "main.m_module": {
       "name": "m_module",
       "schema": "main",
@@ -2708,7 +2575,8 @@
       "values": [
         "pending",
         "contacted",
-        "resolved"
+        "resolved",
+        "declined"
       ]
     },
     "main.admin_request_type": {
@@ -2785,25 +2653,6 @@
         "active",
         "inactive",
         "suspended"
-      ]
-    },
-    "main.pr_status": {
-      "name": "pr_status",
-      "schema": "main",
-      "values": [
-        "active",
-        "inactive",
-        "pending",
-        "suspended"
-      ]
-    },
-    "main.pr_tier": {
-      "name": "pr_tier",
-      "schema": "main",
-      "values": [
-        "tier_1",
-        "tier_2",
-        "tier_3"
       ]
     },
     "main.permission_type": {

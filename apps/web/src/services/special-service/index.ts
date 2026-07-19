@@ -66,6 +66,8 @@ export interface SpecialServicesQueryParams {
 	dates?: string;
 	/** Filter by scheduled calendar day(s) — scheduledFor. */
 	scheduledDates?: string;
+	/** Sort by requested time (createdAt). Defaults to newest first. */
+	order?: "asc" | "desc";
 	page?: number;
 	pageSize?: number;
 }
@@ -103,6 +105,7 @@ export async function fetchSpecialServices(
 		adminAccepted: params.adminAccepted,
 		dates: params.dates,
 		scheduledDates: params.scheduledDates,
+		order: params.order,
 		page: params.page,
 		pageSize: params.pageSize,
 	});
@@ -123,6 +126,7 @@ export async function fetchAdminPendingJobs(
 		pageSize?: number;
 		dates?: string;
 		scheduledDates?: string;
+		order?: "asc" | "desc";
 	} = {},
 	onRefreshFail: () => void,
 ): Promise<SpecialServicesApiResponse> {
@@ -132,6 +136,7 @@ export async function fetchAdminPendingJobs(
 		pageSize: params.pageSize,
 		dates: params.dates,
 		scheduledDates: params.scheduledDates,
+		order: params.order,
 	});
 	const response = await client.get<SpecialServicesApiResponse>(
 		`/special-service/admin/pending${queryString}`,

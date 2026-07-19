@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
@@ -15,7 +15,7 @@ import { logger } from '@/util/logger';
 // Each PR = a user + user_profile + a user_role link to the 'pr' role.
 // Linked to sample agencies via agency_member (subRole=pr). A PR can belong
 // to more than one agency — membership rows are the source of truth.
-// Idempotent: rows are stamped createdBy='seed-sample' and re-running wipes them first.
+// Idempotent: upserts by email and rebuilds membership links on every run.
 const ACTOR = 'seed-sample';
 const PR_ROLE_NAME = 'pr';
 const DEMO_PASSWORD = 'Password123!';
@@ -31,6 +31,20 @@ type PrSeed = {
   idNo: string;
   /** Agency codes; first is also written to user_profile.agencyId as primary. */
   agencyCodes: string[];
+  /** Optional showcase fields — profile photo, gallery, and comcard details. */
+  profileImage?: string;
+  portfolioPhotos?: string[];
+  gender?: string;
+  race?: string;
+  nationality?: string;
+  dob?: string; // YYYY-MM-DD
+  comcardHeightCm?: number;
+  comcardWeightKg?: number;
+  addressLine1?: string;
+  addressLine2?: string;
+  postcode?: string;
+  state?: string;
+  country?: string;
 };
 
 const PRS: PrSeed[] = [
@@ -52,6 +66,7 @@ const PRS: PrSeed[] = [
     lastName: 'bin Iskandar',
     idType: 'NRIC',
     idNo: '900715-10-6033',
+    // Multi-agency sample: Atlas + Delta
     agencyCodes: ['AGY001', 'AGY002'],
   },
   {
@@ -72,6 +87,7 @@ const PRS: PrSeed[] = [
     lastName: 'Kumar a/l Suresh',
     idType: 'NRIC',
     idNo: '950101-14-5389',
+    // Multi-agency sample: Delta + Starline
     agencyCodes: ['AGY002', 'AGY003'],
   },
   {
@@ -82,7 +98,40 @@ const PRS: PrSeed[] = [
     lastName: 'Chong Wei Xin',
     idType: 'Passport',
     idNo: 'A12345678',
+    // Multi-agency sample: Atlas + Starline
     agencyCodes: ['AGY001', 'AGY003'],
+  },
+  {
+    // Full showcase sample — identity mirrors the InnocenZ-proto host profile:
+    // nickname Vicky, legal IC name Victoria Tan Mei Lin, IC 950312-14-8821,
+    // tied to Atlas Agency + Delta Agency. Comcard: 153cm / 40kg.
+    username: 'Vicky',
+    email: 'pr.vicky@innocenz.demo',
+    phoneNum: '+60128812201',
+    firstName: 'Victoria',
+    lastName: 'Tan Mei Lin',
+    idType: 'NRIC',
+    idNo: '950312-14-8821',
+    agencyCodes: ['AGY001', 'AGY002'],
+    profileImage: '/img/pr/profile/vicky.png',
+    portfolioPhotos: [
+      '/img/pr/gallery/vicky-1.png',
+      '/img/pr/gallery/vicky-2.png',
+      '/img/pr/gallery/vicky-3.png',
+      '/img/pr/gallery/vicky-4.png',
+      '/img/pr/gallery/vicky-comcard.png',
+    ],
+    gender: 'Female',
+    race: 'Chinese',
+    nationality: 'Malaysian',
+    dob: '1995-03-12', // matches NRIC prefix 950312
+    comcardHeightCm: 153,
+    comcardWeightKg: 40,
+    addressLine1: '12, Jalan Bintang 3',
+    addressLine2: 'Bukit Bintang',
+    postcode: '55100',
+    state: 'Kuala Lumpur',
+    country: 'Malaysia',
   },
 ];
 
@@ -98,11 +147,27 @@ export async function seedSamplePrs(): Promise<void> {
     return;
   }
 
+  // Prefer sample agencies, but fall back to any agency matching the demo codes.
   const agencyRows = await db
-    .select({ id: AgencyTable.id, agencyCode: AgencyTable.agencyCode })
+    .select({
+      id: AgencyTable.id,
+      agencyCode: AgencyTable.agencyCode,
+      createdBy: AgencyTable.createdBy,
+    })
     .from(AgencyTable)
-    .where(eq(AgencyTable.createdBy, ACTOR));
-  const agencyIdByCode = new Map(agencyRows.map((row) => [row.agencyCode, row.id]));
+    .where(
+      inArray(
+        AgencyTable.agencyCode,
+        Array.from(new Set(PRS.flatMap((pr) => pr.agencyCodes))),
+      ),
+    );
+
+  const agencyIdByCode = new Map<string, string>();
+  for (const row of agencyRows) {
+    if (row.createdBy === ACTOR || !agencyIdByCode.has(row.agencyCode)) {
+      agencyIdByCode.set(row.agencyCode, row.id);
+    }
+  }
 
   if (agencyIdByCode.size === 0) {
     logger.warn(
@@ -110,55 +175,125 @@ export async function seedSamplePrs(): Promise<void> {
     );
   }
 
-  // Clear prior sample rows (children first to respect FKs).
-  await db.delete(AgencyMemberTable).where(eq(AgencyMemberTable.createdBy, ACTOR));
-  await db.delete(UserRoleTable).where(eq(UserRoleTable.createdBy, ACTOR));
-  await db.delete(UserProfileTable).where(eq(UserProfileTable.createdBy, ACTOR));
-  await db.delete(UserTable).where(eq(UserTable.createdBy, ACTOR));
-
   const passwordHash = await hashPassword(DEMO_PASSWORD);
   let membershipCount = 0;
+  const seededUserIds: string[] = [];
 
   for (const pr of PRS) {
-    const [user] = await db
-      .insert(UserTable)
-      .values({
-        email: pr.email,
-        phoneNum: pr.phoneNum,
-        username: pr.username,
-        passwordHash,
-        profileImage: DEFAULT_PROFILE_IMAGE,
-        status: 'active',
-        createdBy: ACTOR,
-        updatedBy: ACTOR,
-      })
-      .returning({ id: UserTable.id });
+    const [existing] = await db
+      .select({ id: UserTable.id })
+      .from(UserTable)
+      .where(eq(UserTable.email, pr.email))
+      .limit(1);
 
-    if (!user) continue;
+    let userId = existing?.id ?? null;
+
+    if (userId) {
+      await db
+        .update(UserTable)
+        .set({
+          phoneNum: pr.phoneNum,
+          username: pr.username,
+          passwordHash,
+          profileImage: pr.profileImage ?? DEFAULT_PROFILE_IMAGE,
+          status: 'active',
+          updatedBy: ACTOR,
+          updatedAt: new Date(),
+        })
+        .where(eq(UserTable.id, userId));
+    } else {
+      const [created] = await db
+        .insert(UserTable)
+        .values({
+          email: pr.email,
+          phoneNum: pr.phoneNum,
+          username: pr.username,
+          passwordHash,
+          profileImage: pr.profileImage ?? DEFAULT_PROFILE_IMAGE,
+          status: 'active',
+          createdBy: ACTOR,
+          updatedBy: ACTOR,
+        })
+        .returning({ id: UserTable.id });
+      userId = created?.id ?? null;
+    }
+
+    if (!userId) continue;
+    seededUserIds.push(userId);
 
     const primaryAgencyId = pr.agencyCodes
       .map((code) => agencyIdByCode.get(code))
       .find(Boolean);
 
-    await db.insert(UserProfileTable).values({
-      userId: user.id,
+    const [existingProfile] = await db
+      .select({ id: UserProfileTable.id })
+      .from(UserProfileTable)
+      .where(eq(UserProfileTable.userId, userId))
+      .limit(1);
+
+    const profileValues = {
       firstName: pr.firstName,
       lastName: pr.lastName,
       idType: pr.idType,
       idNo: pr.idNo,
-      verificationStatus: 'verified',
+      gender: pr.gender ?? null,
+      race: pr.race ?? null,
+      nationality: pr.nationality ?? null,
+      dob: pr.dob ?? null,
+      portfolioPhotos: pr.portfolioPhotos ?? null,
+      comcardHeightCm: pr.comcardHeightCm ?? null,
+      comcardWeightKg: pr.comcardWeightKg ?? null,
+      addressLine1: pr.addressLine1 ?? null,
+      addressLine2: pr.addressLine2 ?? null,
+      postcode: pr.postcode ?? null,
+      state: pr.state ?? null,
+      country: pr.country ?? null,
+      verificationStatus: 'verified' as const,
       underAgency: Boolean(primaryAgencyId),
       agencyId: primaryAgencyId ?? null,
-      createdBy: ACTOR,
       updatedBy: ACTOR,
-    });
+      updatedAt: new Date(),
+    };
 
-    await db.insert(UserRoleTable).values({
-      userId: user.id,
-      roleId: prRole.id,
-      createdBy: ACTOR,
-      updatedBy: ACTOR,
-    });
+    if (existingProfile) {
+      await db
+        .update(UserProfileTable)
+        .set(profileValues)
+        .where(eq(UserProfileTable.userId, userId));
+    } else {
+      await db.insert(UserProfileTable).values({
+        userId,
+        ...profileValues,
+        createdBy: ACTOR,
+      });
+    }
+
+    const [existingRole] = await db
+      .select({ id: UserRoleTable.id })
+      .from(UserRoleTable)
+      .where(
+        and(eq(UserRoleTable.userId, userId), eq(UserRoleTable.roleId, prRole.id)),
+      )
+      .limit(1);
+
+    if (!existingRole) {
+      await db.insert(UserRoleTable).values({
+        userId,
+        roleId: prRole.id,
+        createdBy: ACTOR,
+        updatedBy: ACTOR,
+      });
+    }
+
+    // Rebuild this PR's agency links so multi-agency samples stay accurate.
+    await db
+      .delete(AgencyMemberTable)
+      .where(
+        and(
+          eq(AgencyMemberTable.userId, userId),
+          eq(AgencyMemberTable.subRole, 'pr'),
+        ),
+      );
 
     for (const code of pr.agencyCodes) {
       const agencyId = agencyIdByCode.get(code);
@@ -168,7 +303,7 @@ export async function seedSamplePrs(): Promise<void> {
       }
       await db.insert(AgencyMemberTable).values({
         agencyId,
-        userId: user.id,
+        userId,
         subRole: 'pr',
         status: 'active',
         createdBy: ACTOR,
@@ -179,7 +314,10 @@ export async function seedSamplePrs(): Promise<void> {
   }
 
   logger.info(
-    `[seed-sample-prs] Done. ${PRS.length} PR users, ${membershipCount} agency links (password: ${DEMO_PASSWORD}).`,
+    `[seed-sample-prs] Done. ${seededUserIds.length} PR users, ${membershipCount} agency links (password: ${DEMO_PASSWORD}).`,
+  );
+  logger.info(
+    '[seed-sample-prs] Multi-agency demos: Haziq → AGY001+AGY002, Arjun → AGY002+AGY003, Sofia → AGY001+AGY003.',
   );
 }
 

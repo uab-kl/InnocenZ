@@ -1,6 +1,6 @@
 {
-  "id": "885a54f5-092b-4670-863d-588ba45b6f61",
-  "prevId": "ed1cd07a-814a-4571-b05d-2229d9e32c8b",
+  "id": "e62c5a5c-bae2-44b5-a640-ab20ba87a3a7",
+  "prevId": "84960210-b075-4157-87d5-615eaeb6cc8b",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -1409,139 +1409,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "main.pr": {
-      "name": "pr",
-      "schema": "main",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agency_id": {
-          "name": "agency_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "user_id": {
-          "name": "user_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "name": {
-          "name": "name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "nickname": {
-          "name": "nickname",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "tier": {
-          "name": "tier",
-          "type": "pr_tier",
-          "typeSchema": "main",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'tier_1'"
-        },
-        "status": {
-          "name": "status",
-          "type": "pr_status",
-          "typeSchema": "main",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'active'"
-        },
-        "phone": {
-          "name": "phone",
-          "type": "varchar(50)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "email": {
-          "name": "email",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "ic_no": {
-          "name": "ic_no",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "pr_agency_id_agency_id_fk": {
-          "name": "pr_agency_id_agency_id_fk",
-          "tableFrom": "pr",
-          "tableTo": "agency",
-          "schemaTo": "main",
-          "columnsFrom": [
-            "agency_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "pr_user_id_user_id_fk": {
-          "name": "pr_user_id_user_id_fk",
-          "tableFrom": "pr",
-          "tableTo": "user",
-          "schemaTo": "main",
-          "columnsFrom": [
-            "user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "main.m_module": {
       "name": "m_module",
       "schema": "main",
@@ -1915,174 +1782,6 @@
           ]
         }
       },
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "main.shift": {
-      "name": "shift",
-      "schema": "main",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "agency_id": {
-          "name": "agency_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "outlet_id": {
-          "name": "outlet_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "shift_date": {
-          "name": "shift_date",
-          "type": "date",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "slot": {
-          "name": "slot",
-          "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "event_name": {
-          "name": "event_name",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "event_kind": {
-          "name": "event_kind",
-          "type": "shift_event_kind",
-          "typeSchema": "main",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'normal'"
-        },
-        "languages": {
-          "name": "languages",
-          "type": "varchar(255)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "quantity": {
-          "name": "quantity",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "filled": {
-          "name": "filled",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true,
-          "default": 0
-        },
-        "preferred_rating": {
-          "name": "preferred_rating",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "pay_per_hour": {
-          "name": "pay_per_hour",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "estimated_cost": {
-          "name": "estimated_cost",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "live_sales": {
-          "name": "live_sales",
-          "type": "numeric(12, 2)",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'0'"
-        },
-        "status": {
-          "name": "status",
-          "type": "shift_status",
-          "typeSchema": "main",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'draft'"
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "updated_at": {
-          "name": "updated_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "created_by": {
-          "name": "created_by",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "updated_by": {
-          "name": "updated_by",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true
-        }
-      },
-      "indexes": {},
-      "foreignKeys": {
-        "shift_agency_id_agency_id_fk": {
-          "name": "shift_agency_id_agency_id_fk",
-          "tableFrom": "shift",
-          "tableTo": "agency",
-          "schemaTo": "main",
-          "columnsFrom": [
-            "agency_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "shift_outlet_id_outlet_id_fk": {
-          "name": "shift_outlet_id_outlet_id_fk",
-          "tableFrom": "shift",
-          "tableTo": "outlet",
-          "schemaTo": "main",
-          "columnsFrom": [
-            "outlet_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
       "policies": {},
       "checkConstraints": {},
       "isRLSEnabled": false
@@ -2876,7 +2575,10 @@
       "values": [
         "pending",
         "contacted",
-        "resolved"
+        "resolved",
+        "declined",
+        "direct",
+        "approved"
       ]
     },
     "main.admin_request_type": {
@@ -2955,25 +2657,6 @@
         "suspended"
       ]
     },
-    "main.pr_status": {
-      "name": "pr_status",
-      "schema": "main",
-      "values": [
-        "active",
-        "inactive",
-        "pending",
-        "suspended"
-      ]
-    },
-    "main.pr_tier": {
-      "name": "pr_tier",
-      "schema": "main",
-      "values": [
-        "tier_1",
-        "tier_2",
-        "tier_3"
-      ]
-    },
     "main.permission_type": {
       "name": "permission_type",
       "schema": "main",
@@ -2982,24 +2665,6 @@
         "delete",
         "update",
         "create"
-      ]
-    },
-    "main.shift_event_kind": {
-      "name": "shift_event_kind",
-      "schema": "main",
-      "values": [
-        "normal",
-        "special"
-      ]
-    },
-    "main.shift_status": {
-      "name": "shift_status",
-      "schema": "main",
-      "values": [
-        "draft",
-        "open",
-        "confirmed",
-        "sealed"
       ]
     },
     "main.special_service_admin_accepted": {

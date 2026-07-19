@@ -2,7 +2,14 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
+import { UserTable } from '@/features/user/user.model';
 import { OutletMemberTable, OutletMemberInsertType, OutletMemberType } from './outlet.model';
+
+export type OutletMemberEnriched = OutletMemberType & {
+  username: string;
+  email: string | null;
+  phoneNum: string | null;
+};
 
 export class OutletMemberRepositoryClass {
   async add(
@@ -81,6 +88,33 @@ export class OutletMemberRepositoryClass {
         .orderBy(OutletMemberTable.createdAt);
     } catch (error) {
       logger.error('[OutletMemberRepository.listByOutlet] Error:', error);
+      return [];
+    }
+  }
+
+  async listByOutletWithUser(outletId: string): Promise<OutletMemberEnriched[]> {
+    try {
+      return db
+        .select({
+          id: OutletMemberTable.id,
+          outletId: OutletMemberTable.outletId,
+          userId: OutletMemberTable.userId,
+          subRole: OutletMemberTable.subRole,
+          status: OutletMemberTable.status,
+          createdAt: OutletMemberTable.createdAt,
+          updatedAt: OutletMemberTable.updatedAt,
+          createdBy: OutletMemberTable.createdBy,
+          updatedBy: OutletMemberTable.updatedBy,
+          username: UserTable.username,
+          email: UserTable.email,
+          phoneNum: UserTable.phoneNum,
+        })
+        .from(OutletMemberTable)
+        .innerJoin(UserTable, eq(UserTable.id, OutletMemberTable.userId))
+        .where(eq(OutletMemberTable.outletId, outletId))
+        .orderBy(OutletMemberTable.createdAt);
+    } catch (error) {
+      logger.error('[OutletMemberRepository.listByOutletWithUser] Error:', error);
       return [];
     }
   }

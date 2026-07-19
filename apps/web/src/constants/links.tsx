@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react";
 import {
+	ArrowRightLeft,
 	FileText,
 	Handshake,
 	LayoutDashboard,
@@ -101,6 +102,13 @@ export const sidebarSections: SidebarSection[] = [
 				title: "Plan Request",
 				href: "/admin/service/requests",
 				icon: Handshake,
+				allowedPermission: ["*"],
+			},
+			{
+				key: "sidebar-service-plan-changes",
+				title: "Plan Change",
+				href: "/admin/service/plan-changes",
+				icon: ArrowRightLeft,
 				allowedPermission: ["*"],
 			},
 			{

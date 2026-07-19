@@ -50,9 +50,11 @@ import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log
 import { Route as AdminAuditLogIndexRouteImport } from './routes/admin/audit-log/index'
 import { Route as AdminUserManagementPrRouteImport } from './routes/admin/user-management/pr'
 import { Route as AdminUserManagementOutletRouteImport } from './routes/admin/user-management/outlet'
+import { Route as AdminUserManagementLegacyMemberRouteImport } from './routes/admin/user-management/legacy-member'
 import { Route as AdminUserManagementAgencyRouteImport } from './routes/admin/user-management/agency'
 import { Route as AdminUserManagementAdminRouteImport } from './routes/admin/user-management/admin'
 import { Route as AdminServiceRequestsRouteImport } from './routes/admin/service/requests'
+import { Route as AdminServicePlanChangesRouteImport } from './routes/admin/service/plan-changes'
 import { Route as AdminServicePaymentVoucherRouteImport } from './routes/admin/service/payment-voucher'
 import { Route as AdminServiceOtherRouteImport } from './routes/admin/service/other'
 import { Route as AdminRbacRoleRouteImport } from './routes/admin/rbac/role'
@@ -271,6 +273,12 @@ const AdminUserManagementOutletRoute =
     path: '/outlet',
     getParentRoute: () => AdminUserManagementRouteRoute,
   } as any)
+const AdminUserManagementLegacyMemberRoute =
+  AdminUserManagementLegacyMemberRouteImport.update({
+    id: '/legacy-member',
+    path: '/legacy-member',
+    getParentRoute: () => AdminUserManagementRouteRoute,
+  } as any)
 const AdminUserManagementAgencyRoute =
   AdminUserManagementAgencyRouteImport.update({
     id: '/agency',
@@ -286,6 +294,11 @@ const AdminUserManagementAdminRoute =
 const AdminServiceRequestsRoute = AdminServiceRequestsRouteImport.update({
   id: '/service/requests',
   path: '/service/requests',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminServicePlanChangesRoute = AdminServicePlanChangesRouteImport.update({
+  id: '/service/plan-changes',
+  path: '/service/plan-changes',
   getParentRoute: () => AdminRouteRoute,
 } as any)
 const AdminServicePaymentVoucherRoute =
@@ -390,9 +403,11 @@ export interface FileRoutesByFullPath {
   '/admin/rbac/role': typeof AdminRbacRoleRoute
   '/admin/service/other': typeof AdminServiceOtherRoute
   '/admin/service/payment-voucher': typeof AdminServicePaymentVoucherRoute
+  '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
   '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log/': typeof AdminAuditLogIndexRoute
@@ -443,9 +458,11 @@ export interface FileRoutesByTo {
   '/admin/rbac/role': typeof AdminRbacRoleRoute
   '/admin/service/other': typeof AdminServiceOtherRoute
   '/admin/service/payment-voucher': typeof AdminServicePaymentVoucherRoute
+  '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
   '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log': typeof AdminAuditLogIndexRoute
@@ -500,9 +517,11 @@ export interface FileRoutesById {
   '/admin/rbac/role': typeof AdminRbacRoleRoute
   '/admin/service/other': typeof AdminServiceOtherRoute
   '/admin/service/payment-voucher': typeof AdminServicePaymentVoucherRoute
+  '/admin/service/plan-changes': typeof AdminServicePlanChangesRoute
   '/admin/service/requests': typeof AdminServiceRequestsRoute
   '/admin/user-management/admin': typeof AdminUserManagementAdminRoute
   '/admin/user-management/agency': typeof AdminUserManagementAgencyRoute
+  '/admin/user-management/legacy-member': typeof AdminUserManagementLegacyMemberRoute
   '/admin/user-management/outlet': typeof AdminUserManagementOutletRoute
   '/admin/user-management/pr': typeof AdminUserManagementPrRoute
   '/admin/audit-log/': typeof AdminAuditLogIndexRoute
@@ -558,9 +577,11 @@ export interface FileRouteTypes {
     | '/admin/rbac/role'
     | '/admin/service/other'
     | '/admin/service/payment-voucher'
+    | '/admin/service/plan-changes'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
+    | '/admin/user-management/legacy-member'
     | '/admin/user-management/outlet'
     | '/admin/user-management/pr'
     | '/admin/audit-log/'
@@ -611,9 +632,11 @@ export interface FileRouteTypes {
     | '/admin/rbac/role'
     | '/admin/service/other'
     | '/admin/service/payment-voucher'
+    | '/admin/service/plan-changes'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
+    | '/admin/user-management/legacy-member'
     | '/admin/user-management/outlet'
     | '/admin/user-management/pr'
     | '/admin/audit-log'
@@ -667,9 +690,11 @@ export interface FileRouteTypes {
     | '/admin/rbac/role'
     | '/admin/service/other'
     | '/admin/service/payment-voucher'
+    | '/admin/service/plan-changes'
     | '/admin/service/requests'
     | '/admin/user-management/admin'
     | '/admin/user-management/agency'
+    | '/admin/user-management/legacy-member'
     | '/admin/user-management/outlet'
     | '/admin/user-management/pr'
     | '/admin/audit-log/'
@@ -975,6 +1000,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminUserManagementOutletRouteImport
       parentRoute: typeof AdminUserManagementRouteRoute
     }
+    '/admin/user-management/legacy-member': {
+      id: '/admin/user-management/legacy-member'
+      path: '/legacy-member'
+      fullPath: '/admin/user-management/legacy-member'
+      preLoaderRoute: typeof AdminUserManagementLegacyMemberRouteImport
+      parentRoute: typeof AdminUserManagementRouteRoute
+    }
     '/admin/user-management/agency': {
       id: '/admin/user-management/agency'
       path: '/agency'
@@ -994,6 +1026,13 @@ declare module '@tanstack/react-router' {
       path: '/service/requests'
       fullPath: '/admin/service/requests'
       preLoaderRoute: typeof AdminServiceRequestsRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/admin/service/plan-changes': {
+      id: '/admin/service/plan-changes'
+      path: '/service/plan-changes'
+      fullPath: '/admin/service/plan-changes'
+      preLoaderRoute: typeof AdminServicePlanChangesRouteImport
       parentRoute: typeof AdminRouteRoute
     }
     '/admin/service/payment-voucher': {
@@ -1118,6 +1157,7 @@ const AdminRbacRouteRouteWithChildren = AdminRbacRouteRoute._addFileChildren(
 interface AdminUserManagementRouteRouteChildren {
   AdminUserManagementAdminRoute: typeof AdminUserManagementAdminRoute
   AdminUserManagementAgencyRoute: typeof AdminUserManagementAgencyRoute
+  AdminUserManagementLegacyMemberRoute: typeof AdminUserManagementLegacyMemberRoute
   AdminUserManagementOutletRoute: typeof AdminUserManagementOutletRoute
   AdminUserManagementPrRoute: typeof AdminUserManagementPrRoute
 }
@@ -1126,6 +1166,7 @@ const AdminUserManagementRouteRouteChildren: AdminUserManagementRouteRouteChildr
   {
     AdminUserManagementAdminRoute: AdminUserManagementAdminRoute,
     AdminUserManagementAgencyRoute: AdminUserManagementAgencyRoute,
+    AdminUserManagementLegacyMemberRoute: AdminUserManagementLegacyMemberRoute,
     AdminUserManagementOutletRoute: AdminUserManagementOutletRoute,
     AdminUserManagementPrRoute: AdminUserManagementPrRoute,
   }
@@ -1145,6 +1186,7 @@ interface AdminRouteRouteChildren {
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminServiceOtherRoute: typeof AdminServiceOtherRoute
   AdminServicePaymentVoucherRoute: typeof AdminServicePaymentVoucherRoute
+  AdminServicePlanChangesRoute: typeof AdminServicePlanChangesRoute
   AdminServiceRequestsRoute: typeof AdminServiceRequestsRoute
 }
 
@@ -1158,6 +1200,7 @@ const AdminRouteRouteChildren: AdminRouteRouteChildren = {
   AdminSettingsRoute: AdminSettingsRoute,
   AdminServiceOtherRoute: AdminServiceOtherRoute,
   AdminServicePaymentVoucherRoute: AdminServicePaymentVoucherRoute,
+  AdminServicePlanChangesRoute: AdminServicePlanChangesRoute,
   AdminServiceRequestsRoute: AdminServiceRequestsRoute,
 }
 
@@ -1244,12 +1287,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}
