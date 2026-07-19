@@ -21,7 +21,10 @@ function rosterStatusFromAssignment(
 ): RosterSlotStatus {
 	switch (status) {
 		case "assigned":
-			return "assignment-pending"; // agency assigned, awaiting PR
+			// PRs don't accept/decline — they can only cancel per the cancellation
+			// rules — so an assigned shift is effectively scheduled, not "awaiting
+			// PR". See the pr-cannot-accept-decline domain rule.
+			return "scheduled";
 		case "confirmed":
 		case "completed":
 			return "scheduled";
