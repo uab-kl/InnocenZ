@@ -194,6 +194,31 @@ export async function adminDeclineJob(
 	return response.data;
 }
 
+export interface CreateSpecialServiceInput {
+	outletId?: string | null;
+	outletName: string;
+	title: string;
+	category?: SpecialServiceCategory;
+	description?: string | null;
+	budget?: number;
+	scheduledFor?: string | null;
+	initiatedBy?: SpecialServiceInitiatedBy;
+	postingAgencyId?: string | null;
+	postingAgencyName?: string | null;
+}
+
+export async function createSpecialService(
+	input: CreateSpecialServiceInput,
+	onRefreshFail: () => void,
+): Promise<SpecialServiceApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<SpecialServiceApiResponse>(
+		"/special-service",
+		input,
+	);
+	return response.data;
+}
+
 export interface UpdateSpecialServiceInput {
 	title?: string;
 	description?: string | null;

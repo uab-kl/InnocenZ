@@ -1,31 +1,35 @@
-import { useMemo, useState } from 'react';
-import { ChevronRight, Plus } from 'lucide-react';
 import { SpecialServiceFilters } from '@agency-portal/components/agency/SpecialServiceFilters';
 import {
+  daysInJobDraft,
   JobPostingComposer,
+  type JobPostingDraft,
   JobPostingMicroLabel,
   JobPostingsTable,
   JobQueueTable,
-  daysInJobDraft,
   newJobPostingDraft,
   newQueuedJobPosting,
   parseJobPostingDraft,
-  type JobPostingDraft,
   type QueuedJobPosting,
 } from '@agency-portal/components/special-service/job-posting-ui';
-import { useStore } from '@agency-portal/lib/store';
+import {
+  type AgencyJobPost,
+  useAgencySpecialServices,
+} from '@agency-portal/hooks/use-agency-special-services';
 import { OUTLET_NAMES } from '@agency-portal/lib/agency-demo';
 import { AGENCY_SUB_ROLE_LABELS } from '@agency-portal/lib/agency-rbac';
+import { agencyPostedSpecialServices } from '@agency-portal/lib/special-service-actions';
 import {
-  EMPTY_SPECIAL_SERVICE_FILTERS,
   agencyJobPostingInzLabel,
   agencyJobPostingStatusTone,
   bookableServiceOffers,
   collectSpecialServiceDateIsos,
+  EMPTY_SPECIAL_SERVICE_FILTERS,
   filterSpecialServiceRecords,
   isOthersService,
 } from '@agency-portal/lib/special-service-demo';
-import { agencyPostedSpecialServices } from '@agency-portal/lib/special-service-actions';
+import { useStore } from '@agency-portal/lib/store';
+import { ChevronRight, Plus } from 'lucide-react';
+import { useMemo, useState } from 'react';
 
 const DEFAULT_OUTLET = OUTLET_NAMES[0] ?? 'Velvet 23';
 
@@ -34,6 +38,9 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
   const agencySubRole = useStore((s) => s.agencySubRole);
   const records = useStore((s) => s.specialServiceOrders);
   const submitOrder = useStore((s) => s.submitSpecialServiceOrder);
+  const toast = useStore((s) => s.toast);
+  // Real login → backend job postings; demo store otherwise (see the hook).
+  const backend = useAgencySpecialServices();
 
   const serviceOffers = useMemo(() => bookableServiceOffers('agency'), []);
   const prOptions = useMemo(
@@ -53,10 +60,11 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
     EMPTY_SPECIAL_SERVICE_FILTERS,
   );
 
-  const agencyPosted = useMemo(
+  const demoAgencyPosted = useMemo(
     () => agencyPostedSpecialServices(records),
     [records],
   );
+  const agencyPosted = backend.backed ? backend.records : demoAgencyPosted;
   const bookingDateIsos = useMemo(
     () => collectSpecialServiceDateIsos(agencyPosted),
     [agencyPosted],
@@ -89,9 +97,48 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 
   const startEdit = (id: string) => setEditingId(id);
 
+  const resetComposer = () => {
+    setQueuedJobs([]);
+    setComposer(newJobPostingDraft(serviceOffers));
+    setEditingId(null);
+  };
+
   const submitAll = () => {
+    if (queuedJobs.length === 0) return;
+
+    // Real login — post each queued job (× its dates) to the backend for admin
+    // review. No PR is attached: agency job postings are outlet + service.
+    if (backend.backed) {
+      const jobs = queuedJobs
+        .map((job): AgencyJobPost | null => {
+          const parsed = parseJobPostingDraft(job);
+          if (!parsed) return null;
+          return {
+            serviceType: job.serviceType,
+            customServiceName: job.customServiceName,
+            budget: parsed.budget,
+            remark: job.remark,
+            time: job.time,
+            dateIsos: job.selectedDateIsos,
+            outletName: DEFAULT_OUTLET,
+          };
+        })
+        .filter((job): job is AgencyJobPost => job !== null);
+      if (jobs.length > 0) {
+        backend
+          .postJobs(jobs)
+          .then(() =>
+            toast('Job posting submitted for admin review', 'success'),
+          )
+          .catch(() => toast('Could not submit job posting — try again', 'warn'));
+      }
+      resetComposer();
+      return;
+    }
+
+    // Demo store fallback.
     const pr = prOptions[0];
-    if (!pr || queuedJobs.length === 0) return;
+    if (!pr) return;
 
     const raisedBy = AGENCY_SUB_ROLE_LABELS[agencySubRole ?? 'agency_owner'];
 
@@ -119,9 +166,7 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
       }
     }
 
-    setQueuedJobs([]);
-    setComposer(newJobPostingDraft(serviceOffers));
-    setEditingId(null);
+    resetComposer();
   };
 
   const canAdd =
