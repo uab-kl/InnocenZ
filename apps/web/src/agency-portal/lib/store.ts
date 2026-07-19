@@ -6600,6 +6600,32 @@ export const useStore = create<StoreState>()(
             prs: marketplacePrsFromAgency(nextAgencyPRs),
           };
         });
+        // Best-effort persist to the backend rating table in a REAL outlet
+        // session. The rate UI is demo-driven (no real-session PR/shift data),
+        // so this only lands the rating; failures are silent (no session kick).
+        void (async () => {
+          const { getOutletIdentity } = await import(
+            '@agency-portal/lib/outlet-identity'
+          );
+          const identity = getOutletIdentity();
+          if (!identity) return;
+          try {
+            const { submitRating } = await import('@/services/rating');
+            await submitRating(
+              {
+                outletId: identity.outletId,
+                prId,
+                prName: pr.name,
+                stars,
+                note,
+                tags: tags ?? [],
+              },
+              () => {},
+            );
+          } catch {
+            // best-effort — the demo store is already updated
+          }
+        })();
         get().toast('Rating submitted', 'success');
       },
 

@@ -72,6 +72,23 @@ export interface OutletMembersApiResponse {
 	data: OutletMember[];
 }
 
+/** One outlet membership joined to its outlet — resolves a signed-in operator's
+ * own outlet + role at session start. */
+export interface OutletMembership {
+	membershipId: string;
+	userId: string;
+	outletId: string;
+	outletName: string;
+	subRole: OutletMemberSubRole;
+	status: string;
+}
+
+export interface OutletMembershipsApiResponse {
+	success: boolean;
+	message: string;
+	data: OutletMembership[];
+}
+
 export interface OutletsQueryParams {
 	name?: string;
 	status?: OutletStatus;

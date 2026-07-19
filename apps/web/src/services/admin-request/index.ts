@@ -180,6 +180,33 @@ export async function updateAdminRequest(
 	return response.data;
 }
 
+export interface CreateAdminRequestInput {
+	type: AdminRequestType;
+	subscriberType?: SubscriberType | null;
+	/** Must be a real uuid or omitted — the backend rejects non-uuid ids. */
+	subscriberId?: string | null;
+	subscriberName: string;
+	contactName?: string | null;
+	contactEmail?: string | null;
+	contactPhone?: string | null;
+	currentPlanId?: string | null;
+	requestedPlanId?: string | null;
+	message?: string | null;
+}
+
+export async function createAdminRequest(
+	input: CreateAdminRequestInput,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: AdminRequest }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: AdminRequest;
+	}>("/admin-request", input);
+	return response.data;
+}
+
 export async function fetchPendingCount(
 	onRefreshFail: () => void,
 	params: { type?: AdminRequestType; excludeType?: AdminRequestType } = {},
