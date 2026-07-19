@@ -15,6 +15,10 @@ import {
   type QueuedJobPosting,
 } from '@agency-portal/components/special-service/job-posting-ui';
 import { SpecialServiceOrderCard } from '@agency-portal/components/special-service/SpecialServiceOrderCard';
+import {
+  type OutletJobPost,
+  useOutletSpecialServices,
+} from '@agency-portal/hooks/use-outlet-special-services';
 import { useStore } from '@agency-portal/lib/store';
 import {
   EMPTY_SPECIAL_SERVICE_FILTERS,
@@ -37,6 +41,9 @@ export function OutletServicePostSection() {
   const submitOrder = useStore((s) => s.submitSpecialServiceOrder);
   const acceptByOutlet = useStore((s) => s.acceptSpecialServiceByOutlet);
   const declineByOutlet = useStore((s) => s.declineSpecialServiceByOutlet);
+  const toast = useStore((s) => s.toast);
+  // Real login → backend service orders; demo store otherwise (see the hook).
+  const backend = useOutletSpecialServices();
 
   const outletName = outletWorkspace.outletName;
   const serviceOffers = useMemo(() => bookableServiceOffers('outlet'), []);
@@ -50,10 +57,11 @@ export function OutletServicePostSection() {
     EMPTY_SPECIAL_SERVICE_FILTERS,
   );
 
-  const scopedRecords = useMemo(
+  const demoScoped = useMemo(
     () => specialServicesForOutlet(records, outletName),
     [records, outletName],
   );
+  const scopedRecords = backend.backed ? backend.records : demoScoped;
   const pendingAction = useMemo(
     () => pendingSpecialServicesForOutlet(records, outletName),
     [records, outletName],
@@ -93,6 +101,39 @@ export function OutletServicePostSection() {
   const submitAll = () => {
     if (queuedJobs.length === 0) return;
 
+    // Real login — post each queued job (× its dates) to the backend for admin
+    // review. Attribution rides on the outlet identity (outletId + name).
+    if (backend.backed) {
+      const jobs = queuedJobs
+        .map((job): OutletJobPost | null => {
+          const parsed = parseJobPostingDraft(job);
+          if (!parsed) return null;
+          return {
+            serviceType: job.serviceType,
+            customServiceName: job.customServiceName,
+            budget: parsed.budget,
+            remark: job.remark,
+            time: job.time,
+            dateIsos: job.selectedDateIsos,
+          };
+        })
+        .filter((job): job is OutletJobPost => job !== null);
+      if (jobs.length > 0) {
+        backend
+          .postJobs(jobs)
+          .then(() =>
+            toast('Service order submitted for admin review', 'success'),
+          )
+          .catch(() =>
+            toast('Could not submit service order — try again', 'warn'),
+          );
+      }
+      setQueuedJobs([]);
+      setComposer(newJobPostingDraft(serviceOffers));
+      setEditingId(null);
+      return;
+    }
+
     for (const job of queuedJobs) {
       const parsed = parseJobPostingDraft(job);
       if (!parsed) continue;
@@ -131,7 +172,7 @@ export function OutletServicePostSection() {
 
   return (
     <div className="iz-agency-job-posting mt-2">
-      {pendingAction.length > 0 && (
+      {!backend.backed && pendingAction.length > 0 && (
         <IzCard
           flat
           className="mb-3 border-[rgba(159,122,234,.35)] bg-[linear-gradient(180deg,rgba(159,122,234,.08),transparent)]"

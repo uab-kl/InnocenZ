@@ -64,7 +64,10 @@ export function specialServiceRecordFromBackend(
 		amountIn: service.budget != null ? Number(service.budget) : 0,
 		amountOut: 0,
 		initiatedBy: service.initiatedBy,
-		raisedBy: service.postingAgencyName ?? "Agency",
+		raisedBy:
+			service.initiatedBy === "outlet"
+				? service.outletName
+				: (service.postingAgencyName ?? "Agency"),
 		adminAccepted: adminAcceptanceFromBackend(service.adminAccepted),
 		agencyAccepted: "accepted",
 		prAcceptance: "n/a",
