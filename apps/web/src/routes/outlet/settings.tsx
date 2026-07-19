@@ -7,6 +7,7 @@ import {
 } from '@agency-portal/components/outlet/outlet-portal-ui';
 import { IzCard, IzSectionLabel } from '@agency-portal/components/iz/ui';
 import { SecuritySettingsSheets } from '@agency-portal/components/auth/SecuritySettingsSheets';
+import { useOutletProfile } from '@agency-portal/hooks/use-outlet-profile';
 import { useStore } from '@agency-portal/lib/store';
 import type {
   OutletFinanceHead,
@@ -76,6 +77,8 @@ function OutletSettingsPage() {
   const saveOutletSettings = useStore((s) => s.saveOutletSettings);
   const outletSubRole = useStore((s) => s.outletSubRole);
   const toast = useStore((s) => s.toast);
+  // Real login → overlay the real outlet identity in read mode (see the hook).
+  const profile = useOutletProfile();
 
   const [editing, setEditing] = useState(false);
   const [securityOpen, setSecurityOpen] = useState(false);
@@ -86,10 +89,33 @@ function OutletSettingsPage() {
   const avatarFileRef = useRef<HTMLInputElement>(null);
   const canEdit = outletCan(outletSubRole, 'editSettings');
 
-  const owner = editing ? draft : outletOwner;
-  const finance = editing ? financeDraft : outletFinanceHead;
-  const ops = editing ? opsDraft : outletOpsHead;
-  const location = editing ? locationDraft : outletSettings.location;
+  // Read mode overlays the real backend identity (overlay carries only defined
+  // fields, so demo values fill any gaps); editing uses the local draft. This
+  // wire is read-only — the save flow still writes to the demo store only.
+  const owner =
+    !editing && profile.backed && profile.owner
+      ? { ...outletOwner, ...profile.owner }
+      : editing
+        ? draft
+        : outletOwner;
+  const finance =
+    !editing && profile.backed && profile.finance
+      ? { ...outletFinanceHead, ...profile.finance }
+      : editing
+        ? financeDraft
+        : outletFinanceHead;
+  const ops =
+    !editing && profile.backed && profile.ops
+      ? { ...outletOpsHead, ...profile.ops }
+      : editing
+        ? opsDraft
+        : outletOpsHead;
+  const location =
+    !editing && profile.backed && profile.settings?.location
+      ? profile.settings.location
+      : editing
+        ? locationDraft
+        : outletSettings.location;
   const avatarLetter =
     owner.ownerName.trim()[0]?.toUpperCase() ??
     owner.orgName.trim()[0]?.toUpperCase() ??
@@ -104,10 +130,11 @@ function OutletSettingsPage() {
     setOpsDraft((d) => ({ ...d, ...patch }));
 
   const startEdit = () => {
-    setDraft({ ...outletOwner });
-    setFinanceDraft({ ...outletFinanceHead });
-    setOpsDraft({ ...outletOpsHead });
-    setLocationDraft(outletSettings.location);
+    // Seed the edit form from the real identity when available.
+    setDraft({ ...outletOwner, ...(profile.owner ?? {}) });
+    setFinanceDraft({ ...outletFinanceHead, ...(profile.finance ?? {}) });
+    setOpsDraft({ ...outletOpsHead, ...(profile.ops ?? {}) });
+    setLocationDraft(profile.settings?.location ?? outletSettings.location);
     setEditing(true);
   };
 
