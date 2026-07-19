@@ -18,6 +18,8 @@ import memberSubscriptionRoutes from '@/features/member-subscription/member-subs
 import outletTransactionRoutes from '@/features/outlet-transaction/outlet-transaction.routes.js';
 import adminRequestRoutes from '@/features/admin-request/admin-request.routes.js';
 import specialServiceRoutes from '@/features/special-service/special-service.routes.js';
+import outletWorkspaceRoutes from '@/features/outlet-workspace/outlet-workspace.routes.js';
+import ratingRoutes from '@/features/rating/rating.routes.js';
 import { platformAuditMiddleware } from '@/middlewares/platform-audit.js';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import { requireAdmin } from '@/middlewares/require-role.js';
@@ -46,5 +48,7 @@ v1Router.use('/member-subscription', memberSubscriptionRoutes);
 v1Router.use('/outlet-transaction', outletTransactionRoutes);
 v1Router.use('/admin-request', adminRequestRoutes);
 v1Router.use('/special-service', specialServiceRoutes);
+v1Router.use('/outlet-workspace', outletWorkspaceRoutes);
+v1Router.use('/rating', ratingRoutes);
 
 export default v1Router;
