@@ -1,73 +1,69 @@
-import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import {
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-	type FormEvent,
-} from "react";
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
-import { RosterTimetableFilters } from "@agency-portal/components/agency/RosterTimetableFilters";
-import { RosterWeeklyTimetable } from "@agency-portal/components/agency/RosterWeeklyTimetable";
+import { RosterAddPrDialog } from "@agency-portal/components/agency/RosterAddPrDialog";
+import { RosterAddShiftDialog } from "@agency-portal/components/agency/RosterAddShiftDialog";
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
 import { RosterShiftFilters } from "@agency-portal/components/agency/RosterShiftFilters";
-import { RosterAddShiftDialog } from "@agency-portal/components/agency/RosterAddShiftDialog";
 import {
 	RosterShiftTable,
 	rosterSlotDisplayPayout,
 } from "@agency-portal/components/agency/RosterShiftTable";
-import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
-import { useStore } from "@agency-portal/lib/store";
-import { useRosterSlots } from "@agency-portal/hooks/use-roster-slots";
-import {
-	assignmentStatusFromRoster,
-	useRosterMutations,
-} from "@agency-portal/hooks/use-roster-mutations";
-import {
-	OUTLET_NAMES,
-	rosterPageDisplayStatus,
-	rosterSlotsForAgency,
-	scopeToAgency,
-	type AgencyRosterSlot,
-	type RosterSlotStatus,
-} from "@agency-portal/lib/agency-demo";
-import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
-import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
-import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
+import { RosterTimetableFilters } from "@agency-portal/components/agency/RosterTimetableFilters";
+import { RosterWeeklyTimetable } from "@agency-portal/components/agency/RosterWeeklyTimetable";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import {
 	LabelWithIcon,
 	TitleWithIcon,
 } from "@agency-portal/components/iz/TitleWithIcon";
 import {
+	formatRM,
 	IzCard,
 	IzCardTitle,
 	IzPill,
 	IzSelect,
 	IzTimeInput,
-	formatRM,
 } from "@agency-portal/components/iz/ui";
-import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
+import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import {
+	assignmentStatusFromRoster,
+	useRosterMutations,
+} from "@agency-portal/hooks/use-roster-mutations";
+import { useRosterSlots } from "@agency-portal/hooks/use-roster-slots";
+import {
+	type AgencyRosterSlot,
+	OUTLET_NAMES,
+	type RosterSlotStatus,
+	rosterPageDisplayStatus,
+	rosterSlotsForAgency,
+	scopeToAgency,
+} from "@agency-portal/lib/agency-demo";
+import {
+	type AgencyOutletAvailableShift,
+	listAvailableShiftsForEarlyReleaseReassign,
+} from "@agency-portal/lib/agency-outlet-shifts";
+import { agencyCan } from "@agency-portal/lib/agency-rbac";
+import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
+import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
+import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
+import {
+	DEFAULT_ROSTER_DATE_ISO,
+	getPrScheduleState,
+} from "@agency-portal/lib/roster-availability";
+import {
+	countTimetableMatchingSlots,
 	EMPTY_ROSTER_SHIFT_FILTERS,
 	EMPTY_ROSTER_TIMETABLE_FILTERS,
-	countTimetableMatchingSlots,
 	filterRosterShifts,
 	filterTimetablePrs,
 	type RosterShiftFilterState,
 	type RosterTimetableFilterState,
 } from "@agency-portal/lib/roster-shift-filters";
-import { getPrScheduleState } from "@agency-portal/lib/roster-availability";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import {
+	dedupeLiveRosterByPr,
 	mondayOfWeek,
 	weekDayIsos,
-	dedupeLiveRosterByPr,
 } from "@agency-portal/lib/roster-week-plan";
-import {
-	listAvailableShiftsForEarlyReleaseReassign,
-	type AgencyOutletAvailableShift,
-} from "@agency-portal/lib/agency-outlet-shifts";
+import { useStore } from "@agency-portal/lib/store";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
 	ArrowLeftRight,
 	Calendar,
@@ -77,6 +73,13 @@ import {
 	Users,
 	X,
 } from "lucide-react";
+import {
+	type FormEvent,
+	useCallback,
+	useEffect,
+	useMemo,
+	useState,
+} from "react";
 
 const EDITABLE_STATUSES: RosterSlotStatus[] = [
 	"scheduled",
@@ -158,6 +161,7 @@ function AgencyRoster() {
 	const [approveSwapId, setApproveSwapId] = useState<string | null>(null);
 	const [replacementPick, setReplacementPick] = useState("");
 	const [addShiftOpen, setAddShiftOpen] = useState(false);
+	const [addPrOpen, setAddPrOpen] = useState(false);
 	const canAssign = agencyCan(agencySubRole, "assignShifts");
 
 	// Phase 2: in planning view the by-id write actions hit the backend (a slot's
@@ -526,6 +530,13 @@ function AgencyRoster() {
 							>
 								+ Add shift
 							</button>
+							<button
+								type="button"
+								className="iz-btn iz-btn-primary mt-2 w-full"
+								onClick={() => setAddPrOpen(true)}
+							>
+								+ Add PR
+							</button>
 						</>
 					)}
 					<div className="iz-roster-planning-panel">
@@ -746,6 +757,8 @@ function AgencyRoster() {
 				onClose={() => setAddShiftOpen(false)}
 				defaultDateIso={planningDate}
 			/>
+
+			<RosterAddPrDialog open={addPrOpen} onClose={() => setAddPrOpen(false)} />
 		</div>
 	);
 }
