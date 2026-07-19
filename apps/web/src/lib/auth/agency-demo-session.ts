@@ -1,24 +1,24 @@
-import type { AgencySessionIdentity } from '@agency-portal/lib/agency-identity';
-import type { OutletSessionIdentity } from '@agency-portal/lib/outlet-identity';
-import { saveAuthTokens } from '@/lib/auth/auth-storage';
-import { kickToLogin } from '@/lib/auth/guards';
+import type { AgencySessionIdentity } from "@agency-portal/lib/agency-identity";
+import type { OutletSessionIdentity } from "@agency-portal/lib/outlet-identity";
+import { saveAuthTokens } from "@/lib/auth/auth-storage";
+import { kickToLogin } from "@/lib/auth/guards";
 
 /** Demo account that unlocks the ported agency portal (proto demo data). */
-export const AGENCY_DEMO_EMAIL = 'owner@atlas-agency.my';
-export const AGENCY_DEMO_PASSWORD = 'password';
+export const AGENCY_DEMO_EMAIL = "owner@atlas-agency.my";
+export const AGENCY_DEMO_PASSWORD = "password";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-const SESSION_KIND_KEY = 'iz-session-kind';
-export type PortalSessionKind = 'demo' | 'real';
+const SESSION_KIND_KEY = "iz-session-kind";
+export type PortalSessionKind = "demo" | "real";
 
 /** Persist how the current portal session was authenticated. */
 export function setPortalSessionKind(kind: PortalSessionKind): void {
-  try {
-    localStorage.setItem(SESSION_KIND_KEY, kind);
-  } catch {
-    // localStorage unavailable (SSR / privacy mode) — nothing to persist.
-  }
+	try {
+		localStorage.setItem(SESSION_KIND_KEY, kind);
+	} catch {
+		// localStorage unavailable (SSR / privacy mode) — nothing to persist.
+	}
 }
 
 /**
@@ -26,11 +26,11 @@ export function setPortalSessionKind(kind: PortalSessionKind): void {
  * blank data; `demo` (or unset, for legacy sessions) keeps the seeded demo data.
  */
 export function getPortalSessionKind(): PortalSessionKind | null {
-  try {
-    return localStorage.getItem(SESSION_KIND_KEY) as PortalSessionKind | null;
-  } catch {
-    return null;
-  }
+	try {
+		return localStorage.getItem(SESSION_KIND_KEY) as PortalSessionKind | null;
+	} catch {
+		return null;
+	}
 }
 
 /**
@@ -40,18 +40,18 @@ export function getPortalSessionKind(): PortalSessionKind | null {
  * data and never call the real backend.
  */
 function makeDemoJwt(email: string): string {
-  const header = btoa(JSON.stringify({ alg: 'none', typ: 'JWT' }));
-  const payload = btoa(
-    JSON.stringify({ loginMethod: 'email', loginCriteria: email }),
-  );
-  return `${header}.${payload}.demo`;
+	const header = btoa(JSON.stringify({ alg: "none", typ: "JWT" }));
+	const payload = btoa(
+		JSON.stringify({ loginMethod: "email", loginCriteria: email }),
+	);
+	return `${header}.${payload}.demo`;
 }
 
 export function isAgencyDemoLogin(email: string, password: string): boolean {
-  return (
-    email.trim().toLowerCase() === AGENCY_DEMO_EMAIL &&
-    password === AGENCY_DEMO_PASSWORD
-  );
+	return (
+		email.trim().toLowerCase() === AGENCY_DEMO_EMAIL &&
+		password === AGENCY_DEMO_PASSWORD
+	);
 }
 
 /**
@@ -61,26 +61,26 @@ export function isAgencyDemoLogin(email: string, password: string): boolean {
  * never loads during SSR or on the login bundle.
  */
 export async function startAgencyDemoSession(email: string): Promise<void> {
-  setPortalSessionKind('demo');
-  const normalized = email.trim().toLowerCase();
-  const token = makeDemoJwt(normalized);
-  saveAuthTokens(token, token, Date.now() + SEVEN_DAYS_MS);
+	setPortalSessionKind("demo");
+	const normalized = email.trim().toLowerCase();
+	const token = makeDemoJwt(normalized);
+	saveAuthTokens(token, token, Date.now() + SEVEN_DAYS_MS);
 
-  const { useStore } = await import('@agency-portal/lib/store');
-  const store = useStore.getState();
-  store.signIn('Atlas Agency', normalized);
-  store.setRole('agency');
-  store.setAgencySubRole('agency_owner');
+	const { useStore } = await import("@agency-portal/lib/store");
+	const store = useStore.getState();
+	store.signIn("Atlas Agency", normalized);
+	store.setRole("agency");
+	store.setAgencySubRole("agency_owner");
 }
 
 /** Demo account that unlocks the ported outlet portal (proto demo data). */
-export const OUTLET_DEMO_EMAIL = 'owner@velvet23.my';
+export const OUTLET_DEMO_EMAIL = "owner@velvet23.my";
 
 export function isOutletDemoLogin(email: string, password: string): boolean {
-  return (
-    email.trim().toLowerCase() === OUTLET_DEMO_EMAIL &&
-    password === AGENCY_DEMO_PASSWORD
-  );
+	return (
+		email.trim().toLowerCase() === OUTLET_DEMO_EMAIL &&
+		password === AGENCY_DEMO_PASSWORD
+	);
 }
 
 /**
@@ -89,16 +89,16 @@ export function isOutletDemoLogin(email: string, password: string): boolean {
  * imported dynamically so it never loads during SSR or on the login bundle).
  */
 export async function startOutletDemoSession(email: string): Promise<void> {
-  setPortalSessionKind('demo');
-  const normalized = email.trim().toLowerCase();
-  const token = makeDemoJwt(normalized);
-  saveAuthTokens(token, token, Date.now() + SEVEN_DAYS_MS);
+	setPortalSessionKind("demo");
+	const normalized = email.trim().toLowerCase();
+	const token = makeDemoJwt(normalized);
+	saveAuthTokens(token, token, Date.now() + SEVEN_DAYS_MS);
 
-  const { useStore } = await import('@agency-portal/lib/store');
-  const store = useStore.getState();
-  store.signIn('Velvet 23', normalized);
-  store.setRole('vendor');
-  store.setOutletSubRole('outlet_owner');
+	const { useStore } = await import("@agency-portal/lib/store");
+	const store = useStore.getState();
+	store.signIn("Velvet 23", normalized);
+	store.setRole("vendor");
+	store.setOutletSubRole("outlet_owner");
 }
 
 /**
@@ -112,53 +112,53 @@ export async function startOutletDemoSession(email: string): Promise<void> {
  * rather than blocking sign-in.
  */
 export async function startAgencyRealSession(profile: {
-  id: string;
-  email: string;
-  displayName: string;
+	id: string;
+	email: string;
+	displayName: string;
 }): Promise<void> {
-  setPortalSessionKind('real');
-  const normalized = profile.email.trim().toLowerCase();
-  const [{ useStore }, { buildBlankPortalReset }, identityLib, agencySvc] =
-    await Promise.all([
-      import('@agency-portal/lib/store'),
-      import('@agency-portal/lib/demo-seed'),
-      import('@agency-portal/lib/agency-identity'),
-      import('@/services/agency'),
-    ]);
+	setPortalSessionKind("real");
+	const normalized = profile.email.trim().toLowerCase();
+	const [{ useStore }, { buildBlankPortalReset }, identityLib, agencySvc] =
+		await Promise.all([
+			import("@agency-portal/lib/store"),
+			import("@agency-portal/lib/demo-seed"),
+			import("@agency-portal/lib/agency-identity"),
+			import("@/services/agency"),
+		]);
 
-  let identity: AgencySessionIdentity | null = null;
-  try {
-    const res = await agencySvc.fetchAgencyMembershipsForUser(
-      profile.id,
-      kickToLogin,
-    );
-    const primary = identityLib.pickPrimaryMembership(res.data);
-    if (primary) identity = identityLib.identityFromMembership(primary);
-  } catch {
-    identity = null;
-  }
+	let identity: AgencySessionIdentity | null = null;
+	try {
+		const res = await agencySvc.fetchAgencyMembershipsForUser(
+			profile.id,
+			kickToLogin,
+		);
+		const primary = identityLib.pickPrimaryMembership(res.data);
+		if (primary) identity = identityLib.identityFromMembership(primary);
+	} catch {
+		identity = null;
+	}
 
-  const store = useStore.getState();
-  store.signIn(profile.displayName || normalized, normalized);
-  store.setRole('agency');
-  useStore.setState(buildBlankPortalReset());
+	const store = useStore.getState();
+	store.signIn(profile.displayName || normalized, normalized);
+	store.setRole("agency");
+	useStore.setState(buildBlankPortalReset());
 
-  if (identity) {
-    const resolved = identity;
-    identityLib.saveAgencyIdentity(resolved);
-    store.setAgencySubRole(resolved.subRole);
-    useStore.setState((st) => ({
-      activeAgencyId: resolved.agencyId,
-      agencyOwner: {
-        ...st.agencyOwner,
-        orgName: resolved.orgName,
-        email: normalized,
-      },
-    }));
-  } else {
-    identityLib.clearAgencyIdentity();
-    store.setAgencySubRole('agency_owner');
-  }
+	if (identity) {
+		const resolved = identity;
+		identityLib.saveAgencyIdentity(resolved);
+		store.setAgencySubRole(resolved.subRole);
+		useStore.setState((st) => ({
+			activeAgencyId: resolved.agencyId,
+			agencyOwner: {
+				...st.agencyOwner,
+				orgName: resolved.orgName,
+				email: normalized,
+			},
+		}));
+	} else {
+		identityLib.clearAgencyIdentity();
+		store.setAgencySubRole("agency_owner");
+	}
 }
 
 /**
@@ -171,54 +171,54 @@ export async function startAgencyRealSession(profile: {
  * blocking sign-in.
  */
 export async function startOutletRealSession(profile: {
-  id: string;
-  email: string;
-  displayName: string;
+	id: string;
+	email: string;
+	displayName: string;
 }): Promise<void> {
-  setPortalSessionKind('real');
-  const normalized = profile.email.trim().toLowerCase();
-  const [{ useStore }, { buildBlankPortalReset }, identityLib, outletSvc] =
-    await Promise.all([
-      import('@agency-portal/lib/store'),
-      import('@agency-portal/lib/demo-seed'),
-      import('@agency-portal/lib/outlet-identity'),
-      import('@/services/outlet'),
-    ]);
+	setPortalSessionKind("real");
+	const normalized = profile.email.trim().toLowerCase();
+	const [{ useStore }, { buildBlankPortalReset }, identityLib, outletSvc] =
+		await Promise.all([
+			import("@agency-portal/lib/store"),
+			import("@agency-portal/lib/demo-seed"),
+			import("@agency-portal/lib/outlet-identity"),
+			import("@/services/outlet"),
+		]);
 
-  let identity: OutletSessionIdentity | null = null;
-  try {
-    const res = await outletSvc.fetchOutletMembershipsForUser(
-      profile.id,
-      kickToLogin,
-    );
-    const primary = identityLib.pickPrimaryMembership(res.data);
-    if (primary) identity = identityLib.identityFromMembership(primary);
-  } catch {
-    identity = null;
-  }
+	let identity: OutletSessionIdentity | null = null;
+	try {
+		const res = await outletSvc.fetchOutletMembershipsForUser(
+			profile.id,
+			kickToLogin,
+		);
+		const primary = identityLib.pickPrimaryMembership(res.data);
+		if (primary) identity = identityLib.identityFromMembership(primary);
+	} catch {
+		identity = null;
+	}
 
-  const store = useStore.getState();
-  store.signIn(profile.displayName || normalized, normalized);
-  store.setRole('vendor');
-  useStore.setState(buildBlankPortalReset());
+	const store = useStore.getState();
+	store.signIn(profile.displayName || normalized, normalized);
+	store.setRole("vendor");
+	useStore.setState(buildBlankPortalReset());
 
-  if (identity) {
-    const resolved = identity;
-    identityLib.saveOutletIdentity(resolved);
-    store.setOutletSubRole(resolved.subRole);
-    useStore.setState((st) => ({
-      outletOwner: {
-        ...st.outletOwner,
-        orgName: resolved.outletName,
-        email: normalized,
-      },
-      outletWorkspace: {
-        ...st.outletWorkspace,
-        outletName: resolved.outletName,
-      },
-    }));
-  } else {
-    identityLib.clearOutletIdentity();
-    store.setOutletSubRole('outlet_owner');
-  }
+	if (identity) {
+		const resolved = identity;
+		identityLib.saveOutletIdentity(resolved);
+		store.setOutletSubRole(resolved.subRole);
+		useStore.setState((st) => ({
+			outletOwner: {
+				...st.outletOwner,
+				orgName: resolved.outletName,
+				email: normalized,
+			},
+			outletWorkspace: {
+				...st.outletWorkspace,
+				outletName: resolved.outletName,
+			},
+		}));
+	} else {
+		identityLib.clearOutletIdentity();
+		store.setOutletSubRole("outlet_owner");
+	}
 }
