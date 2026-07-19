@@ -1,7 +1,4 @@
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
-import { RosterAddPrDialog } from "@agency-portal/components/agency/RosterAddPrDialog";
-import { RosterAddShiftDialog } from "@agency-portal/components/agency/RosterAddShiftDialog";
-import { RosterAssignDialog } from "@agency-portal/components/agency/RosterAssignDialog";
 import { RosterBackendTimetable } from "@agency-portal/components/agency/RosterBackendTimetable";
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
 import { RosterShiftFilters } from "@agency-portal/components/agency/RosterShiftFilters";
@@ -161,9 +158,6 @@ function AgencyRoster() {
 	const [editId, setEditId] = useState<string | null>(null);
 	const [approveSwapId, setApproveSwapId] = useState<string | null>(null);
 	const [replacementPick, setReplacementPick] = useState("");
-	const [addShiftOpen, setAddShiftOpen] = useState(false);
-	const [addPrOpen, setAddPrOpen] = useState(false);
-	const [assignOpen, setAssignOpen] = useState(false);
 	const canAssign = agencyCan(agencySubRole, "assignShifts");
 
 	// Phase 2: in planning view the by-id write actions hit the backend (a slot's
@@ -517,36 +511,13 @@ function AgencyRoster() {
 			{viewMode === "planning" && (
 				<div className="iz-roster-planning">
 					{canAssign && (
-						<>
-							<button
-								type="button"
-								className="iz-roster-auto-assign"
-								onClick={() => demoAutoAssignPr(planningDate)}
-							>
-								AI auto-assign next free PR · {planningDate}
-							</button>
-							<button
-								type="button"
-								className="iz-btn iz-btn-primary mt-2 w-full"
-								onClick={() => setAddShiftOpen(true)}
-							>
-								+ Add shift
-							</button>
-							<button
-								type="button"
-								className="iz-btn iz-btn-primary mt-2 w-full"
-								onClick={() => setAddPrOpen(true)}
-							>
-								+ Add PR
-							</button>
-							<button
-								type="button"
-								className="iz-btn iz-btn-primary mt-2 w-full"
-								onClick={() => setAssignOpen(true)}
-							>
-								+ Assign PR
-							</button>
-						</>
+						<button
+							type="button"
+							className="iz-roster-auto-assign"
+							onClick={() => demoAutoAssignPr(planningDate)}
+						>
+							AI auto-assign next free PR · {planningDate}
+						</button>
 					)}
 					<div className="iz-roster-planning-panel">
 						<RosterTimetableFilters
@@ -770,21 +741,6 @@ function AgencyRoster() {
 					</>
 				)}
 			</IzSheet>
-
-			<RosterAddShiftDialog
-				open={addShiftOpen}
-				onClose={() => setAddShiftOpen(false)}
-				defaultDateIso={planningDate}
-			/>
-
-			<RosterAddPrDialog open={addPrOpen} onClose={() => setAddPrOpen(false)} />
-
-			<RosterAssignDialog
-				open={assignOpen}
-				onClose={() => setAssignOpen(false)}
-				fromDate={weekStartIso}
-				toDate={weekDays[weekDays.length - 1] ?? weekStartIso}
-			/>
 		</div>
 	);
 }
