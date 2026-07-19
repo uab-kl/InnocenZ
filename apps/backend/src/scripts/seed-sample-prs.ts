@@ -24,6 +24,8 @@ type PrSeed = {
   username: string;
   email: string;
   phoneNum: string;
+  /** Per-account demo password — falls back to DEMO_PASSWORD. */
+  password?: string;
   /** Legal name + ID document captured on the user_profile record. */
   firstName: string;
   lastName: string;
@@ -107,7 +109,10 @@ const PRS: PrSeed[] = [
     // tied to Atlas Agency + Delta Agency. Comcard: 153cm / 40kg.
     username: 'Vicky',
     email: 'pr.vicky@innocenz.demo',
-    phoneNum: '+60128812201',
+    // Sign-in ID + password mirror the InnocenZ-proto PR portal demo login
+    // (defaultSignInIdentifier "60123456789" / prefilled "password").
+    phoneNum: '+60123456789',
+    password: 'password',
     firstName: 'Victoria',
     lastName: 'Tan Mei Lin',
     idType: 'NRIC',
@@ -175,11 +180,14 @@ export async function seedSamplePrs(): Promise<void> {
     );
   }
 
-  const passwordHash = await hashPassword(DEMO_PASSWORD);
+  const defaultPasswordHash = await hashPassword(DEMO_PASSWORD);
   let membershipCount = 0;
   const seededUserIds: string[] = [];
 
   for (const pr of PRS) {
+    const passwordHash = pr.password
+      ? await hashPassword(pr.password)
+      : defaultPasswordHash;
     const [existing] = await db
       .select({ id: UserTable.id })
       .from(UserTable)

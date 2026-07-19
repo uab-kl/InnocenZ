@@ -101,7 +101,7 @@ export class UserControllerClass {
       const id = paramId(req.params.id);
       const actorId = req.user?.id;
 
-      // Admins may only edit their own account from the profile page for now.
+      // Users may only edit their own account from the profile page for now.
       if (!actorId || actorId !== id) {
         return res.status(403).json({
           success: false,
@@ -120,18 +120,60 @@ export class UserControllerClass {
         });
       }
 
+      const firstName =
+        typeof req.body?.firstName === 'string' ? req.body.firstName.trim() : undefined;
+      const lastName =
+        typeof req.body?.lastName === 'string' ? req.body.lastName.trim() : undefined;
+      const email =
+        typeof req.body?.email === 'string' ? req.body.email.trim() : undefined;
+
+      if (firstName !== undefined && (firstName.length < 1 || firstName.length > 100)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Legal first name must be between 1 and 100 characters',
+          data: null,
+        });
+      }
+      if (lastName !== undefined && lastName.length > 100) {
+        return res.status(400).json({
+          success: false,
+          message: 'Legal last name must be at most 100 characters',
+          data: null,
+        });
+      }
+      if (email !== undefined && email.length > 0 && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Enter a valid email address',
+          data: null,
+        });
+      }
+
       const existingUser = await this.userRepository.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      const actor = getActor(req);
       const updatedUser = await this.userRepository.updateUser(
-        { username, updatedBy: getActor(req) },
+        {
+          username,
+          ...(email !== undefined ? { email: email || null } : {}),
+          updatedBy: actor,
+        },
         id,
       );
 
       if (!updatedUser) {
         return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+
+      if (firstName !== undefined || lastName !== undefined) {
+        await this.userProfileRepository.update(id, {
+          ...(firstName !== undefined ? { firstName } : {}),
+          ...(lastName !== undefined ? { lastName } : {}),
+          updatedBy: actor,
+        });
       }
 
       const profile = await this.userProfileRepository.getByUserId(id);
