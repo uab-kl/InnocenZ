@@ -1,5 +1,3 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useMemo } from 'react';
 import { AgencyPaidPvHistory } from '@agency-portal/components/agency/AgencyPaidPvHistory';
 import { ShiftHistoryLog } from '@agency-portal/components/iz/ShiftHistoryLog';
 import { TitleWithIcon } from '@agency-portal/components/iz/TitleWithIcon';
@@ -7,11 +5,14 @@ import {
   OutletPage,
   OutletPageHeader,
 } from '@agency-portal/components/outlet/outlet-portal-ui';
-import { useStore } from '@agency-portal/lib/store';
+import { useAgencyHistory } from '@agency-portal/hooks/use-agency-history';
 import { ownedByAgency } from '@agency-portal/lib/agency-demo';
-import { getPrAgencyById } from '@agency-portal/lib/pr-demo';
 import { getAgencyManagedPvs } from '@agency-portal/lib/agency-payroll';
+import { getPrAgencyById } from '@agency-portal/lib/pr-demo';
 import { scopeShiftHistoryToAgencyName } from '@agency-portal/lib/shift-history-utils';
+import { useStore } from '@agency-portal/lib/store';
+import { createFileRoute, useNavigate } from '@tanstack/react-router';
+import { useMemo } from 'react';
 
 type HistoryTab = 'shifts' | 'outlets' | 'paid';
 
@@ -61,26 +62,45 @@ function AgencyHistory() {
   const activeAgencyId = useStore((s) => s.activeAgencyId);
   const allShiftHistory = useStore((s) => s.shiftHistory);
   const allPrPaymentVouchers = useStore((s) => s.prPaymentVouchers ?? []);
-  const prReceiptScans = useStore((s) => s.prReceiptScans ?? []);
+  const demoReceiptScans = useStore((s) => s.prReceiptScans ?? []);
   const allAgencyPRs = useStore((s) => s.agencyPRs);
   const orgName = useStore((s) => s.agencyOwner.orgName);
+
+  // Real session → backend History; demo store otherwise. Shift tabs come from
+  // completed shift-assignments; the Paid tab reuses the wired PV backend + PR
+  // roster (which the Paid view filters to PAID + scopes by PR). Receipt scans
+  // and itemized PV lines have no backend, so they stay empty / summary-only
+  // when backed.
+  const backend = useAgencyHistory();
 
   // Tenant scoping — Delta must never see Atlas records (and vice-versa).
   // PVs/receipts carry no agency tag, so they are attributed via OWNED PRs; shift
   // history is tagged with the assigning agency's name.
   const activeAgencyName =
     getPrAgencyById(activeAgencyId)?.name ?? 'Atlas Agency';
-  const agencyPRs = useMemo(
+  const demoAgencyPRs = useMemo(
     () => ownedByAgency(allAgencyPRs, activeAgencyId),
     [allAgencyPRs, activeAgencyId],
   );
+  const agencyPRs = backend.backed ? backend.agencyPRs : demoAgencyPRs;
+  const prReceiptScans = backend.backed ? [] : demoReceiptScans;
+
   const shiftHistory = useMemo(
-    () => scopeShiftHistoryToAgencyName(allShiftHistory, activeAgencyName),
-    [allShiftHistory, activeAgencyName],
+    () =>
+      backend.backed
+        ? backend.shiftRows
+        : scopeShiftHistoryToAgencyName(allShiftHistory, activeAgencyName),
+    [backend.backed, backend.shiftRows, allShiftHistory, activeAgencyName],
   );
+  // Both paths run through getAgencyManagedPvs so the tab count matches what the
+  // Paid-PV view (which re-scopes internally) renders.
   const prPaymentVouchers = useMemo(
-    () => getAgencyManagedPvs(allPrPaymentVouchers, agencyPRs),
-    [allPrPaymentVouchers, agencyPRs],
+    () =>
+      getAgencyManagedPvs(
+        backend.backed ? backend.pvs : allPrPaymentVouchers,
+        agencyPRs,
+      ),
+    [backend.backed, backend.pvs, allPrPaymentVouchers, agencyPRs],
   );
 
   const paidCount = prPaymentVouchers.filter((p) => p.status === 'PAID').length;

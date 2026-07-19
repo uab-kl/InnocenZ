@@ -25,7 +25,8 @@ const PV_KEY = ["agency", "payment-vouchers"] as const;
  * breakdown, sales/commission totals, receipt scans — have no backend and stay
  * on the demo store.
  */
-export function useAgencyPvs() {
+export function useAgencyPvs(params: { enabled?: boolean } = {}) {
+	const { enabled = true } = params;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const invalidate = () => queryClient.invalidateQueries({ queryKey: PV_KEY });
@@ -33,6 +34,7 @@ export function useAgencyPvs() {
 	const pvQuery = useQuery({
 		queryKey: PV_KEY,
 		queryFn: () => fetchPaymentVouchers({ pageSize: 500 }, logout),
+		enabled,
 		staleTime: 60_000,
 	});
 

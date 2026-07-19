@@ -23,7 +23,8 @@ type ProfilePatch = Partial<
  * roster's `["roster","prs"]` query key so Manage-PR and the roster grid stay in
  * sync. Demo-only actions (pay class, KPI, languages, tie rules) are not here.
  */
-export function useAgencyPrs() {
+export function useAgencyPrs(params: { enabled?: boolean } = {}) {
+	const { enabled = true } = params;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const invalidate = () =>
@@ -32,6 +33,7 @@ export function useAgencyPrs() {
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
 		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		enabled,
 		staleTime: 60_000,
 	});
 
