@@ -1,16 +1,29 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
-import { useStore } from '@agency-portal/lib/store';
+import {
+  Comcard3dPreviewVisual,
+  type ComcardPreviewData,
+} from '@agency-portal/components/agency/Comcard3dPreview';
+import { IzSheet } from '@agency-portal/components/iz/Sheet';
+import { IzCard, IzPill } from '@agency-portal/components/iz/ui';
+import {
+  canGeneratePortfolioComcard,
+  PortfolioComcardVisual,
+  portfolioPhotosForComcard,
+  StaticComcardVisual,
+} from '@agency-portal/components/pr/PortfolioComcardVisual';
+import { portfolioFilledCount } from '@agency-portal/components/pr/PortfolioGalleryPicker';
+import { useAgencyPendingPrs } from '@agency-portal/hooks/use-agency-pending-prs';
+import { nowAgencyDateTime } from '@agency-portal/lib/agency-demo';
+import { agencyCan } from '@agency-portal/lib/agency-rbac';
 import type { PendingCutlostRequest } from '@agency-portal/lib/outlet-cutlost-requests';
 import {
   cutlostRequestDetail,
   cutlostRequestTitle,
 } from '@agency-portal/lib/outlet-cutlost-requests';
-import { nowAgencyDateTime } from '@agency-portal/lib/agency-demo';
-import { agencyCan } from '@agency-portal/lib/agency-rbac';
-import type { PendingPR, PendingAgencyLink } from '@agency-portal/lib/store';
-import { IzCard, IzPill } from '@agency-portal/components/iz/ui';
-import { IzSheet } from '@agency-portal/components/iz/Sheet';
+import { publicAssetPath } from '@agency-portal/lib/public-asset';
+import type { PendingAgencyLink, PendingPR } from '@agency-portal/lib/store';
+import { useStore } from '@agency-portal/lib/store';
+import { cn } from '@agency-portal/lib/utils';
+import { createFileRoute } from '@tanstack/react-router';
 import {
   Calendar,
   Camera,
@@ -26,19 +39,7 @@ import {
   UserPlus,
   X,
 } from 'lucide-react';
-import { publicAssetPath } from '@agency-portal/lib/public-asset';
-import { portfolioFilledCount } from '@agency-portal/components/pr/PortfolioGalleryPicker';
-import {
-  canGeneratePortfolioComcard,
-  PortfolioComcardVisual,
-  portfolioPhotosForComcard,
-  StaticComcardVisual,
-} from '@agency-portal/components/pr/PortfolioComcardVisual';
-import {
-  Comcard3dPreviewVisual,
-  type ComcardPreviewData,
-} from '@agency-portal/components/agency/Comcard3dPreview';
-import { cn } from '@agency-portal/lib/utils';
+import { useEffect, useMemo, useState } from 'react';
 
 function docImageSrc(src: string) {
   return src.startsWith('data:') ? src : publicAssetPath(src);
@@ -968,7 +969,9 @@ function AgencyPending() {
     if (tabFromSearch) setTab(tabFromSearch);
   }, [tabFromSearch]);
 
-  const signups = useMemo(
+  // Real login → real pending PRs (docs stay placeholder); demo store otherwise.
+  const backend = useAgencyPendingPrs();
+  const demoSignups = useMemo(
     () =>
       pendingPRs.filter(
         (p) =>
@@ -976,6 +979,7 @@ function AgencyPending() {
       ),
     [pendingPRs, activeAgencyId],
   );
+  const signups = backend.backed ? backend.signups : demoSignups;
   const cutlostRequests = useMemo(
     () => pendingCutlostRequests.filter((r) => r.status === 'pending'),
     [pendingCutlostRequests],
@@ -1185,9 +1189,15 @@ function AgencyPending() {
             selectedSignup ? (
               <SignupDetailPanel
                 signup={selectedSignup}
-                onApprove={() => approvePendingPR(selectedSignup.id)}
+                onApprove={() =>
+                  backend.backed
+                    ? backend.approve(selectedSignup.id)
+                    : approvePendingPR(selectedSignup.id)
+                }
                 onReject={(reason) =>
-                  rejectPendingPR(selectedSignup.id, reason)
+                  backend.backed
+                    ? backend.reject(selectedSignup.id)
+                    : rejectPendingPR(selectedSignup.id, reason)
                 }
               />
             ) : selectedLink ? (
@@ -1261,7 +1271,8 @@ function AgencyPending() {
             className="iz-btn iz-btn-primary mt-2 w-full"
             disabled={!invite.name || !invite.ic}
             onClick={() => {
-              invitePendingPR(invite);
+              if (backend.backed) backend.invite(invite);
+              else invitePendingPR(invite);
               setAddOpen(false);
               setInvite({ name: '', ic: '', mobile: '', email: '' });
             }}
