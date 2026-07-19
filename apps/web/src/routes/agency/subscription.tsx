@@ -1,29 +1,33 @@
-import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useMemo } from 'react';
-import { useStore } from '@agency-portal/lib/store';
+import {
+  formatRM,
+  IzCard,
+  IzPageTitle,
+  IzPill,
+  IzSectionLabel,
+} from '@agency-portal/components/iz/ui';
+import { OutletSection } from '@agency-portal/components/outlet/OutletSection';
+import {
+  type AgencyRatePlan,
+  useAgencySubscription,
+} from '@agency-portal/hooks/use-agency-subscription';
 import {
   AGENCY_SUBSCRIPTION_PLANS,
   agencySubscriptionBillingForWeeklyPv,
   agencyWeeklyPvCount,
   scopeToAgency,
 } from '@agency-portal/lib/agency-demo';
-import { getPreviousWeekSundayIso } from '@agency-portal/lib/demo-clock';
 import { getAgencyManagedPvs } from '@agency-portal/lib/agency-payroll';
+import { agencyCan } from '@agency-portal/lib/agency-rbac';
+import { getPreviousWeekSundayIso } from '@agency-portal/lib/demo-clock';
 import {
   demoPayrollWeekBoundsForWeeksAgo,
   demoPvIssueIsoForWeeksAgo,
 } from '@agency-portal/lib/pr-demo';
-import { agencyCan } from '@agency-portal/lib/agency-rbac';
-import { OutletSection } from '@agency-portal/components/outlet/OutletSection';
-import {
-  IzCard,
-  IzPageTitle,
-  IzPill,
-  IzSectionLabel,
-  formatRM,
-} from '@agency-portal/components/iz/ui';
-import { Calendar, CreditCard, Receipt, Users } from 'lucide-react';
+import { useStore } from '@agency-portal/lib/store';
+import { createFileRoute } from '@tanstack/react-router';
 import { format, parseISO } from 'date-fns';
+import { Calendar, CreditCard, Receipt, Users } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 
 const CARD_LAST4 = '4242';
 
@@ -67,6 +71,24 @@ function AgencySubscription() {
   const billing = useMemo(
     () => agencySubscriptionBillingForWeeklyPv(issuedWeeklyPv),
     [issuedWeeklyPv],
+  );
+
+  // Real login → rate card lists real backend plans; demo plans otherwise. The
+  // usage-based hero tier stays demo (no backend equivalent).
+  const sub = useAgencySubscription();
+  const ratePlans = useMemo<AgencyRatePlan[]>(
+    () =>
+      sub.backed
+        ? sub.plans
+        : AGENCY_SUBSCRIPTION_PLANS.map((p) => ({
+            id: p.id,
+            label: p.label,
+            weeklyRm: p.weeklyRm ?? null,
+            priceLabel: p.priceLabel ?? null,
+            capacityLabel: p.capacityLabel,
+            description: p.description,
+          })),
+    [sub.backed, sub.plans],
   );
 
   useEffect(() => {
@@ -155,8 +177,12 @@ function AgencySubscription() {
         payroll week
       </p>
       <div className="grid grid-cols-2 gap-2">
-        {AGENCY_SUBSCRIPTION_PLANS.map((plan) => {
-          const isBilledTier = plan.id === billing.plan.id;
+        {ratePlans.map((plan) => {
+          const isBilledTier = sub.backed
+            ? sub.currentSubscriptionId
+              ? plan.id === sub.currentSubscriptionId
+              : plan.label.toLowerCase() === billing.plan.label.toLowerCase()
+            : plan.id === billing.plan.id;
           const priceDisplay =
             plan.priceLabel ??
             (plan.weeklyRm != null
