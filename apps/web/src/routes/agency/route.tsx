@@ -1,5 +1,6 @@
 import { PortalShell } from '@agency-portal/components/portal/PortalShell';
 import { Toasts } from '@agency-portal/components/Toasts';
+import { getAgencyIdentity } from '@agency-portal/lib/agency-identity';
 import {
   canAccessAgencyPath,
   getAgencyDefaultRoute,
@@ -37,6 +38,16 @@ function AgencyLayout() {
   useEffect(() => {
     if (getPortalSessionKind() === 'real') {
       useStore.setState(buildBlankPortalReset());
+      // buildBlankPortalReset resets agencyOwner to the demo default, so re-apply
+      // the operator's real identity (resolved at sign-in) on every mount.
+      const identity = getAgencyIdentity();
+      if (identity) {
+        useStore.setState((st) => ({
+          activeAgencyId: identity.agencyId,
+          agencySubRole: identity.subRole,
+          agencyOwner: { ...st.agencyOwner, orgName: identity.orgName },
+        }));
+      }
     }
     setMounted(true);
   }, []);

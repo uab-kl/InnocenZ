@@ -95,7 +95,11 @@ function RouteComponent() {
 
         // Real backend accounts land on the same portal pages with no data.
         if (role === 'agency') {
-          await startAgencyRealSession(value.email);
+          await startAgencyRealSession({
+            id: profile.id,
+            email: profile.email || value.email,
+            displayName: profile.displayName,
+          });
           window.location.assign('/agency');
           return;
         }

@@ -1,4 +1,6 @@
+import type { AgencySessionIdentity } from '@agency-portal/lib/agency-identity';
 import { saveAuthTokens } from '@/lib/auth/auth-storage';
+import { kickToLogin } from '@/lib/auth/guards';
 
 /** Demo account that unlocks the ported agency portal (proto demo data). */
 export const AGENCY_DEMO_EMAIL = 'owner@atlas-agency.my';
@@ -100,25 +102,62 @@ export async function startOutletDemoSession(email: string): Promise<void> {
 
 /**
  * Start a REAL agency session. The backend `login()` has already saved real
- * tokens; here we only seed the client store's session identity (role +
- * sub-role + display name) and blank every demo data slice, then mark the
- * session `real` so the portal layout keeps it blank across reloads. Wiring the
- * portal to live backend data is a separate task — until then real accounts see
- * the real pages with no rows. Sub-role defaults to owner (full nav) until RBAC
- * is wired to the backend.
+ * tokens; here we resolve the operator's real agency identity + sub-role from
+ * their backend membership, seed the client store with it, and blank every demo
+ * data slice, then mark the session `real` so the portal layout keeps it blank
+ * across reloads. The resolved identity is persisted (localStorage) so the
+ * portal shell can re-apply it after each per-mount blank reset. On any
+ * resolution failure we fall back to the blank demo identity (owner / full nav)
+ * rather than blocking sign-in.
  */
-export async function startAgencyRealSession(email: string): Promise<void> {
+export async function startAgencyRealSession(profile: {
+  id: string;
+  email: string;
+  displayName: string;
+}): Promise<void> {
   setPortalSessionKind('real');
-  const normalized = email.trim().toLowerCase();
-  const [{ useStore }, { buildBlankPortalReset }] = await Promise.all([
-    import('@agency-portal/lib/store'),
-    import('@agency-portal/lib/demo-seed'),
-  ]);
+  const normalized = profile.email.trim().toLowerCase();
+  const [{ useStore }, { buildBlankPortalReset }, identityLib, agencySvc] =
+    await Promise.all([
+      import('@agency-portal/lib/store'),
+      import('@agency-portal/lib/demo-seed'),
+      import('@agency-portal/lib/agency-identity'),
+      import('@/services/agency'),
+    ]);
+
+  let identity: AgencySessionIdentity | null = null;
+  try {
+    const res = await agencySvc.fetchAgencyMembershipsForUser(
+      profile.id,
+      kickToLogin,
+    );
+    const primary = identityLib.pickPrimaryMembership(res.data);
+    if (primary) identity = identityLib.identityFromMembership(primary);
+  } catch {
+    identity = null;
+  }
+
   const store = useStore.getState();
-  store.signIn(normalized, normalized);
+  store.signIn(profile.displayName || normalized, normalized);
   store.setRole('agency');
-  store.setAgencySubRole('agency_owner');
   useStore.setState(buildBlankPortalReset());
+
+  if (identity) {
+    const resolved = identity;
+    identityLib.saveAgencyIdentity(resolved);
+    store.setAgencySubRole(resolved.subRole);
+    useStore.setState((st) => ({
+      activeAgencyId: resolved.agencyId,
+      agencyOwner: {
+        ...st.agencyOwner,
+        orgName: resolved.orgName,
+        email: normalized,
+      },
+    }));
+  } else {
+    identityLib.clearAgencyIdentity();
+    store.setAgencySubRole('agency_owner');
+  }
 }
 
 /** Start a REAL outlet session — same contract as startAgencyRealSession. */

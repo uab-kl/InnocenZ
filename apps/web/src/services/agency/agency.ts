@@ -84,6 +84,31 @@ export async function fetchAgencyMembers(
 	};
 }
 
+/**
+ * All active agency memberships for a single user, across every sub-role. Used
+ * to resolve the signed-in operator's own agency + role at session start.
+ * Unlike fetchAgencyMembershipsByUsers (which defaults to the `pr` sub-role for
+ * roster lookups), this omits the sub-role filter so owner/finance rows return.
+ */
+export async function fetchAgencyMembershipsForUser(
+	userId: string,
+	onRefreshFail: () => void,
+): Promise<AgencyMembershipsApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		userIds: userId,
+		status: "active",
+	});
+	const response = await client.get<AgencyMembershipsApiResponse>(
+		`/agency/memberships${queryString}`,
+	);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
+}
+
 export async function fetchAgencyMembershipsByUsers(
 	userIds: string[],
 	onRefreshFail: () => void,
