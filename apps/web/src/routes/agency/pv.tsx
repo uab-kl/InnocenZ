@@ -28,7 +28,6 @@ import {
   type ReceiptEntryMethod,
 } from '@agency-portal/lib/pr-demo';
 import {
-  getAgencyManagedPvs,
   getAgencyManagedReceiptScans,
   receiptBelongsToAgencyPr,
   receiptsForPv,
@@ -36,6 +35,10 @@ import {
   agencyPvStatusLabel,
   AGENCY_PV_STATUS_LABELS,
 } from '@agency-portal/lib/agency-payroll';
+import {
+  useAgencyPvs,
+  useAgencyPvDetail,
+} from '@agency-portal/hooks/use-agency-pvs';
 import {
   matchesReceiptShiftWorkRange,
   receiptShiftDateIso,
@@ -168,20 +171,18 @@ function AgencyPV() {
   const navigate = useNavigate();
   const { status: statusFromSearch, pv: pvFromSearch } = Route.useSearch();
   const activeAgencyId = useStore((s) => s.activeAgencyId);
-  const allPrPaymentVouchers = useStore((s) => s.prPaymentVouchers ?? []);
   const prReceiptScans = useStore((s) => s.prReceiptScans ?? []);
   const allAgencyPRs = useStore((s) => s.agencyPRs);
   const agencySubRole = useStore((s) => s.agencySubRole);
-  // Tenant scoping — attribute PVs/receipts to this agency via its OWNED PRs so a
+  // Tenant scoping — attribute receipts to this agency via its OWNED PRs so a
   // shared PR (member of both agencies) never drags the other agency's payroll in.
   const agencyPRs = useMemo(
     () => ownedByAgency(allAgencyPRs, activeAgencyId),
     [allAgencyPRs, activeAgencyId],
   );
-  const prPaymentVouchers = useMemo(
-    () => getAgencyManagedPvs(allPrPaymentVouchers, agencyPRs),
-    [allPrPaymentVouchers, agencyPRs],
-  );
+  // Vouchers come from the backend (already agency-scoped server-side); the
+  // Receipts sub-tab stays on the demo store — no backend for receipt scans.
+  const { pvs: prPaymentVouchers } = useAgencyPvs();
   const [detailId, setDetailId] = useState<string | null>(null);
   const [payrollWeekTab, setPayrollWeekTab] =
     useState<PayrollWeekTab>('last_week');
@@ -1127,34 +1128,42 @@ function PvDetail({
   receiptScans: PrReceiptScan[];
   onClose: () => void;
 }) {
-  const editAgencyPv = useStore((s) => s.editAgencyPv);
-  const sendAgencyPvToPr = useStore((s) => s.sendAgencyPvToPr);
-  const resendAgencyPv = useStore((s) => s.resendAgencyPv);
-  const resolveAgencyPvDispute = useStore((s) => s.resolveAgencyPvDispute);
-  const overrideSignedAgencyPv = useStore((s) => s.overrideSignedAgencyPv);
+  const { editLines, sendToPr, resend, resolveDispute, overrideSigned } =
+    useAgencyPvs();
   const agencySubRole = useStore((s) => s.agencySubRole);
   const agencyPRs = useStore((s) => s.agencyPRs);
   const toast = useStore((s) => s.toast);
+  // The list omits line items — pull the full voucher (falls back to the list
+  // row until it resolves).
+  const detailPv = useAgencyPvDetail(pv.id, pv);
+  const v = detailPv ?? pv;
   const [editing, setEditing] = useState(false);
   const [overrideOpen, setOverrideOpen] = useState(false);
   const [overrideReason, setOverrideReason] = useState('');
   const canOverride = agencyCan(agencySubRole, 'overrideSignedPv');
-  const [rows, setRows] = useState<PrPvRow[]>(pv.rows);
-  const [deduct, setDeduct] = useState(pv.deduct);
+  const [rows, setRows] = useState<PrPvRow[]>(v.rows);
+  const [deduct, setDeduct] = useState(v.deduct);
+  // Refresh the editable copy when the real line items arrive.
+  useEffect(() => {
+    if (!editing) {
+      setRows(v.rows);
+      setDeduct(v.deduct);
+    }
+  }, [v, editing]);
 
-  const payee = buildAgencyPayee(pv, agencyPRs);
-  const breakdown = summarizePv(editing ? { ...pv, rows, deduct } : pv);
+  const payee = buildAgencyPayee(v, agencyPRs);
+  const breakdown = summarizePv(editing ? { ...v, rows, deduct } : v);
   const prHasSigned = Boolean(
-    pv.prSignedAt || pv.status === 'PAID' || pv.status === 'SIGNED',
+    v.prSignedAt || v.status === 'PAID' || v.status === 'SIGNED',
   );
-  const prSigPreview = pv.prSignatureDataUrl;
-  const disputeDays = disputeDaysRemaining(pv.disputedAt);
+  const prSigPreview = v.prSignatureDataUrl;
+  const disputeDays = disputeDaysRemaining(v.disputedAt);
   const displayPv: PrPaymentVoucher = editing
-    ? reconcilePvTotals({ ...pv, rows, deduct })
-    : pv;
+    ? reconcilePvTotals({ ...v, rows, deduct })
+    : v;
 
   const saveEdit = () => {
-    editAgencyPv(pv.id, { rows, deduct });
+    editLines(pv.id, rows, deduct);
     setEditing(false);
   };
 
@@ -1392,7 +1401,7 @@ function PvDetail({
           <button
             type="button"
             className="iz-btn iz-btn-primary mt-2 w-full"
-            onClick={() => sendAgencyPvToPr(pv.id)}
+            onClick={() => sendToPr(pv.id)}
           >
             <Send className="h-4 w-4" /> Send to PR for e-sign
           </button>
@@ -1402,7 +1411,7 @@ function PvDetail({
         <button
           type="button"
           className="iz-btn iz-btn-soft mt-2 w-full"
-          onClick={() => resendAgencyPv(pv.id)}
+          onClick={() => resend(pv.id)}
         >
           Re-send to PR
         </button>
@@ -1412,7 +1421,7 @@ function PvDetail({
         <button
           type="button"
           className="iz-btn iz-btn-primary mt-2"
-          onClick={() => resolveAgencyPvDispute(pv.id)}
+          onClick={() => resolveDispute(pv.id)}
         >
           Resolve dispute &amp; reassign
         </button>
@@ -1455,7 +1464,7 @@ function PvDetail({
           className="iz-btn iz-btn-primary mt-3 w-full"
           disabled={!overrideReason.trim()}
           onClick={() => {
-            overrideSignedAgencyPv(pv.id, overrideReason);
+            overrideSigned(pv.id, overrideReason);
             setOverrideOpen(false);
             setOverrideReason('');
           }}
