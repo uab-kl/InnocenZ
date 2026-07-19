@@ -77,29 +77,38 @@ function estPayoutFor(
  * slot. Phase 1: read-only. Demo-only fields (swaps, floor metrics, pay tiers)
  * are left unset until their backend features land.
  */
-export function useRosterSlots(params: { fromDate: string; toDate: string }) {
-	const { fromDate, toDate } = params;
+export function useRosterSlots(params: {
+	fromDate: string;
+	toDate: string;
+	/** Gate the backend reads (default true); demo callers pass false. */
+	enabled?: boolean;
+}) {
+	const { fromDate, toDate, enabled = true } = params;
 	const { logout } = useAuth();
 
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", fromDate, toDate],
 		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
+		enabled,
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 	});
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
 		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		enabled,
 		staleTime: 30_000,
 	});
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
 		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		enabled,
 		staleTime: 60_000,
 	});
 	const outletsQuery = useQuery({
 		queryKey: ["roster", "outlets"],
 		queryFn: () => fetchOutlets({ pageSize: 500 }, logout),
+		enabled,
 		staleTime: 60_000,
 	});
 

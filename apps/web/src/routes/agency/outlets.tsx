@@ -1,22 +1,23 @@
-import { createFileRoute, Link } from '@tanstack/react-router';
-import { useEffect, useMemo, useState } from 'react';
 import { AgencyOutletDetailView } from '@agency-portal/components/agency/AgencyOutletDetailView';
-import { ManageOutletGridCard } from '@agency-portal/components/agency/ManageOutletGridCard';
 import { AgencyOutletFilters } from '@agency-portal/components/agency/AgencyOutletFilters';
+import { ManageOutletGridCard } from '@agency-portal/components/agency/ManageOutletGridCard';
+import { IzCard, IzPageTitle } from '@agency-portal/components/iz/ui';
+import { useAgencyOutletDemand } from '@agency-portal/hooks/use-agency-outlet-demand';
+import { rosterSlotsForAgency } from '@agency-portal/lib/agency-demo';
 import {
-  EMPTY_AGENCY_OUTLET_FILTERS,
   buildAgencyOutletSummaries,
   buildOutletDayDemandSummaries,
   collectOutletShiftDateIsos,
+  EMPTY_AGENCY_OUTLET_FILTERS,
   filterAgencyOutletSummaries,
 } from '@agency-portal/lib/agency-outlet-shifts';
 import { agencyCan } from '@agency-portal/lib/agency-rbac';
-import { rosterSlotsForAgency } from '@agency-portal/lib/agency-demo';
-import { useStore } from '@agency-portal/lib/store';
-import { IzCard, IzPageTitle } from '@agency-portal/components/iz/ui';
 import { PR_AGENCY_TIED_OFFERS } from '@agency-portal/lib/pr-features';
 import { DEFAULT_ROSTER_DATE_ISO } from '@agency-portal/lib/roster-availability';
+import { useStore } from '@agency-portal/lib/store';
+import { createFileRoute, Link } from '@tanstack/react-router';
 import { MousePointerClick, Users } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 export const Route = createFileRoute('/agency/outlets')({
   component: AgencyManageOutlets,
@@ -55,7 +56,12 @@ function AgencyManageOutlets() {
 
   const canManage = agencyCan(agencySubRole, 'managePr');
 
-  const summaries = useMemo(
+  // Real session → backend shift-demand summaries; demo store otherwise.
+  // commissionRules / outletWorkspace have no backend source, so the backed
+  // path keeps them as demo placeholders (they only feed cosmetic pay tiers).
+  const demand = useAgencyOutletDemand();
+
+  const demoSummaries = useMemo(
     () =>
       buildAgencyOutletSummaries({
         shifts,
@@ -67,6 +73,7 @@ function AgencyManageOutlets() {
       }),
     [shifts, agencyRoster, outletCommissionRules, outletWorkspace],
   );
+  const summaries = demand.backed ? demand.summaries : demoSummaries;
 
   const shiftDateIsos = useMemo(
     () => collectOutletShiftDateIsos(summaries),
@@ -88,14 +95,16 @@ function AgencyManageOutlets() {
 
   const detailDayDemand = useMemo(() => {
     if (!detail) return [];
+    // Rebuild from the same source as the cards: backend shifts + roster (no
+    // tied offers) when backed, demo store otherwise.
     return buildOutletDayDemandSummaries({
       outlet: detail.outlet,
-      posted: shifts,
-      roster: agencyRoster,
-      tiedOffers: PR_AGENCY_TIED_OFFERS,
+      posted: demand.backed ? demand.shifts : shifts,
+      roster: demand.backed ? demand.roster : agencyRoster,
+      tiedOffers: demand.backed ? [] : PR_AGENCY_TIED_OFFERS,
       todayIso: DEFAULT_ROSTER_DATE_ISO,
     });
-  }, [detail, shifts, agencyRoster]);
+  }, [detail, demand.backed, demand.shifts, demand.roster, shifts, agencyRoster]);
 
   if (!canManage) {
     return (
