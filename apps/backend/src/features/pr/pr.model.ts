@@ -34,6 +34,27 @@ export const PrTable = MainSchema.table('pr', {
 export type PrType = typeof PrTable.$inferSelect;
 export type PrInsertType = typeof PrTable.$inferInsert;
 
+/**
+ * Comcard / identity fields that live on the linked user account rather than on
+ * the `pr` row itself — the same source the admin PR screen reads. Read-only
+ * here; the PR portal owns the writes. Every field is null when the PR has no
+ * `userId`, or no `user_profile` row yet.
+ */
+export type PrProfile = {
+  profileImage: string | null;
+  gender: string | null;
+  race: string | null;
+  /** ISO date, `YYYY-MM-DD`. */
+  dob: string | null;
+  nationality: string | null;
+  portfolioPhotos: string[] | null;
+  comcardHeightCm: number | null;
+  comcardWeightKg: number | null;
+};
+
+/** A `pr` row with the linked user's comcard profile folded in. */
+export type PrWithProfileType = PrType & { profile: PrProfile | null };
+
 export type PrFilter = {
   id?: string;
   agencyId?: string;

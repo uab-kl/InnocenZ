@@ -78,8 +78,7 @@ export function useOutletToday(
 		// The window is part of the key — a wider Calendar fetch must not be
 		// served from (or overwrite) Today's narrower one.
 		queryKey: ["outlet", "today", "shifts", fromDate, toDate],
-		queryFn: () =>
-			fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
+		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
 		enabled: backed,
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,

@@ -13,6 +13,23 @@ export interface PrPersonnelPagination {
 	hasPrevPage: boolean;
 }
 
+/**
+ * Comcard / identity fields the backend folds in from the PR's linked user
+ * account — the same source the admin PR screen reads, so both screens agree.
+ * Null when the PR has no linked user account or no profile row yet.
+ */
+export interface PrPersonnelProfile {
+	profileImage: string | null;
+	gender: string | null;
+	race: string | null;
+	/** ISO date, `YYYY-MM-DD`. */
+	dob: string | null;
+	nationality: string | null;
+	portfolioPhotos: string[] | null;
+	comcardHeightCm: number | null;
+	comcardWeightKg: number | null;
+}
+
 export interface PrPersonnel {
 	id: string;
 	agencyId: string;
@@ -26,6 +43,9 @@ export interface PrPersonnel {
 	phone: string | null;
 	email: string | null;
 	icNo: string | null;
+	// Present on the read paths (list / get-by-id); absent on create/update
+	// responses, which return the bare `pr` row.
+	profile?: PrPersonnelProfile | null;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;
