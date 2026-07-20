@@ -1,11 +1,13 @@
 import { config as loadEnv } from 'dotenv';
 import {
   root,
+  mobileRoot,
   isWin,
   envPort,
   findFreePort,
   claimBackendOwnership,
   releaseBackendLock,
+  resolveBin,
   spawnProc,
   makeShutdown,
   prefixOutput,
@@ -21,9 +23,13 @@ loadEnv({ path: `${root}/.env.local`, override: true });
 
 const WEB_PORT_START = envPort('WEB_PORT', 3000);
 const BACKEND_PORT_START = envPort('BACKEND_PORT', 7780);
-const API_URL =
-  process.env.VITE_API_URL?.trim() ||
-  `http://localhost:${BACKEND_PORT_START}/api`;
+const publicApiUrl =
+  process.env.VITE_API_URL?.trim() || `http://localhost:${BACKEND_PORT_START}/api`;
+// Mobile needs its own override, if any — leaving EXPO_PUBLIC_API_URL unset lets
+// apps/mobile/src/lib/api.ts autodetect the dev machine's LAN IP from Expo's
+// hostUri, which is what physical devices need (localhost means "the phone
+// itself" inside a mobile app, not the dev machine).
+const mobileApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.MOBILE_API_URL?.trim();
 
 const colors = {
   web: '\x1b[36m', // cyan
@@ -38,14 +44,15 @@ process.on('exit', releaseBackendLock);
 
 const webPort = await findFreePort(WEB_PORT_START, new Set([BACKEND_PORT_START]));
 const backendPort = BACKEND_PORT_START;
-const publicApiUrl = API_URL;
 const ownsBackend = await claimBackendOwnership(backendPort);
 
 console.log(`
-${colors.bold}Web (frontend) + backend${colors.reset}
+${colors.bold}Web + Mobile + backend${colors.reset}
   ${colors.web}frontend${colors.reset}  http://localhost:${webPort}
   ${colors.backend}backend${colors.reset}   http://localhost:${backendPort}/api${ownsBackend ? '' : ' (already running, reusing)'}
   ${colors.backend}api url${colors.reset}   ${publicApiUrl}
+
+Expo needs a real TTY for the QR code — its output is not prefixed like the others.
 `);
 
 if (webPort !== WEB_PORT_START) {
@@ -96,5 +103,18 @@ web.stdout?.on('data', (chunk) => prefixOutput('web', colors.web, colors.reset, 
 web.stderr?.on('data', (chunk) => prefixOutput('web', colors.web, colors.reset, chunk, 'stderr'));
 web.on('exit', (code) => {
   if (code) console.error(`[web] exited with code ${code}`);
+  shutdown(code ?? 0);
+});
+
+// Use the workspace-root Expo CLI with mobile cwd. `pnpm exec` from apps/mobile
+// looks for apps/mobile/node_modules/expo, which does not exist with hoisted installs.
+const expoCli = resolveBin('expo', ['bin', 'cli'], [mobileRoot]);
+const expo = spawnProc(children, process.execPath, [expoCli, 'start'], {
+  cwd: mobileRoot,
+  stdio: 'inherit',
+  env: mobileApiUrl ? { EXPO_PUBLIC_API_URL: mobileApiUrl } : {},
+});
+expo.on('exit', (code) => {
+  if (code) console.error(`[expo] exited with code ${code}`);
   shutdown(code ?? 0);
 });

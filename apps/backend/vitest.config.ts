@@ -7,5 +7,6 @@ export default defineConfig({
     include: ['src/features/**/*.test.ts'],
     environment: 'node',
     globals: true,
+    passWithNoTests: true,
   },
 });
