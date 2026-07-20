@@ -51,6 +51,8 @@ export type ShiftFilter = {
   id?: string;
   agencyId?: string;
   outletId?: string;
+  /** Restrict to a set of outlets — used to scope an outlet caller to its own venues. */
+  outletIds?: string[];
   status?: ShiftStatus;
   eventKind?: ShiftEventKind;
   fromDate?: string;

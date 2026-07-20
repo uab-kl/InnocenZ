@@ -56,10 +56,26 @@ export const ShiftAssignmentTable = MainSchema.table(
 export type ShiftAssignmentType = typeof ShiftAssignmentTable.$inferSelect;
 export type ShiftAssignmentInsertType = typeof ShiftAssignmentTable.$inferInsert;
 
+/**
+ * An assignment plus the shift/PR context a caller would otherwise fetch
+ * separately. Outlet callers cannot read `/pr`, so the list endpoint carries the
+ * PR name inline; `outletId` / `shiftDate` come from the joined shift.
+ */
+export type ShiftAssignmentWithContextType = ShiftAssignmentType & {
+  prName: string | null;
+  outletId: string;
+  shiftDate: string;
+};
+
 export type ShiftAssignmentFilter = {
   id?: string;
   agencyId?: string;
   shiftId?: string;
   prId?: string;
   status?: ShiftAssignmentStatus;
+  /**
+   * Pins an outlet caller to the venues it belongs to (matched on the joined
+   * shift). An empty array matches nothing — never treat it as "no filter".
+   */
+  outletIds?: string[];
 };

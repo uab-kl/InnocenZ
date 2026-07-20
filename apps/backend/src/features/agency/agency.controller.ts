@@ -68,7 +68,11 @@ export class AgencyControllerClass {
         });
       }
 
-      const subRole = parseSubRole(req.query.subRole) ?? 'pr';
+      // `subRole=all` returns every sub-role (mirrors `status=all`); it is how a
+      // signed-in operator resolves their own owner/finance membership. Absent
+      // stays 'pr' for the admin PR list that this endpoint was built for.
+      const subRoleParam = req.query.subRole as string | undefined;
+      const subRole = subRoleParam === 'all' ? undefined : (parseSubRole(subRoleParam) ?? 'pr');
       const status = (req.query.status as string | undefined) ?? 'active';
       const memberships = await this.agencyMemberRepository.listMembershipsByUserIds(userIds, {
         subRole,

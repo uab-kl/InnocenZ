@@ -8,6 +8,12 @@
       "port": 3000
     },
     {
+      "name": "backend",
+      "runtimeExecutable": "pnpm",
+      "runtimeArgs": ["--filter", "innocenz-backend", "dev"],
+      "port": 4000
+    },
+    {
       "name": "mobile",
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/scripts/dev-mobile.mjs"],

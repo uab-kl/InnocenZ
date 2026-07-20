@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrRepositoryClass } from './pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
+import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
@@ -12,7 +13,12 @@ import { PrFilter, PrStatus, PrTier } from './pr.model';
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 
-type Scope = { isAdmin: boolean; agencyId: string | null };
+/**
+ * A caller is scoped one of three ways: admin (everything), agency member (their
+ * agency's PRs), or outlet member (only PRs rostered at their own venues, read
+ * only). `outletIds` is empty for non-outlet callers.
+ */
+type Scope = { isAdmin: boolean; agencyId: string | null; outletIds: string[] };
 
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -25,28 +31,42 @@ export class PrControllerClass {
     private prRepository: PrRepositoryClass,
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
+    private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
 
   /**
    * Resolves the caller's data scope. Admins see everything; every other caller
-   * is confined to the agency they belong to (resolved from the DB, never trusted
-   * from the request body).
+   * is confined to the org they belong to (resolved from the DB, never trusted
+   * from the request body). Agency membership wins when a user holds both.
    */
   private async resolveScope(req: Request): Promise<Scope> {
     const user = req.user!;
     const roles = await this.authRepository.getRolesForUserIds([user.id]);
     const isAdmin = roles.some((r) => r.roleName === 'admin');
-    if (isAdmin) return { isAdmin: true, agencyId: null };
+    if (isAdmin) return { isAdmin: true, agencyId: null, outletIds: [] };
 
     const memberships = await this.agencyMemberRepository.listByUser(user.id);
     const active = memberships.find((m) => m.status === 'active') ?? memberships[0];
-    return { isAdmin: false, agencyId: active?.agencyId ?? null };
+    if (active?.agencyId) {
+      return { isAdmin: false, agencyId: active.agencyId, outletIds: [] };
+    }
+
+    // No agency link — fall back to outlet membership so an outlet can read the
+    // personnel rostered at its own venues.
+    const outletMemberships = await this.outletMemberRepository.listByUser(user.id);
+    const outletIds = [
+      ...new Set(
+        outletMemberships.filter((m) => m.status === 'active').map((m) => m.outletId),
+      ),
+    ];
+    return { isAdmin: false, agencyId: null, outletIds };
   }
 
   async list(req: Request, res: Response) {
     try {
       const scope = await this.resolveScope(req);
-      if (!scope.isAdmin && !scope.agencyId) {
+      const isOutletCaller = !scope.isAdmin && !scope.agencyId && scope.outletIds.length > 0;
+      if (!scope.isAdmin && !scope.agencyId && !isOutletCaller) {
         return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
       }
 
@@ -55,8 +75,13 @@ export class PrControllerClass {
         status: req.query.status as PrStatus | undefined,
         tier: req.query.tier as PrTier | undefined,
         name: req.query.name as string | undefined,
-        // Admins may optionally filter by any agency; agency users are pinned to their own.
-        agencyId: scope.isAdmin ? (req.query.agencyId as string | undefined) : scope.agencyId!,
+        // Admins may optionally filter by any agency; agency users are pinned to
+        // their own. An outlet has no agency — it is pinned by venue instead, so
+        // it sees each staffing agency's PRs but only those who worked for it.
+        agencyId: scope.isAdmin
+          ? (req.query.agencyId as string | undefined)
+          : (scope.agencyId ?? undefined),
+        assignedToOutletIds: isOutletCaller ? scope.outletIds : undefined,
       };
 
       const { prs, totalCount } = await this.prRepository.listPaginated({ filter, page, pageSize });
