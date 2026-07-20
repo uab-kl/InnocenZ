@@ -27,8 +27,7 @@ type PrSeed = {
   /** Per-account demo password — falls back to DEMO_PASSWORD. */
   password?: string;
   /** Legal name + ID document captured on the user_profile record. */
-  firstName: string;
-  lastName: string;
+  fullName: string;
   idType: 'NRIC' | 'Passport' | 'Work permit';
   idNo: string;
   /** Agency codes; first is also written to user_profile.agencyId as primary. */
@@ -54,8 +53,7 @@ const PRS: PrSeed[] = [
     username: 'Nurul Aina',
     email: 'pr.nurul@innocenz.demo',
     phoneNum: '+60123456801',
-    firstName: 'Nurul Aina',
-    lastName: 'binti Rahman',
+    fullName: 'Nurul Aina binti Rahman',
     idType: 'NRIC',
     idNo: '920310-14-5521',
     agencyCodes: ['AGY001'],
@@ -64,8 +62,7 @@ const PRS: PrSeed[] = [
     username: 'Haziq Iskandar',
     email: 'pr.haziq@innocenz.demo',
     phoneNum: '+60123456802',
-    firstName: 'Muhammad Haziq',
-    lastName: 'bin Iskandar',
+    fullName: 'Muhammad Haziq bin Iskandar',
     idType: 'NRIC',
     idNo: '900715-10-6033',
     // Multi-agency sample: Atlas + Delta
@@ -75,8 +72,7 @@ const PRS: PrSeed[] = [
     username: 'Mei Ling Tan',
     email: 'pr.meiling@innocenz.demo',
     phoneNum: '+60123456803',
-    firstName: 'Tan Mei',
-    lastName: 'Ling',
+    fullName: 'Tan Mei Ling',
     idType: 'NRIC',
     idNo: '880522-08-5142',
     agencyCodes: ['AGY002'],
@@ -85,8 +81,7 @@ const PRS: PrSeed[] = [
     username: 'Arjun Kumar',
     email: 'pr.arjun@innocenz.demo',
     phoneNum: '+60123456804',
-    firstName: 'Arjun',
-    lastName: 'Kumar a/l Suresh',
+    fullName: 'Arjun Kumar a/l Suresh',
     idType: 'NRIC',
     idNo: '950101-14-5389',
     // Multi-agency sample: Delta + Starline
@@ -96,8 +91,7 @@ const PRS: PrSeed[] = [
     username: 'Sofia Chong',
     email: 'pr.sofia@innocenz.demo',
     phoneNum: '+60123456805',
-    firstName: 'Sofia',
-    lastName: 'Chong Wei Xin',
+    fullName: 'Sofia Chong Wei Xin',
     idType: 'Passport',
     idNo: 'A12345678',
     // Multi-agency sample: Atlas + Starline
@@ -113,8 +107,7 @@ const PRS: PrSeed[] = [
     // (defaultSignInIdentifier "60123456789" / prefilled "password").
     phoneNum: '+60123456789',
     password: 'password',
-    firstName: 'Victoria',
-    lastName: 'Tan Mei Lin',
+    fullName: 'Victoria Tan Mei Lin',
     idType: 'NRIC',
     idNo: '950312-14-8821',
     agencyCodes: ['AGY001', 'AGY002'],
@@ -229,10 +222,6 @@ export async function seedSamplePrs(): Promise<void> {
     if (!userId) continue;
     seededUserIds.push(userId);
 
-    const primaryAgencyId = pr.agencyCodes
-      .map((code) => agencyIdByCode.get(code))
-      .find(Boolean);
-
     const [existingProfile] = await db
       .select({ id: UserProfileTable.id })
       .from(UserProfileTable)
@@ -240,8 +229,7 @@ export async function seedSamplePrs(): Promise<void> {
       .limit(1);
 
     const profileValues = {
-      firstName: pr.firstName,
-      lastName: pr.lastName,
+      fullName: pr.fullName,
       idType: pr.idType,
       idNo: pr.idNo,
       gender: pr.gender ?? null,
@@ -257,8 +245,6 @@ export async function seedSamplePrs(): Promise<void> {
       state: pr.state ?? null,
       country: pr.country ?? null,
       verificationStatus: 'verified' as const,
-      underAgency: Boolean(primaryAgencyId),
-      agencyId: primaryAgencyId ?? null,
       updatedBy: ACTOR,
       updatedAt: new Date(),
     };

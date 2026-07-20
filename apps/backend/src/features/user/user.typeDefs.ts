@@ -16,8 +16,7 @@ export const typeDefs = `#graphql
   type UserProfile {
     id: ID
     userId: ID!
-    firstName: String
-    lastName: String
+    fullName: String
     nationality: String
     idType: String
     idNo: String
@@ -27,14 +26,8 @@ export const typeDefs = `#graphql
     postcode: String
     state: String
     country: String
-    underAgency: Boolean
-    agencyId: String
     idPhotoFront: String
     idPhotoBack: String
-    acceptPrivacy: Boolean
-    acceptTruth: Boolean
-    acceptAgencyShare: Boolean
-    acceptTerms: Boolean
     verificationStatus: String
     verifiedAt: String
     createdAt: String

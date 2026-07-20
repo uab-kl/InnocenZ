@@ -211,6 +211,13 @@
       "when": 1784500000013,
       "tag": "0029_add_missing_audit_columns",
       "breakpoints": true
+    },
+    {
+      "idx": 30,
+      "version": "7",
+      "when": 1784500000014,
+      "tag": "0030_user_profile_full_name_and_drops",
+      "breakpoints": true
     }
   ]
 }

@@ -17,10 +17,7 @@ function mapPrUser(user: BackendUser, agencies: PrAgencyRef[] = []): PrUser {
 		phoneNum: user.phoneNum ?? "",
 		profileImage: user.profileImage ?? null,
 		displayName: user.username,
-		legalName: [user.profile?.firstName, user.profile?.lastName]
-			.filter(Boolean)
-			.join(" ")
-			.trim(),
+		legalName: user.profile?.fullName?.trim() ?? "",
 		idType: user.profile?.idType ?? null,
 		idNo: user.profile?.idNo ?? null,
 		gender: user.profile?.gender ?? null,

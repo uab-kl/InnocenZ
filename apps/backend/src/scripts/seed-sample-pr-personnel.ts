@@ -28,13 +28,8 @@ const TIER_BY_EMAIL: Record<string, PrTier> = {
   'pr.sofia@innocenz.demo': 'tier_2',
 };
 
-function legalName(
-  firstName: string | null,
-  lastName: string | null,
-  fallback: string,
-): string {
-  const joined = [firstName, lastName].filter(Boolean).join(' ').trim();
-  return joined || fallback;
+function legalName(fullName: string | null, fallback: string): string {
+  return fullName?.trim() || fallback;
 }
 
 export async function seedSamplePrPersonnel(): Promise<void> {
@@ -55,8 +50,7 @@ export async function seedSamplePrPersonnel(): Promise<void> {
       username: UserTable.username,
       email: UserTable.email,
       phoneNum: UserTable.phoneNum,
-      firstName: UserProfileTable.firstName,
-      lastName: UserProfileTable.lastName,
+      fullName: UserProfileTable.fullName,
       idNo: UserProfileTable.idNo,
     })
     .from(AgencyMemberTable)
@@ -89,7 +83,7 @@ export async function seedSamplePrPersonnel(): Promise<void> {
     const values = {
       // The roster shows the legal name as the record name and the floor name
       // as the nickname — mirrors managedPrFromBackend on the web side.
-      name: legalName(link.firstName, link.lastName, link.username),
+      name: legalName(link.fullName, link.username),
       nickname: link.username,
       tier: TIER_BY_EMAIL[link.email ?? ''] ?? ('tier_1' as PrTier),
       status: 'active' as const,

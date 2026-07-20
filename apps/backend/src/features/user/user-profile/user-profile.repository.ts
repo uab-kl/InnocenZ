@@ -50,11 +50,6 @@ export class UserProfileRepositoryClass {
       if (filter.verificationStatus) {
         where.push(eq(UserProfileTable.verificationStatus, filter.verificationStatus));
       }
-      if (filter.underAgency !== undefined) {
-        where.push(eq(UserProfileTable.underAgency, filter.underAgency));
-      }
-      if (filter.agencyId) where.push(eq(UserProfileTable.agencyId, filter.agencyId));
-
       return db
         .select()
         .from(UserProfileTable)
