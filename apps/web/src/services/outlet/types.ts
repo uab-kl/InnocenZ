@@ -22,7 +22,6 @@ export interface Outlet {
 	geoFenceRadius: number | null;
 	status: OutletStatus;
 	onboardedByAgencyId: string | null;
-	subscriptionId: string | null;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;
@@ -93,7 +92,6 @@ export interface OutletsQueryParams {
 	name?: string;
 	status?: OutletStatus;
 	onboardedByAgencyId?: string;
-	subscriptionId?: string;
 	page?: number;
 	pageSize?: number;
 }

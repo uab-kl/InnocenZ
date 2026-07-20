@@ -239,6 +239,13 @@
       "when": 1784500000017,
       "tag": "0033_agency_user_and_outlet_user",
       "breakpoints": true
+    },
+    {
+      "idx": 34,
+      "version": "7",
+      "when": 1784500000018,
+      "tag": "0034_outlet_drop_subscription_id",
+      "breakpoints": true
     }
   ]
 }

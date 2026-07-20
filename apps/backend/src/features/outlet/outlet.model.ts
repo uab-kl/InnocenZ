@@ -2,7 +2,6 @@ import { decimal, integer, timestamp, uuid, varchar } from 'drizzle-orm/pg-core'
 import { MainSchema } from '@/db/db.schema';
 import { UserTable } from '@/features/user/user.model';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { SubscriptionTable } from '@/features/subscription/subscription.model';
 
 export const outletStatusValues = ['pending_review', 'active', 'inactive', 'suspended'] as const;
 export type OutletStatus = (typeof outletStatusValues)[number];
@@ -28,7 +27,6 @@ export const OutletTable = MainSchema.table('outlet', {
   geoFenceRadius: integer('geo_fence_radius').default(50), // metres
   status: outletStatusEnum('status').notNull().default('pending_review'),
   onboardedByAgencyId: uuid('onboarded_by_agency_id').references(() => AgencyTable.id, { onDelete: 'set null' }),
-  subscriptionId: uuid('subscription_id').references(() => SubscriptionTable.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),
@@ -59,5 +57,4 @@ export type OutletFilter = {
   name?: string;
   status?: OutletStatus;
   onboardedByAgencyId?: string;
-  subscriptionId?: string;
 };

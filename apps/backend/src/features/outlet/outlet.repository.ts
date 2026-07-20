@@ -65,7 +65,6 @@ export class OutletRepositoryClass {
       if (filter?.status) conditions.push(eq(OutletTable.status, filter.status));
       if (filter?.name) conditions.push(ilike(OutletTable.name, `%${filter.name}%`));
       if (filter?.onboardedByAgencyId) conditions.push(eq(OutletTable.onboardedByAgencyId, filter.onboardedByAgencyId));
-      if (filter?.subscriptionId) conditions.push(eq(OutletTable.subscriptionId, filter.subscriptionId));
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

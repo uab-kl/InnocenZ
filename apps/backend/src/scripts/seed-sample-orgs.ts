@@ -3,6 +3,7 @@ import 'dotenv/config';
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { SubscriptionTable } from '@/features/subscription/subscription.model';
+import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
@@ -102,12 +103,35 @@ export async function seedSampleOrgs(): Promise<void> {
         country: 'Malaysia',
         status: 'active',
         onboardedByAgencyId: agencyIdByName.get(o.onboardedBy) ?? null,
-        subscriptionId: await outletPlanId(o.planName),
         createdBy: ACTOR,
         updatedBy: ACTOR,
       })
       .returning({ id: OutletTable.id });
-    if (row) outletIdByName.set(o.name, row.id);
+    if (row) {
+      outletIdByName.set(o.name, row.id);
+      // The outlet's plan lives on member_subscription, not on the outlet row
+      // (outlet.subscription_id was dropped in migration 0034).
+      const planId = await outletPlanId(o.planName);
+      if (planId) {
+        await db
+          .insert(MemberSubscriptionTable)
+          .values({
+            subscriberType: 'outlet',
+            subscriberId: row.id,
+            subscriberName: o.name,
+            subscriptionId: planId,
+            planName: o.planName,
+            amount: '0',
+            billingCycle: 'monthly',
+            currency: 'MYR',
+            status: 'active',
+            startedAt: new Date(),
+            createdBy: ACTOR,
+            updatedBy: ACTOR,
+          })
+          .onConflictDoNothing();
+      }
+    }
   }
 
   // Velvet 23 team members (owner / finance / ops head) — upsert users by email

@@ -14,7 +14,6 @@ export const CreateOutletSchema = z.object({
   lng: z.number().min(-180).max(180).optional(),
   geoFenceRadius: z.number().int().min(10).max(1000).default(50),
   onboardedByAgencyId: z.string().uuid().optional(),
-  subscriptionId: z.string().uuid().optional(),
 });
 
 export const UpdateOutletSchema = CreateOutletSchema.partial().extend({
