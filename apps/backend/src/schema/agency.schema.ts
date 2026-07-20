@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { agencyStatusValues, agencyMemberSubRoleValues } from '@/features/agency/agency.model';
+import { agencyStatusValues, agencyUserSubRoleValues } from '@/features/agency/agency.model';
 
 export const CreateAgencySchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -15,11 +15,11 @@ export const UpdateAgencySchema = CreateAgencySchema.partial().extend({
 
 export const AddAgencyMemberSchema = z.object({
   userId: z.string().uuid('Invalid user ID'),
-  subRole: z.enum(agencyMemberSubRoleValues),
+  subRole: z.enum(agencyUserSubRoleValues),
 });
 
 export const UpdateAgencyMemberSchema = z.object({
-  subRole: z.enum(agencyMemberSubRoleValues).optional(),
+  subRole: z.enum(agencyUserSubRoleValues).optional(),
   status: z.string().optional(),
 });
 

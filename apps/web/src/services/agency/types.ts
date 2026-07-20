@@ -4,7 +4,36 @@ export type AgencyStatus =
 	| "inactive"
 	| "suspended";
 
-export type AgencyMemberSubRole = "owner" | "finance" | "pr";
+/**
+ * Sub-roles of an agency portal operator. `pr` is deliberately absent — PRs are
+ * not portal users, and their agency links live on agency_pr (see PrAgencyLink).
+ */
+export type AgencyUserSubRole = "owner" | "finance";
+
+export type AgencyPrApproveStatus = "pending" | "approved" | "rejected";
+
+/** Which agency a PR user account is under — one row per (agency, PR). */
+export interface PrAgencyLink {
+	prId: string;
+	userId: string;
+	agencyId: string;
+	agencyName: string;
+	agencyCode: string;
+	approveStatus: AgencyPrApproveStatus;
+}
+
+/** A PR on an agency's roster. */
+export interface AgencyPr {
+	prId: string;
+	agencyId: string;
+	userId: string | null;
+	name: string;
+	nickname: string | null;
+	approveStatus: AgencyPrApproveStatus;
+	username: string | null;
+	email: string | null;
+	phoneNum: string | null;
+}
 
 export interface Agency {
 	id: string;
@@ -25,7 +54,7 @@ export interface AgencyMember {
 	id: string;
 	agencyId: string;
 	userId: string;
-	subRole: AgencyMemberSubRole;
+	subRole: AgencyUserSubRole;
 	status: string;
 	createdAt: string;
 	updatedAt: string;
@@ -42,7 +71,7 @@ export interface AgencyMembership {
 	agencyId: string;
 	agencyName: string;
 	agencyCode: string;
-	subRole: AgencyMemberSubRole;
+	subRole: AgencyUserSubRole;
 	status: string;
 }
 
@@ -89,7 +118,7 @@ export interface AgenciesQueryParams {
 }
 
 export interface AgencyMembersQueryParams {
-	subRole?: AgencyMemberSubRole;
+	subRole?: AgencyUserSubRole;
 	status?: string;
 	search?: string;
 }

@@ -23,6 +23,7 @@ import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.rep
 import { OutletControllerClass } from '@/features/outlet/outlet.controller.js';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
+import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
 import { AgencyControllerClass } from '@/features/agency/agency.controller.js';
 import { CommissionConfigRepositoryClass } from '@/features/commission/commission-config.repository.js';
 import { CommissionConfigControllerClass } from '@/features/commission/commission-config.controller.js';
@@ -79,7 +80,8 @@ export const subscriptionController = new SubscriptionControllerClass(subscripti
 
 export const agencyRepository = new AgencyRepositoryClass();
 export const agencyMemberRepository = new AgencyMemberRepositoryClass();
-export const agencyController = new AgencyControllerClass(agencyRepository, agencyMemberRepository);
+export const agencyPrRepository = new AgencyPrRepository();
+export const agencyController = new AgencyControllerClass(agencyRepository, agencyMemberRepository, agencyPrRepository);
 
 export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();

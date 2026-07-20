@@ -4,7 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { SubscriptionTable } from '@/features/subscription/subscription.model';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { OutletMemberTable, OutletTable } from '@/features/outlet/outlet.model';
+import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
 import { hashPassword } from '@/util/password';
 import { logger } from '@/util/logger';
@@ -146,9 +146,9 @@ export async function seedSampleOrgs(): Promise<void> {
       if (!userId) continue;
 
       await db
-        .delete(OutletMemberTable)
-        .where(and(eq(OutletMemberTable.userId, userId), eq(OutletMemberTable.subRole, member.subRole)));
-      await db.insert(OutletMemberTable).values({
+        .delete(OutletUserTable)
+        .where(and(eq(OutletUserTable.userId, userId), eq(OutletUserTable.subRole, member.subRole)));
+      await db.insert(OutletUserTable).values({
         outletId: velvetId,
         userId,
         subRole: member.subRole,

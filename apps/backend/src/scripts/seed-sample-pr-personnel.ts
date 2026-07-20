@@ -2,18 +2,18 @@ import 'dotenv/config';
 
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { AgencyMemberTable, AgencyTable } from '@/features/agency/agency.model';
-import { PrTable, type PrTier } from '@/features/pr/pr.model';
+import { AgencyTable } from '@/features/agency/agency.model';
+import { AgencyPrTable, PrTable, type PrTier } from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';
 
 // Fills the `pr` table (PR personnel roster) that the agency Manage-PR screen
 // reads. This is a DIFFERENT table from the PR user accounts seeded by
-// seed-sample-prs, which only writes user / user_profile / user_role /
-// agency_member — none of which the roster reads.
+// seed-sample-prs, which writes user / user_profile / user_role and the
+// skeleton pr + agency_pr rows this script then fills in.
 //
-// Rows are derived from the existing agency_member links rather than a
+// Rows are derived from the existing agency_pr links rather than a
 // hardcoded list, so this stays in sync with whatever PRs are attached to an
 // agency: one `pr` row per (agency, PR user) pair. Additive and idempotent —
 // an existing row for a pair is refreshed in place, never duplicated, and rows
@@ -42,10 +42,11 @@ export async function seedSamplePrPersonnel(): Promise<void> {
     return;
   }
 
-  // Every PR-sub-role membership, joined to the user + profile behind it.
+  // Every PR-to-agency link, joined to the user + profile behind it.
   const links = await db
     .select({
-      agencyId: AgencyMemberTable.agencyId,
+      prId: PrTable.id,
+      agencyId: AgencyPrTable.agencyId,
       userId: UserTable.id,
       username: UserTable.username,
       email: UserTable.email,
@@ -53,23 +54,20 @@ export async function seedSamplePrPersonnel(): Promise<void> {
       fullName: UserProfileTable.fullName,
       idNo: UserProfileTable.idNo,
     })
-    .from(AgencyMemberTable)
-    .innerJoin(UserTable, eq(UserTable.id, AgencyMemberTable.userId))
+    .from(AgencyPrTable)
+    .innerJoin(PrTable, eq(PrTable.id, AgencyPrTable.prId))
+    .innerJoin(UserTable, eq(UserTable.id, PrTable.userId))
     .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
     .where(
-      and(
-        eq(AgencyMemberTable.subRole, 'pr'),
-        eq(AgencyMemberTable.status, 'active'),
-        inArray(
-          AgencyMemberTable.agencyId,
-          agencies.map((a) => a.id),
-        ),
+      inArray(
+        AgencyPrTable.agencyId,
+        agencies.map((a) => a.id),
       ),
     );
 
   if (links.length === 0) {
     logger.warn(
-      '[seed-sample-pr-personnel] No active PR memberships found — run seed-sample-prs first',
+      '[seed-sample-pr-personnel] No agency_pr links found — run seed-sample-prs first',
     );
     return;
   }

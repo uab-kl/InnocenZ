@@ -3,9 +3,9 @@ import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
-import { OutletMemberTable, OutletMemberInsertType, OutletMemberType, OutletTable } from './outlet.model';
+import { OutletUserTable, OutletUserInsertType, OutletUserType, OutletTable } from './outlet.model';
 
-export type OutletMemberEnriched = OutletMemberType & {
+export type OutletMemberEnriched = OutletUserType & {
   username: string;
   email: string | null;
   phoneNum: string | null;
@@ -18,18 +18,18 @@ export type OutletMembershipWithOutlet = {
   userId: string;
   outletId: string;
   outletName: string;
-  subRole: OutletMemberType['subRole'];
+  subRole: OutletUserType['subRole'];
   status: string;
 };
 
 export class OutletMemberRepositoryClass {
   async add(
-    data: Omit<OutletMemberInsertType, 'id' | 'createdAt' | 'updatedAt'>,
+    data: Omit<OutletUserInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction,
-  ): Promise<OutletMemberType> {
+  ): Promise<OutletUserType> {
     try {
       const dbClient = tx ?? db;
-      const [member] = await dbClient.insert(OutletMemberTable).values(data).returning();
+      const [member] = await dbClient.insert(OutletUserTable).values(data).returning();
       logger.info('[OutletMemberRepository.add] Member added:', member.id);
       return member;
     } catch (error) {
@@ -40,15 +40,15 @@ export class OutletMemberRepositoryClass {
 
   async update(
     id: string,
-    data: Partial<OutletMemberInsertType>,
+    data: Partial<OutletUserInsertType>,
     tx?: DbTransaction,
-  ): Promise<OutletMemberType | null> {
+  ): Promise<OutletUserType | null> {
     try {
       const dbClient = tx ?? db;
       const [member] = await dbClient
-        .update(OutletMemberTable)
+        .update(OutletUserTable)
         .set({ ...data, updatedAt: new Date() })
-        .where(eq(OutletMemberTable.id, id))
+        .where(eq(OutletUserTable.id, id))
         .returning();
       return member ?? null;
     } catch (error) {
@@ -57,12 +57,12 @@ export class OutletMemberRepositoryClass {
     }
   }
 
-  async getById(id: string): Promise<OutletMemberType | null> {
+  async getById(id: string): Promise<OutletUserType | null> {
     try {
       const [member] = await db
         .select()
-        .from(OutletMemberTable)
-        .where(eq(OutletMemberTable.id, id))
+        .from(OutletUserTable)
+        .where(eq(OutletUserTable.id, id))
         .limit(1);
       return member ?? null;
     } catch (error) {
@@ -71,15 +71,15 @@ export class OutletMemberRepositoryClass {
     }
   }
 
-  async getByOutletAndUser(outletId: string, userId: string): Promise<OutletMemberType | null> {
+  async getByOutletAndUser(outletId: string, userId: string): Promise<OutletUserType | null> {
     try {
       const [member] = await db
         .select()
-        .from(OutletMemberTable)
+        .from(OutletUserTable)
         .where(
           and(
-            eq(OutletMemberTable.outletId, outletId),
-            eq(OutletMemberTable.userId, userId),
+            eq(OutletUserTable.outletId, outletId),
+            eq(OutletUserTable.userId, userId),
           ),
         )
         .limit(1);
@@ -90,13 +90,13 @@ export class OutletMemberRepositoryClass {
     }
   }
 
-  async listByOutlet(outletId: string): Promise<OutletMemberType[]> {
+  async listByOutlet(outletId: string): Promise<OutletUserType[]> {
     try {
       return db
         .select()
-        .from(OutletMemberTable)
-        .where(eq(OutletMemberTable.outletId, outletId))
-        .orderBy(OutletMemberTable.createdAt);
+        .from(OutletUserTable)
+        .where(eq(OutletUserTable.outletId, outletId))
+        .orderBy(OutletUserTable.createdAt);
     } catch (error) {
       logger.error('[OutletMemberRepository.listByOutlet] Error:', error);
       return [];
@@ -107,35 +107,35 @@ export class OutletMemberRepositoryClass {
     try {
       return db
         .select({
-          id: OutletMemberTable.id,
-          outletId: OutletMemberTable.outletId,
-          userId: OutletMemberTable.userId,
-          subRole: OutletMemberTable.subRole,
-          status: OutletMemberTable.status,
-          createdAt: OutletMemberTable.createdAt,
-          updatedAt: OutletMemberTable.updatedAt,
-          createdBy: OutletMemberTable.createdBy,
-          updatedBy: OutletMemberTable.updatedBy,
+          id: OutletUserTable.id,
+          outletId: OutletUserTable.outletId,
+          userId: OutletUserTable.userId,
+          subRole: OutletUserTable.subRole,
+          status: OutletUserTable.status,
+          createdAt: OutletUserTable.createdAt,
+          updatedAt: OutletUserTable.updatedAt,
+          createdBy: OutletUserTable.createdBy,
+          updatedBy: OutletUserTable.updatedBy,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
         })
-        .from(OutletMemberTable)
-        .innerJoin(UserTable, eq(UserTable.id, OutletMemberTable.userId))
-        .where(eq(OutletMemberTable.outletId, outletId))
-        .orderBy(OutletMemberTable.createdAt);
+        .from(OutletUserTable)
+        .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
+        .where(eq(OutletUserTable.outletId, outletId))
+        .orderBy(OutletUserTable.createdAt);
     } catch (error) {
       logger.error('[OutletMemberRepository.listByOutletWithUser] Error:', error);
       return [];
     }
   }
 
-  async listByUser(userId: string): Promise<OutletMemberType[]> {
+  async listByUser(userId: string): Promise<OutletUserType[]> {
     try {
       return db
         .select()
-        .from(OutletMemberTable)
-        .where(eq(OutletMemberTable.userId, userId));
+        .from(OutletUserTable)
+        .where(eq(OutletUserTable.userId, userId));
     } catch (error) {
       logger.error('[OutletMemberRepository.listByUser] Error:', error);
       return [];
@@ -150,21 +150,21 @@ export class OutletMemberRepositoryClass {
   ): Promise<OutletMembershipWithOutlet[]> {
     if (userIds.length === 0) return [];
     try {
-      const conditions = [inArray(OutletMemberTable.userId, userIds)];
+      const conditions = [inArray(OutletUserTable.userId, userIds)];
       if (options.status) {
-        conditions.push(eq(OutletMemberTable.status, options.status));
+        conditions.push(eq(OutletUserTable.status, options.status));
       }
       const rows = await db
         .select({
-          membershipId: OutletMemberTable.id,
-          userId: OutletMemberTable.userId,
-          outletId: OutletMemberTable.outletId,
+          membershipId: OutletUserTable.id,
+          userId: OutletUserTable.userId,
+          outletId: OutletUserTable.outletId,
           outletName: OutletTable.name,
-          subRole: OutletMemberTable.subRole,
-          status: OutletMemberTable.status,
+          subRole: OutletUserTable.subRole,
+          status: OutletUserTable.status,
         })
-        .from(OutletMemberTable)
-        .innerJoin(OutletTable, eq(OutletTable.id, OutletMemberTable.outletId))
+        .from(OutletUserTable)
+        .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))
         .where(and(...conditions))
         .orderBy(OutletTable.name);
       return rows;
@@ -178,9 +178,9 @@ export class OutletMemberRepositoryClass {
     try {
       const dbClient = tx ?? db;
       await dbClient
-        .update(OutletMemberTable)
+        .update(OutletUserTable)
         .set({ status: 'inactive', updatedAt: new Date() })
-        .where(eq(OutletMemberTable.id, id));
+        .where(eq(OutletUserTable.id, id));
       return true;
     } catch (error) {
       logger.error('[OutletMemberRepository.remove] Error:', error);

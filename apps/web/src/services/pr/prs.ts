@@ -1,7 +1,7 @@
 import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 import type { BackendUser } from "@/services/admin/mappers";
-import { fetchAgencyMembershipsByUsers } from "@/services/agency";
+import { fetchPrAgencyLinks } from "@/services/agency";
 import { getRoleIdByName } from "@/services/rbac/roles";
 import type {
 	PrAgencyRef,
@@ -94,20 +94,20 @@ export async function fetchPrUsers(
 	}>(`/user${queryString}`);
 
 	const users = response.data.data ?? [];
-	const memberships = await fetchAgencyMembershipsByUsers(
+	const links = await fetchPrAgencyLinks(
 		users.map((user) => user.id),
 		onRefreshFail,
 	);
 
 	const agenciesByUser = new Map<string, PrAgencyRef[]>();
-	for (const membership of memberships.data) {
-		const list = agenciesByUser.get(membership.userId) ?? [];
+	for (const link of links.data) {
+		const list = agenciesByUser.get(link.userId) ?? [];
 		list.push({
-			id: membership.agencyId,
-			name: membership.agencyName,
-			code: membership.agencyCode,
+			id: link.agencyId,
+			name: link.agencyName,
+			code: link.agencyCode,
 		});
-		agenciesByUser.set(membership.userId, list);
+		agenciesByUser.set(link.userId, list);
 	}
 
 	let mapped = users.map((user) =>

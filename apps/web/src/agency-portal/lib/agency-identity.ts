@@ -1,5 +1,5 @@
 import type { AgencySubRole } from "@agency-portal/lib/agency-rbac";
-import type { AgencyMemberSubRole, AgencyMembership } from "@/services/agency";
+import type { AgencyUserSubRole, AgencyMembership } from "@/services/agency";
 
 /**
  * Real agency identity for a signed-in operator, resolved from their backend
@@ -21,7 +21,7 @@ const IDENTITY_KEY = "iz-agency-identity";
  * so it falls back to owner.
  */
 export function agencySubRoleFromBackend(
-	subRole: AgencyMemberSubRole,
+	subRole: AgencyUserSubRole,
 ): AgencySubRole {
 	return subRole === "finance" ? "agency_finance" : "agency_owner";
 }

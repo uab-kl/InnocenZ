@@ -4,14 +4,14 @@ import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
 import {
-  AgencyMemberTable,
-  AgencyMemberInsertType,
-  AgencyMemberType,
-  AgencyMemberSubRole,
+  AgencyUserTable,
+  AgencyUserInsertType,
+  AgencyUserType,
+  AgencyUserSubRole,
   AgencyTable,
 } from './agency.model';
 
-export type AgencyMemberEnriched = AgencyMemberType & {
+export type AgencyMemberEnriched = AgencyUserType & {
   username: string;
   email: string | null;
   phoneNum: string | null;
@@ -23,24 +23,24 @@ export type AgencyMembershipWithAgency = {
   agencyId: string;
   agencyName: string;
   agencyCode: string;
-  subRole: AgencyMemberSubRole;
+  subRole: AgencyUserSubRole;
   status: string;
 };
 
 export type ListMembersOptions = {
-  subRole?: AgencyMemberSubRole;
+  subRole?: AgencyUserSubRole;
   status?: string;
   search?: string;
 };
 
 export class AgencyMemberRepositoryClass {
   async add(
-    data: Omit<AgencyMemberInsertType, 'id' | 'createdAt' | 'updatedAt'>,
+    data: Omit<AgencyUserInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction,
-  ): Promise<AgencyMemberType> {
+  ): Promise<AgencyUserType> {
     try {
       const dbClient = tx ?? db;
-      const [member] = await dbClient.insert(AgencyMemberTable).values(data).returning();
+      const [member] = await dbClient.insert(AgencyUserTable).values(data).returning();
       logger.info('[AgencyMemberRepository.add] Member added:', member.id);
       return member;
     } catch (error) {
@@ -51,15 +51,15 @@ export class AgencyMemberRepositoryClass {
 
   async update(
     id: string,
-    data: Partial<AgencyMemberInsertType>,
+    data: Partial<AgencyUserInsertType>,
     tx?: DbTransaction,
-  ): Promise<AgencyMemberType | null> {
+  ): Promise<AgencyUserType | null> {
     try {
       const dbClient = tx ?? db;
       const [member] = await dbClient
-        .update(AgencyMemberTable)
+        .update(AgencyUserTable)
         .set({ ...data, updatedAt: new Date() })
-        .where(eq(AgencyMemberTable.id, id))
+        .where(eq(AgencyUserTable.id, id))
         .returning();
       return member ?? null;
     } catch (error) {
@@ -68,12 +68,12 @@ export class AgencyMemberRepositoryClass {
     }
   }
 
-  async getById(id: string): Promise<AgencyMemberType | null> {
+  async getById(id: string): Promise<AgencyUserType | null> {
     try {
       const [member] = await db
         .select()
-        .from(AgencyMemberTable)
-        .where(eq(AgencyMemberTable.id, id))
+        .from(AgencyUserTable)
+        .where(eq(AgencyUserTable.id, id))
         .limit(1);
       return member ?? null;
     } catch (error) {
@@ -82,12 +82,12 @@ export class AgencyMemberRepositoryClass {
     }
   }
 
-  async getByAgencyAndUser(agencyId: string, userId: string): Promise<AgencyMemberType | null> {
+  async getByAgencyAndUser(agencyId: string, userId: string): Promise<AgencyUserType | null> {
     try {
       const [member] = await db
         .select()
-        .from(AgencyMemberTable)
-        .where(and(eq(AgencyMemberTable.agencyId, agencyId), eq(AgencyMemberTable.userId, userId)))
+        .from(AgencyUserTable)
+        .where(and(eq(AgencyUserTable.agencyId, agencyId), eq(AgencyUserTable.userId, userId)))
         .limit(1);
       return member ?? null;
     } catch (error) {
@@ -101,12 +101,12 @@ export class AgencyMemberRepositoryClass {
     options: ListMembersOptions = {},
   ): Promise<AgencyMemberEnriched[]> {
     try {
-      const conditions = [eq(AgencyMemberTable.agencyId, agencyId)];
+      const conditions = [eq(AgencyUserTable.agencyId, agencyId)];
       if (options.subRole) {
-        conditions.push(eq(AgencyMemberTable.subRole, options.subRole));
+        conditions.push(eq(AgencyUserTable.subRole, options.subRole));
       }
       if (options.status) {
-        conditions.push(eq(AgencyMemberTable.status, options.status));
+        conditions.push(eq(AgencyUserTable.status, options.status));
       }
       if (options.search?.trim()) {
         const term = `%${options.search.trim()}%`;
@@ -121,35 +121,35 @@ export class AgencyMemberRepositoryClass {
 
       return db
         .select({
-          id: AgencyMemberTable.id,
-          agencyId: AgencyMemberTable.agencyId,
-          userId: AgencyMemberTable.userId,
-          subRole: AgencyMemberTable.subRole,
-          status: AgencyMemberTable.status,
-          createdAt: AgencyMemberTable.createdAt,
-          updatedAt: AgencyMemberTable.updatedAt,
-          createdBy: AgencyMemberTable.createdBy,
-          updatedBy: AgencyMemberTable.updatedBy,
+          id: AgencyUserTable.id,
+          agencyId: AgencyUserTable.agencyId,
+          userId: AgencyUserTable.userId,
+          subRole: AgencyUserTable.subRole,
+          status: AgencyUserTable.status,
+          createdAt: AgencyUserTable.createdAt,
+          updatedAt: AgencyUserTable.updatedAt,
+          createdBy: AgencyUserTable.createdBy,
+          updatedBy: AgencyUserTable.updatedBy,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
         })
-        .from(AgencyMemberTable)
-        .innerJoin(UserTable, eq(UserTable.id, AgencyMemberTable.userId))
+        .from(AgencyUserTable)
+        .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
         .where(and(...conditions))
-        .orderBy(AgencyMemberTable.createdAt);
+        .orderBy(AgencyUserTable.createdAt);
     } catch (error) {
       logger.error('[AgencyMemberRepository.listByAgency] Error:', error);
       return [];
     }
   }
 
-  async listByUser(userId: string): Promise<AgencyMemberType[]> {
+  async listByUser(userId: string): Promise<AgencyUserType[]> {
     try {
       return db
         .select()
-        .from(AgencyMemberTable)
-        .where(eq(AgencyMemberTable.userId, userId));
+        .from(AgencyUserTable)
+        .where(eq(AgencyUserTable.userId, userId));
     } catch (error) {
       logger.error('[AgencyMemberRepository.listByUser] Error:', error);
       return [];
@@ -158,31 +158,31 @@ export class AgencyMemberRepositoryClass {
 
   async listMembershipsByUserIds(
     userIds: string[],
-    options: { subRole?: AgencyMemberSubRole; status?: string } = {},
+    options: { subRole?: AgencyUserSubRole; status?: string } = {},
   ): Promise<AgencyMembershipWithAgency[]> {
     if (userIds.length === 0) return [];
 
     try {
-      const conditions = [inArray(AgencyMemberTable.userId, userIds)];
+      const conditions = [inArray(AgencyUserTable.userId, userIds)];
       if (options.subRole) {
-        conditions.push(eq(AgencyMemberTable.subRole, options.subRole));
+        conditions.push(eq(AgencyUserTable.subRole, options.subRole));
       }
       if (options.status) {
-        conditions.push(eq(AgencyMemberTable.status, options.status));
+        conditions.push(eq(AgencyUserTable.status, options.status));
       }
 
       const rows = await db
         .select({
-          membershipId: AgencyMemberTable.id,
-          userId: AgencyMemberTable.userId,
-          agencyId: AgencyMemberTable.agencyId,
+          membershipId: AgencyUserTable.id,
+          userId: AgencyUserTable.userId,
+          agencyId: AgencyUserTable.agencyId,
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
-          subRole: AgencyMemberTable.subRole,
-          status: AgencyMemberTable.status,
+          subRole: AgencyUserTable.subRole,
+          status: AgencyUserTable.status,
         })
-        .from(AgencyMemberTable)
-        .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyMemberTable.agencyId))
+        .from(AgencyUserTable)
+        .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyUserTable.agencyId))
         .where(and(...conditions))
         .orderBy(AgencyTable.name);
 
@@ -197,9 +197,9 @@ export class AgencyMemberRepositoryClass {
     try {
       const dbClient = tx ?? db;
       await dbClient
-        .update(AgencyMemberTable)
+        .update(AgencyUserTable)
         .set({ status: 'inactive', updatedAt: new Date() })
-        .where(eq(AgencyMemberTable.id, id));
+        .where(eq(AgencyUserTable.id, id));
       return true;
     } catch (error) {
       logger.error('[AgencyMemberRepository.remove] Error:', error);

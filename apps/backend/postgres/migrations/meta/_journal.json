@@ -232,6 +232,13 @@
       "when": 1784500000016,
       "tag": "0032_add_agency_pr",
       "breakpoints": true
+    },
+    {
+      "idx": 33,
+      "version": "7",
+      "when": 1784500000017,
+      "tag": "0033_agency_user_and_outlet_user",
+      "breakpoints": true
     }
   ]
 }

@@ -6,16 +6,18 @@ import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
-import { AgencyMemberTable, AgencyTable } from '@/features/agency/agency.model';
+import { AgencyTable } from '@/features/agency/agency.model';
+import { AgencyPrTable, PrTable } from '@/features/pr/pr.model';
 import { hashPassword } from '@/util/password';
 import { DEFAULT_PROFILE_IMAGE } from '@/util/profile-image';
 import { logger } from '@/util/logger';
 
 // Demo PR (promoter) users so the admin PR list page shows real accounts.
 // Each PR = a user + user_profile + a user_role link to the 'pr' role.
-// Linked to sample agencies via agency_member (subRole=pr). A PR can belong
-// to more than one agency — membership rows are the source of truth.
-// Idempotent: upserts by email and rebuilds membership links on every run.
+// Linked to sample agencies via `pr` + `agency_pr`: one `pr` row per (agency,
+// user) pair, and an agency_pr row joining them. A PR can belong to more than
+// one agency — agency_pr is the source of truth.
+// Idempotent: upserts by email and reuses existing pr rows on every run.
 const ACTOR = 'seed-sample';
 const PR_ROLE_NAME = 'pr';
 const DEMO_PASSWORD = 'Password123!';
@@ -280,29 +282,48 @@ export async function seedSamplePrs(): Promise<void> {
     }
 
     // Rebuild this PR's agency links so multi-agency samples stay accurate.
-    await db
-      .delete(AgencyMemberTable)
-      .where(
-        and(
-          eq(AgencyMemberTable.userId, userId),
-          eq(AgencyMemberTable.subRole, 'pr'),
-        ),
-      );
-
+    // One `pr` row per (agency, user) pair, joined by agency_pr. Existing rows
+    // are reused rather than recreated so the roster keeps its ids — and so the
+    // richer fields seed-sample-pr-personnel writes afterwards survive a re-run.
     for (const code of pr.agencyCodes) {
       const agencyId = agencyIdByCode.get(code);
       if (!agencyId) {
         logger.warn(`[seed-sample-prs] Agency ${code} missing — skip link for ${pr.email}`);
         continue;
       }
-      await db.insert(AgencyMemberTable).values({
-        agencyId,
-        userId,
-        subRole: 'pr',
-        status: 'active',
-        createdBy: ACTOR,
-        updatedBy: ACTOR,
-      });
+
+      const [existingPr] = await db
+        .select({ id: PrTable.id })
+        .from(PrTable)
+        .where(and(eq(PrTable.agencyId, agencyId), eq(PrTable.userId, userId)))
+        .limit(1);
+
+      let prId = existingPr?.id;
+      if (!prId) {
+        const [inserted] = await db
+          .insert(PrTable)
+          .values({
+            agencyId,
+            userId,
+            name: pr.fullName,
+            nickname: pr.username,
+            createdBy: ACTOR,
+            updatedBy: ACTOR,
+          })
+          .returning({ id: PrTable.id });
+        prId = inserted.id;
+      }
+
+      await db
+        .insert(AgencyPrTable)
+        .values({
+          agencyId,
+          prId,
+          approveStatus: 'approved',
+          createdBy: ACTOR,
+          updatedBy: ACTOR,
+        })
+        .onConflictDoNothing();
       membershipCount += 1;
     }
   }

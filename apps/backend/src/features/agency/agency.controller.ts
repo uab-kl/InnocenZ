@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { AgencyRepositoryClass } from './agency.repository';
 import { AgencyMemberRepositoryClass } from './agency-member.repository';
+import { AgencyPrRepository } from './agency-pr.repository';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -11,12 +12,20 @@ import {
   AddAgencyMemberSchema,
   UpdateAgencyMemberSchema,
 } from '@/schema/agency.schema';
-import { AgencyFilter, AgencyMemberSubRole, AgencyStatus, agencyMemberSubRoleValues } from './agency.model';
+import { AgencyFilter, AgencyUserSubRole, AgencyStatus, agencyUserSubRoleValues } from './agency.model';
+import { AgencyPrApproveStatus, agencyPrApproveStatusValues } from '@/features/pr/pr.model';
 
-function parseSubRole(value: unknown): AgencyMemberSubRole | undefined {
+function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;
-  return (agencyMemberSubRoleValues as readonly string[]).includes(value)
-    ? (value as AgencyMemberSubRole)
+  return (agencyUserSubRoleValues as readonly string[]).includes(value)
+    ? (value as AgencyUserSubRole)
+    : undefined;
+}
+
+function parseApproveStatus(value: unknown): AgencyPrApproveStatus | undefined {
+  if (typeof value !== 'string') return undefined;
+  return (agencyPrApproveStatusValues as readonly string[]).includes(value)
+    ? (value as AgencyPrApproveStatus)
     : undefined;
 }
 
@@ -24,7 +33,57 @@ export class AgencyControllerClass {
   constructor(
     private agencyRepository: AgencyRepositoryClass,
     private agencyMemberRepository: AgencyMemberRepositoryClass,
+    private agencyPrRepository: AgencyPrRepository,
   ) {}
+
+  /**
+   * Which agencies each PR user account is under. Replaces the old
+   * `GET /agency/memberships?subRole=pr`, which read the sub_role='pr' rows
+   * migration 0033 deleted.
+   */
+  async listPrLinks(req: Request, res: Response) {
+    try {
+      const userIds = String(req.query.userIds ?? '')
+        .split(',')
+        .map((value) => value.trim())
+        .filter(Boolean);
+
+      if (userIds.length === 0) {
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
+      if (userIds.length > 200) {
+        return res.status(400).json({
+          success: false,
+          message: 'At most 200 userIds can be requested at once',
+          data: null,
+        });
+      }
+
+      const links = await this.agencyPrRepository.listLinksByUserIds(userIds);
+      res.status(200).json({ success: true, message: 'OK', data: links });
+    } catch (error) {
+      logger.error('[AgencyController.listPrLinks] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** This agency's PRs, read from agency_pr. */
+  async listAgencyPrs(req: Request, res: Response) {
+    try {
+      const agencyId = paramId(req.params.id);
+      const existing = await this.agencyRepository.getById(agencyId);
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const prs = await this.agencyPrRepository.listByAgency(agencyId, {
+        approveStatus: parseApproveStatus(req.query.approveStatus),
+        search: req.query.search as string | undefined,
+      });
+      res.status(200).json({ success: true, message: 'OK', data: prs });
+    } catch (error) {
+      logger.error('[AgencyController.listAgencyPrs] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
 
   async list(req: Request, res: Response) {
     try {
@@ -68,11 +127,11 @@ export class AgencyControllerClass {
         });
       }
 
-      // `subRole=all` returns every sub-role (mirrors `status=all`); it is how a
-      // signed-in operator resolves their own owner/finance membership. Absent
-      // stays 'pr' for the admin PR list that this endpoint was built for.
+      // Every sub-role by default. This endpoint used to default to 'pr' for the
+      // admin PR list, but agency_user holds only portal operators now — the
+      // PR-to-agency links moved to agency_pr (GET /agency/pr-links).
       const subRoleParam = req.query.subRole as string | undefined;
-      const subRole = subRoleParam === 'all' ? undefined : (parseSubRole(subRoleParam) ?? 'pr');
+      const subRole = subRoleParam === 'all' ? undefined : parseSubRole(subRoleParam);
       const status = (req.query.status as string | undefined) ?? 'active';
       const memberships = await this.agencyMemberRepository.listMembershipsByUserIds(userIds, {
         subRole,

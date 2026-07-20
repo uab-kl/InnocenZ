@@ -6,9 +6,13 @@ export const agencyStatusValues = ['pending_review', 'active', 'inactive', 'susp
 export type AgencyStatus = (typeof agencyStatusValues)[number];
 export const agencyStatusEnum = MainSchema.enum('agency_status', agencyStatusValues);
 
-export const agencyMemberSubRoleValues = ['owner', 'finance', 'pr'] as const;
-export type AgencyMemberSubRole = (typeof agencyMemberSubRoleValues)[number];
-export const agencyMemberSubRoleEnum = MainSchema.enum('agency_member_sub_role', agencyMemberSubRoleValues);
+/**
+ * Sub-roles of a portal operator. `pr` was removed in migration 0033 — a PR is
+ * not a portal user, and the PR-to-agency link lives on `agency_pr`.
+ */
+export const agencyUserSubRoleValues = ['owner', 'finance'] as const;
+export type AgencyUserSubRole = (typeof agencyUserSubRoleValues)[number];
+export const agencyUserSubRoleEnum = MainSchema.enum('agency_user_sub_role', agencyUserSubRoleValues);
 
 export const AgencyTable = MainSchema.table('agency', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
@@ -25,11 +29,12 @@ export const AgencyTable = MainSchema.table('agency', {
   updatedBy: varchar('updated_by').notNull(),
 });
 
-export const AgencyMemberTable = MainSchema.table('agency_member', {
+/** Who can sign into the agency portal. PRs are not portal users — see `AgencyPrTable`. */
+export const AgencyUserTable = MainSchema.table('agency_user', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   agencyId: uuid('agency_id').notNull().references(() => AgencyTable.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => UserTable.id, { onDelete: 'cascade' }),
-  subRole: agencyMemberSubRoleEnum('sub_role').notNull(),
+  subRole: agencyUserSubRoleEnum('sub_role').notNull(),
   status: varchar('status', { length: 50 }).notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -40,8 +45,8 @@ export const AgencyMemberTable = MainSchema.table('agency_member', {
 export type AgencyType = typeof AgencyTable.$inferSelect;
 export type AgencyInsertType = typeof AgencyTable.$inferInsert;
 
-export type AgencyMemberType = typeof AgencyMemberTable.$inferSelect;
-export type AgencyMemberInsertType = typeof AgencyMemberTable.$inferInsert;
+export type AgencyUserType = typeof AgencyUserTable.$inferSelect;
+export type AgencyUserInsertType = typeof AgencyUserTable.$inferInsert;
 
 export type AgencyFilter = {
   id?: string;

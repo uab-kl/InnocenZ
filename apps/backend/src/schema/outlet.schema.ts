@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { outletStatusValues, outletMemberSubRoleValues } from '@/features/outlet/outlet.model';
+import { outletStatusValues, outletUserSubRoleValues } from '@/features/outlet/outlet.model';
 
 export const CreateOutletSchema = z.object({
   name: z.string().min(1, 'Name is required'),
@@ -29,11 +29,11 @@ export const UpdateGeoFenceSchema = z.object({
 
 export const AddOutletMemberSchema = z.object({
   userId: z.string().uuid('Invalid user ID'),
-  subRole: z.enum(outletMemberSubRoleValues),
+  subRole: z.enum(outletUserSubRoleValues),
 });
 
 export const UpdateOutletMemberSchema = z.object({
-  subRole: z.enum(outletMemberSubRoleValues).optional(),
+  subRole: z.enum(outletUserSubRoleValues).optional(),
   status: z.string().optional(),
 });
 
