@@ -32,6 +32,11 @@ export interface ShiftAssignment {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	// Joined shift/PR context. The LIST endpoint always returns these; getById
+	// returns the bare row, so treat them as optional.
+	prName?: string | null;
+	outletId?: string;
+	shiftDate?: string;
 }
 
 export interface ShiftAssignmentsQueryParams {

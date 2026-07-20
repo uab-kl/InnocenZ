@@ -1,6 +1,5 @@
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import type { ShiftHistoryRow } from "@agency-portal/lib/shift-history-utils";
-import type { Shift } from "@/services/shift";
 import type { ShiftAssignment } from "@/services/shift-assignment";
 
 // numeric(12,2) columns come back as strings; coerce defensively.
@@ -35,12 +34,13 @@ function workedHours(
  */
 export function shiftHistoryRowFromAssignment(args: {
 	assignment: ShiftAssignment;
-	shift: Shift;
+	/** The shift's `YYYY-MM-DD` — from the shift row, or joined onto the assignment. */
+	shiftDate: string;
 	prName: string;
 	outletName: string;
 	agencyName: string;
 }): ShiftHistoryRow {
-	const { assignment, shift, prName, outletName, agencyName } = args;
+	const { assignment, shiftDate, prName, outletName, agencyName } = args;
 	const totalPayout = num(assignment.payAmount);
 	return {
 		id: assignment.id,
@@ -48,8 +48,8 @@ export function shiftHistoryRowFromAssignment(args: {
 		prName,
 		outlet: outletName,
 		agencyName,
-		dateIso: shift.shiftDate,
-		dateDisplay: fmtDateLabelFromIso(shift.shiftDate),
+		dateIso: shiftDate,
+		dateDisplay: fmtDateLabelFromIso(shiftDate),
 		totalPayout,
 		// Wages-only breakdown: the sealed `payAmount` is the whole payout; with
 		// drinks/tips 0 the commission parts resolve to 0 too.

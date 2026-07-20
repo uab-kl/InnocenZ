@@ -125,12 +125,12 @@ export const prRepository = new PrRepositoryClass();
 export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();
-export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository);
+export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository);
 
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
-export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository);
+export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const paymentVoucherGenerator = new PaymentVoucherGeneratorClass(shiftAssignmentRepository, paymentVoucherRepository, prRepository);

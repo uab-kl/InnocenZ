@@ -4,14 +4,16 @@ import { requireRole } from '@/middlewares/require-role.js';
 
 const router = Router();
 
-// Shift management is an agency (or admin) function; scoping to the caller's
-// own agency is enforced in the controller.
-router.use(requireRole('admin', 'agency'));
+// Writing shifts is an agency (or admin) function. Outlets may READ the shifts
+// booked at their own venues — the controller pins them to their outlet set, so
+// the wider role here never widens the data they can see.
+const canRead = requireRole('admin', 'agency', 'outlet');
+const canWrite = requireRole('admin', 'agency');
 
-router.get('/', shiftController.list.bind(shiftController));
-router.get('/:id', shiftController.getById.bind(shiftController));
-router.post('/', shiftController.create.bind(shiftController));
-router.put('/:id', shiftController.update.bind(shiftController));
-router.delete('/:id', shiftController.remove.bind(shiftController));
+router.get('/', canRead, shiftController.list.bind(shiftController));
+router.get('/:id', canRead, shiftController.getById.bind(shiftController));
+router.post('/', canWrite, shiftController.create.bind(shiftController));
+router.put('/:id', canWrite, shiftController.update.bind(shiftController));
+router.delete('/:id', canWrite, shiftController.remove.bind(shiftController));
 
 export default router;

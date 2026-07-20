@@ -92,7 +92,7 @@ export function useAgencyHistory(): AgencyHistoryData {
 			rows.push(
 				shiftHistoryRowFromAssignment({
 					assignment: a,
-					shift,
+					shiftDate: shift.shiftDate,
 					prName: prNameById.get(a.prId) ?? "Unknown PR",
 					outletName: outletNameById.get(shift.outletId) ?? shift.outletId,
 					agencyName,

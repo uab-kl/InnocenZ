@@ -5,6 +5,7 @@ import {
   OutletPage,
   OutletPageHeader,
 } from '@agency-portal/components/outlet/outlet-portal-ui';
+import { useOutletHistory } from '@agency-portal/hooks/use-outlet-history';
 import { shiftHistoryForOutlet } from '@agency-portal/lib/portal-sync';
 import { useStore } from '@agency-portal/lib/store';
 
@@ -14,12 +15,18 @@ export const Route = createFileRoute('/outlet/history')({
 
 function OutletHistory() {
   const shiftHistory = useStore((s) => s.shiftHistory) ?? [];
-  const outletName = useStore((s) => s.outletWorkspace.outletName);
-  const rows = useMemo(
-    () => shiftHistoryForOutlet(shiftHistory, outletName),
-    [shiftHistory, outletName],
+  const storeOutletName = useStore((s) => s.outletWorkspace.outletName);
+  // A real session reads its sealed nights from the backend; demo sessions keep
+  // reading the demo store.
+  const backend = useOutletHistory();
+  const outletName = backend.backed ? backend.outletName : storeOutletName;
+  const demoRows = useMemo(
+    () => shiftHistoryForOutlet(shiftHistory, storeOutletName),
+    [shiftHistory, storeOutletName],
   );
+  const rows = backend.backed ? backend.rows : demoRows;
   const summaryHint = useMemo(() => {
+    if (backend.isLoading) return 'Loading shift history…';
     if (rows.length === 0)
       return 'No shift history yet — completed shifts will appear here.';
     const sorted = [...rows].sort((a, b) => a.dateIso.localeCompare(b.dateIso));
@@ -31,7 +38,7 @@ function OutletHistory() {
         ? `${oldest} – ${newest}`
         : (oldest ?? newest);
     return `${rows.length} PR shifts · ${range} · RM ${totalPayout.toLocaleString()} paid out`;
-  }, [rows]);
+  }, [rows, backend.isLoading]);
 
   return (
     <OutletPage>

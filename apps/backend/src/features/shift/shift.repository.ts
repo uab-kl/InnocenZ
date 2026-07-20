@@ -1,4 +1,4 @@
-import { and, eq, gte, lte, sql, SQL } from 'drizzle-orm';
+import { and, eq, gte, inArray, lte, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -60,6 +60,11 @@ export class ShiftRepositoryClass {
       if (filter?.id) conditions.push(eq(ShiftTable.id, filter.id));
       if (filter?.agencyId) conditions.push(eq(ShiftTable.agencyId, filter.agencyId));
       if (filter?.outletId) conditions.push(eq(ShiftTable.outletId, filter.outletId));
+      // An empty array must match nothing, not everything — guard before inArray.
+      if (filter?.outletIds) {
+        if (filter.outletIds.length === 0) return { shifts: [], totalCount: 0 };
+        conditions.push(inArray(ShiftTable.outletId, filter.outletIds));
+      }
       if (filter?.status) conditions.push(eq(ShiftTable.status, filter.status));
       if (filter?.eventKind) conditions.push(eq(ShiftTable.eventKind, filter.eventKind));
       if (filter?.fromDate) conditions.push(gte(ShiftTable.shiftDate, filter.fromDate));

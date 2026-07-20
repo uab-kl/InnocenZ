@@ -1,0 +1,98 @@
+import { shiftHistoryRowFromAssignment } from "@agency-portal/lib/agency-shift-history-map";
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import {
+	type ShiftHistoryRow,
+	sortShiftHistoryDesc,
+} from "@agency-portal/lib/shift-history-utils";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { fetchAgencies } from "@/services/agency/agency";
+import { fetchShiftAssignments } from "@/services/shift-assignment";
+
+// The assignment endpoint has no date filter, so the page size is what bounds
+// the ledger. One outlet's sealed nights stay well inside this.
+const HISTORY_PAGE_SIZE = 500;
+
+export interface OutletHistoryData {
+	backed: boolean;
+	/** The signed-in outlet's name; empty on a demo session. */
+	outletName: string;
+	rows: ShiftHistoryRow[];
+	isLoading: boolean;
+}
+
+/**
+ * Backend-driven data for the outlet History screen. Gated on a real session
+ * (`getOutletIdentity()` non-null): backed sessions get live data, demo sessions
+ * get `backed: false` so the screen falls back to its demo store.
+ *
+ * Rows are COMPLETED shift-assignments for the caller's own venues — the same
+ * per-assignment shape the agency History uses. The backend pins an outlet
+ * caller to its own outlets server-side, and the list response joins the PR name
+ * and shift date, so no `/pr` or `/shift` read is needed (outlets cannot read
+ * `/pr` at all). Agency names come from the agency directory for the "by agency"
+ * filter. As on the agency side the backend has no per-shift drink/tip sales, so
+ * the money breakdown is wages-only.
+ */
+export function useOutletHistory(): OutletHistoryData {
+	const { logout } = useAuth();
+	const identity = useMemo(() => getOutletIdentity(), []);
+	const backed = identity !== null;
+	const outletName = identity?.outletName ?? "";
+
+	const assignmentsQuery = useQuery({
+		queryKey: ["outlet", "history", "assignments"],
+		queryFn: () =>
+			fetchShiftAssignments(
+				{ status: "completed", pageSize: HISTORY_PAGE_SIZE },
+				logout,
+			),
+		enabled: backed,
+		placeholderData: keepPreviousData,
+		staleTime: 60_000,
+	});
+
+	// An outlet's nights can be staffed by more than one agency, so the
+	// id -> name map for the agency filter comes from the directory endpoint.
+	const agenciesQuery = useQuery({
+		queryKey: ["agencies", "directory"],
+		queryFn: () => fetchAgencies({ pageSize: 200 }, logout),
+		enabled: backed,
+		staleTime: 5 * 60_000,
+	});
+
+	const rows = useMemo<ShiftHistoryRow[]>(() => {
+		if (!backed) return [];
+		const assignments = assignmentsQuery.data?.data ?? [];
+		const agencyNameById = new Map(
+			(agenciesQuery.data?.data ?? []).map((a) => [a.id, a.name]),
+		);
+
+		const built: ShiftHistoryRow[] = [];
+		for (const a of assignments) {
+			// Defensive: the status filter is applied server-side, but only sealed
+			// nights are history.
+			if (a.status !== "completed") continue;
+			// Without the joined shift date there is no night to file the row under.
+			if (!a.shiftDate) continue;
+			built.push(
+				shiftHistoryRowFromAssignment({
+					assignment: a,
+					shiftDate: a.shiftDate,
+					prName: a.prName ?? "Unknown PR",
+					outletName,
+					agencyName: agencyNameById.get(a.agencyId) ?? "Agency",
+				}),
+			);
+		}
+		return sortShiftHistoryDesc(built);
+	}, [backed, outletName, assignmentsQuery.data, agenciesQuery.data]);
+
+	return {
+		backed,
+		outletName,
+		rows,
+		isLoading: backed && (assignmentsQuery.isLoading || agenciesQuery.isLoading),
+	};
+}
