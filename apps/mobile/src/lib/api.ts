@@ -56,7 +56,7 @@ export type MeProfile = {
   agencyId: string | null;
   verificationStatus: string | null;
   /** Showcase fields — gallery paths served by the backend /img route. */
-  portfolioPhotos: string[] | null;
+  portfolioPhotos: (string | null)[] | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
 };
@@ -132,7 +132,23 @@ export type ProfileUpdate = {
   firstName?: string;
   lastName?: string;
   email?: string;
+  portfolioPhotos?: (string | null)[];
+  comcardHeightCm?: number | null;
+  comcardWeightKg?: number | null;
 };
+
+export function portfolioSlotsFromProfile(
+  photos: (string | null)[] | null | undefined,
+  slotCount = 8,
+): (string | null)[] {
+  const slots: (string | null)[] = Array.from({ length: slotCount }, () => null);
+  if (!photos?.length) return slots;
+  for (let i = 0; i < Math.min(photos.length, slotCount); i++) {
+    const value = photos[i];
+    slots[i] = value && String(value).trim() ? String(value).trim() : null;
+  }
+  return slots;
+}
 
 export function updateUserProfile(
   accessToken: string,
@@ -163,6 +179,37 @@ export async function uploadUserProfileImage(
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/user/${userId}/profile-image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  }
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
+  if (!res.ok || !body?.success) {
+    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
+  }
+  return body.data;
+}
+
+/** Upload one portfolio gallery slot (0–7). Persists path in user_profile.portfolio_photos. */
+export async function uploadUserPortfolioPhoto(
+  accessToken: string,
+  userId: string,
+  slot: number,
+  file: Blob,
+  filename = 'portfolio.jpg',
+): Promise<Me> {
+  const form = new FormData();
+  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
+    'portfolioPhoto',
+    file,
+    filename,
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/user/${userId}/portfolio/${slot}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
