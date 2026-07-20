@@ -96,6 +96,9 @@ export function SubscriptionFormSheet({
 				| "weekly"
 				| "monthly"
 				| "annually",
+			subscriptionType: (editTarget?.subscriptionType ?? "outlet") as
+				| "agency"
+				| "outlet",
 			status: (editTarget?.status ?? "active") as "active" | "inactive",
 			coverage: editTarget?.coverage ?? "",
 		},
@@ -115,6 +118,10 @@ export function SubscriptionFormSheet({
 		form.setFieldValue("name", editTarget?.name ?? "");
 		form.setFieldValue("price", editTarget ? Number(editTarget.price) : 0);
 		form.setFieldValue("billingCycle", editTarget?.billingCycle ?? "monthly");
+		form.setFieldValue(
+			"subscriptionType",
+			editTarget?.subscriptionType ?? "outlet",
+		);
 		form.setFieldValue("status", editTarget?.status ?? "active");
 		form.setFieldValue("coverage", editTarget?.coverage ?? "");
 	}, [open, editTarget]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -211,6 +218,29 @@ export function SubscriptionFormSheet({
 											</Field>
 										);
 									}}
+								</form.Field>
+
+								<form.Field name="subscriptionType">
+									{(field) => (
+										<Field>
+											<FieldLabel htmlFor="sub-audience">Audience</FieldLabel>
+											<Select
+												value={field.state.value}
+												onValueChange={(value) =>
+													field.handleChange(value as "agency" | "outlet")
+												}
+												disabled={isSubmitting}
+											>
+												<SelectTrigger id="sub-audience">
+													<SelectValue placeholder="Select audience" />
+												</SelectTrigger>
+												<SelectContent>
+													<SelectItem value="agency">Agency</SelectItem>
+													<SelectItem value="outlet">Outlet</SelectItem>
+												</SelectContent>
+											</Select>
+										</Field>
+									)}
 								</form.Field>
 
 								<form.Field name="billingCycle">

@@ -253,6 +253,13 @@
       "when": 1784500000019,
       "tag": "0035_special_service_vendor_name",
       "breakpoints": true
+    },
+    {
+      "idx": 36,
+      "version": "7",
+      "when": 1784500000020,
+      "tag": "0036_subscription_type_and_role",
+      "breakpoints": true
     }
   ]
 }

@@ -56,12 +56,9 @@ export type BillingCycleFilter = "all" | BillingCycle;
 export type PlanAudience = "agency" | "outlet";
 export type SubscriptionAudienceFilter = "all" | PlanAudience;
 
-/**
- * Plans are no longer linked to a role, so the audience comes from the billing
- * cycle: outlet plans are monthly, agency plans weekly.
- */
+/** Audience is stored on the plan since migration 0036, not inferred from the billing cycle. */
 function audienceFor(sub: Subscription): PlanAudience {
-	return sub.billingCycle === "monthly" ? "outlet" : "agency";
+	return sub.subscriptionType;
 }
 
 // Volume tier per plan, taken from the InnocenZ prototype rate cards. Keyed by

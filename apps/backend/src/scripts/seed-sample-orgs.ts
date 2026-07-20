@@ -54,13 +54,13 @@ const VELVET_TEAM: Array<{
   { username: 'Ahmad Razif', email: 'ops@velvet23.my', phoneNum: '+60112345680', subRole: 'operations_head' },
 ];
 
-// Resolve an outlet plan id by name (plan names like Plus/Enterprise/Scale exist for
-// both audiences). Outlet plans are the monthly ones — see seed-plans.ts.
+// Resolve an outlet plan id by name (plan names like Plus/Enterprise/Scale exist
+// for both audiences), disambiguated by the stored audience since migration 0036.
 async function outletPlanId(name: string): Promise<string | null> {
   const [row] = await db
     .select({ id: SubscriptionTable.id })
     .from(SubscriptionTable)
-    .where(and(eq(SubscriptionTable.name, name), eq(SubscriptionTable.billingCycle, 'monthly')))
+    .where(and(eq(SubscriptionTable.name, name), eq(SubscriptionTable.subscriptionType, 'outlet')))
     .limit(1);
   return row?.id ?? null;
 }

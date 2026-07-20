@@ -1,4 +1,6 @@
 export type SubscriptionStatus = "active" | "inactive";
+export type SubscriptionType = "agency" | "outlet";
+
 export type BillingCycle = "weekly" | "monthly" | "annually";
 
 export interface SubscriptionPagination {
@@ -15,6 +17,8 @@ export interface Subscription {
 	name: string;
 	price: string;
 	billingCycle: BillingCycle;
+	subscriptionType: SubscriptionType;
+	roleId: string | null;
 	status: SubscriptionStatus;
 	coverage: string | null;
 	createdAt: string;

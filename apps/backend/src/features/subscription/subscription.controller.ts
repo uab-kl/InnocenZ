@@ -60,6 +60,8 @@ export class SubscriptionControllerClass {
         name: parsed.data.name,
         price: parsed.data.price.toFixed(2),
         billingCycle: parsed.data.billingCycle as BillingCycle,
+        subscriptionType: parsed.data.subscriptionType,
+        roleId: await this.subscriptionRepository.roleIdForType(parsed.data.subscriptionType),
         status: parsed.data.status,
         coverage: parsed.data.coverage ?? null,
         createdBy: actor,

@@ -86,21 +86,20 @@ const ADMIN_SEED: AdminSeed[] = [
   { type: 'plan_change', subscriberType: 'agency', subscriberName: 'Starline PR', role: 'agency', planName: 'Enterprise', requestedPlanName: 'Scale', message: '[Demo] Agency plan change Enterprise → Scale — direct (PR count).', status: 'direct' },
 ];
 
-// Plans are no longer linked to a role, so the audience comes from the billing cycle:
-// outlet plans are monthly, agency plans weekly (see seed-plans.ts).
+// Audience is read straight off the plan since migration 0036 — it used to be
+// inferred from the billing cycle (monthly = outlet, weekly = agency).
 async function buildPlanMap(): Promise<Map<string, string>> {
   const rows = await db
     .select({
       id: SubscriptionTable.id,
       name: SubscriptionTable.name,
-      billingCycle: SubscriptionTable.billingCycle,
+      subscriptionType: SubscriptionTable.subscriptionType,
     })
     .from(SubscriptionTable);
 
   const map = new Map<string, string>();
   for (const row of rows) {
-    const roleName = row.billingCycle === 'monthly' ? 'outlet' : 'agency';
-    map.set(`${roleName}:${row.name}`, row.id);
+    map.set(`${row.subscriptionType}:${row.name}`, row.id);
   }
   return map;
 }
