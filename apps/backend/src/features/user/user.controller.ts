@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { UserRepositoryClass } from './user.repository';
 import { UserProfileRepositoryClass } from './user-profile/user-profile.repository';
-import { UserFilter, UserSortField } from './user.model';
+import { UserFilter, UserSortField, UserStatus } from './user.model';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -46,7 +46,7 @@ export class UserControllerClass {
         email: req.query.email as string | undefined,
         phoneNum: req.query.phoneNum as string | undefined,
         username: req.query.username as string | undefined,
-        status: req.query.status as string | undefined,
+        status: req.query.status as UserStatus | undefined,
         roleId: req.query.roleId as string | undefined,
       };
 

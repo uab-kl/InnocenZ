@@ -218,6 +218,13 @@
       "when": 1784500000014,
       "tag": "0030_user_profile_full_name_and_drops",
       "breakpoints": true
+    },
+    {
+      "idx": 31,
+      "version": "7",
+      "when": 1784500000015,
+      "tag": "0031_user_blocked_reason",
+      "breakpoints": true
     }
   ]
 }
