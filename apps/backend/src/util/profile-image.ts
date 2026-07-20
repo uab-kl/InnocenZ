@@ -3,7 +3,12 @@ import path from 'node:path';
 
 export const DEFAULT_PROFILE_IMAGE = '/img/blank-profile-picture.png';
 export const PROFILE_IMAGE_UPLOAD_DIR = path.join(process.cwd(), 'public', 'img', 'users');
-export const ALLOWED_PROFILE_IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.webp']);
+export const ALLOWED_PROFILE_IMAGE_EXTENSIONS = new Set([
+  '.jpg',
+  '.jpeg',
+  '.png',
+  '.webp',
+]);
 
 export function ensureProfileImageDir(): void {
   fs.mkdirSync(PROFILE_IMAGE_UPLOAD_DIR, { recursive: true });

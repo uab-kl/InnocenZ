@@ -1,8 +1,32 @@
-import { and, eq, ilike, sql, SQL } from 'drizzle-orm';
+import { and, eq, exists, ilike, inArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
-import { PrTable, PrInsertType, PrType, PrFilter } from './pr.model';
+import { ShiftTable } from '@/features/shift/shift.model';
+import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
+import { UserTable } from '@/features/user/user.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
+import { PrTable, PrInsertType, PrType, PrFilter, PrProfile, PrWithProfileType } from './pr.model';
+
+// Comcard / identity columns exposed alongside each `pr` row. They live on the
+// linked user account, so the read paths left-join it — that is the same source
+// the admin PR screen reads, which keeps both screens showing one truth.
+const profileColumns = {
+  profileImage: UserTable.profileImage,
+  gender: UserProfileTable.gender,
+  race: UserProfileTable.race,
+  dob: UserProfileTable.dob,
+  nationality: UserProfileTable.nationality,
+  portfolioPhotos: UserProfileTable.portfolioPhotos,
+  comcardHeightCm: UserProfileTable.comcardHeightCm,
+  comcardWeightKg: UserProfileTable.comcardWeightKg,
+};
+
+/** Collapses an all-null left-join result (no user, or no profile) to `null`. */
+function toProfile(row: PrProfile): PrProfile | null {
+  const hasValue = Object.values(row).some((value) => value !== null && value !== undefined);
+  return hasValue ? row : null;
+}
 
 export class PrRepositoryClass {
   async create(
@@ -40,10 +64,16 @@ export class PrRepositoryClass {
     }
   }
 
-  async getById(id: string): Promise<PrType | null> {
+  async getById(id: string): Promise<PrWithProfileType | null> {
     try {
-      const [pr] = await db.select().from(PrTable).where(eq(PrTable.id, id)).limit(1);
-      return pr ?? null;
+      const [row] = await db
+        .select({ pr: PrTable, profile: profileColumns })
+        .from(PrTable)
+        .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
+        .where(eq(PrTable.id, id))
+        .limit(1);
+      return row ? { ...row.pr, profile: toProfile(row.profile) } : null;
     } catch (error) {
       logger.error('[PrRepository.getById] Error:', error);
       throw error;
@@ -54,7 +84,7 @@ export class PrRepositoryClass {
     filter?: PrFilter;
     page: number;
     pageSize: number;
-  }): Promise<{ prs: PrType[]; totalCount: number }> {
+  }): Promise<{ prs: PrWithProfileType[]; totalCount: number }> {
     try {
       const { filter, page, pageSize } = params;
       const conditions: SQL[] = [];
@@ -63,6 +93,25 @@ export class PrRepositoryClass {
       if (filter?.status) conditions.push(eq(PrTable.status, filter.status));
       if (filter?.tier) conditions.push(eq(PrTable.tier, filter.tier));
       if (filter?.name) conditions.push(ilike(PrTable.name, `%${filter.name}%`));
+      // Outlet callers only see PRs actually rostered at one of their venues.
+      // An empty array must match nothing, not everything — guard before the join.
+      if (filter?.assignedToOutletIds) {
+        if (filter.assignedToOutletIds.length === 0) return { prs: [], totalCount: 0 };
+        conditions.push(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(ShiftAssignmentTable)
+              .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+              .where(
+                and(
+                  eq(ShiftAssignmentTable.prId, PrTable.id),
+                  inArray(ShiftTable.outletId, filter.assignedToOutletIds),
+                ),
+              ),
+          ),
+        );
+      }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
@@ -72,14 +121,17 @@ export class PrRepositoryClass {
         .where(whereClause);
       const totalCount = Number(countRow?.value ?? 0);
 
-      const prs = await db
-        .select()
+      const rows = await db
+        .select({ pr: PrTable, profile: profileColumns })
         .from(PrTable)
+        .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
         .where(whereClause)
         .orderBy(PrTable.createdAt)
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 
+      const prs = rows.map((row) => ({ ...row.pr, profile: toProfile(row.profile) }));
       return { prs, totalCount };
     } catch (error) {
       logger.error('[PrRepository.listPaginated] Error:', error);

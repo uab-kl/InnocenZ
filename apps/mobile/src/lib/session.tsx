@@ -13,6 +13,7 @@ import {
   phoneCandidates,
   updateUserProfile,
   uploadUserProfileImage,
+  uploadUserPortfolioPhoto,
   type AgencyMembership,
   type Me,
   type ProfileUpdate,
@@ -59,6 +60,7 @@ type SessionState = {
   signOut: () => void;
   updateProfile: (patch: ProfileUpdate) => Promise<void>;
   uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
+  uploadPortfolioPhoto: (slot: number, file: Blob, filename?: string) => Promise<Me>;
   refreshMe: () => Promise<void>;
 };
 
@@ -156,6 +158,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [token, me],
   );
 
+  const uploadPortfolioPhoto = useCallback(
+    async (slot: number, file: Blob, filename = 'portfolio.jpg') => {
+      if (!token || !me) throw new ApiError('Not signed in', 401);
+      const updated = await uploadUserPortfolioPhoto(token, me.id, slot, file, filename);
+      setMe(updated);
+      return updated;
+    },
+    [token, me],
+  );
+
   const value = useMemo(
     () => ({
       me,
@@ -166,9 +178,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       signOut,
       updateProfile,
       uploadAvatar,
+      uploadPortfolioPhoto,
       refreshMe,
     }),
-    [me, token, agencies, booting, signIn, signOut, updateProfile, uploadAvatar, refreshMe],
+    [me, token, agencies, booting, signIn, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, refreshMe],
   );
 
   return <SessionContext.Provider value={value}>{children}</SessionContext.Provider>;

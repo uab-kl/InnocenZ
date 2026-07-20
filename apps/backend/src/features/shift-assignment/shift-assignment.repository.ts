@@ -1,13 +1,15 @@
-import { and, eq, gte, lte, sql, SQL } from 'drizzle-orm';
+import { and, eq, gte, inArray, lte, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
+import { PrTable } from '@/features/pr/pr.model';
 import {
   ShiftAssignmentTable,
   ShiftAssignmentInsertType,
   ShiftAssignmentType,
+  ShiftAssignmentWithContextType,
   ShiftAssignmentFilter,
 } from './shift-assignment.model';
 
@@ -74,11 +76,16 @@ export class ShiftAssignmentRepositoryClass {
     }
   }
 
+  /**
+   * Every assignment has a shift (FK, not null), so the inner join is lossless.
+   * It is what lets an outlet caller be scoped by venue, and it carries the
+   * shift/PR context the outlet portal cannot fetch on its own (no `/pr` access).
+   */
   async listPaginated(params: {
     filter?: ShiftAssignmentFilter;
     page: number;
     pageSize: number;
-  }): Promise<{ assignments: ShiftAssignmentType[]; totalCount: number }> {
+  }): Promise<{ assignments: ShiftAssignmentWithContextType[]; totalCount: number }> {
     try {
       const { filter, page, pageSize } = params;
       const conditions: SQL[] = [];
@@ -87,22 +94,42 @@ export class ShiftAssignmentRepositoryClass {
       if (filter?.shiftId) conditions.push(eq(ShiftAssignmentTable.shiftId, filter.shiftId));
       if (filter?.prId) conditions.push(eq(ShiftAssignmentTable.prId, filter.prId));
       if (filter?.status) conditions.push(eq(ShiftAssignmentTable.status, filter.status));
+      // An empty array must match nothing, not everything — guard before inArray.
+      if (filter?.outletIds) {
+        if (filter.outletIds.length === 0) return { assignments: [], totalCount: 0 };
+        conditions.push(inArray(ShiftTable.outletId, filter.outletIds));
+      }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
       const [countRow] = await db
         .select({ value: sql<number>`count(*)::int` as SQL<number> })
         .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .where(whereClause);
       const totalCount = Number(countRow?.value ?? 0);
 
-      const assignments = await db
-        .select()
+      const rows = await db
+        .select({
+          assignment: ShiftAssignmentTable,
+          prName: PrTable.name,
+          outletId: ShiftTable.outletId,
+          shiftDate: ShiftTable.shiftDate,
+        })
         .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
         .where(whereClause)
         .orderBy(ShiftAssignmentTable.createdAt)
         .limit(pageSize)
         .offset((page - 1) * pageSize);
+
+      const assignments = rows.map((row) => ({
+        ...row.assignment,
+        prName: row.prName,
+        outletId: row.outletId,
+        shiftDate: row.shiftDate,
+      }));
 
       return { assignments, totalCount };
     } catch (error) {

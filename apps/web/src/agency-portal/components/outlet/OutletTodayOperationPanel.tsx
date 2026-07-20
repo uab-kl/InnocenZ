@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useStore } from '@agency-portal/lib/store';
 import type { PR, ShiftRequest } from '@agency-portal/lib/store';
-import type { AgencyRosterSlot } from '@agency-portal/lib/agency-demo';
+import type {
+  AgencyManagedPR,
+  AgencyRosterSlot,
+} from '@agency-portal/lib/agency-demo';
 import { OutletSection } from '@agency-portal/components/outlet/OutletSection';
 import {
   outletTonightFloorTotals,
@@ -138,10 +141,19 @@ export function OutletTodayOperationPanel({
   shift,
   outletName,
   className,
+  roster: rosterOverride,
+  agencyPrs: agencyPrsOverride,
 }: {
   shift: ShiftRequest;
   outletName: string;
   className?: string;
+  /**
+   * Backend roster slots + PR records for a real outlet session. The PR list is
+   * built by resolving `shift.prs` ids against these, and unresolvable ids are
+   * dropped — so both must be supplied together. Omitted on demo sessions.
+   */
+  roster?: AgencyRosterSlot[];
+  agencyPrs?: AgencyManagedPR[];
 }) {
   const outletSubRole = useStore((s) => s.outletSubRole);
   const outletWorkspace = useStore((s) => s.outletWorkspace);
@@ -149,11 +161,13 @@ export function OutletTodayOperationPanel({
   const {
     prs,
     ratePr,
-    agencyRoster,
-    agencyPRs,
+    agencyRoster: storeRoster,
+    agencyPRs: storeAgencyPRs,
     postSealRatePrompt,
     clearPostSealRatePrompt,
   } = useStore();
+  const agencyRoster = rosterOverride ?? storeRoster;
+  const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
   const prSubRole = useStore((s) => s.prSubRole);
   const prSessionByRole = useStore((s) => s.prSessionByRole);
   const checkedIn = useStore((s) => s.checkedIn);

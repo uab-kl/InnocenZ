@@ -14,8 +14,8 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
-import { ApiError, assetUrl } from '../lib/api';
-import { SEED_PORTFOLIO, PORTFOLIO_SLOTS } from '../lib/demo-shifts';
+import { ApiError, assetUrl, portfolioSlotsFromProfile } from '../lib/api';
+import { PORTFOLIO_SLOTS } from '../lib/demo-shifts';
 import { PR_AGENCY_OPTIONS, PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { useSession } from '../lib/session';
 import { TopBar } from '../components/TopBar';
@@ -54,7 +54,8 @@ type Draft = {
 
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
-  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, token } = useSession();
+  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, token } =
+    useSession();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -72,8 +73,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const ic = me?.profile.idNo ?? '950312-14-8821';
   const mobile = me?.phoneNum ?? '—';
   const email = me?.email ?? '—';
-  const height = editing ? draft.height : 153;
-  const weight = editing ? draft.weight : 40;
+  const height = editing
+    ? draft.height
+    : me?.profile.comcardHeightCm ?? 153;
+  const weight = editing
+    ? draft.weight
+    : me?.profile.comcardWeightKg ?? 40;
   const age = editing
     ? draft.age
     : me?.profile.dob
@@ -83,7 +88,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const languages = editing ? draft.languages : ['English', 'Mandarin', 'Cantonese'];
   const portfolio = editing
     ? draft.portfolio
-    : ([...SEED_PORTFOLIO, null, null, null, null] as (string | null)[]);
+    : portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
 
   const collagePhotos = useMemo(
     () => portfolio.filter(Boolean).slice(0, 4) as string[],
@@ -105,12 +110,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       icName:
         [me?.profile.firstName, me?.profile.lastName].filter(Boolean).join(' ') ||
         'Victoria Tan Mei Lin',
-      height: 153,
-      weight: 40,
+      height: me?.profile.comcardHeightCm ?? 153,
+      weight: me?.profile.comcardWeightKg ?? 40,
       age: 24,
       languages: ['English', 'Mandarin', 'Cantonese'],
       agencyIds: agencyIds.length ? agencyIds : ['atlas', 'delta'],
-      portfolio: [...SEED_PORTFOLIO, null, null, null, null],
+      portfolio: portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS),
       otherLang: '',
     });
     setError(null);
@@ -149,6 +154,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         firstName,
         lastName,
         email: me?.email ?? '',
+        portfolioPhotos: portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS),
+        comcardHeightCm: draft.height,
+        comcardWeightKg: draft.weight,
       });
       setEditing(false);
     } catch (e) {
@@ -183,6 +191,42 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         await uploadAvatar(file);
       } catch (e) {
         setError(e instanceof ApiError ? e.message : 'Could not upload photo');
+      } finally {
+        setSaving(false);
+      }
+    };
+    input.click();
+  };
+
+  const onPickPortfolio = (slot: number) => {
+    if (!editing || Platform.OS !== 'web' || !token) return;
+    const doc = (globalThis as { document?: { createElement: (tag: string) => HTMLInputLike } })
+      .document;
+    if (!doc) return;
+    const input = doc.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.onchange = async () => {
+      const file = input.files?.[0] ?? null;
+      if (!file) return;
+      if (!file.type.startsWith('image/')) {
+        setError('Please choose an image file');
+        return;
+      }
+      if (file.size > 2_500_000) {
+        setError('Image must be under 2.5 MB');
+        return;
+      }
+      setSaving(true);
+      setError(null);
+      try {
+        const updated = await uploadPortfolioPhoto(slot, file);
+        setDraft((d) => ({
+          ...d,
+          portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
+        }));
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
       } finally {
         setSaving(false);
       }
@@ -344,7 +388,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         <View style={styles.showcase}>
           <View style={styles.comcard}>
             <View style={styles.collage}>
-              {(collagePhotos.length >= 4 ? collagePhotos : SEED_PORTFOLIO.slice(0, 4)).map(
+              {(collagePhotos.length >= 4 ? collagePhotos : portfolio.filter(Boolean).slice(0, 4)).map(
                 (path) => {
                   const uri = assetUrl(path);
                   return uri ? (
@@ -430,7 +474,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>Portfolio gallery · v3</Text>
             {editing && (
-              <Text style={styles.sectionHint}>Comcard live · tap to replace</Text>
+              <Text style={styles.sectionHint}>Tap a slot to upload · save to apply removals</Text>
             )}
           </View>
           <View style={styles.pgrid}>
@@ -438,7 +482,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               const path = portfolio[i];
               const uri = path ? assetUrl(path) : null;
               return (
-                <View key={i} style={styles.pcell}>
+                <Pressable
+                  key={i}
+                  style={styles.pcell}
+                  onPress={editing ? () => onPickPortfolio(i) : undefined}
+                  disabled={!editing || saving}
+                >
                   {uri ? (
                     <Image source={{ uri }} style={styles.pcellImg} resizeMode="cover" />
                   ) : (
@@ -458,7 +507,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       <XIcon size={10} color="#fff" />
                     </Pressable>
                   )}
-                </View>
+                </Pressable>
               );
             })}
           </View>

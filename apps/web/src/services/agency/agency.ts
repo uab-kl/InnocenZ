@@ -97,6 +97,9 @@ export async function fetchAgencyMembershipsForUser(
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
 		userIds: userId,
+		// Without this the endpoint falls back to its `pr` default and an
+		// operator's own owner/finance row is filtered out.
+		subRole: "all",
 		status: "active",
 	});
 	const response = await client.get<AgencyMembershipsApiResponse>(

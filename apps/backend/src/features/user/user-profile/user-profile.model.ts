@@ -24,7 +24,7 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   nationality: varchar('nationality', { length: 100 }),
   gender: varchar('gender', { length: 20 }),
   race: varchar('race', { length: 50 }),
-  portfolioPhotos: jsonb('portfolio_photos').$type<string[]>(),
+  portfolioPhotos: jsonb('portfolio_photos').$type<(string | null)[]>(),
   comcardHeightCm: integer('comcard_height_cm'),
   comcardWeightKg: integer('comcard_weight_kg'),
   idType: idTypeEnum('id_type'),
@@ -70,7 +70,7 @@ export type UserProfileResponse = {
   nationality: string | null;
   gender: string | null;
   race: string | null;
-  portfolioPhotos: string[] | null;
+  portfolioPhotos: (string | null)[] | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
   idType: IdType | null;
