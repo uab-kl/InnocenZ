@@ -1,7 +1,9 @@
-import { and, eq, ilike, sql, SQL } from 'drizzle-orm';
+import { and, eq, exists, ilike, inArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
+import { ShiftTable } from '@/features/shift/shift.model';
+import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { PrTable, PrInsertType, PrType, PrFilter } from './pr.model';
 
 export class PrRepositoryClass {
@@ -63,6 +65,25 @@ export class PrRepositoryClass {
       if (filter?.status) conditions.push(eq(PrTable.status, filter.status));
       if (filter?.tier) conditions.push(eq(PrTable.tier, filter.tier));
       if (filter?.name) conditions.push(ilike(PrTable.name, `%${filter.name}%`));
+      // Outlet callers only see PRs actually rostered at one of their venues.
+      // An empty array must match nothing, not everything — guard before the join.
+      if (filter?.assignedToOutletIds) {
+        if (filter.assignedToOutletIds.length === 0) return { prs: [], totalCount: 0 };
+        conditions.push(
+          exists(
+            db
+              .select({ one: sql`1` })
+              .from(ShiftAssignmentTable)
+              .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+              .where(
+                and(
+                  eq(ShiftAssignmentTable.prId, PrTable.id),
+                  inArray(ShiftTable.outletId, filter.assignedToOutletIds),
+                ),
+              ),
+          ),
+        );
+      }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

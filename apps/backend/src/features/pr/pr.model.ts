@@ -40,4 +40,10 @@ export type PrFilter = {
   status?: PrStatus;
   tier?: PrTier;
   name?: string;
+  /**
+   * Restricts to PRs rostered on a shift at one of these outlets — how an outlet
+   * caller sees the personnel working its own venues without seeing an agency's
+   * whole roster. An empty array matches nothing.
+   */
+  assignedToOutletIds?: string[];
 };

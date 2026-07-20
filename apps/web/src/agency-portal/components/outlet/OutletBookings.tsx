@@ -1,5 +1,9 @@
 import { useMemo } from 'react';
-import { useStore } from '@agency-portal/lib/store';
+import type {
+  AgencyManagedPR,
+  AgencyRosterSlot,
+} from '@agency-portal/lib/agency-demo';
+import { type ShiftRequest, useStore } from '@agency-portal/lib/store';
 import {
   outletHomeShiftRequests,
   resolveOutletShiftDateIso,
@@ -31,15 +35,29 @@ import { ChevronDown } from 'lucide-react';
 
 export function OutletBookings({
   variant = 'home',
+  shifts: shiftsOverride,
+  roster: rosterOverride,
+  agencyPrs,
 }: {
   variant?: 'home' | 'future';
+  /**
+   * Backend-backed shifts + roster for a real outlet session (see
+   * useOutletToday). They travel together: a card's `prs` are resolved against
+   * the roster slots, so overriding one without the other renders a shift with
+   * nobody on it. Omitted on demo sessions, which read the store.
+   */
+  shifts?: ShiftRequest[];
+  roster?: AgencyRosterSlot[];
+  agencyPrs?: AgencyManagedPR[];
 }) {
   const outletWorkspace = useStore((s) => s.outletWorkspace);
   const outletCommissionRules = useStore((s) => s.outletCommissionRules);
-  const agencyRoster = useStore((s) => s.agencyRoster);
+  const storeRoster = useStore((s) => s.agencyRoster);
   const prReceiptScans = useStore((s) => s.prReceiptScans);
   const specialServiceOrders = useStore((s) => s.specialServiceOrders);
-  const shifts = useStore((s) => s.shifts);
+  const storeShifts = useStore((s) => s.shifts);
+  const shifts = shiftsOverride ?? storeShifts;
+  const agencyRoster = rosterOverride ?? storeRoster;
 
   const visibleShifts = useMemo(
     () =>
@@ -157,6 +175,8 @@ export function OutletBookings({
           variant={variant}
           hideLogSales={hideLogSales}
           hideCutlost={variant === 'home'}
+          roster={rosterOverride}
+          agencyPrs={agencyPrs}
         />
       </details>
     );
@@ -169,6 +189,8 @@ export function OutletBookings({
         <OutletTodayOperationPanel
           shift={liveShift}
           outletName={outletWorkspace.outletName}
+          roster={rosterOverride}
+          agencyPrs={agencyPrs}
         />
       )}
       {variant === 'home' && liveShift && (

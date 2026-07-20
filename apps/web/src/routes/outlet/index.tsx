@@ -1,5 +1,6 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { useStore } from '@agency-portal/lib/store';
+import { useOutletToday } from '@agency-portal/hooks/use-outlet-today';
 import { OutletBookings } from '@agency-portal/components/outlet/OutletBookings';
 import { OutletReconciliationBanner } from '@agency-portal/components/outlet/OutletReconciliationBanner';
 import { IconGuide } from '@agency-portal/components/iz/IconGuide';
@@ -17,6 +18,9 @@ function OutletHome() {
   const outletSubRole = useStore((s) => s.outletSubRole);
   const isFinance = outletSubRole === 'outlet_finance';
   const { date, time } = nowAgencyDateTime();
+  // A real session shows tonight's booked shift from the backend; demo sessions
+  // keep the demo store.
+  const backend = useOutletToday();
 
   return (
     <OutletPage>
@@ -32,7 +36,11 @@ function OutletHome() {
         hint="Live shift · tap card to expand details and actions"
       />
 
-      <OutletBookings />
+      <OutletBookings
+        shifts={backend.backed ? backend.shifts : undefined}
+        roster={backend.backed ? backend.roster : undefined}
+        agencyPrs={backend.backed ? backend.prs : undefined}
+      />
 
       <OutletReconciliationBanner />
 

@@ -1,6 +1,10 @@
 import { useMemo } from 'react';
 import { Link } from '@tanstack/react-router';
 import { useStore, type ShiftRequest } from '@agency-portal/lib/store';
+import type {
+  AgencyManagedPR,
+  AgencyRosterSlot,
+} from '@agency-portal/lib/agency-demo';
 import { outletCan } from '@agency-portal/lib/outlet-rbac';
 import { IzPill } from '@agency-portal/components/iz/ui';
 import { OutletShiftSalesPanel } from '@agency-portal/components/outlet/OutletLogSales';
@@ -79,6 +83,8 @@ export function OutletShiftDetailPanel({
   hideLogSales = false,
   hideCutlost = false,
   staffingAgency,
+  roster: rosterOverride,
+  agencyPrs: agencyPrsOverride,
 }: {
   shift: ShiftRequest;
   variant?: 'home' | 'future';
@@ -87,11 +93,19 @@ export function OutletShiftDetailPanel({
   hideCutlost?: boolean;
   /** When set, show linked agency instead of destination labels. */
   staffingAgency?: string;
+  /**
+   * Backend roster slots + PR records for a real outlet session; `shift.prs` is
+   * resolved against them, so they travel together. Omitted on demo sessions.
+   */
+  roster?: AgencyRosterSlot[];
+  agencyPrs?: AgencyManagedPR[];
 }) {
   const outletSubRole = useStore((s) => s.outletSubRole);
   const outletWorkspace = useStore((s) => s.outletWorkspace);
-  const agencyPRs = useStore((s) => s.agencyPRs);
-  const agencyRoster = useStore((s) => s.agencyRoster);
+  const storeAgencyPRs = useStore((s) => s.agencyPRs);
+  const storeRoster = useStore((s) => s.agencyRoster);
+  const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
+  const agencyRoster = rosterOverride ?? storeRoster;
   const prReceiptScans = useStore((s) => s.prReceiptScans);
   const specialServiceOrders = useStore((s) => s.specialServiceOrders);
   const { confirmShift, /* sealShift, */ shiftApplicants, respondToApplicant } =

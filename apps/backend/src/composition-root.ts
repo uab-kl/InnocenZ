@@ -122,7 +122,7 @@ export const ratingRepository = new RatingRepositoryClass();
 export const ratingController = new RatingControllerClass(ratingRepository);
 
 export const prRepository = new PrRepositoryClass();
-export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository);
+export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository);
