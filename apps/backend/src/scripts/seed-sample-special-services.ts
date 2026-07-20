@@ -72,8 +72,7 @@ export async function seedSampleSpecialServices(): Promise<void> {
   for (const s of SEEDS) {
     const postingAgency = s.postingAgency ? await agencyByName(s.postingAgency) : null;
     await db.insert(SpecialServiceTable).values({
-      outletId: await outletIdByName(s.outletName),
-      outletName: s.outletName,
+      outletId: await outletIdByName(s.outletName),
       title: s.title,
       category: s.category,
       budget: s.budget,
@@ -83,9 +82,8 @@ export async function seedSampleSpecialServices(): Promise<void> {
       adminAccepted: s.adminAccepted ?? 'n_a',
       postingAgencyId: postingAgency?.id ?? null,
       postingAgencyName: s.postingAgency ?? null,
-      // Third parties are external vendors, not InnocenZ agencies → no agency id.
-      assignedAgencyId: null,
-      assignedAgencyName: s.thirdParty ?? null,
+      // Third parties are external vendors, not InnocenZ agencies → no agency id.
+      vendorName: s.thirdParty ?? null,
       scheduledFor: s.scheduledFor ? new Date(s.scheduledFor) : null,
       createdBy: ACTOR,
       updatedBy: ACTOR,

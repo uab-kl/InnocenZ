@@ -9,7 +9,6 @@ import {
 export const CreateSpecialServiceSchema = z
   .object({
     outletId: z.uuid().optional().nullable(),
-    outletName: z.string().min(1).max(255),
     title: z.string().min(1).max(255),
     category: z.enum(specialServiceCategoryValues).default('others'),
     description: z.string().max(2000).optional().nullable(),
@@ -30,8 +29,7 @@ export const CreateSpecialServiceSchema = z
   });
 
 export const AssignSpecialServiceSchema = z.object({
-  assignedAgencyId: z.uuid(),
-  assignedAgencyName: z.string().min(1).max(255),
+  vendorName: z.string().min(1).max(255),
 });
 
 export const UpdateStatusSchema = z.object({
@@ -43,13 +41,12 @@ export const UpdateSpecialServiceSchema = z.object({
   title: z.string().min(1).max(255).optional(),
   description: z.string().max(2000).optional().nullable(),
   category: z.enum(specialServiceCategoryValues).optional(),
-  outletName: z.string().min(1).max(255).optional(),
   postingAgencyName: z.string().min(1).max(255).optional().nullable(),
   initiatedBy: z.enum(specialServiceInitiatedByValues).optional(),
   budget: z.coerce.number().nonnegative().optional().nullable(),
   scheduledFor: z.coerce.date().optional().nullable(),
   // Free-text third party the admin found to fulfil the job (optional).
-  assignedAgencyName: z.string().max(255).optional().nullable(),
+  vendorName: z.string().max(255).optional().nullable(),
 });
 
 export const SpecialServiceFilterQuerySchema = z.object({

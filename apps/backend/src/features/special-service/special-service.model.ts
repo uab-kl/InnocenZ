@@ -57,7 +57,6 @@ export const specialServiceAdminAcceptedEnum = MainSchema.enum(
 export const SpecialServiceTable = MainSchema.table('special_service', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   outletId: uuid('outlet_id').references(() => OutletTable.id, { onDelete: 'cascade' }),
-  outletName: varchar('outlet_name', { length: 255 }).notNull(),
   title: varchar('title', { length: 255 }).notNull(),
   category: specialServiceCategoryEnum('category').notNull().default('others'),
   description: text('description'),
@@ -70,10 +69,13 @@ export const SpecialServiceTable = MainSchema.table('special_service', {
     onDelete: 'set null',
   }),
   postingAgencyName: varchar('posting_agency_name', { length: 255 }),
-  assignedAgencyId: uuid('assigned_agency_id').references(() => AgencyTable.id, {
-    onDelete: 'set null',
-  }),
-  assignedAgencyName: varchar('assigned_agency_name', { length: 255 }),
+  /**
+   * The external vendor fulfilling the order — free text, no `agency` row
+   * behind it (MetroRide Transport, Atelier Threads, …). Was
+   * assigned_agency_name; the agency FK beside it was dropped in migration 0035
+   * having never been populated.
+   */
+  vendorName: varchar('vendor_name', { length: 255 }),
   scheduledFor: timestamp('scheduled_for', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -82,13 +84,19 @@ export const SpecialServiceTable = MainSchema.table('special_service', {
 });
 
 export type SpecialService = typeof SpecialServiceTable.$inferSelect;
+
+/**
+ * What the read paths actually return: the row plus the outlet's name, joined
+ * from main.outlet now that the denormalized outlet_name column is gone.
+ */
+export type SpecialServiceWithOutlet = SpecialService & { outletName: string | null };
 export type SpecialServiceInsertType = typeof SpecialServiceTable.$inferInsert;
 
 export type SpecialServiceFilter = {
   outletId?: string;
   status?: SpecialServiceStatus;
   category?: SpecialServiceCategory;
-  assignedAgencyId?: string;
+  vendorName?: string;
   initiatedBy?: SpecialServiceInitiatedBy;
   adminAccepted?: SpecialServiceAdminAccepted;
   /** Match rows requested on any of these calendar days (createdAt). */

@@ -31,7 +31,7 @@ export class SpecialServiceControllerClass {
       outletId: req.query.outletId as string | undefined,
       status: req.query.status as SpecialServiceStatus | undefined,
       category: req.query.category as SpecialServiceCategory | undefined,
-      assignedAgencyId: req.query.assignedAgencyId as string | undefined,
+      vendorName: req.query.vendorName as string | undefined,
       initiatedBy: req.query.initiatedBy as SpecialServiceInitiatedBy | undefined,
       adminAccepted: req.query.adminAccepted as SpecialServiceAdminAccepted | undefined,
       dates: parseDatesQuery(req.query.dates),
@@ -150,7 +150,6 @@ export class SpecialServiceControllerClass {
       const adminAccepted = initiatedBy === 'agency' ? 'pending' : 'n_a';
       const record = await this.repository.create({
         outletId: parsed.data.outletId ?? null,
-        outletName: parsed.data.outletName,
         title: parsed.data.title,
         category: parsed.data.category,
         description: parsed.data.description ?? null,
@@ -180,8 +179,7 @@ export class SpecialServiceControllerClass {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
       const record = await this.repository.update(paramId(req.params.id), {
-        assignedAgencyId: parsed.data.assignedAgencyId,
-        assignedAgencyName: parsed.data.assignedAgencyName,
+        vendorName: parsed.data.vendorName,
         status: 'assigned',
         updatedBy: getActor(req),
       });
@@ -228,7 +226,6 @@ export class SpecialServiceControllerClass {
       if (parsed.data.title !== undefined) payload.title = parsed.data.title;
       if (parsed.data.description !== undefined) payload.description = parsed.data.description;
       if (parsed.data.category !== undefined) payload.category = parsed.data.category;
-      if (parsed.data.outletName !== undefined) payload.outletName = parsed.data.outletName;
       if (parsed.data.postingAgencyName !== undefined) {
         payload.postingAgencyName = parsed.data.postingAgencyName;
       }
@@ -242,8 +239,8 @@ export class SpecialServiceControllerClass {
       if (parsed.data.scheduledFor !== undefined) {
         payload.scheduledFor = parsed.data.scheduledFor;
       }
-      if (parsed.data.assignedAgencyName !== undefined) {
-        payload.assignedAgencyName = parsed.data.assignedAgencyName;
+      if (parsed.data.vendorName !== undefined) {
+        payload.vendorName = parsed.data.vendorName;
       }
       const record = await this.repository.update(existing.id, payload);
       if (!record) {

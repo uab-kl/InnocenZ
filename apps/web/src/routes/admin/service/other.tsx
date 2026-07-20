@@ -591,7 +591,7 @@ function SpecialServicesPage() {
 													{formatBudget(record.budget)}
 												</TableCell>
 												<TableCell className="text-sm text-muted-foreground">
-													{record.assignedAgencyName ?? "—"}
+													{record.vendorName ?? "—"}
 												</TableCell>
 												<TableCell className="text-sm text-muted-foreground">
 													{record.scheduledFor
@@ -767,7 +767,7 @@ function OrderEditForm({
 	);
 	const [description, setDescription] = useState(record.description ?? "");
 	const [budget, setBudget] = useState(record.budget ?? "");
-	const [thirdParty, setThirdParty] = useState(record.assignedAgencyName ?? "");
+	const [thirdParty, setThirdParty] = useState(record.vendorName ?? "");
 	const [status, setStatus] = useState<SpecialServiceStatus>(record.status);
 	const [scheduledFor, setScheduledFor] = useState<Date | undefined>(() =>
 		record.scheduledFor ? new Date(record.scheduledFor) : undefined,
@@ -813,8 +813,8 @@ function OrderEditForm({
 		}
 
 		const trimmedThirdParty = thirdParty.trim();
-		if (trimmedThirdParty !== (record.assignedAgencyName ?? "").trim()) {
-			input.assignedAgencyName =
+		if (trimmedThirdParty !== (record.vendorName ?? "").trim()) {
+			input.vendorName =
 				trimmedThirdParty === "" ? null : trimmedThirdParty;
 		}
 

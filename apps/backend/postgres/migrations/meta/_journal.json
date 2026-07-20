@@ -246,6 +246,13 @@
       "when": 1784500000018,
       "tag": "0034_outlet_drop_subscription_id",
       "breakpoints": true
+    },
+    {
+      "idx": 35,
+      "version": "7",
+      "when": 1784500000019,
+      "tag": "0035_special_service_vendor_name",
+      "breakpoints": true
     }
   ]
 }
