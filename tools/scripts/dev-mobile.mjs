@@ -26,7 +26,11 @@ function readRootEnv() {
 
 const rootEnv = readRootEnv();
 const backendPort = rootEnv.BACKEND_PORT?.trim() || '7777';
-const apiUrl = rootEnv.VITE_API_URL?.trim() || `http://localhost:${backendPort}/api`;
+// VITE_API_URL is web-only (localhost is correct there, since the browser runs on
+// the same machine as the backend). Mobile needs its own override, if any — leaving
+// EXPO_PUBLIC_API_URL unset lets apps/mobile/src/lib/api.ts autodetect the dev
+// machine's LAN IP from Expo's hostUri, which is what physical devices need.
+const apiUrl = rootEnv.EXPO_PUBLIC_API_URL?.trim() || rootEnv.MOBILE_API_URL?.trim();
 
 function resolveBin(packageName, ...binParts) {
   const candidates = [
@@ -110,9 +114,9 @@ const expoCli = resolveBin('expo', 'bin', 'cli');
 const expo = spawnProc(process.execPath, [expoCli, 'start'], {
   cwd: mobileRoot,
   stdio: 'inherit',
-  // Inlined into the app bundle — points the PR app at the same backend the
-  // admin portal uses (see apps/mobile/src/lib/api.ts).
-  env: { EXPO_PUBLIC_API_URL: apiUrl },
+  // Only set EXPO_PUBLIC_API_URL when explicitly overridden; otherwise leave it
+  // unset so apps/mobile/src/lib/api.ts autodetects the dev machine's LAN IP.
+  env: apiUrl ? { EXPO_PUBLIC_API_URL: apiUrl } : {},
 });
 
 expo.on('exit', (code) => shutdown(code ?? 0));

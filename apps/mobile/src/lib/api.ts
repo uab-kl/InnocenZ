@@ -1,7 +1,8 @@
 /**
  * REST client for the InnocenZ backend (the same API the admin portal uses).
- * Base URL comes from EXPO_PUBLIC_API_URL (set by tools/scripts/dev-mobile.mjs
- * from the root .env), falling back to the dev host on port 7777.
+ * Base URL comes from EXPO_PUBLIC_API_URL if explicitly set (see
+ * tools/scripts/dev-mobile.mjs), otherwise autodetected from Expo's hostUri —
+ * the dev machine's LAN IP, which is what physical devices need to reach it.
  */
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
