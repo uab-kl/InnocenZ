@@ -14,6 +14,7 @@ import {
   UPCOMING_SHIFTS,
   fmtDFriendly,
   formatRM,
+  getLastWeekAwaitingPv,
   type DemoShift,
 } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
@@ -73,7 +74,9 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
         ? 'Attendance'
         : 'Check in';
 
-  const focusSection = (key: SectionKey) => setOpen((prev) => ({ ...prev, [key]: true }));
+  /** Hub strip tap: open the matching section, or close it if already open. */
+  const toggleHubSection = (key: SectionKey) =>
+    setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
   const toggleSection = (key: SectionKey, next: boolean) =>
     setOpen((prev) => ({ ...prev, [key]: next }));
 
@@ -143,21 +146,21 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               value={todayStatus}
               valueColor={phase === 'complete' ? C.green : C.goldL}
               on={open.today}
-              onPress={() => focusSection('today')}
+              onPress={() => toggleHubSection('today')}
             />
             <HubTab
               label="TO-DO"
               value={String(TODO_ITEMS.length)}
               valueColor={TODO_ITEMS.length > 0 ? C.amber : C.txt}
               on={open.todo}
-              onPress={() => focusSection('todo')}
+              onPress={() => toggleHubSection('todo')}
             />
             <HubTab
               label="UPCOMING"
               value={String(UPCOMING_SHIFTS.length)}
               valueColor={C.txt}
               on={open.agency}
-              onPress={() => focusSection('agency')}
+              onPress={() => toggleHubSection('agency')}
             />
           </View>
 
@@ -209,7 +212,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                         label={todo.actionLabel}
                         small
                         fullWidth={false}
-                        onPress={() => openPv('pv-2026-0512')}
+                        onPress={() => openPv(getLastWeekAwaitingPv().id)}
                       />
                     </View>
                   ))}

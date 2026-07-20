@@ -121,16 +121,6 @@ export type DemoTodo = {
   actionLabel: string;
 };
 
-/** To-do — matches proto SEED_PR_NOTIFICATIONS PV review item. */
-export const TODO_ITEMS: DemoTodo[] = [
-  {
-    id: 'todo-pv-1',
-    title: 'Review payment voucher',
-    subtitle: `Velvet 23 · PV-2026-0512 · ${formatRM(1630)}`,
-    actionLabel: 'Review PV',
-  },
-];
-
 export type DemoNotification = {
   id: string;
   title: string;
@@ -138,16 +128,6 @@ export type DemoNotification = {
   at: string;
   read: boolean;
 };
-
-export const NOTIFICATIONS: DemoNotification[] = [
-  {
-    id: 'n-pv-1',
-    title: 'Payment Voucher ready',
-    body: 'PV-2026-0512 · RM1,630 net — Finance Head pre-signed. Review & sign.',
-    at: '10 May · 09:20',
-    read: false,
-  },
-];
 
 /* ─── Agency schedule calendar + timetable (proto PrAgencySchedulePanel) ─── */
 
@@ -250,16 +230,8 @@ export type DemoPv = {
   statusLabel: string;
 };
 
+/** Placeholder — real awaiting PV is built from last-week grid via `getLastWeekAwaitingPv`. */
 export const PAYMENT_VOUCHERS: DemoPv[] = [
-  {
-    id: 'pv-2026-0512',
-    ref: 'PV-2026-0512',
-    outlet: 'Velvet 23',
-    weekLabel: '10–16 May 2026',
-    net: 1630,
-    status: 'awaiting_pr',
-    statusLabel: 'Awaiting your signature',
-  },
   {
     id: 'pv-2026-0505',
     ref: 'PV-2026-0505',
@@ -275,37 +247,269 @@ export type DemoHistoryShift = {
   id: string;
   outlet: string;
   dateLabel: string;
+  /** YYYY-MM-DD for filters */
+  dateIso: string;
   time: string;
   payout: number;
-  status: 'complete' | 'cancelled';
+  wages: number;
+  drinks: number;
+  tips: number;
+  others: number;
+  status: 'sealed' | 'signed' | 'cancelled' | 'current';
+  weekId: string;
 };
 
+export type DemoHistoryWeek = {
+  id: string;
+  /** e.g. CURRENT WEEK · 19–25 Jul 2026 */
+  title: string;
+  kind: 'current' | 'payroll';
+  weekLabel: string;
+  pvRef?: string;
+};
+
+export const HISTORY_WEEKS: DemoHistoryWeek[] = [
+  {
+    id: 'week-current',
+    title: 'CURRENT WEEK · 19–25 Jul 2026',
+    kind: 'current',
+    weekLabel: '19–25 Jul 2026',
+    pvRef: 'PV pending Sunday',
+  },
+  {
+    id: 'week-2026-07-12',
+    title: 'PAYROLL WEEK · 12–18 Jul 2026',
+    kind: 'payroll',
+    weekLabel: '12–18 Jul 2026',
+    pvRef: 'PV-2026-0719',
+  },
+  {
+    id: 'week-2026-07-05',
+    title: 'PAYROLL WEEK · 05–11 Jul 2026',
+    kind: 'payroll',
+    weekLabel: '05–11 Jul 2026',
+    pvRef: 'PV-2026-0604-L',
+  },
+];
+
 export const HISTORY_SHIFTS: DemoHistoryShift[] = [
+  {
+    id: 'hist-0712-1',
+    outlet: 'Urban Soul',
+    dateLabel: 'Sat · 18 Jul 2026',
+    dateIso: '2026-07-18',
+    time: '9:00 pm – 3:00 am',
+    payout: 530,
+    wages: 350,
+    drinks: 120,
+    tips: 45,
+    others: 15,
+    status: 'signed',
+    weekId: 'week-2026-07-12',
+  },
+  {
+    id: 'hist-0712-2',
+    outlet: 'Velvet 23',
+    dateLabel: 'Fri · 17 Jul 2026',
+    dateIso: '2026-07-17',
+    time: '10:00 pm – 4:00 am',
+    payout: 498,
+    wages: 350,
+    drinks: 98,
+    tips: 40,
+    others: 10,
+    status: 'signed',
+    weekId: 'week-2026-07-12',
+  },
+  {
+    id: 'hist-0712-3',
+    outlet: 'Bear Lounge',
+    dateLabel: 'Thu · 16 Jul 2026',
+    dateIso: '2026-07-16',
+    time: '9:00 pm – 3:00 am',
+    payout: 512,
+    wages: 350,
+    drinks: 110,
+    tips: 52,
+    others: 0,
+    status: 'signed',
+    weekId: 'week-2026-07-12',
+  },
+  {
+    id: 'hist-0712-4',
+    outlet: 'Mermate',
+    dateLabel: 'Wed · 15 Jul 2026',
+    dateIso: '2026-07-15',
+    time: '10:00 pm – 3:00 am',
+    payout: 486,
+    wages: 350,
+    drinks: 96,
+    tips: 40,
+    others: 0,
+    status: 'signed',
+    weekId: 'week-2026-07-12',
+  },
+  {
+    id: 'hist-0712-5',
+    outlet: 'Velvet 23',
+    dateLabel: 'Tue · 14 Jul 2026',
+    dateIso: '2026-07-14',
+    time: '10:00 pm – 4:00 am',
+    payout: 505,
+    wages: 365,
+    drinks: 100,
+    tips: 40,
+    others: 0,
+    status: 'signed',
+    weekId: 'week-2026-07-12',
+  },
+  {
+    id: 'hist-0712-6',
+    outlet: 'Urban Soul',
+    dateLabel: 'Sun · 12 Jul 2026',
+    dateIso: '2026-07-12',
+    time: '9:00 pm – 2:00 am',
+    payout: 473,
+    wages: 350,
+    drinks: 88,
+    tips: 35,
+    others: 0,
+    status: 'signed',
+    weekId: 'week-2026-07-12',
+  },
   {
     id: 'hist-1',
     outlet: 'Velvet 23',
     dateLabel: 'Fri · 10 Jul 2026',
+    dateIso: '2026-07-10',
     time: '22:00 — 04:00',
     payout: 360,
-    status: 'complete',
+    wages: 252,
+    drinks: 72,
+    tips: 36,
+    others: 0,
+    status: 'sealed',
+    weekId: 'week-2026-07-05',
   },
   {
     id: 'hist-2',
     outlet: 'Mermate',
     dateLabel: 'Wed · 08 Jul 2026',
+    dateIso: '2026-07-08',
     time: '22:00 — 03:00',
     payout: 320,
-    status: 'complete',
+    wages: 224,
+    drinks: 64,
+    tips: 32,
+    others: 0,
+    status: 'sealed',
+    weekId: 'week-2026-07-05',
   },
   {
     id: 'hist-3',
     outlet: 'Velvet 23',
     dateLabel: 'Sun · 05 Jul 2026',
+    dateIso: '2026-07-05',
     time: '22:00 — 04:00',
     payout: 0,
+    wages: 0,
+    drinks: 0,
+    tips: 0,
+    others: 0,
     status: 'cancelled',
+    weekId: 'week-2026-07-05',
   },
 ];
+
+export function historyShiftOutlets(shifts = HISTORY_SHIFTS): string[] {
+  return Array.from(new Set(shifts.map((s) => s.outlet))).sort();
+}
+
+function fmtTimeFromIso(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return `${h}:${m} ${ampm}`;
+}
+
+export function fmtShiftTimeRange(checkedInAt: string, checkedOutAt: string): string {
+  return `${fmtTimeFromIso(checkedInAt)} – ${fmtTimeFromIso(checkedOutAt)}`;
+}
+
+/** Map sealed check-out (Payment → This week) into History shift cards. */
+export function weekPayRecordToHistoryShift(
+  rec: WeekPayRecord,
+  timeRange: string,
+): DemoHistoryShift {
+  const [y, m, d] = isoToYmd(rec.dateIso);
+  const payout = roundRm(rec.wages + rec.drinks + rec.tips + rec.others);
+  return {
+    id: `live-${rec.dateIso}`,
+    outlet: rec.outlet,
+    dateLabel: fmtDFriendly(y, m, d),
+    dateIso: rec.dateIso,
+    time: timeRange,
+    payout,
+    wages: rec.wages,
+    drinks: rec.drinks,
+    tips: rec.tips,
+    others: rec.others,
+    status: 'current',
+    weekId: 'week-current',
+  };
+}
+
+function roundRm(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
+type SessionTimes = {
+  closedShift: {
+    checkedInAt: string;
+    checkedOutAt: string;
+  } | null;
+  checkedInAt: string | null;
+  checkedOutAt: string | null;
+};
+
+function timeRangeForRecord(rec: WeekPayRecord, session: SessionTimes | undefined): string {
+  const matchClosed =
+    session?.closedShift &&
+    isoDateFromTimestamp(session.closedShift.checkedInAt) === rec.dateIso;
+  if (matchClosed && session.closedShift) {
+    return fmtShiftTimeRange(
+      session.closedShift.checkedInAt,
+      session.closedShift.checkedOutAt,
+    );
+  }
+  if (
+    session?.checkedInAt &&
+    session.checkedOutAt &&
+    isoDateFromTimestamp(session.checkedInAt) === rec.dateIso
+  ) {
+    return fmtShiftTimeRange(session.checkedInAt, session.checkedOutAt);
+  }
+  return 'Shift sealed · pending PV';
+}
+
+/**
+ * Current payroll week comes from live check-outs (`weekRecords`);
+ * older weeks stay on static demo history.
+ */
+export function mergeHistoryShiftsWithWeekPay(
+  base: DemoHistoryShift[],
+  records: WeekPayRecord[],
+  session?: SessionTimes,
+): DemoHistoryShift[] {
+  const archived = base.filter((s) => s.weekId !== 'week-current');
+  const live = records.map((rec) =>
+    weekPayRecordToHistoryShift(rec, timeRangeForRecord(rec, session)),
+  );
+  return [...live, ...archived].sort((a, b) => b.dateIso.localeCompare(a.dateIso));
+}
 
 /** Prototype geofence reminder copy — shown as info only while GPS is bypassed. */
 export const GEOFENCE_METERS = 50;
@@ -322,30 +526,102 @@ export const SEED_PORTFOLIO = [
   '/img/pr/portfolio/vicky-4.png',
 ] as const;
 export const SEED_COMCARD = '/img/pr/portfolio/vicky-comcard.png';
+export const SEED_PROFILE_IMAGE = '/img/pr/profile/vicky.png';
 
 export type WeeklyDayPay = {
   day: string;
   date: number;
+  dateIso: string;
   wages: number;
   drinks: number | null;
+  tips: number | null;
+  others: number | null;
+  status: 'verified' | 'pending' | 'empty';
 };
 
-/** Last-week payroll grid demo (matches proto Payment screenshot). */
-export function buildLastWeekPayGrid(baseline = todayYmd()): WeeklyDayPay[] {
+/** One sealed check-out day — feeds Payment → This week until PV issues Sunday. */
+export type WeekPayRecord = {
+  dateIso: string;
+  outlet: string;
+  wages: number;
+  drinks: number;
+  tips: number;
+  others: number;
+};
+
+function emptyWeekSkeleton(weeksAgo: number, baseline = todayYmd()): WeeklyDayPay[] {
   const [y, m, d] = baseline;
   const sunday = new Date(y, m - 1, d);
-  sunday.setDate(sunday.getDate() - sunday.getDay() - 7);
-  const drinks = [125, 96, 109, 122, 98, 134, null] as const;
+  sunday.setDate(sunday.getDate() - sunday.getDay() - weeksAgo * 7);
   return Array.from({ length: 7 }, (_, i) => {
     const dt = new Date(sunday);
     dt.setDate(sunday.getDate() + i);
     return {
       day: DAY_NAMES[dt.getDay()].toUpperCase().slice(0, 3),
       date: dt.getDate(),
-      wages: 334,
-      drinks: drinks[i],
+      dateIso: ymdToIso(dt.getFullYear(), dt.getMonth() + 1, dt.getDate()),
+      wages: 0,
+      drinks: null,
+      tips: null,
+      others: null,
+      status: 'empty' as const,
     };
   });
+}
+
+/** Last-week payroll grid demo (matches proto Payment screenshot). */
+export function buildLastWeekPayGrid(baseline = todayYmd()): WeeklyDayPay[] {
+  const skeleton = emptyWeekSkeleton(1, baseline);
+  const drinks = [125, 96, 109, 122, 98, 134, null] as const;
+  const tips = [40, 35, 50, 28, 45, 55, null] as const;
+  const others = [0, 15, 0, 0, 20, 0, null] as const;
+  return skeleton.map((day, i) => {
+    const hasShift = drinks[i] != null;
+    return {
+      ...day,
+      wages: hasShift ? 334 : 0,
+      drinks: drinks[i],
+      tips: tips[i],
+      others: others[i],
+      status: hasShift ? 'verified' : 'empty',
+    };
+  });
+}
+
+/**
+ * This-week grid from sealed check-outs only (matches proto: no seed rows
+ * until PV issues next Sunday).
+ */
+export function buildThisWeekPayGrid(
+  records: WeekPayRecord[],
+  baseline = todayYmd(),
+): WeeklyDayPay[] {
+  const skeleton = emptyWeekSkeleton(0, baseline);
+  const byIso = new Map(records.map((r) => [r.dateIso, r]));
+  return skeleton.map((day) => {
+    const rec = byIso.get(day.dateIso);
+    if (!rec) return day;
+    return {
+      ...day,
+      wages: rec.wages,
+      drinks: rec.drinks,
+      tips: rec.tips,
+      others: rec.others,
+      status: 'pending',
+    };
+  });
+}
+
+export function weekPayGridTotal(grid: WeeklyDayPay[]): number {
+  return grid.reduce((sum, d) => {
+    return (
+      sum +
+      d.wages +
+      (d.drinks ?? 0) +
+      (d.tips ?? 0) +
+      (d.others ?? 0)
+    );
+  }, 0);
 }
 
 export function weekRangeLabel(weeksAgo: number, baseline = todayYmd()): string {
@@ -357,4 +633,93 @@ export function weekRangeLabel(weeksAgo: number, baseline = todayYmd()): string 
   const a = `${String(sunday.getDate()).padStart(2, '0')} ${MONTH_NAMES[sunday.getMonth()]}`;
   const b = `${String(end.getDate()).padStart(2, '0')} ${MONTH_NAMES[end.getMonth()]} ${end.getFullYear()}`;
   return `${a} – ${b}`;
+}
+
+/** Next Sunday after the payroll week closes — PV issue day copy. */
+export function weekPvIssueDayLabel(weeksAgo = 0, baseline = todayYmd()): string {
+  const [y, m, d] = baseline;
+  const sunday = new Date(y, m - 1, d);
+  sunday.setDate(sunday.getDate() - sunday.getDay() - weeksAgo * 7);
+  const issue = new Date(sunday);
+  issue.setDate(sunday.getDate() + 7);
+  return `${issue.getDate()} ${MONTH_NAMES[issue.getMonth()]}`;
+}
+
+function weekPvIssueDate(weeksAgo: number, baseline = todayYmd()): Date {
+  const [y, m, d] = baseline;
+  const sunday = new Date(y, m - 1, d);
+  sunday.setDate(sunday.getDate() - sunday.getDay() - weeksAgo * 7);
+  const issue = new Date(sunday);
+  issue.setDate(sunday.getDate() + 7);
+  return issue;
+}
+
+/**
+ * Awaiting PR signature PV for last payroll week — same dates + net as Payment
+ * → Last week grid (so History after sign matches Payment).
+ */
+export function getLastWeekAwaitingPv(baseline = todayYmd()): DemoPv {
+  const grid = buildLastWeekPayGrid(baseline);
+  const net = weekPayGridTotal(grid);
+  const weekLabel = weekRangeLabel(1, baseline);
+  const issue = weekPvIssueDate(1, baseline);
+  const y = issue.getFullYear();
+  const mm = String(issue.getMonth() + 1).padStart(2, '0');
+  const dd = String(issue.getDate()).padStart(2, '0');
+  const stamp = `${y}${mm}${dd}`;
+  return {
+    id: `pv-${stamp}`,
+    ref: `PV-${stamp}`,
+    outlet: 'Velvet 23',
+    weekLabel,
+    net,
+    status: 'awaiting_pr',
+    statusLabel: 'Awaiting your signature',
+  };
+}
+
+/** All demo PVs including the live last-week awaiting voucher. */
+export function allPaymentVouchers(baseline = todayYmd()): DemoPv[] {
+  return [getLastWeekAwaitingPv(baseline), ...PAYMENT_VOUCHERS];
+}
+
+/** To-do — matches last-week awaiting PV. */
+export const TODO_ITEMS: DemoTodo[] = (() => {
+  const pv = getLastWeekAwaitingPv();
+  return [
+    {
+      id: 'todo-pv-1',
+      title: 'Review payment voucher',
+      subtitle: `${pv.outlet} · ${pv.ref} · ${formatRM(pv.net)}`,
+      actionLabel: 'Review PV',
+    },
+  ];
+})();
+
+export const NOTIFICATIONS: DemoNotification[] = (() => {
+  const pv = getLastWeekAwaitingPv();
+  return [
+    {
+      id: 'n-pv-1',
+      title: 'Payment Voucher ready',
+      body: `${pv.ref} · ${formatRM(pv.net)} net — Finance Head pre-signed. Review & sign.`,
+      at: weekPvIssueDayLabel(1),
+      read: false,
+    },
+  ];
+})();
+
+export function isoDateFromTimestamp(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return ymdToIso(...todayYmd());
+  return ymdToIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+}
+
+/** Upsert a sealed day into the week-pay list (one row per calendar day). */
+export function upsertWeekPayRecord(
+  records: WeekPayRecord[],
+  next: WeekPayRecord,
+): WeekPayRecord[] {
+  const rest = records.filter((r) => r.dateIso !== next.dateIso);
+  return [...rest, next].sort((a, b) => a.dateIso.localeCompare(b.dateIso));
 }

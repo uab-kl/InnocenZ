@@ -176,6 +176,14 @@ export const XIcon = makeIcon([
   ['path', { d: 'm6 6 12 12' }],
 ]);
 
+export const ImagePlus = makeIcon([
+  ['path', { d: 'M16 5h6' }],
+  ['path', { d: 'M19 2v6' }],
+  ['path', { d: 'M21 11.5V19a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7.5' }],
+  ['path', { d: 'm21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21' }],
+  ['circle', { cx: '9', cy: '9', r: '2' }],
+]);
+
 export const Check = makeIcon([['path', { d: 'M20 6 9 17l-5-5' }]]);
 
 export const Pencil = makeIcon([
@@ -186,6 +194,18 @@ export const Pencil = makeIcon([
 export const Camera = makeIcon([
   ['path', { d: 'M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z' }],
   ['circle', { cx: '12', cy: '13', r: '3' }],
+]);
+
+export const Flag = makeIcon([
+  ['path', { d: 'M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z' }],
+  ['path', { d: 'M4 22v-7' }],
+]);
+
+export const Wine = makeIcon([
+  ['path', { d: 'M8 22h8' }],
+  ['path', { d: 'M7 10h10' }],
+  ['path', { d: 'M12 15v7' }],
+  ['path', { d: 'M12 15a5 5 0 0 0 5-5c0-2-.5-4-2-8H9c-1.5 4-2 6-2 8a5 5 0 0 0 5 5Z' }],
 ]);
 
 export const AlertTriangle = makeIcon([

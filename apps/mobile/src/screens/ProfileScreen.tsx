@@ -15,7 +15,12 @@ import {
 } from 'react-native';
 import { C, F } from '../theme/theme';
 import { ApiError, assetUrl, portfolioSlotsFromProfile } from '../lib/api';
-import { PORTFOLIO_SLOTS } from '../lib/demo-shifts';
+import {
+  PORTFOLIO_SLOTS,
+  SEED_COMCARD,
+  SEED_PORTFOLIO,
+  SEED_PROFILE_IMAGE,
+} from '../lib/demo-shifts';
 import { PR_AGENCY_OPTIONS, PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { useSession } from '../lib/session';
 import { TopBar } from '../components/TopBar';
@@ -62,6 +67,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [error, setError] = useState<string | null>(null);
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => emptyDraft());
+  /** Instant preview while upload is in flight (web object URLs). */
+  const [slotPreviewUri, setSlotPreviewUri] = useState<(string | null)[]>(() =>
+    Array.from({ length: PORTFOLIO_SLOTS }, () => null),
+  );
 
   const displayName = editing ? draft.displayName : me?.username ?? 'PR';
   const legalName = editing
@@ -86,14 +95,33 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       : 24;
 
   const languages = editing ? draft.languages : ['English', 'Mandarin', 'Cantonese'];
-  const portfolio = editing
-    ? draft.portfolio
-    : portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
+  const profilePortfolio = portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
+  const portfolio = editing ? draft.portfolio : profilePortfolio;
 
-  const collagePhotos = useMemo(
-    () => portfolio.filter(Boolean).slice(0, 4) as string[],
-    [portfolio],
-  );
+  const displayPortfolio = useMemo(() => {
+    if (editing) return portfolio;
+    if (portfolio.some(Boolean)) return portfolio;
+    const seeded: (string | null)[] = Array.from({ length: PORTFOLIO_SLOTS }, () => null);
+    SEED_PORTFOLIO.forEach((path, i) => {
+      seeded[i] = path;
+    });
+    return seeded;
+  }, [editing, portfolio]);
+
+  const avatarPath = me?.profileImage ?? (!editing ? SEED_PROFILE_IMAGE : null);
+
+  const comcardTiles = useMemo(() => {
+    if (!editing && !portfolio.some(Boolean)) {
+      return { mode: 'single' as const, src: SEED_COMCARD };
+    }
+    const source = editing ? portfolio : displayPortfolio;
+    return {
+      mode: 'grid' as const,
+      paths: Array.from({ length: 4 }, (_, i) => source[i] ?? null),
+    };
+  }, [displayPortfolio, editing, portfolio]);
+
+  const canPickImages = Boolean(token) && Platform.OS === 'web';
 
   const startEdit = () => {
     const agencyIds = memberships.length
@@ -166,8 +194,20 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
   };
 
+  const validateImageFile = (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      setError('Please choose an image file');
+      return false;
+    }
+    if (file.size > 2_500_000) {
+      setError('Image must be under 2.5 MB');
+      return false;
+    }
+    return true;
+  };
+
   const onPickAvatar = () => {
-    if (!editing || Platform.OS !== 'web' || !token) return;
+    if (!canPickImages) return;
     const doc = (globalThis as { document?: { createElement: (tag: string) => HTMLInputLike } })
       .document;
     if (!doc) return;
@@ -177,14 +217,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     input.onchange = async () => {
       const file = input.files?.[0] ?? null;
       if (!file) return;
-      if (!file.type.startsWith('image/')) {
-        setError('Please choose an image file');
-        return;
-      }
-      if (file.size > 2_500_000) {
-        setError('Image must be under 2.5 MB');
-        return;
-      }
+      if (!validateImageFile(file)) return;
       setSaving(true);
       setError(null);
       try {
@@ -199,7 +232,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   };
 
   const onPickPortfolio = (slot: number) => {
-    if (!editing || Platform.OS !== 'web' || !token) return;
+    if (!canPickImages) return;
     const doc = (globalThis as { document?: { createElement: (tag: string) => HTMLInputLike } })
       .document;
     if (!doc) return;
@@ -209,25 +242,37 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     input.onchange = async () => {
       const file = input.files?.[0] ?? null;
       if (!file) return;
-      if (!file.type.startsWith('image/')) {
-        setError('Please choose an image file');
-        return;
-      }
-      if (file.size > 2_500_000) {
-        setError('Image must be under 2.5 MB');
-        return;
+      if (!validateImageFile(file)) return;
+      const preview =
+        typeof URL !== 'undefined' && 'createObjectURL' in URL ? URL.createObjectURL(file) : null;
+      if (preview) {
+        setSlotPreviewUri((prev) => {
+          const next = [...prev];
+          next[slot] = preview;
+          return next;
+        });
       }
       setSaving(true);
       setError(null);
       try {
         const updated = await uploadPortfolioPhoto(slot, file);
-        setDraft((d) => ({
-          ...d,
-          portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
-        }));
+        if (editing) {
+          setDraft((d) => ({
+            ...d,
+            portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
+          }));
+        }
       } catch (e) {
         setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
       } finally {
+        if (preview) {
+          setSlotPreviewUri((prev) => {
+            const next = [...prev];
+            if (next[slot] === preview) next[slot] = null;
+            return next;
+          });
+          URL.revokeObjectURL(preview);
+        }
         setSaving(false);
       }
     };
@@ -282,21 +327,19 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
         <View style={styles.profileRow}>
           <View style={styles.avatarWrap}>
-            <Pressable onPress={editing ? onPickAvatar : undefined}>
+            <Pressable onPress={canPickImages ? onPickAvatar : undefined}>
               <Avatar
                 size={80}
                 radius={22}
                 fontSize={28}
-                photoPath={me?.profileImage}
+                photoPath={avatarPath}
                 initial={displayName.trim()[0]?.toUpperCase()}
               />
             </Pressable>
-            {editing && (
-              <>
-                <Pressable style={styles.avatarEdit} onPress={onPickAvatar}>
-                  <Camera size={14} color={C.txt} />
-                </Pressable>
-              </>
+            {canPickImages && (
+              <Pressable style={styles.avatarEdit} onPress={onPickAvatar}>
+                <Camera size={14} color={C.txt} />
+              </Pressable>
             )}
           </View>
 
@@ -387,30 +430,43 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         {/* Comcard showcase — portfolio collage + overlay (proto photo comcard) */}
         <View style={styles.showcase}>
           <View style={styles.comcard}>
-            <View style={styles.collage}>
-              {(collagePhotos.length >= 4 ? collagePhotos : portfolio.filter(Boolean).slice(0, 4)).map(
-                (path) => {
-                  const uri = assetUrl(path);
+            {comcardTiles.mode === 'single' ? (
+              <View style={styles.collage}>
+                {assetUrl(comcardTiles.src) ? (
+                  <Image
+                    source={{ uri: assetUrl(comcardTiles.src)! }}
+                    style={StyleSheet.absoluteFillObject}
+                    resizeMode="cover"
+                  />
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.collage}>
+                {comcardTiles.paths.map((path, idx) => {
+                  const uri = path ? assetUrl(path) : null;
                   return uri ? (
                     <Image
-                      key={path}
+                      key={`${path}-${idx}`}
                       source={{ uri }}
                       style={styles.collageTile}
                       resizeMode="cover"
                     />
                   ) : (
-                    <View key={String(path)} style={[styles.collageTile, { backgroundColor: C.panel2 }]} />
+                    <View
+                      key={`empty-${idx}`}
+                      style={[styles.collageTile, { backgroundColor: C.panel2 }]}
+                    />
                   );
-                },
-              )}
-              <View style={styles.comcardOverlay}>
-                <Text style={styles.comcardOverlayName}>{displayName}</Text>
-                <Text style={styles.comcardOverlayStats}>Age {age}</Text>
-                <Text style={styles.comcardOverlayStats}>
-                  {height}cm {weight}kg
-                </Text>
+                })}
+                <View style={styles.comcardOverlay}>
+                  <Text style={styles.comcardOverlayName}>{displayName}</Text>
+                  <Text style={styles.comcardOverlayStats}>Age {age}</Text>
+                  <Text style={styles.comcardOverlayStats}>
+                    {height}cm {weight}kg
+                  </Text>
+                </View>
               </View>
-            </View>
+            )}
           </View>
 
           {!editing && (
@@ -473,20 +529,24 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         <View style={styles.section}>
           <View style={styles.sectionTitleRow}>
             <Text style={styles.sectionTitle}>Portfolio gallery · v3</Text>
-            {editing && (
-              <Text style={styles.sectionHint}>Tap a slot to upload · save to apply removals</Text>
+            {canPickImages && (
+              <Text style={styles.sectionHint}>
+                {editing
+                  ? 'Tap a slot to upload · save to apply removals'
+                  : 'Tap a slot to upload'}
+              </Text>
             )}
           </View>
           <View style={styles.pgrid}>
             {Array.from({ length: PORTFOLIO_SLOTS }, (_, i) => {
-              const path = portfolio[i];
-              const uri = path ? assetUrl(path) : null;
+              const path = displayPortfolio[i];
+              const uri = slotPreviewUri[i] ?? (path ? assetUrl(path) : null);
               return (
                 <Pressable
                   key={i}
                   style={styles.pcell}
-                  onPress={editing ? () => onPickPortfolio(i) : undefined}
-                  disabled={!editing || saving}
+                  onPress={canPickImages ? () => onPickPortfolio(i) : undefined}
+                  disabled={!canPickImages || saving}
                 >
                   {uri ? (
                     <Image source={{ uri }} style={styles.pcellImg} resizeMode="cover" />
@@ -804,6 +864,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     position: 'relative',
+    backgroundColor: C.panel2,
   },
   collageTile: { width: '50%', height: '50%' },
   comcardOverlay: {

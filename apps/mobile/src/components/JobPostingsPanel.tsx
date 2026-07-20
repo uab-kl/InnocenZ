@@ -2,8 +2,16 @@
  * Job postings — port of proto `SpecialServicePortalSection` (role=pr)
  * shown on `/host?view=services`.
  */
-import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  Modal,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+} from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
 import {
@@ -18,6 +26,7 @@ import {
   Check,
   ChevronDown,
   CircleHelp,
+  Clock,
   Plus,
 } from './icons';
 
@@ -60,8 +69,8 @@ export function JobPostingsPanel() {
   const filtersActive =
     filters.date !== 'all' || filters.service !== 'all' || filters.status !== 'all';
 
-  const openOrderSheet = () => {
-    setDraftType(SERVICE_OFFERS[0].id);
+  const openOrderSheet = (serviceId?: string) => {
+    setDraftType(serviceId ?? SERVICE_OFFERS[0].id);
     setDraftTime('19:00');
     setDraftNote('');
     setOrderOpen(true);
@@ -104,7 +113,7 @@ export function JobPostingsPanel() {
         label="Order service"
         icon={Plus}
         small
-        onPress={openOrderSheet}
+        onPress={() => openOrderSheet()}
         style={{ marginTop: 12, alignSelf: 'flex-start', width: 'auto', paddingHorizontal: 16 }}
       />
 
@@ -123,18 +132,18 @@ export function JobPostingsPanel() {
             onToggle={() => setOpenSelect((s) => (s === 'date' ? null : 'date'))}
           />
           <FilterField
+            label="SERVICE"
+            value={filters.service === 'all' ? 'All' : offerLabel(filters.service)}
+            open={openSelect === 'service'}
+            onToggle={() => setOpenSelect((s) => (s === 'service' ? null : 'service'))}
+          />
+          <FilterField
             label="STATUS"
             value={
               STATUS_FILTER_OPTIONS.find((o) => o.id === filters.status)?.label ?? 'All'
             }
             open={openSelect === 'status'}
             onToggle={() => setOpenSelect((s) => (s === 'status' ? null : 'status'))}
-          />
-          <FilterField
-            label="SERVICE"
-            value={filters.service === 'all' ? 'All' : offerLabel(filters.service)}
-            open={openSelect === 'service'}
-            onToggle={() => setOpenSelect((s) => (s === 'service' ? null : 'service'))}
           />
         </View>
 
@@ -151,16 +160,6 @@ export function JobPostingsPanel() {
             }}
           />
         )}
-        {openSelect === 'status' && (
-          <SelectList
-            options={STATUS_FILTER_OPTIONS}
-            selected={filters.status}
-            onPick={(id) => {
-              setFilters((f) => ({ ...f, status: id }));
-              setOpenSelect(null);
-            }}
-          />
-        )}
         {openSelect === 'service' && (
           <SelectList
             options={[
@@ -170,6 +169,16 @@ export function JobPostingsPanel() {
             selected={filters.service}
             onPick={(id) => {
               setFilters((f) => ({ ...f, service: id }));
+              setOpenSelect(null);
+            }}
+          />
+        )}
+        {openSelect === 'status' && (
+          <SelectList
+            options={STATUS_FILTER_OPTIONS}
+            selected={filters.status}
+            onPick={(id) => {
+              setFilters((f) => ({ ...f, status: id }));
               setOpenSelect(null);
             }}
           />
@@ -193,7 +202,7 @@ export function JobPostingsPanel() {
           <View style={{ flex: 1 }}>
             <View style={styles.ordersTitleRow}>
               <CircleHelp size={14} color={C.muted2} />
-              <Text style={styles.ordersTitle}>Your service orders</Text>
+              <Text style={styles.ordersTitle}>YOUR SERVICE ORDERS</Text>
             </View>
             <Text style={styles.ordersHint}>
               {filtered.length} record{filtered.length !== 1 ? 's' : ''}
@@ -245,68 +254,200 @@ export function JobPostingsPanel() {
       >
         <Pressable style={styles.backdrop} onPress={() => setOrderOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.sheetTitle}>
-              {isLeave ? 'Service request' : 'Order agency service'}
-            </Text>
-            <Text style={styles.sheetSub}>
-              Request an agency add-on service — your agency will review and confirm.
-            </Text>
-
-            <Text style={styles.fieldLabel}>Service</Text>
-            <View style={styles.offerList}>
-              {SERVICE_OFFERS.map((o) => (
-                <Pressable
-                  key={o.id}
-                  style={[styles.offerRow, draftType === o.id && styles.offerRowOn]}
-                  onPress={() => setDraftType(o.id)}
-                >
-                  <Text style={styles.offerLabel}>{o.label}</Text>
-                  {draftType === o.id && <Check size={14} color={C.goldL} />}
-                </Pressable>
-              ))}
-            </View>
-            <Text style={styles.offerSummary}>{draftOffer.summary}</Text>
-
-            {!isLeave && (
-              <>
-                <Text style={styles.fieldLabel}>Service time</Text>
-                <TextInput
-                  value={draftTime}
-                  onChangeText={setDraftTime}
-                  style={styles.input}
-                  placeholderTextColor={C.muted2}
-                />
-              </>
-            )}
-
-            <Text style={styles.fieldLabel}>{isLeave ? 'Reason' : 'Notes'}</Text>
-            <TextInput
-              value={draftNote}
-              onChangeText={setDraftNote}
-              style={[styles.input, { minHeight: 72, textAlignVertical: 'top' }]}
-              multiline
-              placeholder={
-                isLeave
-                  ? 'Reason for early leave…'
-                  : 'Pickup address, delivery items, outlet contact…'
-              }
-              placeholderTextColor={C.muted2}
-            />
-
-            <Pressable
-              style={[styles.submit, grad(GRADIENTS.accent, C.accent)]}
-              onPress={submitOrder}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              contentContainerStyle={styles.sheetScroll}
             >
-              <Text style={styles.submitText}>
-                {isLeave ? 'Raise support ticket' : 'Submit to agency'}
+              <Text style={styles.sheetTitle}>
+                {isLeave ? 'Service request' : 'Order agency service'}
               </Text>
-            </Pressable>
-            <Pressable style={styles.cancel} onPress={() => setOrderOpen(false)}>
-              <Text style={styles.cancelText}>Back</Text>
-            </Pressable>
+              <Text style={styles.sheetSub}>
+                Request an agency add-on service — your agency will review and confirm.
+              </Text>
+
+              <Text style={styles.fieldLabel}>Service</Text>
+              <ScrollView
+                style={styles.offerList}
+                nestedScrollEnabled
+                keyboardShouldPersistTaps="handled"
+              >
+                {SERVICE_OFFERS.map((o) => (
+                  <Pressable
+                    key={o.id}
+                    style={[styles.offerRow, draftType === o.id && styles.offerRowOn]}
+                    onPress={() => setDraftType(o.id)}
+                  >
+                    <Text style={styles.offerLabel}>{o.label}</Text>
+                    {draftType === o.id && <Check size={14} color={C.goldL} />}
+                  </Pressable>
+                ))}
+              </ScrollView>
+              <Text style={styles.offerSummary}>{draftOffer.summary}</Text>
+
+              {!isLeave && (
+                <>
+                  <Text style={styles.fieldLabel}>Service time</Text>
+                  <ServiceTimePicker value={draftTime} onChange={setDraftTime} />
+                </>
+              )}
+
+              <Text style={styles.fieldLabel}>{isLeave ? 'Reason' : 'Notes'}</Text>
+              <TextInput
+                value={draftNote}
+                onChangeText={setDraftNote}
+                style={[styles.input, { minHeight: 72, textAlignVertical: 'top' }]}
+                multiline
+                placeholder={
+                  isLeave
+                    ? 'Reason for early leave…'
+                    : 'Pickup address, delivery items, outlet contact…'
+                }
+                placeholderTextColor={C.muted2}
+              />
+
+              <Pressable
+                style={[styles.submit, grad(GRADIENTS.accent, C.accent)]}
+                onPress={submitOrder}
+              >
+                <Text style={styles.submitText}>
+                  {isLeave ? 'Raise support ticket' : 'Submit to agency'}
+                </Text>
+              </Pressable>
+              <Pressable style={styles.cancel} onPress={() => setOrderOpen(false)}>
+                <Text style={styles.cancelText}>Back</Text>
+              </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
+    </View>
+  );
+}
+
+type TimePeriod = 'AM' | 'PM';
+type Time12Parts = { hour12: number; minute: number; period: TimePeriod };
+
+const HOURS_12 = [12, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11] as const;
+const MINUTES = Array.from({ length: 60 }, (_, i) => i);
+const PERIODS: TimePeriod[] = ['AM', 'PM'];
+
+function parseTime12(hhmm: string): Time12Parts {
+  const m = hhmm.trim().match(/^(\d{1,2}):(\d{2})$/);
+  const h24 = m ? Math.min(23, Math.max(0, parseInt(m[1], 10))) : 19;
+  const minute = m ? Math.min(59, Math.max(0, parseInt(m[2], 10))) : 0;
+  const period: TimePeriod = h24 >= 12 ? 'PM' : 'AM';
+  return { hour12: h24 % 12 || 12, minute, period };
+}
+
+function formatTime24(parts: Time12Parts): string {
+  let h24 = parts.hour12 % 12;
+  if (parts.period === 'PM') h24 += 12;
+  return `${String(h24).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+}
+
+function formatTimeLabel(hhmm: string): string {
+  const { hour12, minute, period } = parseTime12(hhmm);
+  return `${hour12}:${String(minute).padStart(2, '0')} ${period}`;
+}
+
+function TimePickerColumn<T extends string | number>({
+  items,
+  value,
+  onChange,
+  formatItem,
+}: {
+  items: readonly T[];
+  value: T;
+  onChange: (v: T) => void;
+  formatItem: (v: T) => string;
+}) {
+  const scrollRef = useRef<ScrollView>(null);
+  const selectedIndex = Math.max(0, items.indexOf(value));
+
+  useEffect(() => {
+    const id = requestAnimationFrame(() => {
+      scrollRef.current?.scrollTo({ y: Math.max(0, selectedIndex * 36 - 36), animated: false });
+    });
+    return () => cancelAnimationFrame(id);
+  }, [selectedIndex]);
+
+  return (
+    <ScrollView
+      ref={scrollRef}
+      style={styles.timeCol}
+      nestedScrollEnabled
+      showsVerticalScrollIndicator={false}
+    >
+      {items.map((item) => {
+        const selected = item === value;
+        return (
+          <Pressable
+            key={String(item)}
+            style={[styles.timeColBtn, selected && styles.timeColBtnOn]}
+            onPress={() => onChange(item)}
+          >
+            <Text style={[styles.timeColText, selected && styles.timeColTextOn]}>
+              {formatItem(item)}
+            </Text>
+          </Pressable>
+        );
+      })}
+    </ScrollView>
+  );
+}
+
+/** Tap-to-open 12h time picker — mirrors proto `IzTimeInput`. */
+function ServiceTimePicker({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const draft = useMemo(() => parseTime12(value || '19:00'), [value]);
+
+  const apply = (next: Time12Parts) => onChange(formatTime24(next));
+
+  return (
+    <View>
+      <Pressable
+        style={[styles.timeTrigger, open && styles.timeTriggerOpen]}
+        onPress={() => setOpen((o) => !o)}
+      >
+        <Clock size={16} color={C.muted2} />
+        <Text style={styles.timeTriggerLabel}>{formatTimeLabel(value || '19:00')}</Text>
+        <ChevronDown
+          size={14}
+          color={C.muted}
+          style={open ? { transform: [{ rotate: '180deg' }] } : undefined}
+        />
+      </Pressable>
+      {open && (
+        <View style={styles.timePopover}>
+          <View style={styles.timeColumns}>
+            <TimePickerColumn
+              items={HOURS_12}
+              value={draft.hour12}
+              onChange={(hour12) => apply({ ...draft, hour12 })}
+              formatItem={(h) => String(h).padStart(2, '0')}
+            />
+            <TimePickerColumn
+              items={MINUTES}
+              value={draft.minute}
+              onChange={(minute) => apply({ ...draft, minute })}
+              formatItem={(m) => String(m).padStart(2, '0')}
+            />
+            <TimePickerColumn
+              items={PERIODS}
+              value={draft.period}
+              onChange={(period) => apply({ ...draft, period })}
+              formatItem={(p) => p}
+            />
+          </View>
+        </View>
+      )}
     </View>
   );
 }
@@ -345,7 +486,12 @@ function SelectList({
   onPick: (id: string) => void;
 }) {
   return (
-    <View style={styles.selectList}>
+    <ScrollView
+      style={styles.selectList}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+      showsVerticalScrollIndicator
+    >
       {options.map((o) => (
         <Pressable
           key={o.id}
@@ -358,7 +504,7 @@ function SelectList({
           {selected === o.id && <Check size={14} color={C.violetL} />}
         </Pressable>
       ))}
-    </View>
+    </ScrollView>
   );
 }
 
@@ -473,7 +619,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line2,
     backgroundColor: C.bg2,
-    overflow: 'hidden',
     maxHeight: 260,
   },
   selectRow: {
@@ -504,7 +649,13 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   ordersTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  ordersTitle: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.txt },
+  ordersTitle: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '800',
+    letterSpacing: 1.44,
+    color: C.txt,
+  },
   ordersHint: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   tapHint: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, fontWeight: '600', color: C.goldL },
   ordersBody: { paddingHorizontal: 12, paddingBottom: 12, gap: 10, borderTopWidth: 1, borderTopColor: C.line },
@@ -558,12 +709,16 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 22,
     borderWidth: 1,
     borderColor: C.line2,
-    padding: 18,
-    paddingBottom: 28,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 12,
     maxWidth: 392,
     width: '100%',
     alignSelf: 'center',
     maxHeight: '90%',
+  },
+  sheetScroll: {
+    paddingBottom: 16,
   },
   sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
   sheetSub: { marginTop: 6, fontFamily: F.manrope, fontSize: 13, color: C.prMuted, lineHeight: 18 },
@@ -580,8 +735,7 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.line,
-    maxHeight: 180,
-    overflow: 'hidden',
+    maxHeight: 280,
   },
   offerRow: {
     flexDirection: 'row',
@@ -595,6 +749,64 @@ const styles = StyleSheet.create({
   offerRowOn: { backgroundColor: 'rgba(183,156,232,0.1)' },
   offerLabel: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
   offerSummary: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  timeTrigger: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    borderWidth: 1,
+    borderColor: C.line2,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    backgroundColor: 'rgba(0,0,0,0.22)',
+  },
+  timeTriggerOpen: {
+    borderColor: 'rgba(183,156,232,0.5)',
+    backgroundColor: 'rgba(183,156,232,0.08)',
+  },
+  timeTriggerLabel: {
+    flex: 1,
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '600',
+    color: C.txt,
+  },
+  timePopover: {
+    marginTop: 8,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: C.bg2,
+    padding: 8,
+  },
+  timeColumns: {
+    flexDirection: 'row',
+    gap: 6,
+    height: 148,
+  },
+  timeCol: {
+    flex: 1,
+    borderRadius: 10,
+    backgroundColor: 'rgba(0,0,0,0.18)',
+  },
+  timeColBtn: {
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 4,
+  },
+  timeColBtnOn: {
+    backgroundColor: 'rgba(183,156,232,0.18)',
+  },
+  timeColText: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.muted,
+  },
+  timeColTextOn: {
+    color: C.goldL,
+  },
   input: {
     fontFamily: F.sora,
     fontSize: 15,

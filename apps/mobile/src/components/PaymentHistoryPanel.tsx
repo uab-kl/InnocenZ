@@ -2,7 +2,7 @@
  * Payment history panel — port of InnocenZ-proto `PrPaymentHistoryPanel`
  * on `/host/history?tab=payment`.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
   Pressable,
@@ -14,18 +14,22 @@ import {
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
+import { PAYMENT_HISTORY_WEEKS, paymentHistoryOutlets, type HistPayWeek } from '../lib/demo-payment-history';
 import {
-  PAYMENT_HISTORY_WEEKS,
-  paymentHistoryOutlets,
-  type HistPayWeek,
-} from '../lib/demo-payment-history';
+  buildDateOptionsFromKeys,
+  collectPaymentWeekDateKeys,
+  matchesPaymentWeekDayTime,
+} from '../lib/hist-date-time-filters';
+import { normalizeHistPayWeek } from '../lib/history-pay-sync';
+import { useShiftSession } from '../lib/shift-session';
+import { useSignedPvs } from '../lib/signed-pv';
 import { usePrNav } from '../lib/pr-nav';
 import { IzButton, Pill } from './ui';
+import { HistDateField, HistDateTimeFilter, HistTimeInput } from './HistDateTimeFilter';
 import {
   Briefcase,
   Calendar,
   ChevronDown,
-  Clock,
   FileText,
   Filter,
   House,
@@ -57,17 +61,49 @@ const EMPTY: Filters = {
 
 export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => void }) {
   const { openPv } = usePrNav();
+  const { weekRecords } = useShiftSession();
+  const { signedWeeks } = useSignedPvs();
   const [applied, setApplied] = useState<Filters>(EMPTY);
   const [draft, setDraft] = useState<Filters>(EMPTY);
   const [filterOpen, setFilterOpen] = useState(false);
-  const [openSelect, setOpenSelect] = useState<'outlet' | 'date' | null>(null);
+  const [openSelect, setOpenSelect] = useState<'outlet' | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [sheetCalendarOpen, setSheetCalendarOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (signedWeeks[0]?.id) setExpanded(signedWeeks[0].id);
+  }, [signedWeeks]);
+
   const [toast, setToast] = useState<string | null>(null);
 
-  const outlets = useMemo(() => paymentHistoryOutlets(), []);
+  const allWeeks = useMemo(() => {
+    const seedIds = new Set(signedWeeks.map((w) => w.id));
+    const merged = [
+      ...signedWeeks,
+      ...PAYMENT_HISTORY_WEEKS.filter((w) => !seedIds.has(w.id)),
+    ];
+    return merged.map(normalizeHistPayWeek);
+  }, [signedWeeks]);
+
+  const outlets = useMemo(() => paymentHistoryOutlets(allWeeks), [allWeeks]);
+
+  const paymentWorkDayKeys = useMemo(() => {
+    const keys = [
+      ...allWeeks.flatMap((w) => collectPaymentWeekDateKeys(w)),
+      ...weekRecords.map((r) => r.dateIso),
+    ];
+    return buildDateOptionsFromKeys(keys).map((o) => o.key);
+  }, [allWeeks, weekRecords]);
 
   const filtered = useMemo(() => {
-    return PAYMENT_HISTORY_WEEKS.filter((w) => {
+    const dayTime = {
+      date: applied.date,
+      timeFrom: applied.timeFrom,
+      timeTo: applied.timeTo,
+    };
+    return allWeeks.filter((w) => {
+      if (!matchesPaymentWeekDayTime(w, dayTime)) return false;
       if (applied.status === 'paid' && w.status !== 'paid') return false;
       if (applied.status === 'signed' && w.status !== 'signed') return false;
       if (applied.outlet !== 'all') {
@@ -98,7 +134,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       }
       return true;
     });
-  }, [applied]);
+  }, [applied, allWeeks]);
 
   const paidList = filtered.filter((w) => w.status === 'paid');
   const signedList = filtered.filter((w) => w.status === 'signed');
@@ -173,35 +209,50 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         />
       </View>
 
-      <View style={styles.inlineFilters}>
+      <View style={styles.filterRow}>
         <FilterField
           icon={House}
           label="OUTLET"
           value={applied.outlet === 'all' ? 'Any outlet' : applied.outlet}
-          onPress={() => setOpenSelect((s) => (s === 'outlet' ? null : 'outlet'))}
+          onPress={() => {
+            setOpenSelect((s) => (s === 'outlet' ? null : 'outlet'));
+            setCalendarOpen(false);
+          }}
         />
-        <FilterField
-          icon={Calendar}
-          label="DATE"
-          value={applied.date || 'Any date'}
-          onPress={() => setOpenSelect((s) => (s === 'date' ? null : 'date'))}
+        <HistDateField
+          date={applied.date}
+          workDayKeys={paymentWorkDayKeys}
+          calendarOpen={calendarOpen}
+          onCalendarOpenChange={(open) => {
+            setCalendarOpen(open);
+            if (open) setOpenSelect(null);
+          }}
+          onDateChange={(date) =>
+            setApplied((f) => ({
+              ...f,
+              date,
+              timeFrom: date ? f.timeFrom : '',
+              timeTo: date ? f.timeTo : '',
+            }))
+          }
+          onClearSideEffects={() =>
+            setApplied((f) => ({ ...f, timeFrom: '', timeTo: '' }))
+          }
         />
       </View>
 
       <View style={styles.timeRow}>
-        <FilterField
-          icon={Clock}
+        <HistTimeInput
           label="FROM TIME"
-          value={applied.date ? applied.timeFrom || 'Tap to choose' : 'Pick date first'}
+          value={applied.timeFrom}
+          onChange={(timeFrom) => setApplied((f) => ({ ...f, timeFrom }))}
           disabled={!applied.date}
-          flex
         />
-        <FilterField
-          icon={Clock}
+        <HistTimeInput
           label="TO TIME"
-          value={applied.date ? applied.timeTo || 'Tap to choose' : 'Pick date first'}
+          value={applied.timeTo}
+          onChange={(timeTo) => setApplied((f) => ({ ...f, timeTo }))}
           disabled={!applied.date}
-          flex
         />
       </View>
 
@@ -211,28 +262,6 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
           selected={applied.outlet}
           onPick={(id) => {
             setApplied((f) => ({ ...f, outlet: id }));
-            setOpenSelect(null);
-          }}
-        />
-      )}
-      {openSelect === 'date' && (
-        <SelectList
-          options={[
-            { id: '', label: 'Any date' },
-            { id: '2026-07-05', label: '05 Jul 2026' },
-            { id: '2026-06-28', label: '28 Jun 2026' },
-            { id: '2026-06-21', label: '21 Jun 2026' },
-            { id: '2026-06-14', label: '14 Jun 2026' },
-            { id: '2026-05-03', label: '03 May 2026' },
-          ]}
-          selected={applied.date}
-          onPick={(id) => {
-            setApplied((f) => ({
-              ...f,
-              date: id,
-              timeFrom: id ? f.timeFrom : '',
-              timeTo: id ? f.timeTo : '',
-            }));
             setOpenSelect(null);
           }}
         />
@@ -335,63 +364,34 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       >
         <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.sheetHandle} />
             <View style={styles.sheetTitleRow}>
               <Wallet size={18} color={C.accent} />
               <Text style={styles.sheetTitle}>Filter payment history</Text>
             </View>
 
-            <Text style={styles.fieldLabel}>DATE</Text>
-            <Pressable
-              style={styles.sheetField}
-              onPress={() =>
+            <HistDateTimeFilter
+              date={draft.date}
+              timeFrom={draft.timeFrom}
+              timeTo={draft.timeTo}
+              workDayKeys={paymentWorkDayKeys}
+              activityKind="payment"
+              calendarOpen={sheetCalendarOpen}
+              onCalendarOpenChange={setSheetCalendarOpen}
+              onDateChange={(date) =>
                 setDraft((d) => ({
                   ...d,
-                  date: d.date ? '' : '2026-07-05',
-                  timeFrom: '',
-                  timeTo: '',
+                  date,
+                  timeFrom: date ? d.timeFrom : '',
+                  timeTo: date ? d.timeTo : '',
                 }))
               }
-            >
-              <Calendar size={14} color={C.muted} />
-              <Text style={styles.sheetFieldText}>
-                {draft.date || 'Tap to choose a date'}
-              </Text>
-              <ChevronDown size={14} color={C.muted} />
-            </Pressable>
+              onTimeFromChange={(timeFrom) => setDraft((d) => ({ ...d, timeFrom }))}
+              onTimeToChange={(timeTo) => setDraft((d) => ({ ...d, timeTo }))}
+            />
 
-            <View style={styles.timeRow}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>FROM TIME</Text>
-                <View style={[styles.sheetField, !draft.date && { opacity: 0.5 }]}>
-                  <Clock size={14} color={C.muted} />
-                  <TextInput
-                    editable={!!draft.date}
-                    value={draft.timeFrom}
-                    onChangeText={(timeFrom) => setDraft((d) => ({ ...d, timeFrom }))}
-                    placeholder="Pick date first"
-                    placeholderTextColor={C.muted2}
-                    style={styles.sheetFieldInput}
-                  />
-                </View>
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.fieldLabel}>TO TIME</Text>
-                <View style={[styles.sheetField, !draft.date && { opacity: 0.5 }]}>
-                  <Clock size={14} color={C.muted} />
-                  <TextInput
-                    editable={!!draft.date}
-                    value={draft.timeTo}
-                    onChangeText={(timeTo) => setDraft((d) => ({ ...d, timeTo }))}
-                    placeholder="Pick date first"
-                    placeholderTextColor={C.muted2}
-                    style={styles.sheetFieldInput}
-                  />
-                </View>
-              </View>
-            </View>
-
-            <Text style={styles.fieldLabel}>
+            <Text style={[styles.fieldLabel, { marginTop: 4 }]}>
               <House size={11} color={C.muted2} /> OUTLET
             </Text>
             <Pressable
@@ -447,6 +447,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
             <Pressable style={styles.clearBtn} onPress={clearFilters}>
               <Text style={styles.clearBtnText}>Clear &amp; close</Text>
             </Pressable>
+            </ScrollView>
           </Pressable>
         </Pressable>
       </Modal>
@@ -644,7 +645,12 @@ function StatTile({
   return (
     <View style={[styles.statTile, accent && styles.statTileAccent]}>
       {Icon ? <Icon size={12} color={C.muted2} /> : null}
-      <Text style={[styles.statValue, valueColor ? { color: valueColor } : null]} numberOfLines={1}>
+      <Text
+        style={[styles.statValue, valueColor ? { color: valueColor } : null]}
+        adjustsFontSizeToFit
+        minimumFontScale={0.55}
+        numberOfLines={2}
+      >
         {value}
       </Text>
       <Text style={styles.statLabel}>{label}</Text>
@@ -758,7 +764,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
   searchInput: { flex: 1, fontFamily: F.manrope, fontSize: 14, color: C.txt, padding: 0 },
-  inlineFilters: { flexDirection: 'row', gap: 8, marginTop: 10 },
+  filterRow: { flexDirection: 'row', gap: 8, marginTop: 10 },
   timeRow: { flexDirection: 'row', gap: 8, marginTop: 8 },
   filterField: {
     flex: 1,
@@ -813,6 +819,7 @@ const styles = StyleSheet.create({
   statRow: { flexDirection: 'row', gap: 8, marginTop: 14 },
   statTile: {
     flex: 1,
+    minWidth: 0,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.line,
@@ -823,9 +830,10 @@ const styles = StyleSheet.create({
   statTileAccent: { borderColor: 'rgba(232,194,122,0.28)' },
   statValue: {
     fontFamily: F.sora,
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '800',
     color: C.txt,
+    flexShrink: 1,
   },
   statLabel: { fontFamily: F.manrope, fontSize: 11, color: C.muted2 },
   summaryLine: {
