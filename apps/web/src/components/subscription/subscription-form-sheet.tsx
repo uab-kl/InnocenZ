@@ -1,7 +1,6 @@
 import { useForm } from "@tanstack/react-form";
-import { useQuery } from "@tanstack/react-query";
-import { AlertCircle, Check, CreditCard, Loader2, Plus } from "lucide-react";
-import { useEffect, useState } from "react";
+import { AlertCircle, CreditCard, Loader2 } from "lucide-react";
+import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
 	Field,
@@ -26,10 +25,7 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
-import { useAuth } from "@/lib/auth-context";
-import { cn, formatRoleLabel, getErrorMessage } from "@/lib/utils";
-import { fetchRoles } from "@/services/rbac";
-import type { RbacRole } from "@/services/rbac/types";
+import { getErrorMessage } from "@/lib/utils";
 import type { Subscription } from "@/services/subscription";
 import {
 	type CreateSubscriptionInput,
@@ -90,16 +86,7 @@ export function SubscriptionFormSheet({
 	error,
 	editTarget,
 }: SubscriptionFormSheetProps) {
-	const { logout } = useAuth();
 	const isEditing = !!editTarget;
-	const [roleRows, setRoleRows] = useState<string[]>([""]);
-
-	const rolesQuery = useQuery({
-		queryKey: ["rbac-roles", "subscription-form"],
-		queryFn: () => fetchRoles({ status: "active", pageSize: 100 }, logout),
-		enabled: open,
-		staleTime: 60_000,
-	});
 
 	const form = useForm({
 		defaultValues: {
@@ -111,7 +98,6 @@ export function SubscriptionFormSheet({
 				| "annually",
 			status: (editTarget?.status ?? "active") as "active" | "inactive",
 			coverage: editTarget?.coverage ?? "",
-			roleIds: editTarget?.roles.map((role) => role.id) ?? [],
 		},
 		onSubmit: async ({ value }) => {
 			const parsed = SubscriptionSchema.safeParse(value);
@@ -123,31 +109,20 @@ export function SubscriptionFormSheet({
 	useEffect(() => {
 		if (!open) {
 			form.reset();
-			setRoleRows([""]);
 			return;
 		}
 
-		const roleIds = editTarget?.roles.map((role) => role.id) ?? [];
-		setRoleRows(roleIds.length > 0 ? roleIds : [""]);
 		form.setFieldValue("name", editTarget?.name ?? "");
 		form.setFieldValue("price", editTarget ? Number(editTarget.price) : 0);
 		form.setFieldValue("billingCycle", editTarget?.billingCycle ?? "monthly");
 		form.setFieldValue("status", editTarget?.status ?? "active");
 		form.setFieldValue("coverage", editTarget?.coverage ?? "");
-		form.setFieldValue("roleIds", roleIds);
 	}, [open, editTarget]); // eslint-disable-line react-hooks/exhaustive-deps
-
-	const syncRoleRows = (rows: string[]) => {
-		setRoleRows(rows);
-		form.setFieldValue("roleIds", rows.filter(Boolean));
-	};
 
 	const handleOpenChange = (nextOpen: boolean) => {
 		if (!nextOpen && isSubmitting) return;
 		onOpenChange(nextOpen);
 	};
-
-	const availableRoles = rolesQuery.data?.data ?? [];
 
 	return (
 		<Sheet open={open} onOpenChange={handleOpenChange}>
@@ -205,34 +180,6 @@ export function SubscriptionFormSheet({
 									);
 								}}
 							</form.Field>
-
-							<Field>
-								<FieldLabel>Roles</FieldLabel>
-								<p className="text-sm text-muted-foreground">
-									Tap the roles that can use this plan.
-								</p>
-								{rolesQuery.isLoading ? (
-									<div className="flex items-center gap-2 text-sm text-muted-foreground">
-										<Loader2 className="h-4 w-4 animate-spin" />
-										Loading roles...
-									</div>
-								) : rolesQuery.isError ? (
-									<p className="text-sm text-destructive">
-										Failed to load roles.
-									</p>
-								) : availableRoles.length === 0 ? (
-									<p className="text-sm text-muted-foreground">
-										No active roles found.
-									</p>
-								) : (
-									<SubscriptionRolePicker
-										selected={roleRows.filter(Boolean)}
-										availableRoles={availableRoles}
-										disabled={isSubmitting}
-										onChange={syncRoleRows}
-									/>
-								)}
-							</Field>
 
 							<div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
 								<form.Field name="price">
@@ -454,55 +401,5 @@ export function SubscriptionFormSheet({
 				</form>
 			</SheetContent>
 		</Sheet>
-	);
-}
-
-function SubscriptionRolePicker({
-	selected,
-	availableRoles,
-	disabled,
-	onChange,
-}: {
-	selected: string[];
-	availableRoles: RbacRole[];
-	disabled: boolean;
-	onChange: (rows: string[]) => void;
-}) {
-	const toggle = (roleId: string) => {
-		onChange(
-			selected.includes(roleId)
-				? selected.filter((id) => id !== roleId)
-				: [...selected, roleId],
-		);
-	};
-
-	return (
-		<div className="flex flex-wrap gap-2">
-			{availableRoles.map((role) => {
-				const on = selected.includes(role.roleId);
-				return (
-					<button
-						key={role.roleId}
-						type="button"
-						disabled={disabled}
-						aria-pressed={on}
-						onClick={() => toggle(role.roleId)}
-						className={cn(
-							"inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-medium transition-colors disabled:pointer-events-none disabled:opacity-50",
-							on
-								? "border-(--lavender-soft) bg-(--lavender-soft)/25 text-lavender"
-								: "border-border text-muted-foreground hover:border-(--lavender-soft)/60 hover:text-foreground",
-						)}
-					>
-						{on ? (
-							<Check className="h-3.5 w-3.5" />
-						) : (
-							<Plus className="h-3.5 w-3.5" />
-						)}
-						{formatRoleLabel(role.roleName)}
-					</button>
-				);
-			})}
-		</div>
 	);
 }

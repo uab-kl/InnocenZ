@@ -17,12 +17,7 @@ import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.rep
 import { UserRoleControllerClass } from '@/features/rbac/user-role/user-role.controller.js';
 import { AuditLogRepositoryClass } from '@/features/audit-log/audit-log.repository.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
-import { SubscriptionRoleRepositoryClass } from '@/features/subscription/subscription-role.repository.js';
 import { SubscriptionControllerClass } from '@/features/subscription/subscription.controller.js';
-import { LimitTypeRepositoryClass } from '@/features/limit-type/limit-type.repository.js';
-import { LimitTypeControllerClass } from '@/features/limit-type/limit-type.controller.js';
-import { SubscriptionFeatureRepositoryClass } from '@/features/subscription-feature/subscription-feature.repository.js';
-import { SubscriptionFeatureControllerClass } from '@/features/subscription-feature/subscription-feature.controller.js';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
 import { OutletControllerClass } from '@/features/outlet/outlet.controller.js';
@@ -80,14 +75,7 @@ export const userRoleController = new UserRoleControllerClass(userRoleRepository
 export const auditLogRepository = new AuditLogRepositoryClass();
 
 export const subscriptionRepository = new SubscriptionRepositoryClass();
-export const subscriptionRoleRepository = new SubscriptionRoleRepositoryClass();
-export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository, subscriptionRoleRepository);
-
-export const limitTypeRepository = new LimitTypeRepositoryClass();
-export const limitTypeController = new LimitTypeControllerClass(limitTypeRepository);
-
-export const subscriptionFeatureRepository = new SubscriptionFeatureRepositoryClass();
-export const subscriptionFeatureController = new SubscriptionFeatureControllerClass(subscriptionFeatureRepository);
+export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
 
 export const agencyRepository = new AgencyRepositoryClass();
 export const agencyMemberRepository = new AgencyMemberRepositoryClass();

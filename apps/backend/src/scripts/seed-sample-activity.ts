@@ -3,9 +3,7 @@ import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { RoleTable } from '@/features/rbac/role/role.model';
 import { SubscriptionTable } from '@/features/subscription/subscription.model';
-import { SubscriptionRoleTable } from '@/features/subscription/subscription-role.model';
 import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model';
 import { AdminRequestTable } from '@/features/admin-request/admin-request.model';
 import { logger } from '@/util/logger';
@@ -88,22 +86,22 @@ const ADMIN_SEED: AdminSeed[] = [
   { type: 'plan_change', subscriberType: 'agency', subscriberName: 'Starline PR', role: 'agency', planName: 'Enterprise', requestedPlanName: 'Scale', message: '[Demo] Agency plan change Enterprise → Scale — direct (PR count).', status: 'direct' },
 ];
 
+// Plans are no longer linked to a role, so the audience comes from the billing cycle:
+// outlet plans are monthly, agency plans weekly (see seed-plans.ts).
 async function buildPlanMap(): Promise<Map<string, string>> {
   const rows = await db
     .select({
       id: SubscriptionTable.id,
       name: SubscriptionTable.name,
-      roleName: RoleTable.roleName,
+      billingCycle: SubscriptionTable.billingCycle,
     })
-    .from(SubscriptionTable)
-    .innerJoin(
-      SubscriptionRoleTable,
-      eq(SubscriptionRoleTable.subscriptionId, SubscriptionTable.id),
-    )
-    .innerJoin(RoleTable, eq(RoleTable.id, SubscriptionRoleTable.roleId));
+    .from(SubscriptionTable);
 
   const map = new Map<string, string>();
-  for (const row of rows) map.set(`${row.roleName}:${row.name}`, row.id);
+  for (const row of rows) {
+    const roleName = row.billingCycle === 'monthly' ? 'outlet' : 'agency';
+    map.set(`${roleName}:${row.name}`, row.id);
+  }
   return map;
 }
 

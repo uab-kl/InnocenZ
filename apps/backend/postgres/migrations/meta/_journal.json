@@ -197,6 +197,20 @@
       "when": 1784500000011,
       "tag": "0027_add_rating",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1784500000012,
+      "tag": "0028_drop_limit_type_and_subscription_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1784500000013,
+      "tag": "0029_add_missing_audit_columns",
+      "breakpoints": true
     }
   ]
 }

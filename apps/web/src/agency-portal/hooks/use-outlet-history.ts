@@ -93,6 +93,7 @@ export function useOutletHistory(): OutletHistoryData {
 		backed,
 		outletName,
 		rows,
-		isLoading: backed && (assignmentsQuery.isLoading || agenciesQuery.isLoading),
+		isLoading:
+			backed && (assignmentsQuery.isLoading || agenciesQuery.isLoading),
 	};
 }

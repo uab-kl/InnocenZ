@@ -84,6 +84,10 @@ export const OutletTierRateTable = MainSchema.table('outlet_tier_rate', {
   otAfterHours: numeric('ot_after_hours', { precision: 6, scale: 2 }),
   targetSalesRm: numeric('target_sales_rm', { precision: 12, scale: 2 }),
   sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: varchar('created_by').notNull().default('system'),
+  updatedBy: varchar('updated_by').notNull().default('system'),
 });
 
 // Service-entitlement drink menu (one item per row). `slug` preserves the
@@ -97,6 +101,10 @@ export const OutletDrinkMenuTable = MainSchema.table('outlet_drink_menu', {
   name: varchar('name', { length: 255 }).notNull(),
   priceRm: numeric('price_rm', { precision: 12, scale: 2 }).notNull().default('0'),
   sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: varchar('created_by').notNull().default('system'),
+  updatedBy: varchar('updated_by').notNull().default('system'),
 });
 
 // Attendance & discipline rules, one row per rule type. Rule-specific columns are
@@ -118,6 +126,10 @@ export const OutletPenaltyRuleTable = MainSchema.table('outlet_penalty_rule', {
   // late_per_week
   maxLatePerWeek: integer('max_late_per_week'),
   graceMinutes: integer('grace_minutes'),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: varchar('created_by').notNull().default('system'),
+  updatedBy: varchar('updated_by').notNull().default('system'),
 });
 
 export type OutletWorkspace = typeof OutletWorkspaceTable.$inferSelect;

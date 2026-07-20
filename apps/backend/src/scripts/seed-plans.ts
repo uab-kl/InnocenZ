@@ -2,9 +2,7 @@ import 'dotenv/config';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { RoleTable } from '@/features/rbac/role/role.model';
 import { SubscriptionTable, BillingCycle } from '@/features/subscription/subscription.model';
-import { SubscriptionRoleTable } from '@/features/subscription/subscription-role.model';
 import { logger } from '@/util/logger';
 
 const ACTOR = 'system';
@@ -39,22 +37,14 @@ const PLANS: PlanSeed[] = [
   { name: 'Custom', price: '0.00', billingCycle: 'weekly', role: 'agency', coverage: '151+ PV/week' },
 ];
 
-async function getRoleId(roleName: RoleName): Promise<string | null> {
-  const [row] = await db
-    .select({ id: RoleTable.id })
-    .from(RoleTable)
-    .where(eq(RoleTable.roleName, roleName))
-    .limit(1);
-  return row?.id ?? null;
-}
-
-// Find a plan by name that is already linked to the given role.
-async function findPlanIdByNameAndRole(name: string, roleId: string): Promise<string | null> {
+// Plans are no longer linked to a role, so name alone is ambiguous ("Plus" exists for
+// both audiences). Outlet plans are monthly and agency plans weekly, so name +
+// billing cycle uniquely identifies a plan in the catalog below.
+async function findPlanId(name: string, billingCycle: BillingCycle): Promise<string | null> {
   const [row] = await db
     .select({ id: SubscriptionTable.id })
     .from(SubscriptionTable)
-    .innerJoin(SubscriptionRoleTable, eq(SubscriptionRoleTable.subscriptionId, SubscriptionTable.id))
-    .where(and(eq(SubscriptionTable.name, name), eq(SubscriptionRoleTable.roleId, roleId)))
+    .where(and(eq(SubscriptionTable.name, name), eq(SubscriptionTable.billingCycle, billingCycle)))
     .limit(1);
   return row?.id ?? null;
 }
@@ -64,13 +54,7 @@ export async function seedPlans(): Promise<void> {
   let updated = 0;
 
   for (const plan of PLANS) {
-    const roleId = await getRoleId(plan.role);
-    if (!roleId) {
-      logger.warn(`[seed-plans] Role "${plan.role}" not found; skipping ${plan.name}. Run init-roles first.`);
-      continue;
-    }
-
-    const existingId = await findPlanIdByNameAndRole(plan.name, roleId);
+    const existingId = await findPlanId(plan.name, plan.billingCycle);
     if (existingId) {
       await db
         .update(SubscriptionTable)
@@ -106,12 +90,6 @@ export async function seedPlans(): Promise<void> {
       continue;
     }
 
-    await db.insert(SubscriptionRoleTable).values({
-      subscriptionId: created.id,
-      roleId,
-      createdBy: ACTOR,
-      updatedBy: ACTOR,
-    });
     inserted += 1;
     logger.info(`[seed-plans] Created ${plan.role}/${plan.name} -> RM${plan.price}/${plan.billingCycle}`);
   }

@@ -2,9 +2,7 @@ import 'dotenv/config';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { RoleTable } from '@/features/rbac/role/role.model';
 import { SubscriptionTable } from '@/features/subscription/subscription.model';
-import { SubscriptionRoleTable } from '@/features/subscription/subscription-role.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletMemberTable, OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
@@ -55,15 +53,13 @@ const VELVET_TEAM: Array<{
   { username: 'Ahmad Razif', email: 'ops@velvet23.my', phoneNum: '+60112345680', subRole: 'operations_head' },
 ];
 
-// Resolve an OUTLET-role plan id by name (plan names like Plus/Enterprise/Scale
-// exist for both roles, so we must filter on the outlet role).
+// Resolve an outlet plan id by name (plan names like Plus/Enterprise/Scale exist for
+// both audiences). Outlet plans are the monthly ones — see seed-plans.ts.
 async function outletPlanId(name: string): Promise<string | null> {
   const [row] = await db
     .select({ id: SubscriptionTable.id })
     .from(SubscriptionTable)
-    .innerJoin(SubscriptionRoleTable, eq(SubscriptionRoleTable.subscriptionId, SubscriptionTable.id))
-    .innerJoin(RoleTable, eq(RoleTable.id, SubscriptionRoleTable.roleId))
-    .where(and(eq(SubscriptionTable.name, name), eq(RoleTable.roleName, 'outlet')))
+    .where(and(eq(SubscriptionTable.name, name), eq(SubscriptionTable.billingCycle, 'monthly')))
     .limit(1);
   return row?.id ?? null;
 }
