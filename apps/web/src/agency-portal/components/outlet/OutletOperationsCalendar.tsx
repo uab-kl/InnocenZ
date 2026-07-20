@@ -142,12 +142,29 @@ function statusEventClass(shift: ShiftRequest) {
   return 'iz-outlet-ops-cal-event--draft';
 }
 
-export function OutletOperationsCalendar() {
+export function OutletOperationsCalendar({
+  shifts: shiftsOverride,
+  roster: rosterOverride,
+  agencyPrs: agencyPrsOverride,
+}: {
+  /**
+   * Backend-backed shifts + roster + PR records for a real outlet session (see
+   * useOutletToday). They travel together: a shift's `prs` are resolved against
+   * the roster slots and PR records, so overriding one without the others shows
+   * a day with nobody booked. Omitted on demo sessions, which read the store.
+   */
+  shifts?: ShiftRequest[];
+  roster?: AgencyRosterSlot[];
+  agencyPrs?: AgencyManagedPR[];
+} = {}) {
   const outletWorkspace = useStore((s) => s.outletWorkspace);
-  const agencyRoster = useStore((s) => s.agencyRoster);
-  const agencyPRs = useStore((s) => s.agencyPRs);
+  const storeRoster = useStore((s) => s.agencyRoster);
+  const storeAgencyPRs = useStore((s) => s.agencyPRs);
   const shiftApplicants = useStore((s) => s.shiftApplicants);
-  const shifts = useStore((s) => s.shifts);
+  const storeShifts = useStore((s) => s.shifts);
+  const shifts = shiftsOverride ?? storeShifts;
+  const agencyRoster = rosterOverride ?? storeRoster;
+  const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
 
   const todayIso = getLiveTodayIso();
   const [viewMonth, setViewMonth] = useState(
@@ -396,9 +413,15 @@ export function OutletOperationsCalendar() {
                   variant="future"
                   hideLogSales
                   staffingAgency={linkedAgency}
+                  roster={rosterOverride}
+                  agencyPrs={agencyPrsOverride}
                 />
                 <div className="mt-3 border-t border-[var(--iz-line)] px-1 pt-3">
-                  <OutletShiftStaffingSection shift={selectedShift} />
+                  <OutletShiftStaffingSection
+                    shift={selectedShift}
+                    roster={rosterOverride}
+                    agencyPrs={agencyPrsOverride}
+                  />
                 </div>
               </>
             );

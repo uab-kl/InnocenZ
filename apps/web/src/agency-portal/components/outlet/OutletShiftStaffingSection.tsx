@@ -11,6 +11,10 @@ import {
   type ShiftStaffRow,
 } from '@agency-portal/lib/outlet-shift-staffing';
 import { resolveOutletShiftDateIso } from '@agency-portal/lib/agency-outlet-shifts';
+import type {
+  AgencyManagedPR,
+  AgencyRosterSlot,
+} from '@agency-portal/lib/agency-demo';
 import { DEFAULT_ROSTER_DATE_ISO } from '@agency-portal/lib/roster-availability';
 import { useStore, type ShiftRequest } from '@agency-portal/lib/store';
 import { cn } from '@agency-portal/lib/utils';
@@ -53,10 +57,24 @@ function StaffRow({ row }: { row: ShiftStaffRow }) {
   );
 }
 
-export function OutletShiftStaffingSection({ shift }: { shift: ShiftRequest }) {
-  const agencyRoster = useStore((s) => s.agencyRoster);
-  const agencyPRs = useStore((s) => s.agencyPRs);
+export function OutletShiftStaffingSection({
+  shift,
+  roster: rosterOverride,
+  agencyPrs: agencyPrsOverride,
+}: {
+  shift: ShiftRequest;
+  /**
+   * Backend roster slots + PR records for a real outlet session; `shift.prs` is
+   * resolved against them, so they travel together. Omitted on demo sessions.
+   */
+  roster?: AgencyRosterSlot[];
+  agencyPrs?: AgencyManagedPR[];
+}) {
+  const storeRoster = useStore((s) => s.agencyRoster);
+  const storeAgencyPRs = useStore((s) => s.agencyPRs);
   const shiftApplicants = useStore((s) => s.shiftApplicants);
+  const agencyRoster = rosterOverride ?? storeRoster;
+  const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
 
   const dateIso = resolveOutletShiftDateIso(
     shift.date,

@@ -39,13 +39,59 @@ export function rosterStatusFromAssignment(
 }
 
 // The backend shift `slot` is free text; only treat it as a time window when it
-// actually looks like one ("HH:MM"), so label-only slots don't get fake times.
+// actually looks like one, so label-only slots don't get fake times.
 const TIME_WINDOW_RE = /\d{1,2}:\d{2}/;
+// "8pm", "8 pm", "8:30pm", "20:00" — the forms an operator actually types.
+const CLOCK_TOKEN_RE = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i;
+
+/** One end of a slot -> 24h "HH:MM", or null when it isn't a clock time. */
+function toHhmm(token: string): string | null {
+	const m = token.trim().match(CLOCK_TOKEN_RE);
+	if (!m) return null;
+	let hour = Number(m[1]);
+	const minutes = m[2] ?? "00";
+	const meridiem = m[3]?.toLowerCase();
+	if (meridiem) {
+		if (hour < 1 || hour > 12) return null;
+		hour = hour % 12;
+		if (meridiem === "pm") hour += 12;
+	} else if (hour > 23) {
+		return null;
+	}
+	if (Number(minutes) > 59) return null;
+	return `${String(hour).padStart(2, "0")}:${minutes}`;
+}
+
+/**
+ * The demo's time helpers expect "HH:MM - HH:MM"; the backend stores whatever
+ * the outlet typed ("8pm - 2am"). Normalize at this boundary so the calendar
+ * renders a real range instead of falling back to 12p–12p, and so the roster
+ * window / estimated payout can be derived. Returns null for label-only slots
+ * ("Late night"), which keep their text and get no fake times.
+ */
+export function normalizedSlotWindow(
+	slot: string | null,
+): { start: string; end: string } | null {
+	if (!slot) return null;
+	const parts = slot.split(/[—–-]/);
+	if (parts.length !== 2) return null;
+	const start = toHhmm(parts[0]);
+	const end = toHhmm(parts[1]);
+	return start && end ? { start, end } : null;
+}
+
+/** The slot as the demo shapes expect it — normalized when parseable. */
+export function normalizedSlotLabel(slot: string | null): string {
+	const window = normalizedSlotWindow(slot);
+	return window ? `${window.start} - ${window.end}` : (slot ?? "");
+}
 
 export function shiftWindow(slot: string | null): {
 	start: string;
 	end: string;
 } {
+	const normalized = normalizedSlotWindow(slot);
+	if (normalized) return normalized;
 	if (slot && TIME_WINDOW_RE.test(slot)) {
 		const { shiftStart, shiftEnd } = parseShiftWindow(slot);
 		return { start: shiftStart, end: shiftEnd };
@@ -109,7 +155,9 @@ export function rosterSlotsFromBackend(input: {
 			outlet: outletNameById?.get(shift.outletId) ?? shift.outletId,
 			date: shift.shiftDate,
 			dateIso: shift.shiftDate,
-			shift: shift.slot ?? shift.eventName ?? "",
+			// Must match the ShiftRequest's `shift` exactly — the panels join roster
+			// slots to a shift on this string.
+			shift: normalizedSlotLabel(shift.slot) || (shift.eventName ?? ""),
 			shiftStart: window.start,
 			shiftEnd: window.end,
 			estPayout: estPayoutFor(window, shift.payPerHour),
@@ -155,7 +203,8 @@ export function shiftRequestFromBackendShift(input: {
 		// The demo calls today's night "Tonight"; formatOutletDayLabel says "Today".
 		date: label === "Today" ? "Tonight" : label,
 		dateIso: shift.shiftDate,
-		shift: shift.slot ?? "",
+		// Same expression as the roster slot's `shift` — they are joined on it.
+		shift: normalizedSlotLabel(shift.slot) || (shift.eventName ?? ""),
 		quantity: shift.quantity,
 		// Trust the real roster over the shift's own counter when PRs are assigned.
 		filled: staffing.length > 0 ? staffing.length : shift.filled,

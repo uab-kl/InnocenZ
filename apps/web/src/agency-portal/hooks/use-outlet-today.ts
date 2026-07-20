@@ -17,9 +17,10 @@ import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
 
-// Today shows tonight's shift; the same window feeds the upcoming-shift list on
-// the Calendar screen, so pull a fortnight rather than a single day.
-const LOOKAHEAD_DAYS = 14;
+// Today shows tonight's shift, so a fortnight ahead is plenty. The Calendar
+// screen pages through months in both directions and passes its own window.
+const DEFAULT_LOOKAHEAD_DAYS = 14;
+const DEFAULT_LOOKBEHIND_DAYS = 0;
 
 export interface OutletTodayData {
 	backed: boolean;
@@ -47,22 +48,38 @@ export interface OutletTodayData {
  * agency/admin — so they still act on the demo store, as do the parts with no
  * backend at all (drink menu counts, receipt scans, tied offers).
  */
-export function useOutletToday(): OutletTodayData {
+export function useOutletToday(
+	params: {
+		/** Days of history to include (Calendar pages backwards; Today doesn't). */
+		lookbehindDays?: number;
+		lookaheadDays?: number;
+	} = {},
+): OutletTodayData {
+	const {
+		lookbehindDays = DEFAULT_LOOKBEHIND_DAYS,
+		lookaheadDays = DEFAULT_LOOKAHEAD_DAYS,
+	} = params;
 	const { logout } = useAuth();
 	const identity = useMemo(() => getOutletIdentity(), []);
 	const backed = identity !== null;
 	const outletName = identity?.outletName ?? "";
 
 	const todayIso = useMemo(() => getLiveTodayIso(), []);
+	const fromDate = useMemo(
+		() => addDaysToIso(todayIso, -lookbehindDays),
+		[todayIso, lookbehindDays],
+	);
 	const toDate = useMemo(
-		() => addDaysToIso(todayIso, LOOKAHEAD_DAYS),
-		[todayIso],
+		() => addDaysToIso(todayIso, lookaheadDays),
+		[todayIso, lookaheadDays],
 	);
 
 	const shiftsQuery = useQuery({
-		queryKey: ["outlet", "today", "shifts", todayIso, toDate],
+		// The window is part of the key — a wider Calendar fetch must not be
+		// served from (or overwrite) Today's narrower one.
+		queryKey: ["outlet", "today", "shifts", fromDate, toDate],
 		queryFn: () =>
-			fetchShifts({ fromDate: todayIso, toDate, pageSize: 200 }, logout),
+			fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
 		enabled: backed,
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
