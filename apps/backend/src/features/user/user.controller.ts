@@ -9,6 +9,13 @@ import {
   deleteProfileImageFile,
   profileImagePublicPath,
 } from '@/util/profile-image';
+import {
+  deletePortfolioImageFile,
+  normalizePortfolioSlots,
+  PORTFOLIO_SLOT_COUNT,
+  portfolioSlotsToJson,
+} from '@/util/portfolio-image';
+import { portfolioImagePathFromFile } from '@/middlewares/upload-portfolio-image';
 import { withUserProfile, withUserProfiles } from '@/util/user-profile-image';
 import { logger } from '@/util/logger';
 
@@ -176,6 +183,40 @@ export class UserControllerClass {
         });
       }
 
+      const portfolioPhotos = parsePortfolioPhotosBody(req.body?.portfolioPhotos);
+      const comcardHeightCm = parseOptionalInt(req.body?.comcardHeightCm);
+      const comcardWeightKg = parseOptionalInt(req.body?.comcardWeightKg);
+
+      if (
+        portfolioPhotos !== undefined ||
+        comcardHeightCm !== undefined ||
+        comcardWeightKg !== undefined
+      ) {
+        let existingProfile = await this.userProfileRepository.getByUserId(id);
+        if (!existingProfile) {
+          existingProfile = await this.userProfileRepository.createEmpty(id, actor);
+        }
+
+        if (portfolioPhotos !== undefined) {
+          const previous = normalizePortfolioSlots(existingProfile.portfolioPhotos);
+          const next = normalizePortfolioSlots(portfolioPhotos);
+          for (let i = 0; i < PORTFOLIO_SLOT_COUNT; i++) {
+            if (previous[i] && previous[i] !== next[i]) {
+              deletePortfolioImageFile(previous[i]);
+            }
+          }
+        }
+
+        await this.userProfileRepository.update(id, {
+          ...(portfolioPhotos !== undefined
+            ? { portfolioPhotos: portfolioSlotsToJson(portfolioPhotos) }
+            : {}),
+          ...(comcardHeightCm !== undefined ? { comcardHeightCm } : {}),
+          ...(comcardWeightKg !== undefined ? { comcardWeightKg } : {}),
+          updatedBy: actor,
+        });
+      }
+
       const profile = await this.userProfileRepository.getByUserId(id);
 
       res.status(200).json({
@@ -239,4 +280,98 @@ export class UserControllerClass {
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
+
+  async uploadPortfolioPhoto(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const actorId = req.user?.id;
+
+      if (!actorId || actorId !== id) {
+        return res.status(403).json({
+          success: false,
+          message: Error.UNAUTHORIZED,
+          data: null,
+        });
+      }
+
+      const slot = Number(req.params.slot);
+      if (!Number.isInteger(slot) || slot < 0 || slot >= PORTFOLIO_SLOT_COUNT) {
+        return res.status(400).json({
+          success: false,
+          message: `Portfolio slot must be between 0 and ${PORTFOLIO_SLOT_COUNT - 1}`,
+          data: null,
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'Portfolio image file is required',
+          data: null,
+        });
+      }
+
+      const existingUser = await this.userRepository.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const actor = getActor(req);
+      let profile = await this.userProfileRepository.getByUserId(id);
+      if (!profile) {
+        profile = await this.userProfileRepository.createEmpty(id, actor);
+      }
+
+      const slots = normalizePortfolioSlots(profile.portfolioPhotos);
+      deletePortfolioImageFile(slots[slot]);
+
+      const publicPath = portfolioImagePathFromFile(id, slot, req.file);
+      slots[slot] = publicPath;
+
+      await this.userProfileRepository.update(id, {
+        portfolioPhotos: portfolioSlotsToJson(slots),
+        updatedBy: actor,
+      });
+
+      profile = await this.userProfileRepository.getByUserId(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Portfolio photo updated',
+        data: withUserProfile(existingUser, profile),
+      });
+    } catch (error) {
+      logger.error('[UserController.uploadPortfolioPhoto] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+}
+
+function parseOptionalInt(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const n = Number(value);
+  if (!Number.isFinite(n) || n < 0 || n > 999) return undefined;
+  return Math.round(n);
+}
+
+function parsePortfolioPhotosBody(
+  value: unknown,
+): (string | null)[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return undefined;
+  if (value.length > PORTFOLIO_SLOT_COUNT) return undefined;
+  const slots: (string | null)[] = Array.from({ length: PORTFOLIO_SLOT_COUNT }, () => null);
+  for (let i = 0; i < value.length; i++) {
+    const item = value[i];
+    if (item === null || item === '') {
+      slots[i] = null;
+      continue;
+    }
+    if (typeof item !== 'string') return undefined;
+    const trimmed = item.trim();
+    if (!trimmed.startsWith('/img/')) return undefined;
+    slots[i] = trimmed;
+  }
+  return slots;
 }
