@@ -8,6 +8,7 @@ import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
 import { C, ensureWebFonts } from '../theme/theme';
 import { SessionProvider, useSession } from '../lib/session';
 import { ShiftSessionProvider } from '../lib/shift-session';
+import { SignedPvProvider } from '../lib/signed-pv';
 import { PrNavProvider, usePrNav } from '../lib/pr-nav';
 import { PhoneFrame } from '../components/PhoneFrame';
 import { BottomNav } from '../components/BottomNav';
@@ -25,22 +26,24 @@ ensureWebFonts();
 
 function LoggedInShell() {
   const { route, setTab, tab } = usePrNav();
-  const hideTabBar = route.name !== 'tabs';
+  const showTabBar = route.name === 'tabs' || route.name === 'scan';
 
   return (
     <ShiftSessionProvider>
-      <PhoneFrame footer={hideTabBar ? null : <BottomNav active={tab} onChange={setTab} />}>
-        {route.name === 'scan' && (
-          <ScanScreen category={route.category} mode={route.mode} editId={route.editId} />
-        )}
-        {route.name === 'pvDetail' && <PvDetailScreen pvId={route.pvId} />}
-        {route.name === 'security' && <SecurityScreen />}
-        {route.name === 'tabs' && tab === 'shifts' && <ShiftsScreen onNavigate={setTab} />}
-        {route.name === 'tabs' && tab === 'checkin' && <CheckInScreen onNavigate={setTab} />}
-        {route.name === 'tabs' && tab === 'payment' && <PaymentScreen onNavigate={setTab} />}
-        {route.name === 'tabs' && tab === 'history' && <HistoryScreen onNavigate={setTab} />}
-        {route.name === 'tabs' && tab === 'profile' && <ProfileScreen onNavigate={setTab} />}
-      </PhoneFrame>
+      <SignedPvProvider>
+        <PhoneFrame footer={showTabBar ? <BottomNav active={tab} onChange={setTab} /> : null}>
+          {route.name === 'scan' && (
+            <ScanScreen category={route.category} mode={route.mode} editId={route.editId} />
+          )}
+          {route.name === 'pvDetail' && <PvDetailScreen pvId={route.pvId} />}
+          {route.name === 'security' && <SecurityScreen />}
+          {route.name === 'tabs' && tab === 'shifts' && <ShiftsScreen onNavigate={setTab} />}
+          {route.name === 'tabs' && tab === 'checkin' && <CheckInScreen onNavigate={setTab} />}
+          {route.name === 'tabs' && tab === 'payment' && <PaymentScreen onNavigate={setTab} />}
+          {route.name === 'tabs' && tab === 'history' && <HistoryScreen onNavigate={setTab} />}
+          {route.name === 'tabs' && tab === 'profile' && <ProfileScreen onNavigate={setTab} />}
+        </PhoneFrame>
+      </SignedPvProvider>
     </ShiftSessionProvider>
   );
 }

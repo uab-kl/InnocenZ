@@ -4,9 +4,17 @@
  */
 import React, { createContext, useCallback, useContext, useMemo, useState } from 'react';
 import { Platform } from 'react-native';
-import { MONTH_NAMES, TONIGHT_SHIFT, type DemoShift } from './demo-shifts';
+import {
+  MONTH_NAMES,
+  TONIGHT_SHIFT,
+  isoDateFromTimestamp,
+  upsertWeekPayRecord,
+  type DemoShift,
+  type WeekPayRecord,
+} from './demo-shifts';
 
 const SESSION_KEY = 'iz-pr-shift-session-v2';
+const WEEK_PAY_KEY = 'iz-pr-week-pay-v1';
 
 export type AttendancePhase = 'idle' | 'booked' | 'on_duty' | 'complete';
 
@@ -48,6 +56,8 @@ type ShiftSessionState = {
   checkedOutAt: string | null;
   closedShift: ClosedShift | null;
   logs: ReceiptLog[];
+  /** Sealed check-outs for the current payroll week (Payment → This week). */
+  weekRecords: WeekPayRecord[];
   /** Proto Tier V sales target (RM) */
   tierTargetRm: number;
   /** Duty wages sealed at check-out (RM) — matches Velvet duty rate in proto */
@@ -58,6 +68,7 @@ type ShiftSessionState = {
   checkOut: () => void;
   cancelShift: () => void;
   resetDemo: () => void;
+  clearWeekPay: () => void;
   addReceiptLog: (log: Omit<ReceiptLog, 'id' | 'at' | 'pending'>) => void;
   deleteReceiptLog: (id: string) => void;
 };
@@ -92,6 +103,29 @@ function writePersisted(data: Persisted | null) {
   }
 }
 
+function readWeekPay(): WeekPayRecord[] {
+  try {
+    const raw = webStorage()?.getItem(WEEK_PAY_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw) as WeekPayRecord[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeWeekPay(records: WeekPayRecord[]) {
+  try {
+    webStorage()?.setItem(WEEK_PAY_KEY, JSON.stringify(records));
+  } catch {
+    /* ignore */
+  }
+}
+
+function roundRm(n: number) {
+  return Math.round(n * 100) / 100;
+}
+
 /** e.g. "19 Jul 2026, 11:50 pm" — matches proto attendance stamps */
 export function fmtAttendanceStamp(iso: string | null | undefined): string {
   if (!iso) return '—';
@@ -102,6 +136,35 @@ export function fmtAttendanceStamp(iso: string | null | undefined): string {
   const ampm = h >= 12 ? 'pm' : 'am';
   h = h % 12 || 12;
   return `${d.getDate()} ${MONTH_NAMES[d.getMonth()]} ${d.getFullYear()}, ${h}:${m} ${ampm}`;
+}
+
+/** Sum of receipt commissions (RM) — matches proto `shiftCommissionTotal`. */
+export function shiftCommissionTotal(logs: ReceiptLog[]): number {
+  return logs.reduce((sum, log) => sum + log.commission, 0);
+}
+
+/** Duty wages + commission — matches proto `shiftPayoutTotal`. */
+export function shiftPayoutTotal(baseWages: number, logs: ReceiptLog[]): number {
+  return Math.round((baseWages + shiftCommissionTotal(logs)) * 100) / 100;
+}
+
+/** Elapsed check-in → check-out label, with OT beyond scheduled hours when known. */
+export function shiftDurationLabel(
+  checkedInAt: string | null | undefined,
+  checkedOutAt: string | null | undefined,
+  scheduledHours = 6,
+): string {
+  if (!checkedInAt || !checkedOutAt) return '—';
+  const start = new Date(checkedInAt).getTime();
+  const end = new Date(checkedOutAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return '—';
+  const totalMins = Math.round((end - start) / 60_000);
+  const h = Math.floor(totalMins / 60);
+  const m = totalMins % 60;
+  const base = m > 0 ? `${h}h ${m}m` : `${h}h`;
+  const otMins = Math.max(0, totalMins - scheduledHours * 60);
+  if (otMins <= 0) return base;
+  return `${base} incl. +${otMins}m OT`;
 }
 
 const DEFAULT: Persisted = {
@@ -125,10 +188,46 @@ export function ShiftSessionProvider({ children }: { children: React.ReactNode }
     if (!stored) return DEFAULT;
     return { ...DEFAULT, ...stored, logs: stored.logs ?? [] };
   });
+  const [weekRecords, setWeekRecords] = useState<WeekPayRecord[]>(() => {
+    let records = readWeekPay();
+    const session = readPersisted();
+    if (session?.phase === 'complete' && session.closedShift) {
+      const dateIso = isoDateFromTimestamp(
+        session.checkedInAt ?? session.closedShift.checkedInAt,
+      );
+      if (!records.some((r) => r.dateIso === dateIso)) {
+        const drinks = roundRm(
+          (session.logs ?? [])
+            .filter((l) => l.category === 'drinks')
+            .reduce((s, l) => s + l.commission, 0),
+        );
+        const tips = roundRm(
+          (session.logs ?? [])
+            .filter((l) => l.category === 'tips')
+            .reduce((s, l) => s + l.commission, 0),
+        );
+        records = upsertWeekPayRecord(records, {
+          dateIso,
+          outlet: session.closedShift.outlet,
+          wages: session.closedShift.baseWages || DUTY_WAGES_RM,
+          drinks,
+          tips,
+          others: 0,
+        });
+        writeWeekPay(records);
+      }
+    }
+    return records;
+  });
 
   const persist = useCallback((next: Persisted) => {
     setState(next);
     writePersisted(next);
+  }, []);
+
+  const persistWeek = useCallback((next: WeekPayRecord[]) => {
+    setWeekRecords(next);
+    writeWeekPay(next);
   }, []);
 
   const acceptShift = useCallback(() => {
@@ -154,6 +253,24 @@ export function ShiftSessionProvider({ children }: { children: React.ReactNode }
   const checkOut = useCallback(() => {
     const now = new Date().toISOString();
     const checkedInAt = state.checkedInAt ?? now;
+    const logs = state.logs;
+    const drinks = roundRm(
+      logs.filter((l) => l.category === 'drinks').reduce((s, l) => s + l.commission, 0),
+    );
+    const tips = roundRm(
+      logs.filter((l) => l.category === 'tips').reduce((s, l) => s + l.commission, 0),
+    );
+    const dateIso = isoDateFromTimestamp(checkedInAt);
+    persistWeek(
+      upsertWeekPayRecord(weekRecords, {
+        dateIso,
+        outlet: TONIGHT_SHIFT.outlet,
+        wages: DUTY_WAGES_RM,
+        drinks,
+        tips,
+        others: 0,
+      }),
+    );
     persist({
       phase: 'complete',
       checkedInAt,
@@ -165,9 +282,9 @@ export function ShiftSessionProvider({ children }: { children: React.ReactNode }
         checkedOutAt: now,
         baseWages: DUTY_WAGES_RM,
       },
-      logs: state.logs,
+      logs,
     });
-  }, [persist, state.checkedInAt, state.logs]);
+  }, [persist, persistWeek, state.checkedInAt, state.logs, weekRecords]);
 
   const cancelShift = useCallback(() => {
     persist({
@@ -182,6 +299,10 @@ export function ShiftSessionProvider({ children }: { children: React.ReactNode }
   const resetDemo = useCallback(() => {
     persist(DEFAULT);
   }, [persist]);
+
+  const clearWeekPay = useCallback(() => {
+    persistWeek([]);
+  }, [persistWeek]);
 
   const addReceiptLog = useCallback(
     (log: Omit<ReceiptLog, 'id' | 'at' | 'pending'>) => {
@@ -211,6 +332,7 @@ export function ShiftSessionProvider({ children }: { children: React.ReactNode }
       checkedOutAt: state.checkedOutAt,
       closedShift: state.closedShift,
       logs: state.logs,
+      weekRecords,
       tierTargetRm: TIER_TARGET_RM,
       dutyWagesRm: DUTY_WAGES_RM,
       prTier: 'Tier V',
@@ -219,16 +341,19 @@ export function ShiftSessionProvider({ children }: { children: React.ReactNode }
       checkOut,
       cancelShift,
       resetDemo,
+      clearWeekPay,
       addReceiptLog,
       deleteReceiptLog,
     }),
     [
       state,
+      weekRecords,
       acceptShift,
       checkIn,
       checkOut,
       cancelShift,
       resetDemo,
+      clearWeekPay,
       addReceiptLog,
       deleteReceiptLog,
     ],

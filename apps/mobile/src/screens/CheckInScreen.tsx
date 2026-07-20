@@ -13,7 +13,11 @@ import {
   fmtDFriendly,
   formatRM,
 } from '../lib/demo-shifts';
-import { useShiftSession } from '../lib/shift-session';
+import {
+  shiftDurationLabel,
+  shiftPayoutTotal,
+  useShiftSession,
+} from '../lib/shift-session';
 import { TopBar } from '../components/TopBar';
 import { EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
@@ -25,12 +29,20 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     phase,
     shift,
     closedShift,
+    checkedInAt,
+    checkedOutAt,
+    logs,
+    dutyWagesRm,
     acceptShift,
     checkIn,
     checkOut,
     cancelShift,
     resetDemo,
   } = useShiftSession();
+
+  const finalPayout =
+    closedShift != null ? shiftPayoutTotal(dutyWagesRm, logs) : dutyWagesRm;
+  const completeDuration = shiftDurationLabel(checkedInAt, checkedOutAt);
 
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -182,9 +194,12 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <>
               <View style={styles.completeHero}>
                 <Pill variant="green">Complete</Pill>
-                <View style={styles.onDutyMoney}>
-                  <Text style={styles.onDutyLabel}>Final payout</Text>
-                  <Text style={styles.onDutyAmt}>{formatRM(closedShift.baseWages)}</Text>
+                <View style={styles.completeMoney}>
+                  <View>
+                    <Text style={styles.onDutyLabel}>Final payout</Text>
+                    <Text style={styles.completeDuration}>Duration {completeDuration}</Text>
+                  </View>
+                  <Text style={styles.completeAmt}>{formatRM(finalPayout)}</Text>
                 </View>
               </View>
               <ShiftStatusPanel checkedOut />
@@ -487,6 +502,25 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(93,217,160,0.3)',
     backgroundColor: C.greenBg,
     gap: 10,
+  },
+  completeMoney: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-end',
+    gap: 12,
+  },
+  completeAmt: {
+    fontFamily: F.sora,
+    fontSize: 26,
+    fontWeight: '800',
+    color: C.accentL,
+    letterSpacing: -0.4,
+  },
+  completeDuration: {
+    marginTop: 4,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
   },
   sheetBackdrop: {
     flex: 1,

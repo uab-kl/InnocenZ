@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
-import { NOTIFICATIONS, fmtClock, fmtDTopbar, todayYmd } from '../lib/demo-shifts';
+import { NOTIFICATIONS, fmtClock, fmtDTopbar, getLastWeekAwaitingPv, todayYmd } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
 import { Avatar, IzButton } from './ui';
 import { Bell, ChevronLeft, FileText } from './icons';
@@ -116,7 +116,7 @@ export function TopBar({
                 onPress={() => {
                   setReadIds((ids) => [...ids, n.id]);
                   setSheetOpen(false);
-                  if (n.id.startsWith('n-pv')) openPv('pv-2026-0512');
+                  if (n.id.startsWith('n-pv')) openPv(getLastWeekAwaitingPv().id);
                 }}
               >
                 <View style={styles.notifHead}>

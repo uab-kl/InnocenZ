@@ -8,6 +8,9 @@ import { C, F } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
 import {
   fmtAttendanceStamp,
+  shiftCommissionTotal,
+  shiftDurationLabel,
+  shiftPayoutTotal,
   useShiftSession,
   type ReceiptLog,
 } from '../lib/shift-session';
@@ -42,11 +45,20 @@ export function ShiftStatusPanel({ checkedOut }: { checkedOut: boolean }) {
     () => logs.reduce((s, l) => s + l.amount, 0),
     [logs],
   );
+  const commissionTotal = useMemo(() => shiftCommissionTotal(logs), [logs]);
+  const payoutTotal = useMemo(
+    () => shiftPayoutTotal(dutyWagesRm, logs),
+    [dutyWagesRm, logs],
+  );
   const pendingCount = logs.filter((l) => l.pending).length;
+  const wagesFinalized = checkedOut;
 
   const remaining = Math.max(0, tierTargetRm - salesLogged);
   const targetMet = remaining <= 0;
   const targetPct = Math.min(100, tierTargetRm > 0 ? (salesLogged / tierTargetRm) * 100 : 0);
+  const durationLabel = checkedOut
+    ? shiftDurationLabel(checkedInAt, checkedOutAt)
+    : 'In progress';
 
   const statusHint =
     logs.length === 0
@@ -67,7 +79,7 @@ export function ShiftStatusPanel({ checkedOut }: { checkedOut: boolean }) {
           label="CHECK-OUT"
           value={checkedOut ? fmtAttendanceStamp(checkedOutAt) : 'Pending'}
         />
-        <TimeCell label="DURATION" value={checkedOut ? 'Complete' : 'In progress'} />
+        <TimeCell label="DURATION" value={durationLabel} />
       </View>
 
       <View style={styles.targets}>
@@ -165,6 +177,22 @@ export function ShiftStatusPanel({ checkedOut }: { checkedOut: boolean }) {
                   onDelete={() => deleteReceiptLog(log.id)}
                 />
               ))}
+
+              <View style={styles.trFoot}>
+                <View style={styles.totalsBlock}>
+                  <Text style={styles.totalsLabel}>TOTALS</Text>
+                  <Text style={styles.totalsHint} numberOfLines={1}>
+                    {wagesFinalized
+                      ? `Payout ${formatRM(payoutTotal)} · shift pay + commission`
+                      : 'Total excluding wages & OT'}
+                  </Text>
+                </View>
+                <Text style={[styles.td, styles.colComm, styles.totalsComm]}>
+                  {formatRM(commissionTotal)}
+                </Text>
+                <View style={styles.colVerify} />
+                {!checkedOut && <View style={styles.colAct} />}
+              </View>
             </View>
           </ScrollView>
         )}
@@ -425,6 +453,34 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(232,224,245,0.06)',
   },
   trSelflog: { backgroundColor: 'rgba(232,198,106,0.05)' },
+  trFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingTop: 12,
+    paddingBottom: 4,
+    borderTopWidth: 1,
+    borderTopColor: C.line2,
+    marginTop: 4,
+  },
+  totalsBlock: {
+    width: COL.ref + COL.item + COL.qty + COL.src,
+    paddingRight: 8,
+    flexShrink: 0,
+  },
+  totalsLabel: {
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: C.muted,
+  },
+  totalsHint: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted2,
+  },
+  totalsComm: { fontFamily: F.sora, fontWeight: '800', color: C.accentL },
   th: {
     fontFamily: F.sora,
     fontSize: 10,

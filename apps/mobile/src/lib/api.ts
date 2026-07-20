@@ -10,15 +10,31 @@ import Constants from 'expo-constants';
 const DEFAULT_BACKEND_PORT = 7777;
 
 function detectApiUrl(): string {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
-  if (fromEnv) return fromEnv.replace(/\/$/, '');
-
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim()?.replace(/\/$/, '');
   const loc = (globalThis as { location?: { protocol: string; hostname: string } }).location;
+
+  // Web: match API host to the page host. EXPO_PUBLIC_API_URL is often set to the
+  // LAN IP for Expo Go on a phone; opening the app at localhost:8081 must still
+  // call localhost:7777, not 192.168.x.x (often blocked or unreachable from the browser).
   if (Platform.OS === 'web' && loc) {
-    return `${loc.protocol}//${loc.hostname}:${DEFAULT_BACKEND_PORT}/api`;
+    const pageHost = loc.hostname;
+    if (pageHost === 'localhost' || pageHost === '127.0.0.1') {
+      return `${loc.protocol}//${pageHost}:${DEFAULT_BACKEND_PORT}/api`;
+    }
+    if (fromEnv) {
+      try {
+        const envHost = new URL(fromEnv).hostname;
+        if (pageHost === envHost) return fromEnv;
+      } catch {
+        /* ignore malformed env URL */
+      }
+    }
+    return `${loc.protocol}//${pageHost}:${DEFAULT_BACKEND_PORT}/api`;
   }
 
-  // Native: the Metro host serving the bundle is the dev machine's LAN IP.
+  if (fromEnv) return fromEnv;
+
+  // Native: Metro host is the dev machine's LAN IP.
   const hostUri = Constants.expoConfig?.hostUri ?? '';
   const host = hostUri.split(':')[0];
   return `http://${host || 'localhost'}:${DEFAULT_BACKEND_PORT}/api`;

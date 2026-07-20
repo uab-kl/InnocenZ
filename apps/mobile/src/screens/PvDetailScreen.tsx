@@ -1,6 +1,6 @@
 /**
  * PV detail — port of InnocenZ-proto `/host/PaymentVoucher?pvId=`
- * Week summary, signature pad, dispute sheet.
+ * Full week summary (wages/drinks/tips/others/status), linked receipt details, sign + dispute.
  */
 import React, { useMemo, useState } from 'react';
 import {
@@ -14,14 +14,27 @@ import {
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
-  PAYMENT_VOUCHERS,
   buildLastWeekPayGrid,
   formatRM,
+  getLastWeekAwaitingPv,
+  weekPayGridTotal,
+  type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { PAYMENT_HISTORY_WEEKS } from '../lib/demo-payment-history';
 import { usePrNav } from '../lib/pr-nav';
+import { useSignedPvs } from '../lib/signed-pv';
 import { Pill } from '../components/ui';
-import { Check, ChevronLeft, Pencil, Shield, XIcon } from '../components/icons';
+import {
+  Check,
+  ChevronLeft,
+  Flag,
+  Pencil,
+  Shield,
+  Wallet,
+  XIcon,
+} from '../components/icons';
+
+type IncomeKey = 'wages' | 'drinks' | 'tips' | 'others';
 
 const DISPUTE_PRESETS = [
   'Unmatch commission',
@@ -31,10 +44,95 @@ const DISPUTE_PRESETS = [
   'Others',
 ] as const;
 
+const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
+  { key: 'wages', label: 'Daily wages' },
+  { key: 'drinks', label: 'Drinks' },
+  { key: 'tips', label: 'Tips' },
+  { key: 'others', label: 'Others' },
+];
+
+type LinkedReceipt = {
+  id: string;
+  ref: string;
+  item: string;
+  category: 'Drinks' | 'Tips';
+  qty: number;
+  amount: number;
+  commission: number;
+  outlet: string;
+  at: string;
+  matched: boolean;
+};
+
+const DEMO_RECEIPTS: LinkedReceipt[] = [
+  {
+    id: 'r1',
+    ref: 'RSV-0712-A',
+    item: 'Hennessy VSOP',
+    category: 'Drinks',
+    qty: 1,
+    amount: 125,
+    commission: 18.75,
+    outlet: 'Velvet 23',
+    at: '12 Jul 2026 · 11:42 pm',
+    matched: true,
+  },
+  {
+    id: 'r2',
+    ref: 'RSV-0712-B',
+    item: 'Guest tip',
+    category: 'Tips',
+    qty: 1,
+    amount: 40,
+    commission: 4,
+    outlet: 'Velvet 23',
+    at: '12 Jul 2026 · 12:08 am',
+    matched: true,
+  },
+  {
+    id: 'r3',
+    ref: 'RSV-0713-A',
+    item: 'Moët & Chandon',
+    category: 'Drinks',
+    qty: 1,
+    amount: 96,
+    commission: 14.4,
+    outlet: 'Velvet 23',
+    at: '13 Jul 2026 · 11:55 pm',
+    matched: true,
+  },
+  {
+    id: 'r4',
+    ref: 'RSV-0714-A',
+    item: 'Cosmo',
+    category: 'Drinks',
+    qty: 1,
+    amount: 109,
+    commission: 16.35,
+    outlet: 'Velvet 23',
+    at: '14 Jul 2026 · 10:40 pm',
+    matched: true,
+  },
+];
+
+function cellAmount(day: WeeklyDayPay, key: IncomeKey): number {
+  if (key === 'wages') return day.wages;
+  if (key === 'drinks') return day.drinks ?? 0;
+  if (key === 'tips') return day.tips ?? 0;
+  return day.others ?? 0;
+}
+
+function formatCell(value: number): string {
+  if (value <= 0) return '—';
+  return value.toFixed(2);
+}
+
 export function PvDetailScreen({ pvId }: { pvId: string }) {
   const { goBack, setTab } = usePrNav();
+  const { isSigned, signPv } = useSignedPvs();
+  const lastWeekPv = useMemo(() => getLastWeekAwaitingPv(), []);
   const hist = PAYMENT_HISTORY_WEEKS.find((p) => p.id === pvId);
-  const inbox = PAYMENT_VOUCHERS.find((p) => p.id === pvId);
+  /** Any unsigned review opens the live last-week PV (same as Payment → Last week). */
   const pv = hist
     ? {
         id: hist.id,
@@ -45,28 +143,74 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         status: hist.status === 'paid' ? ('paid' as const) : ('signed' as const),
         statusLabel: hist.statusMeta,
       }
-    : inbox ?? PAYMENT_VOUCHERS[0];
+    : lastWeekPv;
   const grid = useMemo(() => buildLastWeekPayGrid(), []);
+  const gridTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
+  /** Net always matches Payment → Last week total. */
+  const netDisplay = !hist && gridTotal > 0 ? gridTotal : pv.net;
+  const displayWeekLabel = !hist ? lastWeekPv.weekLabel : pv.weekLabel;
+  const alreadySigned =
+    isSigned(lastWeekPv.id) || isSigned(pv.id) || (hist ? true : false);
 
-  const [signed, setSigned] = useState(pv.status !== 'awaiting_pr');
+  const [signed, setSigned] = useState(alreadySigned);
   const [sigName, setSigName] = useState('');
   const [signOpen, setSignOpen] = useState(false);
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
   const [disputeNote, setDisputeNote] = useState('');
-  const [disputed, setDisputed] = useState(false);
-  const [receiptsOpen, setReceiptsOpen] = useState(false);
+  const [disputedKeys, setDisputedKeys] = useState<Set<string>>(() => new Set());
+  const [disputeTargetLabel, setDisputeTargetLabel] = useState('');
+  const [receiptsOpen, setReceiptsOpen] = useState(true);
+  const [receiptDetail, setReceiptDetail] = useState<LinkedReceipt | null>(null);
 
   const confirmSign = () => {
     if (sigName.trim().length < 2) return;
+    const sealed = {
+      ...lastWeekPv,
+      net: netDisplay,
+      status: 'signed' as const,
+      statusLabel: 'Signed',
+    };
+    signPv({
+      pv: sealed,
+      net: netDisplay,
+      grid,
+      sigName: sigName.trim(),
+    });
     setSigned(true);
     setSignOpen(false);
+    setTab('history');
+  };
+
+  const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
+    const amount = cellAmount(day, row.key);
+    if (amount <= 0 || day.status === 'empty') return;
+    const key = `${day.dateIso}-${row.key}`;
+    const label = `${day.day} ${day.date} · ${row.label} · ${formatRM(amount)}`;
+    setDisputeTargetLabel(`${key}|${label}`);
+    setDisputeNote(`${row.label} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`);
+    setDisputePreset(DISPUTE_PRESETS[0]);
+    setDisputeOpen(true);
   };
 
   const submitDispute = () => {
-    setDisputed(true);
+    const key = disputeTargetLabel.split('|')[0];
+    if (key) {
+      setDisputedKeys((prev) => {
+        const next = new Set(prev);
+        if (next.has(key)) next.delete(key);
+        else next.add(key);
+        return next;
+      });
+    }
     setDisputeOpen(false);
   };
+
+  const anyDisputed = disputedKeys.size > 0;
+  const disputeModeWithdraw = (() => {
+    const key = disputeTargetLabel.split('|')[0];
+    return key ? disputedKeys.has(key) : false;
+  })();
 
   return (
     <View style={styles.screen}>
@@ -81,78 +225,143 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       </View>
 
       <View style={styles.statusRow}>
-        <Pill variant={signed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
-          {disputed ? 'Dispute open' : signed ? pv.statusLabel : 'Pending your review'}
+        <Pill variant={anyDisputed ? 'red' : signed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
+          {anyDisputed ? 'Dispute open' : signed ? pv.statusLabel : 'Pending your review'}
         </Pill>
-        <Text style={styles.pvId}>{pv.ref}</Text>
+        <Text style={styles.pvId}>{lastWeekPv.ref}</Text>
       </View>
 
-      {!signed && !disputed && (
+      {!signed && !anyDisputed && (
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Pending your review</Text>
           <Text style={styles.bannerBody}>Sign-by Sunday · Finance Head already signed</Text>
         </View>
       )}
-      {disputed && (
+      {anyDisputed && (
         <View style={[styles.banner, styles.bannerDispute]}>
           <Text style={styles.bannerTitle}>Dispute open</Text>
-          <Text style={styles.bannerBody}>{disputePreset} — agency will review</Text>
+          <Text style={styles.bannerBody}>
+            {disputePreset} — agency will review flagged amounts
+          </Text>
         </View>
       )}
 
-      <Text style={styles.sectionLabel}>WEEK SUMMARY</Text>
-      <Text style={styles.weekLabel}>{pv.weekLabel}</Text>
+      <View style={styles.weekCard}>
+        <Text style={styles.sectionLabel}>WEEK SUMMARY</Text>
+        <Text style={styles.weekLabel}>{displayWeekLabel}</Text>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-        <View>
-          <View style={styles.gridRow}>
-            <Text style={[styles.gridLabel, { width: 78 }]}> </Text>
-            {grid.map((d) => (
-              <Pressable
-                key={d.day + d.date}
-                style={styles.gridCol}
-                onPress={() => setDisputeOpen(true)}
-              >
-                <Text style={styles.gridDay}>{d.day}</Text>
-                <Text style={styles.gridDate}>{d.date}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.gridRow}>
-            <Text style={styles.gridLabel}>Daily wages</Text>
-            {grid.map((d) => (
-              <Pressable
-                key={`w-${d.date}`}
-                style={styles.gridCol}
-                onPress={() => setDisputeOpen(true)}
-              >
-                <Text style={styles.gridVal}>{d.wages.toFixed(2)}</Text>
-              </Pressable>
-            ))}
-          </View>
-          <View style={styles.gridRow}>
-            <Text style={styles.gridLabel}>Drinks</Text>
-            {grid.map((d) => (
-              <Pressable
-                key={`d-${d.date}`}
-                style={styles.gridCol}
-                onPress={() => setDisputeOpen(true)}
-              >
-                <Text style={styles.gridVal}>
-                  {d.drinks != null ? d.drinks.toFixed(2) : '—'}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator
+          style={{ marginTop: 10 }}
+        >
+          <View>
+            <View style={styles.gridRow}>
+              <Text style={[styles.gridLabel, { width: 78 }]}> </Text>
+              {grid.map((d) => (
+                <View key={d.dateIso} style={styles.gridCol}>
+                  <Text style={styles.gridDay}>{d.day}</Text>
+                  <Text style={styles.gridDate}>{d.date}</Text>
+                </View>
+              ))}
+              <View style={styles.gridCol}>
+                <Text style={styles.gridDay}>TOT</Text>
+                <Text style={styles.gridDate}> </Text>
+              </View>
+            </View>
+
+            {INCOME_ROWS.map((row) => {
+              const rowTotal = grid.reduce((s, d) => s + cellAmount(d, row.key), 0);
+              return (
+                <View key={row.key} style={styles.gridRow}>
+                  <Text style={styles.gridLabel}>{row.label}</Text>
+                  {grid.map((d) => {
+                    const amount = cellAmount(d, row.key);
+                    const key = `${d.dateIso}-${row.key}`;
+                    const isDisputed = disputedKeys.has(key);
+                    const canTap = amount > 0 && d.status !== 'empty';
+                    return (
+                      <Pressable
+                        key={key}
+                        style={[
+                          styles.gridCol,
+                          canTap && styles.gridColTap,
+                          isDisputed && styles.gridColDisputed,
+                        ]}
+                        onPress={() => canTap && openDispute(d, row)}
+                        disabled={!canTap}
+                      >
+                        <Text
+                          style={[
+                            styles.gridVal,
+                            isDisputed && styles.gridValDisputed,
+                          ]}
+                        >
+                          {formatCell(amount)}
+                        </Text>
+                        {canTap && (
+                          <Flag
+                            size={9}
+                            color={isDisputed ? C.red : C.muted2}
+                            style={{ marginTop: 2 }}
+                          />
+                        )}
+                      </Pressable>
+                    );
+                  })}
+                  <View style={styles.gridCol}>
+                    <Text style={styles.gridVal}>{formatCell(rowTotal)}</Text>
+                  </View>
+                </View>
+              );
+            })}
+
+            <View style={styles.gridRow}>
+              <Text style={styles.gridLabel}>Status</Text>
+              {grid.map((d) => {
+                const dayDisputed = INCOME_ROWS.some((r) =>
+                  disputedKeys.has(`${d.dateIso}-${r.key}`),
+                );
+                const label =
+                  d.status === 'empty'
+                    ? '—'
+                    : dayDisputed
+                      ? 'DISPUTED'
+                      : 'VERIFIED';
+                return (
+                  <View key={`st-${d.dateIso}`} style={styles.gridCol}>
+                    <Text
+                      style={[
+                        styles.statusPill,
+                        dayDisputed && styles.statusPillDisputed,
+                        d.status === 'empty' && { color: C.muted2 },
+                      ]}
+                    >
+                      {label}
+                    </Text>
+                  </View>
+                );
+              })}
+              <View style={styles.gridCol}>
+                <Text style={styles.statusPill}>
+                  {grid.filter((d) => d.status === 'verified').length} verified
                 </Text>
-              </Pressable>
-            ))}
+              </View>
+            </View>
           </View>
-        </View>
-      </ScrollView>
-      <Text style={styles.tapHint}>Tap an amount to dispute / withdraw</Text>
+        </ScrollView>
+
+        <Text style={styles.tapHint}>
+          Tap any amount to dispute · tap a{' '}
+          <Text style={{ color: C.red }}>red</Text> amount to withdraw a mistaken dispute.
+        </Text>
+      </View>
 
       <View style={styles.summaryCard}>
         <Text style={styles.summaryK}>Net payable</Text>
-        <Text style={styles.summaryV}>{formatRM(pv.net)}</Text>
-        <Text style={styles.summaryK}>Payee</Text>
-        <Text style={styles.summaryBody}>PR Personnel · {pv.outlet}</Text>
+        <Text style={styles.summaryV}>{formatRM(netDisplay)}</Text>
+        <Text style={[styles.summaryK, { marginTop: 10 }]}>Payee</Text>
+        <Text style={styles.summaryBody}>PR Personnel · {lastWeekPv.outlet}</Text>
       </View>
 
       <Pressable style={styles.collapse} onPress={() => setReceiptsOpen((o) => !o)}>
@@ -161,8 +370,26 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       </Pressable>
       {receiptsOpen && (
         <View style={styles.receiptBox}>
-          <Text style={styles.receiptLine}>RSV-0512-A · Hennessy VSOP · RM 125.00 · Matched</Text>
-          <Text style={styles.receiptLine}>RSV-0512-B · Guest tip · RM 50.00 · Matched</Text>
+          {DEMO_RECEIPTS.map((r) => (
+            <Pressable
+              key={r.id}
+              style={styles.receiptRow}
+              onPress={() => setReceiptDetail(r)}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.receiptRef}>{r.ref}</Text>
+                <Text style={styles.receiptMeta}>
+                  {r.item} · {formatRM(r.amount)}
+                </Text>
+              </View>
+              <View style={styles.receiptRight}>
+                <Text style={styles.receiptMatched}>
+                  {r.matched ? 'Matched' : 'Pending'}
+                </Text>
+                <Text style={styles.receiptDetailsLink}>Details</Text>
+              </View>
+            </Pressable>
+          ))}
         </View>
       )}
 
@@ -194,7 +421,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       {signed && pv.status === 'paid' && (
         <View style={styles.paidBox}>
           <Shield size={16} color={C.green} />
-          <Text style={styles.paidText}>PAID · {formatRM(pv.net)} in your bank</Text>
+          <Text style={styles.paidText}>PAID · {formatRM(netDisplay)} in your bank</Text>
         </View>
       )}
 
@@ -203,6 +430,53 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           <Text style={styles.softText}>View in History · Payment history</Text>
         </Pressable>
       )}
+
+      {/* Receipt details sheet */}
+      <Modal
+        visible={receiptDetail != null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setReceiptDetail(null)}
+      >
+        <Pressable style={styles.backdrop} onPress={() => setReceiptDetail(null)}>
+          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.receiptSheetHead}>
+              <Wallet size={18} color={C.goldL} />
+              <Text style={styles.sheetTitle}>Receipt details</Text>
+            </View>
+            {receiptDetail && (
+              <>
+                <Text style={styles.detailK}>DATE &amp; TIME</Text>
+                <Text style={styles.detailV}>{receiptDetail.at}</Text>
+                <Text style={styles.detailK}>OUTLET</Text>
+                <Text style={styles.detailV}>{receiptDetail.outlet}</Text>
+                <Text style={styles.detailK}>RECEIPT</Text>
+                <Text style={styles.detailV}>{receiptDetail.ref}</Text>
+                <Text style={styles.detailK}>COMMISSION</Text>
+                <Text style={[styles.detailV, { color: C.accentL }]}>
+                  {formatRM(receiptDetail.commission)}
+                </Text>
+                <View style={styles.detailFoot}>
+                  <Text style={styles.detailFootL}>
+                    {receiptDetail.qty}× {receiptDetail.category}
+                    {receiptDetail.item !== 'Guest tip' ? ` · ${receiptDetail.item}` : ''}
+                  </Text>
+                  <Text style={styles.detailFootR}>{formatRM(receiptDetail.amount)}</Text>
+                </View>
+                <View style={styles.matchedBanner}>
+                  <Check size={14} color={C.green} />
+                  <Text style={styles.matchedBannerText}>
+                    {receiptDetail.matched ? 'Matched to this PV' : 'Pending agency verify'}
+                  </Text>
+                </View>
+              </>
+            )}
+            <Pressable style={styles.sheetCancel} onPress={() => setReceiptDetail(null)}>
+              <Text style={styles.sheetCancelText}>Close</Text>
+            </Pressable>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       {/* Signature sheet */}
       <Modal visible={signOpen} transparent animationType="slide" onRequestClose={() => setSignOpen(false)}>
@@ -246,28 +520,44 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         <Pressable style={styles.backdrop} onPress={() => setDisputeOpen(false)}>
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.sheetTitle}>
-              {disputed ? 'Withdraw dispute?' : 'Dispute this amount'}
+              {disputeModeWithdraw ? 'Withdraw dispute?' : 'Dispute this amount'}
             </Text>
-            {!disputed && (
+            {!!disputeTargetLabel.includes('|') && (
+              <View style={styles.targetPill}>
+                <Text style={styles.targetPillText}>
+                  {disputeTargetLabel.split('|')[1]}
+                </Text>
+              </View>
+            )}
+            {!disputeModeWithdraw ? (
               <>
-                <Text style={styles.fieldLabel}>Reason</Text>
-                {DISPUTE_PRESETS.map((p) => (
-                  <Pressable
-                    key={p}
-                    style={[styles.preset, disputePreset === p && styles.presetOn]}
-                    onPress={() => setDisputePreset(p)}
-                  >
-                    <Text style={styles.presetText}>{p}</Text>
-                  </Pressable>
-                ))}
+                <Text style={styles.fieldLabel}>Quick reason</Text>
+                <View style={styles.presetWrap}>
+                  {DISPUTE_PRESETS.map((p) => (
+                    <Pressable
+                      key={p}
+                      style={[styles.presetChip, disputePreset === p && styles.presetChipOn]}
+                      onPress={() => setDisputePreset(p)}
+                    >
+                      <Text
+                        style={[
+                          styles.presetChipText,
+                          disputePreset === p && { color: C.violetL },
+                        ]}
+                      >
+                        {p}
+                      </Text>
+                    </Pressable>
+                  ))}
+                </View>
                 <Text style={styles.fieldLabel}>Note</Text>
                 <TextInput
                   value={disputeNote}
                   onChangeText={setDisputeNote}
-                  style={styles.input}
+                  style={[styles.input, { minHeight: 72, textAlignVertical: 'top' }]}
+                  multiline
                   placeholderTextColor={C.muted2}
                 />
-                <Text style={styles.sheetHint}>Attach files (images) — skipped in demo</Text>
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
                   onPress={submitDispute}
@@ -275,15 +565,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                   <Text style={styles.primaryText}>Submit dispute</Text>
                 </Pressable>
               </>
-            )}
-            {disputed && (
-              <Pressable
-                style={styles.dangerBtn}
-                onPress={() => {
-                  setDisputed(false);
-                  setDisputeOpen(false);
-                }}
-              >
+            ) : (
+              <Pressable style={styles.dangerBtn} onPress={submitDispute}>
                 <Text style={styles.dangerBtnText}>Withdraw dispute</Text>
               </Pressable>
             )}
@@ -323,8 +606,15 @@ const styles = StyleSheet.create({
   },
   bannerTitle: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
   bannerBody: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  weekCard: {
+    marginTop: 14,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    padding: 14,
+  },
   sectionLabel: {
-    marginTop: 16,
     fontFamily: F.sora,
     fontSize: 11,
     fontWeight: '700',
@@ -339,11 +629,35 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: C.muted2,
   },
-  gridCol: { width: 56, alignItems: 'center' },
+  gridCol: { width: 56, alignItems: 'center', paddingVertical: 2 },
+  gridColTap: {
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  gridColDisputed: {
+    backgroundColor: 'rgba(240,138,138,0.1)',
+  },
   gridDay: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.muted2 },
   gridDate: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
   gridVal: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
-  tapHint: { marginTop: 4, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
+  gridValDisputed: { color: C.red },
+  statusPill: {
+    fontFamily: F.sora,
+    fontSize: 8,
+    fontWeight: '800',
+    letterSpacing: 0.3,
+    color: C.green,
+    textAlign: 'center',
+  },
+  statusPillDisputed: { color: C.red },
+  tapHint: {
+    marginTop: 4,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted2,
+    textAlign: 'center',
+    lineHeight: 16,
+  },
   summaryCard: {
     marginTop: 14,
     borderRadius: 14,
@@ -358,9 +672,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     letterSpacing: 0.8,
     color: C.muted2,
-    marginTop: 6,
   },
   summaryV: {
+    marginTop: 4,
     fontFamily: F.sora,
     fontSize: 28,
     fontWeight: '800',
@@ -386,10 +700,32 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderColor: C.line,
-    padding: 12,
-    gap: 6,
+    overflow: 'hidden',
   },
-  receiptLine: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  receiptRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: C.line,
+  },
+  receiptRef: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
+  receiptMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  receiptRight: { alignItems: 'flex-end', gap: 4 },
+  receiptMatched: {
+    fontFamily: F.sora,
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.green,
+  },
+  receiptDetailsLink: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.goldL,
+  },
   sigCard: {
     marginTop: 12,
     borderRadius: 14,
@@ -442,6 +778,12 @@ const styles = StyleSheet.create({
     width: '100%',
     alignSelf: 'center',
   },
+  receiptSheetHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
   sheetHint: {
     marginTop: 6,
@@ -450,6 +792,45 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.prMuted,
   },
+  detailK: {
+    marginTop: 12,
+    fontFamily: F.sora,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: C.muted2,
+  },
+  detailV: {
+    marginTop: 4,
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  detailFoot: {
+    marginTop: 16,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+  },
+  detailFootL: { fontFamily: F.manrope, fontSize: 13, color: C.prMuted, flex: 1 },
+  detailFootR: { fontFamily: F.sora, fontSize: 16, fontWeight: '800', color: C.txt },
+  matchedBanner: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: C.greenBg,
+    borderWidth: 1,
+    borderColor: 'rgba(93,217,160,0.35)',
+  },
+  matchedBannerText: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.green },
   fieldLabel: {
     marginTop: 10,
     marginBottom: 4,
@@ -471,6 +852,41 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
+  targetPill: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(0,0,0,0.28)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  targetPillText: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.goldL,
+  },
+  presetWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  presetChip: {
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: C.line,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  presetChipOn: {
+    borderColor: 'rgba(183,156,232,0.5)',
+    backgroundColor: 'rgba(183,156,232,0.14)',
+  },
+  presetChipText: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.txt,
+  },
   sigPad: {
     marginTop: 12,
     height: 88,
@@ -490,19 +906,6 @@ const styles = StyleSheet.create({
   },
   sheetCancel: { marginTop: 10, alignItems: 'center', padding: 10 },
   sheetCancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
-  preset: {
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: C.line,
-    marginBottom: 6,
-  },
-  presetOn: {
-    borderColor: 'rgba(183,156,232,0.5)',
-    backgroundColor: 'rgba(183,156,232,0.12)',
-  },
-  presetText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
   dangerBtn: {
     marginTop: 12,
     borderRadius: 12,
