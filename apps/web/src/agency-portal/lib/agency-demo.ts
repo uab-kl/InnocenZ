@@ -696,8 +696,7 @@ export function calcShiftPayout(
 		wages,
 		drinkCommission: Math.round(drinkCommission * 100) / 100,
 		tipCommission: Math.round(tipCommission * 100) / 100,
-		total:
-			Math.round((wages + drinkCommission + tipCommission) * 100) / 100,
+		total: Math.round((wages + drinkCommission + tipCommission) * 100) / 100,
 		rule,
 	};
 }

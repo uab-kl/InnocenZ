@@ -125,10 +125,7 @@ export function sealShiftHistoryAmounts(input: {
 function hasStoredPayoutBreakdown(
 	row: Pick<
 		ShiftHistoryRow,
-		| "wagesRm"
-		| "drinkCommissionRm"
-		| "tipCommissionRm"
-		| "otRm"
+		"wagesRm" | "drinkCommissionRm" | "tipCommissionRm" | "otRm"
 	>,
 ): boolean {
 	return (
