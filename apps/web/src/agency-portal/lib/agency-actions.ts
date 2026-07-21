@@ -55,7 +55,6 @@ export function buildPvFromShiftHistoryRow(
     drinks: row.totalDrinks,
     drinkSales,
     tips: row.totalTips,
-    tableSales: Math.round(row.totalTips * 0.5),
     checkOutAfterOt: row.durationHours > rule.otAfterHours,
     prTier: pr.trainingLevel,
   });
@@ -94,18 +93,6 @@ export function buildPvFromShiftHistoryRow(
       desc: 'Commission – Tips',
       qty: 1,
       amt: payout.tipCommission,
-      ref: 'Outlet log',
-    });
-  }
-  if (payout.tableCommission > 0) {
-    rows.push({
-      i: idx++,
-      date: dateLabel,
-      day,
-      outlet: row.outlet,
-      desc: 'Commission – Tables',
-      qty: 1,
-      amt: payout.tableCommission,
       ref: 'Outlet log',
     });
   }

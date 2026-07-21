@@ -93,9 +93,8 @@ export function sealShiftHistoryAmounts(input: {
       ? roundRm(input.drinkSalesRm)
       : deriveHistoryDrinkSalesRm(input.drinkUnits, input.perDrinkRm);
   const tipSalesRm = roundRm(input.tipSalesRm);
-  // Tables / table commission removed from History payout model.
+  // Tables / table sales removed from the payout model entirely.
   const tableUnits = 0;
-  const tableSales = 0;
   const payout = calcShiftPayout(
     {
       outlet: input.outlet,
@@ -103,7 +102,6 @@ export function sealShiftHistoryAmounts(input: {
       drinks: input.drinkUnits,
       drinkSales: drinkSalesRm,
       tips: tipSalesRm,
-      tableSales,
       prTier: input.prTier,
     },
     input.rules,

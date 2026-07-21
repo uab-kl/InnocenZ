@@ -39,7 +39,6 @@ export function OutletSealReview({
         drinks,
         drinkSales,
         tips,
-        tableSales: 0,
         prTier: pr?.trainingLevel,
         shiftTierRates: shift.tierRates,
       });

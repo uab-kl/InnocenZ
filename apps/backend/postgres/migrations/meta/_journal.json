@@ -281,6 +281,13 @@
       "when": 1784500000023,
       "tag": "0039_shift_sale_drop_table_sales",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "7",
+      "when": 1784500000024,
+      "tag": "0040_outlet_drop_table_pct",
+      "breakpoints": true
     }
   ]
 }

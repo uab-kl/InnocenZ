@@ -86,7 +86,6 @@ export function estimateRosterSlotPayout(
       drinks: drinkUnits,
       drinkSales: drinkUnits * perDrinkRm,
       tips: slot.floorTips ?? 0,
-      tableSales: 0,
       prTier: opts.trainingLevel,
       shiftTierRates: opts.shiftTierRates,
     },

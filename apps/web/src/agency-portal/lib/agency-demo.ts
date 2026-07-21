@@ -669,7 +669,6 @@ export function calcShiftPayout(
     drinks: number;
     drinkSales: number;
     tips: number;
-    tableSales: number;
     checkOutAfterOt?: boolean;
     /** PR training tier — uses tier-specific wage & commission when set */
     prTier?: string;
@@ -691,7 +690,9 @@ export function calcShiftPayout(
   );
   const drinkCommission = (input.drinkSales * rule.drinkPct) / 100;
   const tipCommission = (input.tips * rule.tipPct) / 100;
-  const tableCommission = (input.tableSales * rule.tablePct) / 100;
+  // Table sales removed — there is no table-sales commission. Kept as a constant
+  // 0 so downstream payout consumers (PV lines, seal review) stay untouched.
+  const tableCommission = 0;
   return {
     shiftPay,
     otSupplement,

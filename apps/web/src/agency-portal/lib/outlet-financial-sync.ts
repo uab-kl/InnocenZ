@@ -360,7 +360,6 @@ export function rosterSlotPayoutFromFloorSales(
       drinks: floor.drinkUnits,
       drinkSales: floor.drinkSalesRm,
       tips: floor.tipRm,
-      tableSales: 0,
       prTier: opts.trainingLevel,
       shiftTierRates: opts.shiftTierRates,
     },
@@ -783,16 +782,12 @@ export function buildSyncedOutletPnlRow(
       drinks: drinkUnits,
       drinkSales,
       tips,
-      tableSales: 0,
       shiftTierRates: s.tierRates,
     },
     commissionRules,
   );
   const prCommission =
-    Math.round(
-      (payout.drinkCommission + payout.tipCommission + payout.tableCommission) *
-        100,
-    ) / 100;
+    Math.round((payout.drinkCommission + payout.tipCommission) * 100) / 100;
   const prWages = s.estimatedCost;
   const anchorCommission = calcAnchorCommission(
     seedRow.outlet,
@@ -851,12 +846,11 @@ function calcAnchorCommission(
       drinks: drinkUnits,
       drinkSales: computeDrinkSales({ ...shift, drinkUnits }, drinkMenu),
       tips: floorTipsForOutlet(shift.outletName, roster),
-      tableSales: 0,
       shiftTierRates: shift.tierRates,
     },
     commissionRules,
   );
-  return payout.drinkCommission + payout.tipCommission + payout.tableCommission;
+  return payout.drinkCommission + payout.tipCommission;
 }
 
 export type LaborCostReportLine = {
