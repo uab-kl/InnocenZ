@@ -52,9 +52,6 @@ export const OutletWorkspaceTable = MainSchema.table('outlet_workspace', {
   perDrinkRm: numeric('per_drink_rm', { precision: 12, scale: 2 })
     .notNull()
     .default('0'),
-  perTableRm: numeric('per_table_rm', { precision: 12, scale: 2 })
-    .notNull()
-    .default('0'),
   happyHourStart: varchar('happy_hour_start', { length: 10 }).notNull().default(''),
   happyHourEnd: varchar('happy_hour_end', { length: 10 }).notNull().default(''),
   happyHourDrinkDiscountPct: integer('happy_hour_drink_discount_pct')

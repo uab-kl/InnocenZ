@@ -124,7 +124,8 @@ export function workspaceSettingsFromBackend(
 		tierRates,
 		commissionOnlyRates,
 		perDrinkRm: num(record.perDrinkRm),
-		perTableRm: num(record.perTableRm),
+		// Per-table price removed backend-side; keep the demo field at 0.
+		perTableRm: 0,
 		drinkMenu,
 		happyHourStart: record.happyHourStart,
 		happyHourEnd: record.happyHourEnd,
@@ -143,7 +144,6 @@ export function saveInputFromWorkspaceSettings(
 		tipPct: ws.tipPct,
 		otAfterHours: ws.otAfterHours,
 		perDrinkRm: ws.perDrinkRm,
-		perTableRm: ws.perTableRm,
 		happyHourStart: ws.happyHourStart,
 		happyHourEnd: ws.happyHourEnd,
 		happyHourDrinkDiscountPct: ws.happyHourDrinkDiscountPct,

@@ -50,7 +50,6 @@ export class OutletWorkspaceControllerClass {
         tipPct: num(d.tipPct),
         otAfterHours: num(d.otAfterHours),
         perDrinkRm: num(d.perDrinkRm),
-        perTableRm: num(d.perTableRm),
         happyHourStart: d.happyHourStart,
         happyHourEnd: d.happyHourEnd,
         happyHourDrinkDiscountPct: d.happyHourDrinkDiscountPct,

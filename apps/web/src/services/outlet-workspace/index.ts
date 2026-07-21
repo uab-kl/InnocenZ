@@ -53,7 +53,6 @@ export interface OutletWorkspaceRecord {
 	tipPct: string;
 	otAfterHours: string;
 	perDrinkRm: string;
-	perTableRm: string;
 	happyHourStart: string;
 	happyHourEnd: string;
 	happyHourDrinkDiscountPct: number;
@@ -108,7 +107,6 @@ export interface SaveOutletWorkspaceInput {
 	tipPct: number;
 	otAfterHours: number;
 	perDrinkRm: number;
-	perTableRm: number;
 	happyHourStart: string;
 	happyHourEnd: string;
 	happyHourDrinkDiscountPct: number;

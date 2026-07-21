@@ -43,7 +43,6 @@ export const UpsertOutletWorkspaceSchema = z.object({
   tipPct: z.coerce.number().default(0),
   otAfterHours: z.coerce.number().default(0),
   perDrinkRm: z.coerce.number().default(0),
-  perTableRm: z.coerce.number().default(0),
   happyHourStart: z.string().max(10).default(''),
   happyHourEnd: z.string().max(10).default(''),
   happyHourDrinkDiscountPct: z.coerce.number().int().default(0),
