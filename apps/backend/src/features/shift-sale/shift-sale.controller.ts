@@ -10,13 +10,7 @@ import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { CreateShiftSaleSchema } from '@/schema/shift-sale.schema';
 import { ShiftSaleFilter } from './shift-sale.model';
-
-/**
- * Same three-way scoping as the shift controller: admin (everything), agency
- * member (their agency), or outlet member (their own venues). Resolved from the
- * DB, never trusted from the request.
- */
-type Scope = { isAdmin: boolean; agencyId: string | null; outletIds: string[] };
+import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 
 function money(value: number | undefined): string {
   return (Number.isFinite(value) && value! > 0 ? value! : 0).toFixed(2);
@@ -32,34 +26,17 @@ export class ShiftSaleControllerClass {
     private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
 
-  private isOutletCaller(scope: Scope): boolean {
-    return !scope.isAdmin && !scope.agencyId && scope.outletIds.length > 0;
-  }
-
-  private async resolveScope(req: Request): Promise<Scope> {
-    const user = req.user!;
-    const roles = await this.authRepository.getRolesForUserIds([user.id]);
-    const isAdmin = roles.some((r) => r.roleName === 'admin');
-    if (isAdmin) return { isAdmin: true, agencyId: null, outletIds: [] };
-
-    const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    const active = memberships.find((m) => m.status === 'active') ?? memberships[0];
-    if (active?.agencyId) {
-      return { isAdmin: false, agencyId: active.agencyId, outletIds: [] };
-    }
-
-    const outletMemberships = await this.outletMemberRepository.listByUser(user.id);
-    const outletIds = [
-      ...new Set(
-        outletMemberships.filter((m) => m.status === 'active').map((m) => m.outletId),
-      ),
-    ];
-    return { isAdmin: false, agencyId: null, outletIds };
+  private resolveScope(req: Request): Promise<OrgScope> {
+    return resolveOrgScope(req, {
+      authRepository: this.authRepository,
+      agencyMemberRepository: this.agencyMemberRepository,
+      outletMemberRepository: this.outletMemberRepository,
+    });
   }
 
   /** Filter shared by list + report: pin each caller to the org it belongs to. */
-  private scopedFilter(req: Request, scope: Scope): ShiftSaleFilter | null {
-    if (this.isOutletCaller(scope)) {
+  private scopedFilter(req: Request, scope: OrgScope): ShiftSaleFilter | null {
+    if (isOutletCaller(scope)) {
       return {
         outletIds: scope.outletIds,
         outletId: req.query.outletId as string | undefined,
@@ -101,23 +78,27 @@ export class ShiftSaleControllerClass {
       const owns =
         scope.isAdmin ||
         (scope.agencyId !== null && shift.agencyId === scope.agencyId) ||
-        (this.isOutletCaller(scope) && scope.outletIds.includes(shift.outletId));
+        (isOutletCaller(scope) && scope.outletIds.includes(shift.outletId));
       if (!owns) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
       // The PR must actually be staffing this shift — sales cannot be attributed
-      // to a PR who was never assigned.
+      // to a PR who was never assigned, and a cancelled/no-show PR generated no
+      // floor sales (the cost side already excludes those statuses, so exclude
+      // them here too for symmetry).
       const assignments = await this.shiftAssignmentRepository.listByShift(shift.id);
-      if (!assignments.some((a) => a.prId === parsed.data.prId)) {
-        return res.status(400).json({ success: false, message: 'PR is not assigned to this shift', data: null });
+      const isStaffing = assignments.some(
+        (a) => a.prId === parsed.data.prId && a.status !== 'cancelled' && a.status !== 'no_show',
+      );
+      if (!isStaffing) {
+        return res.status(400).json({ success: false, message: 'PR is not actively assigned to this shift', data: null });
       }
 
       // Total is computed server-side; the client never dictates the sum.
       const drinkSalesRm = parsed.data.drinkSalesRm ?? 0;
       const tipSalesRm = parsed.data.tipSalesRm ?? 0;
-      const tableSalesRm = parsed.data.tableSalesRm ?? 0;
-      const totalSalesRm = drinkSalesRm + tipSalesRm + tableSalesRm;
+      const totalSalesRm = drinkSalesRm + tipSalesRm;
 
       const actor = getActor(req);
       const sale = await this.shiftSaleRepository.upsert({
@@ -131,7 +112,6 @@ export class ShiftSaleControllerClass {
         drinkSalesRm: money(drinkSalesRm),
         tipUnits: parsed.data.tipUnits ?? 0,
         tipSalesRm: money(tipSalesRm),
-        tableSalesRm: money(tableSalesRm),
         totalSalesRm: money(totalSalesRm),
         createdBy: actor,
         updatedBy: actor,
@@ -167,11 +147,16 @@ export class ShiftSaleControllerClass {
       if (!filter) {
         return res.status(403).json({ success: false, message: 'No organization associated with this account', data: null });
       }
-      const [byDay, byPr] = await Promise.all([
+      // Revenue (shift_sale) and cost (shift_assignment.pay_amount) are both
+      // aggregated server-side over the same scope, so the client never has to
+      // page through raw assignment rows to compute margin. Cost stays at
+      // (PR × day) grain so the client can slice it to the selected range.
+      const [byDay, byPr, costByPrDay] = await Promise.all([
         this.shiftSaleRepository.reportByDay(filter),
         this.shiftSaleRepository.reportByPr(filter),
+        this.shiftAssignmentRepository.reportCostByPrDay(filter),
       ]);
-      res.status(200).json({ success: true, message: 'OK', data: { byDay, byPr } });
+      res.status(200).json({ success: true, message: 'OK', data: { byDay, byPr, costByPrDay } });
     } catch (error) {
       logger.error('[ShiftSaleController.report] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

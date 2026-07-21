@@ -11,7 +11,6 @@ export const CreateShiftSaleSchema = z.object({
   drinkSalesRm: z.number().nonnegative().optional(),
   tipUnits: z.number().int().nonnegative().optional(),
   tipSalesRm: z.number().nonnegative().optional(),
-  tableSalesRm: z.number().nonnegative().optional(),
 });
 
 export type CreateShiftSaleInput = z.infer<typeof CreateShiftSaleSchema>;

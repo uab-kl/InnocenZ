@@ -1,4 +1,4 @@
-import { date, integer, numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date, index, integer, numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
@@ -36,7 +36,6 @@ export const ShiftSaleTable = MainSchema.table(
     drinkSalesRm: numeric('drink_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
     tipUnits: integer('tip_units').notNull().default(0),
     tipSalesRm: numeric('tip_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
-    tableSalesRm: numeric('table_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
     totalSalesRm: numeric('total_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -46,6 +45,9 @@ export const ShiftSaleTable = MainSchema.table(
   (table) => ({
     // One sales row per PR per shift — the write path upserts on this.
     uniqShiftPr: unique('shift_sale_shift_pr_unique').on(table.shiftId, table.prId),
+    // The report scopes an outlet to its venues and groups/filters by day — this
+    // covers the (outlet_id, sold_on) predicate the byDay aggregate runs on.
+    outletSoldOnIdx: index('shift_sale_outlet_sold_on_idx').on(table.outletId, table.soldOn),
   }),
 );
 
@@ -68,7 +70,6 @@ export type ShiftSaleDayTotals = {
   soldOn: string;
   drinkSalesRm: number;
   tipSalesRm: number;
-  tableSalesRm: number;
   totalSalesRm: number;
 };
 

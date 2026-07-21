@@ -17,7 +17,6 @@ export interface ShiftSale {
 	drinkSalesRm: string;
 	tipUnits: number;
 	tipSalesRm: string;
-	tableSalesRm: string;
 	totalSalesRm: string;
 	createdAt: string;
 	updatedAt: string;
@@ -29,7 +28,6 @@ export interface ShiftSaleDayTotals {
 	soldOn: string;
 	drinkSalesRm: number;
 	tipSalesRm: number;
-	tableSalesRm: number;
 	totalSalesRm: number;
 }
 
@@ -39,9 +37,19 @@ export interface ShiftSalePrTotals {
 	totalSalesRm: number;
 }
 
+// Manpower cost (shift_assignment.pay_amount) at (PR × day) grain, aggregated
+// server-side. Non-staffing statuses (cancelled/no_show) are already excluded.
+export interface ShiftCostPrDayTotals {
+	prId: string;
+	prName: string | null;
+	soldOn: string;
+	cost: number;
+}
+
 export interface ShiftSaleReport {
 	byDay: ShiftSaleDayTotals[];
 	byPr: ShiftSalePrTotals[];
+	costByPrDay: ShiftCostPrDayTotals[];
 }
 
 export interface ShiftSaleReportParams {
@@ -58,7 +66,6 @@ export interface LogShiftSaleInput {
 	drinkSalesRm?: number;
 	tipUnits?: number;
 	tipSalesRm?: number;
-	tableSalesRm?: number;
 }
 
 export async function fetchShiftSaleReport(
@@ -76,11 +83,16 @@ export async function fetchShiftSaleReport(
 		message: string;
 		data: ShiftSaleReport;
 	}>(`/shift-sale/report${queryString}`);
-	return response.data.data ?? { byDay: [], byPr: [] };
+	return response.data.data ?? { byDay: [], byPr: [], costByPrDay: [] };
 }
 
 export async function fetchShiftSales(
-	params: { shiftId?: string; outletId?: string; fromDate?: string; toDate?: string },
+	params: {
+		shiftId?: string;
+		outletId?: string;
+		fromDate?: string;
+		toDate?: string;
+	},
 	onRefreshFail: () => void,
 ): Promise<ShiftSale[]> {
 	const client = getClient(onRefreshFail);

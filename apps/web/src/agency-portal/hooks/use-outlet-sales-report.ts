@@ -1,15 +1,12 @@
-import { useMemo } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import { useQuery } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
 	fetchShiftSaleReport,
+	type ShiftCostPrDayTotals,
 	type ShiftSaleReport,
 } from "@/services/shift-sale";
-import {
-	fetchShiftAssignments,
-	type ShiftAssignment,
-} from "@/services/shift-assignment";
 
 // A wide window — the outlet Reports screen slices weeks/custom ranges from this
 // single fetch client-side, so we pull everything once and let the builders below
@@ -76,12 +73,6 @@ export interface UseOutletSalesReport {
 
 const EMPTY_FLOOR: FloorBreakdown = { days: [], drinkSales: 0, tipsSales: 0 };
 
-// PRs pulled off the floor aren't revenue-generating that night — match the
-// demo, which reports on staffing shifts only.
-function isStaffing(a: ShiftAssignment): boolean {
-	return a.status !== "cancelled" && a.status !== "no_show";
-}
-
 function weekdayLabel(dateIso: string): string {
 	return new Date(`${dateIso}T12:00:00`).toLocaleDateString("en-GB", {
 		weekday: "short",
@@ -119,57 +110,59 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 		queryKey: ["outlet", "shift-sale-report", outletId],
 		enabled: backed,
 		queryFn: (): Promise<ShiftSaleReport> =>
-			fetchShiftSaleReport({ fromDate: REPORT_FROM, toDate: REPORT_TO }, logout),
-	});
-
-	const assignmentsQuery = useQuery({
-		queryKey: ["outlet", "shift-sale-costs", outletId],
-		enabled: backed,
-		queryFn: async (): Promise<ShiftAssignment[]> => {
-			const res = await fetchShiftAssignments({ pageSize: 100 }, logout);
-			return res.data;
-		},
+			fetchShiftSaleReport(
+				{ fromDate: REPORT_FROM, toDate: REPORT_TO },
+				logout,
+			),
 	});
 
 	const byDaySales = reportQuery.data?.byDay ?? [];
-	const assignments = assignmentsQuery.data ?? [];
+	// Manpower cost at (PR × day) grain, aggregated server-side (no client row
+	// cap; cancelled/no-show already excluded). Sliced to the range below.
+	const costByPrDay: ShiftCostPrDayTotals[] =
+		reportQuery.data?.costByPrDay ?? [];
 
 	const buildTopPrs = useMemo(
 		() =>
 			(range: SalesReportRange): TopPrRow[] => {
-				// Cost per PR, restricted to the range via the assignment's shift date.
+				// Cost per PR, restricted to the range via the cost row's sold-on day.
 				const perPr = new Map<string, { name: string; earned: number }>();
-				for (const a of assignments) {
-					if (!isStaffing(a) || !a.shiftDate || !inRange(a.shiftDate, range)) continue;
-					const pay = Number(a.payAmount) || 0;
-					const cur = perPr.get(a.prId) ?? { name: a.prName ?? "PR", earned: 0 };
-					cur.earned += pay;
-					if (a.prName) cur.name = a.prName;
-					perPr.set(a.prId, cur);
+				for (const c of costByPrDay) {
+					if (!inRange(c.soldOn, range)) continue;
+					const cur = perPr.get(c.prId) ?? {
+						name: c.prName ?? "PR",
+						earned: 0,
+					};
+					cur.earned += c.cost;
+					if (c.prName) cur.name = c.prName;
+					perPr.set(c.prId, cur);
 				}
 				return [...perPr.entries()]
-					.map(([prId, v]) => ({ prId, name: v.name, earned: v.earned, agency: "" }))
+					.map(([prId, v]) => ({
+						prId,
+						name: v.name,
+						earned: v.earned,
+						agency: "",
+					}))
 					.sort((a, b) => b.earned - a.earned || a.name.localeCompare(b.name));
 			},
-		[assignments],
+		[costByPrDay],
 	);
 
 	const buildReport = (range: SalesReportRange): WeeklyReport | null => {
 		const salesDays = byDaySales.filter((d) => inRange(d.soldOn, range));
+		const costInRange = costByPrDay.filter((c) => inRange(c.soldOn, range));
 		// Days that have sales OR cost inside the range.
 		const dayIsos = new Set<string>(salesDays.map((d) => d.soldOn));
-		for (const a of assignments) {
-			if (isStaffing(a) && a.shiftDate && inRange(a.shiftDate, range)) {
-				dayIsos.add(a.shiftDate);
-			}
-		}
+		for (const c of costInRange) dayIsos.add(c.soldOn);
 		if (dayIsos.size === 0) return null;
 
-		const salesByDay = new Map(salesDays.map((d) => [d.soldOn, d.totalSalesRm]));
+		const salesByDay = new Map(
+			salesDays.map((d) => [d.soldOn, d.totalSalesRm]),
+		);
 		const costByDay = new Map<string, number>();
-		for (const a of assignments) {
-			if (!isStaffing(a) || !a.shiftDate) continue;
-			costByDay.set(a.shiftDate, (costByDay.get(a.shiftDate) ?? 0) + (Number(a.payAmount) || 0));
+		for (const c of costInRange) {
+			costByDay.set(c.soldOn, (costByDay.get(c.soldOn) ?? 0) + c.cost);
 		}
 
 		const days: WeeklyDaySales[] = [...dayIsos]
@@ -216,9 +209,8 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 				dateDisplay: dayDisplay(d.soldOn),
 				dayLabel: weekdayLabel(d.soldOn),
 				drinkSales: d.drinkSalesRm,
-				// Table sales fold into the "tips" column of the demo's two-way split.
-				tipsSales: d.tipSalesRm + d.tableSalesRm,
-				total: d.drinkSalesRm + d.tipSalesRm + d.tableSalesRm,
+				tipsSales: d.tipSalesRm,
+				total: d.drinkSalesRm + d.tipSalesRm,
 			}));
 		return {
 			days,
@@ -229,7 +221,7 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 
 	return {
 		backed,
-		isLoading: reportQuery.isLoading || assignmentsQuery.isLoading,
+		isLoading: reportQuery.isLoading,
 		hasData: byDaySales.length > 0,
 		buildReport,
 		buildFloorBreakdown,

@@ -14,17 +14,11 @@ import {
   UpdateShiftAssignmentSchema,
 } from '@/schema/shift-assignment.schema';
 import { ShiftAssignmentFilter, ShiftAssignmentStatus } from './shift-assignment.model';
+import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 const PG_UNIQUE_VIOLATION = '23505';
-
-/**
- * A caller is scoped one of three ways: admin (everything), agency member
- * (their agency's assignments), or outlet member (assignments on shifts at their
- * own venues, read only). `outletIds` is empty for non-outlet callers.
- */
-type Scope = { isAdmin: boolean; agencyId: string | null; outletIds: string[] };
 
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -48,39 +42,19 @@ export class ShiftAssignmentControllerClass {
     private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
 
-  /**
-   * Admins see everything; every other caller is confined to the org they belong
-   * to (resolved from the DB, never trusted from the request body). Agency
-   * membership wins when a user somehow holds both.
-   */
-  private async resolveScope(req: Request): Promise<Scope> {
-    const user = req.user!;
-    const roles = await this.authRepository.getRolesForUserIds([user.id]);
-    const isAdmin = roles.some((r) => r.roleName === 'admin');
-    if (isAdmin) return { isAdmin: true, agencyId: null, outletIds: [] };
-
-    const memberships = await this.agencyMemberRepository.listByUser(user.id);
-    const active = memberships.find((m) => m.status === 'active') ?? memberships[0];
-    if (active?.agencyId) {
-      return { isAdmin: false, agencyId: active.agencyId, outletIds: [] };
-    }
-
-    // No agency link — fall back to outlet membership so an outlet can read who
-    // was rostered on the shifts at its own venues.
-    const outletMemberships = await this.outletMemberRepository.listByUser(user.id);
-    const outletIds = [
-      ...new Set(
-        outletMemberships.filter((m) => m.status === 'active').map((m) => m.outletId),
-      ),
-    ];
-    return { isAdmin: false, agencyId: null, outletIds };
+  private resolveScope(req: Request): Promise<OrgScope> {
+    return resolveOrgScope(req, {
+      authRepository: this.authRepository,
+      agencyMemberRepository: this.agencyMemberRepository,
+      outletMemberRepository: this.outletMemberRepository,
+    });
   }
 
   async list(req: Request, res: Response) {
     try {
       const scope = await this.resolveScope(req);
-      const isOutletCaller = !scope.isAdmin && !scope.agencyId && scope.outletIds.length > 0;
-      if (!scope.isAdmin && !scope.agencyId && !isOutletCaller) {
+      const outletCaller = isOutletCaller(scope);
+      if (!scope.isAdmin && !scope.agencyId && !outletCaller) {
         return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
       }
 
@@ -95,7 +69,7 @@ export class ShiftAssignmentControllerClass {
           ? (req.query.agencyId as string | undefined)
           : (scope.agencyId ?? undefined),
         // Pins an outlet caller to its own venues, matched on the joined shift.
-        outletIds: isOutletCaller ? scope.outletIds : undefined,
+        outletIds: outletCaller ? scope.outletIds : undefined,
       };
 
       const { assignments, totalCount } = await this.shiftAssignmentRepository.listPaginated({ filter, page, pageSize });

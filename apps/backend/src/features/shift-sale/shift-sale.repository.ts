@@ -48,7 +48,6 @@ export class ShiftSaleRepositoryClass {
             drinkSalesRm: data.drinkSalesRm,
             tipUnits: data.tipUnits,
             tipSalesRm: data.tipSalesRm,
-            tableSalesRm: data.tableSalesRm,
             totalSalesRm: data.totalSalesRm,
             soldOn: data.soldOn,
             updatedAt: new Date(),
@@ -98,7 +97,6 @@ export class ShiftSaleRepositoryClass {
           soldOn: ShiftSaleTable.soldOn,
           drinkSalesRm: sql<number>`coalesce(sum(${ShiftSaleTable.drinkSalesRm}), 0)::float8`,
           tipSalesRm: sql<number>`coalesce(sum(${ShiftSaleTable.tipSalesRm}), 0)::float8`,
-          tableSalesRm: sql<number>`coalesce(sum(${ShiftSaleTable.tableSalesRm}), 0)::float8`,
           totalSalesRm: sql<number>`coalesce(sum(${ShiftSaleTable.totalSalesRm}), 0)::float8`,
         })
         .from(ShiftSaleTable)
@@ -109,7 +107,6 @@ export class ShiftSaleRepositoryClass {
         soldOn: r.soldOn,
         drinkSalesRm: Number(r.drinkSalesRm),
         tipSalesRm: Number(r.tipSalesRm),
-        tableSalesRm: Number(r.tableSalesRm),
         totalSalesRm: Number(r.totalSalesRm),
       }));
     } catch (error) {
