@@ -186,7 +186,6 @@ export function buildReceiptScansFromPaymentVouchers(
       const comm = calcReceiptCommissions(items);
       const drinkCommission = category === 'drinks' ? row.amt : 0;
       const tipCommission = category === 'tips' ? row.amt : 0;
-      const tableCommission = category === 'tables' ? row.amt : 0;
 
       out.push({
         id,
@@ -205,7 +204,6 @@ export function buildReceiptScansFromPaymentVouchers(
         totalLogged: row.amt,
         drinkCommission: drinkCommission || comm.drinkCommission,
         tipCommission: tipCommission || comm.tipCommission,
-        tableCommission: tableCommission || comm.tableCommission,
         totalCommission: row.amt,
         status: receiptStatusFromPv({ status: 'pending' } as PrReceiptScan, pv),
       });
@@ -386,7 +384,6 @@ export function buildReceiptScansFromShiftHistory(
         totalLogged: part.amount,
         drinkCommission: comm.drinkCommission,
         tipCommission: comm.tipCommission,
-        tableCommission: comm.tableCommission,
         totalCommission: comm.totalCommission,
         status: 'pending',
       });
@@ -440,7 +437,6 @@ function attachReceiptIdsToPvRows(
         if (s.pvLineDesc && s.pvLineDesc === row.desc) return true;
         if (desc.includes('drink')) return s.drinkCommission === row.amt;
         if (desc.includes('tip')) return s.tipCommission === row.amt;
-        if (desc.includes('table')) return s.tableCommission === row.amt;
         if (desc.includes('other') || row.desc === 'Others') {
           return (
             s.totalCommission === row.amt &&

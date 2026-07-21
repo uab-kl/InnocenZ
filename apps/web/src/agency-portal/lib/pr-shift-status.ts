@@ -107,7 +107,6 @@ export function aggregateShiftSales(scans: PrReceiptScan[]) {
   let tableUnits = 0;
   let drinkCommission = 0;
   let tipCommission = 0;
-  let tableCommission = 0;
   for (const scan of scans) {
     const items = sumReceiptItems(scan.items);
     drinkUnits += items.drinkUnits;
@@ -115,7 +114,6 @@ export function aggregateShiftSales(scans: PrReceiptScan[]) {
     tableUnits += items.tableUnits;
     drinkCommission += scan.drinkCommission;
     tipCommission += scan.tipCommission;
-    tableCommission += scan.tableCommission;
   }
   return {
     drinkUnits,
@@ -123,8 +121,7 @@ export function aggregateShiftSales(scans: PrReceiptScan[]) {
     tableUnits,
     drinkCommission,
     tipCommission,
-    tableCommission,
-    commissionTotal: drinkCommission + tipCommission + tableCommission,
+    commissionTotal: drinkCommission + tipCommission,
   };
 }
 
@@ -149,7 +146,6 @@ export function verifyReceiptScan(scan: PrReceiptScan): {
   }
   if (expected.drinkCommission !== scan.drinkCommission) issues.push('drinks');
   if (expected.tipCommission !== scan.tipCommission) issues.push('tips');
-  if (expected.tableCommission !== scan.tableCommission) issues.push('tables');
   if (issues.length === 0) return { ok: true, note: 'Matches PV rules' };
   return { ok: false, note: `Check ${issues.join(', ')}` };
 }

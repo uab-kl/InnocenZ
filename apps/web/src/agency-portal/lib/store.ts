@@ -403,7 +403,6 @@ export interface PV {
   wages: number;
   drinkCommission: number;
   tipCommission: number;
-  tableCommission: number;
   status: 'draft' | 'sent' | 'signed' | 'disputed';
   version: number;
 }
@@ -2138,7 +2137,6 @@ export const useStore = create<StoreState>()(
           otRm: sealed.otRm,
           drinkCommissionRm: sealed.drinkCommissionRm,
           tipCommissionRm: sealed.tipCommissionRm,
-          tableCommissionRm: sealed.tableCommissionRm,
           durationHours: hoursWorked,
         });
         const checkOutTime = new Date().toLocaleTimeString('en-MY', {
@@ -6448,7 +6446,6 @@ export const useStore = create<StoreState>()(
             otRm: sealed.otRm,
             drinkCommissionRm: sealed.drinkCommissionRm,
             tipCommissionRm: sealed.tipCommissionRm,
-            tableCommissionRm: sealed.tableCommissionRm,
             durationHours: 6,
           });
         });
@@ -6520,8 +6517,7 @@ export const useStore = create<StoreState>()(
       signPv: (id) => {
         const pv = get().pvs.find((p) => p.id === id);
         if (!pv) return;
-        const total =
-          pv.wages + pv.drinkCommission + pv.tipCommission + pv.tableCommission;
+        const total = pv.wages + pv.drinkCommission + pv.tipCommission;
         set((st) => ({
           pvs: st.pvs.map((p) =>
             p.id === id ? { ...p, status: 'signed' } : p,

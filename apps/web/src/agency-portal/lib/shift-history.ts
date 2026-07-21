@@ -209,9 +209,7 @@ export function migrateShiftHistoryFinancials(
     // Don't re-% payroll PV line items (those amts are already commissions).
     const needsTipReseal =
       tipCommissionIgnoresWorkspacePct(row) && !row.id.startsWith('ap-shift-');
-    const needsTableStrip =
-      typeof row.tableCommissionRm === 'number' && row.tableCommissionRm > 0;
-    if (isDemoSeed || needsTipReseal || needsTableStrip) {
+    if (isDemoSeed || needsTipReseal) {
       const sealed = sealShiftHistoryAmounts({
         outlet: row.outlet,
         drinkUnits: row.totalDrinks,
@@ -224,7 +222,6 @@ export function migrateShiftHistoryFinancials(
         ...row,
         ...sealedAmountsToHistoryFields(sealed),
         totalTables: row.totalTables ?? 0,
-        tableCommissionRm: 0,
       };
     }
     if (

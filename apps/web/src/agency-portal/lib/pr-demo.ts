@@ -444,10 +444,8 @@ export function buildPaymentVoucherFromShift(
   const dateLabel = fmtDtable(y, m, d);
   const drinkIds: string[] = [];
   const tipIds: string[] = [];
-  const tableIds: string[] = [];
   let drinkAmt = 0;
   let tipAmt = 0;
-  let tableAmt = 0;
   for (const r of receipts) {
     if (r.drinkCommission > 0) {
       drinkAmt += r.drinkCommission;
@@ -456,10 +454,6 @@ export function buildPaymentVoucherFromShift(
     if (r.tipCommission > 0) {
       tipAmt += r.tipCommission;
       tipIds.push(r.id);
-    }
-    if (r.tableCommission > 0) {
-      tableAmt += r.tableCommission;
-      tableIds.push(r.id);
     }
   }
   const rows: PrPvRow[] = [
@@ -500,19 +494,6 @@ export function buildPaymentVoucherFromShift(
       amt: tipAmt,
       ref: 'Receipt scans',
       receiptIds: tipIds,
-    });
-  }
-  if (tableAmt > 0) {
-    rows.push({
-      i: idx++,
-      date: dateLabel,
-      day,
-      outlet: session.outlet,
-      desc: 'Commission – Tables',
-      qty: tableIds.length,
-      amt: tableAmt,
-      ref: 'Receipt scans',
-      receiptIds: tableIds,
     });
   }
   const otMin = session.overtimeMinutes ?? 0;
@@ -1738,7 +1719,6 @@ export interface PrReceiptScan {
   totalLogged: number;
   drinkCommission: number;
   tipCommission: number;
-  tableCommission: number;
   totalCommission: number;
   /** Shift session — receipts only count toward this shift's PV */
   shiftSessionId?: string;
@@ -1765,20 +1745,16 @@ export const RECEIPT_COMMISSION_RULES = {
 export function calcReceiptCommissions(items: PrReceiptItem[]) {
   let drinkCommission = 0;
   let tipCommission = 0;
-  let tableCommission = 0;
   for (const item of items) {
     if (item.category === 'drinks')
       drinkCommission += item.qty * RECEIPT_COMMISSION_RULES.drinkPerUnit;
     else if (item.category === 'tips')
       tipCommission += item.amount * RECEIPT_COMMISSION_RULES.tipRate;
-    else if (item.category === 'tables')
-      tableCommission += item.qty * RECEIPT_COMMISSION_RULES.tablePerUnit;
   }
   return {
     drinkCommission,
     tipCommission,
-    tableCommission,
-    totalCommission: drinkCommission + tipCommission + tableCommission,
+    totalCommission: drinkCommission + tipCommission,
   };
 }
 
@@ -2218,7 +2194,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 410,
     drinkCommission: 150,
     tipCommission: 0,
-    tableCommission: 0,
     totalCommission: 150,
     pvId: 'PV-2026-0498',
     pvStatus: 'PAID',
@@ -2246,7 +2221,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 320,
     drinkCommission: 15,
     tipCommission: 0,
-    tableCommission: 0,
     totalCommission: 15,
     pvId: 'PV-2026-0498',
     pvStatus: 'PAID',
@@ -2268,7 +2242,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 80,
     drinkCommission: 0,
     tipCommission: 80,
-    tableCommission: 0,
     totalCommission: 80,
     pvId: 'PV-2026-0498',
     pvStatus: 'PAID',
@@ -2296,7 +2269,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 360,
     drinkCommission: 120,
     tipCommission: 0,
-    tableCommission: 0,
     totalCommission: 120,
     pvId: 'PV-2026-0521',
     pvStatus: 'DISPUTED',
@@ -2327,7 +2299,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 245,
     drinkCommission: 60,
     tipCommission: 65,
-    tableCommission: 0,
     totalCommission: 125,
     status: 'attached',
   },
@@ -2354,7 +2325,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 360,
     drinkCommission: 96,
     tipCommission: 0,
-    tableCommission: 0,
     totalCommission: 96,
     pvStatus: 'SENT',
     status: 'in_pv',
@@ -2389,7 +2359,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 960,
     drinkCommission: 30,
     tipCommission: 0,
-    tableCommission: 60,
     totalCommission: 90,
     pvStatus: 'SIGNED',
     status: 'in_pv',
@@ -2418,7 +2387,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 270,
     drinkCommission: 85,
     tipCommission: 0,
-    tableCommission: 0,
     totalCommission: 85,
     pvStatus: 'DISPUTED',
     status: 'in_pv',
@@ -2447,7 +2415,6 @@ export const SEED_RECEIPT_SCANS: PrReceiptScan[] = [
     totalLogged: 225,
     drinkCommission: 75,
     tipCommission: 0,
-    tableCommission: 0,
     totalCommission: 75,
     pvStatus: 'PAID',
     status: 'paid',
@@ -2516,8 +2483,6 @@ export function receiptPvCalcNote(scan: PrReceiptScan) {
     parts.push(`Drinks ${formatRMPlain(scan.drinkCommission)}`);
   if (scan.tipCommission > 0)
     parts.push(`Tips ${formatRMPlain(scan.tipCommission)}`);
-  if (scan.tableCommission > 0)
-    parts.push(`Tables ${formatRMPlain(scan.tableCommission)}`);
   const calc = parts.join(' + ') || formatRMPlain(0);
   if (scan.pvId) {
     if (scan.status === 'attached') {

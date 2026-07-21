@@ -10,9 +10,6 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
   const drinkUnits = scan.items
     .filter((i) => i.category === 'drinks')
     .reduce((s, i) => s + i.qty, 0);
-  const tableUnits = scan.items
-    .filter((i) => i.category === 'tables')
-    .reduce((s, i) => s + i.qty, 0);
   const manual = receiptEntryMethod(scan) === 'manual';
 
   return (
@@ -76,18 +73,6 @@ export function ReceiptScanSlip({ scan }: { scan: PrReceiptScan }) {
                   <td>Tips</td>
                   <td className="iz-muted">100% of tip logged</td>
                   <td className="text-right">{formatRM(scan.tipCommission)}</td>
-                </tr>
-              )}
-              {scan.tableCommission > 0 && (
-                <tr>
-                  <td>Tables</td>
-                  <td className="iz-muted">
-                    {tableUnits} table{tableUnits === 1 ? '' : 's'} × RM
-                    {RECEIPT_COMMISSION_RULES.tablePerUnit}
-                  </td>
-                  <td className="text-right">
-                    {formatRM(scan.tableCommission)}
-                  </td>
                 </tr>
               )}
             </tbody>
