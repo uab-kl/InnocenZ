@@ -6,6 +6,7 @@ import type {
   AgencyRosterSlot,
 } from '@agency-portal/lib/agency-demo';
 import { outletCan } from '@agency-portal/lib/outlet-rbac';
+import { useOutletShiftActions } from '@agency-portal/hooks/use-outlet-shift-actions';
 import { IzPill } from '@agency-portal/components/iz/ui';
 import { OutletShiftSalesPanel } from '@agency-portal/components/outlet/OutletLogSales';
 // import { OutletSealReview } from "@agency-portal/components/outlet/OutletSealReview";
@@ -108,8 +109,25 @@ export function OutletShiftDetailPanel({
   const agencyRoster = rosterOverride ?? storeRoster;
   const prReceiptScans = useStore((s) => s.prReceiptScans);
   const specialServiceOrders = useStore((s) => s.specialServiceOrders);
-  const { confirmShift, /* sealShift, */ shiftApplicants, respondToApplicant } =
-    useStore();
+  const {
+    confirmShift: confirmShiftDemo,
+    /* sealShift, */ shiftApplicants,
+    respondToApplicant,
+  } = useStore();
+  // On a real outlet session the confirm persists to the backend; a demo
+  // session keeps the local store. `backed` decides which path runs.
+  const {
+    backed,
+    confirmShift: confirmShiftBackend,
+    isConfirming,
+  } = useOutletShiftActions();
+  const confirmShift = (shiftId: string) => {
+    if (backed) {
+      confirmShiftBackend(shiftId).catch(() => {});
+    } else {
+      confirmShiftDemo(shiftId);
+    }
+  };
 
   const canLogSales = outletCan(outletSubRole, 'logSales');
   const canConfirm = outletCan(outletSubRole, 'confirmShift');
@@ -438,6 +456,7 @@ export function OutletShiftDetailPanel({
                 title="Confirm staffing"
                 hint="Lock in PRs and mark this shift live"
                 tone="green"
+                disabled={isConfirming}
                 onClick={() => confirmShift(shift.id)}
               />
             )}
