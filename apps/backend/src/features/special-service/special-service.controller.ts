@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { SpecialServiceRepositoryClass } from './special-service.repository.js';
+import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
 import {
   SpecialServiceAdminAccepted,
   SpecialServiceCategory,
@@ -20,7 +21,10 @@ import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
 
 export class SpecialServiceControllerClass {
-  constructor(private repository: SpecialServiceRepositoryClass) {}
+  constructor(
+    private repository: SpecialServiceRepositoryClass,
+    private prRepository: PrRepositoryClass,
+  ) {}
 
   private parseOrder(req: Request): 'asc' | 'desc' {
     return req.query.order === 'asc' ? 'asc' : 'desc';
@@ -105,6 +109,53 @@ export class SpecialServiceControllerClass {
     }
   }
 
+  // The signed-in PR's own postings (mobile "Your service orders"). Scoped
+  // server-side to the caller's pr.id, resolved from their user account.
+  async listMine(req: Request, res: Response) {
+    try {
+      const page = Number(req.query.page ?? 1);
+      const pageSize = Number(req.query.pageSize ?? 50);
+      const emptyPage = {
+        page,
+        pageSize,
+        totalCount: 0,
+        totalPages: 1,
+        hasNextPage: false,
+        hasPrevPage: false,
+      };
+      const userId = req.user?.id;
+      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+      if (!pr) {
+        return res
+          .status(200)
+          .json({ success: true, message: 'OK', data: [], pagination: emptyPage });
+      }
+      const { records, totalCount } = await this.repository.listPaginated({
+        filter: { postingPrId: pr.id },
+        page,
+        pageSize,
+        order: this.parseOrder(req),
+      });
+      const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: records,
+        pagination: {
+          page,
+          pageSize,
+          totalCount,
+          totalPages,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1,
+        },
+      });
+    } catch (error) {
+      logger.error('[SpecialServiceController.listMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   // Counts by status for the summary cards.
   async statusSummary(_req: Request, res: Response) {
     try {
@@ -147,7 +198,26 @@ export class SpecialServiceControllerClass {
       }
       const actor = getActor(req);
       const initiatedBy = parsed.data.initiatedBy;
+      // Agency posts wait for admin review; outlet/PR posts go live as 'open'.
       const adminAccepted = initiatedBy === 'agency' ? 'pending' : 'n_a';
+
+      // PR-initiated postings go to the admin. A PR cannot read the /pr list, so
+      // its pr.id is resolved server-side from the signed-in user account rather
+      // than trusted from the client.
+      let postingPrId = parsed.data.postingPrId ?? null;
+      if (initiatedBy === 'pr') {
+        const userId = req.user?.id;
+        const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+        if (!pr) {
+          return res.status(400).json({
+            success: false,
+            message: 'No PR profile is linked to this account',
+            data: null,
+          });
+        }
+        postingPrId = pr.id;
+      }
+
       const record = await this.repository.create({
         outletId: parsed.data.outletId ?? null,
         title: parsed.data.title,
@@ -159,6 +229,7 @@ export class SpecialServiceControllerClass {
         adminAccepted,
         postingAgencyId: parsed.data.postingAgencyId ?? null,
         postingAgencyName: parsed.data.postingAgencyName ?? null,
+        postingPrId,
         scheduledFor: parsed.data.scheduledFor ?? null,
         createdBy: actor,
         updatedBy: actor,

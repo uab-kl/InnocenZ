@@ -64,7 +64,12 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
-import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
+import {
+	formatDate,
+	formatNumber,
+	formatPrice,
+	getErrorMessage,
+} from "@/lib/utils";
 import {
 	adminApproveJob,
 	adminDeclineJob,
@@ -148,10 +153,15 @@ const statusBadgeColors: Record<SpecialServiceStatus, string> = {
 const sourceNameOf = (record: SpecialService) =>
 	record.initiatedBy === "agency"
 		? record.postingAgencyName || ""
-		: record.outletName;
+		: record.initiatedBy === "pr"
+			? record.postingPrName || ""
+			: record.outletName;
+
+const roleLabelOf = (initiatedBy: SpecialServiceInitiatedBy) =>
+	initiatedBy === "agency" ? "Agency" : initiatedBy === "pr" ? "PR" : "Outlet";
 
 const formatBudget = (budget: string | null) =>
-	budget != null && budget.trim() !== "" ? `RM ${budget}` : "—";
+	budget != null && budget.trim() !== "" ? `RM ${formatPrice(budget)}` : "—";
 
 function SpecialServicesPage() {
 	const { logout } = useAuth();
@@ -360,6 +370,7 @@ function SpecialServicesPage() {
 								<SourceToggle
 									className="sm:mr-auto"
 									value={sourceFilter}
+									sources={["outlet", "agency", "pr"]}
 									onChange={(value) => {
 										setSourceFilter(value);
 										setPage(1);
@@ -564,9 +575,9 @@ function SpecialServicesPage() {
 														</span>
 														<Badge
 															variant="outline"
-															className="w-fit capitalize text-muted-foreground"
+															className="w-fit text-muted-foreground"
 														>
-															{record.initiatedBy}
+															{roleLabelOf(record.initiatedBy)}
 														</Badge>
 													</div>
 												</TableCell>
@@ -814,8 +825,7 @@ function OrderEditForm({
 
 		const trimmedThirdParty = thirdParty.trim();
 		if (trimmedThirdParty !== (record.vendorName ?? "").trim()) {
-			input.vendorName =
-				trimmedThirdParty === "" ? null : trimmedThirdParty;
+			input.vendorName = trimmedThirdParty === "" ? null : trimmedThirdParty;
 		}
 
 		const prevScheduled = record.scheduledFor
@@ -865,16 +875,14 @@ function OrderEditForm({
 							<Label htmlFor="order-role">Role</Label>
 							<Input
 								id="order-role"
-								value={record.initiatedBy === "agency" ? "Agency" : "Outlet"}
+								value={roleLabelOf(record.initiatedBy)}
 								readOnly
 								disabled
 							/>
 						</div>
 						<div className="space-y-1.5">
 							<Label htmlFor="order-source-name">
-								{record.initiatedBy === "agency"
-									? "Agency name"
-									: "Outlet name"}
+								{`${roleLabelOf(record.initiatedBy)} name`}
 							</Label>
 							<Input
 								id="order-source-name"

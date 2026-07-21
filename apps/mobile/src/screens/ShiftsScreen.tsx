@@ -5,19 +5,25 @@
  * the tonight shift card. Identity comes from the backend; shift data mirrors
  * the prototype seeds until the backend models shifts.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   TODO_ITEMS,
-  TONIGHT_SHIFT,
-  UPCOMING_SHIFTS,
   fmtDFriendly,
   formatRM,
   getLastWeekAwaitingPv,
+  todayYmd,
+  ymdToIso,
   type DemoShift,
+  type Ymd,
 } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
+import {
+  fetchMySpecialServices,
+  fetchMyShiftAssignments,
+  type ShiftAssignmentRecord,
+} from '../lib/api';
 import { useViewportSize } from '../lib/viewport';
 import { TopBar } from '../components/TopBar';
 import { Section } from '../components/Section';
@@ -42,9 +48,77 @@ import { usePrNav } from '../lib/pr-nav';
 type HubView = 'shifts' | 'services';
 type SectionKey = 'today' | 'todo' | 'agency';
 
+function ymdFromIso(iso: string): Ymd {
+  const [y, m, d] = iso.split('-').map((n) => Number(n));
+  return [y, m, d];
+}
+
+/** Backend shift assignment -> the DemoShift shape the cards render. */
+function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
+  const onDuty = !!a.checkInAt && !a.checkOutAt;
+  const status: DemoShift['status'] =
+    a.status === 'completed'
+      ? 'complete'
+      : onDuty
+        ? 'on-duty'
+        : a.status === 'assigned'
+          ? 'pending'
+          : 'scheduled';
+  return {
+    id: a.id,
+    outlet: a.outletName ?? 'Outlet',
+    event: a.eventName ?? 'Shift',
+    date: ymdFromIso(a.shiftDate),
+    time: a.slot ?? '—',
+    payout: Number(a.payAmount) || 0,
+    logoPath: null,
+    status,
+  };
+}
+
 export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
-  const { me } = useSession();
+  const { me, token } = useSession();
   const { openPv } = usePrNav();
+  // Real count of this PR's service orders — keeps the Job postings badge in
+  // sync with the list inside the panel (both read the same backend rows).
+  const [jobCount, setJobCount] = useState(0);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchMySpecialServices(token)
+      .then((rows) => {
+        if (!cancelled) setJobCount(rows.length);
+      })
+      .catch(() => {
+        /* non-fatal — leave the badge hidden if the backend is unreachable */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // Real shift assignments for this PR (Shifts screen). Empty until an agency
+  // assigns the PR to a shift.
+  const [shifts, setShifts] = useState<DemoShift[]>([]);
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchMyShiftAssignments(token)
+      .then((rows) => {
+        if (!cancelled) setShifts(rows.map(assignmentToShift));
+      })
+      .catch(() => {
+        /* non-fatal — leave the list empty if the backend is unreachable */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  const todayIso = ymdToIso(...todayYmd());
+  const tonightShift = shifts.find((s) => ymdToIso(...s.date) === todayIso) ?? null;
+  const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
+
   const { phase } = useShiftSession();
   const { width } = useViewportSize();
   const [view, setView] = useState<HubView>('shifts');
@@ -84,18 +158,14 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     <View style={styles.screen}>
       <TopBar onOpenProfile={() => onNavigate('profile')} />
 
-      {/* PrPageHeader */}
+      {/* PrPageHeader — shifts skips the "AGENCY SHIFTS" eyebrow; services keeps its label */}
       <View style={styles.pageHeader}>
-        <View style={styles.headerLabelRow}>
-          {view === 'services' ? (
+        {view === 'services' && (
+          <View style={styles.headerLabelRow}>
             <Sparkles size={15} color={C.muted2} />
-          ) : (
-            <Briefcase size={15} color={C.muted2} />
-          )}
-          <Text style={styles.headerLabel}>
-            {view === 'services' ? 'AGENCY ADD-ON SERVICES' : 'AGENCY SHIFTS'}
-          </Text>
-        </View>
+            <Text style={styles.headerLabel}>AGENCY ADD-ON SERVICES</Text>
+          </View>
+        )}
         <View style={styles.headerTitleRow}>
           {view === 'services' ? (
             <Sparkles size={22} color={C.accent} />
@@ -129,14 +199,16 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
           <Text style={[styles.hubToggleText, view === 'services' && { color: C.violetL }]}>
             Job postings
           </Text>
-          <View style={styles.hubBadge}>
-            <Text style={styles.hubBadgeText}>2</Text>
-          </View>
+          {jobCount > 0 && (
+            <View style={styles.hubBadge}>
+              <Text style={styles.hubBadgeText}>{jobCount}</Text>
+            </View>
+          )}
         </Pressable>
       </View>
 
       {view === 'services' ? (
-        <JobPostingsPanel />
+        <JobPostingsPanel onOrdersCountChange={setJobCount} />
       ) : (
         <>
           {/* Hub strip — Today / To-do / Upcoming */}
@@ -157,7 +229,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
             />
             <HubTab
               label="UPCOMING"
-              value={String(UPCOMING_SHIFTS.length)}
+              value={String(upcomingCount)}
               valueColor={C.txt}
               on={open.agency}
               onPress={() => toggleHubSection('agency')}
@@ -171,21 +243,21 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               open={open.today}
               onToggle={(next) => toggleSection('today', next)}
             >
-              {phase === 'idle' ? (
-                <EmptyDashed>No shift scheduled for today.</EmptyDashed>
-              ) : (
+              {tonightShift ? (
                 <TonightCard
-                  shift={TONIGHT_SHIFT}
+                  shift={tonightShift}
                   eyebrow={
-                    phase === 'complete'
+                    tonightShift.status === 'complete'
                       ? 'COMPLETE'
-                      : phase === 'on_duty'
+                      : tonightShift.status === 'on-duty'
                         ? 'ON DUTY'
                         : 'TONIGHT'
                   }
                   cta={todayCta}
                   onCheckIn={() => onNavigate('checkin')}
                 />
+              ) : (
+                <EmptyDashed>No shift scheduled for today.</EmptyDashed>
               )}
             </Section>
 

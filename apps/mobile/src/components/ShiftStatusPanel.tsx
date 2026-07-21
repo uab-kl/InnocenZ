@@ -6,14 +6,9 @@ import React, { useMemo, useState } from 'react';
 import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
-import {
-  fmtAttendanceStamp,
-  shiftCommissionTotal,
-  shiftDurationLabel,
-  shiftPayoutTotal,
-  useShiftSession,
-  type ReceiptLog,
-} from '../lib/shift-session';
+import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
+import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
+import type { PrReceiptLine } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import {
   Camera,
@@ -27,35 +22,55 @@ import {
   Trash2,
 } from './icons';
 
-export function ShiftStatusPanel({ checkedOut }: { checkedOut: boolean }) {
+export function ShiftStatusPanel({
+  checkedOut,
+  checkInAt,
+  checkOutAt,
+  dutyWagesRm,
+  targetSalesRm,
+  dayKey,
+}: {
+  checkedOut: boolean;
+  /** Real attendance stamps from the backend assignment. */
+  checkInAt?: string | null;
+  checkOutAt?: string | null;
+  /** This shift's real daily wage (the assignment's payAmount). */
+  dutyWagesRm: number;
+  /** This tier's real sales target (RM) at this outlet, or null when unset. */
+  targetSalesRm?: number | null;
+  /** Scope the receipt rows to this day (YYYY-MM-DD) so the panel shows only
+   * THIS shift's earnings — and its total reconciles with the Payment
+   * "This week" column for the same day. */
+  dayKey?: string;
+}) {
   const { openScan } = usePrNav();
-  const {
-    checkedInAt,
-    checkedOutAt,
-    logs,
-    tierTargetRm,
-    dutyWagesRm,
-    prTier,
-    deleteReceiptLog,
-  } = useShiftSession();
+  // Receipt rows come from the backend current-week draft voucher, scoped to
+  // this shift's day so Check-In and Payment never disagree on the amount.
+  const { receiptLines: allLogs, deleteLine } = usePrEarnings();
+  const logs = useMemo(
+    () => (dayKey ? allLogs.filter((l) => l.lineDate === dayKey) : allLogs),
+    [allLogs, dayKey],
+  );
+
+  const checkedInAt = checkInAt ?? null;
+  const checkedOutAt = checkOutAt ?? null;
 
   const [statusOpen, setStatusOpen] = useState(true);
 
-  const salesLogged = useMemo(
-    () => logs.reduce((s, l) => s + l.amount, 0),
-    [logs],
-  );
-  const commissionTotal = useMemo(() => shiftCommissionTotal(logs), [logs]);
+  const commissionTotal = useMemo(() => receiptCommissionTotal(logs), [logs]);
+  // Real sales logged this shift (drink/tip sales), for the tier's target bar.
+  const salesLogged = useMemo(() => logs.reduce((s, l) => s + l.sales, 0), [logs]);
+  const targetPct =
+    targetSalesRm && targetSalesRm > 0
+      ? Math.min(100, Math.round((salesLogged / targetSalesRm) * 100))
+      : 0;
   const payoutTotal = useMemo(
-    () => shiftPayoutTotal(dutyWagesRm, logs),
-    [dutyWagesRm, logs],
+    () => Math.round((dutyWagesRm + commissionTotal) * 100) / 100,
+    [dutyWagesRm, commissionTotal],
   );
   const pendingCount = logs.filter((l) => l.pending).length;
   const wagesFinalized = checkedOut;
 
-  const remaining = Math.max(0, tierTargetRm - salesLogged);
-  const targetMet = remaining <= 0;
-  const targetPct = Math.min(100, tierTargetRm > 0 ? (salesLogged / tierTargetRm) * 100 : 0);
   const durationLabel = checkedOut
     ? shiftDurationLabel(checkedInAt, checkedOutAt)
     : 'In progress';
@@ -82,27 +97,20 @@ export function ShiftStatusPanel({ checkedOut }: { checkedOut: boolean }) {
         <TimeCell label="DURATION" value={durationLabel} />
       </View>
 
-      <View style={styles.targets}>
-        <Text style={styles.targetsLabel}>
-          {targetMet ? 'SHIFT TARGET' : 'TO TARGET'} · {prTier.toUpperCase()}
-        </Text>
-        <View style={styles.targetPrice}>
-          {targetMet ? (
-            <>
-              <Text style={[styles.targetV, { color: C.green }]}>Met</Text>
-              <Text style={styles.targetT}>{formatRM(tierTargetRm)}</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.targetV}>{formatRM(remaining)}</Text>
-              <Text style={styles.targetT}>left · target {formatRM(tierTargetRm)}</Text>
-            </>
-          )}
+      {targetSalesRm != null && targetSalesRm > 0 && (
+        <View style={styles.targets}>
+          <Text style={styles.targetsLabel}>SALES TARGET</Text>
+          <View style={styles.targetPrice}>
+            <Text style={styles.targetV}>{formatRM(salesLogged)}</Text>
+            <Text style={styles.targetT}>
+              of {formatRM(targetSalesRm)} · {targetPct}%
+            </Text>
+          </View>
+          <View style={styles.bar}>
+            <View style={[styles.barFill, { width: `${targetPct}%` as unknown as number }]} />
+          </View>
         </View>
-        <View style={styles.bar}>
-          <View style={[styles.barFill, { width: `${targetPct}%` as unknown as number }]} />
-        </View>
-      </View>
+      )}
 
       {!checkedOut && (
         <View style={styles.scanRows}>
@@ -167,24 +175,27 @@ export function ShiftStatusPanel({ checkedOut }: { checkedOut: boolean }) {
                 {!checkedOut && <View style={styles.colAct} />}
               </View>
 
-              {logs.map((log) => (
-                <LogRow
-                  key={log.id}
-                  log={log}
-                  checkedOut={checkedOut}
-                  onEdit={() => openScan(log.category, 'selflog', log.id)}
-                  onRescan={() => openScan(log.category, 'scan', log.id)}
-                  onDelete={() => deleteReceiptLog(log.id)}
-                />
-              ))}
+              {logs.map((log) => {
+                const cat = log.kind === 'tips' ? 'tips' : 'drinks';
+                return (
+                  <LogRow
+                    key={log.id}
+                    log={log}
+                    checkedOut={checkedOut}
+                    onEdit={() => openScan(cat, 'selflog', log.id)}
+                    onRescan={() => openScan(cat, 'scan', log.id)}
+                    onDelete={() => void deleteLine(log.id)}
+                  />
+                );
+              })}
 
               <View style={styles.trFoot}>
                 <View style={styles.totalsBlock}>
                   <Text style={styles.totalsLabel}>TOTALS</Text>
                   <Text style={styles.totalsHint} numberOfLines={1}>
                     {wagesFinalized
-                      ? `Payout ${formatRM(payoutTotal)} · shift pay + commission`
-                      : 'Total excluding wages & OT'}
+                      ? `Payout ${formatRM(payoutTotal)} · wage ${formatRM(dutyWagesRm)} + comm`
+                      : `Projected ${formatRM(payoutTotal)} · wage ${formatRM(dutyWagesRm)} + comm`}
                   </Text>
                 </View>
                 <Text style={[styles.td, styles.colComm, styles.totalsComm]}>
@@ -254,30 +265,43 @@ function LogRow({
   onRescan,
   onDelete,
 }: {
-  log: ReceiptLog;
+  log: PrReceiptLine;
   checkedOut: boolean;
   onEdit: () => void;
   onRescan: () => void;
   onDelete: () => void;
 }) {
+  // Check-out seals (overtime) aren't receipts — no edit/scan, shown as Sealed.
+  const isSeal = log.source === 'checkin';
+  const sourceLabel = isSeal
+    ? 'Check-in'
+    : log.source === 'manual'
+      ? 'Manual entry'
+      : 'Receipt scan';
+  const refLabel = log.kind === 'tips' ? 'Tip' : log.kind === 'others' ? 'OT' : 'Drink';
   return (
     <View style={[styles.tr, log.pending && styles.trSelflog]}>
       <View style={styles.colRef}>
         <Text style={styles.tdLabel}>
-          {log.category === 'tips' ? 'Tip' : 'Drink'} · {formatRM(log.amount)}
+          {refLabel} · {formatRM(log.sales)}
         </Text>
         <Text style={styles.tdDetail}>{fmtAttendanceStamp(log.at)}</Text>
       </View>
       <Text style={[styles.td, styles.colItem]} numberOfLines={1}>
         {log.item}
       </Text>
-      <Text style={[styles.td, styles.colQty]}>{log.qty}</Text>
-      <Text style={[styles.td, styles.colSrc]}>{log.source}</Text>
+      <Text style={[styles.td, styles.colQty]}>{log.quantity}</Text>
+      <Text style={[styles.td, styles.colSrc]}>{sourceLabel}</Text>
       <Text style={[styles.td, styles.colComm, { color: C.accentL }]}>
         {formatRM(log.commission)}
       </Text>
       <View style={styles.colVerify}>
-        {log.pending ? (
+        {isSeal ? (
+          <View style={styles.badgeSealed}>
+            <Shield size={10} color={C.violetL} />
+            <Text style={styles.badgeSealedText}>Sealed</Text>
+          </View>
+        ) : log.pending ? (
           <View style={styles.badgePending}>
             <Clock size={10} color={C.amber} />
             <Text style={styles.badgePendingText}>Pending</Text>
@@ -291,7 +315,7 @@ function LogRow({
       </View>
       {!checkedOut && (
         <View style={styles.colAct}>
-          {log.pending ? (
+          {isSeal ? null : log.pending ? (
             <>
               <Pressable onPress={onEdit} hitSlop={6}>
                 <Pencil size={13} color={C.goldL} />

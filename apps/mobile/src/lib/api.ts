@@ -10,31 +10,15 @@ import Constants from 'expo-constants';
 const DEFAULT_BACKEND_PORT = 7777;
 
 function detectApiUrl(): string {
-  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim()?.replace(/\/$/, '');
-  const loc = (globalThis as { location?: { protocol: string; hostname: string } }).location;
+  const fromEnv = process.env.EXPO_PUBLIC_API_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
 
-  // Web: match API host to the page host. EXPO_PUBLIC_API_URL is often set to the
-  // LAN IP for Expo Go on a phone; opening the app at localhost:8081 must still
-  // call localhost:7777, not 192.168.x.x (often blocked or unreachable from the browser).
+  const loc = (globalThis as { location?: { protocol: string; hostname: string } }).location;
   if (Platform.OS === 'web' && loc) {
-    const pageHost = loc.hostname;
-    if (pageHost === 'localhost' || pageHost === '127.0.0.1') {
-      return `${loc.protocol}//${pageHost}:${DEFAULT_BACKEND_PORT}/api`;
-    }
-    if (fromEnv) {
-      try {
-        const envHost = new URL(fromEnv).hostname;
-        if (pageHost === envHost) return fromEnv;
-      } catch {
-        /* ignore malformed env URL */
-      }
-    }
-    return `${loc.protocol}//${pageHost}:${DEFAULT_BACKEND_PORT}/api`;
+    return `${loc.protocol}//${loc.hostname}:${DEFAULT_BACKEND_PORT}/api`;
   }
 
-  if (fromEnv) return fromEnv;
-
-  // Native: Metro host is the dev machine's LAN IP.
+  // Native: the Metro host serving the bundle is the dev machine's LAN IP.
   const hostUri = Constants.expoConfig?.hostUri ?? '';
   const host = hostUri.split(':')[0];
   return `http://${host || 'localhost'}:${DEFAULT_BACKEND_PORT}/api`;
@@ -245,6 +229,231 @@ export async function uploadUserPortfolioPhoto(
  * while user.phone_num stores E.164-style "+60123456789" — try sensible
  * candidates in order.
  */
+/**
+ * A special-service / job-posting row as the backend returns it. PR-initiated
+ * postings (initiatedBy 'pr') carry the money budget the PR entered; the admin
+ * portal reads the same rows.
+ */
+export type SpecialServiceRecord = {
+  id: string;
+  title: string;
+  category: string;
+  description: string | null;
+  budget: string | null;
+  status: string;
+  initiatedBy: string;
+  postingPrName: string | null;
+  scheduledFor: string | null;
+  createdAt: string;
+};
+
+export type CreatePrServiceInput = {
+  title: string;
+  category: string;
+  description?: string | null;
+  /** Money budget the PR attaches to the service (RM). */
+  budget?: number;
+  /** ISO datetime for the requested service time. */
+  scheduledFor?: string | null;
+};
+
+/**
+ * Raise a PR service order to the admin. The backend resolves this PR's pr.id
+ * from the signed-in account, so the client never sends it.
+ */
+export function createPrSpecialService(
+  accessToken: string,
+  input: CreatePrServiceInput,
+): Promise<SpecialServiceRecord> {
+  return request<SpecialServiceRecord>('/special-service', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ ...input, initiatedBy: 'pr' }),
+  });
+}
+
+/** This PR's own service orders — the same rows the admin portal shows. */
+export function fetchMySpecialServices(accessToken: string): Promise<SpecialServiceRecord[]> {
+  return request<SpecialServiceRecord[]>('/special-service/mine', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * The rate card resolved for this PR's tier at the shift's outlet (per-shift
+ * override folded over the outlet workspace default). Numeric fields stay as the
+ * backend's fixed(2) strings — parse like `payPerHour`. Null when the outlet has
+ * no workspace/tier row configured; `overridden` flags a per-shift override.
+ */
+export type ShiftAssignmentRate = {
+  wagePerHour: string | null;
+  /** Normal-hour drink commission %. */
+  drinkPct: string;
+  /** Happy-hour drink commission % (null → use drinkPct in HH too). */
+  happyHourDrinkPct: string | null;
+  tipPct: string;
+  otAfterHours: string | null;
+  targetSalesRm: string | null;
+  /** 'HH:MM' or '' when the outlet set no happy-hour window. */
+  happyHourStart: string;
+  happyHourEnd: string;
+  overridden: boolean;
+};
+
+/** One drink on the shift outlet's menu (from outlet_drink_menu). */
+export type OutletDrinkItem = {
+  /** Menu slug — the mobile self-log keys quantities on it. */
+  id: string;
+  name: string;
+  priceRm: string;
+};
+
+/** One of this PR's shift assignments, with the shift + outlet context. */
+export type ShiftAssignmentRecord = {
+  id: string;
+  status: string;
+  payAmount: string;
+  checkInAt: string | null;
+  checkOutAt: string | null;
+  /** Shift day as YYYY-MM-DD. */
+  shiftDate: string;
+  slot: string | null;
+  eventName: string | null;
+  payPerHour: string;
+  outletName: string | null;
+  /** This PR's tier (pr_tier enum), e.g. 'tier_5' / 'commission_only'. */
+  tier: string;
+  /** Resolved rate card for this PR's tier at this outlet, or null if unset. */
+  rate: ShiftAssignmentRate | null;
+  /** The shift outlet's real drink menu (empty when no workspace menu). */
+  drinkMenu: OutletDrinkItem[];
+};
+
+/** This PR's shift assignments (mobile Shifts screen), scoped server-side. */
+export function fetchMyShiftAssignments(accessToken: string): Promise<ShiftAssignmentRecord[]> {
+  return request<ShiftAssignmentRecord[]>('/shift-assignment/mine', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Stamp check-in on one of this PR's own assignments (Check-In screen). The
+ * backend sets check_in_at server-side and verifies the assignment is the
+ * caller's, so the client sends only the assignment id.
+ */
+export function checkInShiftAssignment(
+  accessToken: string,
+  assignmentId: string,
+): Promise<ShiftAssignmentRecord> {
+  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/check-in`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** Stamp check-out (seals the assignment as completed) — see checkInShiftAssignment. */
+export function checkOutShiftAssignment(
+  accessToken: string,
+  assignmentId: string,
+): Promise<ShiftAssignmentRecord> {
+  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/check-out`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * One earning entry on the PR's current-week voucher (reused
+ * payment_voucher_line). `kind` splits the Payment week grid; `pending` self-logs
+ * await agency verification. `commission` is what feeds the voucher net; `sales`
+ * is the gross figure shown on the receipt row only.
+ */
+export type PrReceiptKind = 'wages' | 'drinks' | 'tips' | 'others';
+export type PrReceiptSource = 'scan' | 'manual' | 'checkin';
+
+export type PrReceiptLine = {
+  id: string;
+  kind: PrReceiptKind;
+  source: PrReceiptSource;
+  item: string;
+  quantity: number;
+  sales: number;
+  commission: number;
+  /** Shift day as YYYY-MM-DD. */
+  lineDate: string | null;
+  outlet: string | null;
+  /** ISO timestamp the line was logged. */
+  at: string;
+  pending: boolean;
+};
+
+/** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */
+export type PrCurrentWeek = {
+  voucherId: string | null;
+  /** Mon–Sun window (YYYY-MM-DD) the server bucketed the lines into. */
+  weekStart: string;
+  weekEnd: string;
+  net: string;
+  status: string | null;
+  lines: PrReceiptLine[];
+};
+
+export type PrReceiptLineInput = {
+  kind: PrReceiptKind;
+  source: PrReceiptSource;
+  item: string;
+  quantity?: number;
+  sales: number;
+  commission: number;
+  lineDate?: string;
+  outlet?: string;
+  /** For wages: the assignment id, so a repeated check-out never double-seals. */
+  dedupeRef?: string;
+};
+
+export function fetchMyCurrentWeek(accessToken: string): Promise<PrCurrentWeek> {
+  return request<PrCurrentWeek>('/payment-voucher/mine/current-week', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** The PR's previous-week voucher (Payment "Last week") — same shape, real data. */
+export function fetchMyLastWeek(accessToken: string): Promise<PrCurrentWeek> {
+  return request<PrCurrentWeek>('/payment-voucher/mine/last-week', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+export function addMyReceiptLine(
+  accessToken: string,
+  input: PrReceiptLineInput,
+): Promise<PrReceiptLine> {
+  return request<PrReceiptLine>('/payment-voucher/mine/lines', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateMyReceiptLine(
+  accessToken: string,
+  lineId: string,
+  input: Partial<PrReceiptLineInput>,
+): Promise<PrReceiptLine> {
+  return request<PrReceiptLine>(`/payment-voucher/mine/lines/${lineId}`, {
+    method: 'PATCH',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+export function deleteMyReceiptLine(accessToken: string, lineId: string): Promise<null> {
+  return request<null>(`/payment-voucher/mine/lines/${lineId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
 export function phoneCandidates(rawId: string): string[] {
   const raw = rawId.trim();
   if (raw.includes('@')) return [raw];

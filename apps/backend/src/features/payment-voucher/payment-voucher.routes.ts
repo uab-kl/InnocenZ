@@ -4,6 +4,15 @@ import { requireRole } from '@/middlewares/require-role.js';
 
 const router = Router();
 
+// A signed-in PR reads/mutates ONLY its own current-week draft voucher, scoped
+// server-side by pr.id — so these sit outside the agency/admin guard below and
+// must precede it (and the '/:id' route).
+router.get('/mine/current-week', paymentVoucherController.getMyCurrentWeek.bind(paymentVoucherController));
+router.get('/mine/last-week', paymentVoucherController.getMyLastWeek.bind(paymentVoucherController));
+router.post('/mine/lines', paymentVoucherController.addMyLine.bind(paymentVoucherController));
+router.patch('/mine/lines/:lineId', paymentVoucherController.updateMyLine.bind(paymentVoucherController));
+router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(paymentVoucherController));
+
 // Payment vouchers are an agency (or admin) function; scoping to the caller's
 // own agency is enforced in the controller.
 router.use(requireRole('admin', 'agency'));

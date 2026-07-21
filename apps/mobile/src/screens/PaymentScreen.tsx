@@ -2,7 +2,7 @@
  * Payment — port of InnocenZ-proto `/host/PaymentVoucher`:
  * Payroll header, week tabs, LAST WEEK card with full pay grid + dispute taps.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   Image,
   Modal,
@@ -16,16 +16,15 @@ import {
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
-  buildLastWeekPayGrid,
-  buildThisWeekPayGrid,
   formatRM,
-  getLastWeekAwaitingPv,
   weekPayGridTotal,
   weekPvIssueDayLabel,
   weekRangeLabel,
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
-import { useShiftSession } from '../lib/shift-session';
+import { usePrEarnings } from '../lib/pr-earnings';
+import { fetchMyLastWeek, type PrCurrentWeek, type PrReceiptLine } from '../lib/api';
+import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { useViewportSize } from '../lib/viewport';
 import { TopBar } from '../components/TopBar';
@@ -116,22 +115,101 @@ function formatCell(value: number): string {
   return value.toFixed(2);
 }
 
+const WEEKDAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+/** Statuses that mean the agency has already processed the week's voucher. */
+const VERIFIED_STATUSES = ['sent', 'awaiting_pr', 'signed', 'paid'];
+
+/**
+ * A week's Payment grid built from real backend voucher lines — the replacement
+ * for the demo `buildThisWeekPayGrid` / `buildLastWeekPayGrid`. Buckets each
+ * line by its day and kind (wages / drinks / tips / others). A day with any line
+ * reads verified once the agency has processed the voucher, otherwise pending.
+ * All-UTC so the day columns never TZ-shift.
+ */
+function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay[] {
+  if (!week) return [];
+  const verified = week.status !== null && VERIFIED_STATUSES.includes(week.status);
+  const byIso = new Map<string, PrReceiptLine[]>();
+  for (const line of week.lines) {
+    const key = line.lineDate ?? week.weekStart;
+    const arr = byIso.get(key) ?? [];
+    arr.push(line);
+    byIso.set(key, arr);
+  }
+  const start = new Date(`${week.weekStart}T00:00:00Z`);
+  const days: WeeklyDayPay[] = [];
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start);
+    d.setUTCDate(start.getUTCDate() + i);
+    const iso = d.toISOString().slice(0, 10);
+    const dayLines = byIso.get(iso) ?? [];
+    const sumKind = (kind: PrReceiptLine['kind']) =>
+      dayLines.filter((l) => l.kind === kind).reduce((s, l) => s + l.commission, 0);
+    days.push({
+      day: WEEKDAY_ABBR[d.getUTCDay()],
+      date: d.getUTCDate(),
+      dateIso: iso,
+      wages: sumKind('wages'),
+      drinks: sumKind('drinks'),
+      tips: sumKind('tips'),
+      others: sumKind('others'),
+      status: dayLines.length > 0 ? (verified ? 'verified' : 'pending') : 'empty',
+    });
+  }
+  return days;
+}
+
 export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
-  const { openPv } = usePrNav();
-  const { weekRecords } = useShiftSession();
+  const { openPv, route } = usePrNav();
+  const { token } = useSession();
+  const { current, refresh: refreshEarnings } = usePrEarnings();
   const { isSigned } = useSignedPvs();
   const { width } = useViewportSize();
   const titleSize = Math.min(28, Math.max(22.4, width * 0.052));
-  const thisGrid = useMemo(() => buildThisWeekPayGrid(weekRecords), [weekRecords]);
+  const thisGrid = useMemo(() => buildWeekGridFromLines(current), [current]);
   const thisWeekTotal = useMemo(() => weekPayGridTotal(thisGrid), [thisGrid]);
   const thisPendingDays = thisGrid.filter((d) => d.status === 'pending').length;
   const hasThisWeekRows = thisPendingDays > 0;
 
+  // Last week's voucher comes from the same backend as this week — real data,
+  // no demo grid. Fetched once on mount (it rarely changes mid-session).
+  const [lastWeek, setLastWeek] = useState<PrCurrentWeek | null>(null);
+  useEffect(() => {
+    if (!token) return;
+    let alive = true;
+    void fetchMyLastWeek(token)
+      .then((w) => {
+        if (alive) setLastWeek(w);
+      })
+      .catch(() => {
+        if (alive) setLastWeek(null);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  // Check-out lands here with paymentWeek: 'current' so This week (sealed
+  // shift) is visible immediately — not Last week.
+  const focusWeek =
+    route.name === 'tabs' && route.tab === 'payment' ? route.paymentWeek : undefined;
   const [weekTab, setWeekTab] = useState<WeekTab>(() =>
-    hasThisWeekRows ? 'current' : 'last',
+    focusWeek === 'current' || (!focusWeek && hasThisWeekRows) ? 'current' : 'last',
   );
   const [lastOpen, setLastOpen] = useState(true);
   const [thisOpen, setThisOpen] = useState(true);
+
+  useEffect(() => {
+    if (focusWeek === 'current') {
+      setWeekTab('current');
+      setThisOpen(true);
+      void refreshEarnings();
+    } else if (focusWeek === 'last') {
+      setWeekTab('last');
+      setLastOpen(true);
+    }
+  }, [focusWeek, refreshEarnings]);
   const [disputedKeys, setDisputedKeys] = useState<Set<string>>(() => new Set());
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeMode, setDisputeMode] = useState<'dispute' | 'withdraw'>('dispute');
@@ -145,12 +223,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const lastLabel = weekRangeLabel(1);
   const thisLabel = weekRangeLabel(0);
   const issueDay = weekPvIssueDayLabel(0);
-  const grid = useMemo(() => buildLastWeekPayGrid(), []);
+  const grid = useMemo(() => buildWeekGridFromLines(lastWeek), [lastWeek]);
   const weekTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
   const verifiedDays = grid.filter((d) => d.status === 'verified').length;
-  const lastWeekPv = useMemo(() => getLastWeekAwaitingPv(), []);
+  const hasLastWeekRows = grid.some((d) => d.status !== 'empty');
+  // Only a real, agency-sent voucher the PR hasn't signed yet is reviewable.
   const awaiting =
-    lastWeekPv.status === 'awaiting_pr' && !isSigned(lastWeekPv.id) ? lastWeekPv : undefined;
+    lastWeek?.voucherId &&
+    (lastWeek.status === 'awaiting_pr' || lastWeek.status === 'sent') &&
+    !isSigned(lastWeek.voucherId)
+      ? { id: lastWeek.voucherId, net: Number(lastWeek.net) }
+      : undefined;
   const reviewAmount = weekTotal > 0 ? weekTotal : awaiting?.net ?? 0;
 
   const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
@@ -257,7 +340,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>LAST WEEK</Text>
-                <Pill variant="amber">SENT</Pill>
+                {lastWeek?.status && (
+                  <Pill variant={verifiedDays > 0 ? 'green' : 'amber'}>
+                    {lastWeek.status === 'paid'
+                      ? 'PAID'
+                      : lastWeek.status === 'signed'
+                        ? 'SIGNED'
+                        : verifiedDays > 0
+                          ? 'SENT'
+                          : 'PENDING'}
+                  </Pill>
+                )}
                 <Text style={styles.sectionFrac}>
                   {verifiedDays}/7
                 </Text>
@@ -377,15 +470,23 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </View>
               </ScrollView>
 
-              <Text style={styles.disputeHint}>
-                Tap any amount to dispute · tap a{' '}
-                <Text style={{ color: C.red }}>red</Text> amount to withdraw a mistaken dispute.
-              </Text>
+              {hasLastWeekRows ? (
+                <>
+                  <Text style={styles.disputeHint}>
+                    Tap any amount to dispute · tap a{' '}
+                    <Text style={{ color: C.red }}>red</Text> amount to withdraw a mistaken dispute.
+                  </Text>
 
-              <Text style={styles.footNote}>
-                PV issued every Sunday · Total{' '}
-                <Text style={styles.footTotal}>{formatRM(reviewAmount)}</Text>
-              </Text>
+                  <Text style={styles.footNote}>
+                    PV issued every Sunday · Total{' '}
+                    <Text style={styles.footTotal}>{formatRM(reviewAmount)}</Text>
+                  </Text>
+                </>
+              ) : (
+                <Text style={styles.emptyWeekHint}>
+                  No PV for last week yet — this week’s PV is issued next Sunday.
+                </Text>
+              )}
 
               {awaiting && (
                 <IzButton

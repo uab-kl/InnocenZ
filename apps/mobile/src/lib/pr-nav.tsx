@@ -8,8 +8,10 @@ import type { PrTab } from '../components/BottomNav';
 export type ScanCategory = 'drinks' | 'tips';
 export type ScanMode = 'scan' | 'selflog';
 
+export type PaymentWeekFocus = 'current' | 'last';
+
 export type PrRoute =
-  | { name: 'tabs'; tab: PrTab }
+  | { name: 'tabs'; tab: PrTab; paymentWeek?: PaymentWeekFocus }
   | {
       name: 'scan';
       category: ScanCategory;
@@ -19,9 +21,14 @@ export type PrRoute =
   | { name: 'pvDetail'; pvId: string }
   | { name: 'security' };
 
+type SetTabOptions = {
+  /** When opening Payment after check-out, land on This week (or Last week). */
+  paymentWeek?: PaymentWeekFocus;
+};
+
 type PrNavState = {
   route: PrRoute;
-  setTab: (tab: PrTab) => void;
+  setTab: (tab: PrTab, opts?: SetTabOptions) => void;
   openScan: (category: ScanCategory, mode: ScanMode, editId?: string) => void;
   openPv: (pvId: string) => void;
   openSecurity: () => void;
@@ -36,9 +43,13 @@ export function PrNavProvider({ children }: { children: React.ReactNode }) {
   const [route, setRoute] = useState<PrRoute>({ name: 'tabs', tab: 'shifts' });
   const [stack, setStack] = useState<PrRoute[]>([]);
 
-  const setTab = useCallback((tab: PrTab) => {
+  const setTab = useCallback((tab: PrTab, opts?: SetTabOptions) => {
     setStack([]);
-    setRoute({ name: 'tabs', tab });
+    setRoute({
+      name: 'tabs',
+      tab,
+      ...(tab === 'payment' && opts?.paymentWeek ? { paymentWeek: opts.paymentWeek } : {}),
+    });
   }, []);
 
   const openScan = useCallback((category: ScanCategory, mode: ScanMode, editId?: string) => {

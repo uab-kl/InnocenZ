@@ -260,6 +260,27 @@
       "when": 1784500000020,
       "tag": "0036_subscription_type_and_role",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1784500000021,
+      "tag": "0037_special_service_pr_posting",
+      "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "7",
+      "when": 1784500000022,
+      "tag": "0038_pr_tier_7_tiers",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "7",
+      "when": 1784500000023,
+      "tag": "0039_shift_pay_tier",
+      "breakpoints": true
     }
   ]
 }

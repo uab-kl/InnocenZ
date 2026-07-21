@@ -1,9 +1,47 @@
 import { z } from 'zod';
 import { shiftStatusValues, shiftEventKindValues } from '@/features/shift/shift.model';
+import { tierRateKindValues } from '@/features/outlet-workspace/outlet-workspace.model';
 
 // Accept a non-negative number from the client and store it as a fixed(2) string,
 // matching the numeric(12,2) columns.
 const money = z.number().nonnegative().transform((n) => n.toFixed(2));
+
+// Nullable numeric → fixed(2) string or null (for columns that may be unset).
+const optionalNumeric = z
+  .number()
+  .min(0)
+  .nullish()
+  .transform((n) => (n == null ? null : n.toFixed(2)));
+
+// Required percentage → fixed(2) string, defaulting to '0' (numeric(6,2) NOT NULL).
+const requiredPct = z
+  .number()
+  .min(0)
+  .optional()
+  .default(0)
+  .transform((n) => n.toFixed(2));
+
+/**
+ * One per-shift pay-tier override the outlet composes at post time. Mirrors an
+ * `outlet_tier_rate` row plus the requested `prCount`; the output shape matches
+ * the repo's `ShiftPayTierInput` (numeric columns as fixed(2) strings).
+ */
+const ShiftPayTierSchema = z.object({
+  kind: z.enum(tierRateKindValues).default('tier'),
+  tier: z
+    .string()
+    .max(50)
+    .nullish()
+    .transform((v) => v ?? null),
+  wagePerHour: optionalNumeric,
+  drinkPct: requiredPct,
+  happyHourDrinkPct: optionalNumeric,
+  tipPct: requiredPct,
+  otAfterHours: optionalNumeric,
+  targetSalesRm: optionalNumeric,
+  prCount: z.number().int().nonnegative().optional().default(0),
+  sortOrder: z.number().int().nonnegative().optional().default(0),
+});
 
 export const CreateShiftSchema = z.object({
   // Optional: derived from the caller's agency for agency users; required for admin.
@@ -20,6 +58,9 @@ export const CreateShiftSchema = z.object({
   payPerHour: money.optional(),
   estimatedCost: money.optional(),
   liveSales: money.optional(),
+  // Per-shift rate overrides (Post Job pay-tier rows). Omit to keep the outlet's
+  // workspace defaults; an empty array clears any existing overrides on update.
+  payTiers: z.array(ShiftPayTierSchema).optional(),
 });
 
 export const UpdateShiftSchema = CreateShiftSchema.partial().extend({

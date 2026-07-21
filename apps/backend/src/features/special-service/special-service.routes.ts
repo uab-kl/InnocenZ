@@ -11,6 +11,7 @@ router.get(
   specialServiceController.listAdminPending.bind(specialServiceController),
 );
 router.get('/', specialServiceController.list.bind(specialServiceController));
+router.get('/mine', specialServiceController.listMine.bind(specialServiceController));
 router.get('/:id', specialServiceController.getById.bind(specialServiceController));
 router.post('/', specialServiceController.create.bind(specialServiceController));
 router.patch('/:id/assign', specialServiceController.assign.bind(specialServiceController));
