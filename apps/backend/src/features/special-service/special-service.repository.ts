@@ -1,6 +1,7 @@
 import { and, asc, desc, eq, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
+import { PrTable } from '@/features/pr/pr.model.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
 import { buildMultiDayWhere } from '@/util/filter-date-format.js';
@@ -37,6 +38,8 @@ const selectWithOutlet = {
   adminAccepted: SpecialServiceTable.adminAccepted,
   postingAgencyId: SpecialServiceTable.postingAgencyId,
   postingAgencyName: SpecialServiceTable.postingAgencyName,
+  postingPrId: SpecialServiceTable.postingPrId,
+  postingPrName: PrTable.name,
   vendorName: SpecialServiceTable.vendorName,
   scheduledFor: SpecialServiceTable.scheduledFor,
   createdAt: SpecialServiceTable.createdAt,
@@ -53,6 +56,7 @@ export class SpecialServiceRepositoryClass {
     if (filter?.category) conditions.push(eq(SpecialServiceTable.category, filter.category));
     if (filter?.vendorName) conditions.push(eq(SpecialServiceTable.vendorName, filter.vendorName));
     if (filter?.initiatedBy) conditions.push(eq(SpecialServiceTable.initiatedBy, filter.initiatedBy));
+    if (filter?.postingPrId) conditions.push(eq(SpecialServiceTable.postingPrId, filter.postingPrId));
     if (filter?.adminAccepted)
       conditions.push(eq(SpecialServiceTable.adminAccepted, filter.adminAccepted));
     const requestedOn = buildMultiDayWhere(SpecialServiceTable.createdAt, filter?.dates);
@@ -83,6 +87,7 @@ export class SpecialServiceRepositoryClass {
         .select(selectWithOutlet)
         .from(SpecialServiceTable)
         .leftJoin(OutletTable, eq(OutletTable.id, SpecialServiceTable.outletId))
+        .leftJoin(PrTable, eq(PrTable.id, SpecialServiceTable.postingPrId))
         .where(whereClause)
         .orderBy(
           order === 'asc'
@@ -105,6 +110,7 @@ export class SpecialServiceRepositoryClass {
         .select(selectWithOutlet)
         .from(SpecialServiceTable)
         .leftJoin(OutletTable, eq(OutletTable.id, SpecialServiceTable.outletId))
+        .leftJoin(PrTable, eq(PrTable.id, SpecialServiceTable.postingPrId))
         .where(eq(SpecialServiceTable.id, id))
         .limit(1);
       return row ?? null;

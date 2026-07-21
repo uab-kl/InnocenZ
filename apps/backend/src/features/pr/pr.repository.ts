@@ -44,6 +44,22 @@ export class PrRepositoryClass {
     }
   }
 
+  /** The PR record linked to a user account — how a signed-in PR resolves its
+   * own pr.id server-side (PRs cannot read the /pr list). */
+  async getByUserId(userId: string): Promise<PrType | null> {
+    try {
+      const [pr] = await db
+        .select()
+        .from(PrTable)
+        .where(eq(PrTable.userId, userId))
+        .limit(1);
+      return pr ?? null;
+    } catch (error) {
+      logger.error('[PrRepository.getByUserId] Error:', error);
+      return null;
+    }
+  }
+
   async update(
     id: string,
     data: Partial<PrInsertType>,

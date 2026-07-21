@@ -2,9 +2,14 @@ import { and, asc, eq, gte, inArray, lte, notInArray, sql, SQL } from 'drizzle-o
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
-import { ShiftTable } from '@/features/shift/shift.model';
+import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { PrTable } from '@/features/pr/pr.model';
+import {
+  OutletDrinkMenuTable,
+  OutletTierRateTable,
+  OutletWorkspaceTable,
+} from '@/features/outlet-workspace/outlet-workspace.model';
 import {
   ShiftAssignmentTable,
   ShiftAssignmentInsertType,
@@ -15,9 +20,44 @@ import {
   ShiftCostPrDayTotals,
 } from './shift-assignment.model';
 
-// A PR pulled off the floor (cancelled) or a no-show earned no wage for the
-// shift — the report's cost side excludes both, mirroring the revenue side.
-const NON_STAFFING_STATUSES = ['cancelled', 'no_show'] as const;
+/**
+ * The rate card resolved for one PR tier at one outlet. Numeric columns stay as
+ * their raw string form (matching Drizzle's numeric select), so the mobile app
+ * parses them the same way it already parses `payPerHour`/`payAmount`. Any field
+ * is null when the outlet left it unset (e.g. commission-only has no wage/OT).
+ */
+export type ResolvedTierRate = {
+  wagePerHour: string | null;
+  drinkPct: string; // normal-hour drink commission %
+  happyHourDrinkPct: string | null; // happy-hour drink commission %
+  tipPct: string;
+  otAfterHours: string | null;
+  targetSalesRm: string | null;
+  happyHourStart: string; // 'HH:MM' or '' when no window set
+  happyHourEnd: string;
+};
+
+/**
+ * A per-shift rate override — the same rate fields as a workspace tier rate but
+ * without the happy-hour window (a shift override never moves the window; it
+ * always comes from the outlet workspace). Any field null means "not overridden
+ * — fall back to the workspace default".
+ */
+export type ShiftTierOverride = Omit<
+  ResolvedTierRate,
+  'happyHourStart' | 'happyHourEnd'
+>;
+
+/**
+ * One drink the PR can self-log at an outlet. `id` carries the menu slug (the
+ * mobile app keys quantities on it); `priceRm` stays a numeric string, parsed
+ * client-side like the other money fields. Sourced from `outlet_drink_menu`.
+ */
+export type ResolvedDrinkItem = {
+  id: string;
+  name: string;
+  priceRm: string;
+};
 
 export class ShiftAssignmentRepositoryClass {
   async create(
@@ -140,6 +180,210 @@ export class ShiftAssignmentRepositoryClass {
       return { assignments, totalCount };
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.listPaginated] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Every shift assignment for one PR, with the shift + outlet context the PR
+   * app renders (date, slot/time, event, pay). Outlet name is joined from the
+   * FK, never copied onto the row. Chronological by shift date.
+   */
+  async listForPr(prId: string): Promise<
+    Array<
+      ShiftAssignmentType & {
+        shiftDate: string;
+        slot: string | null;
+        eventName: string | null;
+        payPerHour: string;
+        outletId: string;
+        outletName: string | null;
+      }
+    >
+  > {
+    try {
+      const rows = await db
+        .select({
+          assignment: ShiftAssignmentTable,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          eventName: ShiftTable.eventName,
+          payPerHour: ShiftTable.payPerHour,
+          outletId: ShiftTable.outletId,
+          outletName: OutletTable.name,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(eq(ShiftAssignmentTable.prId, prId))
+        .orderBy(ShiftTable.shiftDate);
+      return rows.map((row) => ({
+        ...row.assignment,
+        shiftDate: row.shiftDate,
+        slot: row.slot,
+        eventName: row.eventName,
+        payPerHour: row.payPerHour,
+        outletId: row.outletId,
+        outletName: row.outletName,
+      }));
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listForPr] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resolve the pay/commission rate card, per outlet, for one PR tier. Joins the
+   * outlet's workspace to its tier-rate row: a ranked tier matches on the label
+   * (`Tier I`..`Servant`); commission-only matches the single `kind` row (no
+   * label). The happy-hour window comes from the workspace parent. Outlets with
+   * no workspace, or no matching tier row, simply don't appear in the map — the
+   * caller treats a miss as "rate not configured". Rates are read via FK join,
+   * never duplicated onto the assignment.
+   */
+  async resolveTierRatesForOutlets(params: {
+    outletIds: string[];
+    tierLabel: string | null;
+    commissionOnly: boolean;
+  }): Promise<Map<string, ResolvedTierRate>> {
+    const result = new Map<string, ResolvedTierRate>();
+    const { outletIds, tierLabel, commissionOnly } = params;
+    // Nothing to resolve: no outlets, or a ranked tier with no label to match.
+    if (outletIds.length === 0) return result;
+    if (!commissionOnly && !tierLabel) return result;
+    try {
+      const uniqueOutletIds = [...new Set(outletIds)];
+      const tierMatch = commissionOnly
+        ? eq(OutletTierRateTable.kind, 'commission_only')
+        : and(
+            eq(OutletTierRateTable.kind, 'tier'),
+            eq(OutletTierRateTable.tier, tierLabel!),
+          );
+      const rows = await db
+        .select({
+          outletId: OutletWorkspaceTable.outletId,
+          happyHourStart: OutletWorkspaceTable.happyHourStart,
+          happyHourEnd: OutletWorkspaceTable.happyHourEnd,
+          wagePerHour: OutletTierRateTable.wagePerHour,
+          drinkPct: OutletTierRateTable.drinkPct,
+          happyHourDrinkPct: OutletTierRateTable.happyHourDrinkPct,
+          tipPct: OutletTierRateTable.tipPct,
+          otAfterHours: OutletTierRateTable.otAfterHours,
+          targetSalesRm: OutletTierRateTable.targetSalesRm,
+        })
+        .from(OutletWorkspaceTable)
+        .innerJoin(
+          OutletTierRateTable,
+          and(eq(OutletTierRateTable.workspaceId, OutletWorkspaceTable.id), tierMatch),
+        )
+        .where(inArray(OutletWorkspaceTable.outletId, uniqueOutletIds));
+      for (const row of rows) {
+        result.set(row.outletId, {
+          wagePerHour: row.wagePerHour,
+          drinkPct: row.drinkPct,
+          happyHourDrinkPct: row.happyHourDrinkPct,
+          tipPct: row.tipPct,
+          otAfterHours: row.otAfterHours,
+          targetSalesRm: row.targetSalesRm,
+          happyHourStart: row.happyHourStart,
+          happyHourEnd: row.happyHourEnd,
+        });
+      }
+      return result;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.resolveTierRatesForOutlets] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resolve the per-shift pay-tier OVERRIDE, per shift, for one PR tier. Same
+   * tier-matching as the workspace resolver but keyed on `shift_pay_tier` rows an
+   * outlet set at post time. A shift with no override row for the tier simply
+   * doesn't appear — the caller then uses the outlet workspace default.
+   */
+  async resolveShiftTierOverrides(params: {
+    shiftIds: string[];
+    tierLabel: string | null;
+    commissionOnly: boolean;
+  }): Promise<Map<string, ShiftTierOverride>> {
+    const result = new Map<string, ShiftTierOverride>();
+    const { shiftIds, tierLabel, commissionOnly } = params;
+    if (shiftIds.length === 0) return result;
+    if (!commissionOnly && !tierLabel) return result;
+    try {
+      const uniqueShiftIds = [...new Set(shiftIds)];
+      const tierMatch = commissionOnly
+        ? eq(ShiftPayTierTable.kind, 'commission_only')
+        : and(
+            eq(ShiftPayTierTable.kind, 'tier'),
+            eq(ShiftPayTierTable.tier, tierLabel!),
+          );
+      const rows = await db
+        .select({
+          shiftId: ShiftPayTierTable.shiftId,
+          wagePerHour: ShiftPayTierTable.wagePerHour,
+          drinkPct: ShiftPayTierTable.drinkPct,
+          happyHourDrinkPct: ShiftPayTierTable.happyHourDrinkPct,
+          tipPct: ShiftPayTierTable.tipPct,
+          otAfterHours: ShiftPayTierTable.otAfterHours,
+          targetSalesRm: ShiftPayTierTable.targetSalesRm,
+        })
+        .from(ShiftPayTierTable)
+        .where(and(inArray(ShiftPayTierTable.shiftId, uniqueShiftIds), tierMatch));
+      for (const row of rows) {
+        result.set(row.shiftId, {
+          wagePerHour: row.wagePerHour,
+          drinkPct: row.drinkPct,
+          happyHourDrinkPct: row.happyHourDrinkPct,
+          tipPct: row.tipPct,
+          otAfterHours: row.otAfterHours,
+          targetSalesRm: row.targetSalesRm,
+        });
+      }
+      return result;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.resolveShiftTierOverrides] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Resolve the drink menu, per outlet, from each outlet's workspace. Joins the
+   * outlet's workspace to its `outlet_drink_menu` rows (FK), ordered by the
+   * outlet's own sort order. Outlets with no workspace, or an empty menu, simply
+   * don't appear in the map — the caller renders no menu for them. The menu is
+   * read via FK join, never duplicated onto the assignment.
+   */
+  async resolveDrinkMenusForOutlets(
+    outletIds: string[],
+  ): Promise<Map<string, ResolvedDrinkItem[]>> {
+    const result = new Map<string, ResolvedDrinkItem[]>();
+    if (outletIds.length === 0) return result;
+    try {
+      const uniqueOutletIds = [...new Set(outletIds)];
+      const rows = await db
+        .select({
+          outletId: OutletWorkspaceTable.outletId,
+          slug: OutletDrinkMenuTable.slug,
+          name: OutletDrinkMenuTable.name,
+          priceRm: OutletDrinkMenuTable.priceRm,
+        })
+        .from(OutletWorkspaceTable)
+        .innerJoin(
+          OutletDrinkMenuTable,
+          eq(OutletDrinkMenuTable.workspaceId, OutletWorkspaceTable.id),
+        )
+        .where(inArray(OutletWorkspaceTable.outletId, uniqueOutletIds))
+        .orderBy(asc(OutletDrinkMenuTable.sortOrder));
+      for (const row of rows) {
+        const list = result.get(row.outletId) ?? [];
+        list.push({ id: row.slug, name: row.name, priceRm: row.priceRm });
+        result.set(row.outletId, list);
+      }
+      return result;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.resolveDrinkMenusForOutlets] Error:', error);
       throw error;
     }
   }

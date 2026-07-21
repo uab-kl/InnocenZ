@@ -198,8 +198,8 @@ export function SpecialServicePortalSection({
           {role === 'outlet'
             ? 'Order agency add-ons for your venue — delivery, emergency cover, styling, and more.'
             : prTiedLocked
-              ? 'Request transportation, makeup, wardrobe, and other agency services — or raise Leave agency under Service.'
-              : 'Request transportation, makeup, wardrobe, and other agency services for your shifts.'}
+              ? 'Request transportation, makeup, wardrobe, and other services — or raise Leave agency under Service.'
+              : 'Request transportation, makeup, wardrobe, and other services for your shifts.'}
         </p>
       </IzCard>
 
@@ -280,7 +280,7 @@ export function SpecialServicePortalSection({
           submitLabel={
             role === 'pr' && isLeaveAgencyService(draft.serviceType)
               ? 'Raise support ticket'
-              : 'Submit to agency'
+              : 'Submit to admin'
           }
         />
       </IzSheet>

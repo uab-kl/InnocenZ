@@ -2,7 +2,7 @@
  * Receipt Scan — port of InnocenZ-proto `/host/scan`.
  * Camera/OCR simulated; self-log drinks/tips write into the active shift session.
  */
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -13,8 +13,10 @@ import {
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
-import { getDrinkMenuForOutlet } from '../lib/outlet-drink-menu';
-import { fmtAttendanceStamp, useShiftSession } from '../lib/shift-session';
+import { fmtAttendanceStamp } from '../lib/shift-session';
+import { useActiveShift } from '../lib/active-shift';
+import { commissionFor as rateCommission, drinkMenuFromAssignment } from '../lib/pr-rate';
+import { usePrEarnings } from '../lib/pr-earnings';
 import { usePrNav, type ScanCategory, type ScanMode } from '../lib/pr-nav';
 import { TopBar } from '../components/TopBar';
 import {
@@ -43,24 +45,35 @@ export function ScanScreen({
   editId?: string;
 }) {
   const { goBack, setTab } = usePrNav();
-  const {
-    phase: attendance,
-    shift,
-    checkedInAt,
-    addReceiptLog,
-    logs,
-    deleteReceiptLog,
-  } = useShiftSession();
-  const onDuty = attendance === 'on_duty';
+  const { active, phase: attendancePhase } = useActiveShift();
+  const { receiptLines, addLine, updateLine } = usePrEarnings();
+  const onDuty = attendancePhase === 'on_duty';
+
+  // Real shift context from the active assignment: outlet, its drink menu, and
+  // this PR's resolved rate card (drink/tip %, happy-hour window).
+  const outlet = active?.outletName ?? 'Outlet';
+  const rate = active?.rate ?? null;
+  const checkedInAt = active?.checkInAt ?? null;
+  const dateYmd = useMemo<[number, number, number]>(() => {
+    if (active?.shiftDate) {
+      const [y, m, d] = active.shiftDate.split('-').map((n) => Number(n));
+      return [y, m, d];
+    }
+    const now = new Date();
+    return [now.getFullYear(), now.getMonth() + 1, now.getDate()];
+  }, [active?.shiftDate]);
 
   const [phase, setPhase] = useState<Phase>(() =>
     mode === 'selflog' || editId ? 'manual' : 'idle',
   );
   const [amount, setAmount] = useState(category === 'tips' ? '50' : '125');
+  const [editItem, setEditItem] = useState('');
   const [note, setNote] = useState('Receipt water-damaged / OCR unreadable');
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const pvId = useMemo(() => shiftPvId(shift.outlet, shift.date), [shift.outlet, shift.date]);
-  const drinkMenu = useMemo(() => getDrinkMenuForOutlet(shift.outlet), [shift.outlet]);
+  const pvId = useMemo(() => shiftPvId(outlet, dateYmd), [outlet, dateYmd]);
+  const drinkMenu = useMemo(() => drinkMenuFromAssignment(active?.drinkMenu), [active?.drinkMenu]);
   const categoryLabel = category === 'tips' ? 'Tips' : 'Drinks';
 
   const pageTitle = editId
@@ -70,8 +83,13 @@ export function ScanScreen({
       : `Scan ${categoryLabel.toLowerCase()} receipt`;
 
   const [drinkQtys, setDrinkQtys] = useState<Record<string, number>>({});
+  // When editing a menu drink, show the drink picker pre-filled with its
+  // previous quantity; tips (and free-typed "manual total" drinks) edit the
+  // single amount field instead.
+  const [editMenuMode, setEditMenuMode] = useState(false);
   const [ocrItem, setOcrItem] = useState('Cosmo');
   const [ocrAmount, setOcrAmount] = useState(150);
+  const prefilledFor = useRef<string | null>(null);
 
   useEffect(() => {
     setDrinkQtys((prev) => {
@@ -81,19 +99,43 @@ export function ScanScreen({
     });
   }, [drinkMenu]);
 
+  // Prefill the edit form from the existing line — ONCE per editId, so a later
+  // provider refresh doesn't clobber the quantities the user is adjusting.
   useEffect(() => {
     if (!editId) return;
-    const existing = logs.find((l) => l.id === editId);
+    if (prefilledFor.current === editId) return;
+    const existing = receiptLines.find((l) => l.id === editId);
     if (!existing) return;
+    prefilledFor.current = editId;
     setPhase('manual');
-    setAmount(String(existing.amount));
-  }, [editId, logs]);
+    setEditItem(existing.item);
+    const menuDrink =
+      existing.kind === 'drinks'
+        ? drinkMenu.find((d) => d.name === existing.item)
+        : undefined;
+    if (menuDrink) {
+      // Restore which drink + how many were logged.
+      setDrinkQtys((q) => ({ ...q, [menuDrink.id]: existing.quantity || 1 }));
+      setEditMenuMode(true);
+    } else {
+      // Tips, or a drink not on the current menu — edit the amount directly.
+      setAmount(String(existing.sales));
+      setEditMenuMode(false);
+    }
+  }, [editId, receiptLines, drinkMenu]);
+
+  // Whether the drink picker (vs the single amount field) is shown.
+  const showDrinkMenu = category === 'drinks' && (!editId || editMenuMode);
+
+  // Commission at this PR's real tier rate (happy-hour aware); falls back to the
+  // prototype flat rates only when the outlet has no rate card configured.
+  const commissionFor = (cat: ScanCategory, sales: number) => rateCommission(cat, sales, rate);
 
   const drinkTotal = drinkMenu.reduce(
     (s, d) => s + d.priceRm * (drinkQtys[d.id] ?? 0),
     0,
   );
-  const drinkCommission = Math.round(drinkTotal * 0.15 * 100) / 100;
+  const drinkCommission = commissionFor('drinks', drinkTotal);
 
   const startScan = () => {
     setPhase('scanning');
@@ -105,64 +147,127 @@ export function ScanScreen({
     }, 900);
   };
 
-  const confirmOcr = () => {
-    if (editId) deleteReceiptLog(editId);
-    addReceiptLog({
-      category,
-      item: ocrItem,
-      qty: 1,
-      amount: ocrAmount,
-      commission:
-        category === 'tips'
-          ? Math.round(ocrAmount * 0.1 * 100) / 100
-          : Math.round(ocrAmount * 0.15 * 100) / 100,
-      source: 'Receipt scan',
-    });
-    setPhase('logged');
+  // Persist to the current-week draft voucher; only flip to `logged` on success.
+  const runSubmit = async (fn: () => Promise<void>) => {
+    if (submitting) return;
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      await fn();
+      setPhase('logged');
+    } catch (e) {
+      setSubmitError(e instanceof Error ? e.message : 'Could not save. Try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const submitManual = () => {
-    if (editId) deleteReceiptLog(editId);
-    if (category === 'drinks') {
-      const items = drinkMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
-      if (items.length === 0) {
-        const amt = Number(amount) || 0;
-        if (amt <= 0) return;
-        addReceiptLog({
-          category: 'drinks',
-          item: 'Manual drink total',
-          qty: 1,
-          amount: amt,
-          commission: Math.round(amt * 0.15 * 100) / 100,
-          source: 'Manual entry',
-        });
-      } else {
-        for (const d of items) {
-          const qty = drinkQtys[d.id] ?? 0;
-          const amt = d.priceRm * qty;
-          addReceiptLog({
-            category: 'drinks',
-            item: d.name,
-            qty,
-            amount: amt,
-            commission: Math.round(amt * 0.15 * 100) / 100,
-            source: 'Manual entry',
+  const confirmOcr = () =>
+    void runSubmit(async () => {
+      const input = {
+        kind: category,
+        source: 'scan' as const,
+        item: ocrItem,
+        quantity: 1,
+        sales: ocrAmount,
+        commission: commissionFor(category, ocrAmount),
+        outlet: outlet,
+      };
+      if (editId) await updateLine(editId, input);
+      else await addLine(input);
+    });
+
+  const submitManual = () =>
+    void runSubmit(async () => {
+      // Editing one existing row — update it in place (fixes the drinks-edit
+      // path that used to rebuild the row and lose its detail).
+      if (editId) {
+        if (editMenuMode) {
+          // Drink edit: recompute from the (restored, then adjusted) quantities.
+          const items = drinkMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
+          if (items.length === 0) throw new Error('Set a drink quantity first.');
+          const [first, ...rest] = items;
+          const firstQty = drinkQtys[first.id] ?? 0;
+          const firstAmt = first.priceRm * firstQty;
+          await updateLine(editId, {
+            kind: 'drinks',
+            source: 'manual',
+            item: first.name,
+            quantity: firstQty,
+            sales: firstAmt,
+            commission: commissionFor('drinks', firstAmt),
+            outlet: outlet,
           });
+          // Any extra drinks the user added during the edit become new rows.
+          for (const d of rest) {
+            const qty = drinkQtys[d.id] ?? 0;
+            const amt = d.priceRm * qty;
+            await addLine({
+              kind: 'drinks',
+              source: 'manual',
+              item: d.name,
+              quantity: qty,
+              sales: amt,
+              commission: commissionFor('drinks', amt),
+              outlet: outlet,
+            });
+          }
+          return;
         }
+        const amt = Number(amount) || 0;
+        await updateLine(editId, {
+          kind: category,
+          source: 'manual',
+          item: editItem || (category === 'tips' ? 'Guest tip' : 'Manual drink total'),
+          quantity: 1,
+          sales: amt,
+          commission: commissionFor(category, amt),
+          outlet: outlet,
+        });
+        return;
       }
-    } else {
-      const amt = Number(amount) || 0;
-      addReceiptLog({
-        category: 'tips',
-        item: 'Guest tip',
-        qty: 1,
-        amount: amt,
-        commission: Math.round(amt * 0.1 * 100) / 100,
-        source: 'Manual entry',
-      });
-    }
-    setPhase('logged');
-  };
+      if (category === 'drinks') {
+        const items = drinkMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
+        if (items.length === 0) {
+          const amt = Number(amount) || 0;
+          if (amt <= 0) throw new Error('Set a drink quantity or amount first.');
+          await addLine({
+            kind: 'drinks',
+            source: 'manual',
+            item: 'Manual drink total',
+            quantity: 1,
+            sales: amt,
+            commission: commissionFor('drinks', amt),
+            outlet: outlet,
+          });
+        } else {
+          for (const d of items) {
+            const qty = drinkQtys[d.id] ?? 0;
+            const amt = d.priceRm * qty;
+            await addLine({
+              kind: 'drinks',
+              source: 'manual',
+              item: d.name,
+              quantity: qty,
+              sales: amt,
+              commission: commissionFor('drinks', amt),
+              outlet: outlet,
+            });
+          }
+        }
+      } else {
+        const amt = Number(amount) || 0;
+        await addLine({
+          kind: 'tips',
+          source: 'manual',
+          item: 'Guest tip',
+          quantity: 1,
+          sales: amt,
+          commission: commissionFor('tips', amt),
+          outlet: outlet,
+        });
+      }
+    });
 
   return (
     <View style={styles.screen}>
@@ -199,11 +304,11 @@ export function ScanScreen({
       ) : (
         <>
           <View style={styles.activeCard}>
-            <Text style={styles.activeTitle}>Active shift · {shift.outlet}</Text>
+            <Text style={styles.activeTitle}>Active shift · {outlet}</Text>
             <Text style={styles.activeMeta}>
               Belongs to <Text style={styles.activeBold}>{pvId}</Text>
               {' · '}
-              {logs.length} receipt(s) logged
+              {receiptLines.length} receipt(s) logged
               {' · '}
               Time-In {fmtAttendanceStamp(checkedInAt)}
             </Text>
@@ -225,7 +330,7 @@ export function ScanScreen({
                   <View style={styles.ocrBlock}>
                     <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
                     <Text style={styles.ocrLine}>Item: {ocrItem}</Text>
-                    <Text style={styles.ocrLine}>Outlet: {shift.outlet}</Text>
+                    <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
                     <Text style={styles.ocrLine}>
                       Total logged: <Text style={styles.activeBold}>{formatRM(ocrAmount)}</Text>
                     </Text>
@@ -237,22 +342,19 @@ export function ScanScreen({
             {phase === 'review' && (
               <>
                 <Text style={styles.cardMeta}>
-                  Est. commission{' '}
-                  {formatRM(
-                    category === 'tips'
-                      ? Math.round(ocrAmount * 0.1 * 100) / 100
-                      : Math.round(ocrAmount * 0.15 * 100) / 100,
-                  )}
+                  Est. commission {formatRM(commissionFor(category, ocrAmount))}
                 </Text>
                 <Pressable
-                  style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
+                  style={[styles.primary, grad(GRADIENTS.accent, C.accent), submitting && { opacity: 0.6 }]}
                   onPress={confirmOcr}
+                  disabled={submitting}
                 >
                   <Camera size={16} color="#241a08" />
                   <Text style={[styles.primaryText, { color: '#241a08' }]}>
-                    Confirm &amp; log receipt
+                    {submitting ? 'Saving…' : 'Confirm & log receipt'}
                   </Text>
                 </Pressable>
+                {submitError && <Text style={styles.errorText}>{submitError}</Text>}
                 <Pressable style={styles.soft} onPress={() => setPhase('manual')}>
                   <Text style={styles.softAmber}>
                     OCR looks wrong? Self-log {category === 'drinks' ? 'drinks' : 'manually'} instead
@@ -282,14 +384,14 @@ export function ScanScreen({
                   <Text style={styles.manualPillText}>Manual self-log</Text>
                 </View>
                 <Text style={styles.scanIdleHint}>
-                  {category === 'drinks'
+                  {showDrinkMenu
                     ? `Select the drink sold and quantity — agency must verify before it counts toward your PV.`
                     : 'Key in the amount yourself — agency must verify before it counts toward your PV.'}
                 </Text>
-                {category === 'drinks' ? (
+                {showDrinkMenu ? (
                   <>
                     <Text style={styles.fieldLabel}>
-                      Drink menu · {shift.outlet} · {drinkMenu.length} drinks
+                      Drink menu · {outlet} · {drinkMenu.length} drinks
                     </Text>
                     <Text style={styles.menuHint}>
                       Tap +/- for each item sold.
@@ -335,7 +437,9 @@ export function ScanScreen({
                   </>
                 ) : (
                   <>
-                    <Text style={styles.fieldLabel}>Tip amount (RM)</Text>
+                    <Text style={styles.fieldLabel}>
+                      {category === 'tips' ? 'Tip amount (RM)' : 'Drink amount (RM)'}
+                    </Text>
                     <TextInput
                       value={amount}
                       onChangeText={setAmount}
@@ -353,14 +457,16 @@ export function ScanScreen({
                   placeholderTextColor={C.muted2}
                 />
                 <Pressable
-                  style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
+                  style={[styles.primary, grad(GRADIENTS.accent, C.accent), submitting && { opacity: 0.6 }]}
                   onPress={submitManual}
+                  disabled={submitting}
                 >
                   <Pencil size={16} color="#241a08" />
                   <Text style={[styles.primaryText, { color: '#241a08' }]}>
-                    {editId ? 'Update self-log' : 'Submit self-log'}
+                    {submitting ? 'Saving…' : editId ? 'Update self-log' : 'Submit self-log'}
                   </Text>
                 </Pressable>
+                {submitError && <Text style={styles.errorText}>{submitError}</Text>}
               </View>
             )}
 
@@ -639,4 +745,11 @@ const styles = StyleSheet.create({
   okRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   okTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   loggedActions: { flexDirection: 'row', gap: 8, marginTop: 4, alignItems: 'stretch' },
+  errorText: {
+    marginTop: 10,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.red,
+    textAlign: 'center',
+  },
 });

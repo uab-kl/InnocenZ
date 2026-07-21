@@ -46,3 +46,32 @@ export const UpdatePaymentVoucherSchema = CreatePaymentVoucherSchema.partial().e
 export type PaymentVoucherLineInput = z.infer<typeof PaymentVoucherLineSchema>;
 export type CreatePaymentVoucherInput = z.infer<typeof CreatePaymentVoucherSchema>;
 export type UpdatePaymentVoucherInput = z.infer<typeof UpdatePaymentVoucherSchema>;
+
+// A PR logs earnings against its *current-week* voucher (status pending_review)
+// as it works a shift — one payment_voucher_line per entry. `kind` splits the
+// Payment week grid (wages/drinks/tips/others); `source` drives the pending vs
+// matched badge (manual self-logs stay pending until the agency verifies).
+export const prReceiptKindValues = ['wages', 'drinks', 'tips', 'others'] as const;
+export type PrReceiptKind = (typeof prReceiptKindValues)[number];
+export const prReceiptSourceValues = ['scan', 'manual', 'checkin'] as const;
+export type PrReceiptSource = (typeof prReceiptSourceValues)[number];
+
+export const CreatePrReceiptLineSchema = z.object({
+  kind: z.enum(prReceiptKindValues),
+  source: z.enum(prReceiptSourceValues),
+  item: z.string().min(1, 'Item is required').max(255, 'Item is too long'),
+  quantity: z.number().int().positive().max(999).optional(),
+  // Gross sale kept only for display on the receipt row; `commission` is what
+  // actually rolls into the voucher net.
+  sales: z.number().nonnegative(),
+  commission: z.number().nonnegative(),
+  lineDate: isoDate.optional(),
+  outlet: z.string().max(255, 'Outlet is too long').optional(),
+  // For wages: the assignment id, so a repeated check-out never double-seals.
+  dedupeRef: z.string().max(80, 'Ref is too long').optional(),
+});
+
+export const UpdatePrReceiptLineSchema = CreatePrReceiptLineSchema.partial();
+
+export type CreatePrReceiptLineInput = z.infer<typeof CreatePrReceiptLineSchema>;
+export type UpdatePrReceiptLineInput = z.infer<typeof UpdatePrReceiptLineSchema>;

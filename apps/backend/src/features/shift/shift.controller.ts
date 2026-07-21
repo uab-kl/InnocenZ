@@ -94,7 +94,10 @@ export class ShiftControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      res.status(200).json({ success: true, message: 'OK', data: shift });
+      // Fold in the per-shift pay-tier overrides so the outlet portal can render
+      // and re-edit exactly what it posted (empty when it uses workspace defaults).
+      const payTiers = await this.shiftRepository.listPayTiersForShift(shift.id);
+      res.status(200).json({ success: true, message: 'OK', data: { ...shift, payTiers } });
     } catch (error) {
       logger.error('[ShiftController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -135,13 +138,19 @@ export class ShiftControllerClass {
       }
 
       const actor = getActor(req);
-      const shift = await this.shiftRepository.create({
-        ...parsed.data,
-        agencyId, // authoritative — overrides any client-supplied value
-        outletId, // authoritative — pinned to the outlet caller's own venue
-        createdBy: actor,
-        updatedBy: actor,
-      });
+      // payTiers is a child-table override, not a shift column — keep it out of
+      // the shift insert and persist it alongside in one transaction.
+      const { payTiers, ...shiftData } = parsed.data;
+      const shift = await this.shiftRepository.createWithPayTiers(
+        {
+          ...shiftData,
+          agencyId, // authoritative — overrides any client-supplied value
+          createdBy: actor,
+          updatedBy: actor,
+        },
+        payTiers,
+        actor,
+      );
       res.status(201).json({ success: true, message: 'Shift created', data: shift });
     } catch (error) {
       logger.error('[ShiftController.create] Error:', error);
@@ -172,13 +181,19 @@ export class ShiftControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const data = { ...parsed.data };
-      // Non-admins cannot reassign the shift to a different agency.
+      const { payTiers, ...data } = parsed.data;
+      // Agency users cannot move a shift to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
       // Outlets cannot move a shift to a different venue.
       if (isOutlet) delete data.outletId;
 
-      const shift = await this.shiftRepository.update(id, { ...data, updatedBy: getActor(req) });
+      const actor = getActor(req);
+      const shift = await this.shiftRepository.updateWithPayTiers(
+        id,
+        { ...data, updatedBy: actor },
+        payTiers,
+        actor,
+      );
       if (!shift) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'Shift updated', data: shift });
     } catch (error) {

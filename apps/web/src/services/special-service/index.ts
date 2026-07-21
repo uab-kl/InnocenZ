@@ -17,7 +17,7 @@ export type SpecialServiceStatus =
 	| "in_progress"
 	| "completed"
 	| "cancelled";
-export type SpecialServiceInitiatedBy = "outlet" | "agency";
+export type SpecialServiceInitiatedBy = "outlet" | "agency" | "pr";
 export type SpecialServiceAdminAccepted =
 	| "n_a"
 	| "pending"
@@ -47,6 +47,8 @@ export interface SpecialService {
 	adminAccepted: SpecialServiceAdminAccepted;
 	postingAgencyId: string | null;
 	postingAgencyName: string | null;
+	postingPrId: string | null;
+	postingPrName: string | null;
 	vendorName: string | null;
 	scheduledFor: string | null;
 	createdAt: string;
@@ -204,6 +206,7 @@ export interface CreateSpecialServiceInput {
 	initiatedBy?: SpecialServiceInitiatedBy;
 	postingAgencyId?: string | null;
 	postingAgencyName?: string | null;
+	postingPrId?: string | null;
 }
 
 export async function createSpecialService(

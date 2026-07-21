@@ -1,48 +1,55 @@
 /**
- * Check-In — port of InnocenZ-proto `/host/tonight`.
- * GPS + selfie are bypassed so hold-to-check-in / check-out always works.
+ * Check-In — port of InnocenZ-proto `/host/tonight`, wired to the backend.
+ * The actionable shift, phase, and check-in / check-out are driven by this PR's
+ * own shift_assignment rows (scoped server-side). GPS + selfie stay bypassed so
+ * hold-to-check-in / check-out always works. Receipt logging (the on-duty status
+ * panel) and the wages seal write to the backend current-week voucher.
  */
-import React, { useRef, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   CANCELLATION_RULE_SUMMARY,
-  DEFAULT_AGENCY_NAME,
   GEOFENCE_METERS,
   GPS_BYPASS,
   fmtDFriendly,
   formatRM,
+  type Ymd,
 } from '../lib/demo-shifts';
-import {
-  shiftDurationLabel,
-  shiftPayoutTotal,
-  useShiftSession,
-} from '../lib/shift-session';
+import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
+import { useActiveShift } from '../lib/active-shift';
+import { overtimePay } from '../lib/pr-rate';
+import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
+import { useSession } from '../lib/session';
+import { usePrNav } from '../lib/pr-nav';
+import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
 import { TopBar } from '../components/TopBar';
 import { EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
-import { MapPin, Sparkles } from '../components/icons';
+import { MapPin } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 
-export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
-  const {
-    phase,
-    shift,
-    closedShift,
-    checkedInAt,
-    checkedOutAt,
-    logs,
-    dutyWagesRm,
-    acceptShift,
-    checkIn,
-    checkOut,
-    cancelShift,
-    resetDemo,
-  } = useShiftSession();
+function ymdFromIso(iso: string): Ymd {
+  const [y, m, d] = iso.split('-').map((n) => Number(n));
+  return [y, m, d];
+}
 
-  const finalPayout =
-    closedShift != null ? shiftPayoutTotal(dutyWagesRm, logs) : dutyWagesRm;
-  const completeDuration = shiftDurationLabel(checkedInAt, checkedOutAt);
+export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
+  const { token } = useSession();
+  const { setTab } = usePrNav();
+  // Keep local session in sync so Scan / Shifts don't bounce the PR back to
+  // "check in" while they're already on duty from the backend stamp.
+  const { checkIn: markLocalOnDuty, checkOut: markLocalComplete, phase: localPhase } =
+    useShiftSession();
+  // Receipt commission + the wages seal now come from the backend current-week voucher.
+  const { receiptLines, addLine } = usePrEarnings();
+  // The active assignment (with its resolved rate card + drink menu) is shared
+  // with Scan via the provider, so both screens act on the same real shift.
+  const { active, phase, loading, error: loadError, refresh, patch, dismiss } =
+    useActiveShift();
+
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -50,6 +57,25 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [cancelOpen, setCancelOpen] = useState(false);
   const [cancelReason, setCancelReason] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // If the backend already has an open check-in (e.g. after reload), mirror that
+  // into the local session so Scan self-log stays unlocked without another tap.
+  useEffect(() => {
+    if (phase === 'on_duty' && localPhase !== 'on_duty') markLocalOnDuty();
+  }, [phase, localPhase, markLocalOnDuty]);
+
+  // Today's key (UTC, matching the backend's lineDate) — the current shift's
+  // receipts and its wages seal all share this day, so Check-In and the Payment
+  // "This week" column for today reconcile to the same figure.
+  const todayKey = new Date().toISOString().slice(0, 10);
+  const todaysReceipts = receiptLines.filter((l) => l.lineDate === todayKey);
+
+  const finalPayout = active
+    ? Number(active.payAmount) + receiptCommissionTotal(todaysReceipts)
+    : 0;
+  const completeDuration = active
+    ? shiftDurationLabel(active.checkInAt, active.checkOutAt)
+    : '—';
 
   const statusLabel =
     phase === 'on_duty'
@@ -60,8 +86,85 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           ? 'Booked'
           : 'No shift';
 
+  const runAttendance = useCallback(
+    async (forCheckout: boolean) => {
+      if (!token || !active) return;
+      setBusy(true);
+      setActionError(null);
+      try {
+        if (forCheckout) {
+          const sealed = await checkOutShiftAssignment(token, active.id);
+          // Seal this shift's wages onto the current-week voucher so Payment
+          // This-week shows the full payout (wages + commission). Idempotent
+          // per assignment via dedupeRef.
+          await addLine({
+            kind: 'wages',
+            source: 'checkin',
+            item: 'Daily wages',
+            quantity: 1,
+            sales: Number(active.payAmount),
+            commission: Number(active.payAmount),
+            // Seal wages on the same day the receipts were logged (today), so the
+            // Payment "This week" column groups wages + drinks + tips together.
+            lineDate: todayKey,
+            outlet: active.outletName ?? undefined,
+            dedupeRef: active.id,
+          });
+          // Overtime: hours worked beyond 6h, paid at this tier's real OT/hr rate
+          // when the outlet configured one (else the pay_per_hour × 1.5 fallback).
+          // Computed from the real check-in/out stamps; sealed as its own line
+          // (idempotent per assignment). Only when there's a positive OT amount.
+          const checkInMs = active.checkInAt ? new Date(active.checkInAt).getTime() : NaN;
+          const checkOutMs = sealed.checkOutAt
+            ? new Date(sealed.checkOutAt).getTime()
+            : Date.now();
+          const payPerHour = Number(active.payPerHour) || 0;
+          const otHours = Number.isFinite(checkInMs)
+            ? Math.max(0, (checkOutMs - checkInMs) / 3_600_000 - 6)
+            : 0;
+          const otAmount = overtimePay(otHours, active.rate, payPerHour);
+          if (otAmount > 0) {
+            const otLabel =
+              active.rate?.otAfterHours != null
+                ? `Overtime ${otHours.toFixed(1)}h @ RM${active.rate.otAfterHours}/h`
+                : `Overtime ${otHours.toFixed(1)}h @1.5×`;
+            await addLine({
+              kind: 'others',
+              source: 'checkin',
+              item: otLabel,
+              quantity: 1,
+              sales: otAmount,
+              commission: otAmount,
+              lineDate: todayKey,
+              outlet: active.outletName ?? undefined,
+              dedupeRef: `${active.id}-ot`,
+            });
+          }
+          markLocalComplete();
+          // Stay optimistic: patch the row so we don't flash "Check in" again
+          // before navigating away.
+          patch(sealed);
+          // Leave Check-In only on check-out → Payment → This week.
+          setTab('payment', { paymentWeek: 'current' });
+        } else {
+          const stamped = await checkInShiftAssignment(token, active.id);
+          markLocalOnDuty();
+          // Stay on Check-In for the whole shift — patch the shared list so the
+          // UI flips to On duty / Check out without a second Check-in tap.
+          patch(stamped);
+        }
+      } catch (e) {
+        setActionError(e instanceof Error ? e.message : 'Attendance failed');
+        await refresh();
+      } finally {
+        setBusy(false);
+      }
+    },
+    [token, active, refresh, patch, addLine, markLocalOnDuty, markLocalComplete, setTab, todayKey],
+  );
+
   const startHold = (forCheckout: boolean) => {
-    if (holding) return;
+    if (holding || busy) return;
     setHolding(true);
     let p = 0;
     timerRef.current = setInterval(() => {
@@ -71,29 +174,40 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         if (timerRef.current) clearInterval(timerRef.current);
         setHolding(false);
         setProgress(0);
-        if (forCheckout) checkOut();
-        else checkIn();
+        void runAttendance(forCheckout);
       }
     }, 60);
   };
 
   const confirmCancel = () => {
-    if (!cancelReason.trim()) return;
+    if (!cancelReason.trim() || !active) return;
+    // Client-only for now — a PR-cancel endpoint is a later slice. Hides the row
+    // from the active pick until reload.
+    dismiss(active.id);
     setCancelOpen(false);
     setCancelReason('');
-    cancelShift();
   };
+
+  const outletName = active?.outletName ?? 'Outlet';
+  const shiftTime = active?.slot ?? '—';
+  const shiftDateYmd = active ? ymdFromIso(active.shiftDate) : null;
 
   return (
     <View style={styles.screen}>
       <TopBar onOpenProfile={() => onNavigate('profile')} />
+
+      {(actionError || loadError) && (
+        <Text style={styles.errorText}>{actionError ?? loadError}</Text>
+      )}
 
       {phase === 'idle' ? (
         <View style={{ marginTop: 12 }}>
           <Text style={styles.pageLabel}>ATTENDANCE</Text>
           <Text style={styles.pageTitle}>Check in</Text>
           <EmptyDashed>
-            Your agency will assign your shift — check in when assigned.
+            {loading
+              ? 'Loading your shift…'
+              : 'Your agency will assign your shift — check in when assigned.'}
           </EmptyDashed>
           <View style={styles.idleActions}>
             <IzButton
@@ -102,117 +216,110 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               small
               onPress={() => onNavigate('shifts')}
             />
-            <IzButton label="Demo shift in" small onPress={acceptShift} />
           </View>
         </View>
       ) : (
-        <>
-          <Pressable
-            style={[styles.brief, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.1)')]}
-            onPress={() => setBriefOpen((o) => !o)}
-          >
-            <View style={styles.briefHead}>
-              <Text style={styles.briefPage}>ATTENDANCE</Text>
-              <View style={styles.statusBlock}>
-                <Text style={styles.statusK}>Status</Text>
-                <Text style={styles.statusV}>{statusLabel}</Text>
-              </View>
-            </View>
-            <View style={styles.briefMain}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.venueName}>{shift.outlet}</Text>
-                <Text style={styles.shiftMeta}>
-                  {fmtDFriendly(...shift.date)} · {shift.time}
-                </Text>
-                <Text style={styles.assign}>
-                  AGENCY ASSIGNED · {DEFAULT_AGENCY_NAME.toUpperCase()}
-                </Text>
-                <View style={styles.vipRow}>
-                  <View style={styles.vipPill}>
-                    <Sparkles size={12} color={C.amber} />
-                    <Text style={styles.vipText}>VIP night</Text>
-                  </View>
+        active && (
+          <>
+            <Pressable
+              style={[styles.brief, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.1)')]}
+              onPress={() => setBriefOpen((o) => !o)}
+            >
+              <View style={styles.briefHead}>
+                <Text style={styles.briefPage}>ATTENDANCE</Text>
+                <View style={styles.statusBlock}>
+                  <Text style={styles.statusK}>Status</Text>
+                  <Text style={styles.statusV}>{statusLabel}</Text>
                 </View>
-                <Text style={styles.event}>{shift.event}</Text>
-                <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
               </View>
-              <View style={styles.mark}>
-                <Text style={styles.markText}>{shift.outlet.trim()[0]?.toUpperCase()}</Text>
+              <View style={styles.briefMain}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.venueName}>{outletName}</Text>
+                  <Text style={styles.shiftMeta}>
+                    {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
+                  </Text>
+                  <Text style={styles.event}>{active.eventName ?? 'Shift'}</Text>
+                  <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
+                </View>
+                <View style={styles.mark}>
+                  <Text style={styles.markText}>{outletName.trim()[0]?.toUpperCase()}</Text>
+                </View>
               </View>
-            </View>
-            {briefOpen && (
-              <View style={styles.briefBody}>
-                <Text style={styles.briefBodyLabel}>Address</Text>
-                <Text style={styles.briefBodyValue}>Bukit Bintang, KL · ~2.4 km away</Text>
-                <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Dress code</Text>
-                <Text style={styles.briefBodyValue}>Black cocktail · heels preferred</Text>
-                <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Est. payout</Text>
-                <Text style={styles.briefBodyValue}>{formatRM(shift.payout)}</Text>
-                <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Agency note</Text>
-                <Text style={styles.briefBodyValue}>
-                  Arrive 15 min early · VIP host briefing at door.
+              {briefOpen && (
+                <View style={styles.briefBody}>
+                  <Text style={styles.briefBodyLabel}>Est. payout</Text>
+                  <Text style={styles.briefBodyValue}>{formatRM(Number(active.payAmount))}</Text>
+                  <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Shift time</Text>
+                  <Text style={styles.briefBodyValue}>{shiftTime}</Text>
+                </View>
+              )}
+            </Pressable>
+
+            {phase === 'booked' && (
+              <>
+                <HoldButton
+                  label="Check in"
+                  holding={holding}
+                  progress={progress}
+                  onPress={() => startHold(false)}
+                />
+                <Text style={styles.gpsNote}>
+                  Reminder: at the venue, check-in is only allowed within {GEOFENCE_METERS}m of{' '}
+                  {outletName}
+                  {GPS_BYPASS ? ' — GPS temporarily bypassed for demo.' : '.'}
                 </Text>
-              </View>
+                <Pressable style={styles.cancelBtn} onPress={() => setCancelOpen(true)}>
+                  <Text style={styles.cancelText}>Cancel shift</Text>
+                </Pressable>
+              </>
             )}
-          </Pressable>
 
-          {phase === 'booked' && (
-            <>
-              <HoldButton
-                label="Check in"
-                holding={holding}
-                progress={progress}
-                onPress={() => startHold(false)}
-              />
-              <Text style={styles.gpsNote}>
-                Reminder: at the venue, check-in is only allowed within {GEOFENCE_METERS}m of{' '}
-                {shift.outlet}
-                {GPS_BYPASS ? ' — GPS temporarily bypassed for demo.' : '.'}
-              </Text>
-              <Pressable style={styles.cancelBtn} onPress={() => setCancelOpen(true)}>
-                <Text style={styles.cancelText}>Cancel shift</Text>
-              </Pressable>
-            </>
-          )}
+            {phase === 'on_duty' && (
+              <>
+                <ShiftStatusPanel
+                  checkedOut={false}
+                  checkInAt={active.checkInAt}
+                  checkOutAt={active.checkOutAt}
+                  dutyWagesRm={Number(active.payAmount)}
+                  targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
+                  dayKey={todayKey}
+                />
+                <HoldButton
+                  label="Check out"
+                  holding={holding}
+                  progress={progress}
+                  onPress={() => startHold(true)}
+                />
+                <Text style={styles.gpsNote}>
+                  Selfie attendance disabled — hold Check out when your shift ends.
+                </Text>
+              </>
+            )}
 
-          {phase === 'on_duty' && (
-            <>
-              <ShiftStatusPanel checkedOut={false} />
-              <HoldButton
-                label="Check out"
-                holding={holding}
-                progress={progress}
-                onPress={() => startHold(true)}
-              />
-              <Text style={styles.gpsNote}>
-                Selfie attendance disabled — hold Check out when your shift ends.
-              </Text>
-            </>
-          )}
-
-          {phase === 'complete' && closedShift && (
-            <>
-              <View style={styles.completeHero}>
-                <Pill variant="green">Complete</Pill>
-                <View style={styles.completeMoney}>
-                  <View>
-                    <Text style={styles.onDutyLabel}>Final payout</Text>
-                    <Text style={styles.completeDuration}>Duration {completeDuration}</Text>
+            {phase === 'complete' && (
+              <>
+                <View style={styles.completeHero}>
+                  <Pill variant="green">Complete</Pill>
+                  <View style={styles.completeMoney}>
+                    <View>
+                      <Text style={styles.onDutyLabel}>Final payout</Text>
+                      <Text style={styles.completeDuration}>Duration {completeDuration}</Text>
+                    </View>
+                    <Text style={styles.completeAmt}>{formatRM(finalPayout)}</Text>
                   </View>
-                  <Text style={styles.completeAmt}>{formatRM(finalPayout)}</Text>
                 </View>
-              </View>
-              <ShiftStatusPanel checkedOut />
-              <IzButton
-                label="Reset attendance demo"
-                variant="soft"
-                small
-                onPress={resetDemo}
-                style={{ marginTop: 12 }}
-              />
-            </>
-          )}
-        </>
+                <ShiftStatusPanel
+                  checkedOut
+                  checkInAt={active.checkInAt}
+                  checkOutAt={active.checkOutAt}
+                  dutyWagesRm={Number(active.payAmount)}
+                  targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
+                  dayKey={todayKey}
+                />
+              </>
+            )}
+          </>
+        )
       )}
 
       <Modal
@@ -225,7 +332,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
             <Text style={styles.sheetTitle}>Cancel shift?</Text>
             <Text style={styles.sheetMeta}>
-              {shift.outlet} · {fmtDFriendly(...shift.date)} · {shift.time}
+              {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
             </Text>
             <Text style={styles.sheetHint}>
               Agency-assigned shift — cancellation may affect wages.
@@ -296,6 +403,13 @@ function HoldButton({
 
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
+  errorText: {
+    marginTop: 10,
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.red,
+    textAlign: 'center',
+  },
   pageLabel: {
     fontFamily: F.sora,
     fontSize: 12,

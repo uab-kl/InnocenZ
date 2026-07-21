@@ -265,6 +265,7 @@
       "idx": 37,
       "version": "7",
       "when": 1784500000021,
+      "tag": "0037_special_service_pr_posting",
       "tag": "0037_add_shift_sale",
       "breakpoints": true
     },
@@ -272,6 +273,7 @@
       "idx": 38,
       "version": "7",
       "when": 1784500000022,
+      "tag": "0038_pr_tier_7_tiers",
       "tag": "0038_shift_sale_report_index",
       "breakpoints": true
     },
@@ -279,6 +281,7 @@
       "idx": 39,
       "version": "7",
       "when": 1784500000023,
+      "tag": "0039_shift_pay_tier",
       "tag": "0039_shift_sale_drop_table_sales",
       "breakpoints": true
     },

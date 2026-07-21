@@ -1,5 +1,9 @@
 import { Request, Response } from 'express';
-import { ShiftAssignmentRepositoryClass } from './shift-assignment.repository';
+import {
+  ShiftAssignmentRepositoryClass,
+  ResolvedTierRate,
+  ShiftTierOverride,
+} from './shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
@@ -19,6 +23,54 @@ import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 const PG_UNIQUE_VIOLATION = '23505';
+
+/**
+ * The `pr.tier` enum maps to the outlet workspace's tier-rate labels. Ranked
+ * tiers carry a label (`outlet_tier_rate.kind='tier'`); commission-only is a
+ * label-less row (`kind='commission_only'`), so it resolves via the flag below,
+ * not a label. Keep this in step with `prTierValues` and the outlet portal's
+ * `OUTLET_PR_TIERS`.
+ */
+const PR_TIER_TO_OUTLET_LABEL: Record<string, string> = {
+  tier_1: 'Tier I',
+  tier_2: 'Tier II',
+  tier_3: 'Tier III',
+  tier_4: 'Tier IV',
+  tier_5: 'Tier V',
+  servant: 'Servant',
+};
+
+/**
+ * Effective rate for one assignment: the per-shift override wins field-by-field
+ * over the outlet workspace default; the happy-hour window always comes from the
+ * workspace (a shift override never moves it). `overridden` flags that a shift
+ * override row applied, so the mobile app can show "rate set for this shift".
+ * Returns null only when neither source has a rate configured.
+ */
+function mergeRate(
+  ws: ResolvedTierRate | undefined,
+  ov: ShiftTierOverride | undefined,
+): (ResolvedTierRate & { overridden: boolean }) | null {
+  if (!ws && !ov) return null;
+  return {
+    wagePerHour: ov?.wagePerHour ?? ws?.wagePerHour ?? null,
+    drinkPct: ov?.drinkPct ?? ws?.drinkPct ?? '0',
+    happyHourDrinkPct: ov?.happyHourDrinkPct ?? ws?.happyHourDrinkPct ?? null,
+    tipPct: ov?.tipPct ?? ws?.tipPct ?? '0',
+    otAfterHours: ov?.otAfterHours ?? ws?.otAfterHours ?? null,
+    targetSalesRm: ov?.targetSalesRm ?? ws?.targetSalesRm ?? null,
+    happyHourStart: ws?.happyHourStart ?? '',
+    happyHourEnd: ws?.happyHourEnd ?? '',
+    overridden: !!ov,
+  };
+}
+
+/**
+ * A caller is scoped one of three ways: admin (everything), agency member
+ * (their agency's assignments), or outlet member (assignments on shifts at their
+ * own venues, read only). `outletIds` is empty for non-outlet callers.
+ */
+type Scope = { isAdmin: boolean; agencyId: string | null; outletIds: string[] };
 
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -82,6 +134,130 @@ export class ShiftAssignmentControllerClass {
       });
     } catch (error) {
       logger.error('[ShiftAssignmentController.list] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The signed-in PR's own shift assignments (mobile Shifts screen). Scoped
+   * server-side to the caller's pr.id, resolved from their user account, since
+   * PRs cannot read the agency/outlet-only list.
+   */
+  async listMine(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+      if (!pr) {
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
+      const assignments = await this.shiftAssignmentRepository.listForPr(pr.id);
+
+      // Resolve the PR's rate card once per outlet, then fold it onto each row so
+      // the mobile app can compute wage/commission/OT/target against real rates
+      // instead of hardcoded percentages.
+      const commissionOnly = pr.tier === 'commission_only';
+      const tierLabel = PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null;
+      // Outlet workspace default (per outlet) + per-shift override (per shift);
+      // the override wins field-by-field in mergeRate. The drink menu is resolved
+      // per outlet too, so the PR self-log lists this outlet's real drinks.
+      const [rateByOutlet, overrideByShift, menuByOutlet] = await Promise.all([
+        this.shiftAssignmentRepository.resolveTierRatesForOutlets({
+          outletIds: assignments.map((a) => a.outletId),
+          tierLabel,
+          commissionOnly,
+        }),
+        this.shiftAssignmentRepository.resolveShiftTierOverrides({
+          shiftIds: assignments.map((a) => a.shiftId),
+          tierLabel,
+          commissionOnly,
+        }),
+        this.shiftAssignmentRepository.resolveDrinkMenusForOutlets(
+          assignments.map((a) => a.outletId),
+        ),
+      ]);
+      const data = assignments.map((a) => ({
+        ...a,
+        tier: pr.tier,
+        rate: mergeRate(rateByOutlet.get(a.outletId), overrideByShift.get(a.shiftId)),
+        drinkMenu: menuByOutlet.get(a.outletId) ?? [],
+      }));
+      res.status(200).json({ success: true, message: 'OK', data });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.listMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The signed-in PR stamps check-in on its OWN assignment. Scoped server-side
+   * to the caller's pr.id (PRs cannot use the admin/agency PUT). Sets check_in_at
+   * and advances the row to `confirmed`; refuses if the assignment is not the
+   * caller's, is cancelled/no_show, or is already checked in.
+   */
+  async checkInMine(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      // Hide assignments outside the caller's scope behind a 404.
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (existing.status === 'cancelled' || existing.status === 'no_show') {
+        return res.status(400).json({ success: false, message: 'This shift can no longer be checked in', data: null });
+      }
+      if (existing.checkInAt) {
+        return res.status(400).json({ success: false, message: 'Already checked in', data: null });
+      }
+
+      const actor = getActor(req);
+      const assignment = await this.shiftAssignmentRepository.update(id, {
+        checkInAt: new Date(),
+        status: 'confirmed',
+        updatedBy: actor,
+      });
+      res.status(200).json({ success: true, message: 'Checked in', data: assignment });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.checkInMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The signed-in PR stamps check-out on its OWN assignment. Requires a prior
+   * check-in; sets check_out_at and seals the row as `completed` (the state the
+   * weekly PV job rolls up).
+   */
+  async checkOutMine(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (!existing.checkInAt) {
+        return res.status(400).json({ success: false, message: 'Check in before checking out', data: null });
+      }
+      if (existing.checkOutAt) {
+        return res.status(400).json({ success: false, message: 'Already checked out', data: null });
+      }
+
+      const actor = getActor(req);
+      const assignment = await this.shiftAssignmentRepository.update(id, {
+        checkOutAt: new Date(),
+        status: 'completed',
+        updatedBy: actor,
+      });
+      res.status(200).json({ success: true, message: 'Checked out', data: assignment });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.checkOutMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

@@ -11,6 +11,13 @@ const canRead = requireRole('admin', 'agency', 'outlet');
 const canWrite = requireRole('admin', 'agency');
 
 router.get('/', canRead, shiftAssignmentController.list.bind(shiftAssignmentController));
+// A signed-in PR reads only its own assignments (scoped server-side by pr.id),
+// so this sits outside the agency/outlet canRead guard. Must precede '/:id'.
+router.get('/mine', shiftAssignmentController.listMine.bind(shiftAssignmentController));
+// A signed-in PR stamps attendance on its OWN assignment — scoped server-side by
+// pr.id, so these sit outside the agency/admin canWrite guard.
+router.post('/mine/:id/check-in', shiftAssignmentController.checkInMine.bind(shiftAssignmentController));
+router.post('/mine/:id/check-out', shiftAssignmentController.checkOutMine.bind(shiftAssignmentController));
 router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignmentController));
 router.post('/', canWrite, shiftAssignmentController.create.bind(shiftAssignmentController));
 router.put('/:id', canWrite, shiftAssignmentController.update.bind(shiftAssignmentController));

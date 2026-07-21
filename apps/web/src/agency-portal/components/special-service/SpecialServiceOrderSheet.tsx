@@ -74,7 +74,7 @@ export function SpecialServiceOrderSheet({
             ? 'Book on behalf of a PR or outlet — they will be notified to accept or decline.'
             : role === 'outlet'
               ? 'Request an add-on from your agency — transportation, delivery, wardrobe, and more.'
-              : 'Request an agency add-on service — your agency will review and confirm.'}
+              : 'Request an add-on service — admin will review and confirm.'}
       </p>
 
       {showPrPicker !== false && (

@@ -142,8 +142,8 @@ function planMatchesRole(
 	subscriberType: SubscriberType | null,
 ): boolean {
 	if (!plan) return false;
-	if (!subscriberType || plan.roles.length === 0) return true;
-	return plan.roles.some((role) => role.roleName === subscriberType);
+	if (!subscriberType || !plan.subscriptionType) return true;
+	return plan.subscriptionType === subscriberType;
 }
 
 function fromPlanOf(
@@ -584,7 +584,10 @@ function PlanChangesPage() {
 					if (!open) setEditRequest(null);
 				}}
 			>
-				<SheetContent side="right" className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+				<SheetContent
+					side="right"
+					className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+				>
 					{editRequest && (
 						<PlanChangeEditForm
 							key={editRequest.id}

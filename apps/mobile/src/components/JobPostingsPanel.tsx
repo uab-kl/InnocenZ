@@ -18,9 +18,15 @@ import {
   SERVICE_OFFERS,
   STATUS_FILTER_OPTIONS,
   offerLabel,
-  seedVickyServiceOrders,
   type ServiceOrder,
+  type ServiceStatus,
 } from '../lib/demo-services';
+import { useSession } from '../lib/session';
+import {
+  createPrSpecialService,
+  fetchMySpecialServices,
+  type SpecialServiceRecord,
+} from '../lib/api';
 import { EmptyDashed, IzButton, Pill } from './ui';
 import {
   Check,
@@ -38,8 +44,84 @@ type Filters = {
 
 const EMPTY: Filters = { date: 'all', service: 'all', status: 'all' };
 
-export function JobPostingsPanel() {
-  const [orders, setOrders] = useState<ServiceOrder[]>(() => seedVickyServiceOrders());
+const PR_STATUS_LABEL: Record<string, string> = {
+  open: 'Pending review',
+  assigned: 'Assigned',
+  in_progress: 'In progress',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
+
+const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTH_LABELS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+function dateLabel(d: Date): string {
+  return `${DAY_LABELS[d.getDay()]} ${String(d.getDate()).padStart(2, '0')} ${MONTH_LABELS[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+function hhmm(d: Date): string {
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/** Today at the given HH:MM, as an ISO string for scheduledFor. */
+function isoFromTodayTime(time: string): string {
+  const [h, m] = time.split(':').map((n) => Number(n));
+  const d = new Date();
+  d.setHours(h || 0, m || 0, 0, 0);
+  return d.toISOString();
+}
+
+const BUDGET_DEFAULT = '00.00';
+
+/**
+ * Calculator-style currency formatting: digits fill in from the right (cents
+ * first) and thousands are grouped, so any amount works — "120000" -> "1,200.00".
+ * Empty input falls back to the 00.00 default.
+ */
+function formatBudgetInput(text: string): string {
+  const digits = text.replace(/\D/g, '');
+  if (!digits) return BUDGET_DEFAULT;
+  const amount = parseInt(digits, 10) / 100;
+  return amount.toLocaleString('en-US', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+/** The numeric value of a formatted budget string ("1,200.00" -> 1200). */
+function budgetToNumber(formatted: string): number {
+  return Number(formatted.replace(/,/g, ''));
+}
+
+/** Backend special_service row -> the ServiceOrder shape the cards render. */
+function recordToOrder(rec: SpecialServiceRecord): ServiceOrder {
+  const when = rec.scheduledFor ?? rec.createdAt;
+  const d = new Date(when);
+  return {
+    id: rec.id,
+    prName: rec.postingPrName ?? 'You',
+    outlet: 'Admin service',
+    date: dateLabel(d),
+    time: rec.scheduledFor ? hhmm(d) : '—',
+    serviceType: rec.category,
+    description: rec.description ?? '',
+    amountIn: 0,
+    amountOut: rec.budget ? Number(rec.budget) : 0,
+    initiatedBy: 'pr',
+    raisedBy: `${rec.postingPrName ?? 'You'} (PR)`,
+    status: (rec.status === 'completed' ? 'accepted' : 'pending_admin') as ServiceStatus,
+    statusLabel: PR_STATUS_LABEL[rec.status] ?? rec.status,
+  };
+}
+
+export function JobPostingsPanel({
+  onOrdersCountChange,
+}: {
+  /** Keep the Shifts ↔ Job postings badge in sync with this list. */
+  onOrdersCountChange?: (count: number) => void;
+} = {}) {
+  const { token } = useSession();
+  const [orders, setOrders] = useState<ServiceOrder[]>([]);
   const [filters, setFilters] = useState<Filters>(EMPTY);
   const [ordersOpen, setOrdersOpen] = useState(false);
   const [orderOpen, setOrderOpen] = useState(false);
@@ -49,6 +131,29 @@ export function JobPostingsPanel() {
   const [draftType, setDraftType] = useState(SERVICE_OFFERS[0].id);
   const [draftTime, setDraftTime] = useState('19:00');
   const [draftNote, setDraftNote] = useState('');
+  const [draftBudget, setDraftBudget] = useState(BUDGET_DEFAULT);
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
+  // This PR's real service orders — the same rows the admin portal reads.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchMySpecialServices(token)
+      .then((rows) => {
+        if (cancelled) return;
+        setOrders(rows.map(recordToOrder));
+        onOrdersCountChange?.(rows.length);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setOrders([]);
+        onOrdersCountChange?.(0);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, onOrdersCountChange]);
 
   const filtered = useMemo(() => {
     return orders.filter((o) => {
@@ -73,30 +178,41 @@ export function JobPostingsPanel() {
     setDraftType(serviceId ?? SERVICE_OFFERS[0].id);
     setDraftTime('19:00');
     setDraftNote('');
+    setDraftBudget(BUDGET_DEFAULT);
+    setSubmitError(null);
     setOrderOpen(true);
   };
 
-  const submitOrder = () => {
+  const submitOrder = async () => {
+    if (!token || submitting) return;
     if (isLeave && !draftNote.trim()) return;
-    const id = `SS-${Date.now().toString(36).toUpperCase()}`;
-    const next: ServiceOrder = {
-      id,
-      prName: 'Vicky',
-      outlet: isLeave ? 'Agency service' : 'Velvet 23',
-      date: seedVickyServiceOrders()[0]?.date ?? 'Today',
-      time: isLeave ? '—' : draftTime,
-      serviceType: draftType,
-      description: draftNote.trim() || draftOffer.summary,
-      amountIn: 0,
-      amountOut: draftOffer.defaultRate,
-      initiatedBy: 'pr',
-      raisedBy: 'Vicky (PR)',
-      status: isLeave ? 'pending_agency' : 'pending_agency',
-      statusLabel: isLeave ? 'Pending agency' : 'Pending agency',
-    };
-    setOrders((prev) => [next, ...prev]);
-    setOrderOpen(false);
-    setOrdersOpen(true);
+    setSubmitting(true);
+    setSubmitError(null);
+    try {
+      const budgetNum = budgetToNumber(draftBudget);
+      const rec = await createPrSpecialService(token, {
+        title: draftOffer.label,
+        // Backend has no 'leave_agency' category — file it under 'others'.
+        category: isLeave ? 'others' : draftType,
+        description: draftNote.trim() || draftOffer.summary,
+        budget: Number.isFinite(budgetNum) && budgetNum > 0 ? budgetNum : undefined,
+        scheduledFor: isLeave ? null : isoFromTodayTime(draftTime),
+      });
+      setOrders((prev) => {
+        const next = [recordToOrder(rec), ...prev];
+        onOrdersCountChange?.(next.length);
+        return next;
+      });
+      setOrderOpen(false);
+      setOrdersOpen(true);
+    } catch (error) {
+      // Surface the failure so a silent no-op never looks like success.
+      setSubmitError(
+        error instanceof Error ? error.message : 'Could not submit — please try again.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -104,8 +220,8 @@ export function JobPostingsPanel() {
       <View style={styles.banner}>
         <Text style={styles.bannerText}>
           <Text style={{ color: C.violetL }}>✦ </Text>
-          Request transportation, makeup, wardrobe, and other agency services — or raise Leave
-          agency under Service.
+          Request transportation, makeup, wardrobe, and other services — or raise Leave agency
+          under Service.
         </Text>
       </View>
 
@@ -263,7 +379,7 @@ export function JobPostingsPanel() {
                 {isLeave ? 'Service request' : 'Order agency service'}
               </Text>
               <Text style={styles.sheetSub}>
-                Request an agency add-on service — your agency will review and confirm.
+                Request an add-on service — admin will review and confirm.
               </Text>
 
               <Text style={styles.fieldLabel}>Service</Text>
@@ -287,6 +403,15 @@ export function JobPostingsPanel() {
 
               {!isLeave && (
                 <>
+                  <Text style={styles.fieldLabel}>Budget (RM)</Text>
+                  <TextInput
+                    value={draftBudget}
+                    onChangeText={(t) => setDraftBudget(formatBudgetInput(t))}
+                    style={styles.input}
+                    keyboardType="numeric"
+                    selectTextOnFocus
+                  />
+
                   <Text style={styles.fieldLabel}>Service time</Text>
                   <ServiceTimePicker value={draftTime} onChange={setDraftTime} />
                 </>
@@ -306,12 +431,23 @@ export function JobPostingsPanel() {
                 placeholderTextColor={C.muted2}
               />
 
+              {submitError && <Text style={styles.submitError}>{submitError}</Text>}
+
               <Pressable
-                style={[styles.submit, grad(GRADIENTS.accent, C.accent)]}
+                style={[
+                  styles.submit,
+                  grad(GRADIENTS.accent, C.accent),
+                  submitting && { opacity: 0.6 },
+                ]}
                 onPress={submitOrder}
+                disabled={submitting}
               >
                 <Text style={styles.submitText}>
-                  {isLeave ? 'Raise support ticket' : 'Submit to agency'}
+                  {submitting
+                    ? 'Submitting…'
+                    : isLeave
+                      ? 'Raise support ticket'
+                      : 'Submit to admin'}
                 </Text>
               </Pressable>
               <Pressable style={styles.cancel} onPress={() => setOrderOpen(false)}>
@@ -826,6 +962,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   submitText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: '#241a08' },
+  submitError: {
+    marginTop: 12,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: '#ff8a8a',
+    textAlign: 'center',
+  },
   cancel: { marginTop: 10, alignItems: 'center', padding: 10 },
   cancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
 });

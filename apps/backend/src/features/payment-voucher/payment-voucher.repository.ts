@@ -1,4 +1,4 @@
-import { and, eq, gte, ilike, lte, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, lte, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -8,6 +8,7 @@ import {
   PaymentVoucherInsertType,
   PaymentVoucherLineInsertType,
   PaymentVoucherType,
+  PaymentVoucherLineType,
   PaymentVoucherWithLines,
   PaymentVoucherFilter,
 } from './payment-voucher.model';
@@ -176,5 +177,198 @@ export class PaymentVoucherRepositoryClass {
       logger.error('[PaymentVoucherRepository.remove] Error:', error);
       throw error;
     }
+  }
+
+  // --- PR current-week draft voucher + line-level ops -----------------------
+  // A PR accumulates a week's earnings on ONE pending_review voucher (the draft
+  // the weekly generator would otherwise create — existsForPrWeek makes the two
+  // idempotent). Each self-log / wages seal is a single line on it.
+
+  /** The PR's current-week draft voucher (pending_review) with its lines, or null. */
+  async getCurrentWeekDraft(prId: string, weekStart: string): Promise<PaymentVoucherWithLines | null> {
+    try {
+      const [voucher] = await db
+        .select()
+        .from(PaymentVoucherTable)
+        .where(
+          and(
+            eq(PaymentVoucherTable.prId, prId),
+            eq(PaymentVoucherTable.weekStart, weekStart),
+            eq(PaymentVoucherTable.status, 'pending_review'),
+          ),
+        )
+        .limit(1);
+      if (!voucher) return null;
+      const lines = await this.getLines(voucher.id);
+      return { ...voucher, lines };
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getCurrentWeekDraft] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The PR's voucher for a given week regardless of status (draft, sent,
+   * signed, paid…) with its lines — used for the Payment "Last week" view. The
+   * most recently created one wins if more than one exists.
+   */
+  async getWeekVoucher(prId: string, weekStart: string): Promise<PaymentVoucherWithLines | null> {
+    try {
+      const [voucher] = await db
+        .select()
+        .from(PaymentVoucherTable)
+        .where(
+          and(
+            eq(PaymentVoucherTable.prId, prId),
+            eq(PaymentVoucherTable.weekStart, weekStart),
+          ),
+        )
+        .orderBy(desc(PaymentVoucherTable.createdAt))
+        .limit(1);
+      if (!voucher) return null;
+      const lines = await this.getLines(voucher.id);
+      return { ...voucher, lines };
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getWeekVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Finds the PR's current-week draft voucher, creating an empty one if absent. */
+  async getOrCreateCurrentWeekDraft(data: {
+    prId: string;
+    agencyId: string;
+    prName: string;
+    prIc?: string | null;
+    outlet?: string | null;
+    weekStart: string;
+    weekEnd: string;
+    actor: string;
+  }): Promise<PaymentVoucherType> {
+    try {
+      const existing = await this.getCurrentWeekDraft(data.prId, data.weekStart);
+      if (existing) return existing;
+      const [voucher] = await db
+        .insert(PaymentVoucherTable)
+        .values({
+          agencyId: data.agencyId,
+          prId: data.prId,
+          prName: data.prName,
+          prIc: data.prIc ?? undefined,
+          outlet: data.outlet ?? undefined,
+          cycle: 'Weekly',
+          weekStart: data.weekStart,
+          weekEnd: data.weekEnd,
+          subtotal: '0.00',
+          deduction: '0.00',
+          net: '0.00',
+          status: 'pending_review',
+          createdBy: data.actor,
+          updatedBy: data.actor,
+        })
+        .returning();
+      return voucher;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Error:', error);
+      throw error;
+    }
+  }
+
+  /** One line joined to its voucher — used to authorize a PR line op by owner. */
+  async getLineWithVoucher(
+    lineId: string,
+  ): Promise<{ line: PaymentVoucherLineType; voucher: PaymentVoucherType } | null> {
+    try {
+      const [row] = await db
+        .select({ line: PaymentVoucherLineTable, voucher: PaymentVoucherTable })
+        .from(PaymentVoucherLineTable)
+        .innerJoin(PaymentVoucherTable, eq(PaymentVoucherLineTable.voucherId, PaymentVoucherTable.id))
+        .where(eq(PaymentVoucherLineTable.id, lineId))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getLineWithVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Appends one line to a voucher and recomputes its totals. */
+  async addLine(voucherId: string, line: LineInput): Promise<PaymentVoucherLineType> {
+    try {
+      return await db.transaction(async (tx) => {
+        const existing = await this.getLines(voucherId, tx);
+        const [inserted] = await tx
+          .insert(PaymentVoucherLineTable)
+          .values({ ...line, voucherId, sortOrder: existing.length })
+          .returning();
+        await this.recomputeTotals(voucherId, tx);
+        return inserted;
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.addLine] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Patches one line in place and recomputes its voucher totals. */
+  async updateLine(
+    lineId: string,
+    patch: Partial<LineInput>,
+  ): Promise<PaymentVoucherLineType | null> {
+    try {
+      return await db.transaction(async (tx) => {
+        const [line] = await tx
+          .update(PaymentVoucherLineTable)
+          .set({ ...patch, updatedAt: new Date() })
+          .where(eq(PaymentVoucherLineTable.id, lineId))
+          .returning();
+        if (!line) return null;
+        await this.recomputeTotals(line.voucherId, tx);
+        return line;
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.updateLine] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Removes one line and recomputes its voucher totals. */
+  async deleteLine(lineId: string): Promise<boolean> {
+    try {
+      return await db.transaction(async (tx) => {
+        const [line] = await tx
+          .delete(PaymentVoucherLineTable)
+          .where(eq(PaymentVoucherLineTable.id, lineId))
+          .returning({ voucherId: PaymentVoucherLineTable.voucherId });
+        if (!line) return false;
+        await this.recomputeTotals(line.voucherId, tx);
+        return true;
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.deleteLine] Error:', error);
+      throw error;
+    }
+  }
+
+  /** subtotal = Σ line amounts; net = subtotal − deduction. */
+  private async recomputeTotals(voucherId: string, tx: DbTransaction): Promise<void> {
+    const [row] = await tx
+      .select({ subtotal: sql<string>`coalesce(sum(${PaymentVoucherLineTable.amount}), 0)::numeric(12,2)` })
+      .from(PaymentVoucherLineTable)
+      .where(eq(PaymentVoucherLineTable.voucherId, voucherId));
+    const subtotal = Number(row?.subtotal ?? 0);
+    const [voucher] = await tx
+      .select({ deduction: PaymentVoucherTable.deduction })
+      .from(PaymentVoucherTable)
+      .where(eq(PaymentVoucherTable.id, voucherId));
+    const deduction = Number(voucher?.deduction ?? 0);
+    await tx
+      .update(PaymentVoucherTable)
+      .set({
+        subtotal: subtotal.toFixed(2),
+        net: (subtotal - deduction).toFixed(2),
+        updatedAt: new Date(),
+      })
+      .where(eq(PaymentVoucherTable.id, voucherId));
   }
 }

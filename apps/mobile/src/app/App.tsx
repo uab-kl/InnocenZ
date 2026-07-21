@@ -8,6 +8,8 @@ import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
 import { C, ensureWebFonts } from '../theme/theme';
 import { SessionProvider, useSession } from '../lib/session';
 import { ShiftSessionProvider } from '../lib/shift-session';
+import { ActiveShiftProvider } from '../lib/active-shift';
+import { PrEarningsProvider } from '../lib/pr-earnings';
 import { SignedPvProvider } from '../lib/signed-pv';
 import { PrNavProvider, usePrNav } from '../lib/pr-nav';
 import { PhoneFrame } from '../components/PhoneFrame';
@@ -30,6 +32,8 @@ function LoggedInShell() {
 
   return (
     <ShiftSessionProvider>
+      <ActiveShiftProvider>
+      <PrEarningsProvider>
       <SignedPvProvider>
         <PhoneFrame footer={showTabBar ? <BottomNav active={tab} onChange={setTab} /> : null}>
           {route.name === 'scan' && (
@@ -44,6 +48,8 @@ function LoggedInShell() {
           {route.name === 'tabs' && tab === 'profile' && <ProfileScreen onNavigate={setTab} />}
         </PhoneFrame>
       </SignedPvProvider>
+      </PrEarningsProvider>
+      </ActiveShiftProvider>
     </ShiftSessionProvider>
   );
 }

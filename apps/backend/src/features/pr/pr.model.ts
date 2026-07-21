@@ -3,7 +3,15 @@ import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { UserTable } from '@/features/user/user.model';
 
-export const prTierValues = ['tier_1', 'tier_2', 'tier_3'] as const;
+export const prTierValues = [
+  'tier_1',
+  'tier_2',
+  'tier_3',
+  'tier_4',
+  'tier_5',
+  'servant',
+  'commission_only',
+] as const;
 export type PrTier = (typeof prTierValues)[number];
 export const prTierEnum = MainSchema.enum('pr_tier', prTierValues);
 

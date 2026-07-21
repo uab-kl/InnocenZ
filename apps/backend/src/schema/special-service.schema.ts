@@ -17,6 +17,7 @@ export const CreateSpecialServiceSchema = z
     initiatedBy: z.enum(specialServiceInitiatedByValues).default('outlet'),
     postingAgencyId: z.uuid().optional().nullable(),
     postingAgencyName: z.string().min(1).max(255).optional().nullable(),
+    postingPrId: z.uuid().optional().nullable(),
   })
   .superRefine((data, ctx) => {
     if (data.initiatedBy === 'agency' && !data.postingAgencyName) {
@@ -26,6 +27,8 @@ export const CreateSpecialServiceSchema = z
         message: 'postingAgencyName is required when initiatedBy is agency',
       });
     }
+    // PR postings need no postingPrId from the client — the controller resolves
+    // it server-side from the signed-in PR's user account.
   });
 
 export const AssignSpecialServiceSchema = z.object({

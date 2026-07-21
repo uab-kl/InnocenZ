@@ -104,23 +104,26 @@ export const outletTransactionController = new OutletTransactionControllerClass(
 export const adminRequestRepository = new AdminRequestRepositoryClass();
 export const adminRequestController = new AdminRequestControllerClass(adminRequestRepository);
 
+export const prRepository = new PrRepositoryClass();
+
 export const specialServiceRepository = new SpecialServiceRepositoryClass();
-export const specialServiceController = new SpecialServiceControllerClass(specialServiceRepository);
+export const specialServiceController = new SpecialServiceControllerClass(
+  specialServiceRepository,
+  prRepository,
+);
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();
 export const outletWorkspaceController = new OutletWorkspaceControllerClass(outletWorkspaceRepository);
 
 export const ratingRepository = new RatingRepositoryClass();
 export const ratingController = new RatingControllerClass(ratingRepository);
-
-export const prRepository = new PrRepositoryClass();
 export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
-export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository);
+export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository);
 
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);

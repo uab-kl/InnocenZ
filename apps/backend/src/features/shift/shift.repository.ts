@@ -1,8 +1,22 @@
-import { and, eq, gte, inArray, lte, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
-import { ShiftTable, ShiftInsertType, ShiftType, ShiftFilter } from './shift.model';
+import {
+  ShiftTable,
+  ShiftInsertType,
+  ShiftType,
+  ShiftFilter,
+  ShiftPayTierTable,
+  ShiftPayTier,
+} from './shift.model';
+
+// A pay-tier override row as accepted from the controller — the caller supplies
+// only the rate fields; shift_id, actor, and timestamps are set by the repo.
+export type ShiftPayTierInput = Omit<
+  ShiftPayTier,
+  'id' | 'shiftId' | 'createdAt' | 'updatedAt' | 'createdBy' | 'updatedBy'
+>;
 
 export class ShiftRepositoryClass {
   async create(
@@ -45,6 +59,80 @@ export class ShiftRepositoryClass {
       return shift ?? null;
     } catch (error) {
       logger.error('[ShiftRepository.getById] Error:', error);
+      throw error;
+    }
+  }
+
+  /** The pay-tier override rows an outlet set for one shift, in composer order. */
+  async listPayTiersForShift(shiftId: string): Promise<ShiftPayTier[]> {
+    try {
+      return await db
+        .select()
+        .from(ShiftPayTierTable)
+        .where(eq(ShiftPayTierTable.shiftId, shiftId))
+        .orderBy(asc(ShiftPayTierTable.sortOrder));
+    } catch (error) {
+      logger.error('[ShiftRepository.listPayTiersForShift] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Replace a shift's pay-tier overrides wholesale (delete-then-insert), mirroring
+   * how the outlet workspace replaces its child rows. Passing an empty array
+   * clears the overrides so the shift falls back to the outlet workspace defaults.
+   */
+  async replacePayTiers(
+    shiftId: string,
+    rows: ShiftPayTierInput[],
+    actor: string,
+    tx?: DbTransaction,
+  ): Promise<void> {
+    const dbClient = tx ?? db;
+    await dbClient.delete(ShiftPayTierTable).where(eq(ShiftPayTierTable.shiftId, shiftId));
+    if (rows.length > 0) {
+      await dbClient
+        .insert(ShiftPayTierTable)
+        .values(rows.map((r) => ({ ...r, shiftId, createdBy: actor, updatedBy: actor })));
+    }
+  }
+
+  /** Create a shift and (optionally) its pay-tier overrides atomically. */
+  async createWithPayTiers(
+    data: Omit<ShiftInsertType, 'id' | 'createdAt' | 'updatedAt'>,
+    payTiers: ShiftPayTierInput[] | undefined,
+    actor: string,
+  ): Promise<ShiftType> {
+    try {
+      return await db.transaction(async (tx) => {
+        const shift = await this.create(data, tx);
+        if (payTiers) await this.replacePayTiers(shift.id, payTiers, actor, tx);
+        return shift;
+      });
+    } catch (error) {
+      logger.error('[ShiftRepository.createWithPayTiers] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Update a shift and, when `payTiers` is provided, replace its overrides in the
+   * same transaction. `payTiers` undefined leaves existing overrides untouched.
+   */
+  async updateWithPayTiers(
+    id: string,
+    data: Partial<ShiftInsertType>,
+    payTiers: ShiftPayTierInput[] | undefined,
+    actor: string,
+  ): Promise<ShiftType | null> {
+    try {
+      return await db.transaction(async (tx) => {
+        const shift = await this.update(id, data, tx);
+        if (shift && payTiers) await this.replacePayTiers(id, payTiers, actor, tx);
+        return shift;
+      });
+    } catch (error) {
+      logger.error('[ShiftRepository.updateWithPayTiers] Error:', error);
       throw error;
     }
   }
