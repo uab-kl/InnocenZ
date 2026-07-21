@@ -266,7 +266,6 @@
       "version": "7",
       "when": 1784500000021,
       "tag": "0037_special_service_pr_posting",
-      "tag": "0037_add_shift_sale",
       "breakpoints": true
     },
     {
@@ -274,7 +273,6 @@
       "version": "7",
       "when": 1784500000022,
       "tag": "0038_pr_tier_7_tiers",
-      "tag": "0038_shift_sale_report_index",
       "breakpoints": true
     },
     {
@@ -282,21 +280,41 @@
       "version": "7",
       "when": 1784500000023,
       "tag": "0039_shift_pay_tier",
-      "tag": "0039_shift_sale_drop_table_sales",
       "breakpoints": true
     },
     {
       "idx": 40,
       "version": "7",
       "when": 1784500000024,
-      "tag": "0040_outlet_drop_table_pct",
+      "tag": "0040_add_shift_sale",
       "breakpoints": true
     },
     {
       "idx": 41,
       "version": "7",
       "when": 1784500000025,
-      "tag": "0041_outlet_drop_per_table_rm",
+      "tag": "0041_shift_sale_report_index",
+      "breakpoints": true
+    },
+    {
+      "idx": 42,
+      "version": "7",
+      "when": 1784500000026,
+      "tag": "0042_shift_sale_drop_table_sales",
+      "breakpoints": true
+    },
+    {
+      "idx": 43,
+      "version": "7",
+      "when": 1784500000027,
+      "tag": "0043_outlet_drop_table_pct",
+      "breakpoints": true
+    },
+    {
+      "idx": 44,
+      "version": "7",
+      "when": 1784500000028,
+      "tag": "0044_outlet_drop_per_table_rm",
       "breakpoints": true
     }
   ]

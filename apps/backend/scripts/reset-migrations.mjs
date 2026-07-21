@@ -1,7 +1,11 @@
-import { config } from 'dotenv';
+import './load-dotenv.mjs';
 import pg from 'pg';
 
-config();
+if (!process.env.DATABASE_URL) {
+  throw new Error(
+    'DATABASE_URL is missing — set it in the repo root .env (or apps/backend/.env)',
+  );
+}
 
 const pool = new pg.Pool({ connectionString: process.env.DATABASE_URL });
 const client = await pool.connect();
