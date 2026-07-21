@@ -45,6 +45,8 @@ import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
 import { PrControllerClass } from '@/features/pr/pr.controller.js';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository.js';
 import { ShiftControllerClass } from '@/features/shift/shift.controller.js';
+import { ShiftSaleRepositoryClass } from '@/features/shift-sale/shift-sale.repository.js';
+import { ShiftSaleControllerClass } from '@/features/shift-sale/shift-sale.controller.js';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
 import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
@@ -118,12 +120,15 @@ export const ratingController = new RatingControllerClass(ratingRepository);
 export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();
-export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository);
 
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+
+export const shiftSaleRepository = new ShiftSaleRepositoryClass();
+export const shiftSaleController = new ShiftSaleControllerClass(shiftSaleRepository, shiftRepository, shiftAssignmentRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const paymentVoucherGenerator = new PaymentVoucherGeneratorClass(shiftAssignmentRepository, paymentVoucherRepository, prRepository);

@@ -46,14 +46,10 @@ export const OutletWorkspaceTable = MainSchema.table('outlet_workspace', {
     .default('0'),
   drinkPct: numeric('drink_pct', { precision: 6, scale: 2 }).notNull().default('0'),
   tipPct: numeric('tip_pct', { precision: 6, scale: 2 }).notNull().default('0'),
-  tablePct: numeric('table_pct', { precision: 6, scale: 2 }).notNull().default('0'),
   otAfterHours: numeric('ot_after_hours', { precision: 6, scale: 2 })
     .notNull()
     .default('0'),
   perDrinkRm: numeric('per_drink_rm', { precision: 12, scale: 2 })
-    .notNull()
-    .default('0'),
-  perTableRm: numeric('per_table_rm', { precision: 12, scale: 2 })
     .notNull()
     .default('0'),
   happyHourStart: varchar('happy_hour_start', { length: 10 }).notNull().default(''),
@@ -68,7 +64,7 @@ export const OutletWorkspaceTable = MainSchema.table('outlet_workspace', {
 });
 
 // Wage + commission per PR training tier (kind='tier', tier set) plus the single
-// commission-only default (kind='commission_only', tier null, wage/table/ot null).
+// commission-only default (kind='commission_only', tier null, wage/ot null).
 export const OutletTierRateTable = MainSchema.table('outlet_tier_rate', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   workspaceId: uuid('workspace_id')
@@ -80,7 +76,6 @@ export const OutletTierRateTable = MainSchema.table('outlet_tier_rate', {
   drinkPct: numeric('drink_pct', { precision: 6, scale: 2 }).notNull().default('0'),
   happyHourDrinkPct: numeric('happy_hour_drink_pct', { precision: 6, scale: 2 }),
   tipPct: numeric('tip_pct', { precision: 6, scale: 2 }).notNull().default('0'),
-  tablePct: numeric('table_pct', { precision: 6, scale: 2 }),
   otAfterHours: numeric('ot_after_hours', { precision: 6, scale: 2 }),
   targetSalesRm: numeric('target_sales_rm', { precision: 12, scale: 2 }),
   sortOrder: integer('sort_order').notNull().default(0),

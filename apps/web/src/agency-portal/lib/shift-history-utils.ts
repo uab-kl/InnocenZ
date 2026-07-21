@@ -32,7 +32,6 @@ export interface ShiftHistoryRow {
   otRm?: number;
   drinkCommissionRm?: number;
   tipCommissionRm?: number;
-  tableCommissionRm?: number;
   durationHours: number;
 }
 

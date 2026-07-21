@@ -17,7 +17,6 @@ export interface WorkspaceTierRateRow {
 	drinkPct: string;
 	happyHourDrinkPct: string | null;
 	tipPct: string;
-	tablePct: string | null;
 	otAfterHours: string | null;
 	targetSalesRm: string | null;
 	sortOrder: number;
@@ -52,10 +51,8 @@ export interface OutletWorkspaceRecord {
 	basePayPerHour: string;
 	drinkPct: string;
 	tipPct: string;
-	tablePct: string;
 	otAfterHours: string;
 	perDrinkRm: string;
-	perTableRm: string;
 	happyHourStart: string;
 	happyHourEnd: string;
 	happyHourDrinkDiscountPct: number;
@@ -80,7 +77,6 @@ export interface SaveTierRateInput {
 	drinkPct: number;
 	happyHourDrinkPct?: number | null;
 	tipPct: number;
-	tablePct?: number | null;
 	otAfterHours?: number | null;
 	targetSalesRm?: number | null;
 	sortOrder: number;
@@ -109,10 +105,8 @@ export interface SaveOutletWorkspaceInput {
 	basePayPerHour: number;
 	drinkPct: number;
 	tipPct: number;
-	tablePct: number;
 	otAfterHours: number;
 	perDrinkRm: number;
-	perTableRm: number;
 	happyHourStart: string;
 	happyHourEnd: string;
 	happyHourDrinkDiscountPct: number;
