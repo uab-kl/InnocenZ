@@ -1,4 +1,4 @@
-import { and, eq, gte, inArray, lte, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, notInArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -11,7 +11,13 @@ import {
   ShiftAssignmentType,
   ShiftAssignmentWithContextType,
   ShiftAssignmentFilter,
+  ShiftAssignmentCostFilter,
+  ShiftCostPrDayTotals,
 } from './shift-assignment.model';
+
+// A PR pulled off the floor (cancelled) or a no-show earned no wage for the
+// shift — the report's cost side excludes both, mirroring the revenue side.
+const NON_STAFFING_STATUSES = ['cancelled', 'no_show'] as const;
 
 export class ShiftAssignmentRepositoryClass {
   async create(
@@ -205,6 +211,57 @@ export class ShiftAssignmentRepositoryClass {
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.listAgencyIdsWithCompletedInRange] Error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * Shared WHERE for the report cost aggregates: exclude non-staffing statuses,
+   * then pin to the caller's org (agency or a set of venues, via the joined
+   * shift) and the shift-date window. Empty `outletIds` is guarded by the caller.
+   */
+  private buildCostConditions(filter?: ShiftAssignmentCostFilter): SQL | undefined {
+    const conditions: SQL[] = [
+      notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+    ];
+    if (filter?.agencyId) conditions.push(eq(ShiftAssignmentTable.agencyId, filter.agencyId));
+    if (filter?.outletId) conditions.push(eq(ShiftTable.outletId, filter.outletId));
+    if (filter?.outletIds) conditions.push(inArray(ShiftTable.outletId, filter.outletIds));
+    if (filter?.fromDate) conditions.push(gte(ShiftTable.shiftDate, filter.fromDate));
+    if (filter?.toDate) conditions.push(lte(ShiftTable.shiftDate, filter.toDate));
+    return and(...conditions);
+  }
+
+  /**
+   * Manpower cost grouped by (PR, shift date) — the cost side of the report.
+   * Aggregating server-side removes the old client-side 100-row assignment cap
+   * that under-counted cost (and so overstated margin); the (PR × day) grain
+   * lets the client slice any date range and roll up both P&L and top-PRs.
+   */
+  async reportCostByPrDay(filter?: ShiftAssignmentCostFilter): Promise<ShiftCostPrDayTotals[]> {
+    try {
+      if (filter?.outletIds && filter.outletIds.length === 0) return [];
+      const rows = await db
+        .select({
+          prId: ShiftAssignmentTable.prId,
+          prName: PrTable.name,
+          soldOn: ShiftTable.shiftDate,
+          cost: sql<number>`coalesce(sum(${ShiftAssignmentTable.payAmount}), 0)::float8`,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .where(this.buildCostConditions(filter))
+        .groupBy(ShiftAssignmentTable.prId, PrTable.name, ShiftTable.shiftDate)
+        .orderBy(asc(ShiftTable.shiftDate));
+      return rows.map((r) => ({
+        prId: r.prId,
+        prName: r.prName,
+        soldOn: r.soldOn,
+        cost: Number(r.cost),
+      }));
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.reportCostByPrDay] Error:', error);
+      return [];
     }
   }
 

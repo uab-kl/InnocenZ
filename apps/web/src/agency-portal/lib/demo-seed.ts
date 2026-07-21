@@ -122,7 +122,6 @@ const DEMO_PVS: PV[] = [
     wages: 360,
     drinkCommission: 84,
     tipCommission: 45,
-    tableCommission: 30,
     status: 'sent',
     version: 1,
   },

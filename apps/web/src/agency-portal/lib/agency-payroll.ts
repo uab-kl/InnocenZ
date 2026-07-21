@@ -410,7 +410,6 @@ function buildShiftHistoryFromPayrollPvs(
       otRm: 0,
       drinkCommissionRm,
       tipCommissionRm,
-      tableCommissionRm: 0,
       durationHours: 6,
     };
   });

@@ -5,7 +5,7 @@ import type {
 import { formatOutletDayLabel } from "@agency-portal/lib/agency-outlet-shifts";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
 import type { ShiftRequest } from "@agency-portal/lib/store";
-import type { Shift } from "@/services/shift";
+import type { CreateShiftInput, Shift, ShiftEventKind } from "@/services/shift";
 import type {
 	ShiftAssignment,
 	ShiftAssignmentStatus,
@@ -217,5 +217,61 @@ export function shiftRequestFromBackendShift(input: {
 		status: shift.status,
 		prs: staffing.map((a) => a.prId),
 		payPerHour: num(shift.payPerHour),
+	};
+}
+
+/**
+ * The fields the reverse (write) mapper reads off a Post Job composer item. A
+ * posted shift item is a superset of this — the extra demo-only fields (pay
+ * tiers, drink menus, dress code, star tiers, named PR ids) have no `shift`
+ * column and are dropped here.
+ */
+export interface OutletShiftPostItem {
+	/** Canonical yyyy-MM-dd — the composer always sets this on a posted item. */
+	dateIso: string;
+	shift: string;
+	quantity: number;
+	languages: string;
+	event: string;
+	eventKind?: ShiftEventKind;
+	preferredRating: number;
+	estimatedCost: number;
+	payPerHour: number;
+}
+
+// The backend's preferredRating is a 0–5 int; the composer's derived value can
+// fall outside that when no star tier is chosen, so clamp at the boundary.
+function clampRating(rating: number): number {
+	if (!Number.isFinite(rating)) return 0;
+	return Math.max(0, Math.min(5, Math.round(rating)));
+}
+
+function nonNegative(value: number): number {
+	return Number.isFinite(value) && value > 0 ? value : 0;
+}
+
+/**
+ * A Post Job composer item -> the backend `CreateShiftInput`. `outletId` comes
+ * from the signed-in outlet's identity, never the item. No `agencyId` is sent:
+ * the backend routes the PR request to the outlet's onboarding agency, which is
+ * authoritative and cannot be forged. A brand-new posted shift starts with no
+ * live sales, so `liveSales` is always 0.
+ */
+export function createShiftInputFromPost(
+	item: OutletShiftPostItem,
+	outletId: string,
+): CreateShiftInput {
+	return {
+		outletId,
+		shiftDate: item.dateIso,
+		slot: item.shift.trim() || undefined,
+		eventName: item.event.trim() || undefined,
+		eventKind: item.eventKind,
+		languages: item.languages.trim() || undefined,
+		quantity: nonNegative(Math.round(item.quantity)),
+		preferredRating: clampRating(item.preferredRating),
+		payPerHour: nonNegative(item.payPerHour),
+		estimatedCost: nonNegative(item.estimatedCost),
+		liveSales: 0,
 	};
 }

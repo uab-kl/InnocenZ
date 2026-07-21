@@ -79,3 +79,30 @@ export type ShiftAssignmentFilter = {
    */
   outletIds?: string[];
 };
+
+/**
+ * Scope + window for the cost side of the outlet sales report. Mirrors the
+ * shift-sale report filter (agency OR a set of outlets, over a shift-date range)
+ * so the same resolved scope can drive both the revenue and cost aggregates.
+ */
+export type ShiftAssignmentCostFilter = {
+  agencyId?: string;
+  outletId?: string;
+  /** An empty array matches nothing — never treat it as "no filter". */
+  outletIds?: string[];
+  fromDate?: string;
+  toDate?: string;
+};
+
+/**
+ * One PR's manpower cost on one day (report costByPrDay row). Kept at
+ * (PR × day) granularity — not collapsed to a window total — so the client can
+ * slice it to any selected date range and still roll up both per-day P&L and
+ * per-PR "top performers" without paging through raw assignment rows.
+ */
+export type ShiftCostPrDayTotals = {
+  prId: string;
+  prName: string | null;
+  soldOn: string;
+  cost: number;
+};
