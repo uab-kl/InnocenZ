@@ -4,11 +4,12 @@ import { requireRole } from '@/middlewares/require-role.js';
 
 const router = Router();
 
-// Writing shifts is an agency (or admin) function. Outlets may READ the shifts
-// booked at their own venues — the controller pins them to their outlet set, so
-// the wider role here never widens the data they can see.
+// Outlets both READ the shifts booked at their own venues and WRITE new ones —
+// posting a job and requesting PR from a chosen agency is their primary use of
+// the app. The controller pins every caller to its own org, so the shared role
+// here never widens the data an outlet can see or touch.
 const canRead = requireRole('admin', 'agency', 'outlet');
-const canWrite = requireRole('admin', 'agency');
+const canWrite = requireRole('admin', 'agency', 'outlet');
 
 router.get('/', canRead, shiftController.list.bind(shiftController));
 router.get('/:id', canRead, shiftController.getById.bind(shiftController));

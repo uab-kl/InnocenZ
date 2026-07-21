@@ -30,6 +30,7 @@ import {
   type DraftShift,
 } from '@agency-portal/components/outlet/post-job-fields';
 import { PostJobActionPanel } from '@agency-portal/components/outlet/post-job-shift-ui';
+import { useOutletPostJob } from '@agency-portal/hooks/use-outlet-post-job';
 import {
   basePayFromPayTierRows,
   clonePostJobPayTierRow,
@@ -95,6 +96,10 @@ function PostJobPage() {
     outletOwner,
     toast,
   } = useStore();
+
+  // On a real outlet session, posting writes to the backend; a demo session
+  // keeps the local store. `backed` decides which path submitNew takes.
+  const { backed, postShifts, isPosting } = useOutletPostJob();
 
   const subscriptionPlan = getOutletSubscriptionPlan(
     outletOwner.subscriptionPlanId,
@@ -400,67 +405,87 @@ function PostJobPage() {
       }
     }
 
-    createShifts(
-      expandedShifts.map((s) => ({
-        outletName,
+    const postItems = expandedShifts.map((s) => ({
+      outletName,
 
-        date: formatJobDate(s.jobDate),
+      date: formatJobDate(s.jobDate),
 
-        dateIso: isoFromJobDate(s.jobDate),
+      dateIso: isoFromJobDate(s.jobDate),
 
-        shift: s.shiftTime,
+      shift: s.shiftTime,
 
-        quantity: s.quantity,
+      quantity: s.quantity,
 
-        languages: buildLanguagesLabel(
-          s.langs.length > 0 ? s.langs : languagesForPrIds(s.prIds, agencyPRs),
-          s.otherLang,
-        ),
+      languages: buildLanguagesLabel(
+        s.langs.length > 0 ? s.langs : languagesForPrIds(s.prIds, agencyPRs),
+        s.otherLang,
+      ),
 
-        event: s.event,
+      event: s.event,
 
-        eventKind: s.eventKind,
+      eventKind: s.eventKind,
 
-        specialEventType:
-          s.eventKind === 'special' ? s.specialEventType : undefined,
+      specialEventType:
+        s.eventKind === 'special' ? s.specialEventType : undefined,
 
-        customSpecialEventName:
-          s.eventKind === 'special' && isOtherSpecialEvent(s.specialEventType)
-            ? s.customSpecialEventName?.trim() || undefined
-            : undefined,
+      customSpecialEventName:
+        s.eventKind === 'special' && isOtherSpecialEvent(s.specialEventType)
+          ? s.customSpecialEventName?.trim() || undefined
+          : undefined,
 
-        eventDrinkMenu:
-          s.eventKind === 'special'
-            ? s.eventDrinkMenu?.map((d) => ({ ...d }))
-            : undefined,
+      eventDrinkMenu:
+        s.eventKind === 'special'
+          ? s.eventDrinkMenu?.map((d) => ({ ...d }))
+          : undefined,
 
-        preferredRating: Math.min(...s.starTiers.map(starTierToMinRating)),
+      preferredRating: Math.min(...s.starTiers.map(starTierToMinRating)),
 
-        preferredStarTiers: s.starTiers,
+      preferredStarTiers: s.starTiers,
 
-        estimatedCost: estimateDraftShiftCost(s, prTierById),
+      estimatedCost: estimateDraftShiftCost(s, prTierById),
 
-        liveSales: 0,
+      liveSales: 0,
 
-        payPerHour: basePayFromPayTierRows(s.payTierRows),
+      payPerHour: basePayFromPayTierRows(s.payTierRows),
 
-        tierRates: s.tierRates,
+      tierRates: s.tierRates,
 
-        payTierRows: s.payTierRows.map(clonePostJobPayTierRow),
+      payTierRows: s.payTierRows.map(clonePostJobPayTierRow),
 
-        dressCode: resolveDressCode(s.dressCode, s.customDressCode),
+      dressCode: resolveDressCode(s.dressCode, s.customDressCode),
 
-        destination: s.destination,
+      destination: s.destination,
 
-        prs: s.prIds,
-      })),
-    );
+      prs: s.prIds,
+    }));
 
-    setComposer(newDraftShift(undefined, outletWorkspace));
+    const resetForm = () => {
+      setComposer(newDraftShift(undefined, outletWorkspace));
+      setDraftShifts([]);
+      setEditingShiftId(null);
+    };
 
-    setDraftShifts([]);
+    // Real session → persist to the backend; the outletId and routed agency are
+    // resolved server-side. Demo-only fields in postItems (pay tiers, drink
+    // menus, dress code, star tiers, named PRs) are dropped by the mapper.
+    if (backed) {
+      postShifts(postItems)
+        .then(() => {
+          toast(
+            `Posted ${postItems.length} shift${postItems.length !== 1 ? 's' : ''}`,
+            'success',
+          );
+          resetForm();
+        })
+        .catch(() => {
+          toast('Could not post shifts — please try again', 'warn');
+        });
+      return;
+    }
 
-    setEditingShiftId(null);
+    createShifts(postItems);
+
+    resetForm();
   };
 
   const showTabs = canPostShifts && canOrderServices;
@@ -597,7 +622,7 @@ function PostJobPage() {
                 shiftCount={shiftCountForPost}
                 onAddShift={addDraftShift}
                 onSubmit={submitNew}
-                submitDisabled={totalHeadcount <= 0}
+                submitDisabled={totalHeadcount <= 0 || isPosting}
               />
             </aside>
           </div>

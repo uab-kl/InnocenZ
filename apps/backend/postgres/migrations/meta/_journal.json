@@ -260,6 +260,13 @@
       "when": 1784500000020,
       "tag": "0036_subscription_type_and_role",
       "breakpoints": true
+    },
+    {
+      "idx": 37,
+      "version": "7",
+      "when": 1784500000021,
+      "tag": "0037_add_shift_sale",
+      "breakpoints": true
     }
   ]
 }
