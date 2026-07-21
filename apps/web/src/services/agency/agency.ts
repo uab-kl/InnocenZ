@@ -7,6 +7,8 @@ import type {
 	AgencyMembersApiResponse,
 	AgencyMembershipsApiResponse,
 	AgencyMembersQueryParams,
+	AgencyPr,
+	PrAgencyLink,
 } from "./types";
 
 export async function fetchAgencies(
@@ -112,6 +114,58 @@ export async function fetchAgencyMembershipsForUser(
 	};
 }
 
+/**
+ * Which agencies each PR user account is under, read from agency_pr. Replaces
+ * the old `fetchAgencyMembershipsByUsers(..., { subRole: "pr" })` — agency_user
+ * holds only portal operators now.
+ */
+export async function fetchPrAgencyLinks(
+	userIds: string[],
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: PrAgencyLink[] }> {
+	if (userIds.length === 0) {
+		return { success: true, message: "OK", data: [] };
+	}
+
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({ userIds: userIds.join(",") });
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: PrAgencyLink[] | null;
+	}>(`/agency/pr-links${queryString}`);
+
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
+}
+
+/** One agency's PR roster, read from agency_pr. */
+export async function fetchAgencyPrs(
+	agencyId: string,
+	params: { approveStatus?: string; search?: string } = {},
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string; data: AgencyPr[] }> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		approveStatus: params.approveStatus,
+		search: params.search,
+	});
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: AgencyPr[] | null;
+	}>(`/agency/${agencyId}/prs${queryString}`);
+
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
+}
+
 export async function fetchAgencyMembershipsByUsers(
 	userIds: string[],
 	onRefreshFail: () => void,
@@ -124,7 +178,7 @@ export async function fetchAgencyMembershipsByUsers(
 	const client = getClient(onRefreshFail);
 	const queryString = buildQueryParams({
 		userIds: userIds.join(","),
-		subRole: options.subRole ?? "pr",
+		subRole: options.subRole,
 		status: options.status ?? "active",
 	});
 	const response = await client.get<AgencyMembershipsApiResponse>(

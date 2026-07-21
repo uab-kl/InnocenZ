@@ -1,4 +1,4 @@
-import { timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { UserTable } from '@/features/user/user.model';
@@ -33,6 +33,40 @@ export const PrTable = MainSchema.table('pr', {
 
 export type PrType = typeof PrTable.$inferSelect;
 export type PrInsertType = typeof PrTable.$inferInsert;
+
+export const agencyPrApproveStatusValues = ['pending', 'approved', 'rejected'] as const;
+export type AgencyPrApproveStatus = (typeof agencyPrApproveStatusValues)[number];
+export const agencyPrApproveStatusEnum = MainSchema.enum('agency_pr_approve_status', agencyPrApproveStatusValues);
+
+/**
+ * Which agencies a PR is under. A PR can be under many agencies, so this is the
+ * many-to-many the single `pr.agency_id` column cannot express.
+ *
+ * `pr.agency_id` is deliberately still in place and still drives every read path
+ * (roster, shifts, payroll, tenant scoping); it is the PR's originating agency.
+ * This table is backfilled from it and takes over once those reads are migrated.
+ */
+export const AgencyPrTable = MainSchema.table(
+  'agency_pr',
+  {
+    id: uuid('id').defaultRandom().notNull().primaryKey(),
+    agencyId: uuid('agency_id')
+      .notNull()
+      .references(() => AgencyTable.id, { onDelete: 'cascade' }),
+    prId: uuid('pr_id')
+      .notNull()
+      .references(() => PrTable.id, { onDelete: 'cascade' }),
+    approveStatus: agencyPrApproveStatusEnum('approve_status').notNull().default('pending'),
+    createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdBy: varchar('created_by').notNull(),
+    updatedBy: varchar('updated_by').notNull(),
+  },
+  (table) => [unique('agency_pr_agency_id_pr_id_unique').on(table.agencyId, table.prId)],
+);
+
+export type AgencyPrType = typeof AgencyPrTable.$inferSelect;
+export type AgencyPrInsertType = typeof AgencyPrTable.$inferInsert;
 
 /**
  * Comcard / identity fields that live on the linked user account rather than on

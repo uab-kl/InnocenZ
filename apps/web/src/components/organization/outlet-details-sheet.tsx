@@ -3,7 +3,6 @@ import {
 	Building2,
 	CalendarDays,
 	Compass,
-	CreditCard,
 	FileText,
 	Globe,
 	Hash,
@@ -185,15 +184,6 @@ export function OutletDetailsSheet({
 												? (agencyQuery.data?.data?.name ??
 													`${outlet.onboardedByAgencyId.slice(0, 8)}…`)
 												: "Direct signup"
-										}
-									/>
-									<DetailField
-										icon={CreditCard}
-										label="Subscription"
-										value={
-											outlet.subscriptionId
-												? `${outlet.subscriptionId.slice(0, 8)}…`
-												: "No subscription"
 										}
 									/>
 									<DetailField

@@ -28,7 +28,6 @@ export class OutletControllerClass {
         name: req.query.name as string | undefined,
         status: req.query.status as OutletStatus | undefined,
         onboardedByAgencyId: req.query.onboardedByAgencyId as string | undefined,
-        subscriptionId: req.query.subscriptionId as string | undefined,
       };
       const { outlets, totalCount } = await this.outletRepository.listPaginated({ filter, page, pageSize });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));

@@ -2,11 +2,10 @@ import 'dotenv/config';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { RoleTable } from '@/features/rbac/role/role.model';
 import { SubscriptionTable } from '@/features/subscription/subscription.model';
-import { SubscriptionRoleTable } from '@/features/subscription/subscription-role.model';
+import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { OutletMemberTable, OutletTable } from '@/features/outlet/outlet.model';
+import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
 import { hashPassword } from '@/util/password';
 import { logger } from '@/util/logger';
@@ -55,15 +54,13 @@ const VELVET_TEAM: Array<{
   { username: 'Ahmad Razif', email: 'ops@velvet23.my', phoneNum: '+60112345680', subRole: 'operations_head' },
 ];
 
-// Resolve an OUTLET-role plan id by name (plan names like Plus/Enterprise/Scale
-// exist for both roles, so we must filter on the outlet role).
+// Resolve an outlet plan id by name (plan names like Plus/Enterprise/Scale exist
+// for both audiences), disambiguated by the stored audience since migration 0036.
 async function outletPlanId(name: string): Promise<string | null> {
   const [row] = await db
     .select({ id: SubscriptionTable.id })
     .from(SubscriptionTable)
-    .innerJoin(SubscriptionRoleTable, eq(SubscriptionRoleTable.subscriptionId, SubscriptionTable.id))
-    .innerJoin(RoleTable, eq(RoleTable.id, SubscriptionRoleTable.roleId))
-    .where(and(eq(SubscriptionTable.name, name), eq(RoleTable.roleName, 'outlet')))
+    .where(and(eq(SubscriptionTable.name, name), eq(SubscriptionTable.subscriptionType, 'outlet')))
     .limit(1);
   return row?.id ?? null;
 }
@@ -106,12 +103,35 @@ export async function seedSampleOrgs(): Promise<void> {
         country: 'Malaysia',
         status: 'active',
         onboardedByAgencyId: agencyIdByName.get(o.onboardedBy) ?? null,
-        subscriptionId: await outletPlanId(o.planName),
         createdBy: ACTOR,
         updatedBy: ACTOR,
       })
       .returning({ id: OutletTable.id });
-    if (row) outletIdByName.set(o.name, row.id);
+    if (row) {
+      outletIdByName.set(o.name, row.id);
+      // The outlet's plan lives on member_subscription, not on the outlet row
+      // (outlet.subscription_id was dropped in migration 0034).
+      const planId = await outletPlanId(o.planName);
+      if (planId) {
+        await db
+          .insert(MemberSubscriptionTable)
+          .values({
+            subscriberType: 'outlet',
+            subscriberId: row.id,
+            subscriberName: o.name,
+            subscriptionId: planId,
+            planName: o.planName,
+            amount: '0',
+            billingCycle: 'monthly',
+            currency: 'MYR',
+            status: 'active',
+            startedAt: new Date(),
+            createdBy: ACTOR,
+            updatedBy: ACTOR,
+          })
+          .onConflictDoNothing();
+      }
+    }
   }
 
   // Velvet 23 team members (owner / finance / ops head) — upsert users by email
@@ -150,9 +170,9 @@ export async function seedSampleOrgs(): Promise<void> {
       if (!userId) continue;
 
       await db
-        .delete(OutletMemberTable)
-        .where(and(eq(OutletMemberTable.userId, userId), eq(OutletMemberTable.subRole, member.subRole)));
-      await db.insert(OutletMemberTable).values({
+        .delete(OutletUserTable)
+        .where(and(eq(OutletUserTable.userId, userId), eq(OutletUserTable.subRole, member.subRole)));
+      await db.insert(OutletUserTable).values({
         outletId: velvetId,
         userId,
         subRole: member.subRole,

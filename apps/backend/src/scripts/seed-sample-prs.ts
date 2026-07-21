@@ -6,16 +6,18 @@ import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
-import { AgencyMemberTable, AgencyTable } from '@/features/agency/agency.model';
+import { AgencyTable } from '@/features/agency/agency.model';
+import { AgencyPrTable, PrTable } from '@/features/pr/pr.model';
 import { hashPassword } from '@/util/password';
 import { DEFAULT_PROFILE_IMAGE } from '@/util/profile-image';
 import { logger } from '@/util/logger';
 
 // Demo PR (promoter) users so the admin PR list page shows real accounts.
 // Each PR = a user + user_profile + a user_role link to the 'pr' role.
-// Linked to sample agencies via agency_member (subRole=pr). A PR can belong
-// to more than one agency — membership rows are the source of truth.
-// Idempotent: upserts by email and rebuilds membership links on every run.
+// Linked to sample agencies via `pr` + `agency_pr`: one `pr` row per (agency,
+// user) pair, and an agency_pr row joining them. A PR can belong to more than
+// one agency — agency_pr is the source of truth.
+// Idempotent: upserts by email and reuses existing pr rows on every run.
 const ACTOR = 'seed-sample';
 const PR_ROLE_NAME = 'pr';
 const DEMO_PASSWORD = 'Password123!';
@@ -27,8 +29,7 @@ type PrSeed = {
   /** Per-account demo password — falls back to DEMO_PASSWORD. */
   password?: string;
   /** Legal name + ID document captured on the user_profile record. */
-  firstName: string;
-  lastName: string;
+  fullName: string;
   idType: 'NRIC' | 'Passport' | 'Work permit';
   idNo: string;
   /** Agency codes; first is also written to user_profile.agencyId as primary. */
@@ -54,8 +55,7 @@ const PRS: PrSeed[] = [
     username: 'Nurul Aina',
     email: 'pr.nurul@innocenz.demo',
     phoneNum: '+60123456801',
-    firstName: 'Nurul Aina',
-    lastName: 'binti Rahman',
+    fullName: 'Nurul Aina binti Rahman',
     idType: 'NRIC',
     idNo: '920310-14-5521',
     agencyCodes: ['AGY001'],
@@ -64,8 +64,7 @@ const PRS: PrSeed[] = [
     username: 'Haziq Iskandar',
     email: 'pr.haziq@innocenz.demo',
     phoneNum: '+60123456802',
-    firstName: 'Muhammad Haziq',
-    lastName: 'bin Iskandar',
+    fullName: 'Muhammad Haziq bin Iskandar',
     idType: 'NRIC',
     idNo: '900715-10-6033',
     // Multi-agency sample: Atlas + Delta
@@ -75,8 +74,7 @@ const PRS: PrSeed[] = [
     username: 'Mei Ling Tan',
     email: 'pr.meiling@innocenz.demo',
     phoneNum: '+60123456803',
-    firstName: 'Tan Mei',
-    lastName: 'Ling',
+    fullName: 'Tan Mei Ling',
     idType: 'NRIC',
     idNo: '880522-08-5142',
     agencyCodes: ['AGY002'],
@@ -85,8 +83,7 @@ const PRS: PrSeed[] = [
     username: 'Arjun Kumar',
     email: 'pr.arjun@innocenz.demo',
     phoneNum: '+60123456804',
-    firstName: 'Arjun',
-    lastName: 'Kumar a/l Suresh',
+    fullName: 'Arjun Kumar a/l Suresh',
     idType: 'NRIC',
     idNo: '950101-14-5389',
     // Multi-agency sample: Delta + Starline
@@ -96,8 +93,7 @@ const PRS: PrSeed[] = [
     username: 'Sofia Chong',
     email: 'pr.sofia@innocenz.demo',
     phoneNum: '+60123456805',
-    firstName: 'Sofia',
-    lastName: 'Chong Wei Xin',
+    fullName: 'Sofia Chong Wei Xin',
     idType: 'Passport',
     idNo: 'A12345678',
     // Multi-agency sample: Atlas + Starline
@@ -113,8 +109,7 @@ const PRS: PrSeed[] = [
     // (defaultSignInIdentifier "60123456789" / prefilled "password").
     phoneNum: '+60123456789',
     password: 'password',
-    firstName: 'Victoria',
-    lastName: 'Tan Mei Lin',
+    fullName: 'Victoria Tan Mei Lin',
     idType: 'NRIC',
     idNo: '950312-14-8821',
     agencyCodes: ['AGY001', 'AGY002'],
@@ -229,10 +224,6 @@ export async function seedSamplePrs(): Promise<void> {
     if (!userId) continue;
     seededUserIds.push(userId);
 
-    const primaryAgencyId = pr.agencyCodes
-      .map((code) => agencyIdByCode.get(code))
-      .find(Boolean);
-
     const [existingProfile] = await db
       .select({ id: UserProfileTable.id })
       .from(UserProfileTable)
@@ -240,8 +231,7 @@ export async function seedSamplePrs(): Promise<void> {
       .limit(1);
 
     const profileValues = {
-      firstName: pr.firstName,
-      lastName: pr.lastName,
+      fullName: pr.fullName,
       idType: pr.idType,
       idNo: pr.idNo,
       gender: pr.gender ?? null,
@@ -257,8 +247,6 @@ export async function seedSamplePrs(): Promise<void> {
       state: pr.state ?? null,
       country: pr.country ?? null,
       verificationStatus: 'verified' as const,
-      underAgency: Boolean(primaryAgencyId),
-      agencyId: primaryAgencyId ?? null,
       updatedBy: ACTOR,
       updatedAt: new Date(),
     };
@@ -294,29 +282,48 @@ export async function seedSamplePrs(): Promise<void> {
     }
 
     // Rebuild this PR's agency links so multi-agency samples stay accurate.
-    await db
-      .delete(AgencyMemberTable)
-      .where(
-        and(
-          eq(AgencyMemberTable.userId, userId),
-          eq(AgencyMemberTable.subRole, 'pr'),
-        ),
-      );
-
+    // One `pr` row per (agency, user) pair, joined by agency_pr. Existing rows
+    // are reused rather than recreated so the roster keeps its ids — and so the
+    // richer fields seed-sample-pr-personnel writes afterwards survive a re-run.
     for (const code of pr.agencyCodes) {
       const agencyId = agencyIdByCode.get(code);
       if (!agencyId) {
         logger.warn(`[seed-sample-prs] Agency ${code} missing — skip link for ${pr.email}`);
         continue;
       }
-      await db.insert(AgencyMemberTable).values({
-        agencyId,
-        userId,
-        subRole: 'pr',
-        status: 'active',
-        createdBy: ACTOR,
-        updatedBy: ACTOR,
-      });
+
+      const [existingPr] = await db
+        .select({ id: PrTable.id })
+        .from(PrTable)
+        .where(and(eq(PrTable.agencyId, agencyId), eq(PrTable.userId, userId)))
+        .limit(1);
+
+      let prId = existingPr?.id;
+      if (!prId) {
+        const [inserted] = await db
+          .insert(PrTable)
+          .values({
+            agencyId,
+            userId,
+            name: pr.fullName,
+            nickname: pr.username,
+            createdBy: ACTOR,
+            updatedBy: ACTOR,
+          })
+          .returning({ id: PrTable.id });
+        prId = inserted.id;
+      }
+
+      await db
+        .insert(AgencyPrTable)
+        .values({
+          agencyId,
+          prId,
+          approveStatus: 'approved',
+          createdBy: ACTOR,
+          updatedBy: ACTOR,
+        })
+        .onConflictDoNothing();
       membershipCount += 1;
     }
   }

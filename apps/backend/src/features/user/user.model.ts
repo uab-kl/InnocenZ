@@ -1,6 +1,9 @@
 import { timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 
+export const userStatusValues = ['active', 'inactive', 'blocked'] as const;
+export type UserStatus = (typeof userStatusValues)[number];
+
 export const UserTable = MainSchema.table('user', {
     id: uuid('id').defaultRandom().notNull().primaryKey(),
     email: varchar('email').unique(),
@@ -8,7 +11,8 @@ export const UserTable = MainSchema.table('user', {
     profileImage: varchar('profile_image'),
     username: varchar('username', { length: 100 }).notNull(),
     passwordHash: varchar('password_hash', { length: 255 }),
-    status: varchar('status', { length: 100 }).notNull(),
+    status: varchar('status', { length: 100 }).$type<UserStatus>().notNull(),
+    blockedReason: varchar('blocked_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),
@@ -27,7 +31,7 @@ export type UserFilter = {
     email?: string;
     phoneNum?: string;
     username?: string;
-    status?: string;
+    status?: UserStatus;
     roleId?: string;
     /** Joined on/after this date (start of day). Use with endDate for a period filter. */
     startDate?: Date | string | null;

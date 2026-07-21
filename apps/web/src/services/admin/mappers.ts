@@ -3,8 +3,7 @@ import type { AdminUser } from "./types";
 // Legal identity captured on the separate user_profile record. The /user list
 // endpoint already nests this under `profile` (see withUserProfiles on the API).
 export interface BackendUserProfile {
-	firstName: string | null;
-	lastName: string | null;
+	fullName: string | null;
 	nationality: string | null;
 	gender: string | null;
 	race: string | null;

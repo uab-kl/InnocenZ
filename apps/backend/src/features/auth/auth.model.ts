@@ -8,6 +8,9 @@ export const ResetPasswordTokenTable = MainSchema.table('reset_password_token', 
     token: varchar('token', { length: 255 }).notNull(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdBy: varchar('created_by').notNull().default('system'),
+    updatedBy: varchar('updated_by').notNull().default('system'),
 });
 
 export type ResetPasswordTokenType = typeof ResetPasswordTokenTable.$inferSelect;

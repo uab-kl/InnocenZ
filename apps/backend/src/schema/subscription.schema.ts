@@ -1,25 +1,15 @@
 import { z } from 'zod';
-import { billingCycleValues } from '@/features/subscription/subscription.model.js';
+import {
+  billingCycleValues,
+  subscriptionTypeValues,
+} from '@/features/subscription/subscription.model.js';
 
 export const SubscriptionSchema = z.object({
   name: z.string().min(1).max(255),
   price: z.coerce.number().nonnegative(),
   billingCycle: z.enum(billingCycleValues).default('monthly'),
+  /** Who the plan is sold to. No longer inferred from billingCycle. */
+  subscriptionType: z.enum(subscriptionTypeValues),
   status: z.string().default('active'),
   coverage: z.string().max(100).optional().nullable(),
-  roleIds: z.array(z.uuid()).optional(),
-});
-
-export const LimitTypeSchema = z.object({
-  code: z.string().min(1).max(255),
-  name: z.string().min(1).max(255),
-  description: z.string().max(255).optional().nullable(),
-  configSchema: z.record(z.string(), z.unknown()).optional().nullable(),
-  status: z.string().default('active'),
-});
-
-export const SubscriptionFeatureSchema = z.object({
-  subscriptionId: z.uuid(),
-  roleId: z.uuid(),
-  limitTypeId: z.uuid(),
 });

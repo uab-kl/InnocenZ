@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { OutletMemberTable, OutletTable } from '@/features/outlet/outlet.model';
+import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { UserTable } from '@/features/user/user.model';
@@ -36,16 +36,16 @@ export async function seedOutletRoles(): Promise<void> {
 
   const members = await db
     .select({
-      userId: OutletMemberTable.userId,
-      subRole: OutletMemberTable.subRole,
+      userId: OutletUserTable.userId,
+      subRole: OutletUserTable.subRole,
       email: UserTable.email,
       username: UserTable.username,
       outletName: OutletTable.name,
     })
-    .from(OutletMemberTable)
-    .innerJoin(UserTable, eq(UserTable.id, OutletMemberTable.userId))
-    .innerJoin(OutletTable, eq(OutletTable.id, OutletMemberTable.outletId))
-    .where(eq(OutletMemberTable.status, 'active'));
+    .from(OutletUserTable)
+    .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
+    .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))
+    .where(eq(OutletUserTable.status, 'active'));
 
   if (members.length === 0) {
     logger.warn('[seed-outlet-roles] No active outlet members found — run seed-sample-orgs first');

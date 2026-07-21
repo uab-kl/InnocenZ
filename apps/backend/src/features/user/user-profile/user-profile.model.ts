@@ -1,4 +1,4 @@
-import { boolean, date, integer, jsonb, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date, integer, jsonb, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { UserTable } from '@/features/user/user.model';
 
@@ -19,8 +19,7 @@ export const UserProfileTable = MainSchema.table('user_profile', {
     .references(() => UserTable.id)
     .notNull()
     .unique(),
-  firstName: varchar('first_name', { length: 100 }),
-  lastName: varchar('last_name', { length: 100 }),
+  fullName: varchar('full_name', { length: 255 }),
   nationality: varchar('nationality', { length: 100 }),
   gender: varchar('gender', { length: 20 }),
   race: varchar('race', { length: 50 }),
@@ -35,14 +34,8 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   postcode: varchar('postcode', { length: 20 }),
   state: varchar('state', { length: 100 }),
   country: varchar('country', { length: 100 }),
-  underAgency: boolean('under_agency'),
-  agencyId: varchar('agency_id', { length: 64 }),
   idPhotoFront: varchar('id_photo_front'),
   idPhotoBack: varchar('id_photo_back'),
-  acceptPrivacy: boolean('accept_privacy'),
-  acceptTruth: boolean('accept_truth'),
-  acceptAgencyShare: boolean('accept_agency_share'),
-  acceptTerms: boolean('accept_terms'),
   verificationStatus: verificationStatusEnum('verification_status').default('draft'),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -58,15 +51,12 @@ export type UserProfileFilter = {
   userId?: string;
   nationality?: string;
   verificationStatus?: VerificationStatus;
-  underAgency?: boolean;
-  agencyId?: string;
 };
 
 export type UserProfileResponse = {
   id: string | null;
   userId: string;
-  firstName: string | null;
-  lastName: string | null;
+  fullName: string | null;
   nationality: string | null;
   gender: string | null;
   race: string | null;
@@ -81,14 +71,8 @@ export type UserProfileResponse = {
   postcode: string | null;
   state: string | null;
   country: string | null;
-  underAgency: boolean | null;
-  agencyId: string | null;
   idPhotoFront: string | null;
   idPhotoBack: string | null;
-  acceptPrivacy: boolean | null;
-  acceptTruth: boolean | null;
-  acceptAgencyShare: boolean | null;
-  acceptTerms: boolean | null;
   verificationStatus: VerificationStatus | null;
   verifiedAt: Date | null;
   createdAt: Date | null;
@@ -101,8 +85,7 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
   return {
     id: null,
     userId,
-    firstName: null,
-    lastName: null,
+    fullName: null,
     nationality: null,
     gender: null,
     race: null,
@@ -117,14 +100,8 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     postcode: null,
     state: null,
     country: null,
-    underAgency: null,
-    agencyId: null,
     idPhotoFront: null,
     idPhotoBack: null,
-    acceptPrivacy: null,
-    acceptTruth: null,
-    acceptAgencyShare: null,
-    acceptTerms: null,
     verificationStatus: 'draft',
     verifiedAt: null,
     createdAt: null,
@@ -138,8 +115,7 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
   return {
     id: profile.id,
     userId: profile.userId,
-    firstName: profile.firstName,
-    lastName: profile.lastName,
+    fullName: profile.fullName,
     nationality: profile.nationality,
     gender: profile.gender,
     race: profile.race,
@@ -154,14 +130,8 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     postcode: profile.postcode,
     state: profile.state,
     country: profile.country,
-    underAgency: profile.underAgency,
-    agencyId: profile.agencyId,
     idPhotoFront: profile.idPhotoFront,
     idPhotoBack: profile.idPhotoBack,
-    acceptPrivacy: profile.acceptPrivacy,
-    acceptTruth: profile.acceptTruth,
-    acceptAgencyShare: profile.acceptAgencyShare,
-    acceptTerms: profile.acceptTerms,
     verificationStatus: profile.verificationStatus,
     verifiedAt: profile.verifiedAt,
     createdAt: profile.createdAt,

@@ -1,10 +1,29 @@
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/index.js';
-import { Subscription, SubscriptionTable, SubscriptionInsertType } from './subscription.model.js';
+import { Subscription, SubscriptionTable, SubscriptionInsertType, SubscriptionType } from './subscription.model.js';
+import { RoleTable } from '@/features/rbac/role/role.model.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
 
 export class SubscriptionRepositoryClass {
+  /**
+   * The main.role row a plan audience maps to, for subscription.role_id.
+   * Returns null if the role is missing so a plan can still be created.
+   */
+  async roleIdForType(subscriptionType: SubscriptionType): Promise<string | null> {
+    try {
+      const [row] = await db
+        .select({ id: RoleTable.id })
+        .from(RoleTable)
+        .where(eq(RoleTable.roleName, subscriptionType))
+        .limit(1);
+      return row?.id ?? null;
+    } catch (error) {
+      logger.error('[SubscriptionRepository.roleIdForType] Error:', error);
+      return null;
+    }
+  }
+
   constructor() {}
 
   async getSubscriptionById(id: string): Promise<Subscription | null> {

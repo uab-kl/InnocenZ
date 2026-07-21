@@ -68,6 +68,10 @@ export const PaymentVoucherLineTable = MainSchema.table('payment_voucher_line', 
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull().default('0'),
   ref: varchar('ref', { length: 100 }),
   sortOrder: integer('sort_order').notNull().default(0),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: varchar('created_by').notNull().default('system'),
+  updatedBy: varchar('updated_by').notNull().default('system'),
 });
 
 export type PaymentVoucherType = typeof PaymentVoucherTable.$inferSelect;

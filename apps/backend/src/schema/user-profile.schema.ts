@@ -19,13 +19,6 @@ function nricMatchesDob(dob: string, idNo: string): boolean {
   return Boolean(prefix) && digits.length === NRIC_LENGTH && digits.startsWith(prefix);
 }
 
-const acknowledgementsSchema = z.object({
-  acceptPrivacy: z.boolean(),
-  acceptTruth: z.boolean(),
-  acceptAgencyShare: z.boolean(),
-  acceptTerms: z.boolean(),
-});
-
 /** Fields stored on the `user` table */
 const userAccountFields = {
   username: z.string().min(1, 'Username is required'),
@@ -36,8 +29,7 @@ const userAccountFields = {
 
 /** Fields stored on `user_profile` only */
 const profileOnlyFields = {
-  firstName: z.string().min(1, 'First name is required'),
-  lastName: z.string().min(1, 'Last name is required'),
+  fullName: z.string().min(1, 'Full name is required'),
   nationality: z.string().min(1, 'Nationality is required'),
   idType: z.enum(idTypeValues),
   idNo: z.string().min(1, 'ID number is required'),
@@ -47,8 +39,6 @@ const profileOnlyFields = {
   postcode: z.string().min(1, 'Postcode is required'),
   state: z.string().min(1, 'State is required'),
   country: z.string().min(1, 'Country is required'),
-  underAgency: z.boolean().nullable(),
-  agencyId: z.string().optional(),
   idPhotoFront: z.string().optional(),
   idPhotoBack: z.string().optional(),
 };
@@ -72,35 +62,17 @@ function profileRefinements(data: ProfileOnlyBody, ctx: z.RefinementCtx) {
       });
     }
   }
-
-  if (data.underAgency === null) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'Please indicate whether you are under an agency',
-      path: ['underAgency'],
-    });
-  }
-
-  if (data.underAgency === true && !data.agencyId?.trim()) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'Agency is required when under an agency',
-      path: ['agencyId'],
-    });
-  }
 }
 
 export const UserProfileCreateSchema = z
   .object({ ...userAccountFields, ...profileOnlyFields })
-  .extend(acknowledgementsSchema.shape)
   .superRefine((data, ctx) => profileRefinements(data, ctx));
 
 export const UserProfileUpdateSchema = UserProfileCreateSchema.partial().superRefine((data, ctx) => {
   if (data.idType === 'NRIC' && data.idNo && data.dob) {
     profileRefinements(
       {
-        firstName: data.firstName ?? '',
-        lastName: data.lastName ?? '',
+        fullName: data.fullName ?? '',
         nationality: data.nationality ?? '',
         idType: data.idType,
         idNo: data.idNo,
@@ -109,8 +81,6 @@ export const UserProfileUpdateSchema = UserProfileCreateSchema.partial().superRe
         postcode: data.postcode ?? '',
         state: data.state ?? '',
         country: data.country ?? '',
-        underAgency: data.underAgency ?? null,
-        agencyId: data.agencyId,
         addressLine2: data.addressLine2,
         idPhotoFront: data.idPhotoFront,
         idPhotoBack: data.idPhotoBack,
@@ -129,13 +99,6 @@ export const UserProfileSubmitSchema = UserProfileCreateSchema.superRefine((data
   }
   if (!data.profileImage) {
     ctx.addIssue({ code: 'custom', message: 'Profile photo is required', path: ['profileImage'] });
-  }
-  if (!data.acceptPrivacy || !data.acceptTruth || !data.acceptAgencyShare || !data.acceptTerms) {
-    ctx.addIssue({
-      code: 'custom',
-      message: 'All acknowledgements and terms must be accepted',
-      path: ['acceptTerms'],
-    });
   }
 });
 

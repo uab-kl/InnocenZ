@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { AgencyMemberTable, AgencyTable } from '@/features/agency/agency.model';
+import { AgencyUserTable, AgencyTable } from '@/features/agency/agency.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { UserTable } from '@/features/user/user.model';
@@ -122,13 +122,13 @@ async function ensureRole(userId: string, roleId: string): Promise<void> {
 
 async function ensureOwnerMembership(userId: string, agencyId: string): Promise<void> {
   const [existing] = await db
-    .select({ id: AgencyMemberTable.id })
-    .from(AgencyMemberTable)
+    .select({ id: AgencyUserTable.id })
+    .from(AgencyUserTable)
     .where(
       and(
-        eq(AgencyMemberTable.userId, userId),
-        eq(AgencyMemberTable.agencyId, agencyId),
-        eq(AgencyMemberTable.subRole, 'owner'),
+        eq(AgencyUserTable.userId, userId),
+        eq(AgencyUserTable.agencyId, agencyId),
+        eq(AgencyUserTable.subRole, 'owner'),
       ),
     )
     .limit(1);
@@ -136,13 +136,13 @@ async function ensureOwnerMembership(userId: string, agencyId: string): Promise<
   if (existing) {
     // Scope resolution prefers an active membership — make sure it is one.
     await db
-      .update(AgencyMemberTable)
+      .update(AgencyUserTable)
       .set({ status: 'active', updatedBy: ACTOR, updatedAt: new Date() })
-      .where(eq(AgencyMemberTable.id, existing.id));
+      .where(eq(AgencyUserTable.id, existing.id));
     return;
   }
 
-  await db.insert(AgencyMemberTable).values({
+  await db.insert(AgencyUserTable).values({
     agencyId,
     userId,
     subRole: 'owner',

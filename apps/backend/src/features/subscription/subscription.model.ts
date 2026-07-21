@@ -1,15 +1,27 @@
 import { MainSchema } from "@/db/db.schema";
 import { decimal, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { RoleTable } from "@/features/rbac/role/role.model";
 
 export const billingCycleValues = ['weekly', 'monthly', 'annually'] as const;
 export type BillingCycle = (typeof billingCycleValues)[number];
 export const billingCycleEnum = MainSchema.enum('billing_cycle', billingCycleValues);
+
+/**
+ * Who a plan is sold to. Until migration 0036 this was inferred from
+ * billingCycle (weekly = agency, monthly = outlet); it is now stored.
+ */
+export const subscriptionTypeValues = ['agency', 'outlet'] as const;
+export type SubscriptionType = (typeof subscriptionTypeValues)[number];
+export const subscriptionTypeEnum = MainSchema.enum('subscription_type', subscriptionTypeValues);
 
 export const SubscriptionTable = MainSchema.table('subscription', {
     id: uuid('id').defaultRandom().notNull().primaryKey(),
     name: varchar('name', { length: 255 }).notNull(),
     price: decimal('price', { precision: 10, scale: 2 }).notNull(),
     billingCycle: billingCycleEnum('billing_cycle').notNull().default('monthly'),
+    subscriptionType: subscriptionTypeEnum('subscription_type').notNull(),
+    /** The role this plan grants — main.role 'agency' or 'outlet'. */
+    roleId: uuid('role_id').references(() => RoleTable.id, { onDelete: 'set null' }),
     status: varchar('status').notNull().default('active'),
     // Free-text volume tier shown on the plan (e.g. "11–25 PV/week", "5 PRs/day").
     coverage: varchar('coverage', { length: 100 }),

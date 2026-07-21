@@ -47,8 +47,7 @@ export interface SpecialService {
 	adminAccepted: SpecialServiceAdminAccepted;
 	postingAgencyId: string | null;
 	postingAgencyName: string | null;
-	assignedAgencyId: string | null;
-	assignedAgencyName: string | null;
+	vendorName: string | null;
 	scheduledFor: string | null;
 	createdAt: string;
 	updatedAt: string;
@@ -228,7 +227,7 @@ export interface UpdateSpecialServiceInput {
 	initiatedBy?: SpecialServiceInitiatedBy;
 	budget?: number | null;
 	scheduledFor?: string | null;
-	assignedAgencyName?: string | null;
+	vendorName?: string | null;
 }
 
 export async function updateSpecialService(

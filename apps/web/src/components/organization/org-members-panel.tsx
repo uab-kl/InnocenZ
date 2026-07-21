@@ -3,8 +3,8 @@ import { Loader2, Search } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/lib/auth-context";
-import { formatDate, getErrorMessage } from "@/lib/utils";
-import { fetchAgencyMembers } from "@/services/agency";
+import { getErrorMessage } from "@/lib/utils";
+import { fetchAgencyPrs } from "@/services/agency";
 
 export function OrgMembersPanel({ orgId }: { orgId: string }) {
 	const { logout } = useAuth();
@@ -21,15 +21,7 @@ export function OrgMembersPanel({ orgId }: { orgId: string }) {
 	const membersQuery = useQuery({
 		queryKey: ["agency-prs", orgId, debouncedSearch],
 		queryFn: () =>
-			fetchAgencyMembers(
-				orgId,
-				{
-					subRole: "pr",
-					status: "active",
-					search: debouncedSearch || undefined,
-				},
-				logout,
-			),
+			fetchAgencyPrs(orgId, { search: debouncedSearch || undefined }, logout),
 		staleTime: 30_000,
 	});
 
@@ -81,12 +73,12 @@ export function OrgMembersPanel({ orgId }: { orgId: string }) {
 				<ul className="space-y-1.5">
 					{members.map((member) => (
 						<li
-							key={member.id}
+							key={member.prId}
 							className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-2.5 text-base"
 						>
 							<div className="min-w-0 flex-1">
 								<div className="font-medium">
-									{member.username || member.userId.slice(0, 8)}
+									{member.name || member.nickname || member.prId.slice(0, 8)}
 								</div>
 								<div className="text-sm text-muted-foreground">
 									{[member.email, member.phoneNum]
@@ -94,8 +86,8 @@ export function OrgMembersPanel({ orgId }: { orgId: string }) {
 										.join(" · ") || "—"}
 								</div>
 							</div>
-							<span className="text-sm text-muted-foreground">
-								Joined {formatDate(member.createdAt)}
+							<span className="text-sm text-muted-foreground capitalize">
+								{member.approveStatus}
 							</span>
 						</li>
 					))}

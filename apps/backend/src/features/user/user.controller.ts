@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { UserRepositoryClass } from './user.repository';
 import { UserProfileRepositoryClass } from './user-profile/user-profile.repository';
-import { UserFilter, UserSortField } from './user.model';
+import { UserFilter, UserSortField, UserStatus } from './user.model';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -46,7 +46,7 @@ export class UserControllerClass {
         email: req.query.email as string | undefined,
         phoneNum: req.query.phoneNum as string | undefined,
         username: req.query.username as string | undefined,
-        status: req.query.status as string | undefined,
+        status: req.query.status as UserStatus | undefined,
         roleId: req.query.roleId as string | undefined,
       };
 
@@ -127,24 +127,15 @@ export class UserControllerClass {
         });
       }
 
-      const firstName =
-        typeof req.body?.firstName === 'string' ? req.body.firstName.trim() : undefined;
-      const lastName =
-        typeof req.body?.lastName === 'string' ? req.body.lastName.trim() : undefined;
+      const fullName =
+        typeof req.body?.fullName === 'string' ? req.body.fullName.trim() : undefined;
       const email =
         typeof req.body?.email === 'string' ? req.body.email.trim() : undefined;
 
-      if (firstName !== undefined && (firstName.length < 1 || firstName.length > 100)) {
+      if (fullName !== undefined && (fullName.length < 1 || fullName.length > 255)) {
         return res.status(400).json({
           success: false,
-          message: 'Legal first name must be between 1 and 100 characters',
-          data: null,
-        });
-      }
-      if (lastName !== undefined && lastName.length > 100) {
-        return res.status(400).json({
-          success: false,
-          message: 'Legal last name must be at most 100 characters',
+          message: 'Legal full name must be between 1 and 255 characters',
           data: null,
         });
       }
@@ -175,10 +166,9 @@ export class UserControllerClass {
         return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       }
 
-      if (firstName !== undefined || lastName !== undefined) {
+      if (fullName !== undefined) {
         await this.userProfileRepository.update(id, {
-          ...(firstName !== undefined ? { firstName } : {}),
-          ...(lastName !== undefined ? { lastName } : {}),
+          fullName,
           updatedBy: actor,
         });
       }

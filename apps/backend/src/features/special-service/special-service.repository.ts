@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
+import { OutletTable } from '@/features/outlet/outlet.model.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
 import { buildMultiDayWhere } from '@/util/filter-date-format.js';
@@ -8,6 +9,7 @@ import {
   SpecialServiceFilter,
   SpecialServiceInsertType,
   SpecialServiceStatus,
+  SpecialServiceWithOutlet,
   SpecialServiceTable,
 } from './special-service.model.js';
 
@@ -16,14 +18,40 @@ export type StatusCountRow = {
   count: number;
 };
 
+/**
+ * Every special_service column plus the outlet's name. outlet_name used to be
+ * stored on the row; migration 0035 dropped the copy, so it is joined from
+ * main.outlet here and API responses keep the field unchanged.
+ */
+const selectWithOutlet = {
+  id: SpecialServiceTable.id,
+  outletId: SpecialServiceTable.outletId,
+  outletName: OutletTable.name,
+  title: SpecialServiceTable.title,
+  category: SpecialServiceTable.category,
+  description: SpecialServiceTable.description,
+  budget: SpecialServiceTable.budget,
+  currency: SpecialServiceTable.currency,
+  status: SpecialServiceTable.status,
+  initiatedBy: SpecialServiceTable.initiatedBy,
+  adminAccepted: SpecialServiceTable.adminAccepted,
+  postingAgencyId: SpecialServiceTable.postingAgencyId,
+  postingAgencyName: SpecialServiceTable.postingAgencyName,
+  vendorName: SpecialServiceTable.vendorName,
+  scheduledFor: SpecialServiceTable.scheduledFor,
+  createdAt: SpecialServiceTable.createdAt,
+  updatedAt: SpecialServiceTable.updatedAt,
+  createdBy: SpecialServiceTable.createdBy,
+  updatedBy: SpecialServiceTable.updatedBy,
+};
+
 export class SpecialServiceRepositoryClass {
   private buildConditions(filter?: SpecialServiceFilter): SQL | undefined {
     const conditions: SQL[] = [];
     if (filter?.outletId) conditions.push(eq(SpecialServiceTable.outletId, filter.outletId));
     if (filter?.status) conditions.push(eq(SpecialServiceTable.status, filter.status));
     if (filter?.category) conditions.push(eq(SpecialServiceTable.category, filter.category));
-    if (filter?.assignedAgencyId)
-      conditions.push(eq(SpecialServiceTable.assignedAgencyId, filter.assignedAgencyId));
+    if (filter?.vendorName) conditions.push(eq(SpecialServiceTable.vendorName, filter.vendorName));
     if (filter?.initiatedBy) conditions.push(eq(SpecialServiceTable.initiatedBy, filter.initiatedBy));
     if (filter?.adminAccepted)
       conditions.push(eq(SpecialServiceTable.adminAccepted, filter.adminAccepted));
@@ -40,7 +68,7 @@ export class SpecialServiceRepositoryClass {
     pageSize: number;
     /** Sort by requested time (createdAt). Defaults to newest first. */
     order?: 'asc' | 'desc';
-  }): Promise<{ records: SpecialService[]; totalCount: number }> {
+  }): Promise<{ records: SpecialServiceWithOutlet[]; totalCount: number }> {
     try {
       const { filter, page, pageSize, order = 'desc' } = params;
       const whereClause = this.buildConditions(filter);
@@ -52,8 +80,9 @@ export class SpecialServiceRepositoryClass {
       const totalCount = Number(countRow?.value ?? 0);
 
       const records = await db
-        .select()
+        .select(selectWithOutlet)
         .from(SpecialServiceTable)
+        .leftJoin(OutletTable, eq(OutletTable.id, SpecialServiceTable.outletId))
         .where(whereClause)
         .orderBy(
           order === 'asc'
@@ -70,11 +99,12 @@ export class SpecialServiceRepositoryClass {
     }
   }
 
-  async getById(id: string): Promise<SpecialService | null> {
+  async getById(id: string): Promise<SpecialServiceWithOutlet | null> {
     try {
       const [row] = await db
-        .select()
+        .select(selectWithOutlet)
         .from(SpecialServiceTable)
+        .leftJoin(OutletTable, eq(OutletTable.id, SpecialServiceTable.outletId))
         .where(eq(SpecialServiceTable.id, id))
         .limit(1);
       return row ?? null;

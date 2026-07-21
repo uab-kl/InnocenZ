@@ -17,6 +17,9 @@ export const AuditLogTable = MainSchema.table(
     ipAddress: varchar('ip_address').notNull(),
     userAgent: text('user_agent').notNull(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdBy: varchar('created_by').notNull().default('system'),
+    updatedBy: varchar('updated_by').notNull().default('system'),
   },
   (table) => [
     index('audit_user_idx').on(table.userId),

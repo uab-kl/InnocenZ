@@ -53,11 +53,17 @@ import type {
 
 export type SubscriptionStatusFilter = "all" | SubscriptionStatus;
 export type BillingCycleFilter = "all" | BillingCycle;
-export type SubscriptionRoleFilter = "all" | string;
+export type PlanAudience = "agency" | "outlet";
+export type SubscriptionAudienceFilter = "all" | PlanAudience;
+
+/** Audience is stored on the plan since migration 0036, not inferred from the billing cycle. */
+function audienceFor(sub: Subscription): PlanAudience {
+	return sub.subscriptionType;
+}
 
 // Volume tier per plan, taken from the InnocenZ prototype rate cards. Keyed by
-// role because "Plus"/"Enterprise"/"Scale" exist for both with different ranges
-// and units: agency bills weekly on PV volume, outlet monthly on PRs/day.
+// audience because "Plus"/"Enterprise"/"Scale" exist for both with different
+// ranges and units: agency bills weekly on PV volume, outlet monthly on PRs/day.
 const PLAN_COVERAGE: Record<string, Record<string, string>> = {
 	agency: {
 		Starter: "5 PV/week",
@@ -78,20 +84,12 @@ const PLAN_COVERAGE: Record<string, Record<string, string>> = {
 };
 
 function coverageFor(sub: Subscription): string {
-	for (const role of sub.roles) {
-		const byName = PLAN_COVERAGE[role.roleName];
-		if (byName?.[sub.name]) return byName[sub.name];
-	}
-	return "—";
-}
-
-function hasRole(sub: Subscription, roleName: string): boolean {
-	return sub.roles.some((role) => role.roleName === roleName);
+	return PLAN_COVERAGE[audienceFor(sub)]?.[sub.name] ?? "—";
 }
 
 /** Agency Custom (151+ PV/week) is priced per deal — not a fixed catalog price. */
 function isAgencyCustomPlan(sub: Subscription): boolean {
-	return sub.name === "Custom" && hasRole(sub, "agency");
+	return sub.name === "Custom" && audienceFor(sub) === "agency";
 }
 
 function priceLabelFor(sub: Subscription): string {
@@ -110,11 +108,10 @@ interface SubscriptionsTableProps {
 	error: Error | null;
 	statusFilter: SubscriptionStatusFilter;
 	billingCycleFilter: BillingCycleFilter;
-	roleFilter: SubscriptionRoleFilter;
-	roleOptions: Array<{ id: string; roleName: string }>;
+	audienceFilter: SubscriptionAudienceFilter;
 	onStatusFilterChange: (value: SubscriptionStatusFilter) => void;
 	onBillingCycleFilterChange: (value: BillingCycleFilter) => void;
-	onRoleFilterChange: (value: SubscriptionRoleFilter) => void;
+	onAudienceFilterChange: (value: SubscriptionAudienceFilter) => void;
 	onPageChange: (page: number) => void;
 	onRetry: () => void;
 	onCreateClick: () => void;
@@ -132,11 +129,10 @@ export function SubscriptionsTable({
 	error,
 	statusFilter,
 	billingCycleFilter,
-	roleFilter,
-	roleOptions,
+	audienceFilter,
 	onStatusFilterChange,
 	onBillingCycleFilterChange,
-	onRoleFilterChange,
+	onAudienceFilterChange,
 	onPageChange,
 	onRetry,
 	onCreateClick,
@@ -150,19 +146,8 @@ export function SubscriptionsTable({
 		(a, b) => Number(a.price) - Number(b.price),
 	);
 
-	// The plans role filter is keyed by role id; map it to/from outlet/agency so
-	// it can share the same toggle as the other admin pages.
-	const agencyRoleId = roleOptions.find((r) => r.roleName === "agency")?.id;
-	const outletRoleId = roleOptions.find((r) => r.roleName === "outlet")?.id;
-	const roleSourceValue: SourceValue =
-		roleFilter === agencyRoleId
-			? "agency"
-			: roleFilter === outletRoleId
-				? "outlet"
-				: "all";
-
 	const showOutletPosAddonRow =
-		roleSourceValue === "outlet" && !showLoading && !isError;
+		audienceFilter === "outlet" && !showLoading && !isError;
 
 	return (
 		<Card className="border-(--lavender-soft)/40 bg-card">
@@ -181,14 +166,10 @@ export function SubscriptionsTable({
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
 						<SourceToggle
 							className="sm:mr-auto"
-							value={roleSourceValue}
-							onChange={(value) => {
-								if (value === "agency")
-									onRoleFilterChange(agencyRoleId ?? "all");
-								else if (value === "outlet")
-									onRoleFilterChange(outletRoleId ?? "all");
-								else onRoleFilterChange("all");
-							}}
+							value={audienceFilter as SourceValue}
+							onChange={(value) =>
+								onAudienceFilterChange(value as SubscriptionAudienceFilter)
+							}
 						/>
 
 						<Select
@@ -241,7 +222,7 @@ export function SubscriptionsTable({
 						<TableHeader>
 							<TableRow>
 								<TableHead>Name</TableHead>
-								<TableHead>Roles</TableHead>
+								<TableHead>Audience</TableHead>
 								<TableHead>Price (RM)</TableHead>
 								<TableHead>Coverage</TableHead>
 								<TableHead>Billing Cycle</TableHead>
@@ -293,21 +274,12 @@ export function SubscriptionsTable({
 										<TableRow key={sub.id}>
 											<TableCell className="font-medium">{sub.name}</TableCell>
 											<TableCell>
-												{sub.roles.length > 0 ? (
-													<div className="flex flex-wrap gap-1.5">
-														{sub.roles.map((role) => (
-															<Badge
-																key={role.id}
-																variant="outline"
-																className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
-															>
-																{formatRoleLabel(role.roleName)}
-															</Badge>
-														))}
-													</div>
-												) : (
-													<span className="text-sm text-muted-foreground">—</span>
-												)}
+												<Badge
+													variant="outline"
+													className="border-(--lavender-soft)/50 bg-(--lavender-soft)/10 text-foreground"
+												>
+													{formatRoleLabel(audienceFor(sub))}
+												</Badge>
 											</TableCell>
 											<TableCell
 												className={
