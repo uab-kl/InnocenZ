@@ -15,6 +15,7 @@ import {
 } from 'react-native';
 import { C, F } from '../theme/theme';
 import { ApiError, assetUrl, portfolioSlotsFromProfile } from '../lib/api';
+import { fetchImageBlob, renderComcardPng } from '../lib/render-comcard';
 import {
   PORTFOLIO_SLOTS,
   SEED_COMCARD,
@@ -59,11 +60,13 @@ type Draft = {
 
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
-  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, token } =
+  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, uploadComcardImage, token } =
     useSession();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [savingComcard, setSavingComcard] = useState(false);
+  const [comcardSavedHint, setComcardSavedHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
   const [draft, setDraft] = useState<Draft>(() => emptyDraft());
@@ -122,6 +125,34 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   }, [displayPortfolio, editing, portfolio]);
 
   const canPickImages = Boolean(token) && Platform.OS === 'web';
+  const canSaveComcard = Boolean(token) && Platform.OS === 'web' && !editing;
+
+  const saveComcardToDatabase = async () => {
+    if (!canSaveComcard) return;
+    setSavingComcard(true);
+    setError(null);
+    setComcardSavedHint(null);
+    try {
+      let blob: Blob;
+      if (comcardTiles.mode === 'single') {
+        blob = await fetchImageBlob(comcardTiles.src);
+      } else {
+        blob = await renderComcardPng({
+          paths: comcardTiles.paths,
+          name: displayName,
+          age,
+          heightCm: height,
+          weightKg: weight,
+        });
+      }
+      await uploadComcardImage(blob, 'comcard.png');
+      setComcardSavedHint('Comcard saved');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not save comcard');
+    } finally {
+      setSavingComcard(false);
+    }
+  };
 
   const startEdit = () => {
     const agencyIds = memberships.length
@@ -468,6 +499,27 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               </View>
             )}
           </View>
+
+          {canSaveComcard && (
+            <View style={styles.comcardActions}>
+              <IzButton
+                label={savingComcard ? 'Saving…' : me?.profile.comcardImage ? 'Update saved comcard' : 'Save comcard'}
+                onPress={() => {
+                  void saveComcardToDatabase();
+                }}
+                disabled={savingComcard || saving}
+                variant="soft"
+                small
+              />
+              {comcardSavedHint ? (
+                <Text style={styles.comcardSavedHint}>{comcardSavedHint}</Text>
+              ) : me?.profile.comcardImage ? (
+                <Text style={styles.comcardSavedHint}>Saved to profile</Text>
+              ) : (
+                <Text style={styles.comcardHint}>Save the auto-generated comcard to your profile</Text>
+              )}
+            </View>
+          )}
 
           {!editing && (
             <View style={styles.measureGrid}>
@@ -858,6 +910,25 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     borderWidth: 1,
     borderColor: C.line2,
+  },
+  comcardActions: {
+    marginTop: 12,
+    width: '100%',
+    maxWidth: 280,
+    alignItems: 'center',
+    gap: 6,
+  },
+  comcardHint: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.muted,
+    textAlign: 'center',
+  },
+  comcardSavedHint: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.green,
+    textAlign: 'center',
   },
   collage: {
     flex: 1,

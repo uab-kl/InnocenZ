@@ -1,6 +1,7 @@
 /**
- * Agency schedule — calendar + timetable from InnocenZ-proto `PrAgencySchedulePanel`
- * (screenshot: month/year selects, legend, TIMETABLE · week range, agency cards).
+ * Agency schedule — calendar + timetable from real `/shift-assignment/mine`
+ * rows. Status follows attendance stamps: On duty (checked in) / Complete
+ * (checked out) / Scheduled|Pending (booked).
  */
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -28,6 +29,8 @@ import {
   todayYmd,
   ymdToIso,
 } from '../lib/demo-shifts';
+import { useActiveShift } from '../lib/active-shift';
+import { useSession } from '../lib/session';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
@@ -42,19 +45,47 @@ const KIND_STYLE: Record<ScheduleDayKind, { bg: string; border: string; color: s
 
 export function AgencySchedulePanel() {
   const today = todayYmd();
+  const { me, agencies } = useSession();
+  const { assignments, refresh } = useActiveShift();
   const [viewMonth, setViewMonth] = useState(() => new Date(today[0], today[1] - 1, 1));
   const [blocked, setBlocked] = useState<string[]>([]);
   const [rulesOpen, setRulesOpen] = useState(false);
   const [cancelledIds, setCancelledIds] = useState<string[]>([]);
 
-  const days = useMemo(() => buildScheduleDays(blocked), [blocked]);
+  const agencyName = agencies[0]?.agencyName ?? me?.username ?? 'Agency';
+  const todayIso = ymdToIso(...today);
+
+  const scheduleShifts = useMemo(
+    () =>
+      assignments
+        .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+        .map((a) => ({
+          id: a.id,
+          dateIso: a.shiftDate,
+          outlet: a.outletName ?? 'Outlet',
+          time: a.slot ?? '—',
+          checkInAt: a.checkInAt,
+          checkOutAt: a.checkOutAt,
+          status: a.status,
+          agencyName,
+        })),
+    [assignments, agencyName],
+  );
+
+  const days = useMemo(
+    () => buildScheduleDays(blocked, todayIso, scheduleShifts),
+    [blocked, todayIso, scheduleShifts],
+  );
   const dayByIso = useMemo(() => new Map(days.map((d) => [d.dateIso, d])), [days]);
 
-  const weekRange = useMemo(() => getUpcomingWeekRange(), []);
+  const weekRange = useMemo(() => getUpcomingWeekRange(todayIso), [todayIso]);
   const weekLabel = formatUpcomingWeekLabel(weekRange.fromIso, weekRange.toIso).toUpperCase();
   const timetable = useMemo(
-    () => buildUpcomingWeekTimetable().filter((e) => !cancelledIds.includes(e.id)),
-    [cancelledIds],
+    () =>
+      buildUpcomingWeekTimetable(todayIso, scheduleShifts).filter(
+        (e) => !cancelledIds.includes(e.id),
+      ),
+    [cancelledIds, scheduleShifts, todayIso],
   );
 
   const year = viewMonth.getFullYear();
@@ -71,7 +102,15 @@ export function AgencySchedulePanel() {
 
   const toggleDay = (iso: string) => {
     const day = dayByIso.get(iso);
-    if (!day || day.kind === 'past' || day.kind === 'assigned' || day.kind === 'pending') return;
+    if (
+      !day ||
+      day.kind === 'past' ||
+      day.kind === 'assigned' ||
+      day.kind === 'pending' ||
+      day.kind === 'active'
+    ) {
+      return;
+    }
     setBlocked((prev) => (prev.includes(iso) ? prev.filter((x) => x !== iso) : [...prev, iso]));
   };
 
@@ -130,7 +169,6 @@ export function AgencySchedulePanel() {
           </View>
         </View>
 
-        {/* Year jump chips for clarity */}
         <View style={styles.yearChips}>
           {years.map((y) => (
             <Pressable
@@ -172,7 +210,7 @@ export function AgencySchedulePanel() {
             const day = dayByIso.get(iso);
             const kind = day?.kind ?? 'past';
             const style = KIND_STYLE[kind];
-            const isToday = iso === ymdToIso(...today);
+            const isToday = iso === todayIso;
             const canToggle = kind === 'open' || kind === 'unavailable';
             return (
               <Pressable
@@ -194,7 +232,8 @@ export function AgencySchedulePanel() {
 
         <View style={styles.legend}>
           <LegendSwatch color="rgba(232,224,245,0.35)" label="Available" />
-          <LegendSwatch color={C.green} label="Scheduled" />
+          <LegendSwatch color={C.green} label="Scheduled / Complete" />
+          <LegendSwatch color={C.accentL} label="On duty" />
           <LegendSwatch color={C.amber} label="Pending" />
           <LegendSwatch color={C.red} label="Not available" />
         </View>
@@ -207,6 +246,9 @@ export function AgencySchedulePanel() {
         <View style={styles.ttHead}>
           <Clock size={16} color={C.muted2} />
           <Text style={styles.ttTitle}>Timetable · {weekLabel}</Text>
+          <Pressable onPress={() => void refresh()} hitSlop={8} style={{ marginLeft: 'auto' }}>
+            <Text style={styles.refreshText}>Refresh</Text>
+          </Pressable>
         </View>
         {timetable.length === 0 ? (
           <View style={styles.empty}>
@@ -264,9 +306,11 @@ function TimetableRow({
       <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
       <Text style={[styles.ttFieldLabel, { marginTop: 8 }]}>TIME</Text>
       <Text style={styles.ttFieldValue}>{entry.time}</Text>
-      <Pressable onPress={onCancel} style={styles.cancelBtn}>
-        <Text style={styles.cancelText}>Cancel</Text>
-      </Pressable>
+      {entry.canCancel ? (
+        <Pressable onPress={onCancel} style={styles.cancelBtn}>
+          <Text style={styles.cancelText}>Cancel</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }
@@ -395,6 +439,12 @@ const styles = StyleSheet.create({
     letterSpacing: 0.6,
     textTransform: 'uppercase',
     color: C.muted,
+  },
+  refreshText: {
+    fontFamily: F.sora,
+    fontSize: 11,
+    fontWeight: '600',
+    color: C.goldL,
   },
   empty: {
     borderWidth: 1,

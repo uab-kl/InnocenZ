@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, ilike, lte, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -11,6 +11,7 @@ import {
   PaymentVoucherLineType,
   PaymentVoucherWithLines,
   PaymentVoucherFilter,
+  PaymentVoucherStatus,
 } from './payment-voucher.model';
 
 type LineInput = Omit<PaymentVoucherLineInsertType, 'id' | 'voucherId'>;
@@ -230,6 +231,42 @@ export class PaymentVoucherRepositoryClass {
       return { ...voucher, lines };
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getWeekVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Signed/paid vouchers for the PR History → Payment tab (and payroll weeks
+   * on History → Shifts). Newest week first. Optional `statuses` defaults to
+   * signed + paid; pass past-week statuses when Shifts needs sealed drafts too.
+   */
+  async listHistoryForPr(
+    prId: string,
+    opts?: { statuses?: PaymentVoucherStatus[]; excludeWeekStart?: string },
+  ): Promise<PaymentVoucherWithLines[]> {
+    try {
+      const statuses = opts?.statuses ?? (['signed', 'paid'] as PaymentVoucherStatus[]);
+      const conditions = [
+        eq(PaymentVoucherTable.prId, prId),
+        inArray(PaymentVoucherTable.status, statuses),
+      ];
+      if (opts?.excludeWeekStart) {
+        conditions.push(ne(PaymentVoucherTable.weekStart, opts.excludeWeekStart));
+      }
+      const vouchers = await db
+        .select()
+        .from(PaymentVoucherTable)
+        .where(and(...conditions))
+        .orderBy(desc(PaymentVoucherTable.weekStart), desc(PaymentVoucherTable.createdAt));
+
+      const withLines: PaymentVoucherWithLines[] = [];
+      for (const voucher of vouchers) {
+        const lines = await this.getLines(voucher.id);
+        withLines.push({ ...voucher, lines });
+      }
+      return withLines;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listHistoryForPr] Error:', error);
       throw error;
     }
   }

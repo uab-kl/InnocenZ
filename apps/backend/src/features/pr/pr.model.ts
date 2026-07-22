@@ -90,6 +90,8 @@ export type PrProfile = {
   dob: string | null;
   nationality: string | null;
   portfolioPhotos: string[] | null;
+  /** Saved auto-generated photo comcard path on the linked user_profile. */
+  comcardImage: string | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
 };

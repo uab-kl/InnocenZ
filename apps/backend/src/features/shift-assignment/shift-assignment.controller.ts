@@ -94,6 +94,37 @@ export class ShiftAssignmentControllerClass {
     private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
 
+  /**
+   * Flat shift wages for this PR's tier on this shift: per-shift override from
+   * Post Job "Pay by PR tier → Wages", else the outlet workspace tier rate.
+   * Commission-only PRs have no wages row (null).
+   */
+  private async resolveTierWages(
+    pr: { tier: string },
+    shiftId: string,
+    outletId: string,
+  ): Promise<string | null> {
+    const commissionOnly = pr.tier === 'commission_only';
+    if (commissionOnly) return null;
+    const tierLabel = PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null;
+    const [rateByOutlet, overrideByShift] = await Promise.all([
+      this.shiftAssignmentRepository.resolveTierRatesForOutlets({
+        outletIds: [outletId],
+        tierLabel,
+        commissionOnly,
+      }),
+      this.shiftAssignmentRepository.resolveShiftTierOverrides({
+        shiftIds: [shiftId],
+        tierLabel,
+        commissionOnly,
+      }),
+    ]);
+    const rate = mergeRate(rateByOutlet.get(outletId), overrideByShift.get(shiftId));
+    if (rate?.wagePerHour == null || rate.wagePerHour === '') return null;
+    const n = Number(rate.wagePerHour);
+    return Number.isFinite(n) ? n.toFixed(2) : null;
+  }
+
   private resolveScope(req: Request): Promise<OrgScope> {
     return resolveOrgScope(req, {
       authRepository: this.authRepository,
@@ -250,9 +281,15 @@ export class ShiftAssignmentControllerClass {
       }
 
       const actor = getActor(req);
+      const shift = await this.shiftRepository.getById(existing.shiftId);
+      const tierWages = shift
+        ? await this.resolveTierWages(pr, existing.shiftId, shift.outletId)
+        : null;
       const assignment = await this.shiftAssignmentRepository.update(id, {
         checkOutAt: new Date(),
         status: 'completed',
+        // Seal flat tier wages onto the assignment so PV / History match Post Job.
+        ...(tierWages != null ? { payAmount: tierWages } : {}),
         updatedBy: actor,
       });
       res.status(200).json({ success: true, message: 'Checked out', data: assignment });
@@ -313,12 +350,14 @@ export class ShiftAssignmentControllerClass {
       }
 
       const actor = getActor(req);
+      const tierWages = await this.resolveTierWages(pr, shift.id, shift.outletId);
       const assignment = await this.shiftAssignmentRepository.create({
         shiftId: shift.id,
         prId: pr.id,
         agencyId: shift.agencyId, // authoritative — derived from the shift
         status: parsed.data.status ?? 'assigned',
-        payAmount: parsed.data.payAmount,
+        // Client override wins; otherwise Post Job / workspace tier wages.
+        payAmount: parsed.data.payAmount ?? tierWages ?? '0.00',
         checkInAt: parsed.data.checkInAt ? new Date(parsed.data.checkInAt) : undefined,
         checkOutAt: parsed.data.checkOutAt ? new Date(parsed.data.checkOutAt) : undefined,
         notes: parsed.data.notes,

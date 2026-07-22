@@ -10,6 +10,7 @@ import { SessionProvider, useSession } from '../lib/session';
 import { ShiftSessionProvider } from '../lib/shift-session';
 import { ActiveShiftProvider } from '../lib/active-shift';
 import { PrEarningsProvider } from '../lib/pr-earnings';
+import { PaymentHistoryProvider } from '../lib/payment-history';
 import { SignedPvProvider } from '../lib/signed-pv';
 import { PrNavProvider, usePrNav } from '../lib/pr-nav';
 import { PhoneFrame } from '../components/PhoneFrame';
@@ -34,6 +35,7 @@ function LoggedInShell() {
     <ShiftSessionProvider>
       <ActiveShiftProvider>
       <PrEarningsProvider>
+      <PaymentHistoryProvider>
       <SignedPvProvider>
         <PhoneFrame footer={showTabBar ? <BottomNav active={tab} onChange={setTab} /> : null}>
           {route.name === 'scan' && (
@@ -48,6 +50,7 @@ function LoggedInShell() {
           {route.name === 'tabs' && tab === 'profile' && <ProfileScreen onNavigate={setTab} />}
         </PhoneFrame>
       </SignedPvProvider>
+      </PaymentHistoryProvider>
       </PrEarningsProvider>
       </ActiveShiftProvider>
     </ShiftSessionProvider>

@@ -16,6 +16,8 @@ import {
   portfolioSlotsToJson,
 } from '@/util/portfolio-image';
 import { portfolioImagePathFromFile } from '@/middlewares/upload-portfolio-image';
+import { comcardImagePathFromFile } from '@/middlewares/upload-comcard-image';
+import { deleteComcardImageFile } from '@/util/comcard-image';
 import { withUserProfile, withUserProfiles } from '@/util/user-profile-image';
 import { logger } from '@/util/logger';
 
@@ -332,6 +334,61 @@ export class UserControllerClass {
       });
     } catch (error) {
       logger.error('[UserController.uploadPortfolioPhoto] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  async uploadComcardImage(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const actorId = req.user?.id;
+
+      if (!actorId || actorId !== id) {
+        return res.status(403).json({
+          success: false,
+          message: Error.UNAUTHORIZED,
+          data: null,
+        });
+      }
+
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'Comcard image file is required',
+          data: null,
+        });
+      }
+
+      const existingUser = await this.userRepository.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const actor = getActor(req);
+      let profile = await this.userProfileRepository.getByUserId(id);
+      if (!profile) {
+        profile = await this.userProfileRepository.createEmpty(id, actor);
+      }
+
+      const publicPath = comcardImagePathFromFile(id, req.file);
+      if (profile.comcardImage && profile.comcardImage !== publicPath) {
+        deleteComcardImageFile(profile.comcardImage);
+      }
+
+      await this.userProfileRepository.update(id, {
+        comcardImage: publicPath,
+        updatedBy: actor,
+      });
+
+      profile = await this.userProfileRepository.getByUserId(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Comcard image updated',
+        data: withUserProfile(existingUser, profile),
+      });
+    } catch (error) {
+      logger.error('[UserController.uploadComcardImage] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

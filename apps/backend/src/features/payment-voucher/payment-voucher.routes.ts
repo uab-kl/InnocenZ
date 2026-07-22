@@ -9,6 +9,7 @@ const router = Router();
 // must precede it (and the '/:id' route).
 router.get('/mine/current-week', paymentVoucherController.getMyCurrentWeek.bind(paymentVoucherController));
 router.get('/mine/last-week', paymentVoucherController.getMyLastWeek.bind(paymentVoucherController));
+router.get('/mine/history', paymentVoucherController.getMyHistory.bind(paymentVoucherController));
 router.post('/mine/lines', paymentVoucherController.addMyLine.bind(paymentVoucherController));
 router.patch('/mine/lines/:lineId', paymentVoucherController.updateMyLine.bind(paymentVoucherController));
 router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(paymentVoucherController));

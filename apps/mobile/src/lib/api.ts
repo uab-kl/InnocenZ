@@ -57,6 +57,8 @@ export type MeProfile = {
   verificationStatus: string | null;
   /** Showcase fields — gallery paths served by the backend /img route. */
   portfolioPhotos: (string | null)[] | null;
+  /** Saved auto-generated photo comcard path (`user_profile.comcard_image`). */
+  comcardImage: string | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
 };
@@ -224,6 +226,36 @@ export async function uploadUserPortfolioPhoto(
   return body.data;
 }
 
+/** Upload the auto-generated photo comcard — stored on user_profile.comcard_image. */
+export async function uploadUserComcardImage(
+  accessToken: string,
+  userId: string,
+  file: Blob,
+  filename = 'comcard.png',
+): Promise<Me> {
+  const form = new FormData();
+  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
+    'comcardImage',
+    file,
+    filename,
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/user/${userId}/comcard-image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  }
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
+  if (!res.ok || !body?.success) {
+    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
+  }
+  return body.data;
+}
+
 /**
  * The PR portal sign-in accepts the digits the prototype uses ("60123456789")
  * while user.phone_num stores E.164-style "+60123456789" — try sensible
@@ -321,6 +353,8 @@ export type ShiftAssignmentRecord = {
   eventName: string | null;
   payPerHour: string;
   outletName: string | null;
+  /** The shift outlet's address (composed from its address columns via FK). */
+  outletAddress: string | null;
   /** This PR's tier (pr_tier enum), e.g. 'tier_5' / 'commission_only'. */
   tier: string;
   /** Resolved rate card for this PR's tier at this outlet, or null if unset. */
@@ -420,6 +454,31 @@ export function fetchMyCurrentWeek(accessToken: string): Promise<PrCurrentWeek> 
 /** The PR's previous-week voucher (Payment "Last week") — same shape, real data. */
 export function fetchMyLastWeek(accessToken: string): Promise<PrCurrentWeek> {
   return request<PrCurrentWeek>('/payment-voucher/mine/last-week', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Signed/paid vouchers for History (Payment history + past payroll weeks).
+ * Empty when the PR has no completed PVs — never invents demo amounts.
+ */
+export type PrHistoryVoucher = {
+  voucherId: string;
+  weekStart: string | null;
+  weekEnd: string | null;
+  net: string;
+  wages: string;
+  status: string;
+  outlet: string | null;
+  bankRef: string | null;
+  issuedDate: string | null;
+  prSignedAt: string | null;
+  paidAt: string | null;
+  lines: PrReceiptLine[];
+};
+
+export function fetchMyPaymentHistory(accessToken: string): Promise<PrHistoryVoucher[]> {
+  return request<PrHistoryVoucher[]>('/payment-voucher/mine/history', {
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

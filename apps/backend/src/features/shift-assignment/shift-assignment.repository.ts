@@ -18,14 +18,15 @@ import {
   ShiftAssignmentFilter,
   ShiftAssignmentCostFilter,
   ShiftCostPrDayTotals,
+  ShiftAssignmentStatus,
 } from './shift-assignment.model';
 
 /**
- * Floor/display name for history + reports: nickname when set, else legal name.
- * Matches the web `managedPrFromBackend` mapping so outlet and agency history
- * show the same label for a PR.
+ * Statuses that do not count as staffing cost — cancelled and no-show PRs are
+ * not paid. Mirrors mobile `pickActive` (active-shift.tsx) and the canonical
+ * `shiftAssignmentStatusValues` in shift-assignment.model.ts.
  */
-const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${PrTable.nickname}), ''), ${PrTable.name})`;
+const NON_STAFFING_STATUSES = ['cancelled', 'no_show'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
 
 /**
  * The rate card resolved for one PR tier at one outlet. Numeric columns stay as
@@ -205,6 +206,7 @@ export class ShiftAssignmentRepositoryClass {
         payPerHour: string;
         outletId: string;
         outletName: string | null;
+        outletAddress: string | null;
       }
     >
   > {
@@ -218,21 +220,40 @@ export class ShiftAssignmentRepositoryClass {
           payPerHour: ShiftTable.payPerHour,
           outletId: ShiftTable.outletId,
           outletName: OutletTable.name,
+          // Address parts read straight off the FK-joined outlet — never copied
+          // onto the assignment. Composed into one display line below.
+          outletAddressLine1: OutletTable.addressLine1,
+          outletAddressLine2: OutletTable.addressLine2,
+          outletPostcode: OutletTable.postcode,
+          outletState: OutletTable.state,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
         .where(eq(ShiftAssignmentTable.prId, prId))
         .orderBy(ShiftTable.shiftDate);
-      return rows.map((row) => ({
-        ...row.assignment,
-        shiftDate: row.shiftDate,
-        slot: row.slot,
-        eventName: row.eventName,
-        payPerHour: row.payPerHour,
-        outletId: row.outletId,
-        outletName: row.outletName,
-      }));
+      return rows.map((row) => {
+        // "50000 Kuala Lumpur" — postcode + state read as one piece.
+        const cityLine = [row.outletPostcode, row.outletState]
+          .map((s) => s?.trim())
+          .filter(Boolean)
+          .join(' ');
+        const outletAddress =
+          [row.outletAddressLine1, row.outletAddressLine2, cityLine]
+            .map((s) => s?.trim())
+            .filter(Boolean)
+            .join(', ') || null;
+        return {
+          ...row.assignment,
+          shiftDate: row.shiftDate,
+          slot: row.slot,
+          eventName: row.eventName,
+          payPerHour: row.payPerHour,
+          outletId: row.outletId,
+          outletName: row.outletName,
+          outletAddress,
+        };
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.listForPr] Error:', error);
       throw error;

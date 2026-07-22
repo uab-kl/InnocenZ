@@ -113,6 +113,8 @@ export type SpecialServiceFilter = {
   initiatedBy?: SpecialServiceInitiatedBy;
   postingPrId?: string;
   adminAccepted?: SpecialServiceAdminAccepted;
+  /** Partial or full match on special_service.id (UUID text). */
+  id?: string;
   /** Match rows requested on any of these calendar days (createdAt). */
   dates?: string[];
   /** Match rows scheduled on any of these calendar days (scheduledFor). */

@@ -168,11 +168,11 @@ export function PostJobTierRatesEditor({
                       <div
                         key={`${row.id}-pay`}
                         className="iz-post-job-tier-pay-cell"
-                        title="Tap to edit wages"
+                        title="Tap to edit wages for this PR tier"
                       >
                         {commissionOnly ? (
                           <span className="text-xs font-medium text-[var(--iz-muted)]">
-                            No base
+                            No wages
                           </span>
                         ) : (
                           <>

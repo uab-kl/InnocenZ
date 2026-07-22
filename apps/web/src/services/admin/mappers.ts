@@ -9,6 +9,7 @@ export interface BackendUserProfile {
 	race: string | null;
 	dob: string | null;
 	portfolioPhotos: string[] | null;
+	comcardImage: string | null;
 	comcardHeightCm: number | null;
 	comcardWeightKg: number | null;
 	idType: string | null;

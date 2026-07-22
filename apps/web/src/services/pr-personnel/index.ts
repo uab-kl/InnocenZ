@@ -26,6 +26,8 @@ export interface PrPersonnelProfile {
 	dob: string | null;
 	nationality: string | null;
 	portfolioPhotos: string[] | null;
+	/** Saved auto-generated photo comcard path (`user_profile.comcard_image`). */
+	comcardImage: string | null;
 	comcardHeightCm: number | null;
 	comcardWeightKg: number | null;
 }

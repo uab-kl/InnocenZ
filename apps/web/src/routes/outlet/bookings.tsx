@@ -470,8 +470,9 @@ function PostJobPage() {
 		};
 
 		// Real session → persist to the backend; the outletId and routed agency are
-		// resolved server-side. Demo-only fields in postItems (pay tiers, drink
-		// menus, dress code, star tiers, named PRs) are dropped by the mapper.
+		// resolved server-side. Pay-tier rows are persisted as per-shift rate
+		// overrides; the remaining demo-only fields in postItems (drink menus,
+		// dress code, star tiers, named PRs) are dropped by the mapper.
 		if (backed) {
 			postShifts(postItems)
 				.then(() => {

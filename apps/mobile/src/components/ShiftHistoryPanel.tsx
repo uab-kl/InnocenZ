@@ -1,25 +1,27 @@
 /**
- * Shift history — port of InnocenZ-proto History → Shifts:
- * filters (outlet/status/date/from–to), collapsible payroll weeks + PV, detailed shift cards.
+ * Shift history — filters + collapsible weeks from real payment_voucher data.
+ * Current week = live draft lines (same source as Payment). Past weeks = signed/paid only.
  */
 import React, { useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import {
-  HISTORY_SHIFTS,
-  HISTORY_WEEKS,
   formatRM,
   historyShiftOutlets,
+  mergeHistoryShiftsWithWeekPay,
   type DemoHistoryShift,
+  type DemoHistoryWeek,
+  type WeekPayRecord,
 } from '../lib/demo-shifts';
+import { usePrEarnings } from '../lib/pr-earnings';
+import type { PrReceiptLine } from '../lib/api';
 import { matchesShiftDayTime } from '../lib/hist-date-time-filters';
+import { usePaymentHistory } from '../lib/payment-history';
 import {
-  mergeHistoryShiftsWithPaymentWeeks,
-  normalizeHistPayWeek,
-  payWeekTotalsForHistoryWeek,
-} from '../lib/history-pay-sync';
-import { PAYMENT_HISTORY_WEEKS } from '../lib/demo-payment-history';
-import { useSignedPvs } from '../lib/signed-pv';
+  currentWeekHistoryMeta,
+  historyVoucherToHistoryWeek,
+  historyVoucherToShifts,
+} from '../lib/payment-history-map';
 import { useShiftSession } from '../lib/shift-session';
 import { HistDateTimeFilter } from './HistDateTimeFilter';
 import { IzButton, Pill } from './ui';
@@ -54,29 +56,83 @@ function statusPill(status: DemoHistoryShift['status']): {
   return { variant: 'green', label: 'Sealed' };
 }
 
+/**
+ * Build one current-week History card per calendar day — same grain as Payment's
+ * This-week columns — so 2 verified days → 2 cards (not one per outlet).
+ * Outlet label prefers the wages outlet; otherwise joins unique outlets.
+ */
+function weekRecordsFromLines(lines: PrReceiptLine[]): WeekPayRecord[] {
+  const byDate = new Map<
+    string,
+    WeekPayRecord & { outlets: Set<string>; wagesOutlet: string | null }
+  >();
+  for (const l of lines) {
+    const dateIso = l.lineDate?.match(/^(\d{4}-\d{2}-\d{2})/)?.[1];
+    if (!dateIso) continue;
+    const outlet = l.outlet?.trim() || 'Outlet';
+    const rec =
+      byDate.get(dateIso) ??
+      {
+        dateIso,
+        outlet,
+        wages: 0,
+        drinks: 0,
+        tips: 0,
+        others: 0,
+        outlets: new Set<string>(),
+        wagesOutlet: null,
+      };
+    rec.outlets.add(outlet);
+    if (l.kind === 'wages') {
+      rec.wages += l.commission;
+      if (!rec.wagesOutlet) rec.wagesOutlet = outlet;
+    } else if (l.kind === 'drinks') rec.drinks += l.commission;
+    else if (l.kind === 'tips') rec.tips += l.commission;
+    else if (l.kind === 'others') rec.others += l.commission;
+    byDate.set(dateIso, rec);
+  }
+  return [...byDate.values()].map((rec) => {
+    const names = [...rec.outlets];
+    const outlet =
+      rec.wagesOutlet ??
+      (names.length === 1 ? names[0]! : names.length > 1 ? names.join(' · ') : rec.outlet);
+    return {
+      dateIso: rec.dateIso,
+      outlet,
+      wages: rec.wages,
+      drinks: rec.drinks,
+      tips: rec.tips,
+      others: rec.others,
+    };
+  });
+}
+
 export function ShiftHistoryPanel() {
-  const { weekRecords, closedShift, checkedInAt, checkedOutAt } = useShiftSession();
-  const { signedWeeks } = useSignedPvs();
+  const { closedShift, checkedInAt, checkedOutAt } = useShiftSession();
+  const { current, lines } = usePrEarnings();
+  const { vouchers } = usePaymentHistory();
+  const weekRecords = useMemo(() => weekRecordsFromLines(lines), [lines]);
 
-  const allPayWeeks = useMemo(() => {
-    const seedIds = new Set(signedWeeks.map((w) => w.id));
-    const merged = [
-      ...signedWeeks,
-      ...PAYMENT_HISTORY_WEEKS.filter((w) => !seedIds.has(w.id)),
-    ];
-    return merged.map(normalizeHistPayWeek);
-  }, [signedWeeks]);
+  const historyWeeks: DemoHistoryWeek[] = useMemo(() => {
+    const currentMeta = currentWeekHistoryMeta(
+      current?.weekStart ?? new Date().toISOString().slice(0, 10),
+      current?.weekEnd ?? new Date().toISOString().slice(0, 10),
+    );
+    return [currentMeta, ...vouchers.map(historyVoucherToHistoryWeek)];
+  }, [current?.weekStart, current?.weekEnd, vouchers]);
 
-  const allShifts = useMemo(
-    () =>
-      mergeHistoryShiftsWithPaymentWeeks(
-        HISTORY_SHIFTS,
-        weekRecords,
-        { closedShift, checkedInAt, checkedOutAt },
-        allPayWeeks,
-      ),
-    [weekRecords, closedShift, checkedInAt, checkedOutAt, allPayWeeks],
-  );
+  const allShifts = useMemo(() => {
+    const currentShifts = mergeHistoryShiftsWithWeekPay(
+      [],
+      weekRecords,
+      { closedShift, checkedInAt, checkedOutAt },
+    );
+    const past = vouchers.flatMap((v) => {
+      const week = historyVoucherToHistoryWeek(v);
+      return historyVoucherToShifts(v, week.id);
+    });
+    return [...currentShifts, ...past].sort((a, b) => b.dateIso.localeCompare(a.dateIso));
+  }, [weekRecords, closedShift, checkedInAt, checkedOutAt, vouchers]);
 
   const [query, setQuery] = useState('');
   const [outlet, setOutlet] = useState('all');
@@ -86,9 +142,7 @@ export function ShiftHistoryPanel() {
   const [timeTo, setTimeTo] = useState('');
   const [calendarOpen, setCalendarOpen] = useState(false);
   const [openSelect, setOpenSelect] = useState<SelectKind>(null);
-  const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>(() =>
-    Object.fromEntries(HISTORY_WEEKS.map((w, i) => [w.id, i < 2])),
-  );
+  const [openWeeks, setOpenWeeks] = useState<Record<string, boolean>>({ 'week-current': true });
 
   const workDayKeys = useMemo(
     () =>
@@ -240,17 +294,21 @@ export function ShiftHistoryPanel() {
       )}
 
       <View style={styles.weekList}>
-        {HISTORY_WEEKS.map((week) => {
+        {historyWeeks.map((week) => {
           const weekShifts = filtered.filter((s) => s.weekId === week.id);
-          if (weekShifts.length === 0 && (outlet !== 'all' || status !== 'any' || date || query)) {
+          // Hide empty past weeks entirely (no phantom PV totals without shifts).
+          if (week.kind !== 'current' && weekShifts.length === 0) return null;
+          if (
+            weekShifts.length === 0 &&
+            (outlet !== 'all' || status !== 'any' || date || query)
+          ) {
             return null;
           }
           const active = weekShifts.filter((s) => s.status !== 'cancelled');
-          const pvTotals = payWeekTotalsForHistoryWeek(week, allPayWeeks);
-          const weekEarned = pvTotals ? pvTotals.net : active.reduce((s, r) => s + r.payout, 0);
-          const weekWages = pvTotals ? pvTotals.wages : active.reduce((s, r) => s + r.wages, 0);
-          const open = openWeeks[week.id] ?? false;
-          const count = pvTotals ? pvTotals.shifts : weekShifts.length;
+          const weekEarned = active.reduce((s, r) => s + r.payout, 0);
+          const weekWages = active.reduce((s, r) => s + r.wages, 0);
+          const open = openWeeks[week.id] ?? week.kind === 'current';
+          const count = weekShifts.length;
 
           return (
             <View key={week.id} style={styles.weekCard}>
@@ -268,8 +326,7 @@ export function ShiftHistoryPanel() {
                     </Text>
                   </View>
                   <Text style={styles.weekEarn}>
-                    {formatRM(weekEarned)} {pvTotals ? 'net' : 'earned'} · {formatRM(weekWages)}{' '}
-                    wages
+                    {formatRM(weekEarned)} earned · {formatRM(weekWages)} wages
                   </Text>
                 </View>
                 <ChevronDown
@@ -459,21 +516,6 @@ const styles = StyleSheet.create({
     letterSpacing: 1.2,
     color: C.txt,
   },
-  moreBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: C.line,
-  },
-  moreBtnOn: {
-    borderColor: 'rgba(232,194,122,0.45)',
-    backgroundColor: 'rgba(232,194,122,0.1)',
-  },
-  moreText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.muted },
   search: {
     marginTop: 10,
     flexDirection: 'row',
