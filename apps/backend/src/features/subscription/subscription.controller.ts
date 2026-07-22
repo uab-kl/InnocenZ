@@ -12,11 +12,13 @@ function filterSubscriptions(
   name?: string,
   status?: string,
   billingCycle?: string,
+  subscriptionType?: string,
 ): Subscription[] {
   return subscriptions.filter((subscription) => {
     if (name && !subscription.name.toLowerCase().includes(name.toLowerCase())) return false;
     if (status && subscription.status !== status) return false;
     if (billingCycle && subscription.billingCycle !== billingCycle) return false;
+    if (subscriptionType && subscription.subscriptionType !== subscriptionType) return false;
     return true;
   });
 }
@@ -33,6 +35,7 @@ export class SubscriptionControllerClass {
         req.query.name as string | undefined,
         req.query.status as string | undefined,
         req.query.billingCycle as string | undefined,
+        req.query.subscriptionType as string | undefined,
       );
       res.status(200).json({ success: true, message: 'Successfully fetched subscriptions', ...paginate(subscriptions, page, pageSize) });
     } catch {

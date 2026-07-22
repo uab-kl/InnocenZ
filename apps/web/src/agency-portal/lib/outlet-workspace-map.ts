@@ -1,7 +1,10 @@
 import {
+	OUTLET_BASE_TIER,
 	OUTLET_PR_TIERS,
 	type OutletPrTier,
 	type OutletTierRateSettings,
+	repairTierRatesDailyWageSemantics,
+	resolveStandardShiftHours,
 } from "@agency-portal/lib/agency-demo";
 import {
 	DEFAULT_OUTLET_WORKSPACE,
@@ -44,10 +47,11 @@ export function workspaceSettingsFromBackend(
 			tipPct: num(row.tipPct),
 			// Table commission removed backend-side; keep the demo field at 0.
 			tablePct: 0,
-			otAfterHours: num(row.otAfterHours),
+			otAfterHours: resolveStandardShiftHours(optNum(row.otAfterHours)),
 			targetSalesRm: optNum(row.targetSalesRm),
 		};
 	}
+	const repairedTierRates = repairTierRatesDailyWageSemantics(tierRates);
 
 	const coRow = record.tierRates.find((r) => r.kind === "commission_only");
 	const commissionOnlyRates = coRow
@@ -110,18 +114,28 @@ export function workspaceSettingsFromBackend(
 		record.drinkMenu.length > 0
 			? [...record.drinkMenu]
 					.sort((a, b) => a.sortOrder - b.sortOrder)
-					.map((d) => ({ id: d.slug, name: d.name, priceRm: num(d.priceRm) }))
+					.map((d) => ({
+						id: d.slug,
+						name: d.name,
+						priceRm: num(d.priceRm),
+						category:
+							d.category === "drink"
+								? ("drink" as const)
+								: ("service" as const),
+					}))
 			: DEFAULT_OUTLET_WORKSPACE.drinkMenu.map((d) => ({ ...d }));
+
+	const baseTier = repairedTierRates[OUTLET_BASE_TIER];
 
 	return {
 		outletName,
-		basePayPerHour: num(record.basePayPerHour),
-		drinkPct: num(record.drinkPct),
-		tipPct: num(record.tipPct),
+		basePayPerHour: baseTier.wagePerHour,
+		drinkPct: baseTier.drinkPct,
+		tipPct: baseTier.tipPct,
 		// Table commission removed backend-side; keep the demo field at 0.
 		tablePct: 0,
-		otAfterHours: num(record.otAfterHours),
-		tierRates,
+		otAfterHours: resolveStandardShiftHours(baseTier.otAfterHours),
+		tierRates: repairedTierRates,
 		commissionOnlyRates,
 		perDrinkRm: num(record.perDrinkRm),
 		// Per-table price removed backend-side; keep the demo field at 0.
@@ -142,7 +156,7 @@ export function saveInputFromWorkspaceSettings(
 		basePayPerHour: ws.basePayPerHour,
 		drinkPct: ws.drinkPct,
 		tipPct: ws.tipPct,
-		otAfterHours: ws.otAfterHours,
+		otAfterHours: resolveStandardShiftHours(ws.otAfterHours),
 		perDrinkRm: ws.perDrinkRm,
 		happyHourStart: ws.happyHourStart,
 		happyHourEnd: ws.happyHourEnd,
@@ -157,7 +171,7 @@ export function saveInputFromWorkspaceSettings(
 					drinkPct: t.drinkPct,
 					happyHourDrinkPct: t.happyHourDrinkPct ?? null,
 					tipPct: t.tipPct,
-					otAfterHours: t.otAfterHours,
+					otAfterHours: resolveStandardShiftHours(t.otAfterHours),
 					targetSalesRm: t.targetSalesRm ?? null,
 					sortOrder: i,
 				};
@@ -178,6 +192,8 @@ export function saveInputFromWorkspaceSettings(
 			slug: d.id,
 			name: d.name,
 			priceRm: d.priceRm,
+			category:
+				d.category === "drink" ? ("drink" as const) : ("service" as const),
 			sortOrder: i,
 		})),
 		penaltyRules: [

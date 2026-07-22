@@ -51,6 +51,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '@agency-portal/lib/store';
 import { shiftHistoryForOutlet } from '@agency-portal/lib/portal-sync';
+import type { AgencyManagedPR } from '@agency-portal/lib/agency-demo';
 
 type Portal = 'agency' | 'outlet';
 type AgencyGroupBy = 'pr' | 'venue';
@@ -61,6 +62,7 @@ export function ShiftHistoryLog({
   subtitle: subtitleOverride,
   embedded = false,
   groupBy = 'pr',
+  agencyPRs: agencyPRsProp,
 }: {
   portal: Portal;
   rows?: ShiftHistoryRow[];
@@ -69,6 +71,8 @@ export function ShiftHistoryLog({
   embedded?: boolean;
   /** Agency history — roll up by PR (default) or by outlet venue. */
   groupBy?: AgencyGroupBy;
+  /** Live PR roster for avatars (profile → comcard). Falls back to demo store. */
+  agencyPRs?: AgencyManagedPR[];
 }) {
   const [nameFilter, setNameFilter] = useState('');
   const [dateRange, setDateRange] = useState({ from: '', to: '' });
@@ -78,7 +82,8 @@ export function ShiftHistoryLog({
   const [detailVenue, setDetailVenue] = useState<string | null>(null);
   const outletRatings = useStore((s) => s.ratings);
   const outletCommissionRules = useStore((s) => s.outletCommissionRules);
-  const agencyPRs = useStore((s) => s.agencyPRs);
+  const storeAgencyPRs = useStore((s) => s.agencyPRs);
+  const agencyPRs = agencyPRsProp ?? storeAgencyPRs;
   const perDrinkRm = useStore((s) => s.outletWorkspace.perDrinkRm);
 
   const breakdownOpts = useMemo(() => {
@@ -427,6 +432,7 @@ export function ShiftHistoryLog({
               rank={index + 1}
               topPayout={topPrPayout}
               portal={portal}
+              agencyPRs={agencyPRs}
               rating={findOutletRatingForPr(rollup.prName, outletRatings)}
               onTap={showPrDetail ? () => openPrDetail(rollup.prId) : undefined}
             />

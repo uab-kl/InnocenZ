@@ -146,12 +146,46 @@ export function migrateTierRatesHappyHourDrinks(
 
 const OT_HOURLY_PREMIUM = 1.5;
 
-/** Regular hourly equivalent from flat shift pay and standard hours. */
+/**
+ * Standard shift length (hours) used for RM/HR = daily wage ÷ hours.
+ * Default 6; outlets can change this per shift when they set shift times.
+ */
+export const DEFAULT_STANDARD_SHIFT_HOURS = 6;
+
+/** Default sales targets (RM) on the outlet workspace rate card. */
+export const DEFAULT_WORKSPACE_TIER_TARGET_SALES: Record<OutletPrTier, number> =
+	{
+		"Tier I": 1000,
+		"Tier II": 1200,
+		"Tier III": 1500,
+		"Tier IV": 1800,
+		"Tier V": 2000,
+		Servant: 800,
+	};
+
+/** Coerce stored OT/standard hours into a usable shift length (1–24h, default 6). */
+export function resolveStandardShiftHours(
+	otAfterHours?: number | null,
+): number {
+	if (
+		otAfterHours == null ||
+		!Number.isFinite(otAfterHours) ||
+		otAfterHours <= 0
+	) {
+		return DEFAULT_STANDARD_SHIFT_HOURS;
+	}
+	// Absurd values (e.g. minutes saved as hours) fall back to the default.
+	if (otAfterHours > 24) return DEFAULT_STANDARD_SHIFT_HOURS;
+	return otAfterHours;
+}
+
+/** Regular hourly equivalent from flat daily/shift pay ÷ standard hours. */
 export function tierBaseRmPerHour(
 	rule: Pick<OutletTierRateSettings, "wagePerHour" | "otAfterHours">,
 ): number {
-	if (rule.otAfterHours <= 0 || rule.wagePerHour <= 0) return 0;
-	return rule.wagePerHour / rule.otAfterHours;
+	if (rule.wagePerHour <= 0) return 0;
+	const hours = resolveStandardShiftHours(rule.otAfterHours);
+	return rule.wagePerHour / hours;
 }
 
 /** OT hourly pay rate (1.5× base hourly — matches `calcShiftWagesFromRule`). */
@@ -211,7 +245,7 @@ export function buildDefaultTierRates(
 	base: OutletTierRateSettings,
 ): Record<OutletPrTier, OutletTierRateSettings> {
 	const baseWage = snapTierWage(base.wagePerHour);
-	const otAfterHours = base.otAfterHours ?? 6;
+	const otAfterHours = resolveStandardShiftHours(base.otAfterHours);
 	const out = {} as Record<OutletPrTier, OutletTierRateSettings>;
 	for (const tier of OUTLET_PR_TIERS) {
 		const commission = defaultCommissionForTier(base, tier);
@@ -225,6 +259,72 @@ export function buildDefaultTierRates(
 			tipPct: commission.tipPct,
 			tablePct: base.tablePct,
 			otAfterHours,
+			targetSalesRm:
+				base.targetSalesRm ?? DEFAULT_WORKSPACE_TIER_TARGET_SALES[tier],
+		};
+	}
+	// Keep explicit per-tier targets from defaults (base.targetSalesRm would copy one value).
+	if (base.targetSalesRm == null) {
+		for (const tier of OUTLET_PR_TIERS) {
+			out[tier] = {
+				...out[tier],
+				targetSalesRm: DEFAULT_WORKSPACE_TIER_TARGET_SALES[tier],
+			};
+		}
+	}
+	return out;
+}
+
+/**
+ * Fix rate cards where daily wages were stored as hourly equivalents
+ * (e.g. Tier I = 83.33 instead of 500) and/or `otAfterHours` was nonsensical.
+ * RM/HR = daily wage ÷ standard hours (default 6).
+ */
+export function repairTierRatesDailyWageSemantics(
+	tierRates: Record<OutletPrTier, OutletTierRateSettings>,
+): Record<OutletPrTier, OutletTierRateSettings> {
+	const base = tierRates[OUTLET_BASE_TIER];
+	if (!base) return tierRates;
+
+	const expectedHourly =
+		OUTLET_STANDARD_SHIFT_PAY / DEFAULT_STANDARD_SHIFT_HOURS;
+	// e.g. 83.33 left over from daily÷6 being written back into daily wages
+	const looksLikeHourlyAsDaily =
+		Math.abs(base.wagePerHour - expectedHourly) < 2;
+
+	const needsOtFix = OUTLET_PR_TIERS.some((tier) => {
+		const h = tierRates[tier]?.otAfterHours ?? 0;
+		return h <= 0 || h > 24;
+	});
+
+	if (!looksLikeHourlyAsDaily && !needsOtFix) {
+		// Still backfill missing sales targets so the rate card shows sensible defaults.
+		let touched = false;
+		const out = cloneTierRates(tierRates);
+		for (const tier of OUTLET_PR_TIERS) {
+			if (out[tier].targetSalesRm == null) {
+				out[tier] = {
+					...out[tier],
+					targetSalesRm: DEFAULT_WORKSPACE_TIER_TARGET_SALES[tier],
+				};
+				touched = true;
+			}
+		}
+		return touched ? out : tierRates;
+	}
+
+	const out = cloneTierRates(tierRates);
+	for (const tier of OUTLET_PR_TIERS) {
+		const prev = out[tier];
+		const wage = looksLikeHourlyAsDaily
+			? snapTierWage(prev.wagePerHour * DEFAULT_STANDARD_SHIFT_HOURS)
+			: snapTierWage(prev.wagePerHour);
+		out[tier] = {
+			...prev,
+			wagePerHour: wage,
+			otAfterHours: DEFAULT_STANDARD_SHIFT_HOURS,
+			targetSalesRm:
+				prev.targetSalesRm ?? DEFAULT_WORKSPACE_TIER_TARGET_SALES[tier],
 		};
 	}
 	return out;
@@ -311,7 +411,7 @@ export function formatTierShiftPay(amount: number): string {
 	return `RM ${amount.toLocaleString("en-MY")}/shift`;
 }
 
-/** Flat shift pay on completion, plus OT premium beyond `otAfterHours`. */
+/** Flat shift pay on completion, plus OT premium beyond standard shift hours. */
 export function calcShiftWagesFromRule(
 	rule: Pick<OutletTierRateSettings, "wagePerHour" | "otAfterHours">,
 	hoursWorked: number,
@@ -321,8 +421,9 @@ export function calcShiftWagesFromRule(
 		return { shiftPay: 0, otSupplement: 0, wages: 0 };
 	}
 	const shiftPay = rule.wagePerHour;
-	const otHours = Math.max(0, hoursWorked - rule.otAfterHours);
-	const otHourly = rule.otAfterHours > 0 ? shiftPay / rule.otAfterHours : 0;
+	const standardHours = resolveStandardShiftHours(rule.otAfterHours);
+	const otHours = Math.max(0, hoursWorked - standardHours);
+	const otHourly = standardHours > 0 ? shiftPay / standardHours : 0;
 	const otSupplement = Math.round(otHours * otHourly * 1.5 * 100) / 100;
 	const wages = Math.round((shiftPay + otSupplement) * 100) / 100;
 	return { shiftPay, otSupplement, wages };
@@ -410,11 +511,11 @@ export function normalizeTierRates(
 				wagePerHour: snapTierWage(
 					partial[tier].wagePerHour ?? defaults[tier].wagePerHour,
 				),
-				otAfterHours:
+				otAfterHours: resolveStandardShiftHours(
 					partial[tier].otAfterHours ??
-					defaults[tier].otAfterHours ??
-					snappedBase.otAfterHours ??
-					6,
+						defaults[tier].otAfterHours ??
+						snappedBase.otAfterHours,
+				),
 			};
 		}
 	}
@@ -440,11 +541,11 @@ export function normalizeWorkspaceTierRates(
 				wagePerHour: snapTierWage(
 					partial[tier].wagePerHour ?? defaults[tier].wagePerHour,
 				),
-				otAfterHours:
+				otAfterHours: resolveStandardShiftHours(
 					partial[tier].otAfterHours ??
-					defaults[tier].otAfterHours ??
-					snappedBase.otAfterHours ??
-					6,
+						defaults[tier].otAfterHours ??
+						snappedBase.otAfterHours,
+				),
 			};
 		}
 	}

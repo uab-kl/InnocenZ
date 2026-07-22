@@ -1,13 +1,14 @@
 import { IzPill } from '@agency-portal/components/iz/ui';
-import { StaticComcardVisual } from '@agency-portal/components/pr/PortfolioComcardVisual';
 import {
   PortfolioComcardVisual,
+  StaticComcardVisual,
   canGeneratePortfolioComcard,
   portfolioPhotosForComcard,
 } from '@agency-portal/components/pr/PortfolioComcardVisual';
 import { getComcardDemoStyle } from '@agency-portal/lib/comcard-demo';
 import { publicAssetPath } from '@agency-portal/lib/public-asset';
 import { cn } from '@agency-portal/lib/utils';
+import type { ReactNode } from 'react';
 
 export type ComcardPreviewData = {
   id?: string;
@@ -106,8 +107,15 @@ export function Comcard3dPreviewThumb({
 }) {
   const fallback: ComcardPreviewData = { name: 'PR', height: 165, age: 24 };
   const data = pr ?? fallback;
+  // Tiny thumbs must stay a single <img> — never mount PortfolioComcardVisual
+  // here (its text overlay fills the crop and looks like a broken comcard).
+  const thumbPhoto =
+    data.comcardImageUrl ||
+    data.avatarPhoto ||
+    data.portfolioPhotos?.find((src): src is string => Boolean(src)) ||
+    null;
 
-  if (data.comcardImageUrl) {
+  if (thumbPhoto) {
     return (
       <div
         className={cn(
@@ -116,7 +124,7 @@ export function Comcard3dPreviewThumb({
         )}
       >
         <img
-          src={publicAssetPath(data.comcardImageUrl)}
+          src={publicAssetPath(thumbPhoto)}
           alt=""
           className="iz-comcard-3d-preview--thumb-photo__img"
         />
@@ -217,6 +225,12 @@ export function Comcard3dPreviewCard({
     >
       {pr.comcardImageUrl ? (
         <StaticComcardVisual src={pr.comcardImageUrl} className="!w-full" />
+      ) : canGeneratePortfolioComcard(pr.portfolioPhotos ?? []) ? (
+        <PortfolioComcardVisual
+          photos={portfolioPhotosForComcard(pr.portfolioPhotos ?? [])}
+          pr={pr}
+          className="!w-full"
+        />
       ) : (
         <ComcardStage pr={pr} variant="card" />
       )}
@@ -272,6 +286,28 @@ export function Comcard3dPreviewVisual({
   compact?: boolean;
 }) {
   const weight = comcardWeight(pr.weight);
+  const portfolio = pr.portfolioPhotos ?? [];
+  // Compact sheets fill their frame; the Manage PR detail keeps a modest card size.
+  const visualClass = compact
+    ? 'iz-comcard-3d-preview--sheet__visual'
+    : 'mx-auto';
+
+  let visual: ReactNode;
+  if (pr.comcardImageUrl) {
+    visual = (
+      <StaticComcardVisual src={pr.comcardImageUrl} className={visualClass} />
+    );
+  } else if (canGeneratePortfolioComcard(portfolio)) {
+    visual = (
+      <PortfolioComcardVisual
+        photos={portfolioPhotosForComcard(portfolio)}
+        pr={pr}
+        className={visualClass}
+      />
+    );
+  } else {
+    visual = <ComcardStage pr={pr} variant="full" />;
+  }
 
   return (
     <div
@@ -282,16 +318,7 @@ export function Comcard3dPreviewVisual({
       )}
     >
       <div className={cn(compact && 'iz-comcard-3d-preview--sheet__frame')}>
-        {pr.comcardImageUrl ? (
-          <StaticComcardVisual
-            src={pr.comcardImageUrl}
-            className={
-              compact ? 'iz-comcard-3d-preview--sheet__visual' : '!w-full'
-            }
-          />
-        ) : (
-          <ComcardStage pr={pr} variant="full" />
-        )}
+        {visual}
       </div>
       {showStats && (
         <div className="iz-comcard-3d-preview-stats">

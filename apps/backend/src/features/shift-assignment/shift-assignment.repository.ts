@@ -166,7 +166,7 @@ export class ShiftAssignmentRepositoryClass {
       const rows = await db
         .select({
           assignment: ShiftAssignmentTable,
-          prName: PrTable.name,
+          prName: prDisplayNameSql,
           outletId: ShiftTable.outletId,
           shiftDate: ShiftTable.shiftDate,
         })
@@ -515,7 +515,7 @@ export class ShiftAssignmentRepositoryClass {
       const rows = await db
         .select({
           prId: ShiftAssignmentTable.prId,
-          prName: PrTable.name,
+          prName: prDisplayNameSql,
           soldOn: ShiftTable.shiftDate,
           cost: sql<number>`coalesce(sum(${ShiftAssignmentTable.payAmount}), 0)::float8`,
         })
@@ -523,7 +523,12 @@ export class ShiftAssignmentRepositoryClass {
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
         .where(this.buildCostConditions(filter))
-        .groupBy(ShiftAssignmentTable.prId, PrTable.name, ShiftTable.shiftDate)
+        .groupBy(
+          ShiftAssignmentTable.prId,
+          PrTable.nickname,
+          PrTable.name,
+          ShiftTable.shiftDate,
+        )
         .orderBy(asc(ShiftTable.shiftDate));
       return rows.map((r) => ({
         prId: r.prId,

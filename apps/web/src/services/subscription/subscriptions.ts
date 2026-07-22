@@ -20,6 +20,7 @@ export async function fetchSubscriptions(
 		name: params.name,
 		status: params.status,
 		billingCycle: params.billingCycle,
+		subscriptionType: params.subscriptionType,
 		page: params.page,
 		pageSize: params.pageSize,
 	});

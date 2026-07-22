@@ -22,12 +22,15 @@ export interface WorkspaceTierRateRow {
 	sortOrder: number;
 }
 
+export type DrinkMenuCategory = "drink" | "service";
+
 export interface WorkspaceDrinkMenuRow {
 	id: string;
 	workspaceId: string;
 	slug: string;
 	name: string;
 	priceRm: string;
+	category: DrinkMenuCategory;
 	sortOrder: number;
 }
 
@@ -86,6 +89,7 @@ export interface SaveDrinkMenuInput {
 	slug: string;
 	name: string;
 	priceRm: number;
+	category: DrinkMenuCategory;
 	sortOrder: number;
 }
 
