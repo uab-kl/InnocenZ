@@ -1,5 +1,7 @@
+import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { shiftHistoryRowFromAssignment } from "@agency-portal/lib/agency-shift-history-map";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import { managedPrFromBackend } from "@agency-portal/lib/pr-personnel-map";
 import {
 	type ShiftHistoryRow,
 	sortShiftHistoryDesc,
@@ -8,6 +10,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAgencies } from "@/services/agency/agency";
+import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
 
 // The assignment endpoint has no date filter, so the page size is what bounds
@@ -19,6 +22,11 @@ export interface OutletHistoryData {
 	/** The signed-in outlet's name; empty on a demo session. */
 	outletName: string;
 	rows: ShiftHistoryRow[];
+	/**
+	 * PRs rostered at this outlet (with profile photos). Used by history cards
+	 * for avatars — same source as outlet Today.
+	 */
+	prs: AgencyManagedPR[];
 	isLoading: boolean;
 }
 
@@ -28,12 +36,12 @@ export interface OutletHistoryData {
  * get `backed: false` so the screen falls back to its demo store.
  *
  * Rows are COMPLETED shift-assignments for the caller's own venues — the same
- * per-assignment shape the agency History uses. The backend pins an outlet
- * caller to its own outlets server-side, and the list response joins the PR name
- * and shift date, so no `/pr` or `/shift` read is needed (outlets cannot read
- * `/pr` at all). Agency names come from the agency directory for the "by agency"
- * filter. As on the agency side the backend has no per-shift drink/tip sales, so
- * the money breakdown is wages-only.
+ * per-assignment shape the agency History uses. The list response joins the PR
+ * display name and shift date. PR profile photos come from `/pr` (outlet-scoped
+ * to PRs rostered at the caller's venues — same as Today). Agency names come
+ * from the agency directory for the "by agency" filter. As on the agency side
+ * the backend has no per-shift drink/tip sales, so the money breakdown is
+ * wages-only.
  */
 export function useOutletHistory(): OutletHistoryData {
 	const { logout } = useAuth();
@@ -60,6 +68,14 @@ export function useOutletHistory(): OutletHistoryData {
 		queryFn: () => fetchAgencies({ pageSize: 200 }, logout),
 		enabled: backed,
 		staleTime: 5 * 60_000,
+	});
+
+	// Same key/fn as outlet Today so history cards share the PR photo cache.
+	const prsQuery = useQuery({
+		queryKey: ["outlet", "today", "prs"],
+		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		enabled: backed,
+		staleTime: 60_000,
 	});
 
 	const rows = useMemo<ShiftHistoryRow[]>(() => {
@@ -89,11 +105,20 @@ export function useOutletHistory(): OutletHistoryData {
 		return sortShiftHistoryDesc(built);
 	}, [backed, outletName, assignmentsQuery.data, agenciesQuery.data]);
 
+	const prs = useMemo<AgencyManagedPR[]>(
+		() => (backed ? (prsQuery.data?.data ?? []).map(managedPrFromBackend) : []),
+		[backed, prsQuery.data],
+	);
+
 	return {
 		backed,
 		outletName,
 		rows,
+		prs,
 		isLoading:
-			backed && (assignmentsQuery.isLoading || agenciesQuery.isLoading),
+			backed &&
+			(assignmentsQuery.isLoading ||
+				agenciesQuery.isLoading ||
+				prsQuery.isLoading),
 	};
 }

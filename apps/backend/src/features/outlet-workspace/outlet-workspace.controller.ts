@@ -71,6 +71,7 @@ export class OutletWorkspaceControllerClass {
           slug: m.slug,
           name: m.name,
           priceRm: num(m.priceRm),
+          category: m.category,
           sortOrder: m.sortOrder,
         })),
         penaltyRules: d.penaltyRules.map((p) => ({

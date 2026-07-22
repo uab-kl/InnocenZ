@@ -123,13 +123,14 @@ export class ShiftSaleRepositoryClass {
       const rows = await db
         .select({
           prId: ShiftSaleTable.prId,
-          prName: PrTable.name,
+          // Nickname (floor name) when set — same rule as shift-assignment history.
+          prName: sql<string>`coalesce(nullif(trim(${PrTable.nickname}), ''), ${PrTable.name})`,
           totalSalesRm: sql<number>`coalesce(sum(${ShiftSaleTable.totalSalesRm}), 0)::float8`,
         })
         .from(ShiftSaleTable)
         .leftJoin(PrTable, eq(PrTable.id, ShiftSaleTable.prId))
         .where(whereClause)
-        .groupBy(ShiftSaleTable.prId, PrTable.name)
+        .groupBy(ShiftSaleTable.prId, PrTable.nickname, PrTable.name)
         .orderBy(sql`3 desc`);
       return rows.map((r) => ({
         prId: r.prId,

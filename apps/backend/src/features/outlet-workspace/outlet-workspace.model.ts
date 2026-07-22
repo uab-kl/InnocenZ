@@ -95,6 +95,8 @@ export const OutletDrinkMenuTable = MainSchema.table('outlet_drink_menu', {
   slug: varchar('slug', { length: 100 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   priceRm: numeric('price_rm', { precision: 12, scale: 2 }).notNull().default('0'),
+  // 'drink' | 'service' — drives which workspace list the item shows under.
+  category: varchar('category', { length: 20 }).notNull().default('service'),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

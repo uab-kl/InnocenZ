@@ -44,6 +44,7 @@ export interface SubscriptionsQueryParams {
 	name?: string;
 	status?: SubscriptionStatus;
 	billingCycle?: BillingCycle;
+	subscriptionType?: SubscriptionType;
 	page?: number;
 	pageSize?: number;
 }

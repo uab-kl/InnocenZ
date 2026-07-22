@@ -16,6 +16,7 @@ export const Route = createFileRoute("/outlet/history")({
 function OutletHistory() {
 	const shiftHistory = useStore((s) => s.shiftHistory) ?? [];
 	const storeOutletName = useStore((s) => s.outletWorkspace.outletName);
+	const storeAgencyPRs = useStore((s) => s.agencyPRs);
 	// A real session reads its sealed nights from the backend; demo sessions keep
 	// reading the demo store.
 	const backend = useOutletHistory();
@@ -25,6 +26,8 @@ function OutletHistory() {
 		[shiftHistory, storeOutletName],
 	);
 	const rows = backend.backed ? backend.rows : demoRows;
+	// Backend PR roster carries profile photos; demo falls back to the store.
+	const agencyPRs = backend.backed ? backend.prs : storeAgencyPRs;
 	const summaryHint = useMemo(() => {
 		if (backend.isLoading) return "Loading shift history…";
 		if (rows.length === 0)
@@ -47,7 +50,12 @@ function OutletHistory() {
 				title="History"
 				hint={summaryHint}
 			/>
-			<ShiftHistoryLog portal="outlet" rows={rows} embedded />
+			<ShiftHistoryLog
+				portal="outlet"
+				rows={rows}
+				agencyPRs={agencyPRs}
+				embedded
+			/>
 		</OutletPage>
 	);
 }

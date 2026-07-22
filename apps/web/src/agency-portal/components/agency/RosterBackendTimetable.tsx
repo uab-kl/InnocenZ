@@ -1,9 +1,14 @@
+import {
+	PrComcardIdentity,
+	toComcardPreview,
+} from "@agency-portal/components/agency/PrComcardIdentity";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { formatRM } from "@agency-portal/components/iz/ui";
 import type {
 	AgencyRosterSlot,
 	RosterSlotStatus,
 } from "@agency-portal/lib/agency-demo";
+import { managedPrFromBackend } from "@agency-portal/lib/pr-personnel-map";
 import { getPrScheduleState } from "@agency-portal/lib/roster-availability";
 import {
 	filterRosterShifts,
@@ -243,16 +248,22 @@ export function RosterBackendTimetable({
 									</td>
 								</tr>
 							) : (
-								prRows.map((pr) => (
+								prRows.map((pr) => {
+									const profile = managedPrFromBackend(pr);
+									const displayName = pr.nickname
+										? `${pr.name} (${pr.nickname})`
+										: pr.name;
+									return (
 									<tr key={pr.id}>
 										<th scope="row" className="iz-roster-week-pr">
 											<div className="iz-roster-week-pr-inner">
+												<PrComcardIdentity
+													pr={toComcardPreview(profile)}
+													profile={profile}
+													size="week"
+												/>
 												<div className="min-w-0">
-													<span className="name">
-														{pr.nickname
-															? `${pr.name} (${pr.nickname})`
-															: pr.name}
-													</span>
+													<span className="name">{displayName}</span>
 													{pr.tier && (
 														<span className="meta">
 															<span className="rating">{pr.tier}</span>
@@ -320,7 +331,8 @@ export function RosterBackendTimetable({
 											);
 										})}
 									</tr>
-								))
+									);
+								})
 							)}
 						</tbody>
 					</table>

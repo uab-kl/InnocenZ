@@ -168,6 +168,7 @@ function AgencyHistory() {
 						portal="agency"
 						groupBy="pr"
 						rows={shiftHistory}
+						agencyPRs={agencyPRs}
 						embedded
 					/>
 				</>
@@ -184,6 +185,7 @@ function AgencyHistory() {
 						portal="agency"
 						groupBy="venue"
 						rows={shiftHistory}
+						agencyPRs={agencyPRs}
 						embedded
 					/>
 				</>

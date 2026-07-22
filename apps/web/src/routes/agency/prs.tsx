@@ -6,7 +6,7 @@ import { AgencyBroadcastSheet } from '@agency-portal/components/agency/AgencyBro
 import { ManagePrGridCard } from '@agency-portal/components/agency/ManagePrGridCard';
 import { Comcard3dPreviewVisual } from '@agency-portal/components/agency/Comcard3dPreview';
 import { toComcardPreview } from '@agency-portal/components/agency/PrComcardIdentity';
-import { StaticComcardVisual } from '@agency-portal/components/pr/PortfolioComcardVisual';
+import { canGeneratePortfolioComcard, PortfolioGalleryTile } from '@agency-portal/components/pr/PortfolioComcardVisual';
 import { IzSheet } from '@agency-portal/components/iz/Sheet';
 import { useStore } from '@agency-portal/lib/store';
 import type { AgencyManagedPR } from '@agency-portal/lib/agency-demo';
@@ -832,7 +832,10 @@ function AgencyPrDetail({
       </IzCard>
 
       <IzSectionLabel>
-        {detail.comcardImageUrl ? 'Photo comcard' : '3D Comcard'}
+        {detail.comcardImageUrl ||
+        canGeneratePortfolioComcard(detail.portfolioPhotos ?? [])
+          ? 'Photo comcard'
+          : '3D Comcard'}
         {editing && (
           <span className="ml-auto text-[var(--iz-gold-l)] normal-case tracking-normal">
             Editable
@@ -860,11 +863,6 @@ function AgencyPrDetail({
               onChange={(n) => setDraft((p) => ({ ...p, age: n }))}
             />
           </div>
-        ) : detail.comcardImageUrl ? (
-          <StaticComcardVisual
-            src={detail.comcardImageUrl}
-            className="mx-auto"
-          />
         ) : (
           <Comcard3dPreviewVisual pr={toComcardPreview(detail)} />
         )}
@@ -878,16 +876,7 @@ function AgencyPrDetail({
               {detail
                 .portfolioPhotos!.filter((src): src is string => Boolean(src))
                 .map((src, i) => (
-                  <div
-                    key={i}
-                    className="aspect-square overflow-hidden rounded-lg border border-[var(--iz-line)]"
-                  >
-                    <img
-                      src={publicAssetPath(src)}
-                      alt=""
-                      className="h-full w-full object-cover"
-                    />
-                  </div>
+                  <PortfolioGalleryTile key={`${src}-${i}`} src={src} />
                 ))}
             </div>
             <p className="iz-tiny iz-muted2 mt-2">
