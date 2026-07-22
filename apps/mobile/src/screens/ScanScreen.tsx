@@ -12,7 +12,7 @@ import {
   View,
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
-import { formatRM } from '../lib/demo-shifts';
+import { formatRM, todayYmd, ymdToIso } from '../lib/demo-shifts';
 import { fmtAttendanceStamp } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
 import { commissionFor as rateCommission, drinkMenuFromAssignment } from '../lib/pr-rate';
@@ -48,6 +48,16 @@ export function ScanScreen({
   const { active, phase: attendancePhase } = useActiveShift();
   const { receiptLines, addLine, updateLine } = usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
+
+  // Stamp every self-logged line with the PR's actual calendar day (device-local
+  // "today"), so a receipt logged today counts today — never the shift's
+  // scheduled date (the seed dates some shifts a day ahead) and never a UTC day
+  // that rolls over at night.
+  const todayKey = ymdToIso(...todayYmd());
+  const logLine = (input: Parameters<typeof addLine>[0]) =>
+    addLine({ lineDate: todayKey, ...input });
+  const editLine = (id: string, input: Parameters<typeof updateLine>[1]) =>
+    updateLine(id, { lineDate: todayKey, ...input });
 
   // Real shift context from the active assignment: outlet, its drink menu, and
   // this PR's resolved rate card (drink/tip %, happy-hour window).
@@ -124,8 +134,11 @@ export function ScanScreen({
     }
   }, [editId, receiptLines, drinkMenu]);
 
-  // Whether the drink picker (vs the single amount field) is shown.
-  const showDrinkMenu = category === 'drinks' && (!editId || editMenuMode);
+  // Whether the drink picker (vs the single amount field) is shown. The outlet's
+  // real drink menu drives it; when the outlet hasn't configured one, fall back
+  // to the manual amount field so the PR can still self-log a drink total.
+  const showDrinkMenu =
+    category === 'drinks' && drinkMenu.length > 0 && (!editId || editMenuMode);
 
   // Commission at this PR's real tier rate (happy-hour aware); falls back to the
   // prototype flat rates only when the outlet has no rate card configured.
@@ -173,8 +186,8 @@ export function ScanScreen({
         commission: commissionFor(category, ocrAmount),
         outlet: outlet,
       };
-      if (editId) await updateLine(editId, input);
-      else await addLine(input);
+      if (editId) await editLine(editId, input);
+      else await logLine(input);
     });
 
   const submitManual = () =>
@@ -189,7 +202,7 @@ export function ScanScreen({
           const [first, ...rest] = items;
           const firstQty = drinkQtys[first.id] ?? 0;
           const firstAmt = first.priceRm * firstQty;
-          await updateLine(editId, {
+          await editLine(editId, {
             kind: 'drinks',
             source: 'manual',
             item: first.name,
@@ -202,7 +215,7 @@ export function ScanScreen({
           for (const d of rest) {
             const qty = drinkQtys[d.id] ?? 0;
             const amt = d.priceRm * qty;
-            await addLine({
+            await logLine({
               kind: 'drinks',
               source: 'manual',
               item: d.name,
@@ -215,7 +228,7 @@ export function ScanScreen({
           return;
         }
         const amt = Number(amount) || 0;
-        await updateLine(editId, {
+        await editLine(editId, {
           kind: category,
           source: 'manual',
           item: editItem || (category === 'tips' ? 'Guest tip' : 'Manual drink total'),
@@ -231,7 +244,7 @@ export function ScanScreen({
         if (items.length === 0) {
           const amt = Number(amount) || 0;
           if (amt <= 0) throw new Error('Set a drink quantity or amount first.');
-          await addLine({
+          await logLine({
             kind: 'drinks',
             source: 'manual',
             item: 'Manual drink total',
@@ -244,7 +257,7 @@ export function ScanScreen({
           for (const d of items) {
             const qty = drinkQtys[d.id] ?? 0;
             const amt = d.priceRm * qty;
-            await addLine({
+            await logLine({
               kind: 'drinks',
               source: 'manual',
               item: d.name,
@@ -257,7 +270,7 @@ export function ScanScreen({
         }
       } else {
         const amt = Number(amount) || 0;
-        await addLine({
+        await logLine({
           kind: 'tips',
           source: 'manual',
           item: 'Guest tip',

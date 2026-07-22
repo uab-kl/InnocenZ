@@ -51,6 +51,7 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		weight: profile?.comcardWeightKg ?? undefined,
 		race: profile?.race ?? "",
 		avatarPhoto: profile?.profileImage ?? null,
+		comcardImageUrl: profile?.comcardImage ?? null,
 		portfolioPhotos: profile?.portfolioPhotos ?? undefined,
 		languages: [],
 		place: "",

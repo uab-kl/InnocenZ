@@ -9,21 +9,15 @@ import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
-  TODO_ITEMS,
   fmtDFriendly,
   formatRM,
-  getLastWeekAwaitingPv,
   todayYmd,
   ymdToIso,
   type DemoShift,
   type Ymd,
 } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
-import {
-  fetchMySpecialServices,
-  fetchMyShiftAssignments,
-  type ShiftAssignmentRecord,
-} from '../lib/api';
+import { fetchMySpecialServices, type ShiftAssignmentRecord } from '../lib/api';
 import { useViewportSize } from '../lib/viewport';
 import { TopBar } from '../components/TopBar';
 import { Section } from '../components/Section';
@@ -43,6 +37,8 @@ import {
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { useShiftSession } from '../lib/shift-session';
+import { useActiveShift } from '../lib/active-shift';
+import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePrNav } from '../lib/pr-nav';
 
 type HubView = 'shifts' | 'services';
@@ -55,11 +51,11 @@ function ymdFromIso(iso: string): Ymd {
 
 /** Backend shift assignment -> the DemoShift shape the cards render. */
 function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
-  const onDuty = !!a.checkInAt && !a.checkOutAt;
+  // Attendance stamps win: checked out → Complete, checked in → On duty.
   const status: DemoShift['status'] =
-    a.status === 'completed'
+    a.checkOutAt || a.status === 'completed'
       ? 'complete'
-      : onDuty
+      : a.checkInAt
         ? 'on-duty'
         : a.status === 'assigned'
           ? 'pending'
@@ -97,29 +93,22 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     };
   }, [token]);
 
-  // Real shift assignments for this PR (Shifts screen). Empty until an agency
-  // assigns the PR to a shift.
-  const [shifts, setShifts] = useState<DemoShift[]>([]);
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    fetchMyShiftAssignments(token)
-      .then((rows) => {
-        if (!cancelled) setShifts(rows.map(assignmentToShift));
-      })
-      .catch(() => {
-        /* non-fatal — leave the list empty if the backend is unreachable */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
+  // Real shift assignments for this PR — shared with Check-In / timetable so
+  // On duty / Complete badges flip as soon as attendance stamps change.
+  const { assignments, phase: attendancePhase } = useActiveShift();
+  const { awaiting } = useAwaitingLastWeekPv();
+  const todoItems = awaiting ? [awaiting.todo] : [];
+  const shifts = assignments
+    .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+    .map(assignmentToShift);
 
   const todayIso = ymdToIso(...todayYmd());
   const tonightShift = shifts.find((s) => ymdToIso(...s.date) === todayIso) ?? null;
   const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
 
-  const { phase } = useShiftSession();
+  const { phase: localPhase } = useShiftSession();
+  // Prefer live assignment stamps; fall back to local session for offline demo.
+  const phase = attendancePhase !== 'idle' ? attendancePhase : localPhase;
   const { width } = useViewportSize();
   const [view, setView] = useState<HubView>('shifts');
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
@@ -158,14 +147,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     <View style={styles.screen}>
       <TopBar onOpenProfile={() => onNavigate('profile')} />
 
-      {/* PrPageHeader — shifts skips the "AGENCY SHIFTS" eyebrow; services keeps its label */}
+      {/* PrPageHeader */}
       <View style={styles.pageHeader}>
-        {view === 'services' && (
-          <View style={styles.headerLabelRow}>
-            <Sparkles size={15} color={C.muted2} />
-            <Text style={styles.headerLabel}>AGENCY ADD-ON SERVICES</Text>
-          </View>
-        )}
         <View style={styles.headerTitleRow}>
           {view === 'services' ? (
             <Sparkles size={22} color={C.accent} />
@@ -222,8 +205,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
             />
             <HubTab
               label="TO-DO"
-              value={String(TODO_ITEMS.length)}
-              valueColor={TODO_ITEMS.length > 0 ? C.amber : C.txt}
+              value={String(todoItems.length)}
+              valueColor={todoItems.length > 0 ? C.amber : C.txt}
               on={open.todo}
               onPress={() => toggleHubSection('todo')}
             />
@@ -267,11 +250,11 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               open={open.todo}
               onToggle={(next) => toggleSection('todo', next)}
             >
-              {TODO_ITEMS.length === 0 ? (
+              {todoItems.length === 0 ? (
                 <EmptyDashed>Nothing to do</EmptyDashed>
               ) : (
                 <View style={{ gap: 10 }}>
-                  {TODO_ITEMS.map((todo) => (
+                  {todoItems.map((todo) => (
                     <View key={todo.id} style={styles.todoCard}>
                       <View style={styles.todoIcon}>
                         <FileText size={16} color={C.goldL} />
@@ -284,7 +267,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                         label={todo.actionLabel}
                         small
                         fullWidth={false}
-                        onPress={() => openPv(getLastWeekAwaitingPv().id)}
+                        onPress={() => openPv(todo.pvId)}
                       />
                     </View>
                   ))}
@@ -388,18 +371,6 @@ const styles = StyleSheet.create({
   },
   pageHeader: {
     paddingTop: 2,
-  },
-  headerLabelRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-  },
-  headerLabel: {
-    fontFamily: F.sora,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.68,
-    color: '#c4b4d8',
   },
   headerTitleRow: {
     flexDirection: 'row',

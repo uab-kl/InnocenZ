@@ -148,6 +148,8 @@ export type TimetableEntry = {
   statusVariant: 'green' | 'amber' | 'red';
   sourceLabel: string;
   sourceDetail: string;
+  /** False once checked in / completed — Cancel is only for upcoming booked shifts. */
+  canCancel: boolean;
 };
 
 export const CANCELLATION_RULE_SUMMARY = [
@@ -156,16 +158,60 @@ export const CANCELLATION_RULE_SUMMARY = [
   { label: '< 12h before', outcome: '−50% wages', tone: 'red' as const },
 ];
 
-/** Build Sun→+21d schedule window, marking assigned days from UPCOMING_SHIFTS. */
+/** Attendance label for timetable cards — stamps win over assignment.status. */
+export function timetableStatusFromStamps(input: {
+  checkInAt?: string | null;
+  checkOutAt?: string | null;
+  status?: string | null;
+}): Pick<TimetableEntry, 'statusLabel' | 'statusVariant' | 'canCancel'> {
+  if (input.checkOutAt || input.status === 'completed') {
+    return { statusLabel: 'Complete', statusVariant: 'green', canCancel: false };
+  }
+  if (input.checkInAt) {
+    return { statusLabel: 'On duty', statusVariant: 'amber', canCancel: false };
+  }
+  if (input.status === 'assigned' || input.status === 'pending') {
+    return { statusLabel: 'Pending', statusVariant: 'amber', canCancel: true };
+  }
+  return { statusLabel: 'Scheduled', statusVariant: 'green', canCancel: true };
+}
+
+type ScheduleShiftLike = {
+  id: string;
+  dateIso: string;
+  outlet: string;
+  time: string;
+  checkInAt?: string | null;
+  checkOutAt?: string | null;
+  status?: string | null;
+  agencyName?: string | null;
+};
+
+/** Build Sun→+21d schedule window from real assignments (fallback: demo UPCOMING_SHIFTS). */
 export function buildScheduleDays(
   blockedIsos: string[] = [],
   baselineIso = ymdToIso(...todayYmd()),
+  shifts?: ScheduleShiftLike[],
 ): ScheduleDay[] {
   const fromIso = payrollWeekSundayIso();
   const toIso = addDaysIso(baselineIso, 21);
-  const assigned = new Map(
-    UPCOMING_SHIFTS.map((s) => [ymdToIso(...s.date), s.status] as const),
-  );
+  const source =
+    shifts ??
+    UPCOMING_SHIFTS.map((s) => ({
+      id: s.id,
+      dateIso: ymdToIso(...s.date),
+      outlet: s.outlet,
+      time: s.time,
+      status: s.status === 'pending' ? 'assigned' : 'confirmed',
+      checkInAt: s.status === 'on-duty' || s.status === 'complete' ? '1' : null,
+      checkOutAt: s.status === 'complete' ? '1' : null,
+    }));
+  const byDate = new Map<string, ScheduleShiftLike[]>();
+  for (const s of source) {
+    const list = byDate.get(s.dateIso) ?? [];
+    list.push(s);
+    byDate.set(s.dateIso, list);
+  }
   const blocked = new Set(blockedIsos);
   const days: ScheduleDay[] = [];
   let cursor = fromIso;
@@ -173,9 +219,12 @@ export function buildScheduleDays(
     let kind: ScheduleDayKind = 'open';
     if (cursor < baselineIso) kind = 'past';
     else if (blocked.has(cursor)) kind = 'unavailable';
-    else if (assigned.has(cursor)) {
-      const st = assigned.get(cursor);
-      kind = st === 'pending' ? 'pending' : 'assigned';
+    else if (byDate.has(cursor)) {
+      const rows = byDate.get(cursor)!;
+      if (rows.some((r) => r.checkInAt && !r.checkOutAt)) kind = 'active';
+      else if (rows.some((r) => r.checkOutAt || r.status === 'completed')) kind = 'assigned';
+      else if (rows.some((r) => r.status === 'assigned' || r.status === 'pending')) kind = 'pending';
+      else kind = 'assigned';
     }
     days.push({ dateIso: cursor, kind });
     cursor = addDaysIso(cursor, 1);
@@ -200,22 +249,38 @@ export function formatUpcomingWeekLabel(fromIso: string, toIso: string) {
 
 export function buildUpcomingWeekTimetable(
   baselineIso = ymdToIso(...todayYmd()),
+  shifts?: ScheduleShiftLike[],
 ): TimetableEntry[] {
   const { fromIso, toIso } = getUpcomingWeekRange(baselineIso);
-  return UPCOMING_SHIFTS.filter((s) => {
-    const iso = ymdToIso(...s.date);
-    return iso >= fromIso && iso <= toIso;
-  }).map((s) => ({
-    id: s.id,
-    dateIso: ymdToIso(...s.date),
-    dateLabel: fmtDFriendly(...s.date),
-    outlet: s.outlet,
-    time: s.time,
-    statusLabel: s.status === 'pending' ? 'Pending' : 'Scheduled',
-    statusVariant: s.status === 'pending' ? ('amber' as const) : ('green' as const),
-    sourceLabel: 'Atlas Agency',
-    sourceDetail: 'Agency assigned this shift on your roster',
-  }));
+  const source =
+    shifts ??
+    UPCOMING_SHIFTS.map((s) => ({
+      id: s.id,
+      dateIso: ymdToIso(...s.date),
+      outlet: s.outlet,
+      time: s.time,
+      status: s.status === 'pending' ? 'assigned' : 'confirmed',
+      checkInAt: s.status === 'on-duty' || s.status === 'complete' ? '1' : null,
+      checkOutAt: s.status === 'complete' ? '1' : null,
+      agencyName: 'Atlas Agency',
+    }));
+  return source
+    .filter((s) => s.dateIso >= fromIso && s.dateIso <= toIso)
+    .sort((a, b) => a.dateIso.localeCompare(b.dateIso) || a.time.localeCompare(b.time))
+    .map((s) => {
+      const [y, m, d] = isoToYmd(s.dateIso);
+      const stamp = timetableStatusFromStamps(s);
+      return {
+        id: s.id,
+        dateIso: s.dateIso,
+        dateLabel: fmtDFriendly(y, m, d),
+        outlet: s.outlet,
+        time: s.time,
+        ...stamp,
+        sourceLabel: s.agencyName?.trim() || 'Agency',
+        sourceDetail: 'Agency assigned this shift on your roster',
+      };
+    });
 }
 
 /* ─── Payment vouchers + history ─── */
@@ -683,31 +748,11 @@ export function allPaymentVouchers(baseline = todayYmd()): DemoPv[] {
   return [getLastWeekAwaitingPv(baseline), ...PAYMENT_VOUCHERS];
 }
 
-/** To-do — matches last-week awaiting PV. */
-export const TODO_ITEMS: DemoTodo[] = (() => {
-  const pv = getLastWeekAwaitingPv();
-  return [
-    {
-      id: 'todo-pv-1',
-      title: 'Review payment voucher',
-      subtitle: `${pv.outlet} · ${pv.ref} · ${formatRM(pv.net)}`,
-      actionLabel: 'Review PV',
-    },
-  ];
-})();
+/** To-do — filled from real last-week PV via `useAwaitingLastWeekPv` (not demo). */
+export const TODO_ITEMS: DemoTodo[] = [];
 
-export const NOTIFICATIONS: DemoNotification[] = (() => {
-  const pv = getLastWeekAwaitingPv();
-  return [
-    {
-      id: 'n-pv-1',
-      title: 'Payment Voucher ready',
-      body: `${pv.ref} · ${formatRM(pv.net)} net — Finance Head pre-signed. Review & sign.`,
-      at: weekPvIssueDayLabel(1),
-      read: false,
-    },
-  ];
-})();
+/** Notifications — PV-ready items come from `useAwaitingLastWeekPv` when a real PV exists. */
+export const NOTIFICATIONS: DemoNotification[] = [];
 
 export function isoDateFromTimestamp(iso: string): string {
   const d = new Date(iso);

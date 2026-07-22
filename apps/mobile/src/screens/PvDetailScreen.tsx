@@ -21,6 +21,7 @@ import {
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { PAYMENT_HISTORY_WEEKS } from '../lib/demo-payment-history';
+import { usePaymentHistory } from '../lib/payment-history';
 import { usePrNav } from '../lib/pr-nav';
 import { useSignedPvs } from '../lib/signed-pv';
 import { Pill } from '../components/ui';
@@ -130,8 +131,10 @@ function formatCell(value: number): string {
 export function PvDetailScreen({ pvId }: { pvId: string }) {
   const { goBack, setTab } = usePrNav();
   const { isSigned, signPv } = useSignedPvs();
+  const { weeks: apiWeeks } = usePaymentHistory();
   const lastWeekPv = useMemo(() => getLastWeekAwaitingPv(), []);
-  const hist = PAYMENT_HISTORY_WEEKS.find((p) => p.id === pvId);
+  const hist =
+    apiWeeks.find((p) => p.id === pvId) ?? PAYMENT_HISTORY_WEEKS.find((p) => p.id === pvId);
   /** Any unsigned review opens the live last-week PV (same as Payment → Last week). */
   const pv = hist
     ? {

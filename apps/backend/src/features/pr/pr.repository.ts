@@ -18,6 +18,7 @@ const profileColumns = {
   dob: UserProfileTable.dob,
   nationality: UserProfileTable.nationality,
   portfolioPhotos: UserProfileTable.portfolioPhotos,
+  comcardImage: UserProfileTable.comcardImage,
   comcardHeightCm: UserProfileTable.comcardHeightCm,
   comcardWeightKg: UserProfileTable.comcardWeightKg,
 };

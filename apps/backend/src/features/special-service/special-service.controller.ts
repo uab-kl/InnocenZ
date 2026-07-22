@@ -31,6 +31,7 @@ export class SpecialServiceControllerClass {
   }
 
   private buildFilter(req: Request): SpecialServiceFilter {
+    const idRaw = typeof req.query.id === 'string' ? req.query.id.trim() : '';
     return {
       outletId: req.query.outletId as string | undefined,
       status: req.query.status as SpecialServiceStatus | undefined,
@@ -38,6 +39,7 @@ export class SpecialServiceControllerClass {
       vendorName: req.query.vendorName as string | undefined,
       initiatedBy: req.query.initiatedBy as SpecialServiceInitiatedBy | undefined,
       adminAccepted: req.query.adminAccepted as SpecialServiceAdminAccepted | undefined,
+      id: idRaw || undefined,
       dates: parseDatesQuery(req.query.dates),
       scheduledDates: parseDatesQuery(req.query.scheduledDates),
     };

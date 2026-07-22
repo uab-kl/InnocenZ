@@ -173,6 +173,7 @@ function SpecialServicesPage() {
 	const [sourceFilter, setSourceFilter] = useState<SourceFilter>("all");
 	const [scheduledDates, setScheduledDates] = useState<Date[]>([]);
 	const [requestedDates, setRequestedDates] = useState<Date[]>([]);
+	const [idSearch, setIdSearch] = useState("");
 	const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 	const [page, setPage] = useState(1);
 	const [actionId, setActionId] = useState<string | null>(null);
@@ -186,6 +187,8 @@ function SpecialServicesPage() {
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (categoryFilter !== "all") queryParams.category = categoryFilter;
 	if (sourceFilter !== "all") queryParams.initiatedBy = sourceFilter;
+	const trimmedIdSearch = idSearch.trim();
+	if (trimmedIdSearch) queryParams.id = trimmedIdSearch;
 	const scheduledDatesParam = datesToQueryParam(scheduledDates);
 	if (scheduledDatesParam) queryParams.scheduledDates = scheduledDatesParam;
 	const requestedDatesParam = datesToQueryParam(requestedDates);
@@ -367,15 +370,31 @@ function SpecialServicesPage() {
 
 						<div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
 							{!isPendingView && (
-								<SourceToggle
-									className="sm:mr-auto"
-									value={sourceFilter}
-									sources={["outlet", "agency", "pr"]}
-									onChange={(value) => {
-										setSourceFilter(value);
-										setPage(1);
-									}}
-								/>
+								<>
+									<div className="space-y-1.5 sm:mr-auto">
+										<Label htmlFor="ss-id-search" className="sr-only">
+											Search special service ID
+										</Label>
+										<Input
+											id="ss-id-search"
+											placeholder="Search special service ID…"
+											className="font-mono text-xs sm:w-72"
+											value={idSearch}
+											onChange={(event) => {
+												setIdSearch(event.target.value);
+												setPage(1);
+											}}
+										/>
+									</div>
+									<SourceToggle
+										value={sourceFilter}
+										sources={["outlet", "agency", "pr"]}
+										onChange={(value) => {
+											setSourceFilter(value);
+											setPage(1);
+										}}
+									/>
+								</>
 							)}
 
 							<Select
@@ -474,9 +493,11 @@ function SpecialServicesPage() {
 						<Table>
 							<TableHeader>
 								<TableRow>
+									<TableHead className="w-[220px]">Special Service ID</TableHead>
 									<TableHead>Title</TableHead>
 									<TableHead>Source</TableHead>
-									<TableHead className="w-[180px]">Category</TableHead>
+									<TableHead className="w-[160px]">Category</TableHead>
+									<TableHead className="min-w-[200px]">Description</TableHead>
 									<TableHead>Budget</TableHead>
 									<TableHead>Third Party</TableHead>
 									<TableHead className="w-[150px]">Scheduled For</TableHead>
@@ -514,7 +535,7 @@ function SpecialServicesPage() {
 							<TableBody>
 								{showLoading ? (
 									<TableRow>
-										<TableCell colSpan={8} className="h-32">
+										<TableCell colSpan={10} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-6 w-6 animate-spin" />
 												<span>Loading…</span>
@@ -523,7 +544,7 @@ function SpecialServicesPage() {
 									</TableRow>
 								) : servicesQuery.isError ? (
 									<TableRow>
-										<TableCell colSpan={8} className="h-32">
+										<TableCell colSpan={10} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-3">
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="font-medium text-destructive">
@@ -545,7 +566,7 @@ function SpecialServicesPage() {
 									</TableRow>
 								) : records.length === 0 ? (
 									<TableRow>
-										<TableCell colSpan={8} className="h-32">
+										<TableCell colSpan={10} className="h-32">
 											<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 												<LayoutGrid className="h-6 w-6" />
 												<span>
@@ -565,6 +586,11 @@ function SpecialServicesPage() {
 												className="cursor-pointer"
 												onClick={() => setEditRecord(record)}
 											>
+												<TableCell>
+													<code className="block max-w-[200px] truncate font-mono text-xs text-muted-foreground" title={record.id}>
+														{record.id}
+													</code>
+												</TableCell>
 												<TableCell className="font-medium">
 													{record.title}
 												</TableCell>
@@ -582,21 +608,22 @@ function SpecialServicesPage() {
 													</div>
 												</TableCell>
 												<TableCell>
-													<div className="flex flex-col gap-1">
-														<Badge
-															variant="outline"
-															className="w-fit border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender"
-														>
-															{categoryLabels[record.category] ??
-																record.category}
-														</Badge>
-														{record.category === "others" &&
-															record.description && (
-																<span className="line-clamp-2 text-xs text-muted-foreground">
-																	{record.description}
-																</span>
-															)}
-													</div>
+													<Badge
+														variant="outline"
+														className="w-fit border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender"
+													>
+														{categoryLabels[record.category] ??
+															record.category}
+													</Badge>
+												</TableCell>
+												<TableCell className="max-w-[280px] text-sm text-muted-foreground">
+													{record.description?.trim() ? (
+														<span className="line-clamp-3" title={record.description}>
+															{record.description}
+														</span>
+													) : (
+														"—"
+													)}
 												</TableCell>
 												<TableCell className="text-sm">
 													{formatBudget(record.budget)}
@@ -861,6 +888,17 @@ function OrderEditForm({
 
 			<div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-4">
 				<div className="space-y-1.5">
+					<Label htmlFor="order-id">Special Service ID</Label>
+					<Input
+						id="order-id"
+						value={record.id}
+						readOnly
+						disabled
+						className="font-mono text-xs"
+					/>
+				</div>
+
+				<div className="space-y-1.5">
 					<Label htmlFor="order-title">Title</Label>
 					<Input
 						id="order-title"
@@ -927,7 +965,7 @@ function OrderEditForm({
 					<Textarea
 						id="order-description"
 						rows={3}
-						placeholder="Add details for this order…"
+						placeholder="PR / outlet note for this order…"
 						value={description}
 						onChange={(e) => setDescription(e.target.value)}
 					/>

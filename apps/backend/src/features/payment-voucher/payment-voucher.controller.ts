@@ -151,6 +151,15 @@ function toReceiptLineDTO(line: PaymentVoucherLineType): PrReceiptLineDTO {
   };
 }
 
+/** Wage lines only — History summary "RM X wages" beside net. */
+function sumWages(lines: PaymentVoucherLineType[]): string {
+  const total = lines.reduce((sum, line) => {
+    const { kind } = decodeRef(line.ref);
+    return kind === 'wages' ? sum + Number(line.amount) : sum;
+  }, 0);
+  return total.toFixed(2);
+}
+
 export class PaymentVoucherControllerClass {
   constructor(
     private paymentVoucherRepository: PaymentVoucherRepositoryClass,
@@ -390,6 +399,44 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.getMyLastWeek] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Signed/paid vouchers for History → Payment (and past payroll weeks on
+   * History → Shifts). Sourced only from payment_voucher — never demo seed.
+   */
+  async getMyHistory(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+
+      const { weekStart: currentWeekStart } = weekBounds();
+      const vouchers = await this.paymentVoucherRepository.listHistoryForPr(pr.id, {
+        excludeWeekStart: currentWeekStart,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: vouchers.map((v) => ({
+          voucherId: v.id,
+          weekStart: v.weekStart,
+          weekEnd: v.weekEnd,
+          net: v.net,
+          wages: sumWages(v.lines),
+          status: v.status,
+          outlet: v.outlet,
+          bankRef: v.bankRef,
+          issuedDate: v.issuedDate,
+          prSignedAt: v.prSignedAt,
+          paidAt: v.paidAt,
+          lines: v.lines.map(toReceiptLineDTO),
+        })),
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.getMyHistory] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

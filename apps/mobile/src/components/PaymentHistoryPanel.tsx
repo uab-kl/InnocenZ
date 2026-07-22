@@ -14,13 +14,14 @@ import {
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
-import { PAYMENT_HISTORY_WEEKS, paymentHistoryOutlets, type HistPayWeek } from '../lib/demo-payment-history';
+import { paymentHistoryOutlets, type HistPayWeek } from '../lib/demo-payment-history';
 import {
   buildDateOptionsFromKeys,
   collectPaymentWeekDateKeys,
   matchesPaymentWeekDayTime,
 } from '../lib/hist-date-time-filters';
 import { normalizeHistPayWeek } from '../lib/history-pay-sync';
+import { usePaymentHistory } from '../lib/payment-history';
 import { useShiftSession } from '../lib/shift-session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { usePrNav } from '../lib/pr-nav';
@@ -62,6 +63,7 @@ const EMPTY: Filters = {
 export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => void }) {
   const { openPv } = usePrNav();
   const { weekRecords } = useShiftSession();
+  const { weeks: apiWeeks } = usePaymentHistory();
   const { signedWeeks } = useSignedPvs();
   const [applied, setApplied] = useState<Filters>(EMPTY);
   const [draft, setDraft] = useState<Filters>(EMPTY);
@@ -71,20 +73,24 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
   const [sheetCalendarOpen, setSheetCalendarOpen] = useState(false);
   const [expanded, setExpanded] = useState<string | null>(null);
 
+  // Only keep local signed weeks that match a real API voucher (no demo phantoms).
+  const allWeeks = useMemo(() => {
+    const apiIds = new Set(apiWeeks.map((w) => w.id));
+    const localOnly = signedWeeks
+      .filter((w) => apiIds.has(w.id))
+      .map(normalizeHistPayWeek);
+    const mergedIds = new Set(localOnly.map((w) => w.id));
+    return [
+      ...localOnly,
+      ...apiWeeks.filter((w) => !mergedIds.has(w.id)).map(normalizeHistPayWeek),
+    ];
+  }, [apiWeeks, signedWeeks]);
+
   useEffect(() => {
-    if (signedWeeks[0]?.id) setExpanded(signedWeeks[0].id);
-  }, [signedWeeks]);
+    if (allWeeks[0]?.id) setExpanded(allWeeks[0].id);
+  }, [allWeeks]);
 
   const [toast, setToast] = useState<string | null>(null);
-
-  const allWeeks = useMemo(() => {
-    const seedIds = new Set(signedWeeks.map((w) => w.id));
-    const merged = [
-      ...signedWeeks,
-      ...PAYMENT_HISTORY_WEEKS.filter((w) => !seedIds.has(w.id)),
-    ];
-    return merged.map(normalizeHistPayWeek);
-  }, [signedWeeks]);
 
   const outlets = useMemo(() => paymentHistoryOutlets(allWeeks), [allWeeks]);
 
@@ -332,11 +338,11 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         {filtered.length === 0 ? (
           <View style={styles.empty}>
             <Text style={styles.emptyText}>
-              {PAYMENT_HISTORY_WEEKS.length === 0
+              {allWeeks.length === 0
                 ? 'No payments yet'
                 : 'No payments match your filters.'}
             </Text>
-            {PAYMENT_HISTORY_WEEKS.length === 0 && (
+            {allWeeks.length === 0 && (
               <IzButton label="Open Payment" small onPress={onOpenPayment} />
             )}
           </View>

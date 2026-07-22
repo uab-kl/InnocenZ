@@ -59,6 +59,14 @@ export class SpecialServiceRepositoryClass {
     if (filter?.postingPrId) conditions.push(eq(SpecialServiceTable.postingPrId, filter.postingPrId));
     if (filter?.adminAccepted)
       conditions.push(eq(SpecialServiceTable.adminAccepted, filter.adminAccepted));
+    const idQuery = filter?.id?.trim();
+    if (idQuery) {
+      // Strip ILIKE wildcards so a pasted fragment only matches literally.
+      const safe = idQuery.replace(/[%_]/g, '');
+      if (safe) {
+        conditions.push(sql`${SpecialServiceTable.id}::text ILIKE ${`%${safe}%`}`);
+      }
+    }
     const requestedOn = buildMultiDayWhere(SpecialServiceTable.createdAt, filter?.dates);
     if (requestedOn) conditions.push(requestedOn);
     const scheduledOn = buildMultiDayWhere(SpecialServiceTable.scheduledFor, filter?.scheduledDates);

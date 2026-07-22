@@ -55,6 +55,25 @@ export interface ShiftsApiResponse {
 	data: Shift[];
 }
 
+/**
+ * One per-shift pay-tier override the outlet composes at post time — mirrors a
+ * backend `shift_pay_tier` row. Numeric fields are sent as numbers; the backend
+ * coerces them to its numeric(…) columns. `tier` carries the outlet label
+ * ('Tier I'..'Servant') for ranked tiers, null for commission-only.
+ */
+export interface ShiftPayTierInput {
+	kind?: "tier" | "commission_only";
+	tier?: string | null;
+	wagePerHour?: number | null;
+	drinkPct?: number;
+	happyHourDrinkPct?: number | null;
+	tipPct?: number;
+	otAfterHours?: number | null;
+	targetSalesRm?: number | null;
+	prCount?: number;
+	sortOrder?: number;
+}
+
 export interface CreateShiftInput {
 	agencyId?: string;
 	outletId: string;
@@ -69,6 +88,9 @@ export interface CreateShiftInput {
 	payPerHour?: number;
 	estimatedCost?: number;
 	liveSales?: number;
+	// Per-shift rate overrides (Post Job pay-tier rows). Omit to keep the outlet's
+	// workspace defaults; an empty array clears any existing overrides on update.
+	payTiers?: ShiftPayTierInput[];
 }
 
 export type UpdateShiftInput = Partial<CreateShiftInput> & {

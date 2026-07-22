@@ -6,8 +6,9 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
-import { NOTIFICATIONS, fmtClock, fmtDTopbar, getLastWeekAwaitingPv, todayYmd } from '../lib/demo-shifts';
+import { fmtClock, fmtDTopbar, formatRM, todayYmd, weekPvIssueDayLabel } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
+import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { Avatar, IzButton } from './ui';
 import { Bell, ChevronLeft, FileText } from './icons';
 import { usePrNav } from '../lib/pr-nav';
@@ -32,15 +33,27 @@ export function TopBar({
 }) {
   const { me } = useSession();
   const { openPv } = usePrNav();
+  const { awaiting } = useAwaitingLastWeekPv();
   const time = useClock();
   const [y, m, d] = todayYmd();
   const [sheetOpen, setSheetOpen] = useState(false);
   const [readIds, setReadIds] = useState<string[]>([]);
 
-  const notifications = useMemo(
-    () => NOTIFICATIONS.map((n) => ({ ...n, read: n.read || readIds.includes(n.id) })),
-    [readIds],
-  );
+  const notifications = useMemo(() => {
+    const list = awaiting
+      ? [
+          {
+            id: `n-pv-${awaiting.todo.pvId}`,
+            title: 'Payment Voucher ready',
+            body: `${awaiting.todo.ref} · ${formatRM(awaiting.todo.net)} net — Finance Head pre-signed. Review & sign.`,
+            at: weekPvIssueDayLabel(1),
+            read: false as boolean,
+            pvId: awaiting.todo.pvId as string | undefined,
+          },
+        ]
+      : [];
+    return list.map((n) => ({ ...n, read: n.read || readIds.includes(n.id) }));
+  }, [awaiting, readIds]);
   const unread = notifications.filter((n) => !n.read).length;
 
   const displayName = me?.username ?? 'PR';
@@ -109,14 +122,17 @@ export function TopBar({
             <Text style={styles.sheetHint}>
               Assignments, swaps, PVs, and SOS receipts — tap to open the screen.
             </Text>
-            {notifications.map((n) => (
+            {notifications.length === 0 ? (
+              <Text style={styles.sheetHint}>No notifications right now.</Text>
+            ) : (
+              notifications.map((n) => (
               <Pressable
                 key={n.id}
                 style={[styles.notifCard, !n.read && styles.notifCardUnread]}
                 onPress={() => {
                   setReadIds((ids) => [...ids, n.id]);
                   setSheetOpen(false);
-                  if (n.id.startsWith('n-pv')) openPv(getLastWeekAwaitingPv().id);
+                  if (n.pvId) openPv(n.pvId);
                 }}
               >
                 <View style={styles.notifHead}>
@@ -133,7 +149,8 @@ export function TopBar({
                 <Text style={styles.notifBody}>{n.body}</Text>
                 <Text style={styles.notifAt}>{n.at}</Text>
               </Pressable>
-            ))}
+              ))
+            )}
             <IzButton label="Close" variant="soft" onPress={() => setSheetOpen(false)} style={{ marginTop: 12 }} />
           </Pressable>
         </Pressable>

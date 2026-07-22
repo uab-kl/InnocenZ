@@ -63,6 +63,8 @@ export interface SpecialServicesQueryParams {
 	outletId?: string;
 	initiatedBy?: SpecialServiceInitiatedBy;
 	adminAccepted?: SpecialServiceAdminAccepted;
+	/** Search by special service id (full or partial UUID). */
+	id?: string;
 	/** Filter by requested calendar day(s) — createdAt. */
 	dates?: string;
 	/** Filter by scheduled calendar day(s) — scheduledFor. */
@@ -104,6 +106,7 @@ export async function fetchSpecialServices(
 		outletId: params.outletId,
 		initiatedBy: params.initiatedBy,
 		adminAccepted: params.adminAccepted,
+		id: params.id,
 		dates: params.dates,
 		scheduledDates: params.scheduledDates,
 		order: params.order,

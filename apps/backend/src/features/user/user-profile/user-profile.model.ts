@@ -24,6 +24,8 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   gender: varchar('gender', { length: 20 }),
   race: varchar('race', { length: 50 }),
   portfolioPhotos: jsonb('portfolio_photos').$type<(string | null)[]>(),
+  /** Public path to the saved auto-generated photo comcard image. */
+  comcardImage: varchar('comcard_image'),
   comcardHeightCm: integer('comcard_height_cm'),
   comcardWeightKg: integer('comcard_weight_kg'),
   idType: idTypeEnum('id_type'),
@@ -61,6 +63,7 @@ export type UserProfileResponse = {
   gender: string | null;
   race: string | null;
   portfolioPhotos: (string | null)[] | null;
+  comcardImage: string | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
   idType: IdType | null;
@@ -90,6 +93,7 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     gender: null,
     race: null,
     portfolioPhotos: null,
+    comcardImage: null,
     comcardHeightCm: null,
     comcardWeightKg: null,
     idType: null,
@@ -120,6 +124,7 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     gender: profile.gender,
     race: profile.race,
     portfolioPhotos: profile.portfolioPhotos,
+    comcardImage: profile.comcardImage,
     comcardHeightCm: profile.comcardHeightCm,
     comcardWeightKg: profile.comcardWeightKg,
     idType: profile.idType,

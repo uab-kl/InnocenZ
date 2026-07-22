@@ -4,8 +4,19 @@ import type {
 } from "@agency-portal/lib/agency-demo";
 import { formatOutletDayLabel } from "@agency-portal/lib/agency-outlet-shifts";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
+import {
+	isCommissionOnlyPayTier,
+	outletTierForPostJobPayTier,
+	type PostJobPayTierRow,
+	payTierDisplayOrder,
+} from "@agency-portal/lib/post-job-pay-tiers";
 import type { ShiftRequest } from "@agency-portal/lib/store";
-import type { CreateShiftInput, Shift, ShiftEventKind } from "@/services/shift";
+import type {
+	CreateShiftInput,
+	Shift,
+	ShiftEventKind,
+	ShiftPayTierInput,
+} from "@/services/shift";
 import type {
 	ShiftAssignment,
 	ShiftAssignmentStatus,
@@ -222,9 +233,9 @@ export function shiftRequestFromBackendShift(input: {
 
 /**
  * The fields the reverse (write) mapper reads off a Post Job composer item. A
- * posted shift item is a superset of this — the extra demo-only fields (pay
- * tiers, drink menus, dress code, star tiers, named PR ids) have no `shift`
- * column and are dropped here.
+ * posted shift item is a superset of this — the remaining demo-only fields
+ * (drink menus, dress code, star tiers, named PR ids) have no backend column and
+ * are dropped here. The pay-tier rows ARE persisted, as `shift_pay_tier` rows.
  */
 export interface OutletShiftPostItem {
 	/** Canonical yyyy-MM-dd — the composer always sets this on a posted item. */
@@ -237,6 +248,8 @@ export interface OutletShiftPostItem {
 	preferredRating: number;
 	estimatedCost: number;
 	payPerHour: number;
+	/** Per-tier rate + headcount rows the composer built (persisted as overrides). */
+	payTierRows?: PostJobPayTierRow[];
 }
 
 // The backend's preferredRating is a 0–5 int; the composer's derived value can
@@ -251,6 +264,35 @@ function nonNegative(value: number): number {
 }
 
 /**
+ * Post Job pay-tier rows -> the backend `payTiers` overrides. Only rows actually
+ * staffing the shift (prCount > 0) are persisted. `tier` carries the outlet
+ * label the PR rate resolver matches on ('Tier I'..'Servant'); commission-only
+ * has no label. The composer doesn't collect a per-shift happy-hour % or OT
+ * rate, so those are left unset and fall back to the outlet workspace defaults.
+ */
+export function shiftPayTiersFromRows(
+	rows: PostJobPayTierRow[],
+): ShiftPayTierInput[] {
+	return rows
+		.filter((row) => row.prCount > 0)
+		.map((row) => {
+			const commissionOnly = isCommissionOnlyPayTier(row.payTierId);
+			return {
+				kind: commissionOnly ? "commission_only" : "tier",
+				tier: outletTierForPostJobPayTier(row.payTierId),
+				wagePerHour: commissionOnly ? null : row.wagePerHour,
+				drinkPct: row.drinkPct,
+				happyHourDrinkPct: null,
+				tipPct: row.tipPct,
+				otAfterHours: null,
+				targetSalesRm: row.targetSalesRm ?? null,
+				prCount: row.prCount,
+				sortOrder: payTierDisplayOrder(row.payTierId),
+			};
+		});
+}
+
+/**
  * A Post Job composer item -> the backend `CreateShiftInput`. `outletId` comes
  * from the signed-in outlet's identity, never the item. No `agencyId` is sent:
  * the backend routes the PR request to the outlet's onboarding agency, which is
@@ -261,6 +303,11 @@ export function createShiftInputFromPost(
 	item: OutletShiftPostItem,
 	outletId: string,
 ): CreateShiftInput {
+	// Persist the composer's per-tier overrides when it built any; omit the field
+	// entirely otherwise, so the shift keeps the outlet's workspace rate card.
+	const payTiers = item.payTierRows?.length
+		? shiftPayTiersFromRows(item.payTierRows)
+		: undefined;
 	return {
 		outletId,
 		shiftDate: item.dateIso,
@@ -273,5 +320,6 @@ export function createShiftInputFromPost(
 		payPerHour: nonNegative(item.payPerHour),
 		estimatedCost: nonNegative(item.estimatedCost),
 		liveSales: 0,
+		...(payTiers && payTiers.length ? { payTiers } : {}),
 	};
 }

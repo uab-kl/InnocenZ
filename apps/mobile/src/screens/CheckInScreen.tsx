@@ -14,6 +14,8 @@ import {
   GPS_BYPASS,
   fmtDFriendly,
   formatRM,
+  todayYmd,
+  ymdToIso,
   type Ymd,
 } from '../lib/demo-shifts';
 import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
@@ -32,6 +34,11 @@ import type { PrTab } from '../components/BottomNav';
 function ymdFromIso(iso: string): Ymd {
   const [y, m, d] = iso.split('-').map((n) => Number(n));
   return [y, m, d];
+}
+
+/** Device-local calendar day of a Date as [y, m(1-based), d]. */
+function localYmd(d: Date): Ymd {
+  return [d.getFullYear(), d.getMonth() + 1, d.getDate()];
 }
 
 export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
@@ -64,14 +71,16 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     if (phase === 'on_duty' && localPhase !== 'on_duty') markLocalOnDuty();
   }, [phase, localPhase, markLocalOnDuty]);
 
-  // Today's key (UTC, matching the backend's lineDate) — the current shift's
-  // receipts and its wages seal all share this day, so Check-In and the Payment
-  // "This week" column for today reconcile to the same figure.
-  const todayKey = new Date().toISOString().slice(0, 10);
-  const todaysReceipts = receiptLines.filter((l) => l.lineDate === todayKey);
+  // Attribute wages + receipts to the PR's actual calendar day (device-local
+  // "today") — the day the check-out happens. Not the shift's scheduled date
+  // (the seed dates some shifts a day ahead, which would push earnings onto
+  // tomorrow) and not a UTC day that rolls over at night.
+  const todayKey = ymdToIso(...todayYmd());
+  const todayReceipts = receiptLines.filter((l) => l.lineDate === todayKey);
 
   const finalPayout = active
-    ? Number(active.payAmount) + receiptCommissionTotal(todaysReceipts)
+    ? (Number(active.rate?.wagePerHour) || Number(active.payAmount)) +
+      receiptCommissionTotal(todayReceipts)
     : 0;
   const completeDuration = active
     ? shiftDurationLabel(active.checkInAt, active.checkOutAt)
@@ -94,18 +103,22 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       try {
         if (forCheckout) {
           const sealed = await checkOutShiftAssignment(token, active.id);
-          // Seal this shift's wages onto the current-week voucher so Payment
-          // This-week shows the full payout (wages + commission). Idempotent
-          // per assignment via dedupeRef.
+          // Flat tier wages from Post Job "Pay by PR tier → Wages" (rate.wagePerHour),
+          // falling back to the sealed assignment payAmount.
+          const wagesRm =
+            Number(active.rate?.wagePerHour) ||
+            Number(sealed.payAmount) ||
+            Number(active.payAmount) ||
+            0;
           await addLine({
             kind: 'wages',
             source: 'checkin',
             item: 'Daily wages',
             quantity: 1,
-            sales: Number(active.payAmount),
-            commission: Number(active.payAmount),
-            // Seal wages on the same day the receipts were logged (today), so the
-            // Payment "This week" column groups wages + drinks + tips together.
+            sales: wagesRm,
+            commission: wagesRm,
+            // Seal wages on today (same key the receipts use), so the Payment
+            // "This week" column groups wages + drinks + tips together.
             lineDate: todayKey,
             outlet: active.outletName ?? undefined,
             dedupeRef: active.id,
@@ -190,7 +203,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   const outletName = active?.outletName ?? 'Outlet';
   const shiftTime = active?.slot ?? '—';
-  const shiftDateYmd = active ? ymdFromIso(active.shiftDate) : null;
+  // A completed shift shows the day it was actually worked (local check-out day),
+  // not its scheduled shift_date — so a shift checked out today never reads as a
+  // future date. Booked / on-duty keep showing the scheduled date.
+  const shiftDateYmd: Ymd | null = active
+    ? active.checkOutAt
+      ? localYmd(new Date(active.checkOutAt))
+      : ymdFromIso(active.shiftDate)
+    : null;
 
   return (
     <View style={styles.screen}>
@@ -238,6 +258,12 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <Text style={styles.shiftMeta}>
                     {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
                   </Text>
+                  {active.outletAddress ? (
+                    <View style={styles.addrRow}>
+                      <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
+                      <Text style={styles.addrText}>{active.outletAddress}</Text>
+                    </View>
+                  ) : null}
                   <Text style={styles.event}>{active.eventName ?? 'Shift'}</Text>
                   <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
                 </View>
@@ -248,7 +274,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               {briefOpen && (
                 <View style={styles.briefBody}>
                   <Text style={styles.briefBodyLabel}>Est. payout</Text>
-                  <Text style={styles.briefBodyValue}>{formatRM(Number(active.payAmount))}</Text>
+                  <Text style={styles.briefBodyValue}>
+                    {formatRM(Number(active.rate?.wagePerHour) || Number(active.payAmount))}
+                  </Text>
                   <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Shift time</Text>
                   <Text style={styles.briefBodyValue}>{shiftTime}</Text>
                 </View>
@@ -280,7 +308,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   checkedOut={false}
                   checkInAt={active.checkInAt}
                   checkOutAt={active.checkOutAt}
-                  dutyWagesRm={Number(active.payAmount)}
+                  dutyWagesRm={Number(active.rate?.wagePerHour) || Number(active.payAmount)}
                   targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
                   dayKey={todayKey}
                 />
@@ -312,7 +340,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   checkedOut
                   checkInAt={active.checkInAt}
                   checkOutAt={active.checkOutAt}
-                  dutyWagesRm={Number(active.payAmount)}
+                  dutyWagesRm={Number(active.rate?.wagePerHour) || Number(active.payAmount)}
                   targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
                   dayKey={todayKey}
                 />
@@ -477,6 +505,19 @@ const styles = StyleSheet.create({
     fontFamily: F.manrope,
     fontSize: 14,
     color: C.prMuted,
+  },
+  addrRow: {
+    marginTop: 6,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+  },
+  addrText: {
+    flex: 1,
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.prMuted2,
+    lineHeight: 18,
   },
   assign: {
     marginTop: 10,

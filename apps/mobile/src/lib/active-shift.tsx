@@ -25,10 +25,20 @@ export function derivePhase(a: ShiftAssignmentRecord): Exclude<AttendancePhase, 
   return 'booked';
 }
 
+/** Local (device-time) calendar day as YYYY-MM-DD — the PR's own "today". */
+function localDateKey(d: Date): string {
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+}
+
 /**
- * The single assignment the app acts on: a shift in progress wins, else the
- * soonest one still awaiting check-in, else the latest completed one (to show
- * its summary). Cancelled / no-show / locally-dismissed rows are skipped.
+ * The single assignment the app acts on:
+ *  1. a shift in progress (checked in, not out) — highest;
+ *  2. a shift the PR checked out TODAY — stays pinned so Check-In keeps showing
+ *     its status table + payout after check-out (clears itself the next day);
+ *  3. the soonest one still awaiting check-in (their next shift);
+ *  4. the latest completed one, as a fallback so the page is never blank.
+ * Cancelled / no-show / locally-dismissed rows are skipped.
  */
 export function pickActive(
   list: ShiftAssignmentRecord[],
@@ -37,8 +47,21 @@ export function pickActive(
   const open = list.filter(
     (a) => !dismissed.has(a.id) && a.status !== 'cancelled' && a.status !== 'no_show',
   );
-  const onDuty = open.find((a) => a.checkInAt && !a.checkOutAt);
+  const today = localDateKey(new Date());
+
+  // A shift dated in the future can't be "on duty" today — you check in when it
+  // actually starts. Guarding on shiftDate stops tomorrow's booked shift (with a
+  // stray check-in) from hijacking Check-In before its day arrives.
+  const onDuty = open.find((a) => a.checkInAt && !a.checkOutAt && a.shiftDate <= today);
   if (onDuty) return onDuty;
+
+  // Keep the just-finished shift on screen for the rest of the day (matched on
+  // the check-out stamp's local day), then let it reset when the day changes.
+  const completedToday = open
+    .filter((a) => a.checkOutAt && localDateKey(new Date(a.checkOutAt)) === today)
+    .sort((a, b) => (b.checkOutAt ?? '').localeCompare(a.checkOutAt ?? ''));
+  if (completedToday.length) return completedToday[0];
+
   const booked = open
     .filter((a) => !a.checkInAt && a.status !== 'completed')
     .sort((a, b) => a.shiftDate.localeCompare(b.shiftDate));

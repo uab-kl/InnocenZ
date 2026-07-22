@@ -97,8 +97,8 @@ export function PostJobTierRatesEditor({
   };
 
   const rowLabels = commissionExpanded
-    ? (['Base / hr', 'Drinks', 'Tips', 'PR count'] as const)
-    : (['Base / hr', 'Commission', 'PR count'] as const);
+    ? (['Wages', 'Drinks', 'Tips', 'PR count'] as const)
+    : (['Wages', 'Commission', 'PR count'] as const);
 
   const commissionRowIndex = 1;
   const drinksRowIndex = 1;
@@ -166,11 +166,11 @@ export function PostJobTierRatesEditor({
                       <div
                         key={`${row.id}-pay`}
                         className="iz-post-job-tier-pay-cell"
-                        title="Tap to edit base pay"
+                        title="Tap to edit wages for this PR tier"
                       >
                         {commissionOnly ? (
                           <span className="text-xs font-medium text-[var(--iz-muted)]">
-                            No base
+                            No wages
                           </span>
                         ) : (
                           <>

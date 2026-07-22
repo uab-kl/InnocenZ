@@ -8,7 +8,7 @@ import { MONTH_NAMES, weekPayGridTotal, type DemoPv, type WeeklyDayPay } from '.
 import type { HistPayLine, HistPayWeek } from './demo-payment-history';
 import { normalizeHistPayWeek } from './history-pay-sync';
 
-const STORE_KEY = 'iz-pr-signed-pvs-v2';
+const STORE_KEY = 'iz-pr-signed-pvs-v3';
 
 type SignedPvState = {
   signedWeeks: HistPayWeek[];
@@ -65,7 +65,10 @@ function linesFromGrid(grid: WeeklyDayPay[], outlet: string): HistPayLine[] {
   const lines: HistPayLine[] = [];
   for (const d of grid) {
     if (d.status === 'empty') continue;
-    const date = `${String(d.date).padStart(2, '0')} ${d.day}`;
+    // Include month so History → Shifts can parse line dates back to ISO.
+    const [y, m] = d.dateIso.split('-').map(Number);
+    const mon = MONTH_NAMES[(m ?? 1) - 1] ?? 'Jan';
+    const date = `${String(d.date).padStart(2, '0')} ${mon}`;
     if (d.wages > 0) {
       lines.push({
         date,
