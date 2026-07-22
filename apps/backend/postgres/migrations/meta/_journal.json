@@ -316,6 +316,13 @@
       "when": 1784500000028,
       "tag": "0044_outlet_drop_per_table_rm",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1784500000029,
+      "tag": "0045_drink_menu_category",
+      "breakpoints": true
     }
   ]
 }

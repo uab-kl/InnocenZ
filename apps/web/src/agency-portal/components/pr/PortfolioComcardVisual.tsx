@@ -4,6 +4,7 @@ import {
 } from '@agency-portal/components/agency/Comcard3dPreview';
 import { publicAssetPath } from '@agency-portal/lib/public-asset';
 import { cn } from '@agency-portal/lib/utils';
+import { useState } from 'react';
 
 function portfolioImageSrc(src: string) {
   return src.startsWith('data:') ? src : publicAssetPath(src);
@@ -66,6 +67,21 @@ export function PrComcardPickerThumb({
   );
 }
 
+function PortfolioComcardCell({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  return (
+    <div className="iz-portfolio-comcard__cell">
+      {!failed && (
+        <img
+          src={portfolioImageSrc(src)}
+          alt=""
+          onError={() => setFailed(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 export function PortfolioComcardVisual({
   photos,
   pr,
@@ -83,9 +99,7 @@ export function PortfolioComcardVisual({
       <div className="iz-portfolio-comcard__frame">
         <div className="iz-portfolio-comcard__grid" aria-hidden={false}>
           {grid.map((src, i) => (
-            <div key={i} className="iz-portfolio-comcard__cell">
-              <img src={portfolioImageSrc(src)} alt="" />
-            </div>
+            <PortfolioComcardCell key={`${src}-${i}`} src={src} />
           ))}
         </div>
         <div className="iz-portfolio-comcard__overlay">
@@ -97,6 +111,33 @@ export function PortfolioComcardVisual({
         </div>
         <span className="iz-portfolio-comcard__badge">Photo Comcard</span>
       </div>
+    </div>
+  );
+}
+
+/** Gallery tile that disappears if the asset 404s (deleted upload, etc.). */
+export function PortfolioGalleryTile({
+  src,
+  className,
+}: {
+  src: string;
+  className?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  if (failed) return null;
+  return (
+    <div
+      className={cn(
+        'aspect-square overflow-hidden rounded-lg border border-[var(--iz-line)]',
+        className,
+      )}
+    >
+      <img
+        src={portfolioImageSrc(src)}
+        alt=""
+        className="h-full w-full object-cover"
+        onError={() => setFailed(true)}
+      />
     </div>
   );
 }

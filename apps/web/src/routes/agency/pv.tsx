@@ -436,7 +436,7 @@ function AgencyPV() {
           className={`iz-payroll-tab${payrollWeekTab === 'last_last_week' ? ' on' : ''}`}
           onClick={() => selectPayrollWeekTab('last_last_week')}
         >
-          Last Last Week
+          Payment Week
         </button>
       </div>
 

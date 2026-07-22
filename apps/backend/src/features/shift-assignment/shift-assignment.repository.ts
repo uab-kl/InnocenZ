@@ -21,6 +21,13 @@ import {
 } from './shift-assignment.model';
 
 /**
+ * Floor/display name for history + reports: nickname when set, else legal name.
+ * Matches the web `managedPrFromBackend` mapping so outlet and agency history
+ * show the same label for a PR.
+ */
+const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${PrTable.nickname}), ''), ${PrTable.name})`;
+
+/**
  * The rate card resolved for one PR tier at one outlet. Numeric columns stay as
  * their raw string form (matching Drizzle's numeric select), so the mobile app
  * parses them the same way it already parses `payPerHour`/`payAmount`. Any field
@@ -158,7 +165,7 @@ export class ShiftAssignmentRepositoryClass {
       const rows = await db
         .select({
           assignment: ShiftAssignmentTable,
-          prName: PrTable.name,
+          prName: prDisplayNameSql,
           outletId: ShiftTable.outletId,
           shiftDate: ShiftTable.shiftDate,
         })
@@ -487,7 +494,7 @@ export class ShiftAssignmentRepositoryClass {
       const rows = await db
         .select({
           prId: ShiftAssignmentTable.prId,
-          prName: PrTable.name,
+          prName: prDisplayNameSql,
           soldOn: ShiftTable.shiftDate,
           cost: sql<number>`coalesce(sum(${ShiftAssignmentTable.payAmount}), 0)::float8`,
         })
@@ -495,7 +502,12 @@ export class ShiftAssignmentRepositoryClass {
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
         .where(this.buildCostConditions(filter))
-        .groupBy(ShiftAssignmentTable.prId, PrTable.name, ShiftTable.shiftDate)
+        .groupBy(
+          ShiftAssignmentTable.prId,
+          PrTable.nickname,
+          PrTable.name,
+          ShiftTable.shiftDate,
+        )
         .orderBy(asc(ShiftTable.shiftDate));
       return rows.map((r) => ({
         prId: r.prId,

@@ -22,6 +22,7 @@ export const DrinkMenuItemSchema = z.object({
   slug: z.string().min(1).max(100),
   name: z.string().min(1).max(255),
   priceRm: z.coerce.number().default(0),
+  category: z.enum(['drink', 'service']).default('service'),
   sortOrder: z.coerce.number().int().default(0),
 });
 

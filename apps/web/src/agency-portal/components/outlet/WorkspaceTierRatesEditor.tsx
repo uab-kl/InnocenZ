@@ -1,6 +1,7 @@
 import {
   OUTLET_BASE_TIER,
   OUTLET_PR_TIERS,
+  resolveStandardShiftHours,
   tierBaseRmPerHour,
   tierHappyHourDrinkPct,
   tierOtRmPerHour,
@@ -102,7 +103,9 @@ export function WorkspaceTierRatesEditor({
 
   hideTargetSales?: boolean;
 }) {
-  const defaultOtAfterHours = tierRates[OUTLET_BASE_TIER]?.otAfterHours ?? 6;
+  const defaultOtAfterHours = resolveStandardShiftHours(
+    tierRates[OUTLET_BASE_TIER]?.otAfterHours,
+  );
 
   const showTierStaffing = tierStaffingByPayTier != null;
 
@@ -197,7 +200,9 @@ export function WorkspaceTierRatesEditor({
   const workspaceTierRow = (tier: OutletPrTier) => {
     const rates = tierRates[tier];
 
-    const otAfterHours = rates.otAfterHours ?? defaultOtAfterHours;
+    const otAfterHours = resolveStandardShiftHours(
+      rates.otAfterHours ?? defaultOtAfterHours,
+    );
 
     const hourlyRule = { wagePerHour: rates.wagePerHour, otAfterHours };
 
@@ -215,7 +220,7 @@ export function WorkspaceTierRatesEditor({
               ? tierTableCell('bg-black/15 text-[var(--iz-muted)]')
               : tierTableEditableCell()
           }
-          title={readOnly ? undefined : 'Tap to edit pay per shift'}
+          title={readOnly ? undefined : 'Tap to edit daily / shift pay'}
         >
           <div className={fieldShell(undefined, true)}>
             <span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -232,7 +237,7 @@ export function WorkspaceTierRatesEditor({
 
         <div
           className={tierTableReadonlyCell('justify-center')}
-          title="Derived from daily wages ÷ standard hours"
+          title={`Derived from daily wages ÷ ${otAfterHours}h shift (default 6h)`}
         >
           <TierRmHrReadonly amount={tierBaseRmPerHour(hourlyRule)} />
         </div>

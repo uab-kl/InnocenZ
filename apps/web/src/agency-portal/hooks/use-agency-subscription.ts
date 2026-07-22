@@ -35,17 +35,28 @@ function ratePlanFromBackend(sub: Subscription): AgencyRatePlan {
 	};
 }
 
+/** Starter → … → Scale by weekly price; Custom / renegotiate last. */
+function compareAgencyRatePlans(a: AgencyRatePlan, b: AgencyRatePlan): number {
+	const aPrice = a.weeklyRm;
+	const bPrice = b.weeklyRm;
+	if (aPrice == null && bPrice == null) return a.label.localeCompare(b.label);
+	if (aPrice == null) return 1;
+	if (bPrice == null) return -1;
+	return aPrice - bPrice;
+}
+
 /**
  * Backend-driven Subscription rate card + the agency's assigned plan.
  *
  * Gated on a real session (`getAgencyIdentity()`); demo sessions get `backed:
- * false` and the screen keeps its demo plans + usage-based tier. ACCEPTED
- * DEGRADATION: the screen's hero tier is derived from weekly-PV usage, which the
- * backend does NOT model — the backend stores an ASSIGNED plan
- * (`member-subscription`). So the rate card lists real plans and the "Your tier"
- * highlight prefers the real assigned plan (`currentSubscriptionId`), falling
- * back to a usage-derived label match. Plan marketing descriptions have no
- * backend and render empty.
+ * false` and the screen keeps its demo plans + usage-based tier. Plans are
+ * scoped with `subscriptionType: "agency"` so outlet monthly tiers never leak
+ * into the rate card. ACCEPTED DEGRADATION: the screen's hero tier is derived
+ * from weekly-PV usage, which the backend does NOT model — the backend stores
+ * an ASSIGNED plan (`member-subscription`). So the rate card lists real agency
+ * plans and the "Your tier" highlight prefers the real assigned plan
+ * (`currentSubscriptionId`), falling back to a usage-derived label match. Plan
+ * marketing descriptions have no backend and render empty.
  */
 export function useAgencySubscription() {
 	const { logout } = useAuth();
@@ -54,9 +65,12 @@ export function useAgencySubscription() {
 	const agencyId = identity?.agencyId ?? null;
 
 	const plansQuery = useQuery({
-		queryKey: ["agency", "subscription", "plans"],
+		queryKey: ["agency", "subscription", "plans", "agency"],
 		queryFn: () =>
-			fetchSubscriptions({ status: "active", pageSize: 100 }, logout),
+			fetchSubscriptions(
+				{ status: "active", subscriptionType: "agency", pageSize: 100 },
+				logout,
+			),
 		enabled: backed,
 		staleTime: 60_000,
 	});
@@ -78,7 +92,11 @@ export function useAgencySubscription() {
 	});
 
 	const plans = useMemo<AgencyRatePlan[]>(
-		() => (plansQuery.data?.data ?? []).map(ratePlanFromBackend),
+		() =>
+			(plansQuery.data?.data ?? [])
+				.filter((sub) => sub.subscriptionType === "agency")
+				.map(ratePlanFromBackend)
+				.sort(compareAgencyRatePlans),
 		[plansQuery.data],
 	);
 

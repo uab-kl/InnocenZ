@@ -21,6 +21,7 @@ import {
 import { cn } from '@agency-portal/lib/utils';
 import {
   TierCountStepper,
+  TierMoneyInput,
   TierPayInput,
   TierPctStepper,
 } from '@agency-portal/components/outlet/tier-rates-table-ui';
@@ -97,13 +98,14 @@ export function PostJobTierRatesEditor({
   };
 
   const rowLabels = commissionExpanded
-    ? (['Base / hr', 'Drinks', 'Tips', 'PR count'] as const)
-    : (['Base / hr', 'Commission', 'PR count'] as const);
+    ? (['Wages', 'Drinks', 'Tips', 'Target', 'PR count'] as const)
+    : (['Wages', 'Commission', 'Target', 'PR count'] as const);
 
   const commissionRowIndex = 1;
   const drinksRowIndex = 1;
   const tipsRowIndex = 2;
-  const prCountRowIndex = commissionExpanded ? 3 : 2;
+  const targetRowIndex = commissionExpanded ? 3 : 2;
+  const prCountRowIndex = commissionExpanded ? 4 : 3;
 
   return (
     <div className="space-y-2">
@@ -166,7 +168,7 @@ export function PostJobTierRatesEditor({
                       <div
                         key={`${row.id}-pay`}
                         className="iz-post-job-tier-pay-cell"
-                        title="Tap to edit base pay"
+                        title="Tap to edit wages"
                       >
                         {commissionOnly ? (
                           <span className="text-xs font-medium text-[var(--iz-muted)]">
@@ -243,6 +245,27 @@ export function PostJobTierRatesEditor({
                         <TierPctStepper
                           value={row.tipPct}
                           onChange={(tipPct) => patchRow(row.id, { tipPct })}
+                        />
+                      </div>
+                    );
+                  }
+
+                  if (labelIndex === targetRowIndex) {
+                    return (
+                      <div
+                        key={`${row.id}-target`}
+                        className="iz-post-job-tier-pay-cell"
+                        title="Tap to set target sales (optional)"
+                      >
+                        <span className="text-[10px] font-semibold text-[var(--iz-muted)]">
+                          RM
+                        </span>
+                        <TierMoneyInput
+                          value={row.targetSalesRm}
+                          placeholder="Optional"
+                          onChange={(targetSalesRm) =>
+                            patchRow(row.id, { targetSalesRm })
+                          }
                         />
                       </div>
                     );

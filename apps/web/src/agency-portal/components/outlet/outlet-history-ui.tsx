@@ -6,6 +6,7 @@ import type {
   ShiftHistoryRow,
 } from '@agency-portal/lib/shift-history-utils';
 import {
+  type AgencyManagedPR,
   findAgencyManagedPr,
   resolveAgencyPrPhoto,
 } from '@agency-portal/lib/agency-demo';
@@ -59,11 +60,23 @@ function formatLatestLabel(dateIso: string, dateDisplay: string) {
   return `Latest ${dateDisplay}`;
 }
 
-function OutletPrAvatar({ prId, prName }: { prId: string; prName: string }) {
-  const agencyPRs = useStore((s) => s.agencyPRs);
+function OutletPrAvatar({
+  prId,
+  prName,
+  agencyPRs: agencyPRsProp,
+}: {
+  prId: string;
+  prName: string;
+  /** Prefer caller roster (e.g. backend History) over the demo store. */
+  agencyPRs?: AgencyManagedPR[];
+}) {
+  const storePRs = useStore((s) => s.agencyPRs);
+  const agencyPRs = agencyPRsProp ?? storePRs;
   const agencyPr = findAgencyManagedPr(agencyPRs, prId, prName);
+  // Profile photo first, then dedicated comcard, then a portfolio still.
   const photoSrc = agencyPr ? resolveAgencyPrPhoto(agencyPr) : null;
-  const [photoFailed, setPhotoFailed] = useState(false);
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
+  const photoFailed = Boolean(photoSrc && failedSrc === photoSrc);
   const initial = prName.trim().charAt(0).toUpperCase() || '?';
   const avatar = avatarStyle(prName);
 
@@ -76,7 +89,7 @@ function OutletPrAvatar({ prId, prName }: { prId: string; prName: string }) {
         <img
           src={publicAssetPath(photoSrc)}
           alt=""
-          onError={() => setPhotoFailed(true)}
+          onError={() => setFailedSrc(photoSrc)}
         />
       </div>
     );
@@ -375,6 +388,7 @@ export function OutletPrHistoryCard({
   rating,
   onTap,
   portal = 'outlet',
+  agencyPRs,
 }: {
   rollup: ShiftHistoryPrRollup;
   rank: number;
@@ -382,6 +396,7 @@ export function OutletPrHistoryCard({
   rating?: OutletPrRating;
   onTap?: () => void;
   portal?: 'agency' | 'outlet';
+  agencyPRs?: AgencyManagedPR[];
 }) {
   const venueKind = portal === 'agency' ? 'outlet' : 'agency';
   const subtitle =
@@ -411,7 +426,11 @@ export function OutletPrHistoryCard({
                 {rank}
               </span>
             ) : null}
-            <OutletPrAvatar prId={rollup.prId} prName={rollup.prName} />
+            <OutletPrAvatar
+              prId={rollup.prId}
+              prName={rollup.prName}
+              agencyPRs={agencyPRs}
+            />
           </div>
           <div className="iz-outlet-hist-card__names">
             <div className="iz-outlet-hist-card__name-row">
