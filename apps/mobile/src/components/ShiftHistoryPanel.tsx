@@ -93,9 +93,13 @@ function weekRecordsFromLines(lines: PrReceiptLine[]): WeekPayRecord[] {
   }
   return [...byDate.values()].map((rec) => {
     const names = [...rec.outlets];
+    // Label by every outlet that contributed that day — never fold a second
+    // venue's drinks/tips silently under the wages outlet (keeps the per-day
+    // total matching Payment while attributing money to the right venues).
     const outlet =
-      rec.wagesOutlet ??
-      (names.length === 1 ? names[0]! : names.length > 1 ? names.join(' · ') : rec.outlet);
+      names.length > 1
+        ? names.join(' · ')
+        : names[0] ?? rec.wagesOutlet ?? rec.outlet;
     return {
       dateIso: rec.dateIso,
       outlet,
