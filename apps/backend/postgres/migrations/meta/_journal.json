@@ -321,8 +321,21 @@
       "idx": 45,
       "version": "7",
       "when": 1784500000029,
-      "tag": "0046_user_profile_comcard_image",
       "tag": "0045_drink_menu_category",
+      "breakpoints": true
+    },
+    {
+      "idx": 46,
+      "version": "7",
+      "when": 1784500000030,
+      "tag": "0046_user_profile_comcard_image",
+      "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1784500000031,
+      "tag": "0047_tier_rate_daily_wage_and_outlet_id",
       "breakpoints": true
     }
   ]

@@ -70,13 +70,25 @@ export const OutletTierRateTable = MainSchema.table('outlet_tier_rate', {
   workspaceId: uuid('workspace_id')
     .notNull()
     .references(() => OutletWorkspaceTable.id, { onDelete: 'cascade' }),
+  // Direct owner of this rate card (mirrors workspace.outlet_id). One outlet =
+  // one rate card, so this convenience FK lets outlet-scoped queries skip the
+  // workspace join.
+  outletId: uuid('outlet_id')
+    .notNull()
+    .references(() => OutletTable.id, { onDelete: 'cascade' }),
   kind: tierRateKindEnum('kind').notNull().default('tier'),
   tier: varchar('tier', { length: 50 }),
-  wagePerHour: numeric('wage_per_hour', { precision: 12, scale: 2 }),
+  // DB column is `daily_wage`: the PR's DAILY wage for the tier (e.g. Tier I =
+  // 500), NOT an hourly rate. The TS name stays `wagePerHour` so the API/wire
+  // shape the mobile app consumes is unchanged. RM/hr = daily_wage / hours.
+  wagePerHour: numeric('daily_wage', { precision: 12, scale: 2 }),
   drinkPct: numeric('drink_pct', { precision: 6, scale: 2 }).notNull().default('0'),
   happyHourDrinkPct: numeric('happy_hour_drink_pct', { precision: 6, scale: 2 }),
   tipPct: numeric('tip_pct', { precision: 6, scale: 2 }).notNull().default('0'),
-  otAfterHours: numeric('ot_after_hours', { precision: 6, scale: 2 }),
+  // DB column is `standard_shift_hours`: the length of a standard shift (6),
+  // used to derive the hourly/OT rate. TS name kept as `otAfterHours` for the
+  // same wire-compatibility reason.
+  otAfterHours: numeric('standard_shift_hours', { precision: 6, scale: 2 }),
   targetSalesRm: numeric('target_sales_rm', { precision: 12, scale: 2 }),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -92,6 +104,11 @@ export const OutletDrinkMenuTable = MainSchema.table('outlet_drink_menu', {
   workspaceId: uuid('workspace_id')
     .notNull()
     .references(() => OutletWorkspaceTable.id, { onDelete: 'cascade' }),
+  // Direct owner of this menu (mirrors workspace.outlet_id) — one outlet owns
+  // one drink/service list. Convenience FK alongside workspace_id.
+  outletId: uuid('outlet_id')
+    .notNull()
+    .references(() => OutletTable.id, { onDelete: 'cascade' }),
   slug: varchar('slug', { length: 100 }).notNull(),
   name: varchar('name', { length: 255 }).notNull(),
   priceRm: numeric('price_rm', { precision: 12, scale: 2 }).notNull().default('0'),

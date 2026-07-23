@@ -14,10 +14,11 @@ import {
   OutletWorkspaceTable,
 } from './outlet-workspace.model.js';
 
-// Child rows for an upsert, minus the workspaceId (set inside the transaction).
+// Child rows for an upsert, minus workspaceId/outletId (both set by the repo
+// inside the transaction from the parent outlet).
 export type WorkspaceChildren = {
-  tierRates: Omit<OutletTierRateInsertType, 'id' | 'workspaceId'>[];
-  drinkMenu: Omit<OutletDrinkMenuInsertType, 'id' | 'workspaceId'>[];
+  tierRates: Omit<OutletTierRateInsertType, 'id' | 'workspaceId' | 'outletId'>[];
+  drinkMenu: Omit<OutletDrinkMenuInsertType, 'id' | 'workspaceId' | 'outletId'>[];
   penaltyRules: Omit<OutletPenaltyRuleInsertType, 'id' | 'workspaceId'>[];
 };
 
@@ -111,12 +112,16 @@ export class OutletWorkspaceRepositoryClass {
         if (children.tierRates.length > 0) {
           await tx
             .insert(OutletTierRateTable)
-            .values(children.tierRates.map((r) => ({ ...r, workspaceId: id })));
+            .values(
+              children.tierRates.map((r) => ({ ...r, workspaceId: id, outletId })),
+            );
         }
         if (children.drinkMenu.length > 0) {
           await tx
             .insert(OutletDrinkMenuTable)
-            .values(children.drinkMenu.map((r) => ({ ...r, workspaceId: id })));
+            .values(
+              children.drinkMenu.map((r) => ({ ...r, workspaceId: id, outletId })),
+            );
         }
         if (children.penaltyRules.length > 0) {
           await tx
