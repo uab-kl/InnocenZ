@@ -5,7 +5,6 @@ import {
 	type CreatePrPersonnelInput,
 	createPrPersonnel,
 } from "@/services/pr-personnel";
-import { type CreateShiftInput, createShift } from "@/services/shift";
 import {
 	createShiftAssignment,
 	removeShiftAssignment,
@@ -77,16 +76,13 @@ export function useRosterMutations() {
 		onSuccess: invalidate,
 	});
 
-	const addShift = useMutation({
-		mutationFn: (input: CreateShiftInput) => createShift(input, logout),
-		onSuccess: invalidate,
-	});
-
+	// Agencies do not create shifts — only outlets post jobs (see shift.routes.ts
+	// `canCreate`). The roster's create-shift mutation was removed accordingly.
 	const addPr = useMutation({
 		mutationFn: (input: CreatePrPersonnelInput) =>
 			createPrPersonnel(input, logout),
 		onSuccess: invalidate,
 	});
 
-	return { setStatus, cancel, flagNoShow, unassign, assign, addShift, addPr };
+	return { setStatus, cancel, flagNoShow, unassign, assign, addPr };
 }
