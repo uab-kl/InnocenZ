@@ -114,7 +114,9 @@ app.use(platformAuditMiddleware);
 
 app.use('/api/v1', v1Router);
 
-const PORT = env.PORT;
+// Prefer a platform-injected PORT (container/cloud); otherwise the shared
+// BACKEND_PORT convention (defaults to 7777) that the web app targets.
+const PORT = env.PORT ?? env.BACKEND_PORT;
 const MIGRATE_MAX_BUFFER_BYTES = 10 * 1024 * 1024;
 
 function cleanCliOutput(value?: string): string | undefined {

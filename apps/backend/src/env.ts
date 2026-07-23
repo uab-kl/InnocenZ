@@ -5,11 +5,19 @@ import { z } from 'zod';
 
 export const env = createEnv({
   server: {
+    // Local dev + the shared convention use BACKEND_PORT (see .env.example);
+    // 7777 is the standard port the web app's axios/proxy target. PORT is kept
+    // optional as a fallback for container/cloud platforms that inject it.
+    BACKEND_PORT: z
+      .string()
+      .transform((val) => Number(val))
+      .pipe(z.number().min(1).max(65535))
+      .default(7777),
     PORT: z
       .string()
       .transform((val) => Number(val))
       .pipe(z.number().min(1).max(65535))
-      .default(3000),
+      .optional(),
     NODE_ENV: z
       .string()
       .trim()
