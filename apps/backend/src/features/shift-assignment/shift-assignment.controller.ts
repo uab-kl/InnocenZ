@@ -299,6 +299,55 @@ export class ShiftAssignmentControllerClass {
     }
   }
 
+  /**
+   * The signed-in PR cancels its OWN upcoming assignment with a required reason.
+   * Sets status='cancelled' and stores the reason on the reused `notes` column
+   * (no new table) — the agency reads shift_assignment, so a cancelled row with
+   * its reason IS the agency notification. A shift already checked in or
+   * completed can no longer be cancelled.
+   */
+  async cancelMine(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) {
+        return res.status(400).json({ success: false, message: 'A cancellation reason is required', data: null });
+      }
+      if (reason.length > 500) {
+        return res.status(400).json({ success: false, message: 'Reason is too long (max 500)', data: null });
+      }
+
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (existing.status === 'cancelled') {
+        return res.status(400).json({ success: false, message: 'This shift is already cancelled', data: null });
+      }
+      if (existing.checkInAt || existing.status === 'completed') {
+        return res.status(400).json({
+          success: false,
+          message: 'This shift is in progress or completed and can no longer be cancelled',
+          data: null,
+        });
+      }
+
+      const assignment = await this.shiftAssignmentRepository.update(id, {
+        status: 'cancelled',
+        notes: reason,
+        updatedBy: getActor(req),
+      });
+      res.status(200).json({ success: true, message: 'Shift cancelled — your agency has been notified', data: assignment });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.cancelMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const assignment = await this.shiftAssignmentRepository.getById(paramId(req.params.id));

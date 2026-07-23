@@ -397,6 +397,23 @@ export function checkOutShiftAssignment(
 }
 
 /**
+ * Cancel one of this PR's own upcoming assignments with a required reason. The
+ * backend flips it to 'cancelled' and stores the reason so the agency is
+ * notified. Fails for a shift already checked in or completed.
+ */
+export function cancelMyShiftAssignment(
+  accessToken: string,
+  assignmentId: string,
+  reason: string,
+): Promise<ShiftAssignmentRecord> {
+  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/**
  * One earning entry on the PR's current-week voucher (reused
  * payment_voucher_line). `kind` splits the Payment week grid; `pending` self-logs
  * await agency verification. `commission` is what feeds the voucher net; `sales`

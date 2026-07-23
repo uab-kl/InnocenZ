@@ -18,6 +18,9 @@ router.get('/mine', shiftAssignmentController.listMine.bind(shiftAssignmentContr
 // pr.id, so these sit outside the agency/admin canWrite guard.
 router.post('/mine/:id/check-in', shiftAssignmentController.checkInMine.bind(shiftAssignmentController));
 router.post('/mine/:id/check-out', shiftAssignmentController.checkOutMine.bind(shiftAssignmentController));
+// A signed-in PR cancels its OWN upcoming assignment (reason required) — the
+// agency sees the cancelled row. Also outside the agency/admin canWrite guard.
+router.post('/mine/:id/cancel', shiftAssignmentController.cancelMine.bind(shiftAssignmentController));
 router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignmentController));
 router.post('/', canWrite, shiftAssignmentController.create.bind(shiftAssignmentController));
 router.put('/:id', canWrite, shiftAssignmentController.update.bind(shiftAssignmentController));
