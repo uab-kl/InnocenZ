@@ -132,6 +132,8 @@ type PrReceiptLineDTO = {
   at: Date;
   /** Manual self-logs stay pending until the agency verifies them. */
   pending: boolean;
+  /** Proof photo(s) attached to the self-log — [] when none. */
+  proofPhotos: string[];
 };
 
 /** Maps a stored line back to the clean receipt shape the mobile app renders. */
@@ -149,6 +151,7 @@ function toReceiptLineDTO(line: PaymentVoucherLineType): PrReceiptLineDTO {
     outlet: line.outlet,
     at: line.createdAt,
     pending: source === 'manual',
+    proofPhotos: line.proofPhotos ?? [],
   };
 }
 
@@ -488,6 +491,7 @@ export class PaymentVoucherControllerClass {
         quantity: parsed.data.quantity ?? 1,
         amount: parsed.data.commission.toFixed(2),
         ref: encodeRef(parsed.data.kind, parsed.data.source, parsed.data.sales, parsed.data.dedupeRef),
+        proofPhotos: parsed.data.proofPhotos ?? null,
         createdBy: actor,
         updatedBy: actor,
       });
@@ -527,6 +531,7 @@ export class PaymentVoucherControllerClass {
         lineDate?: string;
         outlet?: string | null;
         ref?: string;
+        proofPhotos?: string[] | null;
         updatedBy: string;
       } = { updatedBy: getActor(req) };
       if (parsed.data.item !== undefined) patch.description = parsed.data.item;
@@ -534,6 +539,7 @@ export class PaymentVoucherControllerClass {
       if (parsed.data.commission !== undefined) patch.amount = parsed.data.commission.toFixed(2);
       if (parsed.data.lineDate !== undefined) patch.lineDate = parsed.data.lineDate;
       if (parsed.data.outlet !== undefined) patch.outlet = parsed.data.outlet;
+      if (parsed.data.proofPhotos !== undefined) patch.proofPhotos = parsed.data.proofPhotos;
       patch.ref = encodeRef(
         parsed.data.kind ?? cur.kind,
         parsed.data.source ?? cur.source,

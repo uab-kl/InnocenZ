@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   StyleSheet,
   Text,
@@ -22,10 +23,13 @@ import { TopBar } from '../components/TopBar';
 import {
   Camera,
   Check,
+  ImagePlus,
   Pencil,
   Shield,
   Wine,
+  XIcon,
 } from '../components/icons';
+import { pickProofPhotos } from '../lib/proof-photo';
 
 type Phase = 'idle' | 'scanning' | 'review' | 'manual' | 'logged';
 
@@ -81,6 +85,8 @@ export function ScanScreen({
   const [note, setNote] = useState('Receipt water-damaged / OCR unreadable');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // Proof photo(s) for the self-log — mandatory for a new drink self-log.
+  const [proofPhotos, setProofPhotos] = useState<string[]>([]);
 
   const pvId = useMemo(() => shiftPvId(outlet, dateYmd), [outlet, dateYmd]);
   const drinkMenu = useMemo(() => drinkMenuFromAssignment(active?.drinkMenu), [active?.drinkMenu]);
@@ -140,6 +146,11 @@ export function ScanScreen({
   const showDrinkMenu =
     category === 'drinks' && drinkMenu.length > 0 && (!editId || editMenuMode);
 
+  // A drink self-log needs photo proof BEFORE it can be submitted (agency
+  // verifies against it). Not required for OCR scans, tips, or edits.
+  const proofRequired = mode === 'selflog' && category === 'drinks' && !editId;
+  const missingProof = proofRequired && proofPhotos.length === 0;
+
   // Commission at this PR's real tier rate (happy-hour aware); falls back to the
   // prototype flat rates only when the outlet has no rate card configured.
   const commissionFor = (cat: ScanCategory, sales: number) => rateCommission(cat, sales, rate);
@@ -149,6 +160,11 @@ export function ScanScreen({
     0,
   );
   const drinkCommission = commissionFor('drinks', drinkTotal);
+
+  // A drink self-log needs BOTH a quantity/amount AND a proof photo before it
+  // can be submitted (the user's rule: pick drinks + snap pic, then submit).
+  const hasDrinkAmount = showDrinkMenu ? drinkTotal > 0 : Number(amount) > 0;
+  const drinkIncomplete = proofRequired && !hasDrinkAmount;
 
   const startScan = () => {
     setPhase('scanning');
@@ -240,6 +256,14 @@ export function ScanScreen({
         return;
       }
       if (category === 'drinks') {
+        // Proof photo is mandatory (the submit button is already gated on this;
+        // this is the backstop so a drink self-log can never persist without it).
+        if (proofRequired && proofPhotos.length === 0) {
+          throw new Error('Snap a proof photo before you submit.');
+        }
+        // The proof belongs to the whole self-log — attach it to the first line
+        // created; the agency verifies the receipt against that row.
+        const proof = proofPhotos.length ? proofPhotos : undefined;
         const items = drinkMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
         if (items.length === 0) {
           const amt = Number(amount) || 0;
@@ -252,9 +276,11 @@ export function ScanScreen({
             sales: amt,
             commission: commissionFor('drinks', amt),
             outlet: outlet,
+            proofPhotos: proof,
           });
         } else {
-          for (const d of items) {
+          for (let i = 0; i < items.length; i++) {
+            const d = items[i];
             const qty = drinkQtys[d.id] ?? 0;
             const amt = d.priceRm * qty;
             await logLine({
@@ -265,6 +291,7 @@ export function ScanScreen({
               sales: amt,
               commission: commissionFor('drinks', amt),
               outlet: outlet,
+              proofPhotos: i === 0 ? proof : undefined,
             });
           }
         }
@@ -462,6 +489,54 @@ export function ScanScreen({
                     />
                   </>
                 )}
+                {proofRequired && (
+                  <View style={styles.proofBox}>
+                    <View style={styles.proofHeadRow}>
+                      <Camera size={16} color={C.goldL} />
+                      <Text style={styles.proofTitle}>Proof photo · required</Text>
+                    </View>
+                    <Text style={styles.proofHint}>
+                      Snap the receipt / drinks as proof before you submit — the agency verifies
+                      your self-log against it. You can attach more than one.
+                    </Text>
+                    <Pressable
+                      style={styles.proofBtn}
+                      onPress={() =>
+                        pickProofPhotos((urls) =>
+                          setProofPhotos((prev) => [...prev, ...urls].slice(0, 6)),
+                        )
+                      }
+                    >
+                      <ImagePlus size={16} color={C.txt} />
+                      <Text style={styles.proofBtnText}>
+                        {proofPhotos.length ? 'Add another photo' : 'Take / attach photo'}
+                      </Text>
+                    </Pressable>
+                    {proofPhotos.length > 0 ? (
+                      <View style={styles.proofThumbs}>
+                        {proofPhotos.map((src, i) => (
+                          <View key={`${i}-${src.slice(0, 24)}`} style={styles.proofThumb}>
+                            <Image source={{ uri: src }} style={styles.proofImg} />
+                            <Pressable
+                              style={styles.proofRemove}
+                              onPress={() =>
+                                setProofPhotos((prev) => prev.filter((_, idx) => idx !== i))
+                              }
+                              hitSlop={6}
+                            >
+                              <XIcon size={12} color={C.txt} />
+                            </Pressable>
+                          </View>
+                        ))}
+                      </View>
+                    ) : (
+                      <Text style={styles.proofReminder}>
+                        ⚠ No photo yet — snap one to enable Submit.
+                      </Text>
+                    )}
+                  </View>
+                )}
+
                 <Text style={styles.fieldLabel}>Note for agency (optional)</Text>
                 <TextInput
                   value={note}
@@ -470,13 +545,27 @@ export function ScanScreen({
                   placeholderTextColor={C.muted2}
                 />
                 <Pressable
-                  style={[styles.primary, grad(GRADIENTS.accent, C.accent), submitting && { opacity: 0.6 }]}
+                  style={[
+                    styles.primary,
+                    grad(GRADIENTS.accent, C.accent),
+                    (submitting || missingProof || drinkIncomplete) && { opacity: 0.6 },
+                  ]}
                   onPress={submitManual}
-                  disabled={submitting}
+                  disabled={submitting || missingProof || drinkIncomplete}
                 >
                   <Pencil size={16} color="#241a08" />
                   <Text style={[styles.primaryText, { color: '#241a08' }]}>
-                    {submitting ? 'Saving…' : editId ? 'Update self-log' : 'Submit self-log'}
+                    {submitting
+                      ? 'Saving…'
+                      : drinkIncomplete && missingProof
+                        ? 'Add drinks + proof to submit'
+                        : drinkIncomplete
+                          ? 'Set a drink quantity'
+                          : missingProof
+                            ? 'Snap proof to submit'
+                            : editId
+                              ? 'Update self-log'
+                              : 'Submit self-log'}
                   </Text>
                 </Pressable>
                 {submitError && <Text style={styles.errorText}>{submitError}</Text>}
@@ -764,5 +853,77 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: C.red,
     textAlign: 'center',
+  },
+  proofBox: {
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(232,194,122,0.35)',
+    backgroundColor: 'rgba(232,194,122,0.06)',
+    padding: 12,
+  },
+  proofHeadRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  proofTitle: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '800',
+    color: C.goldL,
+  },
+  proofHint: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 17,
+    color: C.prMuted,
+  },
+  proofBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  proofBtnText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  proofThumbs: {
+    marginTop: 10,
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  proofThumb: {
+    width: 68,
+    height: 68,
+    borderRadius: 10,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  proofImg: { width: '100%', height: '100%' },
+  proofRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(6,3,12,0.72)',
+    borderWidth: 1,
+    borderColor: C.line2,
+  },
+  proofReminder: {
+    marginTop: 10,
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.amber,
   },
 });

@@ -1,4 +1,4 @@
-import { date, integer, numeric, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date, integer, jsonb, numeric, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
@@ -67,6 +67,10 @@ export const PaymentVoucherLineTable = MainSchema.table('payment_voucher_line', 
   quantity: integer('quantity').notNull().default(1),
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull().default('0'),
   ref: varchar('ref', { length: 100 }),
+  // Proof photo(s) the PR snaps when self-logging (one or many). Same jsonb
+  // array-of-paths pattern as user_profile.portfolio_photos; agency verifies
+  // against these. Null when the entry carries no proof (OCR scan, wages seal).
+  proofPhotos: jsonb('proof_photos').$type<string[]>(),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

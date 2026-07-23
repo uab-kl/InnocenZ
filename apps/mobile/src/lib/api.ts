@@ -419,6 +419,8 @@ export type PrReceiptLine = {
   /** ISO timestamp the line was logged. */
   at: string;
   pending: boolean;
+  /** Proof photo(s) the PR attached to a self-log — [] when none. */
+  proofPhotos: string[];
 };
 
 /** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */
@@ -456,6 +458,8 @@ export type PrReceiptLineInput = {
   outlet?: string;
   /** For wages: the assignment id, so a repeated check-out never double-seals. */
   dedupeRef?: string;
+  /** Proof photo(s) for a self-log (downscaled data URLs). Required for drinks. */
+  proofPhotos?: string[];
 };
 
 export function fetchMyCurrentWeek(accessToken: string): Promise<PrCurrentWeek> {

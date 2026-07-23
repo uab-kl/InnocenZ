@@ -69,6 +69,12 @@ export const CreatePrReceiptLineSchema = z.object({
   outlet: z.string().max(255, 'Outlet is too long').optional(),
   // For wages: the assignment id, so a repeated check-out never double-seals.
   dedupeRef: z.string().max(80, 'Ref is too long').optional(),
+  // Proof photo(s) the PR snaps for a self-log (client downscales before send).
+  // Stored on payment_voucher_line.proof_photos so the agency can verify.
+  proofPhotos: z
+    .array(z.string().min(1).max(1_500_000, 'Photo is too large'))
+    .max(6, 'At most 6 photos')
+    .optional(),
 });
 
 export const UpdatePrReceiptLineSchema = CreatePrReceiptLineSchema.partial();
