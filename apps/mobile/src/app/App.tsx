@@ -15,6 +15,7 @@ import { SignedPvProvider } from '../lib/signed-pv';
 import { PrNavProvider, usePrNav } from '../lib/pr-nav';
 import { PhoneFrame } from '../components/PhoneFrame';
 import { BottomNav } from '../components/BottomNav';
+import { TopBar } from '../components/TopBar';
 import { LoginScreen } from '../screens/LoginScreen';
 import { ShiftsScreen } from '../screens/ShiftsScreen';
 import { CheckInScreen } from '../screens/CheckInScreen';
@@ -37,7 +38,10 @@ function LoggedInShell() {
       <PrEarningsProvider>
       <PaymentHistoryProvider>
       <SignedPvProvider>
-        <PhoneFrame footer={showTabBar ? <BottomNav active={tab} onChange={setTab} /> : null}>
+        <PhoneFrame
+          header={showTabBar ? <TopBar onOpenProfile={() => setTab('profile')} /> : null}
+          footer={showTabBar ? <BottomNav active={tab} onChange={setTab} /> : null}
+        >
           {route.name === 'scan' && (
             <ScanScreen category={route.category} mode={route.mode} editId={route.editId} />
           )}

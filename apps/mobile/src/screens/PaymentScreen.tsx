@@ -35,7 +35,6 @@ import {
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { useViewportSize } from '../lib/viewport';
-import { TopBar } from '../components/TopBar';
 import { IzButton, Pill } from '../components/ui';
 import { ChevronDown, Flag, ImagePlus, Shield, Wallet, XIcon } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
@@ -341,7 +340,6 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   return (
     <View style={styles.screen}>
-      <TopBar onOpenProfile={() => onNavigate('profile')} />
       <View style={styles.pageHeader}>
         <View style={styles.headerLabelRow}>
           <Text style={styles.dollar}>$</Text>

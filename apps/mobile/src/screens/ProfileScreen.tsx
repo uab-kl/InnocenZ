@@ -24,7 +24,6 @@ import {
 } from '../lib/demo-shifts';
 import { PR_AGENCY_OPTIONS, PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { useSession } from '../lib/session';
-import { TopBar } from '../components/TopBar';
 import { Avatar, IzButton } from '../components/ui';
 import {
   Camera,
@@ -335,11 +334,6 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   return (
     <View style={styles.screen}>
-      <TopBar
-        onOpenProfile={() => onNavigate('profile')}
-        backLabel={editing ? 'Cancel edit' : undefined}
-        onBack={editing ? cancelEdit : undefined}
-      />
 
       <View style={styles.hero}>
         <View style={styles.heroHead}>

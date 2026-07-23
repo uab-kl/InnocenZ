@@ -11,6 +11,7 @@ import {
   CalendarDays,
   ChevronDown,
   Clock,
+  MapPin,
   Shield,
 } from './icons';
 import { Pill } from './ui';
@@ -63,6 +64,7 @@ export function AgencySchedulePanel() {
           id: a.id,
           dateIso: a.shiftDate,
           outlet: a.outletName ?? 'Outlet',
+          address: a.outletAddress,
           time: a.slot ?? '—',
           checkInAt: a.checkInAt,
           checkOutAt: a.checkOutAt,
@@ -82,9 +84,15 @@ export function AgencySchedulePanel() {
   const weekLabel = formatUpcomingWeekLabel(weekRange.fromIso, weekRange.toIso).toUpperCase();
   const timetable = useMemo(
     () =>
-      buildUpcomingWeekTimetable(todayIso, scheduleShifts).filter(
-        (e) => !cancelledIds.includes(e.id),
-      ),
+      buildUpcomingWeekTimetable(
+        todayIso,
+        // Once a shift is checked in (on duty) or checked out (complete) it
+        // drops off the agency schedule — it lives in Today's section instead.
+        // A not-yet-checked-in shift (incl. today's) stays visible here.
+        scheduleShifts.filter(
+          (s) => !s.checkInAt && !s.checkOutAt && s.status !== 'completed',
+        ),
+      ).filter((e) => !cancelledIds.includes(e.id)),
     [cancelledIds, scheduleShifts, todayIso],
   );
 
@@ -302,10 +310,25 @@ function TimetableRow({
           <Pill variant={entry.statusVariant}>{entry.statusLabel}</Pill>
         </View>
       </View>
-      <Text style={styles.ttFieldLabel}>DATE</Text>
-      <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
-      <Text style={[styles.ttFieldLabel, { marginTop: 8 }]}>TIME</Text>
-      <Text style={styles.ttFieldValue}>{entry.time}</Text>
+      <View style={styles.ttDateTimeRow}>
+        <View style={styles.ttField}>
+          <Text style={styles.ttFieldLabel}>DATE</Text>
+          <Text style={styles.ttFieldValue}>{dateFriendly}</Text>
+        </View>
+        <View style={styles.ttField}>
+          <Text style={styles.ttFieldLabel}>TIME</Text>
+          <Text style={styles.ttFieldValue}>{entry.time}</Text>
+        </View>
+      </View>
+      {entry.address ? (
+        <View style={styles.ttAddrBlock}>
+          <Text style={styles.ttFieldLabel}>ADDRESS</Text>
+          <View style={styles.ttAddrRow}>
+            <MapPin size={13} color={C.prMuted2} strokeWidth={2} />
+            <Text style={styles.ttAddrValue}>{entry.address}</Text>
+          </View>
+        </View>
+      ) : null}
       {entry.canCancel ? (
         <Pressable onPress={onCancel} style={styles.cancelBtn}>
           <Text style={styles.cancelText}>Cancel</Text>
@@ -502,6 +525,22 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: C.prMuted,
     marginTop: 2,
+  },
+  ttDateTimeRow: { flexDirection: 'row', gap: 12 },
+  ttField: { flex: 1, minWidth: 0 },
+  ttAddrBlock: { marginTop: 8 },
+  ttAddrRow: {
+    marginTop: 2,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+  },
+  ttAddrValue: {
+    flex: 1,
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.prMuted,
+    lineHeight: 18,
   },
   cancelBtn: {
     marginTop: 12,

@@ -6,7 +6,6 @@ import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { useViewportSize } from '../lib/viewport';
-import { TopBar } from '../components/TopBar';
 import { PaymentHistoryPanel } from '../components/PaymentHistoryPanel';
 import { ShiftHistoryPanel } from '../components/ShiftHistoryPanel';
 import { Briefcase, HistoryIcon, Wallet } from '../components/icons';
@@ -21,7 +20,6 @@ export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   return (
     <View style={styles.screen}>
-      <TopBar onOpenProfile={() => onNavigate('profile')} />
       <View style={styles.pageHeader}>
         <Text style={styles.headerLabel}>EARNINGS</Text>
         <View style={styles.headerTitleRow}>

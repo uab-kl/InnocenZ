@@ -77,6 +77,8 @@ function payrollWeekSundayIso(from = todayYmd()): string {
 export type DemoShift = {
   id: string;
   outlet: string;
+  /** Full outlet address (from the shift's outlet FK) — where the PR works. */
+  address?: string | null;
   event: string;
   date: Ymd;
   time: string;
@@ -143,6 +145,8 @@ export type TimetableEntry = {
   dateIso: string;
   dateLabel: string;
   outlet: string;
+  /** Full outlet address (from the shift's outlet FK) — where the PR works. */
+  address?: string | null;
   time: string;
   statusLabel: string;
   statusVariant: 'green' | 'amber' | 'red';
@@ -180,6 +184,7 @@ type ScheduleShiftLike = {
   id: string;
   dateIso: string;
   outlet: string;
+  address?: string | null;
   time: string;
   checkInAt?: string | null;
   checkOutAt?: string | null;
@@ -275,6 +280,7 @@ export function buildUpcomingWeekTimetable(
         dateIso: s.dateIso,
         dateLabel: fmtDFriendly(y, m, d),
         outlet: s.outlet,
+        address: s.address ?? null,
         time: s.time,
         ...stamp,
         sourceLabel: s.agencyName?.trim() || 'Agency',
