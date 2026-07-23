@@ -22,11 +22,12 @@ import {
 } from './shift-assignment.model';
 
 /**
- * Statuses that do not count as staffing cost — cancelled and no-show PRs are
- * not paid. Mirrors mobile `pickActive` (active-shift.tsx) and the canonical
+ * Statuses that do not count as staffing cost — cancelled, no-show and
+ * leave-approved PRs are not paid (an approved MC/leave excuses the shift).
+ * Mirrors mobile `pickActive` (active-shift.tsx) and the canonical
  * `shiftAssignmentStatusValues` in shift-assignment.model.ts.
  */
-const NON_STAFFING_STATUSES = ['cancelled', 'no_show'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
+const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
 
 /**
  * A PR's display name: preferred nickname when set, otherwise legal name.
@@ -72,6 +73,37 @@ export type ResolvedDrinkItem = {
   id: string;
   name: string;
   priceRm: string;
+};
+
+/**
+ * One released-but-unfilled slot on an upcoming shift: the cancelled /
+ * leave-approved assignment plus enough FK-joined shift/outlet context for the
+ * agency to backfill it. `staffedCount` counts the shift's remaining staffing
+ * assignments (statuses outside NON_STAFFING_STATUSES).
+ */
+export type BackfillSlot = {
+  assignmentId: string;
+  prId: string;
+  prName: string;
+  status: ShiftAssignmentStatus;
+  notes: string | null;
+  shiftId: string;
+  shiftDate: string;
+  slot: string | null;
+  eventName: string | null;
+  outletId: string;
+  outletName: string | null;
+  quantity: number;
+  staffedCount: number;
+};
+
+/** One ranked replacement option for a released slot. */
+export type ReplacementCandidate = {
+  prId: string;
+  prName: string;
+  tier: string;
+  /** Completed shifts this PR has worked at the slot's outlet. */
+  timesAtOutlet: number;
 };
 
 export class ShiftAssignmentRepositoryClass {
@@ -263,6 +295,146 @@ export class ShiftAssignmentRepositoryClass {
       });
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.listForPr] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Upcoming shift slots that lost their PR (cancelled or approved MC/leave)
+   * and are still short-staffed — the agency's backfill worklist. Staffing is
+   * recounted per shift so a slot drops off as soon as a replacement is
+   * assigned. Shift/outlet/PR context is FK-joined, never copied.
+   */
+  async listBackfillSlots(params: {
+    fromDate: string;
+    agencyId?: string;
+  }): Promise<BackfillSlot[]> {
+    try {
+      const conditions: SQL[] = [
+        inArray(ShiftAssignmentTable.status, ['cancelled', 'leave_approved']),
+        gte(ShiftTable.shiftDate, params.fromDate),
+      ];
+      if (params.agencyId) {
+        conditions.push(eq(ShiftAssignmentTable.agencyId, params.agencyId));
+      }
+      const released = await db
+        .select({
+          assignmentId: ShiftAssignmentTable.id,
+          prId: ShiftAssignmentTable.prId,
+          prName: prDisplayNameSql,
+          status: ShiftAssignmentTable.status,
+          notes: ShiftAssignmentTable.notes,
+          shiftId: ShiftTable.id,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          eventName: ShiftTable.eventName,
+          outletId: ShiftTable.outletId,
+          outletName: OutletTable.name,
+          quantity: ShiftTable.quantity,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .innerJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(and(...conditions))
+        .orderBy(asc(ShiftTable.shiftDate));
+      if (released.length === 0) return [];
+
+      const shiftIds = [...new Set(released.map((r) => r.shiftId))];
+      const staffedRows = await db
+        .select({
+          shiftId: ShiftAssignmentTable.shiftId,
+          staffed: sql<number>`count(*)::int`,
+        })
+        .from(ShiftAssignmentTable)
+        .where(
+          and(
+            inArray(ShiftAssignmentTable.shiftId, shiftIds),
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        )
+        .groupBy(ShiftAssignmentTable.shiftId);
+      const staffedByShift = new Map(staffedRows.map((r) => [r.shiftId, r.staffed]));
+
+      return released
+        .map((r) => ({ ...r, staffedCount: staffedByShift.get(r.shiftId) ?? 0 }))
+        .filter((r) => r.staffedCount < r.quantity);
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listBackfillSlots] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Ranked replacement PRs for a released slot: the agency's active PRs with no
+   * staffing assignment on that date (an existing booking — including a pending
+   * leave — makes a PR busy). "Nearest" without geodata = the released PR's
+   * tier first (rate parity with what Post Job budgeted), then how often the
+   * candidate has completed shifts at this outlet, then name.
+   */
+  async listReplacementCandidates(params: {
+    agencyId: string;
+    shiftDate: string;
+    outletId: string;
+    excludePrIds: string[];
+    preferTier?: string;
+  }): Promise<ReplacementCandidate[]> {
+    try {
+      const busyRows = await db
+        .select({ prId: ShiftAssignmentTable.prId })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .where(
+          and(
+            eq(ShiftTable.shiftDate, params.shiftDate),
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        );
+      const unavailable = new Set([
+        ...busyRows.map((r) => r.prId),
+        ...params.excludePrIds,
+      ]);
+
+      const prs = await db
+        .select({
+          prId: PrTable.id,
+          prName: prDisplayNameSql,
+          tier: PrTable.tier,
+        })
+        .from(PrTable)
+        .where(and(eq(PrTable.agencyId, params.agencyId), eq(PrTable.status, 'active')))
+        .orderBy(asc(PrTable.name));
+      const free = prs.filter((p) => !unavailable.has(p.prId));
+      if (free.length === 0) return [];
+
+      // Venue familiarity: completed shifts this candidate worked at the outlet.
+      const experienceRows = await db
+        .select({
+          prId: ShiftAssignmentTable.prId,
+          times: sql<number>`count(*)::int`,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .where(
+          and(
+            eq(ShiftTable.outletId, params.outletId),
+            eq(ShiftAssignmentTable.status, 'completed'),
+            inArray(ShiftAssignmentTable.prId, free.map((p) => p.prId)),
+          ),
+        )
+        .groupBy(ShiftAssignmentTable.prId);
+      const timesByPr = new Map(experienceRows.map((r) => [r.prId, r.times]));
+
+      return free
+        .map((p) => ({ ...p, timesAtOutlet: timesByPr.get(p.prId) ?? 0 }))
+        .sort(
+          (a, b) =>
+            Number(b.tier === params.preferTier) - Number(a.tier === params.preferTier) ||
+            b.timesAtOutlet - a.timesAtOutlet ||
+            a.prName.localeCompare(b.prName),
+        );
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listReplacementCandidates] Error:', error);
       throw error;
     }
   }

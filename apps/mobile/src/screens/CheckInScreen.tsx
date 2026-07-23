@@ -25,7 +25,6 @@ import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { usePrNav } from '../lib/pr-nav';
 import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
-import { TopBar } from '../components/TopBar';
 import { EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
 import { MapPin } from '../components/icons';
@@ -214,7 +213,6 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   return (
     <View style={styles.screen}>
-      <TopBar onOpenProfile={() => onNavigate('profile')} />
 
       {(actionError || loadError) && (
         <Text style={styles.errorText}>{actionError ?? loadError}</Text>

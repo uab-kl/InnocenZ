@@ -345,6 +345,11 @@ export type ShiftAssignmentRecord = {
   id: string;
   status: string;
   payAmount: string;
+  /**
+   * Cancel / MC-leave reason (the reused shift_assignment.notes column). A
+   * rejected leave request comes back prefixed '[Leave rejected] '.
+   */
+  notes: string | null;
   checkInAt: string | null;
   checkOutAt: string | null;
   /** Shift day as YYYY-MM-DD. */
@@ -393,6 +398,41 @@ export function checkOutShiftAssignment(
   return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/check-out`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Cancel one of this PR's own upcoming assignments with a required reason. The
+ * backend flips it to 'cancelled' and stores the reason so the agency is
+ * notified. Fails for a shift already checked in or completed.
+ */
+export function cancelMyShiftAssignment(
+  accessToken: string,
+  assignmentId: string,
+  reason: string,
+): Promise<ShiftAssignmentRecord> {
+  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/cancel`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ reason }),
+  });
+}
+
+/**
+ * File an MC/leave request on one of this PR's own upcoming assignments. Unlike
+ * cancel this is not immediate: the row goes to 'leave_pending' (reason stored
+ * for the agency) until the agency approves (excused, no penalty) or rejects
+ * (back to 'assigned', notes prefixed '[Leave rejected] ').
+ */
+export function requestMyShiftLeave(
+  accessToken: string,
+  assignmentId: string,
+  reason: string,
+): Promise<ShiftAssignmentRecord> {
+  return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/leave`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ reason }),
   });
 }
 

@@ -19,7 +19,6 @@ import { useActiveShift } from '../lib/active-shift';
 import { commissionFor as rateCommission, drinkMenuFromAssignment } from '../lib/pr-rate';
 import { usePrEarnings } from '../lib/pr-earnings';
 import { usePrNav, type ScanCategory, type ScanMode } from '../lib/pr-nav';
-import { TopBar } from '../components/TopBar';
 import {
   Camera,
   Check,
@@ -311,7 +310,6 @@ export function ScanScreen({
 
   return (
     <View style={styles.screen}>
-      <TopBar onOpenProfile={() => setTab('profile')} />
 
       <View style={styles.titleRow}>
         {category === 'drinks' ? (

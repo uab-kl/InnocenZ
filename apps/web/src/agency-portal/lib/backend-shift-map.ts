@@ -41,8 +41,14 @@ export function rosterStatusFromAssignment(
 		case "confirmed":
 		case "completed":
 			return "scheduled";
+		// MC/leave awaiting the agency decision — reads as a pending cell; the
+		// roster page's Leave requests panel is where it gets approved/rejected.
+		case "leave_pending":
+			return "assignment-pending";
 		case "no_show":
 		case "cancelled":
+		// Approved MC/leave = excused absence — off the plan like a cancel.
+		case "leave_approved":
 			return "unavailable";
 		default:
 			return "scheduled";
@@ -202,9 +208,13 @@ export function shiftRequestFromBackendShift(input: {
 }): ShiftRequest {
 	const { shift, assignments, outletName, todayIso } = input;
 	const forShift = assignments.filter((a) => a.shiftId === shift.id);
-	// Cancelled / no-show PRs are not staffing the floor tonight.
+	// Cancelled / no-show / leave-approved PRs are not staffing the floor
+	// tonight (an approved MC/leave excuses the shift).
 	const staffing = forShift.filter(
-		(a) => a.status !== "cancelled" && a.status !== "no_show",
+		(a) =>
+			a.status !== "cancelled" &&
+			a.status !== "no_show" &&
+			a.status !== "leave_approved",
 	);
 	const label = formatOutletDayLabel(shift.shiftDate, todayIso);
 

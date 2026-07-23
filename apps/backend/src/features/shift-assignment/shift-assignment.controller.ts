@@ -237,7 +237,14 @@ export class ShiftAssignmentControllerClass {
       if (!existing || existing.prId !== pr.id) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (existing.status === 'cancelled' || existing.status === 'no_show') {
+      // leave_approved = excused from the shift; leave_pending is NOT blocked —
+      // a PR who shows up anyway checks in, which flips the row to `confirmed`
+      // and thereby withdraws the pending request.
+      if (
+        existing.status === 'cancelled' ||
+        existing.status === 'no_show' ||
+        existing.status === 'leave_approved'
+      ) {
         return res.status(400).json({ success: false, message: 'This shift can no longer be checked in', data: null });
       }
       if (existing.checkInAt) {
@@ -295,6 +302,237 @@ export class ShiftAssignmentControllerClass {
       res.status(200).json({ success: true, message: 'Checked out', data: assignment });
     } catch (error) {
       logger.error('[ShiftAssignmentController.checkOutMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The signed-in PR cancels its OWN upcoming assignment with a required reason.
+   * Sets status='cancelled' and stores the reason on the reused `notes` column
+   * (no new table) — the agency reads shift_assignment, so a cancelled row with
+   * its reason IS the agency notification. A shift already checked in or
+   * completed can no longer be cancelled.
+   */
+  async cancelMine(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) {
+        return res.status(400).json({ success: false, message: 'A cancellation reason is required', data: null });
+      }
+      if (reason.length > 500) {
+        return res.status(400).json({ success: false, message: 'Reason is too long (max 500)', data: null });
+      }
+
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (existing.status === 'cancelled') {
+        return res.status(400).json({ success: false, message: 'This shift is already cancelled', data: null });
+      }
+      if (existing.status === 'leave_approved') {
+        return res.status(400).json({ success: false, message: 'Leave is already approved for this shift — no need to cancel', data: null });
+      }
+      if (existing.checkInAt || existing.status === 'completed') {
+        return res.status(400).json({
+          success: false,
+          message: 'This shift is in progress or completed and can no longer be cancelled',
+          data: null,
+        });
+      }
+
+      const assignment = await this.shiftAssignmentRepository.update(id, {
+        status: 'cancelled',
+        notes: reason,
+        updatedBy: getActor(req),
+      });
+      res.status(200).json({ success: true, message: 'Shift cancelled — your agency has been notified', data: assignment });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.cancelMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The signed-in PR files an MC/leave request on its OWN upcoming assignment
+   * (Slice 2 of the cancel epic). Unlike cancelMine this is NOT immediate: the
+   * row goes to `leave_pending` with the reason on the reused `notes` column and
+   * waits for the agency to approve (→ `leave_approved`, excused, no penalty) or
+   * reject (→ back to `assigned`). Checking in while pending withdraws the
+   * request (see checkInMine).
+   */
+  async requestLeaveMine(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
+      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+
+      const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
+      if (!reason) {
+        return res.status(400).json({ success: false, message: 'A leave reason is required', data: null });
+      }
+      if (reason.length > 500) {
+        return res.status(400).json({ success: false, message: 'Reason is too long (max 500)', data: null });
+      }
+
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (existing.status === 'leave_pending') {
+        return res.status(400).json({ success: false, message: 'A leave request for this shift is already awaiting review', data: null });
+      }
+      if (existing.status === 'leave_approved') {
+        return res.status(400).json({ success: false, message: 'Leave is already approved for this shift', data: null });
+      }
+      if (existing.status === 'cancelled' || existing.status === 'no_show') {
+        return res.status(400).json({ success: false, message: 'This shift can no longer take a leave request', data: null });
+      }
+      if (existing.checkInAt || existing.status === 'completed') {
+        return res.status(400).json({
+          success: false,
+          message: 'This shift is in progress or completed and can no longer take a leave request',
+          data: null,
+        });
+      }
+
+      const assignment = await this.shiftAssignmentRepository.update(id, {
+        status: 'leave_pending',
+        notes: reason,
+        updatedBy: getActor(req),
+      });
+      res.status(200).json({ success: true, message: 'Leave request sent — your agency will review it', data: assignment });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.requestLeaveMine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Agency (or admin) approves a pending MC/leave request: the PR is excused
+   * from the shift with no penalty. `leave_approved` is terminal like
+   * `cancelled` — staffing/cost rollups skip it — but stays distinct so an
+   * excused absence never reads as a penalty cancel.
+   */
+  async approveLeave(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (existing.status !== 'leave_pending') {
+        return res.status(400).json({ success: false, message: 'Only a pending leave request can be approved', data: null });
+      }
+
+      const assignment = await this.shiftAssignmentRepository.update(id, {
+        status: 'leave_approved',
+        updatedBy: getActor(req),
+      });
+      res.status(200).json({ success: true, message: 'Leave approved — the PR is excused from this shift', data: assignment });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.approveLeave] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Agency (or admin) rejects a pending MC/leave request: the row returns to
+   * `assigned` (the PR is still expected to work the shift). The reason keeps
+   * living on `notes`, prefixed so the mobile app can tell the PR the request
+   * was rejected; sliced to the column's 500 limit.
+   */
+  async rejectLeave(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (existing.status !== 'leave_pending') {
+        return res.status(400).json({ success: false, message: 'Only a pending leave request can be rejected', data: null });
+      }
+
+      const assignment = await this.shiftAssignmentRepository.update(id, {
+        status: 'assigned',
+        notes: `[Leave rejected] ${existing.notes ?? ''}`.slice(0, 500),
+        updatedBy: getActor(req),
+      });
+      res.status(200).json({ success: true, message: 'Leave rejected — the PR stays on this shift', data: assignment });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.rejectLeave] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency's backfill worklist (Slice 3 of the cancel epic): upcoming slots
+   * whose PR cancelled or had leave approved, while the shift is still below
+   * its quantity. Surfacing the row on the roster IS the notification — same
+   * philosophy as the cancel/leave rows themselves.
+   */
+  async listBackfill(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const slots = await this.shiftAssignmentRepository.listBackfillSlots({
+        fromDate: today,
+        agencyId: scope.isAdmin ? (req.query.agencyId as string | undefined) : scope.agencyId!,
+      });
+      res.status(200).json({ success: true, message: 'OK', data: slots });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.listBackfill] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Ranked replacement PRs for one released assignment: free that night, same
+   * agency, active — ordered by the released PR's tier (rate parity), then
+   * completed shifts at the outlet, then name. Filling the slot reuses the
+   * normal POST / (create assignment), so no separate write path exists here.
+   */
+  async listReplacementCandidatesForAssignment(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const shift = await this.shiftRepository.getById(existing.shiftId);
+      if (!shift) return res.status(404).json({ success: false, message: 'Shift not found', data: null });
+
+      const releasedPr = await this.prRepository.getById(existing.prId);
+      const candidates = await this.shiftAssignmentRepository.listReplacementCandidates({
+        agencyId: existing.agencyId,
+        shiftDate: shift.shiftDate,
+        outletId: shift.outletId,
+        excludePrIds: [existing.prId],
+        preferTier: releasedPr?.tier,
+      });
+      res.status(200).json({ success: true, message: 'OK', data: candidates });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.listReplacementCandidatesForAssignment] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

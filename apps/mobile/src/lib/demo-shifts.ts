@@ -77,6 +77,8 @@ function payrollWeekSundayIso(from = todayYmd()): string {
 export type DemoShift = {
   id: string;
   outlet: string;
+  /** Full outlet address (from the shift's outlet FK) — where the PR works. */
+  address?: string | null;
   event: string;
   date: Ymd;
   time: string;
@@ -143,6 +145,8 @@ export type TimetableEntry = {
   dateIso: string;
   dateLabel: string;
   outlet: string;
+  /** Full outlet address (from the shift's outlet FK) — where the PR works. */
+  address?: string | null;
   time: string;
   statusLabel: string;
   statusVariant: 'green' | 'amber' | 'red';
@@ -150,6 +154,8 @@ export type TimetableEntry = {
   sourceDetail: string;
   /** False once checked in / completed — Cancel is only for upcoming booked shifts. */
   canCancel: boolean;
+  /** MC/Leave request allowed — same window as Cancel, minus an already-pending request. */
+  canLeave: boolean;
 };
 
 export const CANCELLATION_RULE_SUMMARY = [
@@ -163,23 +169,33 @@ export function timetableStatusFromStamps(input: {
   checkInAt?: string | null;
   checkOutAt?: string | null;
   status?: string | null;
-}): Pick<TimetableEntry, 'statusLabel' | 'statusVariant' | 'canCancel'> {
+}): Pick<TimetableEntry, 'statusLabel' | 'statusVariant' | 'canCancel' | 'canLeave'> {
   if (input.checkOutAt || input.status === 'completed') {
-    return { statusLabel: 'Complete', statusVariant: 'green', canCancel: false };
+    return { statusLabel: 'Complete', statusVariant: 'green', canCancel: false, canLeave: false };
   }
   if (input.checkInAt) {
-    return { statusLabel: 'On duty', statusVariant: 'amber', canCancel: false };
+    return { statusLabel: 'On duty', statusVariant: 'amber', canCancel: false, canLeave: false };
+  }
+  // MC/Leave awaiting the agency's decision — both actions pause until it lands.
+  if (input.status === 'leave_pending') {
+    return { statusLabel: 'Leave pending', statusVariant: 'amber', canCancel: false, canLeave: false };
+  }
+  // Excused shift (agency approved the MC/leave). Normally filtered out of the
+  // schedule upstream; if shown, it is terminal — no further actions.
+  if (input.status === 'leave_approved') {
+    return { statusLabel: 'Leave approved', statusVariant: 'green', canCancel: false, canLeave: false };
   }
   if (input.status === 'assigned' || input.status === 'pending') {
-    return { statusLabel: 'Pending', statusVariant: 'amber', canCancel: true };
+    return { statusLabel: 'Pending', statusVariant: 'amber', canCancel: true, canLeave: true };
   }
-  return { statusLabel: 'Scheduled', statusVariant: 'green', canCancel: true };
+  return { statusLabel: 'Scheduled', statusVariant: 'green', canCancel: true, canLeave: true };
 }
 
 type ScheduleShiftLike = {
   id: string;
   dateIso: string;
   outlet: string;
+  address?: string | null;
   time: string;
   checkInAt?: string | null;
   checkOutAt?: string | null;
@@ -223,7 +239,14 @@ export function buildScheduleDays(
       const rows = byDate.get(cursor)!;
       if (rows.some((r) => r.checkInAt && !r.checkOutAt)) kind = 'active';
       else if (rows.some((r) => r.checkOutAt || r.status === 'completed')) kind = 'assigned';
-      else if (rows.some((r) => r.status === 'assigned' || r.status === 'pending')) kind = 'pending';
+      // leave_pending days stay amber — still booked until the agency decides.
+      else if (
+        rows.some(
+          (r) =>
+            r.status === 'assigned' || r.status === 'pending' || r.status === 'leave_pending',
+        )
+      )
+        kind = 'pending';
       else kind = 'assigned';
     }
     days.push({ dateIso: cursor, kind });
@@ -275,6 +298,7 @@ export function buildUpcomingWeekTimetable(
         dateIso: s.dateIso,
         dateLabel: fmtDFriendly(y, m, d),
         outlet: s.outlet,
+        address: s.address ?? null,
         time: s.time,
         ...stamp,
         sourceLabel: s.agencyName?.trim() || 'Agency',

@@ -5,7 +5,7 @@
  * the tonight shift card. Identity comes from the backend; shift data mirrors
  * the prototype seeds until the backend models shifts.
  */
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
@@ -17,12 +17,10 @@ import {
   type Ymd,
 } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
-import { fetchMySpecialServices, type ShiftAssignmentRecord } from '../lib/api';
+import { type ShiftAssignmentRecord } from '../lib/api';
 import { useViewportSize } from '../lib/viewport';
-import { TopBar } from '../components/TopBar';
 import { Section } from '../components/Section';
 import { AgencySchedulePanel } from '../components/AgencySchedulePanel';
-import { JobPostingsPanel } from '../components/JobPostingsPanel';
 import { Avatar, EmptyDashed, IzButton, LabelWithIcon } from '../components/ui';
 import {
   Briefcase,
@@ -32,7 +30,6 @@ import {
   FileText,
   House,
   MapPin,
-  Sparkles,
   Store,
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
@@ -41,7 +38,6 @@ import { useActiveShift } from '../lib/active-shift';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePrNav } from '../lib/pr-nav';
 
-type HubView = 'shifts' | 'services';
 type SectionKey = 'today' | 'todo' | 'agency';
 
 function ymdFromIso(iso: string): Ymd {
@@ -63,6 +59,7 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
   return {
     id: a.id,
     outlet: a.outletName ?? 'Outlet',
+    address: a.outletAddress,
     event: a.eventName ?? 'Shift',
     date: ymdFromIso(a.shiftDate),
     time: a.slot ?? '—',
@@ -73,25 +70,8 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
 }
 
 export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
-  const { me, token } = useSession();
+  const { me } = useSession();
   const { openPv } = usePrNav();
-  // Real count of this PR's service orders — keeps the Job postings badge in
-  // sync with the list inside the panel (both read the same backend rows).
-  const [jobCount, setJobCount] = useState(0);
-  useEffect(() => {
-    if (!token) return;
-    let cancelled = false;
-    fetchMySpecialServices(token)
-      .then((rows) => {
-        if (!cancelled) setJobCount(rows.length);
-      })
-      .catch(() => {
-        /* non-fatal — leave the badge hidden if the backend is unreachable */
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [token]);
 
   // Real shift assignments for this PR — shared with Check-In / timetable so
   // On duty / Complete badges flip as soon as attendance stamps change.
@@ -99,18 +79,26 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   const { awaiting } = useAwaitingLastWeekPv();
   const todoItems = awaiting ? [awaiting.todo] : [];
   const shifts = assignments
-    .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+    .filter(
+      (a) =>
+        a.status !== 'cancelled' &&
+        a.status !== 'no_show' &&
+        // Excused via approved MC/leave — drops off the upcoming list.
+        a.status !== 'leave_approved',
+    )
     .map(assignmentToShift);
 
   const todayIso = ymdToIso(...todayYmd());
-  const tonightShift = shifts.find((s) => ymdToIso(...s.date) === todayIso) ?? null;
+  // Today shows the shift up to check-out; once completed it drops off and the
+  // section waits for the next shift.
+  const tonightShift =
+    shifts.find((s) => ymdToIso(...s.date) === todayIso && s.status !== 'complete') ?? null;
   const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
 
   const { phase: localPhase } = useShiftSession();
   // Prefer live assignment stamps; fall back to local session for offline demo.
   const phase = attendancePhase !== 'idle' ? attendancePhase : localPhase;
   const { width } = useViewportSize();
-  const [view, setView] = useState<HubView>('shifts');
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     today: true,
     todo: false,
@@ -145,56 +133,18 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
 
   return (
     <View style={styles.screen}>
-      <TopBar onOpenProfile={() => onNavigate('profile')} />
 
       {/* PrPageHeader */}
       <View style={styles.pageHeader}>
         <View style={styles.headerTitleRow}>
-          {view === 'services' ? (
-            <Sparkles size={22} color={C.accent} />
-          ) : (
-            <Briefcase size={22} color={C.accent} />
-          )}
-          {view === 'services' ? (
-            <Text style={[styles.headerTitle, { fontSize: titleSize }]}>Job Posting</Text>
-          ) : (
-            <Text style={[styles.headerTitle, { fontSize: titleSize }]}>
-              Hi, <Text style={styles.headerTitleAccent}>{firstName}</Text>
-            </Text>
-          )}
+          <Briefcase size={22} color={C.accent} />
+          <Text style={[styles.headerTitle, { fontSize: titleSize }]}>
+            Hi, <Text style={styles.headerTitleAccent}>{firstName}</Text>
+          </Text>
         </View>
       </View>
 
-      {/* Shifts ↔ Job postings toggle */}
-      <View style={styles.hubToggle}>
-        <Pressable
-          style={[styles.hubToggleBtn, view === 'shifts' && styles.hubToggleBtnOnShifts]}
-          onPress={() => setView('shifts')}
-        >
-          <Briefcase size={14} color={view === 'shifts' ? C.goldL : C.prMuted} />
-          <Text style={[styles.hubToggleText, view === 'shifts' && { color: C.goldL }]}>Shifts</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.hubToggleBtn, view === 'services' && styles.hubToggleBtnOnServices]}
-          onPress={() => setView('services')}
-        >
-          <Sparkles size={14} color={view === 'services' ? C.violetL : C.prMuted} />
-          <Text style={[styles.hubToggleText, view === 'services' && { color: C.violetL }]}>
-            Job postings
-          </Text>
-          {jobCount > 0 && (
-            <View style={styles.hubBadge}>
-              <Text style={styles.hubBadgeText}>{jobCount}</Text>
-            </View>
-          )}
-        </Pressable>
-      </View>
-
-      {view === 'services' ? (
-        <JobPostingsPanel onOrdersCountChange={setJobCount} />
-      ) : (
-        <>
-          {/* Hub strip — Today / To-do / Upcoming */}
+      {/* Hub strip — Today / To-do / Upcoming */}
           <View style={styles.hubTabs}>
             <HubTab
               label="TODAY"
@@ -284,8 +234,6 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               <AgencySchedulePanel />
             </Section>
           </View>
-        </>
-      )}
     </View>
   );
 }
@@ -341,6 +289,12 @@ function TonightCard({
         <View style={{ flex: 1, minWidth: 0 }}>
           <LabelWithIcon icon={Store} label="Outlet name" />
           <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
+          {shift.address ? (
+            <View style={styles.shiftAddrRow}>
+              <MapPin size={12} color={C.prMuted2} strokeWidth={2} />
+              <Text style={styles.shiftAddrText}>{shift.address}</Text>
+            </View>
+          ) : null}
         </View>
       </View>
       <View style={styles.shiftFacts}>
@@ -507,6 +461,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 22,
     color: C.txt,
+  },
+  shiftAddrRow: {
+    marginTop: 5,
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 5,
+  },
+  shiftAddrText: {
+    flex: 1,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 17,
+    color: C.prMuted2,
   },
   shiftFacts: {
     gap: 10,

@@ -4,13 +4,18 @@ import { AgencyTable } from '@/features/agency/agency.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { PrTable } from '@/features/pr/pr.model';
 
-// Roster lifecycle for a PR on a shift. Mirrors the frontend live-workforce states.
+// Roster lifecycle for a PR on a shift. Mirrors the frontend live-workforce
+// states. leave_pending/leave_approved are the PR MC/Leave flow: the PR files a
+// request (reason on `notes`), the agency approves (excused, no penalty) or
+// rejects (row returns to `assigned`).
 export const shiftAssignmentStatusValues = [
   'assigned',
   'confirmed',
   'completed',
   'no_show',
   'cancelled',
+  'leave_pending',
+  'leave_approved',
 ] as const;
 export type ShiftAssignmentStatus = (typeof shiftAssignmentStatusValues)[number];
 export const shiftAssignmentStatusEnum = MainSchema.enum(

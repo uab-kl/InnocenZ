@@ -45,7 +45,12 @@ export function pickActive(
   dismissed: Set<string>,
 ): ShiftAssignmentRecord | null {
   const open = list.filter(
-    (a) => !dismissed.has(a.id) && a.status !== 'cancelled' && a.status !== 'no_show',
+    (a) =>
+      !dismissed.has(a.id) &&
+      a.status !== 'cancelled' &&
+      a.status !== 'no_show' &&
+      // Excused via approved MC/leave — never today's active shift.
+      a.status !== 'leave_approved',
   );
   const today = localDateKey(new Date());
 

@@ -6,7 +6,9 @@ import {
 	createPrPersonnel,
 } from "@/services/pr-personnel";
 import {
+	approveLeaveRequest,
 	createShiftAssignment,
+	rejectLeaveRequest,
 	removeShiftAssignment,
 	type ShiftAssignmentStatus,
 	updateShiftAssignment,
@@ -70,6 +72,18 @@ export function useRosterMutations() {
 		onSuccess: invalidate,
 	});
 
+	// PR MC/leave decisions (leave_pending rows): approve excuses the shift with
+	// no penalty; reject puts the PR back on it.
+	const approveLeave = useMutation({
+		mutationFn: (id: string) => approveLeaveRequest(id, logout),
+		onSuccess: invalidate,
+	});
+
+	const rejectLeave = useMutation({
+		mutationFn: (id: string) => rejectLeaveRequest(id, logout),
+		onSuccess: invalidate,
+	});
+
 	const assign = useMutation({
 		mutationFn: (vars: { shiftId: string; prId: string }) =>
 			createShiftAssignment({ shiftId: vars.shiftId, prId: vars.prId }, logout),
@@ -84,5 +98,14 @@ export function useRosterMutations() {
 		onSuccess: invalidate,
 	});
 
-	return { setStatus, cancel, flagNoShow, unassign, assign, addPr };
+	return {
+		setStatus,
+		cancel,
+		flagNoShow,
+		unassign,
+		assign,
+		addPr,
+		approveLeave,
+		rejectLeave,
+	};
 }

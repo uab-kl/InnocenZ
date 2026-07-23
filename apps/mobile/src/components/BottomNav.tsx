@@ -10,7 +10,7 @@ import { Briefcase, HistoryIcon, MapPin, UserIcon, Wallet, type IconComponent } 
 export type PrTab = 'shifts' | 'checkin' | 'payment' | 'history' | 'profile';
 
 const TABS: { key: PrTab; label: string; icon: IconComponent }[] = [
-  { key: 'shifts', label: 'Shifts', icon: Briefcase },
+  { key: 'shifts', label: 'Today', icon: Briefcase },
   { key: 'checkin', label: 'Check-In', icon: MapPin },
   { key: 'payment', label: 'Payment', icon: Wallet },
   { key: 'history', label: 'History', icon: HistoryIcon },
