@@ -3,23 +3,26 @@
  * Scan / Self-log navigate to `/host/scan` equivalent (ScanScreen).
  */
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
-import type { PrReceiptLine } from '../lib/api';
+import { assetUrl, type PrReceiptLine } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
+import { pickProofPhotos } from '../lib/proof-photo';
 import {
   Camera,
   Check,
   ChevronDown,
   Clock,
   HelpCircle,
+  ImagePlus,
   MapPin,
   Pencil,
   Shield,
   Trash2,
+  XIcon,
 } from './icons';
 
 export function ShiftStatusPanel({
@@ -46,11 +49,55 @@ export function ShiftStatusPanel({
   const { openScan } = usePrNav();
   // Receipt rows come from the backend current-week draft voucher, scoped to
   // this shift's day so Check-In and Payment never disagree on the amount.
-  const { receiptLines: allLogs, deleteLine } = usePrEarnings();
+  const { receiptLines: allLogs, deleteLine, updateLine } = usePrEarnings();
   const logs = useMemo(
     () => (dayKey ? allLogs.filter((l) => l.lineDate === dayKey) : allLogs),
     [allLogs, dayKey],
   );
+  // Every proof photo the PR snapped for this shift's self-logs, each carrying
+  // its owning line + index so it can be removed. Shown as an editable gallery
+  // under the totals so the PR can confirm / add / remove what they uploaded.
+  const proofItems = useMemo(
+    () =>
+      logs.flatMap((l) =>
+        (l.proofPhotos ?? []).map((src, idx) => ({ lineId: l.id, idx, src })),
+      ),
+    [logs],
+  );
+  // New photos append to the first self-log that already carries proof.
+  const proofTargetLineId = proofItems[0]?.lineId;
+  const [lightbox, setLightbox] = useState<string | null>(null);
+  const [photoBusy, setPhotoBusy] = useState(false);
+  // Photos are editable only while on duty (same rule as row edit/delete).
+  const canEditPhotos = !checkedOut;
+
+  const applyPhotos = async (lineId: string, next: string[]) => {
+    if (photoBusy) return;
+    setPhotoBusy(true);
+    try {
+      await updateLine(lineId, { proofPhotos: next });
+    } finally {
+      setPhotoBusy(false);
+    }
+  };
+
+  const removePhoto = (lineId: string, idx: number) => {
+    const line = logs.find((l) => l.id === lineId);
+    if (!line) return;
+    void applyPhotos(
+      lineId,
+      (line.proofPhotos ?? []).filter((_, i) => i !== idx),
+    );
+  };
+
+  const addPhotos = () => {
+    if (!proofTargetLineId) return;
+    pickProofPhotos((urls) => {
+      const line = logs.find((l) => l.id === proofTargetLineId);
+      if (!line) return;
+      void applyPhotos(proofTargetLineId, [...(line.proofPhotos ?? []), ...urls].slice(0, 6));
+    });
+  };
 
   const checkedInAt = checkInAt ?? null;
   const checkedOutAt = checkOutAt ?? null;
@@ -142,6 +189,7 @@ export function ShiftStatusPanel({
         <Text style={styles.statusHint}>{statusHint}</Text>
 
         {statusOpen && (
+          <>
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={styles.table}>
               <View style={styles.trHead}>
@@ -206,8 +254,73 @@ export function ShiftStatusPanel({
               </View>
             </View>
           </ScrollView>
+
+          {proofItems.length > 0 && (
+            <View style={styles.gallery}>
+              <View style={styles.galleryHead}>
+                <Camera size={13} color={C.goldL} />
+                <Text style={styles.galleryLabel}>PROOF PHOTOS · {proofItems.length}</Text>
+              </View>
+              <Text style={styles.gallerySub}>
+                {canEditPhotos
+                  ? 'Tap to view · ✕ to remove · add another below'
+                  : 'Pictures you uploaded for this shift'}
+              </Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.galleryRow}
+              >
+                {proofItems.map((it) => {
+                  const uri =
+                    it.src.startsWith('data:') || it.src.startsWith('http')
+                      ? it.src
+                      : assetUrl(it.src) ?? it.src;
+                  return (
+                    <View key={`${it.lineId}-${it.idx}`} style={styles.galleryItem}>
+                      <Pressable onPress={() => setLightbox(uri)}>
+                        <Image source={{ uri }} style={styles.galleryThumb} />
+                      </Pressable>
+                      {canEditPhotos && (
+                        <Pressable
+                          style={styles.galleryRemove}
+                          onPress={() => removePhoto(it.lineId, it.idx)}
+                          disabled={photoBusy}
+                          hitSlop={6}
+                        >
+                          <XIcon size={11} color={C.txt} />
+                        </Pressable>
+                      )}
+                    </View>
+                  );
+                })}
+              </ScrollView>
+              {canEditPhotos && proofTargetLineId && (
+                <Pressable style={styles.galleryAddBtn} onPress={addPhotos} disabled={photoBusy}>
+                  <ImagePlus size={14} color={C.txt} />
+                  <Text style={styles.galleryAddText}>
+                    {photoBusy ? 'Saving…' : 'Add another photo'}
+                  </Text>
+                </Pressable>
+              )}
+            </View>
+          )}
+          </>
         )}
       </View>
+
+      <Modal
+        visible={lightbox != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLightbox(null)}
+      >
+        <Pressable style={styles.lightboxBackdrop} onPress={() => setLightbox(null)}>
+          {lightbox && (
+            <Image source={{ uri: lightbox }} style={styles.lightboxImg} resizeMode="contain" />
+          )}
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -562,4 +675,70 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(93,217,160,0.35)',
   },
   badgeMatchedText: { fontFamily: F.sora, fontSize: 10, fontWeight: '700', color: C.green },
+  gallery: {
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 14,
+    borderTopWidth: 1,
+    borderTopColor: C.line2,
+  },
+  galleryHead: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  galleryLabel: {
+    fontFamily: F.sora,
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.8,
+    color: C.goldL,
+  },
+  gallerySub: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted2,
+  },
+  galleryRow: { gap: 8, paddingTop: 10 },
+  galleryItem: { position: 'relative' },
+  galleryThumb: {
+    width: 76,
+    height: 76,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  galleryRemove: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    width: 20,
+    height: 20,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(6,3,12,0.78)',
+    borderWidth: 1,
+    borderColor: C.line2,
+  },
+  galleryAddBtn: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  galleryAddText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  lightboxBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(6,3,12,0.92)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  lightboxImg: { width: '100%', height: '80%' },
 });
