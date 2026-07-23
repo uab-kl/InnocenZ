@@ -429,7 +429,20 @@ export type PrCurrentWeek = {
   weekEnd: string;
   net: string;
   status: string | null;
+  /** Set on the "Last week" voucher when the PR has raised a dispute (§3 F). */
+  disputeReason?: string | null;
+  disputeNote?: string | null;
+  disputedAt?: string | null;
   lines: PrReceiptLine[];
+};
+
+/** The voucher's dispute state returned by the raise/withdraw endpoints (§3 F). */
+export type PrDisputeState = {
+  voucherId: string;
+  status: string;
+  disputeReason: string | null;
+  disputeNote: string | null;
+  disputedAt: string | null;
 };
 
 export type PrReceiptLineInput = {
@@ -509,6 +522,34 @@ export function updateMyReceiptLine(
 export function deleteMyReceiptLine(accessToken: string, lineId: string): Promise<null> {
   return request<null>(`/payment-voucher/mine/lines/${lineId}`, {
     method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Raise (or amend) a dispute on one of the PR's own issued vouchers so the
+ * agency payroll page can verify/reject it (§3 F). Persists on the reused
+ * payment_voucher dispute columns — no new table.
+ */
+export function raiseMyDispute(
+  accessToken: string,
+  voucherId: string,
+  input: { reason: string; note?: string },
+): Promise<PrDisputeState> {
+  return request<PrDisputeState>(`/payment-voucher/mine/${voucherId}/dispute`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+/** Withdraw the PR's own dispute — the voucher returns to review. */
+export function withdrawMyDispute(
+  accessToken: string,
+  voucherId: string,
+): Promise<PrDisputeState> {
+  return request<PrDisputeState>(`/payment-voucher/mine/${voucherId}/dispute/withdraw`, {
+    method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
   });
 }

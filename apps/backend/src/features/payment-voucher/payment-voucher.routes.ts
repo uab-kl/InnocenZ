@@ -14,6 +14,11 @@ router.post('/mine/lines', paymentVoucherController.addMyLine.bind(paymentVouche
 router.patch('/mine/lines/:lineId', paymentVoucherController.updateMyLine.bind(paymentVoucherController));
 router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(paymentVoucherController));
 
+// A PR raises / withdraws a dispute on its OWN issued voucher (§3 F). 3- and
+// 4-segment paths, so they never collide with the 2-segment '/mine/lines'.
+router.post('/mine/:voucherId/dispute', paymentVoucherController.raiseMyDispute.bind(paymentVoucherController));
+router.post('/mine/:voucherId/dispute/withdraw', paymentVoucherController.withdrawMyDispute.bind(paymentVoucherController));
+
 // Payment vouchers are an agency (or admin) function; scoping to the caller's
 // own agency is enforced in the controller.
 router.use(requireRole('admin', 'agency'));

@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Alert,
   Image,
   Modal,
   Platform,
@@ -23,7 +24,14 @@ import {
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { usePrEarnings } from '../lib/pr-earnings';
-import { fetchMyLastWeek, type PrCurrentWeek, type PrReceiptLine } from '../lib/api';
+import {
+  fetchMyLastWeek,
+  raiseMyDispute,
+  withdrawMyDispute,
+  type PrCurrentWeek,
+  type PrDisputeState,
+  type PrReceiptLine,
+} from '../lib/api';
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { useViewportSize } from '../lib/viewport';
@@ -217,8 +225,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
-  /** Optional proof kept with submitted disputes (demo). */
+  /** Optional proof kept with submitted disputes (image upload is still local). */
   const [disputePhotoMap, setDisputePhotoMap] = useState<Record<string, string[]>>({});
+  const [disputeBusy, setDisputeBusy] = useState(false);
 
   const lastLabel = weekRangeLabel(1);
   const thisLabel = weekRangeLabel(0);
@@ -235,6 +244,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       ? { id: lastWeek.voucherId, net: Number(lastWeek.net) }
       : undefined;
   const reviewAmount = weekTotal > 0 ? weekTotal : awaiting?.net ?? 0;
+  // The dispute is persisted at the voucher grain (payment_voucher.status), so
+  // the whole "Last week" PV is either under dispute or not (§3 F).
+  const voucherDisputed = lastWeek?.status === 'disputed';
 
   const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
     const amount = cellAmount(day, row.key);
@@ -250,7 +262,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       amount,
     };
     setDisputeTarget(target);
-    if (disputedKeys.has(key)) {
+    // A PV already under dispute → tapping any amount offers to withdraw it.
+    if (voucherDisputed) {
       setDisputeMode('withdraw');
       setDisputeNote('');
       setDisputePhotos([]);
@@ -271,22 +284,59 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setDisputePhotos([]);
   };
 
-  const submitDispute = () => {
-    if (!disputeTarget) return;
-    setDisputedKeys((prev) => {
-      const next = new Set(prev);
-      if (disputeMode === 'withdraw') next.delete(disputeTarget.key);
-      else next.add(disputeTarget.key);
-      return next;
-    });
-    setDisputePhotoMap((prev) => {
-      const next = { ...prev };
-      if (disputeMode === 'withdraw') delete next[disputeTarget.key];
-      else if (disputePhotos.length) next[disputeTarget.key] = disputePhotos;
-      else delete next[disputeTarget.key];
-      return next;
-    });
-    closeDispute();
+  const submitDispute = async () => {
+    if (!disputeTarget || disputeBusy) return;
+    const voucherId = lastWeek?.voucherId;
+    if (!token || !voucherId) {
+      Alert.alert(
+        'No voucher to dispute yet',
+        'Last week’s payment voucher hasn’t been issued yet — there’s nothing to dispute.',
+      );
+      return;
+    }
+    setDisputeBusy(true);
+    try {
+      const next: PrDisputeState =
+        disputeMode === 'withdraw'
+          ? await withdrawMyDispute(token, voucherId)
+          : await raiseMyDispute(token, voucherId, {
+              reason: disputePreset,
+              note: disputeNote.trim() || undefined,
+            });
+      // Reflect the persisted state so the grid + header pill update immediately
+      // and survive a reload (getMyLastWeek returns these fields).
+      setLastWeek((prev) =>
+        prev
+          ? {
+              ...prev,
+              status: next.status,
+              disputeReason: next.disputeReason,
+              disputeNote: next.disputeNote,
+              disputedAt: next.disputedAt,
+            }
+          : prev,
+      );
+      setDisputedKeys((prev) => {
+        // Withdraw clears the whole voucher dispute; raise echoes the tapped cell.
+        if (disputeMode === 'withdraw') return new Set();
+        const nextSet = new Set(prev);
+        nextSet.add(disputeTarget.key);
+        return nextSet;
+      });
+      setDisputePhotoMap((prev) => {
+        if (disputeMode === 'withdraw') return {};
+        if (!disputePhotos.length) return prev;
+        return { ...prev, [disputeTarget.key]: disputePhotos };
+      });
+      closeDispute();
+    } catch (error) {
+      Alert.alert(
+        'Dispute failed',
+        error instanceof Error ? error.message : 'Please try again.',
+      );
+    } finally {
+      setDisputeBusy(false);
+    }
   };
 
   return (
@@ -341,14 +391,16 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>LAST WEEK</Text>
                 {lastWeek?.status && (
-                  <Pill variant={verifiedDays > 0 ? 'green' : 'amber'}>
-                    {lastWeek.status === 'paid'
-                      ? 'PAID'
-                      : lastWeek.status === 'signed'
-                        ? 'SIGNED'
-                        : verifiedDays > 0
-                          ? 'SENT'
-                          : 'PENDING'}
+                  <Pill variant={voucherDisputed ? 'red' : verifiedDays > 0 ? 'green' : 'amber'}>
+                    {voucherDisputed
+                      ? 'DISPUTED'
+                      : lastWeek.status === 'paid'
+                        ? 'PAID'
+                        : lastWeek.status === 'signed'
+                          ? 'SIGNED'
+                          : verifiedDays > 0
+                            ? 'SENT'
+                            : 'PENDING'}
                   </Pill>
                 )}
                 <Text style={styles.sectionFrac}>
@@ -440,9 +492,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <View style={styles.gridRow}>
                     <Text style={styles.gridLabel}>Status</Text>
                     {grid.map((d) => {
-                      const dayDisputed = INCOME_ROWS.some((r) =>
-                        disputedKeys.has(`${d.dateIso}-${r.key}`),
-                      );
+                      const dayDisputed =
+                        voucherDisputed ||
+                        INCOME_ROWS.some((r) => disputedKeys.has(`${d.dateIso}-${r.key}`));
                       const label =
                         d.status === 'empty'
                           ? '—'
@@ -469,6 +521,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   </View>
                 </View>
               </ScrollView>
+
+              {voucherDisputed && (
+                <View style={styles.disputeBanner}>
+                  <Text style={styles.disputeBannerTitle}>Dispute open · agency reviewing</Text>
+                  {lastWeek?.disputeReason ? (
+                    <Text style={styles.disputeBannerBody}>
+                      {lastWeek.disputeReason}
+                      {lastWeek.disputeNote ? ` — ${lastWeek.disputeNote}` : ''}
+                    </Text>
+                  ) : null}
+                  <Text style={styles.disputeBannerHint}>
+                    Tap any amount to withdraw this dispute.
+                  </Text>
+                </View>
+              )}
 
               {hasLastWeekRows ? (
                 <>
@@ -733,10 +800,13 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     <Text style={styles.backBtnText}>Back</Text>
                   </Pressable>
                   <Pressable
-                    style={[styles.submitBtn, grad(GRADIENTS.accent, C.accent)]}
+                    style={[styles.submitBtn, grad(GRADIENTS.accent, C.accent), disputeBusy && { opacity: 0.6 }]}
                     onPress={submitDispute}
+                    disabled={disputeBusy}
                   >
-                    <Text style={styles.primaryText}>Submit dispute</Text>
+                    <Text style={styles.primaryText}>
+                      {disputeBusy ? 'Submitting…' : 'Submit dispute'}
+                    </Text>
                   </Pressable>
                 </View>
               </>
@@ -748,8 +818,14 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     ? ` · ${disputePhotoMap[disputeTarget.key].length} proof image(s) will be cleared.`
                     : ''}
                 </Text>
-                <Pressable style={styles.dangerBtn} onPress={submitDispute}>
-                  <Text style={styles.dangerBtnText}>Withdraw dispute</Text>
+                <Pressable
+                  style={[styles.dangerBtn, disputeBusy && { opacity: 0.6 }]}
+                  onPress={submitDispute}
+                  disabled={disputeBusy}
+                >
+                  <Text style={styles.dangerBtnText}>
+                    {disputeBusy ? 'Withdrawing…' : 'Withdraw dispute'}
+                  </Text>
                 </Pressable>
                 <Pressable style={styles.cancel} onPress={closeDispute}>
                   <Text style={styles.cancelText}>Back</Text>
@@ -930,6 +1006,34 @@ const styles = StyleSheet.create({
     color: C.prMuted,
     textAlign: 'center',
   },
+  disputeBanner: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.4)',
+    backgroundColor: C.redBg,
+    padding: 12,
+  },
+  disputeBannerTitle: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '800',
+    color: C.red,
+  },
+  disputeBannerBody: {
+    marginTop: 4,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 17,
+    color: C.txt,
+  },
+  disputeBannerHint: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted,
+  },
+
   footNote: {
     marginTop: 10,
     fontFamily: F.manrope,

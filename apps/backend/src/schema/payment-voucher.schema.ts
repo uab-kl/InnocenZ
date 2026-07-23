@@ -75,3 +75,13 @@ export const UpdatePrReceiptLineSchema = CreatePrReceiptLineSchema.partial();
 
 export type CreatePrReceiptLineInput = z.infer<typeof CreatePrReceiptLineSchema>;
 export type UpdatePrReceiptLineInput = z.infer<typeof UpdatePrReceiptLineSchema>;
+
+// A PR raises a dispute on its OWN issued voucher (the week under review). The
+// reason is one of the quick presets; the note carries the flagged amount(s).
+// Persisted on the reused payment_voucher dispute columns (status='disputed').
+export const PrDisputeSchema = z.object({
+  reason: z.string().min(1, 'Reason is required').max(200, 'Reason is too long'),
+  note: z.string().max(1000, 'Note is too long').optional(),
+});
+
+export type PrDisputeInput = z.infer<typeof PrDisputeSchema>;
