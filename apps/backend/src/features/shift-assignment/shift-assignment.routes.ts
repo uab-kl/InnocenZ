@@ -24,7 +24,13 @@ router.post('/mine/:id/cancel', shiftAssignmentController.cancelMine.bind(shiftA
 // A signed-in PR files an MC/leave request on its OWN assignment (reason
 // required) — goes to leave_pending until the agency decides below.
 router.post('/mine/:id/leave', shiftAssignmentController.requestLeaveMine.bind(shiftAssignmentController));
+// Agency backfill worklist — released (cancelled / leave-approved) slots on
+// upcoming shifts still below quantity. Must precede '/:id'.
+router.get('/backfill', canWrite, shiftAssignmentController.listBackfill.bind(shiftAssignmentController));
 router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignmentController));
+// Ranked replacement PRs for a released assignment; assigning the pick goes
+// through the normal POST '/' below.
+router.get('/:id/replacement-candidates', canWrite, shiftAssignmentController.listReplacementCandidatesForAssignment.bind(shiftAssignmentController));
 // Agency decision on a pending MC/leave request (scoped to its own rows in the
 // controller): approve excuses the PR, reject puts the row back to assigned.
 router.post('/:id/leave/approve', canWrite, shiftAssignmentController.approveLeave.bind(shiftAssignmentController));

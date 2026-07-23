@@ -1,4 +1,5 @@
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
+import { BackfillPanel } from "@agency-portal/components/agency/BackfillPanel";
 import { LeaveRequestsPanel } from "@agency-portal/components/agency/LeaveRequestsPanel";
 import { RosterBackendTimetable } from "@agency-portal/components/agency/RosterBackendTimetable";
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
@@ -549,6 +550,10 @@ function AgencyRoster() {
 			{/* Backend MC/leave requests from PRs — approve/reject lands straight on
 			    the shift-assignment rows the grids above read. */}
 			<LeaveRequestsPanel canAct={canAssign} />
+
+			{/* Released slots (cancel / approved leave) still short-staffed — pick a
+			    ranked free PR to refill via the normal assign mutation. */}
+			<BackfillPanel canAct={canAssign} />
 
 			{canAssign && pendingPrSwaps.length > 0 && (
 				<OutletSection

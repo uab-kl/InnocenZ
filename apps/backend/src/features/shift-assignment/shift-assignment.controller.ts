@@ -477,6 +477,66 @@ export class ShiftAssignmentControllerClass {
     }
   }
 
+  /**
+   * The agency's backfill worklist (Slice 3 of the cancel epic): upcoming slots
+   * whose PR cancelled or had leave approved, while the shift is still below
+   * its quantity. Surfacing the row on the roster IS the notification — same
+   * philosophy as the cancel/leave rows themselves.
+   */
+  async listBackfill(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const slots = await this.shiftAssignmentRepository.listBackfillSlots({
+        fromDate: today,
+        agencyId: scope.isAdmin ? (req.query.agencyId as string | undefined) : scope.agencyId!,
+      });
+      res.status(200).json({ success: true, message: 'OK', data: slots });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.listBackfill] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Ranked replacement PRs for one released assignment: free that night, same
+   * agency, active — ordered by the released PR's tier (rate parity), then
+   * completed shifts at the outlet, then name. Filling the slot reuses the
+   * normal POST / (create assignment), so no separate write path exists here.
+   */
+  async listReplacementCandidatesForAssignment(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const existing = await this.shiftAssignmentRepository.getById(id);
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const shift = await this.shiftRepository.getById(existing.shiftId);
+      if (!shift) return res.status(404).json({ success: false, message: 'Shift not found', data: null });
+
+      const releasedPr = await this.prRepository.getById(existing.prId);
+      const candidates = await this.shiftAssignmentRepository.listReplacementCandidates({
+        agencyId: existing.agencyId,
+        shiftDate: shift.shiftDate,
+        outletId: shift.outletId,
+        excludePrIds: [existing.prId],
+        preferTier: releasedPr?.tier,
+      });
+      res.status(200).json({ success: true, message: 'OK', data: candidates });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.listReplacementCandidatesForAssignment] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async getById(req: Request, res: Response) {
     try {
       const assignment = await this.shiftAssignmentRepository.getById(paramId(req.params.id));

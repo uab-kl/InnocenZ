@@ -40,7 +40,8 @@ export function LeaveRequestsPanel({ canAct }: { canAct: boolean }) {
 	const requests = requestsQuery.data?.data ?? [];
 	if (requests.length === 0) return null;
 
-	const busy = rosterMut.approveLeave.isPending || rosterMut.rejectLeave.isPending;
+	const busy =
+		rosterMut.approveLeave.isPending || rosterMut.rejectLeave.isPending;
 
 	return (
 		<OutletSection
