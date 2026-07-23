@@ -114,6 +114,11 @@ export class ShiftControllerClass {
       const scope = await this.resolveScope(req);
       let agencyId: string;
       let outletId = parsed.data.outletId;
+      // An outlet posting a job is committing to run it, so it goes straight to
+      // `confirmed` — it shows up immediately as tonight's live shift (Today) and
+      // as a confirmed event (Calendar). Admin/agency creates keep the table
+      // default (`draft`). The client cannot set status; this is authoritative.
+      let postedStatus: 'confirmed' | undefined;
       if (scope.isAdmin) {
         if (!parsed.data.agencyId) {
           return res.status(400).json({ success: false, message: 'agencyId is required', data: null });
@@ -133,6 +138,7 @@ export class ShiftControllerClass {
           return res.status(400).json({ success: false, message: 'This outlet has no onboarding agency to request PR from', data: null });
         }
         agencyId = outlet.onboardedByAgencyId;
+        postedStatus = 'confirmed';
       } else {
         return res.status(403).json({ success: false, message: 'No organization associated with this account', data: null });
       }
@@ -145,6 +151,7 @@ export class ShiftControllerClass {
         {
           ...shiftData,
           agencyId, // authoritative — overrides any client-supplied value
+          ...(postedStatus ? { status: postedStatus } : {}),
           createdBy: actor,
           updatedBy: actor,
         },

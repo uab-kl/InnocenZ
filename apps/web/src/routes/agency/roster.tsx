@@ -31,7 +31,6 @@ import {
 	OUTLET_NAMES,
 	type RosterSlotStatus,
 	rosterPageDisplayStatus,
-	rosterSlotsForAgency,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import {
@@ -113,7 +112,6 @@ function AgencyRoster() {
 	const viewMode: ViewMode = view ?? "live";
 	const setViewMode = (next: ViewMode) =>
 		navigate({ search: next === "live" ? {} : { view: next } });
-	const allAgencyRoster = useStore((s) => s.agencyRoster);
 	const allAgencyPRs = useStore((s) => s.agencyPRs);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
 	const agencyPRs = useMemo(
@@ -123,17 +121,18 @@ function AgencyRoster() {
 	const [planningDate, setPlanningDate] = useState(DEFAULT_ROSTER_DATE_ISO);
 	const weekStartIso = mondayOfWeek(planningDate);
 	const weekDays = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
-	// Planning view reads live backend data; live view keeps the demo store.
+	// Both views read live backend data. Planning loads the picked week; live
+	// pins to today so the Shifts table + KPIs reflect tonight's real roster —
+	// assignments made in Planning are the same backend rows, so a shift booked
+	// for today shows up here the moment it's saved.
 	const backendRoster = useRosterSlots({
-		fromDate: weekStartIso,
-		toDate: weekDays[weekDays.length - 1] ?? weekStartIso,
+		fromDate: viewMode === "live" ? DEFAULT_ROSTER_DATE_ISO : weekStartIso,
+		toDate:
+			viewMode === "live"
+				? DEFAULT_ROSTER_DATE_ISO
+				: (weekDays[weekDays.length - 1] ?? weekStartIso),
 	});
-	const demoAgencyRoster = useMemo(
-		() => rosterSlotsForAgency(allAgencyRoster, allAgencyPRs, activeAgencyId),
-		[allAgencyRoster, allAgencyPRs, activeAgencyId],
-	);
-	const agencyRoster =
-		viewMode === "planning" ? backendRoster.slots : demoAgencyRoster;
+	const agencyRoster = backendRoster.slots;
 	const prCheckInMeta = useStore((s) => s.prCheckInMeta);
 	const prSubRole = useStore((s) => s.prSubRole);
 	const editRosterSlot = useStore((s) => s.editRosterSlot);

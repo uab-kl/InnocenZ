@@ -66,11 +66,14 @@ export const ShiftPayTierTable = MainSchema.table('shift_pay_tier', {
     .references(() => ShiftTable.id, { onDelete: 'cascade' }),
   kind: tierRateKindEnum('kind').notNull().default('tier'),
   tier: varchar('tier', { length: 50 }),
-  wagePerHour: numeric('wage_per_hour', { precision: 12, scale: 2 }),
+  // Mirrors outlet_tier_rate: DB columns are `daily_wage` / `standard_shift_hours`
+  // (a per-shift override of the workspace default). TS names kept as
+  // wagePerHour/otAfterHours so the shared resolver shape and wire contract hold.
+  wagePerHour: numeric('daily_wage', { precision: 12, scale: 2 }),
   drinkPct: numeric('drink_pct', { precision: 6, scale: 2 }).notNull().default('0'),
   happyHourDrinkPct: numeric('happy_hour_drink_pct', { precision: 6, scale: 2 }),
   tipPct: numeric('tip_pct', { precision: 6, scale: 2 }).notNull().default('0'),
-  otAfterHours: numeric('ot_after_hours', { precision: 6, scale: 2 }),
+  otAfterHours: numeric('standard_shift_hours', { precision: 6, scale: 2 }),
   targetSalesRm: numeric('target_sales_rm', { precision: 12, scale: 2 }),
   prCount: integer('pr_count').notNull().default(0),
   sortOrder: integer('sort_order').notNull().default(0),
