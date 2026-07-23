@@ -29,6 +29,13 @@ import {
 const NON_STAFFING_STATUSES = ['cancelled', 'no_show'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
 
 /**
+ * A PR's display name: preferred nickname when set, otherwise legal name.
+ * Shared by the assignment-list and cost queries so both show the same label.
+ * (Restored after a merge dropped the definition while keeping its usages.)
+ */
+const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${PrTable.nickname}), ''), ${PrTable.name})`;
+
+/**
  * The rate card resolved for one PR tier at one outlet. Numeric columns stay as
  * their raw string form (matching Drizzle's numeric select), so the mobile app
  * parses them the same way it already parses `payPerHour`/`payAmount`. Any field

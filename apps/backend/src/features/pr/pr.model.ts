@@ -89,7 +89,9 @@ export type PrProfile = {
   /** ISO date, `YYYY-MM-DD`. */
   dob: string | null;
   nationality: string | null;
-  portfolioPhotos: string[] | null;
+  // Matches the user_profile.portfolio_photos jsonb column, which infers as a
+  // nullable array of nullable strings (drizzle's conservative jsonb typing).
+  portfolioPhotos: (string | null)[] | null;
   /** Saved auto-generated photo comcard path on the linked user_profile. */
   comcardImage: string | null;
   comcardHeightCm: number | null;
