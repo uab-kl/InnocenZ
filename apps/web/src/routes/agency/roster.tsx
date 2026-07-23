@@ -1,4 +1,5 @@
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
+import { LeaveRequestsPanel } from "@agency-portal/components/agency/LeaveRequestsPanel";
 import { RosterBackendTimetable } from "@agency-portal/components/agency/RosterBackendTimetable";
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
 import { RosterShiftFilters } from "@agency-portal/components/agency/RosterShiftFilters";
@@ -544,6 +545,10 @@ function AgencyRoster() {
 					</div>
 				</div>
 			)}
+
+			{/* Backend MC/leave requests from PRs — approve/reject lands straight on
+			    the shift-assignment rows the grids above read. */}
+			<LeaveRequestsPanel canAct={canAssign} />
 
 			{canAssign && pendingPrSwaps.length > 0 && (
 				<OutletSection

@@ -79,7 +79,13 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   const { awaiting } = useAwaitingLastWeekPv();
   const todoItems = awaiting ? [awaiting.todo] : [];
   const shifts = assignments
-    .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+    .filter(
+      (a) =>
+        a.status !== 'cancelled' &&
+        a.status !== 'no_show' &&
+        // Excused via approved MC/leave — drops off the upcoming list.
+        a.status !== 'leave_approved',
+    )
     .map(assignmentToShift);
 
   const todayIso = ymdToIso(...todayYmd());

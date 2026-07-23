@@ -4,7 +4,7 @@
  * (checked out) / Scheduled|Pending (booked).
  */
 import React, { useMemo, useState } from 'react';
-import { Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import {
   AlertTriangle,
@@ -16,6 +16,7 @@ import {
   Shield,
 } from './icons';
 import { Pill } from './ui';
+import { PhoneSheet } from './PhoneSheet';
 import {
   CANCELLATION_RULE_SUMMARY,
   DAY_NAMES,
@@ -34,7 +35,14 @@ import {
 } from '../lib/demo-shifts';
 import { useActiveShift } from '../lib/active-shift';
 import { useSession } from '../lib/session';
-import { cancelMyShiftAssignment, type ShiftAssignmentRecord } from '../lib/api';
+import {
+  cancelMyShiftAssignment,
+  requestMyShiftLeave,
+  type ShiftAssignmentRecord,
+} from '../lib/api';
+
+/** Backend marker a rejected MC/leave leaves on the assignment notes. */
+const LEAVE_REJECTED_PREFIX = '[Leave rejected]';
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
@@ -86,6 +94,43 @@ export function AgencySchedulePanel() {
   const [cancelReason, setCancelReason] = useState('');
   const [cancelBusy, setCancelBusy] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  // MC/Leave request (no penalty — waits for the agency to approve/reject).
+  const [leaveTarget, setLeaveTarget] = useState<TimetableEntry | null>(null);
+  const [leaveReason, setLeaveReason] = useState('');
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  const openLeave = (entry: TimetableEntry) => {
+    // Demo rows have no live assignment to request leave on.
+    if (!assignments.some((a) => a.id === entry.id)) return;
+    setLeaveReason('');
+    setLeaveError(null);
+    setLeaveTarget(entry);
+  };
+
+  const confirmLeave = async () => {
+    if (!leaveTarget || leaveBusy) return;
+    const reason = leaveReason.trim();
+    if (!reason) {
+      setLeaveError('Please describe your MC / leave reason.');
+      return;
+    }
+    if (!token) {
+      setLeaveError('Not signed in.');
+      return;
+    }
+    setLeaveBusy(true);
+    setLeaveError(null);
+    try {
+      await requestMyShiftLeave(token, leaveTarget.id, reason);
+      setLeaveTarget(null);
+      void refresh();
+    } catch (e) {
+      setLeaveError(e instanceof Error ? e.message : 'Could not submit. Try again.');
+    } finally {
+      setLeaveBusy(false);
+    }
+  };
 
   const openCancel = (entry: TimetableEntry) => {
     const assignment = assignments.find((a) => a.id === entry.id);
@@ -130,7 +175,13 @@ export function AgencySchedulePanel() {
   const scheduleShifts = useMemo(
     () =>
       assignments
-        .filter((a) => a.status !== 'cancelled' && a.status !== 'no_show')
+        .filter(
+          (a) =>
+            a.status !== 'cancelled' &&
+            a.status !== 'no_show' &&
+            // Excused via approved MC/leave — off the schedule, no penalty.
+            a.status !== 'leave_approved',
+        )
         .map((a) => ({
           id: a.id,
           dateIso: a.shiftDate,
@@ -342,7 +393,13 @@ export function AgencySchedulePanel() {
                   key={entry.id}
                   entry={entry}
                   penalty={assignment ? cancelPenalty(assignment) : null}
+                  leavePending={assignment?.status === 'leave_pending'}
+                  leaveRejected={
+                    assignment?.status !== 'leave_pending' &&
+                    (assignment?.notes?.startsWith(LEAVE_REJECTED_PREFIX) ?? false)
+                  }
                   onCancel={() => openCancel(entry)}
+                  onLeave={() => openLeave(entry)}
                 />
               );
             })}
@@ -350,12 +407,7 @@ export function AgencySchedulePanel() {
         )}
       </View>
 
-      <Modal
-        visible={cancelTarget != null}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setCancelTarget(null)}
-      >
+      <PhoneSheet visible={cancelTarget != null} onRequestClose={() => setCancelTarget(null)}>
         <Pressable style={styles.cancelBackdrop} onPress={() => setCancelTarget(null)}>
           <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
             <View style={styles.cancelHandle} />
@@ -457,7 +509,63 @@ export function AgencySchedulePanel() {
             </ScrollView>
           </Pressable>
         </Pressable>
-      </Modal>
+      </PhoneSheet>
+
+      <PhoneSheet visible={leaveTarget != null} onRequestClose={() => setLeaveTarget(null)}>
+        <Pressable style={styles.cancelBackdrop} onPress={() => setLeaveTarget(null)}>
+          <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.cancelHandle} />
+            <View style={styles.cancelHeaderRow}>
+              <CalendarDays size={20} color={C.goldL} />
+              <Text style={styles.cancelHeaderTitle}>MC / Leave</Text>
+            </View>
+            {leaveTarget && (
+              <Text style={styles.cancelHeaderSub}>
+                {leaveTarget.outlet} · {leaveTarget.dateLabel} · {leaveTarget.time}
+              </Text>
+            )}
+            <ScrollView
+              keyboardShouldPersistTaps="handled"
+              showsVerticalScrollIndicator={false}
+              style={{ marginTop: 12 }}
+            >
+              <Text style={styles.cancelNote}>
+                Unable to work this shift due to MC or personal leave? Send the request to your
+                agency — you stay scheduled until they approve it.
+              </Text>
+              <View style={[styles.penaltyBanner, styles.penaltyBannerOk]}>
+                <Text style={styles.penaltyBannerTitle}>No penalty when approved</Text>
+                <Text style={styles.penaltyBannerBody}>
+                  An approved MC / leave excuses this shift with no deduction. If rejected, the
+                  shift stays yours — cancelling instead follows the cancellation rules.
+                </Text>
+              </View>
+              <Text style={styles.cancelFieldLabel}>Reason (required)</Text>
+              <TextInput
+                value={leaveReason}
+                onChangeText={setLeaveReason}
+                style={styles.cancelInput}
+                placeholder="e.g. MC — fever, clinic visit tomorrow morning"
+                placeholderTextColor={C.muted2}
+                multiline
+              />
+              {leaveError && <Text style={styles.cancelErrorText}>{leaveError}</Text>}
+              <Pressable
+                style={[styles.leaveSubmitBtn, leaveBusy && { opacity: 0.6 }]}
+                onPress={confirmLeave}
+                disabled={leaveBusy}
+              >
+                <Text style={styles.leaveSubmitText}>
+                  {leaveBusy ? 'Submitting…' : 'Submit leave request'}
+                </Text>
+              </Pressable>
+              <Pressable style={styles.cancelBackBtn} onPress={() => setLeaveTarget(null)}>
+                <Text style={styles.cancelBackText}>Back</Text>
+              </Pressable>
+            </ScrollView>
+          </Pressable>
+        </Pressable>
+      </PhoneSheet>
     </View>
   );
 }
@@ -474,11 +582,19 @@ function LegendSwatch({ color, label }: { color: string; label: string }) {
 function TimetableRow({
   entry,
   penalty,
+  leavePending,
+  leaveRejected,
   onCancel,
+  onLeave,
 }: {
   entry: TimetableEntry;
   penalty: CancelPenalty | null;
+  /** Backend row is leave_pending — swap the action buttons for a wait note. */
+  leavePending: boolean;
+  /** Agency rejected the MC/leave — the PR is still expected on this shift. */
+  leaveRejected: boolean;
   onCancel: () => void;
+  onLeave: () => void;
 }) {
   const [y, m, d] = isoToYmd(entry.dateIso);
   const dateFriendly = `${DAY_NAMES[new Date(y, m - 1, d).getDay()]} ${String(d).padStart(2, '0')} ${MONTH_NAMES[m - 1]} ${y}`;
@@ -515,13 +631,37 @@ function TimetableRow({
           </View>
         </View>
       ) : null}
-      {entry.canCancel ? (
-        <Pressable onPress={onCancel} style={styles.cancelBtn}>
-          <Text style={styles.cancelText}>
-            Cancel{penalty && penalty.amount > 0 ? ` (−${formatRM(penalty.amount)})` : ''}
+      {leaveRejected ? (
+        <View style={styles.leaveRejectedNote}>
+          <AlertTriangle size={13} color={C.red} />
+          <Text style={styles.leaveRejectedText}>
+            Leave request rejected — you are still on this shift.
           </Text>
-        </Pressable>
+        </View>
       ) : null}
+      {leavePending ? (
+        <View style={styles.leavePendingNote}>
+          <Clock size={13} color={C.amber} />
+          <Text style={styles.leavePendingText}>
+            MC / Leave submitted — awaiting agency review.
+          </Text>
+        </View>
+      ) : !entry.canCancel && !entry.canLeave ? null : (
+        <View style={styles.actionRow}>
+          {entry.canCancel ? (
+            <Pressable onPress={onCancel} style={[styles.cancelBtn, styles.actionBtn]}>
+              <Text style={styles.cancelText}>
+                Cancel{penalty && penalty.amount > 0 ? ` (−${formatRM(penalty.amount)})` : ''}
+              </Text>
+            </Pressable>
+          ) : null}
+          {entry.canLeave ? (
+            <Pressable onPress={onLeave} style={[styles.leaveBtn, styles.actionBtn]}>
+              <Text style={styles.leaveText}>MC / Leave</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 }
@@ -730,6 +870,8 @@ const styles = StyleSheet.create({
     color: C.prMuted,
     lineHeight: 18,
   },
+  actionRow: { marginTop: 12, flexDirection: 'row', gap: 8 },
+  actionBtn: { flex: 1, marginTop: 0 },
   cancelBtn: {
     marginTop: 12,
     alignItems: 'center',
@@ -740,6 +882,63 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(240,138,138,0.08)',
   },
   cancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.red },
+  leaveBtn: {
+    alignItems: 'center',
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.4)',
+    backgroundColor: 'rgba(232,198,106,0.08)',
+  },
+  leaveText: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.amber },
+  leavePendingNote: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.35)',
+    backgroundColor: 'rgba(232,198,106,0.08)',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  leavePendingText: {
+    flex: 1,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.amber,
+  },
+  leaveRejectedNote: {
+    marginTop: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.35)',
+    backgroundColor: 'rgba(240,138,138,0.06)',
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+  },
+  leaveRejectedText: {
+    flex: 1,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.red,
+  },
+  leaveSubmitBtn: {
+    marginTop: 16,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(93,217,160,0.45)',
+    backgroundColor: 'rgba(93,217,160,0.12)',
+  },
+  leaveSubmitText: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.green },
   cancelBackdrop: {
     flex: 1,
     backgroundColor: 'rgba(6,3,12,0.65)',

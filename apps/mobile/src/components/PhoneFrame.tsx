@@ -8,6 +8,13 @@ import { Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { C, GRADIENTS, grad } from '../theme/theme';
 import { useViewportSize } from '../lib/viewport';
 
+/**
+ * DOM id of the phone screen container on web — PhoneSheet portals bottom
+ * sheets into it so they stay inside the frame instead of covering the
+ * whole browser viewport.
+ */
+export const PHONE_SCREEN_ID = 'iz-phone-screen';
+
 export function PhoneFrame({
   children,
   header,
@@ -29,6 +36,7 @@ export function PhoneFrame({
 
   const body = (
     <View
+      nativeID={PHONE_SCREEN_ID}
       style={[
         styles.phone,
         grad(GRADIENTS.phone, C.bg),

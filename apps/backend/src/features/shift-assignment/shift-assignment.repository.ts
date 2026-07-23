@@ -22,11 +22,12 @@ import {
 } from './shift-assignment.model';
 
 /**
- * Statuses that do not count as staffing cost — cancelled and no-show PRs are
- * not paid. Mirrors mobile `pickActive` (active-shift.tsx) and the canonical
+ * Statuses that do not count as staffing cost — cancelled, no-show and
+ * leave-approved PRs are not paid (an approved MC/leave excuses the shift).
+ * Mirrors mobile `pickActive` (active-shift.tsx) and the canonical
  * `shiftAssignmentStatusValues` in shift-assignment.model.ts.
  */
-const NON_STAFFING_STATUSES = ['cancelled', 'no_show'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
+const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
 
 /**
  * A PR's display name: preferred nickname when set, otherwise legal name.

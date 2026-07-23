@@ -6,7 +6,11 @@ export type ShiftAssignmentStatus =
 	| "confirmed"
 	| "completed"
 	| "no_show"
-	| "cancelled";
+	| "cancelled"
+	// PR MC/leave flow: pending awaits the agency decision below; approved is an
+	// excused absence (no penalty). Reject returns the row to "assigned".
+	| "leave_pending"
+	| "leave_approved";
 
 export interface ShiftAssignmentPagination {
 	page: number;
@@ -122,6 +126,42 @@ export async function updateShiftAssignment(
 		message: string;
 		data: ShiftAssignment;
 	}>(`/shift-assignment/${id}`, input);
+	return response.data.data;
+}
+
+/**
+ * Approve a PR's pending MC/leave request — the PR is excused from the shift
+ * with no penalty (status leave_pending -> leave_approved). 400 unless the row
+ * is currently leave_pending; agency callers are scoped server-side.
+ */
+export async function approveLeaveRequest(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<ShiftAssignment> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: ShiftAssignment;
+	}>(`/shift-assignment/${id}/leave/approve`);
+	return response.data.data;
+}
+
+/**
+ * Reject a PR's pending MC/leave request — the row returns to "assigned" (the
+ * PR stays on the shift); the reason keeps living on notes, prefixed
+ * "[Leave rejected] " so the mobile app can surface the outcome.
+ */
+export async function rejectLeaveRequest(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<ShiftAssignment> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: ShiftAssignment;
+	}>(`/shift-assignment/${id}/leave/reject`);
 	return response.data.data;
 }
 
