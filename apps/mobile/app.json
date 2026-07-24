@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Mobile",
-    "slug": "@org/mobile",
+    "name": "InnocenZ",
+    "slug": "innocenz-mobile",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -9,9 +9,19 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "bundleIdentifier": "com.innocenz.mobile",
+      "supportsTablet": true,
+      "config": {
+        "googleMapsApiKey": "AIzaSyDIvKLWKko9xNfwHTm0czohNYbYFdB8uXs"
+      }
     },
     "android": {
+      "package": "com.innocenz.mobile",
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyDIvKLWKko9xNfwHTm0czohNYbYFdB8uXs"
+        }
+      },
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -32,6 +42,11 @@
           "backgroundColor": "#ffffff"
         }
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "3114a391-b87d-49ca-be3c-b95b06c65b17"
+      }
+    }
   }
 }
