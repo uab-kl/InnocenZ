@@ -32,7 +32,12 @@ jobs:
         with:
           fetch-depth: 1
       - uses: anthropics/claude-code-action@v1
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: ${{ github.event_name == 'workflow_dispatch' && inputs.task || '' }}
+          # Automation mode denies write tools by default — grant what a fix
+          # needs: explore, edit, git branch/commit/push, and gh pr create.
+          claude_args: '--allowedTools "Read,Grep,Glob,LS,Write,Edit,MultiEdit,Bash(git:*),Bash(gh pr:*),Bash(ls:*),Bash(cat:*),Bash(node:*),Bash(npm:*),Bash(pnpm:*)"'
