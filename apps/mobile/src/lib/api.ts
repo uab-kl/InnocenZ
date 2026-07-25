@@ -83,15 +83,28 @@ export class ApiError extends Error {
   }
 }
 
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const controller = new AbortController();
+  // On a flaky phone connection a dropped/blocked request can hang forever
+  // with no reject — without this, callers like the Check-In button never see
+  // an error and never leave their "busy" state, so the UI looks unresponsive.
+  const timer = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      signal: controller.signal,
     });
-  } catch {
+  } catch (e) {
+    if (e instanceof Error && e.name === 'AbortError') {
+      throw new ApiError('Request timed out. Check your connection and try again.', 0);
+    }
     throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  } finally {
+    clearTimeout(timer);
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!res.ok || !body?.success) {

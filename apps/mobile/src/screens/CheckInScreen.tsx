@@ -64,6 +64,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [cancelReason, setCancelReason] = useState('');
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
+  // Clear a still-running hold animation on unmount so it can't fire
+  // runAttendance (or setState) after this screen is gone.
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) clearInterval(timerRef.current);
+    };
+  }, []);
+
   // If the backend already has an open check-in (e.g. after reload), mirror that
   // into the local session so Scan self-log stays unlocked without another tap.
   useEffect(() => {
@@ -285,7 +293,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <>
                 <HoldButton
                   label="Check in"
+                  busyLabel="Checking in…"
                   holding={holding}
+                  busy={busy}
                   progress={progress}
                   onPress={() => startHold(false)}
                 />
@@ -312,7 +322,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 />
                 <HoldButton
                   label="Check out"
+                  busyLabel="Checking out…"
                   holding={holding}
+                  busy={busy}
                   progress={progress}
                   onPress={() => startHold(true)}
                 />
@@ -403,25 +415,31 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
 function HoldButton({
   label,
+  busyLabel,
   holding,
+  busy,
   progress,
   onPress,
 }: {
   label: string;
+  busyLabel: string;
   holding: boolean;
+  busy: boolean;
   progress: number;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={holding}
-      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent)]}
+      disabled={holding || busy}
+      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent), busy && { opacity: 0.6 }]}
     >
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
         <MapPin size={16} color="#241a08" strokeWidth={2.2} />
-        <Text style={styles.holdText}>{holding ? `Holding ${progress}%` : label}</Text>
+        <Text style={styles.holdText}>
+          {busy ? busyLabel : holding ? `Holding ${progress}%` : label}
+        </Text>
       </View>
     </Pressable>
   );
