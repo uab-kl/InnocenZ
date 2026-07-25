@@ -1,0 +1,38 @@
+# Installed by UAB Support Desk (Settings -> AI Model).
+# Triggered directly by the "Fix with AI" button on a ticket (workflow
+# dispatch — no GitHub issue involved), or by commenting @claude on an
+# issue/PR manually.
+name: Claude Code
+on:
+  workflow_dispatch:
+    inputs:
+      task:
+        description: "Task for Claude (sent by UAB Support Desk)"
+        required: true
+        type: string
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+
+jobs:
+  claude:
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude')) ||
+      (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude'))
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+      issues: write
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+      - uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          prompt: ${{ github.event_name == 'workflow_dispatch' && inputs.task || '' }}
