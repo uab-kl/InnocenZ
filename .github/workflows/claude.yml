@@ -10,6 +10,16 @@ on:
         description: "Task for Claude (sent by UAB Support Desk)"
         required: true
         type: string
+      callback_url:
+        description: "Where to POST Claude's report (optional)"
+        required: false
+        type: string
+        default: ""
+      callback_token:
+        description: "Bearer token for the report callback (optional)"
+        required: false
+        type: string
+        default: ""
   issue_comment:
     types: [created]
   pull_request_review_comment:
@@ -42,17 +52,22 @@ jobs:
           # needs: explore, edit, git branch/commit/push, and gh pr create.
           claude_args: '--allowedTools "Read,Grep,Glob,LS,Write,Edit,MultiEdit,Bash(git:*),Bash(gh pr:*),Bash(ls:*),Bash(cat:*),Bash(node:*),Bash(npm:*),Bash(pnpm:*)"'
       # Claude's final words otherwise vanish into a temp file — surface them
-      # on the run's Summary page so "no PR" always comes with an explanation.
-      - name: Publish Claude's report to the run summary
+      # on the run's Summary page AND send them back to the support desk so
+      # the ticket page shows the outcome.
+      - name: Publish Claude's report
         if: always()
         run: |
           FILE="${{ runner.temp }}/claude-execution-output.json"
+          REPORT=""
+          if [ -f "$FILE" ]; then
+            REPORT=$(jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n\n---\n\n")' "$FILE" 2>/dev/null || true)
+          fi
           {
             echo "## Claude's report"
             echo ""
-            if [ -f "$FILE" ]; then
-              jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n\n---\n\n")' "$FILE" 2>/dev/null || echo "(could not parse Claude output)"
-            else
-              echo "(no output file found)"
-            fi
+            if [ -n "$REPORT" ]; then echo "$REPORT"; else echo "(no text output found)"; fi
           } >> "$GITHUB_STEP_SUMMARY"
+          if [ -n "${{ inputs.callback_url }}" ] && [ -n "$REPORT" ]; then
+            jq -n --arg report "$REPORT" --arg runUrl "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}" '{report: $report, runUrl: $runUrl}' \
+              | curl -s -o /dev/null -X POST "${{ inputs.callback_url }}" -H "Authorization: Bearer ${{ inputs.callback_token }}" -H "content-type: application/json" --data @- || true
+          fi
