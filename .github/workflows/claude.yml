@@ -41,3 +41,18 @@ jobs:
           # Automation mode denies write tools by default — grant what a fix
           # needs: explore, edit, git branch/commit/push, and gh pr create.
           claude_args: '--allowedTools "Read,Grep,Glob,LS,Write,Edit,MultiEdit,Bash(git:*),Bash(gh pr:*),Bash(ls:*),Bash(cat:*),Bash(node:*),Bash(npm:*),Bash(pnpm:*)"'
+      # Claude's final words otherwise vanish into a temp file — surface them
+      # on the run's Summary page so "no PR" always comes with an explanation.
+      - name: Publish Claude's report to the run summary
+        if: always()
+        run: |
+          FILE="${{ runner.temp }}/claude-execution-output.json"
+          {
+            echo "## Claude's report"
+            echo ""
+            if [ -f "$FILE" ]; then
+              jq -r '[.[] | select(.type=="assistant") | .message.content[]? | select(.type=="text") | .text] | join("\n\n---\n\n")' "$FILE" 2>/dev/null || echo "(could not parse Claude output)"
+            else
+              echo "(no output file found)"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
