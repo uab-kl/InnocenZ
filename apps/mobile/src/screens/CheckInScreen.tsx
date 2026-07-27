@@ -287,6 +287,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   label="Check in"
                   holding={holding}
                   progress={progress}
+                  busy={busy}
                   onPress={() => startHold(false)}
                 />
                 <Text style={styles.gpsNote}>
@@ -314,6 +315,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   label="Check out"
                   holding={holding}
                   progress={progress}
+                  busy={busy}
                   onPress={() => startHold(true)}
                 />
                 <Text style={styles.gpsNote}>
@@ -405,23 +407,34 @@ function HoldButton({
   label,
   holding,
   progress,
+  busy,
   onPress,
 }: {
   label: string;
   holding: boolean;
   progress: number;
+  /** The network call from the completed hold is still in flight — keep the
+   * button locked and visibly pending so a slow connection at the venue
+   * doesn't look like a dead tap (no feedback + tappable again). */
+  busy: boolean;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={holding}
-      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent)]}
+      disabled={holding || busy}
+      style={[
+        styles.holdBtn,
+        grad(GRADIENTS.accent, C.accent),
+        busy && styles.holdBtnBusy,
+      ]}
     >
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
         <MapPin size={16} color="#241a08" strokeWidth={2.2} />
-        <Text style={styles.holdText}>{holding ? `Holding ${progress}%` : label}</Text>
+        <Text style={styles.holdText}>
+          {holding ? `Holding ${progress}%` : busy ? 'Please wait…' : label}
+        </Text>
       </View>
     </Pressable>
   );
@@ -598,6 +611,9 @@ const styles = StyleSheet.create({
     padding: 14,
     overflow: 'hidden',
     position: 'relative',
+  },
+  holdBtnBusy: {
+    opacity: 0.6,
   },
   holdFill: {
     position: 'absolute',
