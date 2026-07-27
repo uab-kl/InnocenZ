@@ -285,7 +285,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <>
                 <HoldButton
                   label="Check in"
+                  busyLabel="Checking in…"
                   holding={holding}
+                  busy={busy}
                   progress={progress}
                   onPress={() => startHold(false)}
                 />
@@ -312,7 +314,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 />
                 <HoldButton
                   label="Check out"
+                  busyLabel="Checking out…"
                   holding={holding}
+                  busy={busy}
                   progress={progress}
                   onPress={() => startHold(true)}
                 />
@@ -403,25 +407,38 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
 function HoldButton({
   label,
+  busyLabel,
   holding,
+  busy,
   progress,
   onPress,
 }: {
   label: string;
+  busyLabel: string;
   holding: boolean;
+  busy: boolean;
   progress: number;
   onPress: () => void;
 }) {
+  // Once the hold-fill animation reaches 100% it resets `holding`/`progress`
+  // immediately, but the actual check-in/out request (tracked by `busy`) can
+  // still be in flight on a slow connection. Without reading `busy` here the
+  // button snapped back to its idle label while a request was still pending,
+  // so a slow network read as "nothing happened" — taps were silently
+  // swallowed by the `holding || busy` guard in startHold with no feedback.
+  const pending = holding || busy;
   return (
     <Pressable
       onPress={onPress}
-      disabled={holding}
-      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent)]}
+      disabled={pending}
+      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent), pending && !holding && styles.holdBtnBusy]}
     >
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
         <MapPin size={16} color="#241a08" strokeWidth={2.2} />
-        <Text style={styles.holdText}>{holding ? `Holding ${progress}%` : label}</Text>
+        <Text style={styles.holdText}>
+          {holding ? `Holding ${progress}%` : busy ? busyLabel : label}
+        </Text>
       </View>
     </Pressable>
   );
@@ -598,6 +615,9 @@ const styles = StyleSheet.create({
     padding: 14,
     overflow: 'hidden',
     position: 'relative',
+  },
+  holdBtnBusy: {
+    opacity: 0.6,
   },
   holdFill: {
     position: 'absolute',
