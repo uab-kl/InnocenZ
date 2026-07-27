@@ -487,6 +487,70 @@ export function cancelMyShiftAssignment(
 }
 
 /**
+ * An outlet swap the PR's agency has proposed: work a different outlet's shift
+ * on the same night. Nothing moves until the PR approves — `pending_pr` is the
+ * only live state, the other three are terminal.
+ */
+export type OutletSwapRecord = {
+  id: string;
+  assignmentId: string;
+  status: 'pending_pr' | 'approved' | 'declined' | 'cancelled';
+  /** The agency's reason for the move, shown to the PR. */
+  agencyNote: string | null;
+  prNote: string | null;
+  respondedAt: string | null;
+  createdAt: string;
+  /** Where they are now. */
+  fromOutletName: string | null;
+  fromSlot: string | null;
+  /** Where they would go. Same night — the backend refuses a date change. */
+  toOutletName: string | null;
+  toSlot: string | null;
+  toEventName: string | null;
+  /** Destination shift day as YYYY-MM-DD. */
+  toShiftDate: string;
+};
+
+/** Outlet swaps addressed to this PR, scoped server-side by pr.id. */
+export function fetchMyOutletSwaps(accessToken: string): Promise<OutletSwapRecord[]> {
+  return request<OutletSwapRecord[]>('/outlet-swap/mine', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Accept the move. This is the only call that changes the roster: the backend
+ * repoints the PR's shift assignment at the destination shift inside one
+ * transaction. It can still refuse — 409 when the destination filled up while
+ * this screen was open, or when the request was already answered — so the
+ * caller must surface the message rather than assume success.
+ */
+export function approveOutletSwap(
+  accessToken: string,
+  swapId: string,
+  note?: string,
+): Promise<OutletSwapRecord> {
+  return request<OutletSwapRecord>(`/outlet-swap/mine/${swapId}/approve`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(note ? { note } : {}),
+  });
+}
+
+/** Turn the move down — the PR stays on their original shift. */
+export function declineOutletSwap(
+  accessToken: string,
+  swapId: string,
+  note?: string,
+): Promise<OutletSwapRecord> {
+  return request<OutletSwapRecord>(`/outlet-swap/mine/${swapId}/decline`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(note ? { note } : {}),
+  });
+}
+
+/**
  * File an MC/leave request on one of this PR's own upcoming assignments. Unlike
  * cancel this is not immediate: the row goes to 'leave_pending' (reason stored
  * for the agency) until the agency approves (excused, no penalty) or rejects
