@@ -11,7 +11,7 @@ import { useSession } from '../lib/session';
 import { IzButton } from '../components/ui';
 import { Eye, EyeOff, Lock, LogIn, Phone } from '../components/icons';
 
-export function LoginScreen() {
+export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void } = {}) {
   const { signIn } = useSession();
   const [identifier, setIdentifier] = useState('60123456789');
   const [password, setPassword] = useState('');
@@ -93,6 +93,14 @@ export function LoginScreen() {
         disabled={busy || !identifier.trim() || !password}
         style={{ marginTop: 8 }}
       />
+
+      {onCreateAccount && (
+        <Pressable onPress={onCreateAccount} hitSlop={8} style={styles.signUpLink}>
+          <Text style={styles.signUpText}>
+            New here? <Text style={styles.signUpAccent}>Create an account</Text>
+          </Text>
+        </Pressable>
+      )}
     </View>
   );
 }
@@ -173,5 +181,20 @@ const styles = StyleSheet.create({
     lineHeight: C.fsTiny * 1.4,
     color: C.red,
     marginBottom: 10,
+  },
+  signUpLink: {
+    alignSelf: 'center',
+    marginTop: 18,
+    paddingVertical: 6,
+  },
+  signUpText: {
+    fontFamily: F.manrope,
+    fontSize: C.fsTiny,
+    color: C.prMuted,
+  },
+  signUpAccent: {
+    fontFamily: F.sora,
+    fontWeight: '700',
+    color: C.accent,
   },
 });

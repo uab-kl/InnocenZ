@@ -3,7 +3,7 @@
  * Identity linked to admin backend PR "Vicky" (+60123456789).
  * Rebuild stamp: 2026-07-20T00:30Z
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
 import { C, ensureWebFonts } from '../theme/theme';
 import { SessionProvider, useSession } from '../lib/session';
@@ -17,6 +17,7 @@ import { PhoneFrame } from '../components/PhoneFrame';
 import { BottomNav } from '../components/BottomNav';
 import { TopBar } from '../components/TopBar';
 import { LoginScreen } from '../screens/LoginScreen';
+import { SignUpScreen } from '../screens/SignUpScreen';
 import { ShiftsScreen } from '../screens/ShiftsScreen';
 import { CheckInScreen } from '../screens/CheckInScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
@@ -63,6 +64,7 @@ function LoggedInShell() {
 
 function AppShell() {
   const { me, booting } = useSession();
+  const [authView, setAuthView] = useState<'signIn' | 'signUp'>('signIn');
 
   if (booting) {
     return (
@@ -77,7 +79,11 @@ function AppShell() {
   if (!me) {
     return (
       <PhoneFrame scroll={false}>
-        <LoginScreen />
+        {authView === 'signUp' ? (
+          <SignUpScreen onBackToSignIn={() => setAuthView('signIn')} />
+        ) : (
+          <LoginScreen onCreateAccount={() => setAuthView('signUp')} />
+        )}
       </PhoneFrame>
     );
   }

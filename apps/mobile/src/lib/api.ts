@@ -107,6 +107,74 @@ export function login(identifier: string, password: string): Promise<LoginResult
   return request<LoginResult>('/auth/login', { method: 'POST', body: JSON.stringify(payload) });
 }
 
+/* ------------------------------------------------------------------ *
+ * PR self sign-up (WhatsApp OTP)
+ *
+ * Agency + outlet accounts verify by EMAIL; only PRs verify by WhatsApp, so
+ * these three calls are the PR-only path. The backend half is Build
+ * Steps §4B and does NOT exist yet — until it lands these resolve to
+ * 404 and SignUpScreen surfaces the error normally.
+ *
+ * `registerPr` deliberately sends NO roleId. `POST /auth/register`
+ * currently takes one from the client while being unauthenticated
+ * (auth.routes.ts:12 + auth.schema.ts:29), which lets a caller mint any
+ * role. The OTP path must derive the PR role server-side from the
+ * verified phone_verification row instead — see Build Steps 4B-4.
+ * ------------------------------------------------------------------ */
+
+/** Name + id only — enough to pick an agency during sign-up, nothing more. */
+export type PublicAgency = { id: string; name: string };
+
+/**
+ * Agency list for the sign-up wizard. Must live under /auth to be reachable:
+ * `GET /agency` sits below `v1Router.use(authenticateJWT)` (router/v1.ts:32)
+ * so a PR who has no account yet gets a 401 from it. Not built yet — the
+ * screen falls back to typing the agency name by hand.
+ */
+export function fetchPublicAgencies(): Promise<PublicAgency[]> {
+  return request<PublicAgency[]>('/auth/agencies');
+}
+
+/** Seconds the code stays valid, and how long before Resend is allowed. */
+export type OtpSendResult = { expiresInSec: number; resendAfterSec: number };
+
+/** Receipt proving this number passed — handed back to registerPr. */
+export type OtpVerifyResult = { verificationId: string };
+
+export function sendPrOtp(phoneNum: string): Promise<OtpSendResult> {
+  return request<OtpSendResult>('/auth/otp/send', {
+    method: 'POST',
+    body: JSON.stringify({ phoneNum, channel: 'whatsapp' }),
+  });
+}
+
+export function verifyPrOtp(phoneNum: string, code: string): Promise<OtpVerifyResult> {
+  return request<OtpVerifyResult>('/auth/otp/verify', {
+    method: 'POST',
+    body: JSON.stringify({ phoneNum, code }),
+  });
+}
+
+export function registerPr(input: {
+  verificationId: string;
+  phoneNum: string;
+  username: string;
+  password: string;
+  email?: string;
+}): Promise<null> {
+  return request<null>('/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({
+      verificationId: input.verificationId,
+      phoneNum: input.phoneNum,
+      username: input.username,
+      password: input.password,
+      // Email stays optional — RegisterSchema already allows it to be absent.
+      ...(input.email ? { email: input.email } : {}),
+    }),
+  });
+}
+
 export function fetchMe(accessToken: string): Promise<Me> {
   return request<Me>('/auth/me', { headers: { Authorization: `Bearer ${accessToken}` } });
 }
