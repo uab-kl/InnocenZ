@@ -57,7 +57,9 @@ export function useRosterSlots(params: {
 			// Only the week's shifts; assignments outside this window are dropped.
 			shifts: shiftsQuery.data?.data ?? [],
 			assignments: assignmentsQuery.data?.data ?? [],
-			prNameById: new Map(prs.map((p) => [p.id, p.name])),
+			// The roster identifies PRs by their working nickname, not their
+			// legal name; `nickname` is nullable, so full name is the fallback.
+			prNameById: new Map(prs.map((p) => [p.id, p.nickname?.trim() || p.name])),
 			outletNameById: new Map(outlets.map((o) => [o.id, o.name])),
 		});
 	}, [

@@ -1,4 +1,15 @@
-import { date, integer, jsonb, numeric, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { sql } from 'drizzle-orm';
+import {
+  date,
+  index,
+  integer,
+  jsonb,
+  numeric,
+  timestamp,
+  uniqueIndex,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
@@ -49,6 +60,10 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   disputeReason: varchar('dispute_reason', { length: 1000 }),
   disputedAt: timestamp('disputed_at', { withTimezone: true }),
   disputeNote: varchar('dispute_note', { length: 1000 }),
+  // NOTE: these three dispute_* columns are superseded by
+  // PaymentVoucherDisputeTable (migration 0051) and kept only so the current
+  // controller keeps working. Read new code against that table; a follow-up
+  // migration drops these once nothing reads them.
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),
@@ -67,6 +82,11 @@ export const PaymentVoucherLineTable = MainSchema.table('payment_voucher_line', 
   quantity: integer('quantity').notNull().default(1),
   amount: numeric('amount', { precision: 12, scale: 2 }).notNull().default('0'),
   ref: varchar('ref', { length: 100 }),
+  /**
+   * Which bucket this line belongs to (migration 0051). NULL means the row
+   * predates classification — distinguishable from a genuine 'other'. New
+   * writes should always set it.
+   */
   // Proof photo(s) the PR snaps when self-logging (one or many). Same jsonb
   // array-of-paths pattern as user_profile.portfolio_photos; agency verifies
   // against these. Null when the entry carries no proof (OCR scan, wages seal).
@@ -78,10 +98,106 @@ export const PaymentVoucherLineTable = MainSchema.table('payment_voucher_line', 
   updatedBy: varchar('updated_by').notNull().default('system'),
 });
 
+/** How a dispute ended. NULL outcome = still awaiting agency review. */
+export const paymentVoucherDisputeOutcomeValues = ['accepted', 'rejected', 'withdrawn'] as const;
+export type PaymentVoucherDisputeOutcome = (typeof paymentVoucherDisputeOutcomeValues)[number];
+export const paymentVoucherDisputeOutcomeEnum = MainSchema.enum(
+  'payment_voucher_dispute_outcome',
+  paymentVoucherDisputeOutcomeValues,
+);
+
+/**
+ * Which part of a day's earnings is being disputed.
+ *
+ * MUST stay in step with `prReceiptKindValues` in
+ * `@/schema/payment-voucher.schema` — the same vocabulary a voucher line
+ * already carries inside its packed `ref`. Not imported from there because
+ * that module imports this one; duplicated deliberately, with this note.
+ */
+export const paymentVoucherDisputeComponentValues = [
+  'wages',
+  'drinks',
+  'tips',
+  'others',
+] as const;
+export type PaymentVoucherDisputeComponent =
+  (typeof paymentVoucherDisputeComponentValues)[number];
+export const paymentVoucherDisputeComponentEnum = MainSchema.enum(
+  'payment_voucher_dispute_component',
+  paymentVoucherDisputeComponentValues,
+);
+
+/**
+ * One dispute a PR raised on a single shift DAY and a single COMPONENT of it
+ * (migration 0051).
+ *
+ * A PR may dispute freely across a month, but `UNIQUE (voucherId, disputeDate,
+ * component)` allows each day+component exactly once — so 23/7 wages and 23/7
+ * drinks are separate disputes, while 23/7 wages twice is refused by the
+ * database rather than by controller convention.
+ *
+ * Deliberately NOT keyed to a `PaymentVoucherLineTable` row: lines are deleted
+ * and re-inserted wholesale on every voucher update (repository.ts:61), and
+ * that rewrite is exactly what happens when the agency accepts — a line-keyed
+ * dispute would destroy the row it points at at the moment it succeeded.
+ */
+export const PaymentVoucherDisputeTable = MainSchema.table('payment_voucher_dispute', {
+  id: uuid('id').defaultRandom().notNull().primaryKey(),
+  voucherId: uuid('voucher_id')
+    .notNull()
+    .references(() => PaymentVoucherTable.id, { onDelete: 'cascade' }),
+  /** The disputed shift day — pairs with PaymentVoucherLineTable.lineDate. */
+  disputeDate: date('dispute_date', { mode: 'string' }).notNull(),
+  component: paymentVoucherDisputeComponentEnum('component').notNull(),
+  reason: varchar('reason', { length: 1000 }),
+  note: varchar('note', { length: 1000 }),
+  raisedAt: timestamp('raised_at', { withTimezone: true }).defaultNow().notNull(),
+  /**
+   * What the voucher said when raised. Compute server-side from the lines —
+   * never accept it from the client, it is the baseline of a money claim.
+   */
+  disputedAmount: numeric('disputed_amount', { precision: 12, scale: 2 }),
+  /** What the PR says it should be. */
+  claimedAmount: numeric('claimed_amount', { precision: 12, scale: 2 }),
+  /**
+   * Evidence, required on new rows by a NOT VALID check constraint. Same
+   * array-of-paths shape as PaymentVoucherLineTable.proofPhotos. Treat as
+   * immutable once submitted, or the agency's decision stops referring to what
+   * they actually saw.
+   */
+  proofPhotos: jsonb('proof_photos').$type<string[]>(),
+  /** Receipts pointed at, by the reference packed in line.ref — not line id. */
+  receiptRefs: jsonb('receipt_refs').$type<string[]>(),
+  outcome: paymentVoucherDisputeOutcomeEnum('outcome'),
+  resolvedAt: timestamp('resolved_at', { withTimezone: true }),
+  resolvedBy: varchar('resolved_by'),
+  resolutionNote: varchar('resolution_note', { length: 1000 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+    createdBy: varchar('created_by').notNull().default('system'),
+    updatedBy: varchar('updated_by').notNull().default('system'),
+  },
+  (table) => [
+    // One dispute per day per component — 23/7 wages and 23/7 drinks stay
+    // separate, 23/7 wages twice is refused by the database.
+    uniqueIndex('payment_voucher_dispute_one_per_day_component').on(
+      table.voucherId,
+      table.disputeDate,
+      table.component,
+    ),
+    // The agency queue: everything still awaiting review, oldest first.
+    index('payment_voucher_dispute_open_idx')
+      .on(table.raisedAt)
+      .where(sql`${table.outcome} is null`),
+  ],
+);
+
 export type PaymentVoucherType = typeof PaymentVoucherTable.$inferSelect;
 export type PaymentVoucherInsertType = typeof PaymentVoucherTable.$inferInsert;
 export type PaymentVoucherLineType = typeof PaymentVoucherLineTable.$inferSelect;
 export type PaymentVoucherLineInsertType = typeof PaymentVoucherLineTable.$inferInsert;
+export type PaymentVoucherDisputeType = typeof PaymentVoucherDisputeTable.$inferSelect;
+export type PaymentVoucherDisputeInsertType = typeof PaymentVoucherDisputeTable.$inferInsert;
 
 export type PaymentVoucherWithLines = PaymentVoucherType & {
   lines: PaymentVoucherLineType[];

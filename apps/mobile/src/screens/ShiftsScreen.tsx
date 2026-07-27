@@ -5,7 +5,7 @@
  * the tonight shift card. Identity comes from the backend; shift data mirrors
  * the prototype seeds until the backend models shifts.
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
@@ -21,6 +21,8 @@ import { type ShiftAssignmentRecord } from '../lib/api';
 import { useViewportSize } from '../lib/viewport';
 import { Section } from '../components/Section';
 import { AgencySchedulePanel } from '../components/AgencySchedulePanel';
+import { OutletSwapRequests } from '../components/OutletSwapRequests';
+import { useOutletSwaps } from '../lib/outlet-swaps';
 import { Avatar, EmptyDashed, IzButton, LabelWithIcon } from '../components/ui';
 import {
   Briefcase,
@@ -75,9 +77,14 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
 
   // Real shift assignments for this PR — shared with Check-In / timetable so
   // On duty / Complete badges flip as soon as attendance stamps change.
-  const { assignments, phase: attendancePhase } = useActiveShift();
+  const { assignments, phase: attendancePhase, refresh } = useActiveShift();
+  // Approving a swap repoints the assignment, so the shift list above is stale
+  // the moment it succeeds — re-read it rather than leaving the old outlet on
+  // screen.
+  const outletSwaps = useOutletSwaps({ onChanged: refresh });
   const { awaiting } = useAwaitingLastWeekPv();
   const todoItems = awaiting ? [awaiting.todo] : [];
+  const todoCount = todoItems.length + outletSwaps.pending.length;
   const shifts = assignments
     .filter(
       (a) =>
@@ -104,6 +111,16 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     todo: false,
     agency: true,
   });
+  // To-do starts collapsed, which would hide a swap request behind a tap — and
+  // an unseen request is not a notification. Open it once when one arrives,
+  // without fighting the user if they then close it.
+  const [swapAlerted, setSwapAlerted] = useState(false);
+  useEffect(() => {
+    if (outletSwaps.pending.length > 0 && !swapAlerted) {
+      setSwapAlerted(true);
+      setOpen((prev) => ({ ...prev, todo: true }));
+    }
+  }, [outletSwaps.pending.length, swapAlerted]);
 
   const firstName = me?.profile.firstName?.split(' ')[0] ?? me?.username ?? 'PR';
   // .iz-pr-page-header__title: clamp(1.4rem, 5.2vw, 1.75rem)
@@ -155,8 +172,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
             />
             <HubTab
               label="TO-DO"
-              value={String(todoItems.length)}
-              valueColor={todoItems.length > 0 ? C.amber : C.txt}
+              value={String(todoCount)}
+              valueColor={todoCount > 0 ? C.amber : C.txt}
               on={open.todo}
               onPress={() => toggleHubSection('todo')}
             />
@@ -200,7 +217,11 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               open={open.todo}
               onToggle={(next) => toggleSection('todo', next)}
             >
-              {todoItems.length === 0 ? (
+              {/* A swap request has no push transport, so surfacing it here IS
+                  the notification — and it sits above the PV to-dos because it
+                  is the only item that changes where the PR works tonight. */}
+              <OutletSwapRequests swaps={outletSwaps} />
+              {todoItems.length === 0 && outletSwaps.pending.length === 0 ? (
                 <EmptyDashed>Nothing to do</EmptyDashed>
               ) : (
                 <View style={{ gap: 10 }}>
