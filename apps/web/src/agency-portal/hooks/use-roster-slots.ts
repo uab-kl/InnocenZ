@@ -59,6 +59,15 @@ export function useRosterSlots(params: {
 			assignments: assignmentsQuery.data?.data ?? [],
 			prNameById: new Map(prs.map((p) => [p.id, p.name])),
 			outletNameById: new Map(outlets.map((o) => [o.id, o.name])),
+			// The outlet's real map pin and fence, straight off the outlet rows
+			// this hook already loads. The live GPS panel draws the venue and the
+			// fence circle from these — no hardcoded coordinate table.
+			outletGeoById: new Map(
+				outlets.map((o) => [
+					o.id,
+					{ lat: o.lat, lng: o.lng, geoFenceRadius: o.geoFenceRadius },
+				]),
+			),
 		});
 	}, [
 		shiftsQuery.data,

@@ -351,6 +351,27 @@
       "when": 1784500000033,
       "tag": "0049_shift_assignment_leave_status",
       "breakpoints": true
+    },
+    {
+      "idx": 50,
+      "version": "7",
+      "when": 1784500000034,
+      "tag": "0050_shift_assignment_check_in_location",
+      "breakpoints": true
+    },
+    {
+      "idx": 51,
+      "version": "7",
+      "when": 1785135680057,
+      "tag": "0053_lovely_rawhide_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "7",
+      "when": 1785139602605,
+      "tag": "0054_aromatic_tombstone",
+      "breakpoints": true
     }
   ]
 }

@@ -11,10 +11,13 @@ import {
   addMyReceiptLine,
   deleteMyReceiptLine,
   fetchMyCurrentWeek,
+  submitMyReceipt,
   updateMyReceiptLine,
   type PrCurrentWeek,
   type PrReceiptLine,
   type PrReceiptLineInput,
+  type PrReceiptRecord,
+  type PrReceiptSubmitInput,
 } from './api';
 
 type PrEarningsState = {
@@ -27,6 +30,8 @@ type PrEarningsState = {
   receiptLines: PrReceiptLine[];
   refresh: () => Promise<void>;
   addLine: (input: PrReceiptLineInput) => Promise<PrReceiptLine>;
+  /** Saves one whole scanned/self-logged receipt (header + items) in one call. */
+  submitReceipt: (input: PrReceiptSubmitInput) => Promise<PrReceiptRecord>;
   updateLine: (id: string, input: Partial<PrReceiptLineInput>) => Promise<PrReceiptLine>;
   deleteLine: (id: string) => Promise<void>;
 };
@@ -66,6 +71,16 @@ export function PrEarningsProvider({ children }: { children: React.ReactNode }) 
     [token, refresh],
   );
 
+  const submitReceipt = useCallback(
+    async (input: PrReceiptSubmitInput) => {
+      if (!token) throw new Error('Not signed in');
+      const receipt = await submitMyReceipt(token, input);
+      await refresh();
+      return receipt;
+    },
+    [token, refresh],
+  );
+
   const updateLine = useCallback(
     async (id: string, input: Partial<PrReceiptLineInput>) => {
       if (!token) throw new Error('Not signed in');
@@ -92,8 +107,8 @@ export function PrEarningsProvider({ children }: { children: React.ReactNode }) 
   );
 
   const value = useMemo<PrEarningsState>(
-    () => ({ current, loading, error, lines, receiptLines, refresh, addLine, updateLine, deleteLine }),
-    [current, loading, error, lines, receiptLines, refresh, addLine, updateLine, deleteLine],
+    () => ({ current, loading, error, lines, receiptLines, refresh, addLine, submitReceipt, updateLine, deleteLine }),
+    [current, loading, error, lines, receiptLines, refresh, addLine, submitReceipt, updateLine, deleteLine],
   );
 
   return <PrEarningsContext.Provider value={value}>{children}</PrEarningsContext.Provider>;

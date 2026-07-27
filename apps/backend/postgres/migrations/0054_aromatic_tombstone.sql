@@ -1,0 +1,1 @@
+ALTER TABLE "main"."payment_voucher_receipt" ADD COLUMN "note" varchar(1000);

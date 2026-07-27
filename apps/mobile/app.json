@@ -34,6 +34,14 @@
     },
     "plugins": [
       [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "InnocenZ uses your location only when you check in or out of a shift, to confirm you are at the venue.",
+          "locationWhenInUsePermission": "InnocenZ uses your location only when you check in or out of a shift, to confirm you are at the venue.",
+          "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
         "expo-splash-screen",
         {
           "image": "./assets/images/splash-icon.png",

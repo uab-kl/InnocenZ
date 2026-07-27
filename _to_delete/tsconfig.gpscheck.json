@@ -1,0 +1,16 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/agency-portal/lib/gps-locations.ts",
+    "src/agency-portal/lib/backend-shift-map.ts",
+    "src/agency-portal/lib/agency-demo.ts",
+    "src/agency-portal/hooks/use-roster-slots.ts",
+    "src/agency-portal/hooks/use-outlet-today.ts",
+    "src/agency-portal/lib/pr-check-in-geofence.ts",
+    "src/agency-portal/lib/pr-shift-outlet.ts",
+    "src/services/shift-assignment/index.ts",
+    "src/agency-portal/components/agency/AgencyGpsPanel.tsx",
+    "src/agency-portal/components/agency/GpsRoadMap.tsx",
+    "src/vite-env.d.ts"
+  ]
+}

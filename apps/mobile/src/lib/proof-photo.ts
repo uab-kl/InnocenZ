@@ -59,9 +59,20 @@ export function downscaleToDataUrl(file: Blob, maxPx = 1024, quality = 0.7): Pro
   });
 }
 
-/** Snap / pick proof photos (web only). Downscales each before returning. */
+/**
+ * Snap / pick proof photos. On the phone this opens the real camera (via
+ * receipt-ocr's capture helper, expo-image-picker); on web it keeps the
+ * existing file-input flow. Downscales each before returning.
+ */
 export function pickProofPhotos(onPicked: (urls: string[]) => void) {
-  if (Platform.OS !== 'web') return;
+  if (Platform.OS !== 'web') {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    const { captureReceiptPhoto } = require('./receipt-ocr') as typeof import('./receipt-ocr');
+    void captureReceiptPhoto().then((shot) => {
+      if (shot?.dataUrl) onPicked([shot.dataUrl]);
+    });
+    return;
+  }
   const doc = (globalThis as { document?: { createElement: (t: string) => HtmlFileInput } }).document;
   if (!doc) return;
   const input = doc.createElement('input');

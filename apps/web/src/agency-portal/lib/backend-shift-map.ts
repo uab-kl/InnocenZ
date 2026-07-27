@@ -150,13 +150,58 @@ function num(value: string | null | undefined): number {
  * the `prName` the assignment list joins in. Demo-only fields (swaps, floor
  * metrics, pay tiers) are left unset until their backend features land.
  */
+/**
+ * Numeric columns arrive as strings (numeric/decimal) or numbers (integer), and
+ * as null when unset. Anything that isn't a finite number becomes undefined, so
+ * a missing pin reads as "no coordinate" instead of a silent 0,0 off Africa.
+ */
+function numOrUndefined(
+	value: string | number | null | undefined,
+): number | undefined {
+	if (value === null || value === undefined || value === "") return undefined;
+	const n = Number(value);
+	return Number.isFinite(n) ? n : undefined;
+}
+
+/**
+ * The roster status a live view should show. `rosterStatusFromAssignment` maps
+ * the stored enum for the planning grid; here the timestamps get the final say,
+ * because a PR who has checked in and not checked out is on duty right now no
+ * matter what the row's enum says.
+ */
+function liveRosterStatus(a: ShiftAssignment): RosterSlotStatus {
+	const working =
+		!!a.checkInAt &&
+		!a.checkOutAt &&
+		a.status !== "cancelled" &&
+		a.status !== "no_show" &&
+		a.status !== "leave_approved";
+	return working ? "on-duty" : rosterStatusFromAssignment(a.status);
+}
+
 export function rosterSlotsFromBackend(input: {
 	shifts: Shift[];
 	assignments: ShiftAssignment[];
 	prNameById?: Map<string, string>;
 	outletNameById?: Map<string, string>;
+	/**
+	 * The outlet's saved map pin + fence radius, keyed by outlet id. Read from
+	 * the outlet row through the shift's FK — the coordinates are never stored
+	 * on the assignment. Absent entries mean that outlet has not dropped a pin,
+	 * which is exactly the case the backend leaves unfenced.
+	 */
+	outletGeoById?: Map<
+		string,
+		{ lat: string | null; lng: string | null; geoFenceRadius: number | null }
+	>;
 }): AgencyRosterSlot[] {
-	const { shifts, assignments, prNameById, outletNameById } = input;
+	const {
+		shifts,
+		assignments,
+		prNameById,
+		outletNameById,
+		outletGeoById,
+	} = input;
 	const shiftById = new Map(shifts.map((s) => [s.id, s]));
 
 	const slots: AgencyRosterSlot[] = [];
@@ -165,6 +210,7 @@ export function rosterSlotsFromBackend(input: {
 		const shift = shiftById.get(a.shiftId);
 		if (!shift) continue;
 		const window = shiftWindow(shift.slot);
+		const outletGeo = outletGeoById?.get(shift.outletId);
 		slots.push({
 			id: a.id,
 			prId: a.prId,
@@ -178,9 +224,21 @@ export function rosterSlotsFromBackend(input: {
 			shiftStart: window.start,
 			shiftEnd: window.end,
 			estPayout: estPayoutFor(window, shift.payPerHour),
-			status: rosterStatusFromAssignment(a.status),
+			// Stamped in and not yet out = genuinely on the floor. The status map
+			// alone cannot see this (a "confirmed" row is scheduled until the PR
+			// actually arrives), and the live GPS panel keys off "on-duty", so
+			// without this a real check-in would never appear on the map.
+			status: liveRosterStatus(a),
 			checkedInAt: a.checkInAt ?? undefined,
 			checkedOutAt: a.checkOutAt ?? undefined,
+			// Real, server-verified position — see the AgencyRosterSlot doc.
+			checkInLat: numOrUndefined(a.checkInLat),
+			checkInLng: numOrUndefined(a.checkInLng),
+			checkInDistanceM: numOrUndefined(a.checkInDistanceM),
+			checkInAccuracyM: numOrUndefined(a.checkInAccuracyM),
+			outletLat: numOrUndefined(outletGeo?.lat),
+			outletLng: numOrUndefined(outletGeo?.lng),
+			outletGeoFenceRadiusM: numOrUndefined(outletGeo?.geoFenceRadius),
 			noShowFlag: a.status === "no_show" ? true : undefined,
 			cancelledAt: a.status === "cancelled" ? a.updatedAt : undefined,
 			agencyId: a.agencyId,

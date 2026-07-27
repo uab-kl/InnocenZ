@@ -8,7 +8,10 @@ const router = Router();
 router.get('/', outletController.list.bind(outletController));
 // Must precede `/:id` so "memberships" isn't captured as an outlet id.
 router.get('/memberships', outletController.listMemberships.bind(outletController));
+// Same reason: "geocode" must not be captured as an outlet id.
+router.get('/geocode', outletController.geocode.bind(outletController));
 router.get('/:id', outletController.getById.bind(outletController));
+router.get('/:id/geocode', outletController.geocodeOwnAddress.bind(outletController));
 router.post('/', outletController.create.bind(outletController));
 router.put('/:id', outletController.update.bind(outletController));
 router.patch('/:id/geo-fence', outletController.setGeoFence.bind(outletController));

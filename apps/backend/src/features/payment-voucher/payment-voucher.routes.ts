@@ -11,6 +11,7 @@ router.get('/mine/current-week', paymentVoucherController.getMyCurrentWeek.bind(
 router.get('/mine/last-week', paymentVoucherController.getMyLastWeek.bind(paymentVoucherController));
 router.get('/mine/history', paymentVoucherController.getMyHistory.bind(paymentVoucherController));
 router.post('/mine/lines', paymentVoucherController.addMyLine.bind(paymentVoucherController));
+router.post('/mine/receipts', paymentVoucherController.addMyReceipt.bind(paymentVoucherController));
 router.patch('/mine/lines/:lineId', paymentVoucherController.updateMyLine.bind(paymentVoucherController));
 router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(paymentVoucherController));
 

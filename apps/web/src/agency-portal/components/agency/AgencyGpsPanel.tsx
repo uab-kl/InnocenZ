@@ -9,6 +9,7 @@ import type {
 } from '@agency-portal/lib/agency-demo';
 import {
   buildGpsTrackingRows,
+  GEOFENCE_METERS,
   gpsMapBounds,
   mapsUrlForCoord,
   OUTLET_GPS,
@@ -102,7 +103,11 @@ export function AgencyGpsPanel({
           const bounds = gpsMapBounds(outletRows);
           const pin = outletPins[0] ?? {
             outlet,
+            // Only reached when the group somehow has no rows; the real pin
+            // travels on the rows themselves, from the outlet's saved location.
             coord: OUTLET_GPS[outlet] ?? OUTLET_GPS['Velvet 23'],
+            radiusM: GEOFENCE_METERS,
+            unpinned: true,
           };
           const outletInRange = outletRows.filter((r) => r.inRange).length;
 
@@ -129,7 +134,9 @@ export function AgencyGpsPanel({
                         {outlet}
                       </span>
                       <span className="iz-roster-gps-outlet-meta">
-                        {outletInRange}/{outletRows.length} in geofence
+                        {pin.unpinned
+                          ? 'No map pin — not fenced'
+                          : `${outletInRange}/${outletRows.length} in geofence · ${pin.radiusM ?? GEOFENCE_METERS} m`}
                       </span>
                     </div>
                     <a
@@ -174,12 +181,28 @@ export function AgencyGpsPanel({
                                 </IzPill>
                               </div>
                               <span className="iz-roster-gps-row-meta">
-                                {row.meters} m
-                                {row.gpsFallback
-                                  ? ' · Fallback'
-                                  : row.inRange
-                                    ? ' · In geofence'
-                                    : ' · Outside'}
+                                {/*
+                                  An estimated row has no device fix behind it,
+                                  so its distance is not a measurement and must
+                                  not be shown as one. Same for an unpinned
+                                  venue: nothing was fenced, so nothing can be
+                                  reported as in or out of it.
+                                */}
+                                {row.estimated
+                                  ? 'No GPS recorded'
+                                  : `${Math.round(row.meters)} m`}
+                                {row.estimated
+                                  ? ' · Estimated'
+                                  : row.gpsFallback
+                                    ? ' · Fallback'
+                                    : row.outletUnpinned
+                                      ? ' · Venue not pinned'
+                                      : row.inRange
+                                        ? ' · In geofence'
+                                        : ' · Outside'}
+                                {!row.estimated && row.accuracyM
+                                  ? ` · ±${Math.round(row.accuracyM)} m`
+                                  : ''}
                               </span>
                             </div>
                           </div>

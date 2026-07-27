@@ -26,6 +26,15 @@ export const UpdateGeoFenceSchema = z.object({
   geoFenceRadius: z.number().int().min(10).max(1000).optional(),
 });
 
+/**
+ * Free-text address lookup. Read-only: the result is a SUGGESTION the operator
+ * confirms via PATCH /outlet/:id/geo-fence. Nothing here saves a pin, because
+ * saving a pin is what switches hard geofencing on for that venue.
+ */
+export const GeocodeQuerySchema = z.object({
+  address: z.string().trim().min(3, 'Enter at least 3 characters to search').max(500),
+});
+
 export const AddOutletMemberSchema = z.object({
   userId: z.string().uuid('Invalid user ID'),
   subRole: z.enum(outletUserSubRoleValues),

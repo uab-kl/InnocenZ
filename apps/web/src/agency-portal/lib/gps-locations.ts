@@ -79,6 +79,22 @@ export interface GpsTrackingRow {
   gpsFallback?: boolean;
   prCoord: GeoCoord;
   outletCoord: GeoCoord;
+  /**
+   * True when `prCoord` is NOT a real device fix — no GPS was stored for this
+   * stamp, so the position is the demo ring around the venue. Nothing that
+   * reads as evidence (distance, in/out of fence) should be presented as fact
+   * on an estimated row; the UI labels them instead.
+   */
+  estimated?: boolean;
+  /** The outlet's own fence radius in metres — 50 only when it has none set. */
+  radiusM: number;
+  /** The device's self-reported confidence radius at the stamp, when stored. */
+  accuracyM?: number;
+  /**
+   * True when the venue has no saved pin, so `outletCoord` is a stand-in. The
+   * backend leaves these outlets unfenced, and so does this panel.
+   */
+  outletUnpinned?: boolean;
 }
 
 export interface GpsMapBounds {
@@ -326,6 +342,21 @@ function boundsFromCoords(coords: GeoCoord[], pad = 0.0018): GpsMapBounds {
   };
 }
 
+/**
+ * Today's live GPS rows for the agency map.
+ *
+ * Both coordinates here are REAL wherever real data exists: the venue comes
+ * from the outlet's own saved pin, and the PR dot comes from the fix the
+ * phone sent at check-in, which the backend already verified against that pin
+ * and stored. The distance shown is the backend's own haversine result — the
+ * number the fence was actually judged on — not a second, slightly different
+ * measurement taken here.
+ *
+ * The hash-seeded ring below survives for exactly one reason: demo roster
+ * slots, and rows stamped before geofencing shipped, have no fix at all. Those
+ * rows are flagged `estimated` so the panel can say so rather than let an
+ * invented dot pass for evidence. Do not extend that path to real slots.
+ */
 export function buildGpsTrackingRows(
   roster: AgencyRosterSlot[],
   agencyPRs: AgencyManagedPR[],
@@ -338,10 +369,30 @@ export function buildGpsTrackingRows(
   );
 
   return slots.map((slot) => {
-    const outletCoord = OUTLET_GPS[slot.outlet] ?? OUTLET_GPS['Velvet 23'];
-    const prCoord = coordOnDutyAtOutlet(outletCoord, slot.prId);
-    const meters = metersBetween(prCoord, outletCoord);
-    const status = 'on-duty' as const;
+    // The outlet's saved pin wins outright. OUTLET_GPS only answers for the
+    // five demo venues, and a real outlet that has dropped a pin never reaches
+    // it — that table is a demo seed, not a location source.
+    const pinned = slot.outletLat != null && slot.outletLng != null;
+    const outletCoord: GeoCoord = pinned
+      ? { lat: slot.outletLat as number, lng: slot.outletLng as number }
+      : (OUTLET_GPS[slot.outlet] ?? OUTLET_GPS['Velvet 23']);
+
+    // The venue's own fence, not a global constant. GEOFENCE_METERS is only the
+    // default an outlet inherits when it has never set one.
+    const radiusM = slot.outletGeoFenceRadiusM ?? GEOFENCE_METERS;
+
+    const hasFix = slot.checkInLat != null && slot.checkInLng != null;
+    const prCoord: GeoCoord = hasFix
+      ? { lat: slot.checkInLat as number, lng: slot.checkInLng as number }
+      : coordOnDutyAtOutlet(outletCoord, slot.prId);
+
+    // Prefer the server's stored distance: it is what the fence was decided on,
+    // and recomputing it here with a different formula would let the panel
+    // disagree with the decision it is reporting.
+    const meters =
+      hasFix && slot.checkInDistanceM != null
+        ? slot.checkInDistanceM
+        : metersBetween(prCoord, outletCoord);
 
     const gpsFallback =
       activePrId === slot.prId && prCheckInMeta?.gpsFallback === true;
@@ -351,10 +402,16 @@ export function buildGpsTrackingRows(
       prId: slot.prId,
       prName: resolveRosterPrName(slot.prId, slot.prName, agencyPRs),
       outlet: slot.outlet,
-      status,
+      status: 'on-duty' as const,
       meters: gpsFallback ? Math.max(meters, 120) : meters,
-      inRange: gpsFallback ? false : meters <= GEOFENCE_METERS,
+      // An unpinned venue is not fenced anywhere in the system, so this cannot
+      // claim the PR is out of range — there is no range to be out of.
+      inRange: gpsFallback ? false : !pinned || meters <= radiusM,
       gpsFallback,
+      estimated: !hasFix,
+      radiusM,
+      accuracyM: slot.checkInAccuracyM,
+      outletUnpinned: !pinned,
       prCoord,
       outletCoord,
     };
@@ -363,13 +420,25 @@ export function buildGpsTrackingRows(
 
 export function uniqueOutletPins(
   rows: GpsTrackingRow[],
-): { outlet: string; coord: GeoCoord }[] {
+): { outlet: string; coord: GeoCoord; radiusM: number; unpinned: boolean }[] {
   const seen = new Set<string>();
-  const pins: { outlet: string; coord: GeoCoord }[] = [];
+  const pins: {
+    outlet: string;
+    coord: GeoCoord;
+    radiusM: number;
+    unpinned: boolean;
+  }[] = [];
   for (const row of rows) {
     if (seen.has(row.outlet)) continue;
     seen.add(row.outlet);
-    pins.push({ outlet: row.outlet, coord: row.outletCoord });
+    // Radius travels with the pin so the drawn circle is the fence the server
+    // actually enforces for THIS venue, not a fixed 50 m everywhere.
+    pins.push({
+      outlet: row.outlet,
+      coord: row.outletCoord,
+      radiusM: row.radiusM,
+      unpinned: !!row.outletUnpinned,
+    });
   }
   return pins;
 }
@@ -396,9 +465,17 @@ export function mapsDirectionsUrl(from: GeoCoord, to: GeoCoord): string {
   return `https://www.google.com/maps/dir/?api=1&origin=${from.lat},${from.lng}&destination=${to.lat},${to.lng}`;
 }
 
-/** Geofence diameter in screen px — matches map zoom (no shrink cap) */
-export function geofenceDiameterPx(zoom: number, lat = 3.15): number {
+/**
+ * Geofence diameter in screen px — matches map zoom (no shrink cap). Takes the
+ * outlet's own radius so the drawn circle is the real fence; the default is
+ * only for callers that have no outlet in hand.
+ */
+export function geofenceDiameterPx(
+  zoom: number,
+  lat = 3.15,
+  radiusM = GEOFENCE_METERS,
+): number {
   const metersPerPixel =
     (156543.03 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
-  return (GEOFENCE_METERS * 2) / metersPerPixel;
+  return (radiusM * 2) / metersPerPixel;
 }

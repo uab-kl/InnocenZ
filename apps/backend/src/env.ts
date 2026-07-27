@@ -40,6 +40,11 @@ export const env = createEnv({
     DATABASE_URL: z.string(),
     LOGGING_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+    // SERVER key for the Geocoding API (address -> pin on the outlet form).
+    // Optional: without it the lookup endpoint returns a plain "not configured"
+    // message and the operator drops the pin by hand. NOT the same key as the
+    // one in apps/mobile/app.json — that one is restricted to the app bundle.
+    GOOGLE_MAPS_API_KEY: z.string().optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

@@ -868,6 +868,25 @@ export interface AgencyRosterSlot {
 	agencyId?: string;
 	/** Pay-tier column this assignment fills — gates commission-only vs basic eligibility. */
 	payTierId?: PostJobPayTierId;
+	/**
+	 * Where the PR's phone actually was when it stamped in, as verified and
+	 * stored by the backend. Undefined on demo slots and on stamps taken before
+	 * geofencing shipped — the GPS panel marks those rows estimated rather than
+	 * passing an invented dot off as evidence. `checkInDistanceM` is the server's
+	 * own measurement against the outlet pin, not anything the phone reported.
+	 */
+	checkInLat?: number;
+	checkInLng?: number;
+	checkInDistanceM?: number;
+	checkInAccuracyM?: number;
+	/**
+	 * The outlet's own saved pin and fence, FK-joined from the outlet row at read
+	 * time — never copied onto the assignment. Undefined until the outlet drops
+	 * its pin, which is also when the backend starts enforcing the fence.
+	 */
+	outletLat?: number;
+	outletLng?: number;
+	outletGeoFenceRadiusM?: number;
 }
 
 export type OutletSwapStatus = "pending_pr" | "approved" | "declined";

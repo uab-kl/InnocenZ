@@ -600,9 +600,19 @@ export function mergeHistoryShiftsWithWeekPay(
   return [...live, ...archived].sort((a, b) => b.dateIso.localeCompare(a.dateIso));
 }
 
-/** Prototype geofence reminder copy — shown as info only while GPS is bypassed. */
+/**
+ * Geofence copy shown on the Check-In screen. The number is display-only — the
+ * REAL radius lives on `outlet.geo_fence_radius` and is enforced by the backend,
+ * which recomputes the distance from the outlet's own pin. Never treat this
+ * constant as the rule.
+ *
+ * GPS_BYPASS is now false: the app really reads the phone's position at
+ * check-in. It stays as a constant only because the screen copy branches on it.
+ * Do not set it back to true — the server blocks regardless, so bypassing here
+ * would just turn a clear "you are 137 m away" into a generic failure.
+ */
 export const GEOFENCE_METERS = 50;
-export const GPS_BYPASS = true;
+export const GPS_BYPASS = false;
 
 export const DEFAULT_AGENCY_NAME = 'Atlas Agency';
 

@@ -14,9 +14,11 @@ import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import {
+  CheckInMineSchema,
   CreateShiftAssignmentSchema,
   UpdateShiftAssignmentSchema,
 } from '@/schema/shift-assignment.schema';
+import { describeDeviceFix, verifyWithinGeoFence } from './check-in-geofence';
 import { ShiftAssignmentFilter, ShiftAssignmentStatus } from './shift-assignment.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 
@@ -251,10 +253,42 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Already checked in', data: null });
       }
 
+      // The phone's claimed position. The distance is NOT taken from the body —
+      // it is recomputed here from the outlet's own pin, because the phone is
+      // the thing being verified and does not get to grade itself.
+      const parsed = CheckInMineSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: 'Invalid location', data: parsed.error.issues });
+      }
+      const outletPin = await this.shiftAssignmentRepository.getOutletGeoFenceForAssignment(id);
+      const verdict = verifyWithinGeoFence({ outlet: outletPin, device: parsed.data });
+      if (!verdict.ok) {
+        if (verdict.detail.reason === 'mock_location') {
+          // The refusal itself leaves no row behind, so the log line IS the
+          // audit trail for a disputed shift. Worth a warn, not an error: it is
+          // a rejected attempt, not a broken server.
+          logger.warn(
+            `[ShiftAssignmentController.checkInMine] Mock location rejected: assignment=${id} pr=${pr.id}`,
+          );
+        }
+        // 422: the request was well-formed, the PR is simply not at the venue.
+        // Hard block — there is no demo/relax bypass on the server.
+        return res.status(422).json({ success: false, message: verdict.message, data: verdict.detail });
+      }
+      const fix = verdict.fix;
+
       const actor = getActor(req);
       const assignment = await this.shiftAssignmentRepository.update(id, {
         checkInAt: new Date(),
         status: 'confirmed',
+        ...(fix
+          ? {
+              checkInLat: String(fix.lat),
+              checkInLng: String(fix.lng),
+              checkInDistanceM: fix.distanceM,
+              checkInAccuracyM: fix.accuracyM,
+            }
+          : {}),
         updatedBy: actor,
       });
       res.status(200).json({ success: true, message: 'Checked in', data: assignment });
@@ -287,6 +321,24 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Already checked out', data: null });
       }
 
+      // Check-out RECORDS the position but never blocks on it: a PR who has
+      // already worked the shift must always be able to close it, even if they
+      // stepped out to the car park. The fence gates entry, not exit.
+      const parsedOut = CheckInMineSchema.safeParse(req.body ?? {});
+      if (!parsedOut.success) {
+        return res.status(400).json({ success: false, message: 'Invalid location', data: parsedOut.error.issues });
+      }
+      const outletPinOut = await this.shiftAssignmentRepository.getOutletGeoFenceForAssignment(id);
+      // Never blocks (see above), but a spoofed fix is still dropped by
+      // describeDeviceFix rather than written to the row, so check-out closes
+      // with no position instead of a fabricated one.
+      if (parsedOut.data.mocked === true) {
+        logger.warn(
+          `[ShiftAssignmentController.checkOutMine] Mock location discarded: assignment=${id} pr=${pr.id}`,
+        );
+      }
+      const outFix = describeDeviceFix({ outlet: outletPinOut, device: parsedOut.data });
+
       const actor = getActor(req);
       const shift = await this.shiftRepository.getById(existing.shiftId);
       const tierWages = shift
@@ -295,6 +347,14 @@ export class ShiftAssignmentControllerClass {
       const assignment = await this.shiftAssignmentRepository.update(id, {
         checkOutAt: new Date(),
         status: 'completed',
+        ...(outFix
+          ? {
+              checkOutLat: String(outFix.lat),
+              checkOutLng: String(outFix.lng),
+              checkOutDistanceM: outFix.distanceM,
+              checkOutAccuracyM: outFix.accuracyM,
+            }
+          : {}),
         // Seal flat tier wages onto the assignment so PV / History match Post Job.
         ...(tierWages != null ? { payAmount: tierWages } : {}),
         updatedBy: actor,

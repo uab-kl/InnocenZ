@@ -5,8 +5,11 @@ import { DbTransaction } from '@/types/db-transaction';
 import {
   PaymentVoucherTable,
   PaymentVoucherLineTable,
+  PaymentVoucherReceiptTable,
   PaymentVoucherInsertType,
   PaymentVoucherLineInsertType,
+  PaymentVoucherReceiptInsertType,
+  PaymentVoucherReceiptType,
   PaymentVoucherType,
   PaymentVoucherLineType,
   PaymentVoucherWithLines,
@@ -15,6 +18,10 @@ import {
 } from './payment-voucher.model';
 
 type LineInput = Omit<PaymentVoucherLineInsertType, 'id' | 'voucherId'>;
+type ReceiptInput = Omit<
+  PaymentVoucherReceiptInsertType,
+  'id' | 'receiptNo' | 'createdAt' | 'updatedAt'
+>;
 
 export class PaymentVoucherRepositoryClass {
   async create(
@@ -325,6 +332,81 @@ export class PaymentVoucherRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getLineWithVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /** A receipt already logged for this voucher with the same order number, if any. */
+  async findReceiptByOrderNo(
+    voucherId: string,
+    orderNo: string,
+  ): Promise<PaymentVoucherReceiptType | null> {
+    try {
+      const [row] = await db
+        .select()
+        .from(PaymentVoucherReceiptTable)
+        .where(
+          and(
+            eq(PaymentVoucherReceiptTable.voucherId, voucherId),
+            eq(PaymentVoucherReceiptTable.orderNo, orderNo),
+          ),
+        )
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.findReceiptByOrderNo] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Persists ONE whole receipt: the payment_voucher_receipt row (with its
+   * DATABASE-GENERATED unique running number RCP-000001, RCP-000002, … based
+   * on how many receipts exist) plus one payment_voucher_line per item,
+   * FK-linked via receipt_id — all in a single transaction, then the voucher
+   * totals recompute. Retries the running number on a rare unique collision.
+   */
+  async createReceiptWithLines(
+    receipt: ReceiptInput,
+    lines: LineInput[],
+  ): Promise<{ receipt: PaymentVoucherReceiptType; lines: PaymentVoucherLineType[] }> {
+    try {
+      return await db.transaction(async (tx) => {
+        const [{ total }] = await tx
+          .select({ total: sql<number>`count(*)` })
+          .from(PaymentVoucherReceiptTable);
+        let inserted: PaymentVoucherReceiptType | null = null;
+        for (let bump = 1; bump <= 5 && !inserted; bump++) {
+          const receiptNo = `RCP-${String(Number(total) + bump).padStart(6, '0')}`;
+          try {
+            const [row] = await tx
+              .insert(PaymentVoucherReceiptTable)
+              .values({ ...receipt, receiptNo })
+              .returning();
+            inserted = row;
+          } catch (e) {
+            const pgCode = (e as { code?: string }).code;
+            if (pgCode !== '23505' || bump === 5) throw e; // not a dupe, or out of retries
+          }
+        }
+        if (!inserted) throw new Error('Could not allocate a receipt number');
+        const existing = await this.getLines(receipt.voucherId, tx);
+        const insertedLines = await tx
+          .insert(PaymentVoucherLineTable)
+          .values(
+            lines.map((line, i) => ({
+              ...line,
+              voucherId: receipt.voucherId,
+              receiptId: inserted!.id,
+              sortOrder: existing.length + i,
+            })),
+          )
+          .returning();
+        await this.recomputeTotals(receipt.voucherId, tx);
+        return { receipt: inserted, lines: insertedLines };
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.createReceiptWithLines] Error:', error);
       throw error;
     }
   }

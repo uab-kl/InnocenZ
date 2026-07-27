@@ -22,7 +22,10 @@ export const DrinkMenuItemSchema = z.object({
   slug: z.string().min(1).max(100),
   name: z.string().min(1).max(255),
   priceRm: z.coerce.number().default(0),
-  category: z.enum(['drink', 'service']).default('service'),
+  // 'drink' | 'service' | 'tip' — reuses the existing outlet_drink_menu.category
+  // varchar(20) column (no migration needed). 'tip' rows show under the TIPS
+  // workspace list and the PR tips scan/self-log.
+  category: z.enum(['drink', 'service', 'tip']).default('service'),
   sortOrder: z.coerce.number().int().default(0),
 });
 

@@ -1,0 +1,217 @@
+/**
+ * Receipt parser — build steps 2B-1 + 2B-2.
+ *
+ * Takes the raw text ML Kit read off a receipt photo and hunts 3 facts:
+ *   1. the DATE,
+ *   2. the ORDER / RECEIPT NUMBER,
+ *   3. the ITEM LINES — matched FORGIVINGLY against the outlet's own menu
+ *      (ignore capitals/spaces, allow up to 2 typo letters), so "tigerbeer"
+ *      still finds "Tiger Beer" and brings the correct price.
+ *
+ * Pure functions, no I/O — testable with any receipt text.
+ */
+import type { MenuDrink } from './pr-rate';
+
+// 1. THE DATE — matches things shaped like 23/07/26, 23-07-2026 or 2026-07-23.
+const DATE_RE = /(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})|(\d{4}-\d{2}-\d{2})/;
+
+// 2. THE ORDER NUMBER — the code after "Order No." / "Receipt #" etc. The
+//    capture MUST contain a digit (so "RE-ORDER\nTable" can never win) and the
+//    strict "keyword + No." form is tried before the loose "No: 12345" form.
+const ORDER_NO_STRICT_RE =
+  /(?:receipt|order|inv(?:oice)?|bill|chk)\s*(?:no|num|number)?\.?\s*[:#.]?\s*([A-Z]{0,6}\d[A-Z0-9-]+)/i;
+const ORDER_NO_LOOSE_RE = /(?:no\.?|#)\s*[:#.]?\s*([A-Z]{0,6}\d[A-Z0-9-]+)/i;
+// Last resort: an order-code-shaped token ANYWHERE in the text (ORD0389,
+// INV-1234, CHK0021…). ML Kit often splits "Order No." and its value into
+// far-apart text blocks, so keyword adjacency can't be relied on.
+const ORDER_TOKEN_RE = /\b(?:ORD|INV|BIL|BILL|CHK|RCP|TKT|REC)[-#]?[A-Z]{0,3}\d{2,}[A-Z0-9-]*\b/i;
+
+function findOrderNo(text: string): string | null {
+  const hit =
+    ORDER_NO_STRICT_RE.exec(text) ?? ORDER_NO_LOOSE_RE.exec(text) ?? ORDER_TOKEN_RE.exec(text);
+  if (!hit) return null;
+  return (hit[1] ?? hit[0]).toUpperCase();
+}
+
+// THE TIME — "09:43 PM" / "21:43", normalised to 24h "HH:MM". Colon form only
+// (prices like 150.00 use a dot, so they can never be mistaken for a time);
+// keeps scanning until a plausible clock value is found.
+const TIME_RE = /(\d{1,2}):(\d{2})\s*(AM|PM)?/gi;
+
+// OCR sometimes reads the colon as a dot ("09.43 PM") — accept the dot form
+// ONLY when AM/PM follows (a price like 30.00 never has a meridiem).
+const TIME_DOT_RE = /(\d{1,2})\.(\d{2})\s*(AM|PM)/gi;
+
+export function findReceiptTime(text: string): string | null {
+  for (const re of [TIME_RE, TIME_DOT_RE]) {
+    re.lastIndex = 0;
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(text)) !== null) {
+      let h = Number(m[1]);
+      const min = Number(m[2]);
+      if (h > 23 || min > 59) continue;
+      const mer = m[3]?.toUpperCase();
+      if (mer === 'PM' && h < 12) h += 12;
+      if (mer === 'AM' && h === 12) h = 0;
+      return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+    }
+  }
+  return null;
+}
+
+// 3. AN ITEM LINE — starts with a quantity, ends with a price.
+//    example:  "2  Tiger Beer   36.00"  →  qty 2, name "Tiger Beer", amount 36.00
+const ITEM_RE = /^(\d{1,2})\s+(.+?)\s+(\d+[.,]\d{2})$/;
+
+// Also understands "Tiger Beer x2" / "2x Tiger Beer" style quantities.
+const QTY_SUFFIX_RE = /(?:^|\s)[x×](\d{1,2})(?:\s|$)|(?:^|\s)(\d{1,2})[x×](?:\s|$)/i;
+
+export type ParsedReceipt = {
+  /** Receipt date normalised to YYYY-MM-DD, or null when unreadable. */
+  date: string | null;
+  /** Receipt time normalised to 24h HH:MM, or null when unreadable. */
+  time: string | null;
+  /** Order / receipt number, or null when unreadable. */
+  orderNo: string | null;
+  /** Menu items the OCR text mentioned, with the best quantity guess. */
+  matches: ReceiptMatch[];
+  /** Every non-empty line the OCR read (for debugging / "show raw text"). */
+  lines: string[];
+};
+
+export type ReceiptMatch = {
+  /** Menu slug (outlet_drink_menu.slug) — self-log keys quantities on it. */
+  id: string;
+  /** Menu display name. */
+  name: string;
+  /** Unit price from the OUTLET MENU (never trust the receipt's arithmetic). */
+  priceRm: number;
+  /** Quantity read off the receipt line, default 1. */
+  qty: number;
+};
+
+/** lowercase + strip everything but letters/digits: "Tiger Beer" → "tigerbeer". */
+function normalize(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, '');
+}
+
+/** Levenshtein distance with an early exit above `max` (only need ≤2). */
+function editDistance(a: string, b: string, max = 2): number {
+  if (Math.abs(a.length - b.length) > max) return max + 1;
+  const prev = new Array(b.length + 1).fill(0).map((_, i) => i);
+  for (let i = 1; i <= a.length; i++) {
+    let best = max + 1;
+    let diag = prev[0];
+    prev[0] = i;
+    for (let j = 1; j <= b.length; j++) {
+      const tmp = prev[j];
+      prev[j] = Math.min(
+        prev[j] + 1,
+        prev[j - 1] + 1,
+        diag + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+      diag = tmp;
+      if (prev[j] < best) best = prev[j];
+    }
+    if (best > max) return max + 1;
+  }
+  return prev[b.length];
+}
+
+/** Words of a raw line, lowercased ("Lemon Drop 12" → ['lemon','drop','12']). */
+function lineTokens(line: string): string[] {
+  return line.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+}
+
+/**
+ * Forgiving "does this receipt line mention this menu item?" test — but the
+ * typo allowance SCALES with the name's length, so a short name like "Tip" /
+ * "Tips" can never be faked by a nearby word ("this", "Shots"):
+ *   < 5 letters  → must appear as an EXACT standalone word;
+ *   5–8 letters  → up to 1 typo;
+ *   9+ letters   → up to 2 typos.
+ */
+export function lineMentionsItem(line: string, itemName: string): boolean {
+  const l = normalize(line);
+  const n = normalize(itemName);
+  if (!l || !n) return false;
+  if (n.length < 5) {
+    return lineTokens(line).includes(n);
+  }
+  if (l.includes(n)) return true;
+  const maxTypos = n.length >= 9 ? 2 : 1;
+  for (let start = 0; start + n.length - maxTypos <= l.length; start++) {
+    const win = l.slice(start, start + n.length);
+    if (editDistance(win, n, maxTypos) <= maxTypos) return true;
+  }
+  return false;
+}
+
+/** Best quantity guess for a line: leading qty, "x2"/"2x", else 1. */
+function qtyFromLine(line: string): number {
+  const item = ITEM_RE.exec(line.trim());
+  if (item) {
+    const q = Number(item[1]);
+    if (q >= 1 && q <= 99) return q;
+  }
+  const suffix = QTY_SUFFIX_RE.exec(line);
+  if (suffix) {
+    const q = Number(suffix[1] ?? suffix[2]);
+    if (q >= 1 && q <= 99) return q;
+  }
+  return 1;
+}
+
+/** dd/mm/yy(yy) or yyyy-mm-dd → YYYY-MM-DD, or null when nonsense. */
+export function normalizeReceiptDate(raw: string): string | null {
+  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
+  if (iso) return raw;
+  const dmy = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(raw);
+  if (!dmy) return null;
+  const d = Number(dmy[1]);
+  const m = Number(dmy[2]);
+  let y = Number(dmy[3]);
+  if (y < 100) y += 2000;
+  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
+  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+}
+
+/**
+ * The whole job in one call: OCR text + this outlet's menu (already sliced to
+ * the scan category) → date, order number, and the matched menu items.
+ */
+export function parseReceipt(text: string, menu: MenuDrink[]): ParsedReceipt {
+  const lines = text
+    .split(/\r?\n/)
+    .map((l) => l.trim())
+    .filter(Boolean);
+
+  const dateRaw = DATE_RE.exec(text)?.[0] ?? null;
+  const orderNo = findOrderNo(text);
+
+  const byId = new Map<string, ReceiptMatch>();
+  for (const line of lines) {
+    for (const item of menu) {
+      if (!lineMentionsItem(line, item.name)) continue;
+      const qty = qtyFromLine(line);
+      const prev = byId.get(item.id);
+      if (prev) prev.qty = Math.max(prev.qty, qty);
+      else byId.set(item.id, { id: item.id, name: item.name, priceRm: item.priceRm, qty });
+    }
+  }
+
+  return {
+    date: dateRaw ? normalizeReceiptDate(dateRaw) : null,
+    time: findReceiptTime(text),
+    orderNo,
+    matches: [...byId.values()],
+    lines,
+  };
+}
+
+/** Fallback receipt ref when OCR couldn't read one: RCP-{OUTLET}-{yyyymmdd}-{hhmmss}. */
+export function fallbackReceiptRef(outlet: string, now: Date = new Date()): string {
+  const slug = outlet.replace(/[^a-zA-Z0-9]+/g, '').toUpperCase().slice(0, 8) || 'OUTLET';
+  const p = (n: number) => String(n).padStart(2, '0');
+  return `RCP-${slug}-${now.getFullYear()}${p(now.getMonth() + 1)}${p(now.getDate())}-${p(now.getHours())}${p(now.getMinutes())}${p(now.getSeconds())}`;
+}
