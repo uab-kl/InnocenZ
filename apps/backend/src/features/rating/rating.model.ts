@@ -32,4 +32,13 @@ export type RatingInsertType = typeof RatingTable.$inferInsert;
 export type RatingFilter = {
   outletId?: string;
   prId?: string;
+  /**
+   * Tenancy scopes, set by the controller from the caller's own memberships —
+   * never from the query string. `outletIds` confines a venue operator to the
+   * ratings written at its own venues; `prIds` confines an agency to ratings OF
+   * ITS OWN PRs (`pr_id` is not a FK, so `pr.agency_id` is the only honest
+   * link). An empty array means the caller owns nothing and must match NOTHING.
+   */
+  outletIds?: string[];
+  prIds?: string[];
 };

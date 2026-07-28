@@ -61,6 +61,25 @@ export class PrRepositoryClass {
     }
   }
 
+  /**
+   * Just the ids of an agency's PRs. Enough to scope a query that keys on a PR
+   * id without paging the whole roster through `listPaginated`. Fails closed:
+   * an error yields an empty list, which callers must treat as "matches
+   * nothing" rather than "no filter".
+   */
+  async listIdsByAgency(agencyId: string): Promise<string[]> {
+    try {
+      const rows = await db
+        .select({ id: PrTable.id })
+        .from(PrTable)
+        .where(eq(PrTable.agencyId, agencyId));
+      return rows.map((row) => row.id);
+    } catch (error) {
+      logger.error('[PrRepository.listIdsByAgency] Error:', error);
+      return [];
+    }
+  }
+
   async update(
     id: string,
     data: Partial<PrInsertType>,
