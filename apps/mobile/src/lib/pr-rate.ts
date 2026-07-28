@@ -124,6 +124,50 @@ export function commissionFor(
 }
 
 /**
+ * Hours in a scheduled shift before overtime starts.
+ *
+ * Hardcoded because `/shift-assignment/mine` does not ship the tier's configured
+ * `standard_shift_hours` — the column exists on outlet_tier_rate but is not in
+ * the ShiftAssignmentRate payload. Widen the payload and read it from there
+ * rather than changing this number.
+ */
+export const STANDARD_SHIFT_HOURS = 6;
+
+/**
+ * The longest a single shift can plausibly run. A venue shift is one night; past
+ * this the stamps describe something else entirely.
+ */
+export const MAX_PLAUSIBLE_SHIFT_HOURS = 16;
+
+/**
+ * Overtime hours between two attendance stamps, or 0 when they cannot be
+ * trusted.
+ *
+ * The elapsed time is wall-clock, not worked time, so a forgotten check-out or a
+ * stale check-in from an earlier shift makes it grow without limit — that is how
+ * one live voucher ended up billing "Overtime 113.1h", a third of its value, for
+ * a night nobody worked 113 hours of.
+ *
+ * Beyond MAX_PLAUSIBLE_SHIFT_HOURS this returns 0 rather than a capped figure:
+ * the stamps are known-wrong at that point, and a capped number is still invented
+ * money that lands on a voucher looking deliberate. The agency adds real overtime
+ * by hand instead.
+ */
+export function overtimeHours(
+  checkInAt: string | null | undefined,
+  checkOutMs: number,
+): number {
+  if (!checkInAt) return 0;
+  const checkInMs = new Date(checkInAt).getTime();
+  if (!Number.isFinite(checkInMs) || !Number.isFinite(checkOutMs)) return 0;
+
+  const elapsed = (checkOutMs - checkInMs) / 3_600_000;
+  // Negative means the stamps are out of order — as untrustworthy as too long.
+  if (elapsed <= 0 || elapsed > MAX_PLAUSIBLE_SHIFT_HOURS) return 0;
+  return Math.max(0, elapsed - STANDARD_SHIFT_HOURS);
+}
+
+/**
  * Overtime pay (RM) for hours worked beyond the scheduled shift. Uses the tier's
  * real OT/hr rate when configured; otherwise falls back to payPerHour × 1.5
  * (the prototype rule). Returns 0 when there is no positive overtime.

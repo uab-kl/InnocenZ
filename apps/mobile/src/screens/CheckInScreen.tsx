@@ -21,7 +21,7 @@ import {
 } from '../lib/demo-shifts';
 import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
-import { overtimePay } from '../lib/pr-rate';
+import { overtimeHours, overtimePay } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { usePrNav } from '../lib/pr-nav';
@@ -144,14 +144,13 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           // when the outlet configured one (else the pay_per_hour × 1.5 fallback).
           // Computed from the real check-in/out stamps; sealed as its own line
           // (idempotent per assignment). Only when there's a positive OT amount.
-          const checkInMs = active.checkInAt ? new Date(active.checkInAt).getTime() : NaN;
           const checkOutMs = sealed.checkOutAt
             ? new Date(sealed.checkOutAt).getTime()
             : Date.now();
           const payPerHour = Number(active.payPerHour) || 0;
-          const otHours = Number.isFinite(checkInMs)
-            ? Math.max(0, (checkOutMs - checkInMs) / 3_600_000 - 6)
-            : 0;
+          // Bounded: elapsed wall-clock is not worked time, so a forgotten
+          // check-out yields 0 rather than a night's pay in overtime.
+          const otHours = overtimeHours(active.checkInAt, checkOutMs);
           const otAmount = overtimePay(otHours, active.rate, payPerHour);
           if (otAmount > 0) {
             const otLabel =
