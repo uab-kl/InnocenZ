@@ -119,7 +119,7 @@ export const outletWorkspaceController = new OutletWorkspaceControllerClass(outl
 
 export const ratingRepository = new RatingRepositoryClass();
 export const ratingController = new RatingControllerClass(ratingRepository);
-export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository, agencyPrRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository);

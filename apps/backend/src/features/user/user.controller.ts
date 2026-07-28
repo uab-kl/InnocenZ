@@ -178,11 +178,13 @@ export class UserControllerClass {
       const portfolioPhotos = parsePortfolioPhotosBody(req.body?.portfolioPhotos);
       const comcardHeightCm = parseOptionalInt(req.body?.comcardHeightCm);
       const comcardWeightKg = parseOptionalInt(req.body?.comcardWeightKg);
+      const languages = parseLanguagesBody(req.body?.languages);
 
       if (
         portfolioPhotos !== undefined ||
         comcardHeightCm !== undefined ||
-        comcardWeightKg !== undefined
+        comcardWeightKg !== undefined ||
+        languages !== undefined
       ) {
         let existingProfile = await this.userProfileRepository.getByUserId(id);
         if (!existingProfile) {
@@ -205,6 +207,7 @@ export class UserControllerClass {
             : {}),
           ...(comcardHeightCm !== undefined ? { comcardHeightCm } : {}),
           ...(comcardWeightKg !== undefined ? { comcardWeightKg } : {}),
+          ...(languages !== undefined ? { languages } : {}),
           updatedBy: actor,
         });
       }
@@ -315,9 +318,14 @@ export class UserControllerClass {
       }
 
       const slots = normalizePortfolioSlots(profile.portfolioPhotos);
-      deletePortfolioImageFile(slots[slot]);
 
+      // Multer has already written the upload to `{userId}-{slot}.{ext}`, which
+      // is exactly the old path when the extension is unchanged — deleting the
+      // previous file first would delete the new one and blank the slot.
       const publicPath = portfolioImagePathFromFile(id, slot, req.file);
+      if (slots[slot] && slots[slot] !== publicPath) {
+        deletePortfolioImageFile(slots[slot]);
+      }
       slots[slot] = publicPath;
 
       await this.userProfileRepository.update(id, {
@@ -400,6 +408,25 @@ function parseOptionalInt(value: unknown): number | null | undefined {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 999) return undefined;
   return Math.round(n);
+}
+
+/** Accepts an array of non-empty language names; caps length and dedupes. */
+function parseLanguagesBody(value: unknown): string[] | undefined {
+  if (value === undefined) return undefined;
+  if (!Array.isArray(value)) return undefined;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of value) {
+    if (typeof item !== 'string') continue;
+    const trimmed = item.trim();
+    if (!trimmed || trimmed.length > 40) continue;
+    const key = trimmed.toLowerCase();
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(trimmed);
+    if (out.length >= 20) break;
+  }
+  return out;
 }
 
 function parsePortfolioPhotosBody(

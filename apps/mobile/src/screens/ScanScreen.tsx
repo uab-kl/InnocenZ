@@ -149,7 +149,6 @@ export function ScanScreen({
   const [receiptShot, setReceiptShot] = useState<string | null>(null);
   // Why the scan fell back to manual (OCR unavailable / nothing matched).
   const [scanIssue, setScanIssue] = useState<string | null>(null);
-  const [showAddMissed, setShowAddMissed] = useState(false);
   // When editing a menu item, show the item picker pre-filled with its
   // previous quantity; free-typed amounts edit the single amount field instead.
   const [editMenuMode, setEditMenuMode] = useState(false);
@@ -220,7 +219,6 @@ export function ScanScreen({
   const drinkIncomplete = proofRequired && !hasItemAmount;
 
   const detected = categoryMenu.filter((d) => detectedIds.includes(d.id));
-  const undetected = categoryMenu.filter((d) => !detectedIds.includes(d.id));
   const detectedTotal = detected.reduce((s, d) => s + d.priceRm * (drinkQtys[d.id] ?? 0), 0);
   const detectedUnits = detected.reduce((s, d) => s + (drinkQtys[d.id] ?? 0), 0);
   const detectedCommission = detected.reduce(
@@ -310,7 +308,6 @@ export function ScanScreen({
       return next;
     });
     if (target === 'manual') keepAsProof(shot.dataUrl);
-    setShowAddMissed(false);
     setPhase(target);
   };
 
@@ -687,33 +684,6 @@ export function ScanScreen({
                         </View>
                       </View>
                     ))}
-                    {!editId && manualScanAttempted && undetected.length > 0 && !showAddMissed && (
-                      <Pressable style={styles.soft} onPress={() => setShowAddMissed(true)}>
-                        <Text style={styles.softAmber}>OCR missed one? Add manually</Text>
-                      </Pressable>
-                    )}
-                    {!editId && manualScanAttempted && undetected.length > 0 && showAddMissed && (
-                      <>
-                        <Text style={styles.fieldLabel}>Add {itemNoun} OCR missed</Text>
-                        {undetected.map((d) => (
-                          <Pressable
-                            key={d.id}
-                            style={styles.drinkRow}
-                            onPress={() => {
-                              setDetectedIds((prev) => [...prev, d.id]);
-                              setDrinkQtys((q) => ({ ...q, [d.id]: Math.max(1, q[d.id] ?? 0) }));
-                              setShowAddMissed(false);
-                            }}
-                          >
-                            <View style={{ flex: 1 }}>
-                              <Text style={styles.drinkName}>{d.name}</Text>
-                              <Text style={styles.drinkUnit}>{formatRM(d.priceRm)} each</Text>
-                            </View>
-                            <Text style={styles.softAmber}>+ Add</Text>
-                          </Pressable>
-                        ))}
-                      </>
-                    )}
                     {menuTotal > 0 && (
                       <View style={styles.selfLogSummary}>
                         <View style={styles.selfLogSummaryRow}>

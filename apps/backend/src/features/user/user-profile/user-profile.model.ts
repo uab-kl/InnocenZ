@@ -23,6 +23,8 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   nationality: varchar('nationality', { length: 100 }),
   gender: varchar('gender', { length: 20 }),
   race: varchar('race', { length: 50 }),
+  /** Spoken languages, e.g. ['English','Mandarin'] — editable from the PR profile. */
+  languages: jsonb('languages').$type<string[]>(),
   portfolioPhotos: jsonb('portfolio_photos').$type<(string | null)[]>(),
   /** Public path to the saved auto-generated photo comcard image. */
   comcardImage: varchar('comcard_image'),
@@ -62,6 +64,7 @@ export type UserProfileResponse = {
   nationality: string | null;
   gender: string | null;
   race: string | null;
+  languages: string[] | null;
   portfolioPhotos: (string | null)[] | null;
   comcardImage: string | null;
   comcardHeightCm: number | null;
@@ -92,6 +95,7 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     nationality: null,
     gender: null,
     race: null,
+    languages: null,
     portfolioPhotos: null,
     comcardImage: null,
     comcardHeightCm: null,
@@ -123,6 +127,7 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     nationality: profile.nationality,
     gender: profile.gender,
     race: profile.race,
+    languages: profile.languages,
     portfolioPhotos: profile.portfolioPhotos,
     comcardImage: profile.comcardImage,
     comcardHeightCm: profile.comcardHeightCm,

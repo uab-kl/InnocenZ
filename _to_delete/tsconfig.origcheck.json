@@ -1,0 +1,5 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [],
+  "files": ["src/routes/outlet/_origsettings_check.tsx"]
+}

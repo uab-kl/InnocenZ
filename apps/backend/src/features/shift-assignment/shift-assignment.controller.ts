@@ -303,6 +303,39 @@ export class ShiftAssignmentControllerClass {
    * check-in; sets check_out_at and seals the row as `completed` (the state the
    * weekly PV job rolls up).
    */
+  /** "8pm", "20:00", "8.30pm" → minutes since midnight, or null when not a clock time. */
+  private slotClockToMinutes(token: string): number | null {
+    const m = token.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i);
+    if (!m) return null;
+    let hour = Number(m[1]);
+    const minutes = Number(m[2] ?? '0');
+    const meridiem = m[3]?.toLowerCase();
+    if (meridiem) {
+      if (hour < 1 || hour > 12) return null;
+      hour = (hour % 12) + (meridiem === 'pm' ? 12 : 0);
+    } else if (hour > 23) return null;
+    if (minutes > 59) return null;
+    return hour * 60 + minutes;
+  }
+
+  /**
+   * The scheduled end of a shift as a Date: shift_date + the slot's end time,
+   * rolled to the next day when the window crosses midnight ("22:00 - 04:00").
+   * Null when the free-text slot has no parseable window — then no clamp.
+   */
+  private scheduledShiftEnd(shiftDate: string, slot: string | null): Date | null {
+    if (!slot) return null;
+    const parts = slot.split(/[—–-]/);
+    if (parts.length !== 2) return null;
+    const start = this.slotClockToMinutes(parts[0]);
+    const end = this.slotClockToMinutes(parts[1]);
+    if (start == null || end == null) return null;
+    const [y, m, d] = shiftDate.split('-').map(Number);
+    const endDate = new Date(y, (m || 1) - 1, d || 1, Math.floor(end / 60), end % 60);
+    if (end <= start) endDate.setDate(endDate.getDate() + 1);
+    return endDate;
+  }
+
   async checkOutMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
@@ -344,8 +377,20 @@ export class ShiftAssignmentControllerClass {
       const tierWages = shift
         ? await this.resolveTierWages(pr, existing.shiftId, shift.outletId)
         : null;
+      // Forgot-to-check-out guard: the stamp is CLAMPED to the shift's
+      // scheduled end, so pay locks to the shift's duration — a check-out
+      // hours late can't inflate wages/OT by itself. Hours past the window
+      // only ever count once the agency approves OT (separate flow). Never
+      // clamps below the check-in stamp (a PR who started late still closes
+      // with a forward duration), and an unparseable slot means no clamp.
+      const now = new Date();
+      const scheduledEnd = shift ? this.scheduledShiftEnd(shift.shiftDate, shift.slot) : null;
+      const clampTo =
+        scheduledEnd && now > scheduledEnd && scheduledEnd > new Date(existing.checkInAt)
+          ? scheduledEnd
+          : now;
       const assignment = await this.shiftAssignmentRepository.update(id, {
-        checkOutAt: new Date(),
+        checkOutAt: clampTo,
         status: 'completed',
         ...(outFix
           ? {

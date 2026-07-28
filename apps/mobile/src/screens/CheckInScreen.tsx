@@ -7,7 +7,9 @@
  * panel) and the wages seal write to the backend current-week voucher.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Location from 'expo-location';
+import { distanceM } from '../lib/geo';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   CANCELLATION_RULE_SUMMARY,
@@ -33,6 +35,18 @@ import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 import { MapPin } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 
+// react-native-maps ships native code only — requiring it on web would crash
+// the bundle, so the map renders on the phone and web shows the metres text.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let RNMaps: any = null;
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  RNMaps = require('react-native-maps');
+}
+
+/** The phone's live position while this screen is open. */
+type LivePos = { lat: number; lng: number; accuracyM?: number };
+
 function ymdFromIso(iso: string): Ymd {
   const [y, m, d] = iso.split('-').map((n) => Number(n));
   return [y, m, d];
@@ -54,11 +68,81 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const { receiptLines, addLine } = usePrEarnings();
   // The active assignment (with its resolved rate card + drink menu) is shared
   // with Scan via the provider, so both screens act on the same real shift.
-  const { active, phase, loading, error: loadError, refresh, patch, dismiss } =
+  const { active, current, phase, loading, error: loadError, refresh, patch, dismiss, focus, focusedId } =
     useActiveShift();
+
+  // Re-pull on mount: a new same-day assignment made while the app sat on
+  // another tab must renew this page, not leave the old shift on screen.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // ---- 1D-3/1D-4: live position vs the venue pin (server still referees) ----
+  const [myPos, setMyPos] = useState<LivePos | null>(null);
+  const pin =
+    active && active.outletLat !== null && active.outletLng !== null
+      ? {
+          lat: active.outletLat,
+          lng: active.outletLng,
+          radiusM: active.outletGeoFenceRadiusM ?? GEOFENCE_METERS,
+        }
+      : null;
+
+  // Watch the phone's position while the screen is open (foreground only) and
+  // a check-in is still ahead; stop the watch on unmount / once on duty.
+  useEffect(() => {
+    if (!pin || phase !== 'booked') return;
+    let sub: { remove: () => void } | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted' || cancelled) return;
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 5 },
+          (pos) =>
+            setMyPos({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              accuracyM: pos.coords.accuracy ?? undefined,
+            }),
+        );
+      } catch {
+        // No GPS here (blocked browser / emulator) — button stays gated until
+        // Refresh GPS works; the server would refuse a pinned venue anyway.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [pin?.lat, pin?.lng, phase]);
+
+  /** One-shot re-read for the “Refresh GPS” link (indoors ±80 m is normal). */
+  const refreshGps = useCallback(async () => {
+    try {
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setMyPos({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracyM: pos.coords.accuracy ?? undefined,
+      });
+    } catch {
+      setActionError('Could not read GPS — check location permission and try again.');
+    }
+  }, []);
+
+  // The gate — same allowance the server gives (radius + capped accuracy).
+  const metres = myPos && pin ? Math.round(distanceM(myPos, pin)) : null;
+  const allowed = pin ? pin.radiusM + Math.min(myPos?.accuracyM ?? 0, 30) : null;
+  const inside = metres !== null && allowed !== null && metres <= allowed;
+  // No pin = venue not fenced yet → button stays usable (matches the server).
+  const gateBlocked = pin !== null && !inside;
 
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -87,6 +171,22 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const completeDuration = active
     ? shiftDurationLabel(active.checkInAt, active.checkOutAt)
     : '—';
+
+  // OT read from the sealed stamps (the server clamps a forgotten check-out to
+  // the shift's scheduled end, so these hours are real). Never auto-paid —
+  // surfaced below as pending agency approval, outside the payout.
+  const otHoursWorked =
+    active?.checkInAt && active.checkOutAt
+      ? Math.max(
+          0,
+          (new Date(active.checkOutAt).getTime() - new Date(active.checkInAt).getTime()) /
+            3_600_000 -
+            6,
+        )
+      : 0;
+  const otPendingAmount = active
+    ? overtimePay(otHoursWorked, active.rate, Number(active.payPerHour) || 0)
+    : 0;
 
   const statusLabel =
     phase === 'on_duty'
@@ -140,36 +240,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             outlet: active.outletName ?? undefined,
             dedupeRef: active.id,
           });
-          // Overtime: hours worked beyond 6h, paid at this tier's real OT/hr rate
-          // when the outlet configured one (else the pay_per_hour × 1.5 fallback).
-          // Computed from the real check-in/out stamps; sealed as its own line
-          // (idempotent per assignment). Only when there's a positive OT amount.
-          const checkInMs = active.checkInAt ? new Date(active.checkInAt).getTime() : NaN;
-          const checkOutMs = sealed.checkOutAt
-            ? new Date(sealed.checkOutAt).getTime()
-            : Date.now();
-          const payPerHour = Number(active.payPerHour) || 0;
-          const otHours = Number.isFinite(checkInMs)
-            ? Math.max(0, (checkOutMs - checkInMs) / 3_600_000 - 6)
-            : 0;
-          const otAmount = overtimePay(otHours, active.rate, payPerHour);
-          if (otAmount > 0) {
-            const otLabel =
-              active.rate?.otAfterHours != null
-                ? `Overtime ${otHours.toFixed(1)}h @ RM${active.rate.otAfterHours}/h`
-                : `Overtime ${otHours.toFixed(1)}h @1.5×`;
-            await addLine({
-              kind: 'others',
-              source: 'checkin',
-              item: otLabel,
-              quantity: 1,
-              sales: otAmount,
-              commission: otAmount,
-              lineDate: todayKey,
-              outlet: active.outletName ?? undefined,
-              dedupeRef: `${active.id}-ot`,
-            });
-          }
+          // Overtime is NOT auto-paid any more. The server clamps a forgotten
+          // check-out to the shift's scheduled end (pay locks to the shift
+          // window), and genuine OT beyond 6h is only money once the agency
+          // approves it — the summary below shows it as pending approval. The
+          // OT math itself (overtimePay in pr-rate.ts) is unchanged.
           markLocalComplete();
           // Stay optimistic: patch the row so we don't flash "Check in" again
           // before navigating away.
@@ -234,6 +309,16 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
       {(actionError || loadError) && (
         <Text style={styles.errorText}>{actionError ?? loadError}</Text>
+      )}
+
+      {/* Pinned to an earlier shift's summary while a live shift waits —
+          one tap returns to the current check-in. */}
+      {active && focusedId === active.id && current && current.id !== active.id && (
+        <Pressable style={styles.focusBanner} onPress={() => focus(null)}>
+          <Text style={styles.focusBannerText}>
+            Viewing an earlier shift · tap to go to your current shift
+          </Text>
+        </Pressable>
       )}
 
       {phase === 'idle' ? (
@@ -301,14 +386,59 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
             {phase === 'booked' && (
               <>
+                {pin && RNMaps ? (
+                  <View style={styles.mapWrap}>
+                    <RNMaps.default
+                      provider={RNMaps.PROVIDER_GOOGLE}
+                      style={{ height: 220 }}
+                      showsUserLocation
+                      initialRegion={{
+                        latitude: pin.lat,
+                        longitude: pin.lng,
+                        latitudeDelta: 0.004,
+                        longitudeDelta: 0.004,
+                      }}
+                    >
+                      <RNMaps.Marker
+                        coordinate={{ latitude: pin.lat, longitude: pin.lng }}
+                        title={outletName}
+                      />
+                      <RNMaps.Circle
+                        center={{ latitude: pin.lat, longitude: pin.lng }}
+                        radius={pin.radiusM}
+                        strokeColor="rgba(74,222,128,.9)"
+                        fillColor="rgba(74,222,128,.15)"
+                      />
+                    </RNMaps.default>
+                  </View>
+                ) : null}
+                {pin && (
+                  <View style={styles.metresRow}>
+                    <Text style={[styles.metresText, inside && { color: C.green }]}>
+                      {metres === null
+                        ? 'Locating…'
+                        : inside
+                          ? `${metres} m from ${outletName}`
+                          : `${metres} m away — move closer`}
+                    </Text>
+                    <Pressable onPress={() => void refreshGps()}>
+                      <Text style={styles.refreshGps}>Refresh GPS</Text>
+                    </Pressable>
+                  </View>
+                )}
                 <HoldButton
-                  label="Check in"
+                  label={gateBlocked && metres !== null ? `${metres} m away — move closer` : 'Check in'}
                   holding={holding}
                   progress={progress}
-                  onPress={() => startHold(false)}
+                  disabled={gateBlocked}
+                  onPress={() => {
+                    // Courtesy gate only — the server re-checks every tap (422).
+                    if (gateBlocked) return;
+                    startHold(false);
+                  }}
                 />
                 <Text style={styles.gpsNote}>
-                  Check-in is only allowed within {GEOFENCE_METERS}m of {outletName}
+                  Check-in is only allowed within {pin?.radiusM ?? GEOFENCE_METERS}m of {outletName}
                   {GPS_BYPASS
                     ? ' — GPS temporarily bypassed for demo.'
                     : '. Your phone shares its location for this stamp only.'}
@@ -354,6 +484,12 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     <Text style={styles.completeAmt}>{formatRM(finalPayout)}</Text>
                   </View>
                 </View>
+                {otPendingAmount > 0 && (
+                  <Text style={styles.otPendingNote}>
+                    Overtime {otHoursWorked.toFixed(1)}h ({formatRM(otPendingAmount)}) — pending
+                    agency approval · not added to payout
+                  </Text>
+                )}
                 <ShiftStatusPanel
                   checkedOut
                   checkInAt={active.checkInAt}
@@ -426,17 +562,19 @@ function HoldButton({
   holding,
   progress,
   onPress,
+  disabled = false,
 }: {
   label: string;
   holding: boolean;
   progress: number;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={holding}
-      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent)]}
+      disabled={holding || disabled}
+      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent), disabled && { opacity: 0.45 }]}
     >
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
@@ -449,12 +587,62 @@ function HoldButton({
 
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
+  mapWrap: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: C.line2,
+  },
+  metresRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  metresText: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.amber },
+  refreshGps: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.blue,
+    textDecorationLine: 'underline',
+  },
   errorText: {
     marginTop: 10,
     fontFamily: F.manrope,
     fontSize: 13,
     color: C.red,
     textAlign: 'center',
+  },
+  focusBanner: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.4)',
+    backgroundColor: 'rgba(232,198,106,0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  focusBannerText: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.amber,
+    textAlign: 'center',
+  },
+  otPendingNote: {
+    marginTop: 8,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.amber,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(232,198,106,0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   pageLabel: {
     fontFamily: F.sora,

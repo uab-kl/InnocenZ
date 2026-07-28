@@ -1,5 +1,5 @@
 import { createFileRoute } from '@tanstack/react-router';
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { AppTopbar } from '@agency-portal/components/Nav';
 import {
   OutletPage,
@@ -16,28 +16,20 @@ import type {
 } from '@agency-portal/lib/outlet-demo';
 import { publicAssetPath } from '@agency-portal/lib/public-asset';
 import { outletCan } from '@agency-portal/lib/outlet-rbac';
-import { useAuth } from '@/lib/auth-context';
-import {
-  geocodeOutletAddress,
-  saveOutletGeoFence,
-} from '@/services/outlet';
-import type { OutletGeocodeCandidate } from '@/services/outlet';
 import {
   Building2,
   Camera,
-  ExternalLink,
   Mail,
   MapPin,
   Pencil,
   Phone,
-  Search,
   Shield,
   User,
   Wrench,
   X,
 } from 'lucide-react';
 
-export const Route = createFileRoute('/outlet/settings')({
+export const Route = createFileRoute('/outlet/_origsettings_check')({
   component: OutletSettingsPage,
 });
 
@@ -70,284 +62,6 @@ function ToggleRow({
         />
       </span>
     </button>
-  );
-}
-
-/** Pull the backend's own words out of an axios error, or fall back. */
-function apiErrorMessage(error: unknown, fallback: string): string {
-  const maybe = error as { response?: { data?: { message?: string } } };
-  return maybe?.response?.data?.message || fallback;
-}
-
-const PRECISION_LABEL: Record<OutletGeocodeCandidate['precision'], string> = {
-  ROOFTOP: 'exact building',
-  RANGE_INTERPOLATED: 'street estimate',
-  GEOMETRIC_CENTER: 'area centre',
-  APPROXIMATE: 'approximate',
-};
-
-/**
- * Venue map pin + check-in fence — the missing half of Build Step 1C-2.
- *
- * The backend has been ready for a while: GET /outlet/:id/geocode turns the
- * saved address into candidate pins (read-only), and PATCH /outlet/:id/geo-fence
- * saves one. This card is deliberately the ONLY place that calls the PATCH,
- * because saving a pin is what switches hard fencing on for the venue — from
- * that moment every PR check-in outside the radius is refused server-side
- * (HTTP 422). So the geocoder proposes, and the human presses Save.
- *
- * It saves on its own button, outside the page's demo edit/save flow, because
- * the pin writes to the real outlet row — not to the demo store.
- */
-function VenueGeoFenceCard({
-  backed,
-  outletId,
-  geo,
-  refreshOutlet,
-  canEdit,
-}: {
-  backed: boolean;
-  outletId: string | null;
-  geo: { lat: number | null; lng: number | null; radiusM: number } | null;
-  refreshOutlet: () => void;
-  canEdit: boolean;
-}) {
-  const { logout } = useAuth();
-  const toast = useStore((s) => s.toast);
-  const [finding, setFinding] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [candidates, setCandidates] = useState<OutletGeocodeCandidate[]>([]);
-  const [draftLat, setDraftLat] = useState('');
-  const [draftLng, setDraftLng] = useState('');
-  const [draftRadius, setDraftRadius] = useState('50');
-
-  const pinned = geo?.lat != null && geo?.lng != null;
-
-  // Seed the draft from the saved pin once it loads (never mid-edit).
-  useEffect(() => {
-    if (geo?.lat != null && geo?.lng != null) {
-      setDraftLat((v) => (v === '' ? String(geo.lat) : v));
-      setDraftLng((v) => (v === '' ? String(geo.lng) : v));
-    }
-    if (geo) setDraftRadius((v) => (v === '50' ? String(geo.radiusM) : v));
-  }, [geo]);
-
-  const lat = Number(draftLat);
-  const lng = Number(draftLng);
-  const radius = Math.round(Number(draftRadius));
-  const draftValid =
-    draftLat.trim() !== '' &&
-    draftLng.trim() !== '' &&
-    Number.isFinite(lat) &&
-    Number.isFinite(lng) &&
-    Math.abs(lat) <= 90 &&
-    Math.abs(lng) <= 180;
-  const radiusValid =
-    Number.isFinite(radius) && radius >= 10 && radius <= 1000;
-
-  const findOnMap = async () => {
-    if (!outletId) return;
-    setFinding(true);
-    setCandidates([]);
-    try {
-      const res = await geocodeOutletAddress(outletId, logout);
-      const found = res.data?.candidates ?? [];
-      setCandidates(found);
-      if (found.length > 0) {
-        // Pre-pick the first (best) candidate; the operator can still adjust.
-        setDraftLat(String(found[0].lat));
-        setDraftLng(String(found[0].lng));
-      } else {
-        toast('No match for the saved address — paste coordinates instead', 'warn');
-      }
-    } catch (error) {
-      // 400 no address · 404 no match · 503 key not configured — the backend
-      // explains itself; show its words rather than inventing our own.
-      toast(
-        apiErrorMessage(error, 'Address lookup failed — try again'),
-        'warn',
-      );
-    } finally {
-      setFinding(false);
-    }
-  };
-
-  const savePin = async () => {
-    if (!outletId || !draftValid) {
-      toast('Enter a valid latitude and longitude first', 'warn');
-      return;
-    }
-    if (!radiusValid) {
-      toast('Fence radius must be 10–1000 m', 'warn');
-      return;
-    }
-    setSaving(true);
-    try {
-      await saveOutletGeoFence(
-        outletId,
-        { lat, lng, geoFenceRadius: radius },
-        logout,
-      );
-      toast(
-        `Venue pinned — the ${radius} m check-in fence is now ON`,
-        'success',
-      );
-      setCandidates([]);
-      refreshOutlet();
-    } catch (error) {
-      toast(apiErrorMessage(error, 'Could not save the pin'), 'warn');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  if (!backed) {
-    return (
-      <IzCard>
-        <p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-          Demo session — sign in with a real outlet account to pin the venue
-          and switch on the check-in fence.
-        </p>
-      </IzCard>
-    );
-  }
-
-  return (
-    <IzCard>
-      {pinned ? (
-        <p className="iz-tiny mb-2 rounded-lg border border-[rgba(74,222,128,.35)] bg-[rgba(74,222,128,.08)] px-2.5 py-1.5 text-[var(--iz-green)]">
-          Fence ON · pin saved at {geo?.lat?.toFixed(6)}, {geo?.lng?.toFixed(6)}{' '}
-          · {geo?.radiusM} m — check-ins outside this circle are refused.
-        </p>
-      ) : (
-        <p className="iz-tiny mb-2 rounded-lg border border-[rgba(251,191,36,.35)] bg-[rgba(251,191,36,.08)] px-2.5 py-1.5 text-[var(--iz-amber,#fbbf24)]">
-          No map pin yet — the 50 m check-in rule is NOT enforced for this
-          venue. Saving a pin switches it on immediately.
-        </p>
-      )}
-
-      {canEdit ? (
-        <>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              className="iz-btn iz-btn-secondary flex items-center gap-1.5 !text-xs"
-              onClick={findOnMap}
-              disabled={finding}
-            >
-              <Search className="h-3.5 w-3.5" />
-              {finding ? 'Finding…' : 'Find from saved address'}
-            </button>
-            {draftValid && (
-              <a
-                className="iz-tiny flex items-center gap-1 text-[var(--iz-gold,#d9b97a)] underline"
-                href={`https://www.google.com/maps/search/?api=1&query=${lat},${lng}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                <ExternalLink className="h-3 w-3" />
-                Open in Google Maps
-              </a>
-            )}
-          </div>
-
-          {candidates.length > 0 && (
-            <div className="mt-2 flex flex-col gap-1">
-              {candidates.map((c) => {
-                const picked =
-                  draftLat === String(c.lat) && draftLng === String(c.lng);
-                return (
-                  <button
-                    key={c.placeId}
-                    type="button"
-                    onClick={() => {
-                      setDraftLat(String(c.lat));
-                      setDraftLng(String(c.lng));
-                    }}
-                    className={`rounded-lg border px-2.5 py-1.5 text-left iz-tiny ${
-                      picked
-                        ? 'border-[rgba(217,185,122,.5)] bg-[rgba(217,185,122,.08)]'
-                        : 'border-[var(--iz-line)]'
-                    }`}
-                  >
-                    <span className="font-semibold">
-                      {PRECISION_LABEL[c.precision]}
-                    </span>{' '}
-                    · {c.formattedAddress}
-                  </button>
-                );
-              })}
-            </div>
-          )}
-
-          {draftValid && (
-            <iframe
-              title="Venue map preview"
-              src={`https://www.google.com/maps?q=${lat},${lng}&z=17&output=embed`}
-              className="mt-2 w-full rounded-lg border-0"
-              height={200}
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-            />
-          )}
-
-          <div className="mt-2 grid grid-cols-3 gap-2">
-            <label className="iz-tiny iz-muted flex flex-col gap-1">
-              Latitude
-              <input
-                className="iz-input !text-xs"
-                value={draftLat}
-                onChange={(e) => setDraftLat(e.target.value)}
-                placeholder="3.147800"
-                inputMode="decimal"
-              />
-            </label>
-            <label className="iz-tiny iz-muted flex flex-col gap-1">
-              Longitude
-              <input
-                className="iz-input !text-xs"
-                value={draftLng}
-                onChange={(e) => setDraftLng(e.target.value)}
-                placeholder="101.700500"
-                inputMode="decimal"
-              />
-            </label>
-            <label className="iz-tiny iz-muted flex flex-col gap-1">
-              Fence (m)
-              <input
-                className="iz-input !text-xs"
-                value={draftRadius}
-                onChange={(e) => setDraftRadius(e.target.value)}
-                placeholder="50"
-                inputMode="numeric"
-              />
-            </label>
-          </div>
-          <p className="iz-tiny iz-muted2 mt-1.5">
-            Tip: in Google Maps, right-click the venue ENTRANCE → click the
-            coordinates to copy → paste above. The entrance beats the rooftop
-            centre — that is where staff actually stand.
-          </p>
-
-          <button
-            type="button"
-            className="iz-btn iz-btn-primary mt-2 w-full !text-xs"
-            onClick={savePin}
-            disabled={saving || !draftValid}
-          >
-            {saving
-              ? 'Saving…'
-              : pinned
-                ? 'Update pin + fence'
-                : 'Save pin — switch the fence ON'}
-          </button>
-        </>
-      ) : (
-        <p className="iz-tiny iz-muted">
-          Only the outlet owner can move the venue pin.
-        </p>
-      )}
-    </IzCard>
   );
 }
 
@@ -634,15 +348,6 @@ function OutletSettingsPage() {
           readOnly={fieldsLocked}
         />
       </IzCard>
-
-      <IzSectionLabel>Venue location &amp; check-in fence</IzSectionLabel>
-      <VenueGeoFenceCard
-        backed={profile.backed}
-        outletId={profile.outletId}
-        geo={profile.geo}
-        refreshOutlet={profile.refreshOutlet}
-        canEdit={canEdit}
-      />
 
       <IzSectionLabel>Finance Head</IzSectionLabel>
       <IzCard className={editCardClass}>
