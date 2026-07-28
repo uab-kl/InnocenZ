@@ -68,315 +68,337 @@
     {
       "idx": 9,
       "version": "7",
+      "when": 1782790982633,
+      "tag": "0002_audit_logs",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
       "when": 1784003543157,
       "tag": "0009_spicy_monster_badoon",
       "breakpoints": true
     },
     {
-      "idx": 10,
+      "idx": 11,
       "version": "7",
       "when": 1784016894158,
       "tag": "0010_busy_iron_fist",
       "breakpoints": true
     },
     {
-      "idx": 11,
+      "idx": 12,
       "version": "7",
       "when": 1784100000000,
       "tag": "0011_special_service_admin_review",
       "breakpoints": true
     },
     {
-      "idx": 12,
+      "idx": 13,
       "version": "7",
       "when": 1784200000000,
       "tag": "0012_agency_member_pr_role",
       "breakpoints": true
     },
     {
-      "idx": 13,
+      "idx": 14,
       "version": "7",
       "when": 1784300000000,
       "tag": "0013_admin_request_remarks",
       "breakpoints": true
     },
     {
-      "idx": 14,
+      "idx": 15,
       "version": "7",
       "when": 1784400000000,
       "tag": "0014_special_service_category_types",
       "breakpoints": true
     },
     {
-      "idx": 15,
+      "idx": 16,
       "version": "7",
       "when": 1784183854994,
       "tag": "0015_ambiguous_slayback",
       "breakpoints": true
     },
     {
-      "idx": 16,
+      "idx": 17,
       "version": "7",
       "when": 1784500000000,
       "tag": "0016_admin_request_requested_plan",
       "breakpoints": true
     },
     {
-      "idx": 17,
+      "idx": 18,
       "version": "7",
       "when": 1784500000001,
       "tag": "0017_admin_request_declined_status",
       "breakpoints": true
     },
     {
-      "idx": 18,
+      "idx": 19,
       "version": "7",
       "when": 1784500000002,
       "tag": "0018_admin_request_direct_approved_status",
       "breakpoints": true
     },
     {
-      "idx": 19,
+      "idx": 20,
       "version": "7",
       "when": 1784500000003,
       "tag": "0019_admin_request_custom_renegotiation_type",
       "breakpoints": true
     },
     {
-      "idx": 20,
+      "idx": 21,
       "version": "7",
       "when": 1784500000004,
       "tag": "0020_user_profile_pr_showcase",
       "breakpoints": true
     },
     {
-      "idx": 21,
+      "idx": 22,
       "version": "7",
       "when": 1784500000005,
       "tag": "0021_outlet_logo_image",
       "breakpoints": true
     },
     {
-      "idx": 22,
+      "idx": 23,
       "version": "7",
       "when": 1784500000006,
       "tag": "0022_add_pr_and_admin_request_plan",
       "breakpoints": true
     },
     {
-      "idx": 23,
+      "idx": 24,
       "version": "7",
       "when": 1784500000007,
       "tag": "0023_add_shift",
       "breakpoints": true
     },
     {
-      "idx": 24,
+      "idx": 25,
       "version": "7",
       "when": 1784500000008,
       "tag": "0024_add_payment_voucher",
       "breakpoints": true
     },
     {
-      "idx": 25,
+      "idx": 26,
       "version": "7",
       "when": 1784500000009,
       "tag": "0025_add_shift_assignment",
       "breakpoints": true
     },
     {
-      "idx": 26,
+      "idx": 27,
       "version": "7",
       "when": 1784500000010,
       "tag": "0026_add_outlet_workspace",
       "breakpoints": true
     },
     {
-      "idx": 27,
+      "idx": 28,
       "version": "7",
       "when": 1784500000011,
       "tag": "0027_add_rating",
       "breakpoints": true
     },
     {
-      "idx": 28,
+      "idx": 29,
       "version": "7",
       "when": 1784500000012,
       "tag": "0028_drop_limit_type_and_subscription_links",
       "breakpoints": true
     },
     {
-      "idx": 29,
+      "idx": 30,
       "version": "7",
       "when": 1784500000013,
       "tag": "0029_add_missing_audit_columns",
       "breakpoints": true
     },
     {
-      "idx": 30,
+      "idx": 31,
       "version": "7",
       "when": 1784500000014,
       "tag": "0030_user_profile_full_name_and_drops",
       "breakpoints": true
     },
     {
-      "idx": 31,
+      "idx": 32,
       "version": "7",
       "when": 1784500000015,
       "tag": "0031_user_blocked_reason",
       "breakpoints": true
     },
     {
-      "idx": 32,
+      "idx": 33,
       "version": "7",
       "when": 1784500000016,
       "tag": "0032_add_agency_pr",
       "breakpoints": true
     },
     {
-      "idx": 33,
+      "idx": 34,
       "version": "7",
       "when": 1784500000017,
       "tag": "0033_agency_user_and_outlet_user",
       "breakpoints": true
     },
     {
-      "idx": 34,
+      "idx": 35,
       "version": "7",
       "when": 1784500000018,
       "tag": "0034_outlet_drop_subscription_id",
       "breakpoints": true
     },
     {
-      "idx": 35,
+      "idx": 36,
       "version": "7",
       "when": 1784500000019,
       "tag": "0035_special_service_vendor_name",
       "breakpoints": true
     },
     {
-      "idx": 36,
+      "idx": 37,
       "version": "7",
       "when": 1784500000020,
       "tag": "0036_subscription_type_and_role",
       "breakpoints": true
     },
     {
-      "idx": 37,
+      "idx": 38,
       "version": "7",
       "when": 1784500000021,
       "tag": "0037_special_service_pr_posting",
       "breakpoints": true
     },
     {
-      "idx": 38,
+      "idx": 39,
       "version": "7",
       "when": 1784500000022,
       "tag": "0038_pr_tier_7_tiers",
       "breakpoints": true
     },
     {
-      "idx": 39,
+      "idx": 40,
       "version": "7",
       "when": 1784500000023,
       "tag": "0039_shift_pay_tier",
       "breakpoints": true
     },
     {
-      "idx": 40,
+      "idx": 41,
       "version": "7",
       "when": 1784500000024,
       "tag": "0040_add_shift_sale",
       "breakpoints": true
     },
     {
-      "idx": 41,
+      "idx": 42,
       "version": "7",
       "when": 1784500000025,
       "tag": "0041_shift_sale_report_index",
       "breakpoints": true
     },
     {
-      "idx": 42,
+      "idx": 43,
       "version": "7",
       "when": 1784500000026,
       "tag": "0042_shift_sale_drop_table_sales",
       "breakpoints": true
     },
     {
-      "idx": 43,
+      "idx": 44,
       "version": "7",
       "when": 1784500000027,
       "tag": "0043_outlet_drop_table_pct",
       "breakpoints": true
     },
     {
-      "idx": 44,
+      "idx": 45,
       "version": "7",
       "when": 1784500000028,
       "tag": "0044_outlet_drop_per_table_rm",
       "breakpoints": true
     },
     {
-      "idx": 45,
+      "idx": 46,
       "version": "7",
       "when": 1784500000029,
       "tag": "0045_drink_menu_category",
       "breakpoints": true
     },
     {
-      "idx": 46,
+      "idx": 47,
       "version": "7",
       "when": 1784500000030,
       "tag": "0046_user_profile_comcard_image",
       "breakpoints": true
     },
     {
-      "idx": 47,
+      "idx": 48,
       "version": "7",
       "when": 1784500000031,
       "tag": "0047_tier_rate_daily_wage_and_outlet_id",
       "breakpoints": true
     },
     {
-      "idx": 48,
+      "idx": 49,
       "version": "7",
       "when": 1784500000032,
       "tag": "0048_pv_line_proof_photos",
       "breakpoints": true
     },
     {
-      "idx": 49,
+      "idx": 50,
       "version": "7",
       "when": 1784500000033,
       "tag": "0049_shift_assignment_leave_status",
       "breakpoints": true
     },
     {
-      "idx": 50,
+      "idx": 51,
       "version": "7",
       "when": 1784500000034,
       "tag": "0050_shift_assignment_check_in_location",
       "breakpoints": true
     },
     {
-      "idx": 53,
-      "version": "7",
-      "when": 1785135680057,
-      "tag": "0053_lovely_rawhide_kid",
-      "idx": 51,
+      "idx": 52,
       "version": "7",
       "when": 1784500000035,
       "tag": "0051_pv_dispute_resolution",
       "breakpoints": true
     },
     {
-      "idx": 52,
+      "idx": 53,
+      "version": "7",
+      "when": 1784500000036,
+      "tag": "0052_add_outlet_swap_request",
+      "breakpoints": true
+    },
+    {
+      "idx": 54,
+      "version": "7",
+      "when": 1785135680057,
+      "tag": "0053_lovely_rawhide_kid",
+      "breakpoints": true
+    },
+    {
+      "idx": 55,
       "version": "7",
       "when": 1785139602605,
       "tag": "0054_aromatic_tombstone",
-      "when": 1784500000036,
-      "tag": "0052_add_outlet_swap_request",
+      "breakpoints": true
+    },
+    {
+      "idx": 57,
+      "version": "7",
+      "when": 1785225600000,
+      "tag": "0057_pv_line_component",
       "breakpoints": true
     }
   ]
