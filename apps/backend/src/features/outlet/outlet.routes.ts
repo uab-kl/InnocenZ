@@ -5,15 +5,31 @@ import { outletOwnerOnly } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
+// Reads are open to the three org roles and closed to PR. A venue record carries
+// the address, SSM no, business licence and geo-fence centre, so an ungated read
+// let any signed-in account — a PR included — enumerate every outlet on the
+// platform. Callers are all admin or agency screens (admin dashboard/user-
+// management, agency roster + geo-fence + auto-assign) plus the outlet operator's
+// own profile and session bootstrap; `outlet` is in the list for that last case.
+// apps/mobile touches no /outlet route (only /outlet-swap/mine), so PR is safe to
+// exclude — verified against every caller before gating, per the lesson from the
+// outlet-workspace revert (4c7151c).
+const canReadOutlet = requireRole('admin', 'agency', 'outlet');
+
 // Outlet CRUD
-router.get('/', outletController.list.bind(outletController));
+router.get('/', canReadOutlet, outletController.list.bind(outletController));
 // Must precede `/:id` so "memberships" isn't captured as an outlet id.
-router.get('/memberships', outletController.listMemberships.bind(outletController));
+router.get('/memberships', canReadOutlet, outletController.listMemberships.bind(outletController));
 // Same reason: "geocode" must not be captured as an outlet id.
-router.get('/geocode', outletController.geocode.bind(outletController));
-router.get('/:id', outletController.getById.bind(outletController));
-router.get('/:id/geocode', outletController.geocodeOwnAddress.bind(outletController));
-router.post('/', outletController.create.bind(outletController));
+router.get('/geocode', canReadOutlet, outletController.geocode.bind(outletController));
+router.get('/:id', canReadOutlet, outletController.getById.bind(outletController));
+router.get('/:id/geocode', canReadOutlet, outletController.geocodeOwnAddress.bind(outletController));
+// Admin-only: creating a venue is an onboarding act, and `create` stamps
+// status='pending_review' for an admin to approve. No client calls this — every
+// existing row came from a seed script or admin. If agency-side outlet onboarding
+// ever ships (the `onboarded_by_agency_id` column anticipates it), widen to
+// 'agency' together with that UI, not before.
+router.post('/', requireAdmin, outletController.create.bind(outletController));
 // Editing the venue record is outletCan('editSettings') — owner only; Finance
 // and Ops are both excluded. Neither of these carried ANY role gate before, so
 // any signed-in account, a PR included, could rewrite an outlet or move the
