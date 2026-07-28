@@ -1,4 +1,4 @@
-import { numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { decimal, integer, numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { ShiftTable } from '@/features/shift/shift.model';
@@ -46,6 +46,22 @@ export const ShiftAssignmentTable = MainSchema.table(
     payAmount: numeric('pay_amount', { precision: 12, scale: 2 }).notNull().default('0'),
     checkInAt: timestamp('check_in_at', { withTimezone: true }),
     checkOutAt: timestamp('check_out_at', { withTimezone: true }),
+    // Where the PR physically stood when they stamped attendance. Written only
+    // by the PR's own check-in / check-out (never by the agency PUT), and only
+    // as a SNAPSHOT at those two moments - this is not continuous tracking.
+    // `distance_m` is the server's own recomputed metres from the outlet pin
+    // (reached by FK: assignment -> shift -> outlet.lat/lng), never a distance
+    // the phone claimed. `accuracy_m` is the device's reported confidence
+    // radius, kept for audit. All nullable: rows predating this, and outlets
+    // that have not dropped a pin yet, simply carry no fix.
+    checkInLat: decimal('check_in_lat', { precision: 10, scale: 8 }),
+    checkInLng: decimal('check_in_lng', { precision: 11, scale: 8 }),
+    checkInDistanceM: integer('check_in_distance_m'),
+    checkInAccuracyM: integer('check_in_accuracy_m'),
+    checkOutLat: decimal('check_out_lat', { precision: 10, scale: 8 }),
+    checkOutLng: decimal('check_out_lng', { precision: 11, scale: 8 }),
+    checkOutDistanceM: integer('check_out_distance_m'),
+    checkOutAccuracyM: integer('check_out_accuracy_m'),
     notes: varchar('notes', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

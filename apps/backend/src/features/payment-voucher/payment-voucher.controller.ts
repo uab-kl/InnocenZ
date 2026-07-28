@@ -12,6 +12,7 @@ import {
   UpdatePaymentVoucherSchema,
   PaymentVoucherLineInput,
   CreatePrReceiptLineSchema,
+  CreatePrReceiptSchema,
   UpdatePrReceiptLineSchema,
   PrDisputeSchema,
   PrReceiptKind,
@@ -99,16 +100,24 @@ function previousWeekBounds(now = new Date()): { weekStart: string; weekEnd: str
 // the reused payment_voucher_line stores them packed into `ref`. `amount` holds
 // the commission (or wages) that actually feeds the voucher net.
 const REF_SEP = '|';
-function encodeRef(kind: PrReceiptKind, source: PrReceiptSource, sales: number, dedupe?: string): string {
-  return [kind, source, sales.toFixed(2), dedupe ?? ''].join(REF_SEP);
+function encodeRef(
+  kind: PrReceiptKind,
+  source: PrReceiptSource,
+  sales: number,
+  dedupe?: string,
+  category?: string,
+): string {
+  return [kind, source, sales.toFixed(2), dedupe ?? '', category ?? ''].join(REF_SEP);
 }
 function decodeRef(ref: string | null): {
   kind: PrReceiptKind;
   source: PrReceiptSource;
   sales: number;
   dedupe: string;
+  /** Catalog category ('drink' | 'service' | 'tip') when the line came from a receipt. */
+  category: string;
 } {
-  const [kind, source, sales, dedupe] = (ref ?? '').split(REF_SEP);
+  const [kind, source, sales, dedupe, category] = (ref ?? '').split(REF_SEP);
   return {
     kind: (prReceiptKindValues as readonly string[]).includes(kind) ? (kind as PrReceiptKind) : 'others',
     source: (prReceiptSourceValues as readonly string[]).includes(source)
@@ -116,6 +125,7 @@ function decodeRef(ref: string | null): {
       : 'manual',
     sales: Number(sales) || 0,
     dedupe: dedupe ?? '',
+    category: category ?? '',
   };
 }
 
@@ -498,6 +508,108 @@ export class PaymentVoucherControllerClass {
       res.status(201).json({ success: true, message: 'Logged', data: toReceiptLineDTO(line) });
     } catch (error) {
       logger.error('[PaymentVoucherController.addMyLine] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Logs ONE whole scanned / self-logged receipt: header (OCR order number,
+   * date, time, source, proof photo) + its item lines, saved as one
+   * payment_voucher_receipt row (auto receipt number RCP-000001…) with
+   * FK-linked payment_voucher_line rows on the PR's current-week voucher.
+   * The same paper receipt (same order number) can only be logged once per
+   * voucher — a second attempt answers 409.
+   */
+  async addMyReceipt(req: Request, res: Response) {
+    try {
+      const parsed = CreatePrReceiptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const pr = await this.resolvePr(req);
+      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+
+      const { weekStart, weekEnd } = weekBounds();
+      const actor = getActor(req);
+      const draft = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
+        prId: pr.id,
+        agencyId: pr.agencyId,
+        prName: pr.name,
+        prIc: pr.icNo,
+        outlet: parsed.data.outlet ?? null,
+        weekStart,
+        weekEnd,
+        actor,
+      });
+
+      // One paper receipt = one log. Same order number on this voucher → refused.
+      if (parsed.data.orderNo) {
+        const dupe = await this.paymentVoucherRepository.findReceiptByOrderNo(
+          draft.id,
+          parsed.data.orderNo,
+        );
+        if (dupe) {
+          return res.status(409).json({
+            success: false,
+            message: `Receipt ${parsed.data.orderNo} is already logged (${dupe.receiptNo}) — use Self-log to adjust it.`,
+            data: null,
+          });
+        }
+      }
+
+      // The RECEIPT row records the paper's printed date/time verbatim
+      // (receipt_date / receipt_time). The PAY LINES bucket on the day they
+      // were logged, so the earning lands in the current shift/week PV even
+      // when the paper is dated differently.
+      const lineDate = parsed.data.lineDate ?? todayIso();
+      const { receipt, lines } = await this.paymentVoucherRepository.createReceiptWithLines(
+        {
+          voucherId: draft.id,
+          shiftAssignmentId: parsed.data.assignmentId ?? null,
+          orderNo: parsed.data.orderNo ?? null,
+          source: parsed.data.source,
+          receiptDate: parsed.data.receiptDate ?? null,
+          receiptTime: parsed.data.receiptTime ?? null,
+          note: parsed.data.note ?? null,
+          proofPhotos: parsed.data.proofPhotos ?? null,
+          createdBy: actor,
+          updatedBy: actor,
+        },
+        parsed.data.items.map((item, i) => ({
+          lineDate,
+          outlet: parsed.data.outlet,
+          description: item.item,
+          quantity: item.quantity,
+          amount: item.commission.toFixed(2),
+          ref: encodeRef(
+            item.kind,
+            parsed.data.source,
+            item.sales,
+            `${parsed.data.orderNo ?? ''}:${i}`,
+            item.category,
+          ),
+          proofPhotos: i === 0 ? (parsed.data.proofPhotos ?? null) : null,
+          createdBy: actor,
+          updatedBy: actor,
+        })),
+      );
+
+      res.status(201).json({
+        success: true,
+        message: 'Receipt logged',
+        data: {
+          id: receipt.id,
+          receiptNo: receipt.receiptNo,
+          orderNo: receipt.orderNo,
+          receiptDate: receipt.receiptDate,
+          receiptTime: receipt.receiptTime,
+          source: receipt.source,
+          lines: lines.map(toReceiptLineDTO),
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.addMyReceipt] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

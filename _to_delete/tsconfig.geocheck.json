@@ -1,0 +1,8 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [
+    "src/types/**/*",
+    "src/features/shift-assignment/**/*",
+    "src/schema/shift-assignment.schema.ts"
+  ]
+}

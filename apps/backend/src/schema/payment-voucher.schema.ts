@@ -82,6 +82,45 @@ export const UpdatePrReceiptLineSchema = CreatePrReceiptLineSchema.partial();
 export type CreatePrReceiptLineInput = z.infer<typeof CreatePrReceiptLineSchema>;
 export type UpdatePrReceiptLineInput = z.infer<typeof UpdatePrReceiptLineSchema>;
 
+// One whole SCANNED / SELF-LOGGED RECEIPT: header facts the OCR read (order
+// number, date, time) plus its item lines. Persisted as one
+// payment_voucher_receipt row + one payment_voucher_line per item (FK-linked).
+export const prReceiptItemCategoryValues = ['drink', 'service', 'tip'] as const;
+export type PrReceiptItemCategory = (typeof prReceiptItemCategoryValues)[number];
+
+export const CreatePrReceiptSchema = z.object({
+  source: z.enum(prReceiptSourceValues),
+  // The shift assignment this receipt was logged during (FK on the receipt).
+  assignmentId: z.string().uuid('Invalid assignment ID').optional(),
+  // What OCR read off the paper — e.g. ORD0389.
+  orderNo: z.string().max(100, 'Order no is too long').optional(),
+  receiptDate: isoDate.optional(),
+  receiptTime: z.string().max(10, 'Time is too long').optional(),
+  // PR's note to the agency (self-logs send it; scans may omit it).
+  note: z.string().max(1000, 'Note is too long').optional(),
+  outlet: z.string().max(255, 'Outlet is too long').optional(),
+  lineDate: isoDate.optional(),
+  proofPhotos: z
+    .array(z.string().min(1).max(1_500_000, 'Photo is too large'))
+    .max(6, 'At most 6 photos')
+    .optional(),
+  items: z
+    .array(
+      z.object({
+        kind: z.enum(prReceiptKindValues),
+        category: z.enum(prReceiptItemCategoryValues).default('drink'),
+        item: z.string().min(1, 'Item is required').max(255, 'Item is too long'),
+        quantity: z.number().int().positive().max(999),
+        sales: z.number().nonnegative(),
+        commission: z.number().nonnegative(),
+      }),
+    )
+    .min(1, 'At least one item')
+    .max(50, 'Too many items'),
+});
+
+export type CreatePrReceiptInput = z.infer<typeof CreatePrReceiptSchema>;
+
 // A PR raises a dispute on its OWN issued voucher (the week under review). The
 // reason is one of the quick presets; the note carries the flagged amount(s).
 // Persisted on the reused payment_voucher dispute columns (status='disputed').

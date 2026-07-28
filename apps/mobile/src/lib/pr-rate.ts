@@ -14,7 +14,14 @@ import type { OutletDrinkItem, ShiftAssignmentRate } from './api';
 export const FALLBACK_DRINK_PCT = 15;
 export const FALLBACK_TIP_PCT = 10;
 
-export type MenuDrink = { id: string; name: string; priceRm: number };
+/** Catalog section of a menu item — mirrors outlet_drink_menu.category. */
+export type MenuCategory = 'drink' | 'service' | 'tip';
+
+export type MenuDrink = { id: string; name: string; priceRm: number; category: MenuCategory };
+
+function toMenuCategory(raw: string | null | undefined): MenuCategory {
+  return raw === 'service' || raw === 'tip' ? raw : 'drink';
+}
 
 /** Map the backend drink menu (money as strings) to the screen's number form. */
 export function drinkMenuFromAssignment(
@@ -24,7 +31,35 @@ export function drinkMenuFromAssignment(
     id: d.id,
     name: d.name,
     priceRm: Number(d.priceRm) || 0,
+    category: toMenuCategory(d.category),
   }));
+}
+
+/**
+ * The menu slice for one scan page: the Drinks page shows category 'drink';
+ * the Tips page shows 'service' + 'tip' (Booking commission, Havoc, Tip…).
+ * Falls back to the whole menu when the outlet hasn't tagged categories yet,
+ * so an untagged legacy menu still lets the PR log.
+ */
+export function menuForScanCategory(
+  menu: MenuDrink[],
+  scanCategory: 'drinks' | 'tips',
+): MenuDrink[] {
+  const filtered =
+    scanCategory === 'drinks'
+      ? menu.filter((d) => d.category === 'drink')
+      : menu.filter((d) => d.category === 'service' || d.category === 'tip');
+  return filtered.length > 0 ? filtered : menu;
+}
+
+/**
+ * Which PV money bucket one logged item belongs to (build-sheet rule 2C-4):
+ * drinks → drinks; Tip + Booking commission → tips; other services → others.
+ */
+export function receiptKindForItem(item: MenuDrink): 'drinks' | 'tips' | 'others' {
+  if (item.category === 'drink') return 'drinks';
+  if (item.category === 'tip' || item.id === 'booking-com') return 'tips';
+  return 'others';
 }
 
 /** 'HH:MM' → minutes since midnight, or null when malformed/empty. */

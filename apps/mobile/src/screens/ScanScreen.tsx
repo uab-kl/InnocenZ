@@ -1,6 +1,17 @@
 /**
- * Receipt Scan — port of InnocenZ-proto `/host/scan`.
- * Camera/OCR simulated; self-log drinks/tips write into the active shift session.
+ * Receipt Scan — port of InnocenZ-proto `/host/scan`, now with REAL OCR.
+ *
+ * Scan flow (build steps 2A–2C): snap the receipt with the camera →
+ * ML Kit reads the words on the phone (free, offline) → receipt-parser hunts
+ * the date + order number and matches item lines against THIS outlet's menu
+ * (drinks page ↔ category 'drink'; tips page ↔ 'service' + 'tip') → the PR
+ * adjusts quantities and confirms → each item saves through the SAME
+ * self-log door (POST /payment-voucher/mine/lines) marked source 'scan',
+ * receipt photo attached, deduped by receipt number so the same receipt
+ * can't be logged twice.
+ *
+ * When OCR isn't available (web preview / Expo Go) or can't match anything,
+ * it falls back to the manual self-log tap list — photo kept as proof.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -16,9 +27,17 @@ import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { formatRM, todayYmd, ymdToIso } from '../lib/demo-shifts';
 import { fmtAttendanceStamp } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
-import { commissionFor as rateCommission, drinkMenuFromAssignment } from '../lib/pr-rate';
+import {
+  commissionFor as rateCommission,
+  drinkMenuFromAssignment,
+  menuForScanCategory,
+  receiptKindForItem,
+  type MenuDrink,
+} from '../lib/pr-rate';
 import { usePrEarnings } from '../lib/pr-earnings';
 import { usePrNav, type ScanCategory, type ScanMode } from '../lib/pr-nav';
+import { captureReceiptPhoto, recognizeReceiptText } from '../lib/receipt-ocr';
+import { parseReceipt } from '../lib/receipt-parser';
 import {
   Camera,
   Check,
@@ -29,6 +48,7 @@ import {
   XIcon,
 } from '../components/icons';
 import { pickProofPhotos } from '../lib/proof-photo';
+import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 
 type Phase = 'idle' | 'scanning' | 'review' | 'manual' | 'logged';
 
@@ -48,9 +68,18 @@ export function ScanScreen({
   editId?: string;
 }) {
   const { goBack, setTab } = usePrNav();
-  const { active, phase: attendancePhase } = useActiveShift();
-  const { receiptLines, addLine, updateLine } = usePrEarnings();
+  const { active, phase: attendancePhase, refresh: refreshShift } = useActiveShift();
+  const { receiptLines, addLine, submitReceipt, updateLine } = usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
+
+  // Re-pull `/shift-assignment/mine` from the DATABASE every time this screen
+  // opens — it carries the shift outlet's live drink/service/tip catalog
+  // (outlet_workspace → outlet_drink_menu via FK), so an item the outlet just
+  // added in its Workspace is scannable immediately, no re-login needed.
+  useEffect(() => {
+    void refreshShift();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Stamp every self-logged line with the PR's actual calendar day (device-local
   // "today"), so a receipt logged today counts today — never the shift's
@@ -81,7 +110,10 @@ export function ScanScreen({
   );
   const [amount, setAmount] = useState(category === 'tips' ? '50' : '125');
   const [editItem, setEditItem] = useState('');
-  const [note, setNote] = useState('Receipt water-damaged / OCR unreadable');
+  // REQUIRED for self-logs: what was unclear on the paper (quantity / price /
+  // date…) or a confirmation that everything matches. Starts empty on purpose
+  // so the PR must actually write it.
+  const [note, setNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // Proof photo(s) for the self-log — mandatory for a new drink self-log.
@@ -89,7 +121,14 @@ export function ScanScreen({
 
   const pvId = useMemo(() => shiftPvId(outlet, dateYmd), [outlet, dateYmd]);
   const drinkMenu = useMemo(() => drinkMenuFromAssignment(active?.drinkMenu), [active?.drinkMenu]);
+  // The slice of the outlet catalog this page logs: Drinks page ↔ 'drink'
+  // items; Tips page ↔ 'service' + 'tip' items (Booking commission, Havoc, Tip).
+  const categoryMenu = useMemo(
+    () => menuForScanCategory(drinkMenu, category),
+    [drinkMenu, category],
+  );
   const categoryLabel = category === 'tips' ? 'Tips' : 'Drinks';
+  const itemNoun = category === 'tips' ? 'tip / service item' : 'drink';
 
   const pageTitle = editId
     ? 'Edit self-log'
@@ -98,21 +137,31 @@ export function ScanScreen({
       : `Scan ${categoryLabel.toLowerCase()} receipt`;
 
   const [drinkQtys, setDrinkQtys] = useState<Record<string, number>>({});
-  // When editing a menu drink, show the drink picker pre-filled with its
-  // previous quantity; tips (and free-typed "manual total" drinks) edit the
-  // single amount field instead.
+  // What the LAST real OCR pass read off the receipt.
+  const [detectedIds, setDetectedIds] = useState<string[]>([]);
+  // What OCR read off the paper (ORD0389) — sent to the server as orderNo.
+  const [receiptNo, setReceiptNo] = useState<string | null>(null);
+  const [receiptDate, setReceiptDate] = useState<string | null>(null);
+  const [receiptTime, setReceiptTime] = useState<string | null>(null);
+  // The database-generated running number (RCP-000001) returned on save.
+  const [serverReceiptNo, setServerReceiptNo] = useState<string | null>(null);
+  // Downscaled receipt photo — attached to the logged line as proof.
+  const [receiptShot, setReceiptShot] = useState<string | null>(null);
+  // Why the scan fell back to manual (OCR unavailable / nothing matched).
+  const [scanIssue, setScanIssue] = useState<string | null>(null);
+  const [showAddMissed, setShowAddMissed] = useState(false);
+  // When editing a menu item, show the item picker pre-filled with its
+  // previous quantity; free-typed amounts edit the single amount field instead.
   const [editMenuMode, setEditMenuMode] = useState(false);
-  const [ocrItem, setOcrItem] = useState('Cosmo');
-  const [ocrAmount, setOcrAmount] = useState(150);
   const prefilledFor = useRef<string | null>(null);
 
   useEffect(() => {
     setDrinkQtys((prev) => {
       const next: Record<string, number> = {};
-      for (const d of drinkMenu) next[d.id] = prev[d.id] ?? 0;
+      for (const d of categoryMenu) next[d.id] = prev[d.id] ?? 0;
       return next;
     });
-  }, [drinkMenu]);
+  }, [categoryMenu]);
 
   // Prefill the edit form from the existing line — ONCE per editId, so a later
   // provider refresh doesn't clobber the quantities the user is adjusting.
@@ -124,56 +173,148 @@ export function ScanScreen({
     prefilledFor.current = editId;
     setPhase('manual');
     setEditItem(existing.item);
-    const menuDrink =
-      existing.kind === 'drinks'
-        ? drinkMenu.find((d) => d.name === existing.item)
-        : undefined;
-    if (menuDrink) {
-      // Restore which drink + how many were logged.
-      setDrinkQtys((q) => ({ ...q, [menuDrink.id]: existing.quantity || 1 }));
+    const menuItem = categoryMenu.find((d) => d.name === existing.item);
+    if (menuItem) {
+      // Restore which item + how many were logged.
+      setDrinkQtys((q) => ({ ...q, [menuItem.id]: existing.quantity || 1 }));
       setEditMenuMode(true);
     } else {
-      // Tips, or a drink not on the current menu — edit the amount directly.
+      // A line not on the current menu — edit the amount directly.
       setAmount(String(existing.sales));
       setEditMenuMode(false);
     }
-  }, [editId, receiptLines, drinkMenu]);
+  }, [editId, receiptLines, categoryMenu]);
 
-  // Whether the drink picker (vs the single amount field) is shown. The outlet's
-  // real drink menu drives it; when the outlet hasn't configured one, fall back
-  // to the manual amount field so the PR can still self-log a drink total.
-  const showDrinkMenu =
-    category === 'drinks' && drinkMenu.length > 0 && (!editId || editMenuMode);
+  // Whether the item tap-list (vs the single amount field) is shown. The
+  // outlet's real catalog drives it — drinks AND tips/service both get the
+  // tap-don't-type list (build steps 2C-3 + 2C-4); when the outlet hasn't
+  // configured one, fall back to the manual amount field.
+  const showItemMenu = categoryMenu.length > 0 && (!editId || editMenuMode);
 
-  // A drink self-log needs photo proof BEFORE it can be submitted (agency
-  // verifies against it). Not required for OCR scans, tips, or edits.
-  const proofRequired = mode === 'selflog' && category === 'drinks' && !editId;
+  // The scanned receipt photo IS the proof — runScanDetect auto-attaches it,
+  // so the menu flow never asks for a second photo. A separate proof photo is
+  // only demanded on the no-menu amount fallback (nothing else captures one).
+  const proofRequired =
+    mode === 'selflog' && category === 'drinks' && !editId && !showItemMenu;
   const missingProof = proofRequired && proofPhotos.length === 0;
 
   // Commission at this PR's real tier rate (happy-hour aware); falls back to the
   // prototype flat rates only when the outlet has no rate card configured.
   const commissionFor = (cat: ScanCategory, sales: number) => rateCommission(cat, sales, rate);
+  /** Commission for one catalog item: drinks use the drink %, everything else the tip %. */
+  const commissionForItem = (d: MenuDrink, sales: number) =>
+    commissionFor(receiptKindForItem(d) === 'drinks' ? 'drinks' : 'tips', sales);
 
-  const drinkTotal = drinkMenu.reduce(
+  const menuTotal = categoryMenu.reduce(
     (s, d) => s + d.priceRm * (drinkQtys[d.id] ?? 0),
     0,
   );
-  const drinkCommission = commissionFor('drinks', drinkTotal);
+  const menuCommission = categoryMenu.reduce(
+    (s, d) => s + commissionForItem(d, d.priceRm * (drinkQtys[d.id] ?? 0)),
+    0,
+  );
 
   // A drink self-log needs BOTH a quantity/amount AND a proof photo before it
   // can be submitted (the user's rule: pick drinks + snap pic, then submit).
-  const hasDrinkAmount = showDrinkMenu ? drinkTotal > 0 : Number(amount) > 0;
-  const drinkIncomplete = proofRequired && !hasDrinkAmount;
+  const hasItemAmount = showItemMenu ? menuTotal > 0 : Number(amount) > 0;
+  const drinkIncomplete = proofRequired && !hasItemAmount;
 
-  const startScan = () => {
-    setPhase('scanning');
-    setTimeout(() => {
-      const first = drinkMenu[0];
-      setOcrItem(category === 'tips' ? 'Guest tip' : first?.name ?? 'Cosmo');
-      setOcrAmount(category === 'tips' ? 50 : first?.priceRm ?? 150);
-      setPhase('review');
-    }, 900);
+  const detected = categoryMenu.filter((d) => detectedIds.includes(d.id));
+  const undetected = categoryMenu.filter((d) => !detectedIds.includes(d.id));
+  const detectedTotal = detected.reduce((s, d) => s + d.priceRm * (drinkQtys[d.id] ?? 0), 0);
+  const detectedUnits = detected.reduce((s, d) => s + (drinkQtys[d.id] ?? 0), 0);
+  const detectedCommission = detected.reduce(
+    (s, d) => s + commissionForItem(d, d.priceRm * (drinkQtys[d.id] ?? 0)),
+    0,
+  );
+
+  const keepAsProof = (dataUrl: string | null) => {
+    if (dataUrl) setProofPhotos((prev) => [...prev, dataUrl].slice(0, 6));
   };
+
+  // Proto-style self-log: item rows appear only AFTER a scan pass (except in
+  // edit mode, where the whole list shows so quantities can be adjusted).
+  const manualRows = editId ? categoryMenu : detected;
+  const manualScanAttempted = receiptShot != null || detectedIds.length > 0;
+  // The agency note is REQUIRED on a fresh self-log: what was unclear on the
+  // paper, or a confirmation the items & prices match.
+  const manualNoteMissing = !editId && note.trim().length === 0;
+
+  // Today's logged receipt lines — feeds the "what have I scanned" gallery.
+  const todayReceiptLines = useMemo(
+    () => receiptLines.filter((l) => l.lineDate === todayKey),
+    [receiptLines, todayKey],
+  );
+
+  /**
+   * The REAL scan: camera → ML Kit words → parser match against this page's
+   * menu slice. `target` is where a successful read lands: 'review' (scan
+   * flow) or 'manual' (the "scan to detect" helper inside self-log).
+   */
+  const runScanDetect = async (target: 'review' | 'manual') => {
+    setSubmitError(null);
+    setScanIssue(null);
+    const shot = await captureReceiptPhoto();
+    if (!shot) return; // PR cancelled the camera
+    setReceiptShot(shot.dataUrl);
+    setPhase('scanning');
+    const text = await recognizeReceiptText(shot.uri);
+    if (text == null) {
+      // OCR engine not in this build (web preview / Expo Go — needs the dev app).
+      setScanIssue(
+        'On-phone OCR needs the dev app build. Photo kept as proof — self-log the items instead.',
+      );
+      keepAsProof(shot.dataUrl);
+      setPhase('manual');
+      return;
+    }
+    const parsed = parseReceipt(text, categoryMenu);
+    // MERGE with earlier passes: a rescan FILLS what's still missing and never
+    // wipes a field an earlier shot already read — so the PR can scan the top
+    // half (order no), then the bottom half (date + time), and it adds up.
+    const mergedOrderNo = parsed.orderNo ?? receiptNo;
+    const mergedDate = parsed.date ?? receiptDate;
+    const mergedTime = parsed.time ?? receiptTime;
+    setReceiptNo(mergedOrderNo);
+    setReceiptDate(mergedDate);
+    setReceiptTime(mergedTime);
+    if (parsed.matches.length === 0 && detectedIds.length === 0) {
+      setScanIssue(
+        `OCR read the photo but matched none of ${outlet}'s ${itemNoun}s — blurry or water-damaged? Self-log below, photo kept as proof.`,
+      );
+      keepAsProof(shot.dataUrl);
+      setPhase('manual');
+      return;
+    }
+    // SCAN ONLY: a pure scan must record the SAME order number + date + time
+    // printed on the paper — no silent "today" fallback: the PR scans again.
+    // Self-log records whatever was read but is never blocked by it.
+    if (target === 'review' && (!mergedDate || !mergedOrderNo || !mergedTime)) {
+      const missing = [
+        !mergedOrderNo ? 'order number' : null,
+        !mergedDate ? 'date' : null,
+        !mergedTime ? 'time' : null,
+      ]
+        .filter(Boolean)
+        .join(' and ');
+      setScanIssue(
+        `OCR couldn't read the receipt's ${missing} yet — get closer to that part of the paper (flat, no glare) and scan again. Fields already read are kept.`,
+      );
+      setPhase('idle');
+      return;
+    }
+    setDetectedIds((prev) => Array.from(new Set([...prev, ...parsed.matches.map((m) => m.id)])));
+    setDrinkQtys((prev) => {
+      const next = { ...prev };
+      for (const m of parsed.matches) next[m.id] = Math.max(next[m.id] ?? 0, m.qty);
+      return next;
+    });
+    if (target === 'manual') keepAsProof(shot.dataUrl);
+    setShowAddMissed(false);
+    setPhase(target);
+  };
+
+  const startScan = () => void runScanDetect('review');
 
   // Persist to the current-week draft voucher; only flip to `logged` on success.
   const runSubmit = async (fn: () => Promise<void>) => {
@@ -190,19 +331,45 @@ export function ScanScreen({
     }
   };
 
+  /** The detected/tapped items in the wire shape the receipt endpoint wants. */
+  const buildReceiptItems = (source: MenuDrink[]) =>
+    source
+      .filter((d) => (drinkQtys[d.id] ?? 0) > 0)
+      .map((d) => {
+        const qty = drinkQtys[d.id] ?? 0;
+        const amt = d.priceRm * qty;
+        return {
+          kind: receiptKindForItem(d),
+          category: d.category,
+          item: d.name,
+          quantity: qty,
+          sales: amt,
+          commission: commissionForItem(d, amt),
+        };
+      });
+
+  /**
+   * Confirm the OCR review: the WHOLE receipt saves in one call — one
+   * payment_voucher_receipt row (unique RCP-… number generated by the
+   * database, OCR order number / date / time recorded) plus one FK-linked
+   * line per item, photo attached as proof. The same order number can only
+   * be logged once — the server answers 409 on a duplicate.
+   */
   const confirmOcr = () =>
     void runSubmit(async () => {
-      const input = {
-        kind: category,
-        source: 'scan' as const,
-        item: ocrItem,
-        quantity: 1,
-        sales: ocrAmount,
-        commission: commissionFor(category, ocrAmount),
+      const items = buildReceiptItems(detected);
+      if (items.length === 0) throw new Error('Set a quantity for at least one item.');
+      const receipt = await submitReceipt({
+        source: 'scan',
+        assignmentId: active?.id,
+        orderNo: receiptNo ?? undefined,
+        receiptDate: receiptDate ?? undefined,
+        receiptTime: receiptTime ?? undefined,
         outlet: outlet,
-      };
-      if (editId) await editLine(editId, input);
-      else await logLine(input);
+        proofPhotos: receiptShot ? [receiptShot] : undefined,
+        items,
+      });
+      setServerReceiptNo(receipt.receiptNo);
     });
 
   const submitManual = () =>
@@ -211,32 +378,32 @@ export function ScanScreen({
       // path that used to rebuild the row and lose its detail).
       if (editId) {
         if (editMenuMode) {
-          // Drink edit: recompute from the (restored, then adjusted) quantities.
-          const items = drinkMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
-          if (items.length === 0) throw new Error('Set a drink quantity first.');
+          // Menu edit: recompute from the (restored, then adjusted) quantities.
+          const items = categoryMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
+          if (items.length === 0) throw new Error(`Set a ${itemNoun} quantity first.`);
           const [first, ...rest] = items;
           const firstQty = drinkQtys[first.id] ?? 0;
           const firstAmt = first.priceRm * firstQty;
           await editLine(editId, {
-            kind: 'drinks',
+            kind: receiptKindForItem(first),
             source: 'manual',
             item: first.name,
             quantity: firstQty,
             sales: firstAmt,
-            commission: commissionFor('drinks', firstAmt),
+            commission: commissionForItem(first, firstAmt),
             outlet: outlet,
           });
-          // Any extra drinks the user added during the edit become new rows.
+          // Any extra items the user added during the edit become new rows.
           for (const d of rest) {
             const qty = drinkQtys[d.id] ?? 0;
             const amt = d.priceRm * qty;
             await logLine({
-              kind: 'drinks',
+              kind: receiptKindForItem(d),
               source: 'manual',
               item: d.name,
               quantity: qty,
               sales: amt,
-              commission: commissionFor('drinks', amt),
+              commission: commissionForItem(d, amt),
               outlet: outlet,
             });
           }
@@ -254,56 +421,44 @@ export function ScanScreen({
         });
         return;
       }
-      if (category === 'drinks') {
-        // Proof photo is mandatory (the submit button is already gated on this;
-        // this is the backstop so a drink self-log can never persist without it).
-        if (proofRequired && proofPhotos.length === 0) {
-          throw new Error('Snap a proof photo before you submit.');
-        }
-        // The proof belongs to the whole self-log — attach it to the first line
-        // created; the agency verifies the receipt against that row.
-        const proof = proofPhotos.length ? proofPhotos : undefined;
-        const items = drinkMenu.filter((d) => (drinkQtys[d.id] ?? 0) > 0);
+      // Proof photo is mandatory for a fresh drink self-log (the submit button
+      // is already gated on this; this is the backstop so it can never persist
+      // without it).
+      if (proofRequired && proofPhotos.length === 0) {
+        throw new Error('Snap a proof photo before you submit.');
+      }
+      const proof = proofPhotos.length ? proofPhotos : undefined;
+      if (showItemMenu) {
+        const items = buildReceiptItems(categoryMenu);
         if (items.length === 0) {
-          const amt = Number(amount) || 0;
-          if (amt <= 0) throw new Error('Set a drink quantity or amount first.');
-          await logLine({
-            kind: 'drinks',
-            source: 'manual',
-            item: 'Manual drink total',
-            quantity: 1,
-            sales: amt,
-            commission: commissionFor('drinks', amt),
-            outlet: outlet,
-            proofPhotos: proof,
-          });
-        } else {
-          for (let i = 0; i < items.length; i++) {
-            const d = items[i];
-            const qty = drinkQtys[d.id] ?? 0;
-            const amt = d.priceRm * qty;
-            await logLine({
-              kind: 'drinks',
-              source: 'manual',
-              item: d.name,
-              quantity: qty,
-              sales: amt,
-              commission: commissionFor('drinks', amt),
-              outlet: outlet,
-              proofPhotos: i === 0 ? proof : undefined,
-            });
-          }
+          throw new Error(`Set a quantity for at least one ${itemNoun}.`);
         }
+        // The whole self-log saves as ONE receipt (source 'manual' — agency
+        // verifies it), items FK-linked, scan photo attached as the proof.
+        const receipt = await submitReceipt({
+          source: 'manual',
+          assignmentId: active?.id,
+          orderNo: receiptNo ?? undefined,
+          receiptDate: receiptDate ?? undefined,
+          receiptTime: receiptTime ?? undefined,
+          note: note.trim() || undefined,
+          outlet: outlet,
+          proofPhotos: proof,
+          items,
+        });
+        setServerReceiptNo(receipt.receiptNo);
       } else {
         const amt = Number(amount) || 0;
+        if (amt <= 0) throw new Error('Set an amount first.');
         await logLine({
-          kind: 'tips',
+          kind: category,
           source: 'manual',
-          item: 'Guest tip',
+          item: category === 'tips' ? 'Guest tip' : 'Manual drink total',
           quantity: 1,
           sales: amt,
-          commission: commissionFor('tips', amt),
+          commission: commissionFor(category, amt),
           outlet: outlet,
+          proofPhotos: proof,
         });
       }
     });
@@ -320,9 +475,7 @@ export function ScanScreen({
         <Text style={styles.pageTitle}>{pageTitle}</Text>
       </View>
       <Text style={styles.pageSub}>
-        {editId
-          ? 'Update amount or note — agency is notified again for verification.'
-          : 'Receipts scanned between Time-In and Time-Out attach to one PV for that shift only.'}
+        {editId ? 'Edit — agency re-verifies.' : "Scans between Time-In and Time-Out go to this shift's PV."}
       </Text>
 
       {!onDuty ? (
@@ -353,10 +506,13 @@ export function ScanScreen({
           </View>
 
           <View style={styles.card}>
-            {(phase === 'idle' || phase === 'scanning' || phase === 'review') && (
+            {(phase === 'idle' || phase === 'scanning') && (
               <View style={styles.scanBox}>
                 {phase === 'idle' && (
-                  <Text style={styles.scanIdleHint}>Tap scan to capture a receipt</Text>
+                  <>
+                    {scanIssue && <Text style={styles.scanIssueText}>{scanIssue}</Text>}
+                    <Text style={styles.scanIdleHint}>Point at the receipt and snap</Text>
+                  </>
                 )}
                 {phase === 'scanning' && (
                   <>
@@ -364,28 +520,54 @@ export function ScanScreen({
                     <Text style={styles.scanScanning}>Scanning… reading OCR fields</Text>
                   </>
                 )}
-                {phase === 'review' && (
-                  <View style={styles.ocrBlock}>
-                    <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
-                    <Text style={styles.ocrLine}>Item: {ocrItem}</Text>
-                    <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
-                    <Text style={styles.ocrLine}>
-                      Total logged: <Text style={styles.activeBold}>{formatRM(ocrAmount)}</Text>
-                    </Text>
-                  </View>
-                )}
               </View>
             )}
 
             {phase === 'review' && (
               <>
+                <View style={styles.ocrBlock}>
+                  <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
+                  <Text style={styles.ocrLine}>Order No: {receiptNo}</Text>
+                  <Text style={styles.ocrLine}>Date: {receiptDate}</Text>
+                  <Text style={styles.ocrLine}>Time: {receiptTime}</Text>
+                  <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
+                </View>
+
+                {/* A pure OCR scan is untouchable: what the receipt says is what
+                    logs — no quantity edits, no manual additions. Wrong read?
+                    The PR uses Self-log from Check-In instead. */}
+                <Text style={styles.fieldLabel}>OCR detected · as read from the receipt</Text>
+                {detected.map((d) => {
+                  const qty = drinkQtys[d.id] ?? 0;
+                  return (
+                    <View key={d.id} style={styles.drinkRow}>
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.drinkName}>{d.name}</Text>
+                        <Text style={styles.drinkUnit}>
+                          {formatRM(d.priceRm)} each
+                          {qty > 0
+                            ? ` · ${formatRM(d.priceRm)} × ${qty} = ${formatRM(d.priceRm * qty)}`
+                            : ''}
+                        </Text>
+                      </View>
+                      <Text style={styles.qtyVal}>× {qty}</Text>
+                    </View>
+                  );
+                })}
+
                 <Text style={styles.cardMeta}>
-                  Est. commission {formatRM(commissionFor(category, ocrAmount))}
+                  {detectedUnits > 0
+                    ? `${detected.filter((d) => (drinkQtys[d.id] ?? 0) > 0).length} ${itemNoun}(s) · ${detectedUnits} unit(s) · ${formatRM(detectedTotal)} · Est. commission ${formatRM(detectedCommission)}`
+                    : 'Set a quantity for at least one item.'}
                 </Text>
                 <Pressable
-                  style={[styles.primary, grad(GRADIENTS.accent, C.accent), submitting && { opacity: 0.6 }]}
+                  style={[
+                    styles.primary,
+                    grad(GRADIENTS.accent, C.accent),
+                    (submitting || detectedUnits === 0) && { opacity: 0.6 },
+                  ]}
                   onPress={confirmOcr}
-                  disabled={submitting}
+                  disabled={submitting || detectedUnits === 0}
                 >
                   <Camera size={16} color="#241a08" />
                   <Text style={[styles.primaryText, { color: '#241a08' }]}>
@@ -393,11 +575,6 @@ export function ScanScreen({
                   </Text>
                 </Pressable>
                 {submitError && <Text style={styles.errorText}>{submitError}</Text>}
-                <Pressable style={styles.soft} onPress={() => setPhase('manual')}>
-                  <Text style={styles.softAmber}>
-                    OCR looks wrong? Self-log {category === 'drinks' ? 'drinks' : 'manually'} instead
-                  </Text>
-                </Pressable>
               </>
             )}
 
@@ -421,24 +598,67 @@ export function ScanScreen({
                 <View style={styles.manualPill}>
                   <Text style={styles.manualPillText}>Manual self-log</Text>
                 </View>
-                <Text style={styles.scanIdleHint}>
-                  {showDrinkMenu
-                    ? `Select the drink sold and quantity — agency must verify before it counts toward your PV.`
-                    : 'Key in the amount yourself — agency must verify before it counts toward your PV.'}
-                </Text>
-                {showDrinkMenu ? (
+                {scanIssue && <Text style={styles.scanIssueText}>{scanIssue}</Text>}
+                {!showItemMenu && (
+                  <Text style={styles.scanIdleHint}>Key in the amount · agency verifies.</Text>
+                )}
+                {showItemMenu ? (
                   <>
-                    <Text style={styles.fieldLabel}>
-                      Drink menu · {outlet} · {drinkMenu.length} drinks
-                    </Text>
-                    <Text style={styles.menuHint}>
-                      Tap +/- for each item sold.
-                    </Text>
-                    {drinkMenu.map((d) => (
+                    <View style={styles.selfLogHead}>
+                      <Wine size={16} color={C.goldL} />
+                      <View style={{ flex: 1 }}>
+                        <Text style={styles.selfLogHeadTitle}>{outlet.toUpperCase()}</Text>
+                        <Text style={styles.selfLogHeadSub}>
+                          OCR reads the receipt & matches this outlet's {categoryMenu.length}{' '}
+                          {itemNoun}
+                          {categoryMenu.length === 1 ? '' : 's'}
+                        </Text>
+                      </View>
+                    </View>
+
+                    {!editId && manualScanAttempted && (
+                      <View style={[styles.ocrBlock, { marginTop: 10 }]}>
+                        <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
+                        <Text style={styles.ocrLine}>Order No: {receiptNo ?? '—'}</Text>
+                        <Text style={styles.ocrLine}>Date: {receiptDate ?? '—'}</Text>
+                        <Text style={styles.ocrLine}>Time: {receiptTime ?? '—'}</Text>
+                        <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
+                      </View>
+                    )}
+
+                    {!editId && (
+                      <View style={styles.selfLogScanbox}>
+                        <Camera size={28} color={C.goldL} />
+                        <Text style={styles.selfLogScanHint}>
+                          {manualRows.length === 0
+                            ? `Point at the receipt — OCR lists the ${itemNoun}s it reads`
+                            : `Scan again to catch a ${itemNoun} OCR missed`}
+                        </Text>
+                        <Pressable
+                          style={styles.selfLogScanBtn}
+                          onPress={() => void runScanDetect('manual')}
+                        >
+                          <Camera size={14} color="#241a08" />
+                          <Text style={styles.selfLogScanBtnText}>
+                            {manualRows.length === 0 ? `Scan ${itemNoun}s` : 'Scan again'}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    )}
+
+                    {manualRows.length > 0 && (
+                      <Text style={styles.fieldLabel}>OCR DETECTED · ADJUST QUANTITY</Text>
+                    )}
+                    {manualRows.map((d) => (
                       <View key={d.id} style={styles.drinkRow}>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.drinkName}>{d.name}</Text>
-                          <Text style={styles.drinkUnit}>{formatRM(d.priceRm)} each</Text>
+                          <Text style={styles.drinkUnit}>
+                            {formatRM(d.priceRm)} each
+                            {(drinkQtys[d.id] ?? 0) > 0
+                              ? ` · × ${drinkQtys[d.id]} = ${formatRM(d.priceRm * (drinkQtys[d.id] ?? 0))}`
+                              : ''}
+                          </Text>
                         </View>
                         <View style={styles.qtyCtrl}>
                           <Pressable
@@ -467,11 +687,49 @@ export function ScanScreen({
                         </View>
                       </View>
                     ))}
-                    <Text style={styles.cardMeta}>
-                      {drinkTotal > 0
-                        ? `Total ${formatRM(drinkTotal)} · Comm ${formatRM(drinkCommission)}`
-                        : 'Set quantity for at least one drink to submit.'}
-                    </Text>
+                    {!editId && manualScanAttempted && undetected.length > 0 && !showAddMissed && (
+                      <Pressable style={styles.soft} onPress={() => setShowAddMissed(true)}>
+                        <Text style={styles.softAmber}>OCR missed one? Add manually</Text>
+                      </Pressable>
+                    )}
+                    {!editId && manualScanAttempted && undetected.length > 0 && showAddMissed && (
+                      <>
+                        <Text style={styles.fieldLabel}>Add {itemNoun} OCR missed</Text>
+                        {undetected.map((d) => (
+                          <Pressable
+                            key={d.id}
+                            style={styles.drinkRow}
+                            onPress={() => {
+                              setDetectedIds((prev) => [...prev, d.id]);
+                              setDrinkQtys((q) => ({ ...q, [d.id]: Math.max(1, q[d.id] ?? 0) }));
+                              setShowAddMissed(false);
+                            }}
+                          >
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.drinkName}>{d.name}</Text>
+                              <Text style={styles.drinkUnit}>{formatRM(d.priceRm)} each</Text>
+                            </View>
+                            <Text style={styles.softAmber}>+ Add</Text>
+                          </Pressable>
+                        ))}
+                      </>
+                    )}
+                    {menuTotal > 0 && (
+                      <View style={styles.selfLogSummary}>
+                        <View style={styles.selfLogSummaryRow}>
+                          <Text style={styles.selfLogSummaryLabel}>
+                            {manualRows.filter((d) => (drinkQtys[d.id] ?? 0) > 0).length} {itemNoun}
+                            {manualRows.length === 1 ? '' : 's'} ·{' '}
+                            {manualRows.reduce((n, d) => n + (drinkQtys[d.id] ?? 0), 0)} unit(s)
+                          </Text>
+                          <Text style={styles.selfLogSummaryTotal}>{formatRM(menuTotal)}</Text>
+                        </View>
+                        <Text style={styles.selfLogSummaryComm}>
+                          Commission preview:{' '}
+                          <Text style={styles.activeBold}>{formatRM(menuCommission)}</Text>
+                        </Text>
+                      </View>
+                    )}
                   </>
                 ) : (
                   <>
@@ -494,8 +752,7 @@ export function ScanScreen({
                       <Text style={styles.proofTitle}>Proof photo · required</Text>
                     </View>
                     <Text style={styles.proofHint}>
-                      Snap the receipt / drinks as proof before you submit — the agency verifies
-                      your self-log against it. You can attach more than one.
+                      Snap the receipt as proof — agency verifies against it.
                     </Text>
                     <Pressable
                       style={styles.proofBtn}
@@ -529,40 +786,57 @@ export function ScanScreen({
                       </View>
                     ) : (
                       <Text style={styles.proofReminder}>
-                        ⚠ No photo yet — snap one to enable Submit.
+                        ⚠ Snap a photo to enable Submit.
                       </Text>
                     )}
                   </View>
                 )}
 
-                <Text style={styles.fieldLabel}>Note for agency (optional)</Text>
+                <Text style={styles.fieldLabel}>
+                  Note for agency {editId ? '(optional)' : '(required)'}
+                </Text>
                 <TextInput
                   value={note}
                   onChangeText={setNote}
                   style={styles.input}
+                  placeholder="Unclear quantity / price / date on the receipt? Explain — or confirm all match."
                   placeholderTextColor={C.muted2}
                 />
                 <Pressable
                   style={[
                     styles.primary,
                     grad(GRADIENTS.accent, C.accent),
-                    (submitting || missingProof || drinkIncomplete) && { opacity: 0.6 },
+                    (submitting ||
+                      missingProof ||
+                      drinkIncomplete ||
+                      manualNoteMissing ||
+                      (showItemMenu && !editId && menuTotal <= 0)) && { opacity: 0.6 },
                   ]}
                   onPress={submitManual}
-                  disabled={submitting || missingProof || drinkIncomplete}
+                  disabled={
+                    submitting ||
+                    missingProof ||
+                    drinkIncomplete ||
+                    manualNoteMissing ||
+                    (showItemMenu && !editId && menuTotal <= 0)
+                  }
                 >
                   <Pencil size={16} color="#241a08" />
                   <Text style={[styles.primaryText, { color: '#241a08' }]}>
                     {submitting
                       ? 'Saving…'
-                      : drinkIncomplete && missingProof
-                        ? 'Add drinks + proof to submit'
-                        : drinkIncomplete
-                          ? 'Set a drink quantity'
+                      : editId
+                        ? 'Update self-log'
+                        : showItemMenu
+                          ? menuTotal <= 0
+                            ? `Submit self-log · scan ${itemNoun}s`
+                            : manualNoteMissing
+                              ? 'Write the agency note to submit'
+                              : `Submit self-log · ${formatRM(menuTotal)}`
                           : missingProof
                             ? 'Snap proof to submit'
-                            : editId
-                              ? 'Update self-log'
+                            : manualNoteMissing
+                              ? 'Write the agency note to submit'
                               : 'Submit self-log'}
                   </Text>
                 </Pressable>
@@ -577,14 +851,28 @@ export function ScanScreen({
                   <Text style={styles.okTitle}>Receipt logged</Text>
                 </View>
                 <Text style={styles.scanIdleHint}>
-                  Row added on Check-In STATUS. Self-logs stay pending until agency verifies.
+                  Added to Check-In STATUS · pending until agency verifies.
                 </Text>
                 <Text style={styles.activeMeta}>
                   Belongs to PV: <Text style={styles.activeBold}>{pvId}</Text>
+                  {serverReceiptNo ? ` · Receipt ${serverReceiptNo}` : ''}
+                  {receiptNo ? ` · Order ${receiptNo}` : ''}
                 </Text>
                 <View style={styles.loggedActions}>
                   {!editId && (
-                    <Pressable style={styles.softBtn} onPress={() => setPhase('idle')}>
+                    <Pressable
+                      style={styles.softBtn}
+                      onPress={() => {
+                        setDetectedIds([]);
+                        setReceiptNo(null);
+                        setReceiptDate(null);
+                        setReceiptTime(null);
+                        setServerReceiptNo(null);
+                        setReceiptShot(null);
+                        setDrinkQtys({});
+                        setPhase('idle');
+                      }}
+                    >
                       <Text style={styles.softText}>Scan another</Text>
                     </Pressable>
                   )}
@@ -602,12 +890,12 @@ export function ScanScreen({
           <View style={styles.tipCard}>
             <Shield size={12} color={C.muted} />
             <Text style={styles.tipText}>
-              Wrong scan? Open the receipt on Check-In and tap{' '}
-              <Text style={styles.activeBold}>Scan again</Text>. Pending self-logs can be{' '}
-              <Text style={styles.activeBold}>edited</Text> or{' '}
-              <Text style={styles.activeBold}>deleted</Text>.
+              Wrong scan? Check-In → <Text style={styles.activeBold}>Scan again</Text> · pending
+              self-logs can be edited or deleted.
             </Text>
           </View>
+
+          <ScannedReceiptsCard lines={todayReceiptLines} />
 
           <Pressable style={styles.softBtn} onPress={goBack}>
             <Text style={styles.softText}>Back to attendance</Text>
@@ -706,6 +994,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: C.violetL,
     textAlign: 'center',
+  },
+  scanIssueText: {
+    marginBottom: 8,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 17,
+    color: C.amber,
   },
   ocrBlock: { alignSelf: 'stretch' },
   ocrHead: {
@@ -923,5 +1218,96 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: C.amber,
+  },
+  // Proto-style self-log (host.scan) pieces
+  selfLogHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(232,194,122,0.35)',
+    backgroundColor: 'rgba(232,194,122,0.05)',
+    padding: 12,
+  },
+  selfLogHeadTitle: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '800',
+    letterSpacing: 1,
+    color: C.goldL,
+  },
+  selfLogHeadSub: {
+    marginTop: 3,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    lineHeight: 15,
+    color: C.prMuted,
+  },
+  selfLogScanbox: {
+    marginTop: 10,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: C.line2,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+    alignItems: 'center',
+    paddingVertical: 22,
+    paddingHorizontal: 16,
+  },
+  selfLogScanHint: {
+    marginTop: 8,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 17,
+    color: C.prMuted,
+    textAlign: 'center',
+  },
+  selfLogScanBtn: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: C.accent,
+  },
+  selfLogScanBtnText: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: '#241a08',
+  },
+  selfLogSummary: {
+    marginTop: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(232,194,122,0.3)',
+    backgroundColor: 'rgba(232,194,122,0.06)',
+    padding: 12,
+  },
+  selfLogSummaryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  selfLogSummaryLabel: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
+  selfLogSummaryTotal: {
+    fontFamily: F.sora,
+    fontSize: 18,
+    fontWeight: '800',
+    color: C.txt,
+  },
+  selfLogSummaryComm: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
   },
 });

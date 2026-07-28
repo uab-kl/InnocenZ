@@ -31,6 +31,20 @@ export interface ShiftAssignment {
 	payAmount: string;
 	checkInAt: string | null;
 	checkOutAt: string | null;
+	// The GPS fix the PR's phone attached to each stamp, as verified and stored
+	// by the server (apps/backend .../check-in-geofence.ts). Null on rows stamped
+	// before geofencing shipped, and on outlets that have no map pin to fence
+	// against. `checkInDistanceM` is the SERVER's own haversine result, never the
+	// phone's claim — which is why the agency portal may render it as evidence.
+	// numeric(10,8)/(11,8) are serialized as strings, same as payAmount.
+	checkInLat?: string | null;
+	checkInLng?: string | null;
+	checkInDistanceM?: number | null;
+	checkInAccuracyM?: number | null;
+	checkOutLat?: string | null;
+	checkOutLng?: string | null;
+	checkOutDistanceM?: number | null;
+	checkOutAccuracyM?: number | null;
 	notes: string | null;
 	createdAt: string;
 	updatedAt: string;

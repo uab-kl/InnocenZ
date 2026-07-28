@@ -23,6 +23,7 @@ import {
   SEED_PROFILE_IMAGE,
 } from '../lib/demo-shifts';
 import { PR_AGENCY_OPTIONS, PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
+import { pickImageFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
 import { Avatar, IzButton } from '../components/ui';
 import {
@@ -36,14 +37,6 @@ import {
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { usePrNav } from '../lib/pr-nav';
-
-type HTMLInputLike = {
-  type: string;
-  accept: string;
-  files?: { 0?: Blob & { type: string; size: number }; length: number } | null;
-  onchange: (() => void) | null;
-  click: () => void;
-};
 
 type Draft = {
   displayName: string;
@@ -123,7 +116,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     };
   }, [displayPortfolio, editing, portfolio]);
 
-  const canPickImages = Boolean(token) && Platform.OS === 'web';
+  // Gallery picking works on BOTH web (file dialog) and the phone (real photo
+  // gallery via expo-image-picker) — see lib/photo-file.ts.
+  const canPickImages = Boolean(token);
   const canSaveComcard = Boolean(token) && Platform.OS === 'web' && !editing;
 
   const saveComcardToDatabase = async () => {
@@ -224,89 +219,74 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
   };
 
-  const validateImageFile = (file: File) => {
-    if (!file.type.startsWith('image/')) {
-      setError('Please choose an image file');
-      return false;
-    }
-    if (file.size > 2_500_000) {
-      setError('Image must be under 2.5 MB');
-      return false;
-    }
-    return true;
-  };
-
-  const onPickAvatar = () => {
-    if (!canPickImages) return;
-    const doc = (globalThis as { document?: { createElement: (tag: string) => HTMLInputLike } })
-      .document;
-    if (!doc) return;
-    const input = doc.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async () => {
-      const file = input.files?.[0] ?? null;
-      if (!file) return;
-      if (!validateImageFile(file)) return;
-      setSaving(true);
-      setError(null);
-      try {
-        await uploadAvatar(file);
-      } catch (e) {
-        setError(e instanceof ApiError ? e.message : 'Could not upload photo');
-      } finally {
-        setSaving(false);
+  /** Gallery-pick with the 2.5 MB guard; null = cancelled / too big / unavailable. */
+  const pickValidatedImage = async () => {
+    const picked = await pickImageFromGallery();
+    if (!picked) {
+      if (Platform.OS !== 'web') {
+        setError('Could not open the gallery — rebuild the dev app (expo run:android).');
       }
-    };
-    input.click();
+      return null;
+    }
+    if (picked.size != null && picked.size > 2_500_000) {
+      setError('Image must be under 2.5 MB');
+      return null;
+    }
+    return picked;
   };
 
-  const onPickPortfolio = (slot: number) => {
+  const onPickAvatar = async () => {
     if (!canPickImages) return;
-    const doc = (globalThis as { document?: { createElement: (tag: string) => HTMLInputLike } })
-      .document;
-    if (!doc) return;
-    const input = doc.createElement('input');
-    input.type = 'file';
-    input.accept = 'image/*';
-    input.onchange = async () => {
-      const file = input.files?.[0] ?? null;
-      if (!file) return;
-      if (!validateImageFile(file)) return;
-      const preview =
-        typeof URL !== 'undefined' && 'createObjectURL' in URL ? URL.createObjectURL(file) : null;
+    const picked = await pickValidatedImage();
+    if (!picked) return;
+    setSaving(true);
+    setError(null);
+    try {
+      await uploadAvatar(picked.file);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not upload photo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onPickPortfolio = async (slot: number) => {
+    if (!canPickImages) return;
+    const picked = await pickValidatedImage();
+    if (!picked) return;
+    const preview = picked.previewUri;
+    if (preview) {
+      setSlotPreviewUri((prev) => {
+        const next = [...prev];
+        next[slot] = preview;
+        return next;
+      });
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await uploadPortfolioPhoto(slot, picked.file);
+      if (editing) {
+        setDraft((d) => ({
+          ...d,
+          portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
+        }));
+      }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
+    } finally {
       if (preview) {
         setSlotPreviewUri((prev) => {
           const next = [...prev];
-          next[slot] = preview;
+          if (next[slot] === preview) next[slot] = null;
           return next;
         });
-      }
-      setSaving(true);
-      setError(null);
-      try {
-        const updated = await uploadPortfolioPhoto(slot, file);
-        if (editing) {
-          setDraft((d) => ({
-            ...d,
-            portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
-          }));
-        }
-      } catch (e) {
-        setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
-      } finally {
-        if (preview) {
-          setSlotPreviewUri((prev) => {
-            const next = [...prev];
-            if (next[slot] === preview) next[slot] = null;
-            return next;
-          });
+        if (Platform.OS === 'web' && typeof URL !== 'undefined' && 'revokeObjectURL' in URL) {
           URL.revokeObjectURL(preview);
         }
-        setSaving(false);
       }
-    };
-    input.click();
+      setSaving(false);
+    }
   };
 
   const toggleLang = (lang: string) => {

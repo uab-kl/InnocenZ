@@ -1,8 +1,9 @@
 /**
  * Check-In — port of InnocenZ-proto `/host/tonight`, wired to the backend.
  * The actionable shift, phase, and check-in / check-out are driven by this PR's
- * own shift_assignment rows (scoped server-side). GPS + selfie stay bypassed so
- * hold-to-check-in / check-out always works. Receipt logging (the on-duty status
+ * own shift_assignment rows (scoped server-side). GPS is REAL: the phone reads
+ * its position for both stamps and the backend verifies it against the outlet's
+ * saved pin (selfie is still bypassed). Receipt logging (the on-duty status
  * panel) and the wages seal write to the backend current-week voucher.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
@@ -25,8 +26,10 @@ import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { usePrNav } from '../lib/pr-nav';
 import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
+import { getAttendanceFix } from '../lib/device-location';
 import { EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
+import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 import { MapPin } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 
@@ -100,8 +103,23 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setBusy(true);
       setActionError(null);
       try {
+        // Read the phone's position for BOTH stamps. The phone only reports
+        // where it is — the backend recomputes the metres from the outlet's
+        // own pin and decides. A denied/unavailable fix is surfaced here and
+        // stops check-in early, because a check-in with no fix is refused by
+        // the server the moment that outlet has a pin; failing here gives the
+        // PR a fixable message instead of a bare rejection.
+        const located = await getAttendanceFix();
+        if (!located.ok && !forCheckout) {
+          // `finally` clears busy.
+          setActionError(located.message);
+          return;
+        }
+        // Check-out never blocks on location: the shift is already worked.
+        const fix = located.ok ? located.fix : undefined;
+
         if (forCheckout) {
-          const sealed = await checkOutShiftAssignment(token, active.id);
+          const sealed = await checkOutShiftAssignment(token, active.id, fix);
           // Flat tier wages from Post Job "Pay by PR tier → Wages" (rate.wagePerHour),
           // falling back to the sealed assignment payAmount.
           const wagesRm =
@@ -159,7 +177,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           // Leave Check-In only on check-out → Payment → This week.
           setTab('payment', { paymentWeek: 'current' });
         } else {
-          const stamped = await checkInShiftAssignment(token, active.id);
+          const stamped = await checkInShiftAssignment(token, active.id, fix);
           markLocalOnDuty();
           // Stay on Check-In for the whole shift — patch the shared list so the
           // UI flips to On duty / Check out without a second Check-in tap.
@@ -290,9 +308,10 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   onPress={() => startHold(false)}
                 />
                 <Text style={styles.gpsNote}>
-                  Reminder: at the venue, check-in is only allowed within {GEOFENCE_METERS}m of{' '}
-                  {outletName}
-                  {GPS_BYPASS ? ' — GPS temporarily bypassed for demo.' : '.'}
+                  Check-in is only allowed within {GEOFENCE_METERS}m of {outletName}
+                  {GPS_BYPASS
+                    ? ' — GPS temporarily bypassed for demo.'
+                    : '. Your phone shares its location for this stamp only.'}
                 </Text>
                 <Pressable style={styles.cancelBtn} onPress={() => setCancelOpen(true)}>
                   <Text style={styles.cancelText}>Cancel shift</Text>
@@ -310,6 +329,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
                   dayKey={todayKey}
                 />
+                <ScannedReceiptsCard lines={todayReceipts} />
                 <HoldButton
                   label="Check out"
                   holding={holding}

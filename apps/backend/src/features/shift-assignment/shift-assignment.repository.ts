@@ -5,6 +5,7 @@ import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { PrTable } from '@/features/pr/pr.model';
+import { DEFAULT_GEOFENCE_RADIUS_M } from './check-in-geofence';
 import {
   OutletDrinkMenuTable,
   OutletTierRateTable,
@@ -73,6 +74,12 @@ export type ResolvedDrinkItem = {
   id: string;
   name: string;
   priceRm: string;
+  /**
+   * Catalog section from outlet_drink_menu.category: 'drink' | 'service' |
+   * 'tip'. Drives which PR scan/self-log list (Drinks vs Tips/Service) the
+   * item appears under on the phone.
+   */
+  category: string;
 };
 
 /**
@@ -295,6 +302,47 @@ export class ShiftAssignmentRepositoryClass {
       });
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.listForPr] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The outlet map pin that fences one assignment, reached purely by FK:
+   * shift_assignment -> shift.outlet_id -> outlet.lat/lng/geo_fence_radius.
+   * Nothing about the outlet is copied onto the assignment — the pin can be
+   * moved on the outlet row and every future check-in follows it immediately.
+   * Returns null when the assignment (or its shift/outlet) is gone; returns a
+   * row with lat/lng = null when the outlet has not dropped its pin yet, which
+   * the caller treats as "not fenceable" rather than "reject".
+   */
+  async getOutletGeoFenceForAssignment(assignmentId: string): Promise<{
+    outletId: string;
+    lat: number | null;
+    lng: number | null;
+    radiusM: number;
+  } | null> {
+    try {
+      const [row] = await db
+        .select({
+          outletId: OutletTable.id,
+          lat: OutletTable.lat,
+          lng: OutletTable.lng,
+          radiusM: OutletTable.geoFenceRadius,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .innerJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(eq(ShiftAssignmentTable.id, assignmentId))
+        .limit(1);
+      if (!row) return null;
+      return {
+        outletId: row.outletId,
+        lat: row.lat === null ? null : Number(row.lat),
+        lng: row.lng === null ? null : Number(row.lng),
+        radiusM: row.radiusM ?? DEFAULT_GEOFENCE_RADIUS_M,
+      };
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.getOutletGeoFenceForAssignment] Error:', error);
       throw error;
     }
   }
@@ -575,6 +623,7 @@ export class ShiftAssignmentRepositoryClass {
           slug: OutletDrinkMenuTable.slug,
           name: OutletDrinkMenuTable.name,
           priceRm: OutletDrinkMenuTable.priceRm,
+          category: OutletDrinkMenuTable.category,
         })
         .from(OutletWorkspaceTable)
         .innerJoin(
@@ -585,7 +634,12 @@ export class ShiftAssignmentRepositoryClass {
         .orderBy(asc(OutletDrinkMenuTable.sortOrder));
       for (const row of rows) {
         const list = result.get(row.outletId) ?? [];
-        list.push({ id: row.slug, name: row.name, priceRm: row.priceRm });
+        list.push({
+          id: row.slug,
+          name: row.name,
+          priceRm: row.priceRm,
+          category: row.category,
+        });
         result.set(row.outletId, list);
       }
       return result;

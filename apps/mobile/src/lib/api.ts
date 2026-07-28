@@ -6,6 +6,7 @@
  */
 import { Platform } from 'react-native';
 import Constants from 'expo-constants';
+import type { DeviceFix } from './device-location';
 
 const DEFAULT_BACKEND_PORT = 7777;
 
@@ -406,6 +407,12 @@ export type OutletDrinkItem = {
   id: string;
   name: string;
   priceRm: string;
+  /**
+   * Catalog section — 'drink' | 'service' | 'tip' (outlet_drink_menu.category).
+   * Splits the Drinks scan list from the Tips/Service scan list. Optional so an
+   * older backend that doesn't send it yet still works (treated as 'drink').
+   */
+  category?: string | null;
 };
 
 /** One of this PR's shift assignments, with the shift + outlet context. */
@@ -446,26 +453,43 @@ export function fetchMyShiftAssignments(accessToken: string): Promise<ShiftAssig
 /**
  * Stamp check-in on one of this PR's own assignments (Check-In screen). The
  * backend sets check_in_at server-side and verifies the assignment is the
- * caller's, so the client sends only the assignment id.
+ * caller's, so the client sends only the assignment id and — when the phone
+ * could read one — its GPS fix.
+ *
+ * The fix is the phone's CLAIM, not a verdict: the backend recomputes the
+ * metres itself from the outlet's saved pin and answers 422 with a readable
+ * message ("You are 137 m from the venue...") when the PR is outside the
+ * fence. That message is what `request` throws, so screens can show it as-is.
+ *
+ * `fix` is optional so an outlet that has not dropped its map pin yet still
+ * works. Once that outlet HAS a pin, a check-in with no fix is refused.
  */
 export function checkInShiftAssignment(
   accessToken: string,
   assignmentId: string,
+  fix?: DeviceFix,
 ): Promise<ShiftAssignmentRecord> {
   return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/check-in`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(fix ?? {}),
   });
 }
 
-/** Stamp check-out (seals the assignment as completed) — see checkInShiftAssignment. */
+/**
+ * Stamp check-out (seals the assignment as completed) — see checkInShiftAssignment.
+ * The fix is RECORDED but never blocks: a PR who has already worked the shift
+ * must always be able to close it, even from the car park.
+ */
 export function checkOutShiftAssignment(
   accessToken: string,
   assignmentId: string,
+  fix?: DeviceFix,
 ): Promise<ShiftAssignmentRecord> {
   return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/check-out`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(fix ?? {}),
   });
 }
 
@@ -677,6 +701,60 @@ export function addMyReceiptLine(
   input: PrReceiptLineInput,
 ): Promise<PrReceiptLine> {
   return request<PrReceiptLine>('/payment-voucher/mine/lines', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
+  });
+}
+
+/** One item on a whole scanned/self-logged receipt. */
+export type PrReceiptItemInput = {
+  kind: PrReceiptKind;
+  /** Catalog category from outlet_drink_menu: 'drink' | 'service' | 'tip'. */
+  category: 'drink' | 'service' | 'tip';
+  item: string;
+  quantity: number;
+  sales: number;
+  commission: number;
+};
+
+/** One whole receipt: OCR header facts + item lines, saved in one call. */
+export type PrReceiptSubmitInput = {
+  source: PrReceiptSource;
+  /** The active shift assignment this receipt belongs to. */
+  assignmentId?: string;
+  /** The order number OCR read off the paper (e.g. ORD0389). */
+  orderNo?: string;
+  receiptDate?: string;
+  receiptTime?: string;
+  /** PR's note to the agency (required for self-logs — what was unclear). */
+  note?: string;
+  outlet?: string;
+  proofPhotos?: string[];
+  items: PrReceiptItemInput[];
+};
+
+export type PrReceiptRecord = {
+  id: string;
+  /** Database-generated unique running number: RCP-000001, … */
+  receiptNo: string;
+  orderNo: string | null;
+  receiptDate: string | null;
+  receiptTime: string | null;
+  source: string;
+  lines: PrReceiptLine[];
+};
+
+/**
+ * Saves ONE whole receipt (payment_voucher_receipt + FK-linked lines) on the
+ * PR's current-week voucher. A duplicate order number answers 409 with a
+ * readable message ("Receipt ORD0389 is already logged…").
+ */
+export function submitMyReceipt(
+  accessToken: string,
+  input: PrReceiptSubmitInput,
+): Promise<PrReceiptRecord> {
+  return request<PrReceiptRecord>('/payment-voucher/mine/receipts', {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(input),

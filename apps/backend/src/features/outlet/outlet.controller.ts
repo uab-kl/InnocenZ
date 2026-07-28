@@ -9,9 +9,11 @@ import {
   CreateOutletSchema,
   UpdateOutletSchema,
   UpdateGeoFenceSchema,
+  GeocodeQuerySchema,
   AddOutletMemberSchema,
   UpdateOutletMemberSchema,
 } from '@/schema/outlet.schema';
+import { addressQueryFromOutlet, geocodeAddress } from './geocode';
 import { OutletFilter, OutletStatus } from './outlet.model';
 
 export class OutletControllerClass {
@@ -145,6 +147,64 @@ export class OutletControllerClass {
       res.status(200).json({ success: true, message: 'Geo-fence updated', data: outlet });
     } catch (error) {
       logger.error('[OutletController.setGeoFence] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * GET /outlet/geocode?address=...
+   * Address -> candidate pins. Saves nothing; the operator confirms one and
+   * commits it through setGeoFence, which is the only path that turns fencing
+   * on for a venue.
+   */
+  async geocode(req: Request, res: Response) {
+    try {
+      const parsed = GeocodeQuerySchema.safeParse(req.query);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+      const outcome = await geocodeAddress(parsed.data.address);
+      if (!outcome.ok) {
+        // 404 for "nothing matched"; 503 for a key/quota/network problem, so the
+        // form can tell "try another address" apart from "try again later".
+        const status = outcome.reason === 'no_match' ? 404 : 503;
+        return res.status(status).json({ success: false, message: outcome.message, data: null });
+      }
+      res.status(200).json({ success: true, message: 'OK', data: outcome.candidates });
+    } catch (error) {
+      logger.error('[OutletController.geocode] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * GET /outlet/:id/geocode
+   * Same lookup, but built from the outlet's OWN stored address columns — the
+   * common case, since the address was already typed during onboarding. Still
+   * read-only.
+   */
+  async geocodeOwnAddress(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const outlet = await this.outletRepository.getById(id);
+      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const address = addressQueryFromOutlet(outlet);
+      if (address.length < 3) {
+        return res.status(400).json({
+          success: false,
+          message: 'This outlet has no address saved yet — add one, or drop the pin on the map.',
+          data: null,
+        });
+      }
+      const outcome = await geocodeAddress(address);
+      if (!outcome.ok) {
+        const status = outcome.reason === 'no_match' ? 404 : 503;
+        return res.status(status).json({ success: false, message: outcome.message, data: null });
+      }
+      res.status(200).json({ success: true, message: 'OK', data: { query: address, candidates: outcome.candidates } });
+    } catch (error) {
+      logger.error('[OutletController.geocodeOwnAddress] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

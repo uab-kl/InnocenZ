@@ -77,7 +77,14 @@ export function GpsRoadMap({
 }: {
   rows: GpsTrackingRow[];
   bounds: GpsMapBounds;
-  outletPins: { outlet: string; coord: GeoCoord }[];
+  // radiusM is the venue's OWN fence, so the drawn circle matches what the
+  // server enforces there; unpinned venues have no real fence to draw.
+  outletPins: {
+    outlet: string;
+    coord: GeoCoord;
+    radiusM?: number;
+    unpinned?: boolean;
+  }[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   height?: number;
@@ -273,16 +280,23 @@ export function GpsRoadMap({
             width,
             height,
           );
-          const fence = geofenceDiameterPx(effectiveZoom, pin.coord.lat);
+          const fence = geofenceDiameterPx(
+            effectiveZoom,
+            pin.coord.lat,
+            pin.radiusM,
+          );
           return (
             <span
               key={`fence-${pin.outlet}`}
               className="iz-gmaps-geofence"
+              // An unpinned venue is not fenced by the server either, so the
+              // circle is drawn faint rather than implying an enforced boundary.
               style={{
                 left: pos.x,
                 top: pos.y,
                 width: fence,
                 height: fence,
+                opacity: pin.unpinned ? 0.35 : undefined,
               }}
             />
           );

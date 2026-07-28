@@ -24,5 +24,26 @@ export const UpdateShiftAssignmentSchema = z.object({
   notes: z.string().max(500, 'Notes is too long').optional(),
 });
 
+/**
+ * The optional GPS fix a PR's phone attaches to its own check-in / check-out.
+ * Optional on purpose: an outlet that has not dropped its map pin yet cannot be
+ * fenced, so those stamps still go through. The moment a pin exists the server
+ * REFUSES a stamp with no fix (see check-in-geofence.ts) — there is deliberately
+ * no relax flag on this side. `accuracyM` is the device's own confidence radius,
+ * kept for audit; the distance is never taken from the client.
+ */
+export const CheckInMineSchema = z.object({
+  lat: z.number().min(-90).max(90).optional(),
+  lng: z.number().min(-180).max(180).optional(),
+  accuracyM: z.number().nonnegative().max(10000).optional(),
+  // Android reports whether the fix came from a mock-location provider. The
+  // phone volunteering this is not a security control on its own (a patched
+  // client can omit it), but a stock phone running a GPS-spoofing app does set
+  // it, and that is the cheap, common case worth catching.
+  mocked: z.boolean().optional(),
+});
+
+export type CheckInMineInput = z.infer<typeof CheckInMineSchema>;
+
 export type CreateShiftAssignmentInput = z.infer<typeof CreateShiftAssignmentSchema>;
 export type UpdateShiftAssignmentInput = z.infer<typeof UpdateShiftAssignmentSchema>;
