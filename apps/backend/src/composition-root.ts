@@ -112,13 +112,14 @@ export const specialServiceRepository = new SpecialServiceRepositoryClass();
 export const specialServiceController = new SpecialServiceControllerClass(
   specialServiceRepository,
   prRepository,
+  authRepository,
 );
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();
 export const outletWorkspaceController = new OutletWorkspaceControllerClass(outletWorkspaceRepository);
 
 export const ratingRepository = new RatingRepositoryClass();
-export const ratingController = new RatingControllerClass(ratingRepository);
+export const ratingController = new RatingControllerClass(ratingRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository, agencyPrRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();

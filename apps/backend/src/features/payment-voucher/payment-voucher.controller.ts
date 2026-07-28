@@ -245,7 +245,12 @@ export class PaymentVoucherControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      res.status(200).json({ success: true, message: 'OK', data: voucher });
+      // Receipts ride along so the agency can verify a week's commission against
+      // the evidence without a second round trip. Loaded only AFTER the ownership
+      // check above, so a foreign voucher never leaks its receipts.
+      const receipts = await this.paymentVoucherRepository.listReceipts(voucher.id);
+
+      res.status(200).json({ success: true, message: 'OK', data: { ...voucher, receipts } });
     } catch (error) {
       logger.error('[PaymentVoucherController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

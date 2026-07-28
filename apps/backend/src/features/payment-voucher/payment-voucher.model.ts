@@ -108,6 +108,25 @@ export const PaymentVoucherReceiptTable = MainSchema.table('payment_voucher_rece
 });
 
 /** One earning line on a voucher (frontend `PrPvRow`). Replaced wholesale on update. */
+/**
+ * Which bucket a voucher line belongs to. The PG type `payment_voucher_component`
+ * is LIVE (migration 0051) — this declaration exists to match it. Without it
+ * drizzle-kit sees a column the schema does not declare and generates a DROP.
+ */
+export const paymentVoucherComponentValues = [
+  'wages',
+  'drink_commission',
+  'tip_commission',
+  'ot',
+  'deduction',
+  'other',
+] as const;
+export type PaymentVoucherComponent = (typeof paymentVoucherComponentValues)[number];
+export const paymentVoucherComponentEnum = MainSchema.enum(
+  'payment_voucher_component',
+  paymentVoucherComponentValues,
+);
+
 export const PaymentVoucherLineTable = MainSchema.table('payment_voucher_line', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   voucherId: uuid('voucher_id')
@@ -128,6 +147,7 @@ export const PaymentVoucherLineTable = MainSchema.table('payment_voucher_line', 
    * predates classification — distinguishable from a genuine 'other'. New
    * writes should always set it.
    */
+  component: paymentVoucherComponentEnum('component'),
   // Proof photo(s) the PR snaps when self-logging (one or many). Same jsonb
   // array-of-paths pattern as user_profile.portfolio_photos; agency verifies
   // against these. Null when the entry carries no proof (OCR scan, wages seal).

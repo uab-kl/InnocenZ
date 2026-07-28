@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { shiftController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
+import { outletOwnerOrOps } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -19,7 +20,8 @@ const canCreate = requireRole('admin', 'outlet');
 
 router.get('/', canRead, shiftController.list.bind(shiftController));
 router.get('/:id', canRead, shiftController.getById.bind(shiftController));
-router.post('/', canCreate, shiftController.create.bind(shiftController));
+// Posting a job is outletCan('postJob'), which Outlet Finance does not hold.
+router.post('/', canCreate, outletOwnerOrOps, shiftController.create.bind(shiftController));
 router.put('/:id', canWrite, shiftController.update.bind(shiftController));
 router.delete('/:id', canWrite, shiftController.remove.bind(shiftController));
 

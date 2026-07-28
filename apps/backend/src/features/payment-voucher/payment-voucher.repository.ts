@@ -2,6 +2,7 @@ import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-o
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
+import { prepareLine } from './payment-voucher-component';
 import {
   PaymentVoucherTable,
   PaymentVoucherLineTable,
@@ -35,7 +36,11 @@ export class PaymentVoucherRepositoryClass {
           lines.length > 0
             ? await tx
                 .insert(PaymentVoucherLineTable)
-                .values(lines.map((line, i) => ({ ...line, voucherId: voucher.id, sortOrder: i })))
+                .values(
+                  lines.map((line, i) =>
+                    prepareLine({ ...line, voucherId: voucher.id, sortOrder: i }),
+                  ),
+                )
                 .returning()
             : [];
         return { ...voucher, lines: insertedLines };
@@ -70,7 +75,11 @@ export class PaymentVoucherRepositoryClass {
             lines.length > 0
               ? await tx
                   .insert(PaymentVoucherLineTable)
-                  .values(lines.map((line, i) => ({ ...line, voucherId: id, sortOrder: i })))
+                  .values(
+                    lines.map((line, i) =>
+                      prepareLine({ ...line, voucherId: id, sortOrder: i }),
+                    ),
+                  )
                   .returning()
               : [];
           return { ...voucher, lines: insertedLines };
@@ -98,6 +107,28 @@ export class PaymentVoucherRepositoryClass {
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getById] Error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * The receipts behind a voucher — the evidence the agency verifies a week's
+   * commission against.
+   *
+   * Deliberately NOT folded into getById: the PR `/mine/*` paths read that on
+   * every poll and do not need receipts, so this stays a second call the agency
+   * detail route makes explicitly.
+   */
+  async listReceipts(voucherId: string): Promise<PaymentVoucherReceiptType[]> {
+    try {
+      return await db
+        .select()
+        .from(PaymentVoucherReceiptTable)
+        .where(eq(PaymentVoucherReceiptTable.voucherId, voucherId))
+        .orderBy(PaymentVoucherReceiptTable.receiptNo);
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listReceipts] Error:', error);
+      // Fails closed: no evidence shown beats wrong evidence shown.
+      return [];
     }
   }
 
@@ -394,12 +425,14 @@ export class PaymentVoucherRepositoryClass {
         const insertedLines = await tx
           .insert(PaymentVoucherLineTable)
           .values(
-            lines.map((line, i) => ({
-              ...line,
-              voucherId: receipt.voucherId,
-              receiptId: inserted!.id,
-              sortOrder: existing.length + i,
-            })),
+            lines.map((line, i) =>
+              prepareLine({
+                ...line,
+                voucherId: receipt.voucherId,
+                receiptId: inserted!.id,
+                sortOrder: existing.length + i,
+              }),
+            ),
           )
           .returning();
         await this.recomputeTotals(receipt.voucherId, tx);
@@ -418,7 +451,7 @@ export class PaymentVoucherRepositoryClass {
         const existing = await this.getLines(voucherId, tx);
         const [inserted] = await tx
           .insert(PaymentVoucherLineTable)
-          .values({ ...line, voucherId, sortOrder: existing.length })
+          .values(prepareLine({ ...line, voucherId, sortOrder: existing.length }))
           .returning();
         await this.recomputeTotals(voucherId, tx);
         return inserted;

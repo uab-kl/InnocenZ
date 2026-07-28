@@ -17,6 +17,15 @@ export interface PaymentVoucherPagination {
 	hasPrevPage: boolean;
 }
 
+/** Which bucket a line belongs to. NULL on rows written before classification. */
+export type PaymentVoucherComponent =
+	| "wages"
+	| "drink_commission"
+	| "tip_commission"
+	| "ot"
+	| "deduction"
+	| "other";
+
 export interface PaymentVoucherLine {
 	id: string;
 	voucherId: string;
@@ -28,6 +37,29 @@ export interface PaymentVoucherLine {
 	amount: string;
 	ref: string | null;
 	sortOrder: number;
+	component: PaymentVoucherComponent | null;
+	/** The receipt this line came from; null for wage seals and legacy rows. */
+	receiptId: string | null;
+}
+
+/** How a receipt reached the system — scanned, typed by hand, or auto-sealed. */
+export type PaymentVoucherReceiptSource = "scan" | "manual" | "checkin";
+
+/**
+ * One receipt backing a voucher's commission. This is the evidence the agency
+ * verifies against: a line with no receipt behind it was self-declared.
+ */
+export interface PaymentVoucherReceipt {
+	id: string;
+	voucherId: string;
+	shiftAssignmentId: string | null;
+	receiptNo: string;
+	orderNo: string | null;
+	source: PaymentVoucherReceiptSource;
+	receiptDate: string | null;
+	receiptTime: string | null;
+	proofPhotos: string[] | null;
+	note: string | null;
 }
 
 export interface PaymentVoucher {
@@ -63,6 +95,8 @@ export interface PaymentVoucher {
 // getById returns the voucher with its line items; list omits them.
 export interface PaymentVoucherWithLines extends PaymentVoucher {
 	lines: PaymentVoucherLine[];
+	/** Only the agency/admin detail route returns these; absent on list rows. */
+	receipts?: PaymentVoucherReceipt[];
 }
 
 export interface PaymentVouchersQueryParams {

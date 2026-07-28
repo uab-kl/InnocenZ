@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { SpecialServiceRepositoryClass } from './special-service.repository.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
+import { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
 import {
   SpecialServiceAdminAccepted,
   SpecialServiceCategory,
@@ -24,10 +25,34 @@ export class SpecialServiceControllerClass {
   constructor(
     private repository: SpecialServiceRepositoryClass,
     private prRepository: PrRepositoryClass,
+    private authRepository: AuthRepositoryClass,
   ) {}
 
   private parseOrder(req: Request): 'asc' | 'desc' {
     return req.query.order === 'asc' ? 'asc' : 'desc';
+  }
+
+  /**
+   * `initiatedBy` is not a label, it is a decision: an agency posting lands as
+   * `admin_accepted: 'pending'` and waits for review, while outlet and PR
+   * postings go live immediately. It arrived straight from the request body, so
+   * a PR could post as 'outlet' and bypass admin review entirely.
+   *
+   * The enum values are the same strings as the role names, so the caller's own
+   * role decides what it may claim. Admin may post on anyone's behalf; everyone
+   * else may only speak for themselves. Returns null when the claim does not
+   * match, which the caller turns into a 403.
+   */
+  private async initiatedByForCaller(
+    req: Request,
+    claimed: SpecialServiceInitiatedBy,
+  ): Promise<SpecialServiceInitiatedBy | null> {
+    const userId = req.user?.id;
+    if (!userId) return null;
+    const roles = await this.authRepository.getRolesForUserIds([userId]);
+    const roleNames = roles.map((role) => role.roleName);
+    if (roleNames.includes('admin')) return claimed;
+    return roleNames.includes(claimed) ? claimed : null;
   }
 
   private buildFilter(req: Request): SpecialServiceFilter {
@@ -199,7 +224,14 @@ export class SpecialServiceControllerClass {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
       const actor = getActor(req);
-      const initiatedBy = parsed.data.initiatedBy;
+      const initiatedBy = await this.initiatedByForCaller(req, parsed.data.initiatedBy);
+      if (!initiatedBy) {
+        return res.status(403).json({
+          success: false,
+          message: 'Cannot post a special service on behalf of another role',
+          data: null,
+        });
+      }
       // Agency posts wait for admin review; outlet/PR posts go live as 'open'.
       const adminAccepted = initiatedBy === 'agency' ? 'pending' : 'n_a';
 

@@ -23,7 +23,7 @@ import {
 } from '../lib/demo-shifts';
 import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
-import { overtimePay } from '../lib/pr-rate';
+import { overtimeHours, overtimePay } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { usePrNav } from '../lib/pr-nav';
@@ -175,15 +175,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // OT read from the sealed stamps (the server clamps a forgotten check-out to
   // the shift's scheduled end, so these hours are real). Never auto-paid —
   // surfaced below as pending agency approval, outside the payout.
-  const otHoursWorked =
-    active?.checkInAt && active.checkOutAt
-      ? Math.max(
-          0,
-          (new Date(active.checkOutAt).getTime() - new Date(active.checkInAt).getTime()) /
-            3_600_000 -
-            6,
-        )
-      : 0;
+  //
+  // Via overtimeHours rather than subtracting 6 inline: it carries the same
+  // STANDARD_SHIFT_HOURS constant the pay uses, and returns 0 for stamps that
+  // cannot be true (out of order, or longer than a plausible shift) so a
+  // clamp that never ran cannot surface a "113.1h" figure to the PR.
+  const otHoursWorked = active?.checkOutAt
+    ? overtimeHours(active.checkInAt, new Date(active.checkOutAt).getTime())
+    : 0;
   const otPendingAmount = active
     ? overtimePay(otHoursWorked, active.rate, Number(active.payPerHour) || 0)
     : 0;

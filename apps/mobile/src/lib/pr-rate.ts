@@ -124,9 +124,96 @@ export function commissionFor(
 }
 
 /**
- * Overtime pay (RM) for hours worked beyond the scheduled shift. Uses the tier's
- * real OT/hr rate when configured; otherwise falls back to payPerHour × 1.5
- * (the prototype rule). Returns 0 when there is no positive overtime.
+ * Hours in a scheduled shift before overtime starts.
+ *
+ * Hardcoded because `/shift-assignment/mine` does not ship the tier's configured
+ * `standard_shift_hours` — the column exists on outlet_tier_rate but is not in
+ * the ShiftAssignmentRate payload. Widen the payload and read it from there
+ * rather than changing this number.
+ */
+export const STANDARD_SHIFT_HOURS = 6;
+
+/**
+ * The longest a single shift can plausibly run. A venue shift is one night; past
+ * this the stamps describe something else entirely.
+ */
+export const MAX_PLAUSIBLE_SHIFT_HOURS = 16;
+
+/**
+ * Overtime hours between two attendance stamps, or 0 when they cannot be
+ * trusted.
+ *
+ * The elapsed time is wall-clock, not worked time, so a forgotten check-out or a
+ * stale check-in from an earlier shift makes it grow without limit — that is how
+ * one live voucher ended up billing "Overtime 113.1h", a third of its value, for
+ * a night nobody worked 113 hours of.
+ *
+ * Beyond MAX_PLAUSIBLE_SHIFT_HOURS this returns 0 rather than a capped figure:
+ * the stamps are known-wrong at that point, and a capped number is still invented
+ * money that lands on a voucher looking deliberate. The agency adds real overtime
+ * by hand instead.
+ */
+export function overtimeHours(
+  checkInAt: string | null | undefined,
+  checkOutMs: number,
+): number {
+  if (!checkInAt) return 0;
+  const checkInMs = new Date(checkInAt).getTime();
+  if (!Number.isFinite(checkInMs) || !Number.isFinite(checkOutMs)) return 0;
+
+  const elapsed = (checkOutMs - checkInMs) / 3_600_000;
+  // Negative means the stamps are out of order — as untrustworthy as too long.
+  if (elapsed <= 0 || elapsed > MAX_PLAUSIBLE_SHIFT_HOURS) return 0;
+  return Math.max(0, elapsed - STANDARD_SHIFT_HOURS);
+}
+
+/** Overtime is paid at 1.5× the normal hourly rate. */
+const OT_MULTIPLIER = 1.5;
+
+/**
+ * The overtime rate in RM per hour.
+ *
+ * `rate.otAfterHours` is NOT a rate. Despite the name it is the DB column
+ * `standard_shift_hours` — the length of a standard shift, i.e. the threshold
+ * after which overtime starts — and it is 6. This function used to spend it
+ * directly as ringgit per hour, which is how one live voucher came to bill
+ * "Overtime 113.1h @ RM6.00/h": a shift length charged as a wage.
+ *
+ * `rate.wagePerHour` is likewise the DB column `daily_wage` (Tier I = 500), not
+ * an hourly figure — see the alias note on OutletTierRateTable. So the hourly
+ * rate has to be derived, and overtime is 1.5× that:
+ *
+ *     500 / 6 × 1.5 = 125.00
+ *
+ * which is exactly what `outlet_workspace.ot_after_hours` holds for every
+ * outlet, confirming 125 was the intended figure all along. Deriving per tier
+ * also beats that flat column: Tier V (1000/day) correctly yields 250/h.
+ *
+ * Returns 0 when no trustworthy rate can be derived — the agency adds real
+ * overtime by hand rather than have a guess land on a voucher.
+ */
+export function overtimeRate(
+  rate: ShiftAssignmentRate | null,
+  payPerHour: number,
+): number {
+  const dailyWage = Number(rate?.wagePerHour);
+  const shiftHours = Number(rate?.otAfterHours);
+  if (Number.isFinite(dailyWage) && dailyWage > 0 && Number.isFinite(shiftHours) && shiftHours > 0) {
+    return (dailyWage / shiftHours) * OT_MULTIPLIER;
+  }
+  // Fallback for an unconfigured tier. `payPerHour` is the shift's
+  // `pay_per_hour`, which since migration 0047 is fed a DAILY wage by
+  // basePayFromPayTierRows — every live shift reads 500 — so it divides by the
+  // standard shift too. Using it raw would bill 500 × 1.5 = RM750/h.
+  if (Number.isFinite(payPerHour) && payPerHour > 0) {
+    return (payPerHour / STANDARD_SHIFT_HOURS) * OT_MULTIPLIER;
+  }
+  return 0;
+}
+
+/**
+ * Overtime pay (RM) for hours worked beyond the scheduled shift. Returns 0 when
+ * there is no positive overtime or no rate can be derived.
  */
 export function overtimePay(
   otHours: number,
@@ -134,10 +221,7 @@ export function overtimePay(
   payPerHour: number,
 ): number {
   if (otHours <= 0) return 0;
-  const otRate =
-    rate?.otAfterHours != null && Number.isFinite(Number(rate.otAfterHours))
-      ? Number(rate.otAfterHours)
-      : payPerHour * 1.5;
+  const otRate = overtimeRate(rate, payPerHour);
   if (otRate <= 0) return 0;
   return Math.round(otHours * otRate * 100) / 100;
 }

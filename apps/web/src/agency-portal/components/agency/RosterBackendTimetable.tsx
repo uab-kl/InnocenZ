@@ -254,83 +254,83 @@ export function RosterBackendTimetable({
 										? `${pr.name} (${pr.nickname})`
 										: pr.name;
 									return (
-									<tr key={pr.id}>
-										<th scope="row" className="iz-roster-week-pr">
-											<div className="iz-roster-week-pr-inner">
-												<PrComcardIdentity
-													pr={toComcardPreview(profile)}
-													profile={profile}
-													size="week"
-												/>
-												<div className="min-w-0">
-													<span className="name">{displayName}</span>
-													{pr.tier && (
-														<span className="meta">
-															<span className="rating">{pr.tier}</span>
-														</span>
-													)}
+										<tr key={pr.id}>
+											<th scope="row" className="iz-roster-week-pr">
+												<div className="iz-roster-week-pr-inner">
+													<PrComcardIdentity
+														pr={toComcardPreview(profile)}
+														profile={profile}
+														size="week"
+													/>
+													<div className="min-w-0">
+														<span className="name">{displayName}</span>
+														{pr.tier && (
+															<span className="meta">
+																<span className="rating">{pr.tier}</span>
+															</span>
+														)}
+													</div>
 												</div>
-											</div>
-										</th>
-										{days.map((dateIso) => {
-											const rawSlot = slotByPrDay.get(`${pr.id}__${dateIso}`);
-											// A slot that fails the active filters reads as free, so
-											// the outlet/status/payout/time filters narrow the grid.
-											const slot =
-												rawSlot &&
-												(!shiftFiltersOn ||
-													timetableSlotMatches(rawSlot, filters))
-													? rawSlot
-													: undefined;
-											if (slot) {
-												const tone = toneFor(slot.status);
+											</th>
+											{days.map((dateIso) => {
+												const rawSlot = slotByPrDay.get(`${pr.id}__${dateIso}`);
+												// A slot that fails the active filters reads as free, so
+												// the outlet/status/payout/time filters narrow the grid.
+												const slot =
+													rawSlot &&
+													(!shiftFiltersOn ||
+														timetableSlotMatches(rawSlot, filters))
+														? rawSlot
+														: undefined;
+												if (slot) {
+													const tone = toneFor(slot.status);
+													return (
+														<td key={dateIso} className="iz-roster-week-td">
+															<button
+																type="button"
+																className={`iz-roster-week-cell iz-roster-week-cell--filled ${tone.className}`}
+																onClick={() => canAssign && onEditSlot(slot.id)}
+																disabled={!canAssign}
+																aria-label={`${pr.name} at ${slot.outlet} on ${dateIso}`}
+															>
+																<span className="outlet">{slot.outlet}</span>
+																<span className="shift">
+																	{slot.shift || "Shift"}
+																</span>
+																<span className="status">{tone.label}</span>
+															</button>
+														</td>
+													);
+												}
+
+												const open = openShiftsByDay[dateIso] ?? [];
+												const hasOpen = open.length > 0;
 												return (
 													<td key={dateIso} className="iz-roster-week-td">
 														<button
 															type="button"
-															className={`iz-roster-week-cell iz-roster-week-cell--filled ${tone.className}`}
-															onClick={() => canAssign && onEditSlot(slot.id)}
+															className={`iz-roster-week-cell iz-roster-week-cell--empty${canAssign && !hasOpen ? " iz-roster-week-cell--no-shifts" : ""}`}
 															disabled={!canAssign}
-															aria-label={`${pr.name} at ${slot.outlet} on ${dateIso}`}
+															onClick={() =>
+																canAssign && setAssignTarget({ pr, dateIso })
+															}
+															aria-label={`Assign ${pr.name} on ${dateIso}`}
+															title={
+																canAssign && !hasOpen
+																	? "No open shifts this day"
+																	: undefined
+															}
 														>
-															<span className="outlet">{slot.outlet}</span>
-															<span className="shift">
-																{slot.shift || "Shift"}
-															</span>
-															<span className="status">{tone.label}</span>
+															{canAssign ? (
+																<Plus className="h-4 w-4" />
+															) : (
+																<span className="dash">—</span>
+															)}
 														</button>
 													</td>
 												);
-											}
-
-											const open = openShiftsByDay[dateIso] ?? [];
-											const hasOpen = open.length > 0;
-											return (
-												<td key={dateIso} className="iz-roster-week-td">
-													<button
-														type="button"
-														className={`iz-roster-week-cell iz-roster-week-cell--empty${canAssign && !hasOpen ? " iz-roster-week-cell--no-shifts" : ""}`}
-														disabled={!canAssign}
-														onClick={() =>
-															canAssign && setAssignTarget({ pr, dateIso })
-														}
-														aria-label={`Assign ${pr.name} on ${dateIso}`}
-														title={
-															canAssign && !hasOpen
-																? "No open shifts this day"
-																: undefined
-														}
-													>
-														{canAssign ? (
-															<Plus className="h-4 w-4" />
-														) : (
-															<span className="dash">—</span>
-														)}
-													</button>
-												</td>
-											);
-										})}
-									</tr>
+											})}
+										</tr>
 									);
 								})
 							)}
@@ -448,7 +448,12 @@ function AssignBackendCellSheet({
 											</div>
 											<p className="iz-tiny mt-1 text-[var(--iz-gold-l)]">
 												{shift.quantity - shift.filled} open ·{" "}
-												{formatRM(Number(shift.payPerHour))}/hr
+												{/* payPerHour holds a DAILY wage: it is set from
+												    basePayFromPayTierRows, and tier rows have been
+												    daily since migration 0047 (Tier I = 500). The
+												    column name is the stale part, not the value —
+												    labelling it /hr read as RM500.00 an hour. */}
+												{formatRM(Number(shift.payPerHour))}/day
 											</p>
 										</div>
 										<span className="iz-tiny iz-muted2 shrink-0 text-right leading-tight">

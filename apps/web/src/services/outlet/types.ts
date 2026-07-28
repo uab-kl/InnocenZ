@@ -88,6 +88,51 @@ export interface OutletMembershipsApiResponse {
 	data: OutletMembership[];
 }
 
+/** Google's confidence hint. ROOFTOP is a building; APPROXIMATE can be a suburb. */
+export type GeocodePrecision =
+	| "ROOFTOP"
+	| "RANGE_INTERPOLATED"
+	| "GEOMETRIC_CENTER"
+	| "APPROXIMATE";
+
+/** One address-lookup suggestion. Saves nothing until the operator commits it. */
+export interface GeocodeCandidate {
+	formattedAddress: string;
+	lat: number;
+	lng: number;
+	precision: GeocodePrecision;
+	placeId: string;
+}
+
+export interface GeocodeCandidatesApiResponse {
+	success: boolean;
+	message: string;
+	data: GeocodeCandidate[];
+}
+
+/**
+ * The by-id lookup echoes the address it searched, so the operator can see it.
+ *
+ * `data` is null on every non-2xx the controller returns (400 no address, 404
+ * unknown outlet, 503 no geocoder key, 500) — axios rejects those before a
+ * caller sees them, but the type stays honest about it.
+ */
+export interface OutletGeocodeApiResponse {
+	success: boolean;
+	message: string;
+	data: {
+		query: string;
+		candidates: GeocodeCandidate[];
+	} | null;
+}
+
+/** Mirrors UpdateGeoFenceSchema: radius is metres, 10–1000, server default 50. */
+export interface GeoFencePayload {
+	lat: number;
+	lng: number;
+	geoFenceRadius?: number;
+}
+
 export interface OutletsQueryParams {
 	name?: string;
 	status?: OutletStatus;
@@ -96,22 +141,7 @@ export interface OutletsQueryParams {
 	pageSize?: number;
 }
 
-/** One candidate pin from the address geocoder — a SUGGESTION, never saved. */
-export interface OutletGeocodeCandidate {
-	formattedAddress: string;
-	lat: number;
-	lng: number;
-	/** ROOFTOP = exact building … APPROXIMATE = area guess. */
-	precision:
-		| "ROOFTOP"
-		| "RANGE_INTERPOLATED"
-		| "GEOMETRIC_CENTER"
-		| "APPROXIMATE";
-	placeId: string;
-}
-
-export interface OutletGeocodeApiResponse {
-	success: boolean;
-	message: string;
-	data: { query: string; candidates: OutletGeocodeCandidate[] } | null;
-}
+// A second copy of the geocode candidate + response types arrived on the same
+// merge. The candidate was field-for-field GeocodeCandidate above, and the
+// duplicate response interface would not have compiled. Its one improvement is
+// kept on the surviving declaration: `data` really is nullable.

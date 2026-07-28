@@ -1,6 +1,8 @@
 import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 import type {
+	GeocodeCandidatesApiResponse,
+	GeoFencePayload,
 	OutletApiResponse,
 	OutletGeocodeApiResponse,
 	OutletMembersApiResponse,
@@ -64,6 +66,58 @@ export async function suspendOutlet(
 }
 
 /**
+ * Address -> candidate pins, built from the outlet's OWN stored address columns.
+ * Read-only: nothing is saved until the operator confirms one through
+ * setOutletGeoFence.
+ */
+export async function geocodeOutletAddress(
+	outletId: string,
+	onRefreshFail: () => void,
+): Promise<OutletGeocodeApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<OutletGeocodeApiResponse>(
+		`/outlet/${outletId}/geocode`,
+	);
+	return response.data;
+}
+
+/** Same lookup for a typed address, when the saved one is wrong or missing. */
+export async function geocodeOutletFreeText(
+	address: string,
+	onRefreshFail: () => void,
+): Promise<GeocodeCandidatesApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({ address });
+	const response = await client.get<GeocodeCandidatesApiResponse>(
+		`/outlet/geocode${queryString}`,
+	);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
+}
+
+/**
+ * Commits the pin. This is the ONLY call that switches hard geofencing on for a
+ * venue — once lat/lng exist, every PR check-in there is distance-checked — so
+ * it stays a deliberate, human-confirmed action. Owner sub-role only, enforced
+ * server-side by outletOwnerOnly.
+ */
+export async function setOutletGeoFence(
+	outletId: string,
+	payload: GeoFencePayload,
+	onRefreshFail: () => void,
+): Promise<OutletApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<OutletApiResponse>(
+		`/outlet/${outletId}/geo-fence`,
+		payload,
+	);
+	return response.data;
+}
+
+/**
  * All active outlet memberships for a single user, across every sub-role. Used
  * to resolve the signed-in operator's own outlet + role at session start
  * (mirrors fetchAgencyMembershipsForUser).
@@ -102,37 +156,7 @@ export async function fetchOutletMembers(
 	};
 }
 
-/**
- * Address -> candidate pins for this outlet's SAVED address. Read-only by
- * design: the operator picks a candidate and commits it with
- * saveOutletGeoFence below, so the only code path that can switch the
- * check-in fence on for a venue is the one a human confirms.
- */
-export async function geocodeOutletAddress(
-	id: string,
-	onRefreshFail: () => void,
-): Promise<OutletGeocodeApiResponse> {
-	const client = getClient(onRefreshFail);
-	const response = await client.get<OutletGeocodeApiResponse>(
-		`/outlet/${id}/geocode`,
-	);
-	return response.data;
-}
-
-/**
- * Save the venue pin — THE fence master-switch. The moment this succeeds,
- * every PR check-in at this outlet is refused server-side outside
- * geoFenceRadius metres (HTTP 422; see backend check-in-geofence.ts).
- */
-export async function saveOutletGeoFence(
-	id: string,
-	pin: { lat: number; lng: number; geoFenceRadius?: number },
-	onRefreshFail: () => void,
-): Promise<OutletApiResponse> {
-	const client = getClient(onRefreshFail);
-	const response = await client.patch<OutletApiResponse>(
-		`/outlet/${id}/geo-fence`,
-		pin,
-	);
-	return response.data;
-}
+// The geocode and geo-fence calls live above: geocodeOutletAddress,
+// geocodeOutletFreeText and setOutletGeoFence. A second pair of them arrived
+// on the same merge under different names, hitting the identical two
+// endpoints — the duplicate `geocodeOutletAddress` would not have compiled.
