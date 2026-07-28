@@ -10,6 +10,10 @@ const router = Router();
 const canRead = requireRole('admin', 'agency', 'outlet');
 const canWrite = requireRole('admin', 'agency');
 
+// PR-scoped self-service. Must sit above the role guards (a PR is none of the
+// roles below) and above `/:id`, which would otherwise swallow "mine".
+router.put('/mine/agencies', prController.updateMyAgencies.bind(prController));
+
 router.get('/', canRead, prController.list.bind(prController));
 router.get('/:id', canRead, prController.getById.bind(prController));
 router.post('/', canWrite, prController.create.bind(prController));

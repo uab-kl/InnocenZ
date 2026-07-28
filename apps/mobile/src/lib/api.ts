@@ -194,6 +194,51 @@ export type AgencyMembership = {
   status: string;
 };
 
+/** One agency_pr link, including links still waiting on agency approval. */
+export type PrAgencyLink = {
+  prId: string;
+  userId: string;
+  agencyId: string;
+  agencyName: string;
+  agencyCode: string;
+  approveStatus: string;
+};
+
+/**
+ * This PR's agency links from `agency_pr` — the table the agency roster reads.
+ * Unlike /agency/memberships (portal operators in `agency_user`) this includes
+ * `pending` links, so the profile can show a request the agency hasn't
+ * approved yet.
+ */
+export function fetchMyAgencyLinks(accessToken: string, userId: string): Promise<PrAgencyLink[]> {
+  const query = new URLSearchParams({ userIds: userId }).toString();
+  return request<PrAgencyLink[]>(`/agency/pr-links?${query}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** Every agency the PR can ask to join — real rows, real ids, from `agency`. */
+export function fetchAgencies(accessToken: string): Promise<{ id: string; name: string }[]> {
+  return request<{ id: string; name: string }[]>('/agency?pageSize=100', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Set which agencies this PR wants to be under. New links land as `pending`
+ * in agency_pr — the agency still approves before the PR joins its roster.
+ */
+export function updateMyAgencies(
+  accessToken: string,
+  agencyIds: string[],
+): Promise<unknown> {
+  return request<unknown>('/pr/mine/agencies', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ agencyIds }),
+  });
+}
+
 /** Agencies this PR belongs to — same rows the admin PR list joins on. */
 export function fetchMemberships(accessToken: string, userId: string): Promise<AgencyMembership[]> {
   const query = new URLSearchParams({ userIds: userId, subRole: 'pr' }).toString();

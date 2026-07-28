@@ -2,7 +2,7 @@
  * Profile — 1:1 port of InnocenZ-proto `/host/profile`.
  * Identity from admin backend (Vicky); comcard/portfolio/languages mirror proto seeds.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -14,12 +14,20 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
-import { ApiError, assetUrl, portfolioSlotsFromProfile } from '../lib/api';
+import {
+  ApiError,
+  assetUrl,
+  fetchAgencies,
+  fetchMyAgencyLinks,
+  portfolioSlotsFromProfile,
+  updateMyAgencies,
+  type PrAgencyLink,
+} from '../lib/api';
 import { fetchImageBlob, renderComcardPng } from '../lib/render-comcard';
 import {
   PORTFOLIO_SLOTS,
 } from '../lib/demo-shifts';
-import { PR_AGENCY_OPTIONS, PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
+import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { pickImageFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
 import { Avatar, IzButton } from '../components/ui';
@@ -38,6 +46,8 @@ import { usePrNav } from '../lib/pr-nav';
 type Draft = {
   displayName: string;
   icName: string;
+  /** Login email — editable here, saved to the user account. */
+  email: string;
   height: number;
   weight: number;
   age: number;
@@ -58,6 +68,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [comcardSavedHint, setComcardSavedHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
+  /** Real agencies from the backend — the checkbox list the PR picks from. */
+  const [agencyOptions, setAgencyOptions] = useState<{ id: string; name: string }[]>([]);
+  /** This PR's own agency_pr links, pending ones included. */
+  const [myLinks, setMyLinks] = useState<PrAgencyLink[]>([]);
   const [draft, setDraft] = useState<Draft>(() => emptyDraft());
   /** Instant preview while upload is in flight (web object URLs). */
   const [slotPreviewUri, setSlotPreviewUri] = useState<(string | null)[]>(() =>
@@ -65,9 +79,47 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   );
 
   const displayName = editing ? draft.displayName : me?.username ?? 'PR';
+  const reloadMyLinks = React.useCallback(async () => {
+    if (!token || !me) return;
+    try {
+      setMyLinks(await fetchMyAgencyLinks(token, me.id));
+    } catch {
+      /* Non-fatal: the picker falls back to whatever is already loaded. */
+    }
+  }, [token, me]);
+
+  useEffect(() => {
+    if (!token) return;
+    let alive = true;
+    fetchAgencies(token)
+      .then((list) => {
+        if (alive) setAgencyOptions(list.map((a) => ({ id: a.id, name: a.name })));
+      })
+      .catch(() => {
+        /* Non-fatal: the picker just stays empty. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    void reloadMyLinks();
+  }, [reloadMyLinks]);
+
   // Everything below reads the account's own saved row — no demo fallbacks.
   const legalName = editing ? draft.icName : me?.profile.fullName?.trim() || '—';
-  const agencyNames = memberships.map((m) => m.agencyName).join(', ') || '—';
+  // Approved links are the real tie; pending ones are still just a request.
+  const agencyNames =
+    myLinks
+      .filter((l) => l.approveStatus === 'approved')
+      .map((l) => l.agencyName)
+      .join(', ') ||
+    memberships.map((m) => m.agencyName).join(', ') ||
+    '—';
+  const pendingAgencyNames = myLinks
+    .filter((l) => l.approveStatus !== 'approved')
+    .map((l) => l.agencyName);
   const ic = me?.profile.idNo ?? '—';
   const mobile = me?.phoneNum ?? '—';
   const email = me?.email ?? '—';
@@ -135,16 +187,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   };
 
   const startEdit = () => {
-    // Agencies come from the approved agency_pr memberships, never demo ids.
-    const agencyIds = memberships
-      .map(
-        (m) =>
-          PR_AGENCY_OPTIONS.find((a) => a.name.toLowerCase() === m.agencyName.toLowerCase())?.id,
-      )
-      .filter(Boolean) as string[];
+    // Real agency ids straight off the PR's agency_pr links (pending included).
+    const agencyIds = myLinks.length
+      ? myLinks.map((l) => l.agencyId)
+      : memberships.map((m) => m.agencyId).filter(Boolean);
     setDraft({
       displayName: me?.username ?? '',
       icName: me?.profile.fullName ?? '',
+      email: me?.email ?? '',
       height: me?.profile.comcardHeightCm ?? 0,
       weight: me?.profile.comcardWeightKg ?? 0,
       age: me?.profile.dob
@@ -180,6 +230,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setError('Select at least one language');
       return;
     }
+    const emailValue = draft.email.trim();
+    if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+      setError('Enter a valid email address');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
@@ -187,13 +242,20 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         username: name,
         // Legal IC name → user_profile.full_name (the column admin/agency read).
         fullName: draft.icName.trim(),
-        email: me?.email ?? '',
+        email: emailValue,
         portfolioPhotos: portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS),
-        comcardHeightCm: draft.height,
-        comcardWeightKg: draft.weight,
+        // A blank field means "not set" — never write 0 over a real measurement.
+        comcardHeightCm: draft.height || null,
+        comcardWeightKg: draft.weight || null,
         // Spoken languages → user_profile.languages.
         languages: draft.languages,
       });
+      // Agencies live in agency_pr, not on the profile row — new picks are
+      // saved as pending join requests for the agency to approve.
+      if (token) {
+        await updateMyAgencies(token, draft.agencyIds);
+        await reloadMyLinks();
+      }
       setEditing(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save profile');
@@ -291,9 +353,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }));
   };
 
-  const agencyLabel = draft.agencyIds
-    .map((id) => PR_AGENCY_OPTIONS.find((a) => a.id === id)?.name ?? id)
-    .join(', ');
+  const agencyLabel =
+    draft.agencyIds
+      .map((id) => agencyOptions.find((a) => a.id === id)?.name)
+      .filter(Boolean)
+      .join(', ') || 'Select agencies';
 
   return (
     <View style={styles.screen}>
@@ -349,6 +413,16 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   style={styles.input}
                   placeholderTextColor={C.muted2}
                 />
+                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Email</Text>
+                <TextInput
+                  value={draft.email}
+                  onChangeText={(v) => setDraft((d) => ({ ...d, email: v }))}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="you@example.com"
+                  style={styles.input}
+                  placeholderTextColor={C.muted2}
+                />
               </>
             ) : (
               <>
@@ -367,6 +441,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               {!editing && (
                 <Text style={styles.metaText}>Agency-Tied · {agencyNames}</Text>
               )}
+              {!editing && pendingAgencyNames.length > 0 && (
+                <Text style={styles.metaPending}>
+                  Awaiting approval · {pendingAgencyNames.join(', ')}
+                </Text>
+              )}
               <Text style={styles.metaIc}>IC {ic}</Text>
             </View>
 
@@ -384,7 +463,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </Pressable>
                 {agencyMenuOpen && (
                   <View style={styles.agencyMenu}>
-                    {PR_AGENCY_OPTIONS.map((a) => {
+                    {agencyOptions.length === 0 && (
+                      <Text style={styles.langEmptyText}>No agencies available.</Text>
+                    )}
+                    {agencyOptions.map((a) => {
                       const on = draft.agencyIds.includes(a.id);
                       return (
                         <Pressable
@@ -489,14 +571,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>HEIGHT</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{me?.profile.comcardHeightCm ?? '—'}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.comcardHeightCm || '—'}</Text>
                   <Text style={styles.measureSuffix}>cm</Text>
                 </View>
               </View>
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>WEIGHT</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{me?.profile.comcardWeightKg ?? '—'}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.comcardWeightKg || '—'}</Text>
                   <Text style={styles.measureSuffix}>kg</Text>
                 </View>
               </View>
@@ -515,7 +597,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <MeasureField
                 label="HEIGHT"
                 suffix="cm"
-                value={String(draft.height)}
+                value={draft.height ? String(draft.height) : ''}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, height: Number(v.replace(/\D/g, '')) || 0 }))
                 }
@@ -523,7 +605,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <MeasureField
                 label="WEIGHT"
                 suffix="kg"
-                value={String(draft.weight)}
+                value={draft.weight ? String(draft.weight) : ''}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, weight: Number(v.replace(/\D/g, '')) || 0 }))
                 }
@@ -531,7 +613,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <MeasureField
                 label="AGE"
                 suffix="y"
-                value={String(draft.age)}
+                value={draft.age ? String(draft.age) : ''}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, age: Number(v.replace(/\D/g, '')) || 0 }))
                 }
@@ -674,9 +756,10 @@ function emptyDraft(): Draft {
   return {
     displayName: '',
     icName: '',
-    height: 153,
-    weight: 40,
-    age: 24,
+    email: '',
+    height: 0,
+    weight: 0,
+    age: 0,
     languages: [],
     agencyIds: [],
     portfolio: [],
@@ -703,6 +786,7 @@ function MeasureField({
           value={value}
           onChangeText={onChange}
           keyboardType="number-pad"
+          maxLength={3}
           style={styles.measureInput}
           placeholderTextColor={C.muted2}
         />
@@ -979,7 +1063,11 @@ const styles = StyleSheet.create({
     color: C.txt,
   },
   measureInput: {
-    flex: 1,
+    // Sized to 3 digits, not flex — a stretched input pushes the unit out of the box.
+    width: 46,
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
     fontFamily: F.sora,
     fontSize: 22,
     fontWeight: '800',
@@ -1043,6 +1131,7 @@ const styles = StyleSheet.create({
   },
   langPillText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.violetL },
   langEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  metaPending: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.amber },
   langEdit: {
     marginTop: 8,
     borderRadius: 14,

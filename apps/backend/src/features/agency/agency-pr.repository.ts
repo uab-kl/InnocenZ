@@ -1,7 +1,12 @@
 import { and, eq, ilike, inArray, or } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { AgencyPrTable, PrTable, type AgencyPrApproveStatus } from '@/features/pr/pr.model';
+import {
+  AgencyPrTable,
+  PrTable,
+  type AgencyPrApproveStatus,
+  type AgencyPrType,
+} from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
 
@@ -112,6 +117,75 @@ export class AgencyPrRepository {
     } catch (error) {
       logger.error('[AgencyPrRepository.listByAgency] Error:', error);
       return [];
+    }
+  }
+
+  /** Narrows the given ids to the ones that are real agencies. */
+  async filterExistingAgencyIds(agencyIds: string[]): Promise<string[]> {
+    if (agencyIds.length === 0) return [];
+    try {
+      const rows = await db
+        .select({ id: AgencyTable.id })
+        .from(AgencyTable)
+        .where(inArray(AgencyTable.id, agencyIds));
+      return rows.map((row) => row.id);
+    } catch (error) {
+      logger.error('[AgencyPrRepository.filterExistingAgencyIds] Error:', error);
+      return [];
+    }
+  }
+
+  /** Every agency_pr row for one PR, whatever its approval state. */
+  async listByPr(prId: string): Promise<AgencyPrType[]> {
+    try {
+      return await db.select().from(AgencyPrTable).where(eq(AgencyPrTable.prId, prId));
+    } catch (error) {
+      logger.error('[AgencyPrRepository.listByPr] Error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Point this PR's agency links at exactly `agencyIds`.
+   *
+   * A PR asking to join an agency is a *request*, so new links are written as
+   * `pending` and only the agency can approve them — this never grants
+   * membership on its own. Unticking drops the link; an already-approved one
+   * survives only while it stays selected.
+   */
+  async syncLinksForPr(prId: string, agencyIds: string[], actor: string): Promise<void> {
+    const wanted = [...new Set(agencyIds)];
+    try {
+      await db.transaction(async (tx) => {
+        const existing = await tx
+          .select()
+          .from(AgencyPrTable)
+          .where(eq(AgencyPrTable.prId, prId));
+
+        const stale = existing
+          .filter((row) => !wanted.includes(row.agencyId))
+          .map((row) => row.id);
+        if (stale.length > 0) {
+          await tx.delete(AgencyPrTable).where(inArray(AgencyPrTable.id, stale));
+        }
+
+        const known = new Set(existing.map((row) => row.agencyId));
+        const added = wanted.filter((agencyId) => !known.has(agencyId));
+        if (added.length > 0) {
+          await tx.insert(AgencyPrTable).values(
+            added.map((agencyId) => ({
+              agencyId,
+              prId,
+              approveStatus: 'pending' as const,
+              createdBy: actor,
+              updatedBy: actor,
+            })),
+          );
+        }
+      });
+    } catch (error) {
+      logger.error('[AgencyPrRepository.syncLinksForPr] Error:', error);
+      throw error;
     }
   }
 }

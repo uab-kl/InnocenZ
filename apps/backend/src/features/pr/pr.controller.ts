@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { PrRepositoryClass } from './pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
+import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { Error } from '@/error/index';
@@ -32,7 +33,57 @@ export class PrControllerClass {
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
+    private agencyPrRepository: AgencyPrRepository,
   ) {}
+
+  /**
+   * The signed-in PR sets which agencies they want to be under, from their own
+   * profile page. Links are written as `pending` — this is a join *request*,
+   * so the agency still has to approve before the PR is on its roster.
+   */
+  async updateMyAgencies(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const pr = await this.prRepository.getByUserId(userId);
+      if (!pr) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const raw = req.body?.agencyIds;
+      if (!Array.isArray(raw) || raw.length > 20) {
+        return res.status(400).json({
+          success: false,
+          message: 'agencyIds must be an array of at most 20 agency ids',
+          data: null,
+        });
+      }
+      const agencyIds = [
+        ...new Set(raw.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
+      ];
+
+      // Every id must be a real agency, else the FK insert would 500 later.
+      const known = await this.agencyPrRepository.filterExistingAgencyIds(agencyIds);
+      if (known.length !== agencyIds.length) {
+        return res.status(400).json({
+          success: false,
+          message: 'One or more agencies do not exist',
+          data: null,
+        });
+      }
+
+      await this.agencyPrRepository.syncLinksForPr(pr.id, known, getActor(req));
+      const links = await this.agencyPrRepository.listLinksByUserIds([userId]);
+
+      res.status(200).json({ success: true, message: 'Agencies updated', data: links });
+    } catch (error) {
+      logger.error('[PrController.updateMyAgencies] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
 
   /**
    * Resolves the caller's data scope. Admins see everything; every other caller

@@ -318,9 +318,14 @@ export class UserControllerClass {
       }
 
       const slots = normalizePortfolioSlots(profile.portfolioPhotos);
-      deletePortfolioImageFile(slots[slot]);
 
+      // Multer has already written the upload to `{userId}-{slot}.{ext}`, which
+      // is exactly the old path when the extension is unchanged — deleting the
+      // previous file first would delete the new one and blank the slot.
       const publicPath = portfolioImagePathFromFile(id, slot, req.file);
+      if (slots[slot] && slots[slot] !== publicPath) {
+        deletePortfolioImageFile(slots[slot]);
+      }
       slots[slot] = publicPath;
 
       await this.userProfileRepository.update(id, {
