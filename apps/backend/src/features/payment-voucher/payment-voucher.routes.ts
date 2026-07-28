@@ -24,10 +24,15 @@ router.post('/mine/:voucherId/dispute/withdraw', paymentVoucherController.withdr
 // own agency is enforced in the controller.
 router.use(requireRole('admin', 'agency'));
 
+// The agency's grant is create-read-update, NOT delete. A voucher is a money
+// record a PR may already have signed or disputed, so destroying one stays with
+// admin; everything else on this router remains agency-reachable.
+const canDelete = requireRole('admin');
+
 router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
 router.get('/:id', paymentVoucherController.getById.bind(paymentVoucherController));
 router.post('/', paymentVoucherController.create.bind(paymentVoucherController));
 router.put('/:id', paymentVoucherController.update.bind(paymentVoucherController));
-router.delete('/:id', paymentVoucherController.remove.bind(paymentVoucherController));
+router.delete('/:id', canDelete, paymentVoucherController.remove.bind(paymentVoucherController));
 
 export default router;

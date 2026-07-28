@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { shiftAssignmentController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
+import { agencyOwnerOnly } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -35,8 +36,11 @@ router.get('/:id/replacement-candidates', canWrite, shiftAssignmentController.li
 // controller): approve excuses the PR, reject puts the row back to assigned.
 router.post('/:id/leave/approve', canWrite, shiftAssignmentController.approveLeave.bind(shiftAssignmentController));
 router.post('/:id/leave/reject', canWrite, shiftAssignmentController.rejectLeave.bind(shiftAssignmentController));
-router.post('/', canWrite, shiftAssignmentController.create.bind(shiftAssignmentController));
-router.put('/:id', canWrite, shiftAssignmentController.update.bind(shiftAssignmentController));
-router.delete('/:id', canWrite, shiftAssignmentController.remove.bind(shiftAssignmentController));
+// Rostering is agencyCan('assignShifts'), which Agency Finance does not hold —
+// so the org-level `canWrite` is not enough on its own. Admin passes the
+// sub-role guard by design.
+router.post('/', canWrite, agencyOwnerOnly, shiftAssignmentController.create.bind(shiftAssignmentController));
+router.put('/:id', canWrite, agencyOwnerOnly, shiftAssignmentController.update.bind(shiftAssignmentController));
+router.delete('/:id', canWrite, agencyOwnerOnly, shiftAssignmentController.remove.bind(shiftAssignmentController));
 
 export default router;
