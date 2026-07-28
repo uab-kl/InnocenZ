@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { outletController } from '@/composition-root.js';
-import { requireAdmin } from '@/middlewares/require-role.js';
+import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
+import { outletOwnerOnly } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -13,8 +14,19 @@ router.get('/geocode', outletController.geocode.bind(outletController));
 router.get('/:id', outletController.getById.bind(outletController));
 router.get('/:id/geocode', outletController.geocodeOwnAddress.bind(outletController));
 router.post('/', outletController.create.bind(outletController));
-router.put('/:id', outletController.update.bind(outletController));
-router.patch('/:id/geo-fence', outletController.setGeoFence.bind(outletController));
+// Editing the venue record is outletCan('editSettings') — owner only; Finance
+// and Ops are both excluded. Neither of these carried ANY role gate before, so
+// any signed-in account, a PR included, could rewrite an outlet or move the
+// geo-fence centre the 50 m check-in rule is measured against.
+const canEditOutlet = requireRole('admin', 'outlet');
+
+router.put('/:id', canEditOutlet, outletOwnerOnly, outletController.update.bind(outletController));
+router.patch(
+  '/:id/geo-fence',
+  canEditOutlet,
+  outletOwnerOnly,
+  outletController.setGeoFence.bind(outletController),
+);
 router.patch('/:id/approve', requireAdmin, outletController.approve.bind(outletController));
 router.patch('/:id/suspend', requireAdmin, outletController.suspend.bind(outletController));
 

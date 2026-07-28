@@ -86,6 +86,43 @@ export function requireOutletSubRole(...allowed: OutletSubRole[]) {
 }
 
 /**
+ * Refines outlet members only, and waves everyone else through to whatever
+ * `requireRole` already decided.
+ *
+ * Needed on routes an agency and an outlet share, such as logging floor sales:
+ * an agency user holds no outlet_user row at all, so the strict guard above
+ * would 403 a caller the org-level grant explicitly allows. This variant asks a
+ * narrower question — "if you are an outlet member, are you the right kind?" —
+ * and leaves who-may-reach-this-route to the role guard in front of it.
+ */
+export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+
+    try {
+      if (await isAdmin(user.id)) return next();
+
+      const memberships = await outletMemberRepository.listByUser(user.id);
+      const active = memberships.filter((m) => m.status === 'active');
+      if (active.length === 0) return next(); // not an outlet member — not ours to judge
+
+      if (!active.some((m) => allowed.includes(m.subRole))) {
+        return res.status(403).json({ success: false, message: forbidden(allowed), data: null });
+      }
+
+      return next();
+    } catch {
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  };
+}
+
+/**
  * Named grants, kept here so the server matrix sits in ONE place and can be
  * diffed against the two portal files it mirrors. Frontend name → enum value:
  * agency_owner→owner · agency_finance→finance · outlet_owner→owner ·
@@ -98,5 +135,8 @@ export const agencyOwnerOnly = requireAgencySubRole('owner');
 /** outletCan 'editSettings' — outlet owner only (finance and ops both excluded). */
 export const outletOwnerOnly = requireOutletSubRole('owner');
 
-/** outletCan 'manageWorkspace' · 'postJob' · 'logSales' · 'ratePrs' — owner + ops, never finance. */
+/** outletCan 'manageWorkspace' · 'postJob' · 'ratePrs' — owner + ops, never finance. */
 export const outletOwnerOrOps = requireOutletSubRole('owner', 'operations_head');
+
+/** outletCan 'logSales' — owner + ops, on a route agencies also legitimately use. */
+export const outletOwnerOrOpsIfMember = requireOutletSubRoleIfMember('owner', 'operations_head');

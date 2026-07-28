@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { agencyController } from '@/composition-root.js';
-import { requireAdmin } from '@/middlewares/require-role.js';
+import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
+import { agencyOwnerOnly } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -10,7 +11,15 @@ router.get('/memberships', agencyController.listMemberships.bind(agencyControlle
 router.get('/pr-links', agencyController.listPrLinks.bind(agencyController));
 router.get('/:id', agencyController.getById.bind(agencyController));
 router.post('/', agencyController.create.bind(agencyController));
-router.put('/:id', agencyController.update.bind(agencyController));
+// Editing the agency record is agencyCan('editSettings') — owner only. This
+// carried no role gate at all before, so any signed-in account could rewrite an
+// agency's own details.
+router.put(
+  '/:id',
+  requireRole('admin', 'agency'),
+  agencyOwnerOnly,
+  agencyController.update.bind(agencyController),
+);
 router.patch('/:id/approve', requireAdmin, agencyController.approve.bind(agencyController));
 router.patch('/:id/suspend', requireAdmin, agencyController.suspend.bind(agencyController));
 
