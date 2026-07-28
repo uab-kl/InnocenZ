@@ -2,6 +2,7 @@ import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-o
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
+import { withComponent } from './payment-voucher-component';
 import {
   PaymentVoucherTable,
   PaymentVoucherLineTable,
@@ -35,7 +36,11 @@ export class PaymentVoucherRepositoryClass {
           lines.length > 0
             ? await tx
                 .insert(PaymentVoucherLineTable)
-                .values(lines.map((line, i) => ({ ...line, voucherId: voucher.id, sortOrder: i })))
+                .values(
+                  lines.map((line, i) =>
+                    withComponent({ ...line, voucherId: voucher.id, sortOrder: i }),
+                  ),
+                )
                 .returning()
             : [];
         return { ...voucher, lines: insertedLines };
@@ -70,7 +75,11 @@ export class PaymentVoucherRepositoryClass {
             lines.length > 0
               ? await tx
                   .insert(PaymentVoucherLineTable)
-                  .values(lines.map((line, i) => ({ ...line, voucherId: id, sortOrder: i })))
+                  .values(
+                    lines.map((line, i) =>
+                      withComponent({ ...line, voucherId: id, sortOrder: i }),
+                    ),
+                  )
                   .returning()
               : [];
           return { ...voucher, lines: insertedLines };
@@ -394,12 +403,14 @@ export class PaymentVoucherRepositoryClass {
         const insertedLines = await tx
           .insert(PaymentVoucherLineTable)
           .values(
-            lines.map((line, i) => ({
-              ...line,
-              voucherId: receipt.voucherId,
-              receiptId: inserted!.id,
-              sortOrder: existing.length + i,
-            })),
+            lines.map((line, i) =>
+              withComponent({
+                ...line,
+                voucherId: receipt.voucherId,
+                receiptId: inserted!.id,
+                sortOrder: existing.length + i,
+              }),
+            ),
           )
           .returning();
         await this.recomputeTotals(receipt.voucherId, tx);
@@ -418,7 +429,7 @@ export class PaymentVoucherRepositoryClass {
         const existing = await this.getLines(voucherId, tx);
         const [inserted] = await tx
           .insert(PaymentVoucherLineTable)
-          .values({ ...line, voucherId, sortOrder: existing.length })
+          .values(withComponent({ ...line, voucherId, sortOrder: existing.length }))
           .returning();
         await this.recomputeTotals(voucherId, tx);
         return inserted;

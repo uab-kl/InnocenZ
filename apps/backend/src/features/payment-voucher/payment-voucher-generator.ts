@@ -90,6 +90,10 @@ export class PaymentVoucherGeneratorClass {
           quantity: 1,
           amount: row.assignment.payAmount,
           ref: row.assignment.id,
+          // Every generated line is the shift's wage. Set explicitly because the
+          // ref here is a bare assignment id, so there is no packed kind for
+          // withComponent() to read.
+          component: 'wages' as const,
         }));
 
         const subtotal = prRows.reduce((sum, row) => sum + Number(row.assignment.payAmount), 0);
