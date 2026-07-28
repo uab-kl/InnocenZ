@@ -110,6 +110,28 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
+  /**
+   * The receipts behind a voucher — the evidence the agency verifies a week's
+   * commission against.
+   *
+   * Deliberately NOT folded into getById: the PR `/mine/*` paths read that on
+   * every poll and do not need receipts, so this stays a second call the agency
+   * detail route makes explicitly.
+   */
+  async listReceipts(voucherId: string): Promise<PaymentVoucherReceiptType[]> {
+    try {
+      return await db
+        .select()
+        .from(PaymentVoucherReceiptTable)
+        .where(eq(PaymentVoucherReceiptTable.voucherId, voucherId))
+        .orderBy(PaymentVoucherReceiptTable.receiptNo);
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listReceipts] Error:', error);
+      // Fails closed: no evidence shown beats wrong evidence shown.
+      return [];
+    }
+  }
+
   private async getLines(voucherId: string, tx?: DbTransaction) {
     const dbClient = tx ?? db;
     return dbClient

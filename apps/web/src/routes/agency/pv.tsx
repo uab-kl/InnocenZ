@@ -39,6 +39,7 @@ import {
   useAgencyPvs,
   useAgencyPvDetail,
 } from '@agency-portal/hooks/use-agency-pvs';
+import { PayrollVerifyPanel } from '@agency-portal/components/agency/PayrollVerifyPanel';
 import {
   matchesReceiptShiftWorkRange,
   receiptShiftDateIso,
@@ -1472,6 +1473,10 @@ function PvDetail({
           Confirm override
         </button>
       </IzSheet>
+
+      {/* Receipt evidence for this week — renders nothing on a demo voucher,
+          whose id has no backend row behind it. */}
+      <PayrollVerifyPanel voucherId={pv.id} />
 
       <button
         type="button"
