@@ -33,7 +33,13 @@ export function componentFromRef(
   ref: string | null | undefined,
 ): PaymentVoucherComponent | undefined {
   if (!ref || !ref.includes(REF_SEP)) return undefined;
-  const [kind] = ref.split(REF_SEP);
+  const [kind, , , dedupe] = ref.split(REF_SEP);
+  // Overtime is logged with the coarse kind 'others', so the kind alone would
+  // bucket a whole night's OT as 'other'. The phone marks it explicitly —
+  // `dedupeRef: ${assignmentId}-ot` in mobile CheckInScreen — and that marker is
+  // checked first because it is the more specific fact. 'ot' is a real value of
+  // the enum that nothing else writes.
+  if (dedupe?.endsWith('-ot')) return 'ot';
   return COMPONENT_BY_KIND[kind];
 }
 
