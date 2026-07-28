@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "include": [],
+  "files": [
+    "src/routes/outlet/settings.tsx",
+    "src/services/outlet/outlet.ts",
+    "src/services/outlet/types.ts",
+    "src/agency-portal/hooks/use-outlet-profile.ts"
+  ]
+}

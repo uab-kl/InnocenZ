@@ -110,6 +110,21 @@ export function useOutletProfile() {
 		return memberOverlay(membersQuery.data?.data ?? [], "operations_head");
 	}, [backed, membersQuery.data]);
 
+	// The venue's saved map pin, parsed to numbers (columns store strings).
+	// null coords = pin never dropped = check-in fence OFF for this venue.
+	const geo = useMemo(() => {
+		if (!backed) return null;
+		const outlet = outletQuery.data?.data;
+		if (!outlet) return null;
+		const lat = outlet.lat === null ? null : Number(outlet.lat);
+		const lng = outlet.lng === null ? null : Number(outlet.lng);
+		return {
+			lat: lat !== null && Number.isFinite(lat) ? lat : null,
+			lng: lng !== null && Number.isFinite(lng) ? lng : null,
+			radiusM: outlet.geoFenceRadius ?? 50,
+		};
+	}, [backed, outletQuery.data]);
+
 	const settings = useMemo<OutletProfileSettingsOverlay | null>(() => {
 		if (!backed) return null;
 		const outlet = outletQuery.data?.data;
@@ -125,6 +140,11 @@ export function useOutletProfile() {
 
 	return {
 		backed,
+		outletId,
+		geo,
+		refreshOutlet: () => {
+			void outletQuery.refetch();
+		},
 		owner,
 		finance,
 		ops,

@@ -2,6 +2,7 @@ import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 import type {
 	OutletApiResponse,
+	OutletGeocodeApiResponse,
 	OutletMembersApiResponse,
 	OutletMembershipsApiResponse,
 	OutletsApiResponse,
@@ -99,4 +100,39 @@ export async function fetchOutletMembers(
 		message: response.data.message,
 		data: response.data.data ?? [],
 	};
+}
+
+/**
+ * Address -> candidate pins for this outlet's SAVED address. Read-only by
+ * design: the operator picks a candidate and commits it with
+ * saveOutletGeoFence below, so the only code path that can switch the
+ * check-in fence on for a venue is the one a human confirms.
+ */
+export async function geocodeOutletAddress(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<OutletGeocodeApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<OutletGeocodeApiResponse>(
+		`/outlet/${id}/geocode`,
+	);
+	return response.data;
+}
+
+/**
+ * Save the venue pin — THE fence master-switch. The moment this succeeds,
+ * every PR check-in at this outlet is refused server-side outside
+ * geoFenceRadius metres (HTTP 422; see backend check-in-geofence.ts).
+ */
+export async function saveOutletGeoFence(
+	id: string,
+	pin: { lat: number; lng: number; geoFenceRadius?: number },
+	onRefreshFail: () => void,
+): Promise<OutletApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<OutletApiResponse>(
+		`/outlet/${id}/geo-fence`,
+		pin,
+	);
+	return response.data;
 }

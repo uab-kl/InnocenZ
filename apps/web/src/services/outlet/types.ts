@@ -95,3 +95,23 @@ export interface OutletsQueryParams {
 	page?: number;
 	pageSize?: number;
 }
+
+/** One candidate pin from the address geocoder — a SUGGESTION, never saved. */
+export interface OutletGeocodeCandidate {
+	formattedAddress: string;
+	lat: number;
+	lng: number;
+	/** ROOFTOP = exact building … APPROXIMATE = area guess. */
+	precision:
+		| "ROOFTOP"
+		| "RANGE_INTERPOLATED"
+		| "GEOMETRIC_CENTER"
+		| "APPROXIMATE";
+	placeId: string;
+}
+
+export interface OutletGeocodeApiResponse {
+	success: boolean;
+	message: string;
+	data: { query: string; candidates: OutletGeocodeCandidate[] } | null;
+}
