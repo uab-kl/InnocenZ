@@ -30,6 +30,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  ChevronDown,
   House,
   MapPin,
   Store,
@@ -240,6 +241,9 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                       shift={s}
                       eyebrow={tonightShift ? 'EARLIER TODAY · COMPLETE' : 'COMPLETE'}
                       cta="View summary"
+                      // Collapsed by default while a live shift owns the page;
+                      // the lone just-finished shift stays expanded.
+                      defaultOpen={!tonightShift}
                       // Pin Check-In to this finished shift's check-out summary.
                       onCheckIn={() => {
                         focus(s.id);
@@ -325,57 +329,78 @@ function HubTab({
   );
 }
 
-/** `TodayShiftCard` — tonight's confirmed shift with the gold Check in CTA. */
+/**
+ * `TodayShiftCard` — a Today-section shift. The header (eyebrow + outlet) is
+ * always visible and taps to collapse/expand the details, so a day holding
+ * several shifts stays scannable; the CTA lives in the expanded body.
+ */
 function TonightCard({
   shift,
   eyebrow,
   cta,
   onCheckIn,
+  defaultOpen = true,
 }: {
   shift: DemoShift;
   eyebrow: string;
   cta: string;
   onCheckIn: () => void;
+  /** "Earlier today" summaries start collapsed; the live shift starts open. */
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <View style={[styles.shiftCard, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.08)')]}>
-      <Text style={styles.shiftEyebrow}>{eyebrow}</Text>
-      <View style={styles.shiftVenue}>
-        <Avatar
-          size={52}
-          radius={16}
-          photoPath={shift.logoPath}
-          initial={shift.outlet.trim()[0]?.toUpperCase()}
-          logo
-          style={styles.shiftLogo}
-        />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <LabelWithIcon icon={Store} label="Outlet name" />
-          <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
-          {shift.address ? (
-            <View style={styles.shiftAddrRow}>
-              <MapPin size={12} color={C.prMuted2} strokeWidth={2} />
-              <Text style={styles.shiftAddrText}>{shift.address}</Text>
+      <Pressable onPress={() => setOpen((o) => !o)}>
+        <View style={styles.shiftCardHead}>
+          <Text style={styles.shiftEyebrow}>{eyebrow}</Text>
+          <ChevronDown
+            size={16}
+            color={C.muted}
+            style={open ? { transform: [{ rotate: '180deg' }] } : undefined}
+          />
+        </View>
+        <View style={styles.shiftVenue}>
+          <Avatar
+            size={52}
+            radius={16}
+            photoPath={shift.logoPath}
+            initial={shift.outlet.trim()[0]?.toUpperCase()}
+            logo
+            style={styles.shiftLogo}
+          />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <LabelWithIcon icon={Store} label="Outlet name" />
+            <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
+            {open && shift.address ? (
+              <View style={styles.shiftAddrRow}>
+                <MapPin size={12} color={C.prMuted2} strokeWidth={2} />
+                <Text style={styles.shiftAddrText}>{shift.address}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Pressable>
+      {open && (
+        <>
+          <View style={styles.shiftFacts}>
+            <View style={styles.shiftFact}>
+              <LabelWithIcon icon={Calendar} label="Date" />
+              <Text style={styles.shiftFactValue}>{fmtDFriendly(...shift.date)}</Text>
             </View>
-          ) : null}
-        </View>
-      </View>
-      <View style={styles.shiftFacts}>
-        <View style={styles.shiftFact}>
-          <LabelWithIcon icon={Calendar} label="Date" />
-          <Text style={styles.shiftFactValue}>{fmtDFriendly(...shift.date)}</Text>
-        </View>
-        <View style={styles.shiftFact}>
-          <LabelWithIcon icon={Clock} label="Time" />
-          <Text style={styles.shiftFactValue}>{shift.time}</Text>
-        </View>
-      </View>
-      <View style={styles.shiftEvent}>
-        <Text style={styles.shiftEventText}>
-          {shift.event} · {formatRM(shift.payout)}
-        </Text>
-      </View>
-      <IzButton label={cta} icon={MapPin} small onPress={onCheckIn} style={{ marginTop: 12 }} />
+            <View style={styles.shiftFact}>
+              <LabelWithIcon icon={Clock} label="Time" />
+              <Text style={styles.shiftFactValue}>{shift.time}</Text>
+            </View>
+          </View>
+          <View style={styles.shiftEvent}>
+            <Text style={styles.shiftEventText}>
+              {shift.event} · {formatRM(shift.payout)}
+            </Text>
+          </View>
+          <IzButton label={cta} icon={MapPin} small onPress={onCheckIn} style={{ marginTop: 12 }} />
+        </>
+      )}
     </View>
   );
 }
@@ -499,6 +524,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(183,156,232,0.22)',
+  },
+  shiftCardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   shiftEyebrow: {
     fontFamily: F.manrope,
