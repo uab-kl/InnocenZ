@@ -112,6 +112,7 @@ export const specialServiceRepository = new SpecialServiceRepositoryClass();
 export const specialServiceController = new SpecialServiceControllerClass(
   specialServiceRepository,
   prRepository,
+  authRepository,
 );
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();
