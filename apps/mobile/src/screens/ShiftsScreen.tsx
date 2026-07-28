@@ -11,6 +11,7 @@ import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   fmtDFriendly,
   formatRM,
+  shiftEndDate,
   todayYmd,
   ymdToIso,
   type DemoShift,
@@ -90,7 +91,33 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   const outletSwaps = useOutletSwaps({ onChanged: refresh });
   const { awaiting } = useAwaitingLastWeekPv();
   const todoItems = awaiting ? [awaiting.todo] : [];
-  const todoCount = todoItems.length + outletSwaps.pending.length;
+
+  // Forgot-to-check-out caution: still checked in past the shift's scheduled
+  // end. The backend clamps the eventual stamp to that end (pay locks to the
+  // shift window), so this to-do is the nudge that actually closes the shift.
+  const overdueAssignment =
+    assignments.find(
+      (a) =>
+        a.checkInAt &&
+        !a.checkOutAt &&
+        a.status !== 'cancelled' &&
+        a.status !== 'no_show' &&
+        a.status !== 'leave_approved',
+    ) ?? null;
+  const overdueEnd = overdueAssignment
+    ? shiftEndDate(overdueAssignment.shiftDate, overdueAssignment.slot)
+    : null;
+  const overdueCheckout =
+    overdueAssignment && overdueEnd && Date.now() > overdueEnd.getTime()
+      ? { assignment: overdueAssignment, end: overdueEnd }
+      : null;
+  const overdueEndHm = overdueCheckout
+    ? `${String(overdueCheckout.end.getHours()).padStart(2, '0')}:${String(
+        overdueCheckout.end.getMinutes(),
+      ).padStart(2, '0')}`
+    : '';
+
+  const todoCount = todoItems.length + outletSwaps.pending.length + (overdueCheckout ? 1 : 0);
   const shifts = assignments
     .filter(
       (a) =>
@@ -153,6 +180,15 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
       setOpen((prev) => ({ ...prev, todo: true }));
     }
   }, [outletSwaps.pending.length, swapAlerted]);
+  // A forgotten check-out is a caution the PR must SEE — pop To-do open once
+  // when it appears (same one-shot pattern as swap requests).
+  const [overdueAlerted, setOverdueAlerted] = useState(false);
+  useEffect(() => {
+    if (overdueCheckout && !overdueAlerted) {
+      setOverdueAlerted(true);
+      setOpen((prev) => ({ ...prev, todo: true }));
+    }
+  }, [overdueCheckout, overdueAlerted]);
 
   const firstName = me?.profile.firstName?.split(' ')[0] ?? me?.username ?? 'PR';
   // .iz-pr-page-header__title: clamp(1.4rem, 5.2vw, 1.75rem)
@@ -266,8 +302,40 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               {/* A swap request has no push transport, so surfacing it here IS
                   the notification — and it sits above the PV to-dos because it
                   is the only item that changes where the PR works tonight. */}
+              {overdueCheckout && (
+                <View
+                  style={[
+                    styles.todoCard,
+                    {
+                      borderColor: 'rgba(232,198,106,0.4)',
+                      backgroundColor: 'rgba(232,198,106,0.06)',
+                      marginBottom: 10,
+                    },
+                  ]}
+                >
+                  <View style={styles.todoIcon}>
+                    <Clock size={16} color={C.amber} />
+                  </View>
+                  <View style={styles.todoBody}>
+                    <Text style={styles.todoTitle}>Forgot to check out?</Text>
+                    <Text style={styles.todoSubtitle}>
+                      {overdueCheckout.assignment.outletName ?? 'Outlet'} · shift ended{' '}
+                      {overdueEndHm} · pay locks to the shift window
+                    </Text>
+                  </View>
+                  <IzButton
+                    label="Check out"
+                    small
+                    fullWidth={false}
+                    onPress={() => {
+                      focus(null);
+                      onNavigate('checkin');
+                    }}
+                  />
+                </View>
+              )}
               <OutletSwapRequests swaps={outletSwaps} />
-              {todoItems.length === 0 && outletSwaps.pending.length === 0 ? (
+              {todoItems.length === 0 && outletSwaps.pending.length === 0 && !overdueCheckout ? (
                 <EmptyDashed>Nothing to do</EmptyDashed>
               ) : (
                 <View style={{ gap: 10 }}>

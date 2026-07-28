@@ -164,6 +164,22 @@ export const CANCELLATION_RULE_SUMMARY = [
   { label: '< 12h before', outcome: '−50% wages', tone: 'red' as const },
 ];
 
+/**
+ * Scheduled end of a shift as a Date, from its date + "HH:MM - HH:MM" slot.
+ * Crosses midnight when the end reads earlier than the start ("22:00 - 04:00"
+ * ends the next morning). Null when the free-text slot has no two clock times.
+ */
+export function shiftEndDate(shiftDateIso: string, slot: string | null): Date | null {
+  const matches = slot?.match(/(\d{1,2}):(\d{2})/g);
+  if (!matches || matches.length < 2) return null;
+  const [sh, sm] = matches[0].split(':').map(Number);
+  const [eh, em] = matches[1].split(':').map(Number);
+  const [y, m, d] = isoToYmd(shiftDateIso);
+  const end = new Date(y, m - 1, d, eh, em);
+  if (eh * 60 + em <= sh * 60 + sm) end.setDate(end.getDate() + 1);
+  return end;
+}
+
 /** Attendance label for timetable cards — stamps win over assignment.status. */
 export function timetableStatusFromStamps(input: {
   checkInAt?: string | null;

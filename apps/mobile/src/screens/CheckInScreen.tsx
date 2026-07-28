@@ -94,6 +94,22 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     ? shiftDurationLabel(active.checkInAt, active.checkOutAt)
     : '—';
 
+  // OT read from the sealed stamps (the server clamps a forgotten check-out to
+  // the shift's scheduled end, so these hours are real). Never auto-paid —
+  // surfaced below as pending agency approval, outside the payout.
+  const otHoursWorked =
+    active?.checkInAt && active.checkOutAt
+      ? Math.max(
+          0,
+          (new Date(active.checkOutAt).getTime() - new Date(active.checkInAt).getTime()) /
+            3_600_000 -
+            6,
+        )
+      : 0;
+  const otPendingAmount = active
+    ? overtimePay(otHoursWorked, active.rate, Number(active.payPerHour) || 0)
+    : 0;
+
   const statusLabel =
     phase === 'on_duty'
       ? 'On duty'
@@ -146,36 +162,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             outlet: active.outletName ?? undefined,
             dedupeRef: active.id,
           });
-          // Overtime: hours worked beyond 6h, paid at this tier's real OT/hr rate
-          // when the outlet configured one (else the pay_per_hour × 1.5 fallback).
-          // Computed from the real check-in/out stamps; sealed as its own line
-          // (idempotent per assignment). Only when there's a positive OT amount.
-          const checkInMs = active.checkInAt ? new Date(active.checkInAt).getTime() : NaN;
-          const checkOutMs = sealed.checkOutAt
-            ? new Date(sealed.checkOutAt).getTime()
-            : Date.now();
-          const payPerHour = Number(active.payPerHour) || 0;
-          const otHours = Number.isFinite(checkInMs)
-            ? Math.max(0, (checkOutMs - checkInMs) / 3_600_000 - 6)
-            : 0;
-          const otAmount = overtimePay(otHours, active.rate, payPerHour);
-          if (otAmount > 0) {
-            const otLabel =
-              active.rate?.otAfterHours != null
-                ? `Overtime ${otHours.toFixed(1)}h @ RM${active.rate.otAfterHours}/h`
-                : `Overtime ${otHours.toFixed(1)}h @1.5×`;
-            await addLine({
-              kind: 'others',
-              source: 'checkin',
-              item: otLabel,
-              quantity: 1,
-              sales: otAmount,
-              commission: otAmount,
-              lineDate: todayKey,
-              outlet: active.outletName ?? undefined,
-              dedupeRef: `${active.id}-ot`,
-            });
-          }
+          // Overtime is NOT auto-paid any more. The server clamps a forgotten
+          // check-out to the shift's scheduled end (pay locks to the shift
+          // window), and genuine OT beyond 6h is only money once the agency
+          // approves it — the summary below shows it as pending approval. The
+          // OT math itself (overtimePay in pr-rate.ts) is unchanged.
           markLocalComplete();
           // Stay optimistic: patch the row so we don't flash "Check in" again
           // before navigating away.
@@ -370,6 +361,12 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     <Text style={styles.completeAmt}>{formatRM(finalPayout)}</Text>
                   </View>
                 </View>
+                {otPendingAmount > 0 && (
+                  <Text style={styles.otPendingNote}>
+                    Overtime {otHoursWorked.toFixed(1)}h ({formatRM(otPendingAmount)}) — pending
+                    agency approval · not added to payout
+                  </Text>
+                )}
                 <ShiftStatusPanel
                   checkedOut
                   checkInAt={active.checkInAt}
@@ -487,6 +484,19 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: C.amber,
     textAlign: 'center',
+  },
+  otPendingNote: {
+    marginTop: 8,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.amber,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(232,198,106,0.35)',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
   },
   pageLabel: {
     fontFamily: F.sora,
