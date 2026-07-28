@@ -35,6 +35,10 @@ export type LocationResult =
 
 /** How long to wait for a fix before giving up (ms). */
 const FIX_TIMEOUT_MS = 12_000;
+/** How long to wait for the services-enabled check before giving up (ms). */
+const SERVICES_TIMEOUT_MS = 8_000;
+/** How long to wait for the permission prompt to be answered (ms). */
+const PERMISSION_TIMEOUT_MS = 30_000;
 
 const DENIED_MESSAGE =
   'InnocenZ needs location access to check you in at the venue. Turn it on in Settings > InnocenZ > Location, then try again.';
@@ -42,6 +46,8 @@ const DISABLED_MESSAGE =
   'Location services are off on this phone. Turn on GPS / Location, then try again.';
 const TIMEOUT_MESSAGE =
   'Could not get a GPS fix. Step outside or near a window and try again.';
+const STUCK_MESSAGE =
+  'Location is taking too long to respond. Close and reopen InnocenZ, then try again.';
 
 function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
   return Promise.race([
@@ -59,13 +65,28 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
  */
 export async function getAttendanceFix(): Promise<LocationResult> {
   try {
-    const services = await Location.hasServicesEnabledAsync();
+    // Both of these are native-bridge calls gated on the host Activity (Android)
+    // — if the Activity is recreated (rotation, low-memory reclaim, an OEM/MDM
+    // permission layer intercepting the dialog) the callback can be dropped and
+    // the promise never settles. Without a timeout here that leaves check-in
+    // stuck in "busy" forever with no error shown, so every native call in this
+    // function — not just the GPS fix — races against a deadline.
+    const services = await withTimeout(Location.hasServicesEnabledAsync(), SERVICES_TIMEOUT_MS);
+    if (services === null) {
+      return { ok: false, reason: 'error', message: STUCK_MESSAGE };
+    }
     if (!services) {
       return { ok: false, reason: 'disabled', message: DISABLED_MESSAGE };
     }
 
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== Location.PermissionStatus.GRANTED) {
+    const permission = await withTimeout(
+      Location.requestForegroundPermissionsAsync(),
+      PERMISSION_TIMEOUT_MS,
+    );
+    if (!permission) {
+      return { ok: false, reason: 'error', message: STUCK_MESSAGE };
+    }
+    if (permission.status !== Location.PermissionStatus.GRANTED) {
       return { ok: false, reason: 'denied', message: DENIED_MESSAGE };
     }
 

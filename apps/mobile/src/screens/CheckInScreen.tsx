@@ -304,6 +304,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <HoldButton
                   label="Check in"
                   holding={holding}
+                  busy={busy}
                   progress={progress}
                   onPress={() => startHold(false)}
                 />
@@ -333,6 +334,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <HoldButton
                   label="Check out"
                   holding={holding}
+                  busy={busy}
                   progress={progress}
                   onPress={() => startHold(true)}
                 />
@@ -424,24 +426,28 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 function HoldButton({
   label,
   holding,
+  busy,
   progress,
   onPress,
 }: {
   label: string;
   holding: boolean;
+  busy: boolean;
   progress: number;
   onPress: () => void;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={holding}
-      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent)]}
+      disabled={holding || busy}
+      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent), busy && { opacity: 0.6 }]}
     >
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
         <MapPin size={16} color="#241a08" strokeWidth={2.2} />
-        <Text style={styles.holdText}>{holding ? `Holding ${progress}%` : label}</Text>
+        <Text style={styles.holdText}>
+          {holding ? `Holding ${progress}%` : busy ? 'Please wait…' : label}
+        </Text>
       </View>
     </Pressable>
   );
