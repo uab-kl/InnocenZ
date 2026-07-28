@@ -59,13 +59,21 @@ function withTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
  */
 export async function getAttendanceFix(): Promise<LocationResult> {
   try {
-    const services = await Location.hasServicesEnabledAsync();
+    // Every native call below gets its own bounded wait. Without this, a
+    // device where the services check or the permission prompt itself never
+    // settles (seen on some Android OEMs when the Play Services location
+    // dialog is interrupted) leaves this whole function — and the caller's
+    // `busy` flag — hung forever with no error ever surfaced.
+    const services = await withTimeout(Location.hasServicesEnabledAsync(), FIX_TIMEOUT_MS);
     if (!services) {
       return { ok: false, reason: 'disabled', message: DISABLED_MESSAGE };
     }
 
-    const { status } = await Location.requestForegroundPermissionsAsync();
-    if (status !== Location.PermissionStatus.GRANTED) {
+    const permission = await withTimeout(
+      Location.requestForegroundPermissionsAsync(),
+      FIX_TIMEOUT_MS,
+    );
+    if (!permission || permission.status !== Location.PermissionStatus.GRANTED) {
       return { ok: false, reason: 'denied', message: DENIED_MESSAGE };
     }
 
@@ -83,7 +91,10 @@ export async function getAttendanceFix(): Promise<LocationResult> {
       // standing inside a basement club may not get a fresh lock, and a fix
       // from a minute ago at the same venue is still honest evidence. The
       // server still decides whether it is close enough.
-      const last = await Location.getLastKnownPositionAsync({ maxAge: 120_000 });
+      const last = await withTimeout(
+        Location.getLastKnownPositionAsync({ maxAge: 120_000 }),
+        FIX_TIMEOUT_MS,
+      );
       if (!last) {
         return { ok: false, reason: 'timeout', message: TIMEOUT_MESSAGE };
       }
