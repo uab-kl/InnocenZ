@@ -72,7 +72,7 @@ export async function captureReceiptPhoto(): Promise<ReceiptShot | null> {
     try {
       const perm = await ImagePicker.requestCameraPermissionsAsync();
       if (perm.granted) {
-        result = await ImagePicker.launchCameraAsync({ quality: 0.8, exif: false });
+        result = await ImagePicker.launchCameraAsync({ quality: 1, exif: false });
       }
     } catch {
       result = null;
@@ -82,7 +82,7 @@ export async function captureReceiptPhoto(): Promise<ReceiptShot | null> {
     try {
       result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        quality: 0.8,
+        quality: 1,
         exif: false,
       });
     } catch {
