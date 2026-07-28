@@ -305,6 +305,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   label="Check in"
                   holding={holding}
                   progress={progress}
+                  busy={busy}
                   onPress={() => startHold(false)}
                 />
                 <Text style={styles.gpsNote}>
@@ -334,6 +335,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   label="Check out"
                   holding={holding}
                   progress={progress}
+                  busy={busy}
                   onPress={() => startHold(true)}
                 />
                 <Text style={styles.gpsNote}>
@@ -425,23 +427,32 @@ function HoldButton({
   label,
   holding,
   progress,
+  busy,
   onPress,
 }: {
   label: string;
   holding: boolean;
   progress: number;
+  busy: boolean;
   onPress: () => void;
 }) {
+  // Once the hold completes, `holding` flips back to false immediately while
+  // the check-in/out request (GPS fix + network round trip) is still in
+  // flight — without this branch the button snapped back to its idle label
+  // right then, so a slow GPS fix or flaky venue network looked exactly like
+  // the tap had done nothing at all.
   return (
     <Pressable
       onPress={onPress}
-      disabled={holding}
-      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent)]}
+      disabled={holding || busy}
+      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent), busy && { opacity: 0.7 }]}
     >
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
         <MapPin size={16} color="#241a08" strokeWidth={2.2} />
-        <Text style={styles.holdText}>{holding ? `Holding ${progress}%` : label}</Text>
+        <Text style={styles.holdText}>
+          {holding ? `Holding ${progress}%` : busy ? 'Please wait…' : label}
+        </Text>
       </View>
     </Pressable>
   );

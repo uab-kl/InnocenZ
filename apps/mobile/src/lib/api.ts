@@ -84,15 +84,33 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * How long to wait for a response before giving up (ms). Without this, a
+ * flaky venue Wi-Fi / captive portal / corporate firewall that silently
+ * drops packets (rather than resetting the connection) leaves `fetch` hung
+ * forever with no rejection — the request never resolves, so nothing ever
+ * clears `busy` and the screen looks like it never responded, even though
+ * the backend itself answered fine.
+ */
+const REQUEST_TIMEOUT_MS = 20_000;
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  const timeoutController = new AbortController();
+  const timeoutId = setTimeout(() => timeoutController.abort(), REQUEST_TIMEOUT_MS);
   try {
     res = await fetch(`${API_BASE}${path}`, {
       ...init,
       headers: { 'Content-Type': 'application/json', ...(init?.headers ?? {}) },
+      signal: timeoutController.signal,
     });
-  } catch {
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new ApiError('The request timed out. Check your connection and try again.', 0);
+    }
     throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  } finally {
+    clearTimeout(timeoutId);
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!res.ok || !body?.success) {
