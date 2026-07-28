@@ -28,7 +28,7 @@ import {
  * Mirrors mobile `pickActive` (active-shift.tsx) and the canonical
  * `shiftAssignmentStatusValues` in shift-assignment.model.ts.
  */
-const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
+export const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
 
 /**
  * A PR's display name: preferred nickname when set, otherwise legal name.

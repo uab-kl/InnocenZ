@@ -20,7 +20,6 @@ import {
 	IzCardTitle,
 	IzPill,
 	IzSelect,
-	IzTimeInput,
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import {
@@ -28,9 +27,10 @@ import {
 	useRosterMutations,
 } from "@agency-portal/hooks/use-roster-mutations";
 import { useRosterSlots } from "@agency-portal/hooks/use-roster-slots";
+import { useOutletSwapMutations } from "@agency-portal/hooks/use-outlet-swap-mutations";
+import { useSwapOutletTargets } from "@agency-portal/hooks/use-swap-outlet-targets";
 import {
 	type AgencyRosterSlot,
-	OUTLET_NAMES,
 	type RosterSlotStatus,
 	rosterPageDisplayStatus,
 	scopeToAgency,
@@ -86,20 +86,6 @@ const EDITABLE_STATUSES: RosterSlotStatus[] = [
 	"unavailable",
 ];
 
-const STATUS_LABEL: Record<
-	RosterSlotStatus,
-	{ label: string; variant: "green" | "amber" | "red" | "violet" | "ink" }
-> = {
-	"on-duty": { label: "On duty", variant: "green" },
-	"en-route": { label: "Scheduled", variant: "ink" },
-	scheduled: { label: "Scheduled", variant: "ink" },
-	unavailable: { label: "Unavailable", variant: "red" },
-	"swap-pending": { label: "Swap pending", variant: "violet" },
-	"assignment-pending": { label: "Awaiting PR", variant: "amber" },
-	"outlet-request-pending": { label: "Outlet request", variant: "amber" },
-	"outlet-pending": { label: "Awaiting outlet", variant: "amber" },
-};
-
 type ViewMode = "live" | "planning";
 
 export const Route = createFileRoute("/agency/roster")({
@@ -139,7 +125,11 @@ function AgencyRoster() {
 	const prSubRole = useStore((s) => s.prSubRole);
 	const editRosterSlot = useStore((s) => s.editRosterSlot);
 	const cancelRosterShift = useStore((s) => s.cancelRosterShift);
-	const requestOutletSwap = useStore((s) => s.requestOutletSwap);
+	// Outlet swaps are backend-backed: the demo store's requestOutletSwap matched
+	// the slot id against `agencyRoster`, but the roster now renders backend
+	// slots whose id is a shift_assignment UUID, so it silently found nothing
+	// and the button did nothing.
+	const outletSwap = useOutletSwapMutations();
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const prSwapRequests = useStore((s) => s.prSwapRequests);
 	const approvePrSwapRequest = useStore((s) => s.approvePrSwapRequest);
@@ -663,9 +653,20 @@ function AgencyRoster() {
 						handleEditSave(editSlot.id, patch);
 						setEditId(null);
 					}}
-					onRequestOutletSwap={(targetOutlet, note) => {
-						requestOutletSwap(editSlot.id, targetOutlet, note);
-						setEditId(null);
+					swapPending={outletSwap.isPending}
+					swapError={outletSwap.errorMessage}
+					onRequestOutletSwap={(toShiftId, note) => {
+						// The slot id IS the shift_assignment id (backend-shift-map),
+						// which is what the swap record hangs off. Closing only on
+						// success keeps the refusal ("that shift is full") on screen.
+						outletSwap.request.mutate(
+							{
+								assignmentId: editSlot.id,
+								toShiftId,
+								agencyNote: note || undefined,
+							},
+							{ onSuccess: () => setEditId(null) },
+						);
 					}}
 					onReassignToOpenShift={(target) => {
 						const { shiftStart, shiftEnd } = parseShiftWindow(target.shift);
@@ -759,6 +760,8 @@ function EditRosterModal({
 	onClose,
 	onSave,
 	onRequestOutletSwap,
+	swapPending = false,
+	swapError = null,
 	onReassignToOpenShift,
 	onCancelShift,
 	onUnassign,
@@ -766,7 +769,13 @@ function EditRosterModal({
 	slot: AgencyRosterSlot;
 	onClose: () => void;
 	onSave: (patch: Partial<AgencyRosterSlot>) => void;
-	onRequestOutletSwap: (targetOutlet: string, note: string) => void;
+	/** `toShiftId` is the destination SHIFT, not an outlet — the swap record
+	 *  stores a shift id so approval knows exactly where to move the PR. */
+	onRequestOutletSwap: (toShiftId: string, note: string) => void;
+	/** In flight. Owned by the parent, which holds the mutation. */
+	swapPending?: boolean;
+	/** The server's refusal text, shown in place rather than closing the sheet. */
+	swapError?: string | null;
 	onReassignToOpenShift: (target: AgencyOutletAvailableShift) => void;
 	onCancelShift: () => void;
 	/** Planning view only: hard-delete the assignment row (frees the slot). */
@@ -779,17 +788,32 @@ function EditRosterModal({
 	const initialStatus = EDITABLE_STATUSES.includes(displayStatus)
 		? displayStatus
 		: "scheduled";
-	const [status, setStatus] = useState<RosterSlotStatus>(initialStatus);
-	const [shiftStart, setShiftStart] = useState(slot.shiftStart);
-	const [shiftEnd, setShiftEnd] = useState(slot.shiftEnd);
-	const [swapOutlet, setSwapOutlet] = useState("");
+	// Fixed, not editable: kept so saving preserves the slot's existing status
+	// rather than clearing it.
+	const status: RosterSlotStatus = initialStatus;
+	// The destination SHIFT id. Was an outlet name, which could not say which of
+	// a venue's shifts the PR was being moved to.
+	const [swapShiftId, setSwapShiftId] = useState("");
 	const [swapNote, setSwapNote] = useState("");
 	const [reassignShiftId, setReassignShiftId] = useState("");
 	const [busy, setBusy] = useState(false);
 	const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 	const [unassignConfirmOpen, setUnassignConfirmOpen] = useState(false);
-	const shiftPreview = `${shiftStart} — ${shiftEnd}`;
-	const swapTargets = OUTLET_NAMES.filter((o) => o !== slot.outlet);
+	// Swap targets come from the backend: only outlets that exist and are
+	// actually running a shift on this slot's date. Sending a PR to a venue with
+	// nothing on that night was possible while this read the demo outlet list.
+	const {
+		targets: swapTargets,
+		isLoading: swapTargetsLoading,
+		isError: swapTargetsError,
+	} = useSwapOutletTargets({
+		// The date, the agency and the "not this shift" exclusion are all derived
+		// server-side from the assignment itself.
+		assignmentId: slot.id,
+	});
+	// Once a swap target is picked the window that matters is the destination's,
+	// not the shift the PR is being moved off.
+	const selectedSwapTarget = swapTargets.find((t) => t.shiftId === swapShiftId);
 	const releasedEarly = Boolean(slot.checkedOutAt);
 	const canRequestSwap =
 		!releasedEarly &&
@@ -816,13 +840,17 @@ function EditRosterModal({
 		e.preventDefault();
 		if (busy) return;
 		setBusy(true);
-		onSave({ status, shiftStart, shiftEnd, shift: shiftPreview });
+		// Status only — the shift's times belong to the outlet's posted job.
+		onSave({ status });
 	};
 
 	const handleSwap = () => {
-		if (busy || !swapOutlet) return;
-		setBusy(true);
-		onRequestOutletSwap(swapOutlet, swapNote.trim());
+		if (busy || swapPending || !swapShiftId) return;
+		// Deliberately does NOT set `busy`: unlike save/reassign/cancel, this
+		// request can be refused (destination full, one already pending) and the
+		// sheet stays open to show why. `swapPending` covers it instead, and the
+		// parent closes the sheet only on success.
+		onRequestOutletSwap(swapShiftId, swapNote.trim());
 	};
 
 	const handleReassign = () => {
@@ -955,55 +983,15 @@ function EditRosterModal({
 					</span>
 				</div>
 
-				<div>
-					<span className="iz-field-label">Status</span>
-					<div
-						className="iz-status-chips"
-						role="group"
-						aria-label="Shift status"
-					>
-						{EDITABLE_STATUSES.map((s) => {
-							const meta = STATUS_LABEL[s];
-							return (
-								<button
-									key={s}
-									type="button"
-									className={`iz-status-chip${status === s ? " on" : ""}`}
-									data-variant={meta.variant}
-									aria-pressed={status === s}
-									onClick={() => setStatus(s)}
-									disabled={busy}
-								>
-									{meta.label}
-								</button>
-							);
-						})}
-					</div>
-				</div>
+				{/* No status control: "On duty" wrote the same `confirmed` as
+				    "Scheduled" (attendance comes from the PR's check-in timestamps),
+				    and "Unavailable" wrote `cancelled` — the same destructive write
+				    as Cancel Shift below, but without its confirmation step. */}
 
-				<div className="mt-4 grid grid-cols-2 gap-3">
-					<div>
-						<span className="iz-field-label">Start</span>
-						<IzTimeInput
-							value={shiftStart}
-							onChange={setShiftStart}
-							aria-label="Shift start time"
-						/>
-					</div>
-					<div>
-						<span className="iz-field-label">End</span>
-						<IzTimeInput
-							value={shiftEnd}
-							onChange={setShiftEnd}
-							aria-label="Shift end time"
-						/>
-					</div>
-				</div>
-
-				<div className="iz-sheet-preview">
-					<div className="k">Shift window</div>
-					<div className="v">{shiftPreview}</div>
-				</div>
+				{/* Shift times are set by the outlet when it posts the job — the
+				    agency reassigns people, it does not reschedule a booked shift.
+				    The window that matters here is the destination's, shown inside
+				    the swap card once a target is picked. */}
 
 				{canRequestSwap && (
 					<div className="mt-4 rounded-xl border border-[rgba(124,107,255,.3)] bg-[rgba(124,107,255,.06)] p-3">
@@ -1015,21 +1003,65 @@ function EditRosterModal({
 							{slot.prName} must approve before the outlet changes.
 						</p>
 						<div className="mt-3">
-							<span className="iz-field-label">New outlet</span>
+							<span className="iz-field-label">New shift</span>
 							<IzSelect
 								block
 								className="!text-sm"
-								value={swapOutlet}
-								onChange={(e) => setSwapOutlet(e.target.value)}
-								disabled={busy}
+								value={swapShiftId}
+								onChange={(e) => setSwapShiftId(e.target.value)}
+								disabled={
+									busy ||
+									swapPending ||
+									swapTargetsLoading ||
+									swapTargets.length === 0
+								}
 							>
-								<option value="">Select outlet…</option>
-								{swapTargets.map((o) => (
-									<option key={o} value={o}>
-										{o}
+								<option value="">
+									{swapTargetsLoading
+										? "Loading shifts…"
+										: swapTargetsError
+											? "Could not load shifts"
+											: swapTargets.length === 0
+												? "No other outlet has a shift on this day"
+												: "Select shift…"}
+								</option>
+								{/* A venue running two shifts that night appears twice — the
+								    window disambiguates them. Full shifts stay visible but
+								    unselectable: approval refuses them server-side, so
+								    offering one would only produce a doomed request. */}
+								{swapTargets.map((t) => (
+									<option key={t.shiftId} value={t.shiftId} disabled={t.isFull}>
+										{t.outletName}
+										{t.shiftWindow ? ` · ${t.shiftWindow}` : ""}
+										{t.isFull
+											? " — full"
+											: ` (${t.staffedCount}/${t.quantity})`}
 									</option>
 								))}
 							</IzSelect>
+							{selectedSwapTarget && (
+								<div className="iz-sheet-preview mt-2">
+									<div className="k">Shift they move to</div>
+									<div className="v">
+										{selectedSwapTarget.outletName} ·{" "}
+										{selectedSwapTarget.shiftWindow ?? "Window not set"}
+									</div>
+									{selectedSwapTarget.eventName && (
+										<div className="iz-tiny iz-muted mt-0.5">
+											{selectedSwapTarget.eventName}
+										</div>
+									)}
+									<div className="iz-tiny iz-muted mt-0.5">
+										{selectedSwapTarget.staffedCount} of{" "}
+										{selectedSwapTarget.quantity} staffed
+									</div>
+								</div>
+							)}
+							{swapError && (
+								<p className="iz-tiny mt-2 text-[var(--destructive)]">
+									{swapError}
+								</p>
+							)}
 						</div>
 						<div className="mt-2">
 							<span className="iz-field-label">Note to PR (optional)</span>
@@ -1038,16 +1070,16 @@ function EditRosterModal({
 								value={swapNote}
 								onChange={(e) => setSwapNote(e.target.value)}
 								placeholder="Reason for relocation…"
-								disabled={busy}
+								disabled={busy || swapPending}
 							/>
 						</div>
 						<button
 							type="button"
 							className="iz-btn iz-btn-soft mt-3 w-full !text-xs"
-							disabled={!swapOutlet || busy}
+							disabled={!swapShiftId || busy || swapPending}
 							onClick={handleSwap}
 						>
-							Send swap request to PR
+							{swapPending ? "Sending…" : "Send swap request to PR"}
 						</button>
 					</div>
 				)}
