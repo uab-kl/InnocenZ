@@ -448,7 +448,12 @@ function AssignBackendCellSheet({
 											</div>
 											<p className="iz-tiny mt-1 text-[var(--iz-gold-l)]">
 												{shift.quantity - shift.filled} open ·{" "}
-												{formatRM(Number(shift.payPerHour))}/hr
+												{/* payPerHour holds a DAILY wage: it is set from
+												    basePayFromPayTierRows, and tier rows have been
+												    daily since migration 0047 (Tier I = 500). The
+												    column name is the stale part, not the value —
+												    labelling it /hr read as RM500.00 an hour. */}
+												{formatRM(Number(shift.payPerHour))}/day
 											</p>
 										</div>
 										<span className="iz-tiny iz-muted2 shrink-0 text-right leading-tight">

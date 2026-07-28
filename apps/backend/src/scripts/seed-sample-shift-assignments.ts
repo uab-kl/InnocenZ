@@ -101,7 +101,12 @@ export async function seedSampleShiftAssignments(): Promise<void> {
     // Staff to the shift's own headcount, capped by the agency's real roster.
     const wanted = status === 'assigned' ? (shift.filled ?? 0) : shift.quantity;
     const headcount = Math.min(Math.max(wanted, 0), pool.length);
-    const payAmount = money(Number(shift.payPerHour ?? 0) * SHIFT_HOURS);
+    // `pay_per_hour` holds a DAILY wage despite the name — it is set from
+    // basePayFromPayTierRows, and tier rows have been daily since migration
+    // 0047 (Tier I = 500). Multiplying by SHIFT_HOURS billed a day six times
+    // over: 500 x 6 = RM3000 per assignment. The live rows are correct
+    // (700.00 = Tier III, 600.00 = Tier II) because they predate this path.
+    const payAmount = money(Number(shift.payPerHour ?? 0));
     const isWorked = status === 'completed';
 
     for (let i = 0; i < headcount; i += 1) {
