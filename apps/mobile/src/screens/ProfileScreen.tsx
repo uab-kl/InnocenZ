@@ -18,9 +18,6 @@ import { ApiError, assetUrl, portfolioSlotsFromProfile } from '../lib/api';
 import { fetchImageBlob, renderComcardPng } from '../lib/render-comcard';
 import {
   PORTFOLIO_SLOTS,
-  SEED_COMCARD,
-  SEED_PORTFOLIO,
-  SEED_PROFILE_IMAGE,
 } from '../lib/demo-shifts';
 import { PR_AGENCY_OPTIONS, PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { pickImageFromGallery } from '../lib/photo-file';
@@ -93,28 +90,24 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const profilePortfolio = portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
   const portfolio = editing ? draft.portfolio : profilePortfolio;
 
-  const displayPortfolio = useMemo(() => {
-    if (editing) return portfolio;
-    if (portfolio.some(Boolean)) return portfolio;
-    const seeded: (string | null)[] = Array.from({ length: PORTFOLIO_SLOTS }, () => null);
-    SEED_PORTFOLIO.forEach((path, i) => {
-      seeded[i] = path;
-    });
-    return seeded;
-  }, [editing, portfolio]);
+  // Only the account's own uploaded photos — no demo seed leaks into a fresh PR.
+  const displayPortfolio = portfolio;
 
-  const avatarPath = me?.profileImage ?? (!editing ? SEED_PROFILE_IMAGE : null);
+  const avatarPath = me?.profileImage ?? null;
 
   const comcardTiles = useMemo(() => {
-    if (!editing && !portfolio.some(Boolean)) {
-      return { mode: 'single' as const, src: SEED_COMCARD };
+    // A saved comcard image wins; else a collage from the account's real photos.
+    // No saved comcard and no photos → nothing to show (fresh account).
+    if (!editing && me?.profile.comcardImage) {
+      return { mode: 'single' as const, src: me.profile.comcardImage };
     }
     const source = editing ? portfolio : displayPortfolio;
+    if (!source.some(Boolean)) return { mode: 'empty' as const };
     return {
       mode: 'grid' as const,
       paths: Array.from({ length: 4 }, (_, i) => source[i] ?? null),
     };
-  }, [displayPortfolio, editing, portfolio]);
+  }, [displayPortfolio, editing, portfolio, me?.profile.comcardImage]);
 
   // Gallery picking works on BOTH web (file dialog) and the phone (real photo
   // gallery via expo-image-picker) — see lib/photo-file.ts.
@@ -122,7 +115,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const canSaveComcard = Boolean(token) && Platform.OS === 'web' && !editing;
 
   const saveComcardToDatabase = async () => {
-    if (!canSaveComcard) return;
+    if (!canSaveComcard || comcardTiles.mode === 'empty') return;
     setSavingComcard(true);
     setError(null);
     setComcardSavedHint(null);
@@ -196,16 +189,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setError('Select at least one language');
       return;
     }
-    const parts = draft.icName.trim().split(/\s+/);
-    const firstName = parts[0] ?? '';
-    const lastName = parts.slice(1).join(' ');
     setSaving(true);
     setError(null);
     try {
       await updateProfile({
         username: name,
-        firstName,
-        lastName,
+        // Legal IC name → user_profile.full_name (the column admin/agency read).
+        fullName: draft.icName.trim(),
         email: me?.email ?? '',
         portfolioPhotos: portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS),
         comcardHeightCm: draft.height,
@@ -445,6 +435,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   />
                 ) : null}
               </View>
+            ) : comcardTiles.mode === 'empty' ? (
+              <View style={[styles.collage, styles.collageEmpty]}>
+                <Text style={styles.collageEmptyText}>
+                  No comcard yet — add photos to your gallery below to build one.
+                </Text>
+              </View>
             ) : (
               <View style={styles.collage}>
                 {comcardTiles.paths.map((path, idx) => {
@@ -474,7 +470,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             )}
           </View>
 
-          {canSaveComcard && (
+          {canSaveComcard && comcardTiles.mode !== 'empty' && (
             <View style={styles.comcardActions}>
               <IzButton
                 label={savingComcard ? 'Saving…' : me?.profile.comcardImage ? 'Update saved comcard' : 'Save comcard'}
@@ -500,21 +496,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>HEIGHT</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{height}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.comcardHeightCm ?? '—'}</Text>
                   <Text style={styles.measureSuffix}>cm</Text>
                 </View>
               </View>
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>WEIGHT</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{weight}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.comcardWeightKg ?? '—'}</Text>
                   <Text style={styles.measureSuffix}>kg</Text>
                 </View>
               </View>
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>AGE</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{age}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.dob ? age : '—'}</Text>
                   <Text style={styles.measureSuffix}>y</Text>
                 </View>
               </View>
@@ -912,6 +908,18 @@ const styles = StyleSheet.create({
     backgroundColor: C.panel2,
   },
   collageTile: { width: '50%', height: '50%' },
+  collageEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  collageEmptyText: {
+    fontFamily: F.manrope,
+    fontSize: 13,
+    lineHeight: 18,
+    color: C.prMuted,
+    textAlign: 'center',
+  },
   comcardOverlay: {
     position: 'absolute',
     left: '50%',
@@ -948,6 +956,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(155,184,255,0.45)',
     borderBottomWidth: 2,
     padding: 10,
+    overflow: 'hidden',
+    minWidth: 0,
     backgroundColor: 'rgba(0,0,0,0.18)',
   },
   measureLabel: {
@@ -957,8 +967,15 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: C.blue,
   },
-  measureRow: { marginTop: 4, flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  measureRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    minWidth: 0,
+  },
   measureValue: {
+    flexShrink: 1,
     fontFamily: F.sora,
     fontSize: 22,
     fontWeight: '800',
@@ -972,7 +989,7 @@ const styles = StyleSheet.create({
     color: C.txt,
     padding: 0,
   },
-  measureSuffix: { fontFamily: F.manrope, fontSize: 12, color: C.blue },
+  measureSuffix: { flexShrink: 0, fontFamily: F.manrope, fontSize: 12, color: C.blue },
   section: { marginTop: 16 },
   sectionTitleRow: {
     flexDirection: 'row',

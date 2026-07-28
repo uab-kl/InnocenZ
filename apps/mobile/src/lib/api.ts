@@ -200,8 +200,8 @@ export function fetchMemberships(accessToken: string, userId: string): Promise<A
 
 export type ProfileUpdate = {
   username: string;
-  firstName?: string;
-  lastName?: string;
+  /** Legal full name — persisted to user_profile.full_name (what admin reads). */
+  fullName?: string;
   email?: string;
   portfolioPhotos?: (string | null)[];
   comcardHeightCm?: number | null;
