@@ -486,6 +486,10 @@ export type ShiftAssignmentRecord = {
   outletName: string | null;
   /** The shift outlet's address (composed from its address columns via FK). */
   outletAddress: string | null;
+  /** Venue pin off the outlet FK — null until the outlet drops its pin. */
+  outletLat: number | null;
+  outletLng: number | null;
+  outletGeoFenceRadiusM: number;
   /** This PR's tier (pr_tier enum), e.g. 'tier_5' / 'commission_only'. */
   tier: string;
   /** Resolved rate card for this PR's tier at this outlet, or null if unset. */

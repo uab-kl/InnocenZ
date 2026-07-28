@@ -7,7 +7,9 @@
  * panel) and the wages seal write to the backend current-week voucher.
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import * as Location from 'expo-location';
+import { distanceM } from '../lib/geo';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   CANCELLATION_RULE_SUMMARY,
@@ -32,6 +34,18 @@ import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 import { MapPin } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
+
+// react-native-maps ships native code only — requiring it on web would crash
+// the bundle, so the map renders on the phone and web shows the metres text.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let RNMaps: any = null;
+if (Platform.OS !== 'web') {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  RNMaps = require('react-native-maps');
+}
+
+/** The phone's live position while this screen is open. */
+type LivePos = { lat: number; lng: number; accuracyM?: number };
 
 function ymdFromIso(iso: string): Ymd {
   const [y, m, d] = iso.split('-').map((n) => Number(n));
@@ -65,6 +79,70 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // ---- 1D-3/1D-4: live position vs the venue pin (server still referees) ----
+  const [myPos, setMyPos] = useState<LivePos | null>(null);
+  const pin =
+    active && active.outletLat !== null && active.outletLng !== null
+      ? {
+          lat: active.outletLat,
+          lng: active.outletLng,
+          radiusM: active.outletGeoFenceRadiusM ?? GEOFENCE_METERS,
+        }
+      : null;
+
+  // Watch the phone's position while the screen is open (foreground only) and
+  // a check-in is still ahead; stop the watch on unmount / once on duty.
+  useEffect(() => {
+    if (!pin || phase !== 'booked') return;
+    let sub: { remove: () => void } | null = null;
+    let cancelled = false;
+    (async () => {
+      try {
+        const { status } = await Location.requestForegroundPermissionsAsync();
+        if (status !== 'granted' || cancelled) return;
+        sub = await Location.watchPositionAsync(
+          { accuracy: Location.Accuracy.Balanced, distanceInterval: 5 },
+          (pos) =>
+            setMyPos({
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              accuracyM: pos.coords.accuracy ?? undefined,
+            }),
+        );
+      } catch {
+        // No GPS here (blocked browser / emulator) — button stays gated until
+        // Refresh GPS works; the server would refuse a pinned venue anyway.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      sub?.remove();
+    };
+  }, [pin?.lat, pin?.lng, phase]);
+
+  /** One-shot re-read for the “Refresh GPS” link (indoors ±80 m is normal). */
+  const refreshGps = useCallback(async () => {
+    try {
+      const pos = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+      setMyPos({
+        lat: pos.coords.latitude,
+        lng: pos.coords.longitude,
+        accuracyM: pos.coords.accuracy ?? undefined,
+      });
+    } catch {
+      setActionError('Could not read GPS — check location permission and try again.');
+    }
+  }, []);
+
+  // The gate — same allowance the server gives (radius + capped accuracy).
+  const metres = myPos && pin ? Math.round(distanceM(myPos, pin)) : null;
+  const allowed = pin ? pin.radiusM + Math.min(myPos?.accuracyM ?? 0, 30) : null;
+  const inside = metres !== null && allowed !== null && metres <= allowed;
+  // No pin = venue not fenced yet → button stays usable (matches the server).
+  const gateBlocked = pin !== null && !inside;
 
   const [holding, setHolding] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -308,14 +386,59 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
             {phase === 'booked' && (
               <>
+                {pin && RNMaps ? (
+                  <View style={styles.mapWrap}>
+                    <RNMaps.default
+                      provider={RNMaps.PROVIDER_GOOGLE}
+                      style={{ height: 220 }}
+                      showsUserLocation
+                      initialRegion={{
+                        latitude: pin.lat,
+                        longitude: pin.lng,
+                        latitudeDelta: 0.004,
+                        longitudeDelta: 0.004,
+                      }}
+                    >
+                      <RNMaps.Marker
+                        coordinate={{ latitude: pin.lat, longitude: pin.lng }}
+                        title={outletName}
+                      />
+                      <RNMaps.Circle
+                        center={{ latitude: pin.lat, longitude: pin.lng }}
+                        radius={pin.radiusM}
+                        strokeColor="rgba(74,222,128,.9)"
+                        fillColor="rgba(74,222,128,.15)"
+                      />
+                    </RNMaps.default>
+                  </View>
+                ) : null}
+                {pin && (
+                  <View style={styles.metresRow}>
+                    <Text style={[styles.metresText, inside && { color: C.green }]}>
+                      {metres === null
+                        ? 'Locating…'
+                        : inside
+                          ? `${metres} m from ${outletName}`
+                          : `${metres} m away — move closer`}
+                    </Text>
+                    <Pressable onPress={() => void refreshGps()}>
+                      <Text style={styles.refreshGps}>Refresh GPS</Text>
+                    </Pressable>
+                  </View>
+                )}
                 <HoldButton
-                  label="Check in"
+                  label={gateBlocked && metres !== null ? `${metres} m away — move closer` : 'Check in'}
                   holding={holding}
                   progress={progress}
-                  onPress={() => startHold(false)}
+                  disabled={gateBlocked}
+                  onPress={() => {
+                    // Courtesy gate only — the server re-checks every tap (422).
+                    if (gateBlocked) return;
+                    startHold(false);
+                  }}
                 />
                 <Text style={styles.gpsNote}>
-                  Check-in is only allowed within {GEOFENCE_METERS}m of {outletName}
+                  Check-in is only allowed within {pin?.radiusM ?? GEOFENCE_METERS}m of {outletName}
                   {GPS_BYPASS
                     ? ' — GPS temporarily bypassed for demo.'
                     : '. Your phone shares its location for this stamp only.'}
@@ -439,17 +562,19 @@ function HoldButton({
   holding,
   progress,
   onPress,
+  disabled = false,
 }: {
   label: string;
   holding: boolean;
   progress: number;
   onPress: () => void;
+  disabled?: boolean;
 }) {
   return (
     <Pressable
       onPress={onPress}
-      disabled={holding}
-      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent)]}
+      disabled={holding || disabled}
+      style={[styles.holdBtn, grad(GRADIENTS.accent, C.accent), disabled && { opacity: 0.45 }]}
     >
       <View style={[styles.holdFill, { width: `${Math.min(100, progress)}%` as unknown as number }]} />
       <View style={styles.holdContent}>
@@ -462,6 +587,27 @@ function HoldButton({
 
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
+  mapWrap: {
+    marginTop: 12,
+    borderRadius: 14,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: C.line2,
+  },
+  metresRow: {
+    marginTop: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  metresText: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.amber },
+  refreshGps: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.blue,
+    textDecorationLine: 'underline',
+  },
   errorText: {
     marginTop: 10,
     fontFamily: F.manrope,
