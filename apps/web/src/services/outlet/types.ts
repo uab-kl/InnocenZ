@@ -88,6 +88,45 @@ export interface OutletMembershipsApiResponse {
 	data: OutletMembership[];
 }
 
+/** Google's confidence hint. ROOFTOP is a building; APPROXIMATE can be a suburb. */
+export type GeocodePrecision =
+	| "ROOFTOP"
+	| "RANGE_INTERPOLATED"
+	| "GEOMETRIC_CENTER"
+	| "APPROXIMATE";
+
+/** One address-lookup suggestion. Saves nothing until the operator commits it. */
+export interface GeocodeCandidate {
+	formattedAddress: string;
+	lat: number;
+	lng: number;
+	precision: GeocodePrecision;
+	placeId: string;
+}
+
+export interface GeocodeCandidatesApiResponse {
+	success: boolean;
+	message: string;
+	data: GeocodeCandidate[];
+}
+
+/** The by-id lookup echoes the address it searched, so the operator can see it. */
+export interface OutletGeocodeApiResponse {
+	success: boolean;
+	message: string;
+	data: {
+		query: string;
+		candidates: GeocodeCandidate[];
+	};
+}
+
+/** Mirrors UpdateGeoFenceSchema: radius is metres, 10–1000, server default 50. */
+export interface GeoFencePayload {
+	lat: number;
+	lng: number;
+	geoFenceRadius?: number;
+}
+
 export interface OutletsQueryParams {
 	name?: string;
 	status?: OutletStatus;

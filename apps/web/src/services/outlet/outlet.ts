@@ -1,7 +1,10 @@
 import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 import type {
+	GeocodeCandidatesApiResponse,
+	GeoFencePayload,
 	OutletApiResponse,
+	OutletGeocodeApiResponse,
 	OutletMembersApiResponse,
 	OutletMembershipsApiResponse,
 	OutletsApiResponse,
@@ -58,6 +61,58 @@ export async function suspendOutlet(
 	const client = getClient(onRefreshFail);
 	const response = await client.patch<OutletApiResponse>(
 		`/outlet/${id}/suspend`,
+	);
+	return response.data;
+}
+
+/**
+ * Address -> candidate pins, built from the outlet's OWN stored address columns.
+ * Read-only: nothing is saved until the operator confirms one through
+ * setOutletGeoFence.
+ */
+export async function geocodeOutletAddress(
+	outletId: string,
+	onRefreshFail: () => void,
+): Promise<OutletGeocodeApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<OutletGeocodeApiResponse>(
+		`/outlet/${outletId}/geocode`,
+	);
+	return response.data;
+}
+
+/** Same lookup for a typed address, when the saved one is wrong or missing. */
+export async function geocodeOutletFreeText(
+	address: string,
+	onRefreshFail: () => void,
+): Promise<GeocodeCandidatesApiResponse> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({ address });
+	const response = await client.get<GeocodeCandidatesApiResponse>(
+		`/outlet/geocode${queryString}`,
+	);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
+}
+
+/**
+ * Commits the pin. This is the ONLY call that switches hard geofencing on for a
+ * venue — once lat/lng exist, every PR check-in there is distance-checked — so
+ * it stays a deliberate, human-confirmed action. Owner sub-role only, enforced
+ * server-side by outletOwnerOnly.
+ */
+export async function setOutletGeoFence(
+	outletId: string,
+	payload: GeoFencePayload,
+	onRefreshFail: () => void,
+): Promise<OutletApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<OutletApiResponse>(
+		`/outlet/${outletId}/geo-fence`,
+		payload,
 	);
 	return response.data;
 }

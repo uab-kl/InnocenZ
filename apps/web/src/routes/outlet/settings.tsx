@@ -7,6 +7,7 @@ import {
 } from '@agency-portal/components/outlet/outlet-portal-ui';
 import { IzCard, IzSectionLabel } from '@agency-portal/components/iz/ui';
 import { SecuritySettingsSheets } from '@agency-portal/components/auth/SecuritySettingsSheets';
+import { GeoFenceCard } from '@agency-portal/components/outlet/GeoFenceCard';
 import { useOutletProfile } from '@agency-portal/hooks/use-outlet-profile';
 import { useStore } from '@agency-portal/lib/store';
 import type {
@@ -348,6 +349,9 @@ function OutletSettingsPage() {
           readOnly={fieldsLocked}
         />
       </IzCard>
+
+      {/* Renders its own section label, and nothing at all on a demo session. */}
+      <GeoFenceCard canEdit={canEdit} />
 
       <IzSectionLabel>Finance Head</IzSectionLabel>
       <IzCard className={editCardClass}>
