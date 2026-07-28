@@ -21,7 +21,7 @@ import {
 } from '../lib/demo-shifts';
 import { shiftDurationLabel, useShiftSession } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
-import { overtimeHours, overtimePay } from '../lib/pr-rate';
+import { overtimeHours, overtimePay, overtimeRate } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { usePrNav } from '../lib/pr-nav';
@@ -153,10 +153,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           const otHours = overtimeHours(active.checkInAt, checkOutMs);
           const otAmount = overtimePay(otHours, active.rate, payPerHour);
           if (otAmount > 0) {
-            const otLabel =
-              active.rate?.otAfterHours != null
-                ? `Overtime ${otHours.toFixed(1)}h @ RM${active.rate.otAfterHours}/h`
-                : `Overtime ${otHours.toFixed(1)}h @1.5×`;
+            // Label the rate actually charged. This used to print
+            // `rate.otAfterHours`, which is the standard shift LENGTH (6), so a
+            // voucher read "@ RM6.00/h" while being billed something else.
+            const otRate = overtimeRate(active.rate, payPerHour);
+            const otLabel = `Overtime ${otHours.toFixed(1)}h @ RM${otRate.toFixed(2)}/h`;
             await addLine({
               kind: 'others',
               source: 'checkin',
