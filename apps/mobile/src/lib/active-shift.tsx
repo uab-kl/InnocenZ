@@ -34,10 +34,13 @@ function localDateKey(d: Date): string {
 /**
  * The single assignment the app acts on:
  *  1. a shift in progress (checked in, not out) — highest;
- *  2. a shift the PR checked out TODAY — stays pinned so Check-In keeps showing
- *     its status table + payout after check-out (clears itself the next day);
- *  3. the soonest one still awaiting check-in (their next shift);
- *  4. the latest completed one, as a fallback so the page is never blank.
+ *  2. a shift booked for TODAY still awaiting check-in — a new same-day
+ *     assignment renews the Check-In page even right after a check-out, so
+ *     the PR can start the next shift instead of staring at the old summary;
+ *  3. a shift the PR checked out TODAY — with no new shift today, the summary
+ *     stays pinned for the rest of the day (clears itself the next day);
+ *  4. the soonest one still awaiting check-in (their next shift);
+ *  5. the latest completed one, as a fallback so the page is never blank.
  * Cancelled / no-show / locally-dismissed rows are skipped.
  */
 export function pickActive(
@@ -60,6 +63,14 @@ export function pickActive(
   const onDuty = open.find((a) => a.checkInAt && !a.checkOutAt && a.shiftDate <= today);
   if (onDuty) return onDuty;
 
+  // A fresh assignment for TONIGHT outranks this morning's check-out summary —
+  // the agency re-booked the PR, so Check-In renews to the new shift. Strictly
+  // today's date: tomorrow's booking must not evict the summary early.
+  const bookedToday = open
+    .filter((a) => !a.checkInAt && a.status !== 'completed' && a.shiftDate === today)
+    .sort((a, b) => (a.slot ?? '').localeCompare(b.slot ?? ''));
+  if (bookedToday.length) return bookedToday[0];
+
   // Keep the just-finished shift on screen for the rest of the day (matched on
   // the check-out stamp's local day), then let it reset when the day changes.
   const completedToday = open
@@ -80,6 +91,8 @@ export function pickActive(
 type ActiveShiftState = {
   assignments: ShiftAssignmentRecord[];
   active: ShiftAssignmentRecord | null;
+  /** The auto-picked shift, ignoring any focus override — "your current shift". */
+  current: ShiftAssignmentRecord | null;
   phase: AttendancePhase;
   loading: boolean;
   error: string | null;
@@ -88,6 +101,12 @@ type ActiveShiftState = {
   patch: (updated: ShiftAssignmentRecord) => void;
   /** Hide a row from the active pick until the next reload (client-only cancel). */
   dismiss: (id: string) => void;
+  /**
+   * Pin Check-In to one specific assignment — the Today section's
+   * "View summary" on an earlier same-day shift. null returns to auto-pick.
+   */
+  focus: (id: string | null) => void;
+  focusedId: string | null;
 };
 
 const ActiveShiftContext = createContext<ActiveShiftState | null>(null);
@@ -131,12 +150,44 @@ export function ActiveShiftProvider({ children }: { children: React.ReactNode })
     setDismissed((prev) => new Set(prev).add(id));
   }, []);
 
-  const active = useMemo(() => pickActive(assignments, dismissed), [assignments, dismissed]);
+  const [focusedId, setFocusedId] = useState<string | null>(null);
+  const focus = useCallback((id: string | null) => setFocusedId(id), []);
+
+  const current = useMemo(() => pickActive(assignments, dismissed), [assignments, dismissed]);
+  // A focus pin only holds while the row is still viewable: a completed shift's
+  // summary stays reachable for the rest of its check-out day, then the pin
+  // silently falls back to the auto pick (so yesterday's summary can't hijack
+  // Check-In after midnight).
+  const active = useMemo(() => {
+    if (!focusedId) return current;
+    const row = assignments.find((a) => a.id === focusedId);
+    const today = localDateKey(new Date());
+    const valid =
+      row &&
+      !dismissed.has(row.id) &&
+      row.status !== 'cancelled' &&
+      row.status !== 'no_show' &&
+      row.status !== 'leave_approved' &&
+      (!row.checkOutAt || localDateKey(new Date(row.checkOutAt)) === today);
+    return valid ? row : current;
+  }, [assignments, dismissed, focusedId, current]);
   const phase: AttendancePhase = active ? derivePhase(active) : 'idle';
 
   const value = useMemo<ActiveShiftState>(
-    () => ({ assignments, active, phase, loading, error, refresh, patch, dismiss }),
-    [assignments, active, phase, loading, error, refresh, patch, dismiss],
+    () => ({
+      assignments,
+      active,
+      current,
+      phase,
+      loading,
+      error,
+      refresh,
+      patch,
+      dismiss,
+      focus,
+      focusedId,
+    }),
+    [assignments, active, current, phase, loading, error, refresh, patch, dismiss, focus, focusedId],
   );
 
   return <ActiveShiftContext.Provider value={value}>{children}</ActiveShiftContext.Provider>;

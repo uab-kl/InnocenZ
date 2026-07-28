@@ -1,6 +1,6 @@
 {
-  "id": "b99eeb47-86db-4256-bbee-eeef98314de9",
-  "prevId": "8ca646de-560a-4480-9f5a-06c369350f45",
+  "id": "e5296f65-868e-4247-8573-b48f6218f613",
+  "prevId": "b99eeb47-86db-4256-bbee-eeef98314de9",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -4476,6 +4476,12 @@
         "race": {
           "name": "race",
           "type": "varchar(50)",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "languages": {
+          "name": "languages",
+          "type": "jsonb",
           "primaryKey": false,
           "notNull": false
         },

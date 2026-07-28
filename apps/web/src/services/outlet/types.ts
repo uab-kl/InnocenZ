@@ -110,14 +110,20 @@ export interface GeocodeCandidatesApiResponse {
 	data: GeocodeCandidate[];
 }
 
-/** The by-id lookup echoes the address it searched, so the operator can see it. */
+/**
+ * The by-id lookup echoes the address it searched, so the operator can see it.
+ *
+ * `data` is null on every non-2xx the controller returns (400 no address, 404
+ * unknown outlet, 503 no geocoder key, 500) — axios rejects those before a
+ * caller sees them, but the type stays honest about it.
+ */
 export interface OutletGeocodeApiResponse {
 	success: boolean;
 	message: string;
 	data: {
 		query: string;
 		candidates: GeocodeCandidate[];
-	};
+	} | null;
 }
 
 /** Mirrors UpdateGeoFenceSchema: radius is metres, 10–1000, server default 50. */
@@ -134,3 +140,8 @@ export interface OutletsQueryParams {
 	page?: number;
 	pageSize?: number;
 }
+
+// A second copy of the geocode candidate + response types arrived on the same
+// merge. The candidate was field-for-field GeocodeCandidate above, and the
+// duplicate response interface would not have compiled. Its one improvement is
+// kept on the surviving declaration: `data` really is nullable.

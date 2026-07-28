@@ -1,6 +1,6 @@
 {
-  "id": "b99eeb47-86db-4256-bbee-eeef98314de9",
-  "prevId": "8ca646de-560a-4480-9f5a-06c369350f45",
+  "id": "8ca646de-560a-4480-9f5a-06c369350f45",
+  "prevId": "fbe24584-fc2d-4d26-9e9e-9214f63d9cb4",
   "version": "7",
   "dialect": "postgresql",
   "tables": {
@@ -2197,13 +2197,6 @@
         "ref": {
           "name": "ref",
           "type": "varchar(100)",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "component": {
-          "name": "component",
-          "type": "payment_voucher_component",
-          "typeSchema": "main",
           "primaryKey": false,
           "notNull": false
         },
@@ -4854,18 +4847,6 @@
         "owner",
         "finance",
         "operations_head"
-      ]
-    },
-    "main.payment_voucher_component": {
-      "name": "payment_voucher_component",
-      "schema": "main",
-      "values": [
-        "wages",
-        "drink_commission",
-        "tip_commission",
-        "ot",
-        "deduction",
-        "other"
       ]
     },
     "main.payment_voucher_dispute_component": {

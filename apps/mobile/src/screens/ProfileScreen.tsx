@@ -2,7 +2,7 @@
  * Profile — 1:1 port of InnocenZ-proto `/host/profile`.
  * Identity from admin backend (Vicky); comcard/portfolio/languages mirror proto seeds.
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -14,15 +14,20 @@ import {
   View,
 } from 'react-native';
 import { C, F } from '../theme/theme';
-import { ApiError, assetUrl, portfolioSlotsFromProfile } from '../lib/api';
+import {
+  ApiError,
+  assetUrl,
+  fetchAgencies,
+  fetchMyAgencyLinks,
+  portfolioSlotsFromProfile,
+  updateMyAgencies,
+  type PrAgencyLink,
+} from '../lib/api';
 import { fetchImageBlob, renderComcardPng } from '../lib/render-comcard';
 import {
   PORTFOLIO_SLOTS,
-  SEED_COMCARD,
-  SEED_PORTFOLIO,
-  SEED_PROFILE_IMAGE,
 } from '../lib/demo-shifts';
-import { PR_AGENCY_OPTIONS, PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
+import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { pickImageFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
 import { Avatar, IzButton } from '../components/ui';
@@ -41,6 +46,8 @@ import { usePrNav } from '../lib/pr-nav';
 type Draft = {
   displayName: string;
   icName: string;
+  /** Login email — editable here, saved to the user account. */
+  email: string;
   height: number;
   weight: number;
   age: number;
@@ -61,6 +68,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [comcardSavedHint, setComcardSavedHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
+  /** Real agencies from the backend — the checkbox list the PR picks from. */
+  const [agencyOptions, setAgencyOptions] = useState<{ id: string; name: string }[]>([]);
+  /** This PR's own agency_pr links, pending ones included. */
+  const [myLinks, setMyLinks] = useState<PrAgencyLink[]>([]);
   const [draft, setDraft] = useState<Draft>(() => emptyDraft());
   /** Instant preview while upload is in flight (web object URLs). */
   const [slotPreviewUri, setSlotPreviewUri] = useState<(string | null)[]>(() =>
@@ -68,53 +79,82 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   );
 
   const displayName = editing ? draft.displayName : me?.username ?? 'PR';
-  const legalName = editing
-    ? draft.icName
-    : [me?.profile.firstName, me?.profile.lastName].filter(Boolean).join(' ') ||
-      'Victoria Tan Mei Lin';
+  const reloadMyLinks = React.useCallback(async () => {
+    if (!token || !me) return;
+    try {
+      setMyLinks(await fetchMyAgencyLinks(token, me.id));
+    } catch {
+      /* Non-fatal: the picker falls back to whatever is already loaded. */
+    }
+  }, [token, me]);
+
+  useEffect(() => {
+    if (!token) return;
+    let alive = true;
+    fetchAgencies(token)
+      .then((list) => {
+        if (alive) setAgencyOptions(list.map((a) => ({ id: a.id, name: a.name })));
+      })
+      .catch(() => {
+        /* Non-fatal: the picker just stays empty. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [token]);
+
+  useEffect(() => {
+    void reloadMyLinks();
+  }, [reloadMyLinks]);
+
+  // Everything below reads the account's own saved row — no demo fallbacks.
+  const legalName = editing ? draft.icName : me?.profile.fullName?.trim() || '—';
+  // Approved links are the real tie; pending ones are still just a request.
   const agencyNames =
-    memberships.map((m) => m.agencyName).join(', ') || 'Atlas Agency, Delta Agency';
-  const ic = me?.profile.idNo ?? '950312-14-8821';
+    myLinks
+      .filter((l) => l.approveStatus === 'approved')
+      .map((l) => l.agencyName)
+      .join(', ') ||
+    memberships.map((m) => m.agencyName).join(', ') ||
+    '—';
+  const pendingAgencyNames = myLinks
+    .filter((l) => l.approveStatus === 'pending')
+    .map((l) => l.agencyName);
+  /** While the agency has a request open, the PR's selection is frozen. */
+  const agencyLocked = pendingAgencyNames.length > 0;
+  const ic = me?.profile.idNo ?? '—';
   const mobile = me?.phoneNum ?? '—';
   const email = me?.email ?? '—';
-  const height = editing
-    ? draft.height
-    : me?.profile.comcardHeightCm ?? 153;
-  const weight = editing
-    ? draft.weight
-    : me?.profile.comcardWeightKg ?? 40;
+  const height = editing ? draft.height : me?.profile.comcardHeightCm ?? 0;
+  const weight = editing ? draft.weight : me?.profile.comcardWeightKg ?? 0;
   const age = editing
     ? draft.age
     : me?.profile.dob
       ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
-      : 24;
+      : 0;
 
-  const languages = editing ? draft.languages : ['English', 'Mandarin', 'Cantonese'];
+  const languages = editing ? draft.languages : me?.profile.languages ?? [];
   const profilePortfolio = portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
   const portfolio = editing ? draft.portfolio : profilePortfolio;
 
-  const displayPortfolio = useMemo(() => {
-    if (editing) return portfolio;
-    if (portfolio.some(Boolean)) return portfolio;
-    const seeded: (string | null)[] = Array.from({ length: PORTFOLIO_SLOTS }, () => null);
-    SEED_PORTFOLIO.forEach((path, i) => {
-      seeded[i] = path;
-    });
-    return seeded;
-  }, [editing, portfolio]);
+  // Only the account's own uploaded photos — no demo seed leaks into a fresh PR.
+  const displayPortfolio = portfolio;
 
-  const avatarPath = me?.profileImage ?? (!editing ? SEED_PROFILE_IMAGE : null);
+  const avatarPath = me?.profileImage ?? null;
 
   const comcardTiles = useMemo(() => {
-    if (!editing && !portfolio.some(Boolean)) {
-      return { mode: 'single' as const, src: SEED_COMCARD };
+    // A saved comcard image wins; else a collage from the account's real photos.
+    // No saved comcard and no photos → nothing to show (fresh account).
+    if (!editing && me?.profile.comcardImage) {
+      return { mode: 'single' as const, src: me.profile.comcardImage };
     }
     const source = editing ? portfolio : displayPortfolio;
+    if (!source.some(Boolean)) return { mode: 'empty' as const };
     return {
       mode: 'grid' as const,
       paths: Array.from({ length: 4 }, (_, i) => source[i] ?? null),
     };
-  }, [displayPortfolio, editing, portfolio]);
+  }, [displayPortfolio, editing, portfolio, me?.profile.comcardImage]);
 
   // Gallery picking works on BOTH web (file dialog) and the phone (real photo
   // gallery via expo-image-picker) — see lib/photo-file.ts.
@@ -122,7 +162,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const canSaveComcard = Boolean(token) && Platform.OS === 'web' && !editing;
 
   const saveComcardToDatabase = async () => {
-    if (!canSaveComcard) return;
+    if (!canSaveComcard || comcardTiles.mode === 'empty') return;
     setSavingComcard(true);
     setError(null);
     setComcardSavedHint(null);
@@ -149,25 +189,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   };
 
   const startEdit = () => {
-    const agencyIds = memberships.length
-      ? memberships
-          .map((m) =>
-            PR_AGENCY_OPTIONS.find(
-              (a) => a.name.toLowerCase() === m.agencyName.toLowerCase(),
-            )?.id,
-          )
-          .filter(Boolean) as string[]
-      : ['atlas', 'delta'];
+    // Real agency ids straight off the PR's agency_pr links (pending included).
+    const agencyIds = myLinks.length
+      ? myLinks.map((l) => l.agencyId)
+      : memberships.map((m) => m.agencyId).filter(Boolean);
     setDraft({
-      displayName: me?.username ?? 'Vicky',
-      icName:
-        [me?.profile.firstName, me?.profile.lastName].filter(Boolean).join(' ') ||
-        'Victoria Tan Mei Lin',
-      height: me?.profile.comcardHeightCm ?? 153,
-      weight: me?.profile.comcardWeightKg ?? 40,
-      age: 24,
-      languages: ['English', 'Mandarin', 'Cantonese'],
-      agencyIds: agencyIds.length ? agencyIds : ['atlas', 'delta'],
+      displayName: me?.username ?? '',
+      icName: me?.profile.fullName ?? '',
+      email: me?.email ?? '',
+      height: me?.profile.comcardHeightCm ?? 0,
+      weight: me?.profile.comcardWeightKg ?? 0,
+      age: me?.profile.dob
+        ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
+        : 0,
+      languages: me?.profile.languages ?? [],
+      agencyIds,
       portfolio: portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS),
       otherLang: '',
     });
@@ -196,21 +232,36 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       setError('Select at least one language');
       return;
     }
-    const parts = draft.icName.trim().split(/\s+/);
-    const firstName = parts[0] ?? '';
-    const lastName = parts.slice(1).join(' ');
+    const emailValue = draft.email.trim();
+    if (emailValue && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailValue)) {
+      setError('Enter a valid email address');
+      return;
+    }
     setSaving(true);
     setError(null);
     try {
       await updateProfile({
         username: name,
-        firstName,
-        lastName,
-        email: me?.email ?? '',
+        // Legal IC name → user_profile.full_name (the column admin/agency read).
+        fullName: draft.icName.trim(),
+        email: emailValue,
         portfolioPhotos: portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS),
-        comcardHeightCm: draft.height,
-        comcardWeightKg: draft.weight,
+        // A blank field means "not set" — never write 0 over a real measurement.
+        comcardHeightCm: draft.height || null,
+        comcardWeightKg: draft.weight || null,
+        // Spoken languages → user_profile.languages.
+        languages: draft.languages,
       });
+      // Agencies live in agency_pr, not on the profile row — new picks are
+      // saved as pending join requests for the agency to approve. Skip the
+      // call entirely when the selection is locked or unchanged, so saving
+      // the rest of the profile never trips the "awaiting approval" guard.
+      const currentIds = [...myLinks.map((l) => l.agencyId)].sort().join(',');
+      const nextIds = [...draft.agencyIds].sort().join(',');
+      if (token && !agencyLocked && currentIds !== nextIds) {
+        await updateMyAgencies(token, draft.agencyIds);
+        await reloadMyLinks();
+      }
       setEditing(false);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save profile');
@@ -308,9 +359,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }));
   };
 
-  const agencyLabel = draft.agencyIds
-    .map((id) => PR_AGENCY_OPTIONS.find((a) => a.id === id)?.name ?? id)
-    .join(', ');
+  const agencyLabel =
+    draft.agencyIds
+      .map((id) => agencyOptions.find((a) => a.id === id)?.name)
+      .filter(Boolean)
+      .join(', ') || 'Select agencies';
 
   return (
     <View style={styles.screen}>
@@ -366,6 +419,16 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   style={styles.input}
                   placeholderTextColor={C.muted2}
                 />
+                <Text style={[styles.fieldLabel, { marginTop: 8 }]}>Email</Text>
+                <TextInput
+                  value={draft.email}
+                  onChangeText={(v) => setDraft((d) => ({ ...d, email: v }))}
+                  autoCapitalize="none"
+                  keyboardType="email-address"
+                  placeholder="you@example.com"
+                  style={styles.input}
+                  placeholderTextColor={C.muted2}
+                />
               </>
             ) : (
               <>
@@ -384,6 +447,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               {!editing && (
                 <Text style={styles.metaText}>Agency-Tied · {agencyNames}</Text>
               )}
+              {!editing && pendingAgencyNames.length > 0 && (
+                <Text style={styles.metaPending}>
+                  Awaiting approval · {pendingAgencyNames.join(', ')}
+                </Text>
+              )}
               <Text style={styles.metaIc}>IC {ic}</Text>
             </View>
 
@@ -391,17 +459,31 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={{ marginTop: 10 }}>
                 <Text style={styles.fieldLabel}>Agencies</Text>
                 <Pressable
-                  style={styles.agencyBtn}
+                  style={[styles.agencyBtn, agencyLocked && { opacity: 0.6 }]}
+                  disabled={agencyLocked}
                   onPress={() => setAgencyMenuOpen((o) => !o)}
                 >
                   <Text style={styles.agencyBtnText} numberOfLines={1}>
                     {agencyLabel || 'Select agencies…'}
                   </Text>
-                  <ChevronDown size={16} color={C.muted} />
+                  {agencyLocked ? (
+                    <Lock size={14} color={C.muted} />
+                  ) : (
+                    <ChevronDown size={16} color={C.muted} />
+                  )}
                 </Pressable>
+                {agencyLocked && (
+                  <Text style={styles.metaPending}>
+                    Waiting for {pendingAgencyNames.join(', ')} to approve — you cannot
+                    change agencies until they approve or reject.
+                  </Text>
+                )}
                 {agencyMenuOpen && (
                   <View style={styles.agencyMenu}>
-                    {PR_AGENCY_OPTIONS.map((a) => {
+                    {agencyOptions.length === 0 && (
+                      <Text style={styles.langEmptyText}>No agencies available.</Text>
+                    )}
+                    {agencyOptions.map((a) => {
                       const on = draft.agencyIds.includes(a.id);
                       return (
                         <Pressable
@@ -445,6 +527,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   />
                 ) : null}
               </View>
+            ) : comcardTiles.mode === 'empty' ? (
+              <View style={[styles.collage, styles.collageEmpty]}>
+                <Text style={styles.collageEmptyText}>
+                  No comcard yet — add photos to your gallery below to build one.
+                </Text>
+              </View>
             ) : (
               <View style={styles.collage}>
                 {comcardTiles.paths.map((path, idx) => {
@@ -474,7 +562,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             )}
           </View>
 
-          {canSaveComcard && (
+          {canSaveComcard && comcardTiles.mode !== 'empty' && (
             <View style={styles.comcardActions}>
               <IzButton
                 label={savingComcard ? 'Saving…' : me?.profile.comcardImage ? 'Update saved comcard' : 'Save comcard'}
@@ -500,21 +588,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>HEIGHT</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{height}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.comcardHeightCm || '—'}</Text>
                   <Text style={styles.measureSuffix}>cm</Text>
                 </View>
               </View>
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>WEIGHT</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{weight}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.comcardWeightKg || '—'}</Text>
                   <Text style={styles.measureSuffix}>kg</Text>
                 </View>
               </View>
               <View style={styles.measure}>
                 <Text style={styles.measureLabel}>AGE</Text>
                 <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{age}</Text>
+                  <Text style={styles.measureValue}>{me?.profile.dob ? age : '—'}</Text>
                   <Text style={styles.measureSuffix}>y</Text>
                 </View>
               </View>
@@ -526,7 +614,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <MeasureField
                 label="HEIGHT"
                 suffix="cm"
-                value={String(draft.height)}
+                value={draft.height ? String(draft.height) : ''}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, height: Number(v.replace(/\D/g, '')) || 0 }))
                 }
@@ -534,7 +622,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <MeasureField
                 label="WEIGHT"
                 suffix="kg"
-                value={String(draft.weight)}
+                value={draft.weight ? String(draft.weight) : ''}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, weight: Number(v.replace(/\D/g, '')) || 0 }))
                 }
@@ -542,7 +630,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <MeasureField
                 label="AGE"
                 suffix="y"
-                value={String(draft.age)}
+                value={draft.age ? String(draft.age) : ''}
                 onChange={(v) =>
                   setDraft((d) => ({ ...d, age: Number(v.replace(/\D/g, '')) || 0 }))
                 }
@@ -629,6 +717,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <Text style={styles.addLangText}>+ Add</Text>
               </Pressable>
             </View>
+          ) : languages.length === 0 ? (
+            <Text style={styles.langEmptyText}>
+              No languages yet — tap Edit profile to add them.
+            </Text>
           ) : (
             <View style={styles.langChips}>
               {languages.map((l) => (
@@ -681,9 +773,10 @@ function emptyDraft(): Draft {
   return {
     displayName: '',
     icName: '',
-    height: 153,
-    weight: 40,
-    age: 24,
+    email: '',
+    height: 0,
+    weight: 0,
+    age: 0,
     languages: [],
     agencyIds: [],
     portfolio: [],
@@ -710,6 +803,7 @@ function MeasureField({
           value={value}
           onChangeText={onChange}
           keyboardType="number-pad"
+          maxLength={3}
           style={styles.measureInput}
           placeholderTextColor={C.muted2}
         />
@@ -912,6 +1006,18 @@ const styles = StyleSheet.create({
     backgroundColor: C.panel2,
   },
   collageTile: { width: '50%', height: '50%' },
+  collageEmpty: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 20,
+  },
+  collageEmptyText: {
+    fontFamily: F.manrope,
+    fontSize: 13,
+    lineHeight: 18,
+    color: C.prMuted,
+    textAlign: 'center',
+  },
   comcardOverlay: {
     position: 'absolute',
     left: '50%',
@@ -948,6 +1054,8 @@ const styles = StyleSheet.create({
     borderBottomColor: 'rgba(155,184,255,0.45)',
     borderBottomWidth: 2,
     padding: 10,
+    overflow: 'hidden',
+    minWidth: 0,
     backgroundColor: 'rgba(0,0,0,0.18)',
   },
   measureLabel: {
@@ -957,22 +1065,33 @@ const styles = StyleSheet.create({
     letterSpacing: 0.8,
     color: C.blue,
   },
-  measureRow: { marginTop: 4, flexDirection: 'row', alignItems: 'baseline', gap: 4 },
+  measureRow: {
+    marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 4,
+    minWidth: 0,
+  },
   measureValue: {
+    flexShrink: 1,
     fontFamily: F.sora,
     fontSize: 22,
     fontWeight: '800',
     color: C.txt,
   },
   measureInput: {
-    flex: 1,
+    // Sized to 3 digits, not flex — a stretched input pushes the unit out of the box.
+    width: 46,
+    flexGrow: 0,
+    flexShrink: 1,
+    minWidth: 0,
     fontFamily: F.sora,
     fontSize: 22,
     fontWeight: '800',
     color: C.txt,
     padding: 0,
   },
-  measureSuffix: { fontFamily: F.manrope, fontSize: 12, color: C.blue },
+  measureSuffix: { flexShrink: 0, fontFamily: F.manrope, fontSize: 12, color: C.blue },
   section: { marginTop: 16 },
   sectionTitleRow: {
     flexDirection: 'row',
@@ -1028,6 +1147,8 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(183,156,232,0.3)',
   },
   langPillText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.violetL },
+  langEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  metaPending: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.amber },
   langEdit: {
     marginTop: 8,
     borderRadius: 14,

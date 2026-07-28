@@ -26,11 +26,38 @@ const ORDER_NO_LOOSE_RE = /(?:no\.?|#)\s*[:#.]?\s*([A-Z]{0,6}\d[A-Z0-9-]+)/i;
 // far-apart text blocks, so keyword adjacency can't be relied on.
 const ORDER_TOKEN_RE = /\b(?:ORD|INV|BIL|BILL|CHK|RCP|TKT|REC)[-#]?[A-Z]{0,3}\d{2,}[A-Z0-9-]*\b/i;
 
+// Order-code prefixes we know are LETTERS; everything after them is DIGITS.
+const ORDER_PREFIXES = ['ORD', 'INV', 'RCP', 'BILL', 'BIL', 'CHK', 'TKT', 'REC', 'NO'];
+// The camera's classic letter↔digit confusions, digit-side corrections.
+const DIGIT_FIXES: Record<string, string> = {
+  O: '0', Q: '0', D: '0', I: '1', L: '1', Z: '2', S: '5', G: '6', B: '8',
+};
+
+/**
+ * Clean an OCR-read order code: when it starts with a known prefix (ORD, INV…),
+ * every confusable LETTER in the number part becomes its digit twin — so
+ * "ORDO389" (letter O) auto-corrects to "ORD0389". Tokens without a known
+ * prefix are left untouched.
+ */
+export function normalizeOrderToken(raw: string): string {
+  const token = raw.toUpperCase();
+  const prefix = ORDER_PREFIXES.find((p) => token.startsWith(p) && token.length > p.length);
+  if (!prefix) return token;
+  const tail = token
+    .slice(prefix.length)
+    .split('')
+    .map((ch) => DIGIT_FIXES[ch] ?? ch)
+    .join('');
+  // Only accept the fix if the tail is now digits/dashes — otherwise the token
+  // wasn't letters+number shaped and we keep the original read.
+  return /^[0-9-]+$/.test(tail) ? prefix + tail : token;
+}
+
 function findOrderNo(text: string): string | null {
   const hit =
     ORDER_NO_STRICT_RE.exec(text) ?? ORDER_NO_LOOSE_RE.exec(text) ?? ORDER_TOKEN_RE.exec(text);
   if (!hit) return null;
-  return (hit[1] ?? hit[0]).toUpperCase();
+  return normalizeOrderToken(hit[1] ?? hit[0]);
 }
 
 // THE TIME — "09:43 PM" / "21:43", normalised to 24h "HH:MM". Colon form only

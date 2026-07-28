@@ -1,7 +1,13 @@
-import { and, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { AgencyPrTable, PrTable, type AgencyPrApproveStatus } from '@/features/pr/pr.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
+import {
+  AgencyPrTable,
+  PrTable,
+  type AgencyPrApproveStatus,
+  type AgencyPrType,
+} from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
 
@@ -37,6 +43,31 @@ export type AgencyPrEnriched = {
   phoneNum: string | null;
 };
 
+const APPROVE_RANK: Record<string, number> = { approved: 3, pending: 2, rejected: 1 };
+
+/**
+ * One person, one row. Legacy seeding left some users with two `pr` rows, so
+ * the same human could appear twice on a roster — once approved, once pending.
+ * Rows are keyed by user account (PRs with no account keep their own row) and
+ * the strongest approval state wins, so a pending duplicate never hides an
+ * approval. Migration 0056 removes the duplicate rows for good; this keeps the
+ * roster correct in the meantime and stays correct afterwards.
+ */
+function dedupeByPerson(rows: AgencyPrEnriched[]): AgencyPrEnriched[] {
+  const best = new Map<string, AgencyPrEnriched>();
+  for (const row of rows) {
+    const key = row.userId ?? `pr:${row.prId}`;
+    const seen = best.get(key);
+    if (
+      !seen ||
+      (APPROVE_RANK[row.approveStatus] ?? 0) > (APPROVE_RANK[seen.approveStatus] ?? 0)
+    ) {
+      best.set(key, row);
+    }
+  }
+  return [...best.values()];
+}
+
 export class AgencyPrRepository {
   /**
    * Every agency each of these PR *user accounts* is under. Joined through `pr`
@@ -63,7 +94,20 @@ export class AgencyPrRepository {
         .orderBy(AgencyTable.name);
 
       // userId is non-null on every row: the inArray above filters it.
-      return rows as PrAgencyLink[];
+      // Duplicate `pr` rows can link the same person to one agency twice —
+      // collapse to one link per (user, agency), strongest status winning.
+      const best = new Map<string, PrAgencyLink>();
+      for (const row of rows as PrAgencyLink[]) {
+        const key = `${row.userId}:${row.agencyId}`;
+        const seen = best.get(key);
+        if (
+          !seen ||
+          (APPROVE_RANK[row.approveStatus] ?? 0) > (APPROVE_RANK[seen.approveStatus] ?? 0)
+        ) {
+          best.set(key, row);
+        }
+      }
+      return [...best.values()];
     } catch (error) {
       logger.error('[AgencyPrRepository.listLinksByUserIds] Error:', error);
       return [];
@@ -92,13 +136,17 @@ export class AgencyPrRepository {
         );
       }
 
-      return await db
+      // Identity comes from the linked account (user_profile.full_name and the
+      // account's own username) so an edit the PR makes on their profile shows
+      // here immediately. `pr.name`/`pr.nickname` are only the fallback for a
+      // PR row that has no user account yet.
+      const rows = await db
         .select({
           prId: PrTable.id,
           agencyId: AgencyPrTable.agencyId,
           userId: PrTable.userId,
-          name: PrTable.name,
-          nickname: PrTable.nickname,
+          name: sql<string>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), ${PrTable.name})`,
+          nickname: sql<string | null>`coalesce(nullif(trim(${UserTable.username}), ''), ${PrTable.nickname})`,
           approveStatus: AgencyPrTable.approveStatus,
           username: UserTable.username,
           email: UserTable.email,
@@ -107,11 +155,83 @@ export class AgencyPrRepository {
         .from(AgencyPrTable)
         .innerJoin(PrTable, eq(PrTable.id, AgencyPrTable.prId))
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, PrTable.userId))
         .where(and(...conditions))
         .orderBy(PrTable.name);
+
+      return dedupeByPerson(rows);
     } catch (error) {
       logger.error('[AgencyPrRepository.listByAgency] Error:', error);
       return [];
+    }
+  }
+
+  /** Narrows the given ids to the ones that are real agencies. */
+  async filterExistingAgencyIds(agencyIds: string[]): Promise<string[]> {
+    if (agencyIds.length === 0) return [];
+    try {
+      const rows = await db
+        .select({ id: AgencyTable.id })
+        .from(AgencyTable)
+        .where(inArray(AgencyTable.id, agencyIds));
+      return rows.map((row) => row.id);
+    } catch (error) {
+      logger.error('[AgencyPrRepository.filterExistingAgencyIds] Error:', error);
+      return [];
+    }
+  }
+
+  /** Every agency_pr row for one PR, whatever its approval state. */
+  async listByPr(prId: string): Promise<AgencyPrType[]> {
+    try {
+      return await db.select().from(AgencyPrTable).where(eq(AgencyPrTable.prId, prId));
+    } catch (error) {
+      logger.error('[AgencyPrRepository.listByPr] Error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Point this PR's agency links at exactly `agencyIds`.
+   *
+   * A PR asking to join an agency is a *request*, so new links are written as
+   * `pending` and only the agency can approve them — this never grants
+   * membership on its own. Unticking drops the link; an already-approved one
+   * survives only while it stays selected.
+   */
+  async syncLinksForPr(prId: string, agencyIds: string[], actor: string): Promise<void> {
+    const wanted = [...new Set(agencyIds)];
+    try {
+      await db.transaction(async (tx) => {
+        const existing = await tx
+          .select()
+          .from(AgencyPrTable)
+          .where(eq(AgencyPrTable.prId, prId));
+
+        const stale = existing
+          .filter((row) => !wanted.includes(row.agencyId))
+          .map((row) => row.id);
+        if (stale.length > 0) {
+          await tx.delete(AgencyPrTable).where(inArray(AgencyPrTable.id, stale));
+        }
+
+        const known = new Set(existing.map((row) => row.agencyId));
+        const added = wanted.filter((agencyId) => !known.has(agencyId));
+        if (added.length > 0) {
+          await tx.insert(AgencyPrTable).values(
+            added.map((agencyId) => ({
+              agencyId,
+              prId,
+              approveStatus: 'pending' as const,
+              createdBy: actor,
+              updatedBy: actor,
+            })),
+          );
+        }
+      });
+    } catch (error) {
+      logger.error('[AgencyPrRepository.syncLinksForPr] Error:', error);
+      throw error;
     }
   }
 }

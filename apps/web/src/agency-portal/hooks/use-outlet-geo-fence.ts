@@ -102,7 +102,9 @@ export function useOutletGeoFence() {
 				return { query: trimmed, candidates: response.data };
 			}
 			const response = await geocodeOutletAddress(outletId as string, logout);
-			return response.data;
+			// `data` is null on the controller's error paths; axios rejects those
+			// first, so this is belt-and-braces rather than a live case.
+			return response.data ?? { query: "", candidates: [] };
 		},
 		onSuccess: (result) => {
 			setCandidates(result.candidates ?? []);

@@ -45,11 +45,15 @@ export type LoginResult = {
 };
 
 export type MeProfile = {
+  /** Legal full name from user_profile.full_name — what admin/agency read. */
+  fullName: string | null;
   firstName: string | null;
   lastName: string | null;
   nationality: string | null;
   gender: string | null;
   race: string | null;
+  /** Spoken languages persisted to user_profile.languages. */
+  languages: string[] | null;
   idType: string | null;
   idNo: string | null;
   dob: string | null;
@@ -190,6 +194,51 @@ export type AgencyMembership = {
   status: string;
 };
 
+/** One agency_pr link, including links still waiting on agency approval. */
+export type PrAgencyLink = {
+  prId: string;
+  userId: string;
+  agencyId: string;
+  agencyName: string;
+  agencyCode: string;
+  approveStatus: string;
+};
+
+/**
+ * This PR's agency links from `agency_pr` — the table the agency roster reads.
+ * Unlike /agency/memberships (portal operators in `agency_user`) this includes
+ * `pending` links, so the profile can show a request the agency hasn't
+ * approved yet.
+ */
+export function fetchMyAgencyLinks(accessToken: string, userId: string): Promise<PrAgencyLink[]> {
+  const query = new URLSearchParams({ userIds: userId }).toString();
+  return request<PrAgencyLink[]>(`/agency/pr-links?${query}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** Every agency the PR can ask to join — real rows, real ids, from `agency`. */
+export function fetchAgencies(accessToken: string): Promise<{ id: string; name: string }[]> {
+  return request<{ id: string; name: string }[]>('/agency?pageSize=100', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Set which agencies this PR wants to be under. New links land as `pending`
+ * in agency_pr — the agency still approves before the PR joins its roster.
+ */
+export function updateMyAgencies(
+  accessToken: string,
+  agencyIds: string[],
+): Promise<unknown> {
+  return request<unknown>('/pr/mine/agencies', {
+    method: 'PUT',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ agencyIds }),
+  });
+}
+
 /** Agencies this PR belongs to — same rows the admin PR list joins on. */
 export function fetchMemberships(accessToken: string, userId: string): Promise<AgencyMembership[]> {
   const query = new URLSearchParams({ userIds: userId, subRole: 'pr' }).toString();
@@ -200,12 +249,14 @@ export function fetchMemberships(accessToken: string, userId: string): Promise<A
 
 export type ProfileUpdate = {
   username: string;
-  firstName?: string;
-  lastName?: string;
+  /** Legal full name — persisted to user_profile.full_name (what admin reads). */
+  fullName?: string;
   email?: string;
   portfolioPhotos?: (string | null)[];
   comcardHeightCm?: number | null;
   comcardWeightKg?: number | null;
+  /** Spoken languages — persisted to user_profile.languages. */
+  languages?: string[];
 };
 
 export function portfolioSlotsFromProfile(
@@ -435,6 +486,10 @@ export type ShiftAssignmentRecord = {
   outletName: string | null;
   /** The shift outlet's address (composed from its address columns via FK). */
   outletAddress: string | null;
+  /** Venue pin off the outlet FK — null until the outlet drops its pin. */
+  outletLat: number | null;
+  outletLng: number | null;
+  outletGeoFenceRadiusM: number;
   /** This PR's tier (pr_tier enum), e.g. 'tier_5' / 'commission_only'. */
   tier: string;
   /** Resolved rate card for this PR's tier at this outlet, or null if unset. */

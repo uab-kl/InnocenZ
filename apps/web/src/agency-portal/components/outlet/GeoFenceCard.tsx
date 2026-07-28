@@ -59,7 +59,20 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 	const [manualLng, setManualLng] = useState("");
 
 	// Demo sessions have no outlet to pin; the demo store holds no coordinates.
-	if (!backed) return null;
+	// Say so rather than rendering nothing — an operator who sees no card at all
+	// cannot tell "not available on a demo login" from "this venue is fenced".
+	if (!backed)
+		return (
+			<>
+				<IzSectionLabel>Attendance</IzSectionLabel>
+				<IzCard>
+					<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
+						Demo session — sign in with a real outlet account to pin the venue
+						and switch on the check-in fence.
+					</p>
+				</IzCard>
+			</>
+		);
 
 	const radiusValue = Number(radius);
 	const radiusValid =
@@ -101,6 +114,21 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 		<>
 			<IzSectionLabel>Attendance</IzSectionLabel>
 			<IzCard>
+				{/* Saving a pin is the fence master-switch, so lead with whether it
+				    is on: from that moment every check-in outside the radius is
+				    refused server-side (HTTP 422). */}
+				{pin ? (
+					<p className="iz-tiny mb-2 rounded-lg border border-[rgba(74,222,128,.35)] bg-[rgba(74,222,128,.08)] px-2.5 py-1.5 text-[var(--iz-green)]">
+						Fence ON · pin saved at {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}{" "}
+						· {pin.radius} m — check-ins outside this circle are refused.
+					</p>
+				) : (
+					<p className="iz-tiny mb-2 rounded-lg border border-[rgba(251,191,36,.35)] bg-[rgba(251,191,36,.08)] px-2.5 py-1.5 text-[var(--iz-amber,#fbbf24)]">
+						No map pin yet — the check-in rule is NOT enforced for this venue.
+						Saving a pin switches it on immediately.
+					</p>
+				)}
+
 				<div className="flex items-start justify-between gap-3">
 					<div>
 						<div className="flex items-center gap-2 text-sm font-semibold">
@@ -118,12 +146,6 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 						{isLoading ? "Loading" : pin ? "Fenced" : "Not set"}
 					</span>
 				</div>
-
-				{pin && (
-					<p className="iz-tiny iz-muted2 mt-2 font-mono">
-						{pin.lat.toFixed(6)}, {pin.lng.toFixed(6)} · {pin.radius} m
-					</p>
-				)}
 
 				{!canEdit && (
 					<p className="iz-tiny iz-muted2 mt-3">

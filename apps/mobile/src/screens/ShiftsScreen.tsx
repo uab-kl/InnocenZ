@@ -11,6 +11,7 @@ import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
   fmtDFriendly,
   formatRM,
+  shiftEndDate,
   todayYmd,
   ymdToIso,
   type DemoShift,
@@ -30,6 +31,7 @@ import {
   ClipboardList,
   Clock,
   FileText,
+  ChevronDown,
   House,
   MapPin,
   Store,
@@ -77,14 +79,45 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
 
   // Real shift assignments for this PR — shared with Check-In / timetable so
   // On duty / Complete badges flip as soon as attendance stamps change.
-  const { assignments, phase: attendancePhase, refresh } = useActiveShift();
+  const { assignments, phase: attendancePhase, refresh, focus } = useActiveShift();
+  // Re-pull assignments whenever the Today page mounts — the agency may have
+  // assigned a new same-day shift while the app sat on another tab.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
   // Approving a swap repoints the assignment, so the shift list above is stale
   // the moment it succeeds — re-read it rather than leaving the old outlet on
   // screen.
   const outletSwaps = useOutletSwaps({ onChanged: refresh });
   const { awaiting } = useAwaitingLastWeekPv();
   const todoItems = awaiting ? [awaiting.todo] : [];
-  const todoCount = todoItems.length + outletSwaps.pending.length;
+
+  // Forgot-to-check-out caution: still checked in past the shift's scheduled
+  // end. The backend clamps the eventual stamp to that end (pay locks to the
+  // shift window), so this to-do is the nudge that actually closes the shift.
+  const overdueAssignment =
+    assignments.find(
+      (a) =>
+        a.checkInAt &&
+        !a.checkOutAt &&
+        a.status !== 'cancelled' &&
+        a.status !== 'no_show' &&
+        a.status !== 'leave_approved',
+    ) ?? null;
+  const overdueEnd = overdueAssignment
+    ? shiftEndDate(overdueAssignment.shiftDate, overdueAssignment.slot)
+    : null;
+  const overdueCheckout =
+    overdueAssignment && overdueEnd && Date.now() > overdueEnd.getTime()
+      ? { assignment: overdueAssignment, end: overdueEnd }
+      : null;
+  const overdueEndHm = overdueCheckout
+    ? `${String(overdueCheckout.end.getHours()).padStart(2, '0')}:${String(
+        overdueCheckout.end.getMinutes(),
+      ).padStart(2, '0')}`
+    : '';
+
+  const todoCount = todoItems.length + outletSwaps.pending.length + (overdueCheckout ? 1 : 0);
   const shifts = assignments
     .filter(
       (a) =>
@@ -96,10 +129,36 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     .map(assignmentToShift);
 
   const todayIso = ymdToIso(...todayYmd());
-  // Today shows the shift up to check-out; once completed it drops off and the
-  // section waits for the next shift.
+  // Today lists EVERY shift the PR works today: at most one still
+  // pending/on-duty (the check-in target) plus any already checked-out. A
+  // finished shift belongs to the day it was CHECKED OUT — night shifts cross
+  // midnight (scheduled 27 Jul 22:00, checked out 28 Jul morning), so matching
+  // completed rows on shiftDate would lose them. Same rule as pickActive and
+  // the Check-In header date.
+  const stampDayIso = (stamp: string) => {
+    const d = new Date(stamp);
+    return ymdToIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  };
   const tonightShift =
     shifts.find((s) => ymdToIso(...s.date) === todayIso && s.status !== 'complete') ?? null;
+  const completedToday = assignments
+    .filter(
+      (a) =>
+        a.status !== 'cancelled' &&
+        a.status !== 'no_show' &&
+        a.status !== 'leave_approved' &&
+        a.checkOutAt != null &&
+        stampDayIso(a.checkOutAt) === todayIso,
+    )
+    .sort((a, b) => (b.checkOutAt ?? '').localeCompare(a.checkOutAt ?? ''))
+    .map((a) => {
+      const d = new Date(a.checkOutAt as string);
+      return {
+        ...assignmentToShift(a),
+        // Show the worked (check-out) day on the card, not the seed shift_date.
+        date: [d.getFullYear(), d.getMonth() + 1, d.getDate()] as Ymd,
+      };
+    });
   const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
 
   const { phase: localPhase } = useShiftSession();
@@ -121,6 +180,15 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
       setOpen((prev) => ({ ...prev, todo: true }));
     }
   }, [outletSwaps.pending.length, swapAlerted]);
+  // A forgotten check-out is a caution the PR must SEE — pop To-do open once
+  // when it appears (same one-shot pattern as swap requests).
+  const [overdueAlerted, setOverdueAlerted] = useState(false);
+  useEffect(() => {
+    if (overdueCheckout && !overdueAlerted) {
+      setOverdueAlerted(true);
+      setOpen((prev) => ({ ...prev, todo: true }));
+    }
+  }, [overdueCheckout, overdueAlerted]);
 
   const firstName = me?.profile.firstName?.split(' ')[0] ?? me?.username ?? 'PR';
   // .iz-pr-page-header__title: clamp(1.4rem, 5.2vw, 1.75rem)
@@ -135,12 +203,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
           ? 'Tonight'
           : 'Off';
 
-  const todayCta =
-    phase === 'complete'
-      ? 'View summary'
-      : phase === 'on_duty'
-        ? 'Attendance'
-        : 'Check in';
+  // CTA per card, not per global phase — a completed card always offers its
+  // summary even while a fresh same-day shift owns the Check in button.
 
   /** Hub strip tap: open the matching section, or close it if already open. */
   const toggleHubSection = (key: SectionKey) =>
@@ -193,19 +257,37 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               open={open.today}
               onToggle={(next) => toggleSection('today', next)}
             >
-              {tonightShift ? (
-                <TonightCard
-                  shift={tonightShift}
-                  eyebrow={
-                    tonightShift.status === 'complete'
-                      ? 'COMPLETE'
-                      : tonightShift.status === 'on-duty'
-                        ? 'ON DUTY'
-                        : 'TONIGHT'
-                  }
-                  cta={todayCta}
-                  onCheckIn={() => onNavigate('checkin')}
-                />
+              {tonightShift || completedToday.length > 0 ? (
+                <View style={{ gap: 12 }}>
+                  {tonightShift && (
+                    <TonightCard
+                      shift={tonightShift}
+                      eyebrow={tonightShift.status === 'on-duty' ? 'ON DUTY' : 'TONIGHT'}
+                      cta={tonightShift.status === 'on-duty' ? 'Attendance' : 'Check in'}
+                      // Clear any summary pin so Check-In lands on the live shift.
+                      onCheckIn={() => {
+                        focus(null);
+                        onNavigate('checkin');
+                      }}
+                    />
+                  )}
+                  {completedToday.map((s) => (
+                    <TonightCard
+                      key={s.id}
+                      shift={s}
+                      eyebrow={tonightShift ? 'EARLIER TODAY · COMPLETE' : 'COMPLETE'}
+                      cta="View summary"
+                      // Collapsed by default while a live shift owns the page;
+                      // the lone just-finished shift stays expanded.
+                      defaultOpen={!tonightShift}
+                      // Pin Check-In to this finished shift's check-out summary.
+                      onCheckIn={() => {
+                        focus(s.id);
+                        onNavigate('checkin');
+                      }}
+                    />
+                  ))}
+                </View>
               ) : (
                 <EmptyDashed>No shift scheduled for today.</EmptyDashed>
               )}
@@ -220,8 +302,40 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               {/* A swap request has no push transport, so surfacing it here IS
                   the notification — and it sits above the PV to-dos because it
                   is the only item that changes where the PR works tonight. */}
+              {overdueCheckout && (
+                <View
+                  style={[
+                    styles.todoCard,
+                    {
+                      borderColor: 'rgba(232,198,106,0.4)',
+                      backgroundColor: 'rgba(232,198,106,0.06)',
+                      marginBottom: 10,
+                    },
+                  ]}
+                >
+                  <View style={styles.todoIcon}>
+                    <Clock size={16} color={C.amber} />
+                  </View>
+                  <View style={styles.todoBody}>
+                    <Text style={styles.todoTitle}>Forgot to check out?</Text>
+                    <Text style={styles.todoSubtitle}>
+                      {overdueCheckout.assignment.outletName ?? 'Outlet'} · shift ended{' '}
+                      {overdueEndHm} · pay locks to the shift window
+                    </Text>
+                  </View>
+                  <IzButton
+                    label="Check out"
+                    small
+                    fullWidth={false}
+                    onPress={() => {
+                      focus(null);
+                      onNavigate('checkin');
+                    }}
+                  />
+                </View>
+              )}
               <OutletSwapRequests swaps={outletSwaps} />
-              {todoItems.length === 0 && outletSwaps.pending.length === 0 ? (
+              {todoItems.length === 0 && outletSwaps.pending.length === 0 && !overdueCheckout ? (
                 <EmptyDashed>Nothing to do</EmptyDashed>
               ) : (
                 <View style={{ gap: 10 }}>
@@ -283,57 +397,78 @@ function HubTab({
   );
 }
 
-/** `TodayShiftCard` — tonight's confirmed shift with the gold Check in CTA. */
+/**
+ * `TodayShiftCard` — a Today-section shift. The header (eyebrow + outlet) is
+ * always visible and taps to collapse/expand the details, so a day holding
+ * several shifts stays scannable; the CTA lives in the expanded body.
+ */
 function TonightCard({
   shift,
   eyebrow,
   cta,
   onCheckIn,
+  defaultOpen = true,
 }: {
   shift: DemoShift;
   eyebrow: string;
   cta: string;
   onCheckIn: () => void;
+  /** "Earlier today" summaries start collapsed; the live shift starts open. */
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
   return (
     <View style={[styles.shiftCard, grad(GRADIENTS.shiftCard, 'rgba(232,194,122,0.08)')]}>
-      <Text style={styles.shiftEyebrow}>{eyebrow}</Text>
-      <View style={styles.shiftVenue}>
-        <Avatar
-          size={52}
-          radius={16}
-          photoPath={shift.logoPath}
-          initial={shift.outlet.trim()[0]?.toUpperCase()}
-          logo
-          style={styles.shiftLogo}
-        />
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <LabelWithIcon icon={Store} label="Outlet name" />
-          <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
-          {shift.address ? (
-            <View style={styles.shiftAddrRow}>
-              <MapPin size={12} color={C.prMuted2} strokeWidth={2} />
-              <Text style={styles.shiftAddrText}>{shift.address}</Text>
+      <Pressable onPress={() => setOpen((o) => !o)}>
+        <View style={styles.shiftCardHead}>
+          <Text style={styles.shiftEyebrow}>{eyebrow}</Text>
+          <ChevronDown
+            size={16}
+            color={C.muted}
+            style={open ? { transform: [{ rotate: '180deg' }] } : undefined}
+          />
+        </View>
+        <View style={styles.shiftVenue}>
+          <Avatar
+            size={52}
+            radius={16}
+            photoPath={shift.logoPath}
+            initial={shift.outlet.trim()[0]?.toUpperCase()}
+            logo
+            style={styles.shiftLogo}
+          />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <LabelWithIcon icon={Store} label="Outlet name" />
+            <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
+            {open && shift.address ? (
+              <View style={styles.shiftAddrRow}>
+                <MapPin size={12} color={C.prMuted2} strokeWidth={2} />
+                <Text style={styles.shiftAddrText}>{shift.address}</Text>
+              </View>
+            ) : null}
+          </View>
+        </View>
+      </Pressable>
+      {open && (
+        <>
+          <View style={styles.shiftFacts}>
+            <View style={styles.shiftFact}>
+              <LabelWithIcon icon={Calendar} label="Date" />
+              <Text style={styles.shiftFactValue}>{fmtDFriendly(...shift.date)}</Text>
             </View>
-          ) : null}
-        </View>
-      </View>
-      <View style={styles.shiftFacts}>
-        <View style={styles.shiftFact}>
-          <LabelWithIcon icon={Calendar} label="Date" />
-          <Text style={styles.shiftFactValue}>{fmtDFriendly(...shift.date)}</Text>
-        </View>
-        <View style={styles.shiftFact}>
-          <LabelWithIcon icon={Clock} label="Time" />
-          <Text style={styles.shiftFactValue}>{shift.time}</Text>
-        </View>
-      </View>
-      <View style={styles.shiftEvent}>
-        <Text style={styles.shiftEventText}>
-          {shift.event} · {formatRM(shift.payout)}
-        </Text>
-      </View>
-      <IzButton label={cta} icon={MapPin} small onPress={onCheckIn} style={{ marginTop: 12 }} />
+            <View style={styles.shiftFact}>
+              <LabelWithIcon icon={Clock} label="Time" />
+              <Text style={styles.shiftFactValue}>{shift.time}</Text>
+            </View>
+          </View>
+          <View style={styles.shiftEvent}>
+            <Text style={styles.shiftEventText}>
+              {shift.event} · {formatRM(shift.payout)}
+            </Text>
+          </View>
+          <IzButton label={cta} icon={MapPin} small onPress={onCheckIn} style={{ marginTop: 12 }} />
+        </>
+      )}
     </View>
   );
 }
@@ -457,6 +592,12 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     borderWidth: 1,
     borderColor: 'rgba(183,156,232,0.22)',
+  },
+  shiftCardHead: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
   },
   shiftEyebrow: {
     fontFamily: F.manrope,

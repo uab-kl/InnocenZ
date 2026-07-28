@@ -253,6 +253,10 @@ export class ShiftAssignmentRepositoryClass {
         outletId: string;
         outletName: string | null;
         outletAddress: string | null;
+        /** Venue pin off the outlet FK — null until the outlet drops its pin. */
+        outletLat: number | null;
+        outletLng: number | null;
+        outletGeoFenceRadiusM: number;
       }
     >
   > {
@@ -272,6 +276,10 @@ export class ShiftAssignmentRepositoryClass {
           outletAddressLine2: OutletTable.addressLine2,
           outletPostcode: OutletTable.postcode,
           outletState: OutletTable.state,
+          // The venue pin, same FK path as getOutletGeoFenceForAssignment.
+          outletLat: OutletTable.lat,
+          outletLng: OutletTable.lng,
+          outletGeoFenceRadius: OutletTable.geoFenceRadius,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
@@ -298,6 +306,9 @@ export class ShiftAssignmentRepositoryClass {
           outletId: row.outletId,
           outletName: row.outletName,
           outletAddress,
+          outletLat: row.outletLat === null ? null : Number(row.outletLat),
+          outletLng: row.outletLng === null ? null : Number(row.outletLng),
+          outletGeoFenceRadiusM: row.outletGeoFenceRadius ?? DEFAULT_GEOFENCE_RADIUS_M,
         };
       });
     } catch (error) {

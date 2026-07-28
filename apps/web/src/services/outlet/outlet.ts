@@ -155,3 +155,8 @@ export async function fetchOutletMembers(
 		data: response.data.data ?? [],
 	};
 }
+
+// The geocode and geo-fence calls live above: geocodeOutletAddress,
+// geocodeOutletFreeText and setOutletGeoFence. A second pair of them arrived
+// on the same merge under different names, hitting the identical two
+// endpoints — the duplicate `geocodeOutletAddress` would not have compiled.
