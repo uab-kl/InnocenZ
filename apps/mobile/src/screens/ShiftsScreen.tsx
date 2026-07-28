@@ -77,7 +77,12 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
 
   // Real shift assignments for this PR — shared with Check-In / timetable so
   // On duty / Complete badges flip as soon as attendance stamps change.
-  const { assignments, phase: attendancePhase, refresh } = useActiveShift();
+  const { assignments, phase: attendancePhase, refresh, focus } = useActiveShift();
+  // Re-pull assignments whenever the Today page mounts — the agency may have
+  // assigned a new same-day shift while the app sat on another tab.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
   // Approving a swap repoints the assignment, so the shift list above is stale
   // the moment it succeeds — re-read it rather than leaving the old outlet on
   // screen.
@@ -96,10 +101,13 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     .map(assignmentToShift);
 
   const todayIso = ymdToIso(...todayYmd());
-  // Today shows the shift up to check-out; once completed it drops off and the
-  // section waits for the next shift.
-  const tonightShift =
-    shifts.find((s) => ymdToIso(...s.date) === todayIso && s.status !== 'complete') ?? null;
+  // Today lists EVERY shift dated today: at most one still pending/on-duty (the
+  // check-in target) plus any already checked-out — a day can hold several
+  // shifts, and finished ones keep their summary viewable here even after a
+  // new same-day assignment renews Check-In.
+  const todayShifts = shifts.filter((s) => ymdToIso(...s.date) === todayIso);
+  const tonightShift = todayShifts.find((s) => s.status !== 'complete') ?? null;
+  const completedToday = todayShifts.filter((s) => s.status === 'complete');
   const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
 
   const { phase: localPhase } = useShiftSession();
@@ -135,12 +143,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
           ? 'Tonight'
           : 'Off';
 
-  const todayCta =
-    phase === 'complete'
-      ? 'View summary'
-      : phase === 'on_duty'
-        ? 'Attendance'
-        : 'Check in';
+  // CTA per card, not per global phase — a completed card always offers its
+  // summary even while a fresh same-day shift owns the Check in button.
 
   /** Hub strip tap: open the matching section, or close it if already open. */
   const toggleHubSection = (key: SectionKey) =>
@@ -193,19 +197,34 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               open={open.today}
               onToggle={(next) => toggleSection('today', next)}
             >
-              {tonightShift ? (
-                <TonightCard
-                  shift={tonightShift}
-                  eyebrow={
-                    tonightShift.status === 'complete'
-                      ? 'COMPLETE'
-                      : tonightShift.status === 'on-duty'
-                        ? 'ON DUTY'
-                        : 'TONIGHT'
-                  }
-                  cta={todayCta}
-                  onCheckIn={() => onNavigate('checkin')}
-                />
+              {tonightShift || completedToday.length > 0 ? (
+                <View style={{ gap: 12 }}>
+                  {tonightShift && (
+                    <TonightCard
+                      shift={tonightShift}
+                      eyebrow={tonightShift.status === 'on-duty' ? 'ON DUTY' : 'TONIGHT'}
+                      cta={tonightShift.status === 'on-duty' ? 'Attendance' : 'Check in'}
+                      // Clear any summary pin so Check-In lands on the live shift.
+                      onCheckIn={() => {
+                        focus(null);
+                        onNavigate('checkin');
+                      }}
+                    />
+                  )}
+                  {completedToday.map((s) => (
+                    <TonightCard
+                      key={s.id}
+                      shift={s}
+                      eyebrow={tonightShift ? 'EARLIER TODAY · COMPLETE' : 'COMPLETE'}
+                      cta="View summary"
+                      // Pin Check-In to this finished shift's check-out summary.
+                      onCheckIn={() => {
+                        focus(s.id);
+                        onNavigate('checkin');
+                      }}
+                    />
+                  ))}
+                </View>
               ) : (
                 <EmptyDashed>No shift scheduled for today.</EmptyDashed>
               )}

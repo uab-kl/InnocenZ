@@ -54,8 +54,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const { receiptLines, addLine } = usePrEarnings();
   // The active assignment (with its resolved rate card + drink menu) is shared
   // with Scan via the provider, so both screens act on the same real shift.
-  const { active, phase, loading, error: loadError, refresh, patch, dismiss } =
+  const { active, current, phase, loading, error: loadError, refresh, patch, dismiss, focus, focusedId } =
     useActiveShift();
+
+  // Re-pull on mount: a new same-day assignment made while the app sat on
+  // another tab must renew this page, not leave the old shift on screen.
+  useEffect(() => {
+    void refresh();
+  }, [refresh]);
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -234,6 +240,16 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
       {(actionError || loadError) && (
         <Text style={styles.errorText}>{actionError ?? loadError}</Text>
+      )}
+
+      {/* Pinned to an earlier shift's summary while a live shift waits —
+          one tap returns to the current check-in. */}
+      {active && focusedId === active.id && current && current.id !== active.id && (
+        <Pressable style={styles.focusBanner} onPress={() => focus(null)}>
+          <Text style={styles.focusBannerText}>
+            Viewing an earlier shift · tap to go to your current shift
+          </Text>
+        </Pressable>
       )}
 
       {phase === 'idle' ? (
@@ -454,6 +470,22 @@ const styles = StyleSheet.create({
     fontFamily: F.manrope,
     fontSize: 13,
     color: C.red,
+    textAlign: 'center',
+  },
+  focusBanner: {
+    marginTop: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.4)',
+    backgroundColor: 'rgba(232,198,106,0.08)',
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+  },
+  focusBannerText: {
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.amber,
     textAlign: 'center',
   },
   pageLabel: {
