@@ -101,13 +101,36 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     .map(assignmentToShift);
 
   const todayIso = ymdToIso(...todayYmd());
-  // Today lists EVERY shift dated today: at most one still pending/on-duty (the
-  // check-in target) plus any already checked-out — a day can hold several
-  // shifts, and finished ones keep their summary viewable here even after a
-  // new same-day assignment renews Check-In.
-  const todayShifts = shifts.filter((s) => ymdToIso(...s.date) === todayIso);
-  const tonightShift = todayShifts.find((s) => s.status !== 'complete') ?? null;
-  const completedToday = todayShifts.filter((s) => s.status === 'complete');
+  // Today lists EVERY shift the PR works today: at most one still
+  // pending/on-duty (the check-in target) plus any already checked-out. A
+  // finished shift belongs to the day it was CHECKED OUT — night shifts cross
+  // midnight (scheduled 27 Jul 22:00, checked out 28 Jul morning), so matching
+  // completed rows on shiftDate would lose them. Same rule as pickActive and
+  // the Check-In header date.
+  const stampDayIso = (stamp: string) => {
+    const d = new Date(stamp);
+    return ymdToIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
+  };
+  const tonightShift =
+    shifts.find((s) => ymdToIso(...s.date) === todayIso && s.status !== 'complete') ?? null;
+  const completedToday = assignments
+    .filter(
+      (a) =>
+        a.status !== 'cancelled' &&
+        a.status !== 'no_show' &&
+        a.status !== 'leave_approved' &&
+        a.checkOutAt != null &&
+        stampDayIso(a.checkOutAt) === todayIso,
+    )
+    .sort((a, b) => (b.checkOutAt ?? '').localeCompare(a.checkOutAt ?? ''))
+    .map((a) => {
+      const d = new Date(a.checkOutAt as string);
+      return {
+        ...assignmentToShift(a),
+        // Show the worked (check-out) day on the card, not the seed shift_date.
+        date: [d.getFullYear(), d.getMonth() + 1, d.getDate()] as Ymd,
+      };
+    });
   const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
 
   const { phase: localPhase } = useShiftSession();
