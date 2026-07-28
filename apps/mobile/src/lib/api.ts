@@ -45,11 +45,15 @@ export type LoginResult = {
 };
 
 export type MeProfile = {
+  /** Legal full name from user_profile.full_name — what admin/agency read. */
+  fullName: string | null;
   firstName: string | null;
   lastName: string | null;
   nationality: string | null;
   gender: string | null;
   race: string | null;
+  /** Spoken languages persisted to user_profile.languages. */
+  languages: string[] | null;
   idType: string | null;
   idNo: string | null;
   dob: string | null;
@@ -206,6 +210,8 @@ export type ProfileUpdate = {
   portfolioPhotos?: (string | null)[];
   comcardHeightCm?: number | null;
   comcardWeightKg?: number | null;
+  /** Spoken languages — persisted to user_profile.languages. */
+  languages?: string[];
 };
 
 export function portfolioSlotsFromProfile(

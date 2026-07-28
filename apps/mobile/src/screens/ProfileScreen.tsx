@@ -65,28 +65,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   );
 
   const displayName = editing ? draft.displayName : me?.username ?? 'PR';
-  const legalName = editing
-    ? draft.icName
-    : [me?.profile.firstName, me?.profile.lastName].filter(Boolean).join(' ') ||
-      'Victoria Tan Mei Lin';
-  const agencyNames =
-    memberships.map((m) => m.agencyName).join(', ') || 'Atlas Agency, Delta Agency';
-  const ic = me?.profile.idNo ?? '950312-14-8821';
+  // Everything below reads the account's own saved row — no demo fallbacks.
+  const legalName = editing ? draft.icName : me?.profile.fullName?.trim() || '—';
+  const agencyNames = memberships.map((m) => m.agencyName).join(', ') || '—';
+  const ic = me?.profile.idNo ?? '—';
   const mobile = me?.phoneNum ?? '—';
   const email = me?.email ?? '—';
-  const height = editing
-    ? draft.height
-    : me?.profile.comcardHeightCm ?? 153;
-  const weight = editing
-    ? draft.weight
-    : me?.profile.comcardWeightKg ?? 40;
+  const height = editing ? draft.height : me?.profile.comcardHeightCm ?? 0;
+  const weight = editing ? draft.weight : me?.profile.comcardWeightKg ?? 0;
   const age = editing
     ? draft.age
     : me?.profile.dob
       ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
-      : 24;
+      : 0;
 
-  const languages = editing ? draft.languages : ['English', 'Mandarin', 'Cantonese'];
+  const languages = editing ? draft.languages : me?.profile.languages ?? [];
   const profilePortfolio = portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
   const portfolio = editing ? draft.portfolio : profilePortfolio;
 
@@ -142,25 +135,23 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   };
 
   const startEdit = () => {
-    const agencyIds = memberships.length
-      ? memberships
-          .map((m) =>
-            PR_AGENCY_OPTIONS.find(
-              (a) => a.name.toLowerCase() === m.agencyName.toLowerCase(),
-            )?.id,
-          )
-          .filter(Boolean) as string[]
-      : ['atlas', 'delta'];
+    // Agencies come from the approved agency_pr memberships, never demo ids.
+    const agencyIds = memberships
+      .map(
+        (m) =>
+          PR_AGENCY_OPTIONS.find((a) => a.name.toLowerCase() === m.agencyName.toLowerCase())?.id,
+      )
+      .filter(Boolean) as string[];
     setDraft({
-      displayName: me?.username ?? 'Vicky',
-      icName:
-        [me?.profile.firstName, me?.profile.lastName].filter(Boolean).join(' ') ||
-        'Victoria Tan Mei Lin',
-      height: me?.profile.comcardHeightCm ?? 153,
-      weight: me?.profile.comcardWeightKg ?? 40,
-      age: 24,
-      languages: ['English', 'Mandarin', 'Cantonese'],
-      agencyIds: agencyIds.length ? agencyIds : ['atlas', 'delta'],
+      displayName: me?.username ?? '',
+      icName: me?.profile.fullName ?? '',
+      height: me?.profile.comcardHeightCm ?? 0,
+      weight: me?.profile.comcardWeightKg ?? 0,
+      age: me?.profile.dob
+        ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
+        : 0,
+      languages: me?.profile.languages ?? [],
+      agencyIds,
       portfolio: portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS),
       otherLang: '',
     });
@@ -200,6 +191,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         portfolioPhotos: portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS),
         comcardHeightCm: draft.height,
         comcardWeightKg: draft.weight,
+        // Spoken languages → user_profile.languages.
+        languages: draft.languages,
       });
       setEditing(false);
     } catch (e) {
@@ -625,6 +618,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <Text style={styles.addLangText}>+ Add</Text>
               </Pressable>
             </View>
+          ) : languages.length === 0 ? (
+            <Text style={styles.langEmptyText}>
+              No languages yet — tap Edit profile to add them.
+            </Text>
           ) : (
             <View style={styles.langChips}>
               {languages.map((l) => (
@@ -1045,6 +1042,7 @@ const styles = StyleSheet.create({
     borderColor: 'rgba(183,156,232,0.3)',
   },
   langPillText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.violetL },
+  langEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
   langEdit: {
     marginTop: 8,
     borderRadius: 14,
