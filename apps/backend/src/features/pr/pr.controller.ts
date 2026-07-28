@@ -65,6 +65,18 @@ export class PrControllerClass {
         ...new Set(raw.filter((id): id is string => typeof id === 'string' && id.trim().length > 0)),
       ];
 
+      // A request already on the agency's desk locks the selection: the PR
+      // cannot add or drop agencies until it is approved or rejected.
+      const current = await this.agencyPrRepository.listByPr(pr.id);
+      const pendingLink = current.find((link) => link.approveStatus === 'pending');
+      if (pendingLink) {
+        return res.status(409).json({
+          success: false,
+          message: 'An agency request is awaiting approval. You cannot change agencies until it is approved or rejected.',
+          data: null,
+        });
+      }
+
       // Every id must be a real agency, else the FK insert would 500 later.
       const known = await this.agencyPrRepository.filterExistingAgencyIds(agencyIds);
       if (known.length !== agencyIds.length) {

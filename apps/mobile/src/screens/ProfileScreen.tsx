@@ -118,8 +118,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     memberships.map((m) => m.agencyName).join(', ') ||
     '—';
   const pendingAgencyNames = myLinks
-    .filter((l) => l.approveStatus !== 'approved')
+    .filter((l) => l.approveStatus === 'pending')
     .map((l) => l.agencyName);
+  /** While the agency has a request open, the PR's selection is frozen. */
+  const agencyLocked = pendingAgencyNames.length > 0;
   const ic = me?.profile.idNo ?? '—';
   const mobile = me?.phoneNum ?? '—';
   const email = me?.email ?? '—';
@@ -251,8 +253,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         languages: draft.languages,
       });
       // Agencies live in agency_pr, not on the profile row — new picks are
-      // saved as pending join requests for the agency to approve.
-      if (token) {
+      // saved as pending join requests for the agency to approve. Skip the
+      // call entirely when the selection is locked or unchanged, so saving
+      // the rest of the profile never trips the "awaiting approval" guard.
+      const currentIds = [...myLinks.map((l) => l.agencyId)].sort().join(',');
+      const nextIds = [...draft.agencyIds].sort().join(',');
+      if (token && !agencyLocked && currentIds !== nextIds) {
         await updateMyAgencies(token, draft.agencyIds);
         await reloadMyLinks();
       }
@@ -453,14 +459,25 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={{ marginTop: 10 }}>
                 <Text style={styles.fieldLabel}>Agencies</Text>
                 <Pressable
-                  style={styles.agencyBtn}
+                  style={[styles.agencyBtn, agencyLocked && { opacity: 0.6 }]}
+                  disabled={agencyLocked}
                   onPress={() => setAgencyMenuOpen((o) => !o)}
                 >
                   <Text style={styles.agencyBtnText} numberOfLines={1}>
                     {agencyLabel || 'Select agencies…'}
                   </Text>
-                  <ChevronDown size={16} color={C.muted} />
+                  {agencyLocked ? (
+                    <Lock size={14} color={C.muted} />
+                  ) : (
+                    <ChevronDown size={16} color={C.muted} />
+                  )}
                 </Pressable>
+                {agencyLocked && (
+                  <Text style={styles.metaPending}>
+                    Waiting for {pendingAgencyNames.join(', ')} to approve — you cannot
+                    change agencies until they approve or reject.
+                  </Text>
+                )}
                 {agencyMenuOpen && (
                   <View style={styles.agencyMenu}>
                     {agencyOptions.length === 0 && (

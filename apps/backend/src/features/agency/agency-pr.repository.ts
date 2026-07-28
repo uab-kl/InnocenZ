@@ -1,6 +1,7 @@
-import { and, eq, ilike, inArray, or } from 'drizzle-orm';
+import { and, eq, ilike, inArray, or, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import {
   AgencyPrTable,
   PrTable,
@@ -42,6 +43,31 @@ export type AgencyPrEnriched = {
   phoneNum: string | null;
 };
 
+const APPROVE_RANK: Record<string, number> = { approved: 3, pending: 2, rejected: 1 };
+
+/**
+ * One person, one row. Legacy seeding left some users with two `pr` rows, so
+ * the same human could appear twice on a roster — once approved, once pending.
+ * Rows are keyed by user account (PRs with no account keep their own row) and
+ * the strongest approval state wins, so a pending duplicate never hides an
+ * approval. Migration 0056 removes the duplicate rows for good; this keeps the
+ * roster correct in the meantime and stays correct afterwards.
+ */
+function dedupeByPerson(rows: AgencyPrEnriched[]): AgencyPrEnriched[] {
+  const best = new Map<string, AgencyPrEnriched>();
+  for (const row of rows) {
+    const key = row.userId ?? `pr:${row.prId}`;
+    const seen = best.get(key);
+    if (
+      !seen ||
+      (APPROVE_RANK[row.approveStatus] ?? 0) > (APPROVE_RANK[seen.approveStatus] ?? 0)
+    ) {
+      best.set(key, row);
+    }
+  }
+  return [...best.values()];
+}
+
 export class AgencyPrRepository {
   /**
    * Every agency each of these PR *user accounts* is under. Joined through `pr`
@@ -68,7 +94,20 @@ export class AgencyPrRepository {
         .orderBy(AgencyTable.name);
 
       // userId is non-null on every row: the inArray above filters it.
-      return rows as PrAgencyLink[];
+      // Duplicate `pr` rows can link the same person to one agency twice —
+      // collapse to one link per (user, agency), strongest status winning.
+      const best = new Map<string, PrAgencyLink>();
+      for (const row of rows as PrAgencyLink[]) {
+        const key = `${row.userId}:${row.agencyId}`;
+        const seen = best.get(key);
+        if (
+          !seen ||
+          (APPROVE_RANK[row.approveStatus] ?? 0) > (APPROVE_RANK[seen.approveStatus] ?? 0)
+        ) {
+          best.set(key, row);
+        }
+      }
+      return [...best.values()];
     } catch (error) {
       logger.error('[AgencyPrRepository.listLinksByUserIds] Error:', error);
       return [];
@@ -97,13 +136,17 @@ export class AgencyPrRepository {
         );
       }
 
-      return await db
+      // Identity comes from the linked account (user_profile.full_name and the
+      // account's own username) so an edit the PR makes on their profile shows
+      // here immediately. `pr.name`/`pr.nickname` are only the fallback for a
+      // PR row that has no user account yet.
+      const rows = await db
         .select({
           prId: PrTable.id,
           agencyId: AgencyPrTable.agencyId,
           userId: PrTable.userId,
-          name: PrTable.name,
-          nickname: PrTable.nickname,
+          name: sql<string>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), ${PrTable.name})`,
+          nickname: sql<string | null>`coalesce(nullif(trim(${UserTable.username}), ''), ${PrTable.nickname})`,
           approveStatus: AgencyPrTable.approveStatus,
           username: UserTable.username,
           email: UserTable.email,
@@ -112,8 +155,11 @@ export class AgencyPrRepository {
         .from(AgencyPrTable)
         .innerJoin(PrTable, eq(PrTable.id, AgencyPrTable.prId))
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, PrTable.userId))
         .where(and(...conditions))
         .orderBy(PrTable.name);
+
+      return dedupeByPerson(rows);
     } catch (error) {
       logger.error('[AgencyPrRepository.listByAgency] Error:', error);
       return [];
