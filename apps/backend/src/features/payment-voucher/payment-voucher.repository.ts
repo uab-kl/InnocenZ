@@ -2,7 +2,7 @@ import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-o
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
-import { withComponent } from './payment-voucher-component';
+import { prepareLine } from './payment-voucher-component';
 import {
   PaymentVoucherTable,
   PaymentVoucherLineTable,
@@ -38,7 +38,7 @@ export class PaymentVoucherRepositoryClass {
                 .insert(PaymentVoucherLineTable)
                 .values(
                   lines.map((line, i) =>
-                    withComponent({ ...line, voucherId: voucher.id, sortOrder: i }),
+                    prepareLine({ ...line, voucherId: voucher.id, sortOrder: i }),
                   ),
                 )
                 .returning()
@@ -77,7 +77,7 @@ export class PaymentVoucherRepositoryClass {
                   .insert(PaymentVoucherLineTable)
                   .values(
                     lines.map((line, i) =>
-                      withComponent({ ...line, voucherId: id, sortOrder: i }),
+                      prepareLine({ ...line, voucherId: id, sortOrder: i }),
                     ),
                   )
                   .returning()
@@ -426,7 +426,7 @@ export class PaymentVoucherRepositoryClass {
           .insert(PaymentVoucherLineTable)
           .values(
             lines.map((line, i) =>
-              withComponent({
+              prepareLine({
                 ...line,
                 voucherId: receipt.voucherId,
                 receiptId: inserted!.id,
@@ -451,7 +451,7 @@ export class PaymentVoucherRepositoryClass {
         const existing = await this.getLines(voucherId, tx);
         const [inserted] = await tx
           .insert(PaymentVoucherLineTable)
-          .values(withComponent({ ...line, voucherId, sortOrder: existing.length }))
+          .values(prepareLine({ ...line, voucherId, sortOrder: existing.length }))
           .returning();
         await this.recomputeTotals(voucherId, tx);
         return inserted;
