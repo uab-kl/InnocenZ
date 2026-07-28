@@ -119,8 +119,8 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 				    refused server-side (HTTP 422). */}
 				{pin ? (
 					<p className="iz-tiny mb-2 rounded-lg border border-[rgba(74,222,128,.35)] bg-[rgba(74,222,128,.08)] px-2.5 py-1.5 text-[var(--iz-green)]">
-						Fence ON · pin saved at {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}{" "}
-						· {pin.radius} m — check-ins outside this circle are refused.
+						Fence ON · pin saved at {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)} ·{" "}
+						{pin.radius} m — check-ins outside this circle are refused.
 					</p>
 				) : (
 					<p className="iz-tiny mb-2 rounded-lg border border-[rgba(251,191,36,.35)] bg-[rgba(251,191,36,.08)] px-2.5 py-1.5 text-[var(--iz-amber,#fbbf24)]">
