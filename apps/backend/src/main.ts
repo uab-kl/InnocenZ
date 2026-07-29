@@ -20,6 +20,8 @@ import { requestLoggerMiddleware } from './middlewares/request-logger';
 import { platformAuditMiddleware } from './middlewares/platform-audit';
 import { env } from './env';
 import { logger } from './util/logger';
+import { scheduler } from './scheduler/scheduler';
+import { registerJobs } from './scheduler/jobs';
 import { initAdmin } from './scripts/init-admin';
 import { initRoles } from './scripts/init-roles';
 import { seedRbac } from './scripts/seed-rbac';
@@ -244,6 +246,11 @@ async function bootstrap(): Promise<void> {
   server.listen(Number(PORT), () => {
     logger.info(`Server is listening on port ${PORT}...`);
   });
+
+  // Background jobs start with the server. registerJobs() is the only place that
+  // names them, so what runs in the background is one file to read.
+  registerJobs();
+  scheduler.start();
 
   void (async () => {
     if (env.NODE_ENV === 'production') {
