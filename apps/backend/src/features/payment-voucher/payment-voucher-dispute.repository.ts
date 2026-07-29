@@ -16,6 +16,25 @@ export type PaymentVoucherDisputeInsert = typeof PaymentVoucherDisputeTable.$inf
 /** Postgres unique_violation — the one-per-day-per-component constraint firing. */
 const UNIQUE_VIOLATION = '23505';
 
+/**
+ * Finds the driver's SQLSTATE, wherever it ended up.
+ *
+ * drizzle-orm 0.45 wraps query failures in a DrizzleQueryError and hangs the
+ * real pg error off `cause`, so reading `error.code` at the top level silently
+ * misses every constraint violation. That is not theoretical: it turned a
+ * duplicate dispute into a 500 instead of a 409, and only an end-to-end test
+ * caught it. Walking the chain works whether the error is wrapped or not.
+ */
+function sqlStateOf(error: unknown): string | undefined {
+  let current = error;
+  for (let depth = 0; current && depth < 5; depth += 1) {
+    const code = (current as { code?: unknown }).code;
+    if (typeof code === 'string') return code;
+    current = (current as { cause?: unknown }).cause;
+  }
+  return undefined;
+}
+
 export class DuplicateDisputeError extends Error {
   constructor() {
     super('A dispute for this day and component already exists');
@@ -95,7 +114,7 @@ export class PaymentVoucherDisputeRepositoryClass {
       const [row] = await db.insert(PaymentVoucherDisputeTable).values(input).returning();
       return row ?? null;
     } catch (error) {
-      if ((error as { code?: string })?.code === UNIQUE_VIOLATION) {
+      if (sqlStateOf(error) === UNIQUE_VIOLATION) {
         throw new DuplicateDisputeError();
       }
       logger.error('[PaymentVoucherDisputeRepository.create] Error:', error);
