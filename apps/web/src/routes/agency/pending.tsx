@@ -1008,8 +1008,8 @@ function LeaveDetailPanel({
 						{outletName}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-2">
-						Approving excuses the PR with no penalty and leaves the shift short —
-						it shows up on the roster's backfill worklist for a replacement.
+						Approving excuses the PR with no penalty and leaves the shift short
+						— it shows up on the roster's backfill worklist for a replacement.
 						Rejecting puts the PR back on the shift.
 					</p>
 				</div>
