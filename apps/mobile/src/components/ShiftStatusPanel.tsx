@@ -90,6 +90,20 @@ export function ShiftStatusPanel({
     );
   };
 
+  /**
+   * “Scan again” on a row: straight to the camera (no picker, no edit form) —
+   * the single new shot REPLACES that action's saved picture.
+   */
+  const rescanPhoto = (lineId: string) => {
+    if (photoBusy) return;
+    pickProofPhotos(
+      (urls) => {
+        if (urls[0]) void applyPhotos(lineId, [urls[0]]);
+      },
+      { multiple: false },
+    );
+  };
+
   const addPhotos = () => {
     if (!proofTargetLineId) return;
     pickProofPhotos((urls) => {
@@ -230,8 +244,11 @@ export function ShiftStatusPanel({
                     key={log.id}
                     log={log}
                     checkedOut={checkedOut}
+                    missingPhoto={
+                      log.source !== 'checkin' && (log.proofPhotos ?? []).length === 0
+                    }
                     onEdit={() => openScan(cat, 'selflog', log.id)}
-                    onRescan={() => openScan(cat, 'scan', log.id)}
+                    onRescan={() => rescanPhoto(log.id)}
                     onDelete={() => void deleteLine(log.id)}
                   />
                 );
@@ -374,12 +391,14 @@ function ScanCategory({
 function LogRow({
   log,
   checkedOut,
+  missingPhoto,
   onEdit,
   onRescan,
   onDelete,
 }: {
   log: PrReceiptLine;
   checkedOut: boolean;
+  missingPhoto: boolean;
   onEdit: () => void;
   onRescan: () => void;
   onDelete: () => void;
@@ -438,9 +457,17 @@ function LogRow({
               </Pressable>
             </>
           ) : (
-            <Pressable onPress={onRescan} hitSlop={6}>
-              <Camera size={13} color={C.goldL} />
-            </Pressable>
+            <>
+              {/* Camera = scan again → replaces this row's picture. Red = the
+                  row has NO picture yet and blocks check-out until it does. */}
+              <Pressable onPress={onRescan} hitSlop={6}>
+                <Camera size={13} color={missingPhoto ? C.red : C.goldL} />
+              </Pressable>
+              {/* A wrong scan can be removed whole — picture + details. */}
+              <Pressable onPress={onDelete} hitSlop={6}>
+                <Trash2 size={13} color={C.red} />
+              </Pressable>
+            </>
           )}
         </View>
       )}

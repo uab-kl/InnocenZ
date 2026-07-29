@@ -214,6 +214,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // tomorrow) and not a UTC day that rolls over at night.
   const todayKey = ymdToIso(...todayYmd());
   const todayReceipts = receiptLines.filter((l) => l.lineDate === todayKey);
+  // Every logged action (scan or self-log) must carry its picture — a row
+  // without one blocks check-out until it is re-scanned or removed.
+  const linesMissingPhoto = todayReceipts.filter(
+    (l) => l.source !== 'checkin' && (l.proofPhotos ?? []).length === 0,
+  ).length;
 
   const finalPayout = active
     ? (Number(active.rate?.wagePerHour) || Number(active.payAmount)) +
@@ -514,11 +519,23 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   label="Check out"
                   holding={holding}
                   progress={progress}
-                  onPress={() => startHold(true)}
+                  disabled={linesMissingPhoto > 0}
+                  onPress={() => {
+                    if (linesMissingPhoto > 0) return;
+                    startHold(true);
+                  }}
                 />
-                <Text style={styles.gpsNote}>
-                  Selfie attendance disabled — hold Check out when your shift ends.
-                </Text>
+                {linesMissingPhoto > 0 ? (
+                  <Text style={[styles.gpsNote, { color: C.red }]}>
+                    {linesMissingPhoto} logged action{linesMissingPhoto === 1 ? '' : 's'} ha
+                    {linesMissingPhoto === 1 ? 's' : 've'} no picture — tap the red camera on
+                    that row to scan again, or remove the row, before you can check out.
+                  </Text>
+                ) : (
+                  <Text style={styles.gpsNote}>
+                    Selfie attendance disabled — hold Check out when your shift ends.
+                  </Text>
+                )}
               </>
             )}
 
