@@ -105,7 +105,17 @@ export const platformConfigRepository = new PlatformConfigRepositoryClass();
 export const platformConfigController = new PlatformConfigControllerClass(platformConfigRepository);
 
 export const memberSubscriptionRepository = new MemberSubscriptionRepositoryClass();
-export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository);
+/**
+ * Shared by the controllers that scope reads to the caller's own organisation.
+ * Declared after the member repositories it wraps.
+ */
+export const callerOrgDeps = {
+  authRepository,
+  agencyMemberRepository,
+  outletMemberRepository,
+};
+
+export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository, callerOrgDeps);
 
 export const outletTransactionRepository = new OutletTransactionRepositoryClass();
 export const outletTransactionController = new OutletTransactionControllerClass(outletTransactionRepository);
@@ -120,6 +130,7 @@ export const specialServiceController = new SpecialServiceControllerClass(
   specialServiceRepository,
   prRepository,
   authRepository,
+  callerOrgDeps,
 );
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();

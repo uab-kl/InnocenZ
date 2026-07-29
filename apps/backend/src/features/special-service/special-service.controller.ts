@@ -20,12 +20,14 @@ import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
+import { resolveCallerOrg, type CallerOrgDeps } from '@/util/caller-org.js';
 
 export class SpecialServiceControllerClass {
   constructor(
     private repository: SpecialServiceRepositoryClass,
     private prRepository: PrRepositoryClass,
     private authRepository: AuthRepositoryClass,
+    private callerOrgDeps: CallerOrgDeps,
   ) {}
 
   private parseOrder(req: Request): 'asc' | 'desc' {
@@ -70,12 +72,43 @@ export class SpecialServiceControllerClass {
     };
   }
 
+  /**
+   * Narrows the client's filter to what the caller may see.
+   *
+   * `list` used to build its filter purely from query params, so any signed-in
+   * account could page every outlet's and agency's service orders.
+   *
+   * An outlet is pinned to its own outletId. An agency is a looser fit —
+   * `special_service` has no agency column — so it is confined to the orders it
+   * initiated. That is narrower than the truth (it will not show an outlet's
+   * request this agency ends up fulfilling), which is the right direction to err
+   * until the table carries an agency id.
+   *
+   * Returns null when the caller belongs to no org.
+   */
+  private async scopedFilter(req: Request): Promise<SpecialServiceFilter | null> {
+    const filter = this.buildFilter(req);
+    const scope = await resolveCallerOrg(req, this.callerOrgDeps);
+    if (scope.isAdmin) return filter;
+    if (scope.outletId) return { ...filter, outletId: scope.outletId };
+    if (scope.agencyId) return { ...filter, initiatedBy: 'agency' };
+    return null;
+  }
+
   async list(req: Request, res: Response) {
     try {
       const page = Number(req.query.page ?? 1);
       const pageSize = Number(req.query.pageSize ?? 10);
+      const filter = await this.scopedFilter(req);
+      if (!filter) {
+        return res.status(403).json({
+          success: false,
+          message: 'No organization associated with this account',
+          data: null,
+        });
+      }
       const { records, totalCount } = await this.repository.listPaginated({
-        filter: this.buildFilter(req),
+        filter,
         page,
         pageSize,
         order: this.parseOrder(req),
@@ -210,6 +243,18 @@ export class SpecialServiceControllerClass {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Someone else's order is a 404, not a 403 — the response must not confirm
+      // the id exists. Same ownership rule as scopedFilter above.
+      const scope = await resolveCallerOrg(req, this.callerOrgDeps);
+      const ownsIt =
+        scope.isAdmin ||
+        (scope.outletId !== null && record.outletId === scope.outletId) ||
+        (scope.agencyId !== null && record.initiatedBy === 'agency');
+      if (!ownsIt) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
       res.status(200).json({ success: true, message: 'OK', data: record });
     } catch (error) {
       logger.error('[SpecialServiceController.getById] Error:', error);
