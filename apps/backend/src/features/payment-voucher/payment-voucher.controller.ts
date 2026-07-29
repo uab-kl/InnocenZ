@@ -1,4 +1,8 @@
 import { Request, Response } from 'express';
+import {
+  DuplicateDisputeError,
+  PaymentVoucherDisputeRepositoryClass,
+} from './payment-voucher-dispute.repository.js';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
@@ -14,7 +18,8 @@ import {
   CreatePrReceiptLineSchema,
   CreatePrReceiptSchema,
   UpdatePrReceiptLineSchema,
-  PrDisputeSchema,
+  PrRaiseDisputeSchema,
+  PrWithdrawDisputeSchema,
   PrReceiptKind,
   PrReceiptSource,
   prReceiptKindValues,
@@ -180,6 +185,7 @@ export class PaymentVoucherControllerClass {
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private prRepository: PrRepositoryClass,
+    private paymentVoucherDisputeRepository: PaymentVoucherDisputeRepositoryClass,
   ) {}
 
   /** The PR profile bound to the signed-in account, or null (not a PR). */
@@ -729,7 +735,7 @@ export class PaymentVoucherControllerClass {
    */
   async raiseMyDispute(req: Request, res: Response) {
     try {
-      const parsed = PrDisputeSchema.safeParse(req.body);
+      const parsed = PrRaiseDisputeSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
@@ -751,16 +757,76 @@ export class PaymentVoucherControllerClass {
         });
       }
 
-      const voucher = await this.paymentVoucherRepository.update(voucherId, {
+      const { disputeDate, component } = parsed.data;
+      const actor = getActor(req);
+
+      // The day has to be one this voucher actually covers, or a PR could raise
+      // a claim against a date with nothing on it — and the baseline below would
+      // silently compute as 0.00.
+      const covered = await this.paymentVoucherDisputeRepository.voucherHasDate(
+        voucherId,
+        disputeDate,
+      );
+      if (!covered) {
+        return res.status(400).json({
+          success: false,
+          message: 'That day has no lines on this voucher',
+          data: null,
+        });
+      }
+
+      // Server-computed, never from the request: this is the figure the claim is
+      // measured against, so the claimant must not be able to set it.
+      const disputedAmount = await this.paymentVoucherDisputeRepository.sumLinesFor(
+        voucherId,
+        disputeDate,
+        component,
+      );
+
+      let dispute;
+      try {
+        dispute = await this.paymentVoucherDisputeRepository.create({
+          voucherId,
+          disputeDate,
+          component,
+          reason: parsed.data.reason,
+          note: parsed.data.note ?? null,
+          disputedAmount,
+          claimedAmount: parsed.data.claimedAmount?.toFixed(2) ?? null,
+          proofPhotos: parsed.data.proofPhotos,
+          receiptRefs: parsed.data.receiptRefs ?? null,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+      } catch (duplicate) {
+        // One dispute per day per component, decided by the unique index
+        // payment_voucher_dispute_one_per_day_component — so two simultaneous
+        // taps cannot both win. Narrowed on purpose: anything else is a real
+        // fault and must not be reported to the PR as "already disputed".
+        if (!(duplicate instanceof DuplicateDisputeError)) throw duplicate;
+        return res.status(409).json({
+          success: false,
+          message: `${component} on ${disputeDate} has already been disputed`,
+          data: null,
+        });
+      }
+      if (!dispute) {
+        return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+
+      // The voucher's dispute columns are now a CACHE of the rows, not the truth.
+      // Kept in step because the agency payroll page still reads them; the
+      // dispute table is what actually records the claim.
+      await this.paymentVoucherRepository.update(voucherId, {
         status: 'disputed',
         disputeReason: parsed.data.reason,
         disputeNote: parsed.data.note ?? null,
-        // Stamp the first dispute time only; amending the note keeps it.
+        // Stamp the first dispute time only; later ones keep the original.
         disputedAt: existing.disputedAt ?? new Date(),
-        updatedBy: getActor(req),
+        updatedBy: actor,
       });
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Dispute raised', data: this.disputeStateDTO(voucher) });
+
+      res.status(201).json({ success: true, message: 'Dispute raised', data: dispute });
     } catch (error) {
       logger.error('[PaymentVoucherController.raiseMyDispute] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -778,19 +844,49 @@ export class PaymentVoucherControllerClass {
       if (!existing || existing.prId !== pr.id) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (existing.status !== 'disputed') {
-        return res.status(400).json({ success: false, message: 'No open dispute to withdraw', data: null });
+      const parsed = PrWithdrawDisputeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
 
-      const voucher = await this.paymentVoucherRepository.update(voucherId, {
-        status: 'sent',
-        disputeReason: null,
-        disputeNote: null,
-        disputedAt: null,
-        updatedBy: getActor(req),
+      const actor = getActor(req);
+      const target = await this.paymentVoucherDisputeRepository.getById(parsed.data.disputeId);
+      // Must belong to the voucher in the path, which is already proven to be
+      // this PR's — so a dispute id from someone else's voucher 404s rather than
+      // confirming it exists.
+      if (!target || target.voucherId !== voucherId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const withdrawn = await this.paymentVoucherDisputeRepository.withdraw(target.id, actor);
+      if (!withdrawn) {
+        // Already decided by the agency, or already withdrawn. Retracting a
+        // settled claim would rewrite the outcome of a money decision.
+        return res.status(400).json({
+          success: false,
+          message: 'This dispute has already been resolved',
+          data: null,
+        });
+      }
+
+      // Only hand the voucher back once NOTHING is still contested — withdrawing
+      // Tuesday's tips must not clear Thursday's wages claim.
+      const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucherId);
+      if (stillOpen.length === 0) {
+        await this.paymentVoucherRepository.update(voucherId, {
+          status: 'sent',
+          disputeReason: null,
+          disputeNote: null,
+          disputedAt: null,
+          updatedBy: actor,
+        });
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Dispute withdrawn',
+        data: { dispute: withdrawn, openDisputes: stillOpen.length },
       });
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Dispute withdrawn', data: this.disputeStateDTO(voucher) });
     } catch (error) {
       logger.error('[PaymentVoucherController.withdrawMyDispute] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

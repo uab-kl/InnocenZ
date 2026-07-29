@@ -124,9 +124,41 @@ export type CreatePrReceiptInput = z.infer<typeof CreatePrReceiptSchema>;
 // A PR raises a dispute on its OWN issued voucher (the week under review). The
 // reason is one of the quick presets; the note carries the flagged amount(s).
 // Persisted on the reused payment_voucher dispute columns (status='disputed').
-export const PrDisputeSchema = z.object({
+/**
+ * Raising one dispute — against a single shift DAY and a single COMPONENT.
+ *
+ * A PR may dispute as much as they like across a month, but each day allows one
+ * dispute per component; the pairing is enforced by a UNIQUE constraint in the
+ * database rather than here.
+ *
+ * `disputedAmount` is deliberately absent. It is the baseline of a money claim
+ * and is computed server-side from the voucher's own lines — accepting it from
+ * the client would let the claimant set what they are claiming against.
+ */
+export const PrRaiseDisputeSchema = z.object({
+  /** The disputed shift day, yyyy-MM-dd, matching payment_voucher_line.line_date. */
+  disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
+  component: z.enum(['wages', 'drinks', 'tips', 'others']),
   reason: z.string().min(1, 'Reason is required').max(200, 'Reason is too long'),
   note: z.string().max(1000, 'Note is too long').optional(),
+  /**
+   * Mandatory, and not merely by convention: the table carries a CHECK that
+   * every new row has at least one proof photo, so an empty array is rejected by
+   * Postgres anyway. Failing here gives the PR a readable message instead of a
+   * constraint violation.
+   */
+  proofPhotos: z.array(z.string().min(1)).min(1, 'At least one proof photo is required'),
+  /** What the PR says the figure should be. Optional — some claims are "this is missing". */
+  claimedAmount: z.number().nonnegative().optional(),
+  /** Receipts pointed at, by their packed ref — never a voucher line id. */
+  receiptRefs: z.array(z.string().min(1)).optional(),
 });
 
-export type PrDisputeInput = z.infer<typeof PrDisputeSchema>;
+export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;
+
+/** Withdrawing targets ONE dispute, since a voucher can now hold several. */
+export const PrWithdrawDisputeSchema = z.object({
+  disputeId: z.string().uuid('disputeId must be a uuid'),
+});
+
+export type PrWithdrawDisputeInput = z.infer<typeof PrWithdrawDisputeSchema>;

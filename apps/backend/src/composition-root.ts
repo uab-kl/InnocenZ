@@ -47,6 +47,7 @@ import { ShiftControllerClass } from '@/features/shift/shift.controller.js';
 import { ShiftSaleRepositoryClass } from '@/features/shift-sale/shift-sale.repository.js';
 import { ShiftSaleControllerClass } from '@/features/shift-sale/shift-sale.controller.js';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
+import { PaymentVoucherDisputeRepositoryClass } from '@/features/payment-voucher/payment-voucher-dispute.repository.js';
 import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shift-assignment.controller.js';
@@ -127,7 +128,8 @@ export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
-export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository);
+export const paymentVoucherDisputeRepository = new PaymentVoucherDisputeRepositoryClass();
+export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository);
 
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
