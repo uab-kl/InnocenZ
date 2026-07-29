@@ -10,7 +10,7 @@ import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseGranularity } from '@/util/period.js';
-import { resolveCallerOrg, type CallerOrgDeps } from '@/util/caller-org.js';
+import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 
 function parseDate(value: unknown): Date | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined;
@@ -30,7 +30,7 @@ type PeriodRevenuePoint = {
 export class MemberSubscriptionControllerClass {
   constructor(
     private repository: MemberSubscriptionRepositoryClass,
-    private callerOrgDeps: CallerOrgDeps,
+    private orgScopeDeps: OrgScopeDeps,
   ) {}
 
   /**
@@ -47,7 +47,7 @@ export class MemberSubscriptionControllerClass {
     req: Request,
   ): Promise<MemberSubscriptionFilter | null> {
     const filter = this.buildFilter(req);
-    const scope = await resolveCallerOrg(req, this.callerOrgDeps);
+    const scope = await resolveOrgScope(req, this.orgScopeDeps);
     if (scope.isAdmin) return filter;
 
     // Server-derived, and it OVERWRITES whatever the client asked for — the
@@ -55,8 +55,12 @@ export class MemberSubscriptionControllerClass {
     if (scope.agencyId) {
       return { ...filter, subscriberType: 'agency', subscriberId: scope.agencyId };
     }
-    if (scope.outletId) {
-      return { ...filter, subscriberType: 'outlet', subscriberId: scope.outletId };
+    // An operator of several venues holds one subscription per venue; the
+    // filter takes a single id, so this reads the first. Multi-venue operators
+    // need a subscriberIds filter — noted rather than guessed at.
+    const outletId = scope.outletIds[0];
+    if (outletId) {
+      return { ...filter, subscriberType: 'outlet', subscriberId: outletId };
     }
     return null;
   }
@@ -171,11 +175,11 @@ export class MemberSubscriptionControllerClass {
 
       // Someone else's subscription is a 404, not a 403 — the response must not
       // confirm the id exists.
-      const scope = await resolveCallerOrg(req, this.callerOrgDeps);
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
       const ownsIt =
         scope.isAdmin ||
         (record.subscriberType === 'agency' && record.subscriberId === scope.agencyId) ||
-        (record.subscriberType === 'outlet' && record.subscriberId === scope.outletId);
+        (record.subscriberType === 'outlet' && scope.outletIds.includes(record.subscriberId));
       if (!ownsIt) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }

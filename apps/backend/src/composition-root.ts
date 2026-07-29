@@ -106,16 +106,16 @@ export const platformConfigController = new PlatformConfigControllerClass(platfo
 
 export const memberSubscriptionRepository = new MemberSubscriptionRepositoryClass();
 /**
- * Shared by the controllers that scope reads to the caller's own organisation.
- * Declared after the member repositories it wraps.
+ * Repositories for resolveOrgScope (util/org-scope.ts), the scope resolver five
+ * other controllers already use. Declared after the member repositories.
  */
-export const callerOrgDeps = {
+export const orgScopeDeps = {
   authRepository,
   agencyMemberRepository,
   outletMemberRepository,
 };
 
-export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository, callerOrgDeps);
+export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository, orgScopeDeps);
 
 export const outletTransactionRepository = new OutletTransactionRepositoryClass();
 export const outletTransactionController = new OutletTransactionControllerClass(outletTransactionRepository);
@@ -130,7 +130,7 @@ export const specialServiceController = new SpecialServiceControllerClass(
   specialServiceRepository,
   prRepository,
   authRepository,
-  callerOrgDeps,
+  orgScopeDeps,
 );
 
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();

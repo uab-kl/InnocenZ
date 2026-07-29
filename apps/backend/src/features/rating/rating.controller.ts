@@ -10,6 +10,15 @@ import { Error } from '@/error/index.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope.js';
+import { notifyMany } from '@/features/notification/notify.js';
+
+/**
+ * Below this average, the agency is told. Mirrors RATING_WARN_THRESHOLD in
+ * apps/web/src/agency-portal/lib/agency-pr-flags.ts, where the same number
+ * already drives the warning badge — the badge and the notification must not
+ * disagree about what "low" means.
+ */
+const RATING_WARN_THRESHOLD = 3.5;
 
 export class RatingControllerClass {
   constructor(
@@ -19,6 +28,68 @@ export class RatingControllerClass {
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
+
+  /**
+   * A PR's average rating dropping below the warning line tells their agency.
+   *
+   * Notify only — no suspension, no block on new assignments. A single harsh
+   * rating can drag an average down, and removing someone's income on an
+   * arithmetic trigger is a decision a person should make. The agency gets the
+   * signal and keeps the judgement.
+   *
+   * Fires only on the CROSSING. Without that check every subsequent low rating
+   * would raise another notification and the bell would become noise the agency
+   * learns to ignore — which is the same as not having warned them.
+   *
+   * Never throws: this runs after the response has gone out, so a failure here
+   * must not surface anywhere. The rating itself is already saved.
+   */
+  private async notifyAgencyIfRatingLow(
+    prId: string,
+    prName: string,
+    actor: string,
+  ): Promise<void> {
+    try {
+      const ratings = await this.repository.list({ prId });
+      if (ratings.length === 0) return;
+
+      const average =
+        ratings.reduce((sum, r) => sum + r.stars, 0) / ratings.length;
+      if (average >= RATING_WARN_THRESHOLD) return;
+
+      // The average BEFORE this rating landed. If it was already below the line
+      // the agency has been told; only the crossing is news.
+      if (ratings.length > 1) {
+        const [newest, ...previous] = [...ratings].sort(
+          (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+        );
+        void newest;
+        const previousAverage =
+          previous.reduce((sum, r) => sum + r.stars, 0) / previous.length;
+        if (previousAverage < RATING_WARN_THRESHOLD) return;
+      }
+
+      const pr = await this.prRepository.getById(prId);
+      if (!pr?.agencyId) return;
+
+      const members = await this.agencyMemberRepository.listByAgency(pr.agencyId);
+      const recipients = members.filter((m) => m.status === 'active');
+      if (recipients.length === 0) return;
+
+      await notifyMany(
+        recipients.map((m) => m.userId),
+        {
+          kind: 'pr_rating_low',
+          title: `${prName}'s rating has dropped`,
+          body: `Average now ${average.toFixed(1)} across ${ratings.length} ratings, below the ${RATING_WARN_THRESHOLD} warning line.`,
+          payload: { prId, average, ratingCount: ratings.length },
+          actor,
+        },
+      );
+    } catch (error) {
+      logger.error('[RatingController.notifyAgencyIfRatingLow] Error:', error);
+    }
+  }
 
   private resolveScope(req: Request): Promise<OrgScope> {
     return resolveOrgScope(req, {
@@ -115,7 +186,10 @@ export class RatingControllerClass {
           .status(500)
           .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       }
+      // Respond first — the rating is saved, and telling the agency must never
+      // be able to fail the outlet's write.
       res.status(201).json({ success: true, message: 'Rating saved', data: record });
+      void this.notifyAgencyIfRatingLow(parsed.data.prId, parsed.data.prName, actor);
     } catch (error) {
       logger.error('[RatingController.upsert] Error:', error);
       res

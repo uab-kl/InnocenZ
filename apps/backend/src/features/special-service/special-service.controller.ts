@@ -20,14 +20,14 @@ import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
-import { resolveCallerOrg, type CallerOrgDeps } from '@/util/caller-org.js';
+import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 
 export class SpecialServiceControllerClass {
   constructor(
     private repository: SpecialServiceRepositoryClass,
     private prRepository: PrRepositoryClass,
     private authRepository: AuthRepositoryClass,
-    private callerOrgDeps: CallerOrgDeps,
+    private orgScopeDeps: OrgScopeDeps,
   ) {}
 
   private parseOrder(req: Request): 'asc' | 'desc' {
@@ -88,9 +88,12 @@ export class SpecialServiceControllerClass {
    */
   private async scopedFilter(req: Request): Promise<SpecialServiceFilter | null> {
     const filter = this.buildFilter(req);
-    const scope = await resolveCallerOrg(req, this.callerOrgDeps);
+    const scope = await resolveOrgScope(req, this.orgScopeDeps);
     if (scope.isAdmin) return filter;
-    if (scope.outletId) return { ...filter, outletId: scope.outletId };
+    // outletIds is plural but the filter takes one, so an operator of several
+    // venues sees the first. A multi-outlet filter is the follow-up.
+    const outletId = scope.outletIds[0];
+    if (outletId) return { ...filter, outletId };
     if (scope.agencyId) return { ...filter, initiatedBy: 'agency' };
     return null;
   }
@@ -246,10 +249,10 @@ export class SpecialServiceControllerClass {
 
       // Someone else's order is a 404, not a 403 — the response must not confirm
       // the id exists. Same ownership rule as scopedFilter above.
-      const scope = await resolveCallerOrg(req, this.callerOrgDeps);
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
       const ownsIt =
         scope.isAdmin ||
-        (scope.outletId !== null && record.outletId === scope.outletId) ||
+        (record.outletId !== null && scope.outletIds.includes(record.outletId)) ||
         (scope.agencyId !== null && record.initiatedBy === 'agency');
       if (!ownsIt) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });

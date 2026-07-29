@@ -470,6 +470,13 @@
       "when": 1785321385444,
       "tag": "0066_platform_config_typed",
       "breakpoints": true
+    },
+    {
+      "idx": 67,
+      "version": "7",
+      "when": 1785326751705,
+      "tag": "0067_notification_kind_pr_rating_low",
+      "breakpoints": true
     }
   ]
 }

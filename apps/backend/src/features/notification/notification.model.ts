@@ -24,6 +24,8 @@ export const notificationKindValues = [
   'shift_cancelled',
   /** An agency accepted or declined a PR's request to join. */
   'agency_join_resolved',
+  /** A PR's average rating fell below the warning threshold (migration 0067). */
+  'pr_rating_low',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);
