@@ -22,6 +22,7 @@ import { useStore } from '@agency-portal/lib/store';
 import { Link, useLocation } from '@tanstack/react-router';
 import { ChevronLeft, ChevronRight, LogOut } from 'lucide-react';
 import { type ReactNode, useEffect, useState } from 'react';
+import { getPortalSessionKind } from '@/lib/auth/agency-demo-session';
 
 export type PortalKind = 'agency' | 'outlet';
 
@@ -234,12 +235,14 @@ function PortalHeader({
   ownerName,
   avatarPhoto,
   subLabel,
+  demoData,
 }: {
   portal: PortalKind;
   orgName: string;
   ownerName: string;
   avatarPhoto?: string | null;
   subLabel: string;
+  demoData: boolean;
 }) {
   const { pathname } = useLocation();
   const onAgencyHome = portal === 'agency' && isAgencyHomePath(pathname);
@@ -273,6 +276,14 @@ function PortalHeader({
           ))}
       </div>
       <div className="flex shrink-0 items-center gap-2">
+        {demoData && (
+          <span
+            className="iz-tiny rounded-full border border-[var(--iz-danger,#dc2626)] px-2 py-0.5 font-bold uppercase tracking-widest text-[var(--iz-danger,#dc2626)]"
+            title="Fixture data. This session was never authenticated against the backend, so nothing here is real and nothing you do will be saved."
+          >
+            Demo data
+          </span>
+        )}
         <OpsNotificationBell portal={portal} />
         <Link
           to={portalProfilePath(portal)}
@@ -323,6 +334,15 @@ export function PortalShell({
     outletSubRole,
   );
 
+  // A session that did not authenticate against the backend renders fixtures,
+  // and until now said so nowhere: org name and sub-role read identically to a
+  // real login. Anything other than 'real' counts, including an UNSET marker —
+  // that is the legacy case, and it keeps the demo seed too.
+  const [demoData, setDemoData] = useState(false);
+  useEffect(() => {
+    setDemoData(getPortalSessionKind() !== 'real');
+  }, []);
+
   const [collapsed, setCollapsed] = useState(false);
   useEffect(() => {
     try {
@@ -371,6 +391,7 @@ export function PortalShell({
           ownerName={owner.ownerName}
           avatarPhoto={owner.avatarPhoto}
           subLabel={subLabel}
+          demoData={demoData}
         />
 
         <div className="iz-portal-viewport">{children}</div>

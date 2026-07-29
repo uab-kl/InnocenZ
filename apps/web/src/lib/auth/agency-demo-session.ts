@@ -3,8 +3,19 @@ import type { OutletSessionIdentity } from "@agency-portal/lib/outlet-identity";
 import { saveAuthTokens } from "@/lib/auth/auth-storage";
 import { kickToLogin } from "@/lib/auth/guards";
 
-/** Demo account that unlocks the ported agency portal (proto demo data). */
-export const AGENCY_DEMO_EMAIL = "owner@atlas-agency.my";
+/**
+ * Demo account that unlocks the ported agency portal (proto demo data).
+ *
+ * This MUST NOT be an address a real operator can hold. It used to be
+ * `owner@atlas-agency.my` — the real seeded owner login — so one email forked
+ * on the password: `Password123!` reached the backend, while `password` matched
+ * here and short-circuited into a fake-JWT demo session that was
+ * indistinguishable on screen. A mistyped password therefore looked like a
+ * successful login into a parallel app full of fixtures. `.invalid` is reserved
+ * by RFC 2606 and can never be registered, so the collision is now structurally
+ * impossible rather than merely unlikely.
+ */
+export const AGENCY_DEMO_EMAIL = "demo@atlas-agency.invalid";
 export const AGENCY_DEMO_PASSWORD = "password";
 
 const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -73,8 +84,8 @@ export async function startAgencyDemoSession(email: string): Promise<void> {
 	store.setAgencySubRole("agency_owner");
 }
 
-/** Demo account that unlocks the ported outlet portal (proto demo data). */
-export const OUTLET_DEMO_EMAIL = "owner@velvet23.my";
+/** Demo account that unlocks the ported outlet portal — see AGENCY_DEMO_EMAIL. */
+export const OUTLET_DEMO_EMAIL = "demo@velvet23.invalid";
 
 export function isOutletDemoLogin(email: string, password: string): boolean {
 	return (
