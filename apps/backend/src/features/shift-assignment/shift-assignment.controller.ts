@@ -476,12 +476,24 @@ export class ShiftAssignmentControllerClass {
         });
       }
 
+      const actor = getActor(req);
       const assignment = await this.shiftAssignmentRepository.update(id, {
         status: 'cancelled',
         notes: reason,
-        updatedBy: getActor(req),
+        updatedBy: actor,
       });
       res.status(200).json({ success: true, message: 'Shift cancelled — your agency has been notified', data: assignment });
+
+      // That message above has been promising this since the endpoint shipped,
+      // and nothing was actually telling anyone. Now it is true.
+      void this.notifyAgencyCoverNeeded({
+        agencyId: existing.agencyId,
+        assignmentId: id,
+        shiftId: existing.shiftId,
+        prName: pr.name,
+        reason: 'cancelled',
+        actor,
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentController.cancelMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -564,11 +576,23 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Only a pending leave request can be approved', data: null });
       }
 
+      const actor = getActor(req);
       const assignment = await this.shiftAssignmentRepository.update(id, {
         status: 'leave_approved',
-        updatedBy: getActor(req),
+        updatedBy: actor,
       });
       res.status(200).json({ success: true, message: 'Leave approved — the PR is excused from this shift', data: assignment });
+
+      // The slot is now open. Say so, rather than leaving it to be noticed.
+      const excusedPr = await this.prRepository.getById(existing.prId);
+      void this.notifyAgencyCoverNeeded({
+        agencyId: existing.agencyId,
+        assignmentId: id,
+        shiftId: existing.shiftId,
+        prName: excusedPr?.name ?? 'A PR',
+        reason: 'leave_approved',
+        actor,
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentController.approveLeave] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -759,6 +783,54 @@ export class ShiftAssignmentControllerClass {
    * path's success: notify() never throws, so a failed notification can never
    * undo the assignment the agency just made.
    */
+  /**
+   * Tell the agency a shift needs covering.
+   *
+   * Sick cover was almost entirely built already — the backfill worklist, the
+   * ranked replacement candidates and the assign write all existed. What was
+   * missing is this: the worklist sat there and nobody was told to look at it,
+   * so a PR dropping out on the night was only noticed if someone happened to
+   * open the panel.
+   *
+   * Addressed to the agency's members, like the overtime notification above and
+   * unlike the three shift ones, which go to the PR. Never throws — a failed
+   * notification must not undo the release the PR is entitled to.
+   */
+  private async notifyAgencyCoverNeeded(input: {
+    agencyId: string;
+    assignmentId: string;
+    shiftId: string;
+    prName: string;
+    reason: 'cancelled' | 'leave_approved';
+    actor: string;
+  }): Promise<void> {
+    try {
+      const shift = await this.shiftRepository.getById(input.shiftId);
+      const members = await this.agencyMemberRepository.listByAgency(input.agencyId);
+      const recipients = members.filter((m) => m.status === 'active').map((m) => m.userId);
+      if (recipients.length === 0) return;
+
+      const when = shift
+        ? `${shift.shiftDate}${shift.slot ? ` · ${shift.slot}` : ''}`
+        : 'an upcoming shift';
+      const why = input.reason === 'leave_approved' ? 'approved leave' : 'cancelled';
+
+      await notifyMany(recipients, {
+        kind: 'shift_cover_needed',
+        title: `Cover needed — ${input.prName}`,
+        body: `${input.prName} is off ${when} (${why}). Find a replacement on the roster's backfill list.`,
+        payload: {
+          assignmentId: input.assignmentId,
+          shiftId: input.shiftId,
+          reason: input.reason,
+        },
+        actor: input.actor,
+      });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.notifyAgencyCoverNeeded] Error:', error);
+    }
+  }
+
   private async notifyPr(input: {
     prId: string;
     kind: 'shift_assigned' | 'shift_cancelled';

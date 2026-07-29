@@ -477,6 +477,13 @@
       "when": 1785326751705,
       "tag": "0067_notification_kind_pr_rating_low",
       "breakpoints": true
+    },
+    {
+      "idx": 68,
+      "version": "7",
+      "when": 1785327479137,
+      "tag": "0068_notification_kind_shift_cover_needed",
+      "breakpoints": true
     }
   ]
 }
