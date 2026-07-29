@@ -5,6 +5,7 @@
  */
 import React, { useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { C, ensureWebFonts } from '../theme/theme';
 import { SessionProvider, useSession } from '../lib/session';
 import { ShiftSessionProvider } from '../lib/shift-session';
@@ -96,10 +97,12 @@ function AppShell() {
 }
 
 export const App = () => (
-  <SessionProvider>
-    <StatusBar barStyle="light-content" />
-    <AppShell />
-  </SessionProvider>
+  <SafeAreaProvider>
+    <SessionProvider>
+      <StatusBar barStyle="light-content" />
+      <AppShell />
+    </SessionProvider>
+  </SafeAreaProvider>
 );
 
 const styles = StyleSheet.create({
