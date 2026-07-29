@@ -30,6 +30,13 @@ export const PrTable = MainSchema.table('pr', {
   nickname: varchar('nickname', { length: 100 }),
   tier: prTierEnum('tier').notNull().default('tier_1'),
   status: prStatusEnum('status').notNull().default('active'),
+  /**
+   * Why the agency declined this sign-up. The Approvals screen has always
+   * collected a reason and had nowhere to put it, so a declined PR was told
+   * they were declined and nothing else. Cleared on acceptance, so a stale
+   * reason cannot hang off an active roster member.
+   */
+  rejectReason: varchar('reject_reason', { length: 500 }),
   phone: varchar('phone', { length: 50 }),
   email: varchar('email', { length: 255 }),
   icNo: varchar('ic_no', { length: 100 }),

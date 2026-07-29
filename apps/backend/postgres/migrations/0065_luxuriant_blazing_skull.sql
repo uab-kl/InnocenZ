@@ -1,0 +1,15 @@
+-- Why a declined PR sign-up was declined.
+--
+-- The agency Approvals screen has always collected a rejection reason in its
+-- sheet and had nowhere to put it, so the reason was discarded on submit and a
+-- declined PR learned only that they had been declined. With no column there
+-- was also nothing honest to put in the agency_join_resolved notification body.
+--
+-- Nullable on purpose: it is meaningless for an accepted PR, and the controller
+-- clears it on acceptance so a stale reason cannot hang off an active roster
+-- member. 500 chars matches the resolution notes used elsewhere.
+--
+-- IF NOT EXISTS because this is the SHARED database and jk migrates it too from
+-- a divergent journal — an unguarded ADD COLUMN aborts the whole run if it
+-- arrives twice.
+ALTER TABLE "main"."pr" ADD COLUMN IF NOT EXISTS "reject_reason" varchar(500);

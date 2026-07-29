@@ -17,6 +17,11 @@ export const CreatePrSchema = z.object({
 
 export const UpdatePrSchema = CreatePrSchema.partial().extend({
   status: z.enum(prStatusValues).optional(),
+  /**
+   * Why a sign-up was declined — sent alongside `status: 'inactive'`. The
+   * controller clears it when the PR is accepted, so callers never have to.
+   */
+  rejectReason: z.string().max(500, 'Reason is too long').optional(),
 });
 
 export type CreatePrInput = z.infer<typeof CreatePrSchema>;

@@ -236,7 +236,15 @@ export class PrControllerClass {
       // Agency users cannot move a PR to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
 
-      const pr = await this.prRepository.update(id, { ...data, updatedBy: getActor(req) });
+
+      const pr = await this.prRepository.update(id, {
+        ...data,
+        // Acceptance clears any earlier decline reason — the writer's job, not
+        // every caller's, so re-accepting someone previously declined cannot
+        // leave a stale reason hanging off an active roster member.
+        ...(data.status === 'active' ? { rejectReason: null } : {}),
+        updatedBy: getActor(req),
+      });
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // The agency's Approvals screen decides a sign-up by writing this status
@@ -255,9 +263,9 @@ export class PrControllerClass {
           userId: pr.userId,
           kind: 'agency_join_resolved',
           title: accepted ? 'You were accepted by the agency' : 'Your agency application was declined',
-          // No reason is persisted on rejection — the screen collects one but
-          // the column does not exist, so there is nothing honest to quote.
-          body: accepted ? 'You can now be scheduled for shifts.' : undefined,
+          body: accepted
+            ? 'You can now be scheduled for shifts.'
+            : (pr.rejectReason ?? undefined),
           payload: { prId: pr.id, agencyId: pr.agencyId, status: data.status },
           actor: getActor(req),
         });

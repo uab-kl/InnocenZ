@@ -1382,7 +1382,7 @@ function AgencyPending() {
 								}
 								onReject={(reason) =>
 									backend.backed
-										? backend.reject(selectedSignup.id)
+										? backend.reject(selectedSignup.id, reason)
 										: rejectPendingPR(selectedSignup.id, reason)
 								}
 							/>
