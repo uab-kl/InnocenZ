@@ -4,7 +4,7 @@ import {
 	useOutletGeoFence,
 } from "@agency-portal/hooks/use-outlet-geo-fence";
 import { useStore } from "@agency-portal/lib/store";
-import { Crosshair, MapPin, Search } from "lucide-react";
+import { Crosshair, MapPin, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { GeocodeCandidate } from "@/services/outlet";
 
@@ -59,8 +59,10 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 		lookupError,
 		isLookingUp,
 		isSaving,
+		isClearing,
 		lookup,
 		save,
+		clearPin,
 	} = useOutletGeoFence();
 
 	const [address, setAddress] = useState("");
@@ -69,6 +71,10 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 	// at the default (50) for the whole first render pass — and re-saving would
 	// then silently shrink a venue fenced at any other distance.
 	const [radiusDraft, setRadiusDraft] = useState<string | null>(null);
+	// Removing a pin silently re-opens the venue to check-ins from anywhere, and
+	// nothing downstream would flag it — so it costs a second click, not a toast
+	// after the fact.
+	const [confirmingRemove, setConfirmingRemove] = useState(false);
 
 	// Demo sessions have no outlet to pin; the demo store holds no coordinates.
 	// Say so rather than rendering nothing — an operator who sees no card at all
@@ -109,6 +115,17 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 			toast("Check-in pin saved", "success");
 		} catch {
 			toast("Could not save the pin", "warn");
+		}
+	};
+
+	const removePin = async () => {
+		try {
+			await clearPin();
+			setConfirmingRemove(false);
+			setRadiusDraft(null);
+			toast("Check-in pin removed — this venue is no longer fenced", "success");
+		} catch {
+			toast("Could not remove the pin", "warn");
 		}
 	};
 
@@ -275,6 +292,44 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 								})}
 							</div>
 						)}
+
+						{/* Last, and behind a confirm: this is the only control on the card
+						    that makes the venue LESS verified than it was. */}
+						{pin &&
+							(confirmingRemove ? (
+								<div className="rounded-2xl border border-[rgba(240,138,138,.35)] bg-[var(--iz-red-bg)] p-3">
+									<p className="iz-tiny text-pretty text-[var(--iz-red)]">
+										Remove the pin? Attendance verification switches off — every
+										check-in here is accepted again, from anywhere, unmeasured.
+									</p>
+									<div className="mt-2 flex flex-wrap gap-2">
+										<button
+											type="button"
+											className="iz-btn iz-btn-soft iz-btn-sm shrink-0"
+											disabled={isClearing}
+											onClick={() => setConfirmingRemove(false)}
+										>
+											Keep the pin
+										</button>
+										<button
+											type="button"
+											className="iz-btn iz-btn-danger iz-btn-sm shrink-0"
+											disabled={isClearing}
+											onClick={() => void removePin()}
+										>
+											{isClearing ? "Removing…" : "Yes, remove it"}
+										</button>
+									</div>
+								</div>
+							) : (
+								<button
+									type="button"
+									className="iz-btn iz-btn-ghost iz-btn-sm !w-full !text-[var(--iz-red)]"
+									onClick={() => setConfirmingRemove(true)}
+								>
+									<Trash2 className="h-4 w-4" /> Remove pin
+								</button>
+							))}
 					</div>
 				)}
 			</IzCard>

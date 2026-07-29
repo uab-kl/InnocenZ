@@ -43,6 +43,16 @@ router.patch(
   outletOwnerOnly,
   outletController.setGeoFence.bind(outletController),
 );
+// Clearing the pin switches attendance verification OFF for the venue, so it
+// carries the same owner-only gate as setting one. A DELETE rather than a PATCH
+// with null coordinates on purpose: UpdateGeoFenceSchema stays strict, so a
+// malformed PATCH still 400s instead of silently unfencing a venue.
+router.delete(
+  '/:id/geo-fence',
+  canEditOutlet,
+  outletOwnerOnly,
+  outletController.clearGeoFence.bind(outletController),
+);
 router.patch('/:id/approve', requireAdmin, outletController.approve.bind(outletController));
 router.patch('/:id/suspend', requireAdmin, outletController.suspend.bind(outletController));
 

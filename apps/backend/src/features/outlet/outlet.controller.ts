@@ -152,6 +152,29 @@ export class OutletControllerClass {
   }
 
   /**
+   * DELETE /outlet/:id/geo-fence
+   * Drops the pin, which turns attendance verification back OFF for the venue:
+   * verifyWithinGeoFence measures nothing once lat/lng are null, so every
+   * check-in here is accepted again. The radius is left alone so re-pinning the
+   * venue later keeps the distance the operator already chose.
+   */
+  async clearGeoFence(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const outlet = await this.outletRepository.update(id, {
+        lat: null,
+        lng: null,
+        updatedBy: getActor(req),
+      });
+      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      res.status(200).json({ success: true, message: 'Geo-fence removed', data: outlet });
+    } catch (error) {
+      logger.error('[OutletController.clearGeoFence] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
    * GET /outlet/geocode?address=...
    * Address -> candidate pins. Saves nothing; the operator confirms one and
    * commits it through setGeoFence, which is the only path that turns fencing
