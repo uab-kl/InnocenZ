@@ -12,6 +12,7 @@ import {
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGalleryPicker";
 import { useAgencyPendingPrs } from "@agency-portal/hooks/use-agency-pending-prs";
+import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
@@ -23,6 +24,7 @@ import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	Calendar,
@@ -40,6 +42,12 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useAuth } from "@/lib/auth-context";
+import { fetchOutlets } from "@/services/outlet/outlet";
+import {
+	fetchShiftAssignments,
+	type ShiftAssignment,
+} from "@/services/shift-assignment";
 
 function docImageSrc(src: string) {
 	return src.startsWith("data:") ? src : publicAssetPath(src);
@@ -100,7 +108,7 @@ function PendingComcardVisual({
 	);
 }
 
-type Tab = "signups" | "cutlost";
+type Tab = "signups" | "cutlost" | "leaves";
 
 const AVATAR_VARIANTS = ["rose", "sky", "violet", "amber", "mint"] as const;
 
@@ -921,10 +929,104 @@ function LinkRequestDetailPanel({
 	);
 }
 
+/**
+ * A PR's MC / leave request on one of its own shifts (a backend assignment
+ * sitting at `leave_pending`). Approve excuses the shift with no penalty and
+ * releases the slot; reject puts the PR back on it. The backend takes no reason
+ * on either decision, so unlike the sign-up and cutlost tabs there is no reason
+ * sheet here — asking for one would only discard it.
+ */
+function LeaveDetailPanel({
+	req,
+	outletName,
+	busy,
+	onApprove,
+	onReject,
+}: {
+	req: ShiftAssignment;
+	outletName: string;
+	busy: boolean;
+	onApprove: () => void;
+	onReject: () => void;
+}) {
+	const prName = req.prName ?? "PR";
+
+	return (
+		<>
+			<div className="iz-approvals-detail-head">
+				<div className="iz-approvals-detail-profile">
+					<ApprovalsAvatar name={prName} id={req.id} size="lg" />
+					<div className="min-w-0">
+						<h2 className="iz-approvals-detail-name">{prName}</h2>
+						<p className="iz-approvals-detail-meta">
+							{outletName} · {req.shiftDate ?? "—"}
+						</p>
+						<IzPill variant="amber" className="mt-1.5">
+							MC / leave request
+						</IzPill>
+					</div>
+				</div>
+				<div className="iz-approvals-detail-actions">
+					<button
+						type="button"
+						className="iz-btn iz-btn-primary !py-2 !text-xs"
+						disabled={busy}
+						onClick={onApprove}
+					>
+						Approve · excuse shift
+					</button>
+					<button
+						type="button"
+						className="iz-btn iz-btn-soft !py-2 !text-xs"
+						disabled={busy}
+						onClick={onReject}
+					>
+						Reject
+					</button>
+				</div>
+			</div>
+
+			<div className="iz-approvals-info-grid">
+				<div className="iz-approvals-info-card">
+					<h3 className="iz-approvals-info-title">Reason given</h3>
+					<p className="iz-tiny iz-muted">
+						{req.notes?.trim() ? (
+							<>&ldquo;{req.notes.trim()}&rdquo;</>
+						) : (
+							"No reason given."
+						)}
+					</p>
+				</div>
+				<div className="iz-approvals-info-card">
+					<h3 className="iz-approvals-info-title">Shift</h3>
+					<p className="iz-approvals-info-line">
+						<Calendar className="h-3.5 w-3.5 shrink-0" />
+						{req.shiftDate ?? "—"}
+					</p>
+					<p className="iz-approvals-info-line">
+						<Clock className="h-3.5 w-3.5 shrink-0" />
+						{outletName}
+					</p>
+					<p className="iz-tiny iz-muted2 mt-2">
+						Approving excuses the PR with no penalty and leaves the shift short —
+						it shows up on the roster's backfill worklist for a replacement.
+						Rejecting puts the PR back on the shift.
+					</p>
+				</div>
+			</div>
+		</>
+	);
+}
+
 export const Route = createFileRoute("/agency/pending")({
 	component: AgencyPending,
 	validateSearch: (search: Record<string, unknown>): { tab?: Tab } => ({
-		tab: search.tab === "cutlost" ? "cutlost" : undefined,
+		tab:
+			search.tab === "cutlost"
+				? "cutlost"
+				: search.tab === "leaves"
+					? "leaves"
+					: undefined,
 	}),
 });
 
@@ -957,6 +1059,7 @@ function AgencyPending() {
 	const [selectedCutlostId, setSelectedCutlostId] = useState<string | null>(
 		null,
 	);
+	const [selectedLeaveId, setSelectedLeaveId] = useState<string | null>(null);
 	const [addOpen, setAddOpen] = useState(false);
 	const [invite, setInvite] = useState({
 		name: "",
@@ -985,6 +1088,35 @@ function AgencyPending() {
 		[pendingCutlostRequests],
 	);
 
+	// PR MC/leave requests are real backend rows parked at `leave_pending`. The
+	// "roster"-prefixed keys are deliberate: the roster's own leave panel and
+	// planning grid share them, so approving here refreshes both.
+	const { logout } = useAuth();
+	const rosterMut = useRosterMutations();
+	const leaveQuery = useQuery({
+		queryKey: ["roster", "leave-requests"],
+		queryFn: () =>
+			fetchShiftAssignments({ status: "leave_pending", pageSize: 100 }, logout),
+		staleTime: 15_000,
+	});
+	const outletsQuery = useQuery({
+		queryKey: ["roster", "outlets"],
+		queryFn: () => fetchOutlets({ pageSize: 500 }, logout),
+		staleTime: 60_000,
+	});
+	const outletNameById = useMemo(
+		() => new Map((outletsQuery.data?.data ?? []).map((o) => [o.id, o.name])),
+		[outletsQuery.data],
+	);
+	const leaveRequests = useMemo(
+		() => leaveQuery.data?.data ?? [],
+		[leaveQuery.data],
+	);
+	const leaveOutletName = (req: ShiftAssignment) =>
+		(req.outletId ? outletNameById.get(req.outletId) : undefined) ?? "Outlet";
+	const leaveBusy =
+		rosterMut.approveLeave.isPending || rosterMut.rejectLeave.isPending;
+
 	useEffect(() => {
 		if (tab === "signups") {
 			setSelectedSignupId((id) => {
@@ -994,20 +1126,28 @@ function AgencyPending() {
 				];
 				return id && ids.includes(id) ? id : (ids[0] ?? null);
 			});
-		} else {
+		} else if (tab === "cutlost") {
 			setSelectedCutlostId((id) =>
 				id && cutlostRequests.some((r) => r.id === id)
 					? id
 					: (cutlostRequests[0]?.id ?? null),
 			);
+		} else {
+			setSelectedLeaveId((id) =>
+				id && leaveRequests.some((r) => r.id === id)
+					? id
+					: (leaveRequests[0]?.id ?? null),
+			);
 		}
-	}, [tab, signups, agencyLinkRequests, cutlostRequests]);
+	}, [tab, signups, agencyLinkRequests, cutlostRequests, leaveRequests]);
 
 	const selectedSignup = signups.find((s) => s.id === selectedSignupId) ?? null;
 	const selectedLink =
 		agencyLinkRequests.find((l) => l.id === selectedSignupId) ?? null;
 	const selectedCutlost =
 		cutlostRequests.find((r) => r.id === selectedCutlostId) ?? null;
+	const selectedLeave =
+		leaveRequests.find((r) => r.id === selectedLeaveId) ?? null;
 
 	if (!agencyCan(agencySubRole, "approvePrSignups")) {
 		return (
@@ -1046,6 +1186,13 @@ function AgencyPending() {
 							onClick={() => setTab("cutlost")}
 						>
 							Cutlost ({cutlostRequests.length})
+						</button>
+						<button
+							type="button"
+							className={cn("iz-approvals-tab", tab === "leaves" && "on")}
+							onClick={() => setTab("leaves")}
+						>
+							MC/Leaves ({leaveRequests.length})
 						</button>
 					</div>
 
@@ -1142,6 +1289,45 @@ function AgencyPending() {
 									))}
 								</>
 							)
+						) : tab === "leaves" ? (
+							leaveQuery.isLoading ? (
+								<p className="iz-tiny iz-muted px-1 py-4 text-center">
+									Loading MC / leave requests…
+								</p>
+							) : leaveRequests.length === 0 ? (
+								<p className="iz-tiny iz-muted px-1 py-4 text-center">
+									No MC / leave requests
+								</p>
+							) : (
+								leaveRequests.map((req) => (
+									<button
+										key={req.id}
+										type="button"
+										className={cn(
+											"iz-approvals-list-item",
+											selectedLeaveId === req.id && "on",
+										)}
+										onClick={() => setSelectedLeaveId(req.id)}
+									>
+										<ApprovalsAvatar
+											name={req.prName ?? "PR"}
+											id={req.id}
+											size="sm"
+										/>
+										<div className="min-w-0 flex-1">
+											<span className="name">{req.prName ?? "PR"}</span>
+											<span className="sub">
+												{leaveOutletName(req)} · {req.shiftDate ?? "—"}
+											</span>
+											<span className="badges">
+												<span className="iz-approvals-verify-badge gallery">
+													MC / leave
+												</span>
+											</span>
+										</div>
+									</button>
+								))
+							)
 						) : cutlostRequests.length === 0 ? (
 							<p className="iz-tiny iz-muted px-1 py-4 text-center">
 								No cutlost requests
@@ -1209,6 +1395,24 @@ function AgencyPending() {
 						) : (
 							<div className="iz-approvals-empty">
 								<p className="iz-sm iz-muted">Select a sign-up to review</p>
+							</div>
+						)
+					) : tab === "leaves" ? (
+						selectedLeave ? (
+							<LeaveDetailPanel
+								req={selectedLeave}
+								outletName={leaveOutletName(selectedLeave)}
+								busy={leaveBusy}
+								onApprove={() =>
+									rosterMut.approveLeave.mutate(selectedLeave.id)
+								}
+								onReject={() => rosterMut.rejectLeave.mutate(selectedLeave.id)}
+							/>
+						) : (
+							<div className="iz-approvals-empty">
+								<p className="iz-sm iz-muted">
+									Select an MC / leave request to review
+								</p>
 							</div>
 						)
 					) : selectedCutlost ? (
