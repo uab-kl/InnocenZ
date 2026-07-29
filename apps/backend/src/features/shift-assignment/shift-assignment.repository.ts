@@ -799,4 +799,79 @@ export class ShiftAssignmentRepositoryClass {
       throw error;
     }
   }
+
+  /**
+   * What a PR actually did, for penalty evaluation. Read-only.
+   *
+   * Three counts from deliberately different windows, because the rules use
+   * different ones: shifts and lates are per WEEK, MC is per calendar MONTH.
+   *
+   * Lateness is the fiddly part. `slot` is text like "22:00 - 04:00" and
+   * `check_in_at` is timestamptz, so the shift's start has to be rebuilt as a
+   * real instant before the two can be compared — hence the explicit
+   * `AT TIME ZONE 'Asia/Kuala_Lumpur'`. Comparing a naive date+time against a
+   * UTC timestamp is exactly the mistake that once made an 04:01Z check-in look
+   * like 4am when it was really noon.
+   *
+   * A shift with no parseable slot cannot be judged late, so it is skipped
+   * rather than counted either way — an unknown is not a breach.
+   */
+  async attendanceWindow(input: {
+    prId: string;
+    weekStart: string;
+    weekEnd: string;
+    graceMinutes: number;
+  }): Promise<{ shiftsThisWeek: number; lateThisWeek: number; mcThisMonth: number }> {
+    try {
+      const { prId, weekStart, weekEnd, graceMinutes } = input;
+      const result = await db.execute(sql`
+        with wk as (
+          select sa.status, sa.check_in_at, s.shift_date, s.slot
+          from main.shift_assignment sa
+          join main.shift s on s.id = sa.shift_id
+          where sa.pr_id = ${prId}
+            and s.shift_date between ${weekStart} and ${weekEnd}
+        ),
+        mth as (
+          select 1
+          from main.shift_assignment sa
+          join main.shift s on s.id = sa.shift_id
+          where sa.pr_id = ${prId}
+            and sa.status = 'leave_approved'
+            and date_trunc('month', s.shift_date::date)
+                = date_trunc('month', ${weekStart}::date)
+        )
+        select
+          (select count(*)::int from wk where status = 'completed') as shifts_this_week,
+          (select count(*)::int from wk
+             where status = 'completed'
+               and check_in_at is not null
+               and slot ~ '^[0-9]{1,2}:[0-9]{2}'
+               and check_in_at >
+                   ((shift_date::date + split_part(slot, ' - ', 1)::time)
+                      at time zone 'Asia/Kuala_Lumpur')
+                   + make_interval(mins => ${graceMinutes})
+          ) as late_this_week,
+          (select count(*)::int from mth) as mc_this_month
+      `);
+
+      const rows = (Array.isArray(result)
+        ? result
+        : ((result as { rows?: unknown[] })?.rows ?? [])) as Array<{
+        shifts_this_week: number;
+        late_this_week: number;
+        mc_this_month: number;
+      }>;
+      const row = rows[0];
+
+      return {
+        shiftsThisWeek: row?.shifts_this_week ?? 0,
+        lateThisWeek: row?.late_this_week ?? 0,
+        mcThisMonth: row?.mc_this_month ?? 0,
+      };
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.attendanceWindow] Error:', error);
+      throw error;
+    }
+  }
 }

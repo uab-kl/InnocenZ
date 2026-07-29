@@ -138,7 +138,11 @@ export const outletWorkspaceController = new OutletWorkspaceControllerClass(outl
 
 export const ratingRepository = new RatingRepositoryClass();
 export const ratingController = new RatingControllerClass(ratingRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
-export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository, agencyPrRepository);
+// Declared above prController, which needs it for the penalty proposal endpoint.
+// Takes no constructor args, so the move up is free.
+export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
+
+export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository, agencyPrRepository, outletWorkspaceRepository, shiftAssignmentRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository);
@@ -147,7 +151,6 @@ export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 export const paymentVoucherDisputeRepository = new PaymentVoucherDisputeRepositoryClass();
 export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository);
 
-export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
