@@ -8,6 +8,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { distanceM } from '../lib/geo';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
@@ -79,6 +80,10 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  // Bottom sheets render outside PhoneFrame, so they must clear the Android
+  // nav-button bar themselves.
+  const insets = useSafeAreaInsets();
 
   // ---- 1D-3/1D-4: live position vs the venue pin (server still referees) ----
   const [myPos, setMyPos] = useState<LivePos | null>(null);
@@ -556,7 +561,10 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         onRequestClose={() => setCancelOpen(false)}
       >
         <Pressable style={styles.sheetBackdrop} onPress={() => setCancelOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, { paddingBottom: 18 + insets.bottom }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.sheetTitle}>Cancel shift?</Text>
             <Text style={styles.sheetMeta}>
               {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
@@ -610,7 +618,9 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         }}
       >
         <View style={styles.sheetBackdrop}>
-          <View style={[styles.sheet, { alignItems: 'center' }]}>
+          <View
+            style={[styles.sheet, { alignItems: 'center', paddingBottom: 18 + insets.bottom }]}
+          >
             <View style={styles.locIconWrap}>
               <MapPin size={26} color={C.gold} strokeWidth={2.2} />
             </View>
