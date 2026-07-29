@@ -8,7 +8,7 @@ import {
 export const Route = createFileRoute('/admin/audit-log/$role')({
   beforeLoad: ({ params }) => {
     if (!isAuditLogRoleSlug(params.role)) {
-      throw redirect({ to: '/audit-log' });
+      throw redirect({ to: '/admin/audit-log' });
     }
   },
   component: AuditLogRolePage,

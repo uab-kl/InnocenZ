@@ -12,9 +12,13 @@ import { cn } from '@/lib/utils';
 
 export const Route = createFileRoute('/admin/rbac')({
   beforeLoad: ({ location }) => {
+    // The router de-localizes before matching (rewrite.input in router.tsx), so
+    // this sees '/admin/rbac', never '/en/admin/rbac'. It used to compare against
+    // '/rbac' — missing the '/admin' segment — so the section index never
+    // redirected and rendered an empty outlet instead.
     const pathname = location.pathname.replace(/\/$/, '');
-    if (pathname === '/rbac') {
-      throw redirect({ to: '/rbac/role' });
+    if (pathname === '/admin/rbac') {
+      throw redirect({ to: '/admin/rbac/role' });
     }
   },
   notFoundComponent: AdminNotFoundPage,
