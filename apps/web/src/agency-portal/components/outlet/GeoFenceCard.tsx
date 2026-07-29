@@ -140,12 +140,6 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 					</span>
 				</div>
 
-				{pin && (
-					<p className="iz-tiny iz-muted2 mt-3 rounded-[14px] border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2 font-mono tabular-nums">
-						{pin.lat.toFixed(6)}, {pin.lng.toFixed(6)}
-					</p>
-				)}
-
 				{!canEdit && (
 					<p className="iz-tiny iz-muted2 mt-3 text-pretty">
 						Only the outlet owner can change the check-in pin.
