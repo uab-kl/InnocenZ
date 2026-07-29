@@ -12,7 +12,6 @@ import shiftAssignmentRoutes from '@/features/shift-assignment/shift-assignment.
 import outletSwapRoutes from '@/features/outlet-swap/outlet-swap.routes.js';
 import shiftSaleRoutes from '@/features/shift-sale/shift-sale.routes.js';
 import outletRoutes from '@/features/outlet/outlet.routes.js';
-import commissionConfigRoutes from '@/features/commission/commission-config.routes.js';
 import platformConfigRoutes from '@/features/platform-config/platform-config.routes.js';
 import memberSubscriptionRoutes from '@/features/member-subscription/member-subscription.routes.js';
 import outletTransactionRoutes from '@/features/outlet-transaction/outlet-transaction.routes.js';
@@ -42,7 +41,6 @@ v1Router.use('/shift-assignment', shiftAssignmentRoutes);
 v1Router.use('/outlet-swap', outletSwapRoutes);
 v1Router.use('/shift-sale', shiftSaleRoutes);
 v1Router.use('/outlet', outletRoutes);
-v1Router.use('/commission-config', commissionConfigRoutes);
 v1Router.use('/platform-config', requireAdmin, platformConfigRoutes);
 v1Router.use('/member-subscription', memberSubscriptionRoutes);
 v1Router.use('/outlet-transaction', outletTransactionRoutes);

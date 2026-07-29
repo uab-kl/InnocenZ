@@ -1,4 +1,8 @@
 import { Request, Response } from 'express';
+import {
+  DuplicateDisputeError,
+  PaymentVoucherDisputeRepositoryClass,
+} from './payment-voucher-dispute.repository.js';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
@@ -7,6 +11,7 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import { notify } from '@/features/notification/notify.js';
 import {
   CreatePaymentVoucherSchema,
   UpdatePaymentVoucherSchema,
@@ -14,7 +19,9 @@ import {
   CreatePrReceiptLineSchema,
   CreatePrReceiptSchema,
   UpdatePrReceiptLineSchema,
-  PrDisputeSchema,
+  PrRaiseDisputeSchema,
+  PrWithdrawDisputeSchema,
+  ResolveDisputeSchema,
   PrReceiptKind,
   PrReceiptSource,
   prReceiptKindValues,
@@ -180,6 +187,7 @@ export class PaymentVoucherControllerClass {
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private prRepository: PrRepositoryClass,
+    private paymentVoucherDisputeRepository: PaymentVoucherDisputeRepositoryClass,
   ) {}
 
   /** The PR profile bound to the signed-in account, or null (not a PR). */
@@ -729,7 +737,7 @@ export class PaymentVoucherControllerClass {
    */
   async raiseMyDispute(req: Request, res: Response) {
     try {
-      const parsed = PrDisputeSchema.safeParse(req.body);
+      const parsed = PrRaiseDisputeSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
@@ -751,16 +759,82 @@ export class PaymentVoucherControllerClass {
         });
       }
 
+      const { disputeDate, component } = parsed.data;
+      const actor = getActor(req);
+
+      // The day has to be one this voucher actually covers, or a PR could raise
+      // a claim against a date with nothing on it — and the baseline below would
+      // silently compute as 0.00.
+      const covered = await this.paymentVoucherDisputeRepository.voucherHasDate(
+        voucherId,
+        disputeDate,
+      );
+      if (!covered) {
+        return res.status(400).json({
+          success: false,
+          message: 'That day has no lines on this voucher',
+          data: null,
+        });
+      }
+
+      // Server-computed, never from the request: this is the figure the claim is
+      // measured against, so the claimant must not be able to set it.
+      const disputedAmount = await this.paymentVoucherDisputeRepository.sumLinesFor(
+        voucherId,
+        disputeDate,
+        component,
+      );
+
+      let dispute;
+      try {
+        dispute = await this.paymentVoucherDisputeRepository.create({
+          voucherId,
+          disputeDate,
+          component,
+          reason: parsed.data.reason,
+          note: parsed.data.note ?? null,
+          disputedAmount,
+          claimedAmount: parsed.data.claimedAmount?.toFixed(2) ?? null,
+          proofPhotos: parsed.data.proofPhotos,
+          receiptRefs: parsed.data.receiptRefs ?? null,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+      } catch (duplicate) {
+        // One dispute per day per component, decided by the unique index
+        // payment_voucher_dispute_one_per_day_component — so two simultaneous
+        // taps cannot both win. Narrowed on purpose: anything else is a real
+        // fault and must not be reported to the PR as "already disputed".
+        if (!(duplicate instanceof DuplicateDisputeError)) throw duplicate;
+        return res.status(409).json({
+          success: false,
+          message: `${component} on ${disputeDate} has already been disputed`,
+          data: null,
+        });
+      }
+      if (!dispute) {
+        return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+
+      // The voucher's dispute columns are now a CACHE of the rows, not the truth.
+      // Kept in step because the agency payroll page still reads them; the
+      // dispute table is what actually records the claim.
       const voucher = await this.paymentVoucherRepository.update(voucherId, {
         status: 'disputed',
         disputeReason: parsed.data.reason,
         disputeNote: parsed.data.note ?? null,
-        // Stamp the first dispute time only; amending the note keeps it.
+        // Stamp the first dispute time only; later ones keep the original.
         disputedAt: existing.disputedAt ?? new Date(),
-        updatedBy: getActor(req),
+        updatedBy: actor,
       });
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Dispute raised', data: this.disputeStateDTO(voucher) });
+
+      // Both halves: the dispute row is the record, and the voucher state is
+      // what the PR app's grid header already renders.
+      res.status(201).json({
+        success: true,
+        message: 'Dispute raised',
+        data: { dispute, voucher: this.disputeStateDTO(voucher ?? existing) },
+      });
     } catch (error) {
       logger.error('[PaymentVoucherController.raiseMyDispute] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -778,21 +852,193 @@ export class PaymentVoucherControllerClass {
       if (!existing || existing.prId !== pr.id) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (existing.status !== 'disputed') {
-        return res.status(400).json({ success: false, message: 'No open dispute to withdraw', data: null });
+      const parsed = PrWithdrawDisputeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
 
-      const voucher = await this.paymentVoucherRepository.update(voucherId, {
-        status: 'sent',
-        disputeReason: null,
-        disputeNote: null,
-        disputedAt: null,
-        updatedBy: getActor(req),
+      const actor = getActor(req);
+      // Addressed by the grid cell the PR tapped. Scoped to this voucher, which
+      // is already proven to be theirs, so another PR's dispute is unreachable.
+      const target = await this.paymentVoucherDisputeRepository.findOpen(
+        voucherId,
+        parsed.data.disputeDate,
+        parsed.data.component,
+      );
+      if (!target) {
+        return res.status(404).json({
+          success: false,
+          message: 'No open dispute on that day and component',
+          data: null,
+        });
+      }
+
+      const withdrawn = await this.paymentVoucherDisputeRepository.withdraw(target.id, actor);
+      if (!withdrawn) {
+        // Already decided by the agency, or already withdrawn. Retracting a
+        // settled claim would rewrite the outcome of a money decision.
+        return res.status(400).json({
+          success: false,
+          message: 'This dispute has already been resolved',
+          data: null,
+        });
+      }
+
+      // Only hand the voucher back once NOTHING is still contested — withdrawing
+      // Tuesday's tips must not clear Thursday's wages claim.
+      const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucherId);
+      const voucher =
+        stillOpen.length === 0
+          ? await this.paymentVoucherRepository.update(voucherId, {
+              status: 'sent',
+              disputeReason: null,
+              disputeNote: null,
+              disputedAt: null,
+              updatedBy: actor,
+            })
+          : existing;
+
+      res.status(200).json({
+        success: true,
+        message: 'Dispute withdrawn',
+        data: {
+          dispute: withdrawn,
+          voucher: this.disputeStateDTO(voucher ?? existing),
+          openDisputes: stillOpen.length,
+        },
       });
-      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Dispute withdrawn', data: this.disputeStateDTO(voucher) });
     } catch (error) {
       logger.error('[PaymentVoucherController.withdrawMyDispute] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency's dispute queue. `?open=1` narrows to what still needs deciding,
+   * which is what the review screen opens on.
+   */
+  async listDisputes(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency for this account', data: null });
+      }
+
+      const rows = await this.paymentVoucherDisputeRepository.listForScope(scope.agencyId, {
+        openOnly: req.query.open === '1' || req.query.open === 'true',
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Disputes fetched',
+        data: rows.map(({ dispute, voucher }) => ({
+          ...dispute,
+          voucher: {
+            id: voucher.id,
+            prId: voucher.prId,
+            prName: voucher.prName,
+            weekStart: voucher.weekStart,
+            weekEnd: voucher.weekEnd,
+            status: voucher.status,
+            net: voucher.net,
+          },
+        })),
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.listDisputes] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Accept or reject one dispute.
+   *
+   * Records the decision only — it does NOT rewrite the voucher's lines.
+   * Adjusting the money is a separate, deliberate edit, because updating a
+   * voucher deletes and re-inserts every line on it, including the PR's own
+   * self-logged ones. Silently doing that as a side effect of pressing Accept
+   * is how a PR's receipts would disappear at the moment they were vindicated.
+   */
+  async resolveDispute(req: Request, res: Response) {
+    try {
+      const parsed = ResolveDisputeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency for this account', data: null });
+      }
+
+      const disputeId = paramId(req.params.disputeId);
+      const dispute = await this.paymentVoucherDisputeRepository.getById(disputeId);
+      if (!dispute) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // Ownership is checked through the voucher, since a dispute carries no
+      // agency of its own. Cross-tenant reads 404 rather than 403.
+      const voucher = await this.paymentVoucherRepository.getById(dispute.voucherId);
+      if (!voucher || (!scope.isAdmin && voucher.agencyId !== scope.agencyId)) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const actor = getActor(req);
+      const resolved = await this.paymentVoucherDisputeRepository.resolve(
+        disputeId,
+        parsed.data.outcome,
+        parsed.data.resolutionNote?.trim() || null,
+        actor,
+      );
+      if (!resolved) {
+        return res.status(400).json({
+          success: false,
+          message: 'This dispute has already been resolved or withdrawn',
+          data: null,
+        });
+      }
+
+      // Hand the voucher back once nothing on it is still contested.
+      const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucher.id);
+      if (stillOpen.length === 0 && voucher.status === 'disputed') {
+        await this.paymentVoucherRepository.update(voucher.id, {
+          status: 'sent',
+          disputeReason: null,
+          disputeNote: null,
+          disputedAt: null,
+          updatedBy: actor,
+        });
+      }
+
+      // Tell the PR. This is the whole point of recording outcomes: previously
+      // "resolve" erased the complaint and the PR was never told anything.
+      if (voucher.prId) {
+        const pr = await this.prRepository.getById(voucher.prId);
+        if (pr?.userId) {
+          await notify({
+            userId: pr.userId,
+            kind: 'payment_voucher_dispute_resolved',
+            title:
+              parsed.data.outcome === 'accepted'
+                ? 'Your dispute was accepted'
+                : 'Your dispute was rejected',
+            body: `${resolved.component} on ${resolved.disputeDate}${
+              resolved.resolutionNote ? ` — ${resolved.resolutionNote}` : ''
+            }`,
+            payload: { voucherId: voucher.id, disputeId: resolved.id, outcome: resolved.outcome },
+            actor,
+          });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Dispute ${parsed.data.outcome}`,
+        data: { dispute: resolved, openDisputes: stillOpen.length },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.resolveDispute] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

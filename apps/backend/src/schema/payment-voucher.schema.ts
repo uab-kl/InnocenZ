@@ -124,9 +124,77 @@ export type CreatePrReceiptInput = z.infer<typeof CreatePrReceiptSchema>;
 // A PR raises a dispute on its OWN issued voucher (the week under review). The
 // reason is one of the quick presets; the note carries the flagged amount(s).
 // Persisted on the reused payment_voucher dispute columns (status='disputed').
-export const PrDisputeSchema = z.object({
+/**
+ * Raising one dispute — against a single shift DAY and a single COMPONENT.
+ *
+ * A PR may dispute as much as they like across a month, but each day allows one
+ * dispute per component; the pairing is enforced by a UNIQUE constraint in the
+ * database rather than here.
+ *
+ * `disputedAmount` is deliberately absent. It is the baseline of a money claim
+ * and is computed server-side from the voucher's own lines — accepting it from
+ * the client would let the claimant set what they are claiming against.
+ */
+export const PrRaiseDisputeSchema = z.object({
+  /** The disputed shift day, yyyy-MM-dd, matching payment_voucher_line.line_date. */
+  disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
+  component: z.enum(['wages', 'drinks', 'tips', 'others']),
   reason: z.string().min(1, 'Reason is required').max(200, 'Reason is too long'),
   note: z.string().max(1000, 'Note is too long').optional(),
+  /**
+   * OPTIONAL, matching the PR app's dispute sheet ("Proof images are optional —
+   * attach a receipt photo if you have one").
+   *
+   * The design originally made proof mandatory and the table carried a CHECK to
+   * match. That was wrong in the one case that matters most: a PR disputing a
+   * MISSING record has no receipt to photograph — the absence is the complaint —
+   * so requiring evidence made the most legitimate claim the only unfileable
+   * one. The CHECK was dropped in 0064; strength of evidence is now something
+   * the agency weighs when resolving, not a precondition for being heard.
+   */
+  proofPhotos: z.array(z.string().min(1)).optional(),
+  /** What the PR says the figure should be. Optional — some claims are "this is missing". */
+  claimedAmount: z.number().nonnegative().optional(),
+  /** Receipts pointed at, by their packed ref — never a voucher line id. */
+  receiptRefs: z.array(z.string().min(1)).optional(),
 });
 
-export type PrDisputeInput = z.infer<typeof PrDisputeSchema>;
+export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;
+
+/**
+ * Withdrawing targets ONE dispute, since a voucher can now hold several.
+ *
+ * Addressed by day + component rather than by id, because that is what the PR
+ * app has in hand: the user taps a red cell in the week grid, and the cell knows
+ * its date and its income row. Requiring an id would force the app to fetch and
+ * track dispute ids purely to undo something it can already point at.
+ */
+export const PrWithdrawDisputeSchema = z.object({
+  disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
+  component: z.enum(['wages', 'drinks', 'tips', 'others']),
+});
+
+export type PrWithdrawDisputeInput = z.infer<typeof PrWithdrawDisputeSchema>;
+
+/**
+ * The agency's decision on one dispute.
+ *
+ * 'withdrawn' is absent on purpose — that outcome belongs to the PR, and letting
+ * an agency mark a live claim as withdrawn would let it close a complaint as
+ * though the PR had dropped it.
+ *
+ * A rejection must say why. An accepted claim is self-explanatory to the PR
+ * (they get the money); a rejected one is the PR being told no, and "no" with no
+ * reason is what makes a dispute process feel arbitrary.
+ */
+export const ResolveDisputeSchema = z
+  .object({
+    outcome: z.enum(['accepted', 'rejected']),
+    resolutionNote: z.string().max(1000, 'Note is too long').optional(),
+  })
+  .refine((d) => d.outcome !== 'rejected' || !!d.resolutionNote?.trim(), {
+    message: 'A reason is required when rejecting a dispute',
+    path: ['resolutionNote'],
+  });
+
+export type ResolveDisputeInput = z.infer<typeof ResolveDisputeSchema>;

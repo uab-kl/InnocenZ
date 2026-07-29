@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { X } from "lucide-react";
 import { useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import {
 	type BackfillSlot,
 	fetchBackfillSlots,
@@ -101,12 +102,23 @@ function ReplacementSheet({
 	const candidates = candidatesQuery.data ?? [];
 	const busy = rosterMut.assign.isPending;
 
-	const assign = (prId: string) => {
+	const [error, setError] = useState<string | null>(null);
+
+	// Closing on success only. The bare mutate() here reported nothing when the
+	// write failed, so a backfill that never landed looked exactly like one that
+	// did — the sheet shut and the slot stayed on the worklist.
+	const assign = async (prId: string) => {
 		if (busy) return;
-		rosterMut.assign.mutate(
-			{ shiftId: slot.shiftId, prId },
-			{ onSuccess: onClose },
-		);
+		setError(null);
+		try {
+			await rosterMut.assign.mutateAsync({ shiftId: slot.shiftId, prId });
+			onClose();
+		} catch (err) {
+			setError(
+				toMutationError(err, "Couldn't assign the PR.")?.message ??
+					"Couldn't assign the PR.",
+			);
+		}
 	};
 
 	return (
@@ -130,6 +142,10 @@ function ReplacementSheet({
 					<X className="h-4 w-4" />
 				</button>
 			</div>
+
+			{error && (
+				<p className="iz-tiny mt-3 text-[var(--iz-danger,#dc2626)]">{error}</p>
+			)}
 
 			{candidatesQuery.isLoading ? (
 				<p className="iz-tiny iz-muted mt-4 text-center">Matching free PRs…</p>

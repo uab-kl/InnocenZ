@@ -1,3 +1,4 @@
+import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import {
 	EMPTY_PAYROLL_RANGE,
 	PayrollRangeFilterCard,
@@ -423,6 +424,10 @@ function AgencyPV() {
 					signs · PR confirms weekly earnings
 				</p>
 			</header>
+
+			{/* Above the PV list on purpose: a contested voucher is the thing that
+			    needs a human before anything else on this page does. */}
+			<DisputeQueuePanel />
 
 			<div className="iz-payroll-tabs mt-3">
 				<button

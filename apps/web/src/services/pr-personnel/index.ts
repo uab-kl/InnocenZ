@@ -92,6 +92,11 @@ export interface UpdatePrPersonnelInput {
 	phone?: string;
 	email?: string;
 	icNo?: string;
+	/**
+	 * Why a sign-up was declined; sent with `status: "inactive"`. Max 500 chars.
+	 * The backend clears it on acceptance, so callers never send it back.
+	 */
+	rejectReason?: string;
 }
 
 export async function fetchPrPersonnel(

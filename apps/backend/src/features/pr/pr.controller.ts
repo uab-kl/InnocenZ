@@ -4,6 +4,7 @@ import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.rep
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
+import { notify } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -235,8 +236,41 @@ export class PrControllerClass {
       // Agency users cannot move a PR to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
 
-      const pr = await this.prRepository.update(id, { ...data, updatedBy: getActor(req) });
+
+      const pr = await this.prRepository.update(id, {
+        ...data,
+        // Acceptance clears any earlier decline reason — the writer's job, not
+        // every caller's, so re-accepting someone previously declined cannot
+        // leave a stale reason hanging off an active roster member.
+        ...(data.status === 'active' ? { rejectReason: null } : {}),
+        updatedBy: getActor(req),
+      });
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // The agency's Approvals screen decides a sign-up by writing this status
+      // ('active' = accepted, 'inactive' = rejected), so this transition IS the
+      // join resolution — there is no separate approve endpoint. Only fire when
+      // the status actually MOVED, so ordinary profile edits stay silent.
+      // Only these two are join decisions. `pr_status` also has 'pending' and
+      // 'suspended', and treating "not active" as a rejection would tell a
+      // suspended PR their application was declined — wrong, and alarming to
+      // someone the agency already accepted.
+      const JOIN_DECISION: Record<string, boolean> = { active: true, inactive: false };
+      const accepted = data.status ? JOIN_DECISION[data.status] : undefined;
+
+      if (accepted !== undefined && data.status !== existing.status && pr.userId) {
+        await notify({
+          userId: pr.userId,
+          kind: 'agency_join_resolved',
+          title: accepted ? 'You were accepted by the agency' : 'Your agency application was declined',
+          body: accepted
+            ? 'You can now be scheduled for shifts.'
+            : (pr.rejectReason ?? undefined),
+          payload: { prId: pr.id, agencyId: pr.agencyId, status: data.status },
+          actor: getActor(req),
+        });
+      }
+
       res.status(200).json({ success: true, message: 'PR updated', data: pr });
     } catch (error) {
       logger.error('[PrController.update] Error:', error);

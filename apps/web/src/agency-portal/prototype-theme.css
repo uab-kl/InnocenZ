@@ -13100,7 +13100,10 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-layout {
   display: grid;
-  grid-template-columns: minmax(260px, 300px) minmax(0, 1fr);
+  /* Sidebar widened (and the detail pane narrowed to match) so the three tabs
+     sit on one row without cramping. Floor of 330px is what the widest label
+     needs at a third of the column. */
+  grid-template-columns: minmax(330px, 360px) minmax(0, 1fr);
   gap: 0;
   min-height: calc(100dvh - var(--iz-portal-header-h, 56px) - 24px);
   border: 1px solid var(--iz-line);
@@ -13133,19 +13136,28 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-tabs {
   display: grid;
-  grid-template-columns: 1fr 1fr;
+  /* Three tabs on ONE row (Agency-Tied · Cutlost · MC/Leaves). minmax(0,1fr)
+     rather than 1fr so a long label shrinks its own column instead of pushing
+     the grid wider than the sidebar. */
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 6px;
 }
 
 .iz-approvals-tab {
-  padding: 8px 10px;
+  padding: 8px 6px;
   border-radius: 10px;
   border: 1px solid var(--iz-line);
   background: transparent;
   color: var(--iz-muted);
   font-family: 'Sora', sans-serif;
-  font-size: 11px;
+  /* 10px + tight horizontal padding keeps the longest label
+     ("Agency-Tied (0)") on a single line at a third of the sidebar. */
+  font-size: 10px;
   font-weight: 600;
+  text-align: center;
+  /* Deliberately NOT nowrap: at the sidebar's 330px floor the longest label is
+     a few px over a third of the row, and wrapping the count onto a second line
+     (grid keeps all three the same height) reads better than clipping it. */
   cursor: pointer;
   transition:
     background 0.15s,

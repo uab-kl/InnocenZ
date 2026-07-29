@@ -30,6 +30,16 @@ router.use(requireRole('admin', 'agency'));
 const canDelete = requireRole('admin');
 
 router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
+
+// The agency's dispute queue and its decisions. '/disputes' MUST precede the
+// '/:id' route below — both are one segment, so registered the other way round
+// the queue would be read as a voucher whose id is the word "disputes".
+router.get('/disputes', paymentVoucherController.listDisputes.bind(paymentVoucherController));
+router.post(
+  '/disputes/:disputeId/resolve',
+  paymentVoucherController.resolveDispute.bind(paymentVoucherController),
+);
+
 router.get('/:id', paymentVoucherController.getById.bind(paymentVoucherController));
 router.post('/', paymentVoucherController.create.bind(paymentVoucherController));
 router.put('/:id', paymentVoucherController.update.bind(paymentVoucherController));

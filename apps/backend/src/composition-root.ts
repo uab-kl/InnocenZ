@@ -16,6 +16,7 @@ import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-pr
 import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository.js';
 import { UserRoleControllerClass } from '@/features/rbac/user-role/user-role.controller.js';
 import { AuditLogRepositoryClass } from '@/features/audit-log/audit-log.repository.js';
+import { NotificationRepositoryClass } from '@/features/notification/notification.repository.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import { SubscriptionControllerClass } from '@/features/subscription/subscription.controller.js';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
@@ -25,8 +26,6 @@ import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
 import { AgencyControllerClass } from '@/features/agency/agency.controller.js';
-import { CommissionConfigRepositoryClass } from '@/features/commission/commission-config.repository.js';
-import { CommissionConfigControllerClass } from '@/features/commission/commission-config.controller.js';
 import { PlatformConfigRepositoryClass } from '@/features/platform-config/platform-config.repository.js';
 import { PlatformConfigControllerClass } from '@/features/platform-config/platform-config.controller.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
@@ -48,6 +47,7 @@ import { ShiftControllerClass } from '@/features/shift/shift.controller.js';
 import { ShiftSaleRepositoryClass } from '@/features/shift-sale/shift-sale.repository.js';
 import { ShiftSaleControllerClass } from '@/features/shift-sale/shift-sale.controller.js';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
+import { PaymentVoucherDisputeRepositoryClass } from '@/features/payment-voucher/payment-voucher-dispute.repository.js';
 import { PaymentVoucherControllerClass } from '@/features/payment-voucher/payment-voucher.controller.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shift-assignment.controller.js';
@@ -79,6 +79,10 @@ export const userController = new UserControllerClass(userRepository, userProfil
 export const userRoleController = new UserRoleControllerClass(userRoleRepository);
 export const auditLogRepository = new AuditLogRepositoryClass();
 
+// In-app notifications. Producers should call notify() rather than reaching for
+// this directly — it is the seam a real transport gets added behind later.
+export const notificationRepository = new NotificationRepositoryClass();
+
 export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
 
@@ -91,8 +95,6 @@ export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const outletController = new OutletControllerClass(outletRepository, outletMemberRepository);
 
-export const commissionConfigRepository = new CommissionConfigRepositoryClass();
-export const commissionConfigController = new CommissionConfigControllerClass(commissionConfigRepository);
 
 export const platformConfigRepository = new PlatformConfigRepositoryClass();
 export const platformConfigController = new PlatformConfigControllerClass(platformConfigRepository);
@@ -126,7 +128,8 @@ export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
-export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository);
+export const paymentVoucherDisputeRepository = new PaymentVoucherDisputeRepositoryClass();
+export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository);
 
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);

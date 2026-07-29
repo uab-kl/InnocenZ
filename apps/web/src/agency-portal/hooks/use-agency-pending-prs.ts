@@ -84,8 +84,12 @@ export function useAgencyPendingPrs() {
 	};
 
 	const statusMut = useMutation({
-		mutationFn: (vars: { id: string; status: string }) =>
-			updatePrPersonnel(vars.id, { status: vars.status }, logout),
+		mutationFn: (vars: { id: string; status: string; rejectReason?: string }) =>
+			updatePrPersonnel(
+				vars.id,
+				{ status: vars.status, rejectReason: vars.rejectReason },
+				logout,
+			),
 		onSuccess: invalidate,
 	});
 	const createMut = useMutation({
@@ -99,7 +103,8 @@ export function useAgencyPendingPrs() {
 		signups,
 		isLoading: query.isLoading,
 		approve: (id: string) => statusMut.mutate({ id, status: "active" }),
-		reject: (id: string) => statusMut.mutate({ id, status: "inactive" }),
+		reject: (id: string, reason?: string) =>
+			statusMut.mutate({ id, status: "inactive", rejectReason: reason }),
 		invite: (input: AgencyPrInvite) =>
 			createMut.mutate({
 				name: input.name,

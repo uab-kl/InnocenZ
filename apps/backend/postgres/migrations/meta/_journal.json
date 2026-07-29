@@ -428,6 +428,41 @@
       "when": 1785226573408,
       "tag": "0060_damp_fixer",
       "breakpoints": true
+    },
+    {
+      "idx": 61,
+      "version": "7",
+      "when": 1785283378762,
+      "tag": "0061_purple_madrox",
+      "breakpoints": true
+    },
+    {
+      "idx": 62,
+      "version": "7",
+      "when": 1785283776338,
+      "tag": "0062_mute_fat_cobra",
+      "breakpoints": true
+    },
+    {
+      "idx": 63,
+      "version": "7",
+      "when": 1785285278997,
+      "tag": "0063_fix_dispute_component_type",
+      "breakpoints": true
+    },
+    {
+      "idx": 64,
+      "version": "7",
+      "when": 1785286245335,
+      "tag": "0064_dispute_proof_optional",
+      "breakpoints": true
+    },
+    {
+      "idx": 65,
+      "version": "7",
+      "when": 1785299538616,
+      "tag": "0065_luxuriant_blazing_skull",
+      "breakpoints": true
     }
   ]
 }
