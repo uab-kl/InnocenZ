@@ -9,23 +9,10 @@
  * A scheduled cron would call the same PaymentVoucherGenerator.generateForWeek.
  */
 import { paymentVoucherGenerator } from '@/composition-root.js';
-
-function isoDate(d: Date): string {
-  return d.toISOString().slice(0, 10);
-}
-
-/** Previous complete Monday–Sunday relative to `ref` (UTC). */
-function previousWeek(ref: Date): { weekStart: string; weekEnd: string } {
-  const day = ref.getUTCDay(); // 0=Sun..6=Sat
-  const daysSinceMonday = (day + 6) % 7; // Mon=0
-  const thisMonday = new Date(ref);
-  thisMonday.setUTCDate(ref.getUTCDate() - daysSinceMonday);
-  const lastMonday = new Date(thisMonday);
-  lastMonday.setUTCDate(thisMonday.getUTCDate() - 7);
-  const lastSunday = new Date(lastMonday);
-  lastSunday.setUTCDate(lastMonday.getUTCDate() + 6);
-  return { weekStart: isoDate(lastMonday), weekEnd: isoDate(lastSunday) };
-}
+// Shared with the scheduled job on purpose: this script used to compute the week
+// from UTC calendar fields, which lands on the wrong seven days when run near a
+// week boundary from Malaysia. One implementation, one answer.
+import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
 
 function getArg(name: string): string | undefined {
   const prefix = `--${name}=`;
@@ -33,7 +20,7 @@ function getArg(name: string): string | undefined {
 }
 
 async function main() {
-  const defaults = previousWeek(new Date());
+  const defaults = previousCompleteWeek();
   const weekStart = getArg('week-start') ?? defaults.weekStart;
   const weekEnd = getArg('week-end') ?? defaults.weekEnd;
   const agencyId = getArg('agency');

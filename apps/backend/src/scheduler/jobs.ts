@@ -1,4 +1,5 @@
 import { scheduler } from './scheduler.js';
+import { WEEKLY_PAYOUT_JOB } from './weekly-payout.job.js';
 
 /**
  * Every background job in the system, in one list.
@@ -13,15 +14,7 @@ import { scheduler } from './scheduler.js';
  * passes the notification table ends up feeding.
  */
 export function registerJobs(): void {
-  // Intentionally empty. Add with:
-  //
-  //   scheduler.register({
-  //     name: 'weekly-payout',
-  //     schedule: '0 2 * * 1',   // Mondays 02:00 Asia/Kuala_Lumpur
-  //     run: () => paymentVoucherGenerator.runWeekly(),
-  //   });
-  //
   // The scheduler already guards overlap and swallows throws, so a job body only
   // has to do its own work.
-  void scheduler;
+  scheduler.register(WEEKLY_PAYOUT_JOB);
 }
