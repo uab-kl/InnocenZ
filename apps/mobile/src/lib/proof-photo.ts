@@ -64,7 +64,11 @@ export function downscaleToDataUrl(file: Blob, maxPx = 1024, quality = 0.7): Pro
  * receipt-ocr's capture helper, expo-image-picker); on web it keeps the
  * existing file-input flow. Downscales each before returning.
  */
-export function pickProofPhotos(onPicked: (urls: string[]) => void) {
+export function pickProofPhotos(
+  onPicked: (urls: string[]) => void,
+  opts: { multiple?: boolean } = {},
+) {
+  const { multiple = true } = opts;
   if (Platform.OS !== 'web') {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
     const { captureReceiptPhoto } = require('./receipt-ocr') as typeof import('./receipt-ocr');
@@ -79,7 +83,7 @@ export function pickProofPhotos(onPicked: (urls: string[]) => void) {
   input.type = 'file';
   input.accept = 'image/*';
   input.capture = 'environment';
-  input.multiple = true;
+  input.multiple = multiple;
   input.onchange = () => {
     const files = input.files
       ? Array.from(input.files).filter((f) => f.type.startsWith('image/'))
