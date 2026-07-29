@@ -25,8 +25,6 @@ import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
 import { AgencyControllerClass } from '@/features/agency/agency.controller.js';
-import { CommissionConfigRepositoryClass } from '@/features/commission/commission-config.repository.js';
-import { CommissionConfigControllerClass } from '@/features/commission/commission-config.controller.js';
 import { PlatformConfigRepositoryClass } from '@/features/platform-config/platform-config.repository.js';
 import { PlatformConfigControllerClass } from '@/features/platform-config/platform-config.controller.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
@@ -91,8 +89,6 @@ export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const outletController = new OutletControllerClass(outletRepository, outletMemberRepository);
 
-export const commissionConfigRepository = new CommissionConfigRepositoryClass();
-export const commissionConfigController = new CommissionConfigControllerClass(commissionConfigRepository);
 
 export const platformConfigRepository = new PlatformConfigRepositoryClass();
 export const platformConfigController = new PlatformConfigControllerClass(platformConfigRepository);
