@@ -26,6 +26,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts, type Shift } from "@/services/shift";
@@ -59,8 +60,12 @@ type RosterBackendTimetableProps = {
 	canAssign: boolean;
 	onEditSlot: (slotId: string) => void;
 	onWeekChange: (anchorDateIso: string) => void;
-	/** Cell-tap assign: schedule a backend PR onto an open backend shift. */
-	onAssign: (shiftId: string, prId: string) => void;
+	/**
+	 * Cell-tap assign: schedule a backend PR onto an open backend shift. Must
+	 * reject on failure — the sheet reports the reason and stays open rather than
+	 * closing on a write that never landed.
+	 */
+	onAssign: (shiftId: string, prId: string) => Promise<unknown>;
 	todayIso?: string;
 };
 
@@ -375,11 +380,12 @@ function AssignBackendCellSheet({
 	dateIso: string;
 	shifts: Shift[];
 	outletNameById: Map<string, string>;
-	onAssign: (shiftId: string, prId: string) => void;
+	onAssign: (shiftId: string, prId: string) => Promise<unknown>;
 	onClose: () => void;
 }) {
 	const [pickId, setPickId] = useState(shifts[0]?.id ?? "");
 	const [busy, setBusy] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 
 	useEffect(() => {
 		setPickId(shifts[0]?.id ?? "");
@@ -387,11 +393,23 @@ function AssignBackendCellSheet({
 
 	const picked = shifts.find((s) => s.id === pickId);
 
-	const confirm = () => {
+	// Closing before the write resolved was indistinguishable from success: a
+	// 403, a 409 for a PR already on the shift, or an unreachable API all left
+	// the sheet shut and the cell empty with nothing said.
+	const confirm = async () => {
 		if (busy || !picked) return;
 		setBusy(true);
-		onAssign(picked.id, pr.id);
-		onClose();
+		setError(null);
+		try {
+			await onAssign(picked.id, pr.id);
+			onClose();
+		} catch (err) {
+			setError(
+				toMutationError(err, "Couldn't assign the PR.")?.message ??
+					"Couldn't assign the PR.",
+			);
+			setBusy(false);
+		}
 	};
 
 	return (
@@ -464,6 +482,12 @@ function AssignBackendCellSheet({
 							})}
 						</div>
 					</div>
+
+					{error && (
+						<p className="iz-tiny mt-3 text-[var(--iz-danger,#dc2626)]">
+							{error}
+						</p>
+					)}
 
 					<button
 						type="button"

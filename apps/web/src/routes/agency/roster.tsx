@@ -22,12 +22,12 @@ import {
 	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { useOutletSwapMutations } from "@agency-portal/hooks/use-outlet-swap-mutations";
 import {
 	assignmentStatusFromRoster,
 	useRosterMutations,
 } from "@agency-portal/hooks/use-roster-mutations";
 import { useRosterSlots } from "@agency-portal/hooks/use-roster-slots";
-import { useOutletSwapMutations } from "@agency-portal/hooks/use-outlet-swap-mutations";
 import { useSwapOutletTargets } from "@agency-portal/hooks/use-swap-outlet-targets";
 import {
 	type AgencyRosterSlot,
@@ -529,7 +529,7 @@ function AgencyRoster() {
 							onEditSlot={openEdit}
 							onWeekChange={setPlanningDate}
 							onAssign={(shiftId, prId) =>
-								rosterMut.assign.mutate({ shiftId, prId })
+								rosterMut.assign.mutateAsync({ shiftId, prId })
 							}
 							todayIso={DEFAULT_ROSTER_DATE_ISO}
 						/>
