@@ -142,12 +142,17 @@ export const PrRaiseDisputeSchema = z.object({
   reason: z.string().min(1, 'Reason is required').max(200, 'Reason is too long'),
   note: z.string().max(1000, 'Note is too long').optional(),
   /**
-   * Mandatory, and not merely by convention: the table carries a CHECK that
-   * every new row has at least one proof photo, so an empty array is rejected by
-   * Postgres anyway. Failing here gives the PR a readable message instead of a
-   * constraint violation.
+   * OPTIONAL, matching the PR app's dispute sheet ("Proof images are optional —
+   * attach a receipt photo if you have one").
+   *
+   * The design originally made proof mandatory and the table carried a CHECK to
+   * match. That was wrong in the one case that matters most: a PR disputing a
+   * MISSING record has no receipt to photograph — the absence is the complaint —
+   * so requiring evidence made the most legitimate claim the only unfileable
+   * one. The CHECK was dropped in 0064; strength of evidence is now something
+   * the agency weighs when resolving, not a precondition for being heard.
    */
-  proofPhotos: z.array(z.string().min(1)).min(1, 'At least one proof photo is required'),
+  proofPhotos: z.array(z.string().min(1)).optional(),
   /** What the PR says the figure should be. Optional — some claims are "this is missing". */
   claimedAmount: z.number().nonnegative().optional(),
   /** Receipts pointed at, by their packed ref — never a voucher line id. */
@@ -156,9 +161,17 @@ export const PrRaiseDisputeSchema = z.object({
 
 export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;
 
-/** Withdrawing targets ONE dispute, since a voucher can now hold several. */
+/**
+ * Withdrawing targets ONE dispute, since a voucher can now hold several.
+ *
+ * Addressed by day + component rather than by id, because that is what the PR
+ * app has in hand: the user taps a red cell in the week grid, and the cell knows
+ * its date and its income row. Requiring an id would force the app to fetch and
+ * track dispute ids purely to undo something it can already point at.
+ */
 export const PrWithdrawDisputeSchema = z.object({
-  disputeId: z.string().uuid('disputeId must be a uuid'),
+  disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
+  component: z.enum(['wages', 'drinks', 'tips', 'others']),
 });
 
 export type PrWithdrawDisputeInput = z.infer<typeof PrWithdrawDisputeSchema>;

@@ -689,6 +689,34 @@ export type PrCurrentWeek = {
   lines: PrReceiptLine[];
 };
 
+/** The four buckets a day's earnings split into — one dispute each, per day. */
+export type PrDisputeComponent = 'wages' | 'drinks' | 'tips' | 'others';
+
+/** One recorded dispute row. */
+export type PrDispute = {
+  id: string;
+  disputeDate: string;
+  component: PrDisputeComponent;
+  reason: string | null;
+  note: string | null;
+  /** What the voucher said when raised — computed server-side. */
+  disputedAmount: string | null;
+  proofPhotos: string[] | null;
+  outcome: 'accepted' | 'rejected' | 'withdrawn' | null;
+  resolutionNote: string | null;
+};
+
+/**
+ * Raise/withdraw return both halves: the dispute row that was written, and the
+ * voucher's own state, which is what the grid header renders.
+ */
+export type PrDisputeResult = {
+  dispute: PrDispute;
+  voucher: PrDisputeState;
+  /** Withdraw only — how many disputes are still open on the voucher. */
+  openDisputes?: number;
+};
+
 /** The voucher's dispute state returned by the raise/withdraw endpoints (§3 F). */
 export type PrDisputeState = {
   voucherId: string;
@@ -843,23 +871,38 @@ export function deleteMyReceiptLine(accessToken: string, lineId: string): Promis
 export function raiseMyDispute(
   accessToken: string,
   voucherId: string,
-  input: { reason: string; note?: string },
-): Promise<PrDisputeState> {
-  return request<PrDisputeState>(`/payment-voucher/mine/${voucherId}/dispute`, {
+  input: {
+    /** The tapped cell's day, yyyy-MM-dd. */
+    disputeDate: string;
+    component: PrDisputeComponent;
+    reason: string;
+    note?: string;
+    /** Optional — the sheet says so, and the server agrees since 0064. */
+    proofPhotos?: string[];
+  },
+): Promise<PrDisputeResult> {
+  return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
     body: JSON.stringify(input),
   });
 }
 
-/** Withdraw the PR's own dispute — the voucher returns to review. */
+/**
+ * Withdraw ONE dispute — the cell the PR tapped, not the whole voucher.
+ *
+ * Addressed by day + component because that is what the grid already knows; the
+ * voucher only returns to review once nothing on it is still contested.
+ */
 export function withdrawMyDispute(
   accessToken: string,
   voucherId: string,
-): Promise<PrDisputeState> {
-  return request<PrDisputeState>(`/payment-voucher/mine/${voucherId}/dispute/withdraw`, {
+  input: { disputeDate: string; component: PrDisputeComponent },
+): Promise<PrDisputeResult> {
+  return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute/withdraw`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(input),
   });
 }
 

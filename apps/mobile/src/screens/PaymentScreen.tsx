@@ -295,13 +295,24 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
     setDisputeBusy(true);
     try {
-      const next: PrDisputeState =
+      // The tapped cell already knows its day and its income row, so both are
+      // sent as structured fields. They used to be flattened into the note's
+      // prose, which meant the server had to take the PR's word for what was
+      // being disputed and could not price the claim.
+      const result =
         disputeMode === 'withdraw'
-          ? await withdrawMyDispute(token, voucherId)
+          ? await withdrawMyDispute(token, voucherId, {
+              disputeDate: disputeTarget.dateIso,
+              component: disputeTarget.incomeKey,
+            })
           : await raiseMyDispute(token, voucherId, {
+              disputeDate: disputeTarget.dateIso,
+              component: disputeTarget.incomeKey,
               reason: disputePreset,
               note: disputeNote.trim() || undefined,
+              proofPhotos: disputePhotos.length ? disputePhotos : undefined,
             });
+      const next = result.voucher;
       // Reflect the persisted state so the grid + header pill update immediately
       // and survive a reload (getMyLastWeek returns these fields).
       setLastWeek((prev) =>

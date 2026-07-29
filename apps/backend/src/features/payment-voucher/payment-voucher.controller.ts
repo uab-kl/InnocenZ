@@ -817,7 +817,7 @@ export class PaymentVoucherControllerClass {
       // The voucher's dispute columns are now a CACHE of the rows, not the truth.
       // Kept in step because the agency payroll page still reads them; the
       // dispute table is what actually records the claim.
-      await this.paymentVoucherRepository.update(voucherId, {
+      const voucher = await this.paymentVoucherRepository.update(voucherId, {
         status: 'disputed',
         disputeReason: parsed.data.reason,
         disputeNote: parsed.data.note ?? null,
@@ -826,7 +826,13 @@ export class PaymentVoucherControllerClass {
         updatedBy: actor,
       });
 
-      res.status(201).json({ success: true, message: 'Dispute raised', data: dispute });
+      // Both halves: the dispute row is the record, and the voucher state is
+      // what the PR app's grid header already renders.
+      res.status(201).json({
+        success: true,
+        message: 'Dispute raised',
+        data: { dispute, voucher: this.disputeStateDTO(voucher ?? existing) },
+      });
     } catch (error) {
       logger.error('[PaymentVoucherController.raiseMyDispute] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -850,12 +856,19 @@ export class PaymentVoucherControllerClass {
       }
 
       const actor = getActor(req);
-      const target = await this.paymentVoucherDisputeRepository.getById(parsed.data.disputeId);
-      // Must belong to the voucher in the path, which is already proven to be
-      // this PR's — so a dispute id from someone else's voucher 404s rather than
-      // confirming it exists.
-      if (!target || target.voucherId !== voucherId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // Addressed by the grid cell the PR tapped. Scoped to this voucher, which
+      // is already proven to be theirs, so another PR's dispute is unreachable.
+      const target = await this.paymentVoucherDisputeRepository.findOpen(
+        voucherId,
+        parsed.data.disputeDate,
+        parsed.data.component,
+      );
+      if (!target) {
+        return res.status(404).json({
+          success: false,
+          message: 'No open dispute on that day and component',
+          data: null,
+        });
       }
 
       const withdrawn = await this.paymentVoucherDisputeRepository.withdraw(target.id, actor);
@@ -872,20 +885,25 @@ export class PaymentVoucherControllerClass {
       // Only hand the voucher back once NOTHING is still contested — withdrawing
       // Tuesday's tips must not clear Thursday's wages claim.
       const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucherId);
-      if (stillOpen.length === 0) {
-        await this.paymentVoucherRepository.update(voucherId, {
-          status: 'sent',
-          disputeReason: null,
-          disputeNote: null,
-          disputedAt: null,
-          updatedBy: actor,
-        });
-      }
+      const voucher =
+        stillOpen.length === 0
+          ? await this.paymentVoucherRepository.update(voucherId, {
+              status: 'sent',
+              disputeReason: null,
+              disputeNote: null,
+              disputedAt: null,
+              updatedBy: actor,
+            })
+          : existing;
 
       res.status(200).json({
         success: true,
         message: 'Dispute withdrawn',
-        data: { dispute: withdrawn, openDisputes: stillOpen.length },
+        data: {
+          dispute: withdrawn,
+          voucher: this.disputeStateDTO(voucher ?? existing),
+          openDisputes: stillOpen.length,
+        },
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.withdrawMyDispute] Error:', error);

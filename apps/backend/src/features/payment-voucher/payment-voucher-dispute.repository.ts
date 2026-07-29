@@ -131,6 +131,35 @@ export class PaymentVoucherDisputeRepositoryClass {
     }
   }
 
+  /**
+   * The still-open dispute on one day + component, if any. This is how the PR
+   * app addresses a withdraw — it points at the grid cell it tapped, not at an
+   * id it would otherwise have to track.
+   */
+  async findOpen(
+    voucherId: string,
+    disputeDate: string,
+    component: PaymentVoucherDisputeComponent,
+  ): Promise<PaymentVoucherDispute | null> {
+    try {
+      const [row] = await db
+        .select()
+        .from(PaymentVoucherDisputeTable)
+        .where(
+          and(
+            eq(PaymentVoucherDisputeTable.voucherId, voucherId),
+            eq(PaymentVoucherDisputeTable.disputeDate, disputeDate),
+            eq(PaymentVoucherDisputeTable.component, component),
+            isNull(PaymentVoucherDisputeTable.outcome),
+          ),
+        );
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherDisputeRepository.findOpen] Error:', error);
+      return null;
+    }
+  }
+
   async getById(id: string): Promise<PaymentVoucherDispute | null> {
     try {
       const [row] = await db
