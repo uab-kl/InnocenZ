@@ -17,6 +17,8 @@ import {
 import { saveProfileImageFile } from '@/util/profile-image.js';
 import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
+import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
+import { generateSecret, otpauthUri, verifyTotp } from '@/util/totp.js';
 
 export class AuthControllerClass {
   constructor(
@@ -25,7 +27,17 @@ export class AuthControllerClass {
     private userRepository: UserRepository,
     private userProfileRepository: UserProfileRepositoryClass,
     private roleRepository: RoleRepositoryClass,
+    private adminMfaRepository: AdminMfaRepositoryClass,
   ) {}
+
+  /** Wrong attempts before the account locks. */
+  private static readonly MAX_FAILED_ATTEMPTS = 5;
+  /**
+   * How long the lock lasts. Long enough to make scripted guessing useless,
+   * short enough that a real person who fat-fingered their password is not
+   * stranded for the evening.
+   */
+  private static readonly LOCKOUT_MINUTES = 15;
 
   async login(req: Request, res: Response) {
     try {
@@ -72,12 +84,63 @@ export class AuthControllerClass {
         });
       }
 
+      // Lockout, checked BEFORE the password compare. Checking after would let
+      // an attacker keep testing passwords against a locked account and read the
+      // answer from the response, which is the thing the lock exists to stop.
+      if (user.lockedUntil && user.lockedUntil.getTime() > Date.now()) {
+        const minutes = Math.ceil((user.lockedUntil.getTime() - Date.now()) / 60_000);
+        logger.warn('[AuthController.login] Attempt on a locked account');
+        return res.status(429).json({
+          success: false,
+          message: `Too many failed attempts. Try again in ${minutes} minute${minutes === 1 ? '' : 's'}.`,
+        });
+      }
+
       if (!user.passwordHash || !(await comparePassword(parsedBody.password, user.passwordHash))) {
         logger.warn('[AuthController.login] Invalid password');
+        await this.recordFailedLogin(user);
         return res.status(401).json({
           success: false,
           message: 'Invalid credentials',
         });
+      }
+
+      // Second factor, only for an enrolment the user actually CONFIRMED. An
+      // unconfirmed row is an abandoned setup — challenging against it would
+      // lock someone out over a QR code they never scanned.
+      const mfa = await this.adminMfaRepository.getByUserId(user.id);
+      if (mfa?.confirmed) {
+        const code = typeof req.body?.mfaCode === 'string' ? req.body.mfaCode : '';
+        if (!code) {
+          // 401 with a marker, not an error: the password was right and the
+          // client needs to collect a code. It carries no token.
+          return res.status(401).json({
+            success: false,
+            message: 'Enter the 6-digit code from your authenticator app',
+            data: { mfaRequired: true },
+          });
+        }
+        if (!verifyTotp(mfa.secret, code)) {
+          logger.warn('[AuthController.login] Invalid MFA code');
+          // A wrong code counts toward lockout too. Otherwise the second factor
+          // is the one part of login that can be brute-forced freely, and six
+          // digits is only a million guesses.
+          await this.recordFailedLogin(user);
+          return res.status(401).json({
+            success: false,
+            message: 'That code is not valid',
+            data: { mfaRequired: true },
+          });
+        }
+      }
+
+      // Cleared every gate — reset the counter so yesterday's typos do not
+      // accumulate into a lockout weeks later.
+      if (user.failedLoginAttempts > 0 || user.lockedUntil) {
+        await this.userRepository.updateUser(
+          { failedLoginAttempts: 0, lockedUntil: null, updatedBy: user.username },
+          user.id,
+        );
       }
 
       const tokenPayload = { loginMethod, loginCriteria };
@@ -108,6 +171,129 @@ export class AuthControllerClass {
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
       });
+    }
+  }
+
+  /**
+   * Counts a failed attempt and locks the account once the threshold is hit.
+   *
+   * Never throws: a bookkeeping failure must not turn a clean "invalid
+   * credentials" into a 500, which would tell an attacker they had found
+   * something interesting.
+   *
+   * The counter is NOT reset when the lock expires. It is reset only by a
+   * successful login, so someone grinding away gets locked again on their next
+   * wrong guess rather than being handed a fresh budget of five every
+   * fifteen minutes.
+   */
+  private async recordFailedLogin(user: { id: string; username: string; failedLoginAttempts: number }): Promise<void> {
+    try {
+      const attempts = (user.failedLoginAttempts ?? 0) + 1;
+      const lock = attempts >= AuthControllerClass.MAX_FAILED_ATTEMPTS;
+      await this.userRepository.updateUser(
+        {
+          failedLoginAttempts: attempts,
+          lockedUntil: lock
+            ? new Date(Date.now() + AuthControllerClass.LOCKOUT_MINUTES * 60_000)
+            : null,
+          updatedBy: user.username,
+        },
+        user.id,
+      );
+      if (lock) {
+        logger.warn(`[AuthController] Locked ${user.username} after ${attempts} failed attempts`);
+      }
+    } catch (error) {
+      logger.error('[AuthController.recordFailedLogin] Error:', error);
+    }
+  }
+
+  /**
+   * Begin TOTP enrolment for the signed-in user.
+   *
+   * Returns the otpauth URI once, and only to the account enrolling. The secret
+   * inside it is a credential: it is never logged and never returned again — a
+   * user who loses the QR code restarts enrolment rather than re-reading it.
+   */
+  async enrollMfa(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const secret = generateSecret();
+      const row = await this.adminMfaRepository.startEnrolment(user.id, secret);
+      if (!row) {
+        // Already confirmed. Minting a new secret here would silently invalidate
+        // the authenticator they are using right now.
+        return res.status(409).json({
+          success: false,
+          message: 'Two-factor authentication is already set up on this account',
+          data: null,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'Scan this in your authenticator app, then confirm with a code',
+        data: {
+          otpauthUri: otpauthUri(row.secret, user.email ?? user.username),
+          // Shown so a user whose camera cannot scan can type it in.
+          secret: row.secret,
+        },
+      });
+    } catch (error) {
+      logger.error('[AuthController.enrollMfa] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Finish enrolment by proving a code can be generated from the secret.
+   *
+   * Without this step an enrolment could be "on" for a secret the user never
+   * successfully scanned, and the next login would lock them out of their own
+   * account. The proof is the whole point of the confirm step.
+   */
+  async confirmMfa(req: Request, res: Response) {
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const code = typeof req.body?.code === 'string' ? req.body.code : '';
+      const row = await this.adminMfaRepository.getByUserId(user.id);
+      if (!row) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Start enrolment first', data: null });
+      }
+      if (row.confirmed) {
+        return res
+          .status(200)
+          .json({ success: true, message: 'Two-factor authentication is already on', data: null });
+      }
+      if (!verifyTotp(row.secret, code)) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'That code is not valid — check the time on your device', data: null });
+      }
+
+      await this.adminMfaRepository.confirm(row.id);
+      return res.status(200).json({
+        success: true,
+        message: 'Two-factor authentication is on. You will be asked for a code at every login.',
+        data: null,
+      });
+    } catch (error) {
+      logger.error('[AuthController.confirmMfa] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
 

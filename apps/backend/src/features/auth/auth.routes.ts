@@ -32,6 +32,12 @@ router.get('/agencies', async (_req, res) => {
 router.post('/forgot-password', authController.forgotPassword.bind(authController));
 router.post('/reset-password', authController.resetPassword.bind(authController));
 router.get('/me', authenticateJWT, authController.me.bind(authController));
+
+// TOTP enrolment. Both require a signed-in caller and act only on THEIR OWN
+// account — there is no user id in either route, so one user cannot enrol or
+// confirm a factor on another's behalf.
+router.post('/mfa/enroll', authenticateJWT, authController.enrollMfa.bind(authController));
+router.post('/mfa/confirm', authenticateJWT, authController.confirmMfa.bind(authController));
 /**
  * Serves two callers: a public sign-up with no token, and an admin creating
  * another admin with one. optionalAuthenticateJWT reads the token when it is

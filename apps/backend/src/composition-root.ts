@@ -3,6 +3,7 @@ import { AuthControllerClass } from '@/features/auth/auth.controller.js';
 import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { HealthControllerClass } from '@/features/health/health.controller.js';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
+import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
 import { RoleControllerClass } from '@/features/rbac/role/role.controller.js';
 import { ModuleRepositoryClass } from '@/features/rbac/module/module.repository.js';
 import { ModuleControllerClass } from '@/features/rbac/module/module.controller.js';
@@ -66,7 +67,9 @@ export const authRepository = new AuthRepositoryClass(jwtController, userReposit
 // Declared above authController: registration resolves its own role by name now,
 // rather than trusting a roleId off the request body.
 export const roleRepository = new RoleRepositoryClass();
-export const authController = new AuthControllerClass(authRepository, jwtController, userRepository, userProfileRepository, roleRepository);
+// TOTP enrolments. Declared above authController, which challenges at login.
+export const adminMfaRepository = new AdminMfaRepositoryClass();
+export const authController = new AuthControllerClass(authRepository, jwtController, userRepository, userProfileRepository, roleRepository, adminMfaRepository);
 export const healthController = new HealthControllerClass();
 
 export const roleController = new RoleControllerClass(roleRepository);

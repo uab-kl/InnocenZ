@@ -1,4 +1,4 @@
-import { timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { integer, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 
 export const userStatusValues = ['active', 'inactive', 'blocked'] as const;
@@ -12,6 +12,11 @@ export const UserTable = MainSchema.table('user', {
     username: varchar('username', { length: 100 }).notNull(),
     passwordHash: varchar('password_hash', { length: 255 }),
     status: varchar('status', { length: 100 }).$type<UserStatus>().notNull(),
+    // Failed-login lockout (migration 0070). Counters rather than an attempt
+    // log: this is checked on every login, and a join for two integers on the
+    // hottest auth path is not worth the normalisation.
+    failedLoginAttempts: integer('failed_login_attempts').notNull().default(0),
+    lockedUntil: timestamp('locked_until', { withTimezone: true }),
     blockedReason: varchar('blocked_reason'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
