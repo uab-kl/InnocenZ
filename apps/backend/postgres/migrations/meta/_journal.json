@@ -463,6 +463,13 @@
       "when": 1785299538616,
       "tag": "0065_luxuriant_blazing_skull",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "7",
+      "when": 1785321385444,
+      "tag": "0066_platform_config_typed",
+      "breakpoints": true
     }
   ]
 }
