@@ -55,6 +55,8 @@ import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shif
 import { OutletSwapRepositoryClass } from '@/features/outlet-swap/outlet-swap.repository.js';
 import { OutletSwapControllerClass } from '@/features/outlet-swap/outlet-swap.controller.js';
 import { PaymentVoucherGeneratorClass } from '@/features/payment-voucher/payment-voucher-generator.js';
+import { CollectionInvoiceRepositoryClass } from '@/features/collection-invoice/collection-invoice.repository.js';
+import { CollectionInvoiceControllerClass } from '@/features/collection-invoice/collection-invoice.controller.js';
 
 export const jwtController = new JwtControllerClass();
 export const userRoleRepository = new UserRoleRepositoryClass();
@@ -160,3 +162,8 @@ export const shiftSaleRepository = new ShiftSaleRepositoryClass();
 export const shiftSaleController = new ShiftSaleControllerClass(shiftSaleRepository, shiftRepository, shiftAssignmentRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const paymentVoucherGenerator = new PaymentVoucherGeneratorClass(shiftAssignmentRepository, paymentVoucherRepository, prRepository);
+
+// Collections: an agency's receivables from its outlets. A statement of
+// account only — this app does not move money between the two.
+export const collectionInvoiceRepository = new CollectionInvoiceRepositoryClass();
+export const collectionInvoiceController = new CollectionInvoiceControllerClass(collectionInvoiceRepository, orgScopeDeps);

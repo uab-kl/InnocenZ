@@ -1,5 +1,5 @@
 import { logger } from '@/util/logger.js';
-import { paymentVoucherGenerator, prRepository } from '@/composition-root.js';
+import { paymentVoucherGenerator, prRepository, collectionInvoiceRepository } from '@/composition-root.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
 import { notify } from '@/features/notification/notify.js';
 import type { JobDefinition } from './scheduler.js';
@@ -82,6 +82,34 @@ export async function runWeeklyPayout(): Promise<void> {
     `[weekly-payout] notified ${notified}/${result.created.length}` +
       (unlinked > 0 ? ` (${unlinked} PR rows have no user account yet)` : ''),
   );
+
+  // Collections: what each outlet owes its agency for the same week. DRAFTS
+  // only — an agency reviews and issues, nothing is put in front of an outlet
+  // automatically, and this app never moves the money either way.
+  //
+  // Derived from shift assignments rather than the vouchers just generated: a
+  // voucher snapshots one outlet name, so a PR who worked two venues would bill
+  // whichever came first. Same completed-work rule, different grouping.
+  try {
+    const totals = await collectionInvoiceRepository.weeklyOutletTotals(weekStart, weekEnd);
+    const drafted = await collectionInvoiceRepository.draftForWeek(
+      totals,
+      weekStart,
+      weekEnd,
+      ACTOR,
+    );
+    logger.info(
+      `[weekly-payout] collections: ${totals.length} outlet total(s), ${drafted.length} drafted` +
+        (drafted.length < totals.length
+          ? ` (${totals.length - drafted.length} already existed — re-run, left untouched)`
+          : ''),
+    );
+  } catch (error) {
+    // Vouchers are the payroll obligation and are already committed; a failure
+    // to draft a receivable must not cost the PRs their notification or make
+    // the run look failed.
+    logger.error('[weekly-payout] collections drafting failed:', error);
+  }
 }
 
 export const WEEKLY_PAYOUT_JOB: JobDefinition = {

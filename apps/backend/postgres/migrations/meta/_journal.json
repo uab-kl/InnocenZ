@@ -484,6 +484,13 @@
       "when": 1785327479137,
       "tag": "0068_notification_kind_shift_cover_needed",
       "breakpoints": true
+    },
+    {
+      "idx": 69,
+      "version": "7",
+      "when": 1785328303720,
+      "tag": "0069_collection_invoice",
+      "breakpoints": true
     }
   ]
 }
