@@ -42,8 +42,9 @@ function OrDivider() {
  * anything (`verifyWithinGeoFence` returns `enforced: false` when lat/lng are
  * null) — so this card is what turns attendance verification on for a venue.
  * A wrong pin is worse than none: it rejects staff who really are on site.
- * Hence lookup and commit are separate, and the operator sees the coordinates
- * before saving.
+ * Hence lookup and commit are separate: the operator confirms the matched
+ * address and its precision before anything is saved. Coordinates are
+ * deliberately not shown — `precisionNote` is what flags a bad match now.
  *
  * Owner-only, matching `outletOwnerOnly` on PATCH /outlet/:id/geo-fence.
  */
@@ -254,9 +255,6 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 											<div className="text-sm font-medium text-balance">
 												{candidate.formattedAddress}
 											</div>
-											<p className="iz-tiny iz-muted2 mt-0.5 font-mono tabular-nums">
-												{candidate.lat.toFixed(6)}, {candidate.lng.toFixed(6)}
-											</p>
 											<p
 												className={`iz-tiny mt-0.5 ${note.warn ? "text-[var(--iz-amber)]" : "iz-muted"}`}
 											>
