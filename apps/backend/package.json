@@ -12,7 +12,8 @@
     "db:reset": "node scripts/reset-migrations.mjs && drizzle-kit migrate --config=drizzle.migrate.config.ts && tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
     "db:seed": "tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
     "initialize": "node scripts/setup-env.mjs",
-    "test": "vitest"
+    "test": "vitest",
+    "check:drift": "tsx --tsconfig tsconfig.json src/scripts/check-schema-drift.ts"
   },
   "devDependencies": {
     "@types/bcrypt": "^6.0.0",
