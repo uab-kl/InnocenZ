@@ -1,14 +1,22 @@
 import { WELCOME_PATH } from '@agency-portal/lib/nav-back';
 import { useStore } from '@agency-portal/lib/store';
 import { clearAuthTokens } from '@/lib/auth/auth-storage';
+import { localizeHref } from '@/paraglide/runtime';
 
 /** App login route — where signing out of a portal returns to. */
 const LOGIN_PATH = '/login';
 
-/** Full URL to the app login screen (respects Vite base path). */
+/**
+ * Full URL to the app login screen (respects the Vite base path).
+ *
+ * Localize BEFORE prepending the base: the locale prefix belongs to the app
+ * path, so `localizeHref` must not see the deploy base. Without this, signing
+ * out landed on the un-prefixed `/login`.
+ */
 export function welcomeHref(): string {
   const base = import.meta.env.BASE_URL.replace(/\/$/, '');
-  return base ? `${base}${LOGIN_PATH}` : LOGIN_PATH;
+  const path = localizeHref(LOGIN_PATH);
+  return base ? `${base}${path}` : path;
 }
 
 /** Leave any portal and return to the app login screen. */

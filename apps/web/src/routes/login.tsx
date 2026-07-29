@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/input-group";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
+import { hardNavigate } from "@/lib/hard-navigate";
 
 const ROLE_DASHBOARD: Record<string, string> = {
 	admin: "/admin/dashboard",
@@ -76,12 +77,12 @@ function RouteComponent() {
 			} = await import("@/lib/auth/agency-demo-session");
 			if (isAgencyDemoLogin(value.email, value.password)) {
 				await startAgencyDemoSession(value.email);
-				window.location.assign("/agency");
+				hardNavigate("/agency");
 				return;
 			}
 			if (isOutletDemoLogin(value.email, value.password)) {
 				await startOutletDemoSession(value.email);
-				window.location.assign("/outlet");
+				hardNavigate("/outlet");
 				return;
 			}
 
@@ -100,7 +101,7 @@ function RouteComponent() {
 						email: profile.email || value.email,
 						displayName: profile.displayName,
 					});
-					window.location.assign("/agency");
+					hardNavigate("/agency");
 					return;
 				}
 				if (role === "outlet") {
@@ -109,11 +110,11 @@ function RouteComponent() {
 						email: profile.email || value.email,
 						displayName: profile.displayName,
 					});
-					window.location.assign("/outlet");
+					hardNavigate("/outlet");
 					return;
 				}
 
-				window.location.assign((role && ROLE_DASHBOARD[role]) || "/no-access");
+				hardNavigate((role && ROLE_DASHBOARD[role]) || "/no-access");
 			} catch (err) {
 				if (axios.isAxiosError(err)) {
 					if (!err.response) {
