@@ -48,15 +48,11 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 		isLookingUp,
 		isSaving,
 		lookup,
-		clearCandidates,
 		save,
 	} = useOutletGeoFence();
 
 	const [address, setAddress] = useState("");
 	const [radius, setRadius] = useState(String(DEFAULT_GEO_FENCE_RADIUS));
-	const [manual, setManual] = useState(false);
-	const [manualLat, setManualLat] = useState("");
-	const [manualLng, setManualLng] = useState("");
 
 	// Demo sessions have no outlet to pin; the demo store holds no coordinates.
 	// Say so rather than rendering nothing — an operator who sees no card at all
@@ -88,26 +84,9 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 		try {
 			await save({ lat, lng, radius: radiusValue });
 			toast("Check-in pin saved", "success");
-			setManual(false);
-			setManualLat("");
-			setManualLng("");
 		} catch {
 			toast("Could not save the pin", "warn");
 		}
-	};
-
-	const commitManual = () => {
-		const lat = Number(manualLat);
-		const lng = Number(manualLng);
-		if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-			toast("Latitude must be between -90 and 90", "warn");
-			return;
-		}
-		if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
-			toast("Longitude must be between -180 and 180", "warn");
-			return;
-		}
-		void commit(lat, lng);
 	};
 
 	return (
@@ -155,38 +134,28 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 
 				{canEdit && (
 					<div className="mt-4 space-y-3">
-						<div className="flex flex-wrap gap-2">
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft"
-								disabled={isLookingUp}
-								onClick={() => void lookup()}
-							>
-								<Crosshair className="h-4 w-4" />
-								{isLookingUp ? "Looking up…" : "Find from venue address"}
-							</button>
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft"
-								onClick={() => {
-									setManual((m) => !m);
-									clearCandidates();
-								}}
-							>
-								{manual ? "Cancel manual entry" : "Enter coordinates"}
-							</button>
-						</div>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft"
+							disabled={isLookingUp}
+							onClick={() => void lookup()}
+						>
+							<Crosshair className="h-4 w-4" />
+							{isLookingUp ? "Looking up…" : "Find from venue address"}
+						</button>
 
+						{/* `.iz-btn` is width:100% (mobile-first), which would starve the
+						    input on this row — `.iz-btn-sm` restores width:auto. */}
 						<div className="flex gap-2">
 							<input
-								className="iz-field-input flex-1"
+								className="iz-field-input min-w-0 flex-1"
 								placeholder="Or search another address"
 								value={address}
 								onChange={(e) => setAddress(e.target.value)}
 							/>
 							<button
 								type="button"
-								className="iz-btn iz-btn-soft"
+								className="iz-btn iz-btn-soft iz-btn-sm shrink-0 whitespace-nowrap"
 								disabled={isLookingUp || address.trim().length < 3}
 								onClick={() => void lookup(address)}
 							>
@@ -208,36 +177,6 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 							<p className="iz-tiny rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5 text-[var(--iz-amber,#d9b97a)]">
 								{lookupError}
 							</p>
-						)}
-
-						{manual && (
-							<div className="rounded-lg border border-[var(--iz-line)] p-3">
-								<p className="iz-tiny iz-muted mb-2">
-									Read the coordinates off any map app at the venue's door.
-								</p>
-								<div className="flex gap-2">
-									<input
-										className="iz-field-input flex-1"
-										placeholder="Latitude"
-										value={manualLat}
-										onChange={(e) => setManualLat(e.target.value)}
-									/>
-									<input
-										className="iz-field-input flex-1"
-										placeholder="Longitude"
-										value={manualLng}
-										onChange={(e) => setManualLng(e.target.value)}
-									/>
-								</div>
-								<button
-									type="button"
-									className="iz-btn iz-btn-primary mt-2 w-full"
-									disabled={isSaving}
-									onClick={commitManual}
-								>
-									{isSaving ? "Saving…" : "Save this pin"}
-								</button>
-							</div>
 						)}
 
 						{candidates.length > 0 && (

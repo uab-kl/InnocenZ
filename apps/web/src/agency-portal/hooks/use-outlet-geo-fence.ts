@@ -144,11 +144,6 @@ export function useOutletGeoFence() {
 		isLookingUp: lookupMut.isPending,
 		isSaving: saveMut.isPending,
 		lookup: (address?: string) => lookupMut.mutateAsync(address),
-		clearCandidates: () => {
-			setCandidates([]);
-			setSearchedAddress(null);
-			setLookupError(null);
-		},
 		save: (next: OutletPin) => saveMut.mutateAsync(next),
 		saveError: saveMut.error
 			? messageFromError(saveMut.error, "Could not save the pin.")
