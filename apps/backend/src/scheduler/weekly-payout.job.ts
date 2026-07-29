@@ -38,6 +38,20 @@ export async function runWeeklyPayout(): Promise<void> {
     `[weekly-payout] ${result.agenciesProcessed} agencies · ${result.created.length} created · ${result.skipped.length} skipped`,
   );
 
+  // Σ=0. The generator has already flagged and logged each one; this is the
+  // summary a human actually reads. Deliberately does NOT abort the run: the
+  // remaining PRs still need telling about the vouchers that are fine, and an
+  // unbalanced voucher sits at 'pending_review' where an agency reviews it
+  // before any money moves.
+  if (result.imbalanced.length > 0) {
+    logger.error(
+      `[weekly-payout] ${result.imbalanced.length} voucher(s) DO NOT BALANCE — hold payment and review:`,
+    );
+    for (const bad of result.imbalanced) {
+      logger.error(`[weekly-payout]   ${bad.voucherId}: ${bad.problems.join('; ')}`);
+    }
+  }
+
   let notified = 0;
   let unlinked = 0;
 

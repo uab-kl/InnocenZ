@@ -2,6 +2,7 @@ import { logger } from '@/util/logger';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
+import { checkVoucherBalance } from './payment-voucher-balance';
 
 export type GenerateWeeklyParams = {
   /** Inclusive week window, yyyy-MM-dd. Typically the just-finished Mon–Sun. */
@@ -20,6 +21,18 @@ export type GenerateWeeklyResult = {
   agenciesProcessed: number;
   created: Array<{ agencyId: string; prId: string; voucherId: string; net: string }>;
   skipped: Array<{ agencyId: string; prId: string; reason: 'already_exists' | 'pr_missing' }>;
+  /**
+   * Vouchers that were created but do NOT balance — Σ(lines) − deduction ≠ net.
+   * Always empty in a healthy run. Non-empty means money was invented or lost
+   * and something upstream is broken; the voucher is left in place, flagged,
+   * because a wrong row an agency can see beats one silently deleted.
+   */
+  imbalanced: Array<{
+    agencyId: string;
+    prId: string;
+    voucherId: string;
+    problems: string[];
+  }>;
 };
 
 function todayIso(): string {
@@ -54,6 +67,7 @@ export class PaymentVoucherGeneratorClass {
       agenciesProcessed: agencyIds.length,
       created: [],
       skipped: [],
+      imbalanced: [],
     };
 
     for (const agencyId of agencyIds) {
@@ -120,12 +134,33 @@ export class PaymentVoucherGeneratorClass {
         );
 
         result.created.push({ agencyId, prId, voucherId: voucher.id, net: voucher.net });
+
+        // Σ=0. Checked against what was PERSISTED, not against the numbers we
+        // just computed — the point is to catch the round trip, including the
+        // float reduce above and numeric(12,2) truncation on the way in.
+        const balance = checkVoucherBalance(voucher, voucher.lines ?? []);
+        if (!balance.balanced) {
+          result.imbalanced.push({
+            agencyId,
+            prId,
+            voucherId: voucher.id,
+            problems: balance.problems,
+          });
+          logger.error(
+            `[PaymentVoucherGenerator] voucher ${voucher.id} does not balance: ${balance.problems.join('; ')}`,
+          );
+        }
       }
     }
 
     logger.info(
       `[PaymentVoucherGenerator] week ${weekStart}..${weekEnd}: ${result.created.length} created, ${result.skipped.length} skipped across ${result.agenciesProcessed} agencies`,
     );
+    if (result.imbalanced.length > 0) {
+      logger.error(
+        `[PaymentVoucherGenerator] ${result.imbalanced.length} of ${result.created.length} vouchers DO NOT BALANCE — do not pay these until reviewed`,
+      );
+    }
     return result;
   }
 }
