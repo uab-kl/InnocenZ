@@ -735,6 +735,88 @@ export class PaymentVoucherControllerClass {
    * 'disputed' with the reason + note; disputedAt is stamped once. The agency
    * payroll page already reads exactly these fields.
    */
+  /**
+   * A PR accepts their own voucher.
+   *
+   * Until this existed the signature was written to a local AsyncStorage key on
+   * the phone and nowhere else, so the agency never learned the voucher had
+   * been accepted and a reinstall erased it.
+   *
+   * No migration was needed: `pr_signed_at` and the 'signed' status have been on
+   * the table since it was created, waiting for a writer.
+   *
+   * What is deliberately NOT stored is the typed signature name the app
+   * collects. The authoritative identity is the authenticated user behind
+   * `pr_id` — a name typed into a box adds nothing a JWT has not already
+   * established, and storing it would imply a legal weight it does not carry.
+   */
+  async signMyVoucher(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+
+      const voucherId = paramId(req.params.voucherId);
+      const existing = await this.paymentVoucherRepository.getById(voucherId);
+      // Same rule as the dispute routes: someone else's voucher is a 404, never
+      // a 403, so the response does not confirm the id exists.
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // Idempotent. A double tap, or a retry after a dropped response, must not
+      // re-stamp pr_signed_at — the first signature is the one that counts.
+      if (existing.status === 'signed' || existing.status === 'paid') {
+        return res
+          .status(200)
+          .json({ success: true, message: 'Already signed', data: existing });
+      }
+
+      if (existing.status === 'pending_review') {
+        return res.status(400).json({
+          success: false,
+          message: 'This voucher has not been sent to you yet',
+          data: null,
+        });
+      }
+
+      // An open dispute and a signature are contradictory claims about the same
+      // money. Withdrawing is a deliberate act the PR already has an endpoint
+      // for, so make them do it rather than silently resolving it by signing.
+      if (existing.status === 'disputed') {
+        return res.status(409).json({
+          success: false,
+          message: 'Withdraw your dispute before signing this voucher',
+          data: null,
+        });
+      }
+
+      const actor = getActor(req);
+      // No `lines` argument on purpose: update() wipes and reinserts lines when
+      // given them, and this route has no business touching the money.
+      const signed = await this.paymentVoucherRepository.update(voucherId, {
+        status: 'signed',
+        prSignedAt: new Date(),
+        updatedBy: actor,
+      });
+      if (!signed) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      return res
+        .status(200)
+        .json({ success: true, message: 'Voucher signed', data: signed });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.signMyVoucher] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async raiseMyDispute(req: Request, res: Response) {
     try {
       const parsed = PrRaiseDisputeSchema.safeParse(req.body);

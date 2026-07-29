@@ -15,6 +15,10 @@ router.post('/mine/receipts', paymentVoucherController.addMyReceipt.bind(payment
 router.patch('/mine/lines/:lineId', paymentVoucherController.updateMyLine.bind(paymentVoucherController));
 router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(paymentVoucherController));
 
+// A PR signs its OWN issued voucher — the acceptance the agency waits on.
+// 3-segment, so no collision with the 2-segment '/mine/lines' above.
+router.post('/mine/:voucherId/sign', paymentVoucherController.signMyVoucher.bind(paymentVoucherController));
+
 // A PR raises / withdraws a dispute on its OWN issued voucher (§3 F). 3- and
 // 4-segment paths, so they never collide with the 2-segment '/mine/lines'.
 router.post('/mine/:voucherId/dispute', paymentVoucherController.raiseMyDispute.bind(paymentVoucherController));

@@ -501,6 +501,30 @@ export type ShiftAssignmentRecord = {
   drinkMenu: OutletDrinkItem[];
 };
 
+export type SignedVoucher = {
+  id: string;
+  status: string;
+  /** ISO timestamp the server stamped, not one the phone chose. */
+  prSignedAt: string | null;
+};
+
+/**
+ * Accept one of this PR's own vouchers.
+ *
+ * Idempotent server-side, so a retry after a dropped response is safe and will
+ * not move the signature timestamp. Refuses with 409 while a dispute is open —
+ * withdraw it first. Someone else's voucher answers 404.
+ */
+export function signMyVoucher(
+  accessToken: string,
+  voucherId: string,
+): Promise<SignedVoucher> {
+  return request<SignedVoucher>(`/payment-voucher/mine/${voucherId}/sign`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
 /** The closed enum the backend writes — mirrors notification.model.ts. */
 export type NotificationKind =
   | 'payment_voucher_issued'
