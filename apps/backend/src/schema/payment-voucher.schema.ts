@@ -175,3 +175,26 @@ export const PrWithdrawDisputeSchema = z.object({
 });
 
 export type PrWithdrawDisputeInput = z.infer<typeof PrWithdrawDisputeSchema>;
+
+/**
+ * The agency's decision on one dispute.
+ *
+ * 'withdrawn' is absent on purpose — that outcome belongs to the PR, and letting
+ * an agency mark a live claim as withdrawn would let it close a complaint as
+ * though the PR had dropped it.
+ *
+ * A rejection must say why. An accepted claim is self-explanatory to the PR
+ * (they get the money); a rejected one is the PR being told no, and "no" with no
+ * reason is what makes a dispute process feel arbitrary.
+ */
+export const ResolveDisputeSchema = z
+  .object({
+    outcome: z.enum(['accepted', 'rejected']),
+    resolutionNote: z.string().max(1000, 'Note is too long').optional(),
+  })
+  .refine((d) => d.outcome !== 'rejected' || !!d.resolutionNote?.trim(), {
+    message: 'A reason is required when rejecting a dispute',
+    path: ['resolutionNote'],
+  });
+
+export type ResolveDisputeInput = z.infer<typeof ResolveDisputeSchema>;

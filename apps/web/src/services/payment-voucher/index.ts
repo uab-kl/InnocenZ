@@ -232,3 +232,73 @@ export async function removePaymentVoucher(
 	);
 	return response.data;
 }
+
+/** Which part of a day's earnings a PR is contesting. */
+export type DisputeComponent = "wages" | "drinks" | "tips" | "others";
+
+/** NULL outcome = still waiting on this agency. */
+export type DisputeOutcome = "accepted" | "rejected" | "withdrawn";
+
+/**
+ * One dispute, with just enough of its voucher to render a queue row without a
+ * second request per dispute.
+ */
+export interface PaymentVoucherDispute {
+	id: string;
+	voucherId: string;
+	/** The contested shift day, yyyy-MM-dd. */
+	disputeDate: string;
+	component: DisputeComponent;
+	reason: string | null;
+	note: string | null;
+	raisedAt: string;
+	/** What the voucher said when raised — computed server-side, not claimed. */
+	disputedAmount: string | null;
+	claimedAmount: string | null;
+	proofPhotos: string[] | null;
+	outcome: DisputeOutcome | null;
+	resolvedAt: string | null;
+	resolvedBy: string | null;
+	resolutionNote: string | null;
+	voucher: {
+		id: string;
+		prId: string | null;
+		prName: string | null;
+		weekStart: string | null;
+		weekEnd: string | null;
+		status: string;
+		net: string | null;
+	};
+}
+
+/** The agency's review queue. `openOnly` is what the panel opens on. */
+export async function fetchDisputes(
+	onRefreshFail: () => void,
+	openOnly = true,
+): Promise<PaymentVoucherDispute[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: PaymentVoucherDispute[] | null;
+	}>(`/payment-voucher/disputes${openOnly ? "?open=1" : ""}`);
+	return response.data.data ?? [];
+}
+
+/**
+ * Records the agency's decision. A rejection must carry a note — the server
+ * enforces it too, since "no" without a reason is what makes a dispute process
+ * feel arbitrary to the PR on the other end.
+ */
+export async function resolveDispute(
+	disputeId: string,
+	input: { outcome: "accepted" | "rejected"; resolutionNote?: string },
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{ success: boolean; message: string }>(
+		`/payment-voucher/disputes/${disputeId}/resolve`,
+		input,
+	);
+	return response.data;
+}

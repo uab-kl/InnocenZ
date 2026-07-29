@@ -1,4 +1,4 @@
-import { and, eq, isNull } from 'drizzle-orm';
+import { and, desc, eq, isNull, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import {
@@ -6,6 +6,8 @@ import {
   PaymentVoucherDisputeComponent,
   PaymentVoucherDisputeTable,
   PaymentVoucherLineTable,
+  PaymentVoucherTable,
+  PaymentVoucherType,
 } from './payment-voucher.model.js';
 
 export type PaymentVoucherDispute = typeof PaymentVoucherDisputeTable.$inferSelect;
@@ -198,6 +200,80 @@ export class PaymentVoucherDisputeRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[PaymentVoucherDisputeRepository.withdraw] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * The agency's review queue: every dispute on a voucher belonging to this
+   * agency, newest first, with the voucher it hangs off.
+   *
+   * Scoping goes through the JOIN rather than a filter applied afterwards — a
+   * dispute has no agency of its own, and reading them all and discarding the
+   * wrong ones is how cross-tenant leaks happen. `agencyId: null` means admin,
+   * which is unscoped by design.
+   */
+  async listForScope(
+    agencyId: string | null,
+    options?: { openOnly?: boolean; limit?: number },
+  ): Promise<Array<{ dispute: PaymentVoucherDispute; voucher: PaymentVoucherType }>> {
+    try {
+      const conditions: SQL[] = [];
+      if (agencyId) conditions.push(eq(PaymentVoucherTable.agencyId, agencyId));
+      if (options?.openOnly) conditions.push(isNull(PaymentVoucherDisputeTable.outcome));
+
+      return await db
+        .select({ dispute: PaymentVoucherDisputeTable, voucher: PaymentVoucherTable })
+        .from(PaymentVoucherDisputeTable)
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherDisputeTable.voucherId, PaymentVoucherTable.id),
+        )
+        .where(conditions.length ? and(...conditions) : undefined)
+        .orderBy(desc(PaymentVoucherDisputeTable.raisedAt))
+        .limit(options?.limit ?? 200);
+    } catch (error) {
+      logger.error('[PaymentVoucherDisputeRepository.listForScope] Error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Records the agency's decision.
+   *
+   * `isNull(outcome)` in the WHERE makes this a one-time transition: a dispute
+   * already accepted, rejected or withdrawn cannot be re-decided, so the record
+   * of what the agency concluded — and when — cannot be quietly rewritten later.
+   *
+   * Note this deliberately does NOT touch the voucher's lines. Accepting a claim
+   * records that it was accepted; changing the money is a separate, explicit
+   * edit. Rewriting lines here would delete and re-insert every line on the
+   * voucher, including the PR's own self-logged ones.
+   */
+  async resolve(
+    id: string,
+    outcome: 'accepted' | 'rejected',
+    resolutionNote: string | null,
+    actor: string,
+  ): Promise<PaymentVoucherDispute | null> {
+    try {
+      const [row] = await db
+        .update(PaymentVoucherDisputeTable)
+        .set({
+          outcome,
+          resolutionNote,
+          resolvedAt: new Date(),
+          resolvedBy: actor,
+          updatedAt: new Date(),
+          updatedBy: actor,
+        })
+        .where(
+          and(eq(PaymentVoucherDisputeTable.id, id), isNull(PaymentVoucherDisputeTable.outcome)),
+        )
+        .returning();
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherDisputeRepository.resolve] Error:', error);
       return null;
     }
   }

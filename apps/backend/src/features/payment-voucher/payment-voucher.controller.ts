@@ -11,6 +11,7 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import { notify } from '@/features/notification/notify.js';
 import {
   CreatePaymentVoucherSchema,
   UpdatePaymentVoucherSchema,
@@ -20,6 +21,7 @@ import {
   UpdatePrReceiptLineSchema,
   PrRaiseDisputeSchema,
   PrWithdrawDisputeSchema,
+  ResolveDisputeSchema,
   PrReceiptKind,
   PrReceiptSource,
   prReceiptKindValues,
@@ -907,6 +909,136 @@ export class PaymentVoucherControllerClass {
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.withdrawMyDispute] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency's dispute queue. `?open=1` narrows to what still needs deciding,
+   * which is what the review screen opens on.
+   */
+  async listDisputes(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency for this account', data: null });
+      }
+
+      const rows = await this.paymentVoucherDisputeRepository.listForScope(scope.agencyId, {
+        openOnly: req.query.open === '1' || req.query.open === 'true',
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'Disputes fetched',
+        data: rows.map(({ dispute, voucher }) => ({
+          ...dispute,
+          voucher: {
+            id: voucher.id,
+            prId: voucher.prId,
+            prName: voucher.prName,
+            weekStart: voucher.weekStart,
+            weekEnd: voucher.weekEnd,
+            status: voucher.status,
+            net: voucher.net,
+          },
+        })),
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.listDisputes] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Accept or reject one dispute.
+   *
+   * Records the decision only — it does NOT rewrite the voucher's lines.
+   * Adjusting the money is a separate, deliberate edit, because updating a
+   * voucher deletes and re-inserts every line on it, including the PR's own
+   * self-logged ones. Silently doing that as a side effect of pressing Accept
+   * is how a PR's receipts would disappear at the moment they were vindicated.
+   */
+  async resolveDispute(req: Request, res: Response) {
+    try {
+      const parsed = ResolveDisputeSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency for this account', data: null });
+      }
+
+      const disputeId = paramId(req.params.disputeId);
+      const dispute = await this.paymentVoucherDisputeRepository.getById(disputeId);
+      if (!dispute) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // Ownership is checked through the voucher, since a dispute carries no
+      // agency of its own. Cross-tenant reads 404 rather than 403.
+      const voucher = await this.paymentVoucherRepository.getById(dispute.voucherId);
+      if (!voucher || (!scope.isAdmin && voucher.agencyId !== scope.agencyId)) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const actor = getActor(req);
+      const resolved = await this.paymentVoucherDisputeRepository.resolve(
+        disputeId,
+        parsed.data.outcome,
+        parsed.data.resolutionNote?.trim() || null,
+        actor,
+      );
+      if (!resolved) {
+        return res.status(400).json({
+          success: false,
+          message: 'This dispute has already been resolved or withdrawn',
+          data: null,
+        });
+      }
+
+      // Hand the voucher back once nothing on it is still contested.
+      const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucher.id);
+      if (stillOpen.length === 0 && voucher.status === 'disputed') {
+        await this.paymentVoucherRepository.update(voucher.id, {
+          status: 'sent',
+          disputeReason: null,
+          disputeNote: null,
+          disputedAt: null,
+          updatedBy: actor,
+        });
+      }
+
+      // Tell the PR. This is the whole point of recording outcomes: previously
+      // "resolve" erased the complaint and the PR was never told anything.
+      if (voucher.prId) {
+        const pr = await this.prRepository.getById(voucher.prId);
+        if (pr?.userId) {
+          await notify({
+            userId: pr.userId,
+            kind: 'payment_voucher_dispute_resolved',
+            title:
+              parsed.data.outcome === 'accepted'
+                ? 'Your dispute was accepted'
+                : 'Your dispute was rejected',
+            body: `${resolved.component} on ${resolved.disputeDate}${
+              resolved.resolutionNote ? ` — ${resolved.resolutionNote}` : ''
+            }`,
+            payload: { voucherId: voucher.id, disputeId: resolved.id, outcome: resolved.outcome },
+            actor,
+          });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Dispute ${parsed.data.outcome}`,
+        data: { dispute: resolved, openDisputes: stillOpen.length },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.resolveDispute] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
