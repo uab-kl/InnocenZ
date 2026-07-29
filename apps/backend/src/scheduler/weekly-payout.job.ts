@@ -1,5 +1,5 @@
 import { logger } from '@/util/logger.js';
-import { paymentVoucherGenerator, prRepository } from '@/composition-root.js';
+import { paymentVoucherGenerator, prRepository, collectionInvoiceRepository } from '@/composition-root.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
 import { notify } from '@/features/notification/notify.js';
 import type { JobDefinition } from './scheduler.js';
@@ -38,6 +38,20 @@ export async function runWeeklyPayout(): Promise<void> {
     `[weekly-payout] ${result.agenciesProcessed} agencies · ${result.created.length} created · ${result.skipped.length} skipped`,
   );
 
+  // Σ=0. The generator has already flagged and logged each one; this is the
+  // summary a human actually reads. Deliberately does NOT abort the run: the
+  // remaining PRs still need telling about the vouchers that are fine, and an
+  // unbalanced voucher sits at 'pending_review' where an agency reviews it
+  // before any money moves.
+  if (result.imbalanced.length > 0) {
+    logger.error(
+      `[weekly-payout] ${result.imbalanced.length} voucher(s) DO NOT BALANCE — hold payment and review:`,
+    );
+    for (const bad of result.imbalanced) {
+      logger.error(`[weekly-payout]   ${bad.voucherId}: ${bad.problems.join('; ')}`);
+    }
+  }
+
   let notified = 0;
   let unlinked = 0;
 
@@ -68,6 +82,34 @@ export async function runWeeklyPayout(): Promise<void> {
     `[weekly-payout] notified ${notified}/${result.created.length}` +
       (unlinked > 0 ? ` (${unlinked} PR rows have no user account yet)` : ''),
   );
+
+  // Collections: what each outlet owes its agency for the same week. DRAFTS
+  // only — an agency reviews and issues, nothing is put in front of an outlet
+  // automatically, and this app never moves the money either way.
+  //
+  // Derived from shift assignments rather than the vouchers just generated: a
+  // voucher snapshots one outlet name, so a PR who worked two venues would bill
+  // whichever came first. Same completed-work rule, different grouping.
+  try {
+    const totals = await collectionInvoiceRepository.weeklyOutletTotals(weekStart, weekEnd);
+    const drafted = await collectionInvoiceRepository.draftForWeek(
+      totals,
+      weekStart,
+      weekEnd,
+      ACTOR,
+    );
+    logger.info(
+      `[weekly-payout] collections: ${totals.length} outlet total(s), ${drafted.length} drafted` +
+        (drafted.length < totals.length
+          ? ` (${totals.length - drafted.length} already existed — re-run, left untouched)`
+          : ''),
+    );
+  } catch (error) {
+    // Vouchers are the payroll obligation and are already committed; a failure
+    // to draft a receivable must not cost the PRs their notification or make
+    // the run look failed.
+    logger.error('[weekly-payout] collections drafting failed:', error);
+  }
 }
 
 export const WEEKLY_PAYOUT_JOB: JobDefinition = {

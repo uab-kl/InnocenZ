@@ -118,6 +118,23 @@ export async function setOutletGeoFence(
 }
 
 /**
+ * Drops the pin — the exact inverse of setOutletGeoFence, and the only way to
+ * switch attendance verification back OFF for a venue. Every check-in there is
+ * accepted unmeasured again afterwards, so the UI confirms before calling it.
+ * Owner sub-role only, enforced server-side by outletOwnerOnly.
+ */
+export async function clearOutletGeoFence(
+	outletId: string,
+	onRefreshFail: () => void,
+): Promise<OutletApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.delete<OutletApiResponse>(
+		`/outlet/${outletId}/geo-fence`,
+	);
+	return response.data;
+}
+
+/**
  * All active outlet memberships for a single user, across every sub-role. Used
  * to resolve the signed-in operator's own outlet + role at session start
  * (mirrors fetchAgencyMembershipsForUser).

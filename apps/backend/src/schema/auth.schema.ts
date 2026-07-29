@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { SIGNUP_ACCOUNT_TYPES } from '@/features/auth/signup-roles.js';
 
 const LoginSchema = z
   .object({
@@ -26,7 +27,18 @@ const RegisterSchema = z.object({
     phoneNum: z.string(),
     username: z.string().min(1, 'Username is required'),
     password: z.string().min(6, 'Password must be at least 6 characters long').optional(),
-    roleId: z.string().min(1, 'Role is required'),
+    /**
+     * What kind of account is signing up. This is what a PUBLIC caller gets to
+     * choose; the server turns it into a role (features/auth/signup-roles.ts).
+     * 'admin' is not one of the options.
+     */
+    accountType: z.enum(SIGNUP_ACCOUNT_TYPES).optional(),
+    /**
+     * Honoured ONLY for an authenticated admin creating another account. A
+     * public caller sending this is ignored — it used to be the whole hole:
+     * required, unvalidated, and passed straight to createUserWithRole.
+     */
+    roleId: z.string().min(1).optional(),
 });
 
 const FirstTimeLoginSchema = z.object({

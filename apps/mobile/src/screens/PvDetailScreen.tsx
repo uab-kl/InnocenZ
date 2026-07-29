@@ -4,6 +4,7 @@
  */
 import React, { useMemo, useState } from 'react';
 import {
+  Alert,
   Modal,
   Pressable,
   ScrollView,
@@ -22,6 +23,8 @@ import {
 } from '../lib/demo-shifts';
 import { PAYMENT_HISTORY_WEEKS } from '../lib/demo-payment-history';
 import { usePaymentHistory } from '../lib/payment-history';
+import { useSession } from '../lib/session';
+import { signMyVoucher } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import { useSignedPvs } from '../lib/signed-pv';
 import { Pill } from '../components/ui';
@@ -131,7 +134,8 @@ function formatCell(value: number): string {
 export function PvDetailScreen({ pvId }: { pvId: string }) {
   const { goBack, setTab } = usePrNav();
   const { isSigned, signPv } = useSignedPvs();
-  const { weeks: apiWeeks } = usePaymentHistory();
+  const { weeks: apiWeeks, refresh: refreshHistory } = usePaymentHistory();
+  const { token } = useSession();
   const lastWeekPv = useMemo(() => getLastWeekAwaitingPv(), []);
   const hist =
     apiWeeks.find((p) => p.id === pvId) ?? PAYMENT_HISTORY_WEEKS.find((p) => p.id === pvId);
@@ -166,6 +170,15 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const [receiptsOpen, setReceiptsOpen] = useState(true);
   const [receiptDetail, setReceiptDetail] = useState<LinkedReceipt | null>(null);
 
+  /**
+   * This voucher's id IF it is a real backend row. Demo vouchers come from
+   * PAYMENT_HISTORY_WEEKS and there is no server to tell.
+   */
+  const backendPvId = useMemo(
+    () => apiWeeks.find((p) => p.id === pvId)?.id ?? null,
+    [apiWeeks, pvId],
+  );
+
   const confirmSign = () => {
     if (sigName.trim().length < 2) return;
     const sealed = {
@@ -180,6 +193,23 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       grid,
       sigName: sigName.trim(),
     });
+
+    // Tell the agency. Until this call existed the signature lived only in
+    // AsyncStorage, so nobody but this phone ever knew the PV was accepted.
+    if (backendPvId && token) {
+      signMyVoucher(token, backendPvId)
+        .then(() => refreshHistory())
+        .catch((e: unknown) => {
+          // Not swallowed: the PR has to know the agency was not told, because
+          // the local seal above makes it look like it was. The endpoint is
+          // idempotent, so signing again is the fix.
+          Alert.alert(
+            'Signed on this device only',
+            `${e instanceof Error ? e.message : 'Could not reach the agency.'}\n\nOpen this voucher and sign again when you have signal.`,
+          );
+        });
+    }
+
     setSigned(true);
     setSignOpen(false);
     setTab('history');

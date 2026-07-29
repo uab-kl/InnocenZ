@@ -19,6 +19,8 @@ import adminRequestRoutes from '@/features/admin-request/admin-request.routes.js
 import specialServiceRoutes from '@/features/special-service/special-service.routes.js';
 import outletWorkspaceRoutes from '@/features/outlet-workspace/outlet-workspace.routes.js';
 import ratingRoutes from '@/features/rating/rating.routes.js';
+import notificationRoutes from '@/features/notification/notification.routes.js';
+import collectionInvoiceRoutes from '@/features/collection-invoice/collection-invoice.routes.js';
 import { platformAuditMiddleware } from '@/middlewares/platform-audit.js';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import { requireAdmin } from '@/middlewares/require-role.js';
@@ -48,5 +50,10 @@ v1Router.use('/admin-request', adminRequestRoutes);
 v1Router.use('/special-service', specialServiceRoutes);
 v1Router.use('/outlet-workspace', outletWorkspaceRoutes);
 v1Router.use('/rating', ratingRoutes);
+// No role guard: every signed-in role has an inbox. Scoped by req.user.id in
+// the controller, so there is no user id for a caller to tamper with.
+v1Router.use('/notification', notificationRoutes);
+// Agency receivables. Scoped per org in the controller.
+v1Router.use('/collection-invoice', collectionInvoiceRoutes);
 
 export default v1Router;

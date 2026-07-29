@@ -4,6 +4,7 @@ import axios from "axios";
 import { useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
+	clearOutletGeoFence,
 	fetchOutletById,
 	type GeocodeCandidate,
 	geocodeOutletAddress,
@@ -133,6 +134,15 @@ export function useOutletGeoFence() {
 		},
 	});
 
+	const clearMut = useMutation({
+		mutationFn: () => clearOutletGeoFence(outletId as string, logout),
+		onSuccess: () => {
+			setCandidates([]);
+			setSearchedAddress(null);
+			queryClient.invalidateQueries({ queryKey: ["outlet", "profile"] });
+		},
+	});
+
 	return {
 		backed,
 		outlet,
@@ -143,13 +153,10 @@ export function useOutletGeoFence() {
 		lookupError,
 		isLookingUp: lookupMut.isPending,
 		isSaving: saveMut.isPending,
+		isClearing: clearMut.isPending,
 		lookup: (address?: string) => lookupMut.mutateAsync(address),
-		clearCandidates: () => {
-			setCandidates([]);
-			setSearchedAddress(null);
-			setLookupError(null);
-		},
 		save: (next: OutletPin) => saveMut.mutateAsync(next),
+		clearPin: () => clearMut.mutateAsync(),
 		saveError: saveMut.error
 			? messageFromError(saveMut.error, "Could not save the pin.")
 			: null,

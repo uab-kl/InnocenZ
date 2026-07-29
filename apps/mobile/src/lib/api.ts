@@ -170,6 +170,9 @@ export function registerPr(input: {
   return request<null>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({
+      // The server maps this to the 'pr' role. A PR sign-up cannot ask for any
+      // other one — see backend features/auth/signup-roles.ts.
+      accountType: 'pr',
       verificationId: input.verificationId,
       phoneNum: input.phoneNum,
       username: input.username,
@@ -497,6 +500,73 @@ export type ShiftAssignmentRecord = {
   /** The shift outlet's real drink menu (empty when no workspace menu). */
   drinkMenu: OutletDrinkItem[];
 };
+
+export type SignedVoucher = {
+  id: string;
+  status: string;
+  /** ISO timestamp the server stamped, not one the phone chose. */
+  prSignedAt: string | null;
+};
+
+/**
+ * Accept one of this PR's own vouchers.
+ *
+ * Idempotent server-side, so a retry after a dropped response is safe and will
+ * not move the signature timestamp. Refuses with 409 while a dispute is open —
+ * withdraw it first. Someone else's voucher answers 404.
+ */
+export function signMyVoucher(
+  accessToken: string,
+  voucherId: string,
+): Promise<SignedVoucher> {
+  return request<SignedVoucher>(`/payment-voucher/mine/${voucherId}/sign`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** The closed enum the backend writes — mirrors notification.model.ts. */
+export type NotificationKind =
+  | 'payment_voucher_issued'
+  | 'payment_voucher_dispute_resolved'
+  | 'overtime_pending_approval'
+  | 'shift_assigned'
+  | 'shift_cancelled'
+  | 'agency_join_resolved';
+
+export type NotificationRecord = {
+  id: string;
+  kind: NotificationKind;
+  title: string;
+  body: string | null;
+  payload: Record<string, unknown> | null;
+  /** ISO timestamp, or null while unread. */
+  readAt: string | null;
+  createdAt: string;
+};
+
+/**
+ * This PR's notifications, newest first.
+ *
+ * Scoped server-side by the caller's user id — there is no user id in the
+ * route, so nothing to scope wrong from here.
+ */
+export function fetchMyNotifications(accessToken: string): Promise<NotificationRecord[]> {
+  return request<NotificationRecord[]>('/notification?limit=50', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** Idempotent. A row that is not this PR's answers 404, which `request` throws. */
+export function markNotificationRead(
+  accessToken: string,
+  id: string,
+): Promise<NotificationRecord> {
+  return request<NotificationRecord>(`/notification/${id}/read`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
 
 /** This PR's shift assignments (mobile Shifts screen), scoped server-side. */
 export function fetchMyShiftAssignments(accessToken: string): Promise<ShiftAssignmentRecord[]> {

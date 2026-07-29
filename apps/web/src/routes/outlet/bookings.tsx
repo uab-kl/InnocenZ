@@ -65,7 +65,12 @@ function PostJobPage() {
 
 	const canPostShifts = outletCan(outletSubRole, "postJob");
 
-	const canOrderServices = outletCan(outletSubRole, "orderSpecialService");
+	// PHASE 2 — the agency add-on "Services" tab is hidden for now. Restore the
+	// commented line and drop the `false` to bring it back; everything
+	// downstream (the tab bar, the ?tab=services search param, and the services
+	// form) is gated on this one flag, so nothing else needs touching.
+	// const canOrderServices = outletCan(outletSubRole, "orderSpecialService");
+	const canOrderServices = false;
 
 	const tab: PostJobTab = useMemo(() => {
 		if (searchTab === "services" && canOrderServices) return "services";

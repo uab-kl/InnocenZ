@@ -15,6 +15,13 @@ const canWrite = requireRole('admin', 'agency');
 router.put('/mine/agencies', prController.updateMyAgencies.bind(prController));
 
 router.get('/', canRead, prController.list.bind(prController));
+
+// Proposed penalty deductions for a PR's week at one outlet. Read-only — it
+// computes what COULD be charged and never touches a voucher; applying it is a
+// deliberate agency act via PUT /payment-voucher/:id. Two segments, so it must
+// precede '/:id' or that route swallows it.
+router.get('/:id/penalties', canWrite, prController.getPenalties.bind(prController));
+
 router.get('/:id', canRead, prController.getById.bind(prController));
 router.post('/', canWrite, prController.create.bind(prController));
 router.put('/:id', canWrite, prController.update.bind(prController));

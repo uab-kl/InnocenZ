@@ -75,13 +75,24 @@ function resolveFloorPrDisplayStatusFromSlot(
 	now = new Date(),
 ): FloorDisplayStatus {
 	if (!slot) return "scheduled";
+
+	// A real attendance stamp beats the shift clock. The agency roster already
+	// reads a checked-in PR as on duty (backend-shift-map's liveRosterStatus),
+	// and the outlet is the venue the person is physically standing in — but
+	// this used to sit BELOW the clock gate, so before the shift started a
+	// genuine check-in read as "Booked" here while the agency showed "On duty".
+	// Check-in is deliberately not time-boxed, so an early stamp is real.
+	if (slot.checkedOutAt) return "checked-out";
+	if (slot.status === "on-duty" && slot.checkedInAt) return "on-duty";
+
+	// Nothing is stamped below this point, so the clock still governs: before
+	// the shift starts a PR is at most en route, and demo floor activity must
+	// not invent an on-duty PR for a shift that has not begun.
 	const clockStarted = outletShiftClockStarted(shift, now);
 	if (!clockStarted) {
 		if (slot.status === "en-route") return "en-route";
 		return "scheduled";
 	}
-	if (slot.checkedOutAt) return "checked-out";
-	if (slot.status === "on-duty" && slot.checkedInAt) return "on-duty";
 	if (slot.status === "en-route") return "en-route";
 	if (slot.status === "on-duty") return "en-route";
 	if (slotHasDemoFloorActivity(slot)) return "on-duty";

@@ -4,7 +4,7 @@ import {
 	useOutletGeoFence,
 } from "@agency-portal/hooks/use-outlet-geo-fence";
 import { useStore } from "@agency-portal/lib/store";
-import { Crosshair, MapPin, Search } from "lucide-react";
+import { Crosshair, MapPin, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
 import type { GeocodeCandidate } from "@/services/outlet";
 
@@ -24,6 +24,17 @@ function precisionNote(precision: GeocodeCandidate["precision"]): {
 	return { label: "Approximate — may be a whole area", warn: true };
 }
 
+/** Hairline rule with a centred word — ties the two lookup routes into one step. */
+function OrDivider() {
+	return (
+		<div className="flex items-center gap-3" aria-hidden="true">
+			<span className="h-px flex-1 bg-[var(--iz-line)]" />
+			<span className="iz-tiny iz-muted2">or</span>
+			<span className="h-px flex-1 bg-[var(--iz-line)]" />
+		</div>
+	);
+}
+
 /**
  * Sets the venue's check-in pin.
  *
@@ -31,8 +42,9 @@ function precisionNote(precision: GeocodeCandidate["precision"]): {
  * anything (`verifyWithinGeoFence` returns `enforced: false` when lat/lng are
  * null) — so this card is what turns attendance verification on for a venue.
  * A wrong pin is worse than none: it rejects staff who really are on site.
- * Hence lookup and commit are separate, and the operator sees the coordinates
- * before saving.
+ * Hence lookup and commit are separate: the operator confirms the matched
+ * address and its precision before anything is saved. Coordinates are
+ * deliberately not shown — `precisionNote` is what flags a bad match now.
  *
  * Owner-only, matching `outletOwnerOnly` on PATCH /outlet/:id/geo-fence.
  */
@@ -47,16 +59,22 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 		lookupError,
 		isLookingUp,
 		isSaving,
+		isClearing,
 		lookup,
-		clearCandidates,
 		save,
+		clearPin,
 	} = useOutletGeoFence();
 
 	const [address, setAddress] = useState("");
-	const [radius, setRadius] = useState(String(DEFAULT_GEO_FENCE_RADIUS));
-	const [manual, setManual] = useState(false);
-	const [manualLat, setManualLat] = useState("");
-	const [manualLng, setManualLng] = useState("");
+	// null = untouched, so the field tracks the server value as it loads and
+	// after each save. Seeding state with the saved radius instead would pin it
+	// at the default (50) for the whole first render pass — and re-saving would
+	// then silently shrink a venue fenced at any other distance.
+	const [radiusDraft, setRadiusDraft] = useState<string | null>(null);
+	// Removing a pin silently re-opens the venue to check-ins from anywhere, and
+	// nothing downstream would flag it — so it costs a second click, not a toast
+	// after the fact.
+	const [confirmingRemove, setConfirmingRemove] = useState(false);
 
 	// Demo sessions have no outlet to pin; the demo store holds no coordinates.
 	// Say so rather than rendering nothing — an operator who sees no card at all
@@ -66,7 +84,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 			<>
 				<IzSectionLabel>Attendance</IzSectionLabel>
 				<IzCard>
-					<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
+					<p className="iz-tiny iz-muted text-pretty rounded-[14px] border border-dashed border-[var(--iz-line)] px-3 py-2">
 						Demo session — sign in with a real outlet account to pin the venue
 						and switch on the check-in fence.
 					</p>
@@ -74,11 +92,17 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 			</>
 		);
 
+	const savedRadius = pin?.radius ?? DEFAULT_GEO_FENCE_RADIUS;
+	const radius = radiusDraft ?? String(savedRadius);
 	const radiusValue = Number(radius);
 	const radiusValid =
 		Number.isInteger(radiusValue) &&
 		radiusValue >= MIN_RADIUS &&
 		radiusValue <= MAX_RADIUS;
+	// Radius alone is savable once a pin exists — otherwise widening a fence
+	// would mean re-finding an address you have already confirmed.
+	const radiusChanged =
+		pin != null && radiusValid && radiusValue !== pin.radius;
 
 	const commit = async (lat: number, lng: number) => {
 		if (!radiusValid) {
@@ -87,181 +111,169 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 		}
 		try {
 			await save({ lat, lng, radius: radiusValue });
+			setRadiusDraft(null);
 			toast("Check-in pin saved", "success");
-			setManual(false);
-			setManualLat("");
-			setManualLng("");
 		} catch {
 			toast("Could not save the pin", "warn");
 		}
 	};
 
-	const commitManual = () => {
-		const lat = Number(manualLat);
-		const lng = Number(manualLng);
-		if (!Number.isFinite(lat) || lat < -90 || lat > 90) {
-			toast("Latitude must be between -90 and 90", "warn");
-			return;
+	const removePin = async () => {
+		try {
+			await clearPin();
+			setConfirmingRemove(false);
+			setRadiusDraft(null);
+			toast("Check-in pin removed — this venue is no longer fenced", "success");
+		} catch {
+			toast("Could not remove the pin", "warn");
 		}
-		if (!Number.isFinite(lng) || lng < -180 || lng > 180) {
-			toast("Longitude must be between -180 and 180", "warn");
-			return;
-		}
-		void commit(lat, lng);
 	};
 
 	return (
 		<>
 			<IzSectionLabel>Attendance</IzSectionLabel>
 			<IzCard>
-				{/* Saving a pin is the fence master-switch, so lead with whether it
-				    is on: from that moment every check-in outside the radius is
-				    refused server-side (HTTP 422). */}
-				{pin ? (
-					<p className="iz-tiny mb-2 rounded-lg border border-[rgba(74,222,128,.35)] bg-[rgba(74,222,128,.08)] px-2.5 py-1.5 text-[var(--iz-green)]">
-						Fence ON · pin saved at {pin.lat.toFixed(6)}, {pin.lng.toFixed(6)} ·{" "}
-						{pin.radius} m — check-ins outside this circle are refused.
-					</p>
-				) : (
-					<p className="iz-tiny mb-2 rounded-lg border border-[rgba(251,191,36,.35)] bg-[rgba(251,191,36,.08)] px-2.5 py-1.5 text-[var(--iz-amber,#fbbf24)]">
-						No map pin yet — the check-in rule is NOT enforced for this venue.
-						Saving a pin switches it on immediately.
-					</p>
-				)}
-
 				<div className="flex items-start justify-between gap-3">
-					<div>
+					<div className="min-w-0">
 						<div className="flex items-center gap-2 text-sm font-semibold">
-							<MapPin className="h-4 w-4" /> Check-in location
+							<MapPin className="h-4 w-4 shrink-0" /> Check-in location
 						</div>
-						<p className="iz-tiny iz-muted mt-1">
+						{/* Saving a pin is the fence master-switch. State it once — the
+						    colour carries the urgency, the sentence the consequence —
+						    rather than repeating it in a banner, a pill and a caption. */}
+						<p
+							className={`iz-tiny mt-1 text-pretty ${
+								pin ? "iz-muted" : "text-[var(--iz-amber)]"
+							}`}
+						>
 							{pin
-								? `PRs must be within ${pin.radius} m of this point to check in.`
-								: "No pin set — check-ins here are accepted without any location check."}
+								? `PRs must be within ${pin.radius} m of this pin to check in — anywhere further is refused.`
+								: "No pin yet — check-ins here are accepted from anywhere, unmeasured."}
 						</p>
 					</div>
 					<span
-						className={`iz-pill !text-[10px] ${pin ? "iz-pill-green" : "iz-pill-amber"}`}
+						className={`iz-pill !text-[10px] shrink-0 ${pin ? "iz-pill-green" : "iz-pill-amber"}`}
 					>
 						{isLoading ? "Loading" : pin ? "Fenced" : "Not set"}
 					</span>
 				</div>
 
 				{!canEdit && (
-					<p className="iz-tiny iz-muted2 mt-3">
+					<p className="iz-tiny iz-muted2 mt-3 text-pretty">
 						Only the outlet owner can change the check-in pin.
 					</p>
 				)}
 
 				{canEdit && (
-					<div className="mt-4 space-y-3">
-						<div className="flex flex-wrap gap-2">
+					<div className="mt-4 space-y-4">
+						<div>
+							<div className="flex flex-wrap items-end gap-3">
+								<label className="block">
+									<span className="iz-tiny iz-muted">Radius</span>
+									<div className="mt-1 flex items-center gap-2">
+										{/* `.iz-field-input` is width:100%, which outranks a bare
+										    `w-24` in the cascade — hence the `!`. */}
+										<input
+											className={`iz-field-input !w-24 tabular-nums ${
+												radiusValid ? "" : "!border-[var(--iz-red)]"
+											}`}
+											inputMode="numeric"
+											aria-label="Check-in radius in metres"
+											aria-invalid={!radiusValid}
+											value={radius}
+											onChange={(e) => setRadiusDraft(e.target.value)}
+										/>
+										<span className="iz-tiny iz-muted2">metres</span>
+									</div>
+								</label>
+								{radiusChanged && (
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft iz-btn-sm shrink-0 whitespace-nowrap"
+										disabled={isSaving}
+										onClick={() => void commit(pin.lat, pin.lng)}
+									>
+										{isSaving ? "Saving…" : "Update radius"}
+									</button>
+								)}
+							</div>
+							{!radiusValid && (
+								<p className="iz-tiny mt-1.5 text-pretty text-[var(--iz-red)]">
+									Must be a whole number between {MIN_RADIUS} and {MAX_RADIUS}{" "}
+									metres.
+								</p>
+							)}
+						</div>
+
+						<div className="space-y-3">
+							<p className="iz-tiny iz-muted2 text-pretty">
+								{pin
+									? "Move the pin by looking the address up again."
+									: "Find the venue's front door. Saving switches enforcement on immediately."}
+							</p>
+
+							{/* `!` throughout this card: the theme's `.iz-btn`/`.iz-btn-sm`/
+							    `.iz-field-input` all hard-set width and outrank plain
+							    Tailwind width utilities in the cascade. */}
 							<button
 								type="button"
-								className="iz-btn iz-btn-soft"
+								className="iz-btn iz-btn-soft iz-btn-sm !w-full"
 								disabled={isLookingUp}
 								onClick={() => void lookup()}
 							>
 								<Crosshair className="h-4 w-4" />
 								{isLookingUp ? "Looking up…" : "Find from venue address"}
 							</button>
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft"
-								onClick={() => {
-									setManual((m) => !m);
-									clearCandidates();
-								}}
-							>
-								{manual ? "Cancel manual entry" : "Enter coordinates"}
-							</button>
-						</div>
 
-						<div className="flex gap-2">
-							<input
-								className="iz-field-input flex-1"
-								placeholder="Or search another address"
-								value={address}
-								onChange={(e) => setAddress(e.target.value)}
-							/>
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft"
-								disabled={isLookingUp || address.trim().length < 3}
-								onClick={() => void lookup(address)}
-							>
-								<Search className="h-4 w-4" /> Search
-							</button>
-						</div>
+							<OrDivider />
 
-						<label className="block">
-							<span className="iz-tiny iz-muted">Radius (metres)</span>
-							<input
-								className="iz-field-input mt-1 w-32"
-								inputMode="numeric"
-								value={radius}
-								onChange={(e) => setRadius(e.target.value)}
-							/>
-						</label>
-
-						{lookupError && (
-							<p className="iz-tiny rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5 text-[var(--iz-amber,#d9b97a)]">
-								{lookupError}
-							</p>
-						)}
-
-						{manual && (
-							<div className="rounded-lg border border-[var(--iz-line)] p-3">
-								<p className="iz-tiny iz-muted mb-2">
-									Read the coordinates off any map app at the venue's door.
-								</p>
-								<div className="flex gap-2">
-									<input
-										className="iz-field-input flex-1"
-										placeholder="Latitude"
-										value={manualLat}
-										onChange={(e) => setManualLat(e.target.value)}
-									/>
-									<input
-										className="iz-field-input flex-1"
-										placeholder="Longitude"
-										value={manualLng}
-										onChange={(e) => setManualLng(e.target.value)}
-									/>
-								</div>
+							{/* `.iz-btn` is width:100% (mobile-first), which would starve the
+							    input on this row — `.iz-btn-sm` restores width:auto. */}
+							<div className="flex gap-2">
+								<input
+									className="iz-field-input min-w-0 flex-1"
+									placeholder="Search another address"
+									value={address}
+									onChange={(e) => setAddress(e.target.value)}
+								/>
 								<button
 									type="button"
-									className="iz-btn iz-btn-primary mt-2 w-full"
-									disabled={isSaving}
-									onClick={commitManual}
+									className="iz-btn iz-btn-soft iz-btn-sm shrink-0 whitespace-nowrap"
+									disabled={isLookingUp || address.trim().length < 3}
+									onClick={() => void lookup(address)}
 								>
-									{isSaving ? "Saving…" : "Save this pin"}
+									<Search className="h-4 w-4" /> Search
 								</button>
 							</div>
+						</div>
+
+						{lookupError && (
+							<p className="iz-tiny text-pretty rounded-[14px] border border-dashed border-[var(--iz-line)] px-3 py-2 text-[var(--iz-amber)]">
+								{lookupError}
+							</p>
 						)}
 
 						{candidates.length > 0 && (
 							<div className="space-y-2">
 								{searchedAddress && (
-									<p className="iz-tiny iz-muted2">
+									<p className="iz-tiny iz-muted2 text-pretty">
 										Searched: {searchedAddress}
 									</p>
 								)}
+								{/* Panel radius sits above the 14px button it contains, so the
+								    corners nest rather than fight. */}
 								{candidates.map((candidate) => {
 									const note = precisionNote(candidate.precision);
 									return (
 										<div
 											key={candidate.placeId}
-											className="rounded-lg border border-[var(--iz-line)] p-3"
+											className="rounded-2xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] p-3"
 										>
-											<div className="text-sm font-medium">
+											<div className="text-sm font-medium text-balance">
 												{candidate.formattedAddress}
 											</div>
-											<p className="iz-tiny iz-muted2 mt-0.5 font-mono">
-												{candidate.lat.toFixed(6)}, {candidate.lng.toFixed(6)}
-											</p>
 											<p
-												className={`iz-tiny mt-0.5 ${note.warn ? "text-[var(--iz-amber,#d9b97a)]" : "iz-muted"}`}
+												className={`iz-tiny mt-0.5 ${note.warn ? "text-[var(--iz-amber)]" : "iz-muted"}`}
 											>
 												{note.label}
 											</p>
@@ -280,6 +292,44 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 								})}
 							</div>
 						)}
+
+						{/* Last, and behind a confirm: this is the only control on the card
+						    that makes the venue LESS verified than it was. */}
+						{pin &&
+							(confirmingRemove ? (
+								<div className="rounded-2xl border border-[rgba(240,138,138,.35)] bg-[var(--iz-red-bg)] p-3">
+									<p className="iz-tiny text-pretty text-[var(--iz-red)]">
+										Remove the pin? Attendance verification switches off — every
+										check-in here is accepted again, from anywhere, unmeasured.
+									</p>
+									<div className="mt-2 flex flex-wrap gap-2">
+										<button
+											type="button"
+											className="iz-btn iz-btn-soft iz-btn-sm shrink-0"
+											disabled={isClearing}
+											onClick={() => setConfirmingRemove(false)}
+										>
+											Keep the pin
+										</button>
+										<button
+											type="button"
+											className="iz-btn iz-btn-danger iz-btn-sm shrink-0"
+											disabled={isClearing}
+											onClick={() => void removePin()}
+										>
+											{isClearing ? "Removing…" : "Yes, remove it"}
+										</button>
+									</div>
+								</div>
+							) : (
+								<button
+									type="button"
+									className="iz-btn iz-btn-ghost iz-btn-sm !w-full !text-[var(--iz-red)]"
+									onClick={() => setConfirmingRemove(true)}
+								>
+									<Trash2 className="h-4 w-4" /> Remove pin
+								</button>
+							))}
 					</div>
 				)}
 			</IzCard>

@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { authController, agencyRepository } from '@/composition-root.js';
 import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
+import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
 
 const router = Router();
 
@@ -31,7 +32,19 @@ router.get('/agencies', async (_req, res) => {
 router.post('/forgot-password', authController.forgotPassword.bind(authController));
 router.post('/reset-password', authController.resetPassword.bind(authController));
 router.get('/me', authenticateJWT, authController.me.bind(authController));
-router.post('/register', (req, res, next) => {
+
+// TOTP enrolment. Both require a signed-in caller and act only on THEIR OWN
+// account — there is no user id in either route, so one user cannot enrol or
+// confirm a factor on another's behalf.
+router.post('/mfa/enroll', authenticateJWT, authController.enrollMfa.bind(authController));
+router.post('/mfa/confirm', authenticateJWT, authController.confirmMfa.bind(authController));
+/**
+ * Serves two callers: a public sign-up with no token, and an admin creating
+ * another admin with one. optionalAuthenticateJWT reads the token when it is
+ * there without rejecting when it is not — the controller then decides what the
+ * caller is allowed to create. It is not a guard; do not treat it as one.
+ */
+router.post('/register', optionalAuthenticateJWT, (req, res, next) => {
   uploadRegisterProfileImage.single('profileImage')(req, res, (err) => {
     if (err) {
       return res.status(400).json({ success: false, message: err.message, data: null });

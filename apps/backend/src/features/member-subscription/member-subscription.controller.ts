@@ -10,6 +10,7 @@ import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
 import { parseGranularity } from '@/util/period.js';
+import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 
 function parseDate(value: unknown): Date | undefined {
   if (typeof value !== 'string' || value.length === 0) return undefined;
@@ -27,7 +28,42 @@ type PeriodRevenuePoint = {
 };
 
 export class MemberSubscriptionControllerClass {
-  constructor(private repository: MemberSubscriptionRepositoryClass) {}
+  constructor(
+    private repository: MemberSubscriptionRepositoryClass,
+    private orgScopeDeps: OrgScopeDeps,
+  ) {}
+
+  /**
+   * Narrows the client's filter to the caller's own subscription.
+   *
+   * This router had NO gate and NO scoping: any signed-in account could page
+   * every member's billing history, and a PR could cancel one. An agency now
+   * sees only its own row, an outlet only its own, and admin sees everything.
+   *
+   * Returns null when the caller belongs to no org — the caller must 403 on it
+   * rather than fall through to an unfiltered query.
+   */
+  private async scopedFilter(
+    req: Request,
+  ): Promise<MemberSubscriptionFilter | null> {
+    const filter = this.buildFilter(req);
+    const scope = await resolveOrgScope(req, this.orgScopeDeps);
+    if (scope.isAdmin) return filter;
+
+    // Server-derived, and it OVERWRITES whatever the client asked for — the
+    // whole point is that these two fields stop being caller-controlled.
+    if (scope.agencyId) {
+      return { ...filter, subscriberType: 'agency', subscriberId: scope.agencyId };
+    }
+    // An operator of several venues holds one subscription per venue; the
+    // filter takes a single id, so this reads the first. Multi-venue operators
+    // need a subscriberIds filter — noted rather than guessed at.
+    const outletId = scope.outletIds[0];
+    if (outletId) {
+      return { ...filter, subscriberType: 'outlet', subscriberId: outletId };
+    }
+    return null;
+  }
 
   private buildFilter(req: Request): MemberSubscriptionFilter {
     const datesRaw = req.query.dates;
@@ -58,8 +94,16 @@ export class MemberSubscriptionControllerClass {
     try {
       const page = Number(req.query.page ?? 1);
       const pageSize = Number(req.query.pageSize ?? 10);
+      const filter = await this.scopedFilter(req);
+      if (!filter) {
+        return res.status(403).json({
+          success: false,
+          message: 'No organization associated with this account',
+          data: null,
+        });
+      }
       const { records, totalCount } = await this.repository.listPaginated({
-        filter: this.buildFilter(req),
+        filter,
         page,
         pageSize,
       });
@@ -81,7 +125,15 @@ export class MemberSubscriptionControllerClass {
   async summary(req: Request, res: Response) {
     try {
       const granularity = parseGranularity(req.query.granularity);
-      const rows = await this.repository.revenueByPeriod(granularity, this.buildFilter(req));
+      const filter = await this.scopedFilter(req);
+      if (!filter) {
+        return res.status(403).json({
+          success: false,
+          message: 'No organization associated with this account',
+          data: null,
+        });
+      }
+      const rows = await this.repository.revenueByPeriod(granularity, filter);
       const byPeriod = new Map<string, PeriodRevenuePoint>();
       for (const row of rows) {
         const point =
@@ -120,6 +172,18 @@ export class MemberSubscriptionControllerClass {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Someone else's subscription is a 404, not a 403 — the response must not
+      // confirm the id exists.
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
+      const ownsIt =
+        scope.isAdmin ||
+        (record.subscriberType === 'agency' && record.subscriberId === scope.agencyId) ||
+        (record.subscriberType === 'outlet' && scope.outletIds.includes(record.subscriberId));
+      if (!ownsIt) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
       res.status(200).json({ success: true, message: 'OK', data: record });
     } catch (error) {
       logger.error('[MemberSubscriptionController.getById] Error:', error);

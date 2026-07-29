@@ -11,6 +11,10 @@ import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { CreatePrSchema, UpdatePrSchema } from '@/schema/pr.schema';
 import { PrFilter, PrStatus, PrTier } from './pr.model';
+import { OutletWorkspaceRepositoryClass } from '@/features/outlet-workspace/outlet-workspace.repository.js';
+import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
+import type { PayClass } from '@/features/outlet-workspace/outlet-workspace.model.js';
+import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -35,6 +39,8 @@ export class PrControllerClass {
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
     private agencyPrRepository: AgencyPrRepository,
+    private outletWorkspaceRepository: OutletWorkspaceRepositoryClass,
+    private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
   ) {}
 
   /**
@@ -295,6 +301,77 @@ export class PrControllerClass {
       res.status(200).json({ success: true, message: 'PR removed', data: null });
     } catch (error) {
       logger.error('[PrController.remove] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * What this PR's attendance WOULD cost them under an outlet's penalty rules.
+   *
+   * A proposal, not a deduction. Nothing here writes to a voucher: the agency
+   * decides, and applies it via PUT /payment-voucher/:id if they agree. Same
+   * shape as overtime — computed, shown, not money until a human says so. That
+   * restraint is deliberate: a penalty takes pay away, and only one outlet of
+   * six has any rules configured, so an automatic deduction would quietly
+   * underpay people wherever the rules are half-written.
+   *
+   * `outletId` is required rather than inferred. Rules belong to an outlet
+   * workspace and a PR works at several venues, so picking one for them would be
+   * a guess about whose rules bind. Evaluating every outlet a PR worked that
+   * week is the natural follow-up.
+   */
+  async getPenalties(req: Request, res: Response) {
+    try {
+      const prId = paramId(req.params.id);
+      const outletId = typeof req.query.outletId === 'string' ? req.query.outletId : '';
+      const weekStart = typeof req.query.weekStart === 'string' ? req.query.weekStart : '';
+      const weekEnd = typeof req.query.weekEnd === 'string' ? req.query.weekEnd : '';
+      const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+      if (!outletId || !isDate(weekStart) || !isDate(weekEnd)) {
+        return res.status(400).json({
+          success: false,
+          message: 'outletId, weekStart and weekEnd (yyyy-MM-dd) are required',
+          data: null,
+        });
+      }
+
+      const pr = await this.prRepository.getById(prId);
+      if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const workspace = await this.outletWorkspaceRepository.getByOutletId(outletId);
+      const rules = workspace?.penaltyRules ?? [];
+      if (rules.length === 0) {
+        // Not an error: most outlets have written no rules, and "no rules" is a
+        // real answer meaning nothing can be charged.
+        return res.status(200).json({
+          success: true,
+          message: 'OK',
+          data: { breaches: [], totalFineCents: 0, totalFineRm: '0.00', window: null },
+        });
+      }
+
+      // The backend has no pay-class column; the tier carries it. Anything that
+      // is not commission-only earns a basic wage.
+      const payClass: PayClass = pr.tier === 'commission_only' ? 'commissionOnly' : 'basic';
+
+      // Grace belongs to the late rule; with no late rule there is no lateness
+      // concept, and 0 would wrongly make every minute count.
+      const grace = graceMinutesFor(rules);
+      const window = await this.shiftAssignmentRepository.attendanceWindow({
+        prId,
+        weekStart,
+        weekEnd,
+        graceMinutes: grace ?? 0,
+      });
+
+      const proposal = evaluatePrPenalties(payClass, window, rules);
+      return res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: { ...proposal, window, payClass },
+      });
+    } catch (error) {
+      logger.error('[PrController.getPenalties] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

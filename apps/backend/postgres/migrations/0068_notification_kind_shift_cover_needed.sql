@@ -1,0 +1,11 @@
+-- Sick cover: when a PR drops out of a shift, the agency has to find someone
+-- else. Every piece of that already existed — the backfill worklist, ranked
+-- replacement candidates, and the assign write — except the part where anyone
+-- is TOLD. The worklist sat there and the agency had to think to go look at it.
+--
+-- Addressed to the agency, unlike the three shift notifications before it,
+-- which all go to the PR.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back
+-- inside a transaction, so a re-run must be a no-op.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'shift_cover_needed';
