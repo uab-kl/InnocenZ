@@ -1,6 +1,5 @@
 import { getPublicClient } from '@/lib/axios-v1'
 import type { SignupInput } from './register-schemas'
-import { getSignupRoleId } from './signup-role-ids'
 import type { ApiResponse } from './auth-api'
 
 export interface RegisterResponse {
@@ -30,15 +29,15 @@ async function fileToBase64(file: File): Promise<string> {
 export async function registerUser(
 	input: SignupInput,
 ): Promise<ApiResponse<RegisterResponse>> {
-	const roleId = getSignupRoleId(input.accountType)
-
+	// No roleId. The server derives the role from `accountType` below — a public
+	// caller naming its own role was the escalation hole, and the two VITE_*
+	// role ids this used to read were shipped in the bundle anyway.
 	const client = getPublicClient()
 	const payload: Record<string, unknown> = {
 		email: input.loginEmail,
 		phoneNum: normalizePhoneNumber(input.phoneNum),
 		username: input.companyName,
 		password: input.password,
-		roleId,
 		companyName: input.companyName,
 		companyRegistrationOld: input.companyRegistrationOld,
 		companyRegistrationNew: input.companyRegistrationNew,

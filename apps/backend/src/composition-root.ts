@@ -60,10 +60,12 @@ export const userRoleRepository = new UserRoleRepositoryClass();
 export const userProfileRepository = new UserProfileRepositoryClass();
 export const userRepository = new UserRepositoryClass(userRoleRepository, userProfileRepository);
 export const authRepository = new AuthRepositoryClass(jwtController, userRepository, userRoleRepository);
-export const authController = new AuthControllerClass(authRepository, jwtController, userRepository, userProfileRepository);
+// Declared above authController: registration resolves its own role by name now,
+// rather than trusting a roleId off the request body.
+export const roleRepository = new RoleRepositoryClass();
+export const authController = new AuthControllerClass(authRepository, jwtController, userRepository, userProfileRepository, roleRepository);
 export const healthController = new HealthControllerClass();
 
-export const roleRepository = new RoleRepositoryClass();
 export const roleController = new RoleControllerClass(roleRepository);
 
 export const moduleRepository = new ModuleRepositoryClass();

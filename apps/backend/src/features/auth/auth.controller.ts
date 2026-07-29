@@ -8,6 +8,12 @@ import { logger } from '@/util/logger.js';
 import { LoginSchema, RegisterSchema, ForgotPasswordSchema, ResetPasswordSchema } from '@/schema/auth.schema.js';
 import { UserRepositoryClass as UserRepository } from '@/features/user/user.repository.js';
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository.js';
+import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
+import {
+  roleNameForAccountType,
+  SIGNUP_ACCOUNT_TYPES,
+  type SignupAccountType,
+} from './signup-roles.js';
 import { saveProfileImageFile } from '@/util/profile-image.js';
 import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
@@ -18,6 +24,7 @@ export class AuthControllerClass {
     private jwtController: JwtControllerClass,
     private userRepository: UserRepository,
     private userProfileRepository: UserProfileRepositoryClass,
+    private roleRepository: RoleRepositoryClass,
   ) {}
 
   async login(req: Request, res: Response) {
@@ -104,6 +111,71 @@ export class AuthControllerClass {
     }
   }
 
+  /** True only if the caller is signed in AND holds the admin role. */
+  private async callerIsAdmin(req: Request): Promise<boolean> {
+    // optionalAuthenticateJWT leaves req.user unset for anonymous callers, bad
+    // tokens and suspended accounts alike, so this reads false for all three.
+    const callerId = req.user?.id;
+    if (!callerId) return false;
+    try {
+      // Roles come from the DB, never from the token — same rule as requireRole.
+      const roles = await this.authRepository.getRolesForUserIds([callerId]);
+      return roles.some((r) => r.roleName === 'admin');
+    } catch (error) {
+      logger.error('[AuthController.callerIsAdmin] Error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Decides which role a registration creates. The whole point of this method
+   * is that a public caller never gets to name one.
+   *
+   * An authenticated admin may still pass an explicit `roleId` — that is the
+   * admin screen creating another admin, and it is the only path that can reach
+   * an elevated role. Everyone else gets the role the server derives from
+   * `accountType`, which cannot spell 'admin'.
+   */
+  private async resolveRegistrationRoleId(
+    req: Request,
+    body: { accountType?: SignupAccountType; roleId?: string },
+  ): Promise<{ roleId: string } | { error: { status: number; message: string } }> {
+    if (body.roleId && (await this.callerIsAdmin(req))) {
+      return { roleId: body.roleId };
+    }
+
+    if (body.roleId) {
+      // Not an error — the web sign-up still sends one. Log it, ignore it, and
+      // fall through to the account type. If this ever fires with an admin role
+      // id on it, that is someone probing.
+      logger.warn(
+        '[AuthController.register] Ignoring client-supplied roleId from a non-admin caller',
+      );
+    }
+
+    if (!body.accountType) {
+      return {
+        error: {
+          status: 400,
+          message: `accountType is required and must be one of: ${SIGNUP_ACCOUNT_TYPES.join(', ')}`,
+        },
+      };
+    }
+
+    const roleName = roleNameForAccountType(body.accountType);
+    const role = await this.roleRepository.getRoleByName(roleName);
+    if (!role) {
+      // The four default roles are seeded by scripts/init-roles.ts. Missing one
+      // is a deployment fault, not something the caller did wrong.
+      logger.error(`[AuthController.register] Role '${roleName}' is not seeded`);
+      return {
+        error: { status: 500, message: 'Sign-up is not configured for this account type' },
+      };
+    }
+
+    return { roleId: role.id };
+  }
+
   async registerUser(req: Request, res: Response) {
     try {
       logger.info('[AuthController.register] Register request received');
@@ -127,6 +199,15 @@ export class AuthControllerClass {
         });
       }
 
+      const resolved = await this.resolveRegistrationRoleId(req, parsedBody);
+      if ('error' in resolved) {
+        return res.status(resolved.error.status).json({
+          success: false,
+          message: resolved.error.message,
+          data: null,
+        });
+      }
+
       const passwordHash = parsedBody.password ? await hashPassword(parsedBody.password) : null;
       const actor = parsedBody.email ?? parsedBody.phoneNum;
 
@@ -141,7 +222,7 @@ export class AuthControllerClass {
           createdBy: actor,
           updatedBy: actor,
         },
-        parsedBody.roleId,
+        resolved.roleId,
       );
 
       if (req.file) {

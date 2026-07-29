@@ -170,6 +170,9 @@ export function registerPr(input: {
   return request<null>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({
+      // The server maps this to the 'pr' role. A PR sign-up cannot ask for any
+      // other one — see backend features/auth/signup-roles.ts.
+      accountType: 'pr',
       verificationId: input.verificationId,
       phoneNum: input.phoneNum,
       username: input.username,
