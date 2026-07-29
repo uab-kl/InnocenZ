@@ -8,6 +8,7 @@
  */
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Modal, Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import * as Location from 'expo-location';
 import { distanceM } from '../lib/geo';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
@@ -80,8 +81,16 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [actionError, setActionError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // Bottom sheets render outside PhoneFrame, so they must clear the Android
+  // nav-button bar themselves.
+  const insets = useSafeAreaInsets();
+
   // ---- 1D-3/1D-4: live position vs the venue pin (server still referees) ----
   const [myPos, setMyPos] = useState<LivePos | null>(null);
+  /** null = not checked yet; the styled explainer shows before the OS popup. */
+  const [locGranted, setLocGranted] = useState<boolean | null>(null);
+  const [locPromptOpen, setLocPromptOpen] = useState(false);
+  const [locPromptDismissed, setLocPromptDismissed] = useState(false);
   const pin =
     active && active.outletLat !== null && active.outletLng !== null
       ? {
@@ -91,10 +100,45 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         }
       : null;
 
+  // Ask ONCE with our own styled dialog before the bare OS popup ever shows.
+  // Already-granted phones skip straight to the live watch.
+  useEffect(() => {
+    if (!pin || phase !== 'booked' || locGranted !== null) return;
+    let alive = true;
+    void Location.getForegroundPermissionsAsync()
+      .then(({ status }) => {
+        if (!alive) return;
+        if (status === 'granted') setLocGranted(true);
+        else if (!locPromptDismissed) setLocPromptOpen(true);
+      })
+      .catch(() => {
+        /* Treat as undecided; the Refresh GPS link can still request. */
+      });
+    return () => {
+      alive = false;
+    };
+  }, [pin !== null, phase, locGranted, locPromptDismissed]);
+
+  const enableLocation = useCallback(async () => {
+    setLocPromptOpen(false);
+    setLocPromptDismissed(true);
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      setLocGranted(status === 'granted');
+      if (status === 'granted' && Platform.OS === 'android') {
+        // If the device's own location toggle is OFF, this pops the system
+        // "turn on location" prompt — so Enable really switches location on.
+        await Location.enableNetworkProviderAsync().catch(() => {});
+      }
+    } catch {
+      setLocGranted(false);
+    }
+  }, []);
+
   // Watch the phone's position while the screen is open (foreground only) and
   // a check-in is still ahead; stop the watch on unmount / once on duty.
   useEffect(() => {
-    if (!pin || phase !== 'booked') return;
+    if (!pin || phase !== 'booked' || locGranted !== true) return;
     let sub: { remove: () => void } | null = null;
     let cancelled = false;
     (async () => {
@@ -119,11 +163,18 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       cancelled = true;
       sub?.remove();
     };
-  }, [pin?.lat, pin?.lng, phase]);
+  }, [pin?.lat, pin?.lng, phase, locGranted]);
 
   /** One-shot re-read for the “Refresh GPS” link (indoors ±80 m is normal). */
   const refreshGps = useCallback(async () => {
     try {
+      // Also the recovery path after “Continue Without GPS”: asks again.
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== 'granted') {
+        setActionError('Location permission is off — allow it to check in.');
+        return;
+      }
+      setLocGranted(true);
       const pos = await Location.getCurrentPositionAsync({
         accuracy: Location.Accuracy.Balanced,
       });
@@ -510,7 +561,10 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         onRequestClose={() => setCancelOpen(false)}
       >
         <Pressable style={styles.sheetBackdrop} onPress={() => setCancelOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, { paddingBottom: 18 + insets.bottom }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.sheetTitle}>Cancel shift?</Text>
             <Text style={styles.sheetMeta}>
               {outletName} · {shiftDateYmd ? fmtDFriendly(...shiftDateYmd) : '—'} · {shiftTime}
@@ -551,6 +605,54 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </Pressable>
           </Pressable>
         </Pressable>
+      </Modal>
+
+      {/* Styled location explainer — shown once, BEFORE the bare OS popup. */}
+      <Modal
+        visible={locPromptOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          setLocPromptOpen(false);
+          setLocPromptDismissed(true);
+        }}
+      >
+        <View style={styles.sheetBackdrop}>
+          <View
+            style={[styles.sheet, { alignItems: 'center', paddingBottom: 18 + insets.bottom }]}
+          >
+            <View style={styles.locIconWrap}>
+              <MapPin size={26} color={C.gold} strokeWidth={2.2} />
+            </View>
+            <Text style={[styles.sheetTitle, { textAlign: 'center' }]}>
+              Enable Location Access
+            </Text>
+            <Text style={[styles.sheetMeta, { textAlign: 'center' }]}>
+              InnocenZ uses your location for one thing only — proving you are at the
+              venue when you check in.
+            </Text>
+            <View style={styles.locChecklist}>
+              <Text style={styles.locCheckText}>✓ Check-in unlocks within 50 m of the venue</Text>
+              <Text style={styles.locCheckText}>✓ One location stamp per check-in and check-out</Text>
+              <Text style={styles.locCheckText}>✓ No background tracking — ever</Text>
+            </View>
+            <Pressable
+              style={[styles.locEnableBtn, grad(GRADIENTS.accent, C.accent)]}
+              onPress={() => void enableLocation()}
+            >
+              <Text style={styles.locEnableText}>Enable Location Access</Text>
+            </Pressable>
+            <Pressable
+              style={styles.sheetCancel}
+              onPress={() => {
+                setLocPromptOpen(false);
+                setLocPromptDismissed(true);
+              }}
+            >
+              <Text style={styles.sheetCancelText}>Continue Without GPS</Text>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -952,4 +1054,35 @@ const styles = StyleSheet.create({
   dangerBtnText: { fontFamily: F.sora, fontSize: 16, fontWeight: '700', color: C.red },
   sheetCancel: { marginTop: 10, alignItems: 'center', padding: 10 },
   sheetCancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.muted },
+  locIconWrap: {
+    width: 64,
+    height: 64,
+    borderRadius: 32,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(232,198,106,0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(232,198,106,0.35)',
+    marginBottom: 12,
+  },
+  locChecklist: {
+    alignSelf: 'stretch',
+    marginTop: 14,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(255,255,255,0.03)',
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 8,
+  },
+  locCheckText: { fontFamily: F.manrope, fontSize: 13, color: C.txt, lineHeight: 18 },
+  locEnableBtn: {
+    alignSelf: 'stretch',
+    marginTop: 16,
+    borderRadius: 14,
+    alignItems: 'center',
+    paddingVertical: 14,
+  },
+  locEnableText: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: '#241a08' },
 });

@@ -5,6 +5,7 @@
  */
 import React, { type ReactNode } from 'react';
 import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, GRADIENTS, grad } from '../theme/theme';
 import { useViewportSize } from '../lib/viewport';
 
@@ -33,6 +34,9 @@ export function PhoneFrame({
 }) {
   const { width, height } = useViewportSize();
   const framed = Platform.OS === 'web' && width > 520;
+  // Real device notch/status-bar and nav-button heights — all zero on web, so
+  // the desktop bezel preview is unaffected.
+  const insets = useSafeAreaInsets();
 
   const body = (
     <View
@@ -45,11 +49,17 @@ export function PhoneFrame({
           : styles.phoneFull,
       ]}
     >
-      {header && <View style={styles.header}>{header}</View>}
+      {header && (
+        <View style={[styles.header, insets.top > 0 && { paddingTop: insets.top }]}>
+          {header}
+        </View>
+      )}
       {scroll ? (
         <ScrollView
           style={styles.viewport}
-          contentContainerStyle={footer ? { paddingBottom: C.tabbarH } : undefined}
+          contentContainerStyle={
+            footer ? { paddingBottom: C.tabbarH + insets.bottom } : undefined
+          }
           showsVerticalScrollIndicator={false}
         >
           {children}
@@ -57,7 +67,16 @@ export function PhoneFrame({
       ) : (
         <View style={styles.viewport}>{children}</View>
       )}
-      {footer && <View style={styles.footer}>{footer}</View>}
+      {footer && (
+        <View
+          style={[
+            styles.footer,
+            insets.bottom > 0 && { paddingBottom: insets.bottom, backgroundColor: C.bg },
+          ]}
+        >
+          {footer}
+        </View>
+      )}
       {overlay}
     </View>
   );
