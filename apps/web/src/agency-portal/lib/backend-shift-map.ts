@@ -189,7 +189,7 @@ function liveRosterStatus(a: ShiftAssignment): RosterSlotStatus {
 function localDateIso(value: string): string {
 	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
 	const d = new Date(value);
-	return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString('en-CA');
+	return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("en-CA");
 }
 
 export function rosterSlotsFromBackend(input: {
@@ -208,13 +208,8 @@ export function rosterSlotsFromBackend(input: {
 		{ lat: string | null; lng: string | null; geoFenceRadius: number | null }
 	>;
 }): AgencyRosterSlot[] {
-	const {
-		shifts,
-		assignments,
-		prNameById,
-		outletNameById,
-		outletGeoById,
-	} = input;
+	const { shifts, assignments, prNameById, outletNameById, outletGeoById } =
+		input;
 	const shiftById = new Map(shifts.map((s) => [s.id, s]));
 
 	const slots: AgencyRosterSlot[] = [];
