@@ -17,6 +17,7 @@ import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.rep
 import { UserRoleControllerClass } from '@/features/rbac/user-role/user-role.controller.js';
 import { AuditLogRepositoryClass } from '@/features/audit-log/audit-log.repository.js';
 import { NotificationRepositoryClass } from '@/features/notification/notification.repository.js';
+import { NotificationControllerClass } from '@/features/notification/notification.controller.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import { SubscriptionControllerClass } from '@/features/subscription/subscription.controller.js';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
@@ -84,6 +85,8 @@ export const auditLogRepository = new AuditLogRepositoryClass();
 // In-app notifications. Producers should call notify() rather than reaching for
 // this directly — it is the seam a real transport gets added behind later.
 export const notificationRepository = new NotificationRepositoryClass();
+// The read side. Producers write through notify(); recipients read through here.
+export const notificationController = new NotificationControllerClass(notificationRepository);
 
 export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
