@@ -9,6 +9,7 @@ import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
+import { notify } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -707,6 +708,15 @@ export class ShiftAssignmentControllerClass {
         createdBy: actor,
         updatedBy: actor,
       });
+      await this.notifyPr({
+        prId: pr.id,
+        kind: 'shift_assigned',
+        title: 'You have a new shift',
+        body: shift.shiftDate,
+        payload: { assignmentId: assignment?.id, shiftId: shift.id, shiftDate: shift.shiftDate },
+        actor,
+      });
+
       res.status(201).json({ success: true, message: 'PR assigned to shift', data: assignment });
     } catch (error) {
       if (isUniqueViolation(error)) {
@@ -715,6 +725,34 @@ export class ShiftAssignmentControllerClass {
       logger.error('[ShiftAssignmentController.create] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
+  }
+
+  /**
+   * Tell a PR about their own assignment.
+   *
+   * One place for the pr -> user hop, because `notify()` takes a USER id and
+   * every caller here has a pr id. Deliberately not awaited into the response
+   * path's success: notify() never throws, so a failed notification can never
+   * undo the assignment the agency just made.
+   */
+  private async notifyPr(input: {
+    prId: string;
+    kind: 'shift_assigned' | 'shift_cancelled';
+    title: string;
+    body?: string;
+    payload: Record<string, unknown>;
+    actor: string;
+  }): Promise<void> {
+    const pr = await this.prRepository.getById(input.prId);
+    if (!pr?.userId) return;
+    await notify({
+      userId: pr.userId,
+      kind: input.kind,
+      title: input.title,
+      body: input.body,
+      payload: input.payload,
+      actor: input.actor,
+    });
   }
 
   async update(req: Request, res: Response) {
@@ -742,6 +780,21 @@ export class ShiftAssignmentControllerClass {
         updatedBy: getActor(req),
       });
       if (!assignment) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Only on the transition INTO cancelled — re-saving an already-cancelled
+      // row must not tell the PR twice.
+      if (parsed.data.status === 'cancelled' && existing.status !== 'cancelled') {
+        const shift = await this.shiftRepository.getById(existing.shiftId);
+        await this.notifyPr({
+          prId: existing.prId,
+          kind: 'shift_cancelled',
+          title: 'A shift was cancelled',
+          body: shift?.shiftDate,
+          payload: { assignmentId: existing.id, shiftId: existing.shiftId },
+          actor: getActor(req),
+        });
+      }
+
       res.status(200).json({ success: true, message: 'Assignment updated', data: assignment });
     } catch (error) {
       logger.error('[ShiftAssignmentController.update] Error:', error);
@@ -763,6 +816,19 @@ export class ShiftAssignmentControllerClass {
 
       const removed = await this.shiftAssignmentRepository.remove(id);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Unassigning is a cancellation from the PR's side — the shift is simply
+      // gone from their app, and until now nothing said so.
+      const shift = await this.shiftRepository.getById(existing.shiftId);
+      await this.notifyPr({
+        prId: existing.prId,
+        kind: 'shift_cancelled',
+        title: 'You were removed from a shift',
+        body: shift?.shiftDate,
+        payload: { assignmentId: existing.id, shiftId: existing.shiftId },
+        actor: getActor(req),
+      });
+
       res.status(200).json({ success: true, message: 'PR unassigned from shift', data: null });
     } catch (error) {
       logger.error('[ShiftAssignmentController.remove] Error:', error);
