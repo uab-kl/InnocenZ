@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useNavigate } from '@tanstack/react-router';
 import {
   AlertTriangle,
@@ -17,6 +17,8 @@ import {
   type PrNotificationKind,
 } from '@agency-portal/lib/pr-features';
 import { usePrPortalReady } from '@agency-portal/lib/use-pr-sub-role';
+import { useNotifications } from '@agency-portal/hooks/use-notifications';
+import type { NotificationKind } from '@/services/notification';
 
 function prKindIcon(kind: PrNotificationKind) {
   if (kind === 'sos') return AlertTriangle;
@@ -25,20 +27,68 @@ function prKindIcon(kind: PrNotificationKind) {
   return Briefcase;
 }
 
+/** Backend kind -> the kind this bell renders. */
+const PR_KIND_MAP: Record<NotificationKind, PrNotificationKind> = {
+  payment_voucher_issued: 'pv',
+  payment_voucher_dispute_resolved: 'pv',
+  shift_assigned: 'assignment',
+  shift_cancelled: 'assignment',
+  agency_join_resolved: 'application',
+  // Addressed to the agency, not the PR — mapped only so this map stays total.
+  overtime_pending_approval: 'assignment',
+};
+
 export function PrNotificationBell() {
   const { role: prSubRole } = usePrPortalReady();
   const allNotifications = useStore((s) => s.prNotifications);
-  const notifications = prNotificationsForRecipient(
+  const demoNotifications = prNotificationsForRecipient(
     allNotifications,
     getPrRosterId(prSubRole),
   );
   const markPrNotificationRead = useStore((s) => s.markPrNotificationRead);
   const [open, setOpen] = useState(false);
   const navigate = useNavigate();
-  const unread = notifications.filter((n) => !n.read).length;
+
+  // Real session -> the `notification` table. No recipient filter needed: the
+  // server already returns only what was addressed to this user, which is
+  // stricter than the demo store's prId match.
+  const backend = useNotifications('pr');
+  const backendNotifications = useMemo<PrNotification[]>(
+    () =>
+      backend.records.map((record) => ({
+        id: record.id,
+        kind: PR_KIND_MAP[record.kind],
+        title: record.title,
+        body: record.body ?? '',
+        at: new Date(record.createdAt).toLocaleString(undefined, {
+          day: 'numeric',
+          month: 'short',
+          hour: 'numeric',
+          minute: '2-digit',
+        }),
+        read: record.readAt !== null,
+        // Keeps the existing PV deep-link working for real rows.
+        pvId:
+          typeof record.payload?.voucherId === 'string'
+            ? record.payload.voucherId
+            : undefined,
+      })),
+    [backend.records],
+  );
+
+  const notifications = backend.backed
+    ? backendNotifications
+    : demoNotifications;
+  const unread = backend.backed
+    ? backend.unread
+    : notifications.filter((n) => !n.read).length;
 
   const openNotification = (n: PrNotification) => {
-    markPrNotificationRead(n.id);
+    if (backend.backed) {
+      backend.markRead(n.id);
+    } else {
+      markPrNotificationRead(n.id);
+    }
     setOpen(false);
     if (n.pvId) {
       void navigate({ to: '/host/PaymentVoucher', search: { pvId: n.pvId } });

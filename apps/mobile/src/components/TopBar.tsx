@@ -9,6 +9,11 @@ import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { fmtClock, fmtDTopbar, formatRM, todayYmd, weekPvIssueDayLabel } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
+import {
+  fetchMyNotifications,
+  markNotificationRead,
+  type NotificationRecord,
+} from '../lib/api';
 import { Avatar, IzButton } from './ui';
 import { Bell, ChevronLeft, FileText } from './icons';
 import { usePrNav } from '../lib/pr-nav';
@@ -31,7 +36,7 @@ export function TopBar({
   backLabel?: string;
   onBack?: () => void;
 }) {
-  const { me } = useSession();
+  const { me, token } = useSession();
   const { openPv } = usePrNav();
   const { awaiting } = useAwaitingLastWeekPv();
   const time = useClock();
@@ -39,21 +44,73 @@ export function TopBar({
   const [sheetOpen, setSheetOpen] = useState(false);
   const [readIds, setReadIds] = useState<string[]>([]);
 
+  const [rows, setRows] = useState<NotificationRecord[]>([]);
+
+  // Real notifications for this PR. Polled rather than pushed — there is no
+  // transport yet, the `notification` table IS the delivery.
+  useEffect(() => {
+    if (!token) {
+      setRows([]);
+      return;
+    }
+    let alive = true;
+    const load = () => {
+      fetchMyNotifications(token)
+        .then((next) => {
+          if (alive) setRows(next);
+        })
+        // A failure here must not take the top bar down with it; the bell just
+        // shows whatever it last had.
+        .catch(() => {});
+    };
+    load();
+    const id = setInterval(load, 60_000);
+    return () => {
+      alive = false;
+      clearInterval(id);
+    };
+  }, [token]);
+
   const notifications = useMemo(() => {
-    const list = awaiting
-      ? [
-          {
-            id: `n-pv-${awaiting.todo.pvId}`,
-            title: 'Payment Voucher ready',
-            body: `${awaiting.todo.ref} · ${formatRM(awaiting.todo.net)} net — Finance Head pre-signed. Review & sign.`,
-            at: weekPvIssueDayLabel(1),
-            read: false as boolean,
-            pvId: awaiting.todo.pvId as string | undefined,
-          },
-        ]
-      : [];
-    return list.map((n) => ({ ...n, read: n.read || readIds.includes(n.id) }));
-  }, [awaiting, readIds]);
+    const real = rows.map((r) => ({
+      id: r.id,
+      title: r.title,
+      body: r.body ?? '',
+      at: new Date(r.createdAt).toLocaleString(undefined, {
+        day: 'numeric',
+        month: 'short',
+        hour: 'numeric',
+        minute: '2-digit',
+      }),
+      read: r.readAt !== null,
+      pvId: typeof r.payload?.voucherId === 'string' ? r.payload.voucherId : undefined,
+      backed: true,
+    }));
+
+    // The awaiting-PV prompt is a stand-in for `payment_voucher_issued`. Keep it
+    // only while no real row covers that ground, so a PR never loses the
+    // "review & sign" nudge but also never sees it twice.
+    const hasRealPv = rows.some((r) => r.kind === 'payment_voucher_issued');
+    const derived =
+      awaiting && !hasRealPv
+        ? [
+            {
+              id: `n-pv-${awaiting.todo.pvId}`,
+              title: 'Payment Voucher ready',
+              body: `${awaiting.todo.ref} · ${formatRM(awaiting.todo.net)} net — Finance Head pre-signed. Review & sign.`,
+              at: weekPvIssueDayLabel(1),
+              read: false as boolean,
+              pvId: awaiting.todo.pvId as string | undefined,
+              backed: false,
+            },
+          ]
+        : [];
+
+    return [...real, ...derived].map((n) => ({
+      ...n,
+      read: n.read || readIds.includes(n.id),
+    }));
+  }, [rows, awaiting, readIds]);
   const unread = notifications.filter((n) => !n.read).length;
 
   const displayName = me?.username ?? 'PR';
@@ -130,7 +187,15 @@ export function TopBar({
                 key={n.id}
                 style={[styles.notifCard, !n.read && styles.notifCardUnread]}
                 onPress={() => {
+                  // Optimistic locally either way; a real row also persists the
+                  // read server-side so it stays read on the next device.
                   setReadIds((ids) => [...ids, n.id]);
+                  if (n.backed && token) {
+                    markNotificationRead(token, n.id)
+                      .then(() => fetchMyNotifications(token))
+                      .then(setRows)
+                      .catch(() => {});
+                  }
                   setSheetOpen(false);
                   if (n.pvId) openPv(n.pvId);
                 }}

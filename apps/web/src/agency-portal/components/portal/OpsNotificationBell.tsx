@@ -25,6 +25,7 @@ import {
   isUrgentOpsKind,
   OPS_KIND_LABEL,
 } from '@agency-portal/lib/push-notifications';
+import { useNotifications } from '@agency-portal/hooks/use-notifications';
 
 function kindIcon(kind: OpsNotificationKind) {
   if (kind === 'sos') return AlertTriangle;
@@ -46,17 +47,33 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
   const [sosDetailId, setSosDetailId] = useState<string | null>(null);
   const navigate = useNavigate();
 
+  // A real session reads the `notification` table; demo sessions keep the demo
+  // store. SOS has no backend table at all, so the incident sheet below stays
+  // on the store either way.
+  const backend = useNotifications(portal);
+
   const outletName = portal === 'outlet' ? outletOrgName : undefined;
-  const notifications = opsNotificationsForPortal(
+  const demoNotifications = opsNotificationsForPortal(
     allNotifications,
     portal,
     outletName,
   );
-  const unread = notifications.filter((n) => !n.read).length;
+  const notifications = backend.backed
+    ? backend.notifications
+    : demoNotifications;
+  // Backed sessions trust the server's count rather than counting the page we
+  // happen to be showing — the list is capped at 50.
+  const unread = backend.backed
+    ? backend.unread
+    : notifications.filter((n) => !n.read).length;
   const sosDetail = sosIncidentById(sosIncidents, sosDetailId ?? undefined);
 
   const openNotification = (n: OpsNotification) => {
-    markOpsNotificationRead(n.id);
+    if (backend.backed) {
+      backend.markRead(n.id);
+    } else {
+      markOpsNotificationRead(n.id);
+    }
     if (n.kind === 'sos' && n.sosId) {
       setSosDetailId(n.sosId);
       return;
