@@ -9,7 +9,7 @@ import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
-import { notify } from '@/features/notification/notify.js';
+import { notify, notifyMany } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -405,6 +405,30 @@ export class ShiftAssignmentControllerClass {
         ...(tierWages != null ? { payAmount: tierWages } : {}),
         updatedBy: actor,
       });
+      // The stamp was clamped, so the PR worked past the scheduled end and those
+      // hours are NOT money until the agency approves them. Nothing told the
+      // agency before — overtime sat unseen unless someone opened the shift.
+      // Recipient is the agency, not the PR: it is the agency's decision.
+      if (scheduledEnd && now > scheduledEnd) {
+        const members = await this.agencyMemberRepository.listByAgency(existing.agencyId);
+        const memberUserIds = members
+          .map((m) => m.userId)
+          .filter((userId): userId is string => !!userId);
+        await notifyMany(memberUserIds, {
+          kind: 'overtime_pending_approval',
+          title: 'Overtime needs approval',
+          body: `${pr.name} worked past the scheduled end${shift ? ` on ${shift.shiftDate}` : ''}`,
+          payload: {
+            assignmentId: id,
+            prId: pr.id,
+            shiftId: existing.shiftId,
+            scheduledEnd: scheduledEnd.toISOString(),
+            checkedOutAt: now.toISOString(),
+          },
+          actor,
+        });
+      }
+
       res.status(200).json({ success: true, message: 'Checked out', data: assignment });
     } catch (error) {
       logger.error('[ShiftAssignmentController.checkOutMine] Error:', error);

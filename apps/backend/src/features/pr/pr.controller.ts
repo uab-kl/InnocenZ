@@ -4,6 +4,7 @@ import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.rep
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
+import { notify } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -237,6 +238,25 @@ export class PrControllerClass {
 
       const pr = await this.prRepository.update(id, { ...data, updatedBy: getActor(req) });
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // The agency's Approvals screen decides a sign-up by writing this status
+      // ('active' = accepted, 'inactive' = rejected), so this transition IS the
+      // join resolution — there is no separate approve endpoint. Only fire when
+      // the status actually MOVED, so ordinary profile edits stay silent.
+      if (data.status && data.status !== existing.status && pr.userId) {
+        const accepted = data.status === 'active';
+        await notify({
+          userId: pr.userId,
+          kind: 'agency_join_resolved',
+          title: accepted ? 'You were accepted by the agency' : 'Your agency application was declined',
+          // No reason is persisted on rejection — the screen collects one but
+          // the column does not exist, so there is nothing honest to quote.
+          body: accepted ? 'You can now be scheduled for shifts.' : undefined,
+          payload: { prId: pr.id, agencyId: pr.agencyId, status: data.status },
+          actor: getActor(req),
+        });
+      }
+
       res.status(200).json({ success: true, message: 'PR updated', data: pr });
     } catch (error) {
       logger.error('[PrController.update] Error:', error);
