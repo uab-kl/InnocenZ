@@ -72,6 +72,35 @@ function formatRosterSlotDrinks(floor: OutletPrLiveSales): string {
   return floor.drinkSalesRm > 0 ? formatRM(floor.drinkSalesRm) : '—';
 }
 
+/**
+ * Check-in stamps arrive as a UTC ISO string, and the cell used to print it
+ * raw: "2026-07-29T04:01:04.748Z". Unreadable at a glance, and actively
+ * misleading — 04:01Z is 12:01 pm in Malaysia, so a lunchtime check-in looked
+ * like a 4am one.
+ *
+ * Shows local time. The date is added only when the stamp did not land on the
+ * shift's own date, which is the case worth noticing: a shift running past
+ * midnight, or a PR who checked in a day early.
+ */
+function formatCheckInStamp(iso: string, shiftDateIso?: string): string {
+  const at = new Date(iso);
+  if (Number.isNaN(at.getTime())) return iso;
+
+  const time = at.toLocaleTimeString(undefined, {
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+  // en-CA gives yyyy-MM-dd, which is the shape dateIso already uses.
+  const stampDate = at.toLocaleDateString('en-CA');
+  if (!shiftDateIso || stampDate === shiftDateIso) return time;
+
+  const day = at.toLocaleDateString(undefined, {
+    day: 'numeric',
+    month: 'short',
+  });
+  return `${day} · ${time}`;
+}
+
 function formatRosterSlotTips(floor: OutletPrLiveSales): string {
   return floor.tipRm > 0 ? formatRM(floor.tipRm) : '—';
 }
@@ -484,7 +513,15 @@ function RosterTableRow({
       <td className="iz-portal-table-meta iz-portal-table-shift">
         {formatRosterShiftTime(slot)}
       </td>
-      <td className="iz-portal-table-meta">{slot.checkedInAt ?? '—'}</td>
+      <td
+        className="iz-portal-table-meta"
+        // Full stamp on hover, so the exact second is still available.
+        title={slot.checkedInAt ?? undefined}
+      >
+        {slot.checkedInAt
+          ? formatCheckInStamp(slot.checkedInAt, slot.dateIso)
+          : '—'}
+      </td>
       <td className="iz-portal-table-status">
         <StatusPills slot={slot} />
       </td>
