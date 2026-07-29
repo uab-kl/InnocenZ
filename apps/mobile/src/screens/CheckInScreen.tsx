@@ -120,6 +120,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     try {
       const { status } = await Location.requestForegroundPermissionsAsync();
       setLocGranted(status === 'granted');
+      if (status === 'granted' && Platform.OS === 'android') {
+        // If the device's own location toggle is OFF, this pops the system
+        // "turn on location" prompt — so Enable really switches location on.
+        await Location.enableNetworkProviderAsync().catch(() => {});
+      }
     } catch {
       setLocGranted(false);
     }
