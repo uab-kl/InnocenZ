@@ -18,6 +18,7 @@ import {
 } from '@agency-portal/lib/agency-demo';
 import { agencyCan } from '@agency-portal/lib/agency-rbac';
 import { useAgencyPrs } from '@agency-portal/hooks/use-agency-prs';
+import { useAgencyRatings } from '@agency-portal/hooks/use-agency-ratings';
 import {
   IzCard,
   IzCardTitle,
@@ -90,7 +91,12 @@ function AgencyManagePRs() {
     detach: detachAgencyPr,
   } = useAgencyPrs();
   const shiftHistory = useStore((s) => s.shiftHistory);
-  const ratings = useStore((s) => s.ratings);
+  // Real ratings an outlet left on this agency's PRs. Written to the `rating`
+  // table since the rate sheet shipped, but never read back until now — a real
+  // rating was invisible here while demo rows showed fine.
+  const demoRatings = useStore((s) => s.ratings);
+  const backendRatings = useAgencyRatings();
+  const ratings = backendRatings.backed ? backendRatings.ratings : demoRatings;
   const agencySubRole = useStore((s) => s.agencySubRole);
   const requestAgencyPrDetach = useStore((s) => s.requestAgencyPrDetach);
   const rawPenaltyRules = useStore((s) => s.outletWorkspace.penaltyRules);

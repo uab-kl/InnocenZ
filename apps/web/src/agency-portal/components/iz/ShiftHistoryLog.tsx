@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { AppTopbar } from '@agency-portal/components/Nav';
+import { useAgencyRatings } from '@agency-portal/hooks/use-agency-ratings';
 import {
   OutletPrHistoryCard,
   OutletShiftLogRatingBlock,
@@ -80,7 +81,11 @@ export function ShiftHistoryLog({
   const [detailPrId, setDetailPrId] = useState<string | null>(null);
   const [detailPrVenue, setDetailPrVenue] = useState<string | null>(null);
   const [detailVenue, setDetailVenue] = useState<string | null>(null);
-  const outletRatings = useStore((s) => s.ratings);
+  const demoRatings = useStore((s) => s.ratings);
+  const backendRatings = useAgencyRatings();
+  const outletRatings = backendRatings.backed
+    ? backendRatings.ratings
+    : demoRatings;
   const outletCommissionRules = useStore((s) => s.outletCommissionRules);
   const storeAgencyPRs = useStore((s) => s.agencyPRs);
   const agencyPRs = agencyPRsProp ?? storeAgencyPRs;
@@ -738,7 +743,11 @@ export function OutletPrShiftHistorySheet({
   agencyName?: string;
 }) {
   const shiftHistory = useStore((s) => s.shiftHistory) ?? [];
-  const outletRatings = useStore((s) => s.ratings);
+  const demoRatings = useStore((s) => s.ratings);
+  const backendRatings = useAgencyRatings();
+  const outletRatings = backendRatings.backed
+    ? backendRatings.ratings
+    : demoRatings;
   const outletCommissionRules = useStore((s) => s.outletCommissionRules);
   const agencyPRs = useStore((s) => s.agencyPRs);
   const perDrinkRm = useStore((s) => s.outletWorkspace.perDrinkRm);

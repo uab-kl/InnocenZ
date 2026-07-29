@@ -6598,9 +6598,17 @@ export const useStore = create<StoreState>()(
 						prs: marketplacePrsFromAgency(nextAgencyPRs),
 					};
 				});
-				// Best-effort persist to the backend rating table in a REAL outlet
-				// session. The rate UI is demo-driven (no real-session PR/shift data),
-				// so this only lands the rating; failures are silent (no session kick).
+				// Persist to the backend rating table in a REAL outlet session. The
+				// rate UI is demo-driven (no real-session PR/shift data), so this only
+				// lands the rating — but it must not land SILENTLY.
+				//
+				// It used to swallow the error while the toast below fired
+				// unconditionally: a real outlet was told "Rating submitted" even when
+				// the POST failed, and the agency then never saw the rating. The store
+				// write above is optimistic, so a failure has to be said out loud.
+				//
+				// onRefreshFail stays a no-op deliberately: a rating is not worth
+				// ejecting someone mid-shift over an expired token.
 				void (async () => {
 					const { getOutletIdentity } = await import(
 						"@agency-portal/lib/outlet-identity"
@@ -6620,8 +6628,13 @@ export const useStore = create<StoreState>()(
 							},
 							() => {},
 						);
-					} catch {
-						// best-effort — the demo store is already updated
+					} catch (error) {
+						get().toast(
+							`Rating saved on this device only — the agency was not told. ${
+								error instanceof Error ? error.message : "Please try again."
+							}`,
+							"warn",
+						);
 					}
 				})();
 				get().toast("Rating submitted", "success");
