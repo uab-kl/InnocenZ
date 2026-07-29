@@ -99,12 +99,15 @@ const ALL_NAV: AgencyNavItem[] = [
     icon: iconForNav('Payroll'),
     permission: 'viewPv',
   },
-  {
-    to: '/agency/special-service',
-    label: 'Job Posting',
-    icon: iconForNav('Job Posting'),
-    permission: 'viewPv',
-  },
+  // PHASE 2 — "Job Posting" (agency service bookings) is hidden for now.
+  // Uncomment to bring it back; the /agency/special-service route itself is
+  // untouched, so nothing else needs restoring.
+  // {
+  //   to: '/agency/special-service',
+  //   label: 'Job Posting',
+  //   icon: iconForNav('Job Posting'),
+  //   permission: 'viewPv',
+  // },
   {
     to: '/agency/history',
     label: 'History',
