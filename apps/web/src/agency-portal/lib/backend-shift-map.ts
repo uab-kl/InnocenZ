@@ -179,6 +179,19 @@ function liveRosterStatus(a: ShiftAssignment): RosterSlotStatus {
 	return working ? "on-duty" : rosterStatusFromAssignment(a.status);
 }
 
+/**
+ * shift_date arrives as a timestamptz holding LOCAL midnight — the JSON string
+ * is "2026-07-28T16:00:00.000Z" for the local 29 Jul. Panels compare dateIso
+ * against plain "YYYY-MM-DD" (today), so the raw string never matches and an
+ * on-duty PR silently vanishes from the roster day view + live GPS panel.
+ * Normalize to the viewer's calendar date; plain date strings pass through.
+ */
+function localDateIso(value: string): string {
+	if (/^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+	const d = new Date(value);
+	return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString('en-CA');
+}
+
 export function rosterSlotsFromBackend(input: {
 	shifts: Shift[];
 	assignments: ShiftAssignment[];
@@ -216,8 +229,8 @@ export function rosterSlotsFromBackend(input: {
 			prId: a.prId,
 			prName: prNameById?.get(a.prId) ?? a.prName ?? "Unknown PR",
 			outlet: outletNameById?.get(shift.outletId) ?? shift.outletId,
-			date: shift.shiftDate,
-			dateIso: shift.shiftDate,
+			date: localDateIso(shift.shiftDate),
+			dateIso: localDateIso(shift.shiftDate),
 			// Must match the ShiftRequest's `shift` exactly — the panels join roster
 			// slots to a shift on this string.
 			shift: normalizedSlotLabel(shift.slot) || (shift.eventName ?? ""),
@@ -281,7 +294,7 @@ export function shiftRequestFromBackendShift(input: {
 		outletName,
 		// The demo calls today's night "Tonight"; formatOutletDayLabel says "Today".
 		date: label === "Today" ? "Tonight" : label,
-		dateIso: shift.shiftDate,
+		dateIso: localDateIso(shift.shiftDate),
 		// Same expression as the roster slot's `shift` — they are joined on it.
 		shift: normalizedSlotLabel(shift.slot) || (shift.eventName ?? ""),
 		quantity: shift.quantity,

@@ -155,8 +155,21 @@ export class ShiftRepositoryClass {
       }
       if (filter?.status) conditions.push(eq(ShiftTable.status, filter.status));
       if (filter?.eventKind) conditions.push(eq(ShiftTable.eventKind, filter.eventKind));
-      if (filter?.fromDate) conditions.push(gte(ShiftTable.shiftDate, filter.fromDate));
-      if (filter?.toDate) conditions.push(lte(ShiftTable.shiftDate, filter.toDate));
+      // shift_date holds LOCAL midnight as a timestamptz (16:00Z the previous
+      // day). Comparing it to a bare 'YYYY-MM-DD' casts to 00:00 UTC and
+      // silently drops TODAY's shifts from fromDate=today queries — which is
+      // how an on-duty PR vanished from the agency roster + live GPS panel.
+      // Compare calendar dates in the venue timezone instead.
+      if (filter?.fromDate) {
+        conditions.push(
+          sql`(${ShiftTable.shiftDate} at time zone 'Asia/Kuala_Lumpur')::date >= ${filter.fromDate}::date`,
+        );
+      }
+      if (filter?.toDate) {
+        conditions.push(
+          sql`(${ShiftTable.shiftDate} at time zone 'Asia/Kuala_Lumpur')::date <= ${filter.toDate}::date`,
+        );
+      }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 
