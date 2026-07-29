@@ -243,8 +243,14 @@ export class PrControllerClass {
       // ('active' = accepted, 'inactive' = rejected), so this transition IS the
       // join resolution — there is no separate approve endpoint. Only fire when
       // the status actually MOVED, so ordinary profile edits stay silent.
-      if (data.status && data.status !== existing.status && pr.userId) {
-        const accepted = data.status === 'active';
+      // Only these two are join decisions. `pr_status` also has 'pending' and
+      // 'suspended', and treating "not active" as a rejection would tell a
+      // suspended PR their application was declined — wrong, and alarming to
+      // someone the agency already accepted.
+      const JOIN_DECISION: Record<string, boolean> = { active: true, inactive: false };
+      const accepted = data.status ? JOIN_DECISION[data.status] : undefined;
+
+      if (accepted !== undefined && data.status !== existing.status && pr.userId) {
         await notify({
           userId: pr.userId,
           kind: 'agency_join_resolved',
