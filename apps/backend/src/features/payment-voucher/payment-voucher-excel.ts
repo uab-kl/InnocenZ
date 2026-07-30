@@ -78,8 +78,21 @@ export function pvLogoPath(): string | null {
   return fs.existsSync(p) ? p : null;
 }
 
-/** Same derivation the PR app shows on screen, so paper and phone agree. */
+/**
+ * The voucher's number, as printed and as used for the download filename.
+ *
+ * Reads the STORED `voucher_no` (migration 0075). It used to derive
+ * `PV-<weekEnd>`, which meant every PR's voucher for a week carried the same
+ * number and downloaded over the top of the last one — a voucher number that
+ * cannot identify the voucher.
+ *
+ * The week fallback is kept only for a row that predates the column or whose
+ * allocation failed. It is wrong in the same way as before, and deliberately so:
+ * printing nothing where a document expects a number is worse, and the fallback
+ * is now visible in exactly one place instead of five.
+ */
 export function voucherRef(voucher: PaymentVoucherWithLines): string {
+  if (voucher.voucherNo) return voucher.voucherNo;
   const end = (voucher.weekEnd ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (end) return `PV-${end[1]}${end[2]}${end[3]}`;
   return `PV-${voucher.id.slice(0, 8).toUpperCase()}`;

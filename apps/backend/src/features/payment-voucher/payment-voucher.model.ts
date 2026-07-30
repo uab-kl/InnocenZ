@@ -43,6 +43,19 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
     .references(() => AgencyTable.id, { onDelete: 'cascade' }),
   // Nullable: a voucher can be issued to a payee not (yet) registered as a PR.
   prId: uuid('pr_id').references(() => PrTable.id, { onDelete: 'set null' }),
+  /**
+   * The voucher's own number — `PV-000001`, allocated once on insert (0075).
+   *
+   * Before this it was DERIVED as `PV-<weekEnd>` in five places, so every PR's
+   * voucher for a week shared one number and one download filename. Read this
+   * column; never re-derive a number from the week, or the fifth surface will
+   * disagree with the other four again.
+   *
+   * Nullable because the column is unique and a NULL never collides: a failed
+   * allocation must not block a real voucher, and reads as "unnumbered" rather
+   * than as somebody else's number.
+   */
+  voucherNo: varchar('voucher_no', { length: 40 }).unique(),
   prName: varchar('pr_name', { length: 255 }).notNull(),
   prIc: varchar('pr_ic', { length: 100 }),
   outlet: varchar('outlet', { length: 255 }),

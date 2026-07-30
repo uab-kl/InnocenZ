@@ -47,14 +47,74 @@ type ReceiptInput = Omit<
   'id' | 'receiptNo' | 'createdAt' | 'updatedAt'
 >;
 
+/** How many times the allocator retries past a taken number before giving up. */
+const VOUCHER_NO_ATTEMPTS = 20;
+
+/**
+ * Is this the unique-index violation on `voucher_no`, and nothing else?
+ *
+ * Narrow on purpose: a retry loop that catches every error would turn a real
+ * fault into twenty silent attempts and then an unnumbered voucher. drizzle
+ * wraps the driver error, so the pg code is read from `.cause` as well as the
+ * error itself — see the drizzle 0.45 note in the migration memo.
+ */
+function isVoucherNoConflict(error: unknown): boolean {
+  const candidates = [error, (error as { cause?: unknown } | null)?.cause];
+  return candidates.some((e) => {
+    const err = e as { code?: string; constraint?: string; message?: string } | null;
+    if (!err || err.code !== '23505') return false;
+    const where = `${err.constraint ?? ''} ${err.message ?? ''}`;
+    return where.includes('voucher_no');
+  });
+}
+
 export class PaymentVoucherRepositoryClass {
+  /**
+   * The next voucher number — `PV-000001`, in the same shape as the receipt
+   * numbers this schema already issues.
+   *
+   * count()+bump rather than max()+1 for the same reason `createReceiptWithLines`
+   * uses it: it needs no parsing of the stored string. The unique index is what
+   * actually guarantees correctness — two vouchers raised in the same moment both
+   * compute the same candidate, one insert loses, and the caller retries with the
+   * next. Returning null after that many attempts leaves the voucher unnumbered
+   * rather than failing to create it: an unnumbered voucher can be repaired, an
+   * uncreated one is somebody's missing pay.
+   */
+  private async nextVoucherNo(tx: DbTransaction, bump: number): Promise<string> {
+    const [row] = await tx
+      .select({ total: sql<number>`count(*)::int` })
+      .from(PaymentVoucherTable);
+    return `PV-${String(Number(row?.total ?? 0) + bump).padStart(6, '0')}`;
+  }
+
   async create(
     data: Omit<PaymentVoucherInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     lines: LineInput[],
   ): Promise<PaymentVoucherWithLines> {
     try {
       const created = await db.transaction(async (tx) => {
-        const [voucher] = await tx.insert(PaymentVoucherTable).values(data).returning();
+        // A number is allocated here, once, so no reader ever has to invent one.
+        let voucher: PaymentVoucherType | undefined;
+        for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS && !voucher; bump++) {
+          const voucherNo = await this.nextVoucherNo(tx, bump);
+          try {
+            [voucher] = await tx
+              .insert(PaymentVoucherTable)
+              .values({ ...data, voucherNo })
+              .returning();
+          } catch (conflict) {
+            // Only a number clash is retryable; anything else is a real fault
+            // and must not be swallowed into 19 more attempts.
+            if (!isVoucherNoConflict(conflict)) throw conflict;
+          }
+        }
+        if (!voucher) {
+          logger.warn(
+            '[PaymentVoucherRepository.create] Could not allocate a voucher number; creating unnumbered',
+          );
+          [voucher] = await tx.insert(PaymentVoucherTable).values(data).returning();
+        }
         const insertedLines =
           lines.length > 0
             ? await tx
@@ -478,26 +538,44 @@ export class PaymentVoucherRepositoryClass {
     try {
       const existing = await this.getCurrentWeekDraft(data.prId, data.weekStart);
       if (existing) return existing;
-      const [voucher] = await db
-        .insert(PaymentVoucherTable)
-        .values({
-          agencyId: data.agencyId,
-          prId: data.prId,
-          prName: data.prName,
-          prIc: data.prIc ?? undefined,
-          outlet: data.outlet ?? undefined,
-          cycle: 'Weekly',
-          weekStart: data.weekStart,
-          weekEnd: data.weekEnd,
-          subtotal: '0.00',
-          deduction: '0.00',
-          net: '0.00',
-          status: 'pending_review',
-          createdBy: data.actor,
-          updatedBy: data.actor,
-        })
-        .returning();
-      return voucher;
+      const values = {
+        agencyId: data.agencyId,
+        prId: data.prId,
+        prName: data.prName,
+        prIc: data.prIc ?? undefined,
+        outlet: data.outlet ?? undefined,
+        cycle: 'Weekly',
+        weekStart: data.weekStart,
+        weekEnd: data.weekEnd,
+        subtotal: '0.00',
+        deduction: '0.00',
+        net: '0.00',
+        status: 'pending_review' as const,
+        createdBy: data.actor,
+        updatedBy: data.actor,
+      };
+      // Numbered here too. A PR's very first self-log creates this draft, and it
+      // becomes the voucher they are eventually paid against — a voucher that
+      // acquired its number later would have gone unnumbered for a whole week.
+      return await db.transaction(async (tx) => {
+        for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS; bump++) {
+          const voucherNo = await this.nextVoucherNo(tx, bump);
+          try {
+            const [voucher] = await tx
+              .insert(PaymentVoucherTable)
+              .values({ ...values, voucherNo })
+              .returning();
+            return voucher;
+          } catch (conflict) {
+            if (!isVoucherNoConflict(conflict)) throw conflict;
+          }
+        }
+        logger.warn(
+          '[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Could not allocate a voucher number; creating unnumbered',
+        );
+        const [voucher] = await tx.insert(PaymentVoucherTable).values(values).returning();
+        return voucher;
+      });
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Error:', error);
       throw error;

@@ -678,6 +678,9 @@ export class PaymentVoucherControllerClass {
         message: 'OK',
         data: {
           voucherId: draft?.id ?? null,
+          // The stored number (0075). Sent so the app can print the same string
+          // as the paper voucher instead of deriving its own from the week.
+          voucherNo: draft?.voucherNo ?? null,
           weekStart,
           weekEnd,
           net: draft?.net ?? '0.00',
@@ -710,6 +713,7 @@ export class PaymentVoucherControllerClass {
         message: 'OK',
         data: {
           voucherId: voucher?.id ?? null,
+          voucherNo: voucher?.voucherNo ?? null,
           weekStart,
           weekEnd,
           net: voucher?.net ?? '0.00',
@@ -751,6 +755,7 @@ export class PaymentVoucherControllerClass {
         const statuses = receiptStatusMap(await this.paymentVoucherRepository.listReceipts(v.id));
         weeks.push({
           voucherId: v.id,
+          voucherNo: v.voucherNo,
           weekStart: v.weekStart,
           weekEnd: v.weekEnd,
           net: v.net,

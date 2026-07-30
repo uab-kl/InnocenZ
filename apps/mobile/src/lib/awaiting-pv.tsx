@@ -22,7 +22,9 @@ export type AwaitingPvTodo = {
   outlet: string;
 };
 
+/** The stored number (0075); the week-derived form is a pre-0075 fallback. */
 function pvRef(week: PrCurrentWeek): string {
+  if (week.voucherNo) return week.voucherNo;
   const end = (week.weekEnd ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (end) return `PV-${end[1]}${end[2]}${end[3]}`;
   return `PV-${(week.voucherId ?? 'week').slice(0, 8).toUpperCase()}`;

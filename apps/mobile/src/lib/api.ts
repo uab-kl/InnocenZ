@@ -826,6 +826,14 @@ export type PrReceiptLine = {
 /** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */
 export type PrCurrentWeek = {
   voucherId: string | null;
+  /**
+   * The voucher's own number — `PV-000001`, stored (migration 0075).
+   *
+   * Print THIS. It used to be derived from the week end in four places in this
+   * app, which meant every PR's voucher for a week showed the same number as
+   * everyone else's. Null only for a row that predates the column.
+   */
+  voucherNo?: string | null;
   /** Mon–Sun window (YYYY-MM-DD) the server bucketed the lines into. */
   weekStart: string;
   weekEnd: string;
@@ -909,6 +917,8 @@ export function fetchMyLastWeek(accessToken: string): Promise<PrCurrentWeek> {
  */
 export type PrHistoryVoucher = {
   voucherId: string;
+  /** The stored voucher number (0075) — print it rather than deriving one. */
+  voucherNo?: string | null;
   weekStart: string | null;
   weekEnd: string | null;
   net: string;
