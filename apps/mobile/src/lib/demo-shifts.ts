@@ -597,7 +597,7 @@ function timeRangeForRecord(rec: WeekPayRecord, session: SessionTimes | undefine
   ) {
     return fmtShiftTimeRange(session.checkedInAt, session.checkedOutAt);
   }
-  return 'Shift sealed · pending PV';
+  return 'Sealed · pending PV';
 }
 
 /**

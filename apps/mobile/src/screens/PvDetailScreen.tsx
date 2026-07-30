@@ -134,7 +134,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     liveOutlets.length === 1
       ? liveOutlets[0]!
       : liveOutlets.length > 1
-        ? `Multi-outlet (${liveOutlets.length})`
+        ? `(${liveOutlets.length})-outlet`
         : 'Outlet';
   const liveRef = (() => {
     const m = (weekForGrid?.weekEnd ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);

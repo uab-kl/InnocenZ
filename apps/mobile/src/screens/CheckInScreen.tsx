@@ -527,15 +527,11 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     startHold(true);
                   }}
                 />
-                {linesMissingPhoto > 0 ? (
+                {linesMissingPhoto > 0 && (
                   <Text style={[styles.gpsNote, { color: C.red }]}>
                     {linesMissingPhoto} logged action{linesMissingPhoto === 1 ? '' : 's'} ha
                     {linesMissingPhoto === 1 ? 's' : 've'} no picture — tap the red camera on
                     that row to scan again, or remove the row, before you can check out.
-                  </Text>
-                ) : (
-                  <Text style={styles.gpsNote}>
-                    Selfie attendance disabled — hold Check out when your shift ends.
                   </Text>
                 )}
               </>

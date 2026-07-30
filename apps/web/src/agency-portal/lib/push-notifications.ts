@@ -925,6 +925,9 @@ export const OPS_KIND_LABEL: Record<OpsNotification["kind"], string> = {
 	dispute_resolved: "Dispute resolved",
 	overtime_pending: "Overtime",
 	agency_join_resolved: "Agency",
+	pr_rating_low: "Rating drop",
+	shift_cover_needed: "Cover needed",
+	unknown: "Update",
 };
 
 export function isUrgentOpsKind(kind: OpsNotification["kind"]): boolean {

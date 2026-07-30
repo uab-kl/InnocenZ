@@ -33,7 +33,7 @@ function outletFromWeek(week: PrCurrentWeek): string {
     ...new Set(week.lines.map((l) => l.outlet?.trim()).filter(Boolean) as string[]),
   ];
   if (outlets.length === 1) return outlets[0]!;
-  if (outlets.length > 1) return `Multi-outlet (${outlets.length})`;
+  if (outlets.length > 1) return `(${outlets.length})-outlet`;
   return 'Outlet';
 }
 

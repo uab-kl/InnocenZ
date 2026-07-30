@@ -53,9 +53,18 @@ function statusMeta(v: PrHistoryVoucher): string {
     return when ? `Paid ${issuedLabel({ ...v, issuedDate: when })}` : 'Paid';
   }
   const when = asIsoDate(v.prSignedAt);
-  return when
-    ? `Signed ${issuedLabel({ ...v, issuedDate: when })} · Awaiting bank transfer`
-    : 'Signed · Awaiting bank transfer';
+  return when ? `Signed ${issuedLabel({ ...v, issuedDate: when })}` : 'Signed';
+}
+
+/** Short aggregate label — "(2)-outlet" instead of the long "Multi-outlet (2)". */
+function outletLabel(v: PrHistoryVoucher): string {
+  if (v.outlet) return v.outlet;
+  const names = [
+    ...new Set(v.lines.map((l) => l.outlet?.trim()).filter(Boolean) as string[]),
+  ];
+  if (names.length === 1) return names[0]!;
+  if (names.length > 1) return `(${names.length})-outlet`;
+  return 'Outlet';
 }
 
 function lineTypeLabel(kind: PrReceiptLine['kind']): string {
@@ -102,7 +111,7 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
     id: v.voucherId,
     ref: pvRefForWeek(v.weekEnd, v.voucherId),
     weekLabel: formatRangeLabel(v.weekStart, v.weekEnd),
-    outlet: v.outlet ?? 'Multi-outlet',
+    outlet: outletLabel(v),
     shifts: countShifts(v.lines) || Math.max(1, new Set(lines.map((l) => l.date)).size),
     issued: issuedLabel(v),
     status,
@@ -171,7 +180,7 @@ export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): Dem
         outlet,
         dateLabel: fmtDFriendly(y, m, d),
         dateIso,
-        time: v.status === 'paid' ? 'Paid · sealed' : 'Shift sealed · signed PV',
+        time: v.status === 'paid' ? 'Paid · sealed' : 'Sealed · signed PV',
         payout,
         wages: b.wages,
         drinks: b.drinks,

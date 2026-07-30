@@ -41,7 +41,8 @@ export const PAYMENT_HISTORY_WEEKS: HistPayWeek[] = [];
 export function paymentHistoryOutlets(weeks: HistPayWeek[] = PAYMENT_HISTORY_WEEKS): string[] {
   const set = new Set<string>();
   for (const w of weeks) {
-    if (w.outlet && !w.outlet.startsWith('Multi')) set.add(w.outlet);
+    if (w.outlet && !w.outlet.startsWith('Multi') && !/^\(\d+\)-outlet$/.test(w.outlet))
+      set.add(w.outlet);
     for (const line of w.lines) {
       if (line.outlet && line.outlet !== '—') set.add(line.outlet);
     }
