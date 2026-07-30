@@ -69,7 +69,7 @@ export function ScanScreen({
 }) {
   const { goBack, setTab } = usePrNav();
   const { active, phase: attendancePhase, refresh: refreshShift } = useActiveShift();
-  const { receiptLines, addLine, submitReceipt, updateLine } = usePrEarnings();
+  const { receiptLines, addLine, submitReceipt, updateLine, deleteLine } = usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
 
   // Re-pull `/shift-assignment/mine` from the DATABASE every time this screen
@@ -106,7 +106,10 @@ export function ScanScreen({
   }, [active?.shiftDate]);
 
   const [phase, setPhase] = useState<Phase>(() =>
-    mode === 'selflog' || editId ? 'manual' : 'idle',
+    // A scan-mode edit is a RE-SCAN: it walks the normal camera → OCR flow
+    // and replaces the old row on confirm. Only self-log edits open the
+    // manual form.
+    mode === 'selflog' || (editId && mode !== 'scan') ? 'manual' : 'idle',
   );
   const [amount, setAmount] = useState(category === 'tips' ? '50' : '125');
   const [editItem, setEditItem] = useState('');
@@ -356,6 +359,11 @@ export function ScanScreen({
     void runSubmit(async () => {
       const items = buildReceiptItems(detected);
       if (items.length === 0) throw new Error('Set a quantity for at least one item.');
+      // RE-SCAN of an existing row: the old line goes first — its receipt and
+      // snap cascade away server-side — so the same paper's order number
+      // passes the per-shift duplicate check and the fresh scan lands with a
+      // NEW unique receipt id.
+      if (editId) await deleteLine(editId);
       const receipt = await submitReceipt({
         source: 'scan',
         assignmentId: active?.id,
