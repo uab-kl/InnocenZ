@@ -556,16 +556,20 @@ export class PaymentVoucherControllerClass {
         actor,
       });
 
-      // One paper receipt = one log. Same order number on this voucher → refused.
+      // One paper receipt = one log PER SHIFT. Outlets reuse order numbers
+      // across nights, so the same ORD number on a new shift is a new paper —
+      // it inserts normally and gets its own unique RCP number. Only a
+      // re-scan within the same shift is refused.
       if (parsed.data.orderNo) {
         const dupe = await this.paymentVoucherRepository.findReceiptByOrderNo(
           draft.id,
           parsed.data.orderNo,
+          parsed.data.assignmentId ?? null,
         );
         if (dupe) {
           return res.status(409).json({
             success: false,
-            message: `Receipt ${parsed.data.orderNo} is already logged (${dupe.receiptNo}) — use Self-log to adjust it.`,
+            message: `Receipt ${parsed.data.orderNo} is already logged on this shift (${dupe.receiptNo}) — use Self-log to adjust it.`,
             data: null,
           });
         }

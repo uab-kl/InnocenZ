@@ -367,10 +367,18 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
-  /** A receipt already logged for this voucher with the same order number, if any. */
+  /**
+   * A receipt already logged with the same order number — scoped to ONE shift.
+   * Outlets reuse order numbers across nights, so the same ORD number on a NEW
+   * shift is a new paper receipt (it still gets its own unique RCP number);
+   * only a re-scan within the same shift is a duplicate. Callers without a
+   * shift stamp keep the older voucher-wide check, which can only
+   * over-refuse — never double-log.
+   */
   async findReceiptByOrderNo(
     voucherId: string,
     orderNo: string,
+    shiftAssignmentId?: string | null,
   ): Promise<PaymentVoucherReceiptType | null> {
     try {
       const [row] = await db
@@ -380,6 +388,9 @@ export class PaymentVoucherRepositoryClass {
           and(
             eq(PaymentVoucherReceiptTable.voucherId, voucherId),
             eq(PaymentVoucherReceiptTable.orderNo, orderNo),
+            ...(shiftAssignmentId
+              ? [eq(PaymentVoucherReceiptTable.shiftAssignmentId, shiftAssignmentId)]
+              : []),
           ),
         )
         .limit(1);
