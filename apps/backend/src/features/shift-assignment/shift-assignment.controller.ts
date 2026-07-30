@@ -741,6 +741,28 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'PR belongs to a different agency', data: null });
       }
 
+      // A PR may work TWO shifts on the same day — but only at different
+      // times. Compare this shift's window against the PR's other active
+      // assignments that day and refuse a clash; label-only slots that carry
+      // no parseable time are allowed through (nothing to compare).
+      const dayKey = (d: string | Date) =>
+        new Date(d).toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+      const others = await this.shiftAssignmentRepository.listForPr(pr.id);
+      const clash = others.find(
+        (a) =>
+          a.shiftId !== shift.id &&
+          !['cancelled', 'no_show', 'leave_approved'].includes(a.status) &&
+          dayKey(a.shiftDate) === dayKey(shift.shiftDate) &&
+          slotWindowsOverlap(shift.slot, a.slot),
+      );
+      if (clash) {
+        return res.status(400).json({
+          success: false,
+          message: `This PR already works ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day — pick a time that does not overlap.`,
+          data: null,
+        });
+      }
+
       const actor = getActor(req);
       const tierWages = await this.resolveTierWages(pr, shift.id, shift.outletId);
       const assignment = await this.shiftAssignmentRepository.create({
@@ -931,4 +953,23 @@ export class ShiftAssignmentControllerClass {
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
+}
+
+/** "22:00 - 04:00" -> a minutes window [start, end), overnight wrapped past 24h. */
+function slotMinutes(slot: string | null | undefined): { start: number; end: number } | null {
+  if (!slot) return null;
+  const m = slot.match(/(\d{1,2}):(\d{2})\s*[-–—]\s*(\d{1,2}):(\d{2})/);
+  if (!m) return null;
+  const start = Number(m[1]) * 60 + Number(m[2]);
+  let end = Number(m[3]) * 60 + Number(m[4]);
+  if (end <= start) end += 24 * 60;
+  return { start, end };
+}
+
+/** Label-only slots ("Late night") carry no window — nothing to clash with. */
+function slotWindowsOverlap(a: string | null | undefined, b: string | null | undefined): boolean {
+  const wa = slotMinutes(a);
+  const wb = slotMinutes(b);
+  if (!wa || !wb) return false;
+  return wa.start < wb.end && wb.start < wa.end;
 }

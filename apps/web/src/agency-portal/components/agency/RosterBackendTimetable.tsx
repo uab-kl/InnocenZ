@@ -123,13 +123,17 @@ export function RosterBackendTimetable({
 
 	const shiftFiltersOn = rosterShiftFiltersActive(filters);
 
-	// One slot per (PR, day). Filter matching is applied per-cell below via
-	// timetableSlotMatches, so a slot that fails the active filters reads as a
-	// free/assignable cell rather than removing the whole row.
-	const slotByPrDay = useMemo(() => {
-		const map = new Map<string, AgencyRosterSlot>();
+	// ALL slots per (PR, day) — a PR can work two different-time shifts on the
+	// same day, so a cell holds a list. Filter matching is applied per-cell
+	// below via timetableSlotMatches, so a slot that fails the active filters
+	// reads as free rather than removing the whole row.
+	const slotsByPrDay = useMemo(() => {
+		const map = new Map<string, AgencyRosterSlot[]>();
 		for (const slot of roster) {
-			map.set(`${slot.prId}__${slot.dateIso}`, slot);
+			const key = `${slot.prId}__${slot.dateIso}`;
+			const list = map.get(key) ?? [];
+			list.push(slot);
+			map.set(key, list);
 		}
 		return map;
 	}, [roster]);
@@ -278,38 +282,59 @@ export function RosterBackendTimetable({
 												</div>
 											</th>
 											{days.map((dateIso) => {
-												const rawSlot = slotByPrDay.get(`${pr.id}__${dateIso}`);
-												// A slot that fails the active filters reads as free, so
+												const rawSlots =
+													slotsByPrDay.get(`${pr.id}__${dateIso}`) ?? [];
+												// Slots that fail the active filters read as free, so
 												// the outlet/status/payout/time filters narrow the grid.
-												const slot =
-													rawSlot &&
-													(!shiftFiltersOn ||
-														timetableSlotMatches(rawSlot, filters))
-														? rawSlot
-														: undefined;
-												if (slot) {
-													const tone = toneFor(slot.status);
+												const daySlots = rawSlots.filter(
+													(s) =>
+														!shiftFiltersOn ||
+														timetableSlotMatches(s, filters),
+												);
+												const open = openShiftsByDay[dateIso] ?? [];
+												const hasOpen = open.length > 0;
+												if (daySlots.length > 0) {
 													return (
 														<td key={dateIso} className="iz-roster-week-td">
-															<button
-																type="button"
-																className={`iz-roster-week-cell iz-roster-week-cell--filled ${tone.className}`}
-																onClick={() => canAssign && onEditSlot(slot.id)}
-																disabled={!canAssign}
-																aria-label={`${pr.name} at ${slot.outlet} on ${dateIso}`}
-															>
-																<span className="outlet">{slot.outlet}</span>
-																<span className="shift">
-																	{slot.shift || "Shift"}
-																</span>
-																<span className="status">{tone.label}</span>
-															</button>
+															{daySlots.map((slot) => {
+																const tone = toneFor(slot.status);
+																return (
+																	<button
+																		key={slot.id}
+																		type="button"
+																		className={`iz-roster-week-cell iz-roster-week-cell--filled ${tone.className}`}
+																		onClick={() => canAssign && onEditSlot(slot.id)}
+																		disabled={!canAssign}
+																		aria-label={`${pr.name} at ${slot.outlet} on ${dateIso}`}
+																	>
+																		<span className="outlet">{slot.outlet}</span>
+																		<span className="shift">
+																			{slot.shift || "Shift"}
+																		</span>
+																		<span className="status">{tone.label}</span>
+																	</button>
+																);
+															})}
+															{/* Same day, second shift — allowed at a different
+															    time (the backend refuses overlaps). */}
+															{canAssign && hasOpen && (
+																<button
+																	type="button"
+																	className="iz-roster-week-cell iz-roster-week-cell--empty"
+																	style={{ marginTop: 4, minHeight: 28 }}
+																	onClick={() =>
+																		setAssignTarget({ pr, dateIso })
+																	}
+																	aria-label={`Assign ${pr.name} another shift on ${dateIso}`}
+																	title="Add another shift this day (different time)"
+																>
+																	<Plus className="h-3 w-3" />
+																</button>
+															)}
 														</td>
 													);
 												}
 
-												const open = openShiftsByDay[dateIso] ?? [];
-												const hasOpen = open.length > 0;
 												return (
 													<td key={dateIso} className="iz-roster-week-td">
 														<button
