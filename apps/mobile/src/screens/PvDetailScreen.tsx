@@ -211,9 +211,12 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           commission: l.commission,
           outlet: l.outlet ?? '—',
           at: lineDateLabel(l.lineDate),
-          // `pending` is set only for a manual self-log, which is precisely the
-          // "not matched to a receipt" case the agency verifies. Hardcoding this
-          // true made the badge say every line was receipt-backed.
+          // `pending` now carries the parent receipt's REAL review state
+          // (migration 0074), falling back to the manual-self-log guess only for
+          // a line with no receipt behind it. So this badge means "not waiting
+          // on the agency" — which is what it always claimed, and only recently
+          // became true. Hardcoding it true once made every line assert it was
+          // receipt-backed.
           matched: !l.pending,
         })),
     [weekForGrid],

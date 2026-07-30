@@ -11,6 +11,7 @@ import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { assetUrl, type PrReceiptLine } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import { pickProofPhotos } from '../lib/proof-photo';
+import { isReceiptLocked } from '../lib/receipt-review';
 import {
   Camera,
   Check,
@@ -418,6 +419,12 @@ function LogRow({
       ? 'Manual entry'
       : 'Receipt scan';
   const refLabel = log.kind === 'tips' ? 'Tip' : log.kind === 'others' ? 'OT' : 'Drink';
+  // Once the agency has approved the receipt, this row is no longer the PR's to
+  // change — the server refuses the edit and the delete, and the way back is a
+  // dispute. Hiding the controls is the honest form of that: leaving them would
+  // offer three actions that all fail, and the buttons were the only thing on
+  // the row saying it was still theirs.
+  const reviewed = isReceiptLocked(log);
   return (
     <View style={[styles.tr, log.pending && styles.trSelflog]}>
       <View style={styles.colRef}>
@@ -448,13 +455,19 @@ function LogRow({
         ) : (
           <View style={styles.badgeMatched}>
             <Check size={10} color={C.green} />
-            <Text style={styles.badgeMatchedText}>Matched</Text>
+            {/* "Approved" only when a receipt actually carries that state.
+                Everything else keeps saying "Matched", which claims less: that
+                the line has a receipt behind it, not that anybody signed it
+                off. A row with no receipt has nothing to approve. */}
+            <Text style={styles.badgeMatchedText}>
+              {reviewed ? 'Approved' : 'Matched'}
+            </Text>
           </View>
         )}
       </View>
       {!checkedOut && (
         <View style={styles.colAct}>
-          {isSeal ? null : log.pending ? (
+          {isSeal || reviewed ? null : log.pending ? (
             <>
               <Pressable onPress={onEdit} hitSlop={6}>
                 <Pencil size={13} color={C.goldL} />
