@@ -300,9 +300,9 @@ function PendingApprovalsPage() {
 
 				{truncated && (
 					<div className="border-t px-6 py-3 text-xs text-muted-foreground">
-						Showing the {rows.length} most recent of {totalPending} pending items
-						(first {PAGE_SIZE} per category). Open the category pages to see the
-						rest.
+						Showing the {rows.length} most recent of {totalPending} pending
+						items (first {PAGE_SIZE} per category). Open the category pages to
+						see the rest.
 					</div>
 				)}
 			</section>
