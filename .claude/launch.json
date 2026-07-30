@@ -24,6 +24,12 @@
       "runtimeExecutable": "node",
       "runtimeArgs": ["tools/scripts/dev-mobile.mjs"],
       "port": 8081
+    },
+    {
+      "name": "mobile-web",
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["tools/scripts/dev-mobile-web.mjs"],
+      "port": 8081
     }
   ]
 }
