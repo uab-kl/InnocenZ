@@ -632,6 +632,75 @@ export class PaymentVoucherControllerClass {
   }
 
   /** Edits one of the PR's own pending receipt lines. */
+  /**
+   * The agency's receipt review feed: every scanned/self-logged receipt from
+   * its OWN PRs with the full OCR evidence — order number, printed date/time,
+   * proof photos, PR note, and each line's item/quantity/amount — so the
+   * approve/dispute decision is made on everything the PR submitted. Admin may
+   * pass ?agencyId=…; an agency caller is pinned to its own membership.
+   */
+  async listAgencyReceipts(req: Request, res: Response) {
+    try {
+      const user = req.user!;
+      const roles = await this.authRepository.getRolesForUserIds([user.id]);
+      const isAdmin = roles.some((r) => r.roleName === 'admin');
+      let agencyId: string | null = null;
+      if (isAdmin && typeof req.query.agencyId === 'string' && req.query.agencyId) {
+        agencyId = req.query.agencyId;
+      } else {
+        const memberships = await this.agencyMemberRepository.listByUser(user.id);
+        agencyId =
+          (memberships.find((m) => m.status === 'active') ?? memberships[0])?.agencyId ?? null;
+      }
+      if (!agencyId) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+
+      const rows = await this.paymentVoucherRepository.listReceiptsForAgency(agencyId, {
+        fromDate: typeof req.query.fromDate === 'string' ? req.query.fromDate : undefined,
+        toDate: typeof req.query.toDate === 'string' ? req.query.toDate : undefined,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: rows.map((r) => ({
+          id: r.receipt.id,
+          receiptNo: r.receipt.receiptNo,
+          orderNo: r.receipt.orderNo,
+          source: r.receipt.source,
+          receiptDate: r.receipt.receiptDate,
+          receiptTime: r.receipt.receiptTime,
+          note: r.receipt.note,
+          proofPhotos: r.receipt.proofPhotos ?? [],
+          loggedAt: r.receipt.createdAt,
+          voucherId: r.voucherId,
+          voucherStatus: r.voucherStatus,
+          weekStart: r.weekStart,
+          weekEnd: r.weekEnd,
+          prId: r.prId,
+          prName: r.prName,
+          prNickname: r.prNickname,
+          shiftAssignmentId: r.receipt.shiftAssignmentId,
+          lines: r.lines.map((l) => ({
+            id: l.id,
+            lineDate: l.lineDate,
+            outlet: l.outlet,
+            description: l.description,
+            quantity: l.quantity,
+            amount: l.amount,
+            ref: l.ref,
+          })),
+        })),
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.listAgencyReceipts] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async updateMyLine(req: Request, res: Response) {
     try {
       const lineId = paramId(req.params.lineId);

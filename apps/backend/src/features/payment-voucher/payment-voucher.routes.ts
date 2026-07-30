@@ -35,6 +35,10 @@ const canDelete = requireRole('admin');
 
 router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
 
+// The agency's receipt-review feed (full OCR evidence per receipt). One
+// segment, so it MUST precede '/:id' below.
+router.get('/receipts', paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController));
+
 // The agency's dispute queue and its decisions. '/disputes' MUST precede the
 // '/:id' route below — both are one segment, so registered the other way round
 // the queue would be read as a voucher whose id is the word "disputes".

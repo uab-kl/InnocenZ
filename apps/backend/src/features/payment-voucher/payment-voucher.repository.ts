@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { PrTable } from '@/features/pr/pr.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
@@ -363,6 +364,73 @@ export class PaymentVoucherRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getLineWithVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Every scanned/self-logged receipt belonging to ONE agency's PRs, with the
+   * full OCR evidence the agency reviews: order number, printed date/time,
+   * photos, PR note, and each FK-linked line (item, quantity, amount). PR
+   * identity resolves through voucher.pr_id → pr — never copied. Newest first.
+   */
+  async listReceiptsForAgency(
+    agencyId: string,
+    opts: { fromDate?: string; toDate?: string; limit?: number } = {},
+  ) {
+    try {
+      const conditions = [eq(PaymentVoucherTable.agencyId, agencyId)];
+      if (opts.fromDate) {
+        conditions.push(
+          sql`(${PaymentVoucherReceiptTable.createdAt} at time zone 'Asia/Kuala_Lumpur')::date >= ${opts.fromDate}::date`,
+        );
+      }
+      if (opts.toDate) {
+        conditions.push(
+          sql`(${PaymentVoucherReceiptTable.createdAt} at time zone 'Asia/Kuala_Lumpur')::date <= ${opts.toDate}::date`,
+        );
+      }
+      const receipts = await db
+        .select({
+          receipt: PaymentVoucherReceiptTable,
+          voucherId: PaymentVoucherTable.id,
+          voucherStatus: PaymentVoucherTable.status,
+          weekStart: PaymentVoucherTable.weekStart,
+          weekEnd: PaymentVoucherTable.weekEnd,
+          prId: PaymentVoucherTable.prId,
+          prName: PrTable.name,
+          prNickname: PrTable.nickname,
+        })
+        .from(PaymentVoucherReceiptTable)
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherTable.id, PaymentVoucherReceiptTable.voucherId),
+        )
+        .leftJoin(PrTable, eq(PrTable.id, PaymentVoucherTable.prId))
+        .where(and(...conditions))
+        .orderBy(desc(PaymentVoucherReceiptTable.createdAt))
+        .limit(Math.min(opts.limit ?? 200, 500));
+
+      const receiptIds = receipts.map((r) => r.receipt.id);
+      const lines = receiptIds.length
+        ? await db
+            .select()
+            .from(PaymentVoucherLineTable)
+            .where(inArray(PaymentVoucherLineTable.receiptId, receiptIds))
+        : [];
+      const linesByReceipt = new Map<string, typeof lines>();
+      for (const line of lines) {
+        if (!line.receiptId) continue;
+        const list = linesByReceipt.get(line.receiptId) ?? [];
+        list.push(line);
+        linesByReceipt.set(line.receiptId, list);
+      }
+      return receipts.map((r) => ({
+        ...r,
+        lines: linesByReceipt.get(r.receipt.id) ?? [],
+      }));
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listReceiptsForAgency] Error:', error);
       throw error;
     }
   }
