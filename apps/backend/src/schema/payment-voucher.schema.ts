@@ -204,6 +204,18 @@ export type ResolveDisputeInput = z.infer<typeof ResolveDisputeSchema>;
  * normalized strokes ({w,h,strokes:[[[x,y],...]]}). Optional so an older app
  * build can still sign; size caps keep a money row from swallowing megabytes.
  */
+/**
+ * The agency's decision on one day. `status: null` un-reviews it.
+ *
+ * Deliberately carries NO amount: the day's total is recomputed server-side
+ * from the lines, because it is the baseline of a money attestation and a
+ * client-supplied one could approve a figure the voucher never held.
+ */
+export const ReviewVoucherDaySchema = z.object({
+  status: z.enum(['approved', 'held']).nullable(),
+  note: z.string().max(1000).optional(),
+});
+
 export const PrSignVoucherSchema = z.object({
   signature: z
     .object({

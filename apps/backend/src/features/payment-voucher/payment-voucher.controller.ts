@@ -11,6 +11,11 @@ import {
 } from './payment-voucher-excel.js';
 import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
 import { buildVoucherPdf } from './payment-voucher-pdf.js';
+import {
+  allDaysReviewed,
+  buildDayReviewView,
+  dayTotalsCents,
+} from './payment-voucher-day-review.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -28,6 +33,7 @@ import {
   UpdatePrReceiptLineSchema,
   PrRaiseDisputeSchema,
   PrSignVoucherSchema,
+  ReviewVoucherDaySchema,
   PrWithdrawDisputeSchema,
   ResolveDisputeSchema,
   PrReceiptKind,
@@ -266,10 +272,172 @@ export class PaymentVoucherControllerClass {
       // check above, so a foreign voucher never leaks its receipts.
       const receipts = await this.paymentVoucherRepository.listReceipts(voucher.id);
 
-      res.status(200).json({ success: true, message: 'OK', data: { ...voucher, receipts } });
+      // The day-by-day review state rides along for the same reason receipts do:
+      // the panel that shows a week needs the decisions with it, and a second
+      // round trip is a second chance for the two to disagree.
+      const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const dayReviews = buildDayReviewView(voucher.lines, reviews);
+
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: {
+          ...voucher,
+          receipts,
+          dayReviews,
+          allDaysReviewed: allDaysReviewed(dayReviews),
+          hasHeldDay: dayReviews.some((d) => d.status === 'held'),
+        },
+      });
     } catch (error) {
       logger.error('[PaymentVoucherController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency's decision on ONE day of a voucher: approved, held, or (with no
+   * status) un-reviewed again.
+   *
+   * The day's total is recomputed here from the lines and stored with the
+   * decision — never taken from the client. It is the baseline that lets a later
+   * regeneration be detected as stale, so accepting it from the caller would let
+   * them approve a figure the voucher never had.
+   */
+  async reviewDay(req: Request, res: Response) {
+    try {
+      const parsed = ReviewVoucherDaySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const voucher = await this.paymentVoucherRepository.getById(paramId(req.params.id));
+      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && voucher.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // Reviewing a voucher the PR has already signed is backwards — they would
+      // have signed figures nobody had checked. Refuse rather than record a
+      // decision that arrives after the fact.
+      if (voucher.prSignedAt) {
+        return res.status(409).json({
+          success: false,
+          message: 'This voucher is already signed by the PR — day review happens before it is sent.',
+          data: null,
+        });
+      }
+
+      const date = String(req.params.date ?? '');
+      const totals = dayTotalsCents(voucher.lines);
+      if (!totals.has(date)) {
+        return res.status(404).json({
+          success: false,
+          message: 'No lines on this voucher for that day',
+          data: null,
+        });
+      }
+
+      const actor = getActor(req);
+      if (parsed.data.status === null) {
+        await this.paymentVoucherRepository.deleteDayReview(voucher.id, date);
+      } else {
+        const saved = await this.paymentVoucherRepository.upsertDayReview({
+          voucherId: voucher.id,
+          reviewDate: date,
+          status: parsed.data.status,
+          approvedTotalCents: totals.get(date) ?? 0,
+          note: parsed.data.note ?? null,
+          bulk: false,
+          actor,
+        });
+        if (!saved) {
+          return res
+            .status(500)
+            .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+        }
+      }
+
+      const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const dayReviews = buildDayReviewView(voucher.lines, reviews);
+      return res.status(200).json({
+        success: true,
+        message: 'Day review saved',
+        data: { dayReviews, allDaysReviewed: allDaysReviewed(dayReviews) },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.reviewDay] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Clear every unreviewed day in one action.
+   *
+   * Recorded with `bulk: true` so it stays distinguishable from days opened and
+   * approved individually — the convenience is honest, but a reviewer should be
+   * able to tell later which claim they actually made. Days already HELD are
+   * skipped: a bulk approve must not quietly overturn a deliberate refusal.
+   */
+  async approveAllDays(req: Request, res: Response) {
+    try {
+      const voucher = await this.paymentVoucherRepository.getById(paramId(req.params.id));
+      if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && voucher.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (voucher.prSignedAt) {
+        return res.status(409).json({
+          success: false,
+          message: 'This voucher is already signed by the PR — day review happens before it is sent.',
+          data: null,
+        });
+      }
+
+      const existing = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const view = buildDayReviewView(voucher.lines, existing);
+      const actor = getActor(req);
+
+      let approved = 0;
+      for (const day of view) {
+        // Leave live approvals alone, and never overturn a held day.
+        if (day.status !== null) continue;
+        const saved = await this.paymentVoucherRepository.upsertDayReview({
+          voucherId: voucher.id,
+          reviewDate: day.date,
+          status: 'approved',
+          approvedTotalCents: day.totalCents,
+          note: null,
+          bulk: true,
+          actor,
+        });
+        if (saved) approved += 1;
+      }
+
+      const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+      const dayReviews = buildDayReviewView(voucher.lines, reviews);
+      const held = dayReviews.filter((d) => d.status === 'held').length;
+      return res.status(200).json({
+        success: true,
+        message:
+          held > 0
+            ? `${approved} day(s) approved · ${held} held day(s) left untouched`
+            : `${approved} day(s) approved`,
+        data: { dayReviews, allDaysReviewed: allDaysReviewed(dayReviews) },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.approveAllDays] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
 

@@ -6,6 +6,11 @@ import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
 import {
+  PaymentVoucherDayReviewTable,
+  PaymentVoucherDayReviewType,
+  PaymentVoucherDayReviewStatus,
+} from './payment-voucher.model';
+import {
   PaymentVoucherTable,
   PaymentVoucherLineTable,
   PaymentVoucherReceiptTable,
@@ -733,5 +738,121 @@ export class PaymentVoucherRepositoryClass {
         updatedAt: new Date(),
       })
       .where(eq(PaymentVoucherTable.id, voucherId));
+  }
+
+  /** Every day the agency has acted on for this voucher. Absence = unreviewed. */
+  async listDayReviews(voucherId: string): Promise<PaymentVoucherDayReviewType[]> {
+    try {
+      return await db
+        .select()
+        .from(PaymentVoucherDayReviewTable)
+        .where(eq(PaymentVoucherDayReviewTable.voucherId, voucherId))
+        .orderBy(PaymentVoucherDayReviewTable.reviewDate);
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listDayReviews] Error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Record (or change) the agency's decision on one day.
+   *
+   * Upserts on the unique `(voucher_id, review_date)` so re-approving a day
+   * moves it rather than stacking a second row — the DB enforces one decision
+   * per day rather than the controller hoping for it.
+   *
+   * `approvedTotalCents` is the day's total AT THIS MOMENT and must be computed
+   * server-side from the lines; never take it from the client. It is what makes
+   * a later regeneration detectable as stale.
+   */
+  async upsertDayReview(input: {
+    voucherId: string;
+    reviewDate: string;
+    status: PaymentVoucherDayReviewStatus;
+    approvedTotalCents: number | null;
+    note?: string | null;
+    bulk?: boolean;
+    actor: string;
+  }): Promise<PaymentVoucherDayReviewType | null> {
+    try {
+      const rows = await db
+        .insert(PaymentVoucherDayReviewTable)
+        .values({
+          voucherId: input.voucherId,
+          reviewDate: input.reviewDate,
+          status: input.status,
+          approvedTotalCents: input.approvedTotalCents,
+          note: input.note ?? null,
+          bulk: input.bulk ?? false,
+          reviewedAt: new Date(),
+          reviewedBy: input.actor,
+          createdBy: input.actor,
+          updatedBy: input.actor,
+        })
+        .onConflictDoUpdate({
+          target: [
+            PaymentVoucherDayReviewTable.voucherId,
+            PaymentVoucherDayReviewTable.reviewDate,
+          ],
+          set: {
+            status: input.status,
+            approvedTotalCents: input.approvedTotalCents,
+            note: input.note ?? null,
+            bulk: input.bulk ?? false,
+            reviewedAt: new Date(),
+            reviewedBy: input.actor,
+            updatedAt: new Date(),
+            updatedBy: input.actor,
+          },
+        })
+        .returning();
+      return rows[0] ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.upsertDayReview] Error:', error);
+      return null;
+    }
+  }
+
+  /** Un-review a day: the row goes, and the day reads as never looked at. */
+  async deleteDayReview(voucherId: string, reviewDate: string): Promise<boolean> {
+    try {
+      const rows = await db
+        .delete(PaymentVoucherDayReviewTable)
+        .where(
+          and(
+            eq(PaymentVoucherDayReviewTable.voucherId, voucherId),
+            eq(PaymentVoucherDayReviewTable.reviewDate, reviewDate),
+          ),
+        )
+        .returning();
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.deleteDayReview] Error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Is any day explicitly held? Fails CLOSED — an error reports "held", because
+   * the caller uses this to decide whether a voucher may be sent, and letting a
+   * database blip open that gate is the wrong direction to fail in.
+   */
+  async hasHeldDay(voucherId: string): Promise<boolean> {
+    try {
+      const rows = await db
+        .select({ id: PaymentVoucherDayReviewTable.id })
+        .from(PaymentVoucherDayReviewTable)
+        .where(
+          and(
+            eq(PaymentVoucherDayReviewTable.voucherId, voucherId),
+            eq(PaymentVoucherDayReviewTable.status, 'held'),
+          ),
+        )
+        .limit(1);
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.hasHeldDay] Error:', error);
+      return true;
+    }
   }
 }

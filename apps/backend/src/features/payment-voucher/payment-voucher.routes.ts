@@ -55,6 +55,18 @@ const canDelete = requireRole('admin');
 
 router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
 
+// Day-by-day review, BEFORE the voucher goes to the PR. The READ rides on
+// GET '/:id' alongside the receipts rather than living on its own path, so the
+// panel cannot show decisions that disagree with the lines they refer to.
+router.patch(
+  '/:id/day-review/:date',
+  paymentVoucherController.reviewDay.bind(paymentVoucherController),
+);
+router.post(
+  '/:id/day-review/approve-all',
+  paymentVoucherController.approveAllDays.bind(paymentVoucherController),
+);
+
 // The agency's receipt-review feed (full OCR evidence per receipt). One
 // segment, so it MUST precede '/:id' below.
 router.get('/receipts', paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController));
