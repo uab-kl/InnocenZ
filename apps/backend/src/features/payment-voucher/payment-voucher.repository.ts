@@ -1,5 +1,7 @@
 import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { AgencyTable } from '@/features/agency/agency.model';
+import { PrTable } from '@/features/pr/pr.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
@@ -309,6 +311,94 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
+  /**
+   * Every voucher for one payroll week at the given statuses, lines included.
+   * The weekly issue pass uses this to promote a closed week's drafts to 'sent'
+   * — including drafts the PR accumulated live, which the generator's
+   * already-exists skip would otherwise leave unissued forever.
+   */
+  async listForWeek(
+    weekStart: string,
+    statuses: PaymentVoucherStatus[],
+  ): Promise<PaymentVoucherWithLines[]> {
+    try {
+      const vouchers = await db
+        .select()
+        .from(PaymentVoucherTable)
+        .where(
+          and(
+            eq(PaymentVoucherTable.weekStart, weekStart),
+            inArray(PaymentVoucherTable.status, statuses),
+          ),
+        )
+        .orderBy(desc(PaymentVoucherTable.createdAt));
+      const withLines: PaymentVoucherWithLines[] = [];
+      for (const voucher of vouchers) {
+        const lines = await this.getLines(voucher.id);
+        withLines.push({ ...voucher, lines });
+      }
+      return withLines;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listForWeek] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * One voucher with everything the printed/exported PV document shows: lines
+   * plus the issuing agency and payee PR read via their FKs — the voucher row
+   * itself never duplicates those facts.
+   */
+  async getExportBundle(voucherId: string): Promise<{
+    voucher: PaymentVoucherWithLines;
+    agency: { name: string; ssmNo: string; contactPhone: string | null; contactEmail: string | null } | null;
+    pr: { name: string; nickname: string | null; icNo: string | null; phone: string | null } | null;
+  } | null> {
+    try {
+      const [row] = await db
+        .select({
+          voucher: PaymentVoucherTable,
+          agencyName: AgencyTable.name,
+          agencySsmNo: AgencyTable.ssmNo,
+          agencyPhone: AgencyTable.contactPhone,
+          agencyEmail: AgencyTable.contactEmail,
+          prName: PrTable.name,
+          prNickname: PrTable.nickname,
+          prIcNo: PrTable.icNo,
+          prPhone: PrTable.phone,
+        })
+        .from(PaymentVoucherTable)
+        .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
+        .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
+        .where(eq(PaymentVoucherTable.id, voucherId))
+        .limit(1);
+      if (!row) return null;
+      const lines = await this.getLines(row.voucher.id);
+      return {
+        voucher: { ...row.voucher, lines },
+        agency: row.agencyName
+          ? {
+              name: row.agencyName,
+              ssmNo: row.agencySsmNo ?? '',
+              contactPhone: row.agencyPhone,
+              contactEmail: row.agencyEmail,
+            }
+          : null,
+        pr: row.prName
+          ? {
+              name: row.prName,
+              nickname: row.prNickname,
+              icNo: row.prIcNo,
+              phone: row.prPhone,
+            }
+          : null,
+      };
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getExportBundle] Error:', error);
+      throw error;
+    }
+  }
+
   /** Finds the PR's current-week draft voucher, creating an empty one if absent. */
   async getOrCreateCurrentWeekDraft(data: {
     prId: string;
@@ -367,10 +457,128 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
-  /** A receipt already logged for this voucher with the same order number, if any. */
+  /**
+   * Every scanned/self-logged receipt belonging to ONE agency's PRs, with the
+   * full OCR evidence the agency reviews: order number, printed date/time,
+   * photos, PR note, and each FK-linked line (item, quantity, amount). PR
+   * identity resolves through voucher.pr_id → pr — never copied. Newest first.
+   */
+  async listReceiptsForAgency(
+    agencyId: string,
+    opts: { fromDate?: string; toDate?: string; limit?: number } = {},
+  ) {
+    try {
+      const conditions = [eq(PaymentVoucherTable.agencyId, agencyId)];
+      if (opts.fromDate) {
+        conditions.push(
+          sql`(${PaymentVoucherReceiptTable.createdAt} at time zone 'Asia/Kuala_Lumpur')::date >= ${opts.fromDate}::date`,
+        );
+      }
+      if (opts.toDate) {
+        conditions.push(
+          sql`(${PaymentVoucherReceiptTable.createdAt} at time zone 'Asia/Kuala_Lumpur')::date <= ${opts.toDate}::date`,
+        );
+      }
+      const receipts = await db
+        .select({
+          receipt: PaymentVoucherReceiptTable,
+          voucherId: PaymentVoucherTable.id,
+          voucherStatus: PaymentVoucherTable.status,
+          weekStart: PaymentVoucherTable.weekStart,
+          weekEnd: PaymentVoucherTable.weekEnd,
+          prId: PaymentVoucherTable.prId,
+          prName: PrTable.name,
+          prNickname: PrTable.nickname,
+        })
+        .from(PaymentVoucherReceiptTable)
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherTable.id, PaymentVoucherReceiptTable.voucherId),
+        )
+        .leftJoin(PrTable, eq(PrTable.id, PaymentVoucherTable.prId))
+        .where(and(...conditions))
+        .orderBy(desc(PaymentVoucherReceiptTable.createdAt))
+        .limit(Math.min(opts.limit ?? 200, 500));
+
+      const receiptIds = receipts.map((r) => r.receipt.id);
+      const lines = receiptIds.length
+        ? await db
+            .select()
+            .from(PaymentVoucherLineTable)
+            .where(inArray(PaymentVoucherLineTable.receiptId, receiptIds))
+        : [];
+      const linesByReceipt = new Map<string, typeof lines>();
+      for (const line of lines) {
+        if (!line.receiptId) continue;
+        const list = linesByReceipt.get(line.receiptId) ?? [];
+        list.push(line);
+        linesByReceipt.set(line.receiptId, list);
+      }
+      return receipts.map((r) => ({
+        ...r,
+        lines: linesByReceipt.get(r.receipt.id) ?? [],
+      }));
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listReceiptsForAgency] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Lines still pointing at this receipt (checked after deleting one). */
+  async countLinesForReceipt(receiptId: string): Promise<number> {
+    try {
+      const [row] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(PaymentVoucherLineTable)
+        .where(eq(PaymentVoucherLineTable.receiptId, receiptId));
+      return row?.n ?? 0;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.countLinesForReceipt] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Removes a receipt row outright — its snap goes with it. */
+  async deleteReceipt(receiptId: string): Promise<void> {
+    try {
+      await db
+        .delete(PaymentVoucherReceiptTable)
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId));
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.deleteReceipt] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Keeps the parent receipt's picture in step with a re-snapped line. */
+  async updateReceiptPhotos(
+    receiptId: string,
+    proofPhotos: string[] | null,
+    actor: string,
+  ): Promise<void> {
+    try {
+      await db
+        .update(PaymentVoucherReceiptTable)
+        .set({ proofPhotos, updatedAt: new Date(), updatedBy: actor })
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId));
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.updateReceiptPhotos] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * A receipt already logged with the same order number — scoped to ONE shift.
+   * Outlets reuse order numbers across nights, so the same ORD number on a NEW
+   * shift is a new paper receipt (it still gets its own unique RCP number);
+   * only a re-scan within the same shift is a duplicate. Callers without a
+   * shift stamp keep the older voucher-wide check, which can only
+   * over-refuse — never double-log.
+   */
   async findReceiptByOrderNo(
     voucherId: string,
     orderNo: string,
+    shiftAssignmentId?: string | null,
   ): Promise<PaymentVoucherReceiptType | null> {
     try {
       const [row] = await db
@@ -380,6 +588,9 @@ export class PaymentVoucherRepositoryClass {
           and(
             eq(PaymentVoucherReceiptTable.voucherId, voucherId),
             eq(PaymentVoucherReceiptTable.orderNo, orderNo),
+            ...(shiftAssignmentId
+              ? [eq(PaymentVoucherReceiptTable.shiftAssignmentId, shiftAssignmentId)]
+              : []),
           ),
         )
         .limit(1);

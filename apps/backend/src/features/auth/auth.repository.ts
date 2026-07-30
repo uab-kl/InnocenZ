@@ -48,8 +48,13 @@ export class AuthRepositoryClass {
         .where(and(inArray(UserRoleTable.userId, userIds)));
       return results;
     } catch (error) {
+      // Rethrow, never return []: every caller (requireRole, the sub-role
+      // guards' isAdmin, controller scope resolvers) catches and answers 500.
+      // Swallowing to an empty list here made a transient DB hiccup read as
+      // "this user holds no roles" — a false Forbidden for a real admin or
+      // agency owner mid-click.
       logger.error('[AuthRepository.getRolesForUserIds] Error:', error);
-      return [];
+      throw error;
     }
   }
 

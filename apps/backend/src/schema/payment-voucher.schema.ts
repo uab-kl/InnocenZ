@@ -198,3 +198,23 @@ export const ResolveDisputeSchema = z
   });
 
 export type ResolveDisputeInput = z.infer<typeof ResolveDisputeSchema>;
+
+/**
+ * PR sign payload — optionally carries the finger-drawn signature as compact
+ * normalized strokes ({w,h,strokes:[[[x,y],...]]}). Optional so an older app
+ * build can still sign; size caps keep a money row from swallowing megabytes.
+ */
+export const PrSignVoucherSchema = z.object({
+  signature: z
+    .object({
+      w: z.number().min(20).max(4000),
+      h: z.number().min(20).max(2000),
+      strokes: z
+        .array(z.array(z.tuple([z.number(), z.number()])).min(2).max(2000))
+        .min(1)
+        .max(100),
+    })
+    .optional(),
+});
+
+export type PrSignVoucherInput = z.infer<typeof PrSignVoucherSchema>;

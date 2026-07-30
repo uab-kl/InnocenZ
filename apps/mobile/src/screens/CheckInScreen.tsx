@@ -27,6 +27,7 @@ import { useActiveShift } from '../lib/active-shift';
 import { overtimeHours, overtimePay } from '../lib/pr-rate';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
+import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { usePrNav } from '../lib/pr-nav';
 import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
@@ -84,6 +85,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // Bottom sheets render outside PhoneFrame, so they must clear the Android
   // nav-button bar themselves.
   const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
 
   // ---- 1D-3/1D-4: live position vs the venue pin (server still referees) ----
   const [myPos, setMyPos] = useState<LivePos | null>(null);
@@ -579,7 +581,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       >
         <Pressable style={styles.sheetBackdrop} onPress={() => setCancelOpen(false)}>
           <Pressable
-            style={[styles.sheet, { paddingBottom: 18 + insets.bottom }]}
+            style={[styles.sheet, { paddingBottom: 18 + insets.bottom + keyboardInset }]}
             onPress={(e) => e.stopPropagation()}
           >
             <Text style={styles.sheetTitle}>Cancel shift?</Text>

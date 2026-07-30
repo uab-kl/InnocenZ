@@ -104,6 +104,7 @@ function AgencyRoster() {
 		navigate({ search: next === "live" ? {} : { view: next } });
 	const allAgencyPRs = useStore((s) => s.agencyPRs);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
+	const toast = useStore((s) => s.toast);
 	const agencyPRs = useMemo(
 		() => scopeToAgency(allAgencyPRs, activeAgencyId),
 		[allAgencyPRs, activeAgencyId],
@@ -542,9 +543,17 @@ function AgencyRoster() {
 							canAssign={canAssign}
 							onEditSlot={openEdit}
 							onWeekChange={setPlanningDate}
-							onAssign={(shiftId, prId) =>
-								rosterMut.assign.mutateAsync({ shiftId, prId })
-							}
+							onAssign={async (shiftId, prId) => {
+								const created = await rosterMut.assign.mutateAsync({
+									shiftId,
+									prId,
+								});
+								// mutateAsync resolved = the server answered 201, so the
+								// assignment row is already committed — the pop-up never
+								// claims a save that didn't land.
+								toast("PR assigned — saved to the roster", "success");
+								return created;
+							}}
 							todayIso={DEFAULT_ROSTER_DATE_ISO}
 						/>
 					</div>

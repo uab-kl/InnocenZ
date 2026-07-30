@@ -15,23 +15,27 @@ import {
 } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
-  buildLastWeekPayGrid,
   formatRM,
-  getLastWeekAwaitingPv,
   weekPayGridTotal,
+  weekRangeLabel,
+  type DemoPv,
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
-import { PAYMENT_HISTORY_WEEKS } from '../lib/demo-payment-history';
+import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePaymentHistory } from '../lib/payment-history';
 import { useSession } from '../lib/session';
 import {
-  type PrReceiptLine,
-  type PrReceiptSource,
   signMyVoucher,
+  type PrCurrentWeek,
+  type PrReceiptSource,
 } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import { useSignedPvs } from '../lib/signed-pv';
+import { useKeyboardInset } from '../lib/use-keyboard-inset';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pill } from '../components/ui';
+import { SignaturePad, type SignatureInk } from '../components/SignaturePad';
 import {
   Check,
   ChevronLeft,
@@ -72,57 +76,9 @@ type LinkedReceipt = {
   matched: boolean;
 };
 
-const DEMO_RECEIPTS: LinkedReceipt[] = [
-  {
-    id: 'r1',
-    ref: 'RSV-0712-A',
-    item: 'Hennessy VSOP',
-    category: 'Drinks',
-    qty: 1,
-    amount: 125,
-    commission: 18.75,
-    outlet: 'Velvet 23',
-    at: '12 Jul 2026 · 11:42 pm',
-    matched: true,
-  },
-  {
-    id: 'r2',
-    ref: 'RSV-0712-B',
-    item: 'Guest tip',
-    category: 'Tips',
-    qty: 1,
-    amount: 40,
-    commission: 4,
-    outlet: 'Velvet 23',
-    at: '12 Jul 2026 · 12:08 am',
-    matched: true,
-  },
-  {
-    id: 'r3',
-    ref: 'RSV-0713-A',
-    item: 'Moët & Chandon',
-    category: 'Drinks',
-    qty: 1,
-    amount: 96,
-    commission: 14.4,
-    outlet: 'Velvet 23',
-    at: '13 Jul 2026 · 11:55 pm',
-    matched: true,
-  },
-  {
-    id: 'r4',
-    ref: 'RSV-0714-A',
-    item: 'Cosmo',
-    category: 'Drinks',
-    qty: 1,
-    amount: 109,
-    commission: 16.35,
-    outlet: 'Velvet 23',
-    at: '14 Jul 2026 · 10:40 pm',
-    matched: true,
-  },
-];
+const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
+/** '2026-07-21' → '21 Jul 2026' for the linked receipt rows. */
 /**
  * What the row headline says instead of a receipt number.
  *
@@ -138,20 +94,10 @@ const SOURCE_LABEL: Record<PrReceiptSource, string> = {
   checkin: 'Auto-sealed on check-out',
 };
 
-/**
- * Date only, from the shift day rather than the logging timestamp. The exact
- * minute a line was typed is not what a PR is checking, and inventing a time for
- * an auto-sealed line would read as precision the row does not have.
- */
-function formatReceiptDay(line: PrReceiptLine): string {
-  const iso = line.lineDate ?? line.at.slice(0, 10);
-  const at = new Date(`${iso}T12:00:00`);
-  if (Number.isNaN(at.getTime())) return iso;
-  return at.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+function lineDateLabel(iso: string | null): string {
+  const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (!m) return '—';
+  return `${Number(m[3])} ${MONTH_SHORT[Number(m[2]) - 1]} ${m[1]}`;
 }
 
 function cellAmount(day: WeeklyDayPay, key: IncomeKey): number {
@@ -168,18 +114,54 @@ function formatCell(value: number): string {
 
 export function PvDetailScreen({ pvId }: { pvId: string }) {
   const { goBack, setTab } = usePrNav();
+  // Detail screens render outside the tab shell, so the back row must clear
+  // the phone's own status bar or it becomes untouchable.
+  const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
   const { isSigned, signPv } = useSignedPvs();
-  const {
-    weeks: apiWeeks,
-    vouchers: apiVouchers,
-    refresh: refreshHistory,
-  } = usePaymentHistory();
+  const { weeks: apiWeeks, vouchers: apiVouchers, refresh: refreshHistory } = usePaymentHistory();
   const { token } = useSession();
-  const lastWeekPv = useMemo(() => getLastWeekAwaitingPv(), []);
-  const hist =
-    apiWeeks.find((p) => p.id === pvId) ?? PAYMENT_HISTORY_WEEKS.find((p) => p.id === pvId);
+  // The real last-week voucher — the only PV a PR can still sign ("one week,
+  // one PV"). Signed/paid weeks arrive through payment history instead.
+  const { lastWeek } = useAwaitingLastWeekPv();
+
+  const hist = apiWeeks.find((p) => p.id === pvId);
+  const histVoucher = apiVouchers.find((v) => v.voucherId === pvId) ?? null;
+
+  /** Whatever voucher this page shows, in the shared week-grid shape. */
+  const weekForGrid: PrCurrentWeek | null = histVoucher
+    ? {
+        voucherId: histVoucher.voucherId,
+        weekStart: histVoucher.weekStart?.slice(0, 10) ?? '',
+        weekEnd: histVoucher.weekEnd?.slice(0, 10) ?? '',
+        net: histVoucher.net,
+        status: histVoucher.status,
+        lines: histVoucher.lines,
+      }
+    : lastWeek;
+
+  const liveOutlets = useMemo(
+    () =>
+      [
+        ...new Set(
+          (weekForGrid?.lines ?? []).map((l) => l.outlet?.trim()).filter(Boolean) as string[],
+        ),
+      ],
+    [weekForGrid],
+  );
+  const liveOutlet =
+    liveOutlets.length === 1
+      ? liveOutlets[0]!
+      : liveOutlets.length > 1
+        ? `Multi-outlet (${liveOutlets.length})`
+        : 'Outlet';
+  const liveRef = (() => {
+    const m = (weekForGrid?.weekEnd ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+    return m ? `PV-${m[1]}${m[2]}${m[3]}` : `PV-${pvId.slice(0, 8).toUpperCase()}`;
+  })();
+
   /** Any unsigned review opens the live last-week PV (same as Payment → Last week). */
-  const pv = hist
+  const pv: DemoPv = hist
     ? {
         id: hist.id,
         ref: hist.ref,
@@ -189,16 +171,53 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         status: hist.status === 'paid' ? ('paid' as const) : ('signed' as const),
         statusLabel: hist.statusMeta,
       }
-    : lastWeekPv;
-  const grid = useMemo(() => buildLastWeekPayGrid(), []);
+    : {
+        id: lastWeek?.voucherId ?? pvId,
+        ref: liveRef,
+        outlet: liveOutlet,
+        weekLabel: weekRangeLabel(1),
+        net: Number(lastWeek?.net) || 0,
+        status: 'awaiting_pr',
+        statusLabel: 'Awaiting signature',
+      };
+  const grid = useMemo(() => buildWeekGridFromLines(weekForGrid), [weekForGrid]);
   const gridTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
   /** Net always matches Payment → Last week total. */
   const netDisplay = !hist && gridTotal > 0 ? gridTotal : pv.net;
-  const displayWeekLabel = !hist ? lastWeekPv.weekLabel : pv.weekLabel;
+  const displayWeekLabel = pv.weekLabel;
   const alreadySigned =
-    isSigned(lastWeekPv.id) || isSigned(pv.id) || (hist ? true : false);
+    (hist ? true : false) ||
+    isSigned(pv.id) ||
+    lastWeek?.status === 'signed' ||
+    lastWeek?.status === 'paid';
 
   const [signed, setSigned] = useState(alreadySigned);
+  // hist / lastWeek load async, so the seal must follow the data, not the
+  // initial render's state snapshot.
+  const isSealed = signed || alreadySigned;
+
+  /** The voucher's real drink/tip lines — replaces the demo receipt slips. */
+  const linkedReceipts: LinkedReceipt[] = useMemo(
+    () =>
+      (weekForGrid?.lines ?? [])
+        .filter((l) => (l.kind === 'drinks' || l.kind === 'tips') && l.commission > 0)
+        .map((l) => ({
+          id: l.id,
+          ref: SOURCE_LABEL[l.source],
+          item: l.item,
+          category: l.kind === 'drinks' ? ('Drinks' as const) : ('Tips' as const),
+          qty: l.quantity,
+          amount: l.sales || l.commission,
+          commission: l.commission,
+          outlet: l.outlet ?? '—',
+          at: lineDateLabel(l.lineDate),
+          // `pending` is set only for a manual self-log, which is precisely the
+          // "not matched to a receipt" case the agency verifies. Hardcoding this
+          // true made the badge say every line was receipt-backed.
+          matched: !l.pending,
+        })),
+    [weekForGrid],
+  );
   const [sigName, setSigName] = useState('');
   const [signOpen, setSignOpen] = useState(false);
   const [disputeOpen, setDisputeOpen] = useState(false);
@@ -210,91 +229,54 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const [receiptDetail, setReceiptDetail] = useState<LinkedReceipt | null>(null);
 
   /**
-   * This voucher's id IF it is a real backend row. Demo vouchers come from
-   * PAYMENT_HISTORY_WEEKS and there is no server to tell.
+   * This voucher's id IF it is a real backend row — an archived history
+   * voucher OR the live last-week PV awaiting signature. History used to be
+   * the only source, so signing an awaiting voucher never reached the server
+   * and the "signature" lived on this phone alone.
    */
-  const backendPvId = useMemo(
-    () => apiWeeks.find((p) => p.id === pvId)?.id ?? null,
-    [apiWeeks, pvId],
-  );
+  const backendPvId =
+    histVoucher?.voucherId ?? (lastWeek?.voucherId === pvId ? pvId : null);
 
-  /**
-   * The commission evidence behind this voucher — real lines for a real voucher,
-   * the demo list only for a demo one.
-   *
-   * This panel was hardcoded while the rest of the screen was already live, so
-   * the fake rows read as genuine: a PR could open a real voucher and be shown
-   * three drinks nobody sold. The lines were being served all along — no endpoint
-   * needed adding, only reading.
-   *
-   * Drinks and tips only. Wages are not receipt-backed (they seal off the shift
-   * clock) and belong to the grid above, not to evidence of a sale.
-   *
-   * An empty array is a real answer for a real voucher with no commission that
-   * week, so it must NOT fall through to the demo rows — that is the exact
-   * substitution this change exists to remove.
-   */
-  const linkedReceipts = useMemo<LinkedReceipt[]>(() => {
-    const voucher = apiVouchers.find((v) => v.voucherId === pvId);
-    if (!voucher) return DEMO_RECEIPTS;
-    return voucher.lines
-      .filter((line) => line.kind === 'drinks' || line.kind === 'tips')
-      .map((line) => ({
-        id: line.id,
-        ref: SOURCE_LABEL[line.source],
-        item: line.item,
-        category: line.kind === 'tips' ? ('Tips' as const) : ('Drinks' as const),
-        qty: line.quantity,
-        amount: line.sales,
-        commission: line.commission,
-        outlet: line.outlet ?? '—',
-        at: formatReceiptDay(line),
-        // `pending` is set only for a manual self-log, which is precisely the
-        // "not matched to a receipt" case the agency verifies.
-        matched: !line.pending,
-      }));
-  }, [apiVouchers, pvId]);
+  const [signBusy, setSignBusy] = useState(false);
+  const [sigInk, setSigInk] = useState<SignatureInk | null>(null);
 
-  /** True when the rows above are this voucher's own, not the demo placeholder. */
-  const receiptsAreReal = useMemo(
-    () => apiVouchers.some((v) => v.voucherId === pvId),
-    [apiVouchers, pvId],
-  );
-
-  const confirmSign = () => {
-    if (sigName.trim().length < 2) return;
-    const sealed = {
-      ...lastWeekPv,
-      net: netDisplay,
-      status: 'signed' as const,
-      statusLabel: 'Signed',
-    };
-    signPv({
-      pv: sealed,
-      net: netDisplay,
-      grid,
-      sigName: sigName.trim(),
-    });
-
-    // Tell the agency. Until this call existed the signature lived only in
-    // AsyncStorage, so nobody but this phone ever knew the PV was accepted.
-    if (backendPvId && token) {
-      signMyVoucher(token, backendPvId)
-        .then(() => refreshHistory())
-        .catch((e: unknown) => {
-          // Not swallowed: the PR has to know the agency was not told, because
-          // the local seal above makes it look like it was. The endpoint is
-          // idempotent, so signing again is the fix.
-          Alert.alert(
-            'Signed on this device only',
-            `${e instanceof Error ? e.message : 'Could not reach the agency.'}\n\nOpen this voucher and sign again when you have signal.`,
-          );
-        });
+  const confirmSign = async () => {
+    if (sigName.trim().length < 2 || signBusy) return;
+    if (!sigInk) {
+      Alert.alert('Draw your signature', 'Sign in the pad with your finger before confirming.');
+      return;
     }
-
-    setSigned(true);
-    setSignOpen(false);
-    setTab('history');
+    if (!backendPvId || !token) {
+      Alert.alert(
+        'No voucher to sign yet',
+        'This voucher is not on the server — go back, refresh Payment, and try again.',
+      );
+      return;
+    }
+    setSignBusy(true);
+    try {
+      // Database first: the signature only counts once payment_voucher.status
+      // is 'signed' server-side. The local seal and the History redirect come
+      // strictly after the commit, never before.
+      await signMyVoucher(token, backendPvId, sigInk);
+      signPv({
+        pv: { ...pv, net: netDisplay, status: 'signed', statusLabel: 'Signed' },
+        net: netDisplay,
+        grid,
+        sigName: sigName.trim(),
+      });
+      await refreshHistory();
+      setSigned(true);
+      setSignOpen(false);
+      setTab('history');
+    } catch (e: unknown) {
+      Alert.alert(
+        'Not signed',
+        `${e instanceof Error ? e.message : 'Could not reach the agency.'}\n\nNothing was saved — try again when you have signal.`,
+      );
+    } finally {
+      setSignBusy(false);
+    }
   };
 
   const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
@@ -328,25 +310,25 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   })();
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
       <View style={styles.topRow}>
-        <Pressable style={styles.back} onPress={goBack}>
+        <Pressable style={styles.back} onPress={goBack} hitSlop={10}>
           <ChevronLeft size={20} color={C.goldL} />
           <Text style={styles.backText}>Payment</Text>
         </Pressable>
-        <Pressable onPress={goBack} hitSlop={8}>
+        <Pressable onPress={goBack} hitSlop={10}>
           <XIcon size={18} color={C.muted} />
         </Pressable>
       </View>
 
       <View style={styles.statusRow}>
-        <Pill variant={anyDisputed ? 'red' : signed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
-          {anyDisputed ? 'Dispute open' : signed ? pv.statusLabel : 'Pending your review'}
+        <Pill variant={anyDisputed ? 'red' : isSealed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
+          {anyDisputed ? 'Dispute open' : isSealed ? pv.statusLabel : 'Pending your review'}
         </Pill>
-        <Text style={styles.pvId}>{lastWeekPv.ref}</Text>
+        <Text style={styles.pvId}>{pv.ref}</Text>
       </View>
 
-      {!signed && !anyDisputed && (
+      {!isSealed && !anyDisputed && (
         <View style={styles.banner}>
           <Text style={styles.bannerTitle}>Pending your review</Text>
           <Text style={styles.bannerBody}>Sign-by Sunday · Finance Head already signed</Text>
@@ -476,52 +458,47 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         <Text style={styles.summaryK}>Net payable</Text>
         <Text style={styles.summaryV}>{formatRM(netDisplay)}</Text>
         <Text style={[styles.summaryK, { marginTop: 10 }]}>Payee</Text>
-        <Text style={styles.summaryBody}>PR Personnel · {lastWeekPv.outlet}</Text>
+        <Text style={styles.summaryBody}>PR Personnel · {pv.outlet}</Text>
       </View>
 
-      <Pressable style={styles.collapse} onPress={() => setReceiptsOpen((o) => !o)}>
-        {/* Not all real rows are scans — a self-log and a check-out seal reach
-            this list too, so the heading only claims "scans" for the demo set. */}
-        <Text style={styles.collapseTitle}>
-          {receiptsAreReal ? 'DRINK & TIP RECORDS' : 'LINKED RECEIPT SCANS'}
-        </Text>
-        <Text style={styles.collapseAction}>{receiptsOpen ? 'Hide' : 'Details'}</Text>
-      </Pressable>
-      {receiptsOpen && (
+      {linkedReceipts.length > 0 && (
+        <Pressable style={styles.collapse} onPress={() => setReceiptsOpen((o) => !o)}>
+          {/* Not all of these are scans — a self-log and a check-out seal reach
+              this list too, and the demo fallback is gone, so the heading can
+              stop claiming a scan for every row. */}
+          <Text style={styles.collapseTitle}>DRINK &amp; TIP RECORDS</Text>
+          <Text style={styles.collapseAction}>{receiptsOpen ? 'Hide' : 'Details'}</Text>
+        </Pressable>
+      )}
+      {receiptsOpen && linkedReceipts.length > 0 && (
         <View style={styles.receiptBox}>
-          {linkedReceipts.length === 0 ? (
-            <Text style={styles.receiptMeta}>
-              No drink or tip records for this week — this voucher is wages only.
-            </Text>
-          ) : (
-            linkedReceipts.map((r) => (
-              <Pressable
-                key={r.id}
-                style={styles.receiptRow}
-                onPress={() => setReceiptDetail(r)}
-              >
-                <View style={{ flex: 1, minWidth: 0 }}>
-                  <Text style={styles.receiptRef}>{r.ref}</Text>
-                  <Text style={styles.receiptMeta}>
-                    {r.item} · {formatRM(r.amount)}
-                  </Text>
-                </View>
-                <View style={styles.receiptRight}>
-                  <Text style={styles.receiptMatched}>
-                    {r.matched ? 'Matched' : 'Pending'}
-                  </Text>
-                  <Text style={styles.receiptDetailsLink}>Details</Text>
-                </View>
-              </Pressable>
-            ))
-          )}
+          {linkedReceipts.map((r) => (
+            <Pressable
+              key={r.id}
+              style={styles.receiptRow}
+              onPress={() => setReceiptDetail(r)}
+            >
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.receiptRef}>{r.ref}</Text>
+                <Text style={styles.receiptMeta}>
+                  {r.item} · {formatRM(r.amount)}
+                </Text>
+              </View>
+              <View style={styles.receiptRight}>
+                <Text style={styles.receiptMatched}>
+                  {r.matched ? 'Matched' : 'Pending'}
+                </Text>
+                <Text style={styles.receiptDetailsLink}>Details</Text>
+              </View>
+            </Pressable>
+          ))}
         </View>
       )}
 
       <View style={styles.sigCard}>
         <Text style={styles.sectionLabel}>YOUR SIGNATURE</Text>
         <Text style={styles.sigRole}>PR Personnel</Text>
-        {signed ? (
+        {isSealed ? (
           <View style={styles.signedRow}>
             <Check size={16} color={C.green} />
             <Text style={styles.signedText}>
@@ -533,7 +510,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         )}
       </View>
 
-      {!signed && (
+      {!isSealed && (
         <Pressable
           style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
           onPress={() => setSignOpen(true)}
@@ -543,14 +520,14 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         </Pressable>
       )}
 
-      {signed && pv.status === 'paid' && (
+      {isSealed && pv.status === 'paid' && (
         <View style={styles.paidBox}>
           <Shield size={16} color={C.green} />
           <Text style={styles.paidText}>PAID · {formatRM(netDisplay)} in your bank</Text>
         </View>
       )}
 
-      {signed && (
+      {isSealed && (
         <Pressable style={styles.soft} onPress={() => setTab('history')}>
           <Text style={styles.softText}>View in History · Payment history</Text>
         </Pressable>
@@ -606,12 +583,16 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       {/* Signature sheet */}
       <Modal visible={signOpen} transparent animationType="slide" onRequestClose={() => setSignOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setSignOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.sheetTitle}>Sign payment voucher</Text>
             <Text style={styles.sheetHint}>
-              Type your floor nickname as signature (demo pad).
+              Draw your signature with your finger — it is stored on the voucher
+              and printed on the PDF.
             </Text>
-            <Text style={styles.fieldLabel}>Signature</Text>
+            <Text style={styles.fieldLabel}>Name</Text>
             <TextInput
               value={sigName}
               onChangeText={setSigName}
@@ -619,9 +600,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
               placeholder="Vicky"
               placeholderTextColor={C.muted2}
             />
-            <View style={styles.sigPad}>
-              <Text style={styles.sigPadText}>{sigName || 'Sign here'}</Text>
-            </View>
+            <Text style={styles.fieldLabel}>Signature</Text>
+            <SignaturePad onChange={setSigInk} />
             <Pressable
               style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
               onPress={confirmSign}
@@ -643,7 +623,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         onRequestClose={() => setDisputeOpen(false)}
       >
         <Pressable style={styles.backdrop} onPress={() => setDisputeOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.sheetTitle}>
               {disputeModeWithdraw ? 'Withdraw dispute?' : 'Dispute this amount'}
             </Text>

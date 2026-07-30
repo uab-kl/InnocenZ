@@ -4,7 +4,9 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Linking,
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +24,13 @@ import {
 } from '../lib/hist-date-time-filters';
 import { normalizeHistPayWeek } from '../lib/history-pay-sync';
 import { usePaymentHistory } from '../lib/payment-history';
+import {
+  createMyVoucherExportTicket,
+  fetchMyVoucherExcelBlob,
+  fetchMyVoucherPdfBlob,
+} from '../lib/api';
+import { useSession } from '../lib/session';
+import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useShiftSession } from '../lib/shift-session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { usePrNav } from '../lib/pr-nav';
@@ -62,6 +71,8 @@ const EMPTY: Filters = {
 
 export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => void }) {
   const { openPv } = usePrNav();
+  const { token } = useSession();
+  const keyboardInset = useKeyboardInset();
   const { weekRecords } = useShiftSession();
   const { weeks: apiWeeks } = usePaymentHistory();
   const { signedWeeks } = useSignedPvs();
@@ -153,6 +164,71 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         ? totalSigned
         : totalPaid + totalSigned;
   const shifts = filtered.reduce((s, w) => s + w.shifts, 0);
+
+  /** Streams the server-rendered workbook; the toast only fires on success. */
+  const openExcel = async (w: HistPayWeek) => {
+    if (!token) return;
+    if (Platform.OS !== 'web') {
+      // The system browser downloads the file, so hand it a short-lived
+      // ticket URL — a browser tab can't send our Authorization header.
+      try {
+        const { xlsxUrl } = await createMyVoucherExportTicket(token, w.id);
+        await Linking.openURL(xlsxUrl);
+        flash('Excel opening in your browser — check Downloads');
+      } catch {
+        flash('Could not open the Excel — try again');
+      }
+      return;
+    }
+    try {
+      const blob = await fetchMyVoucherExcelBlob(token, w.id);
+      const doc = (globalThis as { document?: any }).document;
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = `${w.ref}-payment-voucher.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flash('Payment voucher Excel downloaded');
+    } catch {
+      flash('Could not download the Excel — try again');
+    }
+  };
+
+  const openPdf = async (w: HistPayWeek) => {
+    if (Platform.OS !== 'web') {
+      if (!token) return;
+      try {
+        // Straight to the PDF file — the browser downloads it and the
+        // notification opens it in the phone's PDF viewer.
+        const { pdfUrl } = await createMyVoucherExportTicket(token, w.id);
+        await Linking.openURL(pdfUrl);
+        flash('PDF downloading — open it from your notifications');
+      } catch {
+        flash('Could not open the voucher — try again');
+      }
+      return;
+    }
+    // Web: the SAME server-rendered boxed PDF as the phone — opened in the
+    // browser's PDF viewer, where view/print/save all live.
+    if (!token) return;
+    try {
+      const blob = await fetchMyVoucherPdfBlob(token, w.id);
+      const url = URL.createObjectURL(blob);
+      const win = (globalThis as { open?: (u?: string, t?: string) => any }).open?.(url, '_blank');
+      if (!win) {
+        const doc = (globalThis as { document?: any }).document;
+        const a = doc.createElement('a');
+        a.href = url;
+        a.download = `${w.ref}-payment-voucher.pdf`;
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      flash('Payment voucher PDF opened');
+    } catch {
+      flash('Could not open the PDF — try again');
+    }
+  };
 
   const filterCount = [
     applied.query,
@@ -354,8 +430,8 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
               open={expanded === w.id}
               onToggle={() => setExpanded((id) => (id === w.id ? null : w.id))}
               onOpenPv={() => openPv(w.id)}
-              onPdf={() => flash('Payment voucher opened — use Print → Save as PDF')}
-              onExcel={() => flash('Payment voucher Excel downloaded')}
+              onPdf={() => void openPdf(w)}
+              onExcel={() => void openExcel(w)}
             />
           ))
         )}
@@ -369,7 +445,10 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         onRequestClose={() => setFilterOpen(false)}
       >
         <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.sheetHandle} />
             <View style={styles.sheetTitleRow}>
@@ -594,16 +673,14 @@ function WeekCard({
 
           <View style={styles.actions}>
             <IzButton label="Open PV" small fullWidth={false} onPress={onOpenPv} />
-            {week.status === 'paid' && (
-              <IzButton
-                label="PDF"
-                icon={FileText}
-                variant="soft"
-                small
-                fullWidth={false}
-                onPress={onPdf}
-              />
-            )}
+            <IzButton
+              label="PDF"
+              icon={FileText}
+              variant="soft"
+              small
+              fullWidth={false}
+              onPress={onPdf}
+            />
             <IzButton
               label="Excel"
               variant="soft"

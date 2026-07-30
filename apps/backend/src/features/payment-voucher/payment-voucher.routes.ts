@@ -19,6 +19,26 @@ router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(
 // 3-segment, so no collision with the 2-segment '/mine/lines' above.
 router.post('/mine/:voucherId/sign', paymentVoucherController.signMyVoucher.bind(paymentVoucherController));
 
+// The PR downloads its OWN voucher as the printed Excel document (History →
+// Excel button). Same 3-segment shape as '/sign' above.
+router.get(
+  '/mine/:voucherId/export.xlsx',
+  paymentVoucherController.exportMyVoucherExcel.bind(paymentVoucherController),
+);
+router.get(
+  '/mine/:voucherId/export.pdf',
+  paymentVoucherController.exportMyVoucherPdf.bind(paymentVoucherController),
+);
+
+// The phone flow: an authenticated POST mints a 5-minute download ticket, and
+// the system browser then opens /payment-voucher/export/<ticket>/... (mounted
+// BEFORE authenticateJWT in router/v1.ts) — a browser download cannot carry
+// the Bearer header, and the session token must never appear in a URL.
+router.post(
+  '/mine/:voucherId/export-ticket',
+  paymentVoucherController.createMyVoucherExportTicket.bind(paymentVoucherController),
+);
+
 // A PR raises / withdraws a dispute on its OWN issued voucher (§3 F). 3- and
 // 4-segment paths, so they never collide with the 2-segment '/mine/lines'.
 router.post('/mine/:voucherId/dispute', paymentVoucherController.raiseMyDispute.bind(paymentVoucherController));
@@ -34,6 +54,10 @@ router.use(requireRole('admin', 'agency'));
 const canDelete = requireRole('admin');
 
 router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
+
+// The agency's receipt-review feed (full OCR evidence per receipt). One
+// segment, so it MUST precede '/:id' below.
+router.get('/receipts', paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController));
 
 // The agency's dispute queue and its decisions. '/disputes' MUST precede the
 // '/:id' route below — both are one segment, so registered the other way round
