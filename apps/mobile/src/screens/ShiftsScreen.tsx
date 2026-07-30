@@ -37,7 +37,6 @@ import {
   Store,
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
-import { useShiftSession } from '../lib/shift-session';
 import { useActiveShift } from '../lib/active-shift';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePrNav } from '../lib/pr-nav';
@@ -79,7 +78,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
 
   // Real shift assignments for this PR — shared with Check-In / timetable so
   // On duty / Complete badges flip as soon as attendance stamps change.
-  const { assignments, phase: attendancePhase, refresh, focus } = useActiveShift();
+  const { assignments, refresh, focus } = useActiveShift();
   // Re-pull assignments whenever the Today page mounts — the agency may have
   // assigned a new same-day shift while the app sat on another tab.
   useEffect(() => {
@@ -117,6 +116,10 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
       ).padStart(2, '0')}`
     : '';
 
+  const todayIso = ymdToIso(...todayYmd());
+  // Missed check-ins (booked, never checked in, window over) are NOT to-dos —
+  // they render as red days on the Agency Schedule calendar instead.
+
   const todoCount = todoItems.length + outletSwaps.pending.length + (overdueCheckout ? 1 : 0);
   const shifts = assignments
     .filter(
@@ -128,7 +131,6 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     )
     .map(assignmentToShift);
 
-  const todayIso = ymdToIso(...todayYmd());
   // Today lists EVERY shift the PR works today: at most one still
   // pending/on-duty (the check-in target) plus any already checked-out. A
   // finished shift belongs to the day it was CHECKED OUT — night shifts cross
@@ -153,7 +155,11 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
         a.status !== 'no_show' &&
         a.status !== 'leave_approved' &&
         a.checkOutAt != null &&
-        stampDayIso(a.checkOutAt) === todayIso,
+        // A night shift checked out just before midnight must not vanish from
+        // Today minutes later — the card stays while the check-out is fresh
+        // (same 12 h rule as Check-In's pinned summary).
+        (stampDayIso(a.checkOutAt) === todayIso ||
+          Date.now() - new Date(a.checkOutAt).getTime() < 12 * 60 * 60 * 1000),
     )
     .sort((a, b) => (b.checkOutAt ?? '').localeCompare(a.checkOutAt ?? ''))
     .map((a) => {
@@ -166,9 +172,6 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     });
   const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
 
-  const { phase: localPhase } = useShiftSession();
-  // Prefer live assignment stamps; fall back to local session for offline demo.
-  const phase = attendancePhase !== 'idle' ? attendancePhase : localPhase;
   const { width } = useViewportSize();
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({
     today: true,
@@ -199,14 +202,16 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   // .iz-pr-page-header__title: clamp(1.4rem, 5.2vw, 1.75rem)
   const titleSize = Math.min(28, Math.max(22.4, width * 0.052));
 
-  const todayStatus =
-    phase === 'complete'
+  // Scoped to TODAY's shifts only — Check-In's never-blank fallback can be
+  // showing YESTERDAY's completed summary, and its phase must not label today
+  // "Complete" while the Today section truthfully says "no shift today".
+  const todayStatus = tonightShift
+    ? tonightShift.status === 'on-duty'
+      ? 'On duty'
+      : 'Tonight'
+    : completedToday.length > 0
       ? 'Complete'
-      : phase === 'on_duty'
-        ? 'On duty'
-        : phase === 'booked'
-          ? 'Tonight'
-          : 'Off';
+      : 'Off';
 
   // CTA per card, not per global phase — a completed card always offers its
   // summary even while a fresh same-day shift owns the Check in button.
@@ -235,7 +240,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
             <HubTab
               label="TODAY"
               value={todayStatus}
-              valueColor={phase === 'complete' ? C.green : C.goldL}
+              valueColor={todayStatus === 'Complete' ? C.green : C.goldL}
               on={open.today}
               onPress={() => toggleHubSection('today')}
             />
@@ -291,7 +296,13 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                     <TonightCard
                       key={s.id}
                       shift={s}
-                      eyebrow={tonightShift ? 'EARLIER TODAY · COMPLETE' : 'COMPLETE'}
+                      eyebrow={
+                        ymdToIso(...s.date) !== todayIso
+                          ? 'LAST NIGHT · COMPLETE'
+                          : tonightShift
+                            ? 'EARLIER TODAY · COMPLETE'
+                            : 'COMPLETE'
+                      }
                       cta="View summary"
                       // Collapsed by default while a live shift owns the page;
                       // the lone just-finished shift stays expanded.

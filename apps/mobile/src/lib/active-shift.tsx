@@ -32,14 +32,28 @@ function localDateKey(d: Date): string {
 }
 
 /**
+ * A check-out is still "fresh" while its calendar day is today or it happened
+ * under 12 h ago — a 23:50 night-shift check-out must not fall off Today /
+ * Check-In minutes later at midnight. Same rule as ShiftsScreen's Today cards.
+ */
+function checkOutFresh(stamp: string): boolean {
+  if (localDateKey(new Date(stamp)) === localDateKey(new Date())) return true;
+  return Date.now() - new Date(stamp).getTime() < 12 * 60 * 60 * 1000;
+}
+
+/**
  * The single assignment the app acts on:
  *  1. a shift in progress (checked in, not out) — highest;
  *  2. a shift booked for TODAY still awaiting check-in — a new same-day
  *     assignment renews the Check-In page even right after a check-out, so
  *     the PR can start the next shift instead of staring at the old summary;
- *  3. a shift the PR checked out TODAY — with no new shift today, the summary
- *     stays pinned for the rest of the day (clears itself the next day);
- *  4. the soonest one still awaiting check-in (their next shift);
+ *  3. a shift the PR checked out TODAY or under 12 h ago (night shifts cross
+ *     midnight) — with no new shift, the just-finished summary stays pinned,
+ *     then clears once the check-out stops being fresh;
+ *  4. the soonest TODAY-or-future one still awaiting check-in (their next
+ *     shift) — a PAST booking that was never checked in is a missed shift,
+ *     not the next shift: it surfaces on Today → To-do instead of posing as
+ *     a live "Booked" card here;
  *  5. the latest completed one, as a fallback so the page is never blank.
  * Cancelled / no-show / locally-dismissed rows are skipped.
  */
@@ -71,15 +85,15 @@ export function pickActive(
     .sort((a, b) => (a.slot ?? '').localeCompare(b.slot ?? ''));
   if (bookedToday.length) return bookedToday[0];
 
-  // Keep the just-finished shift on screen for the rest of the day (matched on
-  // the check-out stamp's local day), then let it reset when the day changes.
+  // Keep the just-finished shift on screen while its check-out is fresh —
+  // the rest of its day, or 12 h past a pre-midnight check-out.
   const completedToday = open
-    .filter((a) => a.checkOutAt && localDateKey(new Date(a.checkOutAt)) === today)
+    .filter((a) => a.checkOutAt && checkOutFresh(a.checkOutAt))
     .sort((a, b) => (b.checkOutAt ?? '').localeCompare(a.checkOutAt ?? ''));
   if (completedToday.length) return completedToday[0];
 
   const booked = open
-    .filter((a) => !a.checkInAt && a.status !== 'completed')
+    .filter((a) => !a.checkInAt && a.status !== 'completed' && a.shiftDate >= today)
     .sort((a, b) => a.shiftDate.localeCompare(b.shiftDate));
   if (booked.length) return booked[0];
   const completed = open
@@ -155,20 +169,19 @@ export function ActiveShiftProvider({ children }: { children: React.ReactNode })
 
   const current = useMemo(() => pickActive(assignments, dismissed), [assignments, dismissed]);
   // A focus pin only holds while the row is still viewable: a completed shift's
-  // summary stays reachable for the rest of its check-out day, then the pin
-  // silently falls back to the auto pick (so yesterday's summary can't hijack
-  // Check-In after midnight).
+  // summary stays reachable while its check-out is fresh, then the pin
+  // silently falls back to the auto pick (so a stale summary can't hijack
+  // Check-In days later).
   const active = useMemo(() => {
     if (!focusedId) return current;
     const row = assignments.find((a) => a.id === focusedId);
-    const today = localDateKey(new Date());
     const valid =
       row &&
       !dismissed.has(row.id) &&
       row.status !== 'cancelled' &&
       row.status !== 'no_show' &&
       row.status !== 'leave_approved' &&
-      (!row.checkOutAt || localDateKey(new Date(row.checkOutAt)) === today);
+      (!row.checkOutAt || checkOutFresh(row.checkOutAt));
     return valid ? row : current;
   }, [assignments, dismissed, focusedId, current]);
   const phase: AttendancePhase = active ? derivePhase(active) : 'idle';

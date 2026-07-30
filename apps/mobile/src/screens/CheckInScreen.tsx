@@ -542,11 +542,18 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <View style={styles.completeHero}>
                   <Pill variant="green">Complete</Pill>
                   <View style={styles.completeMoney}>
-                    <View>
+                    <View style={{ flex: 1, minWidth: 0 }}>
                       <Text style={styles.onDutyLabel}>Final payout</Text>
                       <Text style={styles.completeDuration}>Duration {completeDuration}</Text>
                     </View>
-                    <Text style={styles.completeAmt}>{formatRM(finalPayout)}</Text>
+                    <Text
+                      style={styles.completeAmt}
+                      numberOfLines={1}
+                      adjustsFontSizeToFit
+                      minimumFontScale={0.55}
+                    >
+                      {formatRM(finalPayout)}
+                    </Text>
                   </View>
                 </View>
                 {otPendingAmount > 0 && (
@@ -987,6 +994,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   completeAmt: {
+    flexShrink: 1,
     fontFamily: F.sora,
     fontSize: 26,
     fontWeight: '800',
