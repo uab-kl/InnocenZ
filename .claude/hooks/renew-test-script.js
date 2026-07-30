@@ -16,9 +16,13 @@
 const { execSync } = require('child_process');
 
 let raw = '';
-try { raw = require('fs').readFileSync(0, 'utf8'); } catch {}
+try {
+  raw = require('fs').readFileSync(0, 'utf8');
+} catch {}
 let evt = {};
-try { evt = JSON.parse(raw || '{}'); } catch {}
+try {
+  evt = JSON.parse(raw || '{}');
+} catch {}
 if (evt.stop_hook_active) process.exit(0);
 
 const CODE_RE = /^(apps|packages|tools)\//;
@@ -35,7 +39,9 @@ try {
 
   let staleCommit = null;
   if (!dirtyScript) {
-    const lines = git('log -1 --pretty=%ct%n%h --name-only').split('\n').filter(Boolean);
+    const lines = git('log -1 --pretty=%ct%n%h --name-only')
+      .split('\n')
+      .filter(Boolean);
     const ageMin = (Date.now() / 1000 - Number(lines[0])) / 60;
     const files = lines.slice(2);
     if (
