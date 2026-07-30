@@ -92,11 +92,90 @@ export interface PaymentVoucher {
 	updatedBy: string;
 }
 
+export type PaymentVoucherDayStatus = "approved" | "held";
+
+/**
+ * One day of a voucher, with the agency's decision folded in.
+ *
+ * `status` is null when nobody has decided — there is no `pending` state, and a
+ * day whose total changed since it was approved comes back null with
+ * `stale: true` rather than still reading approved.
+ *
+ * Cents, not ringgit: `totalCents` is what the day sums to now and
+ * `approvedTotalCents` is what it summed to when it was signed off. The server
+ * compares them; the UI only has to show that they diverged.
+ */
+export interface PaymentVoucherDayReview {
+	date: string;
+	totalCents: number;
+	status: PaymentVoucherDayStatus | null;
+	stale: boolean;
+	approvedTotalCents: number | null;
+	note: string | null;
+	/** Approved as part of an approve-all rather than opened individually. */
+	bulk: boolean;
+	reviewedAt: string | null;
+	reviewedBy: string | null;
+}
+
 // getById returns the voucher with its line items; list omits them.
 export interface PaymentVoucherWithLines extends PaymentVoucher {
 	lines: PaymentVoucherLine[];
 	/** Only the agency/admin detail route returns these; absent on list rows. */
 	receipts?: PaymentVoucherReceipt[];
+	/**
+	 * Day-by-day review state. Rides on the detail route beside the lines on
+	 * purpose, so a decision can never be shown next to lines it does not refer
+	 * to. Absent on list rows.
+	 */
+	dayReviews?: PaymentVoucherDayReview[];
+	allDaysReviewed?: boolean;
+	/**
+	 * ⚠️ Send-readiness reads THIS, never `allDaysReviewed`. Both are true when
+	 * every day is decided and one of them is held — a held day IS a decision.
+	 */
+	hasHeldDay?: boolean;
+}
+
+export interface DayReviewResult {
+	dayReviews: PaymentVoucherDayReview[];
+	allDaysReviewed: boolean;
+}
+
+/**
+ * Record, change or clear one day's decision. `status: null` un-reviews it.
+ *
+ * The body carries no amount by design — the server recomputes the day from the
+ * lines and stores that as the baseline, so a client cannot approve a figure the
+ * voucher never had.
+ */
+export async function reviewPaymentVoucherDay(
+	id: string,
+	date: string,
+	input: { status: PaymentVoucherDayStatus | null; note?: string },
+	onRefreshFail: () => void,
+): Promise<DayReviewResult> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: DayReviewResult;
+	}>(`/payment-voucher/${id}/day-review/${date}`, input);
+	return response.data.data;
+}
+
+/** Approve every undecided day. Held days are skipped server-side. */
+export async function approveAllPaymentVoucherDays(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<DayReviewResult & { message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: DayReviewResult;
+	}>(`/payment-voucher/${id}/day-review/approve-all`, {});
+	return { ...response.data.data, message: response.data.message };
 }
 
 export interface PaymentVouchersQueryParams {
