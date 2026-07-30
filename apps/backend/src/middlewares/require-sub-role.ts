@@ -132,6 +132,17 @@ export function requireOutletSubRoleIfMember(...allowed: OutletSubRole[]) {
 /** agencyCan 'assignShifts' · 'managePr' · 'approvePrSignups' · 'editSettings' — owner only. */
 export const agencyOwnerOnly = requireAgencySubRole('owner');
 
+/**
+ * agencyCan 'raisePv' — owner + finance, which today is every agency sub-role.
+ *
+ * OWNER DECISION (30 Jul 2026) on who may approve or hold a PV day: both. It is
+ * stated as a grant rather than left to the org-level `requireRole('agency')`
+ * precisely BECAUSE it is currently equivalent — a third agency sub-role would
+ * otherwise inherit money-attestation authority by default, silently. Written
+ * down, it has to be granted on purpose.
+ */
+export const agencyOwnerOrFinance = requireAgencySubRole('owner', 'finance');
+
 /** outletCan 'editSettings' — outlet owner only (finance and ops both excluded). */
 export const outletOwnerOnly = requireOutletSubRole('owner');
 

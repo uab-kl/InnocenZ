@@ -1,4 +1,4 @@
-import { and, eq, exists, ilike, inArray, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, ilike, inArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -29,6 +29,29 @@ function toProfile(row: PrProfile): PrProfile | null {
   return hasValue ? row : null;
 }
 
+/**
+ * ONE phone number per person: the account's.
+ *
+ * `pr.phone` and `user.phone_num` held the same fact in two tables and had
+ * already drifted apart — one PR's roster number was not the number their
+ * account signs in with, so they could not log in with the number their agency
+ * had given them. The owner's call (30 Jul 2026) was that **`user.phone_num`
+ * wins**, which is also what the project's own database rule says: one fact
+ * lives in one table, reached by FK.
+ *
+ * `pr.phone` survives for the one case where the account does not exist yet — an
+ * agency adds a PR to the roster before that person has signed up, and the
+ * number they typed is then the only one there is. Once an account is linked, it
+ * is the account that answers.
+ *
+ * The column itself is NOT dropped yet: the agency PR search and jk's PV export
+ * still read it directly, and dropping a column out from under a shared database
+ * breaks whoever is running at that moment.
+ */
+function withAccountPhone<T extends PrType>(pr: T, accountPhone: string | null): T {
+  return accountPhone ? { ...pr, phone: accountPhone } : pr;
+}
+
 export class PrRepositoryClass {
   async create(
     data: Omit<PrInsertType, 'id' | 'createdAt' | 'updatedAt'>,
@@ -45,16 +68,40 @@ export class PrRepositoryClass {
     }
   }
 
-  /** The PR record linked to a user account — how a signed-in PR resolves its
-   * own pr.id server-side (PRs cannot read the /pr list). */
+  /**
+   * The PR record linked to a user account — how a signed-in PR resolves its
+   * own pr.id server-side (PRs cannot read the /pr list).
+   *
+   * Ordered by `created_at` because one user account CAN hold more than one `pr`
+   * row: that is data drift from before `agency_pr` existed (see the note on
+   * `AgencyPrTable` — one `pr` row plus many `agency_pr` rows is the intended
+   * shape, with `pr.agency_id` as the originating agency). An unordered
+   * `LIMIT 1` let Postgres return either row per call, so the same PR could
+   * resolve to a different identity between two requests — which read as their
+   * own swap request, voucher or shift simply not existing. Oldest row wins, to
+   * match "originating agency"; `id` breaks a same-timestamp tie so the order is
+   * total.
+   *
+   * Callers get ONE row, so a PR with drifted duplicates still sees only the
+   * agency behind that row. Consolidating those rows is a data change on the
+   * shared DB (it has to repoint `shift_assignment`, `payment_voucher`, …), so it
+   * is deliberately not done here; this only guarantees the answer stops moving.
+   */
   async getByUserId(userId: string): Promise<PrType | null> {
     try {
-      const [pr] = await db
+      const rows = await db
         .select()
         .from(PrTable)
         .where(eq(PrTable.userId, userId))
-        .limit(1);
-      return pr ?? null;
+        .orderBy(asc(PrTable.createdAt), asc(PrTable.id))
+        .limit(2);
+
+      if (rows.length > 1) {
+        logger.warn(
+          `[PrRepository.getByUserId] user ${userId} has multiple pr rows; resolving to the oldest (${rows[0].id}). Rows under any other pr id are invisible to this account.`,
+        );
+      }
+      return rows[0] ?? null;
     } catch (error) {
       logger.error('[PrRepository.getByUserId] Error:', error);
       return null;
@@ -103,13 +150,15 @@ export class PrRepositoryClass {
   async getById(id: string): Promise<PrWithProfileType | null> {
     try {
       const [row] = await db
-        .select({ pr: PrTable, profile: profileColumns })
+        .select({ pr: PrTable, profile: profileColumns, accountPhone: UserTable.phoneNum })
         .from(PrTable)
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
         .where(eq(PrTable.id, id))
         .limit(1);
-      return row ? { ...row.pr, profile: toProfile(row.profile) } : null;
+      return row
+        ? { ...withAccountPhone(row.pr, row.accountPhone), profile: toProfile(row.profile) }
+        : null;
     } catch (error) {
       logger.error('[PrRepository.getById] Error:', error);
       throw error;
@@ -158,7 +207,7 @@ export class PrRepositoryClass {
       const totalCount = Number(countRow?.value ?? 0);
 
       const rows = await db
-        .select({ pr: PrTable, profile: profileColumns })
+        .select({ pr: PrTable, profile: profileColumns, accountPhone: UserTable.phoneNum })
         .from(PrTable)
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
@@ -167,7 +216,10 @@ export class PrRepositoryClass {
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 
-      const prs = rows.map((row) => ({ ...row.pr, profile: toProfile(row.profile) }));
+      const prs = rows.map((row) => ({
+        ...withAccountPhone(row.pr, row.accountPhone),
+        profile: toProfile(row.profile),
+      }));
       return { prs, totalCount };
     } catch (error) {
       logger.error('[PrRepository.listPaginated] Error:', error);

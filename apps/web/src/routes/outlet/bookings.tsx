@@ -34,6 +34,7 @@ import {
 	resolveDressCode,
 } from "@agency-portal/lib/outlet-demo";
 import { outletCan } from "@agency-portal/lib/outlet-rbac";
+import { OUTLET_SERVICES_ENABLED } from "@agency-portal/lib/phase-flags";
 import {
 	basePayFromPayTierRows,
 	clonePostJobPayTierRow,
@@ -65,12 +66,15 @@ function PostJobPage() {
 
 	const canPostShifts = outletCan(outletSubRole, "postJob");
 
-	// PHASE 2 — the agency add-on "Services" tab is hidden for now. Restore the
-	// commented line and drop the `false` to bring it back; everything
-	// downstream (the tab bar, the ?tab=services search param, and the services
-	// form) is gated on this one flag, so nothing else needs touching.
-	// const canOrderServices = outletCan(outletSubRole, "orderSpecialService");
-	const canOrderServices = false;
+	// PHASE 2 — the agency add-on "Services" tab is deferred. The flag now lives in
+	// lib/phase-flags.ts so the /outlet/special-service entry point reads the same
+	// one; it used to be a local `false` here, which left that route redirecting
+	// into a tab this component could never render.
+	//
+	// The role check is kept live alongside it rather than commented out, so
+	// flipping the flag restores the feature already correctly scoped.
+	const canOrderServices =
+		OUTLET_SERVICES_ENABLED && outletCan(outletSubRole, "orderSpecialService");
 
 	const tab: PostJobTab = useMemo(() => {
 		if (searchTab === "services" && canOrderServices) return "services";
@@ -79,7 +83,10 @@ function PostJobPage() {
 
 		if (canPostShifts) return "shifts";
 
-		return "services";
+		// Never fall through to "services" while it is switched off — that would
+		// select a tab with no form behind it. Reachable only for a role with
+		// neither capability, which the guard below catches anyway.
+		return canOrderServices ? "services" : "shifts";
 	}, [searchTab, canPostShifts, canOrderServices]);
 
 	const setTab = (next: PostJobTab) => {
@@ -501,16 +508,27 @@ function PostJobPage() {
 	const showTabs = canPostShifts && canOrderServices;
 
 	if (!canPostShifts && !canOrderServices) {
+		// A role that CAN order services and only lacks shift posting is not
+		// restricted — the services flow is switched off for phase 2. Saying
+		// "your role cannot" there blames a permission for a product decision and
+		// sends someone to ask for a role change that would not help. Outlet
+		// finance is exactly that case.
+		const blockedByPhase =
+			!OUTLET_SERVICES_ENABLED &&
+			outletCan(outletSubRole, "orderSpecialService");
+
 		return (
 			<div className="iz-screen">
 				<header className="pt-1">
 					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						Access restricted
+						{blockedByPhase ? "Not available yet" : "Access restricted"}
 					</h2>
 				</header>
 
 				<p className="iz-tiny iz-muted mt-3 rounded-2xl border border-dashed border-[var(--iz-line)] px-4 py-8 text-center">
-					Your outlet role cannot post shifts or order services.
+					{blockedByPhase
+						? "Ordering agency services is coming in a later release. Your role will have access when it does — nothing needs changing on your account."
+						: "Your outlet role cannot post shifts or order services."}
 				</p>
 			</div>
 		);

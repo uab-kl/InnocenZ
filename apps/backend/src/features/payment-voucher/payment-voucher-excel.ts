@@ -78,11 +78,41 @@ export function pvLogoPath(): string | null {
   return fs.existsSync(p) ? p : null;
 }
 
-/** Same derivation the PR app shows on screen, so paper and phone agree. */
+/**
+ * The voucher's number, as printed and as used for the download filename.
+ *
+ * Reads the STORED `voucher_no` (migration 0075). It used to derive
+ * `PV-<weekEnd>`, which meant every PR's voucher for a week carried the same
+ * number and downloaded over the top of the last one — a voucher number that
+ * cannot identify the voucher.
+ *
+ * The week fallback is kept only for a row that predates the column or whose
+ * allocation failed. It is wrong in the same way as before, and deliberately so:
+ * printing nothing where a document expects a number is worse, and the fallback
+ * is now visible in exactly one place instead of five.
+ */
 export function voucherRef(voucher: PaymentVoucherWithLines): string {
+  if (voucher.voucherNo) return voucher.voucherNo;
   const end = (voucher.weekEnd ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (end) return `PV-${end[1]}${end[2]}${end[3]}`;
   return `PV-${voucher.id.slice(0, 8).toUpperCase()}`;
+}
+
+/**
+ * Write a money cell as a NUMBER, formatted for display.
+ *
+ * Every amount in this workbook used to be `.toFixed(2)`, which is a string —
+ * so the Amount column of a payment voucher could not be summed, sorted or
+ * charted by the person whose job is precisely to sum it. The value carries the
+ * cell's meaning; `#,##0.00` only decides how it looks.
+ *
+ * Rounded to cents on the way in, because a unit price derived by division
+ * (commission ÷ quantity) is otherwise stored to full float precision and shows
+ * one figure while holding another.
+ */
+function money(cell: { value: unknown; numFmt?: string }, amount: number): void {
+  cell.value = Math.round(amount * 100) / 100;
+  cell.numFmt = '#,##0.00';
 }
 
 function esc(value: string): string {
@@ -208,8 +238,8 @@ export async function buildVoucherWorkbook(params: {
     row.getCell(1).value = seq;
     row.getCell(2).value = `${label} (${dayMonth(line.lineDate)}) - ${line.outlet ?? DASH}`;
     row.getCell(3).value = qty;
-    row.getCell(4).value = (line.commission / qty).toFixed(2);
-    row.getCell(5).value = line.commission.toFixed(2);
+    money(row.getCell(4), line.commission / qty);
+    money(row.getCell(5), line.commission);
     rowNo += 1;
     seq += 1;
   }
@@ -219,8 +249,8 @@ export async function buildVoucherWorkbook(params: {
     row.getCell(1).value = seq;
     row.getCell(2).value = 'Deductions';
     row.getCell(3).value = 1;
-    row.getCell(4).value = (-deduction).toFixed(2);
-    row.getCell(5).value = (-deduction).toFixed(2);
+    money(row.getCell(4), -deduction);
+    money(row.getCell(5), -deduction);
     rowNo += 1;
   }
 

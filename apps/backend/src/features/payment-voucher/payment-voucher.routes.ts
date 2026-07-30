@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { paymentVoucherController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
+import { agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -55,9 +56,49 @@ const canDelete = requireRole('admin');
 
 router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
 
+// Day-by-day review, BEFORE the voucher goes to the PR. The READ rides on
+// GET '/:id' alongside the receipts rather than living on its own path, so the
+// panel cannot show decisions that disagree with the lines they refer to.
+//
+// WRITES carry a sub-role gate: approving a day is a money attestation, and the
+// owner's call (30 Jul 2026) was owner + finance — the same set that holds
+// agencyCan 'raisePv' in the portal. The READ is deliberately NOT gated: seeing
+// what was decided is not the same authority as deciding it.
+router.patch(
+  '/:id/day-review/:date',
+  agencyOwnerOrFinance,
+  paymentVoucherController.reviewDay.bind(paymentVoucherController),
+);
+router.post(
+  '/:id/day-review/approve-all',
+  agencyOwnerOrFinance,
+  paymentVoucherController.approveAllDays.bind(paymentVoucherController),
+);
+
 // The agency's receipt-review feed (full OCR evidence per receipt). One
 // segment, so it MUST precede '/:id' below.
 router.get('/receipts', paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController));
+
+// The receipt lifecycle: PENDING -> APPROVED (here) -> VERIFIED (the Monday
+// rollover, or a resolved dispute — never a request).
+//
+// Both writes carry the same sub-role gate as the day review: approving a
+// receipt, and correcting the figure on it, are money attestations. The READ
+// above stays ungated for the same reason it does there — seeing what was
+// decided is not the authority to decide it.
+//
+// '/receipts/...' is registered before '/:id' so the word "receipts" is never
+// read as a voucher id.
+router.patch(
+  '/receipts/:receiptId/review',
+  agencyOwnerOrFinance,
+  paymentVoucherController.reviewReceipt.bind(paymentVoucherController),
+);
+router.patch(
+  '/receipts/:receiptId/lines/:lineId',
+  agencyOwnerOrFinance,
+  paymentVoucherController.editReceiptLine.bind(paymentVoucherController),
+);
 
 // The agency's dispute queue and its decisions. '/disputes' MUST precede the
 // '/:id' route below — both are one segment, so registered the other way round

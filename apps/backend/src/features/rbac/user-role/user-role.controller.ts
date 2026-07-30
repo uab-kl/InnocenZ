@@ -32,6 +32,62 @@ export class UserRoleControllerClass {
     }
   }
 
+  /**
+   * Take a role back from an account.
+   *
+   * `POST` had no counterpart, so a role could only ever be granted. Combined
+   * with there being no way to delete or disable an account, that meant an admin
+   * created by mistake — or by someone who should not have — was permanent.
+   *
+   * Two guards, both about the same failure: locking everybody out.
+   *  - You cannot revoke your OWN role. An admin who demotes themselves cannot
+   *    undo it, because the endpoint that would undo it is the one they just
+   *    lost.
+   *  - You cannot remove the LAST holder of a role. Emptying `admin` leaves a
+   *    platform nobody can administer, with no endpoint left to repair it.
+   */
+  async revokeUserRole(req: Request, res: Response) {
+    try {
+      const userId = typeof req.body?.userId === 'string' ? req.body.userId : '';
+      const roleId = typeof req.body?.roleId === 'string' ? req.body.roleId : '';
+      if (!userId || !roleId) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'userId and roleId are required', data: null });
+      }
+
+      if (req.user?.id === userId) {
+        return res.status(409).json({
+          success: false,
+          message: 'You cannot remove your own role — ask another admin to do it.',
+          data: null,
+        });
+      }
+
+      const holders = await this.userRoleRepository.countUsersWithRole(roleId);
+      if (holders <= 1) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'That is the last account holding this role — grant it to someone else before removing it.',
+          data: null,
+        });
+      }
+
+      const revoked = await this.userRoleRepository.revokeRole(userId, roleId);
+      if (!revoked) {
+        return res
+          .status(404)
+          .json({ success: false, message: 'That account does not hold that role', data: null });
+      }
+      return res.status(200).json({ success: true, message: 'Role removed', data: null });
+    } catch {
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async createUserRole(req: Request, res: Response) {
     try {
       const parsed = UserRoleSchema.safeParse(req.body);

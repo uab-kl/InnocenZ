@@ -39,7 +39,22 @@ v1Router.use('/auth', authRoutes);
 v1Router.use('/payment-voucher/export', paymentVoucherExportRoutes);
 v1Router.use(authenticateJWT);
 v1Router.use('/user', userRoutes);
-v1Router.use('/rbac', rbacRoutes);
+// Admin-only in BOTH directions, mounted the same way as /platform-config.
+//
+// Every /rbac write was already requireAdmin in its own route file; the READS
+// were open to any signed-in account, so a PR could enumerate the platform's
+// whole permission model — 5 roles, 10 modules, 51 permissions (found 31 Jul
+// 2026, TEST_SCRIPT §8 X34). No data leaked, but nothing outside the admin
+// portal has ever needed it: the agency portal makes zero /rbac calls, mobile
+// makes none, and public signup deliberately reads role UUIDs from env rather
+// than looking them up here. Verified before gating, because the GET /user
+// lesson was that a flat gate can blank a live screen.
+//
+// ⚠️ The ungated-router sweep (28 Jul) PASSED these. It asked whether a router
+// sat behind auth — it does. It never asked whether every authenticated ROLE
+// should see what is behind it. If you add a /rbac route meant for another
+// role, this mount is what you have to change.
+v1Router.use('/rbac', requireAdmin, rbacRoutes);
 v1Router.use('/subscription', subscriptionRoutes);
 v1Router.use('/agency', agencyRoutes);
 v1Router.use('/pr', prRoutes);

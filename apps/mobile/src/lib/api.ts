@@ -800,14 +800,40 @@ export type PrReceiptLine = {
   outlet: string | null;
   /** ISO timestamp the line was logged. */
   at: string;
+  /** Still waiting on the agency — the parent receipt has not been approved. */
   pending: boolean;
   /** Proof photo(s) the PR attached to a self-log — [] when none. */
   proofPhotos: string[];
+  /**
+   * The parent receipt's review state, or null when this line has no receipt
+   * behind it (a wages seal, a bare self-logged line, a legacy row).
+   *
+   * `pending` also means the line is still THIS PR's to edit or delete; once it
+   * is approved the figure belongs to the agency and the way back is a dispute.
+   */
+  receiptStatus?: 'pending' | 'approved' | 'verified' | null;
+  /**
+   * May this money be disputed yet? ADVISORY — for greying a control, never as
+   * the rule: the server refuses with a 409 whose message names the receipt.
+   *
+   * Wages are always true. They are sealed at check-out with no receipt to
+   * approve, so requiring approval there would make a wage error the one thing
+   * that could never be contested.
+   */
+  disputable?: boolean;
 };
 
 /** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */
 export type PrCurrentWeek = {
   voucherId: string | null;
+  /**
+   * The voucher's own number — `PV-000001`, stored (migration 0075).
+   *
+   * Print THIS. It used to be derived from the week end in four places in this
+   * app, which meant every PR's voucher for a week showed the same number as
+   * everyone else's. Null only for a row that predates the column.
+   */
+  voucherNo?: string | null;
   /** Mon–Sun window (YYYY-MM-DD) the server bucketed the lines into. */
   weekStart: string;
   weekEnd: string;
@@ -891,6 +917,8 @@ export function fetchMyLastWeek(accessToken: string): Promise<PrCurrentWeek> {
  */
 export type PrHistoryVoucher = {
   voucherId: string;
+  /** The stored voucher number (0075) — print it rather than deriving one. */
+  voucherNo?: string | null;
   weekStart: string | null;
   weekEnd: string | null;
   net: string;

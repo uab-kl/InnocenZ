@@ -33,7 +33,20 @@ function formatRangeLabel(weekStart: string | null, weekEnd: string | null): str
   return `${left} – ${right}`;
 }
 
-function pvRefForWeek(weekEnd: string | null, voucherId: string): string {
+/**
+ * The voucher's number.
+ *
+ * `voucherNo` is the stored one (migration 0075) and is what the paper voucher
+ * prints. The week-derived form below is a FALLBACK for rows that predate the
+ * column — it was the only behaviour until 30 Jul 2026, and it gave every PR's
+ * voucher for a week the same number.
+ */
+function pvRefForWeek(
+  weekEnd: string | null,
+  voucherId: string,
+  voucherNo?: string | null,
+): string {
+  if (voucherNo) return voucherNo;
   const end = asIsoDate(weekEnd);
   if (!end) return `PV-${voucherId.slice(0, 8).toUpperCase()}`;
   const [y, m, d] = end.split('-');
@@ -109,7 +122,7 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
   const status: HistPayWeek['status'] = v.status === 'paid' ? 'paid' : 'signed';
   return {
     id: v.voucherId,
-    ref: pvRefForWeek(v.weekEnd, v.voucherId),
+    ref: pvRefForWeek(v.weekEnd, v.voucherId, v.voucherNo),
     weekLabel: formatRangeLabel(v.weekStart, v.weekEnd),
     outlet: outletLabel(v),
     shifts: countShifts(v.lines) || Math.max(1, new Set(lines.map((l) => l.date)).size),
@@ -131,7 +144,7 @@ export function historyVoucherToHistoryWeek(v: PrHistoryVoucher): DemoHistoryWee
     title: `PAYROLL WEEK · ${range}`,
     kind: 'payroll',
     weekLabel: range,
-    pvRef: pvRefForWeek(v.weekEnd, v.voucherId),
+    pvRef: pvRefForWeek(v.weekEnd, v.voucherId, v.voucherNo),
   };
 }
 

@@ -25,7 +25,11 @@ import { buildWeekGridFromLines } from '../lib/week-pay-grid';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePaymentHistory } from '../lib/payment-history';
 import { useSession } from '../lib/session';
-import { signMyVoucher, type PrCurrentWeek } from '../lib/api';
+import {
+  signMyVoucher,
+  type PrCurrentWeek,
+  type PrReceiptSource,
+} from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import { useSignedPvs } from '../lib/signed-pv';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
@@ -75,6 +79,21 @@ type LinkedReceipt = {
 const MONTH_SHORT = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
 /** '2026-07-21' → '21 Jul 2026' for the linked receipt rows. */
+/**
+ * What the row headline says instead of a receipt number.
+ *
+ * `payment_voucher_line` carries no receipt_no — the number lives on
+ * `payment_voucher_receipt`, which the /mine payloads do not join. Rather than
+ * print a shortened row id dressed up as a reference, say where the record came
+ * from: that is the fact a PR needs when a line is queried, and it is the same
+ * distinction the agency's verify panel acts on.
+ */
+const SOURCE_LABEL: Record<PrReceiptSource, string> = {
+  scan: 'Scanned receipt',
+  manual: 'Self-logged',
+  checkin: 'Auto-sealed on check-out',
+};
+
 function lineDateLabel(iso: string | null): string {
   const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return '—';
@@ -136,7 +155,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       : liveOutlets.length > 1
         ? `(${liveOutlets.length})-outlet`
         : 'Outlet';
+  // The stored voucher number (0075) is what the paper document prints, so the
+  // phone shows the same string. The week-derived form below is the pre-0075
+  // fallback — it gave every PR's voucher for a week the same number.
   const liveRef = (() => {
+    if (weekForGrid?.voucherNo) return weekForGrid.voucherNo;
     const m = (weekForGrid?.weekEnd ?? '').match(/^(\d{4})-(\d{2})-(\d{2})/);
     return m ? `PV-${m[1]}${m[2]}${m[3]}` : `PV-${pvId.slice(0, 8).toUpperCase()}`;
   })();
@@ -184,7 +207,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         .filter((l) => (l.kind === 'drinks' || l.kind === 'tips') && l.commission > 0)
         .map((l) => ({
           id: l.id,
-          ref: `LN-${l.id.slice(0, 6).toUpperCase()}`,
+          ref: SOURCE_LABEL[l.source],
           item: l.item,
           category: l.kind === 'drinks' ? ('Drinks' as const) : ('Tips' as const),
           qty: l.quantity,
@@ -192,7 +215,13 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           commission: l.commission,
           outlet: l.outlet ?? '—',
           at: lineDateLabel(l.lineDate),
-          matched: true,
+          // `pending` now carries the parent receipt's REAL review state
+          // (migration 0074), falling back to the manual-self-log guess only for
+          // a line with no receipt behind it. So this badge means "not waiting
+          // on the agency" — which is what it always claimed, and only recently
+          // became true. Hardcoding it true once made every line assert it was
+          // receipt-backed.
+          matched: !l.pending,
         })),
     [weekForGrid],
   );
@@ -441,7 +470,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
 
       {linkedReceipts.length > 0 && (
         <Pressable style={styles.collapse} onPress={() => setReceiptsOpen((o) => !o)}>
-          <Text style={styles.collapseTitle}>LINKED RECEIPT SCANS</Text>
+          {/* Not all of these are scans — a self-log and a check-out seal reach
+              this list too, and the demo fallback is gone, so the heading can
+              stop claiming a scan for every row. */}
+          <Text style={styles.collapseTitle}>DRINK &amp; TIP RECORDS</Text>
           <Text style={styles.collapseAction}>{receiptsOpen ? 'Hide' : 'Details'}</Text>
         </Pressable>
       )}

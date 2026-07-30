@@ -60,6 +60,15 @@ interface PrsTableProps {
 	statusFilter: PrStatusFilter;
 	agencyFilter: string;
 	agencies: Agency[];
+	/** The row currently being written, so only its buttons go busy. */
+	busyUserId?: string | null;
+	onSetStatus?: (user: PrUser, next: "active" | "inactive") => void;
+	/**
+	 * Takes the PR role back. The account survives and keeps its history, but it
+	 * stops being a PR — a bigger step than disabling, so the label and the
+	 * confirm both name what is lost.
+	 */
+	onRevokeRole?: (user: PrUser) => void;
 	onSearchChange: (value: string) => void;
 	onStatusFilterChange: (value: PrStatusFilter) => void;
 	onAgencyFilterChange: (value: string) => void;
@@ -81,6 +90,9 @@ export function PrsTable({
 	statusFilter,
 	agencyFilter,
 	agencies,
+	busyUserId,
+	onSetStatus,
+	onRevokeRole,
 	onSearchChange,
 	onStatusFilterChange,
 	onAgencyFilterChange,
@@ -154,12 +166,13 @@ export function PrsTable({
 								<TableHead>Agencies</TableHead>
 								<TableHead className="w-[120px]">Status</TableHead>
 								<TableHead className="w-[180px]">Created</TableHead>
+								<TableHead className="w-[220px] text-right">Actions</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>Loading PR users…</span>
@@ -168,7 +181,7 @@ export function PrsTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -186,7 +199,7 @@ export function PrsTable({
 								</TableRow>
 							) : users.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={7} className="h-32">
+									<TableCell colSpan={8} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Megaphone className="h-6 w-6" />
 											<span>No PR users found</span>
@@ -205,9 +218,13 @@ export function PrsTable({
 										</TableCell>
 										<TableCell>
 											{user.legalName ? (
-												<div className="text-base font-medium">{user.legalName}</div>
+												<div className="text-base font-medium">
+													{user.legalName}
+												</div>
 											) : (
-												<span className="text-base text-muted-foreground">—</span>
+												<span className="text-base text-muted-foreground">
+													—
+												</span>
 											)}
 											{user.idNo && (
 												<div className="font-mono text-sm text-muted-foreground">
@@ -216,8 +233,12 @@ export function PrsTable({
 												</div>
 											)}
 										</TableCell>
-										<TableCell className="text-base">{user.email || "—"}</TableCell>
-										<TableCell className="text-base">{user.phoneNum || "—"}</TableCell>
+										<TableCell className="text-base">
+											{user.email || "—"}
+										</TableCell>
+										<TableCell className="text-base">
+											{user.phoneNum || "—"}
+										</TableCell>
 										<TableCell>
 											<PrAgenciesCell agencies={user.agencies} />
 										</TableCell>
@@ -236,6 +257,37 @@ export function PrsTable({
 										</TableCell>
 										<TableCell className="text-base text-muted-foreground">
 											{formatDate(user.createdAt)}
+										</TableCell>
+										{/* The row itself opens the details sheet, so a button
+										    press here must not also open it. */}
+										<TableCell
+											className="text-right"
+											onClick={(e) => e.stopPropagation()}
+										>
+											<div className="flex justify-end gap-2">
+												<Button
+													variant="outline"
+													size="sm"
+													disabled={busyUserId === user.id}
+													onClick={() =>
+														onSetStatus?.(
+															user,
+															user.status === "active" ? "inactive" : "active",
+														)
+													}
+												>
+													{user.status === "active" ? "Disable" : "Enable"}
+												</Button>
+												<Button
+													variant="outline"
+													size="sm"
+													className="text-destructive"
+													disabled={busyUserId === user.id}
+													onClick={() => onRevokeRole?.(user)}
+												>
+													Remove PR
+												</Button>
+											</div>
 										</TableCell>
 									</TableRow>
 								))

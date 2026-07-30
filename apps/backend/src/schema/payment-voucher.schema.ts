@@ -14,6 +14,16 @@ export const PaymentVoucherLineSchema = z.object({
   // Kept as a plain number so the controller can sum lines into the subtotal.
   amount: z.number().nonnegative(),
   ref: z.string().max(100, 'Ref is too long').optional(),
+  /**
+   * The receipt this line came from, and the proof behind it.
+   *
+   * Optional, and normally omitted: a voucher update replaces the whole line set,
+   * so the repository carries both forward by matching `ref`. They are accepted
+   * here so a caller that KNOWS the link can state it rather than rely on that
+   * match — and so re-attaching a receipt needs no second endpoint.
+   */
+  receiptId: z.string().uuid('receiptId must be a uuid').optional(),
+  proofPhotos: z.array(z.string().max(500)).max(20).optional(),
 });
 
 export const CreatePaymentVoucherSchema = z.object({
@@ -204,6 +214,54 @@ export type ResolveDisputeInput = z.infer<typeof ResolveDisputeSchema>;
  * normalized strokes ({w,h,strokes:[[[x,y],...]]}). Optional so an older app
  * build can still sign; size caps keep a money row from swallowing megabytes.
  */
+/**
+ * The agency's decision on one day. `status: null` un-reviews it.
+ *
+ * Deliberately carries NO amount: the day's total is recomputed server-side
+ * from the lines, because it is the baseline of a money attestation and a
+ * client-supplied one could approve a figure the voucher never held.
+ */
+export const ReviewVoucherDaySchema = z.object({
+  status: z.enum(['approved', 'held']).nullable(),
+  note: z.string().max(1000).optional(),
+});
+
+/**
+ * The agency's decision on ONE receipt.
+ *
+ * 'verified' is absent on purpose. Verification is the lifecycle closing — the
+ * week rolling over, or a dispute being resolved — and letting a reviewer jump
+ * straight to it would shut the dispute window before the PR had ever seen the
+ * figure. The only two states a person sets here are the two a person can
+ * defend: I have checked this, or I have taken that back.
+ */
+export const ReviewReceiptSchema = z.object({
+  status: z.enum(['pending', 'approved']),
+});
+
+export type ReviewReceiptInput = z.infer<typeof ReviewReceiptSchema>;
+
+/**
+ * The agency correcting ONE line of a receipt under review.
+ *
+ * `amount` is the commission — what the PR is actually paid — because that is
+ * the number the voucher net is built from. The GROSS printed sale is packed in
+ * `payment_voucher_line.ref` and is deliberately NOT editable here: it is the
+ * paper's own figure, the photo is the record of it, and re-encoding `ref` would
+ * move the key that carries receipt links across a voucher rewrite and that a
+ * dispute's `receiptRefs` points at.
+ */
+export const AgencyEditReceiptLineSchema = z
+  .object({
+    quantity: z.number().int().positive().max(999).optional(),
+    amount: z.number().nonnegative().optional(),
+  })
+  .refine((d) => d.quantity !== undefined || d.amount !== undefined, {
+    message: 'Send a quantity, an amount, or both',
+  });
+
+export type AgencyEditReceiptLineInput = z.infer<typeof AgencyEditReceiptLineSchema>;
+
 export const PrSignVoucherSchema = z.object({
   signature: z
     .object({

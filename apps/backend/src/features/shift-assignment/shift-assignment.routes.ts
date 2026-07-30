@@ -10,6 +10,10 @@ const router = Router();
 // outlet set, so the wider role here never widens the data they can see.
 const canRead = requireRole('admin', 'agency', 'outlet');
 const canWrite = requireRole('admin', 'agency');
+// Where a worker physically stood is narrower than the roster: outlets are left
+// OUT even for their own venues, because that is a privacy call about staff
+// coordinates rather than the usual tenant-scoping question.
+const canReadPositions = requireRole('admin', 'agency');
 
 router.get('/', canRead, shiftAssignmentController.list.bind(shiftAssignmentController));
 // A signed-in PR reads only its own assignments (scoped server-side by pr.id),
@@ -28,6 +32,10 @@ router.post('/mine/:id/leave', shiftAssignmentController.requestLeaveMine.bind(s
 // Agency backfill worklist — released (cancelled / leave-approved) slots on
 // upcoming shifts still below quantity. Must precede '/:id'.
 router.get('/backfill', canWrite, shiftAssignmentController.listBackfill.bind(shiftAssignmentController));
+// Attendance position snapshots for one date. NOT called '/live': the fixes are
+// stamped at check-in and check-out only, so a live-sounding path would promise
+// tracking the system does not do. Must precede '/:id'.
+router.get('/attendance-fixes', canReadPositions, shiftAssignmentController.listAttendanceFixes.bind(shiftAssignmentController));
 router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignmentController));
 // Ranked replacement PRs for a released assignment; assigning the pick goes
 // through the normal POST '/' below.

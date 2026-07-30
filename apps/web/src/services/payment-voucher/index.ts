@@ -60,7 +60,30 @@ export interface PaymentVoucherReceipt {
 	receiptTime: string | null;
 	proofPhotos: string[] | null;
 	note: string | null;
+	/** Where it sits in the review (migration 0074). */
+	status: PaymentVoucherReceiptStatus;
+	/**
+	 * When a person decided. NULL beside `approved` means the row predates the
+	 * review flow — NOT that somebody approved it at epoch. Print "—", never a
+	 * date derived from something else.
+	 */
+	reviewedAt: string | null;
+	reviewedBy: string | null;
 }
+
+/**
+ * The receipt review lifecycle.
+ *
+ * `pending` — the PR logged it and nobody has checked it. It BLOCKS the voucher's
+ * send, and the PR may not dispute the money behind it yet.
+ * `approved` — the agency accepted it (possibly after correcting the figures).
+ * This is the state that lets the PR contest it.
+ * `verified` — closed: the week rolled over untouched, or a dispute settled.
+ *
+ * Only `pending → approved` (and back) is reachable over HTTP; `verified` is set
+ * by the Monday rollover or by resolving a dispute, never by a request.
+ */
+export type PaymentVoucherReceiptStatus = "pending" | "approved" | "verified";
 
 export interface PaymentVoucher {
 	id: string;
@@ -92,11 +115,141 @@ export interface PaymentVoucher {
 	updatedBy: string;
 }
 
+export type PaymentVoucherDayStatus = "approved" | "held";
+
+/**
+ * One day of a voucher, with the agency's decision folded in.
+ *
+ * `status` is null when nobody has decided — there is no `pending` state, and a
+ * day whose total changed since it was approved comes back null with
+ * `stale: true` rather than still reading approved.
+ *
+ * Cents, not ringgit: `totalCents` is what the day sums to now and
+ * `approvedTotalCents` is what it summed to when it was signed off. The server
+ * compares them; the UI only has to show that they diverged.
+ */
+export interface PaymentVoucherDayReview {
+	date: string;
+	totalCents: number;
+	status: PaymentVoucherDayStatus | null;
+	stale: boolean;
+	approvedTotalCents: number | null;
+	note: string | null;
+	/** Approved as part of an approve-all rather than opened individually. */
+	bulk: boolean;
+	reviewedAt: string | null;
+	reviewedBy: string | null;
+}
+
 // getById returns the voucher with its line items; list omits them.
 export interface PaymentVoucherWithLines extends PaymentVoucher {
 	lines: PaymentVoucherLine[];
 	/** Only the agency/admin detail route returns these; absent on list rows. */
 	receipts?: PaymentVoucherReceipt[];
+	/**
+	 * Day-by-day review state. Rides on the detail route beside the lines on
+	 * purpose, so a decision can never be shown next to lines it does not refer
+	 * to. Absent on list rows.
+	 */
+	dayReviews?: PaymentVoucherDayReview[];
+	allDaysReviewed?: boolean;
+	/**
+	 * ⚠️ Send-readiness reads THIS, never `allDaysReviewed`. Both are true when
+	 * every day is decided and one of them is held — a held day IS a decision.
+	 */
+	hasHeldDay?: boolean;
+}
+
+export interface DayReviewResult {
+	dayReviews: PaymentVoucherDayReview[];
+	allDaysReviewed: boolean;
+}
+
+/**
+ * Record, change or clear one day's decision. `status: null` un-reviews it.
+ *
+ * The body carries no amount by design — the server recomputes the day from the
+ * lines and stores that as the baseline, so a client cannot approve a figure the
+ * voucher never had.
+ */
+export async function reviewPaymentVoucherDay(
+	id: string,
+	date: string,
+	input: { status: PaymentVoucherDayStatus | null; note?: string },
+	onRefreshFail: () => void,
+): Promise<DayReviewResult> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: DayReviewResult;
+	}>(`/payment-voucher/${id}/day-review/${date}`, input);
+	return response.data.data;
+}
+
+/** Approve every undecided day. Held days are skipped server-side. */
+export async function approveAllPaymentVoucherDays(
+	id: string,
+	onRefreshFail: () => void,
+): Promise<DayReviewResult & { message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: DayReviewResult;
+	}>(`/payment-voucher/${id}/day-review/approve-all`, {});
+	return { ...response.data.data, message: response.data.message };
+}
+
+/**
+ * Approve one receipt, or withdraw an approval.
+ *
+ * `verified` is deliberately not accepted here (the server refuses it too):
+ * jumping straight to closed would shut the PR's dispute window before they had
+ * ever seen the figure.
+ */
+export async function reviewPaymentVoucherReceipt(
+	receiptId: string,
+	status: "pending" | "approved",
+	onRefreshFail: () => void,
+): Promise<PaymentVoucherReceipt> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: PaymentVoucherReceipt;
+	}>(`/payment-voucher/receipts/${receiptId}/review`, { status });
+	return response.data.data;
+}
+
+/**
+ * Correct one line of a receipt under review — quantity, commission, or both.
+ *
+ * Targeted at a single line id rather than going through
+ * `PUT /payment-voucher/:id`, which replaces the whole line set and once deleted
+ * the PR's proof photos doing exactly this.
+ *
+ * Two effects to expect in the UI: the day's total changes, so that day goes
+ * STALE in the day-review panel and has to be approved again; and an already
+ * APPROVED receipt drops back to pending, because the receipt row stores no
+ * amount and its staleness cannot be detected after the fact.
+ */
+export async function editPaymentVoucherReceiptLine(
+	receiptId: string,
+	lineId: string,
+	patch: { quantity?: number; amount?: number },
+	onRefreshFail: () => void,
+): Promise<{ receipt: PaymentVoucherReceipt | null; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: { receipt: PaymentVoucherReceipt | null };
+	}>(`/payment-voucher/receipts/${receiptId}/lines/${lineId}`, patch);
+	return {
+		receipt: response.data.data?.receipt ?? null,
+		message: response.data.message,
+	};
 }
 
 export interface PaymentVouchersQueryParams {

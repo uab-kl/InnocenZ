@@ -1,3 +1,4 @@
+import { AgencyAttendanceFixPanel } from "@agency-portal/components/agency/AgencyAttendanceFixPanel";
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
 import { BackfillPanel } from "@agency-portal/components/agency/BackfillPanel";
 import { LeaveRequestsPanel } from "@agency-portal/components/agency/LeaveRequestsPanel";
@@ -35,6 +36,7 @@ import {
 	rosterPageDisplayStatus,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
+import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import {
 	type AgencyOutletAvailableShift,
 	listAvailableShiftsForEarlyReleaseReassign,
@@ -490,13 +492,25 @@ function AgencyRoster() {
 
 			{viewMode === "live" && (
 				<div className="iz-roster-gps">
-					<AgencyGpsPanel
-						roster={agencyRoster}
-						agencyPRs={agencyPRs}
-						dateIso={liveDateIso}
-						prCheckInMeta={prCheckInMeta}
-						prSubRole={prSubRole}
-					/>
+					{/*
+						A real session reads attendance stamps from the backend; a demo
+						session keeps the old demo-fixture panel verbatim. Two components
+						rather than one fed from two sources — the backed one reports
+						positions recorded at check-in and check-out and says so, while the
+						demo one still presents a moving "Live GPS" that no stored data
+						supports.
+					*/}
+					{getAgencyIdentity() !== null ? (
+						<AgencyAttendanceFixPanel dateIso={liveDateIso} />
+					) : (
+						<AgencyGpsPanel
+							roster={agencyRoster}
+							agencyPRs={agencyPRs}
+							dateIso={liveDateIso}
+							prCheckInMeta={prCheckInMeta}
+							prSubRole={prSubRole}
+						/>
+					)}
 				</div>
 			)}
 

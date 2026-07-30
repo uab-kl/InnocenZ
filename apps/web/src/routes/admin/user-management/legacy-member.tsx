@@ -53,14 +53,15 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { getUserTypeByKey } from "@/constants/user-types";
+import { useAccountActions } from "@/hooks/use-account-actions";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
+	type Agency,
 	approveAgency,
 	fetchAgencies,
 	fetchAgencyById,
-	type Agency,
 } from "@/services/agency";
 import {
 	approveOutlet,
@@ -70,9 +71,7 @@ import {
 } from "@/services/outlet";
 import { fetchPrUsers, type PrUser } from "@/services/pr";
 
-export const Route = createFileRoute(
-	"/admin/user-management/legacy-member",
-)({
+export const Route = createFileRoute("/admin/user-management/legacy-member")({
 	component: LegacyMemberPage,
 	head: () => ({
 		meta: [{ title: "Legacy Member — Innocenz Admin" }],
@@ -111,9 +110,7 @@ const roleBadgeColors: Record<Exclude<LegacyRoleFilter, "all">, string> = {
 	pr: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
 };
 
-async function fetchAllAgencies(
-	onRefreshFail: () => void,
-): Promise<Agency[]> {
+async function fetchAllAgencies(onRefreshFail: () => void): Promise<Agency[]> {
 	const rows: Agency[] = [];
 	let page = 1;
 	let hasNextPage = true;
@@ -129,9 +126,7 @@ async function fetchAllAgencies(
 	return rows;
 }
 
-async function fetchAllOutlets(
-	onRefreshFail: () => void,
-): Promise<Outlet[]> {
+async function fetchAllOutlets(onRefreshFail: () => void): Promise<Outlet[]> {
 	const rows: Outlet[] = [];
 	let page = 1;
 	let hasNextPage = true;
@@ -431,6 +426,22 @@ function LegacyMemberPage() {
 		onSettled: () => setActionId(null),
 	});
 
+	/**
+	 * The PR rows here are ACCOUNTS (`GET /user` filtered to the pr role), while
+	 * the agency and outlet rows are ORGANISATIONS. That is why reactivation is
+	 * two different calls on one table: an org goes back through `approve`, an
+	 * account through `PATCH /user/:id/status`. Sending a PR's user id to the
+	 * org endpoint would address a row that is not there.
+	 *
+	 * This tab is where a disabled PR ends up, so without this it was the one
+	 * place an account could arrive and never leave.
+	 */
+	const accountActions = useAccountActions({
+		roleName: "pr",
+		roleLabel: "PR access",
+		queryKeys: ["legacy-members", "pr-users"],
+	});
+
 	const showLoading = isLoading && rows.length === 0;
 
 	function refetchAll() {
@@ -452,8 +463,9 @@ function LegacyMemberPage() {
 						<p className="font-medium text-sky-50">About Legacy Member</p>
 						<p className="mt-1 text-sky-100/85">
 							This list shows suspended Agency and Outlet organizations, plus
-							inactive PR accounts. Filter by Role (not Rank). Reactivate an
-							agency or outlet to restore access; PRs are read-only here.
+							inactive PR accounts. Filter by Role (not Rank). Reactivating an
+							agency or outlet restores the organization; reactivating a PR
+							re-enables the person's account so they can sign in again.
 						</p>
 					</div>
 				</div>
@@ -616,9 +628,13 @@ function LegacyMemberPage() {
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(error as Error | null) ||
-											"Failed to load legacy members"}
+														"Failed to load legacy members"}
 												</p>
-												<Button variant="outline" size="sm" onClick={refetchAll}>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={refetchAll}
+												>
 													Retry
 												</Button>
 											</div>
@@ -684,10 +700,7 @@ function LegacyMemberPage() {
 												</TableCell>
 												<TableCell>{row.contact}</TableCell>
 												<TableCell>
-													<Badge
-														variant="outline"
-														className={row.statusClass}
-													>
+													<Badge variant="outline" className={row.statusClass}>
 														{row.statusLabel}
 													</Badge>
 												</TableCell>
@@ -699,7 +712,8 @@ function LegacyMemberPage() {
 														className="flex flex-wrap gap-2"
 														onClick={(e) => e.stopPropagation()}
 													>
-														{(row.role === "agency" || row.role === "outlet") && (
+														{(row.role === "agency" ||
+															row.role === "outlet") && (
 															<Button
 																size="sm"
 																variant="outline"
@@ -717,6 +731,26 @@ function LegacyMemberPage() {
 																) : (
 																	<CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
 																)}
+																Reactivate
+															</Button>
+														)}
+														{row.role === "pr" && (
+															<Button
+																size="sm"
+																variant="outline"
+																disabled={accountActions.busyUserId === row.id}
+																onClick={() =>
+																	accountActions.askSetStatus(
+																		{
+																			id: row.id,
+																			name: row.name,
+																			status: "inactive",
+																		},
+																		"active",
+																	)
+																}
+															>
+																<CheckCircle2 className="mr-1.5 h-3.5 w-3.5" />
 																Reactivate
 															</Button>
 														)}
@@ -748,11 +782,10 @@ function LegacyMemberPage() {
 								</span>{" "}
 								-{" "}
 								<span className="font-medium">
-									{formatNumber(
-										Math.min(currentPage * PAGE_SIZE, totalCount),
-									)}
+									{formatNumber(Math.min(currentPage * PAGE_SIZE, totalCount))}
 								</span>{" "}
-								of <span className="font-medium">{formatNumber(totalCount)}</span>{" "}
+								of{" "}
+								<span className="font-medium">{formatNumber(totalCount)}</span>{" "}
 								records
 							</div>
 							<div className="flex items-center gap-2">
@@ -810,6 +843,8 @@ function LegacyMemberPage() {
 					if (!open) setSelected(null);
 				}}
 			/>
+
+			{accountActions.dialog}
 		</PageShell>
 	);
 }

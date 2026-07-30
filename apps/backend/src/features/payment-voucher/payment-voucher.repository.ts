@@ -1,10 +1,31 @@
-import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  notExists,
+  sql,
+  SQL,
+} from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
+import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
+import {
+  PaymentVoucherDayReviewTable,
+  PaymentVoucherDayReviewType,
+  PaymentVoucherDayReviewStatus,
+  PaymentVoucherDisputeTable,
+  PaymentVoucherReceiptStatus,
+} from './payment-voucher.model';
 import {
   PaymentVoucherTable,
   PaymentVoucherLineTable,
@@ -26,14 +47,74 @@ type ReceiptInput = Omit<
   'id' | 'receiptNo' | 'createdAt' | 'updatedAt'
 >;
 
+/** How many times the allocator retries past a taken number before giving up. */
+const VOUCHER_NO_ATTEMPTS = 20;
+
+/**
+ * Is this the unique-index violation on `voucher_no`, and nothing else?
+ *
+ * Narrow on purpose: a retry loop that catches every error would turn a real
+ * fault into twenty silent attempts and then an unnumbered voucher. drizzle
+ * wraps the driver error, so the pg code is read from `.cause` as well as the
+ * error itself — see the drizzle 0.45 note in the migration memo.
+ */
+function isVoucherNoConflict(error: unknown): boolean {
+  const candidates = [error, (error as { cause?: unknown } | null)?.cause];
+  return candidates.some((e) => {
+    const err = e as { code?: string; constraint?: string; message?: string } | null;
+    if (!err || err.code !== '23505') return false;
+    const where = `${err.constraint ?? ''} ${err.message ?? ''}`;
+    return where.includes('voucher_no');
+  });
+}
+
 export class PaymentVoucherRepositoryClass {
+  /**
+   * The next voucher number — `PV-000001`, in the same shape as the receipt
+   * numbers this schema already issues.
+   *
+   * count()+bump rather than max()+1 for the same reason `createReceiptWithLines`
+   * uses it: it needs no parsing of the stored string. The unique index is what
+   * actually guarantees correctness — two vouchers raised in the same moment both
+   * compute the same candidate, one insert loses, and the caller retries with the
+   * next. Returning null after that many attempts leaves the voucher unnumbered
+   * rather than failing to create it: an unnumbered voucher can be repaired, an
+   * uncreated one is somebody's missing pay.
+   */
+  private async nextVoucherNo(tx: DbTransaction, bump: number): Promise<string> {
+    const [row] = await tx
+      .select({ total: sql<number>`count(*)::int` })
+      .from(PaymentVoucherTable);
+    return `PV-${String(Number(row?.total ?? 0) + bump).padStart(6, '0')}`;
+  }
+
   async create(
     data: Omit<PaymentVoucherInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     lines: LineInput[],
   ): Promise<PaymentVoucherWithLines> {
     try {
       const created = await db.transaction(async (tx) => {
-        const [voucher] = await tx.insert(PaymentVoucherTable).values(data).returning();
+        // A number is allocated here, once, so no reader ever has to invent one.
+        let voucher: PaymentVoucherType | undefined;
+        for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS && !voucher; bump++) {
+          const voucherNo = await this.nextVoucherNo(tx, bump);
+          try {
+            [voucher] = await tx
+              .insert(PaymentVoucherTable)
+              .values({ ...data, voucherNo })
+              .returning();
+          } catch (conflict) {
+            // Only a number clash is retryable; anything else is a real fault
+            // and must not be swallowed into 19 more attempts.
+            if (!isVoucherNoConflict(conflict)) throw conflict;
+          }
+        }
+        if (!voucher) {
+          logger.warn(
+            '[PaymentVoucherRepository.create] Could not allocate a voucher number; creating unnumbered',
+          );
+          [voucher] = await tx.insert(PaymentVoucherTable).values(data).returning();
+        }
         const insertedLines =
           lines.length > 0
             ? await tx
@@ -72,15 +153,53 @@ export class PaymentVoucherRepositoryClass {
         if (!voucher) return null;
 
         if (lines) {
+          // Carry evidence across the wipe-and-reinsert.
+          //
+          // Replacing the line set is how every voucher update works, and the
+          // HTTP payload carries no receipt_id and no proof_photos — so before
+          // this, an agency editing one amount silently NULLed the receipt link on
+          // every line of the voucher and DELETED the PR's proof photos, the
+          // mandatory evidence behind a self-logged claim. The verify panel then
+          // reported every commission line as unbacked, because it was.
+          //
+          // Matched on `ref`, which encodes kind|source|amount|order and is what a
+          // client round-trips unchanged while editing a price. Only refs that
+          // appear EXACTLY ONCE are carried: an ambiguous match would attach a
+          // receipt to the wrong money, which is worse than the null it replaces.
+          const previous = await this.getLines(id, tx);
+          const carryable = new Map<
+            string,
+            { receiptId: string | null; proofPhotos: string[] | null }
+          >();
+          const refCounts = new Map<string, number>();
+          for (const line of previous) {
+            if (!line.ref) continue;
+            refCounts.set(line.ref, (refCounts.get(line.ref) ?? 0) + 1);
+            carryable.set(line.ref, {
+              receiptId: line.receiptId,
+              proofPhotos: line.proofPhotos,
+            });
+          }
+          for (const [ref, count] of refCounts) if (count > 1) carryable.delete(ref);
+
           await tx.delete(PaymentVoucherLineTable).where(eq(PaymentVoucherLineTable.voucherId, id));
           const insertedLines =
             lines.length > 0
               ? await tx
                   .insert(PaymentVoucherLineTable)
                   .values(
-                    lines.map((line, i) =>
-                      prepareLine({ ...line, voucherId: id, sortOrder: i }),
-                    ),
+                    lines.map((line, i) => {
+                      const carried = line.ref ? carryable.get(line.ref) : undefined;
+                      return prepareLine({
+                        ...line,
+                        // An explicit value from the caller always wins; this only
+                        // fills in what the HTTP payload cannot express.
+                        receiptId: line.receiptId ?? carried?.receiptId ?? null,
+                        proofPhotos: line.proofPhotos ?? carried?.proofPhotos ?? null,
+                        voucherId: id,
+                        sortOrder: i,
+                      });
+                    }),
                   )
                   .returning()
               : [];
@@ -366,10 +485,16 @@ export class PaymentVoucherRepositoryClass {
           prNickname: PrTable.nickname,
           prIcNo: PrTable.icNo,
           prPhone: PrTable.phone,
+          // The account's number wins over the roster's — same rule as
+          // PrRepository.withAccountPhone. A printed voucher is the document a
+          // PR is paid against, so the phone on it must be the one the person
+          // actually uses, not a copy that drifted.
+          prAccountPhone: UserTable.phoneNum,
         })
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
         .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
+        .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .where(eq(PaymentVoucherTable.id, voucherId))
         .limit(1);
       if (!row) return null;
@@ -389,7 +514,7 @@ export class PaymentVoucherRepositoryClass {
               name: row.prName,
               nickname: row.prNickname,
               icNo: row.prIcNo,
-              phone: row.prPhone,
+              phone: row.prAccountPhone ?? row.prPhone,
             }
           : null,
       };
@@ -413,26 +538,44 @@ export class PaymentVoucherRepositoryClass {
     try {
       const existing = await this.getCurrentWeekDraft(data.prId, data.weekStart);
       if (existing) return existing;
-      const [voucher] = await db
-        .insert(PaymentVoucherTable)
-        .values({
-          agencyId: data.agencyId,
-          prId: data.prId,
-          prName: data.prName,
-          prIc: data.prIc ?? undefined,
-          outlet: data.outlet ?? undefined,
-          cycle: 'Weekly',
-          weekStart: data.weekStart,
-          weekEnd: data.weekEnd,
-          subtotal: '0.00',
-          deduction: '0.00',
-          net: '0.00',
-          status: 'pending_review',
-          createdBy: data.actor,
-          updatedBy: data.actor,
-        })
-        .returning();
-      return voucher;
+      const values = {
+        agencyId: data.agencyId,
+        prId: data.prId,
+        prName: data.prName,
+        prIc: data.prIc ?? undefined,
+        outlet: data.outlet ?? undefined,
+        cycle: 'Weekly',
+        weekStart: data.weekStart,
+        weekEnd: data.weekEnd,
+        subtotal: '0.00',
+        deduction: '0.00',
+        net: '0.00',
+        status: 'pending_review' as const,
+        createdBy: data.actor,
+        updatedBy: data.actor,
+      };
+      // Numbered here too. A PR's very first self-log creates this draft, and it
+      // becomes the voucher they are eventually paid against — a voucher that
+      // acquired its number later would have gone unnumbered for a whole week.
+      return await db.transaction(async (tx) => {
+        for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS; bump++) {
+          const voucherNo = await this.nextVoucherNo(tx, bump);
+          try {
+            const [voucher] = await tx
+              .insert(PaymentVoucherTable)
+              .values({ ...values, voucherNo })
+              .returning();
+            return voucher;
+          } catch (conflict) {
+            if (!isVoucherNoConflict(conflict)) throw conflict;
+          }
+        }
+        logger.warn(
+          '[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Could not allocate a voucher number; creating unnumbered',
+        );
+        const [voucher] = await tx.insert(PaymentVoucherTable).values(values).returning();
+        return voucher;
+      });
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Error:', error);
       throw error;
@@ -564,6 +707,128 @@ export class PaymentVoucherRepositoryClass {
     } catch (error) {
       logger.error('[PaymentVoucherRepository.updateReceiptPhotos] Error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * One receipt joined to its voucher — how a review or a line edit is
+   * authorized, since a receipt carries no agency of its own (it reaches one
+   * only through voucher.agency_id).
+   */
+  async getReceiptWithVoucher(
+    receiptId: string,
+  ): Promise<{ receipt: PaymentVoucherReceiptType; voucher: PaymentVoucherType } | null> {
+    try {
+      const [row] = await db
+        .select({ receipt: PaymentVoucherReceiptTable, voucher: PaymentVoucherTable })
+        .from(PaymentVoucherReceiptTable)
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherReceiptTable.voucherId, PaymentVoucherTable.id),
+        )
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getReceiptWithVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Move one receipt through the review lifecycle.
+   *
+   * `reviewedAt`/`reviewedBy` are stamped on every transition a PERSON makes, so
+   * an approval always says who and when. The automatic APPROVED->VERIFIED
+   * rollover below deliberately leaves them alone: verification there is the
+   * approval closing, not a second decision, and overwriting them would lose the
+   * name of the only human who actually looked.
+   */
+  async setReceiptStatus(
+    receiptId: string,
+    status: PaymentVoucherReceiptStatus,
+    actor: string,
+  ): Promise<PaymentVoucherReceiptType | null> {
+    try {
+      const [row] = await db
+        .update(PaymentVoucherReceiptTable)
+        .set({
+          status,
+          // Un-approving is a correction, not a review — clear the stamp so the
+          // row never claims a decision that has been taken back.
+          reviewedAt: status === 'pending' ? null : new Date(),
+          reviewedBy: status === 'pending' ? null : actor,
+          updatedAt: new Date(),
+          updatedBy: actor,
+        })
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId))
+        .returning();
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.setReceiptStatus] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * APPROVED -> VERIFIED, the automatic arm of the lifecycle.
+   *
+   * Two modes, one implementation so they cannot drift: `voucherId` closes the
+   * receipts on a single voucher (a dispute has just been resolved), and
+   * `throughWeekStart` closes every approved receipt on a week that has ended (the
+   * Monday rollover). The week form uses `<=`, not `=`: a voucher held back for a
+   * fortnight must still roll over when it finally clears, and an `=` would skip
+   * it forever.
+   *
+   * Vouchers carrying an OPEN dispute are excluded. Verified means closed, and
+   * closing the evidence while somebody is still contesting the money would
+   * settle the record out from under a live claim. Those roll over on the next
+   * pass, once the dispute is resolved.
+   *
+   * Returns the receipt numbers actually moved, so a caller can log a fact
+   * rather than an intention.
+   */
+  async verifyApprovedReceipts(opts: {
+    voucherId?: string;
+    throughWeekStart?: string;
+    actor: string;
+  }): Promise<string[]> {
+    if (!opts.voucherId && !opts.throughWeekStart) return [];
+    try {
+      const voucherFilter = opts.voucherId
+        ? eq(PaymentVoucherTable.id, opts.voucherId)
+        : lte(PaymentVoucherTable.weekStart, opts.throughWeekStart!);
+
+      const rows = await db
+        .update(PaymentVoucherReceiptTable)
+        .set({ status: 'verified', updatedAt: new Date(), updatedBy: opts.actor })
+        .where(
+          and(
+            eq(PaymentVoucherReceiptTable.status, 'approved'),
+            inArray(
+              PaymentVoucherReceiptTable.voucherId,
+              db.select({ id: PaymentVoucherTable.id }).from(PaymentVoucherTable).where(voucherFilter),
+            ),
+            notExists(
+              db
+                .select({ one: sql`1` })
+                .from(PaymentVoucherDisputeTable)
+                .where(
+                  and(
+                    eq(PaymentVoucherDisputeTable.voucherId, PaymentVoucherReceiptTable.voucherId),
+                    isNull(PaymentVoucherDisputeTable.outcome),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .returning({ receiptNo: PaymentVoucherReceiptTable.receiptNo });
+      return rows.map((r) => r.receiptNo);
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.verifyApprovedReceipts] Error:', error);
+      // Fails soft: an unrolled receipt stays approved and rolls next pass. It
+      // must not cost the caller (the Monday job) the work it does afterwards.
+      return [];
     }
   }
 
@@ -733,5 +998,121 @@ export class PaymentVoucherRepositoryClass {
         updatedAt: new Date(),
       })
       .where(eq(PaymentVoucherTable.id, voucherId));
+  }
+
+  /** Every day the agency has acted on for this voucher. Absence = unreviewed. */
+  async listDayReviews(voucherId: string): Promise<PaymentVoucherDayReviewType[]> {
+    try {
+      return await db
+        .select()
+        .from(PaymentVoucherDayReviewTable)
+        .where(eq(PaymentVoucherDayReviewTable.voucherId, voucherId))
+        .orderBy(PaymentVoucherDayReviewTable.reviewDate);
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listDayReviews] Error:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Record (or change) the agency's decision on one day.
+   *
+   * Upserts on the unique `(voucher_id, review_date)` so re-approving a day
+   * moves it rather than stacking a second row — the DB enforces one decision
+   * per day rather than the controller hoping for it.
+   *
+   * `approvedTotalCents` is the day's total AT THIS MOMENT and must be computed
+   * server-side from the lines; never take it from the client. It is what makes
+   * a later regeneration detectable as stale.
+   */
+  async upsertDayReview(input: {
+    voucherId: string;
+    reviewDate: string;
+    status: PaymentVoucherDayReviewStatus;
+    approvedTotalCents: number | null;
+    note?: string | null;
+    bulk?: boolean;
+    actor: string;
+  }): Promise<PaymentVoucherDayReviewType | null> {
+    try {
+      const rows = await db
+        .insert(PaymentVoucherDayReviewTable)
+        .values({
+          voucherId: input.voucherId,
+          reviewDate: input.reviewDate,
+          status: input.status,
+          approvedTotalCents: input.approvedTotalCents,
+          note: input.note ?? null,
+          bulk: input.bulk ?? false,
+          reviewedAt: new Date(),
+          reviewedBy: input.actor,
+          createdBy: input.actor,
+          updatedBy: input.actor,
+        })
+        .onConflictDoUpdate({
+          target: [
+            PaymentVoucherDayReviewTable.voucherId,
+            PaymentVoucherDayReviewTable.reviewDate,
+          ],
+          set: {
+            status: input.status,
+            approvedTotalCents: input.approvedTotalCents,
+            note: input.note ?? null,
+            bulk: input.bulk ?? false,
+            reviewedAt: new Date(),
+            reviewedBy: input.actor,
+            updatedAt: new Date(),
+            updatedBy: input.actor,
+          },
+        })
+        .returning();
+      return rows[0] ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.upsertDayReview] Error:', error);
+      return null;
+    }
+  }
+
+  /** Un-review a day: the row goes, and the day reads as never looked at. */
+  async deleteDayReview(voucherId: string, reviewDate: string): Promise<boolean> {
+    try {
+      const rows = await db
+        .delete(PaymentVoucherDayReviewTable)
+        .where(
+          and(
+            eq(PaymentVoucherDayReviewTable.voucherId, voucherId),
+            eq(PaymentVoucherDayReviewTable.reviewDate, reviewDate),
+          ),
+        )
+        .returning();
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.deleteDayReview] Error:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Is any day explicitly held? Fails CLOSED — an error reports "held", because
+   * the caller uses this to decide whether a voucher may be sent, and letting a
+   * database blip open that gate is the wrong direction to fail in.
+   */
+  async hasHeldDay(voucherId: string): Promise<boolean> {
+    try {
+      const rows = await db
+        .select({ id: PaymentVoucherDayReviewTable.id })
+        .from(PaymentVoucherDayReviewTable)
+        .where(
+          and(
+            eq(PaymentVoucherDayReviewTable.voucherId, voucherId),
+            eq(PaymentVoucherDayReviewTable.status, 'held'),
+          ),
+        )
+        .limit(1);
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.hasHeldDay] Error:', error);
+      return true;
+    }
   }
 }

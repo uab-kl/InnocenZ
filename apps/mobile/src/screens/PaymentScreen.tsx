@@ -35,6 +35,7 @@ import {
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { cellDisputable, receiptReviewCaption } from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
@@ -139,6 +140,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const thisWeekTotal = useMemo(() => weekPayGridTotal(thisGrid), [thisGrid]);
   const thisPendingDays = thisGrid.filter((d) => d.status === 'pending').length;
   const hasThisWeekRows = thisPendingDays > 0;
+  const thisReviewCaption = useMemo(() => receiptReviewCaption(current), [current]);
 
   // Last week's voucher comes from the same backend as this week — real data,
   // no demo grid. Fetched once on mount (it rarely changes mid-session).
@@ -211,6 +213,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
     const amount = cellAmount(day, row.key);
     if (amount <= 0 || day.status === 'empty') return;
+    // A receipt the agency has not reviewed is still the PR's own claim, not a
+    // figure anybody has stated back to them — there is nothing to contest yet.
+    // Withdrawing an existing dispute is never blocked: that would trap a claim
+    // already raised. Wages are exempt server-side and come back disputable.
+    if (!voucherDisputed && !cellDisputable(lastWeek, day.dateIso, row.key)) {
+      Alert.alert(
+        'Not reviewed yet',
+        `Your agency is still checking the receipt behind ${row.label.toLowerCase()} on ${day.day} ${day.date}. Once they approve it you can dispute the amount here.`,
+      );
+      return;
+    }
     const key = `${day.dateIso}-${row.key}`;
     const target: DisputeTarget = {
       key,
@@ -554,6 +567,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </View>
               </View>
 
+              {/* Where the agency has got to with what was logged. This is the
+                  half of the lifecycle the PR can see: approval is what turns
+                  their own claim into the agency's figure, and it is what lets
+                  them dispute it next week. Absent when there are no receipts —
+                  a line about nothing is worse than no line. */}
+              {thisReviewCaption && (
+                <Text style={styles.reviewCaption}>{thisReviewCaption}</Text>
+              )}
+
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator
@@ -883,6 +905,13 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   verified: { marginTop: 4, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  reviewCaption: {
+    marginTop: 8,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 17,
+    color: C.prMuted,
+  },
   verifiedTiny: {
     fontFamily: F.manrope,
     fontSize: 11,

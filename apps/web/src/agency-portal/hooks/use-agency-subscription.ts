@@ -1,4 +1,9 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import {
+	type SubscriptionRecordRow,
+	sortMemberSubscriptions,
+	subscriptionRecordFromMember,
+} from "@agency-portal/lib/subscription-record";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -57,6 +62,12 @@ function compareAgencyRatePlans(a: AgencyRatePlan, b: AgencyRatePlan): number {
  * plans and the "Your tier" highlight prefers the real assigned plan
  * (`currentSubscriptionId`), falling back to a usage-derived label match. Plan
  * marketing descriptions have no backend and render empty.
+ *
+ * `billingHistory` is the agency's own subscription record — what it owes
+ * InnocenZ. Not to be confused with `use-agency-collections`, which is what
+ * OUTLETS owe the agency: opposite direction, different table. Conflating the two
+ * is exactly the mistake that nearly got made here, since the demo store kept
+ * both behind one `agencyCollections` key split by a `kind` field.
  */
 export function useAgencySubscription() {
 	const { logout } = useAuth();
@@ -91,6 +102,27 @@ export function useAgencySubscription() {
 		staleTime: 60_000,
 	});
 
+	/**
+	 * Separate from `memberQuery` above rather than widening it. That one filters
+	 * to `status: "active"` and is consumed as `data[0]` to answer "which plan is
+	 * this agency on" — drop the filter and a cancelled row could become the
+	 * current plan.
+	 */
+	const historyQuery = useQuery({
+		queryKey: ["agency", "subscription", "history", agencyId ?? "none"],
+		queryFn: () => fetchMemberSubscriptions({ pageSize: 50 }, logout),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(
+		() =>
+			sortMemberSubscriptions(historyQuery.data?.data ?? []).map((sub) =>
+				subscriptionRecordFromMember(sub, "InnocenZ Agency"),
+			),
+		[historyQuery.data],
+	);
+
 	const plans = useMemo<AgencyRatePlan[]>(
 		() =>
 			(plansQuery.data?.data ?? [])
@@ -108,8 +140,10 @@ export function useAgencySubscription() {
 	return {
 		backed,
 		plans,
+		billingHistory,
 		currentSubscriptionId: current?.subscriptionId ?? null,
 		currentPlanName: current?.planName ?? null,
 		isLoading: plansQuery.isLoading || memberQuery.isLoading,
+		isHistoryLoading: historyQuery.isLoading,
 	};
 }

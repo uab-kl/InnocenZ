@@ -7,6 +7,27 @@ import { buildPeriodDateWhere } from '@/util/filter-date-format';
 import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository';
 
+/**
+ * The digit strings a typed phone number may legitimately mean.
+ *
+ * Malaysian numbers are written three ways for the same line: `+60123456789`
+ * (stored), `60123456789` (what the sign-in placeholder shows), and
+ * `0123456789` (what people actually say and write). Only the first ever matched,
+ * which is why a PR could be refused a number that was correct.
+ *
+ * Deliberately narrow: it swaps a leading `0` for the `60` country code and back,
+ * nothing else. Matching on a suffix — "the last 9 digits" — would let one
+ * country's number open another's account.
+ */
+export function phoneLoginCandidates(value: string): string[] {
+  const digits = (value ?? '').replace(/\D/g, '');
+  if (digits.length < 6) return [];
+  const forms = new Set<string>([digits]);
+  if (digits.startsWith('0')) forms.add(`60${digits.slice(1)}`);
+  if (digits.startsWith('60')) forms.add(`0${digits.slice(2)}`);
+  return [...forms];
+}
+
 export class UserRepositoryClass {
   constructor(
     private userRoleRepository: UserRoleRepositoryClass,
@@ -181,13 +202,39 @@ export class UserRepositoryClass {
       let users: UserType[] = [];
 
       if (method === 'email') {
-        logger.debug('[UserRepository.getUserByLoginMethod] Getting user by email:', value);
         users = await db.select().from(UserTable).where(eq(UserTable.email, value)).limit(1);
       } else if (method === 'phone') {
-        logger.debug('[UserRepository.getUserByLoginMethod] Getting user by phone:', value);
-        users = await db.select().from(UserTable).where(eq(UserTable.phoneNum, value)).limit(1);
+        // Compare DIGITS, not the string as typed.
+        //
+        // Every stored number carries a '+' and the sign-in field's own
+        // placeholder does not, so an exact match refused numbers that were
+        // right. The local form is accepted too (012… for +6012…), because that
+        // is how a Malaysian number is written everywhere except this database.
+        //
+        // Fetches TWO rows and refuses on ambiguity rather than taking the
+        // first: this is a login, and quietly choosing one of two accounts that
+        // both match is the wrong way to resolve a duplicate.
+        const candidates = phoneLoginCandidates(value);
+        if (candidates.length === 0) return null;
+        users = await db
+          .select()
+          .from(UserTable)
+          .where(inArray(sql`regexp_replace(${UserTable.phoneNum}, '\\D', '', 'g')`, candidates))
+          .limit(2);
+        if (users.length > 1) {
+          logger.error(
+            '[UserRepository.getUserByLoginMethod] Refusing login: that number matches more than one account',
+          );
+          return null;
+        }
       }
-      logger.info('[UserRepository.getUserByLoginMethod] Users:', users);
+      // Deliberately NOT logging the rows: a UserType carries passwordHash, and
+      // this used to print the whole record on every sign-in attempt.
+      logger.info(
+        `[UserRepository.getUserByLoginMethod] ${
+          users.length === 1 ? `matched user ${users[0].id}` : 'no match'
+        }`,
+      );
       return users.length > 0 ? users[0] : null;
     } catch (error) {
       logger.error('[UserRepository.getUserByLoginMethod] Error:', error);

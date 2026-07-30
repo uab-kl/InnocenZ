@@ -709,6 +709,99 @@ export class ShiftAssignmentRepositoryClass {
     }
   }
 
+  /**
+   * Attendance position fixes for one agency on one shift date, joined to the
+   * shift for its slot and to the outlet for its pin.
+   *
+   * These are SNAPSHOTS, not tracking. `shift_assignment` stores a position only
+   * at check-in and at check-out (see the column comments on the model), and no
+   * table anywhere records a position between them, so the newest thing this can
+   * report about a PR on duty is where they stood when they stamped. Anything
+   * built on it must say so rather than imply a current location.
+   *
+   * `distance_m` is the server's own recomputed metres from the outlet pin, so it
+   * is the trustworthy number — prefer it over recomputing from the returned
+   * coordinates, which would silently disagree if the venue pin has moved since.
+   *
+   * Rows with no check-in are included on purpose: "rostered but not stamped yet"
+   * is a real state the caller needs distinguished from "stamped, no fix
+   * recorded". Both arrive as nulls in different columns, never as a guess.
+   * Excludes NON_STAFFING_STATUSES, since a cancelled or excused PR is not due at
+   * the venue at all.
+   */
+  async listAttendanceFixesForAgencyDate(params: {
+    agencyId: string;
+    shiftDate: string;
+  }): Promise<
+    Array<{
+      assignmentId: string;
+      prId: string;
+      prName: string;
+      status: ShiftAssignmentStatus;
+      shiftDate: string;
+      slot: string | null;
+      outletId: string;
+      outletName: string | null;
+      outletLat: string | null;
+      outletLng: string | null;
+      outletGeoFenceRadius: number | null;
+      checkInAt: Date | null;
+      checkInLat: string | null;
+      checkInLng: string | null;
+      checkInDistanceM: number | null;
+      checkInAccuracyM: number | null;
+      checkOutAt: Date | null;
+      checkOutLat: string | null;
+      checkOutLng: string | null;
+      checkOutDistanceM: number | null;
+      checkOutAccuracyM: number | null;
+    }>
+  > {
+    try {
+      const { agencyId, shiftDate } = params;
+      const rows = await db
+        .select({
+          assignmentId: ShiftAssignmentTable.id,
+          prId: ShiftAssignmentTable.prId,
+          prName: prDisplayNameSql,
+          status: ShiftAssignmentTable.status,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          outletId: ShiftTable.outletId,
+          outletName: OutletTable.name,
+          outletLat: OutletTable.lat,
+          outletLng: OutletTable.lng,
+          outletGeoFenceRadius: OutletTable.geoFenceRadius,
+          checkInAt: ShiftAssignmentTable.checkInAt,
+          checkInLat: ShiftAssignmentTable.checkInLat,
+          checkInLng: ShiftAssignmentTable.checkInLng,
+          checkInDistanceM: ShiftAssignmentTable.checkInDistanceM,
+          checkInAccuracyM: ShiftAssignmentTable.checkInAccuracyM,
+          checkOutAt: ShiftAssignmentTable.checkOutAt,
+          checkOutLat: ShiftAssignmentTable.checkOutLat,
+          checkOutLng: ShiftAssignmentTable.checkOutLng,
+          checkOutDistanceM: ShiftAssignmentTable.checkOutDistanceM,
+          checkOutAccuracyM: ShiftAssignmentTable.checkOutAccuracyM,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .innerJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+            eq(ShiftTable.shiftDate, shiftDate),
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        )
+        .orderBy(asc(OutletTable.name), asc(prDisplayNameSql));
+      return rows;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listAttendanceFixesForAgencyDate] Error:', error);
+      throw error;
+    }
+  }
+
   /** Distinct agency IDs that have any completed assignment in [fromDate, toDate]. */
   async listAgencyIdsWithCompletedInRange(fromDate: string, toDate: string): Promise<string[]> {
     try {
