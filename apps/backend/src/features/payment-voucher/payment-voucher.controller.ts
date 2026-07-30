@@ -10,6 +10,7 @@ import {
   voucherRef,
 } from './payment-voucher-excel.js';
 import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
+import { buildVoucherPdf } from './payment-voucher-pdf.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -1006,6 +1007,7 @@ export class PaymentVoucherControllerClass {
         message: 'OK',
         data: {
           xlsxPath: `/payment-voucher/export/${ticket}/voucher.xlsx`,
+          pdfPath: `/payment-voucher/export/${ticket}/voucher.pdf`,
           printPath: `/payment-voucher/export/${ticket}/print`,
           expiresInSeconds: 300,
         },
@@ -1034,6 +1036,37 @@ export class PaymentVoucherControllerClass {
       return await this.sendVoucherExcel(res, bundle);
     } catch (error) {
       logger.error('[PaymentVoucherController.exportTicketExcel] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Ticket download — the actual PDF file, saved in one tap like the Excel. */
+  async exportTicketPdf(req: Request, res: Response) {
+    try {
+      const voucherId = redeemExportTicket(String(req.params.ticket ?? ''));
+      if (!voucherId) {
+        return res
+          .status(404)
+          .send('This download link has expired — open the app and tap PDF again.');
+      }
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const pdf = await buildVoucherPdf({
+        voucher: bundle.voucher,
+        agency: bundle.agency,
+        pr: bundle.pr,
+        lines: this.voucherExportLines(bundle),
+      });
+      const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.status(200).send(pdf);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportTicketPdf] Error:', error);
       return res
         .status(500)
         .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

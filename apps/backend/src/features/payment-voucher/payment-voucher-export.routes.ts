@@ -15,6 +15,10 @@ router.get(
   paymentVoucherController.exportTicketExcel.bind(paymentVoucherController),
 );
 router.get(
+  '/:ticket/voucher.pdf',
+  paymentVoucherController.exportTicketPdf.bind(paymentVoucherController),
+);
+router.get(
   '/:ticket/print',
   paymentVoucherController.exportTicketPrint.bind(paymentVoucherController),
 );

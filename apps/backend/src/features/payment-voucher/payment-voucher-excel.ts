@@ -34,7 +34,7 @@ export type VoucherExportLine = {
   commission: number;
 };
 
-const KIND_LABELS: Record<string, string> = {
+export const KIND_LABELS: Record<string, string> = {
   wages: 'Daily Wages',
   drinks: 'Commission – Drinks',
   tips: 'Commission – Tips',
@@ -43,22 +43,22 @@ const KIND_LABELS: Record<string, string> = {
 
 const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 
-const DASH = '—';
+export const DASH = '—';
 
-function dayMonth(iso: string | null): string {
+export function dayMonth(iso: string | null): string {
   const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return DASH;
   return `${Number(m[3])} ${MONTHS[Number(m[2]) - 1]}`;
 }
 
-function slashDate(iso: string | null): string {
+export function slashDate(iso: string | null): string {
   const m = iso?.match(/^(\d{4})-(\d{2})-(\d{2})/);
   if (!m) return DASH;
   return `${m[3]}/${m[2]}/${m[1]}`;
 }
 
 /** '30 Jun 2026 · 14:22' in Kuala Lumpur time (UTC+8, no DST). */
-function klStamp(at: Date | null): string {
+export function klStamp(at: Date | null): string {
   if (!at) return '';
   const kl = new Date(at.getTime() + 8 * 60 * 60 * 1000);
   const hh = String(kl.getUTCHours()).padStart(2, '0');
@@ -111,7 +111,8 @@ th{background:#f2f2f2;text-align:left}.tot{font-weight:bold;font-size:14px}.sig{
 <p>Phone No: ${esc(agency?.contactPhone ?? DASH)} · Email: ${esc(agency?.contactEmail ?? DASH)}</p>
 <p>Voucher No.: <strong>${voucherRef(voucher)}</strong> · Voucher Date: ${slashDate(voucher.issuedDate)}</p>
 <p>Payable to: <strong>${prName}</strong>${pr?.nickname ? ` (${esc(pr.nickname)})` : ''} · IC/Passport: ${esc(pr?.icNo ?? DASH)} · Phone: ${esc(pr?.phone ?? DASH)}</p></div>
-<div class="printbar"><button onclick="window.print()">Print / Save as PDF</button></div>
+<div class="printbar"><a href="voucher.pdf" download style="display:inline-block;background:#111;color:#fff;padding:12px 18px;font-size:14px;border-radius:6px;text-decoration:none;font-weight:bold">Download PDF</a>
+<button onclick="window.print()" style="margin-left:10px">Print</button></div>
 <table><thead><tr><th>#</th><th>Description</th><th>Unit</th><th>Unit Price (RM)</th><th>Amount (RM)</th></tr></thead>
 <tbody>${rows}</tbody>
 <tfoot><tr class="tot"><td colspan="4">Total</td><td style="text-align:right">RM ${net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td></tr></tfoot></table>
@@ -120,7 +121,6 @@ th{background:#f2f2f2;text-align:left}.tot{font-weight:bold;font-size:14px}.sig{
 <p>Name: ${prName}</p>
 <p>Date: ${signed || '____________________'}</p></div>
 <p class="note">Please verify the payment details. If there are no discrepancies, kindly sign and acknowledge to proceed with the payment. For any concerns, please contact our finance department.</p>
-<script>setTimeout(function(){try{window.print()}catch(e){}},500)</script>
 </body></html>`;
 }
 

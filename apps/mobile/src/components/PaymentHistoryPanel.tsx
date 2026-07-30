@@ -214,9 +214,11 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
     if (Platform.OS !== 'web') {
       if (!token) return;
       try {
-        const { printUrl } = await createMyVoucherExportTicket(token, w.id);
-        await Linking.openURL(printUrl);
-        flash('Voucher opened — print dialog saves it as PDF');
+        // Straight to the PDF file — the browser downloads it and the
+        // notification opens it in the phone's PDF viewer.
+        const { pdfUrl } = await createMyVoucherExportTicket(token, w.id);
+        await Linking.openURL(pdfUrl);
+        flash('PDF downloading — open it from your notifications');
       } catch {
         flash('Could not open the voucher — try again');
       }

@@ -544,6 +544,7 @@ export async function fetchMyVoucherExcelBlob(
 export type VoucherExportLinks = {
   /** Absolute URLs the system browser can open — the ticket in the path is the credential. */
   xlsxUrl: string;
+  pdfUrl: string;
   printUrl: string;
 };
 
@@ -556,11 +557,15 @@ export async function createMyVoucherExportTicket(
   accessToken: string,
   voucherId: string,
 ): Promise<VoucherExportLinks> {
-  const d = await request<{ xlsxPath: string; printPath: string }>(
+  const d = await request<{ xlsxPath: string; pdfPath: string; printPath: string }>(
     `/payment-voucher/mine/${voucherId}/export-ticket`,
     { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
   );
-  return { xlsxUrl: `${API_BASE}${d.xlsxPath}`, printUrl: `${API_BASE}${d.printPath}` };
+  return {
+    xlsxUrl: `${API_BASE}${d.xlsxPath}`,
+    pdfUrl: `${API_BASE}${d.pdfPath}`,
+    printUrl: `${API_BASE}${d.printPath}`,
+  };
 }
 
 /** The closed enum the backend writes — mirrors notification.model.ts. */
