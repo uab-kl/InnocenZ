@@ -98,7 +98,7 @@ import {
 	Sheet,
 	Shield,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 export const Route = createFileRoute("/agency/pv")({
 	component: AgencyPV,
 	validateSearch: (
@@ -247,33 +247,6 @@ function AgencyPV() {
 	);
 	const { date, time } = nowAgencyDateTime();
 
-	useEffect(() => {
-		if (statusFromSearch === ("PAID" as PvStatusFilter)) {
-			void navigate({
-				to: "/agency/history",
-				search: { tab: "paid" },
-				replace: true,
-			});
-			return;
-		}
-		if (statusFromSearch === "TO_PAY" || statusFromSearch === "SIGNED") {
-			setPayrollWeekTab("last_last_week");
-			setPvSubTab("vouchers");
-			setStatusFilter(statusFromSearch === "TO_PAY" ? "TO_PAY" : "all");
-		} else if (
-			statusFromSearch === "SENT" ||
-			statusFromSearch === "PENDING_REVIEW" ||
-			statusFromSearch === "DISPUTED"
-		) {
-			setPayrollWeekTab("last_week");
-			setPvSubTab("vouchers");
-			setStatusFilter(statusFromSearch);
-		} else if (statusFromSearch && statusFromSearch !== "PAID") {
-			setStatusFilter(statusFromSearch);
-		}
-		if (pvFromSearch) setDetailId(pvFromSearch);
-	}, [statusFromSearch, pvFromSearch, navigate]);
-
 	const payrollActivePvs = useMemo(
 		() => prPaymentVouchers.filter((p) => p.status !== "PAID"),
 		[prPaymentVouchers],
@@ -364,6 +337,64 @@ function AgencyPV() {
 		return lastLastWeekPvs;
 	}, [payrollWeekTab, thisWeekPvs, lastWeekPvs, lastLastWeekPvs]);
 
+	/**
+	 * The first week tab actually holding a voucher of this status, newest first,
+	 * or null if none does.
+	 *
+	 * Exists because a link that names a status must land where that status lives.
+	 * Reading it from the data rather than hardcoding a tab means the payout cadence
+	 * can move without this going stale — which is exactly how the previous
+	 * hardcoded "last_week" ended up pointing at an empty list.
+	 */
+	const tabHoldingStatus = useCallback(
+		(status: PrPvStatus): PayrollWeekTab | null => {
+			const holds = (list: PrPaymentVoucher[]) =>
+				list.some((p) => p.status === status);
+			if (holds(thisWeekPvs)) return "this_week";
+			if (holds(lastWeekPvs)) return "last_week";
+			if (holds(lastLastWeekPvs)) return "last_last_week";
+			return null;
+		},
+		[thisWeekPvs, lastWeekPvs, lastLastWeekPvs],
+	);
+
+	useEffect(() => {
+		if (statusFromSearch === ("PAID" as PvStatusFilter)) {
+			void navigate({
+				to: "/agency/history",
+				search: { tab: "paid" },
+				replace: true,
+			});
+			return;
+		}
+		if (statusFromSearch === "TO_PAY" || statusFromSearch === "SIGNED") {
+			setPayrollWeekTab("last_last_week");
+			setPvSubTab("vouchers");
+			setStatusFilter(statusFromSearch === "TO_PAY" ? "TO_PAY" : "all");
+		} else if (
+			statusFromSearch === "SENT" ||
+			statusFromSearch === "PENDING_REVIEW" ||
+			statusFromSearch === "DISPUTED"
+		) {
+			// Whichever week actually holds a voucher of this status, rather than a
+			// hardcoded "last_week". A real pending_review voucher lives in the week
+			// still RUNNING, so the agency home's "Pending Agency Review" link landed
+			// on Last Week and reported "No vouchers match these filters" while two
+			// waited one tab away. last_week stays the fallback, so an empty result
+			// still lands somewhere deliberate.
+			setPayrollWeekTab(tabHoldingStatus(statusFromSearch) ?? "last_week");
+			setPvSubTab("vouchers");
+			setStatusFilter(statusFromSearch);
+		} else if (statusFromSearch && statusFromSearch !== "PAID") {
+			setStatusFilter(statusFromSearch);
+		}
+		if (pvFromSearch) setDetailId(pvFromSearch);
+		// tabHoldingStatus is a dependency on purpose: on first paint the vouchers
+		// have not arrived, so the pick above would fall back and stick. Re-running
+		// once they load is what makes it land on the right tab — and it cannot then
+		// fight a manual tab click, because selectPayrollWeekTab clears these params.
+	}, [statusFromSearch, pvFromSearch, navigate, tabHoldingStatus]);
+
 	const latestIssuedMs = useMemo(
 		() => getLatestPvIssuedMs(weekTabPvs),
 		[weekTabPvs],
@@ -424,6 +455,13 @@ function AgencyPV() {
 	const selectPayrollWeekTab = (tab: PayrollWeekTab) => {
 		setPayrollWeekTab(tab);
 		setStatusFilter("all");
+		// Drop the incoming ?status/?pv. They are an instruction about where to land,
+		// and once the user has picked a tab themselves that instruction is spent —
+		// leaving it in the URL lets the effect above re-apply it on the next refetch
+		// and pull them off the tab they just chose.
+		if (statusFromSearch || pvFromSearch) {
+			void navigate({ to: "/agency/pv", search: {}, replace: true });
+		}
 	};
 
 	const statusFilteredPvs = useMemo(() => {
