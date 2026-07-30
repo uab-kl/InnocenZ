@@ -132,7 +132,7 @@ function buildSignedWeek(input: {
     shifts: Math.max(1, shifts),
     issued: stamp.split(' · ')[0] ?? stamp,
     status: 'signed',
-    statusMeta: `Signed ${stamp}${input.sigName ? ` · ${input.sigName}` : ''} · Awaiting bank transfer`,
+    statusMeta: `Signed ${stamp}`,
     net: Math.round(net * 100) / 100,
     wages: Math.round(wages * 100) / 100,
     commission: Math.round(commission * 100) / 100,

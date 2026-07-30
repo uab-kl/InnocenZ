@@ -21,7 +21,6 @@ export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   return (
     <View style={styles.screen}>
       <View style={styles.pageHeader}>
-        <Text style={styles.headerLabel}>EARNINGS</Text>
         <View style={styles.headerTitleRow}>
           <HistoryIcon size={22} color={C.accent} />
           <Text style={[styles.headerTitle, { fontSize: titleSize }]}>History</Text>
@@ -59,13 +58,6 @@ export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
   pageHeader: { paddingTop: 2 },
-  headerLabel: {
-    fontFamily: F.sora,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.68,
-    color: '#c4b4d8',
-  },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
   headerTitle: { fontFamily: F.sora, fontWeight: '800', letterSpacing: -0.45, color: C.txt },
   hubToggle: {

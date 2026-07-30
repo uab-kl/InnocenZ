@@ -31,7 +31,22 @@ const KIND_MAP: Record<NotificationKind, OpsNotificationKind> = {
 	shift_assigned: "shift_assigned",
 	shift_cancelled: "shift_edit",
 	agency_join_resolved: "agency_join_resolved",
+	pr_rating_low: "pr_rating_low",
+	shift_cover_needed: "shift_cover_needed",
 };
+
+/**
+ * The map above is total over the kinds this build knows, and the compiler keeps
+ * it that way. It is NOT total over what the server can send: `notification_kind`
+ * is a DB enum that migrations extend, so an API paired with an older bundle
+ * returns kinds absent from the union entirely. That is not theoretical — it is
+ * what blanked the agency portal: an unmapped kind produced `undefined`, and
+ * rendering it called `.startsWith` on that. Unknown kinds now degrade to a
+ * readable neutral row instead of taking the whole page down.
+ */
+function opsKindFor(kind: NotificationKind): OpsNotificationKind {
+	return KIND_MAP[kind] ?? "unknown";
+}
 
 /**
  * Where tapping a notification should land. Returns undefined when there is
@@ -50,9 +65,16 @@ function hrefFor(
 			case "overtime_pending_approval":
 			case "shift_assigned":
 			case "shift_cancelled":
+			// Cover is found on the roster's backfill list, which is where the
+			// backend's own notification body tells the agency to go.
+			case "shift_cover_needed":
 				return "/agency/roster";
 			case "agency_join_resolved":
 				return "/agency/pending";
+			// The rating that dropped belongs to a PR, so land on the PR list
+			// rather than the roster.
+			case "pr_rating_low":
+				return "/agency/prs";
 			default:
 				return undefined;
 		}
@@ -139,7 +161,7 @@ export function useNotifications(
 			// `portal` is a demo-store routing field. A real row is already addressed
 			// to this user, so it belongs to whichever bell is asking.
 			portal: audience === "outlet" ? "outlet" : "agency",
-			kind: KIND_MAP[record.kind],
+			kind: opsKindFor(record.kind),
 			title: record.title,
 			body: record.body ?? "",
 			at: displayTime(record.createdAt),

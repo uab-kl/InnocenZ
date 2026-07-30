@@ -367,9 +367,6 @@ export function AgencySchedulePanel() {
           <LegendSwatch color={C.amber} label="Pending" />
           <LegendSwatch color={C.red} label="Not available" />
         </View>
-        <Text style={styles.hint}>
-          Tap an available day to block it · tap a blocked day to reopen
-        </Text>
       </View>
 
       <View style={styles.timetable}>
@@ -774,13 +771,6 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   swatch: { width: 10, height: 10, borderRadius: 999 },
   legendLabel: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
-  hint: {
-    marginTop: 8,
-    fontFamily: F.manrope,
-    fontSize: 12,
-    color: C.prMuted2,
-    textAlign: 'center',
-  },
   timetable: { marginTop: 2 },
   ttHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   ttTitle: {

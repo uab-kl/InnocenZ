@@ -125,12 +125,7 @@ export function ShiftStatusPanel({
     targetSalesRm && targetSalesRm > 0
       ? Math.min(100, Math.round((salesLogged / targetSalesRm) * 100))
       : 0;
-  const payoutTotal = useMemo(
-    () => Math.round((dutyWagesRm + commissionTotal) * 100) / 100,
-    [dutyWagesRm, commissionTotal],
-  );
   const pendingCount = logs.filter((l) => l.pending).length;
-  const wagesFinalized = checkedOut;
 
   const durationLabel = checkedOut
     ? shiftDurationLabel(checkedInAt, checkedOutAt)
@@ -138,7 +133,7 @@ export function ShiftStatusPanel({
 
   const statusHint =
     logs.length === 0
-      ? 'Use Scan receipt — each log adds a row below. Tap to collapse.'
+      ? null
       : pendingCount > 0
         ? `${pendingCount} receipt${pendingCount !== 1 ? 's' : ''} pending verification in Payment`
         : `${logs.length} receipt${logs.length !== 1 ? 's' : ''} matched · PV ready`;
@@ -200,7 +195,7 @@ export function ShiftStatusPanel({
             style={statusOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
           />
         </Pressable>
-        <Text style={styles.statusHint}>{statusHint}</Text>
+        {statusHint ? <Text style={styles.statusHint}>{statusHint}</Text> : null}
 
         {statusOpen && (
           <>
@@ -220,9 +215,6 @@ export function ShiftStatusPanel({
                 <View style={styles.colRef}>
                   <Text style={styles.tdLabel}>Duty time</Text>
                   <Text style={styles.tdDetail}>{fmtAttendanceStamp(checkedInAt)}</Text>
-                  <Text style={styles.tdNote}>
-                    − {formatRM(dutyWagesRm)}/shift − paid on shift completion
-                  </Text>
                 </View>
                 <Text style={[styles.td, styles.colItem]}>—</Text>
                 <Text style={[styles.td, styles.colQty]}>—</Text>
@@ -265,9 +257,7 @@ export function ShiftStatusPanel({
                 <View style={styles.totalsBlock}>
                   <Text style={styles.totalsLabel}>TOTALS</Text>
                   <Text style={styles.totalsHint} numberOfLines={1}>
-                    {wagesFinalized
-                      ? `Payout ${formatRM(payoutTotal)} · wage ${formatRM(dutyWagesRm)} + comm`
-                      : `Projected ${formatRM(payoutTotal)} · wage ${formatRM(dutyWagesRm)} + comm`}
+                    wage {formatRM(dutyWagesRm)} + comm
                   </Text>
                 </View>
                 <Text style={[styles.td, styles.colComm, styles.totalsComm]}>
@@ -672,7 +662,6 @@ const styles = StyleSheet.create({
   td: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   tdLabel: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
   tdDetail: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
-  tdNote: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
   colRef: { width: COL.ref, paddingRight: 8 },
   colItem: { width: COL.item, paddingRight: 6 },
   colQty: { width: COL.qty, paddingRight: 6 },
