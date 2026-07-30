@@ -324,6 +324,23 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **Session close, 31 Jul 2026.** HEAD `892d57e`, tree clean, **45 commits unpushed**.
+> Shipped: the account controls reaching **PR accounts** (`f365537`, and the §9 entry asking for it
+> was wrong about two of its four tabs — `agency.tsx`/`outlet.tsx` list **organisations**), a full
+> **4-role end-to-end sweep** (`45fe0dd` — 28 endpoints read, 3 write flows round-tripped, shared DB
+> left as found), and **both** of its findings fixed (`5ca3f79` — a malformed id now 404s via
+> `uuidParam()`; the RBAC catalogue is admin-only, and checking first showed every `/rbac` **write**
+> was already gated).
+> 🔴 **Then the day's real finding: THE MONEY IS WRONG** (`892d57e`, §8 X36, new **P0** in §9). One
+> week recomputed by hand from the primary records: worth **RM703.60**, the app produced **two
+> vouchers totalling RM2,285.08**, and the correct one is the one still **unsent**. **Nothing
+> compares a voucher against the records it was built from.**
+> **Also corrected today:** Phase D was **not** blocked on venue coordinates — **all 7 outlets are
+> pinned**; and the auth path reads `user.status` only, so **suspending an organisation does not stop
+> its people signing in** (read from code, not fired — §9).
+> **Owed:** the 31-check browser runbook (0 done), a device run, and the P0 block above.
+> **Do not demo payroll.**
+>
 > **Session close, 30 Jul 2026 (evening).** HEAD `49d3220`, tree clean, **39 commits unpushed**.
 > Shipped this session: the whole receipt lifecycle (0074, agency + PR screens, live-fired), the
 > phone-identity fix, the **first execution of the PR app in this project's history**, voucher
