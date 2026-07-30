@@ -1,3 +1,4 @@
+import { AgencyPvDayReviewPanel } from "@agency-portal/components/agency/AgencyPvDayReviewPanel";
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import {
 	EMPTY_PAYROLL_RANGE,
@@ -18,6 +19,7 @@ import {
 import { AppTopbar } from "@agency-portal/components/Nav";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { ReceiptScanSlip } from "@agency-portal/components/pr/ReceiptScanSlip";
+import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-review";
 import {
 	useAgencyPvDetail,
 	useAgencyPvs,
@@ -1143,6 +1145,9 @@ function PvDetail({
 	// row until it resolves).
 	const detailPv = useAgencyPvDetail(pv.id, pv);
 	const v = detailPv ?? pv;
+	// Shares the day-review panel's fetch (same query key), so the button and the
+	// panel below it can never disagree about whether a day is held.
+	const { sendGate } = useAgencyPvDayReview(pv.id);
 	const [editing, setEditing] = useState(false);
 	const [overrideOpen, setOverrideOpen] = useState(false);
 	const [overrideReason, setOverrideReason] = useState("");
@@ -1402,15 +1407,28 @@ function PvDetail({
 				</button>
 			)}
 
+			{/* The day review gates this: the backend refuses a send while any day is
+			    held or undecided, so the button says why instead of 409-ing. */}
 			{pv.status === "PENDING_REVIEW" &&
 				agencyCan(agencySubRole, "raisePv") && (
-					<button
-						type="button"
-						className="iz-btn iz-btn-primary mt-2 w-full"
-						onClick={() => sendToPr(pv.id)}
-					>
-						<Send className="h-4 w-4" /> Send to PR for e-sign
-					</button>
+					<>
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary mt-2 w-full"
+							disabled={!sendGate.allowed}
+							onClick={() => sendToPr(pv.id)}
+						>
+							<Send className="h-4 w-4" /> Send to PR for e-sign
+						</button>
+						{/* Only once we know WHY. While the fetch is in flight the button is
+						    disabled with no caption — a reason would be a guess. */}
+						{!sendGate.allowed &&
+							sendGate.heldDays.length + sendGate.unreviewedDays.length > 0 && (
+								<p className="iz-tiny iz-muted2 mt-1 text-center">
+									{sendGate.reason} — see Day review below.
+								</p>
+							)}
+					</>
 				)}
 
 			{(pv.status === "DISPUTED" || pv.status === "SENT") && (
@@ -1479,8 +1497,10 @@ function PvDetail({
 				</button>
 			</IzSheet>
 
-			{/* Receipt evidence for this week — renders nothing on a demo voucher,
-          whose id has no backend row behind it. */}
+			{/* Day-by-day sign-off, then the receipt evidence it is judged against.
+          Both render nothing on a demo voucher, whose id has no backend row
+          behind it, and both read the same fetch. */}
+			<AgencyPvDayReviewPanel voucherId={pv.id} />
 			<PayrollVerifyPanel voucherId={pv.id} />
 
 			<button

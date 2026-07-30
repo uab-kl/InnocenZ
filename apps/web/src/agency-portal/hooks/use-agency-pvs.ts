@@ -21,6 +21,25 @@ const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
+ * Does this voucher id have a backend row behind it?
+ *
+ * Demo vouchers carry ids like "pv1", so asking the API for one is a guaranteed
+ * failed request on every open. Exported because every surface reading a real
+ * voucher needs the same answer, and a second copy of this test is how one of
+ * them ends up firing those requests anyway.
+ */
+export const isBackedVoucherId = (id: string | null): boolean =>
+	Boolean(id && UUID_RE.test(id));
+
+/**
+ * The detail fetch behind BOTH the receipt-evidence panel and the day-review
+ * panel. Shared so one voucher on screen means one request, and so a decision
+ * recorded in one panel refreshes the other.
+ */
+export const pvEvidenceKey = (id: string | null) =>
+	["agency", "payment-voucher", "evidence", id] as const;
+
+/**
  * Backend-driven payment vouchers for the Payroll & PV screen. Reads real PVs
  * (already agency-scoped server-side, so no client tenant filter) and exposes
  * the lifecycle writes the backend supports via PUT /payment-voucher: send to
@@ -84,18 +103,18 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
  */
 export function useAgencyPvEvidence(id: string | null) {
 	const { logout } = useAuth();
-	// Demo vouchers carry ids like "pv1", which have no backend row — asking for
-	// one is a guaranteed failed request on every open, so only real uuids are
-	// fetched and a demo voucher simply shows no evidence.
-	const isBacked = Boolean(id && UUID_RE.test(id));
+	// A demo voucher simply shows no evidence rather than firing a request that
+	// cannot succeed.
+	const isBacked = isBackedVoucherId(id);
 	const query = useQuery({
-		queryKey: ["agency", "payment-voucher", "evidence", id],
+		queryKey: pvEvidenceKey(id),
 		queryFn: () => fetchPaymentVoucher(id as string, logout),
 		enabled: isBacked,
 		staleTime: 60_000,
 	});
 	return {
 		voucher: query.data ?? null,
+		isBacked,
 		isLoading: isBacked && query.isLoading,
 	};
 }
