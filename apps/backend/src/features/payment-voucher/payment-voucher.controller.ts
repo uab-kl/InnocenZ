@@ -4,6 +4,7 @@ import {
   PaymentVoucherDisputeRepositoryClass,
 } from './payment-voucher-dispute.repository.js';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
+import { buildVoucherWorkbook, voucherRef } from './payment-voucher-excel.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -904,6 +905,56 @@ export class PaymentVoucherControllerClass {
         .json({ success: true, message: 'Voucher signed', data: signed });
     } catch (error) {
       logger.error('[PaymentVoucherController.signMyVoucher] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The PR downloads their OWN voucher as the printed Excel document — the
+   * same cell layout as the prototype's PV-...-payment-voucher.xlsx export.
+   * Any status is allowed: an unsigned voucher simply exports with an empty
+   * signature block, because the export never shows what the DB does not hold.
+   */
+  async exportMyVoucherExcel(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+
+      const voucherId = paramId(req.params.voucherId);
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      // Someone else's voucher is a 404, never a 403 — same rule as sign/dispute.
+      if (!bundle || bundle.voucher.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const lines = bundle.voucher.lines.map(toReceiptLineDTO).map((l) => ({
+        kind: l.kind,
+        lineDate: l.lineDate,
+        outlet: l.outlet,
+        quantity: l.quantity,
+        commission: l.commission,
+      }));
+      const buffer = await buildVoucherWorkbook({
+        voucher: bundle.voucher,
+        agency: bundle.agency,
+        pr: bundle.pr,
+        lines,
+      });
+      const filename = `${voucherRef(bundle.voucher)}-payment-voucher.xlsx`;
+      res.setHeader(
+        'Content-Type',
+        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      );
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.status(200).send(Buffer.from(buffer as ArrayBuffer));
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportMyVoucherExcel] Error:', error);
       return res
         .status(500)
         .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

@@ -1,5 +1,6 @@
 import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -306,6 +307,94 @@ export class PaymentVoucherRepositoryClass {
       return withLines;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.listHistoryForPr] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Every voucher for one payroll week at the given statuses, lines included.
+   * The weekly issue pass uses this to promote a closed week's drafts to 'sent'
+   * — including drafts the PR accumulated live, which the generator's
+   * already-exists skip would otherwise leave unissued forever.
+   */
+  async listForWeek(
+    weekStart: string,
+    statuses: PaymentVoucherStatus[],
+  ): Promise<PaymentVoucherWithLines[]> {
+    try {
+      const vouchers = await db
+        .select()
+        .from(PaymentVoucherTable)
+        .where(
+          and(
+            eq(PaymentVoucherTable.weekStart, weekStart),
+            inArray(PaymentVoucherTable.status, statuses),
+          ),
+        )
+        .orderBy(desc(PaymentVoucherTable.createdAt));
+      const withLines: PaymentVoucherWithLines[] = [];
+      for (const voucher of vouchers) {
+        const lines = await this.getLines(voucher.id);
+        withLines.push({ ...voucher, lines });
+      }
+      return withLines;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.listForWeek] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * One voucher with everything the printed/exported PV document shows: lines
+   * plus the issuing agency and payee PR read via their FKs — the voucher row
+   * itself never duplicates those facts.
+   */
+  async getExportBundle(voucherId: string): Promise<{
+    voucher: PaymentVoucherWithLines;
+    agency: { name: string; ssmNo: string; contactPhone: string | null; contactEmail: string | null } | null;
+    pr: { name: string; nickname: string | null; icNo: string | null; phone: string | null } | null;
+  } | null> {
+    try {
+      const [row] = await db
+        .select({
+          voucher: PaymentVoucherTable,
+          agencyName: AgencyTable.name,
+          agencySsmNo: AgencyTable.ssmNo,
+          agencyPhone: AgencyTable.contactPhone,
+          agencyEmail: AgencyTable.contactEmail,
+          prName: PrTable.name,
+          prNickname: PrTable.nickname,
+          prIcNo: PrTable.icNo,
+          prPhone: PrTable.phone,
+        })
+        .from(PaymentVoucherTable)
+        .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
+        .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
+        .where(eq(PaymentVoucherTable.id, voucherId))
+        .limit(1);
+      if (!row) return null;
+      const lines = await this.getLines(row.voucher.id);
+      return {
+        voucher: { ...row.voucher, lines },
+        agency: row.agencyName
+          ? {
+              name: row.agencyName,
+              ssmNo: row.agencySsmNo ?? '',
+              contactPhone: row.agencyPhone,
+              contactEmail: row.agencyEmail,
+            }
+          : null,
+        pr: row.prName
+          ? {
+              name: row.prName,
+              nickname: row.prNickname,
+              icNo: row.prIcNo,
+              phone: row.prPhone,
+            }
+          : null,
+      };
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getExportBundle] Error:', error);
       throw error;
     }
   }

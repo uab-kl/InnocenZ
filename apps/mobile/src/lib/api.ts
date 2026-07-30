@@ -525,6 +525,22 @@ export function signMyVoucher(
   });
 }
 
+/**
+ * Downloads the printed PV workbook (the prototype's Excel export layout,
+ * rendered server-side from the real voucher + FK agency/PR rows). Web builds
+ * save it via a blob link; native builds have no file sink in this APK yet.
+ */
+export async function fetchMyVoucherExcelBlob(
+  accessToken: string,
+  voucherId: string,
+): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/payment-voucher/mine/${voucherId}/export.xlsx`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`Excel export failed (${res.status})`);
+  return res.blob();
+}
+
 /** The closed enum the backend writes — mirrors notification.model.ts. */
 export type NotificationKind =
   | 'payment_voucher_issued'

@@ -1,11 +1,22 @@
 import { logger } from '@/util/logger.js';
-import { paymentVoucherGenerator, prRepository, collectionInvoiceRepository } from '@/composition-root.js';
+import {
+  paymentVoucherGenerator,
+  paymentVoucherRepository,
+  prRepository,
+  collectionInvoiceRepository,
+} from '@/composition-root.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
+import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance.js';
 import { notify } from '@/features/notification/notify.js';
 import type { JobDefinition } from './scheduler.js';
 
 /** Stamped into the generated vouchers' audit columns. */
 const ACTOR = 'weekly-payout-job';
+
+/** Today's calendar date in Kuala Lumpur (UTC+8, no DST), for issued_date stamps. */
+function klToday(): string {
+  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
+}
 
 /**
  * Mondays at 02:00 Asia/Kuala_Lumpur — after the last Sunday shift has certainly
@@ -52,11 +63,42 @@ export async function runWeeklyPayout(): Promise<void> {
     }
   }
 
+  // Issue: every voucher for the closed week still at 'pending_review' —
+  // whether generated seconds ago or accumulated live while the PR logged
+  // receipts during the week — is sent to the PR for signature ("one week,
+  // one PV"). Without this pass nothing ever left pending_review, so the
+  // Payment "Last week" sign button could never appear. A voucher whose money
+  // does not balance stays held at pending_review for the agency to fix first.
+  const pending = await paymentVoucherRepository.listForWeek(weekStart, ['pending_review']);
+  const issuedDate = klToday();
+  const issued: { voucherId: string; prId: string | null }[] = [];
+  let held = 0;
+  for (const voucher of pending) {
+    const balance = checkVoucherBalance(voucher, voucher.lines);
+    if (!balance.balanced) {
+      held += 1;
+      logger.error(
+        `[weekly-payout] holding ${voucher.id} at pending_review: ${balance.problems.join('; ')}`,
+      );
+      continue;
+    }
+    const sent = await paymentVoucherRepository.update(voucher.id, {
+      status: 'sent',
+      issuedDate: voucher.issuedDate ?? issuedDate,
+      updatedBy: ACTOR,
+    });
+    if (sent) issued.push({ voucherId: voucher.id, prId: voucher.prId });
+  }
+  logger.info(
+    `[weekly-payout] issued ${issued.length} voucher(s) to PRs` +
+      (held > 0 ? ` (${held} held for agency review)` : ''),
+  );
+
   let notified = 0;
   let unlinked = 0;
 
-  for (const created of result.created) {
-    const pr = await prRepository.getById(created.prId);
+  for (const created of issued) {
+    const pr = created.prId ? await prRepository.getById(created.prId) : null;
     // pr.userId is nullable — a PR row can exist before anyone has signed up for
     // it. There is no account to notify, and that is not an error.
     if (!pr?.userId) {
@@ -79,7 +121,7 @@ export async function runWeeklyPayout(): Promise<void> {
   }
 
   logger.info(
-    `[weekly-payout] notified ${notified}/${result.created.length}` +
+    `[weekly-payout] notified ${notified}/${issued.length}` +
       (unlinked > 0 ? ` (${unlinked} PR rows have no user account yet)` : ''),
   );
 

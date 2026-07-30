@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,8 @@ import {
 } from '../lib/hist-date-time-filters';
 import { normalizeHistPayWeek } from '../lib/history-pay-sync';
 import { usePaymentHistory } from '../lib/payment-history';
+import { fetchMyVoucherExcelBlob } from '../lib/api';
+import { useSession } from '../lib/session';
 import { useShiftSession } from '../lib/shift-session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { usePrNav } from '../lib/pr-nav';
@@ -37,6 +40,25 @@ import {
   Search,
   Wallet,
 } from './icons';
+
+/** Minimal printable PV document — the web "PDF" path is the browser's print dialog. */
+function printableVoucherHtml(w: HistPayWeek): string {
+  const rows = w.lines
+    .map(
+      (l) =>
+        `<tr><td>${l.date} · ${l.day}</td><td>${l.type}</td><td>${l.outlet}</td><td style="text-align:right">${l.amount.toFixed(2)}</td></tr>`,
+    )
+    .join('');
+  return `<!doctype html><html><head><meta charset="utf-8"><title>${w.ref} · Payment Voucher</title>
+<style>body{font-family:Arial,sans-serif;margin:24px;color:#111}h1{font-size:18px}table{border-collapse:collapse;width:100%;margin-top:12px}td,th{border:1px solid #999;padding:6px 8px;font-size:12px}tfoot td{font-weight:bold}</style>
+</head><body>
+<h1>Payment Voucher · ${w.ref}</h1>
+<p>${w.weekLabel} · ${w.outlet}<br>${w.statusMeta}${w.bankRef ? `<br>Bank ref: ${w.bankRef}` : ''}</p>
+<table><thead><tr><th>Date</th><th>Description</th><th>Outlet</th><th>Amount (RM)</th></tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr><td colspan="3">Net payable</td><td style="text-align:right">${w.net.toFixed(2)}</td></tr></tfoot></table>
+</body></html>`;
+}
 
 type StatusChip = 'all' | 'paid' | 'signed';
 
@@ -62,6 +84,7 @@ const EMPTY: Filters = {
 
 export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => void }) {
   const { openPv } = usePrNav();
+  const { token } = useSession();
   const { weekRecords } = useShiftSession();
   const { weeks: apiWeeks } = usePaymentHistory();
   const { signedWeeks } = useSignedPvs();
@@ -153,6 +176,46 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         ? totalSigned
         : totalPaid + totalSigned;
   const shifts = filtered.reduce((s, w) => s + w.shifts, 0);
+
+  /** Streams the server-rendered workbook; the toast only fires on success. */
+  const openExcel = async (w: HistPayWeek) => {
+    if (Platform.OS !== 'web') {
+      flash('Excel download works in the web app — open InnocenZ in a browser');
+      return;
+    }
+    if (!token) return;
+    try {
+      const blob = await fetchMyVoucherExcelBlob(token, w.id);
+      const doc = (globalThis as { document?: any }).document;
+      const url = URL.createObjectURL(blob);
+      const a = doc.createElement('a');
+      a.href = url;
+      a.download = `${w.ref}-payment-voucher.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+      flash('Payment voucher Excel downloaded');
+    } catch {
+      flash('Could not download the Excel — try again');
+    }
+  };
+
+  const openPdf = (w: HistPayWeek) => {
+    if (Platform.OS !== 'web') {
+      openPv(w.id);
+      flash('Use the web app to print / save as PDF');
+      return;
+    }
+    const win = (globalThis as { open?: (u?: string, t?: string) => any }).open?.('', '_blank');
+    if (!win) {
+      flash('Allow pop-ups to print this voucher');
+      return;
+    }
+    win.document.write(printableVoucherHtml(w));
+    win.document.close();
+    win.focus();
+    win.print();
+    flash('Payment voucher opened — use Print → Save as PDF');
+  };
 
   const filterCount = [
     applied.query,
@@ -354,8 +417,8 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
               open={expanded === w.id}
               onToggle={() => setExpanded((id) => (id === w.id ? null : w.id))}
               onOpenPv={() => openPv(w.id)}
-              onPdf={() => flash('Payment voucher opened — use Print → Save as PDF')}
-              onExcel={() => flash('Payment voucher Excel downloaded')}
+              onPdf={() => openPdf(w)}
+              onExcel={() => void openExcel(w)}
             />
           ))
         )}

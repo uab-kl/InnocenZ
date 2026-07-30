@@ -19,6 +19,13 @@ router.delete('/mine/lines/:lineId', paymentVoucherController.deleteMyLine.bind(
 // 3-segment, so no collision with the 2-segment '/mine/lines' above.
 router.post('/mine/:voucherId/sign', paymentVoucherController.signMyVoucher.bind(paymentVoucherController));
 
+// The PR downloads its OWN voucher as the printed Excel document (History →
+// Excel button). Same 3-segment shape as '/sign' above.
+router.get(
+  '/mine/:voucherId/export.xlsx',
+  paymentVoucherController.exportMyVoucherExcel.bind(paymentVoucherController),
+);
+
 // A PR raises / withdraws a dispute on its OWN issued voucher (§3 F). 3- and
 // 4-segment paths, so they never collide with the 2-segment '/mine/lines'.
 router.post('/mine/:voucherId/dispute', paymentVoucherController.raiseMyDispute.bind(paymentVoucherController));
