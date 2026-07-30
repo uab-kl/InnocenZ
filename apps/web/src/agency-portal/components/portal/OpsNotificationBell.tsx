@@ -30,11 +30,14 @@ import { useState } from "react";
 function kindIcon(kind: OpsNotificationKind) {
 	if (kind === "sos") return AlertTriangle;
 	if (kind === "check_in") return MapPin;
-	if (kind === "rating_prompt") return Star;
-	if (kind.startsWith("pv")) return Wallet;
+	if (kind === "rating_prompt" || kind === "pr_rating_low") return Star;
+	// Guarded rather than trusting the parameter type: this line is what took the
+	// agency portal down when an unmapped backend kind arrived here as undefined.
+	if (typeof kind === "string" && kind.startsWith("pv")) return Wallet;
 	if (kind === "report_ready") return FileText;
 	if (kind === "reconciliation_due") return ClipboardList;
 	if (kind === "collection_reminder") return Wallet;
+	if (kind === "unknown") return Bell;
 	return CalendarCheck;
 }
 

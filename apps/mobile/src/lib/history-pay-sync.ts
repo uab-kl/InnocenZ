@@ -206,12 +206,19 @@ export function normalizeHistPayWeek(w: HistPayWeek): HistPayWeek {
   const net = Math.round((wages + commission - debits) * 100) / 100;
   wages = Math.round(wages * 100) / 100;
   commission = Math.round(commission * 100) / 100;
+  // Migrate labels signed under the old copy (stored PVs keep their strings).
+  const outlet = (w.outlet ?? '').replace(/^Multi-outlet \((\d+)\)$/, '($1)-outlet');
+  const statusMeta = (w.statusMeta ?? '')
+    .replace(/ · Awaiting bank transfer$/, '')
+    .replace(/^(Signed \d{1,2} \w{3} \d{4} · \d{2}:\d{2}).*$/, '$1');
   if (
     Math.abs(net - w.net) > 0.02 ||
     Math.abs(wages - w.wages) > 0.02 ||
-    Math.abs(commission - w.commission) > 0.02
+    Math.abs(commission - w.commission) > 0.02 ||
+    outlet !== w.outlet ||
+    statusMeta !== w.statusMeta
   ) {
-    return { ...w, net, wages, commission };
+    return { ...w, net, wages, commission, outlet, statusMeta };
   }
   return w;
 }

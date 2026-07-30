@@ -26,7 +26,14 @@ export type OpsNotificationKind =
 	// event as a raised one, and neither overtime nor a join decision is "roster".
 	| "dispute_resolved"
 	| "overtime_pending"
-	| "agency_join_resolved";
+	| "agency_join_resolved"
+	| "pr_rating_low"
+	| "shift_cover_needed"
+	// Last resort for a row whose backend kind this build has never heard of.
+	// The `notification_kind` DB enum grows by migration and a shared dev database
+	// routinely runs ahead of the web app — mapping such a row to a neutral kind
+	// keeps it readable instead of blanking the portal.
+	| "unknown";
 
 export interface SosIncident {
 	id: string;

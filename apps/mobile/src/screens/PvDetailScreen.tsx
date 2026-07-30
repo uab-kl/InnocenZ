@@ -153,7 +153,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     liveOutlets.length === 1
       ? liveOutlets[0]!
       : liveOutlets.length > 1
-        ? `Multi-outlet (${liveOutlets.length})`
+        ? `(${liveOutlets.length})-outlet`
         : 'Outlet';
   // The stored voucher number (0075) is what the paper document prints, so the
   // phone shows the same string. The week-derived form below is the pre-0075

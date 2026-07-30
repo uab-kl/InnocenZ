@@ -8,6 +8,17 @@ import { redactIdentityDocsForOutlet } from '@/middlewares/redact-identity-docs'
 
 const router = Router();
 
+// ⚠️ MERGE NOTE, 31 Jul 2026. `origin/main` independently tightened this file to
+// `requireAdmin` on both reads, with the rationale "the only callers are the
+// admin portal's user-management tables". That is true of THAT branch and false
+// of this one: `services/pr/prs.ts` feeds the outlet Today/History screens and
+// the agency portal reads it for PR names, so admin-only blanks live screens for
+// two roles. This side was live-verified on 30 Jul (outlet sees 0 of 17 rows
+// carrying identity docs with all 17 names intact) and is the owner's decision
+// D3, so it is kept — the redaction below is the narrowing jk's gate was
+// reaching for, done as a response SHAPE rather than a gate. Raise it with jk
+// rather than assuming: their tightening is deliberate work, not a stray edit.
+//
 // Enumerating user accounts is a staff function. A PR is excluded outright: it
 // has no screen that lists other people, and on a PR token this route returned
 // every account in the system until 30 Jul 2026.

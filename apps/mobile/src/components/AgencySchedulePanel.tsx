@@ -24,10 +24,12 @@ import {
   MONTH_NAMES,
   buildScheduleDays,
   buildUpcomingWeekTimetable,
+  fmtDFriendly,
   formatRM,
   formatUpcomingWeekLabel,
   getUpcomingWeekRange,
   isoToYmd,
+  shiftEndDate,
   type ScheduleDayKind,
   type TimetableEntry,
   todayYmd,
@@ -53,6 +55,13 @@ const KIND_STYLE: Record<ScheduleDayKind, { bg: string; border: string; color: s
   assigned: { bg: 'rgba(93,217,160,0.16)', border: 'rgba(93,217,160,0.45)', color: C.green },
   pending: { bg: 'rgba(232,198,106,0.14)', border: 'rgba(232,198,106,0.4)', color: C.amber },
   active: { bg: 'rgba(232,194,122,0.18)', border: 'rgba(232,194,122,0.5)', color: C.accentL },
+};
+
+/** Overlay for a past day whose booked shift ended with NO check-in (missed). */
+const MISSED_STYLE = {
+  bg: 'rgba(240,113,113,0.2)',
+  border: 'rgba(240,113,113,0.6)',
+  color: '#f07171',
 };
 
 type CancelPenalty = { pct: number; amount: number; tierLabel: string };
@@ -202,6 +211,31 @@ export function AgencySchedulePanel() {
   );
   const dayByIso = useMemo(() => new Map(days.map((d) => [d.dateIso, d])), [days]);
 
+  // A booked shift whose window ended with NO check-in is a missed check-in —
+  // marked red on the calendar. Requiring status 'assigned' means MC/leave
+  // (leave_pending/approved), cancellations and no-shows never count as missed.
+  const missedByIso = useMemo(() => {
+    const map = new Map<string, ShiftAssignmentRecord[]>();
+    for (const a of assignments) {
+      if (a.status !== 'assigned' || a.checkInAt || a.checkOutAt) continue;
+      const end = shiftEndDate(a.shiftDate, a.slot);
+      // Unparseable slot: count it missed once its calendar day is over.
+      const missed = end ? end.getTime() < Date.now() : a.shiftDate < todayIso;
+      if (!missed) continue;
+      const list = map.get(a.shiftDate) ?? [];
+      list.push(a);
+      map.set(a.shiftDate, list);
+    }
+    return map;
+  }, [assignments, todayIso]);
+  // Tap a red day → which outlet the missed shift was at.
+  const [missedTarget, setMissedTarget] = useState<{
+    iso: string;
+    rows: ShiftAssignmentRecord[];
+  } | null>(null);
+  // Which picker (month/year chip row) the MONTH / YEAR fields have open.
+  const [navOpen, setNavOpen] = useState<'month' | 'year' | null>(null);
+
   const weekRange = useMemo(() => getUpcomingWeekRange(todayIso), [todayIso]);
   const weekLabel = formatUpcomingWeekLabel(weekRange.fromIso, weekRange.toIso).toUpperCase();
   const timetable = useMemo(
@@ -228,7 +262,7 @@ export function AgencySchedulePanel() {
   ];
   while (cells.length % 7 !== 0) cells.push(null);
 
-  const years = [year - 1, year, year + 1];
+  const years = Array.from({ length: 7 }, (_, i) => year - 3 + i);
 
   const toggleDay = (iso: string) => {
     const day = dayByIso.get(iso);
@@ -281,7 +315,7 @@ export function AgencySchedulePanel() {
             <Text style={styles.navLabel}>MONTH</Text>
             <Pressable
               style={styles.select}
-              onPress={() => setViewMonth(new Date(year, (month + 11) % 12, 1))}
+              onPress={() => setNavOpen((o) => (o === 'month' ? null : 'month'))}
             >
               <Text style={styles.selectText}>{MONTH_LABELS[month]}</Text>
               <ChevronDown size={14} color={C.muted} />
@@ -291,7 +325,7 @@ export function AgencySchedulePanel() {
             <Text style={styles.navLabel}>YEAR</Text>
             <Pressable
               style={styles.select}
-              onPress={() => setViewMonth(new Date(year + 1, month, 1))}
+              onPress={() => setNavOpen((o) => (o === 'year' ? null : 'year'))}
             >
               <Text style={styles.selectText}>{year}</Text>
               <ChevronDown size={14} color={C.muted} />
@@ -299,31 +333,41 @@ export function AgencySchedulePanel() {
           </View>
         </View>
 
-        <View style={styles.yearChips}>
-          {years.map((y) => (
-            <Pressable
-              key={y}
-              style={[styles.yearChip, y === year && styles.yearChipOn]}
-              onPress={() => setViewMonth(new Date(y, month, 1))}
-            >
-              <Text style={[styles.yearChipText, y === year && { color: C.txt }]}>{y}</Text>
-            </Pressable>
-          ))}
-        </View>
+        {navOpen === 'year' && (
+          <View style={styles.yearChips}>
+            {years.map((y) => (
+              <Pressable
+                key={y}
+                style={[styles.yearChip, y === year && styles.yearChipOn]}
+                onPress={() => {
+                  setViewMonth(new Date(y, month, 1));
+                  setNavOpen(null);
+                }}
+              >
+                <Text style={[styles.yearChipText, y === year && { color: C.txt }]}>{y}</Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
-        <View style={styles.monthChips}>
-          {MONTH_LABELS.map((label, i) => (
-            <Pressable
-              key={label}
-              style={[styles.monthChip, i === month && styles.monthChipOn]}
-              onPress={() => setViewMonth(new Date(year, i, 1))}
-            >
-              <Text style={[styles.monthChipText, i === month && { color: C.txt }]}>
-                {label.slice(0, 3)}
-              </Text>
-            </Pressable>
-          ))}
-        </View>
+        {navOpen === 'month' && (
+          <View style={styles.monthChips}>
+            {MONTH_LABELS.map((label, i) => (
+              <Pressable
+                key={label}
+                style={[styles.monthChip, i === month && styles.monthChipOn]}
+                onPress={() => {
+                  setViewMonth(new Date(year, i, 1));
+                  setNavOpen(null);
+                }}
+              >
+                <Text style={[styles.monthChipText, i === month && { color: C.txt }]}>
+                  {label.slice(0, 3)}
+                </Text>
+              </Pressable>
+            ))}
+          </View>
+        )}
 
         <View style={styles.weekdays}>
           {WEEKDAYS.map((w) => (
@@ -339,7 +383,8 @@ export function AgencySchedulePanel() {
             const iso = ymdToIso(year, month + 1, dayNum);
             const day = dayByIso.get(iso);
             const kind = day?.kind ?? 'past';
-            const style = KIND_STYLE[kind];
+            const missedRows = missedByIso.get(iso);
+            const style = missedRows ? MISSED_STYLE : KIND_STYLE[kind];
             const isToday = iso === todayIso;
             const canToggle = kind === 'open' || kind === 'unavailable';
             return (
@@ -351,8 +396,10 @@ export function AgencySchedulePanel() {
                   { backgroundColor: style.bg, borderColor: style.border },
                   isToday && styles.dayToday,
                 ]}
-                disabled={!canToggle}
-                onPress={() => toggleDay(iso)}
+                disabled={!canToggle && !missedRows}
+                onPress={() =>
+                  missedRows ? setMissedTarget({ iso, rows: missedRows }) : toggleDay(iso)
+                }
               >
                 <Text style={[styles.dayNum, { color: style.color }]}>{dayNum}</Text>
               </Pressable>
@@ -366,10 +413,8 @@ export function AgencySchedulePanel() {
           <LegendSwatch color={C.accentL} label="On duty" />
           <LegendSwatch color={C.amber} label="Pending" />
           <LegendSwatch color={C.red} label="Not available" />
+          <LegendSwatch color="#f07171" label="Missed check-in" />
         </View>
-        <Text style={styles.hint}>
-          Tap an available day to block it · tap a blocked day to reopen
-        </Text>
       </View>
 
       <View style={styles.timetable}>
@@ -566,6 +611,39 @@ export function AgencySchedulePanel() {
           </Pressable>
         </Pressable>
       </PhoneSheet>
+
+      {/* Missed check-in day detail — tap a red day on the calendar. */}
+      <PhoneSheet visible={missedTarget != null} onRequestClose={() => setMissedTarget(null)}>
+        <Pressable style={styles.cancelBackdrop} onPress={() => setMissedTarget(null)}>
+          <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.cancelHandle} />
+            <View style={styles.cancelHeaderRow}>
+              <Clock size={20} color="#f07171" />
+              <Text style={styles.cancelHeaderTitle}>Missed check-in</Text>
+            </View>
+            {missedTarget && (
+              <>
+                <Text style={styles.missedDate}>
+                  {fmtDFriendly(...isoToYmd(missedTarget.iso))}
+                </Text>
+                {missedTarget.rows.map((a) => (
+                  <View key={a.id} style={styles.missedRow}>
+                    <Text style={styles.missedOutlet}>{a.outletName ?? 'Outlet'}</Text>
+                    <Text style={styles.missedMeta}>{a.slot ?? '—'}</Text>
+                    {a.outletAddress ? (
+                      <Text style={styles.missedMeta}>{a.outletAddress}</Text>
+                    ) : null}
+                  </View>
+                ))}
+                <Text style={styles.missedNote}>
+                  No check-in was recorded for this shift, and no MC / leave or
+                  cancellation is on file. Contact your agency if this is wrong.
+                </Text>
+              </>
+            )}
+          </Pressable>
+        </Pressable>
+      </PhoneSheet>
     </View>
   );
 }
@@ -730,7 +808,7 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0,0,0,0.22)',
   },
   selectText: { fontFamily: F.sora, fontSize: 14, fontWeight: '600', color: C.txt },
-  yearChips: { flexDirection: 'row', gap: 6, marginBottom: 6 },
+  yearChips: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: 6 },
   yearChip: {
     paddingHorizontal: 10,
     paddingVertical: 4,
@@ -774,13 +852,18 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   swatch: { width: 10, height: 10, borderRadius: 999 },
   legendLabel: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
-  hint: {
-    marginTop: 8,
-    fontFamily: F.manrope,
-    fontSize: 12,
-    color: C.prMuted2,
-    textAlign: 'center',
+  missedDate: { marginTop: 4, fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
+  missedRow: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(240,113,113,0.35)',
+    backgroundColor: 'rgba(240,113,113,0.08)',
+    borderRadius: 12,
+    padding: 12,
   },
+  missedOutlet: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.txt },
+  missedMeta: { marginTop: 3, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  missedNote: { marginTop: 12, fontFamily: F.manrope, fontSize: 12, color: C.prMuted2 },
   timetable: { marginTop: 2 },
   ttHead: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 },
   ttTitle: {

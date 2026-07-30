@@ -12,7 +12,9 @@ export type NotificationKind =
 	| "overtime_pending_approval"
 	| "shift_assigned"
 	| "shift_cancelled"
-	| "agency_join_resolved";
+	| "agency_join_resolved"
+	| "pr_rating_low"
+	| "shift_cover_needed";
 
 export interface NotificationRecord {
 	id: string;

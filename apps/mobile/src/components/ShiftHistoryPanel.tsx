@@ -244,15 +244,42 @@ export function ShiftHistoryPanel() {
           icon={House}
           label="OUTLET"
           value={outlet === 'all' ? 'Any outlet' : outlet}
-          onPress={() => setOpenSelect((s) => (s === 'outlet' ? null : 'outlet'))}
+          onPress={() => {
+            setOpenSelect((s) => (s === 'outlet' ? null : 'outlet'));
+            setCalendarOpen(false);
+          }}
         />
         <FilterField
           icon={Briefcase}
           label="STATUS"
           value={STATUS_OPTIONS.find((o) => o.id === status)?.label ?? 'Any status'}
-          onPress={() => setOpenSelect((s) => (s === 'status' ? null : 'status'))}
+          onPress={() => {
+            setOpenSelect((s) => (s === 'status' ? null : 'status'));
+            setCalendarOpen(false);
+          }}
         />
       </View>
+
+      {openSelect === 'outlet' && (
+        <SelectList
+          options={[{ id: 'all', label: 'Any outlet' }, ...outlets.map((o) => ({ id: o, label: o }))]}
+          selected={outlet}
+          onPick={(id) => {
+            setOutlet(id);
+            setOpenSelect(null);
+          }}
+        />
+      )}
+      {openSelect === 'status' && (
+        <SelectList
+          options={STATUS_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
+          selected={status}
+          onPick={(id) => {
+            setStatus(id as StatusFilter);
+            setOpenSelect(null);
+          }}
+        />
+      )}
 
       <HistDateTimeFilter
         date={date}
@@ -275,27 +302,6 @@ export function ShiftHistoryPanel() {
         onTimeFromChange={setTimeFrom}
         onTimeToChange={setTimeTo}
       />
-
-      {openSelect === 'outlet' && (
-        <SelectList
-          options={[{ id: 'all', label: 'Any outlet' }, ...outlets.map((o) => ({ id: o, label: o }))]}
-          selected={outlet}
-          onPick={(id) => {
-            setOutlet(id);
-            setOpenSelect(null);
-          }}
-        />
-      )}
-      {openSelect === 'status' && (
-        <SelectList
-          options={STATUS_OPTIONS.map((o) => ({ id: o.id, label: o.label }))}
-          selected={status}
-          onPick={(id) => {
-            setStatus(id as StatusFilter);
-            setOpenSelect(null);
-          }}
-        />
-      )}
 
       <View style={styles.weekList}>
         {historyWeeks.map((week) => {
@@ -373,7 +379,7 @@ function ShiftCard({ shift }: { shift: DemoHistoryShift }) {
       <View style={styles.shiftTop}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={styles.outlet}>{shift.outlet}</Text>
-          <Text style={styles.meta}>
+          <Text style={styles.meta} numberOfLines={1}>
             {shift.dateLabel} · {shift.time}
           </Text>
         </View>

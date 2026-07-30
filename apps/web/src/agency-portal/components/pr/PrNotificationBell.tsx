@@ -34,9 +34,22 @@ const PR_KIND_MAP: Record<NotificationKind, PrNotificationKind> = {
 	shift_assigned: "assignment",
 	shift_cancelled: "assignment",
 	agency_join_resolved: "application",
-	// Addressed to the agency, not the PR — mapped only so this map stays total.
+	// Addressed to the agency, not the PR — mapped only so these stay total.
 	overtime_pending_approval: "assignment",
+	pr_rating_low: "assignment",
+	shift_cover_needed: "assignment",
 };
+
+/**
+ * `notification_kind` is a DB enum that migrations extend, so the server can send
+ * a kind this bundle predates and the map above would miss it. `prKindIcon` only
+ * compares, so an undefined kind renders here rather than throwing — but it
+ * still reads as the wrong thing, and the agency bell crashed outright on this
+ * very gap. Resolve it once, explicitly.
+ */
+function prKindFor(kind: NotificationKind): PrNotificationKind {
+	return PR_KIND_MAP[kind] ?? "assignment";
+}
 
 export function PrNotificationBell() {
 	const { role: prSubRole } = usePrPortalReady();
@@ -57,7 +70,7 @@ export function PrNotificationBell() {
 		() =>
 			backend.records.map((record) => ({
 				id: record.id,
-				kind: PR_KIND_MAP[record.kind],
+				kind: prKindFor(record.kind),
 				title: record.title,
 				body: record.body ?? "",
 				at: new Date(record.createdAt).toLocaleString(undefined, {

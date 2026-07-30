@@ -323,6 +323,17 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         />
       </View>
 
+      {openSelect === 'outlet' && (
+        <SelectList
+          options={[{ id: 'all', label: 'Any outlet' }, ...outlets.map((o) => ({ id: o, label: o }))]}
+          selected={applied.outlet}
+          onPick={(id) => {
+            setApplied((f) => ({ ...f, outlet: id }));
+            setOpenSelect(null);
+          }}
+        />
+      )}
+
       <View style={styles.timeRow}>
         <HistTimeInput
           label="FROM TIME"
@@ -337,17 +348,6 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
           disabled={!applied.date}
         />
       </View>
-
-      {openSelect === 'outlet' && (
-        <SelectList
-          options={[{ id: 'all', label: 'Any outlet' }, ...outlets.map((o) => ({ id: o, label: o }))]}
-          selected={applied.outlet}
-          onPick={(id) => {
-            setApplied((f) => ({ ...f, outlet: id }));
-            setOpenSelect(null);
-          }}
-        />
-      )}
 
       <View style={styles.chips}>
         {(['all', 'paid', 'signed'] as StatusChip[]).map((c) => (
@@ -567,10 +567,10 @@ function WeekCard({
               {week.status === 'paid' ? 'Paid' : 'Signed'}
             </Pill>
           </View>
-          <Text style={styles.cardSub}>
+          <Text style={styles.cardSub} numberOfLines={1}>
             {week.ref} · {week.outlet}
           </Text>
-          <Text style={styles.cardSub}>
+          <Text style={styles.cardSub} numberOfLines={1}>
             {week.shifts} shift{week.shifts !== 1 ? 's' : ''} · Issued {week.issued}
           </Text>
           <Text

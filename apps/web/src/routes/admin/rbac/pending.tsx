@@ -1,17 +1,20 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
+	AlertCircle,
 	Building2,
 	CheckCircle2,
 	Clock,
 	Handshake,
 	LayoutGrid,
 	Loader2,
+	RefreshCw,
 	Store,
 } from "lucide-react";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
+import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
-import { formatDate } from "@/lib/utils";
+import { formatDate, getErrorMessage } from "@/lib/utils";
 import {
 	type AdminRequest,
 	fetchAdminRequests,
@@ -34,6 +37,7 @@ type PendingHref =
 	| "/admin/user-management/agency"
 	| "/admin/user-management/outlet"
 	| "/admin/service/requests"
+	| "/admin/service/plan-changes"
 	| "/admin/service/other";
 
 type PendingRow = {
@@ -102,6 +106,20 @@ function PendingApprovalsPage() {
 		requestsQuery.isLoading ||
 		jobsQuery.isLoading;
 
+	// The four sources fail independently, so a failure is shown as a banner over
+	// whatever DID load — never as a replacement branch that would hide good rows.
+	const loadError =
+		agenciesQuery.error ??
+		outletsQuery.error ??
+		requestsQuery.error ??
+		jobsQuery.error;
+	const refetchAll = () => {
+		agenciesQuery.refetch();
+		outletsQuery.refetch();
+		requestsQuery.refetch();
+		jobsQuery.refetch();
+	};
+
 	const rows: PendingRow[] = [
 		...(agenciesQuery.data?.data ?? []).map(
 			(a: Agency): PendingRow => ({
@@ -136,13 +154,18 @@ function PendingApprovalsPage() {
 				id: `request-${r.id}`,
 				rawId: r.id,
 				kind: "request",
-				typeLabel: "Plan request",
+				typeLabel: r.type === "plan_change" ? "Plan change" : "Plan request",
 				icon: Handshake,
 				name: r.subscriberName,
 				detail: REQUEST_TYPE_LABELS[r.type],
 				date: formatDate(r.createdAt),
 				createdAt: r.createdAt,
-				href: "/admin/service/requests",
+				// The Plan Request inbox filters to its own two types, so a
+				// plan_change must deep-link to the page that actually lists it.
+				href:
+					r.type === "plan_change"
+						? "/admin/service/plan-changes"
+						: "/admin/service/requests",
 			}),
 		),
 		...(jobsQuery.data?.data ?? []).map(
@@ -163,6 +186,15 @@ function PendingApprovalsPage() {
 		(a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
 	);
 
+	// Each source is capped at PAGE_SIZE, but its envelope reports the true
+	// unpaginated total — so we can say when this list is not the whole story.
+	const totalPending =
+		(agenciesQuery.data?.pagination.totalCount ?? 0) +
+		(outletsQuery.data?.pagination.totalCount ?? 0) +
+		(requestsQuery.data?.pagination.totalCount ?? 0) +
+		(jobsQuery.data?.pagination.totalCount ?? 0);
+	const truncated = totalPending > rows.length;
+
 	return (
 		<PageShell>
 			<PageHeader
@@ -172,6 +204,22 @@ function PendingApprovalsPage() {
 			/>
 
 			<section className="overflow-hidden rounded-2xl border bg-card">
+				{loadError && (
+					<div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-6 py-3 text-sm">
+						<AlertCircle className="h-4 w-4 text-destructive" />
+						<span className="font-medium text-destructive">
+							Some pending items could not be loaded — this list is incomplete.
+						</span>
+						<span className="text-xs text-muted-foreground">
+							{getErrorMessage(loadError)}
+						</span>
+						<Button variant="outline" size="sm" onClick={refetchAll}>
+							<RefreshCw className="mr-2 h-4 w-4" />
+							Try Again
+						</Button>
+					</div>
+				)}
+
 				<div className="hidden grid-cols-[2fr_1.1fr_1fr_96px] gap-3 border-b px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground md:grid">
 					<span>Item</span>
 					<span>Type</span>
@@ -184,7 +232,7 @@ function PendingApprovalsPage() {
 						<Loader2 className="h-4 w-4 animate-spin" />
 						Loading pending items…
 					</div>
-				) : rows.length === 0 ? (
+				) : rows.length === 0 && !loadError ? (
 					<div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center text-muted-foreground">
 						<CheckCircle2 className="h-8 w-8 text-[color:var(--signal-live)]/80" />
 						<p className="text-sm font-medium text-foreground">
@@ -248,6 +296,14 @@ function PendingApprovalsPage() {
 							</div>
 						</div>
 					))
+				)}
+
+				{truncated && (
+					<div className="border-t px-6 py-3 text-xs text-muted-foreground">
+						Showing the {rows.length} most recent of {totalPending} pending
+						items (first {PAGE_SIZE} per category). Open the category pages to
+						see the rest.
+					</div>
 				)}
 			</section>
 		</PageShell>

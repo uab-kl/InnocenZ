@@ -39,7 +39,7 @@ import { cellDisputable, receiptReviewCaption } from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
-import { ChevronDown, Flag, ImagePlus, Shield, Wallet, XIcon } from '../components/icons';
+import { ChevronDown, Flag, ImagePlus, Wallet, XIcon } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { usePrNav } from '../lib/pr-nav';
 
@@ -326,24 +326,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   return (
     <View style={styles.screen}>
       <View style={styles.pageHeader}>
-        <View style={styles.headerLabelRow}>
-          <Text style={styles.dollar}>$</Text>
-          <Text style={styles.headerLabel}>PAYROLL</Text>
-        </View>
         <View style={styles.headerTitleRow}>
           <Wallet size={22} color={C.accent} />
           <Text style={[styles.headerTitle, { fontSize: titleSize }]}>Payment</Text>
         </View>
-        <Text style={styles.meta}>
-          Review &amp; sign · unsigned PVs only — signed/paid moved to History
-        </Text>
-      </View>
-
-      <View style={styles.flowBox}>
-        <Shield size={12} color={C.muted} />
-        <Text style={styles.flowText}>
-          Outlet → Agency → your bank · one PV per week (issued Sunday)
-        </Text>
       </View>
 
       <View style={styles.weekTabs}>
@@ -672,9 +658,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </View>
               </ScrollView>
 
-              <Text style={styles.footNote}>
-                PV will be sent on <Text style={styles.footBold}>{issueDay}</Text> after this
-                week ends · running total{' '}
+              <Text style={styles.footNote} numberOfLines={1}>
+                PV on <Text style={styles.footBold}>{issueDay}</Text> · total{' '}
                 <Text style={styles.footTotal}>{formatRM(thisWeekTotal)}</Text>
               </Text>
 
@@ -838,37 +823,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
   pageHeader: { paddingTop: 2 },
-  headerLabelRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-  dollar: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.goldL },
-  headerLabel: {
-    fontFamily: F.sora,
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: 1.68,
-    color: '#c4b4d8',
-  },
   headerTitleRow: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 6 },
   headerTitle: { fontFamily: F.sora, fontWeight: '800', letterSpacing: -0.45, color: C.txt },
-  meta: {
-    marginTop: 6,
-    fontFamily: F.manrope,
-    fontSize: 13,
-    color: C.prMuted,
-    lineHeight: 18,
-  },
-  flowBox: {
-    marginTop: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    borderWidth: 1,
-    borderStyle: 'dashed',
-    borderColor: C.line,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  flowText: { flex: 1, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   weekTabs: {
     marginTop: 12,
     flexDirection: 'row',

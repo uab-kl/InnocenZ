@@ -59,12 +59,11 @@ function PlanPage() {
 	if (statusFilter !== "all") plansQueryParams.status = statusFilter;
 	if (billingCycleFilter !== "all")
 		plansQueryParams.billingCycle = billingCycleFilter;
-	// Plans are no longer linked to a role, so the audience IS the billing cycle:
-	// outlet plans are monthly, agency plans weekly. Filtering server-side keeps
-	// pagination honest; an explicit audience wins over the cycle dropdown.
+	// Audience is stored on the plan (subscription.subscription_type, migration
+	// 0036), so filter on it directly — it then ANDs with the billing-cycle
+	// dropdown instead of overwriting it.
 	if (audienceFilter !== "all")
-		plansQueryParams.billingCycle =
-			audienceFilter === "outlet" ? "monthly" : "weekly";
+		plansQueryParams.subscriptionType = audienceFilter;
 
 	const plansQuery = useQuery({
 		queryKey: ["subscriptions", plansQueryParams],
