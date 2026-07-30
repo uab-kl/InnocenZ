@@ -211,26 +211,62 @@ export function buildVoucherPdf(params: {
         { width: XEND - XC, align: 'center' },
       );
 
-    // ── PR (Payee) signature block — script-style name only once the database
-    // holds pr_signed_at; the export never invents a signature.
+    // ── PR (Payee) signature block. The REAL finger-drawn ink when the
+    // voucher stores it — re-drawn as vector strokes, sized small and fitted
+    // neatly on the line. Nothing is invented: unsigned prints blank lines,
+    // signed-without-ink (older app build) falls back to a small script name.
     const signed = voucher.prSignedAt ? klStamp(new Date(voucher.prSignedAt)) : '';
+    type SignatureInk = { w: number; h: number; strokes: [number, number][][] };
+    let ink: SignatureInk | null = null;
+    if (voucher.prSignature) {
+      try {
+        const raw = JSON.parse(voucher.prSignature) as SignatureInk | null;
+        if (raw && raw.w > 0 && raw.h > 0 && Array.isArray(raw.strokes)) ink = raw;
+      } catch {
+        // Corrupt ink JSON — the printed-name fallback below still signs.
+      }
+    }
     y += 14;
     doc.fillColor('#111').font('Helvetica-Bold').fontSize(8).text('PR (Payee)', XA, y);
     y = doc.y + 4;
-    const sigRow = (label: string, value: string, script = false) => {
+
+    doc.font('Helvetica').fontSize(8).fillColor('#111').text('Signature:', XA, y + 6);
+    if (signed && ink) {
+      const boxW = 110;
+      const boxH = 26;
+      const s = Math.min(boxW / ink.w, boxH / ink.h);
+      const ox = XB;
+      const oy = y + (boxH - ink.h * s) / 2;
+      doc.save().lineWidth(1.1).lineJoin('round').lineCap('round').strokeColor('#22345f');
+      for (const stroke of ink.strokes) {
+        if (!Array.isArray(stroke) || stroke.length < 2) continue;
+        doc.moveTo(ox + stroke[0][0] * s, oy + stroke[0][1] * s);
+        for (let i = 1; i < stroke.length; i++) {
+          doc.lineTo(ox + stroke[i][0] * s, oy + stroke[i][1] * s);
+        }
+        doc.stroke();
+      }
+      doc.restore();
+      y += boxH + 4;
+    } else {
+      if (signed) {
+        doc.font('Times-Italic').fontSize(11).fillColor('#2b3a67').text(prName, XB, y + 2);
+      }
+      y += ROW_H;
+    }
+    doc.moveTo(XA, y).lineTo(XEND, y).strokeColor('#bbb').stroke();
+    y += 2;
+    const sigRow = (label: string, value: string) => {
       doc.font('Helvetica').fontSize(8).fillColor('#111').text(label, XA, y + 3);
       if (value) {
-        doc
-          .font(script ? 'Times-Italic' : 'Helvetica')
-          .fontSize(script ? 13 : 8)
-          .fillColor(script ? '#2b3a67' : '#111')
-          .text(value, XB, script ? y - 1 : y + 3, { width: XEND - XB - 4 });
+        doc.font('Helvetica').fontSize(8).fillColor('#111').text(value, XB, y + 3, {
+          width: XEND - XB - 4,
+        });
       }
       y += ROW_H;
       doc.moveTo(XA, y).lineTo(XEND, y).strokeColor('#bbb').stroke();
       y += 2;
     };
-    sigRow('Signature:', signed ? prName : '', true);
     sigRow('Name:', prName);
     sigRow('Date:', signed);
 

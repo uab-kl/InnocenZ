@@ -31,6 +31,7 @@ import { useSignedPvs } from '../lib/signed-pv';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pill } from '../components/ui';
+import { SignaturePad, type SignatureInk } from '../components/SignaturePad';
 import {
   Check,
   ChevronLeft,
@@ -215,9 +216,14 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     histVoucher?.voucherId ?? (lastWeek?.voucherId === pvId ? pvId : null);
 
   const [signBusy, setSignBusy] = useState(false);
+  const [sigInk, setSigInk] = useState<SignatureInk | null>(null);
 
   const confirmSign = async () => {
     if (sigName.trim().length < 2 || signBusy) return;
+    if (!sigInk) {
+      Alert.alert('Draw your signature', 'Sign in the pad with your finger before confirming.');
+      return;
+    }
     if (!backendPvId || !token) {
       Alert.alert(
         'No voucher to sign yet',
@@ -230,7 +236,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       // Database first: the signature only counts once payment_voucher.status
       // is 'signed' server-side. The local seal and the History redirect come
       // strictly after the commit, never before.
-      await signMyVoucher(token, backendPvId);
+      await signMyVoucher(token, backendPvId, sigInk);
       signPv({
         pv: { ...pv, net: netDisplay, status: 'signed', statusLabel: 'Signed' },
         net: netDisplay,
@@ -558,9 +564,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           >
             <Text style={styles.sheetTitle}>Sign payment voucher</Text>
             <Text style={styles.sheetHint}>
-              Type your floor nickname as signature (demo pad).
+              Draw your signature with your finger — it is stored on the voucher
+              and printed on the PDF.
             </Text>
-            <Text style={styles.fieldLabel}>Signature</Text>
+            <Text style={styles.fieldLabel}>Name</Text>
             <TextInput
               value={sigName}
               onChangeText={setSigName}
@@ -568,9 +575,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
               placeholder="Vicky"
               placeholderTextColor={C.muted2}
             />
-            <View style={styles.sigPad}>
-              <Text style={styles.sigPadText}>{sigName || 'Sign here'}</Text>
-            </View>
+            <Text style={styles.fieldLabel}>Signature</Text>
+            <SignaturePad onChange={setSigInk} />
             <Pressable
               style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
               onPress={confirmSign}

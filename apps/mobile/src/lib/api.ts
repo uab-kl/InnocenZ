@@ -518,10 +518,13 @@ export type SignedVoucher = {
 export function signMyVoucher(
   accessToken: string,
   voucherId: string,
+  /** Finger-drawn ink from the sign pad — stored on the voucher, inked into the PDF. */
+  signature?: { w: number; h: number; strokes: [number, number][][] },
 ): Promise<SignedVoucher> {
   return request<SignedVoucher>(`/payment-voucher/mine/${voucherId}/sign`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+    ...(signature ? { body: JSON.stringify({ signature }) } : {}),
   });
 }
 

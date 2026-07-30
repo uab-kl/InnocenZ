@@ -27,6 +27,7 @@ import {
   CreatePrReceiptSchema,
   UpdatePrReceiptLineSchema,
   PrRaiseDisputeSchema,
+  PrSignVoucherSchema,
   PrWithdrawDisputeSchema,
   ResolveDisputeSchema,
   PrReceiptKind,
@@ -894,12 +895,26 @@ export class PaymentVoucherControllerClass {
         });
       }
 
+      // The finger-drawn signature. Optional (an older app build signs
+      // without one) — but ink the PR actually drew is either stored or the
+      // whole sign is refused, never silently dropped.
+      const parsedSign = PrSignVoucherSchema.safeParse(req.body ?? {});
+      if (!parsedSign.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsedSign.error.issues[0]?.message ?? 'Invalid signature',
+          data: null,
+        });
+      }
+      const signature = parsedSign.data.signature;
+
       const actor = getActor(req);
       // No `lines` argument on purpose: update() wipes and reinserts lines when
       // given them, and this route has no business touching the money.
       const signed = await this.paymentVoucherRepository.update(voucherId, {
         status: 'signed',
         prSignedAt: new Date(),
+        ...(signature ? { prSignature: JSON.stringify(signature) } : {}),
         updatedBy: actor,
       });
       if (!signed) {
