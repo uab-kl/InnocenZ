@@ -1237,7 +1237,17 @@ export class PaymentVoucherControllerClass {
           getActor(req),
         );
       }
-      res.status(200).json({ success: true, message: 'Updated', data: toReceiptLineDTO(line) });
+      // Re-read the receipt statuses so the row the app puts back on screen
+      // reports the REAL review state. Without this the write response fell back
+      // to the source-based guess and answered `pending: false` /
+      // `disputable: true` for a line whose receipt is genuinely pending — so the
+      // app would offer a dispute button the server then refuses.
+      const statuses = receiptStatusMap(
+        await this.paymentVoucherRepository.listReceipts(owned.voucher.id),
+      );
+      res
+        .status(200)
+        .json({ success: true, message: 'Updated', data: toReceiptLineDTO(line, statuses) });
     } catch (error) {
       logger.error('[PaymentVoucherController.updateMyLine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
