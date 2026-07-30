@@ -7,6 +7,10 @@ import {
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import {
+	collectionAmountRm,
+	useAgencyCollections,
+} from "@agency-portal/hooks/use-agency-collections";
+import {
 	type AgencyRatePlan,
 	useAgencySubscription,
 } from "@agency-portal/hooks/use-agency-subscription";
@@ -26,10 +30,38 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
-import { Calendar, CreditCard, Receipt, Users } from "lucide-react";
+import {
+	Building2,
+	Calendar,
+	CreditCard,
+	Receipt,
+	TriangleAlert,
+	Users,
+} from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 const CARD_LAST4 = "4242";
+
+/** "20–26 Jul 2026", collapsing the month when both ends share one. */
+function weekLabel(startIso: string, endIso: string): string {
+	const start = parseISO(startIso);
+	const end = parseISO(endIso);
+	if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
+		return `${startIso} – ${endIso}`;
+	}
+	return start.getMonth() === end.getMonth()
+		? `${format(start, "d")}–${format(end, "d MMM yyyy")}`
+		: `${format(start, "d MMM")} – ${format(end, "d MMM yyyy")}`;
+}
+
+const AGING_PILL: Record<
+	string,
+	{ variant: "green" | "amber" | "red"; label: string }
+> = {
+	current: { variant: "green", label: "Current" },
+	due_soon: { variant: "amber", label: "Due soon" },
+	overdue: { variant: "red", label: "Overdue" },
+};
 
 export const Route = createFileRoute("/agency/subscription")({
 	component: AgencySubscription,
@@ -76,6 +108,13 @@ function AgencySubscription() {
 	// Real login → rate card lists real backend plans; demo plans otherwise. The
 	// usage-based hero tier stays demo (no backend equivalent).
 	const sub = useAgencySubscription();
+
+	// Receivables owed BY outlets — the opposite direction to everything else on
+	// this screen. Backed sessions only: the demo store's `kind: "outlet"` rows
+	// were never rendered anywhere, so there is no demo experience to preserve,
+	// and Issue / Mark-settled buttons that persist nothing would be worse than
+	// no section at all.
+	const collections = useAgencyCollections();
 	const ratePlans = useMemo<AgencyRatePlan[]>(
 		() =>
 			sub.backed
@@ -126,6 +165,42 @@ function AgencySubscription() {
 
 	const isFinanceReadOnly = agencySubRole === "agency_finance";
 	const renewalDate = nextChargeDate;
+
+	// Not `editSettings`: finance is read-only for the card above but is exactly
+	// the role that chases receivables, and it holds both of these.
+	const showCollections =
+		collections.backed && agencyCan(agencySubRole, "viewCollections");
+	const canManageCollections = agencyCan(
+		agencySubRole,
+		"confirmReconciliation",
+	);
+
+	// Both report the server's own message. Settling says it records the agency's
+	// claim rather than verifying payment, and a friendlier client-side string
+	// would overstate what the app actually saw.
+	const handleIssue = async (id: string, outletName: string) => {
+		try {
+			const res = await collections.issue(id);
+			toast(res.message || `Invoice issued to ${outletName}`, "success");
+		} catch {
+			toast(
+				`Could not issue ${outletName}'s invoice — nothing was sent`,
+				"warn",
+			);
+		}
+	};
+
+	const handleSettle = async (id: string, outletName: string) => {
+		try {
+			const res = await collections.settle(id);
+			toast(res.message || `${outletName} marked settled`, "success");
+		} catch {
+			toast(
+				`Could not update ${outletName}'s invoice — status unchanged`,
+				"warn",
+			);
+		}
+	};
 
 	return (
 		<div className="iz-screen">
@@ -264,6 +339,166 @@ function AgencySubscription() {
 					))
 				)}
 			</div>
+
+			{showCollections && (
+				<>
+					<IzSectionLabel>Collections · owed to you by outlets</IzSectionLabel>
+					<p className="iz-tiny iz-muted2 -mt-1 mb-2">
+						Money coming in, not the subscription above — one statement per
+						outlet per week, drafted from completed shifts. InnocenZ does not
+						move this money; you and the outlet settle it between yourselves.
+					</p>
+
+					<IzCard>
+						<div className="grid grid-cols-3 gap-2 text-center">
+							<div>
+								<p className="iz-tiny iz-muted2">Outstanding</p>
+								<p className="mt-1 font-sora text-base font-bold text-[var(--iz-gold-l)]">
+									{formatRM(collections.totals.outstandingRm)}
+								</p>
+							</div>
+							<div>
+								<p className="iz-tiny iz-muted2">Overdue</p>
+								<p
+									className={`mt-1 font-sora text-base font-bold ${
+										collections.totals.overdueRm > 0
+											? "text-[var(--iz-red-l,#ff8080)]"
+											: ""
+									}`}
+								>
+									{formatRM(collections.totals.overdueRm)}
+								</p>
+							</div>
+							<div>
+								<p className="iz-tiny iz-muted2">Settled</p>
+								<p className="mt-1 font-sora text-base font-bold">
+									{formatRM(collections.totals.settledRm)}
+								</p>
+							</div>
+						</div>
+						{collections.totals.overdueRm > 0 && (
+							<p className="iz-tiny iz-muted mt-3 flex items-center gap-1.5 border-t border-[var(--iz-line)] pt-2">
+								<TriangleAlert className="h-3.5 w-3.5 shrink-0" />
+								Overdue is part of outstanding, not on top of it
+							</p>
+						)}
+					</IzCard>
+
+					{collections.drafts.length > 0 && (
+						<>
+							<p className="iz-tiny iz-muted2 mt-3 mb-1">
+								Drafts · {formatRM(collections.totals.draftRm)} · no outlet has
+								been shown these yet
+							</p>
+							<div className="space-y-2">
+								{collections.drafts.map((inv) => (
+									<IzCard key={inv.id} flat>
+										<div className="iz-between gap-2">
+											<div className="flex min-w-0 items-start gap-2">
+												<Building2 className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
+												<div className="min-w-0">
+													<p className="iz-sm font-semibold truncate">
+														{inv.outletName}
+													</p>
+													<p className="iz-tiny iz-muted">
+														{weekLabel(inv.weekStart, inv.weekEnd)} ·{" "}
+														{inv.sourceAssignmentIds.length} shift
+														{inv.sourceAssignmentIds.length === 1 ? "" : "s"}
+													</p>
+												</div>
+											</div>
+											<div className="shrink-0 text-right">
+												<p className="iz-sm font-bold">
+													{formatRM(collectionAmountRm(inv))}
+												</p>
+												{canManageCollections && (
+													<button
+														type="button"
+														className="iz-btn iz-btn-soft mt-1.5 !py-1 !text-[11px]"
+														disabled={collections.isMutating}
+														onClick={() => handleIssue(inv.id, inv.outletName)}
+													>
+														Issue
+													</button>
+												)}
+											</div>
+										</div>
+									</IzCard>
+								))}
+							</div>
+						</>
+					)}
+
+					<div className="mt-3 space-y-2">
+						{collections.isLoading ? (
+							<IzCard flat>
+								<p className="iz-tiny iz-muted text-center py-4">
+									Loading collections…
+								</p>
+							</IzCard>
+						) : collections.invoices.length === 0 ? (
+							<IzCard flat>
+								<p className="iz-tiny iz-muted text-center py-4">
+									No collections yet — the Monday payout job drafts these from
+									the previous week's completed shifts.
+								</p>
+							</IzCard>
+						) : (
+							collections.issued.map((inv) => {
+								const aging = inv.aging ? AGING_PILL[inv.aging] : null;
+								return (
+									<IzCard key={inv.id} flat>
+										<div className="iz-between gap-2">
+											<div className="flex min-w-0 items-start gap-2">
+												<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
+												<div className="min-w-0">
+													<p className="iz-sm font-semibold truncate">
+														{inv.outletName}
+													</p>
+													<p className="iz-tiny iz-muted">
+														{weekLabel(inv.weekStart, inv.weekEnd)}
+														{inv.settledAt
+															? ` · settled ${format(parseISO(inv.settledAt), "d MMM")}`
+															: inv.issuedAt
+																? ` · issued ${format(parseISO(inv.issuedAt), "d MMM")}`
+																: ""}
+													</p>
+												</div>
+											</div>
+											<div className="shrink-0 text-right">
+												<p className="iz-sm font-bold">
+													{formatRM(collectionAmountRm(inv))}
+												</p>
+												<div className="mt-1 flex items-center justify-end gap-1.5">
+													{inv.status === "settled" ? (
+														<IzPill variant="green">Settled</IzPill>
+													) : aging ? (
+														<IzPill variant={aging.variant}>
+															{aging.label}
+														</IzPill>
+													) : (
+														<IzPill variant="ink">{inv.status}</IzPill>
+													)}
+												</div>
+												{inv.status === "issued" && canManageCollections && (
+													<button
+														type="button"
+														className="iz-btn iz-btn-soft mt-1.5 !py-1 !text-[11px]"
+														disabled={collections.isMutating}
+														onClick={() => handleSettle(inv.id, inv.outletName)}
+													>
+														Mark settled
+													</button>
+												)}
+											</div>
+										</div>
+									</IzCard>
+								);
+							})
+						)}
+					</div>
+				</>
+			)}
 
 			<OutletSection
 				title="Payment method"
