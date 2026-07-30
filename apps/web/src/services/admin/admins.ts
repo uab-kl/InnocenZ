@@ -79,25 +79,29 @@ export async function setUserStatus(
 }
 
 /**
- * Take the admin role back from an account.
+ * Take a role back from an account.
+ *
+ * Named by ROLE rather than hardcoding `admin`: the endpoint behind it never
+ * cared which role it was removing, only the caller did.
  *
  * The server refuses two cases and says why: removing your OWN role (nobody
  * could undo it — the endpoint that would is the one you just lost) and
  * removing the LAST holder of a role (a platform nobody can administer). Both
  * come back as a message worth showing verbatim.
  */
-export async function revokeAdminRole(
+export async function revokeUserRole(
 	userId: string,
+	roleName: string,
 	onRefreshFail: () => void,
 ): Promise<{ success: boolean; message: string }> {
-	const adminRoleId = await getRoleIdByName("admin", onRefreshFail);
-	if (!adminRoleId) {
-		throw new Error("Admin role not found");
+	const roleId = await getRoleIdByName(roleName, onRefreshFail);
+	if (!roleId) {
+		throw new Error(`Role "${roleName}" not found`);
 	}
 	const client = getClient(onRefreshFail);
 	const response = await client.delete<{ success: boolean; message: string }>(
 		"/rbac/user-role",
-		{ data: { userId, roleId: adminRoleId } },
+		{ data: { userId, roleId } },
 	);
 	return response.data;
 }

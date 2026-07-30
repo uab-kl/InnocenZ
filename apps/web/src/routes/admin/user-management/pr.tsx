@@ -4,9 +4,14 @@ import { useEffect, useState } from "react";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { PrDetailsSheet, type PrStatusFilter, PrsTable } from "@/components/pr";
 import { getUserTypeByKey } from "@/constants/user-types";
+import { useAccountActions } from "@/hooks/use-account-actions";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAgencies } from "@/services/agency";
-import { fetchPrUsers, type PrUsersQueryParams } from "@/services/pr";
+import {
+	fetchPrUsers,
+	type PrUser,
+	type PrUsersQueryParams,
+} from "@/services/pr";
 
 export const Route = createFileRoute("/admin/user-management/pr")({
 	component: PrUsersPage,
@@ -16,6 +21,15 @@ export const Route = createFileRoute("/admin/user-management/pr")({
 });
 
 const PAGE_SIZE = 10;
+
+const toTarget = (user: PrUser) => ({
+	id: user.id,
+	// The legal name is the one an admin can act on with confidence; the display
+	// name is whatever the PR chose. Fall back rather than render an empty
+	// confirm — a sentence about nobody is worse than a clumsy one.
+	name: user.legalName || user.displayName || user.email || "This account",
+	status: user.status,
+});
 
 function PrUsersPage() {
 	const type = getUserTypeByKey("pr")!;
@@ -58,6 +72,22 @@ function PrUsersPage() {
 		retry: 2,
 	});
 
+	/**
+	 * The same two controls the admin tab got on 30 Jul, on the tab where they
+	 * matter most: PR accounts are the ones created in bulk and the ones that
+	 * leave. Both endpoints are role-agnostic, so nothing here is PR-specific
+	 * except which role a revoke takes back.
+	 *
+	 * `legacy-members` is invalidated alongside the list because a disabled PR
+	 * lands on that tab — leaving it stale would show the account in both places
+	 * at once, in two different states.
+	 */
+	const accountActions = useAccountActions({
+		roleName: "pr",
+		roleLabel: "PR access",
+		queryKeys: ["pr-users", "legacy-members"],
+	});
+
 	return (
 		<PageShell>
 			<PageHeader
@@ -91,7 +121,14 @@ function PrUsersPage() {
 				onPageChange={setCurrentPage}
 				onRetry={() => refetch()}
 				onSelect={(user) => setSelectedId(user.id)}
+				busyUserId={accountActions.busyUserId}
+				onSetStatus={(user, next) =>
+					accountActions.askSetStatus(toTarget(user), next)
+				}
+				onRevokeRole={(user) => accountActions.askRevokeRole(toTarget(user))}
 			/>
+
+			{accountActions.dialog}
 
 			<PrDetailsSheet
 				user={data?.data.find((user) => user.id === selectedId) ?? null}
