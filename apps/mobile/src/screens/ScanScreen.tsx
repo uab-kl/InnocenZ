@@ -283,8 +283,17 @@ export function ScanScreen({
     setReceiptDate(mergedDate);
     setReceiptTime(mergedTime);
     if (parsed.matches.length === 0 && detectedIds.length === 0) {
+      // Name what the matcher was hunting for — "matched none" without the
+      // list reads like a scanner fault when the paper simply doesn't print
+      // any of this outlet's configured items.
+      const wanted = categoryMenu
+        .slice(0, 4)
+        .map((d) => d.name)
+        .join(', ');
       setScanIssue(
-        `OCR read the photo but matched none of ${outlet}'s ${itemNoun}s — blurry or water-damaged? Self-log below, photo kept as proof.`,
+        `OCR read the photo but found none of ${outlet}'s ${itemNoun}s` +
+          (wanted ? ` — it looks for: ${wanted}${categoryMenu.length > 4 ? ', …' : ''}.` : '.') +
+          ` Scan a receipt printing one of those, or self-log below (photo kept as proof).`,
       );
       keepAsProof(shot.dataUrl);
       setPhase('manual');
