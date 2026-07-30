@@ -29,14 +29,31 @@ type WebStorage = {
   removeItem(key: string): void;
 };
 
-function webStorage(): WebStorage | null {
+/**
+ * Web keeps the token in BOTH storages. sessionStorage is per-tab, so two PR
+ * tabs side by side each keep their OWN identity across refresh — signing in
+ * as a second PR used to overwrite the first tab's session, and a refresh
+ * would "jump" to the other PR. localStorage only seeds brand-new tabs with
+ * the most recent login.
+ */
+function webTabStorage(): WebStorage | null {
+  if (Platform.OS !== 'web') return null;
+  return (globalThis as { sessionStorage?: WebStorage }).sessionStorage ?? null;
+}
+
+function webSharedStorage(): WebStorage | null {
   if (Platform.OS !== 'web') return null;
   return (globalThis as { localStorage?: WebStorage }).localStorage ?? null;
 }
 
 function readStoredToken(): string | null {
   try {
-    return webStorage()?.getItem(TOKEN_KEY) ?? null;
+    const own = webTabStorage()?.getItem(TOKEN_KEY) ?? null;
+    if (own) return own;
+    // Fresh tab: adopt the most recent login once, then live per-tab.
+    const shared = webSharedStorage()?.getItem(TOKEN_KEY) ?? null;
+    if (shared) webTabStorage()?.setItem(TOKEN_KEY, shared);
+    return shared;
   } catch {
     return null;
   }
@@ -44,8 +61,13 @@ function readStoredToken(): string | null {
 
 function writeStoredToken(token: string | null) {
   try {
-    if (token) webStorage()?.setItem(TOKEN_KEY, token);
-    else webStorage()?.removeItem(TOKEN_KEY);
+    if (token) {
+      webTabStorage()?.setItem(TOKEN_KEY, token);
+      webSharedStorage()?.setItem(TOKEN_KEY, token);
+    } else {
+      webTabStorage()?.removeItem(TOKEN_KEY);
+      webSharedStorage()?.removeItem(TOKEN_KEY);
+    }
   } catch {
     /* storage unavailable — in-memory session only */
   }
