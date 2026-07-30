@@ -8,6 +8,7 @@ import {
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyCollections } from "@agency-portal/hooks/use-agency-collections";
 import {
+	type AgencyBillingRow,
 	type AgencyRatePlan,
 	useAgencySubscription,
 } from "@agency-portal/hooks/use-agency-subscription";
@@ -118,17 +119,36 @@ function AgencySubscription() {
 		}
 	}, [agencyOwner.subscriptionPlanId, billing.plan.id, saveAgencyOwner]);
 
-	const billingHistory = useMemo(
-		() =>
-			agencyCollections.filter(
+	/**
+	 * What this agency owes InnocenZ. Real sessions read the
+	 * `member_subscription` ledger; demo sessions keep the store's
+	 * `kind: "agency"` invoices, mapped onto the same row shape so the render
+	 * below has one branch rather than two.
+	 *
+	 * The demo rows and the backend rows are NOT the same kind of record — see
+	 * the note under the section heading — so this is the one place that
+	 * difference is reconciled, deliberately and in the open.
+	 */
+	const billingHistory = useMemo<AgencyBillingRow[]>(() => {
+		if (sub.backed) return sub.billingHistory;
+		return agencyCollections
+			.filter(
 				(c) =>
 					c.kind === "agency" &&
-					c.lines.some((line) =>
+					(c.lines ?? []).some((line) =>
 						line.label.toLowerCase().includes("subscription"),
 					),
-			),
-		[agencyCollections],
-	);
+			)
+			.map((c) => ({
+				id: c.id,
+				title: c.lines?.[0]?.label ?? c.id,
+				detail: c.lines?.[0]?.detail ?? "",
+				dateLabel: c.issueDate,
+				amountRm: c.amount,
+				statusLabel: c.status === "SETTLED" ? "Paid" : c.status,
+				tone: c.status === "SETTLED" ? "green" : "amber",
+			}));
+	}, [sub.backed, sub.billingHistory, agencyCollections]);
 
 	if (!agencyCan(agencySubRole, "viewSettings")) {
 		return (
@@ -284,36 +304,49 @@ function AgencySubscription() {
 				})}
 			</div>
 
-			<IzSectionLabel>Billing history</IzSectionLabel>
+			<IzSectionLabel>
+				{sub.backed ? "Subscription record" : "Billing history"}
+			</IzSectionLabel>
+			{sub.backed && (
+				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
+					Your plan history with InnocenZ — one row per subscription, not per
+					charge. It records what you subscribed to and when, so it does not say
+					whether a given week was paid.
+				</p>
+			)}
 			<div className="space-y-2">
-				{billingHistory.length === 0 ? (
+				{sub.backed && sub.isHistoryLoading ? (
 					<IzCard flat>
 						<p className="iz-tiny iz-muted text-center py-4">
-							No subscription invoices yet.
+							Loading subscription record…
+						</p>
+					</IzCard>
+				) : billingHistory.length === 0 ? (
+					<IzCard flat>
+						<p className="iz-tiny iz-muted text-center py-4">
+							{sub.backed
+								? "No subscription on record for this agency yet."
+								: "No subscription invoices yet."}
 						</p>
 					</IzCard>
 				) : (
-					billingHistory.map((inv) => (
-						<IzCard key={inv.id} flat>
+					billingHistory.map((row) => (
+						<IzCard key={row.id} flat>
 							<div className="iz-between gap-2">
 								<div className="flex min-w-0 items-start gap-2">
 									<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
 									<div className="min-w-0">
-										<p className="iz-sm font-semibold truncate">
-											{inv.lines[0]?.label ?? inv.id}
-										</p>
+										<p className="iz-sm font-semibold truncate">{row.title}</p>
 										<p className="iz-tiny iz-muted">
-											{inv.issueDate} · {inv.lines[0]?.detail}
+											{row.dateLabel}
+											{row.detail ? ` · ${row.detail}` : ""}
 										</p>
 									</div>
 								</div>
 								<div className="text-right shrink-0">
-									<p className="iz-sm font-bold">{formatRM(inv.amount)}</p>
-									<IzPill
-										variant={inv.status === "SETTLED" ? "green" : "amber"}
-										className="!mt-1"
-									>
-										{inv.status === "SETTLED" ? "Paid" : inv.status}
+									<p className="iz-sm font-bold">{formatRM(row.amountRm)}</p>
+									<IzPill variant={row.tone} className="!mt-1">
+										{row.statusLabel}
 									</IzPill>
 								</div>
 							</div>
