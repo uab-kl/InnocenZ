@@ -1,74 +1,77 @@
-import { redirect } from '@tanstack/react-router'
-import { env } from '@/env'
-import { clearAuthTokens, getAccessToken } from '@/lib/auth/auth-storage'
-import { getClient } from '@/lib/axios-v1'
-import { hardNavigate } from '@/lib/hard-navigate'
-import { deLocalizeHref } from '@/paraglide/runtime'
+import { redirect } from "@tanstack/react-router";
+import { clearAuthTokens, getAccessToken } from "@/lib/auth/auth-storage";
+import { getClient } from "@/lib/axios-v1";
+import { hardNavigate } from "@/lib/hard-navigate";
+import { deLocalizeHref } from "@/paraglide/runtime";
 
 export function ensureAuthenticated() {
-  if (typeof window === 'undefined') return
+	if (typeof window === "undefined") return;
 
-  if (!getAccessToken()) {
-    clearAuthTokens()
-    throw redirect({ to: '/login' })
-  }
+	if (!getAccessToken()) {
+		clearAuthTokens();
+		throw redirect({ to: "/login" });
+	}
 }
 
 interface MeRole {
-  id: string
-  roleName: string
+	id: string;
+	roleName: string;
 }
 
-// One /auth/me round-trip per token: the admin gate runs on EVERY /admin
-// navigation, and the verdict cannot change without a new login.
-let adminGate: { token: string; verdict: 'admin' | 'agency' | 'outlet' | 'other' } | null = null
+// One /auth/me round-trip per token: the portal gates run on EVERY portal
+// navigation, and the roles cannot change without a new login.
+let roleCache: { token: string; names: string[] } | null = null;
+
+async function signedInRoleNames(): Promise<string[]> {
+	const token = getAccessToken() as string;
+	if (roleCache?.token === token) return roleCache.names;
+	let roles: MeRole[];
+	try {
+		const res = await getClient(kickToLogin).get<{
+			data?: { roles?: MeRole[] };
+		}>("/auth/me");
+		roles = res.data?.data?.roles ?? [];
+	} catch {
+		clearAuthTokens();
+		throw redirect({ to: "/login" });
+	}
+	const names = roles.map((r) => (r.roleName ?? "").toLowerCase());
+	roleCache = { token, names };
+	return names;
+}
 
 /**
- * The /admin tree is for the admin role ONLY (TEST_SCRIPT §4d). Other
- * authenticated sessions used to browse the admin shell and collect 403s —
- * the backend already refuses their data (requireAdmin routers); this closes
- * the front door too: agency → /agency, outlet → /outlet, anything else
- * (e.g. a PR token) → /no-access. A failed role lookup kicks to /login
- * (fail closed) rather than letting an unknown token sit on admin pages.
+ * Each portal tree is for its own role ONLY (TEST_SCRIPT §4d): /admin needs
+ * the admin role, /agency the agency role, /outlet the outlet role. Any other
+ * authenticated session is sent to the portal its own role owns (a PR token
+ * lands on /no-access) instead of browsing a foreign shell against 403s.
+ * Matches on the seeded role NAMES only (admin|agency|outlet|pr) — the old
+ * VITE_*_ROLE_ID fallbacks go stale whenever RBAC is reseeded and then
+ * misroute real sessions (an admin was bounced to /agency by exactly that).
+ * A failed role lookup kicks to /login (fail closed).
  */
-export async function ensureAdminPortal() {
-  if (typeof window === 'undefined') return
-  ensureAuthenticated()
-  const token = getAccessToken() as string
-
-  let verdict = adminGate?.token === token ? adminGate.verdict : null
-  if (!verdict) {
-    let roles: MeRole[]
-    try {
-      const res = await getClient(kickToLogin).get<{ data?: { roles?: MeRole[] } }>('/auth/me')
-      roles = res.data?.data?.roles ?? []
-    } catch {
-      clearAuthTokens()
-      throw redirect({ to: '/login' })
-    }
-    verdict = roles.some((r) => r.roleName === 'admin')
-      ? 'admin'
-      : roles.some((r) => r.roleName === 'agency' || r.id === env.VITE_AGENCY_ROLE_ID)
-        ? 'agency'
-        : roles.some((r) => r.roleName === 'outlet' || r.id === env.VITE_OUTLET_ROLE_ID)
-          ? 'outlet'
-          : 'other'
-    adminGate = { token, verdict }
-  }
-
-  if (verdict === 'agency') throw redirect({ to: '/agency' })
-  if (verdict === 'outlet') throw redirect({ to: '/outlet' })
-  if (verdict === 'other') throw redirect({ to: '/no-access' })
+export async function ensurePortal(portal: "admin" | "agency" | "outlet") {
+	if (typeof window === "undefined") return;
+	ensureAuthenticated();
+	const names = await signedInRoleNames();
+	if (names.includes(portal)) return;
+	if (names.includes("admin")) throw redirect({ to: "/admin" });
+	if (names.includes("agency")) throw redirect({ to: "/agency" });
+	if (names.includes("outlet")) throw redirect({ to: "/outlet" });
+	console.warn("[portal-gate] session has no portal role:", names);
+	throw redirect({ to: "/no-access" });
 }
 
-export function kickToLogin() {
-  clearAuthTokens()
-  if (typeof window === 'undefined') return
+export const ensureAdminPortal = () => ensurePortal("admin");
 
-  // Both halves have to account for the locale prefix: the live pathname is
-  // `/en/login`, so comparing it to '/login' never matched and the guard
-  // re-assigned the location even when already on the login screen.
-  if (deLocalizeHref(window.location.pathname) !== '/login') {
-    hardNavigate('/login')
-  }
+export function kickToLogin() {
+	clearAuthTokens();
+	if (typeof window === "undefined") return;
+
+	// Both halves have to account for the locale prefix: the live pathname is
+	// `/en/login`, so comparing it to '/login' never matched and the guard
+	// re-assigned the location even when already on the login screen.
+	if (deLocalizeHref(window.location.pathname) !== "/login") {
+		hardNavigate("/login");
+	}
 }
