@@ -20,4 +20,39 @@
 - DON'T USE for: basic generator syntax (`nx g @nx/react:app`), standard commands, things you already know
 - The `nx-generate` skill handles generator discovery internally - don't call nx_docs just to look up generator syntax
 
+# InnocenZ project memory (synced 30 Jul 2026 — works on ANY device with this repo)
+
+Full session memory is committed at **`docs/claude-memory/*.md`** (verbatim copies of the
+office PC's Claude Code memory) and mirrored in the **"Claude Code Memory" tab of
+`InnocenZ_BuildSteps.xlsx`**. Read `docs/claude-memory/MEMORY.md` first — it indexes the rest.
+On a new machine you may also copy those files into
+`%USERPROFILE%\.claude\projects\C--Users-jinkg-Downloads-InnocenZ-InnocenZ\memory\` to restore
+native memory. After meaningful sessions, update both `docs/claude-memory/` and the Excel tab.
+
+## Database rules (non-negotiable — every schema change)
+
+1. If an existing table fits, USE it — never create a new table when one fits.
+2. If a table has audit columns, `created_at` / `updated_at` / `created_by` / `updated_by`
+   must ALL be present together.
+3. Use FOREIGN KEYS to read data from other tables (outlet/PR name, …) — never duplicate a
+   column like `name`. One fact lives in one table; no duplicated data anywhere.
+4. Every table's `id` (uuid PK) is the FIRST column; UI features that store data reference
+   rows by that primary id.
+5. Migrations: run `pnpm migrate:deploy` from the repo ROOT (NEVER `pnpm migrate`), then
+   restart the backend (tsx watch serves stale routes). The workbook's **Database** tab is the
+   live ERD/FK proof; known weak edges: `rating.pr_id` is varchar (needs uuid + FK) and
+   `user_role` is missing its two FKs.
+
+## Working rules
+
+- `TEST_SCRIPT.md` (repo root) is the single source of truth: verify every change against it,
+  add new requirements to §9, promote to §8 when verified, append a §10 changelog row.
+- Typecheck baselines — judge ONLY files you touched: backend has 26 pre-existing TS2883
+  router errors (one per `*.routes.ts`) + 2 known `pr.repository.ts` lines; `apps/web` has its
+  own pre-existing baseline; `apps/mobile` is 0-error.
+- `apps/web`: biome (tabs, double quotes); new routes need `npx tsr generate`.
+- PR-scoped backend endpoints use the `/mine` pattern (derive `pr.id` server-side via
+  `prRepository.getByUserId`, placed BEFORE `/:id` and OUTSIDE role guards).
+- Branch `jk` = this user; branch `SL` = teammate (outlet + agency web).
+
 <!-- nx configuration end-->
