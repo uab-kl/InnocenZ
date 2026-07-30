@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { paymentVoucherController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
+import { agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -58,12 +59,19 @@ router.get('/', paymentVoucherController.list.bind(paymentVoucherController));
 // Day-by-day review, BEFORE the voucher goes to the PR. The READ rides on
 // GET '/:id' alongside the receipts rather than living on its own path, so the
 // panel cannot show decisions that disagree with the lines they refer to.
+//
+// WRITES carry a sub-role gate: approving a day is a money attestation, and the
+// owner's call (30 Jul 2026) was owner + finance — the same set that holds
+// agencyCan 'raisePv' in the portal. The READ is deliberately NOT gated: seeing
+// what was decided is not the same authority as deciding it.
 router.patch(
   '/:id/day-review/:date',
+  agencyOwnerOrFinance,
   paymentVoucherController.reviewDay.bind(paymentVoucherController),
 );
 router.post(
   '/:id/day-review/approve-all',
+  agencyOwnerOrFinance,
   paymentVoucherController.approveAllDays.bind(paymentVoucherController),
 );
 

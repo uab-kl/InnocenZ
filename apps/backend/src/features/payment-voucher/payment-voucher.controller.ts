@@ -15,6 +15,7 @@ import {
   allDaysReviewed,
   buildDayReviewView,
   dayTotalsCents,
+  voucherSendGate,
 } from './payment-voucher-day-review.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
@@ -504,6 +505,34 @@ export class PaymentVoucherControllerClass {
       const { lines, ...data } = parsed.data;
       // Agency users cannot move a voucher to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
+
+      // Sending the voucher to the PR is the moment the day-by-day review is
+      // for. Gated ONLY on the pending_review -> sent transition: the dispute
+      // paths also write 'sent', but that is a voucher coming BACK from a
+      // dispute, and re-gating it would strand a PR's own complaint.
+      if (data.status === 'sent' && existing.status === 'pending_review') {
+        // Rewriting the lines in the same call would have the gate judge the OLD
+        // day totals and then send the NEW ones — the exact substitution
+        // `approved_total_cents` exists to catch. Split the two steps so the
+        // rewritten days come back as stale and are reviewed again.
+        if (lines) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'Change the lines and send in two steps — rewriting a voucher re-opens every day for review.',
+            data: null,
+          });
+        }
+        const reviews = await this.paymentVoucherRepository.listDayReviews(id);
+        const gate = voucherSendGate(buildDayReviewView(existing.lines, reviews));
+        if (!gate.allowed) {
+          return res.status(409).json({
+            success: false,
+            message: gate.message,
+            data: { heldDays: gate.heldDays, unreviewedDays: gate.unreviewedDays },
+          });
+        }
+      }
 
       // Replacing the lines invalidates client-omitted totals — recompute them.
       const totals = lines

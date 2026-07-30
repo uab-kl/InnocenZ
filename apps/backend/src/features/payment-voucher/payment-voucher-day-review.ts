@@ -86,3 +86,47 @@ export function buildDayReviewView(
 export function allDaysReviewed(view: DayReviewView[]): boolean {
   return view.length > 0 && view.every((d) => d.status !== null);
 }
+
+export type SendGateResult =
+  | { allowed: true }
+  | { allowed: false; message: string; heldDays: string[]; unreviewedDays: string[] };
+
+/**
+ * May this voucher go to the PR?
+ *
+ * OWNER DECISION (30 Jul 2026): a HELD day blocks, AND every day carrying money
+ * must carry a live decision. The strict form was chosen over warn-only because
+ * a review nobody has to satisfy is not a control.
+ *
+ * A STALE day counts as unreviewed — `buildDayReviewView` has already dropped its
+ * status to null — which is the point of storing `approved_total_cents`: a day
+ * approved at RM 300 that regenerated to RM 420 must be looked at again before
+ * the PR is sent the new figure.
+ *
+ * A voucher with NO dated lines passes. Week-level lines (a deduction, an
+ * adjustment) belong to no day, so there is nothing to approve and blocking it
+ * would be an unopenable deadlock rather than a control.
+ *
+ * Used by BOTH the HTTP send and the Monday payout job. A gate the scheduler
+ * walks past every week is not a gate.
+ */
+export function voucherSendGate(view: DayReviewView[]): SendGateResult {
+  if (view.length === 0) return { allowed: true };
+
+  const heldDays = view.filter((d) => d.status === 'held').map((d) => d.date);
+  const unreviewedDays = view.filter((d) => d.status === null).map((d) => d.date);
+  if (heldDays.length === 0 && unreviewedDays.length === 0) return { allowed: true };
+
+  const parts: string[] = [];
+  if (heldDays.length > 0) parts.push(`${heldDays.length} day(s) held: ${heldDays.join(', ')}`);
+  if (unreviewedDays.length > 0) {
+    parts.push(`${unreviewedDays.length} day(s) not yet reviewed: ${unreviewedDays.join(', ')}`);
+  }
+
+  return {
+    allowed: false,
+    message: `This voucher cannot be sent yet — ${parts.join(' · ')}.`,
+    heldDays,
+    unreviewedDays,
+  };
+}

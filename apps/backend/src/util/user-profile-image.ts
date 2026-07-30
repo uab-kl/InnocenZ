@@ -77,20 +77,62 @@ function stripPrivateUserFields<T extends object>(user: T): PublicUser<T> {
   return copy as PublicUser<T>;
 }
 
+/**
+ * Identity documents — what an outlet must not receive about the staff working
+ * its venue (owner decision, 30 Jul 2026).
+ *
+ * Blanked rather than deleted. A venue screen reading `profile.idNo` gets null
+ * and renders an empty field; deleting the keys would make the same screen
+ * render `undefined` or throw on a destructure, and a privacy fix that breaks a
+ * roster is a privacy fix that gets reverted.
+ *
+ * `fullName`, `nationality`, `gender`, `race`, `languages` and the comcard/
+ * portfolio images deliberately stay: they are the profile a venue books from.
+ * The line is drawn at documents that identify a person off the job.
+ */
+const IDENTITY_DOC_FIELDS = [
+  'idType',
+  'idNo',
+  'dob',
+  'addressLine1',
+  'addressLine2',
+  'postcode',
+  'state',
+  'country',
+  'idPhotoFront',
+  'idPhotoBack',
+] as const;
+
+function redactIdentityDocs<T extends object>(profile: T): T {
+  const copy = { ...profile } as unknown as Record<string, unknown>;
+  for (const field of IDENTITY_DOC_FIELDS) {
+    copy[field] = null;
+  }
+  return copy as T;
+}
+
+export type UserProfileVisibility = {
+  /** Blank the identity documents — set for outlet-only callers. */
+  redactIdentityDocs?: boolean;
+};
+
 export function withUserProfile<T extends { id: string; profileImage: string | null }>(
   user: T,
   profile: UserProfileType | null | undefined,
+  visibility: UserProfileVisibility = {},
 ) {
+  const response = profile ? toUserProfileResponse(profile) : emptyUserProfileResponse(user.id);
   return {
     ...stripPrivateUserFields(withProfileImage(user)),
-    profile: profile ? toUserProfileResponse(profile) : emptyUserProfileResponse(user.id),
+    profile: visibility.redactIdentityDocs ? redactIdentityDocs(response) : response,
   };
 }
 
 export function withUserProfiles<T extends { id: string; profileImage: string | null }>(
   users: T[],
   profiles: UserProfileType[],
+  visibility: UserProfileVisibility = {},
 ) {
   const profileByUserId = new Map(profiles.map((profile) => [profile.userId, profile]));
-  return users.map((user) => withUserProfile(user, profileByUserId.get(user.id)));
+  return users.map((user) => withUserProfile(user, profileByUserId.get(user.id), visibility));
 }

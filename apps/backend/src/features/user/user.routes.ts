@@ -4,6 +4,7 @@ import { requireRole } from '@/middlewares/require-role.js';
 import { uploadProfileImage } from '@/middlewares/upload-profile-image';
 import { uploadPortfolioImage } from '@/middlewares/upload-portfolio-image';
 import { uploadComcardImage } from '@/middlewares/upload-comcard-image';
+import { redactIdentityDocsForOutlet } from '@/middlewares/redact-identity-docs';
 
 const router = Router();
 
@@ -18,7 +19,9 @@ const router = Router();
 // Narrowing what a venue may read here is a shape-level job, not a gate.
 const canListUsers = requireRole('admin', 'agency', 'outlet');
 
-router.get('', canListUsers, userController.list.bind(userController));
+// ...and that shape-level job, decided 30 Jul 2026: an outlet keeps the list but
+// loses the identity documents on every row of it. See redact-identity-docs.ts.
+router.get('', canListUsers, redactIdentityDocsForOutlet, userController.list.bind(userController));
 router.patch('/:id', userController.updateProfile.bind(userController));
 router.post('/:id/profile-image', (req, res, next) => {
   uploadProfileImage.single('profileImage')(req, res, (err) => {
@@ -51,6 +54,18 @@ router.post('/:id/comcard-image', (req, res, next) => {
 const canReadUser = (req: Request, res: Response, next: NextFunction) =>
   req.user?.id === req.params.id ? next() : canListUsers(req, res, next);
 
-router.get('/:id', canReadUser, userController.getById.bind(userController));
+// Own record is exempt from the redaction as well as from the gate — an outlet
+// manager opening their OWN profile must still see their own IC. Skipping the
+// middleware entirely (rather than letting it run and clear the flag) keeps the
+// two exemptions expressed in one place.
+const redactUnlessOwnRecord = (req: Request, res: Response, next: NextFunction) =>
+  req.user?.id === req.params.id ? next() : redactIdentityDocsForOutlet(req, res, next);
+
+router.get(
+  '/:id',
+  canReadUser,
+  redactUnlessOwnRecord,
+  userController.getById.bind(userController),
+);
 
 export default router;

@@ -7,6 +7,10 @@ import {
 } from '@/composition-root.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
 import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance.js';
+import {
+  buildDayReviewView,
+  voucherSendGate,
+} from '@/features/payment-voucher/payment-voucher-day-review.js';
 import { notify } from '@/features/notification/notify.js';
 import type { JobDefinition } from './scheduler.js';
 
@@ -73,6 +77,7 @@ export async function runWeeklyPayout(): Promise<void> {
   const issuedDate = klToday();
   const issued: { voucherId: string; prId: string | null }[] = [];
   let held = 0;
+  let awaitingReview = 0;
   for (const voucher of pending) {
     const balance = checkVoucherBalance(voucher, voucher.lines);
     if (!balance.balanced) {
@@ -80,6 +85,19 @@ export async function runWeeklyPayout(): Promise<void> {
       logger.error(
         `[weekly-payout] holding ${voucher.id} at pending_review: ${balance.problems.join('; ')}`,
       );
+      continue;
+    }
+
+    // The same gate the HTTP send uses. Applied here deliberately: this job is
+    // how vouchers actually reach PRs, so exempting it would leave the agency's
+    // day-by-day sign-off as something the scheduler overrules every Monday.
+    // Consequence to expect on the first run after this shipped: vouchers stay
+    // at pending_review until an agency reviews them, which is the point.
+    const reviews = await paymentVoucherRepository.listDayReviews(voucher.id);
+    const gate = voucherSendGate(buildDayReviewView(voucher.lines, reviews));
+    if (!gate.allowed) {
+      awaitingReview += 1;
+      logger.warn(`[weekly-payout] awaiting agency day review ${voucher.id}: ${gate.message}`);
       continue;
     }
     const sent = await paymentVoucherRepository.update(voucher.id, {
@@ -91,7 +109,8 @@ export async function runWeeklyPayout(): Promise<void> {
   }
   logger.info(
     `[weekly-payout] issued ${issued.length} voucher(s) to PRs` +
-      (held > 0 ? ` (${held} held for agency review)` : ''),
+      (held > 0 ? ` (${held} held for agency review)` : '') +
+      (awaitingReview > 0 ? ` (${awaitingReview} awaiting day-by-day review)` : ''),
   );
 
   let notified = 0;

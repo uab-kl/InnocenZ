@@ -68,7 +68,12 @@ export class UserControllerClass {
       res.status(200).json({
         success: true,
         message: 'OK',
-        data: withUserProfiles(users, profiles),
+        // An outlet-only caller gets names and booking details, never identity
+        // documents — see redact-identity-docs.ts for why this is a shape and
+        // not a gate.
+        data: withUserProfiles(users, profiles, {
+          redactIdentityDocs: req.redactIdentityDocs,
+        }),
         pagination: {
           page,
           pageSize,
@@ -97,7 +102,9 @@ export class UserControllerClass {
       res.status(200).json({
         success: true,
         message: 'OK',
-        data: withUserProfile(user, profile),
+        data: withUserProfile(user, profile, {
+          redactIdentityDocs: req.redactIdentityDocs,
+        }),
       });
     } catch (error) {
       logger.error('[UserController.getById] Error:', error);
