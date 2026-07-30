@@ -5,7 +5,7 @@ import { OutletRepositoryClass } from '@/features/outlet/outlet.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { Error } from '@/error/index';
-import { paramId } from '@/util/params';
+import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
@@ -86,7 +86,10 @@ export class ShiftControllerClass {
 
   async getById(req: Request, res: Response) {
     try {
-      const shift = await this.shiftRepository.getById(paramId(req.params.id));
+      // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
+      // is answered as what it is: not found. See uuidParam().
+      const shiftId = uuidParam(req.params.id);
+      const shift = shiftId ? await this.shiftRepository.getById(shiftId) : null;
       if (!shift) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);

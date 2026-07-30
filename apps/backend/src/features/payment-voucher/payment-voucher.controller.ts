@@ -21,7 +21,7 @@ import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { Error } from '@/error/index';
-import { paramId } from '@/util/params';
+import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { notify } from '@/features/notification/notify.js';
@@ -323,7 +323,10 @@ export class PaymentVoucherControllerClass {
 
   async getById(req: Request, res: Response) {
     try {
-      const voucher = await this.paymentVoucherRepository.getById(paramId(req.params.id));
+      // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
+      // is answered as what it is: not found. See uuidParam().
+      const voucherId = uuidParam(req.params.id);
+      const voucher = voucherId ? await this.paymentVoucherRepository.getById(voucherId) : null;
       if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
@@ -383,7 +386,10 @@ export class PaymentVoucherControllerClass {
           .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
 
-      const voucher = await this.paymentVoucherRepository.getById(paramId(req.params.id));
+      // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
+      // is answered as what it is: not found. See uuidParam().
+      const voucherId = uuidParam(req.params.id);
+      const voucher = voucherId ? await this.paymentVoucherRepository.getById(voucherId) : null;
       if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
@@ -457,7 +463,10 @@ export class PaymentVoucherControllerClass {
    */
   async approveAllDays(req: Request, res: Response) {
     try {
-      const voucher = await this.paymentVoucherRepository.getById(paramId(req.params.id));
+      // A non-uuid cannot match a row, and handing one to Postgres 500s — so it
+      // is answered as what it is: not found. See uuidParam().
+      const voucherId = uuidParam(req.params.id);
+      const voucher = voucherId ? await this.paymentVoucherRepository.getById(voucherId) : null;
       if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       const scope = await this.resolveScope(req);
