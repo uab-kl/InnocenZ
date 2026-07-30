@@ -139,8 +139,13 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     const d = new Date(stamp);
     return ymdToIso(d.getFullYear(), d.getMonth() + 1, d.getDate());
   };
-  const tonightShift =
-    shifts.find((s) => ymdToIso(...s.date) === todayIso && s.status !== 'complete') ?? null;
+  // EVERY not-yet-complete shift today, earliest first — a PR can work two
+  // same-day shifts at different times, and BOTH must sit on Today (.find()
+  // used to swallow the second one).
+  const todayShifts = shifts
+    .filter((s) => ymdToIso(...s.date) === todayIso && s.status !== 'complete')
+    .sort((a, b) => (a.time ?? '').localeCompare(b.time ?? ''));
+  const tonightShift = todayShifts[0] ?? null;
   const completedToday = assignments
     .filter(
       (a) =>
@@ -257,20 +262,28 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
               open={open.today}
               onToggle={(next) => toggleSection('today', next)}
             >
-              {tonightShift || completedToday.length > 0 ? (
+              {todayShifts.length > 0 || completedToday.length > 0 ? (
                 <View style={{ gap: 12 }}>
-                  {tonightShift && (
+                  {todayShifts.map((s, i) => (
                     <TonightCard
-                      shift={tonightShift}
-                      eyebrow={tonightShift.status === 'on-duty' ? 'ON DUTY' : 'TONIGHT'}
-                      cta={tonightShift.status === 'on-duty' ? 'Attendance' : 'Check in'}
-                      // Clear any summary pin so Check-In lands on the live shift.
+                      key={s.id}
+                      shift={s}
+                      eyebrow={
+                        s.status === 'on-duty'
+                          ? 'ON DUTY'
+                          : i === 0
+                            ? 'TONIGHT'
+                            : 'ALSO TODAY'
+                      }
+                      cta={s.status === 'on-duty' ? 'Attendance' : 'Check in'}
                       onCheckIn={() => {
-                        focus(null);
+                        // First card owns the live Check-In pick; a second
+                        // same-day shift pins Check-In to its own row id.
+                        focus(i === 0 ? null : s.id);
                         onNavigate('checkin');
                       }}
                     />
-                  )}
+                  ))}
                   {completedToday.map((s) => (
                     <TonightCard
                       key={s.id}
