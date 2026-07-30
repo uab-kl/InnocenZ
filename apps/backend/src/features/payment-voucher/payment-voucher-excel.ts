@@ -85,6 +85,23 @@ export function voucherRef(voucher: PaymentVoucherWithLines): string {
   return `PV-${voucher.id.slice(0, 8).toUpperCase()}`;
 }
 
+/**
+ * Write a money cell as a NUMBER, formatted for display.
+ *
+ * Every amount in this workbook used to be `.toFixed(2)`, which is a string —
+ * so the Amount column of a payment voucher could not be summed, sorted or
+ * charted by the person whose job is precisely to sum it. The value carries the
+ * cell's meaning; `#,##0.00` only decides how it looks.
+ *
+ * Rounded to cents on the way in, because a unit price derived by division
+ * (commission ÷ quantity) is otherwise stored to full float precision and shows
+ * one figure while holding another.
+ */
+function money(cell: { value: unknown; numFmt?: string }, amount: number): void {
+  cell.value = Math.round(amount * 100) / 100;
+  cell.numFmt = '#,##0.00';
+}
+
 function esc(value: string): string {
   return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
@@ -208,8 +225,8 @@ export async function buildVoucherWorkbook(params: {
     row.getCell(1).value = seq;
     row.getCell(2).value = `${label} (${dayMonth(line.lineDate)}) - ${line.outlet ?? DASH}`;
     row.getCell(3).value = qty;
-    row.getCell(4).value = (line.commission / qty).toFixed(2);
-    row.getCell(5).value = line.commission.toFixed(2);
+    money(row.getCell(4), line.commission / qty);
+    money(row.getCell(5), line.commission);
     rowNo += 1;
     seq += 1;
   }
@@ -219,8 +236,8 @@ export async function buildVoucherWorkbook(params: {
     row.getCell(1).value = seq;
     row.getCell(2).value = 'Deductions';
     row.getCell(3).value = 1;
-    row.getCell(4).value = (-deduction).toFixed(2);
-    row.getCell(5).value = (-deduction).toFixed(2);
+    money(row.getCell(4), -deduction);
+    money(row.getCell(5), -deduction);
     rowNo += 1;
   }
 
