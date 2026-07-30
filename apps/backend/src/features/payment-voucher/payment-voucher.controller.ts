@@ -981,6 +981,44 @@ export class PaymentVoucherControllerClass {
   }
 
   /**
+   * The PR downloads their OWN voucher as the boxed PDF — same renderer as
+   * the phone's ticket download, so web and phone can never diverge. Served
+   * inline: the browser's PDF viewer opens it for viewing/printing/saving.
+   */
+  async exportMyVoucherPdf(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+
+      const voucherId = paramId(req.params.voucherId);
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle || bundle.voucher.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const pdf = await buildVoucherPdf({
+        voucher: bundle.voucher,
+        agency: bundle.agency,
+        pr: bundle.pr,
+        lines: this.voucherExportLines(bundle),
+      });
+      const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      return res.status(200).send(pdf);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportMyVoucherPdf] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
    * The PR asks for a short-lived download link for their OWN voucher. The
    * phone then hands the link to the system browser, which cannot attach the
    * Bearer header — the 5-minute voucher-scoped ticket in the path is the

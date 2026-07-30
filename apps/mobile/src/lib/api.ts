@@ -526,6 +526,21 @@ export function signMyVoucher(
 }
 
 /**
+ * The same boxed voucher as a PDF blob — web builds open it in the browser's
+ * PDF viewer so web and phone always show the ONE server-rendered document.
+ */
+export async function fetchMyVoucherPdfBlob(
+  accessToken: string,
+  voucherId: string,
+): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/payment-voucher/mine/${voucherId}/export.pdf`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`PDF export failed (${res.status})`);
+  return res.blob();
+}
+
+/**
  * Downloads the printed PV workbook (the prototype's Excel export layout,
  * rendered server-side from the real voucher + FK agency/PR rows). Web builds
  * save it via a blob link; native builds have no file sink in this APK yet.

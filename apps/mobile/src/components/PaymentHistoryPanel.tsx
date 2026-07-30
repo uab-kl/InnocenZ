@@ -24,7 +24,11 @@ import {
 } from '../lib/hist-date-time-filters';
 import { normalizeHistPayWeek } from '../lib/history-pay-sync';
 import { usePaymentHistory } from '../lib/payment-history';
-import { createMyVoucherExportTicket, fetchMyVoucherExcelBlob } from '../lib/api';
+import {
+  createMyVoucherExportTicket,
+  fetchMyVoucherExcelBlob,
+  fetchMyVoucherPdfBlob,
+} from '../lib/api';
 import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useShiftSession } from '../lib/shift-session';
@@ -42,25 +46,6 @@ import {
   Search,
   Wallet,
 } from './icons';
-
-/** Minimal printable PV document — the web "PDF" path is the browser's print dialog. */
-function printableVoucherHtml(w: HistPayWeek): string {
-  const rows = w.lines
-    .map(
-      (l) =>
-        `<tr><td>${l.date} · ${l.day}</td><td>${l.type}</td><td>${l.outlet}</td><td style="text-align:right">${l.amount.toFixed(2)}</td></tr>`,
-    )
-    .join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><title>${w.ref} · Payment Voucher</title>
-<style>body{font-family:Arial,sans-serif;margin:24px;color:#111}h1{font-size:18px}table{border-collapse:collapse;width:100%;margin-top:12px}td,th{border:1px solid #999;padding:6px 8px;font-size:12px}tfoot td{font-weight:bold}</style>
-</head><body>
-<h1>Payment Voucher · ${w.ref}</h1>
-<p>${w.weekLabel} · ${w.outlet}<br>${w.statusMeta}${w.bankRef ? `<br>Bank ref: ${w.bankRef}` : ''}</p>
-<table><thead><tr><th>Date</th><th>Description</th><th>Outlet</th><th>Amount (RM)</th></tr></thead>
-<tbody>${rows}</tbody>
-<tfoot><tr><td colspan="3">Net payable</td><td style="text-align:right">${w.net.toFixed(2)}</td></tr></tfoot></table>
-</body></html>`;
-}
 
 type StatusChip = 'all' | 'paid' | 'signed';
 
@@ -224,16 +209,25 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
       }
       return;
     }
-    const win = (globalThis as { open?: (u?: string, t?: string) => any }).open?.('', '_blank');
-    if (!win) {
-      flash('Allow pop-ups to print this voucher');
-      return;
+    // Web: the SAME server-rendered boxed PDF as the phone — opened in the
+    // browser's PDF viewer, where view/print/save all live.
+    if (!token) return;
+    try {
+      const blob = await fetchMyVoucherPdfBlob(token, w.id);
+      const url = URL.createObjectURL(blob);
+      const win = (globalThis as { open?: (u?: string, t?: string) => any }).open?.(url, '_blank');
+      if (!win) {
+        const doc = (globalThis as { document?: any }).document;
+        const a = doc.createElement('a');
+        a.href = url;
+        a.download = `${w.ref}-payment-voucher.pdf`;
+        a.click();
+      }
+      setTimeout(() => URL.revokeObjectURL(url), 60_000);
+      flash('Payment voucher PDF opened');
+    } catch {
+      flash('Could not open the PDF — try again');
     }
-    win.document.write(printableVoucherHtml(w));
-    win.document.close();
-    win.focus();
-    win.print();
-    flash('Payment voucher opened — use Print → Save as PDF');
   };
 
   const filterCount = [

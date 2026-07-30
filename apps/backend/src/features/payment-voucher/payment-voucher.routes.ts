@@ -25,6 +25,10 @@ router.get(
   '/mine/:voucherId/export.xlsx',
   paymentVoucherController.exportMyVoucherExcel.bind(paymentVoucherController),
 );
+router.get(
+  '/mine/:voucherId/export.pdf',
+  paymentVoucherController.exportMyVoucherPdf.bind(paymentVoucherController),
+);
 
 // The phone flow: an authenticated POST mints a 5-minute download ticket, and
 // the system browser then opens /payment-voucher/export/<ticket>/... (mounted
