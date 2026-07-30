@@ -4,6 +4,7 @@
  */
 import React, { useEffect, useMemo, useState } from 'react';
 import {
+  Linking,
   Modal,
   Platform,
   Pressable,
@@ -23,8 +24,9 @@ import {
 } from '../lib/hist-date-time-filters';
 import { normalizeHistPayWeek } from '../lib/history-pay-sync';
 import { usePaymentHistory } from '../lib/payment-history';
-import { fetchMyVoucherExcelBlob } from '../lib/api';
+import { createMyVoucherExportTicket, fetchMyVoucherExcelBlob } from '../lib/api';
 import { useSession } from '../lib/session';
+import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useShiftSession } from '../lib/shift-session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { usePrNav } from '../lib/pr-nav';
@@ -85,6 +87,7 @@ const EMPTY: Filters = {
 export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => void }) {
   const { openPv } = usePrNav();
   const { token } = useSession();
+  const keyboardInset = useKeyboardInset();
   const { weekRecords } = useShiftSession();
   const { weeks: apiWeeks } = usePaymentHistory();
   const { signedWeeks } = useSignedPvs();
@@ -179,11 +182,19 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
 
   /** Streams the server-rendered workbook; the toast only fires on success. */
   const openExcel = async (w: HistPayWeek) => {
+    if (!token) return;
     if (Platform.OS !== 'web') {
-      flash('Excel download works in the web app — open InnocenZ in a browser');
+      // The system browser downloads the file, so hand it a short-lived
+      // ticket URL — a browser tab can't send our Authorization header.
+      try {
+        const { xlsxUrl } = await createMyVoucherExportTicket(token, w.id);
+        await Linking.openURL(xlsxUrl);
+        flash('Excel opening in your browser — check Downloads');
+      } catch {
+        flash('Could not open the Excel — try again');
+      }
       return;
     }
-    if (!token) return;
     try {
       const blob = await fetchMyVoucherExcelBlob(token, w.id);
       const doc = (globalThis as { document?: any }).document;
@@ -199,10 +210,16 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
     }
   };
 
-  const openPdf = (w: HistPayWeek) => {
+  const openPdf = async (w: HistPayWeek) => {
     if (Platform.OS !== 'web') {
-      openPv(w.id);
-      flash('Use the web app to print / save as PDF');
+      if (!token) return;
+      try {
+        const { printUrl } = await createMyVoucherExportTicket(token, w.id);
+        await Linking.openURL(printUrl);
+        flash('Voucher opened — print dialog saves it as PDF');
+      } catch {
+        flash('Could not open the voucher — try again');
+      }
       return;
     }
     const win = (globalThis as { open?: (u?: string, t?: string) => any }).open?.('', '_blank');
@@ -417,7 +434,7 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
               open={expanded === w.id}
               onToggle={() => setExpanded((id) => (id === w.id ? null : w.id))}
               onOpenPv={() => openPv(w.id)}
-              onPdf={() => openPdf(w)}
+              onPdf={() => void openPdf(w)}
               onExcel={() => void openExcel(w)}
             />
           ))
@@ -432,7 +449,10 @@ export function PaymentHistoryPanel({ onOpenPayment }: { onOpenPayment: () => vo
         onRequestClose={() => setFilterOpen(false)}
       >
         <Pressable style={styles.backdrop} onPress={() => setFilterOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
             <View style={styles.sheetHandle} />
             <View style={styles.sheetTitleRow}>
@@ -657,16 +677,14 @@ function WeekCard({
 
           <View style={styles.actions}>
             <IzButton label="Open PV" small fullWidth={false} onPress={onOpenPv} />
-            {week.status === 'paid' && (
-              <IzButton
-                label="PDF"
-                icon={FileText}
-                variant="soft"
-                small
-                fullWidth={false}
-                onPress={onPdf}
-              />
-            )}
+            <IzButton
+              label="PDF"
+              icon={FileText}
+              variant="soft"
+              small
+              fullWidth={false}
+              onPress={onPdf}
+            />
             <IzButton
               label="Excel"
               variant="soft"

@@ -35,6 +35,7 @@ import {
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
 import { ChevronDown, Flag, ImagePlus, Shield, Wallet, XIcon } from '../components/icons';
@@ -129,6 +130,7 @@ function formatCell(value: number): string {
 export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openPv, route } = usePrNav();
   const { token } = useSession();
+  const keyboardInset = useKeyboardInset();
   const { current, refresh: refreshEarnings } = usePrEarnings();
   const { isSigned } = useSignedPvs();
   const { width } = useViewportSize();
@@ -672,7 +674,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         onRequestClose={closeDispute}
       >
         <Pressable style={styles.backdrop} onPress={closeDispute}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <ScrollView
               keyboardShouldPersistTaps="handled"
               showsVerticalScrollIndicator={false}

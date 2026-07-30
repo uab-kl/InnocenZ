@@ -541,6 +541,28 @@ export async function fetchMyVoucherExcelBlob(
   return res.blob();
 }
 
+export type VoucherExportLinks = {
+  /** Absolute URLs the system browser can open — the ticket in the path is the credential. */
+  xlsxUrl: string;
+  printUrl: string;
+};
+
+/**
+ * Mints a 5-minute download ticket for one of this PR's vouchers, so the
+ * phone's browser can open the Excel/print view without a Bearer header (and
+ * without ever putting the session token in a URL).
+ */
+export async function createMyVoucherExportTicket(
+  accessToken: string,
+  voucherId: string,
+): Promise<VoucherExportLinks> {
+  const d = await request<{ xlsxPath: string; printPath: string }>(
+    `/payment-voucher/mine/${voucherId}/export-ticket`,
+    { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  return { xlsxUrl: `${API_BASE}${d.xlsxPath}`, printUrl: `${API_BASE}${d.printPath}` };
+}
+
 /** The closed enum the backend writes — mirrors notification.model.ts. */
 export type NotificationKind =
   | 'payment_voucher_issued'

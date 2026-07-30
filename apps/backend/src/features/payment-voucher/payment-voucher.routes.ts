@@ -26,6 +26,15 @@ router.get(
   paymentVoucherController.exportMyVoucherExcel.bind(paymentVoucherController),
 );
 
+// The phone flow: an authenticated POST mints a 5-minute download ticket, and
+// the system browser then opens /payment-voucher/export/<ticket>/... (mounted
+// BEFORE authenticateJWT in router/v1.ts) — a browser download cannot carry
+// the Bearer header, and the session token must never appear in a URL.
+router.post(
+  '/mine/:voucherId/export-ticket',
+  paymentVoucherController.createMyVoucherExportTicket.bind(paymentVoucherController),
+);
+
 // A PR raises / withdraws a dispute on its OWN issued voucher (§3 F). 3- and
 // 4-segment paths, so they never collide with the 2-segment '/mine/lines'.
 router.post('/mine/:voucherId/dispute', paymentVoucherController.raiseMyDispute.bind(paymentVoucherController));

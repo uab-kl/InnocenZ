@@ -36,6 +36,7 @@ import {
 } from '../lib/pr-rate';
 import { usePrEarnings } from '../lib/pr-earnings';
 import { usePrNav, type ScanCategory, type ScanMode } from '../lib/pr-nav';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureReceiptPhoto, recognizeReceiptText } from '../lib/receipt-ocr';
 import { parseReceipt } from '../lib/receipt-parser';
 import {
@@ -68,6 +69,8 @@ export function ScanScreen({
   editId?: string;
 }) {
   const { goBack, setTab } = usePrNav();
+  // Detail screen outside the tab shell — the back row must clear the status bar.
+  const insets = useSafeAreaInsets();
   const { active, phase: attendancePhase, refresh: refreshShift } = useActiveShift();
   const { receiptLines, addLine, submitReceipt, updateLine, deleteLine } = usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
@@ -473,7 +476,7 @@ export function ScanScreen({
     });
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top + 6 }]}>
 
       <View style={styles.titleRow}>
         {category === 'drinks' ? (

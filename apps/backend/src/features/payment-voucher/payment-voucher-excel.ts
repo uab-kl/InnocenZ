@@ -73,6 +73,57 @@ export function voucherRef(voucher: PaymentVoucherWithLines): string {
   return `PV-${voucher.id.slice(0, 8).toUpperCase()}`;
 }
 
+function esc(value: string): string {
+  return value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+/**
+ * The same voucher as a printable HTML page. The phone opens this in its
+ * browser via a short-lived ticket URL and the print dialog appears — "Save
+ * as PDF" is the built-in Android/iOS print target, so no PDF library and no
+ * new native module (which would strand every installed APK).
+ */
+export function buildVoucherPrintHtml(params: {
+  voucher: PaymentVoucherWithLines;
+  agency: VoucherExportAgency;
+  pr: VoucherExportPr;
+  lines: VoucherExportLine[];
+}): string {
+  const { voucher, agency, pr, lines } = params;
+  const rows = lines
+    .map((line, i) => {
+      const label = KIND_LABELS[line.kind] ?? line.kind;
+      const qty = Math.max(1, line.quantity);
+      return `<tr><td>${i + 1}</td><td>${esc(`${label} (${dayMonth(line.lineDate)}) - ${line.outlet ?? DASH}`)}</td><td style="text-align:center">${qty}</td><td style="text-align:right">${(line.commission / qty).toFixed(2)}</td><td style="text-align:right">${line.commission.toFixed(2)}</td></tr>`;
+    })
+    .join('');
+  const net = Number(voucher.net ?? '0');
+  const prName = esc(pr?.name ?? voucher.prName ?? DASH);
+  const signed = voucher.prSignedAt ? klStamp(new Date(voucher.prSignedAt)) : '';
+  return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>${voucherRef(voucher)} · Payment Voucher</title>
+<style>body{font-family:Arial,sans-serif;margin:20px;color:#111;font-size:13px}h1{font-size:19px;margin:0 0 2px}
+.head p{margin:2px 0}table{border-collapse:collapse;width:100%;margin-top:14px}td,th{border:1px solid #999;padding:6px 8px;font-size:12px}
+th{background:#f2f2f2;text-align:left}.tot{font-weight:bold;font-size:14px}.sig{margin-top:22px}.note{margin-top:22px;font-size:11px;color:#555}
+@media print{.printbar{display:none}}.printbar{margin:14px 0}.printbar button{padding:10px 16px;font-size:14px}</style></head><body>
+<div class="head"><h1>Payment Voucher</h1>
+<p><strong>${esc(agency?.name ?? DASH)}</strong>${agency?.ssmNo ? ` (${esc(agency.ssmNo)})` : ''}</p>
+<p>Phone No: ${esc(agency?.contactPhone ?? DASH)} · Email: ${esc(agency?.contactEmail ?? DASH)}</p>
+<p>Voucher No.: <strong>${voucherRef(voucher)}</strong> · Voucher Date: ${slashDate(voucher.issuedDate)}</p>
+<p>Payable to: <strong>${prName}</strong>${pr?.nickname ? ` (${esc(pr.nickname)})` : ''} · IC/Passport: ${esc(pr?.icNo ?? DASH)} · Phone: ${esc(pr?.phone ?? DASH)}</p></div>
+<div class="printbar"><button onclick="window.print()">Print / Save as PDF</button></div>
+<table><thead><tr><th>#</th><th>Description</th><th>Unit</th><th>Unit Price (RM)</th><th>Amount (RM)</th></tr></thead>
+<tbody>${rows}</tbody>
+<tfoot><tr class="tot"><td colspan="4">Total</td><td style="text-align:right">RM ${net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td></tr></tfoot></table>
+<div class="sig"><p><strong>PR (Payee)</strong></p>
+<p>Signature: ${signed ? prName : '____________________'}</p>
+<p>Name: ${prName}</p>
+<p>Date: ${signed || '____________________'}</p></div>
+<p class="note">Please verify the payment details. If there are no discrepancies, kindly sign and acknowledge to proceed with the payment. For any concerns, please contact our finance department.</p>
+<script>setTimeout(function(){try{window.print()}catch(e){}},500)</script>
+</body></html>`;
+}
+
 export async function buildVoucherWorkbook(params: {
   voucher: PaymentVoucherWithLines;
   agency: VoucherExportAgency;

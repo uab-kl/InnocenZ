@@ -4,7 +4,12 @@ import {
   PaymentVoucherDisputeRepositoryClass,
 } from './payment-voucher-dispute.repository.js';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
-import { buildVoucherWorkbook, voucherRef } from './payment-voucher-excel.js';
+import {
+  buildVoucherPrintHtml,
+  buildVoucherWorkbook,
+  voucherRef,
+} from './payment-voucher-excel.js';
+import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -933,28 +938,130 @@ export class PaymentVoucherControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const lines = bundle.voucher.lines.map(toReceiptLineDTO).map((l) => ({
-        kind: l.kind,
-        lineDate: l.lineDate,
-        outlet: l.outlet,
-        quantity: l.quantity,
-        commission: l.commission,
-      }));
-      const buffer = await buildVoucherWorkbook({
+      return await this.sendVoucherExcel(res, bundle);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportMyVoucherExcel] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Shared by the authenticated /mine export and the ticket download. */
+  private voucherExportLines(bundle: { voucher: { lines: PaymentVoucherLineType[] } }) {
+    return bundle.voucher.lines.map(toReceiptLineDTO).map((l) => ({
+      kind: l.kind,
+      lineDate: l.lineDate,
+      outlet: l.outlet,
+      quantity: l.quantity,
+      commission: l.commission,
+    }));
+  }
+
+  private async sendVoucherExcel(
+    res: Response,
+    bundle: NonNullable<
+      Awaited<ReturnType<PaymentVoucherRepositoryClass['getExportBundle']>>
+    >,
+  ) {
+    const buffer = await buildVoucherWorkbook({
+      voucher: bundle.voucher,
+      agency: bundle.agency,
+      pr: bundle.pr,
+      lines: this.voucherExportLines(bundle),
+    });
+    const filename = `${voucherRef(bundle.voucher)}-payment-voucher.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.status(200).send(Buffer.from(buffer as ArrayBuffer));
+  }
+
+  /**
+   * The PR asks for a short-lived download link for their OWN voucher. The
+   * phone then hands the link to the system browser, which cannot attach the
+   * Bearer header — the 5-minute voucher-scoped ticket in the path is the
+   * whole credential, so the session token never enters a URL.
+   */
+  async createMyVoucherExportTicket(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+
+      const voucherId = paramId(req.params.voucherId);
+      const existing = await this.paymentVoucherRepository.getById(voucherId);
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const ticket = issueExportTicket(voucherId);
+      return res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: {
+          xlsxPath: `/payment-voucher/export/${ticket}/voucher.xlsx`,
+          printPath: `/payment-voucher/export/${ticket}/print`,
+          expiresInSeconds: 300,
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.createMyVoucherExportTicket] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Ticket download — reached by the phone's browser, no JWT. */
+  async exportTicketExcel(req: Request, res: Response) {
+    try {
+      const voucherId = redeemExportTicket(String(req.params.ticket ?? ''));
+      if (!voucherId) {
+        return res
+          .status(404)
+          .send('This download link has expired — open the app and tap Excel again.');
+      }
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      return await this.sendVoucherExcel(res, bundle);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportTicketExcel] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Ticket print view — the browser renders the voucher and offers Save as PDF. */
+  async exportTicketPrint(req: Request, res: Response) {
+    try {
+      const voucherId = redeemExportTicket(String(req.params.ticket ?? ''));
+      if (!voucherId) {
+        return res
+          .status(404)
+          .send('This link has expired — open the app and tap PDF again.');
+      }
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const html = buildVoucherPrintHtml({
         voucher: bundle.voucher,
         agency: bundle.agency,
         pr: bundle.pr,
-        lines,
+        lines: this.voucherExportLines(bundle),
       });
-      const filename = `${voucherRef(bundle.voucher)}-payment-voucher.xlsx`;
-      res.setHeader(
-        'Content-Type',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-      );
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
-      return res.status(200).send(Buffer.from(buffer as ArrayBuffer));
+      return res.status(200).type('html').send(html);
     } catch (error) {
-      logger.error('[PaymentVoucherController.exportMyVoucherExcel] Error:', error);
+      logger.error('[PaymentVoucherController.exportTicketPrint] Error:', error);
       return res
         .status(500)
         .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

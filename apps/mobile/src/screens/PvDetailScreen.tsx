@@ -28,6 +28,8 @@ import { useSession } from '../lib/session';
 import { signMyVoucher, type PrCurrentWeek } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import { useSignedPvs } from '../lib/signed-pv';
+import { useKeyboardInset } from '../lib/use-keyboard-inset';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Pill } from '../components/ui';
 import {
   Check,
@@ -92,6 +94,10 @@ function formatCell(value: number): string {
 
 export function PvDetailScreen({ pvId }: { pvId: string }) {
   const { goBack, setTab } = usePrNav();
+  // Detail screens render outside the tab shell, so the back row must clear
+  // the phone's own status bar or it becomes untouchable.
+  const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
   const { isSigned, signPv } = useSignedPvs();
   const { weeks: apiWeeks, vouchers: apiVouchers, refresh: refreshHistory } = usePaymentHistory();
   const { token } = useSession();
@@ -276,13 +282,13 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   })();
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
       <View style={styles.topRow}>
-        <Pressable style={styles.back} onPress={goBack}>
+        <Pressable style={styles.back} onPress={goBack} hitSlop={10}>
           <ChevronLeft size={20} color={C.goldL} />
           <Text style={styles.backText}>Payment</Text>
         </Pressable>
-        <Pressable onPress={goBack} hitSlop={8}>
+        <Pressable onPress={goBack} hitSlop={10}>
           <XIcon size={18} color={C.muted} />
         </Pressable>
       </View>
@@ -546,7 +552,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       {/* Signature sheet */}
       <Modal visible={signOpen} transparent animationType="slide" onRequestClose={() => setSignOpen(false)}>
         <Pressable style={styles.backdrop} onPress={() => setSignOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.sheetTitle}>Sign payment voucher</Text>
             <Text style={styles.sheetHint}>
               Type your floor nickname as signature (demo pad).
@@ -583,7 +592,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         onRequestClose={() => setDisputeOpen(false)}
       >
         <Pressable style={styles.backdrop} onPress={() => setDisputeOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             <Text style={styles.sheetTitle}>
               {disputeModeWithdraw ? 'Withdraw dispute?' : 'Dispute this amount'}
             </Text>
