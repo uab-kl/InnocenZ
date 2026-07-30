@@ -14,7 +14,7 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
-import { slotWindowsOverlap, shiftDayKey } from '@/util/slot-window';
+import { shiftsOverlap } from '@/util/slot-window';
 import {
   CheckInMineSchema,
   CreateShiftAssignmentSchema,
@@ -100,7 +100,7 @@ export class ShiftAssignmentControllerClass {
 
   /**
    * Flat shift wages for this PR's tier on this shift: per-shift override from
-   * Post Job "Pay by PR tier â†’ Wages", else the outlet workspace tier rate.
+   * Post Job "Pay by PR tier → Wages", else the outlet workspace tier rate.
    * Commission-only PRs have no wages row (null).
    */
   private async resolveTierWages(
@@ -150,7 +150,7 @@ export class ShiftAssignmentControllerClass {
         shiftId: req.query.shiftId as string | undefined,
         prId: req.query.prId as string | undefined,
         status: req.query.status as ShiftAssignmentStatus | undefined,
-        // An outlet caller has no agency of its own â€” the shifts at its venues
+        // An outlet caller has no agency of its own — the shifts at its venues
         // belong to whichever agency staffed them.
         agencyId: scope.isAdmin
           ? (req.query.agencyId as string | undefined)
@@ -241,7 +241,7 @@ export class ShiftAssignmentControllerClass {
       if (!existing || existing.prId !== pr.id) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      // leave_approved = excused from the shift; leave_pending is NOT blocked â€”
+      // leave_approved = excused from the shift; leave_pending is NOT blocked —
       // a PR who shows up anyway checks in, which flips the row to `confirmed`
       // and thereby withdraws the pending request.
       if (
@@ -255,7 +255,7 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Already checked in', data: null });
       }
 
-      // The phone's claimed position. The distance is NOT taken from the body â€”
+      // The phone's claimed position. The distance is NOT taken from the body —
       // it is recomputed here from the outlet's own pin, because the phone is
       // the thing being verified and does not get to grade itself.
       const parsed = CheckInMineSchema.safeParse(req.body ?? {});
@@ -274,7 +274,7 @@ export class ShiftAssignmentControllerClass {
           );
         }
         // 422: the request was well-formed, the PR is simply not at the venue.
-        // Hard block â€” there is no demo/relax bypass on the server.
+        // Hard block — there is no demo/relax bypass on the server.
         return res.status(422).json({ success: false, message: verdict.message, data: verdict.detail });
       }
       const fix = verdict.fix;
@@ -305,7 +305,7 @@ export class ShiftAssignmentControllerClass {
    * check-in; sets check_out_at and seals the row as `completed` (the state the
    * weekly PV job rolls up).
    */
-  /** "8pm", "20:00", "8.30pm" â†’ minutes since midnight, or null when not a clock time. */
+  /** "8pm", "20:00", "8.30pm" → minutes since midnight, or null when not a clock time. */
   private slotClockToMinutes(token: string): number | null {
     const m = token.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i);
     if (!m) return null;
@@ -323,11 +323,11 @@ export class ShiftAssignmentControllerClass {
   /**
    * The scheduled end of a shift as a Date: shift_date + the slot's end time,
    * rolled to the next day when the window crosses midnight ("22:00 - 04:00").
-   * Null when the free-text slot has no parseable window â€” then no clamp.
+   * Null when the free-text slot has no parseable window — then no clamp.
    */
   private scheduledShiftEnd(shiftDate: string, slot: string | null): Date | null {
     if (!slot) return null;
-    const parts = slot.split(/[â€”â€“-]/);
+    const parts = slot.split(/[—–-]/);
     if (parts.length !== 2) return null;
     const start = this.slotClockToMinutes(parts[0]);
     const end = this.slotClockToMinutes(parts[1]);
@@ -380,7 +380,7 @@ export class ShiftAssignmentControllerClass {
         ? await this.resolveTierWages(pr, existing.shiftId, shift.outletId)
         : null;
       // Forgot-to-check-out guard: the stamp is CLAMPED to the shift's
-      // scheduled end, so pay locks to the shift's duration â€” a check-out
+      // scheduled end, so pay locks to the shift's duration — a check-out
       // hours late can't inflate wages/OT by itself. Hours past the window
       // only ever count once the agency approves OT (separate flow). Never
       // clamps below the check-in stamp (a PR who started late still closes
@@ -408,7 +408,7 @@ export class ShiftAssignmentControllerClass {
       });
       // The stamp was clamped, so the PR worked past the scheduled end and those
       // hours are NOT money until the agency approves them. Nothing told the
-      // agency before â€” overtime sat unseen unless someone opened the shift.
+      // agency before — overtime sat unseen unless someone opened the shift.
       // Recipient is the agency, not the PR: it is the agency's decision.
       if (scheduledEnd && now > scheduledEnd) {
         const members = await this.agencyMemberRepository.listByAgency(existing.agencyId);
@@ -440,7 +440,7 @@ export class ShiftAssignmentControllerClass {
   /**
    * The signed-in PR cancels its OWN upcoming assignment with a required reason.
    * Sets status='cancelled' and stores the reason on the reused `notes` column
-   * (no new table) â€” the agency reads shift_assignment, so a cancelled row with
+   * (no new table) — the agency reads shift_assignment, so a cancelled row with
    * its reason IS the agency notification. A shift already checked in or
    * completed can no longer be cancelled.
    */
@@ -467,7 +467,7 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'This shift is already cancelled', data: null });
       }
       if (existing.status === 'leave_approved') {
-        return res.status(400).json({ success: false, message: 'Leave is already approved for this shift â€” no need to cancel', data: null });
+        return res.status(400).json({ success: false, message: 'Leave is already approved for this shift — no need to cancel', data: null });
       }
       if (existing.checkInAt || existing.status === 'completed') {
         return res.status(400).json({
@@ -483,7 +483,7 @@ export class ShiftAssignmentControllerClass {
         notes: reason,
         updatedBy: actor,
       });
-      res.status(200).json({ success: true, message: 'Shift cancelled â€” your agency has been notified', data: assignment });
+      res.status(200).json({ success: true, message: 'Shift cancelled — your agency has been notified', data: assignment });
 
       // That message above has been promising this since the endpoint shipped,
       // and nothing was actually telling anyone. Now it is true.
@@ -505,8 +505,8 @@ export class ShiftAssignmentControllerClass {
    * The signed-in PR files an MC/leave request on its OWN upcoming assignment
    * (Slice 2 of the cancel epic). Unlike cancelMine this is NOT immediate: the
    * row goes to `leave_pending` with the reason on the reused `notes` column and
-   * waits for the agency to approve (â†’ `leave_approved`, excused, no penalty) or
-   * reject (â†’ back to `assigned`). Checking in while pending withdraws the
+   * waits for the agency to approve (→ `leave_approved`, excused, no penalty) or
+   * reject (→ back to `assigned`). Checking in while pending withdraws the
    * request (see checkInMine).
    */
   async requestLeaveMine(req: Request, res: Response) {
@@ -550,7 +550,7 @@ export class ShiftAssignmentControllerClass {
         notes: reason,
         updatedBy: getActor(req),
       });
-      res.status(200).json({ success: true, message: 'Leave request sent â€” your agency will review it', data: assignment });
+      res.status(200).json({ success: true, message: 'Leave request sent — your agency will review it', data: assignment });
     } catch (error) {
       logger.error('[ShiftAssignmentController.requestLeaveMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -560,7 +560,7 @@ export class ShiftAssignmentControllerClass {
   /**
    * Agency (or admin) approves a pending MC/leave request: the PR is excused
    * from the shift with no penalty. `leave_approved` is terminal like
-   * `cancelled` â€” staffing/cost rollups skip it â€” but stays distinct so an
+   * `cancelled` — staffing/cost rollups skip it — but stays distinct so an
    * excused absence never reads as a penalty cancel.
    */
   async approveLeave(req: Request, res: Response) {
@@ -582,7 +582,7 @@ export class ShiftAssignmentControllerClass {
         status: 'leave_approved',
         updatedBy: actor,
       });
-      res.status(200).json({ success: true, message: 'Leave approved â€” the PR is excused from this shift', data: assignment });
+      res.status(200).json({ success: true, message: 'Leave approved — the PR is excused from this shift', data: assignment });
 
       // The slot is now open. Say so, rather than leaving it to be noticed.
       const excusedPr = await this.prRepository.getById(existing.prId);
@@ -625,7 +625,7 @@ export class ShiftAssignmentControllerClass {
         notes: `[Leave rejected] ${existing.notes ?? ''}`.slice(0, 500),
         updatedBy: getActor(req),
       });
-      res.status(200).json({ success: true, message: 'Leave rejected â€” the PR stays on this shift', data: assignment });
+      res.status(200).json({ success: true, message: 'Leave rejected — the PR stays on this shift', data: assignment });
     } catch (error) {
       logger.error('[ShiftAssignmentController.rejectLeave] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -635,7 +635,7 @@ export class ShiftAssignmentControllerClass {
   /**
    * The agency's backfill worklist (Slice 3 of the cancel epic): upcoming slots
    * whose PR cancelled or had leave approved, while the shift is still below
-   * its quantity. Surfacing the row on the roster IS the notification â€” same
+   * its quantity. Surfacing the row on the roster IS the notification — same
    * philosophy as the cancel/leave rows themselves.
    */
   async listBackfill(req: Request, res: Response) {
@@ -661,7 +661,7 @@ export class ShiftAssignmentControllerClass {
    * Where the agency's PRs stamped attendance on one date.
    *
    * Named for what it is. There is no continuous position feed anywhere in the
-   * system â€” `shift_assignment` keeps a fix only at check-in and at check-out â€”
+   * system — `shift_assignment` keeps a fix only at check-in and at check-out —
    * so this endpoint cannot and does not report a live location. The response
    * carries the stamp time next to every coordinate for exactly that reason: a
    * position with no time beside it reads as "now", which would be a lie about
@@ -675,7 +675,7 @@ export class ShiftAssignmentControllerClass {
    *
    * `distanceM` is the server's recomputed metres from the venue pin, never a
    * distance the phone claimed, and `outlet.pinned` says whether a fence existed
-   * at all â€” an unpinned venue accepts every check-in with no location check, so
+   * at all — an unpinned venue accepts every check-in with no location check, so
    * "in range" is meaningless there and must not be rendered.
    *
    * Agency and admin only. Deliberately NOT opened to outlet callers, who can
@@ -761,7 +761,7 @@ export class ShiftAssignmentControllerClass {
 
   /**
    * Ranked replacement PRs for one released assignment: free that night, same
-   * agency, active â€” ordered by the released PR's tier (rate parity), then
+   * agency, active — ordered by the released PR's tier (rate parity), then
    * completed shifts at the outlet, then name. Filling the slot reuses the
    * normal POST / (create assignment), so no separate write path exists here.
    */
@@ -844,23 +844,22 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'PR belongs to a different agency', data: null });
       }
 
-      // A PR may work TWO shifts on the same day â€” but only at different
-      // times. Compare this shift's window against the PR's other active
-      // assignments that day and refuse a clash; label-only slots that carry
-      // no parseable time are allowed through (nothing to compare).
-      const dayKey = shiftDayKey;
+      // A PR may work TWO shifts on the same day — but only at different
+      // times. Compared on a continuous timeline, so an overnight 22:00–04:00
+      // also meets the next morning's 02:00–06:00 — the same-date-only test
+      // this replaced never compared those, and overnight is the normal shape
+      // here. Label-only slots carry no window and never clash.
       const others = await this.shiftAssignmentRepository.listForPr(pr.id);
       const clash = others.find(
         (a) =>
           a.shiftId !== shift.id &&
           !['cancelled', 'no_show', 'leave_approved'].includes(a.status) &&
-          dayKey(a.shiftDate) === dayKey(shift.shiftDate) &&
-          slotWindowsOverlap(shift.slot, a.slot),
+          shiftsOverlap(shift.shiftDate, shift.slot, a.shiftDate, a.slot),
       );
       if (clash) {
         return res.status(400).json({
           success: false,
-          message: `This PR already works ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day â€” pick a time that does not overlap.`,
+          message: `This PR already works ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day — pick a time that does not overlap.`,
           data: null,
         });
       }
@@ -870,7 +869,7 @@ export class ShiftAssignmentControllerClass {
       const assignment = await this.shiftAssignmentRepository.create({
         shiftId: shift.id,
         prId: pr.id,
-        agencyId: shift.agencyId, // authoritative â€” derived from the shift
+        agencyId: shift.agencyId, // authoritative — derived from the shift
         status: parsed.data.status ?? 'assigned',
         // Client override wins; otherwise Post Job / workspace tier wages.
         payAmount: parsed.data.payAmount ?? tierWages ?? '0.00',
@@ -910,14 +909,14 @@ export class ShiftAssignmentControllerClass {
   /**
    * Tell the agency a shift needs covering.
    *
-   * Sick cover was almost entirely built already â€” the backfill worklist, the
+   * Sick cover was almost entirely built already — the backfill worklist, the
    * ranked replacement candidates and the assign write all existed. What was
    * missing is this: the worklist sat there and nobody was told to look at it,
    * so a PR dropping out on the night was only noticed if someone happened to
    * open the panel.
    *
    * Addressed to the agency's members, like the overtime notification above and
-   * unlike the three shift ones, which go to the PR. Never throws â€” a failed
+   * unlike the three shift ones, which go to the PR. Never throws — a failed
    * notification must not undo the release the PR is entitled to.
    */
   private async notifyAgencyCoverNeeded(input: {
@@ -935,13 +934,13 @@ export class ShiftAssignmentControllerClass {
       if (recipients.length === 0) return;
 
       const when = shift
-        ? `${shift.shiftDate}${shift.slot ? ` Â· ${shift.slot}` : ''}`
+        ? `${shift.shiftDate}${shift.slot ? ` · ${shift.slot}` : ''}`
         : 'an upcoming shift';
       const why = input.reason === 'leave_approved' ? 'approved leave' : 'cancelled';
 
       await notifyMany(recipients, {
         kind: 'shift_cover_needed',
-        title: `Cover needed â€” ${input.prName}`,
+        title: `Cover needed — ${input.prName}`,
         body: `${input.prName} is off ${when} (${why}). Find a replacement on the roster's backfill list.`,
         payload: {
           assignmentId: input.assignmentId,
@@ -1001,7 +1000,7 @@ export class ShiftAssignmentControllerClass {
       });
       if (!assignment) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
-      // Only on the transition INTO cancelled â€” re-saving an already-cancelled
+      // Only on the transition INTO cancelled — re-saving an already-cancelled
       // row must not tell the PR twice.
       if (parsed.data.status === 'cancelled' && existing.status !== 'cancelled') {
         const shift = await this.shiftRepository.getById(existing.shiftId);
@@ -1037,7 +1036,7 @@ export class ShiftAssignmentControllerClass {
       const removed = await this.shiftAssignmentRepository.remove(id);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
-      // Unassigning is a cancellation from the PR's side â€” the shift is simply
+      // Unassigning is a cancellation from the PR's side — the shift is simply
       // gone from their app, and until now nothing said so.
       const shift = await this.shiftRepository.getById(existing.shiftId);
       await this.notifyPr({

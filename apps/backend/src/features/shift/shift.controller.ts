@@ -12,7 +12,7 @@ import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
 import { ShiftFilter, ShiftStatus, ShiftEventKind } from './shift.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
-import { slotWindowsOverlap, shiftDayKey } from '@/util/slot-window';
+import { shiftsOverlap, shiftDayKey } from '@/util/slot-window';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -223,8 +223,7 @@ export class ShiftControllerClass {
             (o) =>
               o.shiftId !== id &&
               !['cancelled', 'no_show', 'leave_approved'].includes(o.status) &&
-              shiftDayKey(o.shiftDate) === shiftDayKey(nextDate) &&
-              slotWindowsOverlap(nextSlot, o.slot),
+              shiftsOverlap(nextDate, nextSlot, o.shiftDate, o.slot),
           );
           if (clash) {
             return res.status(400).json({
