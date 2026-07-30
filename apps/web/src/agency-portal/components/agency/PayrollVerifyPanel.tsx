@@ -1,10 +1,15 @@
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import { useAgencyPvReceiptReview } from "@agency-portal/hooks/use-agency-pv-receipt-review";
 import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
-import { FileWarning, Receipt, ScanLine } from "lucide-react";
+import { agencyCan } from "@agency-portal/lib/agency-rbac";
+import { useStore } from "@agency-portal/lib/store";
+import { Check, FileWarning, Receipt, RotateCcw, ScanLine } from "lucide-react";
+import { useState } from "react";
 import type {
 	PaymentVoucherComponent,
 	PaymentVoucherLine,
 	PaymentVoucherReceipt,
+	PaymentVoucherReceiptStatus,
 } from "@/services/payment-voucher";
 
 const COMPONENT_LABELS: Record<PaymentVoucherComponent, string> = {
@@ -32,6 +37,254 @@ function sourceLabel(source: PaymentVoucherReceipt["source"]): string {
 	return "Check-in";
 }
 
+const STATUS_LABEL: Record<PaymentVoucherReceiptStatus, string> = {
+	pending: "Waiting on you",
+	approved: "Approved",
+	verified: "Verified",
+};
+
+const STATUS_PILL: Record<PaymentVoucherReceiptStatus, string> = {
+	pending: "iz-pill-amber",
+	approved: "iz-pill-green",
+	verified: "iz-pill-ink",
+};
+
+/**
+ * A proof photo is stored as an opaque string — the PR app sends a data URL, but
+ * older rows hold a path. Rendering a path as an image gives a broken icon that
+ * reads as "the evidence is missing", which is the one thing this panel must
+ * never say by accident. So only render what is certainly renderable, and print
+ * the rest as the reference it is.
+ */
+const isRenderablePhoto = (photo: string) =>
+	photo.startsWith("data:image/") ||
+	photo.startsWith("https://") ||
+	photo.startsWith("http://");
+
+/**
+ * One receipt, with the agency's decision on it.
+ *
+ * The quantity/commission inputs are the correction path from the owner's spec.
+ * They are deliberately per-line and saved one at a time rather than as a form:
+ * each save is a `PATCH` on that line id, which is what keeps this away from
+ * `PUT /payment-voucher/:id` — the wholesale rewrite that once deleted the PR's
+ * proof photos.
+ */
+function ReceiptRow({
+	receipt,
+	lines,
+	canReview,
+	busy,
+	onApprove,
+	onWithdraw,
+	onEditLine,
+}: {
+	receipt: PaymentVoucherReceipt;
+	lines: PaymentVoucherLine[];
+	canReview: boolean;
+	busy: boolean;
+	onApprove: () => void;
+	onWithdraw: () => void;
+	onEditLine: (
+		lineId: string,
+		patch: { quantity?: number; amount?: number },
+	) => void;
+}) {
+	const [editing, setEditing] = useState<string | null>(null);
+	const [qty, setQty] = useState("");
+	const [amount, setAmount] = useState("");
+
+	const proofPhotos = receipt.proofPhotos ?? [];
+	// Verified means the week is closed. Nothing on it may be re-decided or
+	// re-priced — the server refuses both, and offering the buttons anyway would
+	// just produce a 409 the agency has to interpret.
+	const editable = canReview && receipt.status !== "verified";
+
+	const startEdit = (line: PaymentVoucherLine) => {
+		setEditing(line.id);
+		setQty(String(line.quantity));
+		setAmount(Number(line.amount || 0).toFixed(2));
+	};
+
+	const saveEdit = (line: PaymentVoucherLine) => {
+		const nextQty = Number(qty);
+		const nextAmount = Number(amount);
+		const patch: { quantity?: number; amount?: number } = {};
+		if (Number.isFinite(nextQty) && nextQty > 0 && nextQty !== line.quantity) {
+			patch.quantity = nextQty;
+		}
+		if (
+			Number.isFinite(nextAmount) &&
+			nextAmount >= 0 &&
+			nextAmount.toFixed(2) !== Number(line.amount || 0).toFixed(2)
+		) {
+			patch.amount = nextAmount;
+		}
+		// Nothing actually changed — close the row rather than sending a no-op the
+		// server would reject for having no fields.
+		if (patch.quantity === undefined && patch.amount === undefined) {
+			setEditing(null);
+			return;
+		}
+		onEditLine(line.id, patch);
+		setEditing(null);
+	};
+
+	return (
+		<div className="border-b border-[var(--iz-line)] py-2.5 last:border-0">
+			<div className="flex flex-wrap items-center justify-between gap-2">
+				<div className="flex flex-wrap items-center gap-2">
+					<ScanLine className="h-3.5 w-3.5" />
+					<span className="text-sm font-medium">{receipt.receiptNo}</span>
+					<span
+						className={`iz-pill !text-[10px] ${receipt.source === "scan" ? "iz-pill-green" : "iz-pill-amber"}`}
+					>
+						{sourceLabel(receipt.source)}
+					</span>
+					<span
+						className={`iz-pill !text-[10px] ${STATUS_PILL[receipt.status]}`}
+					>
+						{STATUS_LABEL[receipt.status]}
+					</span>
+				</div>
+				<span className="font-medium">{money(sum(lines))}</span>
+			</div>
+
+			<p className="iz-tiny iz-muted2 mt-0.5">
+				{receipt.receiptDate ?? "—"}
+				{receipt.orderNo ? ` · order ${receipt.orderNo}` : ""} · {lines.length}{" "}
+				{lines.length === 1 ? "line" : "lines"} ·{" "}
+				{proofPhotos.length > 0
+					? `${proofPhotos.length} proof photo${proofPhotos.length === 1 ? "" : "s"}`
+					: "no proof photo"}
+				{receipt.status !== "pending" &&
+					` · ${receipt.reviewedBy ? `by ${receipt.reviewedBy}` : "reviewed"} ${
+						receipt.reviewedAt
+							? new Date(receipt.reviewedAt).toLocaleDateString()
+							: "before this review existed"
+					}`}
+			</p>
+
+			{receipt.note && (
+				<p className="iz-tiny mt-1">
+					<span className="iz-muted2">PR's note:</span> {receipt.note}
+				</p>
+			)}
+
+			{proofPhotos.length > 0 && (
+				<div className="mt-1.5 flex flex-wrap gap-1.5">
+					{proofPhotos.map((photo, i) =>
+						isRenderablePhoto(photo) ? (
+							<img
+								// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
+								key={`${receipt.id}-photo-${i}`}
+								src={photo}
+								alt={`Proof ${i + 1} for ${receipt.receiptNo}`}
+								className="h-16 w-16 rounded border border-[var(--iz-line)] object-cover"
+							/>
+						) : (
+							<span
+								// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
+								key={`${receipt.id}-photo-${i}`}
+								className="iz-tiny iz-muted2 break-all"
+							>
+								{photo}
+							</span>
+						),
+					)}
+				</div>
+			)}
+
+			<div className="mt-1.5">
+				{lines.map((line) => (
+					<div
+						key={line.id}
+						className="iz-tiny flex flex-wrap items-center gap-2 py-1"
+					>
+						{editing === line.id ? (
+							<>
+								<span className="iz-muted2">{line.description}</span>
+								<input
+									className="iz-field-input !h-7 !w-16 !text-[12px]"
+									inputMode="numeric"
+									value={qty}
+									onChange={(e) => setQty(e.target.value)}
+									aria-label={`Quantity for ${line.description}`}
+								/>
+								<span className="iz-muted2">×</span>
+								<input
+									className="iz-field-input !h-7 !w-24 !text-[12px]"
+									inputMode="decimal"
+									value={amount}
+									onChange={(e) => setAmount(e.target.value)}
+									aria-label={`Commission for ${line.description}`}
+								/>
+								<button
+									type="button"
+									className="iz-btn iz-btn-soft !h-7 !px-2 !text-[11px]"
+									disabled={busy}
+									onClick={() => saveEdit(line)}
+								>
+									Save
+								</button>
+								<button
+									type="button"
+									className="iz-btn iz-btn-ghost !h-7 !px-2 !text-[11px]"
+									onClick={() => setEditing(null)}
+								>
+									Cancel
+								</button>
+							</>
+						) : (
+							<>
+								<span className="iz-muted2">
+									{line.quantity} × {line.description}
+								</span>
+								<span className="font-medium">
+									{money(Number(line.amount || 0))}
+								</span>
+								{editable && (
+									<button
+										type="button"
+										className="iz-btn iz-btn-ghost !h-7 !px-2 !text-[11px]"
+										onClick={() => startEdit(line)}
+									>
+										Correct
+									</button>
+								)}
+							</>
+						)}
+					</div>
+				))}
+			</div>
+
+			{editable && (
+				<div className="mt-1.5 flex flex-wrap gap-2">
+					{receipt.status === "pending" ? (
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !h-7 !px-2.5 !text-[11px]"
+							disabled={busy}
+							onClick={onApprove}
+						>
+							<Check className="mr-1 h-3 w-3" /> Approve
+						</button>
+					) : (
+						<button
+							type="button"
+							className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
+							disabled={busy}
+							onClick={onWithdraw}
+						>
+							<RotateCcw className="mr-1 h-3 w-3" /> Withdraw approval
+						</button>
+					)}
+				</div>
+			)}
+		</div>
+	);
+}
+
 /**
  * What the agency checks before issuing a week's voucher: every line grouped by
  * component, and — the point of the screen — which commission lines have no
@@ -43,9 +296,15 @@ function sourceLabel(source: PaymentVoucherReceipt["source"]): string {
  * an agency cannot check against anything, so it is surfaced rather than left to
  * be spotted in a list.
  *
- * Read-only by design. There is no verify/approve endpoint yet, and a button
- * that only changed local state would repeat the mistake the dispute "resolve"
- * button already makes.
+ * The receipts card is where the owner's `PENDING → APPROVED → VERIFIED` review
+ * happens: the photo and the PR's note beside the figures, with the correction
+ * inputs in the same row. Writes are gated on `raisePv`, mirroring the server's
+ * `agencyOwnerOrFinance` on both routes — the read stays open, because seeing a
+ * decision is not the authority to make one.
+ *
+ * The component totals above it remain read-only: there is still no endpoint
+ * that decides a whole week at once, and a button that only changed local state
+ * would repeat the mistake the dispute "resolve" button already makes.
  */
 export function PayrollVerifyPanel({
 	voucherId,
@@ -53,6 +312,15 @@ export function PayrollVerifyPanel({
 	voucherId: string | null;
 }) {
 	const { voucher, isLoading } = useAgencyPvEvidence(voucherId);
+	const agencySubRole = useStore((s) => s.agencySubRole);
+	const canReview = agencyCan(agencySubRole, "raisePv");
+	const {
+		pendingCount,
+		reviewReceipt,
+		editLine,
+		isSaving,
+		error: reviewError,
+	} = useAgencyPvReceiptReview(voucherId);
 
 	if (!voucherId) return null;
 	if (isLoading) {
@@ -154,51 +422,62 @@ export function PayrollVerifyPanel({
 			</IzCard>
 
 			<IzCard>
-				<div className="flex items-center gap-2 text-sm font-semibold">
-					<Receipt className="h-4 w-4" /> Receipts ({receipts.length})
+				<div className="flex flex-wrap items-center justify-between gap-2">
+					<div className="flex items-center gap-2 text-sm font-semibold">
+						<Receipt className="h-4 w-4" /> Receipts ({receipts.length})
+					</div>
+					{pendingCount > 0 && (
+						<span className="iz-pill iz-pill-amber !text-[10px]">
+							{pendingCount} waiting on you
+						</span>
+					)}
 				</div>
+
+				{pendingCount > 0 && (
+					<p className="iz-tiny iz-muted mt-1.5">
+						This voucher cannot be sent until each of these is approved — and
+						the PR cannot dispute the money behind one until you have.
+					</p>
+				)}
+
+				{reviewError && (
+					<p className="iz-tiny mt-1.5 text-[var(--iz-red,#c0554f)]">
+						{reviewError}
+					</p>
+				)}
+
 				{receipts.length === 0 ? (
 					<p className="iz-tiny iz-muted mt-2">
 						No receipts logged for this week.
 					</p>
 				) : (
 					<div className="mt-2">
-						{receipts.map((receipt) => {
-							const backed = lines.filter(
-								(line) => line.receiptId === receipt.id,
-							);
-							const proofCount = receipt.proofPhotos?.length ?? 0;
-							return (
-								<div
-									key={receipt.id}
-									className="border-b border-[var(--iz-line)] py-2 last:border-0"
-								>
-									<div className="flex items-center justify-between gap-2">
-										<div className="flex items-center gap-2">
-											<ScanLine className="h-3.5 w-3.5" />
-											<span className="text-sm font-medium">
-												{receipt.receiptNo}
-											</span>
-											<span
-												className={`iz-pill !text-[10px] ${receipt.source === "scan" ? "iz-pill-green" : "iz-pill-amber"}`}
-											>
-												{sourceLabel(receipt.source)}
-											</span>
-										</div>
-										<span className="font-medium">{money(sum(backed))}</span>
-									</div>
-									<p className="iz-tiny iz-muted2 mt-0.5">
-										{receipt.receiptDate ?? "—"}
-										{receipt.orderNo ? ` · order ${receipt.orderNo}` : ""} ·{" "}
-										{backed.length} {backed.length === 1 ? "line" : "lines"} ·{" "}
-										{proofCount > 0
-											? `${proofCount} proof photo${proofCount === 1 ? "" : "s"}`
-											: "no proof photo"}
-									</p>
-								</div>
-							);
-						})}
+						{receipts.map((receipt) => (
+							<ReceiptRow
+								key={receipt.id}
+								receipt={receipt}
+								lines={lines.filter((line) => line.receiptId === receipt.id)}
+								canReview={canReview}
+								busy={isSaving}
+								onApprove={() =>
+									reviewReceipt({ receiptId: receipt.id, status: "approved" })
+								}
+								onWithdraw={() =>
+									reviewReceipt({ receiptId: receipt.id, status: "pending" })
+								}
+								onEditLine={(lineId, patch) =>
+									editLine({ receiptId: receipt.id, lineId, ...patch })
+								}
+							/>
+						))}
 					</div>
+				)}
+
+				{!canReview && receipts.length > 0 && (
+					<p className="iz-tiny iz-muted2 mt-2">
+						Your agency role can see these receipts but not approve them — owner
+						and finance review receipts.
+					</p>
 				)}
 			</IzCard>
 		</>

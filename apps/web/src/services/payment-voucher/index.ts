@@ -60,7 +60,30 @@ export interface PaymentVoucherReceipt {
 	receiptTime: string | null;
 	proofPhotos: string[] | null;
 	note: string | null;
+	/** Where it sits in the review (migration 0074). */
+	status: PaymentVoucherReceiptStatus;
+	/**
+	 * When a person decided. NULL beside `approved` means the row predates the
+	 * review flow — NOT that somebody approved it at epoch. Print "—", never a
+	 * date derived from something else.
+	 */
+	reviewedAt: string | null;
+	reviewedBy: string | null;
 }
+
+/**
+ * The receipt review lifecycle.
+ *
+ * `pending` — the PR logged it and nobody has checked it. It BLOCKS the voucher's
+ * send, and the PR may not dispute the money behind it yet.
+ * `approved` — the agency accepted it (possibly after correcting the figures).
+ * This is the state that lets the PR contest it.
+ * `verified` — closed: the week rolled over untouched, or a dispute settled.
+ *
+ * Only `pending → approved` (and back) is reachable over HTTP; `verified` is set
+ * by the Monday rollover or by resolving a dispute, never by a request.
+ */
+export type PaymentVoucherReceiptStatus = "pending" | "approved" | "verified";
 
 export interface PaymentVoucher {
 	id: string;
@@ -176,6 +199,57 @@ export async function approveAllPaymentVoucherDays(
 		data: DayReviewResult;
 	}>(`/payment-voucher/${id}/day-review/approve-all`, {});
 	return { ...response.data.data, message: response.data.message };
+}
+
+/**
+ * Approve one receipt, or withdraw an approval.
+ *
+ * `verified` is deliberately not accepted here (the server refuses it too):
+ * jumping straight to closed would shut the PR's dispute window before they had
+ * ever seen the figure.
+ */
+export async function reviewPaymentVoucherReceipt(
+	receiptId: string,
+	status: "pending" | "approved",
+	onRefreshFail: () => void,
+): Promise<PaymentVoucherReceipt> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: PaymentVoucherReceipt;
+	}>(`/payment-voucher/receipts/${receiptId}/review`, { status });
+	return response.data.data;
+}
+
+/**
+ * Correct one line of a receipt under review — quantity, commission, or both.
+ *
+ * Targeted at a single line id rather than going through
+ * `PUT /payment-voucher/:id`, which replaces the whole line set and once deleted
+ * the PR's proof photos doing exactly this.
+ *
+ * Two effects to expect in the UI: the day's total changes, so that day goes
+ * STALE in the day-review panel and has to be approved again; and an already
+ * APPROVED receipt drops back to pending, because the receipt row stores no
+ * amount and its staleness cannot be detected after the fact.
+ */
+export async function editPaymentVoucherReceiptLine(
+	receiptId: string,
+	lineId: string,
+	patch: { quantity?: number; amount?: number },
+	onRefreshFail: () => void,
+): Promise<{ receipt: PaymentVoucherReceipt | null; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: { receipt: PaymentVoucherReceipt | null };
+	}>(`/payment-voucher/receipts/${receiptId}/lines/${lineId}`, patch);
+	return {
+		receipt: response.data.data?.receipt ?? null,
+		message: response.data.message,
+	};
 }
 
 export interface PaymentVouchersQueryParams {

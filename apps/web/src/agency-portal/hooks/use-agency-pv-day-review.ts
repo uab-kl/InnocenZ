@@ -5,6 +5,7 @@ import {
 	approveAllPaymentVoucherDays,
 	type PaymentVoucherDayReview,
 	type PaymentVoucherDayStatus,
+	type PaymentVoucherReceiptStatus,
 	reviewPaymentVoucherDay,
 } from "@/services/payment-voucher";
 import { pvEvidenceKey, useAgencyPvEvidence } from "./use-agency-pvs";
@@ -22,6 +23,8 @@ export interface PvSendGate {
 	allowed: boolean;
 	heldDays: string[];
 	unreviewedDays: string[];
+	/** Receipt numbers still waiting on review — they block the send too. */
+	pendingReceipts: string[];
 	/** Null when allowed. */
 	reason: string | null;
 }
@@ -30,6 +33,7 @@ const ALLOWED: PvSendGate = {
 	allowed: true,
 	heldDays: [],
 	unreviewedDays: [],
+	pendingReceipts: [],
 	reason: null,
 };
 
@@ -46,9 +50,21 @@ const ALLOWED: PvSendGate = {
  * A voucher with no dated days passes, matching the server: week-level lines (a
  * deduction, an adjustment) belong to no day, so there is nothing to approve and
  * blocking would be a deadlock rather than a control.
+ *
+ * A PENDING RECEIPT blocks too, and it is checked here rather than anywhere else
+ * for the same reason the server routes it through one `voucherSendGate()`: two
+ * places deciding whether a week may go out is two places that can disagree.
+ * Note the asymmetry with days — silence on a day blocks, but a receipt is born
+ * in a state and only a manual self-log is born pending.
  */
-export function buildSendGate(days: PaymentVoucherDayReview[]): PvSendGate {
-	if (days.length === 0) return ALLOWED;
+export function buildSendGate(
+	days: PaymentVoucherDayReview[],
+	receipts: { receiptNo: string; status: PaymentVoucherReceiptStatus }[] = [],
+): PvSendGate {
+	const pendingReceipts = receipts
+		.filter((r) => r.status === "pending")
+		.map((r) => r.receiptNo);
+	if (days.length === 0 && pendingReceipts.length === 0) return ALLOWED;
 
 	const heldDays = days.filter((d) => d.status === "held").map((d) => d.date);
 	// A stale day arrives with status null — the server already dropped it back to
@@ -56,18 +72,28 @@ export function buildSendGate(days: PaymentVoucherDayReview[]): PvSendGate {
 	const unreviewedDays = days
 		.filter((d) => d.status === null)
 		.map((d) => d.date);
-	if (heldDays.length === 0 && unreviewedDays.length === 0) return ALLOWED;
+	if (
+		heldDays.length === 0 &&
+		unreviewedDays.length === 0 &&
+		pendingReceipts.length === 0
+	) {
+		return ALLOWED;
+	}
 
 	const parts: string[] = [];
 	if (heldDays.length > 0) parts.push(`${heldDays.length} day(s) held`);
 	if (unreviewedDays.length > 0) {
 		parts.push(`${unreviewedDays.length} day(s) not yet reviewed`);
 	}
+	if (pendingReceipts.length > 0) {
+		parts.push(`${pendingReceipts.length} receipt(s) not yet reviewed`);
+	}
 
 	return {
 		allowed: false,
 		heldDays,
 		unreviewedDays,
+		pendingReceipts,
 		reason: parts.join(" · "),
 	};
 }
@@ -120,6 +146,10 @@ export function useAgencyPvDayReview(voucherId: string | null) {
 	// stays closed on a backed voucher. Open would mean offering a send we cannot
 	// yet say is legal; a demo voucher has no days to review and is never gated.
 	const isResolved = !isBacked || Boolean(voucher);
+	// The receipts ride on the same detail read as the days, so the gate judges
+	// both halves of one response — never a day from one read against a receipt
+	// from another.
+	const receipts = useMemo(() => voucher?.receipts ?? [], [voucher]);
 	const sendGate = useMemo<PvSendGate>(() => {
 		if (!isBacked) return ALLOWED;
 		if (!isResolved) {
@@ -127,11 +157,12 @@ export function useAgencyPvDayReview(voucherId: string | null) {
 				allowed: false,
 				heldDays: [],
 				unreviewedDays: [],
+				pendingReceipts: [],
 				reason: "Checking this week's day review…",
 			};
 		}
-		return buildSendGate(days);
-	}, [days, isBacked, isResolved]);
+		return buildSendGate(days, receipts);
+	}, [days, receipts, isBacked, isResolved]);
 
 	return {
 		days,
