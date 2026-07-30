@@ -24,7 +24,11 @@ import {
 import { PAYMENT_HISTORY_WEEKS } from '../lib/demo-payment-history';
 import { usePaymentHistory } from '../lib/payment-history';
 import { useSession } from '../lib/session';
-import { signMyVoucher } from '../lib/api';
+import {
+  type PrReceiptLine,
+  type PrReceiptSource,
+  signMyVoucher,
+} from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
 import { useSignedPvs } from '../lib/signed-pv';
 import { Pill } from '../components/ui';
@@ -119,6 +123,37 @@ const DEMO_RECEIPTS: LinkedReceipt[] = [
   },
 ];
 
+/**
+ * What the row headline says instead of a receipt number.
+ *
+ * `payment_voucher_line` carries no receipt_no — the number lives on
+ * `payment_voucher_receipt`, which the /mine payloads do not join. Rather than
+ * print a shortened row id dressed up as a reference, say where the record came
+ * from: that is the fact a PR needs when a line is queried, and it is the same
+ * distinction the agency's verify panel acts on.
+ */
+const SOURCE_LABEL: Record<PrReceiptSource, string> = {
+  scan: 'Scanned receipt',
+  manual: 'Self-logged',
+  checkin: 'Auto-sealed on check-out',
+};
+
+/**
+ * Date only, from the shift day rather than the logging timestamp. The exact
+ * minute a line was typed is not what a PR is checking, and inventing a time for
+ * an auto-sealed line would read as precision the row does not have.
+ */
+function formatReceiptDay(line: PrReceiptLine): string {
+  const iso = line.lineDate ?? line.at.slice(0, 10);
+  const at = new Date(`${iso}T12:00:00`);
+  if (Number.isNaN(at.getTime())) return iso;
+  return at.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'short',
+    year: 'numeric',
+  });
+}
+
 function cellAmount(day: WeeklyDayPay, key: IncomeKey): number {
   if (key === 'wages') return day.wages;
   if (key === 'drinks') return day.drinks ?? 0;
@@ -134,7 +169,11 @@ function formatCell(value: number): string {
 export function PvDetailScreen({ pvId }: { pvId: string }) {
   const { goBack, setTab } = usePrNav();
   const { isSigned, signPv } = useSignedPvs();
-  const { weeks: apiWeeks, refresh: refreshHistory } = usePaymentHistory();
+  const {
+    weeks: apiWeeks,
+    vouchers: apiVouchers,
+    refresh: refreshHistory,
+  } = usePaymentHistory();
   const { token } = useSession();
   const lastWeekPv = useMemo(() => getLastWeekAwaitingPv(), []);
   const hist =
@@ -177,6 +216,49 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const backendPvId = useMemo(
     () => apiWeeks.find((p) => p.id === pvId)?.id ?? null,
     [apiWeeks, pvId],
+  );
+
+  /**
+   * The commission evidence behind this voucher — real lines for a real voucher,
+   * the demo list only for a demo one.
+   *
+   * This panel was hardcoded while the rest of the screen was already live, so
+   * the fake rows read as genuine: a PR could open a real voucher and be shown
+   * three drinks nobody sold. The lines were being served all along — no endpoint
+   * needed adding, only reading.
+   *
+   * Drinks and tips only. Wages are not receipt-backed (they seal off the shift
+   * clock) and belong to the grid above, not to evidence of a sale.
+   *
+   * An empty array is a real answer for a real voucher with no commission that
+   * week, so it must NOT fall through to the demo rows — that is the exact
+   * substitution this change exists to remove.
+   */
+  const linkedReceipts = useMemo<LinkedReceipt[]>(() => {
+    const voucher = apiVouchers.find((v) => v.voucherId === pvId);
+    if (!voucher) return DEMO_RECEIPTS;
+    return voucher.lines
+      .filter((line) => line.kind === 'drinks' || line.kind === 'tips')
+      .map((line) => ({
+        id: line.id,
+        ref: SOURCE_LABEL[line.source],
+        item: line.item,
+        category: line.kind === 'tips' ? ('Tips' as const) : ('Drinks' as const),
+        qty: line.quantity,
+        amount: line.sales,
+        commission: line.commission,
+        outlet: line.outlet ?? '—',
+        at: formatReceiptDay(line),
+        // `pending` is set only for a manual self-log, which is precisely the
+        // "not matched to a receipt" case the agency verifies.
+        matched: !line.pending,
+      }));
+  }, [apiVouchers, pvId]);
+
+  /** True when the rows above are this voucher's own, not the demo placeholder. */
+  const receiptsAreReal = useMemo(
+    () => apiVouchers.some((v) => v.voucherId === pvId),
+    [apiVouchers, pvId],
   );
 
   const confirmSign = () => {
@@ -398,31 +480,41 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
       </View>
 
       <Pressable style={styles.collapse} onPress={() => setReceiptsOpen((o) => !o)}>
-        <Text style={styles.collapseTitle}>LINKED RECEIPT SCANS</Text>
+        {/* Not all real rows are scans — a self-log and a check-out seal reach
+            this list too, so the heading only claims "scans" for the demo set. */}
+        <Text style={styles.collapseTitle}>
+          {receiptsAreReal ? 'DRINK & TIP RECORDS' : 'LINKED RECEIPT SCANS'}
+        </Text>
         <Text style={styles.collapseAction}>{receiptsOpen ? 'Hide' : 'Details'}</Text>
       </Pressable>
       {receiptsOpen && (
         <View style={styles.receiptBox}>
-          {DEMO_RECEIPTS.map((r) => (
-            <Pressable
-              key={r.id}
-              style={styles.receiptRow}
-              onPress={() => setReceiptDetail(r)}
-            >
-              <View style={{ flex: 1, minWidth: 0 }}>
-                <Text style={styles.receiptRef}>{r.ref}</Text>
-                <Text style={styles.receiptMeta}>
-                  {r.item} · {formatRM(r.amount)}
-                </Text>
-              </View>
-              <View style={styles.receiptRight}>
-                <Text style={styles.receiptMatched}>
-                  {r.matched ? 'Matched' : 'Pending'}
-                </Text>
-                <Text style={styles.receiptDetailsLink}>Details</Text>
-              </View>
-            </Pressable>
-          ))}
+          {linkedReceipts.length === 0 ? (
+            <Text style={styles.receiptMeta}>
+              No drink or tip records for this week — this voucher is wages only.
+            </Text>
+          ) : (
+            linkedReceipts.map((r) => (
+              <Pressable
+                key={r.id}
+                style={styles.receiptRow}
+                onPress={() => setReceiptDetail(r)}
+              >
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.receiptRef}>{r.ref}</Text>
+                  <Text style={styles.receiptMeta}>
+                    {r.item} · {formatRM(r.amount)}
+                  </Text>
+                </View>
+                <View style={styles.receiptRight}>
+                  <Text style={styles.receiptMatched}>
+                    {r.matched ? 'Matched' : 'Pending'}
+                  </Text>
+                  <Text style={styles.receiptDetailsLink}>Details</Text>
+                </View>
+              </Pressable>
+            ))
+          )}
         </View>
       )}
 
