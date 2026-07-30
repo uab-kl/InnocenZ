@@ -15,6 +15,7 @@ import {
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
+import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
@@ -424,10 +425,16 @@ export class PaymentVoucherRepositoryClass {
           prNickname: PrTable.nickname,
           prIcNo: PrTable.icNo,
           prPhone: PrTable.phone,
+          // The account's number wins over the roster's — same rule as
+          // PrRepository.withAccountPhone. A printed voucher is the document a
+          // PR is paid against, so the phone on it must be the one the person
+          // actually uses, not a copy that drifted.
+          prAccountPhone: UserTable.phoneNum,
         })
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
         .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
+        .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .where(eq(PaymentVoucherTable.id, voucherId))
         .limit(1);
       if (!row) return null;
@@ -447,7 +454,7 @@ export class PaymentVoucherRepositoryClass {
               name: row.prName,
               nickname: row.prNickname,
               icNo: row.prIcNo,
-              phone: row.prPhone,
+              phone: row.prAccountPhone ?? row.prPhone,
             }
           : null,
       };

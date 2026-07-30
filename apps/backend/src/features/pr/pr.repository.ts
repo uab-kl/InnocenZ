@@ -29,6 +29,29 @@ function toProfile(row: PrProfile): PrProfile | null {
   return hasValue ? row : null;
 }
 
+/**
+ * ONE phone number per person: the account's.
+ *
+ * `pr.phone` and `user.phone_num` held the same fact in two tables and had
+ * already drifted apart — one PR's roster number was not the number their
+ * account signs in with, so they could not log in with the number their agency
+ * had given them. The owner's call (30 Jul 2026) was that **`user.phone_num`
+ * wins**, which is also what the project's own database rule says: one fact
+ * lives in one table, reached by FK.
+ *
+ * `pr.phone` survives for the one case where the account does not exist yet — an
+ * agency adds a PR to the roster before that person has signed up, and the
+ * number they typed is then the only one there is. Once an account is linked, it
+ * is the account that answers.
+ *
+ * The column itself is NOT dropped yet: the agency PR search and jk's PV export
+ * still read it directly, and dropping a column out from under a shared database
+ * breaks whoever is running at that moment.
+ */
+function withAccountPhone<T extends PrType>(pr: T, accountPhone: string | null): T {
+  return accountPhone ? { ...pr, phone: accountPhone } : pr;
+}
+
 export class PrRepositoryClass {
   async create(
     data: Omit<PrInsertType, 'id' | 'createdAt' | 'updatedAt'>,
@@ -127,13 +150,15 @@ export class PrRepositoryClass {
   async getById(id: string): Promise<PrWithProfileType | null> {
     try {
       const [row] = await db
-        .select({ pr: PrTable, profile: profileColumns })
+        .select({ pr: PrTable, profile: profileColumns, accountPhone: UserTable.phoneNum })
         .from(PrTable)
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
         .where(eq(PrTable.id, id))
         .limit(1);
-      return row ? { ...row.pr, profile: toProfile(row.profile) } : null;
+      return row
+        ? { ...withAccountPhone(row.pr, row.accountPhone), profile: toProfile(row.profile) }
+        : null;
     } catch (error) {
       logger.error('[PrRepository.getById] Error:', error);
       throw error;
@@ -182,7 +207,7 @@ export class PrRepositoryClass {
       const totalCount = Number(countRow?.value ?? 0);
 
       const rows = await db
-        .select({ pr: PrTable, profile: profileColumns })
+        .select({ pr: PrTable, profile: profileColumns, accountPhone: UserTable.phoneNum })
         .from(PrTable)
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
@@ -191,7 +216,10 @@ export class PrRepositoryClass {
         .limit(pageSize)
         .offset((page - 1) * pageSize);
 
-      const prs = rows.map((row) => ({ ...row.pr, profile: toProfile(row.profile) }));
+      const prs = rows.map((row) => ({
+        ...withAccountPhone(row.pr, row.accountPhone),
+        profile: toProfile(row.profile),
+      }));
       return { prs, totalCount };
     } catch (error) {
       logger.error('[PrRepository.listPaginated] Error:', error);
