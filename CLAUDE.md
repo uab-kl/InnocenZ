@@ -45,6 +45,10 @@ native memory. After meaningful sessions, update both `docs/claude-memory/` and 
 
 ## Working rules
 
+- **Doc roles (the 4-md memory system):** `CLAUDE.md` = rules only — update ONLY when a rule
+  changes. `TEST_SCRIPT.md` = the living session memory — renew it on EVERY work slice
+  (§8 done / §9 to-do next / §10 changelog). `docs/claude-memory/` + the Excel
+  "Claude Code Memory" tab = full memory mirror for other devices.
 - `TEST_SCRIPT.md` (repo root) is the single source of truth: verify every change against it,
   add new requirements to §9, promote to §8 when verified, append a §10 changelog row.
 - Typecheck baselines — judge ONLY files you touched: backend has 26 pre-existing TS2883

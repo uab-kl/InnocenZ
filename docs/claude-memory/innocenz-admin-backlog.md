@@ -5,6 +5,7 @@ metadata:
   node_type: memory
   type: project
   originSessionId: 0ccd2ebf-f34b-4f04-ae14-07954eaaae41
+  modified: 2026-07-30T07:09:15.580Z
 ---
 
 Admin portal work targets **apps/web** (the Nx app at localhost:3000), NOT InnocenZ-proto. The proto + `InnocenZ_MVP_v3_Final.xlsx` are the design/spec reference. SOS is removed from InnocenZ; PV-dispute review is Agency-side (not an Admin function).
@@ -27,6 +28,8 @@ Admin portal work targets **apps/web** (the Nx app at localhost:3000), NOT Innoc
 - **#3 /service/other redesign** — `routes/(admin)/service/other.tsx` rewritten read-first: every cell now plain text/badge (Title, Source name + role badge, Category badge + `others` description, Budget `RM …`, Assigned Agency, Scheduled, Status chip). Editing moved to a right-side `Sheet` drawer (OrderEditForm) opened by row-click or the pencil button — edits Title, Source type/name, Category, Description, Budget, Status; diffs against the record and fires `updateSpecialService` (fields) and/or `updateSpecialServiceStatus`. Removed all per-row draft state (draftBudgets/Titles/Sources/Descriptions + save handlers). NOTE: the top filters (Sources/Categories/Status) were ALREADY wired to queryParams — that part of the old note was stale. Verified: tsc clean (my files), biome clean, `vite build` succeeds (SSR bundles other-*.mjs + organization-*.mjs).
 
 - **#2 PR legal name / IC — DONE (was mislabeled BLOCKED).** The old note was wrong: the legal identity already exists as `user_profile.firstName/lastName/idType/idNo` (idType enum NRIC/Passport/Work permit) and the `GET /user` list endpoint ALREADY nests it as `profile:{…}` via `withUserProfiles` (apps/backend user.controller.list). So it was frontend-only: (a) `services/admin/mappers.ts` — added `BackendUserProfile` + optional `profile` on `BackendUser`; (b) `services/pr/types.ts` — `PrUser` gained `legalName`, `idType`, `idNo`; (c) `services/pr/prs.ts` — `mapPrUser` derives `legalName = [firstName,lastName].filter(Boolean).join(" ")`, maps idType/idNo; `matchesSearch` now also matches legalName + idNo; (d) `components/pr/prs-table.tsx` — new "Legal name" column (legal name + `idType · idNo` subtext, **unmasked** per user), colSpan 6→7. Backend seed `seed-sample-prs.ts` now populates firstName/lastName/idType/idNo (4 NRIC + 1 Passport) so the demo shows values — re-run it to see them. NOTE: `services/pr/*.ts` had corrupt mixed `\r\r\n` line endings — edit them via PowerShell `[IO.File]::ReadAllText/WriteAllText` with single-line anchors (Edit tool's LF match fails), then `biome check --write` to normalize.
+
+- **Per-tab auth pinning (2026-07-30, commit `3e45550`) — the portal-jump/phantom-signout fix.** All portals shared one localStorage token slot, so logging into outlet in a 2nd tab silently replaced the agency tab's identity → role guard bounced it. `apps/web/src/lib/auth/auth-storage.ts` REWRITTEN: tokens live in per-tab sessionStorage pinned via an `auth_seeded` flag; localStorage only SEEDS brand-new tabs (same key names access_token/refresh_token/token_expiry so existing logins survive); `writeKey` sets pin+tab+seed, `removeKey` clears both. It is the ONLY file touching those keys (grep-verified). Each tab is now static to its login; only a login/sign-out in that tab changes it.
 
 **Remaining backlog:**
 
