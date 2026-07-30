@@ -1,15 +1,12 @@
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { Link, useLocation } from "@tanstack/react-router";
 import {
 	Bell,
 	ChevronDown,
 	LogOut,
-	RotateCcw,
 	Settings,
 	User as UserIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { toast } from "sonner";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -90,39 +87,6 @@ function NotificationBell() {
 	);
 }
 
-// Demo helper: re-pull every query so all tables/cards refresh to current
-// server state. (A true re-seed of the demo DB would need a backend endpoint.)
-function ResetDemoButton() {
-	const queryClient = useQueryClient();
-	const [refreshing, setRefreshing] = useState(false);
-
-	const handleReset = async () => {
-		setRefreshing(true);
-		try {
-			await queryClient.invalidateQueries();
-			toast.success("Demo data refreshed");
-		} catch {
-			toast.error("Failed to refresh demo data");
-		} finally {
-			setRefreshing(false);
-		}
-	};
-
-	return (
-		<Button
-			variant="ghost"
-			size="sm"
-			onClick={handleReset}
-			disabled={refreshing}
-			aria-label="Reset demo data"
-			className="gap-2 text-muted-foreground hover:text-foreground"
-		>
-			<RotateCcw className={`h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-			<span className="hidden sm:inline">Reset demo</span>
-		</Button>
-	);
-}
-
 export function Header() {
   const { logout } = useAuthActions();
   const { user } = useCurrentUser();
@@ -161,8 +125,6 @@ export function Header() {
       </nav>
 
 			<div className="flex items-center gap-1">
-				<ResetDemoButton />
-
 				<ThemeToggle />
 
         <NotificationBell />
