@@ -31,6 +31,16 @@ export const notificationKindValues = [
    * Agency-addressed, like overtime_pending_approval.
    */
   'shift_cover_needed',
+  /**
+   * The Monday payout job held one or more vouchers because their days have not
+   * been reviewed (migration 0073). Agency-addressed, and raised ONE PER AGENCY
+   * PER RUN rather than per voucher — a held week can be a dozen vouchers, and
+   * twelve notifications saying the same thing is how a bell gets ignored.
+   *
+   * Exists because the hold was previously a log line only: the queue grew in
+   * silence and the first person to notice was a PR asking where their money was.
+   */
+  'pv_day_review_pending',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);

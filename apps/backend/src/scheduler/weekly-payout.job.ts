@@ -1,5 +1,6 @@
 import { logger } from '@/util/logger.js';
 import {
+  agencyMemberRepository,
   paymentVoucherGenerator,
   paymentVoucherRepository,
   prRepository,
@@ -11,7 +12,7 @@ import {
   buildDayReviewView,
   voucherSendGate,
 } from '@/features/payment-voucher/payment-voucher-day-review.js';
-import { notify } from '@/features/notification/notify.js';
+import { notify, notifyMany } from '@/features/notification/notify.js';
 import type { JobDefinition } from './scheduler.js';
 
 /** Stamped into the generated vouchers' audit columns. */
@@ -76,6 +77,8 @@ export async function runWeeklyPayout(): Promise<void> {
   const pending = await paymentVoucherRepository.listForWeek(weekStart, ['pending_review']);
   const issuedDate = klToday();
   const issued: { voucherId: string; prId: string | null }[] = [];
+  /** agencyId -> the vouchers this run refused to send, for one notification each. */
+  const awaitingByAgency = new Map<string, string[]>();
   let held = 0;
   let awaitingReview = 0;
   for (const voucher of pending) {
@@ -98,6 +101,12 @@ export async function runWeeklyPayout(): Promise<void> {
     if (!gate.allowed) {
       awaitingReview += 1;
       logger.warn(`[weekly-payout] awaiting agency day review ${voucher.id}: ${gate.message}`);
+      // Collected per agency so ONE notification below can name the whole queue.
+      // A log line was the only signal before, which meant nobody was told at all.
+      awaitingByAgency.set(voucher.agencyId, [
+        ...(awaitingByAgency.get(voucher.agencyId) ?? []),
+        voucher.id,
+      ]);
       continue;
     }
     const sent = await paymentVoucherRepository.update(voucher.id, {
@@ -143,6 +152,55 @@ export async function runWeeklyPayout(): Promise<void> {
     `[weekly-payout] notified ${notified}/${issued.length}` +
       (unlinked > 0 ? ` (${unlinked} PR rows have no user account yet)` : ''),
   );
+
+  // Tell each agency what this run would not send.
+  //
+  // Without this the hold is invisible: the job writes a log line nobody reads,
+  // the voucher sits at pending_review, and the PR is never notified either — so
+  // the first sign of a stuck week is somebody asking where their money is. The
+  // day-review panel shows the queue to whoever goes looking; this is what makes
+  // them look.
+  //
+  // ONE notification per agency naming a count, not one per voucher: a held week
+  // can be a dozen vouchers, and a dozen identical bells is how a bell gets
+  // ignored.
+  //
+  // Addressed to owner + finance only, mirroring the agencyOwnerOrFinance guard on
+  // the review routes — telling somebody about a queue they are not permitted to
+  // clear is noise. The sub-role enum happens to be exactly owner|finance today,
+  // so this filter is a no-op right now; it is written down so a third sub-role
+  // does not silently inherit money notifications.
+  for (const [agencyId, voucherIds] of awaitingByAgency) {
+    try {
+      const members = await agencyMemberRepository.listByAgency(agencyId);
+      const recipients = members
+        .filter((m) => m.status === 'active')
+        .filter((m) => m.subRole === 'owner' || m.subRole === 'finance')
+        .map((m) => m.userId);
+      if (recipients.length === 0) {
+        logger.warn(
+          `[weekly-payout] ${voucherIds.length} voucher(s) awaiting review at agency ${agencyId} with no owner/finance member to tell`,
+        );
+        continue;
+      }
+
+      const count = voucherIds.length;
+      await notifyMany(recipients, {
+        kind: 'pv_day_review_pending',
+        title: `${count} voucher${count === 1 ? '' : 's'} awaiting day review`,
+        body:
+          `Week ${weekStart} to ${weekEnd} did not go out: ${count} voucher${count === 1 ? '' : 's'} ` +
+          `${count === 1 ? 'has a day that is' : 'have days that are'} held or unreviewed. ` +
+          `Approve each day on Payroll & PV, then send.`,
+        payload: { weekStart, weekEnd, voucherIds },
+        actor: ACTOR,
+      });
+    } catch (error) {
+      // The vouchers are correctly held either way; failing to announce it must
+      // not make the run look failed or cost the PR notifications above.
+      logger.error(`[weekly-payout] could not notify agency ${agencyId} of held vouchers:`, error);
+    }
+  }
 
   // Collections: what each outlet owes its agency for the same week. DRAFTS
   // only — an agency reviews and issues, nothing is put in front of an outlet

@@ -133,7 +133,7 @@ function statusPill(status: PrPvStatus) {
 
 type PvStatusFilter = "all" | "TO_PAY" | PrPvStatus;
 
-type PayrollWeekTab = "last_week" | "last_last_week";
+type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
 
 type PvSubTab = "vouchers" | "receipts";
 
@@ -143,13 +143,29 @@ const LAST_WEEK_REVIEW_STATUSES = new Set<PrPvStatus>([
 	"DISPUTED",
 ]);
 
+/**
+ * Does this voucher belong to the tab covering `weekStartIso`–`weekEndIso`?
+ *
+ * The tabs are Sun–Sat payroll weeks. A **backend** voucher's own `week_start` is
+ * a MONDAY, so it is matched by asking whether that date falls inside the tab's
+ * window — never by string equality, which could not match a Sunday tab start
+ * against a Monday week start and so silently hid every real voucher on this
+ * screen. Containment is unambiguous: a date sits in exactly one Sun–Sat week.
+ *
+ * Because the two conventions differ by a day, a real voucher's own week range is
+ * not the tab's range. The row prints its own week wherever they diverge rather
+ * than letting the tab label speak for it.
+ */
 function pvBelongsToPayrollWeek(
 	pv: PrPaymentVoucher,
 	weekStartIso: string,
+	weekEndIso: string,
 	lastWeekStart: string,
 	lastLastWeekStart: string,
 ): boolean {
-	if (pv.weekStartIso) return pv.weekStartIso === weekStartIso;
+	if (pv.weekStartIso) {
+		return pv.weekStartIso >= weekStartIso && pv.weekStartIso <= weekEndIso;
+	}
 	const weeksAgo = DEMO_PV_ISSUED_WEEKS_AGO[pv.id];
 	if (weeksAgo === 0) return weekStartIso === lastWeekStart;
 	if (weeksAgo === 1) return weekStartIso === lastLastWeekStart;
@@ -165,11 +181,43 @@ const PV_STATUS_FILTERS: { value: PvStatusFilter; label: string }[] = [
 ];
 
 function statusFiltersForWeek(tab: PayrollWeekTab) {
-	if (tab === "last_week") {
+	// "To pay" only means something once a PR has signed, which cannot have
+	// happened for a week still running or one awaiting review.
+	if (tab === "last_week" || tab === "this_week") {
 		return PV_STATUS_FILTERS.filter((f) => f.value !== "TO_PAY");
 	}
 	return PV_STATUS_FILTERS;
 }
+
+/** "2026-07-20" -> "20 Jul", so a week range reads "20 Jul – 26 Jul 2026". */
+function shortIsoDay(iso: string): string {
+	const d = new Date(`${iso}T00:00:00`);
+	if (Number.isNaN(d.getTime())) return iso;
+	return d.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}
+
+/**
+ * The week a BACKEND voucher itself covers, or null for a demo one (whose
+ * `cycle` string already is a date range).
+ *
+ * Needed because the two conventions differ: `payment_voucher.week_start` is a
+ * Monday, the tabs on this screen are Sun–Sat, and the backend's `cycle` column
+ * holds a cadence ("Weekly") rather than a range — so without this the row shows
+ * no dates at all and the only week on screen is the tab's.
+ */
+function pvOwnWeekLabel(pv: PrPaymentVoucher): string | null {
+	if (!pv.weekStartIso || !pv.weekEndIso) return null;
+	const year = pv.weekEndIso.slice(0, 4);
+	return `${shortIsoDay(pv.weekStartIso)} – ${shortIsoDay(pv.weekEndIso)} ${year}`;
+}
+
+/**
+ * The statuses a voucher for the CURRENT, still-running week can legitimately
+ * hold. Same set as last week's: the week being open does not stop an agency
+ * reviewing what has accrued so far, and a voucher already sent mid-week (it
+ * happens) must not vanish from the only screen that can chase it.
+ */
+const THIS_WEEK_STATUSES = LAST_WEEK_REVIEW_STATUSES;
 
 function AgencyPV() {
 	const navigate = useNavigate();
@@ -243,11 +291,36 @@ function AgencyPV() {
 		[prReceiptScans, agencyPRs, prPaymentVouchers],
 	);
 
+	// -1 = the week still running. Same Sun–Sat shape as the other two, so the
+	// three tabs are one convention rather than a special case bolted on.
+	const thisWeekBounds = useMemo(
+		() => demoPayrollWeekBoundsForWeeksAgo(-1),
+		[],
+	);
 	const lastWeekBounds = useMemo(() => demoPayrollWeekBoundsForWeeksAgo(0), []);
 	const lastLastWeekBounds = useMemo(
 		() => demoPayrollWeekBoundsForWeeksAgo(1),
 		[],
 	);
+
+	const thisWeekPvs = useMemo(() => {
+		return payrollActivePvs.filter(
+			(p) =>
+				pvBelongsToPayrollWeek(
+					p,
+					thisWeekBounds.weekStartIso,
+					thisWeekBounds.weekEndIso,
+					lastWeekBounds.weekStartIso,
+					lastLastWeekBounds.weekStartIso,
+				) && THIS_WEEK_STATUSES.has(p.status),
+		);
+	}, [
+		payrollActivePvs,
+		thisWeekBounds.weekStartIso,
+		thisWeekBounds.weekEndIso,
+		lastWeekBounds.weekStartIso,
+		lastLastWeekBounds.weekStartIso,
+	]);
 
 	const lastWeekPvs = useMemo(() => {
 		return payrollActivePvs.filter(
@@ -255,6 +328,7 @@ function AgencyPV() {
 				pvBelongsToPayrollWeek(
 					p,
 					lastWeekBounds.weekStartIso,
+					lastWeekBounds.weekEndIso,
 					lastWeekBounds.weekStartIso,
 					lastLastWeekBounds.weekStartIso,
 				) && LAST_WEEK_REVIEW_STATUSES.has(p.status),
@@ -262,6 +336,7 @@ function AgencyPV() {
 	}, [
 		payrollActivePvs,
 		lastWeekBounds.weekStartIso,
+		lastWeekBounds.weekEndIso,
 		lastLastWeekBounds.weekStartIso,
 	]);
 
@@ -271,6 +346,7 @@ function AgencyPV() {
 				pvBelongsToPayrollWeek(
 					p,
 					lastLastWeekBounds.weekStartIso,
+					lastLastWeekBounds.weekEndIso,
 					lastWeekBounds.weekStartIso,
 					lastLastWeekBounds.weekStartIso,
 				) && p.status === "SIGNED",
@@ -279,12 +355,14 @@ function AgencyPV() {
 		payrollActivePvs,
 		lastWeekBounds.weekStartIso,
 		lastLastWeekBounds.weekStartIso,
+		lastLastWeekBounds.weekEndIso,
 	]);
 
-	const weekTabPvs = useMemo(
-		() => (payrollWeekTab === "last_week" ? lastWeekPvs : lastLastWeekPvs),
-		[payrollWeekTab, lastWeekPvs, lastLastWeekPvs],
-	);
+	const weekTabPvs = useMemo(() => {
+		if (payrollWeekTab === "this_week") return thisWeekPvs;
+		if (payrollWeekTab === "last_week") return lastWeekPvs;
+		return lastLastWeekPvs;
+	}, [payrollWeekTab, thisWeekPvs, lastWeekPvs, lastLastWeekPvs]);
 
 	const latestIssuedMs = useMemo(
 		() => getLatestPvIssuedMs(weekTabPvs),
@@ -292,7 +370,11 @@ function AgencyPV() {
 	);
 
 	const activeWeekBounds =
-		payrollWeekTab === "last_last_week" ? lastLastWeekBounds : lastWeekBounds;
+		payrollWeekTab === "last_last_week"
+			? lastLastWeekBounds
+			: payrollWeekTab === "this_week"
+				? thisWeekBounds
+				: lastWeekBounds;
 
 	const activeWeekStats = useMemo(() => {
 		const signed = weekTabPvs.filter((p) => p.status === "SIGNED");
@@ -367,7 +449,10 @@ function AgencyPV() {
 	);
 
 	useEffect(() => {
-		if (payrollWeekTab === "last_week" && statusFilter === "TO_PAY") {
+		// "To pay" is offered only on the Payment Week tab; leaving it selected while
+		// switching to a week that cannot have signed vouchers filters the list to
+		// nothing and reads as an empty week.
+		if (payrollWeekTab !== "last_last_week" && statusFilter === "TO_PAY") {
 			setStatusFilter("all");
 		}
 	}, [payrollWeekTab, statusFilter]);
@@ -432,6 +517,16 @@ function AgencyPV() {
 			<DisputeQueuePanel />
 
 			<div className="iz-payroll-tabs mt-3">
+				{/* The week still running. Vouchers accrue into it as shifts complete, so
+				    without this tab a real voucher for the current week has nowhere to
+				    appear at all. */}
+				<button
+					type="button"
+					className={`iz-payroll-tab${payrollWeekTab === "this_week" ? " on" : ""}`}
+					onClick={() => selectPayrollWeekTab("this_week")}
+				>
+					This Week
+				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_week" ? " on" : ""}`}
@@ -449,9 +544,11 @@ function AgencyPV() {
 			</div>
 
 			<p className="iz-tiny iz-muted2 mt-2">
-				{payrollWeekTab === "last_week"
-					? `${lastWeekBounds.cycle} · pending PR review or dispute`
-					: `${lastLastWeekBounds.cycle} · signed · ready to pay`}
+				{payrollWeekTab === "this_week"
+					? `${thisWeekBounds.cycle} · in progress · not yet closed`
+					: payrollWeekTab === "last_week"
+						? `${lastWeekBounds.cycle} · pending PR review or dispute`
+						: `${lastLastWeekBounds.cycle} · signed · ready to pay`}
 				{" · "}
 				{activeWeekStats.pvCount} PV{activeWeekStats.pvCount === 1 ? "" : "s"} ·{" "}
 				{activeWeekBilling.plan.label} · {activeWeekBilling.priceLabel}
@@ -534,7 +631,7 @@ function AgencyPV() {
 							</p>
 						</IzCard>
 					)}
-					{payrollWeekTab === "last_week" && (
+					{payrollWeekTab !== "last_last_week" && (
 						<IzCard flat className="!mb-2.5">
 							<div className="flex items-center gap-2 iz-tiny iz-muted">
 								<Filter className="h-3.5 w-3.5 shrink-0" />
@@ -579,7 +676,7 @@ function AgencyPV() {
 										? "No signed vouchers to pay this week"
 										: "No vouchers match these filters"}
 								</p>
-								{payrollWeekTab === "last_week" && hasActiveFilters && (
+								{payrollWeekTab !== "last_last_week" && hasActiveFilters && (
 									<button
 										type="button"
 										className="iz-chip mt-2"
@@ -610,6 +707,15 @@ function AgencyPV() {
 										<p className="iz-tiny iz-muted2 mt-0.5">
 											Cycle: {pv.cycle}
 										</p>
+										{/* A backend voucher's own week runs Mon–Sun while these tabs
+										    are Sun–Sat, so the tab heading is one day out from the
+										    week this voucher actually covers. Print the voucher's
+										    range rather than letting the heading speak for it. */}
+										{pvOwnWeekLabel(pv) && (
+											<p className="iz-tiny iz-muted2">
+												Week worked: {pvOwnWeekLabel(pv)}
+											</p>
+										)}
 										<p className="iz-tiny iz-muted2">
 											Issued {pv.issued} · Due {resolvePvPayByDue(pv)}
 											{parsePvIssuedMs(pv.issued) >= latestIssuedMs &&

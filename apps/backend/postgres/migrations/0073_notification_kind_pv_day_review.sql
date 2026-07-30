@@ -1,0 +1,11 @@
+-- The Monday payout job now holds a voucher whose days nobody reviewed, and until
+-- this value existed it told nobody: the hold was a log line only, so the queue
+-- grew silently and the first person to notice was a PR asking where their money
+-- was. Added alongside its producer in weekly-payout.job.ts, per the rule in
+-- notification.model.ts ("add one when the code that raises it lands").
+--
+-- Agency-addressed, like overtime_pending_approval and shift_cover_needed.
+--
+-- Additive and idempotent: IF NOT EXISTS makes a re-run a no-op, which matters
+-- because ALTER TYPE ... ADD VALUE cannot be rolled back inside a transaction.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'pv_day_review_pending';

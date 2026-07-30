@@ -512,6 +512,13 @@
       "when": 1785400000000,
       "tag": "0072_pv_day_review",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1785420000000,
+      "tag": "0073_notification_kind_pv_day_review",
+      "breakpoints": true
     }
   ]
 }
