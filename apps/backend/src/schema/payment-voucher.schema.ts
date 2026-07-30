@@ -226,6 +226,42 @@ export const ReviewVoucherDaySchema = z.object({
   note: z.string().max(1000).optional(),
 });
 
+/**
+ * The agency's decision on ONE receipt.
+ *
+ * 'verified' is absent on purpose. Verification is the lifecycle closing — the
+ * week rolling over, or a dispute being resolved — and letting a reviewer jump
+ * straight to it would shut the dispute window before the PR had ever seen the
+ * figure. The only two states a person sets here are the two a person can
+ * defend: I have checked this, or I have taken that back.
+ */
+export const ReviewReceiptSchema = z.object({
+  status: z.enum(['pending', 'approved']),
+});
+
+export type ReviewReceiptInput = z.infer<typeof ReviewReceiptSchema>;
+
+/**
+ * The agency correcting ONE line of a receipt under review.
+ *
+ * `amount` is the commission — what the PR is actually paid — because that is
+ * the number the voucher net is built from. The GROSS printed sale is packed in
+ * `payment_voucher_line.ref` and is deliberately NOT editable here: it is the
+ * paper's own figure, the photo is the record of it, and re-encoding `ref` would
+ * move the key that carries receipt links across a voucher rewrite and that a
+ * dispute's `receiptRefs` points at.
+ */
+export const AgencyEditReceiptLineSchema = z
+  .object({
+    quantity: z.number().int().positive().max(999).optional(),
+    amount: z.number().nonnegative().optional(),
+  })
+  .refine((d) => d.quantity !== undefined || d.amount !== undefined, {
+    message: 'Send a quantity, an amount, or both',
+  });
+
+export type AgencyEditReceiptLineInput = z.infer<typeof AgencyEditReceiptLineSchema>;
+
 export const PrSignVoucherSchema = z.object({
   signature: z
     .object({

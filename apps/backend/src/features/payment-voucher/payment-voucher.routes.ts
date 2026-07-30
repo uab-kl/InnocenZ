@@ -79,6 +79,27 @@ router.post(
 // segment, so it MUST precede '/:id' below.
 router.get('/receipts', paymentVoucherController.listAgencyReceipts.bind(paymentVoucherController));
 
+// The receipt lifecycle: PENDING -> APPROVED (here) -> VERIFIED (the Monday
+// rollover, or a resolved dispute — never a request).
+//
+// Both writes carry the same sub-role gate as the day review: approving a
+// receipt, and correcting the figure on it, are money attestations. The READ
+// above stays ungated for the same reason it does there — seeing what was
+// decided is not the authority to decide it.
+//
+// '/receipts/...' is registered before '/:id' so the word "receipts" is never
+// read as a voucher id.
+router.patch(
+  '/receipts/:receiptId/review',
+  agencyOwnerOrFinance,
+  paymentVoucherController.reviewReceipt.bind(paymentVoucherController),
+);
+router.patch(
+  '/receipts/:receiptId/lines/:lineId',
+  agencyOwnerOrFinance,
+  paymentVoucherController.editReceiptLine.bind(paymentVoucherController),
+);
+
 // The agency's dispute queue and its decisions. '/disputes' MUST precede the
 // '/:id' route below — both are one segment, so registered the other way round
 // the queue would be read as a voucher whose id is the word "disputes".

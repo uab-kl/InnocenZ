@@ -68,6 +68,34 @@ export async function runWeeklyPayout(): Promise<void> {
     }
   }
 
+  // APPROVED -> VERIFIED, the rollover arm of the receipt lifecycle.
+  //
+  // Runs BEFORE the issue pass below, and that order is the point: the gate
+  // refuses a voucher with a PENDING receipt, so if the rollover ran afterwards
+  // a week's receipts would spend an extra seven days at 'approved' before
+  // closing — a whole cadence skipped, every week, invisibly.
+  //
+  // Scoped by `week_start <= weekStart`, so a voucher held back for a fortnight
+  // still rolls over when it clears. Vouchers with an open dispute are skipped
+  // inside the repository: verified means closed, and closing evidence under a
+  // live claim would settle it out from under the PR.
+  try {
+    const verified = await paymentVoucherRepository.verifyApprovedReceipts({
+      throughWeekStart: weekStart,
+      actor: ACTOR,
+    });
+    logger.info(
+      `[weekly-payout] receipts: ${verified.length} approved receipt(s) rolled over to verified` +
+        (verified.length > 0
+          ? ` (${verified.slice(0, 10).join(', ')}${verified.length > 10 ? ', …' : ''})`
+          : ''),
+    );
+  } catch (error) {
+    // A receipt left at 'approved' rolls over next Monday. It must not cost the
+    // PRs the vouchers and notifications below.
+    logger.error('[weekly-payout] receipt rollover failed:', error);
+  }
+
   // Issue: every voucher for the closed week still at 'pending_review' —
   // whether generated seconds ago or accumulated live while the PR logged
   // receipts during the week — is sent to the PR for signature ("one week,
@@ -97,7 +125,10 @@ export async function runWeeklyPayout(): Promise<void> {
     // Consequence to expect on the first run after this shipped: vouchers stay
     // at pending_review until an agency reviews them, which is the point.
     const reviews = await paymentVoucherRepository.listDayReviews(voucher.id);
-    const gate = voucherSendGate(buildDayReviewView(voucher.lines, reviews));
+    // Receipts as well as days: a receipt the agency never looked at holds the
+    // week here exactly as it does at the HTTP send. Same gate, same message.
+    const receipts = await paymentVoucherRepository.listReceipts(voucher.id);
+    const gate = voucherSendGate(buildDayReviewView(voucher.lines, reviews), receipts);
     if (!gate.allowed) {
       awaitingReview += 1;
       logger.warn(`[weekly-payout] awaiting agency day review ${voucher.id}: ${gate.message}`);

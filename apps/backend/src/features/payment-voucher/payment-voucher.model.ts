@@ -76,6 +76,29 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
 });
 
 /**
+ * Where one receipt sits in the agency's review (migration 0074).
+ *
+ * `pending` — the PR said this happened and nobody has checked it yet. A pending
+ * receipt BLOCKS the voucher's send, and the PR may NOT dispute the money behind
+ * it: there is nothing to contest until the agency has stated a figure.
+ * `approved` — the agency looked at the photo and the note and accepted it (or
+ * corrected the numbers first). This is the state in which the PR may dispute.
+ * `verified` — closed. Either the week rolled over untouched, or a dispute
+ * against it was resolved.
+ *
+ * There is deliberately no `rejected`: an agency that disbelieves a receipt
+ * edits the line to what it should be and approves that, which leaves the PR a
+ * figure they can contest. A rejected state would be a refusal with no number
+ * attached and nothing to dispute.
+ */
+export const paymentVoucherReceiptStatusValues = ['pending', 'approved', 'verified'] as const;
+export type PaymentVoucherReceiptStatus = (typeof paymentVoucherReceiptStatusValues)[number];
+export const paymentVoucherReceiptStatusEnum = MainSchema.enum(
+  'payment_voucher_receipt_status',
+  paymentVoucherReceiptStatusValues,
+);
+
+/**
  * One SCANNED OR SELF-LOGGED RECEIPT (an order slip) — the grouping between a
  * voucher and its item lines: voucher → receipts → lines. `receiptNo` is the
  * database-generated running number (RCP-000001, unique); `orderNo` is what
@@ -105,6 +128,17 @@ export const PaymentVoucherReceiptTable = MainSchema.table('payment_voucher_rece
   // paper — quantity / price / date — or confirmation everything matches).
   note: varchar('note', { length: 1000 }),
   proofPhotos: jsonb('proof_photos').$type<string[]>(),
+  /**
+   * The review state (migration 0074). Set on INSERT from `source`: a manual
+   * self-log starts 'pending', a scan or a check-in seal starts 'approved'.
+   */
+  status: paymentVoucherReceiptStatusEnum('status').notNull().default('pending'),
+  /**
+   * When a person decided. NULL beside status='approved' means the row predates
+   * the review flow (backfilled by 0074) — not that it was approved at epoch.
+   */
+  reviewedAt: timestamp('reviewed_at', { withTimezone: true }),
+  reviewedBy: varchar('reviewed_by'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull().default('system'),

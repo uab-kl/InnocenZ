@@ -1,4 +1,8 @@
-import type { PaymentVoucherDayReviewType, PaymentVoucherLineType } from './payment-voucher.model';
+import type {
+  PaymentVoucherDayReviewType,
+  PaymentVoucherLineType,
+  PaymentVoucherReceiptStatus,
+} from './payment-voucher.model';
 
 /**
  * Per-day totals for a voucher, in integer CENTS.
@@ -89,7 +93,20 @@ export function allDaysReviewed(view: DayReviewView[]): boolean {
 
 export type SendGateResult =
   | { allowed: true }
-  | { allowed: false; message: string; heldDays: string[]; unreviewedDays: string[] };
+  | {
+      allowed: false;
+      message: string;
+      heldDays: string[];
+      unreviewedDays: string[];
+      /** Receipt numbers (RCP-000123) still waiting on the agency's review. */
+      pendingReceipts: string[];
+    };
+
+/** Just enough of a receipt for the gate — its number, and where it sits. */
+export type ReceiptGateRow = {
+  receiptNo: string;
+  status: PaymentVoucherReceiptStatus;
+};
 
 /**
  * May this voucher go to the PR?
@@ -107,20 +124,42 @@ export type SendGateResult =
  * adjustment) belong to no day, so there is nothing to approve and blocking it
  * would be an unopenable deadlock rather than a control.
  *
+ * OWNER DECISION #2 (30 Jul 2026): a PENDING RECEIPT also blocks, routed through
+ * here rather than checked separately at the send. One refusal path cannot
+ * disagree with itself; two can. The consequence is what makes the PR side
+ * coherent — by the time a PR reads a *sent* voucher, every receipt on it has
+ * been approved, which is why approval is the precondition for disputing
+ * receipt-backed money.
+ *
+ * Note the asymmetry with days: a day carries no state until someone acts, so
+ * silence blocks. A receipt is born in a state, and only `manual` self-logs are
+ * born pending — a scan does not wait on anybody.
+ *
  * Used by BOTH the HTTP send and the Monday payout job. A gate the scheduler
  * walks past every week is not a gate.
  */
-export function voucherSendGate(view: DayReviewView[]): SendGateResult {
-  if (view.length === 0) return { allowed: true };
+export function voucherSendGate(
+  view: DayReviewView[],
+  receipts: ReceiptGateRow[] = [],
+): SendGateResult {
+  const pendingReceipts = receipts.filter((r) => r.status === 'pending').map((r) => r.receiptNo);
+  if (view.length === 0 && pendingReceipts.length === 0) return { allowed: true };
 
   const heldDays = view.filter((d) => d.status === 'held').map((d) => d.date);
   const unreviewedDays = view.filter((d) => d.status === null).map((d) => d.date);
-  if (heldDays.length === 0 && unreviewedDays.length === 0) return { allowed: true };
+  if (heldDays.length === 0 && unreviewedDays.length === 0 && pendingReceipts.length === 0) {
+    return { allowed: true };
+  }
 
   const parts: string[] = [];
   if (heldDays.length > 0) parts.push(`${heldDays.length} day(s) held: ${heldDays.join(', ')}`);
   if (unreviewedDays.length > 0) {
     parts.push(`${unreviewedDays.length} day(s) not yet reviewed: ${unreviewedDays.join(', ')}`);
+  }
+  if (pendingReceipts.length > 0) {
+    parts.push(
+      `${pendingReceipts.length} receipt(s) not yet reviewed: ${pendingReceipts.join(', ')}`,
+    );
   }
 
   return {
@@ -128,5 +167,6 @@ export function voucherSendGate(view: DayReviewView[]): SendGateResult {
     message: `This voucher cannot be sent yet — ${parts.join(' · ')}.`,
     heldDays,
     unreviewedDays,
+    pendingReceipts,
   };
 }

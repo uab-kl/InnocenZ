@@ -35,6 +35,8 @@ import {
   PrRaiseDisputeSchema,
   PrSignVoucherSchema,
   ReviewVoucherDaySchema,
+  ReviewReceiptSchema,
+  AgencyEditReceiptLineSchema,
   PrWithdrawDisputeSchema,
   ResolveDisputeSchema,
   PrReceiptKind,
@@ -46,6 +48,7 @@ import {
   PaymentVoucherFilter,
   PaymentVoucherStatus,
   PaymentVoucherLineType,
+  PaymentVoucherReceiptStatus,
 } from './payment-voucher.model';
 import type { PrType } from '@/features/pr/pr.model';
 
@@ -168,15 +171,44 @@ type PrReceiptLineDTO = {
   lineDate: string | null;
   outlet: string | null;
   at: Date;
-  /** Manual self-logs stay pending until the agency verifies them. */
+  /** Still waiting on the agency: the parent receipt has not been approved. */
   pending: boolean;
   /** Proof photo(s) attached to the self-log — [] when none. */
   proofPhotos: string[];
+  /**
+   * The parent receipt's review state, or null when this line has no receipt
+   * behind it (a wages seal, a bare self-logged line, a legacy row).
+   */
+  receiptStatus: PaymentVoucherReceiptStatus | null;
+  /**
+   * May the PR contest this money yet?
+   *
+   * ADVISORY — it exists so the app can grey a button instead of offering an
+   * action that will 409. The authoritative refusal lives in `raiseMyDispute`;
+   * a client copy of a rule is never the rule.
+   *
+   * Wages are always disputable: they are sealed at check-out with no receipt to
+   * approve, and making approval a precondition there would mean a wage error
+   * could never be contested (owner's decision, 30 Jul 2026).
+   */
+  disputable: boolean;
 };
 
-/** Maps a stored line back to the clean receipt shape the mobile app renders. */
-function toReceiptLineDTO(line: PaymentVoucherLineType): PrReceiptLineDTO {
+/**
+ * Maps a stored line back to the clean receipt shape the mobile app renders.
+ *
+ * `receiptStatusById` is optional: callers that have loaded the voucher's
+ * receipts pass it, and the line then reports the REAL review state. Without it
+ * `pending` falls back to the old source-based guess, which is why every
+ * PR-facing read passes the map — a line that says "pending" on one screen and
+ * "approved" on another is worse than either.
+ */
+function toReceiptLineDTO(
+  line: PaymentVoucherLineType,
+  receiptStatusById?: Map<string, PaymentVoucherReceiptStatus>,
+): PrReceiptLineDTO {
   const { kind, source, sales } = decodeRef(line.ref);
+  const receiptStatus = line.receiptId ? (receiptStatusById?.get(line.receiptId) ?? null) : null;
   return {
     id: line.id,
     kind,
@@ -188,9 +220,18 @@ function toReceiptLineDTO(line: PaymentVoucherLineType): PrReceiptLineDTO {
     lineDate: line.lineDate,
     outlet: line.outlet,
     at: line.createdAt,
-    pending: source === 'manual',
+    pending: receiptStatus ? receiptStatus === 'pending' : source === 'manual',
     proofPhotos: line.proofPhotos ?? [],
+    receiptStatus,
+    disputable: kind === 'wages' || receiptStatus === null || receiptStatus !== 'pending',
   };
+}
+
+/** receipt id -> review state, for the DTO mapper above. */
+function receiptStatusMap(
+  receipts: { id: string; status: PaymentVoucherReceiptStatus }[],
+): Map<string, PaymentVoucherReceiptStatus> {
+  return new Map(receipts.map((r) => [r.id, r.status]));
 }
 
 /** Wage lines only — History summary "RM X wages" beside net. */
@@ -210,6 +251,23 @@ export class PaymentVoucherControllerClass {
     private prRepository: PrRepositoryClass,
     private paymentVoucherDisputeRepository: PaymentVoucherDisputeRepositoryClass,
   ) {}
+
+  /**
+   * The line's parent receipt when it is past PENDING — i.e. no longer the PR's
+   * to change.
+   *
+   * Once the agency has approved a receipt, the numbers on it are a figure
+   * somebody attested to. A PR who could still edit them would be able to move
+   * money after the attestation, and the approval would quietly stop describing
+   * what it approved. The route back is the dispute, which is exactly what
+   * approval unlocks. Returns null when there is nothing to protect (no receipt,
+   * or still pending).
+   */
+  private async lockedReceiptFor(line: PaymentVoucherLineType) {
+    if (!line.receiptId) return null;
+    const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(line.receiptId);
+    return owned && owned.receipt.status !== 'pending' ? owned.receipt : null;
+  }
 
   /** The PR profile bound to the signed-in account, or null (not a PR). */
   private async resolvePr(req: Request): Promise<PrType | null> {
@@ -294,6 +352,11 @@ export class PaymentVoucherControllerClass {
           dayReviews,
           allDaysReviewed: allDaysReviewed(dayReviews),
           hasHeldDay: dayReviews.some((d) => d.status === 'held'),
+          // Convenience for a header count. The send button must gate on the
+          // receipts' own statuses (and each day's own status), not on these
+          // roll-ups — a summary flag is one refactor away from disagreeing
+          // with the rows it summarises.
+          pendingReceiptCount: receipts.filter((r) => r.status === 'pending').length,
         },
       });
     } catch (error) {
@@ -530,12 +593,20 @@ export class PaymentVoucherControllerClass {
           });
         }
         const reviews = await this.paymentVoucherRepository.listDayReviews(id);
-        const gate = voucherSendGate(buildDayReviewView(existing.lines, reviews));
+        // Receipts too: a PENDING receipt blocks the send through the SAME gate
+        // (owner's decision #2), so the send has one refusal path rather than
+        // two that can disagree about whether a week may go out.
+        const receipts = await this.paymentVoucherRepository.listReceipts(id);
+        const gate = voucherSendGate(buildDayReviewView(existing.lines, reviews), receipts);
         if (!gate.allowed) {
           return res.status(409).json({
             success: false,
             message: gate.message,
-            data: { heldDays: gate.heldDays, unreviewedDays: gate.unreviewedDays },
+            data: {
+              heldDays: gate.heldDays,
+              unreviewedDays: gate.unreviewedDays,
+              pendingReceipts: gate.pendingReceipts,
+            },
           });
         }
       }
@@ -597,6 +668,11 @@ export class PaymentVoucherControllerClass {
 
       const { weekStart, weekEnd } = weekBounds();
       const draft = await this.paymentVoucherRepository.getCurrentWeekDraft(pr.id, weekStart);
+      // This is the THIS-WEEK section, where the PR watches the agency approve
+      // what they logged — so the receipt states have to come with the lines.
+      const statuses = draft
+        ? receiptStatusMap(await this.paymentVoucherRepository.listReceipts(draft.id))
+        : undefined;
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -606,7 +682,7 @@ export class PaymentVoucherControllerClass {
           weekEnd,
           net: draft?.net ?? '0.00',
           status: draft?.status ?? null,
-          lines: (draft?.lines ?? []).map(toReceiptLineDTO),
+          lines: (draft?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses)),
         },
       });
     } catch (error) {
@@ -623,6 +699,12 @@ export class PaymentVoucherControllerClass {
 
       const { weekStart, weekEnd } = previousWeekBounds();
       const voucher = await this.paymentVoucherRepository.getWeekVoucher(pr.id, weekStart);
+      // The LAST-WEEK section is where disputes are raised, and whether a line
+      // may be disputed depends on its receipt's state — so this read carries
+      // the same statuses as this-week rather than guessing from `source`.
+      const statuses = voucher
+        ? receiptStatusMap(await this.paymentVoucherRepository.listReceipts(voucher.id))
+        : undefined;
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -637,7 +719,7 @@ export class PaymentVoucherControllerClass {
           disputeReason: voucher?.disputeReason ?? null,
           disputeNote: voucher?.disputeNote ?? null,
           disputedAt: voucher?.disputedAt ?? null,
-          lines: (voucher?.lines ?? []).map(toReceiptLineDTO),
+          lines: (voucher?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses)),
         },
       });
     } catch (error) {
@@ -660,10 +742,14 @@ export class PaymentVoucherControllerClass {
         excludeWeekStart: currentWeekStart,
       });
 
-      res.status(200).json({
-        success: true,
-        message: 'OK',
-        data: vouchers.map((v) => ({
+      // One receipt read per week, so a past line reports the state it actually
+      // ended in. Without it a settled week would still badge a self-log
+      // "pending" purely because it was self-logged — the same failure as a
+      // cancelled subscription rendering "Paid".
+      const weeks = [];
+      for (const v of vouchers) {
+        const statuses = receiptStatusMap(await this.paymentVoucherRepository.listReceipts(v.id));
+        weeks.push({
           voucherId: v.id,
           weekStart: v.weekStart,
           weekEnd: v.weekEnd,
@@ -675,9 +761,11 @@ export class PaymentVoucherControllerClass {
           issuedDate: v.issuedDate,
           prSignedAt: v.prSignedAt,
           paidAt: v.paidAt,
-          lines: v.lines.map(toReceiptLineDTO),
-        })),
-      });
+          lines: v.lines.map((l) => toReceiptLineDTO(l, statuses)),
+        });
+      }
+
+      res.status(200).json({ success: true, message: 'OK', data: weeks });
     } catch (error) {
       logger.error('[PaymentVoucherController.getMyHistory] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -801,6 +889,11 @@ export class PaymentVoucherControllerClass {
           receiptTime: parsed.data.receiptTime ?? null,
           note: parsed.data.note ?? null,
           proofPhotos: parsed.data.proofPhotos ?? null,
+          // Only a MANUAL self-log waits on the agency (owner's decision #3):
+          // an OCR scan and a check-in seal were not self-declared, so holding
+          // them would block a week on evidence nobody disputes. The PR can
+          // still contest either once the voucher is issued.
+          status: parsed.data.source === 'manual' ? 'pending' : 'approved',
           createdBy: actor,
           updatedBy: actor,
         },
@@ -833,7 +926,8 @@ export class PaymentVoucherControllerClass {
           receiptDate: receipt.receiptDate,
           receiptTime: receipt.receiptTime,
           source: receipt.source,
-          lines: lines.map(toReceiptLineDTO),
+          status: receipt.status,
+          lines: lines.map((l) => toReceiptLineDTO(l, receiptStatusMap([receipt]))),
         },
       });
     } catch (error) {
@@ -886,6 +980,12 @@ export class PaymentVoucherControllerClass {
           receiptTime: r.receipt.receiptTime,
           note: r.receipt.note,
           proofPhotos: r.receipt.proofPhotos ?? [],
+          // The review state, and who set it. A NULL reviewedAt beside
+          // status='approved' means the row predates the review flow (0074's
+          // backfill), not that someone approved it at epoch.
+          status: r.receipt.status,
+          reviewedAt: r.receipt.reviewedAt,
+          reviewedBy: r.receipt.reviewedBy,
           loggedAt: r.receipt.createdAt,
           voucherId: r.voucherId,
           voucherStatus: r.voucherStatus,
@@ -912,6 +1012,168 @@ export class PaymentVoucherControllerClass {
     }
   }
 
+  /**
+   * The agency's decision on ONE receipt: approved, or back to pending.
+   *
+   * Approving is a money attestation — the same authority as approving a day —
+   * so the route carries `agencyOwnerOrFinance`. What it attests to is the photo
+   * and the note against the numbers on the lines, which is why the correction
+   * endpoint below exists beside it rather than after it.
+   *
+   * A VERIFIED receipt is refused. Verification means the week closed or a
+   * dispute settled; reopening it would put a decided record back in play, and
+   * the send gate would then hold a voucher whose money has already moved.
+   */
+  async reviewReceipt(req: Request, res: Response) {
+    try {
+      const parsed = ReviewReceiptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const receiptId = paramId(req.params.receiptId);
+      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      if (!owned) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      // Cross-tenant reads 404 rather than 403 — never confirm a record exists.
+      if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      if (owned.receipt.status === 'verified') {
+        return res.status(409).json({
+          success: false,
+          message: `${owned.receipt.receiptNo} is already verified — that week is closed.`,
+          data: null,
+        });
+      }
+      // Same rule as day review: the decision belongs BEFORE the PR signs.
+      if (owned.voucher.prSignedAt) {
+        return res.status(409).json({
+          success: false,
+          message: 'This voucher is already signed by the PR — receipt review happens before it is sent.',
+          data: null,
+        });
+      }
+
+      const receipt = await this.paymentVoucherRepository.setReceiptStatus(
+        receiptId,
+        parsed.data.status,
+        getActor(req),
+      );
+      if (!receipt) {
+        return res
+          .status(500)
+          .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: parsed.data.status === 'approved' ? 'Receipt approved' : 'Approval withdrawn',
+        data: receipt,
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.reviewReceipt] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency correcting ONE line of a receipt it is reviewing — the quantity,
+   * the commission, or both.
+   *
+   * Targeted rather than done through `PUT /:id`, deliberately: that path deletes
+   * and re-inserts every line on the voucher, which is how an agency price edit
+   * once severed every receipt link and deleted the PR's proof photos. Editing
+   * one row by id cannot do that.
+   *
+   * Two consequences are intended, not side effects:
+   *  - the day's total changes, so `approved_total_cents` flips that day STALE
+   *    and the agency must re-approve the day before the voucher can be sent;
+   *  - an APPROVED receipt drops back to PENDING. The receipt table stores no
+   *    amount, so staleness there cannot be DETECTED later — it has to be
+   *    recorded at the moment of the edit or the approval silently starts
+   *    describing numbers it never saw.
+   */
+  async editReceiptLine(req: Request, res: Response) {
+    try {
+      const parsed = AgencyEditReceiptLineSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const receiptId = paramId(req.params.receiptId);
+      const lineId = paramId(req.params.lineId);
+      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      if (!owned) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (owned.receipt.status === 'verified') {
+        return res.status(409).json({
+          success: false,
+          message: `${owned.receipt.receiptNo} is already verified — that week is closed.`,
+          data: null,
+        });
+      }
+      if (owned.voucher.prSignedAt) {
+        return res.status(409).json({
+          success: false,
+          message: 'This voucher is already signed by the PR — correct it before it is sent.',
+          data: null,
+        });
+      }
+
+      // The line must belong to THIS receipt. Without the check, a valid receipt
+      // id would authorize editing any line on any voucher in the agency.
+      const line = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
+      if (!line || line.line.receiptId !== receiptId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const actor = getActor(req);
+      const updated = await this.paymentVoucherRepository.updateLine(lineId, {
+        ...(parsed.data.quantity !== undefined ? { quantity: parsed.data.quantity } : {}),
+        ...(parsed.data.amount !== undefined ? { amount: parsed.data.amount.toFixed(2) } : {}),
+        updatedBy: actor,
+      });
+      if (!updated) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // See the docstring: the approval described the old figure, and nothing
+      // stored would let a reader notice that later.
+      const receipt =
+        owned.receipt.status === 'approved'
+          ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
+          : owned.receipt;
+
+      return res.status(200).json({
+        success: true,
+        message:
+          owned.receipt.status === 'approved'
+            ? 'Line corrected — approve the receipt again to confirm the new figure'
+            : 'Line corrected',
+        data: {
+          receipt,
+          line: toReceiptLineDTO(updated, receiptStatusMap(receipt ? [receipt] : [])),
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.editReceiptLine] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async updateMyLine(req: Request, res: Response) {
     try {
       const lineId = paramId(req.params.lineId);
@@ -929,6 +1191,14 @@ export class PaymentVoucherControllerClass {
       }
       if (owned.voucher.status !== 'pending_review') {
         return res.status(400).json({ success: false, message: 'This week is already closed for edits', data: null });
+      }
+      const locked = await this.lockedReceiptFor(owned.line);
+      if (locked) {
+        return res.status(409).json({
+          success: false,
+          message: `${locked.receiptNo} has already been reviewed by the agency — raise a dispute if the figure is wrong.`,
+          data: null,
+        });
       }
 
       // Partial update: unspecified ref parts keep their current values.
@@ -987,6 +1257,16 @@ export class PaymentVoucherControllerClass {
       }
       if (owned.voucher.status !== 'pending_review') {
         return res.status(400).json({ success: false, message: 'This week is already closed for edits', data: null });
+      }
+      // Deleting is the sharper case: it would take the reviewed evidence away
+      // along with the money, leaving the agency's approval pointing at nothing.
+      const locked = await this.lockedReceiptFor(owned.line);
+      if (locked) {
+        return res.status(409).json({
+          success: false,
+          message: `${locked.receiptNo} has already been reviewed by the agency — raise a dispute instead of removing it.`,
+          data: null,
+        });
       }
 
       await this.paymentVoucherRepository.deleteLine(lineId);
@@ -1168,7 +1448,9 @@ export class PaymentVoucherControllerClass {
 
   /** Shared by the authenticated /mine export and the ticket download. */
   private voucherExportLines(bundle: { voucher: { lines: PaymentVoucherLineType[] } }) {
-    return bundle.voucher.lines.map(toReceiptLineDTO).map((l) => ({
+    // No receipt-status map on purpose: the printed document shows kind, date,
+    // outlet, quantity and commission, none of which depend on the review state.
+    return bundle.voucher.lines.map((line) => toReceiptLineDTO(line)).map((l) => ({
       kind: l.kind,
       lineDate: l.lineDate,
       outlet: l.outlet,
@@ -1399,6 +1681,35 @@ export class PaymentVoucherControllerClass {
         });
       }
 
+      // APPROVAL IS THE PRECONDITION for contesting receipt-backed money
+      // (owner's decision #1). Until the agency has reviewed a receipt there is
+      // no stated figure to argue with — the PR would be disputing their own
+      // submission. Approval is what turns it into the agency's number.
+      //
+      // WAGES ARE EXEMPT and always disputable: they are sealed at check-out
+      // with no receipt to approve, so requiring approval there would make a
+      // wage error the one thing that could never be contested.
+      //
+      // Structurally this rarely fires — a pending receipt blocks the send, so
+      // an issued voucher has none. It fires on the week still at
+      // pending_review, which a PR can also dispute.
+      if (component !== 'wages') {
+        const receipts = await this.paymentVoucherRepository.listReceipts(voucherId);
+        const statuses = receiptStatusMap(receipts);
+        const waiting = existing.lines
+          .filter((l) => l.lineDate === disputeDate && decodeRef(l.ref).kind === component)
+          .map((l) => (l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null))
+          .filter((r) => r && statuses.get(r.id) === 'pending');
+        if (waiting.length > 0) {
+          const numbers = [...new Set(waiting.map((r) => r!.receiptNo))].join(', ');
+          return res.status(409).json({
+            success: false,
+            message: `The agency has not finished reviewing ${numbers} — you can dispute ${component} on ${disputeDate} once it is approved.`,
+            data: null,
+          });
+        }
+      }
+
       // Server-computed, never from the request: this is the figure the claim is
       // measured against, so the claimant must not be able to set it.
       const disputedAmount = await this.paymentVoucherDisputeRepository.sumLinesFor(
@@ -1623,14 +1934,30 @@ export class PaymentVoucherControllerClass {
 
       // Hand the voucher back once nothing on it is still contested.
       const stillOpen = await this.paymentVoucherDisputeRepository.listOpenForVoucher(voucher.id);
-      if (stillOpen.length === 0 && voucher.status === 'disputed') {
-        await this.paymentVoucherRepository.update(voucher.id, {
-          status: 'sent',
-          disputeReason: null,
-          disputeNote: null,
-          disputedAt: null,
-          updatedBy: actor,
+      if (stillOpen.length === 0) {
+        if (voucher.status === 'disputed') {
+          await this.paymentVoucherRepository.update(voucher.id, {
+            status: 'sent',
+            disputeReason: null,
+            disputeNote: null,
+            disputedAt: null,
+            updatedBy: actor,
+          });
+        }
+        // APPROVED -> VERIFIED, the resolved-dispute arm of the lifecycle. Only
+        // when the LAST open claim is decided: verifying while another dispute
+        // is live would close the evidence under a claim still being heard. The
+        // sweep itself skips vouchers with open disputes for the same reason, so
+        // the two arms cannot contradict each other.
+        const closed = await this.paymentVoucherRepository.verifyApprovedReceipts({
+          voucherId: voucher.id,
+          actor,
         });
+        if (closed.length > 0) {
+          logger.info(
+            `[PaymentVoucherController.resolveDispute] verified ${closed.length} receipt(s) on ${voucher.id}: ${closed.join(', ')}`,
+          );
+        }
       }
 
       // Tell the PR. This is the whole point of recording outcomes: previously

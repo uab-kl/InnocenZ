@@ -1,4 +1,17 @@
-import { and, desc, eq, gte, ilike, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
+import {
+  and,
+  desc,
+  eq,
+  gte,
+  ilike,
+  inArray,
+  isNull,
+  lte,
+  ne,
+  notExists,
+  sql,
+  SQL,
+} from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
@@ -9,6 +22,8 @@ import {
   PaymentVoucherDayReviewTable,
   PaymentVoucherDayReviewType,
   PaymentVoucherDayReviewStatus,
+  PaymentVoucherDisputeTable,
+  PaymentVoucherReceiptStatus,
 } from './payment-voucher.model';
 import {
   PaymentVoucherTable,
@@ -607,6 +622,128 @@ export class PaymentVoucherRepositoryClass {
     } catch (error) {
       logger.error('[PaymentVoucherRepository.updateReceiptPhotos] Error:', error);
       throw error;
+    }
+  }
+
+  /**
+   * One receipt joined to its voucher — how a review or a line edit is
+   * authorized, since a receipt carries no agency of its own (it reaches one
+   * only through voucher.agency_id).
+   */
+  async getReceiptWithVoucher(
+    receiptId: string,
+  ): Promise<{ receipt: PaymentVoucherReceiptType; voucher: PaymentVoucherType } | null> {
+    try {
+      const [row] = await db
+        .select({ receipt: PaymentVoucherReceiptTable, voucher: PaymentVoucherTable })
+        .from(PaymentVoucherReceiptTable)
+        .innerJoin(
+          PaymentVoucherTable,
+          eq(PaymentVoucherReceiptTable.voucherId, PaymentVoucherTable.id),
+        )
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.getReceiptWithVoucher] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Move one receipt through the review lifecycle.
+   *
+   * `reviewedAt`/`reviewedBy` are stamped on every transition a PERSON makes, so
+   * an approval always says who and when. The automatic APPROVED->VERIFIED
+   * rollover below deliberately leaves them alone: verification there is the
+   * approval closing, not a second decision, and overwriting them would lose the
+   * name of the only human who actually looked.
+   */
+  async setReceiptStatus(
+    receiptId: string,
+    status: PaymentVoucherReceiptStatus,
+    actor: string,
+  ): Promise<PaymentVoucherReceiptType | null> {
+    try {
+      const [row] = await db
+        .update(PaymentVoucherReceiptTable)
+        .set({
+          status,
+          // Un-approving is a correction, not a review — clear the stamp so the
+          // row never claims a decision that has been taken back.
+          reviewedAt: status === 'pending' ? null : new Date(),
+          reviewedBy: status === 'pending' ? null : actor,
+          updatedAt: new Date(),
+          updatedBy: actor,
+        })
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId))
+        .returning();
+      return row ?? null;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.setReceiptStatus] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * APPROVED -> VERIFIED, the automatic arm of the lifecycle.
+   *
+   * Two modes, one implementation so they cannot drift: `voucherId` closes the
+   * receipts on a single voucher (a dispute has just been resolved), and
+   * `throughWeekStart` closes every approved receipt on a week that has ended (the
+   * Monday rollover). The week form uses `<=`, not `=`: a voucher held back for a
+   * fortnight must still roll over when it finally clears, and an `=` would skip
+   * it forever.
+   *
+   * Vouchers carrying an OPEN dispute are excluded. Verified means closed, and
+   * closing the evidence while somebody is still contesting the money would
+   * settle the record out from under a live claim. Those roll over on the next
+   * pass, once the dispute is resolved.
+   *
+   * Returns the receipt numbers actually moved, so a caller can log a fact
+   * rather than an intention.
+   */
+  async verifyApprovedReceipts(opts: {
+    voucherId?: string;
+    throughWeekStart?: string;
+    actor: string;
+  }): Promise<string[]> {
+    if (!opts.voucherId && !opts.throughWeekStart) return [];
+    try {
+      const voucherFilter = opts.voucherId
+        ? eq(PaymentVoucherTable.id, opts.voucherId)
+        : lte(PaymentVoucherTable.weekStart, opts.throughWeekStart!);
+
+      const rows = await db
+        .update(PaymentVoucherReceiptTable)
+        .set({ status: 'verified', updatedAt: new Date(), updatedBy: opts.actor })
+        .where(
+          and(
+            eq(PaymentVoucherReceiptTable.status, 'approved'),
+            inArray(
+              PaymentVoucherReceiptTable.voucherId,
+              db.select({ id: PaymentVoucherTable.id }).from(PaymentVoucherTable).where(voucherFilter),
+            ),
+            notExists(
+              db
+                .select({ one: sql`1` })
+                .from(PaymentVoucherDisputeTable)
+                .where(
+                  and(
+                    eq(PaymentVoucherDisputeTable.voucherId, PaymentVoucherReceiptTable.voucherId),
+                    isNull(PaymentVoucherDisputeTable.outcome),
+                  ),
+                ),
+            ),
+          ),
+        )
+        .returning({ receiptNo: PaymentVoucherReceiptTable.receiptNo });
+      return rows.map((r) => r.receiptNo);
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.verifyApprovedReceipts] Error:', error);
+      // Fails soft: an unrolled receipt stays approved and rolls next pass. It
+      // must not cost the caller (the Monday job) the work it does afterwards.
+      return [];
     }
   }
 
