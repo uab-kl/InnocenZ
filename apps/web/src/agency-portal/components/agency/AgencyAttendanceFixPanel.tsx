@@ -131,7 +131,13 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 											</span>
 											<span className="iz-roster-gps-outlet-meta">
 												{group.pinned
-													? `${group.mapped.filter((r) => r.inRange).length}/${group.mapped.length} within ${group.radiusM} m`
+													? // "within fence", NOT "within {radius} m": inRange is radius +
+														// min(accuracy, 30), mirroring the door's own rule, so a fix
+														// can sit outside the bare radius and still legitimately pass.
+														// 69 m against a 50 m pin with ±22 m was the live case that
+														// caught this — printing the radius claimed a precision the
+														// test does not use. Exact figures are on each row.
+														`${group.mapped.filter((r) => r.inRange).length}/${group.mapped.length} within fence · ${group.radiusM} m pin`
 													: "No map pin — check-ins here are not location-checked"}
 												{group.latestStampAt
 													? ` · latest ${stampTime(group.latestStampAt)}`
