@@ -288,8 +288,7 @@ export function RosterBackendTimetable({
 												// the outlet/status/payout/time filters narrow the grid.
 												const daySlots = rawSlots.filter(
 													(s) =>
-														!shiftFiltersOn ||
-														timetableSlotMatches(s, filters),
+														!shiftFiltersOn || timetableSlotMatches(s, filters),
 												);
 												const open = openShiftsByDay[dateIso] ?? [];
 												const hasOpen = open.length > 0;
@@ -303,11 +302,15 @@ export function RosterBackendTimetable({
 																		key={slot.id}
 																		type="button"
 																		className={`iz-roster-week-cell iz-roster-week-cell--filled ${tone.className}`}
-																		onClick={() => canAssign && onEditSlot(slot.id)}
+																		onClick={() =>
+																			canAssign && onEditSlot(slot.id)
+																		}
 																		disabled={!canAssign}
 																		aria-label={`${pr.name} at ${slot.outlet} on ${dateIso}`}
 																	>
-																		<span className="outlet">{slot.outlet}</span>
+																		<span className="outlet">
+																			{slot.outlet}
+																		</span>
 																		<span className="shift">
 																			{slot.shift || "Shift"}
 																		</span>
