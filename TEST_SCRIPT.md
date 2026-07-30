@@ -3,7 +3,7 @@
 **Owners:** jk (PR-mobile + Admin oversight) · SL (Outlet + Agency web)
 **Purpose:** One clean checklist to run **every day**. Test the **connected** workflows first — the ones where both of us have to be wired up before either can see a result.
 **Source of truth:** This file (`TEST_SCRIPT.md`) is the single source of truth. Add a §10 Changelog row on every merge to `main`. A Google Doc copy is regenerated from this file on request (a fresh Doc each time — no in-place Drive edit).
-**Last synced from code:** 2026-07-23 (branch `jk`)
+**Last synced from code:** 2026-07-30 (branch `jk` — full admin-surface audit)
 
 ---
 
@@ -55,7 +55,7 @@ A workflow that has to pass through **many roles** (Outlet → Agency → PR →
 | E | Wages/tips/commission auto-sync | Outlet rate card → PR | ⚠️ **mobile wired** (needs `pnpm migrate` + backend restart to go live) | 🔴 **P1** |
 | F | This-week dispute → verify | PR → Agency payroll | ⚠️ **PR side wired** (persists to `payment_voucher`; agency-verify UI = SL next) | 🔴 **P1** |
 | G | History PV → sign PDF | PR ↔ (PV pdf) | ❌ pdf per PV | 🟠 P2 |
-| H | Everything → Admin portal | all → Admin | ❌ after DB combined | 🟡 P3 |
+| H | Everything → Admin portal | all → Admin | ⚠️ **wired** — 30 Jul audit: every `/admin` page reads/writes the live DB (no demo screens); needs a real-sign-in verify pass (§8 AD3–AD18) | 🟡 P3 |
 
 > **The three 🔴 P1 links (B, E, F) are the spine.** jk + SL are both on them. Do these first — nothing downstream is provable until they connect.
 
@@ -118,12 +118,14 @@ Run top-to-bottom in one sitting. jk drives mobile, SL drives web. Each step mus
 - ☐ **Subscription / Settings / Special-Service**
 
 ### 4d. Admin (web) — jk
-- ☐ **Dashboard** loads
-- ☐ **User Management** — admin / agency / outlet / legacy-member
+- ☐ **Dashboard** — 4 live KPI cards (pending agencies / pending outlets / plan requests / job posts) + status donuts + *Today's action items* + activity feed (audit-log GraphQL) + latest-registrations table; every card/row navigates to its management page
+- ☐ **User Management** — **Admins** (list + Create Admin via `/auth/register`) · **Agency** (search/filter + **approve / suspend / reactivate** + details sheet with PRs tab + `?focus` deep link) · **Outlet** (filter + **approve / suspend / reactivate** + Business/Location/Team tabs + `?focus`) · **PR** (read-only list, search + agency filter, showcase/portfolio sheet) · **Legacy member** (merged suspended agencies/outlets + inactive PRs, reactivate orgs)
 - ☐ **RBAC** — role / permission / module / pending → **confirm role-gating blocks wrong roles**. Retest with real sign-ins, all three portals: (1) backend `requireAdmin` on admin-request routes returns 403 to non-admin tokens; (2) front doors (`ensurePortal`): ANY `/admin/*` URL needs the admin role, `/agency/*` the agency role, `/outlet/*` the outlet role — a wrong-role session lands on ITS OWN portal (PR token → `/no-access`), and an admin session must NEVER be bounced to `/agency` on refresh (the old VITE role-id fallback did exactly that after an RBAC reseed — gates now match seeded role NAMES only)
-- ☐ **Service** — payment-voucher, requests, plan-changes, /service/other (redesign pending)
-- ☐ **Business** — history / plan / subscription
-- ☐ **Audit-Log** per role
+- ☐ **RBAC CRUD** — create/edit role + per-role **permission matrix** save; permission + module create/edit/deactivate; **Pending** aggregator (agencies · outlets · requests · job posts) deep-links `Review →` to each owning page
+- ☐ **Service** — **payment-voucher** (read-only browser: PR-name search, status filter, detail sheet with lines + dispute banner) · **requests** (POS-quote + Custom-renegotiation inbox: remarks / quote / mark-contacted / resolve + negotiated-revenue cards) · **plan-changes** (outlet switch **approve / decline**, agency 'direct' log) · **/service/other** (all-orders + pending-review views, agency job **approve / decline**, edit + status change — redesign pending)
+- ☐ **Business** — **plan** (catalog create/edit/activate; `subscription` path redirects here) · **history** (billing ledger: role toggle, status, search, date filters — read-only)
+- ☐ **Settings** (platform config: fee % / geofence / monthly fee / dup-payment window / currency — PUT persists) · **Profile** (own display name + propic)
+- ☐ **Audit-Log** per role — role picker → per-role table + old-vs-new diff dialog (known: role filter is client-side per page, counts span all roles)
 - ☐ **Special-Service** — receives PR self-log successfully (✅ confirmed)
 
 ---
@@ -202,10 +204,29 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
 
 ### Admin side (jk)
+
+> **30 Jul full-surface audit:** every `/admin` page is wired to the live backend — **zero demo screens in the admin tree** (the demo-store split lives only in agency/outlet). Rows AD3–AD18 are ⚠️ Reported = confirmed in code, pending one real admin sign-in run-through. Hardening gaps found by the audit live in §9 → *Admin hardening backlog*.
+
 | # | Item | Role link | Where | Data source | Status |
 |---|------|-----------|-------|-------------|--------|
 | AD1 | Special-Service receives PR self-log | **Admin ← PR** | `routes/admin/service` | special-service | ✅ Verified |
 | AD2 | Admin can view PR profile | **Admin ← PR** | `routes/admin/user-management` | pr / user | ✅ Verified |
+| AD3 | Dashboard: live KPI cards + status donuts + Today's action items + audit activity feed + latest registrations | **Admin ← all** | `routes/admin/dashboard` | agency · outlet · admin_request · special_service · audit_log (GraphQL) | ⚠️ Reported |
+| AD4 | Agency management: search/filter list + **approve / suspend / reactivate** + details sheet (Basic Info + PRs tab) + `?focus` deep link | **Admin → Agency** | `user-management/agency` | agency (`PATCH /:id/approve` · `/:id/suspend`) + `agency/:id/prs` | ⚠️ Reported |
+| AD5 | Outlet management: filter list + **approve / suspend / reactivate** + details sheet (Business / Location / Team) + `?focus` | **Admin → Outlet** | `user-management/outlet` | outlet (`PATCH /:id/approve` · `/:id/suspend`) + `/:id/members` | ⚠️ Reported |
+| AD6 | PR management: search + agency-filter list, per-row agencies popover, details sheet (Personal / Contact / Showcase / Agencies) — read-only | **Admin ← PR** | `user-management/pr` | user (`?roleId=pr`) + `agency/pr-links` | ⚠️ Reported |
+| AD7 | Admin accounts: list + **Create Admin** (name/email/password) | **Admin → Admin** | `user-management/admin` | user (`?roleId=admin`) + `POST /auth/register` | ⚠️ Reported |
+| AD8 | Legacy member: merged suspended agencies/outlets + inactive PRs, filters/sort, **reactivate** orgs | **Admin → Agency+Outlet+PR** | `user-management/legacy-member` | agency + outlet + user (status loops) | ⚠️ Reported |
+| AD9 | RBAC: role create/edit + **per-role permission matrix** save; permission + module CRUD (soft deactivate); **Pending** aggregator with `Review →` deep links | **all roles** | `rbac/role·permission·module·pending` | role · m_module · m_permission · role_permission | ⚠️ Reported |
+| AD10 | Payment-voucher browser: PR-name search, status filter, detail sheet (lines, totals, dispute reason/note) — read-only | **Admin ← Agency+PR** | `service/payment-voucher` | payment_voucher (+lines) | ⚠️ Reported |
+| AD11 | Plan Request inbox: POS-integration + Custom-renegotiation — edit remarks/quote, **mark contacted**, **resolve** (price finalized) + negotiated-revenue summary | **Admin ← Outlet+Agency** | `service/requests` | admin_request (PATCH `/:id` · `/contacted` · `/resolve`) | ⚠️ Reported |
+| AD12 | Plan-change activity: outlet switch **approve / decline** (price stamped), agency 'direct' auto-switch log | **Admin ← Outlet+Agency** | `service/plan-changes` | admin_request (`?type=plan_change`, PATCH `/approve` · `/decline`) + subscription | ⚠️ Reported |
+| AD13 | Special-service orders: all-orders + pending-review views, agency job **approve / decline**, edit fields + status change, summary cards | **Admin ← Outlet+Agency+PR** | `service/other` | special_service (PATCH `/:id` · `/status` · `/admin-approve` · `/admin-decline`) | ⚠️ Reported |
+| AD14 | Plan catalog: **create / edit / activate** plans (price, cycle, coverage builder) | **Admin → Outlet+Agency** | `business/plan` | subscription (POST · PUT) | ⚠️ Reported |
+| AD15 | Billing ledger: member-subscription history with role toggle / status / search / date filters — read-only | **Admin ← Outlet+Agency** | `business/history` | member_subscription | ⚠️ Reported |
+| AD16 | Audit-log: role picker → per-role table (date/action/entity filters) + old-vs-new **diff dialog** | **Admin ← all** | `audit-log/$role` | audit_log via GraphQL `auditLogs` | ⚠️ Reported |
+| AD17 | Platform settings: fee % / geofence radius / monthly fee / dup-payment window / currency — **PUT persists** | **Admin → all** | `settings` | platform_config | ⚠️ Reported |
+| AD18 | Own profile: display name edit + propic upload | Admin (self) | `profile` | user (`/auth/me` + `PATCH /user/:id`) | ⚠️ Reported |
 
 ---
 
@@ -229,7 +250,19 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 - [ ] **Decide Vicky's duplicate current-week voucher** `34364790-…` — created by pr.vicky 27 Jul, agency owner set it `sent` mid-week; breaks one-week-one-PV at the next close. Merge/delete + block agency from sending current-week vouchers early. *(Agency / DB — decision needed)*
 
 ### 🟡 P3 — admin + database cleanup + hardening
-- [ ] **H · Admin portal**: define what Admin needs to see **after the DB is combined**. *(all → Admin)* — §3 S12
+- [x] **H · Admin portal surface is fully wired** — 30 Jul 6-agent audit: every `/admin` page reads/writes the live DB, zero demo screens (§8 AD3–AD18). Remaining: one real admin sign-in run-through of §4d + the hardening backlog below. *(all → Admin)* — §3 S12
+
+#### Admin hardening backlog (found by the 30 Jul full-surface audit)
+- [ ] 🔥 **`/api/v1/user` has NO role guard** — any signed-in token (a PR token included) can `GET /user` (list every account) and `PATCH /user/:id` (edit anyone's profile). Guard: admin-only list, self-or-admin patch. *(security)*
+- [ ] 🔥 **GraphQL `auditLogs` is not admin-guarded** — any authenticated user can read all non-admin audit rows (only a soft `role != 'admin'` repository filter). Hard-require admin in the resolver. *(security)*
+- [ ] **Create Admin flow leaks intent** — the Active-Status toggle is collected but never sent; a placeholder phone (`+admin-…` hex) is fabricated; admin-creation privilege is decided in `authController.registerUser`, not the router — verify a non-admin token cannot create admins. *(Admin)*
+- [ ] **Admin account lifecycle missing** — no edit / suspend / delete for existing admins and no admin-side password reset (only self-service forgot-password). *(Admin)*
+- [ ] **PR page filters run client-side over the first 200 PRs only** (forced `page=1&pageSize=200`); agency filter capped at first 100 agencies; no `?focus` deep link (agency/outlet pages have one). Wrong results at scale. *(Admin ← PR)*
+- [ ] **Admin PV page is read-only by design but under-wired** — `resolveDispute` (`POST /payment-voucher/disputes/:id/resolve`) and the `receipts[]` evidence array come back from the API and are never rendered/wired. *(Admin ← Agency+PR)*
+- [ ] **RBAC Pending page**: hard-capped at 20 rows per source with no pagination, no error state (a failed query renders the happy "Nothing pending"), and the tab badge **excludes** `plan_change` while the list includes it — counts disagree. *(Admin)*
+- [ ] **Business Plan audience filter proxies billingCycle** (outlet→monthly, agency→weekly) instead of sending `subscriptionType` — any mixed-cycle plan is misfiltered; audience + cycle can't combine. *(Admin)*
+- [ ] **Audit-log role filter is client-side per page** — GraphQL filter has no `role` field, so per-role pages under-fill (footer counts span ALL roles, Next stays enabled on empty pages). Add `role` to `AuditLogFilterInput`. *(Admin ← all)*
+- [ ] **`outlet_transaction` API has zero UI** — fully built, requireAdmin-guarded money-record endpoints (`GET /summary` · `GET /` · `POST /`) with no frontend caller. Build the admin page or drop the feature. *(Admin)*
 - [ ] **OCR capture** (words) — only enable after a **new assignment** arrives; DB is immutable once check-in is submitted.
 - [ ] **OCR baseline**: single non-repeatable receipt · single claim · single PR. Repeatable receipt ⇒ self-log.
 - [ ] **Finish remaining backends** and confirm each is connected. *(SL)*
@@ -247,6 +280,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 | Date | What changed / done | Area (role link) | Status |
 |------|---------------------|------------------|--------|
+| 2026-07-30 | **Admin side fully mapped — §8 grown 2 → 18 rows.** 6-agent code audit traced every `/admin` page to its backend: **all pages live-wired, zero demo screens in the admin tree** (demo-store split is agency/outlet only). New §8 rows AD3–AD18 (dashboard · 5 user-mgmt tabs · RBAC CRUD+pending · 4 service tabs · plan/history · audit-log · settings · profile — all ⚠️ Reported pending one real sign-in run); §4d itemized per tab; §2 link H flipped ❌→⚠️ wired. New **Admin hardening backlog** in §9: 🔥 `/api/v1/user` ungated (any token lists/patches any user) · 🔥 GraphQL `auditLogs` readable by any token · Create-Admin drops status + fakes phone · no admin lifecycle actions · PR filters client-side over first 200 rows · admin PV `resolveDispute`/receipts unwired · RBAC pending 20-row cap + badge/list count mismatch · plan audience filter proxies billingCycle · audit-log role filter client-side · `outlet_transaction` API with zero UI. | Admin (§2 H · §4d · §8 · §9) | ✅ done |
 | 2026-07-30 | **TEST_SCRIPT renewal is now ENFORCED by a hook.** New Stop hook `.claude/hooks/renew-test-script.js` (+ registration in project `.claude/settings.json` → `hooks.Stop`): Claude Code cannot end a turn while changes under `apps/`/`packages/`/`tools/` (uncommitted, or in a last commit < 60 min old) are not reflected by a renewed TEST_SCRIPT.md — it is forced to update §8/§9 + append a §10 row first. Fails open on errors; never double-blocks one stop. Both files are committed, so the rule enforces itself on every device after `git pull`. | all (doc-roles rule) | ✅ done |
 | 2026-07-30 | **Cross-device memory sync.** Full Claude Code session memory mirrored into the repo: `docs/claude-memory/*.md` refreshed (new `innocenz-pv-pipeline.md` + `innocenz-env-gotchas.md`, updated index/wiring/backlog/sync files) and the Excel **"Claude Code Memory"** tab regenerated with every memory in full + restore steps + the to-do queue. New device: `git pull`, then copy `docs/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--Users-jinkg-Downloads-InnocenZ-InnocenZ\memory\`. Rules going forward: renew TEST_SCRIPT.md on EVERY slice; CLAUDE.md only when rules change. | all | ✅ done |
 | 2026-07-30 | **PV signature is REAL drawn ink.** Sign sheet now has a finger-drawn pad (`SignaturePad.tsx`, PanResponder + react-native-svg — no APK rebuild needed); Confirm is blocked until something is drawn; strokes stored on `payment_voucher.pr_signature` (migration 0071, server-validated — malformed ink = 400, never silently dropped) and re-drawn on the PDF as small fitted vector ink. Older signed-without-ink vouchers fall back to a small script name; unsigned print blank. Vicky's voucher reset to `sent` for the first live draw. | PR (§9 G) | ✅ done |
