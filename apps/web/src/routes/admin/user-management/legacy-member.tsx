@@ -58,10 +58,10 @@ import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
+	type Agency,
 	approveAgency,
 	fetchAgencies,
 	fetchAgencyById,
-	type Agency,
 } from "@/services/agency";
 import {
 	approveOutlet,
@@ -71,9 +71,7 @@ import {
 } from "@/services/outlet";
 import { fetchPrUsers, type PrUser } from "@/services/pr";
 
-export const Route = createFileRoute(
-	"/admin/user-management/legacy-member",
-)({
+export const Route = createFileRoute("/admin/user-management/legacy-member")({
 	component: LegacyMemberPage,
 	head: () => ({
 		meta: [{ title: "Legacy Member — Innocenz Admin" }],
@@ -112,9 +110,7 @@ const roleBadgeColors: Record<Exclude<LegacyRoleFilter, "all">, string> = {
 	pr: "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400",
 };
 
-async function fetchAllAgencies(
-	onRefreshFail: () => void,
-): Promise<Agency[]> {
+async function fetchAllAgencies(onRefreshFail: () => void): Promise<Agency[]> {
 	const rows: Agency[] = [];
 	let page = 1;
 	let hasNextPage = true;
@@ -130,9 +126,7 @@ async function fetchAllAgencies(
 	return rows;
 }
 
-async function fetchAllOutlets(
-	onRefreshFail: () => void,
-): Promise<Outlet[]> {
+async function fetchAllOutlets(onRefreshFail: () => void): Promise<Outlet[]> {
 	const rows: Outlet[] = [];
 	let page = 1;
 	let hasNextPage = true;
@@ -634,9 +628,13 @@ function LegacyMemberPage() {
 												<AlertCircle className="h-8 w-8 text-destructive" />
 												<p className="text-sm text-muted-foreground">
 													{getErrorMessage(error as Error | null) ||
-											"Failed to load legacy members"}
+														"Failed to load legacy members"}
 												</p>
-												<Button variant="outline" size="sm" onClick={refetchAll}>
+												<Button
+													variant="outline"
+													size="sm"
+													onClick={refetchAll}
+												>
 													Retry
 												</Button>
 											</div>
@@ -702,10 +700,7 @@ function LegacyMemberPage() {
 												</TableCell>
 												<TableCell>{row.contact}</TableCell>
 												<TableCell>
-													<Badge
-														variant="outline"
-														className={row.statusClass}
-													>
+													<Badge variant="outline" className={row.statusClass}>
 														{row.statusLabel}
 													</Badge>
 												</TableCell>
@@ -717,7 +712,8 @@ function LegacyMemberPage() {
 														className="flex flex-wrap gap-2"
 														onClick={(e) => e.stopPropagation()}
 													>
-														{(row.role === "agency" || row.role === "outlet") && (
+														{(row.role === "agency" ||
+															row.role === "outlet") && (
 															<Button
 																size="sm"
 																variant="outline"
@@ -786,11 +782,10 @@ function LegacyMemberPage() {
 								</span>{" "}
 								-{" "}
 								<span className="font-medium">
-									{formatNumber(
-										Math.min(currentPage * PAGE_SIZE, totalCount),
-									)}
+									{formatNumber(Math.min(currentPage * PAGE_SIZE, totalCount))}
 								</span>{" "}
-								of <span className="font-medium">{formatNumber(totalCount)}</span>{" "}
+								of{" "}
+								<span className="font-medium">{formatNumber(totalCount)}</span>{" "}
 								records
 							</div>
 							<div className="flex items-center gap-2">

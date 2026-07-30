@@ -218,9 +218,13 @@ export function PrsTable({
 										</TableCell>
 										<TableCell>
 											{user.legalName ? (
-												<div className="text-base font-medium">{user.legalName}</div>
+												<div className="text-base font-medium">
+													{user.legalName}
+												</div>
 											) : (
-												<span className="text-base text-muted-foreground">—</span>
+												<span className="text-base text-muted-foreground">
+													—
+												</span>
 											)}
 											{user.idNo && (
 												<div className="font-mono text-sm text-muted-foreground">
@@ -229,8 +233,12 @@ export function PrsTable({
 												</div>
 											)}
 										</TableCell>
-										<TableCell className="text-base">{user.email || "—"}</TableCell>
-										<TableCell className="text-base">{user.phoneNum || "—"}</TableCell>
+										<TableCell className="text-base">
+											{user.email || "—"}
+										</TableCell>
+										<TableCell className="text-base">
+											{user.phoneNum || "—"}
+										</TableCell>
 										<TableCell>
 											<PrAgenciesCell agencies={user.agencies} />
 										</TableCell>
