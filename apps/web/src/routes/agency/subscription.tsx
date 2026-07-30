@@ -6,10 +6,7 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
-import {
-	collectionAmountRm,
-	useAgencyCollections,
-} from "@agency-portal/hooks/use-agency-collections";
+import { useAgencyCollections } from "@agency-portal/hooks/use-agency-collections";
 import {
 	type AgencyRatePlan,
 	useAgencySubscription,
@@ -22,6 +19,12 @@ import {
 } from "@agency-portal/lib/agency-demo";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
+import {
+	COLLECTION_AGING_PILL,
+	collectionAmountRm,
+	collectionStampLabel,
+	collectionWeekLabel,
+} from "@agency-portal/lib/collections";
 import { getPreviousWeekSundayIso } from "@agency-portal/lib/demo-clock";
 import {
 	demoPayrollWeekBoundsForWeeksAgo,
@@ -41,27 +44,6 @@ import {
 import { useEffect, useMemo } from "react";
 
 const CARD_LAST4 = "4242";
-
-/** "20–26 Jul 2026", collapsing the month when both ends share one. */
-function weekLabel(startIso: string, endIso: string): string {
-	const start = parseISO(startIso);
-	const end = parseISO(endIso);
-	if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) {
-		return `${startIso} – ${endIso}`;
-	}
-	return start.getMonth() === end.getMonth()
-		? `${format(start, "d")}–${format(end, "d MMM yyyy")}`
-		: `${format(start, "d MMM")} – ${format(end, "d MMM yyyy")}`;
-}
-
-const AGING_PILL: Record<
-	string,
-	{ variant: "green" | "amber" | "red"; label: string }
-> = {
-	current: { variant: "green", label: "Current" },
-	due_soon: { variant: "amber", label: "Due soon" },
-	overdue: { variant: "red", label: "Overdue" },
-};
 
 export const Route = createFileRoute("/agency/subscription")({
 	component: AgencySubscription,
@@ -401,7 +383,7 @@ function AgencySubscription() {
 														{inv.outletName}
 													</p>
 													<p className="iz-tiny iz-muted">
-														{weekLabel(inv.weekStart, inv.weekEnd)} ·{" "}
+														{collectionWeekLabel(inv.weekStart, inv.weekEnd)} ·{" "}
 														{inv.sourceAssignmentIds.length} shift
 														{inv.sourceAssignmentIds.length === 1 ? "" : "s"}
 													</p>
@@ -445,7 +427,9 @@ function AgencySubscription() {
 							</IzCard>
 						) : (
 							collections.issued.map((inv) => {
-								const aging = inv.aging ? AGING_PILL[inv.aging] : null;
+								const aging = inv.aging
+									? COLLECTION_AGING_PILL[inv.aging]
+									: null;
 								return (
 									<IzCard key={inv.id} flat>
 										<div className="iz-between gap-2">
@@ -456,11 +440,11 @@ function AgencySubscription() {
 														{inv.outletName}
 													</p>
 													<p className="iz-tiny iz-muted">
-														{weekLabel(inv.weekStart, inv.weekEnd)}
+														{collectionWeekLabel(inv.weekStart, inv.weekEnd)}
 														{inv.settledAt
-															? ` · settled ${format(parseISO(inv.settledAt), "d MMM")}`
+															? ` · settled ${collectionStampLabel(inv.settledAt)}`
 															: inv.issuedAt
-																? ` · issued ${format(parseISO(inv.issuedAt), "d MMM")}`
+																? ` · issued ${collectionStampLabel(inv.issuedAt)}`
 																: ""}
 													</p>
 												</div>

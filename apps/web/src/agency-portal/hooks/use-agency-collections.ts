@@ -1,4 +1,5 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import { sumCollectionRm } from "@agency-portal/lib/collections";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -11,28 +12,6 @@ import {
 } from "@/services/collection-invoice";
 
 const COLLECTIONS_KEY = ["agency", "collection-invoices"] as const;
-
-/**
- * Summed in integer cents rather than by adding the floats.
- *
- * `amount` arrives as the string `numeric(12,2)` serializes to, so the choice is
- * deliberate: this is the same arithmetic the voucher Σ=0 check exists to catch
- * on the other side of the money loop, and a receivables total is read as a
- * figure to chase someone for.
- */
-function sumRm(invoices: CollectionInvoice[]): number {
-	const cents = invoices.reduce((total, invoice) => {
-		const parsed = Math.round(Number(invoice.amount) * 100);
-		return total + (Number.isFinite(parsed) ? parsed : 0);
-	}, 0);
-	return cents / 100;
-}
-
-/** `numeric` is a string over the wire; every display path needs a number. */
-export function collectionAmountRm(invoice: CollectionInvoice): number {
-	const parsed = Number(invoice.amount);
-	return Number.isFinite(parsed) ? parsed : 0;
-}
 
 export interface AgencyCollectionTotals {
 	/** Drafted by the weekly job, not yet shown to any outlet. */
@@ -119,10 +98,12 @@ export function useAgencyCollections(): UseAgencyCollectionsResult {
 				b.weekStart.localeCompare(a.weekStart),
 			),
 			totals: {
-				draftRm: sumRm(draftRows),
-				outstandingRm: sumRm(issuedRows),
-				overdueRm: sumRm(issuedRows.filter((i) => i.aging === "overdue")),
-				settledRm: sumRm(settledRows),
+				draftRm: sumCollectionRm(draftRows),
+				outstandingRm: sumCollectionRm(issuedRows),
+				overdueRm: sumCollectionRm(
+					issuedRows.filter((i) => i.aging === "overdue"),
+				),
+				settledRm: sumCollectionRm(settledRows),
 			},
 		};
 	}, [invoices]);
