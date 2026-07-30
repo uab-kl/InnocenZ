@@ -657,6 +657,108 @@ export class ShiftAssignmentControllerClass {
   }
 
   /**
+   * Where the agency's PRs stamped attendance on one date.
+   *
+   * Named for what it is. There is no continuous position feed anywhere in the
+   * system — `shift_assignment` keeps a fix only at check-in and at check-out —
+   * so this endpoint cannot and does not report a live location. The response
+   * carries the stamp time next to every coordinate for exactly that reason: a
+   * position with no time beside it reads as "now", which would be a lie about
+   * data that may be hours old.
+   *
+   * Three states arrive distinctly, and none of them is inferred:
+   *   - not stamped yet        -> checkIn === null
+   *   - stamped, no fix stored -> checkIn set, its lat/lng null (pre-dates the
+   *                               geofence columns, or the venue has no pin)
+   *   - stamped with a fix     -> lat/lng plus the server's own distanceM
+   *
+   * `distanceM` is the server's recomputed metres from the venue pin, never a
+   * distance the phone claimed, and `outlet.pinned` says whether a fence existed
+   * at all — an unpinned venue accepts every check-in with no location check, so
+   * "in range" is meaningless there and must not be rendered.
+   *
+   * Agency and admin only. Deliberately NOT opened to outlet callers, who can
+   * already read the roster at their own venues: a worker's coordinates are a
+   * step beyond that, and widening it is a privacy decision rather than a
+   * scoping one.
+   */
+  async listAttendanceFixes(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+
+      const now = new Date();
+      const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
+      const requested = req.query.date as string | undefined;
+      if (requested !== undefined && !/^\d{4}-\d{2}-\d{2}$/.test(requested)) {
+        return res.status(400).json({ success: false, message: 'date must be YYYY-MM-DD', data: null });
+      }
+      const shiftDate = requested ?? today;
+
+      // An admin may name an agency; anyone else is pinned to their own. Without
+      // an agency in either place there is nothing to scope to, so this refuses
+      // rather than reading across every agency's workers.
+      const agencyId = scope.isAdmin ? (req.query.agencyId as string | undefined) : scope.agencyId!;
+      if (!agencyId) {
+        return res.status(400).json({ success: false, message: 'agencyId is required', data: null });
+      }
+
+      const rows = await this.shiftAssignmentRepository.listAttendanceFixesForAgencyDate({ agencyId, shiftDate });
+
+      // Coordinates leave as numbers: they are geometry, not money, and the
+      // client does map maths on them. The string-numeric convention elsewhere
+      // exists to protect currency precision, which does not apply here.
+      const toNum = (value: string | null): number | null => {
+        if (value === null) return null;
+        const parsed = Number(value);
+        return Number.isFinite(parsed) ? parsed : null;
+      };
+      const stamp = (
+        at: Date | null,
+        lat: string | null,
+        lng: string | null,
+        distanceM: number | null,
+        accuracyM: number | null,
+      ) =>
+        at === null
+          ? null
+          : { at: at.toISOString(), lat: toNum(lat), lng: toNum(lng), distanceM, accuracyM };
+
+      const data = rows.map((row) => {
+        const outletLat = toNum(row.outletLat);
+        const outletLng = toNum(row.outletLng);
+        return {
+          assignmentId: row.assignmentId,
+          prId: row.prId,
+          prName: row.prName,
+          status: row.status,
+          shiftDate: row.shiftDate,
+          slot: row.slot,
+          outlet: {
+            id: row.outletId,
+            name: row.outletName,
+            lat: outletLat,
+            lng: outletLng,
+            radiusM: row.outletGeoFenceRadius,
+            // No pin means check-in ran with no location check at all, which the
+            // client has to show differently from "checked in, out of range".
+            pinned: outletLat !== null && outletLng !== null,
+          },
+          checkIn: stamp(row.checkInAt, row.checkInLat, row.checkInLng, row.checkInDistanceM, row.checkInAccuracyM),
+          checkOut: stamp(row.checkOutAt, row.checkOutLat, row.checkOutLng, row.checkOutDistanceM, row.checkOutAccuracyM),
+        };
+      });
+
+      res.status(200).json({ success: true, message: 'OK', data });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.listAttendanceFixes] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
    * Ranked replacement PRs for one released assignment: free that night, same
    * agency, active — ordered by the released PR's tier (rate parity), then
    * completed shifts at the outlet, then name. Filling the slot reuses the
