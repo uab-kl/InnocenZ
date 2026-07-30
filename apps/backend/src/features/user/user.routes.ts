@@ -22,6 +22,12 @@ const canListUsers = requireRole('admin', 'agency', 'outlet');
 // ...and that shape-level job, decided 30 Jul 2026: an outlet keeps the list but
 // loses the identity documents on every row of it. See redact-identity-docs.ts.
 router.get('', canListUsers, redactIdentityDocsForOutlet, userController.list.bind(userController));
+// Disabling an account is the one thing nobody could do — `PATCH /:id` below is
+// self-edit only, and there is no delete route anywhere, so an account (admin
+// included) was permanent once created. Registered BEFORE '/:id' so "status" is
+// never read as a user id. Admin only, and login already refuses a non-active
+// account, so this switch bites the moment it is thrown.
+router.patch('/:id/status', requireRole('admin'), userController.setStatus.bind(userController));
 router.patch('/:id', userController.updateProfile.bind(userController));
 router.post('/:id/profile-image', (req, res, next) => {
   uploadProfileImage.single('profileImage')(req, res, (err) => {

@@ -44,6 +44,50 @@ export class UserRoleRepositoryClass {
     }
   }
 
+  /**
+   * Take a role back.
+   *
+   * The missing half of `assignRoleToUser`: until this existed, a granted role
+   * could never be revoked, so an account promoted to admin stayed admin
+   * permanently — and with no way to delete or disable the account either, that
+   * made "anyone who can create an account can mint a permanent admin" literally
+   * true. Returns false when the pairing was not there, so a caller can answer
+   * 404 rather than report a revocation that revoked nothing.
+   */
+  async revokeRole(userId: string, roleId: string): Promise<boolean> {
+    try {
+      const rows = await db
+        .delete(UserRoleTable)
+        .where(and(eq(UserRoleTable.userId, userId), eq(UserRoleTable.roleId, roleId)))
+        .returning({ id: UserRoleTable.id });
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[UserRoleRepository.revokeRole] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * How many accounts hold this role — the last-admin guard.
+   *
+   * Fails CLOSED by returning 0 on error, which makes the caller treat the role
+   * as about to be emptied and refuse. Refusing a legitimate revocation is an
+   * inconvenience; letting the final admin be removed locks everybody out of the
+   * platform with no endpoint left to fix it.
+   */
+  async countUsersWithRole(roleId: string): Promise<number> {
+    try {
+      const rows = await db
+        .select({ userId: UserRoleTable.userId })
+        .from(UserRoleTable)
+        .where(eq(UserRoleTable.roleId, roleId));
+      return new Set(rows.map((r) => r.userId)).size;
+    } catch (error) {
+      logger.error('[UserRoleRepository.countUsersWithRole] Error:', error);
+      return 0;
+    }
+  }
+
   async assignRoleToUser(
     data: Omit<UserRoleInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction

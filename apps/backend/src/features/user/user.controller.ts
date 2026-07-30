@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { UserRepositoryClass } from './user.repository';
 import { UserProfileRepositoryClass } from './user-profile/user-profile.repository';
-import { UserFilter, UserSortField, UserStatus } from './user.model';
+import { UserFilter, UserSortField, UserStatus, userStatusValues } from './user.model';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -109,6 +109,71 @@ export class UserControllerClass {
     } catch (error) {
       logger.error('[UserController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Turn an account off (or back on). Admin only.
+   *
+   * There was no way to do this: `updateProfile` below is self-edit only, and no
+   * delete route exists anywhere, so an account — including one holding admin —
+   * could never be removed or disabled once created. This is the soft-disable
+   * half of that fix; `DELETE /rbac/user-role` is the other.
+   *
+   * It works because login ALREADY refuses a non-active account
+   * (auth.controller.ts:79). Nothing else was needed to make it bite, which is
+   * also why the gap was easy to miss: the enforcement was there the whole time,
+   * with no way to reach the switch.
+   *
+   * Deliberately NOT a delete. `audit_logs`, `user_profile`, `admin_mfa` and
+   * `user_role` all reference a user, and the audit trail should outlive the
+   * person it describes.
+   */
+  async setStatus(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const status = typeof req.body?.status === 'string' ? req.body.status : '';
+      if (!(userStatusValues as readonly string[]).includes(status)) {
+        return res.status(400).json({
+          success: false,
+          message: `status must be one of: ${userStatusValues.join(', ')}`,
+          data: null,
+        });
+      }
+
+      // An admin who disables themselves cannot re-enable themselves: the
+      // endpoint that would do it is the one they just locked out of.
+      if (req.user?.id === id) {
+        return res.status(409).json({
+          success: false,
+          message: 'You cannot change your own account status — ask another admin.',
+          data: null,
+        });
+      }
+
+      // NOTE the argument order: this repository takes (patch, id), not (id, patch).
+      const updated = await this.userRepository.updateUser(
+        { status: status as UserStatus, updatedBy: getActor(req) },
+        id,
+      );
+      if (!updated) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      logger.warn(`[UserController.setStatus] ${getActor(req)} set account ${id} to ${status}`);
+      return res.status(200).json({
+        success: true,
+        message:
+          status === 'active'
+            ? 'Account re-enabled'
+            : 'Account disabled — it can no longer sign in',
+        data: { id, status },
+      });
+    } catch (error) {
+      logger.error('[UserController.setStatus] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
 
