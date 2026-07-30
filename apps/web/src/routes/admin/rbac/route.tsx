@@ -31,10 +31,14 @@ const TAB_ACTIVE = "bg-[color:var(--lavender-soft)] !text-lavender";
 
 function RbacLayout() {
 	const badges = useSidebarBadges();
+	// The Pending list shows ALL pending admin-requests, so the tab total has to
+	// add plan changes back — the requests badge excludes them by design (the
+	// sidebar renders Plan Request and Plan Change as two separate badges).
 	const pendingTotal =
 		(badges["sidebar-user-agency"] ?? 0) +
 		(badges["sidebar-user-outlet"] ?? 0) +
 		(badges["sidebar-service-requests"] ?? 0) +
+		(badges["sidebar-service-plan-changes"] ?? 0) +
 		(badges["sidebar-service-other"] ?? 0);
 
 	return (

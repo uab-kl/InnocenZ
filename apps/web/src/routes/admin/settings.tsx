@@ -72,6 +72,30 @@ const EMPTY_FORM = {
   currency: '',
 };
 
+type FormErrors = Partial<Record<keyof typeof EMPTY_FORM, string>>;
+
+const NUMERIC_FIELDS = [
+  'platformFeePercent',
+  'geofenceRadiusMeters',
+  'subscriptionMonthlyFee',
+  'duplicatePaymentWindowHours',
+] as const;
+
+// Guards only what the backend cannot: a blank field posts a real 0, and a
+// non-numeric one posts NaN, which JSON turns into null and z.coerce.number()
+// then coerces to 0 — so the fee is silently overwritten with 0.00 on a 200.
+// Range/integer limits stay server-side (platform-config.controller.ts).
+function validateForm(form: typeof EMPTY_FORM): FormErrors {
+  const errors: FormErrors = {};
+  for (const key of NUMERIC_FIELDS) {
+    const raw = form[key].trim();
+    if (raw === '') errors[key] = 'Required';
+    else if (!Number.isFinite(Number(raw))) errors[key] = 'Enter a number';
+  }
+  if (form.currency.trim() === '') errors.currency = 'Required';
+  return errors;
+}
+
 function PlatformConfigCard() {
   const { logout } = useAuth();
   const queryClient = useQueryClient();
@@ -84,6 +108,7 @@ function PlatformConfigCard() {
   const config = configQuery.data?.data;
 
   const [form, setForm] = useState(EMPTY_FORM);
+  const [errors, setErrors] = useState<FormErrors>({});
 
   useEffect(() => {
     if (config) {
@@ -113,17 +138,22 @@ function PlatformConfigCard() {
 
   function handleSubmit(event: FormEvent) {
     event.preventDefault();
+    const nextErrors = validateForm(form);
+    setErrors(nextErrors);
+    if (Object.keys(nextErrors).length > 0) return;
     updateMutation.mutate({
       platformFeePercent: Number(form.platformFeePercent),
       geofenceRadiusMeters: Number(form.geofenceRadiusMeters),
       subscriptionMonthlyFee: Number(form.subscriptionMonthlyFee),
       duplicatePaymentWindowHours: Number(form.duplicatePaymentWindowHours),
-      currency: form.currency,
+      currency: form.currency.trim(),
     });
   }
 
-  const setField = (key: keyof typeof EMPTY_FORM) => (value: string) =>
+  const setField = (key: keyof typeof EMPTY_FORM) => (value: string) => {
     setForm((prev) => ({ ...prev, [key]: value }));
+    setErrors((prev) => (prev[key] ? { ...prev, [key]: undefined } : prev));
+  };
 
   return (
     <Card>
@@ -154,6 +184,7 @@ function PlatformConfigCard() {
                 step="0.01"
                 value={form.platformFeePercent}
                 onChange={setField('platformFeePercent')}
+                error={errors.platformFeePercent}
               />
               <ConfigField
                 id="geofenceRadiusMeters"
@@ -161,6 +192,7 @@ function PlatformConfigCard() {
                 type="number"
                 value={form.geofenceRadiusMeters}
                 onChange={setField('geofenceRadiusMeters')}
+                error={errors.geofenceRadiusMeters}
               />
               <ConfigField
                 id="subscriptionMonthlyFee"
@@ -169,6 +201,7 @@ function PlatformConfigCard() {
                 step="0.01"
                 value={form.subscriptionMonthlyFee}
                 onChange={setField('subscriptionMonthlyFee')}
+                error={errors.subscriptionMonthlyFee}
               />
               <ConfigField
                 id="duplicatePaymentWindowHours"
@@ -176,12 +209,14 @@ function PlatformConfigCard() {
                 type="number"
                 value={form.duplicatePaymentWindowHours}
                 onChange={setField('duplicatePaymentWindowHours')}
+                error={errors.duplicatePaymentWindowHours}
               />
               <ConfigField
                 id="currency"
                 label="Currency"
                 value={form.currency}
                 onChange={setField('currency')}
+                error={errors.currency}
               />
             </div>
 
@@ -211,6 +246,7 @@ function ConfigField({
   onChange,
   type = 'text',
   step,
+  error,
 }: {
   id: string;
   label: string;
@@ -218,6 +254,7 @@ function ConfigField({
   onChange: (value: string) => void;
   type?: string;
   step?: string;
+  error?: string;
 }) {
   return (
     <div className="space-y-1.5">
@@ -227,8 +264,15 @@ function ConfigField({
         type={type}
         step={step}
         value={value}
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? `${id}-error` : undefined}
         onChange={(event) => onChange(event.target.value)}
       />
+      {error && (
+        <p id={`${id}-error`} className="text-destructive text-sm">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
