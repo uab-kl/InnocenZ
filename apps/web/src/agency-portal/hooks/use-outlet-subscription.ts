@@ -1,6 +1,9 @@
-import type { OutletSubscriptionInvoice } from "@agency-portal/lib/outlet-demo";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
-import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
+import {
+	type SubscriptionRecordRow,
+	sortMemberSubscriptions,
+	subscriptionRecordFromMember,
+} from "@agency-portal/lib/subscription-record";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -8,10 +11,7 @@ import {
 	type CreateAdminRequestInput,
 	createAdminRequest,
 } from "@/services/admin-request";
-import {
-	fetchMemberSubscriptions,
-	type MemberSubscription,
-} from "@/services/member-subscription";
+import { fetchMemberSubscriptions } from "@/services/member-subscription";
 
 const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -23,29 +23,16 @@ export interface PosQuoteContact {
 	phone?: string;
 }
 
-/** Map a backend subscription-ledger row into the demo invoice card shape. */
-function invoiceFromMemberSubscription(
-	sub: MemberSubscription,
-): OutletSubscriptionInvoice {
-	const cycle =
-		sub.billingCycle.charAt(0).toUpperCase() + sub.billingCycle.slice(1);
-	return {
-		id: sub.id,
-		issueDate: fmtDateLabelFromIso(sub.startedAt.slice(0, 10)),
-		detail: `${cycle} billing`,
-		planLabel: sub.planName,
-		amount: Number(sub.amount) || 0,
-		status: sub.status === "past_due" ? "PENDING" : "SETTLED",
-	};
-}
-
 /**
  * Backend-driven subscription data for the outlet portal.
  *
  * Gated on a real session (`getOutletIdentity()`); demo sessions get `backed:
  * false` and keep the demo store. Wires the two genuinely backend-backed parts:
- * - **Billing history:** the `member_subscription` ledger for this outlet,
- *   mapped into the demo invoice card shape.
+ * - **Subscription record:** the `member_subscription` ledger for this outlet.
+ *   NOT an invoice list — one row per subscription, no payment state — so it no
+ *   longer maps onto the demo's invoice card shape. It used to, and collapsing
+ *   the four real statuses into that shape's SETTLED/PENDING meant a *cancelled*
+ *   subscription rendered a green "Paid" pill.
  * - **POS-integration quote:** creates an `admin_request`
  *   (`type: 'pos_integration_quote'`) for admin follow-up.
  *
@@ -76,12 +63,11 @@ export function useOutletSubscription() {
 		staleTime: 60_000,
 	});
 
-	const billingHistory = useMemo<OutletSubscriptionInvoice[]>(() => {
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
 		if (!backed) return [];
-		return (billingQuery.data?.data ?? [])
-			.slice()
-			.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-			.map(invoiceFromMemberSubscription);
+		return sortMemberSubscriptions(billingQuery.data?.data ?? []).map((sub) =>
+			subscriptionRecordFromMember(sub, "InnocenZ Outlet"),
+		);
 	}, [backed, billingQuery.data]);
 
 	const posQuoteMut = useMutation({

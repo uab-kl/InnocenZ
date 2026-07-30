@@ -31,6 +31,7 @@ import {
 	tonightShiftOutletName,
 } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
+import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
 import { createFileRoute } from "@tanstack/react-router";
 import {
 	Calendar,
@@ -176,9 +177,28 @@ function OutletSubscriptionPage() {
 		collections.backed && outletCan(outletSubRole, "viewBilling");
 	const [quoteSentLocal, setQuoteSentLocal] = useState(false);
 
-	// Billing history: real ledger when backed, demo invoices otherwise. The plan
-	// rate-card + payment card stay on demo data (see the hook's docstring).
-	const billingHistory = backend.backed ? backend.billingHistory : demoBilling;
+	/**
+	 * Real sessions read the `member_subscription` ledger; demo sessions keep the
+	 * store's invoices, mapped onto the same row shape so the render has one
+	 * branch. The plan rate-card + payment card stay on demo data either way (see
+	 * the hook's docstring).
+	 *
+	 * The demo rows genuinely ARE invoice-shaped, with a settled/pending state, so
+	 * "Paid" is honest for them. The backend rows are not, which is why they no
+	 * longer borrow that wording.
+	 */
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
+		if (backend.backed) return backend.billingHistory;
+		return demoBilling.map((inv) => ({
+			id: inv.id,
+			title: `InnocenZ Outlet · ${inv.planLabel}`,
+			detail: inv.detail,
+			dateLabel: inv.issueDate,
+			amountRm: inv.amount,
+			statusLabel: inv.status === "SETTLED" ? "Paid" : inv.status,
+			tone: inv.status === "SETTLED" ? "green" : "amber",
+		}));
+	}, [backend.backed, backend.billingHistory, demoBilling]);
 
 	const outletName = tonightShiftOutletName(shifts);
 	const currentPlan = getOutletSubscriptionPlan(outletOwner.subscriptionPlanId);
@@ -361,36 +381,43 @@ function OutletSubscriptionPage() {
 				))}
 			</div>
 
-			<IzSectionLabel>Billing history</IzSectionLabel>
+			<IzSectionLabel>
+				{backend.backed ? "Subscription record" : "Billing history"}
+			</IzSectionLabel>
+			{backend.backed && (
+				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
+					Your plan history with InnocenZ — one row per subscription, not per
+					charge. It records what you subscribed to and when, so it does not say
+					whether a given month was paid.
+				</p>
+			)}
 			<div className="space-y-2">
 				{billingHistory.length === 0 ? (
 					<IzCard flat>
 						<p className="iz-tiny iz-muted py-4 text-center">
-							No subscription invoices yet.
+							{backend.backed
+								? "No subscription on record for this venue yet."
+								: "No subscription invoices yet."}
 						</p>
 					</IzCard>
 				) : (
-					billingHistory.map((inv) => (
-						<IzCard key={inv.id} flat>
+					billingHistory.map((row) => (
+						<IzCard key={row.id} flat>
 							<div className="iz-between gap-2">
 								<div className="flex min-w-0 items-start gap-2">
 									<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
 									<div className="min-w-0">
-										<p className="iz-sm truncate font-semibold">
-											InnocenZ Outlet · {inv.planLabel}
-										</p>
+										<p className="iz-sm truncate font-semibold">{row.title}</p>
 										<p className="iz-tiny iz-muted">
-											{inv.issueDate} · {inv.detail}
+											{row.dateLabel}
+											{row.detail ? ` · ${row.detail}` : ""}
 										</p>
 									</div>
 								</div>
 								<div className="shrink-0 text-right">
-									<p className="iz-sm font-bold">{formatRM(inv.amount)}</p>
-									<IzPill
-										variant={inv.status === "SETTLED" ? "green" : "amber"}
-										className="!mt-1"
-									>
-										{inv.status === "SETTLED" ? "Paid" : inv.status}
+									<p className="iz-sm font-bold">{formatRM(row.amountRm)}</p>
+									<IzPill variant={row.tone} className="!mt-1">
+										{row.statusLabel}
 									</IzPill>
 								</div>
 							</div>

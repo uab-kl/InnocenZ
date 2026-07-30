@@ -1,71 +1,14 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
-import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
+import {
+	type SubscriptionRecordRow,
+	sortMemberSubscriptions,
+	subscriptionRecordFromMember,
+} from "@agency-portal/lib/subscription-record";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import {
-	fetchMemberSubscriptions,
-	type MemberSubscription,
-	type MemberSubscriptionStatus,
-} from "@/services/member-subscription";
+import { fetchMemberSubscriptions } from "@/services/member-subscription";
 import { fetchSubscriptions, type Subscription } from "@/services/subscription";
-
-/**
- * One row of the agency's subscription record with InnocenZ.
- *
- * Named a "record" rather than an invoice on purpose. `member_subscription` is a
- * "who subscribed and when" ledger — one row per subscription, carrying
- * `startedAt`, `endedAt`, `amount` and `billingCycle`. It is NOT one row per
- * charge, and it holds no payment state, so nothing here can honestly say a
- * given week or month was paid.
- */
-export interface AgencyBillingRow {
-	id: string;
-	title: string;
-	detail: string;
-	dateLabel: string;
-	amountRm: number;
-	statusLabel: string;
-	tone: "green" | "amber" | "ink";
-}
-
-/**
- * Deliberately NOT collapsed to paid/unpaid. `active` means the subscription is
- * running, which is not the same claim as "this was paid" — and `cancelled`
- * flattened into a green "Paid" pill would be a plain misstatement.
- */
-const MEMBER_STATUS: Record<
-	MemberSubscriptionStatus,
-	{ label: string; tone: AgencyBillingRow["tone"] }
-> = {
-	active: { label: "Active", tone: "green" },
-	past_due: { label: "Past due", tone: "amber" },
-	cancelled: { label: "Cancelled", tone: "ink" },
-	expired: { label: "Ended", tone: "ink" },
-};
-
-function billingRowFromMemberSubscription(
-	sub: MemberSubscription,
-): AgencyBillingRow {
-	const cycle =
-		sub.billingCycle.charAt(0).toUpperCase() + sub.billingCycle.slice(1);
-	const status = MEMBER_STATUS[sub.status] ?? {
-		label: sub.status,
-		tone: "ink" as const,
-	};
-	return {
-		id: sub.id,
-		title: `InnocenZ Agency · ${sub.planName}`,
-		detail: sub.endedAt
-			? `${cycle} billing · ended ${fmtDateLabelFromIso(sub.endedAt.slice(0, 10))}`
-			: `${cycle} billing`,
-		dateLabel: fmtDateLabelFromIso(sub.startedAt.slice(0, 10)),
-		// numeric over the wire; the screen needs a number.
-		amountRm: Number(sub.amount) || 0,
-		statusLabel: status.label,
-		tone: status.tone,
-	};
-}
 
 /** Rate-card plan shape the Subscription screen renders (demo-plan compatible). */
 export interface AgencyRatePlan {
@@ -172,12 +115,11 @@ export function useAgencySubscription() {
 		staleTime: 60_000,
 	});
 
-	const billingHistory = useMemo<AgencyBillingRow[]>(
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(
 		() =>
-			(historyQuery.data?.data ?? [])
-				.slice()
-				.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-				.map(billingRowFromMemberSubscription),
+			sortMemberSubscriptions(historyQuery.data?.data ?? []).map((sub) =>
+				subscriptionRecordFromMember(sub, "InnocenZ Agency"),
+			),
 		[historyQuery.data],
 	);
 

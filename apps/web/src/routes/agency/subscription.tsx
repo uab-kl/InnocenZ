@@ -8,7 +8,6 @@ import {
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyCollections } from "@agency-portal/hooks/use-agency-collections";
 import {
-	type AgencyBillingRow,
 	type AgencyRatePlan,
 	useAgencySubscription,
 } from "@agency-portal/hooks/use-agency-subscription";
@@ -32,6 +31,7 @@ import {
 	demoPvIssueIsoForWeeksAgo,
 } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
+import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
 import { createFileRoute } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
 import {
@@ -129,7 +129,7 @@ function AgencySubscription() {
 	 * the note under the section heading — so this is the one place that
 	 * difference is reconciled, deliberately and in the open.
 	 */
-	const billingHistory = useMemo<AgencyBillingRow[]>(() => {
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
 		if (sub.backed) return sub.billingHistory;
 		return agencyCollections
 			.filter(
