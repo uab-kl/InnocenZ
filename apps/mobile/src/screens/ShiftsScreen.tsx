@@ -276,6 +276,9 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                             : 'ALSO TODAY'
                       }
                       cta={s.status === 'on-duty' ? 'Attendance' : 'Check in'}
+                      // Cards start collapsed — the PR taps one open to see
+                      // the details they want.
+                      defaultOpen={false}
                       onCheckIn={() => {
                         // First card owns the live Check-In pick; a second
                         // same-day shift pins Check-In to its own row id.
@@ -292,7 +295,7 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                       cta="View summary"
                       // Collapsed by default while a live shift owns the page;
                       // the lone just-finished shift stays expanded.
-                      defaultOpen={!tonightShift}
+                      defaultOpen={false}
                       // Pin Check-In to this finished shift's check-out summary.
                       onCheckIn={() => {
                         focus(s.id);
