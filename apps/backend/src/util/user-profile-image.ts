@@ -43,12 +43,46 @@ export function saveUserIdDocFile(
   return `/img/users/id-docs/${filename}`;
 }
 
+/**
+ * Columns that must never leave the server on a user-shaped response.
+ *
+ * `passwordHash` is the one that matters. Until 30 Jul 2026 `GET /user` served
+ * every account's bcrypt hash — the platform admin's included — to any signed-in
+ * role, because `list()` and `getById()` both spread the raw row straight into
+ * the payload. A live sweep on a PR token returned 10 accounts and 10 hashes.
+ *
+ * Stripped HERE rather than in the repository on purpose: `auth` still needs the
+ * hash to verify a login, so the projection belongs at the response boundary and
+ * not in the query. Both leaking endpoints funnel through this one helper, so
+ * this covers the payload for the `/user/:id` route mobile uses as well.
+ *
+ * The lockout columns ride along because no client reads them (checked across
+ * apps/web and apps/mobile) and they describe how an account is defended rather
+ * than anything needed to render it.
+ */
+const PRIVATE_USER_FIELDS = [
+  'passwordHash',
+  'failedLoginAttempts',
+  'lockedUntil',
+  'blockedReason',
+] as const;
+
+type PublicUser<T> = Omit<T, (typeof PRIVATE_USER_FIELDS)[number]>;
+
+function stripPrivateUserFields<T extends object>(user: T): PublicUser<T> {
+  const copy = { ...user } as unknown as Record<string, unknown>;
+  for (const field of PRIVATE_USER_FIELDS) {
+    delete copy[field];
+  }
+  return copy as PublicUser<T>;
+}
+
 export function withUserProfile<T extends { id: string; profileImage: string | null }>(
   user: T,
   profile: UserProfileType | null | undefined,
 ) {
   return {
-    ...withProfileImage(user),
+    ...stripPrivateUserFields(withProfileImage(user)),
     profile: profile ? toUserProfileResponse(profile) : emptyUserProfileResponse(user.id),
   };
 }
