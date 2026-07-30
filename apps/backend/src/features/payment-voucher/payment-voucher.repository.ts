@@ -77,15 +77,53 @@ export class PaymentVoucherRepositoryClass {
         if (!voucher) return null;
 
         if (lines) {
+          // Carry evidence across the wipe-and-reinsert.
+          //
+          // Replacing the line set is how every voucher update works, and the
+          // HTTP payload carries no receipt_id and no proof_photos — so before
+          // this, an agency editing one amount silently NULLed the receipt link on
+          // every line of the voucher and DELETED the PR's proof photos, the
+          // mandatory evidence behind a self-logged claim. The verify panel then
+          // reported every commission line as unbacked, because it was.
+          //
+          // Matched on `ref`, which encodes kind|source|amount|order and is what a
+          // client round-trips unchanged while editing a price. Only refs that
+          // appear EXACTLY ONCE are carried: an ambiguous match would attach a
+          // receipt to the wrong money, which is worse than the null it replaces.
+          const previous = await this.getLines(id, tx);
+          const carryable = new Map<
+            string,
+            { receiptId: string | null; proofPhotos: string[] | null }
+          >();
+          const refCounts = new Map<string, number>();
+          for (const line of previous) {
+            if (!line.ref) continue;
+            refCounts.set(line.ref, (refCounts.get(line.ref) ?? 0) + 1);
+            carryable.set(line.ref, {
+              receiptId: line.receiptId,
+              proofPhotos: line.proofPhotos,
+            });
+          }
+          for (const [ref, count] of refCounts) if (count > 1) carryable.delete(ref);
+
           await tx.delete(PaymentVoucherLineTable).where(eq(PaymentVoucherLineTable.voucherId, id));
           const insertedLines =
             lines.length > 0
               ? await tx
                   .insert(PaymentVoucherLineTable)
                   .values(
-                    lines.map((line, i) =>
-                      prepareLine({ ...line, voucherId: id, sortOrder: i }),
-                    ),
+                    lines.map((line, i) => {
+                      const carried = line.ref ? carryable.get(line.ref) : undefined;
+                      return prepareLine({
+                        ...line,
+                        // An explicit value from the caller always wins; this only
+                        // fills in what the HTTP payload cannot express.
+                        receiptId: line.receiptId ?? carried?.receiptId ?? null,
+                        proofPhotos: line.proofPhotos ?? carried?.proofPhotos ?? null,
+                        voucherId: id,
+                        sortOrder: i,
+                      });
+                    }),
                   )
                   .returning()
               : [];

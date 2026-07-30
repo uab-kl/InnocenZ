@@ -69,6 +69,12 @@ function toLineRows(lines: PaymentVoucherLineInput[]) {
     quantity: line.quantity ?? 1,
     amount: line.amount.toFixed(2),
     ref: line.ref,
+    // Passed through rather than dropped. Omitting them here is what let an
+    // agency line edit sever every receipt link and delete the PR's proof
+    // photos. Left `undefined` (not null) when absent, so the repository's
+    // ref-match can still carry the existing values forward.
+    receiptId: line.receiptId,
+    proofPhotos: line.proofPhotos,
   }));
 }
 

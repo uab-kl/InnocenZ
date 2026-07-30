@@ -14,6 +14,16 @@ export const PaymentVoucherLineSchema = z.object({
   // Kept as a plain number so the controller can sum lines into the subtotal.
   amount: z.number().nonnegative(),
   ref: z.string().max(100, 'Ref is too long').optional(),
+  /**
+   * The receipt this line came from, and the proof behind it.
+   *
+   * Optional, and normally omitted: a voucher update replaces the whole line set,
+   * so the repository carries both forward by matching `ref`. They are accepted
+   * here so a caller that KNOWS the link can state it rather than rely on that
+   * match — and so re-attaching a receipt needs no second endpoint.
+   */
+  receiptId: z.string().uuid('receiptId must be a uuid').optional(),
+  proofPhotos: z.array(z.string().max(500)).max(20).optional(),
 });
 
 export const CreatePaymentVoucherSchema = z.object({
