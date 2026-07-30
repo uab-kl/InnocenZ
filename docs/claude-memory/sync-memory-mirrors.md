@@ -5,14 +5,14 @@ metadata:
   node_type: memory
   type: feedback
   originSessionId: 88bfe12d-2821-45af-978c-7103c199f157
-  modified: 2026-07-30T07:12:22.270Z
+  modified: 2026-07-30T07:30:52.652Z
 ---
 
 The user works on multiple devices (office PC + house PC, same Claude account) — file-based memory is per-machine, so it must be mirrored where every device can read it.
 
 **Doc-role mapping (2026-07-30, user adopted the "4 md files" agent-memory system from a Xiaohongshu post — "memory.md is my testscript.md"):**
 - `CLAUDE.md` = RULES ONLY — update ONLY when a rule changes ("got new rules only renew at the claude.md"), never as routine session sync.
-- `TEST_SCRIPT.md` = the Memory.md role — the LIVING session record; renew it on EVERY work slice (§8 done / §9 to-do next / §10 changelog).
+- `TEST_SCRIPT.md` = the Memory.md role — the LIVING session record; renew it on EVERY work slice (§8 done / §9 to-do next / §10 changelog). ENFORCED by the repo's Stop hook `.claude/hooks/renew-test-script.js` (registered in project `.claude/settings.json` hooks.Stop): it blocks ending a turn while apps/packages/tools changes aren't reflected by a renewed TEST_SCRIPT.md.
 - `docs/claude-memory/*.md` + the Excel "Claude Code Memory" tab = the Learning/Wiki layer — full memory mirror for other devices.
 
 **Why:** (2026-07-30) "My house same Claude account but have no all those your current Claude code memory … so i can easily do in another devices and consistent and keep memory."
