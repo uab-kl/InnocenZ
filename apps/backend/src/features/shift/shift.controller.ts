@@ -11,6 +11,8 @@ import { logger } from '@/util/logger';
 import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
 import { ShiftFilter, ShiftStatus, ShiftEventKind } from './shift.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
+import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
+import { slotWindowsOverlap, shiftDayKey } from '@/util/slot-window';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -28,6 +30,10 @@ export class ShiftControllerClass {
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
     private outletRepository: OutletRepositoryClass,
+    // Only for the double-booking check on a timing edit — a shift moving in
+    // time is the mirror of assigning into a clash, so both ends need to see
+    // the same assignments.
+    private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
   ) {}
 
   /** True when the caller is an outlet operator (no admin/agency scope, ≥1 outlet). */
@@ -193,6 +199,42 @@ export class ShiftControllerClass {
       if (!scope.isAdmin) delete data.agencyId;
       // Outlets cannot move a shift to a different venue.
       if (isOutlet) delete data.outletId;
+
+      // Moving a shift's time is the OTHER way a PR gets double-booked.
+      // Assigning already refuses a clash (shift-assignment create), but nothing
+      // stopped an edit from dragging this shift on top of another one the same
+      // PR already works — same outcome, opposite direction, and it lands
+      // silently because nobody is assigning anything at that moment.
+      const nextSlot = data.slot === undefined ? existing.slot : data.slot;
+      const nextDate = data.shiftDate === undefined ? existing.shiftDate : data.shiftDate;
+      const timingChanged =
+        (data.slot !== undefined && data.slot !== existing.slot) ||
+        (data.shiftDate !== undefined &&
+          shiftDayKey(nextDate) !== shiftDayKey(existing.shiftDate));
+
+      if (timingChanged) {
+        const assigned = await this.shiftAssignmentRepository.listByShift(id);
+        const live = assigned.filter(
+          (a) => !['cancelled', 'no_show', 'leave_approved'].includes(a.status),
+        );
+        for (const a of live) {
+          const others = await this.shiftAssignmentRepository.listForPr(a.prId);
+          const clash = others.find(
+            (o) =>
+              o.shiftId !== id &&
+              !['cancelled', 'no_show', 'leave_approved'].includes(o.status) &&
+              shiftDayKey(o.shiftDate) === shiftDayKey(nextDate) &&
+              slotWindowsOverlap(nextSlot, o.slot),
+          );
+          if (clash) {
+            return res.status(400).json({
+              success: false,
+              message: `That time clashes for a PR on this shift — they already work ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day. Move the other shift first, or unassign them here.`,
+              data: null,
+            });
+          }
+        }
+      }
 
       const actor = getActor(req);
       const shift = await this.shiftRepository.updateWithPayTiers(
