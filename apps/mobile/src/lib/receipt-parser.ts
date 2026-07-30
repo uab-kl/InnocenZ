@@ -163,7 +163,10 @@ export function lineMentionsItem(line: string, itemName: string): boolean {
   const n = normalize(itemName);
   if (!l || !n) return false;
   if (n.length < 5) {
-    return lineTokens(line).includes(n);
+    // Exact standalone word — but accept the singular/plural twin: receipts
+    // print "TIP 5.00" while outlets configure the item as "Tips", and that
+    // pair must match without opening the door to typo-matching short words.
+    return lineTokens(line).some((t) => t === n || `${t}s` === n || t === `${n}s`);
   }
   if (l.includes(n)) return true;
   const maxTypos = n.length >= 9 ? 2 : 1;

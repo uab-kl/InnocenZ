@@ -518,11 +518,72 @@ export type SignedVoucher = {
 export function signMyVoucher(
   accessToken: string,
   voucherId: string,
+  /** Finger-drawn ink from the sign pad — stored on the voucher, inked into the PDF. */
+  signature?: { w: number; h: number; strokes: [number, number][][] },
 ): Promise<SignedVoucher> {
   return request<SignedVoucher>(`/payment-voucher/mine/${voucherId}/sign`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
+    ...(signature ? { body: JSON.stringify({ signature }) } : {}),
   });
+}
+
+/**
+ * The same boxed voucher as a PDF blob — web builds open it in the browser's
+ * PDF viewer so web and phone always show the ONE server-rendered document.
+ */
+export async function fetchMyVoucherPdfBlob(
+  accessToken: string,
+  voucherId: string,
+): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/payment-voucher/mine/${voucherId}/export.pdf`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`PDF export failed (${res.status})`);
+  return res.blob();
+}
+
+/**
+ * Downloads the printed PV workbook (the prototype's Excel export layout,
+ * rendered server-side from the real voucher + FK agency/PR rows). Web builds
+ * save it via a blob link; native builds have no file sink in this APK yet.
+ */
+export async function fetchMyVoucherExcelBlob(
+  accessToken: string,
+  voucherId: string,
+): Promise<Blob> {
+  const res = await fetch(`${API_BASE}/payment-voucher/mine/${voucherId}/export.xlsx`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`Excel export failed (${res.status})`);
+  return res.blob();
+}
+
+export type VoucherExportLinks = {
+  /** Absolute URLs the system browser can open — the ticket in the path is the credential. */
+  xlsxUrl: string;
+  pdfUrl: string;
+  printUrl: string;
+};
+
+/**
+ * Mints a 5-minute download ticket for one of this PR's vouchers, so the
+ * phone's browser can open the Excel/print view without a Bearer header (and
+ * without ever putting the session token in a URL).
+ */
+export async function createMyVoucherExportTicket(
+  accessToken: string,
+  voucherId: string,
+): Promise<VoucherExportLinks> {
+  const d = await request<{ xlsxPath: string; pdfPath: string; printPath: string }>(
+    `/payment-voucher/mine/${voucherId}/export-ticket`,
+    { method: 'POST', headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+  return {
+    xlsxUrl: `${API_BASE}${d.xlsxPath}`,
+    pdfUrl: `${API_BASE}${d.pdfPath}`,
+    printUrl: `${API_BASE}${d.printPath}`,
+  };
 }
 
 /** The closed enum the backend writes — mirrors notification.model.ts. */

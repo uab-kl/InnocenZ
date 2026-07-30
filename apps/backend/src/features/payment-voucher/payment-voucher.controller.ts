@@ -4,6 +4,13 @@ import {
   PaymentVoucherDisputeRepositoryClass,
 } from './payment-voucher-dispute.repository.js';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
+import {
+  buildVoucherPrintHtml,
+  buildVoucherWorkbook,
+  voucherRef,
+} from './payment-voucher-excel.js';
+import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
+import { buildVoucherPdf } from './payment-voucher-pdf.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -20,6 +27,7 @@ import {
   CreatePrReceiptSchema,
   UpdatePrReceiptLineSchema,
   PrRaiseDisputeSchema,
+  PrSignVoucherSchema,
   PrWithdrawDisputeSchema,
   ResolveDisputeSchema,
   PrReceiptKind,
@@ -556,16 +564,20 @@ export class PaymentVoucherControllerClass {
         actor,
       });
 
-      // One paper receipt = one log. Same order number on this voucher → refused.
+      // One paper receipt = one log PER SHIFT. Outlets reuse order numbers
+      // across nights, so the same ORD number on a new shift is a new paper —
+      // it inserts normally and gets its own unique RCP number. Only a
+      // re-scan within the same shift is refused.
       if (parsed.data.orderNo) {
         const dupe = await this.paymentVoucherRepository.findReceiptByOrderNo(
           draft.id,
           parsed.data.orderNo,
+          parsed.data.assignmentId ?? null,
         );
         if (dupe) {
           return res.status(409).json({
             success: false,
-            message: `Receipt ${parsed.data.orderNo} is already logged (${dupe.receiptNo}) — use Self-log to adjust it.`,
+            message: `Receipt ${parsed.data.orderNo} is already logged on this shift (${dupe.receiptNo}) — re-scan its row (camera icon) to replace the picture, edit it, or remove the row and scan afresh.`,
             data: null,
           });
         }
@@ -628,6 +640,75 @@ export class PaymentVoucherControllerClass {
   }
 
   /** Edits one of the PR's own pending receipt lines. */
+  /**
+   * The agency's receipt review feed: every scanned/self-logged receipt from
+   * its OWN PRs with the full OCR evidence — order number, printed date/time,
+   * proof photos, PR note, and each line's item/quantity/amount — so the
+   * approve/dispute decision is made on everything the PR submitted. Admin may
+   * pass ?agencyId=…; an agency caller is pinned to its own membership.
+   */
+  async listAgencyReceipts(req: Request, res: Response) {
+    try {
+      const user = req.user!;
+      const roles = await this.authRepository.getRolesForUserIds([user.id]);
+      const isAdmin = roles.some((r) => r.roleName === 'admin');
+      let agencyId: string | null = null;
+      if (isAdmin && typeof req.query.agencyId === 'string' && req.query.agencyId) {
+        agencyId = req.query.agencyId;
+      } else {
+        const memberships = await this.agencyMemberRepository.listByUser(user.id);
+        agencyId =
+          (memberships.find((m) => m.status === 'active') ?? memberships[0])?.agencyId ?? null;
+      }
+      if (!agencyId) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+
+      const rows = await this.paymentVoucherRepository.listReceiptsForAgency(agencyId, {
+        fromDate: typeof req.query.fromDate === 'string' ? req.query.fromDate : undefined,
+        toDate: typeof req.query.toDate === 'string' ? req.query.toDate : undefined,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: rows.map((r) => ({
+          id: r.receipt.id,
+          receiptNo: r.receipt.receiptNo,
+          orderNo: r.receipt.orderNo,
+          source: r.receipt.source,
+          receiptDate: r.receipt.receiptDate,
+          receiptTime: r.receipt.receiptTime,
+          note: r.receipt.note,
+          proofPhotos: r.receipt.proofPhotos ?? [],
+          loggedAt: r.receipt.createdAt,
+          voucherId: r.voucherId,
+          voucherStatus: r.voucherStatus,
+          weekStart: r.weekStart,
+          weekEnd: r.weekEnd,
+          prId: r.prId,
+          prName: r.prName,
+          prNickname: r.prNickname,
+          shiftAssignmentId: r.receipt.shiftAssignmentId,
+          lines: r.lines.map((l) => ({
+            id: l.id,
+            lineDate: l.lineDate,
+            outlet: l.outlet,
+            description: l.description,
+            quantity: l.quantity,
+            amount: l.amount,
+            ref: l.ref,
+          })),
+        })),
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.listAgencyReceipts] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async updateMyLine(req: Request, res: Response) {
     try {
       const lineId = paramId(req.params.lineId);
@@ -674,6 +755,15 @@ export class PaymentVoucherControllerClass {
 
       const line = await this.paymentVoucherRepository.updateLine(lineId, patch);
       if (!line) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // A re-snapped picture must follow the paper: keep the parent receipt's
+      // photo in step with the line the app displays and the agency verifies.
+      if (parsed.data.proofPhotos !== undefined && owned.line.receiptId) {
+        await this.paymentVoucherRepository.updateReceiptPhotos(
+          owned.line.receiptId,
+          parsed.data.proofPhotos ?? null,
+          getActor(req),
+        );
+      }
       res.status(200).json({ success: true, message: 'Updated', data: toReceiptLineDTO(line) });
     } catch (error) {
       logger.error('[PaymentVoucherController.updateMyLine] Error:', error);
@@ -697,6 +787,17 @@ export class PaymentVoucherControllerClass {
       }
 
       await this.paymentVoucherRepository.deleteLine(lineId);
+      // Removing the LAST line of a scanned receipt removes the receipt too —
+      // its snap goes with it, and the order number becomes scannable again on
+      // this shift instead of a ghost RCP blocking every re-scan.
+      if (owned.line.receiptId) {
+        const left = await this.paymentVoucherRepository.countLinesForReceipt(
+          owned.line.receiptId,
+        );
+        if (left === 0) {
+          await this.paymentVoucherRepository.deleteReceipt(owned.line.receiptId);
+        }
+      }
       res.status(200).json({ success: true, message: 'Removed', data: null });
     } catch (error) {
       logger.error('[PaymentVoucherController.deleteMyLine] Error:', error);
@@ -794,12 +895,26 @@ export class PaymentVoucherControllerClass {
         });
       }
 
+      // The finger-drawn signature. Optional (an older app build signs
+      // without one) — but ink the PR actually drew is either stored or the
+      // whole sign is refused, never silently dropped.
+      const parsedSign = PrSignVoucherSchema.safeParse(req.body ?? {});
+      if (!parsedSign.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsedSign.error.issues[0]?.message ?? 'Invalid signature',
+          data: null,
+        });
+      }
+      const signature = parsedSign.data.signature;
+
       const actor = getActor(req);
       // No `lines` argument on purpose: update() wipes and reinserts lines when
       // given them, and this route has no business touching the money.
       const signed = await this.paymentVoucherRepository.update(voucherId, {
         status: 'signed',
         prSignedAt: new Date(),
+        ...(signature ? { prSignature: JSON.stringify(signature) } : {}),
         updatedBy: actor,
       });
       if (!signed) {
@@ -811,6 +926,228 @@ export class PaymentVoucherControllerClass {
         .json({ success: true, message: 'Voucher signed', data: signed });
     } catch (error) {
       logger.error('[PaymentVoucherController.signMyVoucher] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The PR downloads their OWN voucher as the printed Excel document — the
+   * same cell layout as the prototype's PV-...-payment-voucher.xlsx export.
+   * Any status is allowed: an unsigned voucher simply exports with an empty
+   * signature block, because the export never shows what the DB does not hold.
+   */
+  async exportMyVoucherExcel(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+
+      const voucherId = paramId(req.params.voucherId);
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      // Someone else's voucher is a 404, never a 403 — same rule as sign/dispute.
+      if (!bundle || bundle.voucher.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      return await this.sendVoucherExcel(res, bundle);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportMyVoucherExcel] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Shared by the authenticated /mine export and the ticket download. */
+  private voucherExportLines(bundle: { voucher: { lines: PaymentVoucherLineType[] } }) {
+    return bundle.voucher.lines.map(toReceiptLineDTO).map((l) => ({
+      kind: l.kind,
+      lineDate: l.lineDate,
+      outlet: l.outlet,
+      quantity: l.quantity,
+      commission: l.commission,
+    }));
+  }
+
+  private async sendVoucherExcel(
+    res: Response,
+    bundle: NonNullable<
+      Awaited<ReturnType<PaymentVoucherRepositoryClass['getExportBundle']>>
+    >,
+  ) {
+    const buffer = await buildVoucherWorkbook({
+      voucher: bundle.voucher,
+      agency: bundle.agency,
+      pr: bundle.pr,
+      lines: this.voucherExportLines(bundle),
+    });
+    const filename = `${voucherRef(bundle.voucher)}-payment-voucher.xlsx`;
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    return res.status(200).send(Buffer.from(buffer as ArrayBuffer));
+  }
+
+  /**
+   * The PR downloads their OWN voucher as the boxed PDF — same renderer as
+   * the phone's ticket download, so web and phone can never diverge. Served
+   * inline: the browser's PDF viewer opens it for viewing/printing/saving.
+   */
+  async exportMyVoucherPdf(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+
+      const voucherId = paramId(req.params.voucherId);
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle || bundle.voucher.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const pdf = await buildVoucherPdf({
+        voucher: bundle.voucher,
+        agency: bundle.agency,
+        pr: bundle.pr,
+        lines: this.voucherExportLines(bundle),
+      });
+      const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `inline; filename="${filename}"`);
+      return res.status(200).send(pdf);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportMyVoucherPdf] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The PR asks for a short-lived download link for their OWN voucher. The
+   * phone then hands the link to the system browser, which cannot attach the
+   * Bearer header — the 5-minute voucher-scoped ticket in the path is the
+   * whole credential, so the session token never enters a URL.
+   */
+  async createMyVoucherExportTicket(req: Request, res: Response) {
+    try {
+      const pr = await this.resolvePr(req);
+      if (!pr) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+
+      const voucherId = paramId(req.params.voucherId);
+      const existing = await this.paymentVoucherRepository.getById(voucherId);
+      if (!existing || existing.prId !== pr.id) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const ticket = issueExportTicket(voucherId);
+      return res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: {
+          xlsxPath: `/payment-voucher/export/${ticket}/voucher.xlsx`,
+          pdfPath: `/payment-voucher/export/${ticket}/voucher.pdf`,
+          printPath: `/payment-voucher/export/${ticket}/print`,
+          expiresInSeconds: 300,
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.createMyVoucherExportTicket] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Ticket download — reached by the phone's browser, no JWT. */
+  async exportTicketExcel(req: Request, res: Response) {
+    try {
+      const voucherId = redeemExportTicket(String(req.params.ticket ?? ''));
+      if (!voucherId) {
+        return res
+          .status(404)
+          .send('This download link has expired — open the app and tap Excel again.');
+      }
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      return await this.sendVoucherExcel(res, bundle);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportTicketExcel] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Ticket download — the actual PDF file, saved in one tap like the Excel. */
+  async exportTicketPdf(req: Request, res: Response) {
+    try {
+      const voucherId = redeemExportTicket(String(req.params.ticket ?? ''));
+      if (!voucherId) {
+        return res
+          .status(404)
+          .send('This download link has expired — open the app and tap PDF again.');
+      }
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const pdf = await buildVoucherPdf({
+        voucher: bundle.voucher,
+        agency: bundle.agency,
+        pr: bundle.pr,
+        lines: this.voucherExportLines(bundle),
+      });
+      const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      return res.status(200).send(pdf);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportTicketPdf] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Ticket print view — the browser renders the voucher and offers Save as PDF. */
+  async exportTicketPrint(req: Request, res: Response) {
+    try {
+      const voucherId = redeemExportTicket(String(req.params.ticket ?? ''));
+      if (!voucherId) {
+        return res
+          .status(404)
+          .send('This link has expired — open the app and tap PDF again.');
+      }
+      const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+      if (!bundle) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const html = buildVoucherPrintHtml({
+        voucher: bundle.voucher,
+        agency: bundle.agency,
+        pr: bundle.pr,
+        lines: this.voucherExportLines(bundle),
+      });
+      return res.status(200).type('html').send(html);
+    } catch (error) {
+      logger.error('[PaymentVoucherController.exportTicketPrint] Error:', error);
       return res
         .status(500)
         .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

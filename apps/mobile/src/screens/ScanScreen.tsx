@@ -36,6 +36,7 @@ import {
 } from '../lib/pr-rate';
 import { usePrEarnings } from '../lib/pr-earnings';
 import { usePrNav, type ScanCategory, type ScanMode } from '../lib/pr-nav';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureReceiptPhoto, recognizeReceiptText } from '../lib/receipt-ocr';
 import { parseReceipt } from '../lib/receipt-parser';
 import {
@@ -68,8 +69,10 @@ export function ScanScreen({
   editId?: string;
 }) {
   const { goBack, setTab } = usePrNav();
+  // Detail screen outside the tab shell — the back row must clear the status bar.
+  const insets = useSafeAreaInsets();
   const { active, phase: attendancePhase, refresh: refreshShift } = useActiveShift();
-  const { receiptLines, addLine, submitReceipt, updateLine } = usePrEarnings();
+  const { receiptLines, addLine, submitReceipt, updateLine, deleteLine } = usePrEarnings();
   const onDuty = attendancePhase === 'on_duty';
 
   // Re-pull `/shift-assignment/mine` from the DATABASE every time this screen
@@ -106,7 +109,10 @@ export function ScanScreen({
   }, [active?.shiftDate]);
 
   const [phase, setPhase] = useState<Phase>(() =>
-    mode === 'selflog' || editId ? 'manual' : 'idle',
+    // A scan-mode edit is a RE-SCAN: it walks the normal camera → OCR flow
+    // and replaces the old row on confirm. Only self-log edits open the
+    // manual form.
+    mode === 'selflog' || (editId && mode !== 'scan') ? 'manual' : 'idle',
   );
   const [amount, setAmount] = useState(category === 'tips' ? '50' : '125');
   const [editItem, setEditItem] = useState('');
@@ -277,8 +283,17 @@ export function ScanScreen({
     setReceiptDate(mergedDate);
     setReceiptTime(mergedTime);
     if (parsed.matches.length === 0 && detectedIds.length === 0) {
+      // Name what the matcher was hunting for — "matched none" without the
+      // list reads like a scanner fault when the paper simply doesn't print
+      // any of this outlet's configured items.
+      const wanted = categoryMenu
+        .slice(0, 4)
+        .map((d) => d.name)
+        .join(', ');
       setScanIssue(
-        `OCR read the photo but matched none of ${outlet}'s ${itemNoun}s — blurry or water-damaged? Self-log below, photo kept as proof.`,
+        `OCR read the photo but found none of ${outlet}'s ${itemNoun}s` +
+          (wanted ? ` — it looks for: ${wanted}${categoryMenu.length > 4 ? ', …' : ''}.` : '.') +
+          ` Scan a receipt printing one of those, or self-log below (photo kept as proof).`,
       );
       keepAsProof(shot.dataUrl);
       setPhase('manual');
@@ -356,6 +371,11 @@ export function ScanScreen({
     void runSubmit(async () => {
       const items = buildReceiptItems(detected);
       if (items.length === 0) throw new Error('Set a quantity for at least one item.');
+      // RE-SCAN of an existing row: the old line goes first — its receipt and
+      // snap cascade away server-side — so the same paper's order number
+      // passes the per-shift duplicate check and the fresh scan lands with a
+      // NEW unique receipt id.
+      if (editId) await deleteLine(editId);
       const receipt = await submitReceipt({
         source: 'scan',
         assignmentId: active?.id,
@@ -389,6 +409,8 @@ export function ScanScreen({
             sales: firstAmt,
             commission: commissionForItem(first, firstAmt),
             outlet: outlet,
+            // A retaken snap replaces the saved picture (and its receipt copy).
+            ...(proofPhotos.length ? { proofPhotos } : {}),
           });
           // Any extra items the user added during the edit become new rows.
           for (const d of rest) {
@@ -415,6 +437,8 @@ export function ScanScreen({
           sales: amt,
           commission: commissionFor(category, amt),
           outlet: outlet,
+          // A retaken snap replaces the saved picture (and its receipt copy).
+          ...(proofPhotos.length ? { proofPhotos } : {}),
         });
         return;
       }
@@ -461,7 +485,7 @@ export function ScanScreen({
     });
 
   return (
-    <View style={styles.screen}>
+    <View style={[styles.screen, { paddingTop: insets.top + 6 }]}>
 
       <View style={styles.titleRow}>
         {category === 'drinks' ? (
@@ -715,26 +739,42 @@ export function ScanScreen({
                     />
                   </>
                 )}
-                {proofRequired && (
+                {(proofRequired || !!editId) && (
                   <View style={styles.proofBox}>
                     <View style={styles.proofHeadRow}>
                       <Camera size={16} color={C.goldL} />
-                      <Text style={styles.proofTitle}>Proof photo · required</Text>
+                      <Text style={styles.proofTitle}>
+                        {editId ? 'Proof photo · retake to replace' : 'Proof photo · required'}
+                      </Text>
                     </View>
                     <Text style={styles.proofHint}>
-                      Snap the receipt as proof — agency verifies against it.
+                      {editId
+                        ? 'Snap again — the new picture replaces the one saved with this log.'
+                        : 'Snap the receipt as proof — agency verifies against it.'}
                     </Text>
                     <Pressable
                       style={styles.proofBtn}
                       onPress={() =>
-                        pickProofPhotos((urls) =>
-                          setProofPhotos((prev) => [...prev, ...urls].slice(0, 6)),
+                        pickProofPhotos(
+                          (urls) =>
+                            setProofPhotos((prev) =>
+                              // Editing replaces the saved picture with ONE new
+                              // snap; a fresh log can attach up to six.
+                              editId ? urls.slice(0, 1) : [...prev, ...urls].slice(0, 6),
+                            ),
+                          { multiple: !editId },
                         )
                       }
                     >
                       <ImagePlus size={16} color={C.txt} />
                       <Text style={styles.proofBtnText}>
-                        {proofPhotos.length ? 'Add another photo' : 'Take / attach photo'}
+                        {editId
+                          ? proofPhotos.length
+                            ? 'Retake again'
+                            : 'Retake photo'
+                          : proofPhotos.length
+                            ? 'Add another photo'
+                            : 'Take / attach photo'}
                       </Text>
                     </Pressable>
                     {proofPhotos.length > 0 ? (
@@ -754,7 +794,7 @@ export function ScanScreen({
                           </View>
                         ))}
                       </View>
-                    ) : (
+                    ) : editId ? null : (
                       <Text style={styles.proofReminder}>
                         ⚠ Snap a photo to enable Submit.
                       </Text>

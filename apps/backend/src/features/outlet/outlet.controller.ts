@@ -116,14 +116,46 @@ export class OutletControllerClass {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
       const { lat, lng, ...rest } = parsed.data;
-      const outlet = await this.outletRepository.update(id, {
+      const addressTouched =
+        rest.addressLine1 !== undefined ||
+        rest.addressLine2 !== undefined ||
+        rest.postcode !== undefined ||
+        rest.state !== undefined;
+      let outlet = await this.outletRepository.update(id, {
         ...rest,
         lat: lat !== undefined ? String(lat) : undefined,
         lng: lng !== undefined ? String(lng) : undefined,
         updatedBy: getActor(req),
       });
       if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'Outlet updated', data: outlet });
+
+      // The check-in fence must FOLLOW the venue: an address edit re-geocodes
+      // the saved address and moves the pin in the same save, so the fence can
+      // never keep guarding the old street. Callers that place a pin
+      // explicitly (the geo-fence card) are left alone, and a failed lookup
+      // keeps the previous pin rather than un-fencing the venue.
+      let message = 'Outlet updated';
+      if (addressTouched && lat === undefined && lng === undefined) {
+        const outcome = await geocodeAddress(addressQueryFromOutlet(outlet));
+        if (outcome.ok && outcome.candidates[0]) {
+          const top = outcome.candidates[0];
+          const moved = await this.outletRepository.update(id, {
+            lat: String(top.lat),
+            lng: String(top.lng),
+            updatedBy: getActor(req),
+          });
+          if (moved) {
+            outlet = moved;
+            message = 'Outlet updated — check-in pin moved to the new address';
+          }
+        } else {
+          logger.warn(
+            `[OutletController.update] address changed for outlet ${id} but geocode gave no match — pin left where it was`,
+          );
+        }
+      }
+
+      res.status(200).json({ success: true, message, data: outlet });
     } catch (error) {
       logger.error('[OutletController.update] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

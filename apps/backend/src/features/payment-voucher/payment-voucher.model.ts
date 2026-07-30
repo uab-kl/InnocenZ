@@ -5,6 +5,7 @@ import {
   integer,
   jsonb,
   numeric,
+  text,
   timestamp,
   uniqueIndex,
   uuid,
@@ -56,6 +57,8 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   financeHeadName: varchar('finance_head_name', { length: 255 }),
   financeHeadSignedAt: timestamp('finance_head_signed_at', { withTimezone: true }),
   prSignedAt: timestamp('pr_signed_at', { withTimezone: true }),
+  /** Finger-drawn signature strokes ({w,h,strokes}) — written only on PR sign. */
+  prSignature: text('pr_signature'),
   paidAt: timestamp('paid_at', { withTimezone: true }),
   bankRef: varchar('bank_ref', { length: 100 }),
   disputeReason: varchar('dispute_reason', { length: 1000 }),

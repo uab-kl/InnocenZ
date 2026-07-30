@@ -7,6 +7,8 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { usePrNav } from '../lib/pr-nav';
 import { useSession } from '../lib/session';
+import { useKeyboardInset } from '../lib/use-keyboard-inset';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ChevronLeft, Lock, Phone, Shield, Trash2 } from '../components/icons';
 
 type Sheet =
@@ -22,6 +24,9 @@ type OtpTarget = 'phone' | 'email';
 
 export function SecurityScreen() {
   const { goBack } = usePrNav();
+  // Detail screen outside the tab shell — the back row must clear the status bar.
+  const insets = useSafeAreaInsets();
+  const keyboardInset = useKeyboardInset();
   const { me, signOut } = useSession();
   const [sheet, setSheet] = useState<Sheet>('menu');
   const [otpTarget, setOtpTarget] = useState<OtpTarget>('phone');
@@ -77,8 +82,8 @@ export function SecurityScreen() {
   };
 
   return (
-    <View style={styles.screen}>
-      <Pressable style={styles.back} onPress={closeAll}>
+    <View style={[styles.screen, { paddingTop: insets.top + 10 }]}>
+      <Pressable style={styles.back} onPress={closeAll} hitSlop={10}>
         <ChevronLeft size={20} color={C.goldL} />
         <Text style={styles.backText}>Profile</Text>
       </Pressable>
@@ -112,7 +117,10 @@ export function SecurityScreen() {
 
       <Modal visible={sheet !== null} transparent animationType="slide" onRequestClose={() => setSheet(null)}>
         <Pressable style={styles.backdrop} onPress={() => setSheet(null)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          <Pressable
+            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            onPress={(e) => e.stopPropagation()}
+          >
             {sheet === 'menu' && (
               <>
                 <Text style={styles.sheetTitle}>Security settings</Text>

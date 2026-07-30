@@ -8,6 +8,7 @@ import agencyRoutes from '@/features/agency/agency.routes.js';
 import prRoutes from '@/features/pr/pr.routes.js';
 import shiftRoutes from '@/features/shift/shift.routes.js';
 import paymentVoucherRoutes from '@/features/payment-voucher/payment-voucher.routes.js';
+import paymentVoucherExportRoutes from '@/features/payment-voucher/payment-voucher-export.routes.js';
 import shiftAssignmentRoutes from '@/features/shift-assignment/shift-assignment.routes.js';
 import outletSwapRoutes from '@/features/outlet-swap/outlet-swap.routes.js';
 import shiftSaleRoutes from '@/features/shift-sale/shift-sale.routes.js';
@@ -31,6 +32,11 @@ v1Router.use(platformAuditMiddleware);
 
 v1Router.use('/health', healthRoutes);
 v1Router.use('/auth', authRoutes);
+// Ticket downloads open in the phone's system browser, which cannot send the
+// Bearer header — the short-lived voucher-scoped ticket in the path is the
+// credential (minted by an authenticated POST). Everything else stays behind
+// authenticateJWT below.
+v1Router.use('/payment-voucher/export', paymentVoucherExportRoutes);
 v1Router.use(authenticateJWT);
 v1Router.use('/user', userRoutes);
 v1Router.use('/rbac', rbacRoutes);

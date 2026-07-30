@@ -16,12 +16,13 @@ import {
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
-import { ensureAuthenticated } from "@/lib/auth/guards";
+import { ensurePortal } from "@/lib/auth/guards";
 import "@agency-portal/prototype-theme.css";
 import "@agency-portal/agency-app-overrides.css";
 
 export const Route = createFileRoute("/agency")({
-	beforeLoad: () => ensureAuthenticated(),
+	// Agency-only tree: admin/outlet sessions are sent to their own portal.
+	beforeLoad: () => ensurePortal("agency"),
 	component: AgencyLayout,
 });
 

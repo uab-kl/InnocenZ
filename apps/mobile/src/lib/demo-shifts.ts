@@ -741,11 +741,13 @@ export function weekPayGridTotal(grid: WeeklyDayPay[]): number {
 
 export function weekRangeLabel(weeksAgo: number, baseline = todayYmd()): string {
   const [y, m, d] = baseline;
-  const sunday = new Date(y, m - 1, d);
-  sunday.setDate(sunday.getDate() - sunday.getDay() - weeksAgo * 7);
-  const end = new Date(sunday);
-  end.setDate(sunday.getDate() + 6);
-  const a = `${String(sunday.getDate()).padStart(2, '0')} ${MONTH_NAMES[sunday.getMonth()]}`;
+  // Monday-start weeks, matching the backend payroll cycle (weekBounds) — a
+  // Sunday anchor made the label read one day earlier than the grid columns.
+  const monday = new Date(y, m - 1, d);
+  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) - weeksAgo * 7);
+  const end = new Date(monday);
+  end.setDate(monday.getDate() + 6);
+  const a = `${String(monday.getDate()).padStart(2, '0')} ${MONTH_NAMES[monday.getMonth()]}`;
   const b = `${String(end.getDate()).padStart(2, '0')} ${MONTH_NAMES[end.getMonth()]} ${end.getFullYear()}`;
   return `${a} – ${b}`;
 }

@@ -248,7 +248,14 @@ export function ShiftStatusPanel({
                       log.source !== 'checkin' && (log.proofPhotos ?? []).length === 0
                     }
                     onEdit={() => openScan(cat, 'selflog', log.id)}
-                    onRescan={() => rescanPhoto(log.id)}
+                    // A scanned row is corrected by SCANNING again (camera →
+                    // OCR → replaces row + receipt + snap). Self-log rows just
+                    // replace their proof picture.
+                    onRescan={() =>
+                      log.source === 'scan'
+                        ? openScan(cat, 'scan', log.id)
+                        : rescanPhoto(log.id)
+                    }
                     onDelete={() => void deleteLine(log.id)}
                   />
                 );
@@ -458,12 +465,22 @@ function LogRow({
             </>
           ) : (
             <>
-              {/* Camera = scan again → replaces this row's picture. Red = the
-                  row has NO picture yet and blocks check-out until it does. */}
+              {/* Pencil (self-logs only) = this row's edit form: quantity,
+                  item, retake photo. Scanned rows have no manual edit —
+                  everything about a scan is fixed by scanning again. */}
+              {log.source === 'manual' && (
+                <Pressable onPress={onEdit} hitSlop={6}>
+                  <Pencil size={13} color={C.goldL} />
+                </Pressable>
+              )}
+              {/* Camera: scan rows → full re-scan (camera → OCR → replaces
+                  row + receipt + snap); self-log rows → replace the proof
+                  picture. Red = no picture yet, blocks check-out. */}
               <Pressable onPress={onRescan} hitSlop={6}>
                 <Camera size={13} color={missingPhoto ? C.red : C.goldL} />
               </Pressable>
-              {/* A wrong scan can be removed whole — picture + details. */}
+              {/* A wrong scan can be removed whole — picture + details go
+                  together (the backend drops the receipt with its last line). */}
               <Pressable onPress={onDelete} hitSlop={6}>
                 <Trash2 size={13} color={C.red} />
               </Pressable>
