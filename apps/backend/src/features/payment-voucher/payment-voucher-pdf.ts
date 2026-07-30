@@ -14,6 +14,7 @@ import {
   KIND_LABELS,
   dayMonth,
   klStamp,
+  pvLogoPath,
   slashDate,
   voucherRef,
   type VoucherExportAgency,
@@ -72,19 +73,22 @@ export function buildVoucherPdf(params: {
       if (opts.fill) doc.rect(x, y, w, h).fillAndStroke(FILL, BORDER);
       else doc.rect(x, y, w, h).stroke(BORDER);
       if (!text) return;
-      const size = opts.size ?? 8;
+      let size = opts.size ?? 8;
       doc
         .fillColor('#111')
         .font(opts.font ?? (opts.bold ? 'Helvetica-Bold' : 'Helvetica'))
         .fontSize(size);
+      // pdfkit wraps whenever `width` is set (lineBreak:false does not stop
+      // it) — so a single-line cell auto-shrinks its font until the text fits
+      // on one line: "Bank Account Name:" must never spill across the border.
+      if (!opts.wrap) {
+        while (size > 6 && doc.widthOfString(text) > w - 8) {
+          size -= 0.5;
+          doc.fontSize(size);
+        }
+      }
       const ty = opts.wrap ? y + 4 : y + (h - size) / 2 - 0.5;
-      // Non-wrap cells stay on ONE line ("Bank Account Name:" must clip, not
-      // spill across the next row's border).
-      doc.text(text, x + 4, ty, {
-        width: w - 8,
-        align: opts.align ?? 'left',
-        lineBreak: opts.wrap ?? false,
-      });
+      doc.text(text, x + 4, ty, { width: w - 8, align: opts.align ?? 'left' });
     };
 
     // ── Letterhead: everything centered, like the template's merged B:E rows.
@@ -96,6 +100,11 @@ export function buildVoucherPdf(params: {
         .text(text, MARGIN, y, { width: CONTENT_W, align: 'center' });
       y = doc.y + gap;
     };
+    // The agency logo, top-left beside the centered letterhead — same gutter
+    // as the Excel template's merged A1:A6.
+    const logo = pvLogoPath();
+    if (logo) doc.image(logo, XA, MARGIN - 8, { fit: [72, 72] });
+
     centered('Payment Voucher', 16, true, 4);
     centered(agency?.name ?? DASH, 9, true);
     centered(agency?.ssmNo ? `(${agency.ssmNo})` : DASH, 8);

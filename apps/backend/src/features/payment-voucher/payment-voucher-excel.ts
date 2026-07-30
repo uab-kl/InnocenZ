@@ -9,6 +9,8 @@
  * address, PR bank account) render as an em dash rather than invented data.
  */
 import ExcelJS from 'exceljs';
+import fs from 'node:fs';
+import path from 'node:path';
 import type { PaymentVoucherWithLines } from './payment-voucher.model';
 
 export type VoucherExportAgency = {
@@ -64,6 +66,16 @@ export function klStamp(at: Date | null): string {
   const hh = String(kl.getUTCHours()).padStart(2, '0');
   const mm = String(kl.getUTCMinutes()).padStart(2, '0');
   return `${kl.getUTCDate()} ${MONTHS[kl.getUTCMonth()]} ${kl.getUTCFullYear()} · ${hh}:${mm}`;
+}
+
+/**
+ * The PV letterhead logo (PV documents ONLY, per the user's instruction).
+ * Null when the file is missing — the export renders without it rather than
+ * failing a money document over a picture.
+ */
+export function pvLogoPath(): string | null {
+  const p = path.join(process.cwd(), 'public', 'img', 'agencies', 'atmosphere-logo.png');
+  return fs.existsSync(p) ? p : null;
 }
 
 /** Same derivation the PR app shows on screen, so paper and phone agree. */
@@ -146,6 +158,16 @@ export async function buildVoucherWorkbook(params: {
   ws.getCell('B6').value = `Address: ${DASH}`;
   ws.mergeCells('A1:A6');
   for (let r = 1; r <= 6; r++) ws.mergeCells(`B${r}:E${r}`);
+
+  // The agency logo sits in the template's A1:A6 gutter, top-left.
+  const logo = pvLogoPath();
+  if (logo) {
+    const imageId = wb.addImage({ filename: logo, extension: 'png' });
+    ws.addImage(imageId, {
+      tl: { col: 0, row: 0 },
+      ext: { width: 86, height: 86 },
+    });
+  }
 
   // Payable-to block (rows 8–13) with voucher no/date on the right.
   ws.getCell('A8').value = 'Payable to:';
