@@ -458,12 +458,17 @@ function LogRow({
             </>
           ) : (
             <>
+              {/* Pencil = open THIS row's edit form (quantity, item, photo). */}
+              <Pressable onPress={onEdit} hitSlop={6}>
+                <Pencil size={13} color={C.goldL} />
+              </Pressable>
               {/* Camera = scan again → replaces this row's picture. Red = the
                   row has NO picture yet and blocks check-out until it does. */}
               <Pressable onPress={onRescan} hitSlop={6}>
                 <Camera size={13} color={missingPhoto ? C.red : C.goldL} />
               </Pressable>
-              {/* A wrong scan can be removed whole — picture + details. */}
+              {/* A wrong scan can be removed whole — picture + details go
+                  together (the backend drops the receipt with its last line). */}
               <Pressable onPress={onDelete} hitSlop={6}>
                 <Trash2 size={13} color={C.red} />
               </Pressable>

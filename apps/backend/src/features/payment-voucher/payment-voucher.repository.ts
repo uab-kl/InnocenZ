@@ -367,6 +367,49 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
+  /** Lines still pointing at this receipt (checked after deleting one). */
+  async countLinesForReceipt(receiptId: string): Promise<number> {
+    try {
+      const [row] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(PaymentVoucherLineTable)
+        .where(eq(PaymentVoucherLineTable.receiptId, receiptId));
+      return row?.n ?? 0;
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.countLinesForReceipt] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Removes a receipt row outright — its snap goes with it. */
+  async deleteReceipt(receiptId: string): Promise<void> {
+    try {
+      await db
+        .delete(PaymentVoucherReceiptTable)
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId));
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.deleteReceipt] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Keeps the parent receipt's picture in step with a re-snapped line. */
+  async updateReceiptPhotos(
+    receiptId: string,
+    proofPhotos: string[] | null,
+    actor: string,
+  ): Promise<void> {
+    try {
+      await db
+        .update(PaymentVoucherReceiptTable)
+        .set({ proofPhotos, updatedAt: new Date(), updatedBy: actor })
+        .where(eq(PaymentVoucherReceiptTable.id, receiptId));
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.updateReceiptPhotos] Error:', error);
+      throw error;
+    }
+  }
+
   /**
    * A receipt already logged with the same order number — scoped to ONE shift.
    * Outlets reuse order numbers across nights, so the same ORD number on a NEW

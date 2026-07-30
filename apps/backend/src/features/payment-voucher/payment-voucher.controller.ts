@@ -569,7 +569,7 @@ export class PaymentVoucherControllerClass {
         if (dupe) {
           return res.status(409).json({
             success: false,
-            message: `Receipt ${parsed.data.orderNo} is already logged on this shift (${dupe.receiptNo}) — use Self-log to adjust it.`,
+            message: `Receipt ${parsed.data.orderNo} is already logged on this shift (${dupe.receiptNo}) — re-scan its row (camera icon) to replace the picture, edit it, or remove the row and scan afresh.`,
             data: null,
           });
         }
@@ -678,6 +678,15 @@ export class PaymentVoucherControllerClass {
 
       const line = await this.paymentVoucherRepository.updateLine(lineId, patch);
       if (!line) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // A re-snapped picture must follow the paper: keep the parent receipt's
+      // photo in step with the line the app displays and the agency verifies.
+      if (parsed.data.proofPhotos !== undefined && owned.line.receiptId) {
+        await this.paymentVoucherRepository.updateReceiptPhotos(
+          owned.line.receiptId,
+          parsed.data.proofPhotos ?? null,
+          getActor(req),
+        );
+      }
       res.status(200).json({ success: true, message: 'Updated', data: toReceiptLineDTO(line) });
     } catch (error) {
       logger.error('[PaymentVoucherController.updateMyLine] Error:', error);
@@ -701,6 +710,17 @@ export class PaymentVoucherControllerClass {
       }
 
       await this.paymentVoucherRepository.deleteLine(lineId);
+      // Removing the LAST line of a scanned receipt removes the receipt too —
+      // its snap goes with it, and the order number becomes scannable again on
+      // this shift instead of a ghost RCP blocking every re-scan.
+      if (owned.line.receiptId) {
+        const left = await this.paymentVoucherRepository.countLinesForReceipt(
+          owned.line.receiptId,
+        );
+        if (left === 0) {
+          await this.paymentVoucherRepository.deleteReceipt(owned.line.receiptId);
+        }
+      }
       res.status(200).json({ success: true, message: 'Removed', data: null });
     } catch (error) {
       logger.error('[PaymentVoucherController.deleteMyLine] Error:', error);

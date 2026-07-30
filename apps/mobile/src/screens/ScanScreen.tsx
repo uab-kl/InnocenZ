@@ -389,6 +389,8 @@ export function ScanScreen({
             sales: firstAmt,
             commission: commissionForItem(first, firstAmt),
             outlet: outlet,
+            // A retaken snap replaces the saved picture (and its receipt copy).
+            ...(proofPhotos.length ? { proofPhotos } : {}),
           });
           // Any extra items the user added during the edit become new rows.
           for (const d of rest) {
@@ -415,6 +417,8 @@ export function ScanScreen({
           sales: amt,
           commission: commissionFor(category, amt),
           outlet: outlet,
+          // A retaken snap replaces the saved picture (and its receipt copy).
+          ...(proofPhotos.length ? { proofPhotos } : {}),
         });
         return;
       }
@@ -715,26 +719,42 @@ export function ScanScreen({
                     />
                   </>
                 )}
-                {proofRequired && (
+                {(proofRequired || !!editId) && (
                   <View style={styles.proofBox}>
                     <View style={styles.proofHeadRow}>
                       <Camera size={16} color={C.goldL} />
-                      <Text style={styles.proofTitle}>Proof photo · required</Text>
+                      <Text style={styles.proofTitle}>
+                        {editId ? 'Proof photo · retake to replace' : 'Proof photo · required'}
+                      </Text>
                     </View>
                     <Text style={styles.proofHint}>
-                      Snap the receipt as proof — agency verifies against it.
+                      {editId
+                        ? 'Snap again — the new picture replaces the one saved with this log.'
+                        : 'Snap the receipt as proof — agency verifies against it.'}
                     </Text>
                     <Pressable
                       style={styles.proofBtn}
                       onPress={() =>
-                        pickProofPhotos((urls) =>
-                          setProofPhotos((prev) => [...prev, ...urls].slice(0, 6)),
+                        pickProofPhotos(
+                          (urls) =>
+                            setProofPhotos((prev) =>
+                              // Editing replaces the saved picture with ONE new
+                              // snap; a fresh log can attach up to six.
+                              editId ? urls.slice(0, 1) : [...prev, ...urls].slice(0, 6),
+                            ),
+                          { multiple: !editId },
                         )
                       }
                     >
                       <ImagePlus size={16} color={C.txt} />
                       <Text style={styles.proofBtnText}>
-                        {proofPhotos.length ? 'Add another photo' : 'Take / attach photo'}
+                        {editId
+                          ? proofPhotos.length
+                            ? 'Retake again'
+                            : 'Retake photo'
+                          : proofPhotos.length
+                            ? 'Add another photo'
+                            : 'Take / attach photo'}
                       </Text>
                     </Pressable>
                     {proofPhotos.length > 0 ? (
@@ -754,7 +774,7 @@ export function ScanScreen({
                           </View>
                         ))}
                       </View>
-                    ) : (
+                    ) : editId ? null : (
                       <Text style={styles.proofReminder}>
                         ⚠ Snap a photo to enable Submit.
                       </Text>
