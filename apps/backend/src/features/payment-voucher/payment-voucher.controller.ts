@@ -1328,7 +1328,29 @@ export class PaymentVoucherControllerClass {
       if (parsed.data.item !== undefined) patch.description = parsed.data.item;
       if (parsed.data.quantity !== undefined) patch.quantity = parsed.data.quantity;
       if (parsed.data.commission !== undefined) patch.amount = parsed.data.commission.toFixed(2);
-      if (parsed.data.lineDate !== undefined) patch.lineDate = parsed.data.lineDate;
+      if (parsed.data.lineDate !== undefined) {
+        // THE THIRD DOOR. `addMyLine` and `addMyReceipt` now refuse an
+        // out-of-week date on the way in — but this endpoint could move an
+        // already-accepted line to ANY date afterwards, which reaches the same
+        // end by two steps instead of one. Guarding only the create paths would
+        // have looked complete and closed nothing.
+        //
+        // Checked against the voucher this line actually belongs to, not the
+        // current week: an old draft is still editable while it is
+        // `pending_review`, and judging it against today's week would refuse a
+        // legitimate correction to last week's own voucher.
+        const outOfWeek =
+          owned.voucher.weekStart && owned.voucher.weekEnd
+            ? checkLineAgainstWeek(parsed.data.lineDate, {
+                weekStart: owned.voucher.weekStart,
+                weekEnd: owned.voucher.weekEnd,
+              })
+            : null;
+        if (outOfWeek) {
+          return res.status(400).json({ success: false, message: outOfWeek, data: null });
+        }
+        patch.lineDate = parsed.data.lineDate;
+      }
       if (parsed.data.outlet !== undefined) patch.outlet = parsed.data.outlet;
       if (parsed.data.proofPhotos !== undefined) patch.proofPhotos = parsed.data.proofPhotos;
       patch.ref = encodeRef(
