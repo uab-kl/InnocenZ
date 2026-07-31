@@ -307,7 +307,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ### 🔴 P1 — the spine (blocks everyone; do first)
 - [ ] **B · Agency schedule/assign PR** — Shifts/Roster page: agency assigns PR to a shift. *(Agency → PR)* — §3 S2
 - [x] **E · Wage/tip/commission auto-sync** — PR wages/drinks(HH/NH)/tips/OT pull from the **outlet rate card** (mobile consumes `/shift-assignment/mine` `rate`+`drinkMenu`; `pr-rate.ts`). ⚠️ **jk done in code — SL/user must run `pnpm migrate` (pr_tier 7-enum) + restart backend to go live, then verify §3 S7.** *(Outlet → PR)* — §3 S7
-- [ ] **F · This-week dispute ↔ verify** — ~~PR raises dispute~~ ✅ **PR side wired** (persists to `payment_voucher`); **remaining: Agency verify/reject on payroll page** reads `status='disputed'` + reason/note. *(PR → Agency)* — §3 S9–S10 *(agency = SL)*
+- [x] **F · This-week dispute ↔ verify** — ✅ **BOTH SIDES EXIST. This entry was STALE and it misled me on 31 Jul** into telling the owner "the agency has no verify/reject", which is false. The agency queue is built and wired: **`DisputeQueuePanel.tsx` + `use-agency-disputes.ts`** with a real `resolveDispute` accept/reject mutation, on **`/agency/pv`**; the backend route comment says so too (*"The agency's dispute queue and its decisions"*). ⚠️ **Left as a worked example of [[audit-entries-are-leads]]: I read this line instead of re-deriving, and reported a gap that did not exist.** *(PR → Agency)* — §3 S9–S10
 - [x] **Payroll page: surface "this week"** so scanned receipts can be **approved** — ✅ **agency half done (30 Jul)**: the receipts card in `PayrollVerifyPanel` is now the review surface, fed by the receipts that already ride on `GET /payment-voucher/:id` (the same read the day-review panel uses, so one voucher on screen is still one request and an approval refreshes both panels). It shows the **proof photo and the PR's note** beside the figures — neither was rendered before — with per-line **quantity/commission correction**, Approve / Withdraw approval, and the send button now blocked while any receipt is pending. Writes gated on `raisePv`, mirroring `agencyOwnerOrFinance`. **Not** built on the agency-wide `GET /payment-voucher/receipts` feed: the owner's spec places the review on the **this-week PV**, and that endpoint is a cross-voucher queue. ⚠️ **Remaining: the PR's two sections** (this-week shows APPROVED, last-week is where a dispute is raised). *(Agency)*
 - [ ] **Verify Payment Voucher ↔ PR wage calc** logic is correct (auto-generated weekly from PR shifts). *(Agency ← PR)*
 - [ ] **Confirm Post Job end-to-end** across roles: outlet post → shift → agency roster → PR assignment. *(Outlet → Agency → PR)*
@@ -320,8 +320,11 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 - [x] **🟠 You cannot actually pay anyone from a voucher** — ✅ **DONE end to end (X40, migration 0076 applied + verified live).** `user_profile.bank_name` / `bank_account_no` (on the PERSON, redacted for outlet callers) and `agency.address_line_1` / `address_line_2`; `agency.model.ts` mapped; `getExportBundle` joins `user_profile`; **workbook, print HTML and PDF all read them** via a shared `joinAddress()`; `PATCH /user/:id` (self-edit only) accepts them, empty string clearing to NULL. An em dash now means *"the PR has not entered their details"* — something someone can fix — instead of *"the system has nowhere to put them"*. **No `pr_code` was added, deliberately: the export has no such field**, so a column for it would be one nothing reads (rule 1).
 - [ ] **🔴 RUN MIGRATION 0076 — it is written and has NOT been applied** *(SL)* — `pnpm migrate:deploy` from the repo ROOT (never `pnpm migrate`), then **restart the backend** (tsx watch serves stale routes). Until then the model files describe columns the shared DB does not have, and any read of them fails at runtime while `tsc` and `drizzle-kit generate` both stay green — the standing "green signals that lie" trap. Verify with `pnpm check:drift` afterwards, **not** by a successful typecheck. ⚠️ **Journal check first:** jk migrates the same DB from a divergent journal, and anything below the live max `when` is silently skipped — 0076 is stamped `1785480000000`.
 - [x] **🟠 `agency.model.ts` never got the two address columns 0076 adds** — ✅ **fixed in the same slice.** Both are now on the model in the same shape `outlet` uses, so nothing reads them as drift and **no `drizzle-kit generate` will propose dropping them**. Worth keeping the note: this is the drift class *in reverse* — a column the DB has and the model does not — and it is the one a generate silently "fixes" by deleting your data.
-- [ ] **🟡 Admin PV page: `resolveDispute` and `receipts[]` come back from the API and are never rendered** *(SL)* — already filed under P3; repeated here because it is part of the same money surface.
-- [ ] **🟡 Agency verify/reject on a DISPUTED voucher** *(SL)* — the PR half is wired (§9 F); the agency half reads `status='disputed'` + reason/note and does not exist.
+- [ ] **🔴 DECISION OWED — may an ADMIN resolve a PV dispute at all?** *(owner, raised 31 Jul)*. **Owner's steer: "the admin is not supposed to be the one reviewing the payment vouchers — the agency handles that."** Two of my own claims were **wrong** and are corrected above: the agency dispute queue **already exists and works** (§9 F), and "wire up the admin PV page" was therefore the **wrong** conclusion — those unrendered `resolveDispute`/`receipts[]` are not an under-wired gap, they are **surface the admin should probably not have**. Building them would have been actively wrong.
+  - **The real hole, independent of the decision:** `POST /payment-voucher/disputes/:disputeId/resolve` inherits only the mount-level `requireRole('admin','agency')` and has **NO `agencyOwnerOrFinance` sub-role gate** — so resolving a dispute (a money decision) is reachable by **any agency member**, while merely approving a day is not. Same asymmetry X39 fixed one route earlier. **Gate it regardless of the admin decision.**
+  - **Option A — keep admin, but gate it:** admin stays as a deliberate *escalation* path; everything else on the admin PV page stays read-only. **Recommended**, because Option B leaves a PR with no recourse if their agency goes quiet.
+  - **Option B — remove admin:** `requireRole('agency')` on the dispute routes, matching the steer exactly and making the admin page genuinely read-only as documented. Cost: a stalled dispute has no escalation.
+  - ⚠️ **Do both changes in ONE edit** — the sub-role gate and the admin decision touch the same two route lines; doing them separately is churn.
 
 ### 🟠 P2 — money loop + proof
 - [ ] **D · Check-in pic received** on Agency/Admin side (PR takes pic as proof; the other side must receive it). *(PR → Agency/Admin)* — §3 S5
@@ -426,6 +429,24 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 > screen, no `component='ot'` line on approval. **Adding columns closed no gap on its own** — that
 > sentence was right, and it still applies to overtime.
 
+> **31 Jul 2026 — session end. ONE DECISION OWED: may an admin resolve a PV dispute?**
+> Owner's steer: *"the admin is not supposed to be the one reviewing the payment vouchers — the
+> agency handles that."* **It corrected two of my claims.** The agency dispute queue **already exists
+> and works** (`DisputeQueuePanel` + `use-agency-disputes`, real accept/reject on `/agency/pv`) — I
+> said it did not, because I read the stale §9 F line instead of re-deriving. And "wire up the admin
+> PV page" was therefore **backwards**: those unrendered `resolveDispute`/`receipts[]` are not a gap
+> to fill, they are surface the admin should probably not have. **Building them would have been
+> actively wrong** — the sharpest instance yet of [[audit-entries-are-leads]].
+> 🔴 **Real hole found alongside it, and it needs fixing either way:**
+> `POST /payment-voucher/disputes/:disputeId/resolve` has **no `agencyOwnerOrFinance` gate**, so any
+> agency member can settle a money dispute while merely approving a day requires owner/finance.
+> Options + the recommendation are in §9. **Do both in one edit — same two route lines.**
+>
+> **31 Jul 2026 — the out-of-week hole had a THIRD door (§8 X41).** `updateMyLine` set `lineDate`
+> straight from the request, so a line could be logged in-week and then **patched to any date**.
+> Guarding only the create paths *looked* complete and closed nothing. Found by walking every write
+> of `line_date`; all four are now covered.
+>
 > **31 Jul 2026 — three more PV fixes, all found by re-derivation (§8 X39).** **X37 had closed only
 > half the duplicate hole:** `POST /payment-voucher/` (agency create) had no `existsForPrWeek` check
 > and no line-date validation, so the agency door was still open — and that is the *likelier* origin
