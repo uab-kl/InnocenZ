@@ -16,6 +16,7 @@ import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
@@ -471,8 +472,22 @@ export class PaymentVoucherRepositoryClass {
    */
   async getExportBundle(voucherId: string): Promise<{
     voucher: PaymentVoucherWithLines;
-    agency: { name: string; ssmNo: string; contactPhone: string | null; contactEmail: string | null } | null;
-    pr: { name: string; nickname: string | null; icNo: string | null; phone: string | null } | null;
+    agency: {
+      name: string;
+      ssmNo: string;
+      contactPhone: string | null;
+      contactEmail: string | null;
+      addressLine1: string | null;
+      addressLine2: string | null;
+    } | null;
+    pr: {
+      name: string;
+      nickname: string | null;
+      icNo: string | null;
+      phone: string | null;
+      bankName: string | null;
+      bankAccountNo: string | null;
+    } | null;
   } | null> {
     try {
       const [row] = await db
@@ -482,6 +497,8 @@ export class PaymentVoucherRepositoryClass {
           agencySsmNo: AgencyTable.ssmNo,
           agencyPhone: AgencyTable.contactPhone,
           agencyEmail: AgencyTable.contactEmail,
+          agencyAddress1: AgencyTable.addressLine1,
+          agencyAddress2: AgencyTable.addressLine2,
           prName: PrTable.name,
           prNickname: PrTable.nickname,
           prIcNo: PrTable.icNo,
@@ -491,11 +508,19 @@ export class PaymentVoucherRepositoryClass {
           // PR is paid against, so the phone on it must be the one the person
           // actually uses, not a copy that drifted.
           prAccountPhone: UserTable.phoneNum,
+          // Where this person is actually paid. Reached by FK through the
+          // ACCOUNT (pr.user_id -> user_profile), never copied onto `pr`: a bank
+          // account is a fact about the person, and the same hop is what keeps it
+          // blanked for outlet callers. A PR with no account has no bank details,
+          // which is correct — you cannot pay someone who has not said where.
+          prBankName: UserProfileTable.bankName,
+          prBankAccountNo: UserProfileTable.bankAccountNo,
         })
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
         .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, PrTable.userId))
         .where(eq(PaymentVoucherTable.id, voucherId))
         .limit(1);
       if (!row) return null;
@@ -508,6 +533,8 @@ export class PaymentVoucherRepositoryClass {
               ssmNo: row.agencySsmNo ?? '',
               contactPhone: row.agencyPhone,
               contactEmail: row.agencyEmail,
+              addressLine1: row.agencyAddress1,
+              addressLine2: row.agencyAddress2,
             }
           : null,
         pr: row.prName
@@ -516,6 +543,8 @@ export class PaymentVoucherRepositoryClass {
               nickname: row.prNickname,
               icNo: row.prIcNo,
               phone: row.prAccountPhone ?? row.prPhone,
+              bankName: row.prBankName,
+              bankAccountNo: row.prBankAccountNo,
             }
           : null,
       };

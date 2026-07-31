@@ -22,6 +22,11 @@ export const AgencyTable = MainSchema.table('agency', {
   contactName: varchar('contact_name', { length: 100 }),
   contactEmail: varchar('contact_email', { length: 255 }),
   contactPhone: varchar('contact_phone', { length: 50 }),
+  // The issuing agency's address, printed on the payment voucher (migration
+  // 0076) — until these existed the exported voucher read "Address: —". Same
+  // two-line shape `outlet` already uses, so the two read alike.
+  addressLine1: varchar('address_line_1', { length: 255 }),
+  addressLine2: varchar('address_line_2', { length: 255 }),
   status: agencyStatusEnum('status').notNull().default('pending_review'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
