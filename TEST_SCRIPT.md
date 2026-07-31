@@ -109,7 +109,7 @@ Run top-to-bottom in one sitting. jk drives mobile, SL drives web. Each step mus
 ### 4c. Agency (web) — SL
 - ☐ **Dashboard / Today** — KPIs, outlet demand, history
 - ☐ **Roster** — add shift / add PR / **assign / unassign** via `agency_pr`
-- ☐ **MC / Leave requests** — Roster shows a *MC / Leave requests* panel when a PR files leave (PR · outlet · date · reason); **Approve · excuse shift** removes the PR from staffing with no penalty (`leave_approved`), **Reject** puts the PR back on the shift (mobile shows the rejection); cancelled rows still surface the PR's cancel reason
+- ☐ **MC / Leave requests** — reviewed on **Approvals only** (the `MC/Leaves` tab); the Roster no longer carries a duplicate panel. The tab lists each request when a PR files leave (PR · outlet · date · reason); **Approve · excuse shift** removes the PR from staffing with no penalty (`leave_approved`), **Reject** puts the PR back on the shift (mobile shows the rejection); cancelled rows still surface the PR's cancel reason
 - ☐ **Backfill needed** — after a cancel or approved leave on an upcoming still-understaffed shift, Roster shows a *Backfill needed* card (outlet · date · staffed X/Y · who left · reason); **Pick replacement** lists ranked free PRs (same tier as the released PR first, then "worked here N×"); **Assign** fills the slot and the card disappears once the shift is back at quantity
 - ☐ **Pending / Approval** flow
 - ☐ **PRs (Manage PR)** list
@@ -397,6 +397,20 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **31 Jul 2026 — MC/Leave had TWO review surfaces; the Roster one is gone.** The same
+> `leave_pending` request rendered Approve/Reject buttons on **both** `/agency/roster` (the
+> `LeaveRequestsPanel`) and `/agency/pending` → **MC/Leaves** tab — two doors onto one decision, and
+> the roster copy showed less (no shift panel, no consequence text). Removed the panel and **deleted
+> the component** rather than leaving it unmounted, so it cannot be re-hung by accident. **Nothing
+> else moved:** both surfaces already ran the identical query under the shared key
+> `["roster","leave-requests"]`, so the Approvals tab keeps its data untouched, and the mutations
+> (`approveLeave` / `rejectLeave` in `use-roster-mutations`) are unchanged — the roster's planning
+> grid and **Backfill needed** card still refresh off that same key when a decision lands. The
+> Backfill card deliberately **stays** on the Roster: it is the staffing *consequence* of an approved
+> leave, not the decision. Checked the notification deep-links before cutting — no agency
+> notification kind routes a leave to `/agency/roster` (`shift_cover_needed` → roster is the backfill
+> list and still correct), so no bell tap lands on a page that can no longer show the thing.
 
 > **31 Jul 2026 — migration 0076: the schema for the two remaining PV gaps (§8 X40). SCHEMA ONLY —
 > NOT APPLIED, NOT WIRED.** Both gaps mean the same thing — *the money is right and still cannot be
