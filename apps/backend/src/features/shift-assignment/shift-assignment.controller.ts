@@ -14,6 +14,8 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import { MAX_PLAUSIBLE_SHIFT_HOURS } from '@/features/payment-voucher/payment-voucher-audit';
+import { overtimeFromStamps } from './overtime';
 import { shiftsOverlap } from '@/util/slot-window';
 import {
   CheckInMineSchema,
@@ -394,8 +396,24 @@ export class ShiftAssignmentControllerClass {
         scheduledEnd && now > scheduledEnd && scheduledEnd > new Date(existing.checkInAt)
           ? scheduledEnd
           : now;
+      // RECORD the overtime before the clamp destroys the evidence for it.
+      //
+      // The clamp overwrites `check_out_at` with the scheduled end, so after this
+      // update the row no longer knows when the PR actually stopped. Deriving the
+      // minutes later is therefore impossible — it has to happen here or not at
+      // all, which is why migration 0077's columns sat unwritten and every hour of
+      // overtime worked until now is unrecoverable.
+      const overtime = overtimeFromStamps(new Date(existing.checkInAt), scheduledEnd, now);
       const assignment = await this.shiftAssignmentRepository.update(id, {
         checkOutAt: clampTo,
+        // NULL status means "no overtime on this shift" — the overwhelming
+        // majority of rows — so both columns are written only when there is a
+        // real claim. `pending` is the only state a check-out may set: approval
+        // belongs to the agency, and a shift that sealed itself approved would be
+        // a PR authorising their own pay.
+        ...(overtime.minutes != null
+          ? { overtimeMinutes: overtime.minutes, overtimeStatus: 'pending' as const }
+          : {}),
         status: 'completed',
         ...(outFix
           ? {
@@ -409,11 +427,26 @@ export class ShiftAssignmentControllerClass {
         ...(tierWages != null ? { payAmount: tierWages } : {}),
         updatedBy: actor,
       });
+      // A forgotten check-out is worth seeing even though it claims nothing —
+      // otherwise the only trace of it is a shift that quietly sealed at its
+      // scheduled hours, and a PR who really did work late has no way to say so.
+      if (overtime.reason === 'implausible_stamp') {
+        logger.warn(
+          `[shift-assignment.checkOut] ${id}: check-out ${overtime.elapsedHours?.toFixed(1)}h after ` +
+            `check-in exceeds ${MAX_PLAUSIBLE_SHIFT_HOURS}h — no overtime recorded, raise it by hand if real`,
+        );
+      }
       // The stamp was clamped, so the PR worked past the scheduled end and those
       // hours are NOT money until the agency approves them. Nothing told the
       // agency before — overtime sat unseen unless someone opened the shift.
       // Recipient is the agency, not the PR: it is the agency's decision.
-      if (scheduledEnd && now > scheduledEnd) {
+      //
+      // Gated on a RECORDED claim rather than on `now > scheduledEnd`, which is
+      // what it used to test. Those differ exactly where it matters: a check-out
+      // two days late overran the window, so the old condition asked an agency to
+      // approve overtime that no longer has a believable number behind it — and
+      // now has no number at all, since the columns stay null.
+      if (overtime.minutes != null) {
         const members = await this.agencyMemberRepository.listByAgency(existing.agencyId);
         const memberUserIds = members
           .map((m) => m.userId)
@@ -421,13 +454,16 @@ export class ShiftAssignmentControllerClass {
         await notifyMany(memberUserIds, {
           kind: 'overtime_pending_approval',
           title: 'Overtime needs approval',
-          body: `${pr.name} worked past the scheduled end${shift ? ` on ${shift.shiftDate}` : ''}`,
+          body: `${pr.name} worked ${overtime.minutes} min past the scheduled end${shift ? ` on ${shift.shiftDate}` : ''}`,
           payload: {
             assignmentId: id,
             prId: pr.id,
             shiftId: existing.shiftId,
-            scheduledEnd: scheduledEnd.toISOString(),
+            scheduledEnd: scheduledEnd?.toISOString() ?? null,
             checkedOutAt: now.toISOString(),
+            // The figure the agency is being asked to decide on, so the alert
+            // does not send someone to the shift to work out what it means.
+            overtimeMinutes: overtime.minutes,
           },
           actor,
         });

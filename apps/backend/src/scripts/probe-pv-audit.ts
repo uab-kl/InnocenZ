@@ -18,6 +18,8 @@ import {
   type DayReviewView,
 } from '@/features/payment-voucher/payment-voucher-day-review';
 import { klToday } from '@/features/payment-voucher/payment-voucher-week';
+import { overtimeFromStamps } from '@/features/shift-assignment/overtime';
+import { MAX_PLAUSIBLE_SHIFT_HOURS } from '@/features/payment-voucher/payment-voucher-audit';
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = '') {
@@ -275,6 +277,51 @@ check(
 // 02:00 Monday job for its first eight hours.
 check('klToday reads KL, not UTC', klToday(new Date('2026-08-02T17:00:00Z')) === '2026-08-03');
 check('klToday is stable mid-day', klToday(new Date('2026-08-03T00:30:00Z')) === '2026-08-03');
+
+console.log('\n--- 9. overtime is RECORDED at check-out, before the clamp destroys the evidence ---');
+// A 22:00–04:00 slot: check in at 22:00, scheduled to end 04:00.
+const IN = new Date('2026-07-27T22:00:00+08:00');
+const SCHED = new Date('2026-07-28T04:00:00+08:00');
+const at = (iso: string) => new Date(iso);
+
+check(
+  '90 minutes past the scheduled end is recorded',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T05:30:00+08:00')).minutes === 90,
+);
+check(
+  'checking out on time claims nothing',
+  overtimeFromStamps(IN, SCHED, SCHED).minutes === null,
+);
+check(
+  'checking out EARLY claims nothing',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T03:00:00+08:00')).minutes === null,
+);
+check(
+  'seconds past the end round to no claim, not a 0-minute one',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T04:00:20+08:00')).minutes === null,
+);
+check(
+  'an unparseable slot (no scheduled end) claims nothing',
+  overtimeFromStamps(IN, null, at('2026-07-28T05:30:00+08:00')).reason === 'no_schedule',
+);
+
+// The 113.1h bug, in the place it would be born rather than where it was found.
+const forgotten = overtimeFromStamps(IN, SCHED, at('2026-07-30T09:00:00+08:00'));
+check('a forgotten check-out claims NOTHING', forgotten.minutes === null);
+check('…and says why', forgotten.reason === 'implausible_stamp');
+check(
+  '…and is NOT capped to a plausible-looking figure',
+  forgotten.minutes !== MAX_PLAUSIBLE_SHIFT_HOURS * 60,
+);
+// The boundary itself: 16h elapsed is still believable, a minute more is not.
+check(
+  'exactly MAX_PLAUSIBLE_SHIFT_HOURS elapsed still records',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T14:00:00+08:00')).minutes === 600,
+);
+check(
+  'one minute beyond it does not',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T14:01:00+08:00')).minutes === null,
+);
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED\n' : `\n${failures} CHECK(S) FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

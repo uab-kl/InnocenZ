@@ -325,7 +325,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 - [x] **🔴 The agency create/update path bypassed both new money guards** — ✅ **closed (X39)**.
 - [x] **🔴 `checkVoucherBalance` double-counted any line with quantity > 1** — ✅ **closed (X39)**. Latent, but it would have held a correct payment.
 - [x] **🟠 `POST /` and `PUT /:id` were less gated than the review routes** — ✅ **closed (X39)**, `agencyOwnerOrFinance`, callers verified first.
-- [ ] **🟠 OVERTIME CAN NEVER BECOME MONEY — ✅ policy ANSWERED, ✅ columns exist, ❌ nothing wired** *(SL)*. **Owner decided (31 Jul): build it with the defaults — approver = `agencyOwnerOrFinance`, rate = derived `daily ÷ 6 × 1.5`.** Migration 0077 is applied, so `overtime_minutes/status/amount/decided_at/decided_by` all exist on `shift_assignment`. **Remaining, and it is all of the behaviour:** (a) check-out must RECORD `overtime_minutes` + `status='pending'` — it currently clamps `check_out_at` and throws the evidence away; (b) a `PATCH /shift-assignment/:id/overtime` approve/reject endpoint under `agencyOwnerOrFinance`, scoped to the caller's agency; (c) on approve, write a **`component='ot'`** line on that PR's voucher for the shift's week — ⚠️ **and decide what happens when that week is already `sent`**, since the new guard 409s it; (d) an agency screen. **Do NOT re-ask the two decisions.** ✅ **The COLUMNS now exist (X40, migration 0077)** — `overtime_minutes` / `overtime_status` / `overtime_amount` / `overtime_decided_at` / `overtime_decided_by` on `shift_assignment`, mirrored in `shift-assignment.model.ts`. **Everything above the schema is still missing:** no approve/reject endpoint, no controller method, no agency screen, and **nothing writes the `component='ot'` voucher line on approval** — so every OT hour raised is still in a state nothing can move it out of, and adding columns did not change that. **The two decisions still block the code: WHO approves** (probably `agencyOwnerOrFinance`, mirroring every other money gate) **and AT WHAT RATE** — the derived `daily ÷ 6 × 1.5` is already in `pr-rate.ts` and matches `outlet_workspace.ot_after_hours` (125) for every outlet, so it has a defensible answer. ⚠️ **`overtime_minutes` must be written AT CHECK-OUT** — the clamp overwrites `check_out_at`, so a later derivation has nothing to derive from. **~1–2 days remain.**
+- [ ] **🟠 OVERTIME CAN NEVER BECOME MONEY — ✅ policy ANSWERED, ✅ columns exist, ❌ nothing wired** *(SL)*. **Owner decided (31 Jul): build it with the defaults — approver = `agencyOwnerOrFinance`, rate = derived `daily ÷ 6 × 1.5`.** Migration 0077 is applied, so `overtime_minutes/status/amount/decided_at/decided_by` all exist on `shift_assignment`. **Remaining, and it is all of the behaviour:** ✅ **(a) is DONE (31 Jul)** — check-out now records `overtime_minutes` + `overtime_status='pending'` in the same update as the clamp, via the new pure `features/shift-assignment/overtime.ts`. ⚠️ **An implausible stamp records NOTHING rather than a capped figure** (mirroring `pr-rate.ts`; a capped 16h would be as fictional as the live "113.1h" and harder to spot), and the `overtime_pending_approval` notification now fires on a **recorded claim** instead of on any overrun — a two-day-late check-out no longer asks an agency to approve a number that does not exist; it gets a `logger.warn` instead. Probe §9, 10 cases, backend tsc 0. **Still owed:** (b) a `PATCH /shift-assignment/:id/overtime` approve/reject endpoint under `agencyOwnerOrFinance`, scoped to the caller's agency; (c) on approve, write a **`component='ot'`** line on that PR's voucher for the shift's week — ⚠️ **and decide what happens when that week is already `sent`**, since the new guard 409s it; (d) an agency screen. **Do NOT re-ask the two decisions.** ✅ **The COLUMNS now exist (X40, migration 0077)** — `overtime_minutes` / `overtime_status` / `overtime_amount` / `overtime_decided_at` / `overtime_decided_by` on `shift_assignment`, mirrored in `shift-assignment.model.ts`. **Everything above the schema is still missing:** no approve/reject endpoint, no controller method, no agency screen, and **nothing writes the `component='ot'` voucher line on approval** — so every OT hour raised is still in a state nothing can move it out of, and adding columns did not change that. **The two decisions still block the code: WHO approves** (probably `agencyOwnerOrFinance`, mirroring every other money gate) **and AT WHAT RATE** — the derived `daily ÷ 6 × 1.5` is already in `pr-rate.ts` and matches `outlet_workspace.ot_after_hours` (125) for every outlet, so it has a defensible answer. ⚠️ **`overtime_minutes` must be written AT CHECK-OUT** — the clamp overwrites `check_out_at`, so a later derivation has nothing to derive from. **~1–2 days remain.**
 - [x] **🟠 You cannot actually pay anyone from a voucher** — ✅ **DONE end to end (X40, migration 0077 applied + verified live).** `user_profile.bank_name` / `bank_account_no` (on the PERSON, redacted for outlet callers) and `agency.address_line_1` / `address_line_2`; `agency.model.ts` mapped; `getExportBundle` joins `user_profile`; **workbook, print HTML and PDF all read them** via a shared `joinAddress()`; `PATCH /user/:id` (self-edit only) accepts them, empty string clearing to NULL. An em dash now means *"the PR has not entered their details"* — something someone can fix — instead of *"the system has nowhere to put them"*. **No `pr_code` was added, deliberately: the export has no such field**, so a column for it would be one nothing reads (rule 1).
 - [x] **🔴 RUN MIGRATION 0077 — ✅ APPLIED and verified live** *(SL)* — `pnpm migrate:deploy` from the repo ROOT (never `pnpm migrate`), then **restart the backend** (tsx watch serves stale routes). All 9/9 columns confirmed by `information_schema` *and* by calling `getExportBundle`; `drizzle-kit` reporting "applied" is not proof, per the standing "green signals that lie" trap — verify with `pnpm check:drift`, **not** by a successful typecheck. ⚠️ **This row read "has NOT been applied" until the main merge, contradicting the row above it.** It was written by the auto-commit hook mid-slice and was already stale when written — corrected rather than deleted, because a doc that quietly rewrites itself teaches you not to trust it. ⚠️ **RENUMBERED 0076 → 0077 during the merge into main:** jk had independently authored `0076_shift_assignment_leave_proof` the same day, so both branches carried an `idx: 76` with the identical `when` of `1785480000000` — precisely the divergent-journal collision that makes anything below the live max silently skipped. jk's keeps 0076 (already on trunk); this one is now `0077_overtime_approval_and_bank` stamped `1785490000000`, and the one-voucher-per-PR-per-week index moved 0077 → `0078_pv_one_per_pr_week` (`1785500000000`, unchanged). Both are `IF NOT EXISTS` throughout, and 1785490000000 sits below the live max, so neither re-runs on the shared DB while a fresh database still gets all three in order.
 - [x] **🟠 `agency.model.ts` never got the two address columns 0077 adds** — ✅ **fixed in the same slice.** Both are now on the model in the same shape `outlet` uses, so nothing reads them as drift and **no `drizzle-kit generate` will propose dropping them**. Worth keeping the note: this is the drift class *in reverse* — a column the DB has and the model does not — and it is the one a generate silently "fixes" by deleting your data.
@@ -403,6 +403,47 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **31 Jul 2026 — overtime is RECORDED at check-out, before the clamp destroys the evidence for it.**
+> This is step (a) of the overtime build, and it is the one that was **losing data every night**.
+> The clamp overwrites `check_out_at` with the shift's scheduled end, so once a check-out has been
+> processed the row **no longer knows when the PR actually stopped** — the minutes cannot be derived
+> later, which is why migration 0077's columns sat unwritten and why every hour of overtime worked
+> until now is unrecoverable. `overtime_minutes` + `overtime_status='pending'` are now written in the
+> same `update` as the clamp.
+>
+> **`pending` is the only state a check-out may set.** A shift that sealed itself `approved` would be
+> a PR authorising their own pay. Both columns are written only when there is a real claim, because a
+> NULL status is the model's own encoding of "no overtime on this shift" — most rows.
+>
+> **⚠️ An implausible stamp records NOTHING, not a capped figure**, and that is the whole design.
+> New pure module `features/shift-assignment/overtime.ts` → `overtimeFromStamps(checkIn,
+> scheduledEnd, actualEnd)`, reusing `MAX_PLAUSIBLE_SHIFT_HOURS` (16) from `payment-voucher-audit.ts`
+> rather than inventing a second threshold. It mirrors `pr-rate.ts`, which returns **0 rather than
+> clamping** — and the reason is this feature's own history: the live `PV-000002` carried
+> **"Overtime 113.1h"** on a six-hour slot. **A capped 16h would have been just as fictional and far
+> harder to spot, because it looks like a number somebody meant.** A PR who forgets to check out for
+> two days has not worked two days of overtime; the stamp has stopped being evidence. The shift still
+> closes and the clamp still seals the scheduled wages, so nothing is lost — only unclaimed, and the
+> agency can raise the hours by hand.
+>
+> **The notification's condition CHANGED, deliberately.** It used to fire on `now > scheduledEnd`;
+> it now fires on a **recorded claim**. Those differ exactly where it matters — a check-out two days
+> late overran the window, so the old test asked an agency to approve overtime with no believable
+> number behind it, and now with no number at all. The forgotten check-out instead gets a
+> `logger.warn` naming the elapsed hours, so it is visible rather than silent. The alert body and
+> payload now carry `overtimeMinutes`, so nobody has to open the shift to learn what they are deciding.
+>
+> **Proof:** `probe-pv-audit.ts` §9 — 10 cases, **all pass**, backend `tsc` **0**. Boundary cases
+> included: exactly 16h elapsed still records, one minute beyond does not, an early check-out and a
+> seconds-late one both claim nothing (a 0-minute claim would put a shift in `pending` for an agency
+> to approve nothing), and an unparseable slot is not judged.
+> ⚠️ **Verified from `apps/backend`, not the repo root** — a root `npx tsc -p tsconfig.json` picks the
+> ROOT config and its clean result says nothing about the backend.
+> ⚠️ **NOT fired live.** ❌ **Still missing, and still the rest of the build:** the
+> `PATCH /shift-assignment/:id/overtime` approve/reject endpoint, the `component='ot'` voucher line on
+> approval, and the agency screen. **The approval step is still blocked on the one open decision** —
+> what it does when that PR's week is already `sent`.
 
 > **31 Jul 2026 — a week that has not FINISHED can no longer be sent.** The mid-week send is the
 > *act* that produced the live `PV-000002` / `PV-000004` duplicate pair; every other fix in this
