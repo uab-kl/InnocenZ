@@ -18,6 +18,8 @@ export type VoucherExportAgency = {
   ssmNo: string;
   contactPhone: string | null;
   contactEmail: string | null;
+  addressLine1: string | null;
+  addressLine2: string | null;
 } | null;
 
 export type VoucherExportPr = {
@@ -25,7 +27,23 @@ export type VoucherExportPr = {
   nickname: string | null;
   icNo: string | null;
   phone: string | null;
+  /** Where this person is paid — user_profile, reached by FK (migration 0077). */
+  bankName: string | null;
+  bankAccountNo: string | null;
 } | null;
+
+/**
+ * The two address lines as one string, or '' when neither is set.
+ *
+ * Returns EMPTY rather than a dash so each caller decides its own placeholder —
+ * the workbook and the print HTML render an unset field differently, and baking
+ * one in here would make the other lie about which it is.
+ */
+export function joinAddress(agency: VoucherExportAgency): string {
+  return [agency?.addressLine1, agency?.addressLine2]
+    .filter((part): part is string => !!part && part.trim() !== '')
+    .join(', ');
+}
 
 /** One table row, already decoded from the packed line ref by the controller. */
 export type VoucherExportLine = {
@@ -151,6 +169,7 @@ th{background:#f2f2f2;text-align:left}.tot{font-weight:bold;font-size:14px}.sig{
 <div class="head"><h1>Payment Voucher</h1>
 <p><strong>${esc(agency?.name ?? DASH)}</strong>${agency?.ssmNo ? ` (${esc(agency.ssmNo)})` : ''}</p>
 <p>Phone No: ${esc(agency?.contactPhone ?? DASH)} · Email: ${esc(agency?.contactEmail ?? DASH)}</p>
+<p>Address: ${esc(joinAddress(agency) || DASH)}</p>
 <p>Voucher No.: <strong>${voucherRef(voucher)}</strong> · Voucher Date: ${slashDate(voucher.issuedDate)}</p>
 <p>Payable to: <strong>${prName}</strong>${pr?.nickname ? ` (${esc(pr.nickname)})` : ''} · IC/Passport: ${esc(pr?.icNo ?? DASH)} · Phone: ${esc(pr?.phone ?? DASH)}</p></div>
 <div class="printbar"><a href="voucher.pdf" download style="display:inline-block;background:#111;color:#fff;padding:12px 18px;font-size:14px;border-radius:6px;text-decoration:none;font-weight:bold">Download PDF</a>
@@ -185,7 +204,10 @@ export async function buildVoucherWorkbook(params: {
   ws.getCell('B3').value = agency?.ssmNo ? `(${agency.ssmNo})` : DASH;
   ws.getCell('B4').value = `Phone No: ${agency?.contactPhone ?? DASH}`;
   ws.getCell('B5').value = `Email Address: ${agency?.contactEmail ?? DASH}`;
-  ws.getCell('B6').value = `Address: ${DASH}`;
+  // A real column since migration 0077. Still an em dash when the agency has not
+  // filled it in — an empty field is honest; an invented address is the defect
+  // this project keeps hitting.
+  ws.getCell('B6').value = `Address: ${joinAddress(agency) || DASH}`;
   ws.mergeCells('A1:A6');
   for (let r = 1; r <= 6; r++) ws.mergeCells(`B${r}:E${r}`);
 
@@ -263,9 +285,12 @@ export async function buildVoucherWorkbook(params: {
   ws.mergeCells(`A${payStart}:C${payStart}`);
   const payRows: [string, string][] = [
     ['Payment Method:', 'Transfer'],
-    ['Bank Name:', DASH],
+    // Real columns since migration 0077 (user_profile). An em dash here now
+    // means the PR has not entered their bank details, which is a thing someone
+    // can go and fix — before, it meant the system had nowhere to put them.
+    ['Bank Name:', pr?.bankName || DASH],
     ['Bank Account Name:', pr?.name ?? voucher.prName ?? DASH],
-    ['Bank Account No.:', DASH],
+    ['Bank Account No.:', pr?.bankAccountNo || DASH],
   ];
   payRows.forEach(([label, value], i) => {
     const r = payStart + 1 + i;

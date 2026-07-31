@@ -103,15 +103,46 @@ router.patch(
 // The agency's dispute queue and its decisions. '/disputes' MUST precede the
 // '/:id' route below — both are one segment, so registered the other way round
 // the queue would be read as a voucher whose id is the word "disputes".
+//
+// OWNER DECISION (31 Jul 2026) — may an admin resolve a dispute? YES, but as a
+// deliberate ESCALATION path, not as routine review. The steer is that the
+// agency handles payment vouchers, and it does: this is the only admin write
+// left on the PV surface, kept because agency-only leaves a PR with no recourse
+// when their agency goes quiet. Everything else an admin sees here is read-only.
+//
+// The gate below is the half that was a hole regardless of that decision.
+// Resolving a dispute settles MONEY, yet it inherited only the mount-level
+// requireRole('admin','agency') — so any agency member could resolve one, while
+// merely approving a day required agencyOwnerOrFinance. Same asymmetry the
+// create/update routes had. `guard()` lets admin bypass the sub-role check, so
+// this narrows agency members WITHOUT closing the escalation path above.
 router.get('/disputes', paymentVoucherController.listDisputes.bind(paymentVoucherController));
 router.post(
   '/disputes/:disputeId/resolve',
+  agencyOwnerOrFinance,
   paymentVoucherController.resolveDispute.bind(paymentVoucherController),
 );
 
 router.get('/:id', paymentVoucherController.getById.bind(paymentVoucherController));
-router.post('/', paymentVoucherController.create.bind(paymentVoucherController));
-router.put('/:id', paymentVoucherController.update.bind(paymentVoucherController));
+
+// Raising and rewriting a voucher are money WRITES, and until now they were the
+// LEAST-gated routes here: any agency member could reach them, while merely
+// *reviewing* a day or a receipt required agencyOwnerOrFinance. The endpoints
+// that author money were looser than the ones that check it.
+//
+// Same guard as the review routes, deliberately — `agencyOwnerOrFinance` mirrors
+// the portal's own `agencyCan('raisePv')`, and the sub-role enum holds exactly
+// owner and finance today. So this is a no-op for every legitimate caller and is
+// written down so a third sub-role cannot silently inherit the right to author
+// payroll. Callers checked before gating (the `GET /user` lesson — a flat gate
+// can blank a live screen): `updatePaymentVoucher` has ONE consumer,
+// `use-agency-pvs.ts`, reached only from PV screens already gated on `raisePv`;
+// `createPaymentVoucher` has no frontend caller at all.
+//
+// READS stay open to the whole agency: seeing what a PR is owed is ordinary
+// roster work, and narrowing that would blank live screens.
+router.post('/', agencyOwnerOrFinance, paymentVoucherController.create.bind(paymentVoucherController));
+router.put('/:id', agencyOwnerOrFinance, paymentVoucherController.update.bind(paymentVoucherController));
 router.delete('/:id', canDelete, paymentVoucherController.remove.bind(paymentVoucherController));
 
 export default router;

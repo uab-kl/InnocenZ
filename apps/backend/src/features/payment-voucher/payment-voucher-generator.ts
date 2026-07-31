@@ -3,6 +3,7 @@ import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shif
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { checkVoucherBalance } from './payment-voucher-balance';
+import { auditVoucher } from './payment-voucher-audit';
 
 export type GenerateWeeklyParams = {
   /** Inclusive week window, yyyy-MM-dd. Typically the just-finished Mon–Sun. */
@@ -28,6 +29,23 @@ export type GenerateWeeklyResult = {
    * because a wrong row an agency can see beats one silently deleted.
    */
   imbalanced: Array<{
+    agencyId: string;
+    prId: string;
+    voucherId: string;
+    problems: string[];
+  }>;
+  /**
+   * Vouchers that BALANCE but do not agree with the records they were built
+   * from — wages for a day nobody worked, a line outside the week, overtime the
+   * attendance stamps cannot justify, a duplicated order reference, or a second
+   * voucher for the same PR and week.
+   *
+   * Separate from `imbalanced` on purpose: that one means the arithmetic is
+   * broken, this one means the arithmetic is fine and the inputs are wrong. They
+   * have different causes and different fixes, and collapsing them would hide
+   * which. Like `imbalanced`, the voucher is left in place and flagged.
+   */
+  unreconciled: Array<{
     agencyId: string;
     prId: string;
     voucherId: string;
@@ -68,6 +86,7 @@ export class PaymentVoucherGeneratorClass {
       created: [],
       skipped: [],
       imbalanced: [],
+      unreconciled: [],
     };
 
     for (const agencyId of agencyIds) {
@@ -150,6 +169,44 @@ export class PaymentVoucherGeneratorClass {
             `[PaymentVoucherGenerator] voucher ${voucher.id} does not balance: ${balance.problems.join('; ')}`,
           );
         }
+
+        // …and does it agree with the RECORDS, not just with itself? The two
+        // checks answer different questions: a voucher paying 700.00 for a day
+        // nobody worked balances perfectly.
+        //
+        // Also checked against what was PERSISTED, for the same round-trip
+        // reason. `assignments` here are the completed rows this voucher was
+        // built from, so the wages arms are near-tautological AT THIS CALL SITE
+        // — that is expected and is not the point. What this catches during
+        // generation is the date window, overtime against the attendance stamps,
+        // duplicate order refs and a sibling voucher. The wages arms earn their
+        // keep when the same function is pointed at an EXISTING voucher with the
+        // full assignment list, which is how PV-000002's unworked day is caught.
+        const audit = auditVoucher({
+          voucher: { id: voucher.id, voucherNo: voucher.voucherNo, weekStart, weekEnd },
+          lines: voucher.lines ?? [],
+          sources: {
+            assignments: prRows.map((row) => ({
+              id: row.assignment.id,
+              shiftDate: row.shiftDate,
+              status: row.assignment.status,
+              payAmount: row.assignment.payAmount,
+              checkInAt: row.assignment.checkInAt,
+              checkOutAt: row.assignment.checkOutAt,
+            })),
+          },
+        });
+        if (!audit.ok) {
+          result.unreconciled.push({
+            agencyId,
+            prId,
+            voucherId: voucher.id,
+            problems: audit.problems,
+          });
+          logger.error(
+            `[PaymentVoucherGenerator] voucher ${voucher.id} does not reconcile against its source records: ${audit.problems.join('; ')}`,
+          );
+        }
       }
     }
 
@@ -159,6 +216,11 @@ export class PaymentVoucherGeneratorClass {
     if (result.imbalanced.length > 0) {
       logger.error(
         `[PaymentVoucherGenerator] ${result.imbalanced.length} of ${result.created.length} vouchers DO NOT BALANCE — do not pay these until reviewed`,
+      );
+    }
+    if (result.unreconciled.length > 0) {
+      logger.error(
+        `[PaymentVoucherGenerator] ${result.unreconciled.length} of ${result.created.length} vouchers DO NOT RECONCILE against their source records — do not pay these until reviewed`,
       );
     }
     return result;

@@ -18,6 +18,7 @@ import {
   slashDate,
   voucherRef,
   type VoucherExportAgency,
+  joinAddress,
   type VoucherExportLine,
   type VoucherExportPr,
 } from './payment-voucher-excel.js';
@@ -110,7 +111,7 @@ export function buildVoucherPdf(params: {
     centered(agency?.ssmNo ? `(${agency.ssmNo})` : DASH, 8);
     centered(`Phone No: ${agency?.contactPhone ?? DASH}`, 8);
     centered(`Email Address: ${agency?.contactEmail ?? DASH}`, 8);
-    centered(`Address: ${DASH}`, 8, false, 10);
+    centered(`Address: ${joinAddress(agency) || DASH}`, 8, false, 10);
 
     // ── Payable-to grid (6 rows), voucher no/date in the right two columns.
     cell(XA, XC - XA, ROW_H, 'Payable to:', { bold: true, fill: true });
@@ -177,9 +178,12 @@ export function buildVoucherPdf(params: {
     // ── Payment details beside one tall Total cell (template rows 23–27).
     const payRows: [string, string][] = [
       ['Payment Method:', 'Transfer'],
-      ['Bank Name:', DASH],
+      // Real columns since migration 0077. An em dash here now means the PR has
+      // not entered their bank details — something someone can go and fix. Before
+      // it meant the system had nowhere to put them.
+      ['Bank Name:', pr?.bankName || DASH],
       ['Bank Account Name:', prName],
-      ['Bank Account No.:', DASH],
+      ['Bank Account No.:', pr?.bankAccountNo || DASH],
     ];
     const blockH = ROW_H * (payRows.length + 1);
     if (y + blockH + 90 > 790) {

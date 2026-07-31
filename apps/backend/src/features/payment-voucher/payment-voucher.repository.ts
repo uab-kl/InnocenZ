@@ -16,9 +16,11 @@ import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { PrTable } from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
+import { isSameOrderNo } from './payment-voucher-audit';
 import {
   PaymentVoucherDayReviewTable,
   PaymentVoucherDayReviewType,
@@ -82,10 +84,25 @@ export class PaymentVoucherRepositoryClass {
    * uncreated one is somebody's missing pay.
    */
   private async nextVoucherNo(tx: DbTransaction, bump: number): Promise<string> {
+    // MAX of the numeric suffix, not count(*). The original used count()+bump to
+    // avoid parsing the stored string, which is true and was still wrong: a count
+    // RECYCLES numbers after any delete. Proven live on 31 Jul — deleting three
+    // vouchers dropped the count from 5 to 2, so the next voucher was issued
+    // `PV-000002`, the number a previously-`sent` document had held, and the one
+    // after that collided with the existing `PV-000003` outright.
+    //
+    // A recycled voucher number is worse than an ugly one: PV-000002 appears in
+    // an export a PR already downloaded, so two different documents answer to the
+    // same name and nothing in a support conversation can tell them apart.
+    //
+    // Non-conforming values (NULL, or anything with no digits) become NULL and are
+    // ignored by max(), so one malformed row cannot stall numbering forever.
     const [row] = await tx
-      .select({ total: sql<number>`count(*)::int` })
+      .select({
+        highest: sql<number>`coalesce(max(nullif(regexp_replace(${PaymentVoucherTable.voucherNo}, '\\D', '', 'g'), '')::int), 0)`,
+      })
       .from(PaymentVoucherTable);
-    return `PV-${String(Number(row?.total ?? 0) + bump).padStart(6, '0')}`;
+    return `PV-${String(Number(row?.highest ?? 0) + bump).padStart(6, '0')}`;
   }
 
   async create(
@@ -99,10 +116,21 @@ export class PaymentVoucherRepositoryClass {
         for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS && !voucher; bump++) {
           const voucherNo = await this.nextVoucherNo(tx, bump);
           try {
-            [voucher] = await tx
-              .insert(PaymentVoucherTable)
-              .values({ ...data, voucherNo })
-              .returning();
+            // SAVEPOINT per attempt (drizzle's nested transaction), and it is
+            // load-bearing rather than tidiness. In PostgreSQL a failed statement
+            // aborts the WHOLE transaction: without this, the first number clash
+            // poisoned `tx`, the next iteration's own SELECT came back 25P02
+            // "current transaction is aborted", and because 25P02 is not a
+            // voucher-no conflict it was rethrown — so the retry loop could never
+            // reach attempt 2 and every caller saw a confusing error about a
+            // COUNT query. Found live on 31 Jul when regenerating a wiped week.
+            voucher = await tx.transaction(async (sp) => {
+              const [row] = await sp
+                .insert(PaymentVoucherTable)
+                .values({ ...data, voucherNo })
+                .returning();
+              return row;
+            });
           } catch (conflict) {
             // Only a number clash is retryable; anything else is a real fault
             // and must not be swallowed into 19 more attempts.
@@ -470,8 +498,22 @@ export class PaymentVoucherRepositoryClass {
    */
   async getExportBundle(voucherId: string): Promise<{
     voucher: PaymentVoucherWithLines;
-    agency: { name: string; ssmNo: string; contactPhone: string | null; contactEmail: string | null } | null;
-    pr: { name: string; nickname: string | null; icNo: string | null; phone: string | null } | null;
+    agency: {
+      name: string;
+      ssmNo: string;
+      contactPhone: string | null;
+      contactEmail: string | null;
+      addressLine1: string | null;
+      addressLine2: string | null;
+    } | null;
+    pr: {
+      name: string;
+      nickname: string | null;
+      icNo: string | null;
+      phone: string | null;
+      bankName: string | null;
+      bankAccountNo: string | null;
+    } | null;
   } | null> {
     try {
       const [row] = await db
@@ -481,6 +523,8 @@ export class PaymentVoucherRepositoryClass {
           agencySsmNo: AgencyTable.ssmNo,
           agencyPhone: AgencyTable.contactPhone,
           agencyEmail: AgencyTable.contactEmail,
+          agencyAddress1: AgencyTable.addressLine1,
+          agencyAddress2: AgencyTable.addressLine2,
           prName: PrTable.name,
           prNickname: PrTable.nickname,
           prIcNo: PrTable.icNo,
@@ -490,11 +534,19 @@ export class PaymentVoucherRepositoryClass {
           // PR is paid against, so the phone on it must be the one the person
           // actually uses, not a copy that drifted.
           prAccountPhone: UserTable.phoneNum,
+          // Where this person is actually paid. Reached by FK through the
+          // ACCOUNT (pr.user_id -> user_profile), never copied onto `pr`: a bank
+          // account is a fact about the person, and the same hop is what keeps it
+          // blanked for outlet callers. A PR with no account has no bank details,
+          // which is correct — you cannot pay someone who has not said where.
+          prBankName: UserProfileTable.bankName,
+          prBankAccountNo: UserProfileTable.bankAccountNo,
         })
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
         .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, PrTable.userId))
         .where(eq(PaymentVoucherTable.id, voucherId))
         .limit(1);
       if (!row) return null;
@@ -507,6 +559,8 @@ export class PaymentVoucherRepositoryClass {
               ssmNo: row.agencySsmNo ?? '',
               contactPhone: row.agencyPhone,
               contactEmail: row.agencyEmail,
+              addressLine1: row.agencyAddress1,
+              addressLine2: row.agencyAddress2,
             }
           : null,
         pr: row.prName
@@ -515,6 +569,8 @@ export class PaymentVoucherRepositoryClass {
               nickname: row.prNickname,
               icNo: row.prIcNo,
               phone: row.prAccountPhone ?? row.prPhone,
+              bankName: row.prBankName,
+              bankAccountNo: row.prBankAccountNo,
             }
           : null,
       };
@@ -524,7 +580,25 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
-  /** Finds the PR's current-week draft voucher, creating an empty one if absent. */
+  /**
+   * Finds the PR's current-week draft voucher, creating an empty one if absent.
+   *
+   * ⚠️ THIS IS WHERE THE DOUBLE VOUCHER CAME FROM. `getCurrentWeekDraft` filters
+   * `status = 'pending_review'`, so once a week's voucher had been SENT, the next
+   * self-log found nothing and cheerfully created a SECOND voucher for the very
+   * same PR and week. That is exactly how Victoria ended up with `PV-000002`
+   * (sent, RM1,581.48) and `PV-000004` (pending_review, RM703.60) — the same
+   * seven days billed twice, the wrong one already in the PR's hands.
+   *
+   * So the existence check is now made across EVERY status, and a week that has
+   * already left draft is REFUSED rather than restarted. Appending to the sent
+   * voucher instead would be worse: it would silently change a document the PR
+   * has already been given, and the agency has already signed off.
+   *
+   * Returns a discriminated result rather than throwing, so the caller has to
+   * decide what to tell the PR — a self-log lost to a swallowed exception is the
+   * failure mode this whole area is being repaired for.
+   */
   async getOrCreateCurrentWeekDraft(data: {
     prId: string;
     agencyId: string;
@@ -534,10 +608,28 @@ export class PaymentVoucherRepositoryClass {
     weekStart: string;
     weekEnd: string;
     actor: string;
-  }): Promise<PaymentVoucherType> {
+  }): Promise<
+    | { ok: true; voucher: PaymentVoucherType }
+    | { ok: false; reason: string; existing: PaymentVoucherType }
+  > {
     try {
       const existing = await this.getCurrentWeekDraft(data.prId, data.weekStart);
-      if (existing) return existing;
+      if (existing) return { ok: true, voucher: existing };
+
+      // No DRAFT — but is there a voucher for this week at all? Checked across
+      // every status precisely because the draft lookup cannot see one.
+      const closed = await this.getWeekVoucher(data.prId, data.weekStart);
+      if (closed) {
+        return {
+          ok: false,
+          existing: closed,
+          reason:
+            `This week's payment voucher (${closed.voucherNo ?? closed.id}) has already been ` +
+            `${closed.status === 'sent' ? 'sent to you' : closed.status} and can no longer be ` +
+            'added to. Ask your agency to reopen it or record this on next week\'s voucher.',
+        };
+      }
+
       const values = {
         agencyId: data.agencyId,
         prId: data.prId,
@@ -557,15 +649,23 @@ export class PaymentVoucherRepositoryClass {
       // Numbered here too. A PR's very first self-log creates this draft, and it
       // becomes the voucher they are eventually paid against — a voucher that
       // acquired its number later would have gone unnumbered for a whole week.
-      return await db.transaction(async (tx) => {
+      const created = await db.transaction(async (tx) => {
         for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS; bump++) {
           const voucherNo = await this.nextVoucherNo(tx, bump);
           try {
-            const [voucher] = await tx
-              .insert(PaymentVoucherTable)
-              .values({ ...values, voucherNo })
-              .returning();
-            return voucher;
+            // SAVEPOINT per attempt — see the identical note in create(). Without
+            // it the first number clash aborts the whole transaction and attempt 2
+            // dies on its own SELECT with 25P02, so the retry never happens. This
+            // is the PR self-log path, so the failure would surface as a PR unable
+            // to log a drink rather than as anything mentioning voucher numbers.
+            const voucher = await tx.transaction(async (sp) => {
+              const [row] = await sp
+                .insert(PaymentVoucherTable)
+                .values({ ...values, voucherNo })
+                .returning();
+              return row;
+            });
+            if (voucher) return voucher;
           } catch (conflict) {
             if (!isVoucherNoConflict(conflict)) throw conflict;
           }
@@ -576,6 +676,7 @@ export class PaymentVoucherRepositoryClass {
         const [voucher] = await tx.insert(PaymentVoucherTable).values(values).returning();
         return voucher;
       });
+      return { ok: true, voucher: created };
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Error:', error);
       throw error;
@@ -839,6 +940,15 @@ export class PaymentVoucherRepositoryClass {
    * only a re-scan within the same shift is a duplicate. Callers without a
    * shift stamp keep the older voucher-wide check, which can only
    * over-refuse — never double-log.
+   *
+   * ⚠️ The match is made in JS on the OCR-folded key, NOT with `eq()` in SQL.
+   * An exact comparison is how one live voucher paid the same Lemon Drop twice:
+   * OCR read one paper as `ORD0389` and the other as `ORDO389` — letter O
+   * against digit zero — so the DB saw two different strings and logged both.
+   * `normaliseOrderNo` folds exactly the characters OCR confuses. The candidate
+   * set is one voucher (usually one shift) of receipts, so comparing in memory
+   * is cheap; expressing the fold in SQL would also make it unindexable without
+   * buying anything.
    */
   async findReceiptByOrderNo(
     voucherId: string,
@@ -846,20 +956,18 @@ export class PaymentVoucherRepositoryClass {
     shiftAssignmentId?: string | null,
   ): Promise<PaymentVoucherReceiptType | null> {
     try {
-      const [row] = await db
+      const candidates = await db
         .select()
         .from(PaymentVoucherReceiptTable)
         .where(
           and(
             eq(PaymentVoucherReceiptTable.voucherId, voucherId),
-            eq(PaymentVoucherReceiptTable.orderNo, orderNo),
             ...(shiftAssignmentId
               ? [eq(PaymentVoucherReceiptTable.shiftAssignmentId, shiftAssignmentId)]
               : []),
           ),
-        )
-        .limit(1);
-      return row ?? null;
+        );
+      return candidates.find((row) => isSameOrderNo(row.orderNo, orderNo)) ?? null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.findReceiptByOrderNo] Error:', error);
       throw error;

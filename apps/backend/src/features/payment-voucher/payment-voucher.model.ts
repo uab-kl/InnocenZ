@@ -86,7 +86,25 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
   createdBy: varchar('created_by').notNull(),
   updatedBy: varchar('updated_by').notNull(),
-});
+}, (table) => [
+  /**
+   * ONE voucher per PR per week (migration 0078).
+   *
+   * Declared here as well as in SQL because of the drift class that runs the
+   * dangerous way round: a constraint the database HAS and the model does NOT is
+   * one `drizzle-kit generate` away from being silently dropped. The generate
+   * "fixes" the difference by deleting it, and nothing fails — the rule just
+   * stops existing.
+   *
+   * Partial because `pr_id` and `week_start` are both nullable. Postgres already
+   * treats NULLs as distinct, so this changes no behaviour; it states that an
+   * unassigned or weekless voucher is deliberately unconstrained, rather than
+   * leaving a reader to infer it from the NULL rule.
+   */
+  uniqueIndex('payment_voucher_one_per_pr_week')
+    .on(table.prId, table.weekStart)
+    .where(sql`${table.prId} IS NOT NULL AND ${table.weekStart} IS NOT NULL`),
+]);
 
 /**
  * Where one receipt sits in the agency's review (migration 0074).

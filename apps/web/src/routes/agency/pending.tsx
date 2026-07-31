@@ -1118,9 +1118,10 @@ function AgencyPending() {
 		[pendingCutlostRequests],
 	);
 
-	// PR MC/leave requests are real backend rows parked at `leave_pending`. The
-	// "roster"-prefixed keys are deliberate: the roster's own leave panel and
-	// planning grid share them, so approving here refreshes both.
+	// PR MC/leave requests are real backend rows parked at `leave_pending`, and
+	// this page is their only review surface. The "roster"-prefixed keys are
+	// deliberate: the roster's planning grid and backfill panel share them, so a
+	// decision here refreshes those too.
 	const { logout } = useAuth();
 	const rosterMut = useRosterMutations();
 	const leaveQuery = useQuery({

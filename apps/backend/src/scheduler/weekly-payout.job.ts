@@ -68,6 +68,21 @@ export async function runWeeklyPayout(): Promise<void> {
     }
   }
 
+  // …and the same summary for vouchers that BALANCE but disagree with the
+  // records behind them — wages for an unworked day, a line outside the week,
+  // overtime the stamps cannot justify, a duplicated order, a sibling voucher.
+  // Reported separately from the block above because the two mean different
+  // things: broken arithmetic, versus correct arithmetic over wrong inputs.
+  // Also deliberately non-aborting, for the same reason.
+  if (result.unreconciled.length > 0) {
+    logger.error(
+      `[weekly-payout] ${result.unreconciled.length} voucher(s) DO NOT RECONCILE against their source records — hold payment and review:`,
+    );
+    for (const bad of result.unreconciled) {
+      logger.error(`[weekly-payout]   ${bad.voucherId}: ${bad.problems.join('; ')}`);
+    }
+  }
+
   // APPROVED -> VERIFIED, the rollover arm of the receipt lifecycle.
   //
   // Runs BEFORE the issue pass below, and that order is the point: the gate

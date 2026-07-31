@@ -3,7 +3,27 @@
  *
  * The invariant, and the whole point of this file:
  *
- *     Σ(line.amount × line.quantity)  −  deduction  −  net  =  0
+ *     Σ(line.amount)  −  deduction  −  net  =  0
+ *
+ * ⚠️ It used to read `Σ(line.amount × line.quantity)`, and that was WRONG —
+ * `payment_voucher_line.amount` is the LINE TOTAL, not a unit price. Every other
+ * module agrees on that and this one did not:
+ *
+ *   - `recomputeTotals()` sets `subtotal = sum(amount)`, bare.
+ *   - the Excel and PDF exports print `amount / quantity` as the Unit Price
+ *     column and `amount` as the Amount column.
+ *   - the PR self-log posts `amount: commission`, already the whole line's
+ *     commission — quantity is inside `sales`, not applied on top.
+ *
+ * So multiplying here double-counted any line with quantity > 1 and reported a
+ * healthy voucher as imbalanced. Nothing had tripped it only because every line
+ * in the live database happens to carry quantity 1; the first multi-item receipt
+ * would have had the Monday job log "DO NOT BALANCE — hold payment and review"
+ * against a voucher that was perfectly fine. **A check that cries wolf is worse
+ * than no check**, because the real ones get waved through with it.
+ *
+ * `quantity` is still read and still validated — a non-integer quantity is a
+ * genuine data fault worth reporting — it simply no longer scales the money.
  *
  * A voucher that fails it is money the system invented or lost. Nothing here
  * writes; it reports, and the caller decides.
@@ -105,15 +125,19 @@ export function checkVoucherBalance(
 
   let lineTotalCents = 0;
   lines.forEach((line, index) => {
-    const amountCents = read(line.amount, `line ${index + 1} amount`);
-    // Quantity defaults to 1: a null quantity means "one of this", not "none".
+    // `amount` is the line TOTAL — see the header. It is added as-is.
+    lineTotalCents += read(line.amount, `line ${index + 1} amount`);
+
+    // Quantity no longer scales the money, but a non-integer one is still a
+    // real data fault and is still reported. Note it does NOT `return`: doing so
+    // would drop this line's amount from the sum and turn a quantity complaint
+    // into a phantom money discrepancy on the very next line of output.
+    // Quantity defaults to 1 — null means "one of this", not "none".
     const rawQuantity = line.quantity ?? 1;
     const quantity = Number(rawQuantity);
     if (!Number.isFinite(quantity) || !Number.isInteger(quantity)) {
       problems.push(`line ${index + 1} quantity is not a whole number: "${rawQuantity}"`);
-      return;
     }
-    lineTotalCents += amountCents * quantity;
   });
 
   const subtotalCents = read(voucher.subtotal, 'subtotal');

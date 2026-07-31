@@ -252,11 +252,38 @@ export class UserControllerClass {
       const comcardWeightKg = parseOptionalInt(req.body?.comcardWeightKg);
       const languages = parseLanguagesBody(req.body?.languages);
 
+      // Bank details (migration 0077) — the fields that decide whether the
+      // payment voucher can actually be acted on by a bank.
+      //
+      // This route is SELF-EDIT ONLY (the 403 above), which is the property that
+      // matters here: nobody can redirect someone else's pay. Clearing a field is
+      // a legitimate edit, so an empty string stores NULL rather than being
+      // ignored — otherwise a wrong account number could never be removed, only
+      // overwritten.
+      const bankNameResult = parseOptionalText(req.body?.bankName, 255, 'Bank name');
+      if (!bankNameResult.ok) {
+        return res.status(400).json({ success: false, message: bankNameResult.message, data: null });
+      }
+      const bankAccountResult = parseOptionalText(
+        req.body?.bankAccountNo,
+        50,
+        'Bank account number',
+      );
+      if (!bankAccountResult.ok) {
+        return res
+          .status(400)
+          .json({ success: false, message: bankAccountResult.message, data: null });
+      }
+      const bankName = bankNameResult.value;
+      const bankAccountNo = bankAccountResult.value;
+
       if (
         portfolioPhotos !== undefined ||
         comcardHeightCm !== undefined ||
         comcardWeightKg !== undefined ||
-        languages !== undefined
+        languages !== undefined ||
+        bankName !== undefined ||
+        bankAccountNo !== undefined
       ) {
         let existingProfile = await this.userProfileRepository.getByUserId(id);
         if (!existingProfile) {
@@ -280,6 +307,8 @@ export class UserControllerClass {
           ...(comcardHeightCm !== undefined ? { comcardHeightCm } : {}),
           ...(comcardWeightKg !== undefined ? { comcardWeightKg } : {}),
           ...(languages !== undefined ? { languages } : {}),
+          ...(bankName !== undefined ? { bankName } : {}),
+          ...(bankAccountNo !== undefined ? { bankAccountNo } : {}),
           updatedBy: actor,
         });
       }
@@ -480,6 +509,35 @@ function parseOptionalInt(value: unknown): number | null | undefined {
   const n = Number(value);
   if (!Number.isFinite(n) || n < 0 || n > 999) return undefined;
   return Math.round(n);
+}
+
+/**
+ * An optional free-text field: `undefined` = not supplied (leave alone),
+ * `null` = explicitly cleared, a string = the trimmed value.
+ *
+ * Returns an Error rather than throwing or silently coercing, because the two
+ * failure modes this replaces are both worse. `parseOptionalInt` above returns
+ * `undefined` for an out-of-range number, i.e. it silently DISCARDS bad input —
+ * acceptable for a comcard height, not for a bank account number, where quietly
+ * ignoring the edit would leave the PR believing they had been paid into an
+ * account they never saved.
+ */
+type OptionalText =
+  | { ok: true; value: string | null | undefined }
+  | { ok: false; message: string };
+
+function parseOptionalText(value: unknown, maxLength: number, label: string): OptionalText {
+  // NOTE: a result object, not a thrown/returned Error — `Error` in this module
+  // is the project's message enum (`@/error/index`), not the global class.
+  if (value === undefined) return { ok: true, value: undefined };
+  if (value === null) return { ok: true, value: null };
+  if (typeof value !== 'string') return { ok: false, message: `${label} must be text` };
+  const trimmed = value.trim();
+  if (trimmed === '') return { ok: true, value: null }; // clearing is a legitimate edit
+  if (trimmed.length > maxLength) {
+    return { ok: false, message: `${label} must be ${maxLength} characters or fewer` };
+  }
+  return { ok: true, value: trimmed };
 }
 
 /** Accepts an array of non-empty language names; caps length and dedupes. */
