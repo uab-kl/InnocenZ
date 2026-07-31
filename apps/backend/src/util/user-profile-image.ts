@@ -101,7 +101,7 @@ const IDENTITY_DOC_FIELDS = [
   'country',
   'idPhotoFront',
   'idPhotoBack',
-  // Bank details (migration 0076), added the same day the columns were, because
+  // Bank details (migration 0077), added the same day the columns were, because
   // this list blanks what it NAMES — a sensitive field it does not name is a
   // sensitive field handed to every venue that resolves a PR's name here.
   // Where someone is paid is further off the job than their home address, not

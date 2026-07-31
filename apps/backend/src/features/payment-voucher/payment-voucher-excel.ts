@@ -27,7 +27,7 @@ export type VoucherExportPr = {
   nickname: string | null;
   icNo: string | null;
   phone: string | null;
-  /** Where this person is paid — user_profile, reached by FK (migration 0076). */
+  /** Where this person is paid — user_profile, reached by FK (migration 0077). */
   bankName: string | null;
   bankAccountNo: string | null;
 } | null;
@@ -204,7 +204,7 @@ export async function buildVoucherWorkbook(params: {
   ws.getCell('B3').value = agency?.ssmNo ? `(${agency.ssmNo})` : DASH;
   ws.getCell('B4').value = `Phone No: ${agency?.contactPhone ?? DASH}`;
   ws.getCell('B5').value = `Email Address: ${agency?.contactEmail ?? DASH}`;
-  // A real column since migration 0076. Still an em dash when the agency has not
+  // A real column since migration 0077. Still an em dash when the agency has not
   // filled it in — an empty field is honest; an invented address is the defect
   // this project keeps hitting.
   ws.getCell('B6').value = `Address: ${joinAddress(agency) || DASH}`;
@@ -285,7 +285,7 @@ export async function buildVoucherWorkbook(params: {
   ws.mergeCells(`A${payStart}:C${payStart}`);
   const payRows: [string, string][] = [
     ['Payment Method:', 'Transfer'],
-    // Real columns since migration 0076 (user_profile). An em dash here now
+    // Real columns since migration 0077 (user_profile). An em dash here now
     // means the PR has not entered their bank details, which is a thing someone
     // can go and fix — before, it meant the system had nowhere to put them.
     ['Bank Name:', pr?.bankName || DASH],

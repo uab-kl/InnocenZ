@@ -178,7 +178,7 @@ export function buildVoucherPdf(params: {
     // ── Payment details beside one tall Total cell (template rows 23–27).
     const payRows: [string, string][] = [
       ['Payment Method:', 'Transfer'],
-      // Real columns since migration 0076. An em dash here now means the PR has
+      // Real columns since migration 0077. An em dash here now means the PR has
       // not entered their bank details — something someone can go and fix. Before
       // it meant the system had nowhere to put them.
       ['Bank Name:', pr?.bankName || DASH],

@@ -252,7 +252,7 @@ export class UserControllerClass {
       const comcardWeightKg = parseOptionalInt(req.body?.comcardWeightKg);
       const languages = parseLanguagesBody(req.body?.languages);
 
-      // Bank details (migration 0076) — the fields that decide whether the
+      // Bank details (migration 0077) — the fields that decide whether the
       // payment voucher can actually be acted on by a bank.
       //
       // This route is SELF-EDIT ONLY (the 403 above), which is the property that

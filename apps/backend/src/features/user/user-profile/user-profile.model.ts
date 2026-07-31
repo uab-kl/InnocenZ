@@ -41,7 +41,7 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   idPhotoFront: varchar('id_photo_front'),
   idPhotoBack: varchar('id_photo_back'),
   /**
-   * Where this person is actually paid (migration 0076). Until these existed the
+   * Where this person is actually paid (migration 0077). Until these existed the
    * payment voucher printed an em dash for both and no bank could act on it —
    * the document was complete except for the parts that make it a payment.
    *

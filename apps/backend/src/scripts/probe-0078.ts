@@ -1,7 +1,7 @@
 /**
- * Proves migration 0077 is LIVE — the one-voucher-per-PR-per-week index.
+ * Proves migration 0078 is LIVE — the one-voucher-per-PR-per-week index.
  *
- *   npx tsx --tsconfig tsconfig.json src/scripts/probe-0077.ts
+ *   npx tsx --tsconfig tsconfig.json src/scripts/probe-0078.ts
  *
  * Why this exists rather than trusting `pnpm migrate:deploy` saying "applied":
  * `tsc` and `drizzle-kit generate` never open a connection, and check-schema-drift
@@ -70,8 +70,8 @@ async function main() {
           prName: victim.prName,
           weekStart: victim.weekStart,
           weekEnd: victim.weekEnd,
-          createdBy: 'probe-0077',
-          updatedBy: 'probe-0077',
+          createdBy: 'probe-0078',
+          updatedBy: 'probe-0078',
         });
         // Not reached when the index bites. If it IS reached the index is absent,
         // so throw to roll back rather than leaving the duplicate behind.
@@ -98,6 +98,6 @@ async function main() {
 main()
   .then(() => process.exit(process.exitCode ?? 0))
   .catch((error) => {
-    console.error('[probe-0077] FAILED:', error);
+    console.error('[probe-0078] FAILED:', error);
     process.exit(1);
   });

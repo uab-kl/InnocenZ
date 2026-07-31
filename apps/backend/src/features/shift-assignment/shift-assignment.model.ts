@@ -20,7 +20,7 @@ export const shiftAssignmentStatusValues = [
 export type ShiftAssignmentStatus = (typeof shiftAssignmentStatusValues)[number];
 
 /**
- * The agency's decision on overtime worked past the scheduled end (0076).
+ * The agency's decision on overtime worked past the scheduled end (0077).
  *
  * A plain varchar rather than a PG enum, and NULL rather than a default: NULL
  * means "no overtime on this shift", which is the overwhelming majority of rows,
@@ -75,7 +75,7 @@ export const ShiftAssignmentTable = MainSchema.table(
     checkOutAccuracyM: integer('check_out_accuracy_m'),
     notes: varchar('notes', { length: 500 }),
     /**
-     * Overtime, and the agency's decision on it (migration 0076).
+     * Overtime, and the agency's decision on it (migration 0077).
      *
      * ⚠️ `overtimeMinutes` is recorded AT CHECK-OUT, not derived later, because
      * check-out CLAMPS `checkOutAt` to the shift's scheduled end — so by the time

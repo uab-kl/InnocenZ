@@ -88,7 +88,7 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   updatedBy: varchar('updated_by').notNull(),
 }, (table) => [
   /**
-   * ONE voucher per PR per week (migration 0077).
+   * ONE voucher per PR per week (migration 0078).
    *
    * Declared here as well as in SQL because of the drift class that runs the
    * dangerous way round: a constraint the database HAS and the model does NOT is
