@@ -10,6 +10,7 @@ import {
   isSameOrderNo,
   checkLineAgainstWeek,
 } from '@/features/payment-voucher/payment-voucher-audit';
+import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance';
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = '') {
@@ -136,6 +137,34 @@ check('in-week date passes', checkLineAgainstWeek('2026-07-28', voucher) === nul
 check('out-of-week date is refused', checkLineAgainstWeek('2026-06-16', voucher) !== null);
 check('missing date is refused', checkLineAgainstWeek(null, voucher) !== null);
 check('week boundaries are inclusive', checkLineAgainstWeek('2026-08-02', voucher) === null);
+
+console.log('\n--- 7. balance: `amount` is the LINE TOTAL, quantity must not scale it ---');
+// The regression this guards: multiplying by quantity double-counted any
+// multi-item receipt and reported a healthy voucher as imbalanced, which would
+// have had the Monday job tell someone to hold a correct payment.
+const qtyVoucher = { subtotal: '30.00', deduction: '0.00', net: '30.00' };
+const qtyLines = [
+  { amount: '10.00', quantity: 1 },
+  { amount: '20.00', quantity: 4 }, // 4 drinks, 20.00 of commission IN TOTAL
+];
+const qtyReport = checkVoucherBalance(qtyVoucher, qtyLines);
+check('a quantity-4 line balances at its face amount', qtyReport.balanced, JSON.stringify(qtyReport.problems));
+check('line total is 30.00, not 90.00', qtyReport.lineTotalCents === 3000, `got ${qtyReport.lineTotalCents}`);
+
+// A genuinely broken voucher must still be caught — the fix must not have
+// turned the check off.
+const brokenReport = checkVoucherBalance(
+  { subtotal: '99.00', deduction: '0.00', net: '99.00' },
+  [{ amount: '10.00', quantity: 1 }],
+);
+check('a real imbalance is still reported', !brokenReport.balanced);
+
+// A bad quantity is still a finding, and must NOT swallow the line's money.
+const badQty = checkVoucherBalance({ subtotal: '10.00', deduction: '0.00', net: '10.00' }, [
+  { amount: '10.00', quantity: 1.5 },
+]);
+check('non-integer quantity is reported', badQty.problems.some((p) => p.includes('whole number')));
+check('…and its amount still counts', badQty.lineTotalCents === 1000, `got ${badQty.lineTotalCents}`);
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED\n' : `\n${failures} CHECK(S) FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

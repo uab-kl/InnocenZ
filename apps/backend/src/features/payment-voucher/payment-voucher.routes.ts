@@ -110,8 +110,25 @@ router.post(
 );
 
 router.get('/:id', paymentVoucherController.getById.bind(paymentVoucherController));
-router.post('/', paymentVoucherController.create.bind(paymentVoucherController));
-router.put('/:id', paymentVoucherController.update.bind(paymentVoucherController));
+
+// Raising and rewriting a voucher are money WRITES, and until now they were the
+// LEAST-gated routes here: any agency member could reach them, while merely
+// *reviewing* a day or a receipt required agencyOwnerOrFinance. The endpoints
+// that author money were looser than the ones that check it.
+//
+// Same guard as the review routes, deliberately — `agencyOwnerOrFinance` mirrors
+// the portal's own `agencyCan('raisePv')`, and the sub-role enum holds exactly
+// owner and finance today. So this is a no-op for every legitimate caller and is
+// written down so a third sub-role cannot silently inherit the right to author
+// payroll. Callers checked before gating (the `GET /user` lesson — a flat gate
+// can blank a live screen): `updatePaymentVoucher` has ONE consumer,
+// `use-agency-pvs.ts`, reached only from PV screens already gated on `raisePv`;
+// `createPaymentVoucher` has no frontend caller at all.
+//
+// READS stay open to the whole agency: seeing what a PR is owed is ordinary
+// roster work, and narrowing that would blank live screens.
+router.post('/', agencyOwnerOrFinance, paymentVoucherController.create.bind(paymentVoucherController));
+router.put('/:id', agencyOwnerOrFinance, paymentVoucherController.update.bind(paymentVoucherController));
 router.delete('/:id', canDelete, paymentVoucherController.remove.bind(paymentVoucherController));
 
 export default router;

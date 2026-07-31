@@ -543,6 +543,49 @@ export class PaymentVoucherControllerClass {
       }
 
       const { lines, ...header } = parsed.data;
+
+      // The SAME two money rules the PR self-log path enforces, on the agency
+      // door. Closing only the PR side left this one wide open, and this is the
+      // likelier origin of the live duplicate: PV-000002 was created and set
+      // 'sent' mid-week from the agency side, not by a self-log.
+      //
+      // Both are conditional because `prId`, `weekStart` and `weekEnd` are all
+      // OPTIONAL on this schema — a voucher may legitimately be raised before
+      // it is attached to a PR or a week. Absent facts cannot be checked; they
+      // are caught later by auditVoucher, which treats a dateless line as
+      // outside the week.
+      if (header.prId && header.weekStart) {
+        const clash = await this.paymentVoucherRepository.existsForPrWeek(
+          agencyId,
+          header.prId,
+          header.weekStart,
+        );
+        if (clash) {
+          return res.status(409).json({
+            success: false,
+            message:
+              `A payment voucher already exists for this PR and the week of ${header.weekStart}. ` +
+              'Edit that one rather than raising a second — two vouchers for one week is a double payment.',
+            data: null,
+          });
+        }
+      }
+      if (header.weekStart && header.weekEnd) {
+        for (const line of lines ?? []) {
+          // Only dates that were actually supplied: a line with no date is a
+          // different (pre-existing) concern and refusing it here would be a
+          // behaviour change beyond this guard's remit.
+          if (!line.lineDate) continue;
+          const outOfWeek = checkLineAgainstWeek(line.lineDate, {
+            weekStart: header.weekStart,
+            weekEnd: header.weekEnd,
+          });
+          if (outOfWeek) {
+            return res.status(400).json({ success: false, message: outOfWeek, data: null });
+          }
+        }
+      }
+
       const totals = resolveTotals({ lines, subtotal: header.subtotal, deduction: header.deduction, net: header.net });
       const actor = getActor(req);
       const voucher = await this.paymentVoucherRepository.create(
@@ -618,6 +661,26 @@ export class PaymentVoucherControllerClass {
               pendingReceipts: gate.pendingReceipts,
             },
           });
+        }
+      }
+
+      // A line rewrite can carry a stray date just as easily as a fresh create,
+      // so the week rule applies here too. Checked against the week the voucher
+      // will HAVE after this update, not the one it had before — otherwise
+      // moving a voucher's week and its lines in one call would be judged
+      // against the old window and wrongly refused.
+      const effectiveWeekStart = data.weekStart ?? existing.weekStart;
+      const effectiveWeekEnd = data.weekEnd ?? existing.weekEnd;
+      if (lines && effectiveWeekStart && effectiveWeekEnd) {
+        for (const line of lines) {
+          if (!line.lineDate) continue;
+          const outOfWeek = checkLineAgainstWeek(line.lineDate, {
+            weekStart: effectiveWeekStart,
+            weekEnd: effectiveWeekEnd,
+          });
+          if (outOfWeek) {
+            return res.status(400).json({ success: false, message: outOfWeek, data: null });
+          }
         }
       }
 
