@@ -340,7 +340,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 - [ ] **Every self-log / OCR scan emits a receipt number**; add a **detail button** for PR to view the receipt. *(PR → Agency)*
 - [x] **PV export "—" fields need real columns** — ✅ **DONE (X40, migration 0077 applied + verified live).** Columns, model mapping, `getExportBundle` join, and all three rendering surfaces. The only remaining "—" is an honest one: nobody has typed their bank details in yet. **A PR-facing profile SCREEN for it is web/mobile work and is not built** — the endpoint accepts the fields today. *(PR / Agency)*
 - [x] **Decide Vicky's duplicate current-week voucher** `34364790-…` — ✅ **ANSWERED 31 Jul, and this was never a separate item: it is the SAME voucher as the `PV-000002`/`PV-000004` pair in P0 above**, logged here first without its amount. Settled by the same wipe-and-regenerate call. ⚠️ **One half of this line survives the decision and is still open:** *"block agency from sending current-week vouchers early"* — the duplicate only became reachable because the agency owner set a **mid-week** voucher to `sent`, and nothing refuses that. Promoted to its own item below. *(Agency / DB)*
-- [ ] **🟠 An agency can mark a CURRENT-week voucher `sent`** *(SL)* — the mid-week send is what created the duplicate above: closing a week that has not finished means the rest of the week's earnings have nowhere to go, and X37's guard then (correctly) 409s them. The generator issues on the Monday job for a reason. **Refuse `sent` while `week_end >= today`**, or require an explicit override. *(Agency)*
+- [x] **🟠 An agency can mark a CURRENT-week voucher `sent`** *(SL)* — ✅ **CLOSED (31 Jul).** `sent` is now refused while `week_end >= today`, as a **third rule inside `voucherSendGate`** rather than a separate check — one refusal path cannot disagree with itself. Evaluated **first and returning alone**, because listing unreviewed days beside it is noise on a week still being worked; the 409 carries `weekEndsOn` (optional, so no consumer of `SendGateResult` breaks). **Both call sites pass it, including the Monday job that can never trip it** — `weekly-payout` runs on `previousCompleteWeek`, and passing the rule anyway is the point, since a gate the scheduler is exempt from has an unguarded way around it. The HTTP send judges `data.weekEnd ?? existing.weekEnd`, matching the line-date check's "the week it WILL have" rule. ⚠️ **The timezone was the trap:** a UTC `toISOString()` date reads *yesterday* between 00:00–08:00 KL, so the rule would have answered "week not finished" for the first eight hours of Monday — **including 02:00, when the payout job runs** — and held every voucher it was about to issue. `klToday()` now lives in `payment-voucher-week.ts` beside `previousCompleteWeek`; **an identical private copy in `weekly-payout.job.ts` was deleted** so there is one definition of "what day is it in KL". Proof: `probe-pv-audit.ts` §8, **10 new cases all passing**, backend `tsc` **0** — including the over-fire guards (Monday case NOT refused; omitting the argument preserves old behaviour; no `week_end` is not judged). ⚠️ **Not fired against the live DB.** ⚠️ **No override was built** — an agency that must genuinely pay early cannot; confirm that is wanted. *(Agency)*
 
 ### 🟡 P3 — admin + database cleanup + hardening
 - [x] **🔴 No way to delete, deactivate or demote an account** — ✅ **fixed (30 Jul)**, §8 X29 → X30. `PATCH /user/:id/status` + `DELETE /rbac/user-role`, both admin-only, with self-lockout and last-holder guards. Login already refused a non-active account, so the disable bites immediately. **Hard delete deliberately NOT added** — four tables FK a user and the audit trail should outlive the person; soft-disable is the right default. ✅ **The admin SCREEN landed too (§8 X32)** — Actions column on the admin user table, confirms on both, server refusals shown verbatim, live-verified. ✅ **CORRECTION (same day, §8 X31): a disabled account's live token dies on the very next request.** I wrote here that it "keeps working until it expires" — that was wrong and was never checked. `authenticateJWT` re-reads the user on every request and already refuses `status !== 'active'`, so the disable is immediate. Left for a follow-up: an admin **UI** (both endpoints are API-only today).
@@ -403,6 +403,44 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **31 Jul 2026 — a week that has not FINISHED can no longer be sent.** The mid-week send is the
+> *act* that produced the live `PV-000002` / `PV-000004` duplicate pair; every other fix in this
+> area addressed its consequences. Closing a week early declares a total for days that have not
+> happened, and the rest of that week's earnings then have nowhere to go — the duplicate-week guard
+> correctly refuses a second voucher, so a Thursday drink logged after a Wednesday send is simply
+> lost.
+>
+> **Added as a third rule inside `voucherSendGate`**, not as a separate check at the send. One
+> refusal path cannot disagree with itself; two can — the same reasoning that put the pending-receipt
+> rule there. It is evaluated **first and returns alone**, because listing unreviewed days beside it
+> would be noise: of course nothing has been reviewed on a week still being worked. The refusal
+> carries `weekEndsOn` (optional, so no existing consumer of `SendGateResult` breaks).
+>
+> **Both call sites pass it, including the Monday job that can never trip it.** `weekly-payout`
+> generates for `previousCompleteWeek`, so `week_end` is always strictly past — passing the rule
+> anyway is the point, since a gate the scheduler is exempted from is a gate with an unguarded way
+> around it. The HTTP send judges `data.weekEnd ?? existing.weekEnd`, matching the line-date check's
+> rule of measuring against the week the voucher *will have*, not the stale one.
+>
+> **The timezone is the trap, and it fails in the expensive direction.** A bare
+> `new Date().toISOString()` is a UTC date, so between 00:00 and 08:00 KL it still reads *yesterday* —
+> which would make "has this week finished?" answer **no** for the first eight hours of Monday,
+> including 02:00 when the payout job runs, holding every voucher it was about to issue. `klToday()`
+> now lives beside `previousCompleteWeek` in `payment-voucher-week.ts`. ⚠️ **It was already defined,
+> character for character, as a private helper in `weekly-payout.job.ts`** — that copy is deleted, so
+> there is one definition of "what day is it in KL" rather than two that can drift.
+>
+> **Proof:** `probe-pv-audit.ts` gains section 8 — 10 new cases, **all pass**, backend `tsc` **0**.
+> The ones that matter are the over-fire guards: the **Monday payout case is NOT refused**, omitting
+> the new argument keeps the old behaviour exactly, a voucher with no `week_end` is not judged, and a
+> mid-week voucher that *also* has an unreviewed day and a pending receipt is refused **for the week**
+> without blaming either — a misleading reason would send someone to review days that are not the
+> problem. ⚠️ **NOT fired against the live DB**, like the line-date refusal before it: proving a
+> refusal needs a real bad write on the shared database.
+>
+> **Deliberately no override.** An agency that genuinely must pay early has no escape hatch, and that
+> is a product decision worth confirming rather than a limitation to work around.
 
 > **31 Jul 2026 — the line-date rule now REFUSES, not just reports.** It has detected since
 > `2cb70b8` (`line_date_contradicts_shift`) and nothing stopped the write. A line whose `ref` names

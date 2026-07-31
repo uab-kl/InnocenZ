@@ -6,7 +6,7 @@ import {
   prRepository,
   collectionInvoiceRepository,
 } from '@/composition-root.js';
-import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
+import { klToday, previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
 import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance.js';
 import {
   buildDayReviewView,
@@ -18,10 +18,10 @@ import type { JobDefinition } from './scheduler.js';
 /** Stamped into the generated vouchers' audit columns. */
 const ACTOR = 'weekly-payout-job';
 
-/** Today's calendar date in Kuala Lumpur (UTC+8, no DST), for issued_date stamps. */
-function klToday(): string {
-  return new Date(Date.now() + 8 * 60 * 60 * 1000).toISOString().slice(0, 10);
-}
+// `klToday` used to be defined here, character for character. It now lives beside
+// `previousCompleteWeek` in payment-voucher-week.ts, because the send gate needs
+// the same answer and two copies of "what day is it in KL" is exactly the kind of
+// pair that drifts apart unnoticed.
 
 /**
  * Mondays at 02:00 Asia/Kuala_Lumpur — after the last Sunday shift has certainly
@@ -143,7 +143,15 @@ export async function runWeeklyPayout(): Promise<void> {
     // Receipts as well as days: a receipt the agency never looked at holds the
     // week here exactly as it does at the HTTP send. Same gate, same message.
     const receipts = await paymentVoucherRepository.listReceipts(voucher.id);
-    const gate = voucherSendGate(buildDayReviewView(voucher.lines, reviews), receipts);
+    // The week-finished rule is passed here too, even though this job runs on
+    // `previousCompleteWeek` and can therefore never trip it. That is the point:
+    // a gate the scheduler is exempted from is a gate with an unguarded way
+    // around it, and if the week arithmetic ever drifts, the job says so on a
+    // Monday instead of quietly issuing a voucher for days nobody has worked.
+    const gate = voucherSendGate(buildDayReviewView(voucher.lines, reviews), receipts, {
+      weekEnd: voucher.weekEnd,
+      today: klToday(),
+    });
     if (!gate.allowed) {
       awaitingReview += 1;
       logger.warn(`[weekly-payout] awaiting agency day review ${voucher.id}: ${gate.message}`);

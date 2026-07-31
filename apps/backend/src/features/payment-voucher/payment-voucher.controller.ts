@@ -35,6 +35,7 @@ import {
   dayTotalsCents,
   voucherSendGate,
 } from './payment-voucher-day-review.js';
+import { klToday } from './payment-voucher-week.js';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -668,7 +669,14 @@ export class PaymentVoucherControllerClass {
         // (owner's decision #2), so the send has one refusal path rather than
         // two that can disagree about whether a week may go out.
         const receipts = await this.paymentVoucherRepository.listReceipts(id);
-        const gate = voucherSendGate(buildDayReviewView(existing.lines, reviews), receipts);
+        // Judged against the week the voucher will HAVE after this update — the
+        // same reasoning the line-date check below uses: an agency correcting a
+        // voucher's week and sending it in one call must be measured against the
+        // corrected week, not the stale one.
+        const gate = voucherSendGate(buildDayReviewView(existing.lines, reviews), receipts, {
+          weekEnd: data.weekEnd ?? existing.weekEnd,
+          today: klToday(),
+        });
         if (!gate.allowed) {
           return res.status(409).json({
             success: false,
@@ -677,6 +685,7 @@ export class PaymentVoucherControllerClass {
               heldDays: gate.heldDays,
               unreviewedDays: gate.unreviewedDays,
               pendingReceipts: gate.pendingReceipts,
+              weekEndsOn: gate.weekEndsOn ?? null,
             },
           });
         }

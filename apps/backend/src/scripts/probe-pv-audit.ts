@@ -13,6 +13,11 @@ import {
   assignmentIdFromRef,
 } from '@/features/payment-voucher/payment-voucher-audit';
 import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance';
+import {
+  voucherSendGate,
+  type DayReviewView,
+} from '@/features/payment-voucher/payment-voucher-day-review';
+import { klToday } from '@/features/payment-voucher/payment-voucher-week';
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = '') {
@@ -206,6 +211,70 @@ const badQty = checkVoucherBalance({ subtotal: '10.00', deduction: '0.00', net: 
 ]);
 check('non-integer quantity is reported', badQty.problems.some((p) => p.includes('whole number')));
 check('…and its amount still counts', badQty.lineTotalCents === 1000, `got ${badQty.lineTotalCents}`);
+
+console.log('\n--- 8. send gate: a week that has not FINISHED cannot be sent ---');
+// The act that created the live PV-000002 / PV-000004 duplicate pair. Every
+// other fix in this area addressed the consequence; this one refuses the act.
+const reviewed: DayReviewView[] = [
+  {
+    date: '2026-07-27',
+    totalCents: 70000,
+    status: 'approved',
+    approvedTotalCents: 70000,
+    stale: false,
+    note: null,
+    bulk: false,
+    reviewedAt: null,
+    reviewedBy: null,
+  },
+];
+const WEEK_END = '2026-08-02';
+
+check(
+  'mid-week send is refused',
+  !voucherSendGate(reviewed, [], { weekEnd: WEEK_END, today: '2026-07-29' }).allowed,
+);
+check(
+  'the LAST day of the week is still mid-week',
+  !voucherSendGate(reviewed, [], { weekEnd: WEEK_END, today: WEEK_END }).allowed,
+);
+check(
+  'the day AFTER the week ends is allowed',
+  voucherSendGate(reviewed, [], { weekEnd: WEEK_END, today: '2026-08-03' }).allowed,
+);
+// The over-fire guard that matters most: the Monday job runs on
+// `previousCompleteWeek`, so if this ever refused, no voucher would ever issue.
+check(
+  'the Monday payout case is NOT refused',
+  voucherSendGate(reviewed, [], { weekEnd: '2026-07-26', today: '2026-07-27' }).allowed,
+);
+check(
+  'a voucher with no weekEnd is not judged',
+  voucherSendGate(reviewed, [], { weekEnd: null, today: '2026-07-29' }).allowed,
+);
+check('omitting the week argument keeps the old behaviour', voucherSendGate(reviewed, []).allowed);
+
+// The refusal must be the WEEK one, not a review one — an unreviewed day inside
+// a running week would otherwise mask the real reason with a misleading message.
+const midWeek = voucherSendGate(
+  [{ ...reviewed[0], status: null, approvedTotalCents: null }],
+  [{ receiptNo: 'RCP-000009', status: 'pending' }],
+  { weekEnd: WEEK_END, today: '2026-07-29' },
+);
+check(
+  'the reason given is the week, not the review',
+  !midWeek.allowed && midWeek.weekEndsOn === WEEK_END,
+);
+check(
+  '…and it does not also blame unreviewed days',
+  !midWeek.allowed && midWeek.unreviewedDays.length === 0 && midWeek.pendingReceipts.length === 0,
+);
+
+// klToday must read KL local, not UTC. 2026-08-02T17:00Z is already 01:00 on the
+// 3rd in KL — the case a UTC date gets wrong, and the one that would hold the
+// 02:00 Monday job for its first eight hours.
+check('klToday reads KL, not UTC', klToday(new Date('2026-08-02T17:00:00Z')) === '2026-08-03');
+check('klToday is stable mid-day', klToday(new Date('2026-08-03T00:30:00Z')) === '2026-08-03');
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED\n' : `\n${failures} CHECK(S) FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

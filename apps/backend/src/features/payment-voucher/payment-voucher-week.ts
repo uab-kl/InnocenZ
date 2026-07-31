@@ -38,3 +38,20 @@ export function previousCompleteWeek(ref: Date = new Date()): {
 
   return { weekStart: isoDate(lastMonday), weekEnd: isoDate(lastSunday) };
 }
+
+/**
+ * Today's calendar date in Kuala Lumpur, as a `YYYY-MM-DD` string.
+ *
+ * The same timezone trap as `previousCompleteWeek`, and it bites in the
+ * direction that matters most: a bare `new Date().toISOString()` is a UTC date,
+ * so between 00:00 and 08:00 KL local it still reads YESTERDAY. Any rule of the
+ * form "has this week finished?" would then answer *no* for the first eight
+ * hours of Monday — including 02:00, when the payout job runs — and would hold
+ * every voucher that job was about to issue.
+ *
+ * Comparable with `week_end` by plain string ordering, because ISO dates sort
+ * lexicographically.
+ */
+export function klToday(ref: Date = new Date()): string {
+  return isoDate(new Date(ref.getTime() + KL_OFFSET_MINUTES * 60_000));
+}

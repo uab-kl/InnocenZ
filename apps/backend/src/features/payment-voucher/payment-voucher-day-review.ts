@@ -100,6 +100,12 @@ export type SendGateResult =
       unreviewedDays: string[];
       /** Receipt numbers (RCP-000123) still waiting on the agency's review. */
       pendingReceipts: string[];
+      /**
+       * Set ONLY when the refusal is "this week has not finished yet", carrying
+       * the day it finishes. Optional so every existing consumer of this shape
+       * keeps compiling; a caller that ignores it still gets the right message.
+       */
+      weekEndsOn?: string;
     };
 
 /** Just enough of a receipt for the gate — its number, and where it sits. */
@@ -135,13 +141,49 @@ export type ReceiptGateRow = {
  * silence blocks. A receipt is born in a state, and only `manual` self-logs are
  * born pending — a scan does not wait on anybody.
  *
+ * THIRD RULE (31 Jul 2026): a week that has not FINISHED cannot be sent. This
+ * one is not about review at all — it is about arithmetic. Closing a week early
+ * declares a total for days that have not happened, and the rest of that week's
+ * earnings then have nowhere to go: the duplicate-week guard correctly refuses a
+ * second voucher, so a Thursday drink logged after a Wednesday send is simply
+ * lost. That is not hypothetical — a mid-week send is exactly how the live
+ * `PV-000002` / `PV-000004` pair came to exist, and every other fix in this area
+ * addressed the *consequence* rather than the act.
+ *
+ * It is checked FIRST and returns alone, because it is a different kind of
+ * refusal: listing unreviewed days beside it would be noise, since of course
+ * nothing has been reviewed on a week still being worked.
+ *
+ * A voucher with no `weekEnd` passes, for the same reason a voucher with no
+ * dated lines does — there is no window to be inside or outside of, and
+ * blocking on a missing value would be a deadlock rather than a control.
+ *
+ * `today` is injected rather than read here so the rule stays pure and the probe
+ * can walk a voucher across its own week-end without waiting a day. Callers pass
+ * `klToday()`; see its docstring for why a UTC date would break the Monday job.
+ *
  * Used by BOTH the HTTP send and the Monday payout job. A gate the scheduler
  * walks past every week is not a gate.
  */
 export function voucherSendGate(
   view: DayReviewView[],
   receipts: ReceiptGateRow[] = [],
+  week?: { weekEnd: string | null; today: string },
 ): SendGateResult {
+  if (week?.weekEnd && week.weekEnd >= week.today) {
+    return {
+      allowed: false,
+      message:
+        `This voucher cannot be sent yet — its week does not finish until ${week.weekEnd}. ` +
+        'Sending a week early declares a total for days that have not happened, and anything ' +
+        'earned in the rest of the week can no longer be added to it.',
+      heldDays: [],
+      unreviewedDays: [],
+      pendingReceipts: [],
+      weekEndsOn: week.weekEnd,
+    };
+  }
+
   const pendingReceipts = receipts.filter((r) => r.status === 'pending').map((r) => r.receiptNo);
   if (view.length === 0 && pendingReceipts.length === 0) return { allowed: true };
 
