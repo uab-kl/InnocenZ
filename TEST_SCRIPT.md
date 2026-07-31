@@ -404,6 +404,35 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **31 Jul 2026 — the line-date rule now REFUSES, not just reports.** It has detected since
+> `2cb70b8` (`line_date_contradicts_shift`) and nothing stopped the write. A line whose `ref` names
+> a shift assignment must be dated that assignment's shift date; the live fault was **wages dated
+> 2026-07-28 whose ref named the 23 Jul assignment**, and because both sit in the same week
+> `checkLineAgainstWeek` passed it. The line carried its own evidence and nothing compared the two.
+>
+> **Placed in the REPOSITORY, not the controller** — `assertLinesAgreeWithShifts(tx, lines)`, called
+> from all four insert paths (`create`, `update`'s delete-and-reinsert, `createReceiptWithLines`,
+> `addLine`). A controller-side check would have covered only the HTTP routes and left the **PR
+> self-log and the weekly generator writing unchecked money**. Same rule as
+> [[pv-money-classification]]: one rule, applied where every path meets. It runs **inside the
+> caller's transaction**, so the read cannot race a shift that moved, and a refusal rolls the whole
+> write back. On the `update` path it runs **before the delete** — that path wipes and re-inserts
+> every line, so a mid-way refusal would have left the voucher with no lines at all.
+>
+> **Two passes are deliberate:** a ref naming no assignment (a scanned drink, `ORD0389:0`) and a ref
+> naming an assignment we cannot find. Refusing an unknown id would turn a missing join into a
+> failed payroll write; `auditVoucher` already reports that case separately.
+>
+> HTTP owns only the status code: new `LineDateConflictError` → **400** via
+> `respondIfLineDateConflict` in the six line-writing handlers (`create`, `update`, `addMyLine`,
+> `addMyReceipt`, `editReceiptLine`, `updateMyLine`). Without it these fell to the catch-all 500,
+> and **a client told "internal server error" retries the same bad date forever.**
+>
+> Backend tsc **0**; `probe-pv-audit` **ALL PASS**. ⚠️ **NOT yet fired against the live DB** — proving
+> the refusal needs a real write attempt on the shared database, which leaves rows. The pure half of
+> the rule is proven; the repository half is reasoned, not observed.
+
+
 > **31 Jul 2026 — SL merged into main, and the merge itself found a landmine.** `SL` was 9 ahead /
 > 2 behind after jk's PR #40. Three conflicts, and only one was interesting.
 >

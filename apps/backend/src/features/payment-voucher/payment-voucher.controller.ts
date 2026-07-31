@@ -11,7 +11,24 @@ import {
 } from './payment-voucher-excel.js';
 import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
 import { buildVoucherPdf } from './payment-voucher-pdf.js';
-import { checkLineAgainstWeek } from './payment-voucher-audit.js';
+import { checkLineAgainstWeek, LineDateConflictError } from './payment-voucher-audit.js';
+
+/**
+ * Turns the repository's line-vs-shift refusal into a 400.
+ *
+ * The check itself lives in the repository so all four insert paths get it,
+ * including the weekly generator, which never touches a controller. What HTTP
+ * owns is only the status code: this is the caller's fault, not a fault, so it
+ * must not fall through to the 500 every catch block otherwise returns — a
+ * client told "internal server error" will retry the same bad date forever.
+ *
+ * Returns true when it has answered, so a catch block reads as one line.
+ */
+function respondIfLineDateConflict(res: Response, error: unknown): boolean {
+  if (!(error instanceof LineDateConflictError)) return false;
+  res.status(400).json({ success: false, message: error.reason, data: null });
+  return true;
+}
 import {
   allDaysReviewed,
   buildDayReviewView,
@@ -603,6 +620,7 @@ export class PaymentVoucherControllerClass {
       );
       res.status(201).json({ success: true, message: 'Payment voucher created', data: voucher });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.create] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -703,6 +721,7 @@ export class PaymentVoucherControllerClass {
       if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'Payment voucher updated', data: voucher });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.update] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -915,6 +934,7 @@ export class PaymentVoucherControllerClass {
       });
       res.status(201).json({ success: true, message: 'Logged', data: toReceiptLineDTO(line) });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.addMyLine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -1043,6 +1063,7 @@ export class PaymentVoucherControllerClass {
         },
       });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.addMyReceipt] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -1279,6 +1300,7 @@ export class PaymentVoucherControllerClass {
         },
       });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.editReceiptLine] Error:', error);
       return res
         .status(500)
@@ -1383,6 +1405,7 @@ export class PaymentVoucherControllerClass {
         .status(200)
         .json({ success: true, message: 'Updated', data: toReceiptLineDTO(line, statuses) });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.updateMyLine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }

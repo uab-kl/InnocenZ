@@ -252,6 +252,25 @@ export function checkLineAgainstShift(
   );
 }
 
+/**
+ * Thrown when a line about to be WRITTEN contradicts the shift its own ref names.
+ *
+ * A distinct class rather than a plain Error because it is the one failure here
+ * that is the caller's fault: every route that writes lines maps it to a 400,
+ * and anything else out of the repository stays a 500. `reason` is carried
+ * separately from `message` so the HTTP body matches the `checkLineAgainstWeek`
+ * refusals these same routes already return — the two halves of one rule must
+ * not drift into two error formats.
+ */
+export class LineDateConflictError extends Error {
+  readonly reason: string;
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'LineDateConflictError';
+    this.reason = reason;
+  }
+}
+
 /** Elapsed hours between two stamps, or null when they cannot be trusted. */
 function elapsedHours(from: Date | string | null, to: Date | string | null): number | null {
   if (!from || !to) return null;

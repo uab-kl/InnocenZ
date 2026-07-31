@@ -19,8 +19,15 @@ import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
+import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
+import { ShiftTable } from '@/features/shift/shift.model';
 import { prepareLine } from './payment-voucher-component';
-import { isSameOrderNo } from './payment-voucher-audit';
+import {
+  assignmentIdFromRef,
+  checkLineAgainstShift,
+  isSameOrderNo,
+  LineDateConflictError,
+} from './payment-voucher-audit';
 import {
   PaymentVoucherDayReviewTable,
   PaymentVoucherDayReviewType,
@@ -83,6 +90,57 @@ export class PaymentVoucherRepositoryClass {
    * rather than failing to create it: an unnumbered voucher can be repaired, an
    * uncreated one is somebody's missing pay.
    */
+  /**
+   * REFUSES a line whose date contradicts the shift its own `ref` names.
+   *
+   * This is the write-time half of the rule `auditVoucher` already reports as
+   * `line_date_contradicts_shift`. Until now the rule only DETECTED: the
+   * generator and `audit-live-vouchers` could tell you a voucher was wrong after
+   * it existed, and nothing stopped it being written. The live fault it exists
+   * to stop was wages dated 2026-07-28 whose ref named the 23 Jul assignment —
+   * both dates sit in the same week, so `checkLineAgainstWeek` passed it. The
+   * line carried its own evidence and nothing compared the two.
+   *
+   * It lives HERE, not in the controller, because all four insert paths
+   * (`create`, `update`'s delete-and-reinsert, `createReceiptWithLines`,
+   * `addLine`) funnel through `prepareLine`, and a controller-side check would
+   * cover only the HTTP ones — leaving the PR self-log and the weekly generator
+   * writing unchecked money. Same reasoning as the component classification in
+   * [[pv-money-classification]]: one rule, applied where every path meets.
+   *
+   * Runs INSIDE the caller's transaction so the read cannot see a shift that a
+   * concurrent write has since moved, and so a refusal rolls the whole write
+   * back rather than leaving a half-written voucher.
+   *
+   * Lines whose ref names no assignment (a scanned drink, `ORD0389:0`) and refs
+   * naming an assignment we cannot find are both passed deliberately — see
+   * `checkLineAgainstShift`. Refusing on an unknown id would turn a missing join
+   * into a failed payroll write.
+   */
+  private async assertLinesAgreeWithShifts(
+    tx: DbTransaction,
+    lines: ReadonlyArray<{ lineDate?: string | null; ref?: string | null }>,
+  ): Promise<void> {
+    const ids = [
+      ...new Set(
+        lines.map((line) => assignmentIdFromRef(line.ref)).filter((id): id is string => id !== null),
+      ),
+    ];
+    if (ids.length === 0) return;
+
+    const rows = await tx
+      .select({ id: ShiftAssignmentTable.id, shiftDate: ShiftTable.shiftDate })
+      .from(ShiftAssignmentTable)
+      .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+      .where(inArray(ShiftAssignmentTable.id, ids));
+
+    const shiftDateById = new Map(rows.map((row) => [row.id.toLowerCase(), row.shiftDate]));
+    for (const line of lines) {
+      const reason = checkLineAgainstShift(line.lineDate, line.ref, shiftDateById);
+      if (reason) throw new LineDateConflictError(reason);
+    }
+  }
+
   private async nextVoucherNo(tx: DbTransaction, bump: number): Promise<string> {
     // MAX of the numeric suffix, not count(*). The original used count()+bump to
     // avoid parsing the stored string, which is true and was still wrong: a count
@@ -143,6 +201,7 @@ export class PaymentVoucherRepositoryClass {
           );
           [voucher] = await tx.insert(PaymentVoucherTable).values(data).returning();
         }
+        await this.assertLinesAgreeWithShifts(tx, lines);
         const insertedLines =
           lines.length > 0
             ? await tx
@@ -210,6 +269,10 @@ export class PaymentVoucherRepositoryClass {
           }
           for (const [ref, count] of refCounts) if (count > 1) carryable.delete(ref);
 
+          // Before the delete, not after: this path wipes and re-inserts every
+          // line, so a refusal that landed mid-way would leave the voucher with
+          // no lines at all.
+          await this.assertLinesAgreeWithShifts(tx, lines);
           await tx.delete(PaymentVoucherLineTable).where(eq(PaymentVoucherLineTable.voucherId, id));
           const insertedLines =
             lines.length > 0
@@ -1005,6 +1068,7 @@ export class PaymentVoucherRepositoryClass {
           }
         }
         if (!inserted) throw new Error('Could not allocate a receipt number');
+        await this.assertLinesAgreeWithShifts(tx, lines);
         const existing = await this.getLines(receipt.voucherId, tx);
         const insertedLines = await tx
           .insert(PaymentVoucherLineTable)
@@ -1032,6 +1096,7 @@ export class PaymentVoucherRepositoryClass {
   async addLine(voucherId: string, line: LineInput): Promise<PaymentVoucherLineType> {
     try {
       return await db.transaction(async (tx) => {
+        await this.assertLinesAgreeWithShifts(tx, [line]);
         const existing = await this.getLines(voucherId, tx);
         const [inserted] = await tx
           .insert(PaymentVoucherLineTable)
