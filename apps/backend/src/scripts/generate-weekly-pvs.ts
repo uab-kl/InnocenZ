@@ -8,6 +8,12 @@
  * With no --week-start, it defaults to the most recently finished Mon–Sun week.
  * A scheduled cron would call the same PaymentVoucherGenerator.generateForWeek.
  */
+// FIRST, before composition-root: importing that builds the pg pool, and without
+// the env loaded it builds from unset credentials and dies at the first query
+// with "SASL: client password must be a string" — an error that names the auth
+// mechanism and not the actual cause. audit-live-vouchers.ts carries the same
+// line for the same reason.
+import '@/env.js';
 import { paymentVoucherGenerator } from '@/composition-root.js';
 // Shared with the scheduled job on purpose: this script used to compute the week
 // from UTC calendar fields, which lands on the wrong seven days when run near a

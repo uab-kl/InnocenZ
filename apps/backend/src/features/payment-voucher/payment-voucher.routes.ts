@@ -103,9 +103,23 @@ router.patch(
 // The agency's dispute queue and its decisions. '/disputes' MUST precede the
 // '/:id' route below — both are one segment, so registered the other way round
 // the queue would be read as a voucher whose id is the word "disputes".
+//
+// OWNER DECISION (31 Jul 2026) — may an admin resolve a dispute? YES, but as a
+// deliberate ESCALATION path, not as routine review. The steer is that the
+// agency handles payment vouchers, and it does: this is the only admin write
+// left on the PV surface, kept because agency-only leaves a PR with no recourse
+// when their agency goes quiet. Everything else an admin sees here is read-only.
+//
+// The gate below is the half that was a hole regardless of that decision.
+// Resolving a dispute settles MONEY, yet it inherited only the mount-level
+// requireRole('admin','agency') — so any agency member could resolve one, while
+// merely approving a day required agencyOwnerOrFinance. Same asymmetry the
+// create/update routes had. `guard()` lets admin bypass the sub-role check, so
+// this narrows agency members WITHOUT closing the escalation path above.
 router.get('/disputes', paymentVoucherController.listDisputes.bind(paymentVoucherController));
 router.post(
   '/disputes/:disputeId/resolve',
+  agencyOwnerOrFinance,
   paymentVoucherController.resolveDispute.bind(paymentVoucherController),
 );
 

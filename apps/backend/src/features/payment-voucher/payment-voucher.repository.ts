@@ -84,10 +84,25 @@ export class PaymentVoucherRepositoryClass {
    * uncreated one is somebody's missing pay.
    */
   private async nextVoucherNo(tx: DbTransaction, bump: number): Promise<string> {
+    // MAX of the numeric suffix, not count(*). The original used count()+bump to
+    // avoid parsing the stored string, which is true and was still wrong: a count
+    // RECYCLES numbers after any delete. Proven live on 31 Jul — deleting three
+    // vouchers dropped the count from 5 to 2, so the next voucher was issued
+    // `PV-000002`, the number a previously-`sent` document had held, and the one
+    // after that collided with the existing `PV-000003` outright.
+    //
+    // A recycled voucher number is worse than an ugly one: PV-000002 appears in
+    // an export a PR already downloaded, so two different documents answer to the
+    // same name and nothing in a support conversation can tell them apart.
+    //
+    // Non-conforming values (NULL, or anything with no digits) become NULL and are
+    // ignored by max(), so one malformed row cannot stall numbering forever.
     const [row] = await tx
-      .select({ total: sql<number>`count(*)::int` })
+      .select({
+        highest: sql<number>`coalesce(max(nullif(regexp_replace(${PaymentVoucherTable.voucherNo}, '\\D', '', 'g'), '')::int), 0)`,
+      })
       .from(PaymentVoucherTable);
-    return `PV-${String(Number(row?.total ?? 0) + bump).padStart(6, '0')}`;
+    return `PV-${String(Number(row?.highest ?? 0) + bump).padStart(6, '0')}`;
   }
 
   async create(
@@ -101,10 +116,21 @@ export class PaymentVoucherRepositoryClass {
         for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS && !voucher; bump++) {
           const voucherNo = await this.nextVoucherNo(tx, bump);
           try {
-            [voucher] = await tx
-              .insert(PaymentVoucherTable)
-              .values({ ...data, voucherNo })
-              .returning();
+            // SAVEPOINT per attempt (drizzle's nested transaction), and it is
+            // load-bearing rather than tidiness. In PostgreSQL a failed statement
+            // aborts the WHOLE transaction: without this, the first number clash
+            // poisoned `tx`, the next iteration's own SELECT came back 25P02
+            // "current transaction is aborted", and because 25P02 is not a
+            // voucher-no conflict it was rethrown — so the retry loop could never
+            // reach attempt 2 and every caller saw a confusing error about a
+            // COUNT query. Found live on 31 Jul when regenerating a wiped week.
+            voucher = await tx.transaction(async (sp) => {
+              const [row] = await sp
+                .insert(PaymentVoucherTable)
+                .values({ ...data, voucherNo })
+                .returning();
+              return row;
+            });
           } catch (conflict) {
             // Only a number clash is retryable; anything else is a real fault
             // and must not be swallowed into 19 more attempts.
@@ -627,11 +653,19 @@ export class PaymentVoucherRepositoryClass {
         for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS; bump++) {
           const voucherNo = await this.nextVoucherNo(tx, bump);
           try {
-            const [voucher] = await tx
-              .insert(PaymentVoucherTable)
-              .values({ ...values, voucherNo })
-              .returning();
-            return voucher;
+            // SAVEPOINT per attempt — see the identical note in create(). Without
+            // it the first number clash aborts the whole transaction and attempt 2
+            // dies on its own SELECT with 25P02, so the retry never happens. This
+            // is the PR self-log path, so the failure would surface as a PR unable
+            // to log a drink rather than as anything mentioning voucher numbers.
+            const voucher = await tx.transaction(async (sp) => {
+              const [row] = await sp
+                .insert(PaymentVoucherTable)
+                .values({ ...values, voucherNo })
+                .returning();
+              return row;
+            });
+            if (voucher) return voucher;
           } catch (conflict) {
             if (!isVoucherNoConflict(conflict)) throw conflict;
           }

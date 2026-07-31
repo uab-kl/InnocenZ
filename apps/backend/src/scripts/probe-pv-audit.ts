@@ -9,6 +9,8 @@ import {
   normaliseOrderNo,
   isSameOrderNo,
   checkLineAgainstWeek,
+  checkLineAgainstShift,
+  assignmentIdFromRef,
 } from '@/features/payment-voucher/payment-voucher-audit';
 import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance';
 
@@ -137,6 +139,45 @@ check('in-week date passes', checkLineAgainstWeek('2026-07-28', voucher) === nul
 check('out-of-week date is refused', checkLineAgainstWeek('2026-06-16', voucher) !== null);
 check('missing date is refused', checkLineAgainstWeek(null, voucher) !== null);
 check('week boundaries are inclusive', checkLineAgainstWeek('2026-08-02', voucher) === null);
+
+console.log('\n--- 6b. the line-date-vs-shift guard (the fictional-wage-day cause) ---');
+// The exact live fault: wages dated 28 Jul whose ref names the 23 Jul assignment.
+// Both dates sit inside the same week, which is why the week guard let it through.
+const ASSIGN = 'f5a1f227-a1ca-449d-8d02-10bddc05a1c9';
+const UNKNOWN_ASSIGN = '00000000-1111-2222-3333-444444444444';
+const shiftDates = new Map([[ASSIGN, '2026-07-23']]);
+check(
+  'the live fault is refused (28 Jul line, 23 Jul shift)',
+  checkLineAgainstShift('2026-07-28', `wages|checkin|700.00|${ASSIGN}|`, shiftDates) !== null,
+);
+check(
+  '...and the week guard alone would NOT have caught it',
+  checkLineAgainstWeek('2026-07-28', voucher) === null,
+);
+check(
+  'a line dated its own shift passes',
+  checkLineAgainstShift('2026-07-23', `wages|checkin|700.00|${ASSIGN}|`, shiftDates) === null,
+);
+check(
+  'the overtime ref (uuid + "-ot" suffix) is still matched',
+  checkLineAgainstShift('2026-07-28', `others|checkin|678.78|${ASSIGN}-ot|`, shiftDates) !== null,
+);
+check(
+  'a bare assignment id (the generator shape) is matched',
+  checkLineAgainstShift('2026-07-28', ASSIGN, shiftDates) !== null,
+);
+check(
+  'a scanned order ref names no shift and is not judged',
+  checkLineAgainstShift('2026-07-28', 'drinks|scan|30.00|ORD0389:0|drink', shiftDates) === null,
+);
+check(
+  'an unknown assignment id is not judged',
+  checkLineAgainstShift('2026-07-28', `wages|checkin|1.00|${UNKNOWN_ASSIGN}|`, shiftDates) === null,
+);
+check(
+  'a ref with no uuid yields no assignment',
+  assignmentIdFromRef('drinks|manual|150.00|') === null,
+);
 
 console.log('\n--- 7. balance: `amount` is the LINE TOTAL, quantity must not scale it ---');
 // The regression this guards: multiplying by quantity double-counted any

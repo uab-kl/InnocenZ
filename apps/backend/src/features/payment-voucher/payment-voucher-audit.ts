@@ -113,6 +113,8 @@ export type AuditFinding = {
     | 'wages_amount_mismatch'
     | 'completed_shift_without_wages'
     | 'line_outside_week'
+    /** The line's date disagrees with the shift its own `ref` names. */
+    | 'line_date_contradicts_shift'
     | 'duplicate_order_no'
     | 'overtime_exceeds_shift_window'
     | 'duplicate_voucher_for_week'
@@ -203,6 +205,53 @@ export function checkLineAgainstWeek(
   );
 }
 
+/**
+ * A shift-assignment id embedded in a line's `ref`, or null if there isn't one.
+ *
+ * `ref` is not one format, which is why this matches a UUID anywhere in the
+ * string rather than splitting on a separator:
+ *   - the generator writes a bare assignment id
+ *   - the self-log writes `wages|checkin|700.00|<uuid>|`
+ *   - overtime writes `others|checkin|678.78|<uuid>-ot|` (suffix after the uuid)
+ *   - a scanned drink writes `drinks|scan|30.00|ORD0389:0|drink` — no uuid, and
+ *     correctly yields null: an order slip is not a claim about a shift.
+ */
+export function assignmentIdFromRef(ref: string | null | undefined): string | null {
+  if (!ref) return null;
+  const match = ref.match(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/i);
+  return match ? match[0].toLowerCase() : null;
+}
+
+/**
+ * The check that was missing, and the direct cause of every fictional wage day:
+ * a line whose `ref` names a shift assignment MUST be dated that shift's date.
+ *
+ * `checkLineAgainstWeek` cannot catch this and never could — the live fault was
+ * wages dated 2026-07-28 whose ref named the 23 Jul assignment, and 28 Jul is
+ * inside the same week, so the window guard passed it. The line carried its own
+ * evidence and nothing compared the two.
+ *
+ * Returns null when fine, or the reason — shaped for a controller to 400.
+ * Unknown ids return null deliberately: a ref pointing at an assignment we were
+ * not given is a different fault (and one `auditVoucher` reports separately),
+ * not grounds to refuse a write on a record we cannot see.
+ */
+export function checkLineAgainstShift(
+  lineDate: string | null | undefined,
+  ref: string | null | undefined,
+  shiftDateById: ReadonlyMap<string, string>,
+): string | null {
+  const assignmentId = assignmentIdFromRef(ref);
+  if (!assignmentId) return null;
+  const shiftDate = shiftDateById.get(assignmentId);
+  if (!shiftDate) return null;
+  if (lineDate === shiftDate) return null;
+  return (
+    `Date ${lineDate ?? '(none)'} does not match the shift this line is for ` +
+    `(assignment ${assignmentId} is on ${shiftDate}).`
+  );
+}
+
 /** Elapsed hours between two stamps, or null when they cannot be trusted. */
 function elapsedHours(from: Date | string | null, to: Date | string | null): number | null {
   if (!from || !to) return null;
@@ -280,6 +329,27 @@ export function auditVoucher(input: {
     if (reason) {
       add({
         code: 'line_outside_week',
+        lineId: line.id,
+        lineDate: line.lineDate,
+        message: reason,
+      });
+    }
+  }
+
+  // --- a line's date agrees with the shift its own ref names -----------------
+  // Strictly narrower than the week check above and NOT implied by it: the live
+  // fault was wages dated 28 Jul whose ref named the 23 Jul assignment, which is
+  // in-week and so passed. Reported separately from wages_without_completed_shift
+  // because this names the CAUSE (the date contradicts the line's own evidence)
+  // rather than the symptom (a day with no completed shift).
+  const shiftDateById = new Map<string, string>(
+    sources.assignments.map((a) => [a.id.toLowerCase(), a.shiftDate]),
+  );
+  for (const line of lines) {
+    const reason = checkLineAgainstShift(line.lineDate, line.ref, shiftDateById);
+    if (reason) {
+      add({
+        code: 'line_date_contradicts_shift',
         lineId: line.id,
         lineDate: line.lineDate,
         message: reason,

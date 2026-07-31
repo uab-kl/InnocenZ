@@ -540,6 +540,13 @@
       "when": 1785480000000,
       "tag": "0076_overtime_approval_and_bank",
       "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1785500000000,
+      "tag": "0077_pv_one_per_pr_week",
+      "breakpoints": true
     }
   ]
 }
