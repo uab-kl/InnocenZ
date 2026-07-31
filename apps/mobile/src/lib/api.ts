@@ -479,6 +479,11 @@ export type ShiftAssignmentRecord = {
    * rejected leave request comes back prefixed '[Leave rejected] '.
    */
   notes: string | null;
+  /**
+   * MC / medical-certificate photos filed with a leave request
+   * (shift_assignment.leave_proof_photos jsonb). Null until leave is requested.
+   */
+  leaveProofPhotos: string[] | null;
   checkInAt: string | null;
   checkOutAt: string | null;
   /** Shift day as YYYY-MM-DD. */
@@ -766,15 +771,21 @@ export function declineOutletSwap(
  * for the agency) until the agency approves (excused, no penalty) or rejects
  * (back to 'assigned', notes prefixed '[Leave rejected] ').
  */
+/**
+ * File an MC/leave request. `proofPhotos` (the MC picture) is REQUIRED — the
+ * agency reviews it before excusing the shift, and the server rejects a
+ * request without one.
+ */
 export function requestMyShiftLeave(
   accessToken: string,
   assignmentId: string,
   reason: string,
+  proofPhotos: string[],
 ): Promise<ShiftAssignmentRecord> {
   return request<ShiftAssignmentRecord>(`/shift-assignment/mine/${assignmentId}/leave`, {
     method: 'POST',
     headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ reason }),
+    body: JSON.stringify({ reason, proofPhotos }),
   });
 }
 

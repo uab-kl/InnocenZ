@@ -27,6 +27,9 @@ import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 const PG_UNIQUE_VIOLATION = '23505';
+/** MC / leave proof bounds — the phone downscales, the server still enforces. */
+const MAX_LEAVE_PHOTOS = 5;
+const MAX_LEAVE_PHOTO_CHARS = 3_000_000;
 
 /**
  * The `pr.tier` enum maps to the outlet workspace's tier-rate labels. Ranked
@@ -523,6 +526,28 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Reason is too long (max 500)', data: null });
       }
 
+      // MC proof is REQUIRED: the agency approves an excused absence off this
+      // photo, so a request with no picture would ask it to decide blind.
+      // Validated here rather than trusted from the phone — same
+      // bounded-image-array contract as payment_voucher_line.proof_photos.
+      const rawPhotos = req.body?.proofPhotos;
+      if (!Array.isArray(rawPhotos) || rawPhotos.length === 0) {
+        return res.status(400).json({ success: false, message: 'An MC / leave photo is required', data: null });
+      }
+      if (rawPhotos.length > MAX_LEAVE_PHOTOS) {
+        return res.status(400).json({ success: false, message: `Too many photos (max ${MAX_LEAVE_PHOTOS})`, data: null });
+      }
+      const proofPhotos: string[] = [];
+      for (const photo of rawPhotos) {
+        if (typeof photo !== 'string' || !photo.startsWith('data:image/')) {
+          return res.status(400).json({ success: false, message: 'Each MC photo must be an image', data: null });
+        }
+        if (photo.length > MAX_LEAVE_PHOTO_CHARS) {
+          return res.status(400).json({ success: false, message: 'Photo is too large — retake it', data: null });
+        }
+        proofPhotos.push(photo);
+      }
+
       const id = paramId(req.params.id);
       const existing = await this.shiftAssignmentRepository.getById(id);
       if (!existing || existing.prId !== pr.id) {
@@ -548,6 +573,7 @@ export class ShiftAssignmentControllerClass {
       const assignment = await this.shiftAssignmentRepository.update(id, {
         status: 'leave_pending',
         notes: reason,
+        leaveProofPhotos: proofPhotos,
         updatedBy: getActor(req),
       });
       res.status(200).json({ success: true, message: 'Leave request sent — your agency will review it', data: assignment });

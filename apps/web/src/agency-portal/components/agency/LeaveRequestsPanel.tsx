@@ -63,6 +63,26 @@ export function LeaveRequestsPanel({ canAct }: { canAct: boolean }) {
 								&ldquo;{req.notes}&rdquo;
 							</p>
 						)}
+						{/* MC proof — click opens full size before you decide. */}
+						{(req.leaveProofPhotos ?? []).length > 0 && (
+							<div className="mt-2 flex flex-wrap gap-1.5">
+								{(req.leaveProofPhotos ?? []).map((src, i) => (
+									<a
+										key={`${req.id}-mc-${i}`}
+										href={src}
+										target="_blank"
+										rel="noreferrer"
+										title="Open MC full size"
+									>
+										<img
+											src={src}
+											alt={`MC document ${i + 1}`}
+											className="h-14 w-14 rounded-md border border-white/10 object-cover transition hover:brightness-110"
+										/>
+									</a>
+								))}
+							</div>
+						)}
 						{canAct && (
 							<div className="mt-2 flex gap-2">
 								<button
