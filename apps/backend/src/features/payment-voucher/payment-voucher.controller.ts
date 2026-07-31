@@ -11,6 +11,7 @@ import {
 } from './payment-voucher-excel.js';
 import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
 import { buildVoucherPdf } from './payment-voucher-pdf.js';
+import { checkLineAgainstWeek } from './payment-voucher-audit.js';
 import {
   allDaysReviewed,
   buildDayReviewView,
@@ -799,7 +800,18 @@ export class PaymentVoucherControllerClass {
 
       const { weekStart, weekEnd } = weekBounds();
       const actor = getActor(req);
-      const draft = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
+
+      // The date is the CLIENT's, so it is checked before anything is written.
+      // This is the guard whose absence put a 2026-06-16 drink on a week-of-27
+      // July voucher: the weekly generator's own query is date-bounded, so the
+      // only way a stray date reaches a voucher is through this path.
+      const lineDate = parsed.data.lineDate ?? todayIso();
+      const outOfWeek = checkLineAgainstWeek(lineDate, { weekStart, weekEnd });
+      if (outOfWeek) {
+        return res.status(400).json({ success: false, message: outOfWeek, data: null });
+      }
+
+      const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
         prId: pr.id,
         agencyId: pr.agencyId,
         prName: pr.name,
@@ -809,6 +821,13 @@ export class PaymentVoucherControllerClass {
         weekEnd,
         actor,
       });
+      // 409, not 500: a closed week is a legitimate state the PR has to be told
+      // about, not a fault. Refusing here is what stops a second voucher being
+      // minted for a week that has already been sent.
+      if (!draftResult.ok) {
+        return res.status(409).json({ success: false, message: draftResult.reason, data: null });
+      }
+      const draft = draftResult.voucher;
 
       // Check-out seals (wages, overtime) carry a dedupeRef so a repeated
       // check-out no-ops instead of double-paying.
@@ -821,7 +840,7 @@ export class PaymentVoucherControllerClass {
       }
 
       const line = await this.paymentVoucherRepository.addLine(draft.id, {
-        lineDate: parsed.data.lineDate ?? todayIso(),
+        lineDate,
         outlet: parsed.data.outlet,
         description: parsed.data.item,
         quantity: parsed.data.quantity ?? 1,
@@ -858,7 +877,19 @@ export class PaymentVoucherControllerClass {
 
       const { weekStart, weekEnd } = weekBounds();
       const actor = getActor(req);
-      const draft = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
+
+      // Same client-supplied date, same guard as addMyLine. Note this bounds the
+      // PAY LINES only: `receiptDate` below is the paper's own printed date and
+      // is deliberately free to differ — a receipt printed at 01:00 belongs to
+      // the shift that just ended, and re-dating it would be a lie about the
+      // paper rather than a fix.
+      const lineDate = parsed.data.lineDate ?? todayIso();
+      const outOfWeek = checkLineAgainstWeek(lineDate, { weekStart, weekEnd });
+      if (outOfWeek) {
+        return res.status(400).json({ success: false, message: outOfWeek, data: null });
+      }
+
+      const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
         prId: pr.id,
         agencyId: pr.agencyId,
         prName: pr.name,
@@ -868,6 +899,10 @@ export class PaymentVoucherControllerClass {
         weekEnd,
         actor,
       });
+      if (!draftResult.ok) {
+        return res.status(409).json({ success: false, message: draftResult.reason, data: null });
+      }
+      const draft = draftResult.voucher;
 
       // One paper receipt = one log PER SHIFT. Outlets reuse order numbers
       // across nights, so the same ORD number on a new shift is a new paper —
@@ -891,8 +926,8 @@ export class PaymentVoucherControllerClass {
       // The RECEIPT row records the paper's printed date/time verbatim
       // (receipt_date / receipt_time). The PAY LINES bucket on the day they
       // were logged, so the earning lands in the current shift/week PV even
-      // when the paper is dated differently.
-      const lineDate = parsed.data.lineDate ?? todayIso();
+      // when the paper is dated differently. `lineDate` is resolved and
+      // week-checked above, before the draft is touched.
       const { receipt, lines } = await this.paymentVoucherRepository.createReceiptWithLines(
         {
           voucherId: draft.id,

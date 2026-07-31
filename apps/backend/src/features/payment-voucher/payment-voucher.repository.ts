@@ -19,6 +19,7 @@ import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { prepareLine } from './payment-voucher-component';
+import { isSameOrderNo } from './payment-voucher-audit';
 import {
   PaymentVoucherDayReviewTable,
   PaymentVoucherDayReviewType,
@@ -524,7 +525,25 @@ export class PaymentVoucherRepositoryClass {
     }
   }
 
-  /** Finds the PR's current-week draft voucher, creating an empty one if absent. */
+  /**
+   * Finds the PR's current-week draft voucher, creating an empty one if absent.
+   *
+   * ⚠️ THIS IS WHERE THE DOUBLE VOUCHER CAME FROM. `getCurrentWeekDraft` filters
+   * `status = 'pending_review'`, so once a week's voucher had been SENT, the next
+   * self-log found nothing and cheerfully created a SECOND voucher for the very
+   * same PR and week. That is exactly how Victoria ended up with `PV-000002`
+   * (sent, RM1,581.48) and `PV-000004` (pending_review, RM703.60) — the same
+   * seven days billed twice, the wrong one already in the PR's hands.
+   *
+   * So the existence check is now made across EVERY status, and a week that has
+   * already left draft is REFUSED rather than restarted. Appending to the sent
+   * voucher instead would be worse: it would silently change a document the PR
+   * has already been given, and the agency has already signed off.
+   *
+   * Returns a discriminated result rather than throwing, so the caller has to
+   * decide what to tell the PR — a self-log lost to a swallowed exception is the
+   * failure mode this whole area is being repaired for.
+   */
   async getOrCreateCurrentWeekDraft(data: {
     prId: string;
     agencyId: string;
@@ -534,10 +553,28 @@ export class PaymentVoucherRepositoryClass {
     weekStart: string;
     weekEnd: string;
     actor: string;
-  }): Promise<PaymentVoucherType> {
+  }): Promise<
+    | { ok: true; voucher: PaymentVoucherType }
+    | { ok: false; reason: string; existing: PaymentVoucherType }
+  > {
     try {
       const existing = await this.getCurrentWeekDraft(data.prId, data.weekStart);
-      if (existing) return existing;
+      if (existing) return { ok: true, voucher: existing };
+
+      // No DRAFT — but is there a voucher for this week at all? Checked across
+      // every status precisely because the draft lookup cannot see one.
+      const closed = await this.getWeekVoucher(data.prId, data.weekStart);
+      if (closed) {
+        return {
+          ok: false,
+          existing: closed,
+          reason:
+            `This week's payment voucher (${closed.voucherNo ?? closed.id}) has already been ` +
+            `${closed.status === 'sent' ? 'sent to you' : closed.status} and can no longer be ` +
+            'added to. Ask your agency to reopen it or record this on next week\'s voucher.',
+        };
+      }
+
       const values = {
         agencyId: data.agencyId,
         prId: data.prId,
@@ -557,7 +594,7 @@ export class PaymentVoucherRepositoryClass {
       // Numbered here too. A PR's very first self-log creates this draft, and it
       // becomes the voucher they are eventually paid against — a voucher that
       // acquired its number later would have gone unnumbered for a whole week.
-      return await db.transaction(async (tx) => {
+      const created = await db.transaction(async (tx) => {
         for (let bump = 1; bump <= VOUCHER_NO_ATTEMPTS; bump++) {
           const voucherNo = await this.nextVoucherNo(tx, bump);
           try {
@@ -576,6 +613,7 @@ export class PaymentVoucherRepositoryClass {
         const [voucher] = await tx.insert(PaymentVoucherTable).values(values).returning();
         return voucher;
       });
+      return { ok: true, voucher: created };
     } catch (error) {
       logger.error('[PaymentVoucherRepository.getOrCreateCurrentWeekDraft] Error:', error);
       throw error;
@@ -839,6 +877,15 @@ export class PaymentVoucherRepositoryClass {
    * only a re-scan within the same shift is a duplicate. Callers without a
    * shift stamp keep the older voucher-wide check, which can only
    * over-refuse — never double-log.
+   *
+   * ⚠️ The match is made in JS on the OCR-folded key, NOT with `eq()` in SQL.
+   * An exact comparison is how one live voucher paid the same Lemon Drop twice:
+   * OCR read one paper as `ORD0389` and the other as `ORDO389` — letter O
+   * against digit zero — so the DB saw two different strings and logged both.
+   * `normaliseOrderNo` folds exactly the characters OCR confuses. The candidate
+   * set is one voucher (usually one shift) of receipts, so comparing in memory
+   * is cheap; expressing the fold in SQL would also make it unindexable without
+   * buying anything.
    */
   async findReceiptByOrderNo(
     voucherId: string,
@@ -846,20 +893,18 @@ export class PaymentVoucherRepositoryClass {
     shiftAssignmentId?: string | null,
   ): Promise<PaymentVoucherReceiptType | null> {
     try {
-      const [row] = await db
+      const candidates = await db
         .select()
         .from(PaymentVoucherReceiptTable)
         .where(
           and(
             eq(PaymentVoucherReceiptTable.voucherId, voucherId),
-            eq(PaymentVoucherReceiptTable.orderNo, orderNo),
             ...(shiftAssignmentId
               ? [eq(PaymentVoucherReceiptTable.shiftAssignmentId, shiftAssignmentId)]
               : []),
           ),
-        )
-        .limit(1);
-      return row ?? null;
+        );
+      return candidates.find((row) => isSameOrderNo(row.orderNo, orderNo)) ?? null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.findReceiptByOrderNo] Error:', error);
       throw error;
