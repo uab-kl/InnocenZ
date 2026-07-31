@@ -18,6 +18,17 @@ export const shiftAssignmentStatusValues = [
   'leave_approved',
 ] as const;
 export type ShiftAssignmentStatus = (typeof shiftAssignmentStatusValues)[number];
+
+/**
+ * The agency's decision on overtime worked past the scheduled end (0076).
+ *
+ * A plain varchar rather than a PG enum, and NULL rather than a default: NULL
+ * means "no overtime on this shift", which is the overwhelming majority of rows,
+ * and a defaulted enum would turn every ordinary shift into a pending decision
+ * somebody has to clear.
+ */
+export const overtimeStatusValues = ['pending', 'approved', 'rejected'] as const;
+export type OvertimeStatus = (typeof overtimeStatusValues)[number];
 export const shiftAssignmentStatusEnum = MainSchema.enum(
   'shift_assignment_status',
   shiftAssignmentStatusValues,
@@ -63,6 +74,28 @@ export const ShiftAssignmentTable = MainSchema.table(
     checkOutDistanceM: integer('check_out_distance_m'),
     checkOutAccuracyM: integer('check_out_accuracy_m'),
     notes: varchar('notes', { length: 500 }),
+    /**
+     * Overtime, and the agency's decision on it (migration 0076).
+     *
+     * ⚠️ `overtimeMinutes` is recorded AT CHECK-OUT, not derived later, because
+     * check-out CLAMPS `checkOutAt` to the shift's scheduled end — so by the time
+     * anyone reviews it, the stamps can no longer say how long the PR actually
+     * stayed. The clamp is deliberate (wages seal to the shift window); this is
+     * the evidence it would otherwise destroy.
+     *
+     * NULL status = no overtime on this shift, which is most rows. Overtime is
+     * NEVER auto-paid: it becomes money only when an agency owner/finance user
+     * approves it, at which point a `component='ot'` voucher line is written.
+     *
+     * `overtimeAmount` freezes what was APPROVED. Never recompute it from the
+     * current rate — that would silently restate a decision someone already made,
+     * the same rule as `payment_voucher_day_review.approved_total_cents`.
+     */
+    overtimeMinutes: integer('overtime_minutes'),
+    overtimeStatus: varchar('overtime_status', { length: 20 }).$type<OvertimeStatus>(),
+    overtimeAmount: numeric('overtime_amount', { precision: 12, scale: 2 }),
+    overtimeDecidedAt: timestamp('overtime_decided_at', { withTimezone: true }),
+    overtimeDecidedBy: varchar('overtime_decided_by'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

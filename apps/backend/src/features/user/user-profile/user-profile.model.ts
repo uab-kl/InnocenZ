@@ -40,6 +40,20 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   country: varchar('country', { length: 100 }),
   idPhotoFront: varchar('id_photo_front'),
   idPhotoBack: varchar('id_photo_back'),
+  /**
+   * Where this person is actually paid (migration 0076). Until these existed the
+   * payment voucher printed an em dash for both and no bank could act on it —
+   * the document was complete except for the parts that make it a payment.
+   *
+   * Here rather than on `pr` because a bank account is a fact about the PERSON,
+   * and this table already holds that class of fact (IC/passport, DOB, address).
+   * It is also the table already blanked for outlet callers, so a venue cannot
+   * see a worker's account number. ⚠️ **Any new sensitive column added here must
+   * be added to `redactIdentityDocsForOutlet` in the same commit** — that helper
+   * blanks a named list, so a field it does not name is a field it leaks.
+   */
+  bankName: varchar('bank_name', { length: 255 }),
+  bankAccountNo: varchar('bank_account_no', { length: 50 }),
   verificationStatus: verificationStatusEnum('verification_status').default('draft'),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -79,6 +93,8 @@ export type UserProfileResponse = {
   country: string | null;
   idPhotoFront: string | null;
   idPhotoBack: string | null;
+  bankName: string | null;
+  bankAccountNo: string | null;
   verificationStatus: VerificationStatus | null;
   verifiedAt: Date | null;
   createdAt: Date | null;
@@ -110,6 +126,8 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     country: null,
     idPhotoFront: null,
     idPhotoBack: null,
+    bankName: null,
+    bankAccountNo: null,
     verificationStatus: 'draft',
     verifiedAt: null,
     createdAt: null,
@@ -142,6 +160,8 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     country: profile.country,
     idPhotoFront: profile.idPhotoFront,
     idPhotoBack: profile.idPhotoBack,
+    bankName: profile.bankName,
+    bankAccountNo: profile.bankAccountNo,
     verificationStatus: profile.verificationStatus,
     verifiedAt: profile.verifiedAt,
     createdAt: profile.createdAt,
