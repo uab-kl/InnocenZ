@@ -46,6 +46,12 @@ export interface ShiftAssignment {
 	checkOutDistanceM?: number | null;
 	checkOutAccuracyM?: number | null;
 	notes: string | null;
+	/**
+	 * MC / medical-certificate photos the PR filed with a leave request
+	 * (shift_assignment.leave_proof_photos jsonb). Null on rows that never
+	 * requested leave; reviewed on the Approvals → MC/Leaves tab.
+	 */
+	leaveProofPhotos?: string[] | null;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;

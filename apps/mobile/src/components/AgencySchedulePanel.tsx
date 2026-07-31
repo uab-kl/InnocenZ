@@ -4,7 +4,7 @@
  * (checked out) / Scheduled|Pending (booked).
  */
 import React, { useMemo, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import {
   AlertTriangle,
@@ -12,6 +12,7 @@ import {
   CalendarDays,
   ChevronDown,
   Clock,
+  ImagePlus,
   MapPin,
   Shield,
 } from './icons';
@@ -36,6 +37,7 @@ import {
   ymdToIso,
 } from '../lib/demo-shifts';
 import { useActiveShift } from '../lib/active-shift';
+import { pickProofPhotos } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
 import {
   cancelMyShiftAssignment,
@@ -45,6 +47,9 @@ import {
 
 /** Backend marker a rejected MC/leave leaves on the assignment notes. */
 const LEAVE_REJECTED_PREFIX = '[Leave rejected]';
+
+/** Matches the server's cap on shift_assignment.leave_proof_photos. */
+const MAX_MC_PHOTOS = 5;
 
 const WEEKDAYS = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa'] as const;
 
@@ -106,6 +111,8 @@ export function AgencySchedulePanel() {
   // MC/Leave request (no penalty — waits for the agency to approve/reject).
   const [leaveTarget, setLeaveTarget] = useState<TimetableEntry | null>(null);
   const [leaveReason, setLeaveReason] = useState('');
+  // MC photo(s) attached to the request — required before Submit.
+  const [leavePhotos, setLeavePhotos] = useState<string[]>([]);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
 
@@ -113,6 +120,7 @@ export function AgencySchedulePanel() {
     // Demo rows have no live assignment to request leave on.
     if (!assignments.some((a) => a.id === entry.id)) return;
     setLeaveReason('');
+    setLeavePhotos([]);
     setLeaveError(null);
     setLeaveTarget(entry);
   };
@@ -124,6 +132,12 @@ export function AgencySchedulePanel() {
       setLeaveError('Please describe your MC / leave reason.');
       return;
     }
+    // The agency approves an excused absence off this picture — no photo, no
+    // request (the server enforces the same rule).
+    if (leavePhotos.length === 0) {
+      setLeaveError('Please attach a photo of your MC / supporting document.');
+      return;
+    }
     if (!token) {
       setLeaveError('Not signed in.');
       return;
@@ -131,8 +145,9 @@ export function AgencySchedulePanel() {
     setLeaveBusy(true);
     setLeaveError(null);
     try {
-      await requestMyShiftLeave(token, leaveTarget.id, reason);
+      await requestMyShiftLeave(token, leaveTarget.id, reason, leavePhotos);
       setLeaveTarget(null);
+      setLeavePhotos([]);
       void refresh();
     } catch (e) {
       setLeaveError(e instanceof Error ? e.message : 'Could not submit. Try again.');
@@ -585,6 +600,44 @@ export function AgencySchedulePanel() {
                   shift stays yours — cancelling instead follows the cancellation rules.
                 </Text>
               </View>
+              <Text style={styles.cancelFieldLabel}>MC / document photo (required)</Text>
+              <Pressable
+                style={styles.mcPickBtn}
+                onPress={() =>
+                  pickProofPhotos((urls) =>
+                    setLeavePhotos((prev) => [...prev, ...urls].slice(0, MAX_MC_PHOTOS)),
+                  )
+                }
+              >
+                <ImagePlus size={16} color={C.goldL} />
+                <Text style={styles.mcPickText}>
+                  {leavePhotos.length === 0 ? 'Snap / upload MC photo' : 'Add another photo'}
+                </Text>
+              </Pressable>
+              {leavePhotos.length > 0 && (
+                <View style={styles.mcThumbRow}>
+                  {leavePhotos.map((uri, i) => (
+                    <View key={`${i}-${uri.slice(-16)}`} style={styles.mcThumbWrap}>
+                      <Image source={{ uri }} style={styles.mcThumb} resizeMode="cover" />
+                      <Pressable
+                        style={styles.mcThumbX}
+                        hitSlop={6}
+                        onPress={() =>
+                          setLeavePhotos((prev) => prev.filter((_, idx) => idx !== i))
+                        }
+                      >
+                        <Text style={styles.mcThumbXText}>×</Text>
+                      </Pressable>
+                    </View>
+                  ))}
+                </View>
+              )}
+              {leavePhotos.length === 0 && (
+                <Text style={styles.mcHint}>
+                  Your agency reviews this photo before approving the leave.
+                </Text>
+              )}
+
               <Text style={styles.cancelFieldLabel}>Reason (required)</Text>
               <TextInput
                 value={leaveReason}
@@ -596,12 +649,19 @@ export function AgencySchedulePanel() {
               />
               {leaveError && <Text style={styles.cancelErrorText}>{leaveError}</Text>}
               <Pressable
-                style={[styles.leaveSubmitBtn, leaveBusy && { opacity: 0.6 }]}
+                style={[
+                  styles.leaveSubmitBtn,
+                  (leaveBusy || leavePhotos.length === 0) && { opacity: 0.6 },
+                ]}
                 onPress={confirmLeave}
                 disabled={leaveBusy}
               >
                 <Text style={styles.leaveSubmitText}>
-                  {leaveBusy ? 'Submitting…' : 'Submit leave request'}
+                  {leaveBusy
+                    ? 'Submitting…'
+                    : leavePhotos.length === 0
+                      ? 'Attach MC photo to submit'
+                      : 'Submit leave request'}
                 </Text>
               </Pressable>
               <Pressable style={styles.cancelBackBtn} onPress={() => setLeaveTarget(null)}>
@@ -852,6 +912,44 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   swatch: { width: 10, height: 10, borderRadius: 999 },
   legendLabel: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
+  mcPickBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: 'rgba(232,194,122,0.45)',
+    backgroundColor: 'rgba(232,194,122,0.06)',
+  },
+  mcPickText: { fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.goldL },
+  mcThumbRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  mcThumbWrap: { position: 'relative' },
+  mcThumb: {
+    width: 72,
+    height: 72,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: C.line2,
+    backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  mcThumbX: {
+    position: 'absolute',
+    top: -6,
+    right: -6,
+    width: 22,
+    height: 22,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: C.panel,
+    borderWidth: 1,
+    borderColor: C.line2,
+  },
+  mcThumbXText: { fontFamily: F.sora, fontSize: 13, fontWeight: '800', color: C.red },
+  mcHint: { marginTop: 6, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
   missedDate: { marginTop: 4, fontFamily: F.sora, fontSize: 13, fontWeight: '700', color: C.txt },
   missedRow: {
     marginTop: 10,

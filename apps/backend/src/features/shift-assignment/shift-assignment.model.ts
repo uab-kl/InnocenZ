@@ -1,4 +1,13 @@
-import { decimal, integer, numeric, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import {
+  decimal,
+  integer,
+  jsonb,
+  numeric,
+  timestamp,
+  unique,
+  uuid,
+  varchar,
+} from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { ShiftTable } from '@/features/shift/shift.model';
@@ -63,6 +72,13 @@ export const ShiftAssignmentTable = MainSchema.table(
     checkOutDistanceM: integer('check_out_distance_m'),
     checkOutAccuracyM: integer('check_out_accuracy_m'),
     notes: varchar('notes', { length: 500 }),
+    // MC / medical-certificate proof for a leave request — the photos the PR
+    // uploads with `leave_pending`, reviewed by the agency before it approves.
+    // Same array-of-images shape as PaymentVoucherLineTable.proofPhotos, and
+    // lives on THIS row (not a new table) because the proof only ever means
+    // anything for this one assignment's leave request. Null on every row that
+    // never filed leave; survives approve/reject so the decision stays audited.
+    leaveProofPhotos: jsonb('leave_proof_photos').$type<string[]>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

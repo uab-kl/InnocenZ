@@ -950,6 +950,7 @@ function LeaveDetailPanel({
 	onReject: () => void;
 }) {
 	const prName = req.prName ?? "PR";
+	const mcPhotos = req.leaveProofPhotos ?? [];
 
 	return (
 		<>
@@ -984,6 +985,35 @@ function LeaveDetailPanel({
 						Reject
 					</button>
 				</div>
+			</div>
+
+			{/* The MC picture the PR uploaded — the thing this decision rests on,
+			    so it sits above the fold, full width. Click opens the original. */}
+			<div className="iz-approvals-info-card mb-3">
+				<h3 className="iz-approvals-info-title">MC / supporting document</h3>
+				{mcPhotos.length === 0 ? (
+					<p className="iz-tiny iz-muted2">
+						No photo attached — this request predates the MC-photo rule.
+					</p>
+				) : (
+					<div className="mt-2 flex flex-wrap gap-2">
+						{mcPhotos.map((src, i) => (
+							<a
+								key={`${req.id}-mc-${i}`}
+								href={src}
+								target="_blank"
+								rel="noreferrer"
+								title="Open full size"
+							>
+								<img
+									src={src}
+									alt={`MC document ${i + 1} from ${prName}`}
+									className="h-32 w-32 rounded-lg border border-white/10 object-cover transition hover:brightness-110"
+								/>
+							</a>
+						))}
+					</div>
+				)}
 			</div>
 
 			<div className="iz-approvals-info-grid">
