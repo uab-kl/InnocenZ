@@ -1038,11 +1038,36 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /**
+   * The next receipt number: MAX of the numeric suffix, never count(*).
+   *
+   * Identical reasoning to `nextVoucherNo`, and identically wrong here until
+   * 2 Aug 2026. A count RECYCLES numbers after any delete, and receipts ARE
+   * deletable — `removeMyReceipt` exists precisely so a PR can drop a bad
+   * self-log — so deleting two receipts made the next scan reissue a number an
+   * earlier receipt already held. That matters more for receipts than for
+   * vouchers: `RCP-…` is what the refusal messages quote back at the PR
+   * ("RCP-000007 has already been reviewed by the agency"), so two rows
+   * answering to one name make those messages point at the wrong receipt.
+   *
+   * Non-conforming values (NULL, or anything with no digits) become NULL and
+   * are ignored by max(), so one malformed row cannot stall numbering forever.
+   */
+  private async nextReceiptNo(tx: DbTransaction, bump: number): Promise<string> {
+    const [row] = await tx
+      .select({
+        highest: sql<number>`coalesce(max(nullif(regexp_replace(${PaymentVoucherReceiptTable.receiptNo}, '\\D', '', 'g'), '')::int), 0)`,
+      })
+      .from(PaymentVoucherReceiptTable);
+    return `RCP-${String(Number(row?.highest ?? 0) + bump).padStart(6, '0')}`;
+  }
+
+  /**
    * Persists ONE whole receipt: the payment_voucher_receipt row (with its
-   * DATABASE-GENERATED unique running number RCP-000001, RCP-000002, … based
-   * on how many receipts exist) plus one payment_voucher_line per item,
-   * FK-linked via receipt_id — all in a single transaction, then the voucher
-   * totals recompute. Retries the running number on a rare unique collision.
+   * DATABASE-GENERATED unique running number RCP-000001, RCP-000002, … taken
+   * from the HIGHEST number issued so far) plus one payment_voucher_line per
+   * item, FK-linked via receipt_id — all in a single transaction, then the
+   * voucher totals recompute. Retries the running number on a rare unique
+   * collision.
    */
   async createReceiptWithLines(
     receipt: ReceiptInput,
@@ -1050,18 +1075,29 @@ export class PaymentVoucherRepositoryClass {
   ): Promise<{ receipt: PaymentVoucherReceiptType; lines: PaymentVoucherLineType[] }> {
     try {
       return await db.transaction(async (tx) => {
-        const [{ total }] = await tx
-          .select({ total: sql<number>`count(*)` })
-          .from(PaymentVoucherReceiptTable);
         let inserted: PaymentVoucherReceiptType | null = null;
         for (let bump = 1; bump <= 5 && !inserted; bump++) {
-          const receiptNo = `RCP-${String(Number(total) + bump).padStart(6, '0')}`;
+          // Re-read inside the loop, not once above it: on a genuine collision
+          // the highest number may have moved, and a value read before the
+          // first attempt would simply collide again at every bump.
+          const receiptNo = await this.nextReceiptNo(tx, bump);
           try {
-            const [row] = await tx
-              .insert(PaymentVoucherReceiptTable)
-              .values({ ...receipt, receiptNo })
-              .returning();
-            inserted = row;
+            // SAVEPOINT per attempt (drizzle's nested transaction), and it is
+            // load-bearing rather than tidiness — the same defect that was fixed
+            // on the voucher allocator on 31 Jul and left standing here. In
+            // PostgreSQL a failed statement aborts the WHOLE transaction, so
+            // without this the first clash poisons `tx`, the next iteration's
+            // own SELECT comes back 25P02 "current transaction is aborted", and
+            // because 25P02 is not a unique violation it is rethrown — the loop
+            // could never reach attempt 2, and the caller saw an error about a
+            // SELECT rather than about a number clash.
+            inserted = await tx.transaction(async (sp) => {
+              const [row] = await sp
+                .insert(PaymentVoucherReceiptTable)
+                .values({ ...receipt, receiptNo })
+                .returning();
+              return row;
+            });
           } catch (e) {
             const pgCode = (e as { code?: string }).code;
             if (pgCode !== '23505' || bump === 5) throw e; // not a dupe, or out of retries
