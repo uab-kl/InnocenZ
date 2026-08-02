@@ -19,6 +19,7 @@ import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
 import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
 import { generateSecret, otpauthUri, verifyTotp } from '@/util/totp.js';
+import { suspendedOrgBlock } from '@/features/auth/org-status.js';
 
 export class AuthControllerClass {
   constructor(
@@ -82,6 +83,20 @@ export class AuthControllerClass {
           success: false,
           message: 'User is not active',
         });
+      }
+
+      // An ACTIVE user inside a SUSPENDED organisation was still getting in,
+      // because `user.status` was the only status any auth path consulted — so
+      // suspending an agency stopped nothing, and its owner and finance staff
+      // kept full access, including raising payment vouchers.
+      //
+      // Checked after `user.status` and BEFORE the password compare, matching
+      // the lockout below: a refusal that only fires once the password is right
+      // would confirm the password to anyone who tried it.
+      const orgBlock = await suspendedOrgBlock(user.id);
+      if (orgBlock) {
+        logger.warn(`[AuthController.login] Blocked by organisation status: ${user.id}`);
+        return res.status(401).json({ success: false, message: orgBlock });
       }
 
       // Lockout, checked BEFORE the password compare. Checking after would let
