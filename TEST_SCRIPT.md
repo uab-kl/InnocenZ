@@ -277,13 +277,20 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X39 | **🔴 THE AGENCY DOOR WAS STILL OPEN, AND THE Σ=0 CHECK WAS CRYING WOLF.** Three fixes, all found by re-deriving rather than from any backlog. **(1) X37 closed only half the hole — my own unfinished business.** `POST /payment-voucher/` (agency create) had **no `existsForPrWeek` check and no line-date validation**, so an agency could still raise a **second voucher for the same PR and week** and still write lines outside it. That is the likelier origin of the live duplicate: `PV-000002` was created and set `sent` mid-week from the agency side, not by a self-log. Both guards now applied to `create`, and the week guard to `update`'s line rewrite — the latter checked against the week the voucher **will have** (`data.weekStart ?? existing.weekStart`), so moving a voucher's week and its lines in one call is not judged against the old window. Both are conditional because `prId`/`weekStart`/`weekEnd` are **optional on the schema** (hence the nullable columns); absent facts cannot be checked and fall through to `auditVoucher`. **(2) `checkVoucherBalance` disagreed with the whole rest of the system about what `amount` means** — it computed `Σ(amount × quantity)`, but `amount` is the **LINE TOTAL**: `recomputeTotals` sums it bare, the Excel/PDF exports print `amount / quantity` as *Unit Price* and `amount` as *Amount*, and the PR self-log posts `amount: commission` with quantity already inside `sales`. So the first multi-item receipt would have made a **healthy** voucher log *"DO NOT BALANCE — hold payment and review"* on the Monday job. **Latent only because every line in the live DB carries quantity 1** — proven by the X38 run, which reported zero `[balance]` findings across all 4 vouchers. Quantity is still validated (a non-integer is a real fault) but no longer scales money, and deliberately **no longer `return`s** — skipping the line would have dropped its amount and turned a quantity complaint into a phantom money discrepancy. **(3) The money-WRITE routes were the least-gated on the router:** `POST /` and `PUT /:id` sat behind `requireRole('admin','agency')` while merely *reviewing* a day or receipt required `agencyOwnerOrFinance` — the endpoints that author money were looser than the ones that check it. Now gated to match, **callers verified first** (`updatePaymentVoucher` has ONE consumer, `use-agency-pvs.ts`, reached only from screens already gated on `agencyCan('raisePv')`; `createPaymentVoucher` has **no frontend caller at all**), so it is a no-op for every legitimate caller. ⚠️ Also **corrected a stale memory entry**: the "agency can DELETE a PV" hole is **already fixed** — `canDelete = requireRole('admin')`. Probe now **26/26**, backend tsc **0**. ⚠️ **Proven at unit level, not fired over HTTP.** | **PR ← Agency** | `payment-voucher.controller` (create/update) · `payment-voucher-balance.ts` · `payment-voucher.routes.ts` | unit probe + code re-derivation | ✅ Verified (code) |
 | X40 | **🟠 MIGRATION 0077 — THE SCHEMA FOR "OT CAN NEVER BECOME MONEY" AND "NOBODY CAN ACTUALLY BE PAID" — WRITTEN, NOT YET APPLIED AND NOT YET WIRED.** One migration for both gaps **deliberately**: the DB is shared with jk, so two windows is twice the risk for no benefit, and everything here is **additive + nullable** (`ADD COLUMN IF NOT EXISTS`, no drops, no backfill, no NOT NULL) so nothing in jk's lane can break on it. **(1) `shift_assignment`** gains `overtime_minutes`, `overtime_status` (varchar, **not** an enum — NULL means *no overtime on this shift*, which is nearly every row, and a defaulted enum would turn every ordinary shift into a pending decision somebody must clear), `overtime_amount`, `overtime_decided_at`, `overtime_decided_by`. ⚠️ **`overtime_minutes` is recorded AT CHECK-OUT, not derived later, because the clamp DESTROYS the evidence** — `check_out_at` is overwritten with the scheduled end, so how long the PR actually stayed survives nowhere but the notification payload. The clamp stays on purpose (wages seal to the shift window; overtime is a separate decision, not a longer day). `overtime_amount` freezes what was **APPROVED** — never recompute from the current rate, the same rule as `payment_voucher_day_review.approved_total_cents`. **(2) `user_profile`** gains `bank_name` / `bank_account_no` — on the PERSON, not on `pr`, because `user_profile` already holds that class of fact (IC/passport, DOB, address) **and is already the table `redactIdentityDocsForOutlet` blanks**, so a venue cannot see a worker's account number for the cost of one line; on `pr` it would have opened to every screen that reads the roster. **Both new fields were added to `IDENTITY_DOC_FIELDS` in the same commit** — that helper blanks what it *names*, so a sensitive field it does not name is a sensitive field handed to every outlet caller. **(3) `agency`** gains `address_line_1` / `address_line_2`, in the same two-line shape `outlet` already uses. ⚠️ **This row was written by the auto-commit hook mid-slice and its "not done" list is now STALE — corrected here rather than deleted, because a doc that quietly rewrites itself teaches you not to trust it.** Since it was written: the migration **HAS been applied and verified live** (all **9/9** columns present on `103.224.93.109:6543/innocenz-test`, checked by `information_schema` **and** by calling `getExportBundle`, which is the read the exports actually make — `drizzle-kit` saying "applied" is not proof, per [[green-signals-that-lie]]); **`agency.model.ts` now HAS the two address columns**, so nothing will propose dropping them; `getExportBundle` joins `user_profile` and carries all four fields; the **workbook, print HTML and PDF all read them** through a shared `joinAddress()`; and `PATCH /user/:id` (self-edit only) accepts `bankName`/`bankAccountNo` with an empty string clearing to NULL. Backend tsc **0**. ✅ **The bank/address half is COMPLETE.** ⚠️ **The OVERTIME half is still schema-only:** the five columns exist and nothing writes or reads them — no check-out recording of `overtime_minutes`, **no approve/reject endpoint, no agency screen, and no `component='ot'` line written on approval.** See §9. | **PR ← Agency** | `0077_…sql` · `shift-assignment.model.ts` · `user-profile.model.ts` · `agency.model.ts` · `util/user-profile-image.ts` · `payment-voucher.repository` · `-excel` · `-pdf` · `user.controller` | live DB (columns verified) | ✅ Bank/address verified · ⚠️ OT schema only |
 | X41 | **🔴 THE OUT-OF-WEEK HOLE HAD A THIRD DOOR — `PATCH /payment-voucher/mine/lines/:lineId`.** Found by walking **every** write of `line_date` rather than trusting that the create paths were the whole story. X37 guarded `addMyLine`/`addMyReceipt` and X39 guarded the agency `create`/`update` — but `updateMyLine` set `patch.lineDate` from the request **with no check at all**, so a PR could log a line with a perfectly valid in-week date, have it accepted, then **PATCH it to `2026-06-16`**. Two steps to the same place, and guarding only the create paths *looked* complete while closing nothing. Now checked against **the voucher the line belongs to** rather than the current week — an old draft stays editable while `pending_review`, and judging it against today's week would refuse a legitimate correction to last week's own voucher. ✅ **Also confirmed clean by the same sweep:** the agency receipt-line edit (`PATCH …/receipts/:receiptId/lines/:lineId`) does not touch `line_date` at all, so it needed nothing; `toLineRows` is fed only by the two already-guarded agency paths. **All four writers of `line_date` are now guarded.** Backend tsc **0**, probe **26/26**. ⚠️ Unit-level only, not fired over HTTP. | **PR ← Agency** | `payment-voucher.controller` (`updateMyLine`) | code sweep of every `line_date` write | ✅ Verified (code) |
+| X42 | **🟢 OVERTIME CAN NOW BE DECIDED, AND AN APPROVAL BECOMES MONEY — the last BUILD in the PV backlog (`5e0dbee`).** `PATCH /shift-assignment/:id/overtime` (approve \| reject, **`agencyOwnerOrFinance`** — the PV attestation grant, because `agencyOwnerOnly` would shut finance out of a payroll decision) + `GET /shift-assignment/overtime/pending` (the worklist, **priced server-side** so the screen cannot derive a second figure) + migration **0079** (`overtime_decided`, **applied and verified live** — the enum now holds 10 values). Minutes have been recorded since `7e47502` and have blocked the send since `882afd7`; **the gate had no exit, so no overtime was ever payable.** **🔴 TWO FAULTS THE BUILD EXPOSED, neither of them the endpoint. (1) The audit would have flagged EVERY legitimate approval.** `maxOvertimeCents` budgeted overtime from `check_in_at`/`check_out_at` — but **check-out CLAMPS `check_out_at` to the scheduled end**, so a shift that genuinely ran two hours late leaves stamps describing one that finished on time, and the budget derives to **0.00**. Correctly-approved money would have come back as *"exceeds what the attendance stamps can justify"*. The **recorded minutes are the evidence the clamp destroys** — that is why check-out writes them — and they are now the primary source, with the stamp derivation kept as a fallback **only** for rows carrying no decision, so pre-0077 vouchers do not start failing. ⚠️ **The pure-function fix reached nothing until both `auditVoucher` call sites started SELECTing the two columns** (`payment-voucher-generator.ts`, `audit-live-vouchers.ts`). A `pending` or `rejected` claim budgets **0** on purpose: OT becomes money at approval and at no other moment. **(2) A double-clicked Approve paid twice.** Read the row → see `pending` → check no line exists → insert: two concurrent requests pass every step, because **a read-then-check is not a lock**. The decision is now CLAIMED with `UPDATE … WHERE overtime_status = 'pending'` (`claimOvertimeDecision`), making the transition itself the mutex; the loser gets 409. The stamp therefore lands **before** the money, and a failed voucher write **reverts the claim** (`revertOvertimeDecision`) — *an approval with no line is recoverable, a line paid twice is not*; without the revert the claim would vanish from the worklist and the send gate would close the week straight over it. Also: **the line lands on the week the shift was WORKED** (owner's rule, via the new pure `weekOfDate()`); **the `-ot` dedupe ref is written, never the `component` column**, since classification is derived in the repository; the line is **dated the shift's own date** so it *passes* `assertLinesAgreeWithShifts`; and **a commission-only PR's unpriceable claim is a 409, not a 0.00 line**. New module `payment-voucher/overtime-line.ts`. Backend tsc **0** (230 files, confirmed by `--listFiles`), probe **83/83** (was 44), `audit-live-vouchers` still **3 of 3 OK**. ⚠️ **NOT fired over HTTP — no approve, reject or 409 has reached a running server.** | **PR ← Agency** | `shift-assignment.controller` (`decideOvertime`, `listPendingOvertime`) · `shift-assignment.repository` · `overtime-line.ts` · `payment-voucher-audit.ts` · `payment-voucher-week.ts` · `0079_…sql` | unit probe 83/83 + live enum + live audit | ✅ Verified (code + DB) · ⚠️ not fired over HTTP |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ NEXT SESSION STARTS HERE (logged 2 Aug 2026 — HEAD `f616891`, tree clean, 7 unpushed)
+### ▶ NEXT SESSION STARTS HERE (logged 2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
+
+> **THE PV BACKLOG HAS NO BUILD LEFT ON THE BACKEND.** `5e0dbee` closed the overtime endpoint, which
+> was the last one. What remains below is **one frontend screen (item 2), two under-wired admin/PR
+> surfaces (items 3–4), and EVIDENCE (item 5)** — five refusals that are unit-proven and have never
+> been sent to a running server. ⚠️ **Migration 0079 is applied to the SHARED DB**; a teammate pulling
+> this branch does not need to re-run it, and it is idempotent if they do.
 
 > Nothing is pushed; **that is the owner's call — ask, do not assume.** Backend `tsc` **0**,
 > `probe-pv-audit.ts` **44/44**. ⚠️ **Run both from `apps/backend`, never the repo root** — a root
@@ -297,21 +304,26 @@ shipped (`882afd7`): **an undecided claim blocks its own week's send.** **There 
 reopen-a-sent-voucher path to build** — a week cannot close with a claim outstanding. Do not design
 an amend flow.
 
-1. **`PATCH /shift-assignment/:id/overtime` (approve/reject) + the `component='ot'` line** — the next
-   job, and everything it needs exists: columns from migration **0077**; minutes recorded at
-   check-out (`7e47502`, `features/shift-assignment/overtime.ts`); the gate read
-   `listPendingOvertimeForPrWeek`; approver **`agencyOwnerOrFinance`**; rate **`daily ÷ 6 × 1.5`**.
-   ⚠️ **`component='ot'` is derived in the REPOSITORY** from a `ref` whose dedupe field **ends
-   `-ot`** (`payment-voucher-component.ts`) — write the ref in that shape rather than setting the
-   column. ⚠️ **The line must pass `assertLinesAgreeWithShifts`, so date it the shift's own
-   `shift_date`**, not the approval date.
-2. **The agency screen** for deciding OT.
+1. ✅ **`PATCH /shift-assignment/:id/overtime` + the `component='ot'` line — DONE `5e0dbee`.** Also
+   `GET /shift-assignment/overtime/pending` (the agency worklist), migration **0079**
+   (`overtime_decided`, applied + verified live), and two fixes the build exposed that nothing else
+   would have: **the clamped stamps made the audit flag every legitimate approval**, and **a
+   double-clicked Approve paid twice**. Full detail in §10. **This was the last BUILD in the PV
+   backlog.**
+2. **The agency screen** for deciding OT — **now the top item, and it is pure frontend.** Both
+   endpoints exist and are priced server-side (`GET …/overtime/pending` returns `amount`, `week`,
+   `prName`, `slot`, `outletName` per claim). ⚠️ **Do not let the screen derive its own figure** —
+   if it did, an agency could approve a number that differs from the line the approval writes.
 3. **Admin PV page is under-wired** — `resolveDispute` and the `receipts[]` evidence array come back
    from the API and are never rendered.
 4. **Receipt numbers on every self-log / OCR scan**, plus a PR detail button.
-5. **Fire the refusals LIVE** — the 400 (bad line date), the 409 (closed week), the mid-week send and
-   the OT gate. **All four of this session's refusals are unit-proven only**, and a refusal's real
-   risk is refusing something legitimate, which a pure probe cannot rule out.
+5. **Fire the refusals LIVE** — the 400 (bad line date), the 409 (closed week), the mid-week send, the
+   OT send gate, and now the **three new OT refusals**: already-decided, the concurrent-claim loser,
+   and the unpriceable commission-only claim. **All of them are unit-proven only**, and a refusal's
+   real risk is refusing something LEGITIMATE, which a pure probe cannot rule out. The cheapest live
+   proof of the whole overtime lane, in order: check out a shift late on the PR app → the claim shows
+   on `GET /shift-assignment/overtime/pending` → approve it → the `ot` line appears on that week's
+   voucher → `audit-live-vouchers.ts` still reports OK → the week can now be sent.
 
 
 ### 🔴🔴 P0 — THE MONEY IS WRONG (found 31 Jul, §8 X36 — do before any demo or pilot)
@@ -435,6 +447,69 @@ an amend flow.
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **2 Aug 2026 — THE OVERTIME BUILD IS DONE (`5e0dbee`). The last build in the PV backlog is closed:
+> an agency can now decide an overtime claim, and an approval becomes a real `component='ot'` line on
+> the voucher of the week the shift was WORKED.**
+>
+> `PATCH /shift-assignment/:id/overtime` (approve | reject, **owner + finance** — `agencyOwnerOrFinance`,
+> the same grant as the rest of the PV attestation surface, because shutting finance out of a payroll
+> decision would be wrong) plus `GET /shift-assignment/overtime/pending`, the agency worklist. Minutes
+> have been recorded at check-out since `7e47502` and have blocked their own week's send since
+> `882afd7`; **until now the gate had no exit, so no overtime was ever payable.**
+>
+> **🔴 THE TRAP, and the reason this was more than an endpoint: the audit would have flagged every
+> legitimate approval.** `maxOvertimeCents` derived its overtime budget from `check_in_at`/
+> `check_out_at` — but **check-out CLAMPS `check_out_at` to the scheduled end**, so a shift that
+> genuinely ran two hours late leaves stamps describing a shift that finished exactly on time, and the
+> derived budget is **0.00**. Every approved OT line would have come back as
+> `overtime_exceeds_shift_window` — *"money the stamps cannot justify"* — on money that was correctly
+> approved. **The RECORDED minutes are the evidence the clamp destroys; that is why check-out writes
+> them, and they are now the primary source.** The stamp derivation stays as a fallback **only** for
+> rows with no decision at all, so vouchers written before migration 0077 do not suddenly start
+> failing. ⚠️ **Both `auditVoucher` call sites had to start SELECTing `overtime_minutes` +
+> `overtime_status`** (`payment-voucher-generator.ts`, `audit-live-vouchers.ts`) — the fix in the pure
+> function alone would have reached neither.
+>
+> **A pending or rejected claim budgets 0 on purpose:** overtime becomes money at approval and at no
+> other moment, so a line that exists before the agency decided is exactly the fault worth reporting.
+>
+> **🔴 A double-clicked Approve would have paid twice.** Read the row, see `pending`, check no line
+> exists, insert one — two concurrent requests both pass every one of those steps. **A read-then-check
+> is not a lock.** The decision is now CLAIMED atomically with
+> `UPDATE … WHERE overtime_status = 'pending'` (`claimOvertimeDecision`), so the transition itself is
+> the mutex and the loser gets a 409. The decision is therefore stamped **before** the money is
+> written, and a failed voucher write **reverts the claim** (`revertOvertimeDecision`) — *an approval
+> that left no line is recoverable; a line paid twice is not.* Without the revert, a failed write would
+> leave overtime marked approved, absent from the worklist, with the send gate letting the week close
+> straight over it.
+>
+> Three smaller rules that are not obvious from the diff:
+> - **The line lands on the week the shift was WORKED**, not the approval week — the owner's rule, via
+>   the new `weekOfDate()` in `payment-voucher-week.ts` (pure string maths on `shift_date`; parsing a
+>   calendar date into an instant only creates a chance to shift it eight hours). This is coherent
+>   **only** because a pending claim already blocks its own week, so the closed-week **409 is a
+>   backstop, not a routine path**.
+> - **The `-ot` dedupe ref is written, never the `component` column** — classification is derived in
+>   the REPOSITORY (`componentFromRef`), so writing the column directly would work today and drift the
+>   first time another path forgot. And the line is **dated the shift's own date**, so it *passes*
+>   `assertLinesAgreeWithShifts` instead of being refused by it. New module
+>   **`payment-voucher/overtime-line.ts`** owns both facts in one place.
+> - **A commission-only PR has no daily wage, so overtime cannot be priced — that is a 409, not a
+>   0.00 line.** *"We paid you nothing for those hours"* is a different and worse claim than *"this
+>   cannot be priced"*.
+>
+> **Migration 0079** adds `overtime_decided` so the PR is told **either way**. Rejection is the case it
+> exists for: an approved claim shows up as money, a rejected one shows up as **nothing at all**, and
+> from where the PR is standing an absence is indistinguishable from a bug. **Applied to the shared DB
+> and verified live** — the enum now carries 10 values. ⚠️ The live journal's max `when` was 0078's
+> `1785500000000`, so 0079 at `1785510000000` applies; **0077 sits below the max and is skipped, which
+> is correct — its five columns were confirmed present on the live DB before running anything.**
+>
+> **Backend tsc 0** (230 files, confirmed via `--listFiles` — a bare root run reports a meaningless 0).
+> **`probe-pv-audit.ts` 83/83, up from 44**, including the clamp trap in both directions and the
+> week-placement maths. **`audit-live-vouchers.ts` still 3 of 3 OK** after the audit change.
+> ⚠️ **NOT fired over HTTP.** No approve, no reject, no 409 has been sent to a running server.
 
 > **31 Jul 2026 — undecided OVERTIME now blocks its own week from being sent, and this is the OWNER'S
 > PAYOUT DECISION in code.** Asked where OT money goes when its week has already been sent, the owner
