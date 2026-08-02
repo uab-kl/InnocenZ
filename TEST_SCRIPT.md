@@ -285,6 +285,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X46 | **🔴 RETRACTED — THIS FINDING IS WRONG, see X48. Kept, not deleted, because a doc that quietly rewrites itself teaches you not to trust it.** ~~`apps/mobile`'s TYPECHECK COMPILES NO APP CODE — the "mobile tsc 0" baseline has been meaningless the whole time.~~ Found while trying to verify a one-field mobile change. `npx tsc -p tsconfig.json --noEmit --listFiles` from `apps/mobile` lists **1378 files and ZERO from `apps/mobile/src`** — the program is nothing but `lib.*.d.ts` and `node_modules`. Cause: `apps/mobile/tsconfig.json` sets no **`jsx`** option, so `.tsx` never enters the program despite `include: ["src/**/*"]`. **Every "mobile tsc 0" in this document and in memory is therefore a statement about an empty program, not about the app.** ⚠️ **This is the sharpest instance of [[green-signals-that-lie]] yet, and worse than the ones before it:** the earlier cases were a green signal that did not cover a *specific* risk (a live DB, a runtime path); this one is a green signal covering **no code at all**, reported confidently across many sessions. It also explains why `apps/mobile` has never caught a type error — not discipline, no compilation. ⚠️ **NOT FIXED HERE, deliberately:** adding `"jsx": "react-native"` will surface an unknown number of pre-existing errors in a lane jk also touches, and turning that on mid-slice would mix a config change with a feature change and give a false impression of what this slice verified. **Filed as the next job with a known first step.** Consequence for THIS slice: the mobile half of X47 is proven by **reading only** — no tool has compiled it. | **PR** | `apps/mobile/tsconfig.json` (unchanged) | `tsc --listFiles` (0 src files of 1378) | 🔴 Confirmed, NOT fixed |
 | X47 | **🟢 A PR CAN NOW SEE THEIR RECEIPT'S NUMBER — and the "add a detail button" backlog item was already built.** Re-derivation first, per the standing rule: the §9 item read *"every self-log/OCR emits a receipt number, plus a PR detail button"*. **Both halves were already true** — `createReceiptWithLines` has always allocated `RCP-…`, and `PvDetailScreen` has had a per-receipt **Details** link opening a modal since it was written. **The REAL gap was narrower and sharper: the modal could show everything about a receipt EXCEPT its number**, because `/payment-voucher/mine*` never joined the receipt table — so the server's own refusals (*"RCP-000007 has already been reviewed by the agency"*) **named an identifier the PR had no way to see anywhere in their app.** Closed by widening the map the PR reads already build: `receiptStatusMap` → **`receiptInfoMap`**, whose value goes from a bare status to `{status, receiptNo}`, and `PrReceiptLineDTO` gains **`receiptNo: string | null`**. ⚠️ **The number rides on the LINE and is NOT copied into a column** — `payment_voucher_line` has no `receipt_no` and must not grow one; the fact belongs to the receipt (rule 3). The modal prints **`RCP-000007 · Self-logged`** — number first because that is what the agency and the server both call it, origin kept beside it because a number alone does not say whether it was scanned or self-logged, and a line with **no** receipt behind it still shows the origin alone rather than a blank. Backend tsc **0**, probe **83/83**. ⚠️ **The mobile half is READ-VERIFIED ONLY — see X46: nothing in `apps/mobile` is compiled by its own typecheck.** Not fired live either. | **PR ← Agency** | `payment-voucher.controller` (`PrReceiptLineDTO`, `receiptInfoMap`, `toReceiptLineDTO`) · `mobile/lib/api.ts` · `mobile/screens/PvDetailScreen.tsx` | backend tsc 0 + probe 83/83; mobile by reading | ✅ Backend verified · ⚠️ mobile unverified |
 | X49 | **🟢 THE OVERTIME REFUSALS ARE FIRED LIVE — 5 passed, 0 failed, and NOTHING was written to the shared DB.** First time any part of the overtime lane has reached a running server. New kept probe `probe-overtime-refusals.ts` (admin login from `DEFAULT_ADMIN_*`, never printed), run against a real backend on 7777 talking to `103.224.93.109:6543`. **The design point: every case here is a REFUSAL, and a refusal writes nothing** — so the whole lane could be proven over HTTP without putting one row on a database jk shares. Fired: **400** `agencyId is required` (admin with no agency — it refuses rather than silently returning an empty list, which would read as "no overtime" to a platform admin); **200** worklist for a real agency; **400** `decision must be 'approve' or 'reject'`; **404** for an absent assignment; and **409** `There is no overtime claim on this shift` — the arm proving "no claim" is distinguished from a malformed request, which is what lets a screen decide whether to re-fetch. ⚠️ **ONE CHECK IS REPORTED AS `SKIP`, NOT `PASS`, AND THAT IS THE POINT:** *"every claim arrives priced and week-stamped"* ran over **zero** pending claims. A check that goes green on an empty set asserts nothing, and calling it a pass would be the exact green-signal-that-lies failure that produced the retracted X46 hours earlier — so the probe now prints SKIP and says why. **The pricing rule therefore remains UNPROVEN live.** ⚠️ **A successful APPROVAL was deliberately NOT fired** — it writes real money onto a real voucher on the shared DB, and that is the owner's call, not mine. Also still unproven live: the concurrent-claim loser (needs two simultaneous requests against a genuine pending claim) and the unpriceable commission-only 409. Backend tsc **0**. ⚠️ The backend's first DB connection **timed out** (`ETIMEDOUT 103.224.93.109:6543`) and recovered on retry — the remote DB is not reliably reachable from this machine, so a failed probe run is worth re-running before it is believed. | **Agency ← PR** | `src/scripts/probe-overtime-refusals.ts` (new, non-mutating, KEPT) | live HTTP, 5 passed / 0 failed / 1 skipped | ✅ Fired live |
+| X50 | **🟢 A SUCCESSFUL OVERTIME APPROVAL IS FIRED LIVE — money reached a real voucher, and the double-click guard refused on real approved data.** Owner asked for it explicitly on 2 Aug. New script `fire-overtime-approval.ts` (**the only WRITING script in `src/scripts/`** — everything named `probe-*` refuses to). It writes twice because a success cannot be reached otherwise: a PENDING claim (what a late check-out records), then the approval over HTTP. **Bounded on purpose: only a `pending_review` voucher is eligible** (a `sent`/`signed` document a PR has already seen must never be appended to), one assignment per run, refuses if the row already carries a decision, **rolls the claim back if the approval fails** (an approval with no line is recoverable; a held week nobody can see is not), and prints cleanup SQL. **RESULT: `f5a1f227…` (shift 23 Jul, 60 min) → `PATCH …/overtime` 200, "Overtime approved — RM175.00 added to the voucher for 2026-07-20"** — and **RM175.00 is exactly `700 ÷ 6 × 1.5`, predicted before the run**, so the rate rule is now confirmed against live money rather than a unit test. `PV-000002` went **700.00 → 875.00, 1 line → 2**, and `audit-live-vouchers.ts` still reports **all 3 vouchers reconcile**. ✅ **The double-click guard then REFUSED on that same real row: 409 "This overtime claim was already approved"** — the first live proof that `claimOvertimeDecision`'s `UPDATE … WHERE overtime_status='pending'` mutex works on data, not just in theory. 🔴 **MY ERROR, RECORDED BECAUSE IT IS THE USEFUL PART: re-running the script created a SECOND approval instead of retesting the first.** It selects on `overtime_status IS NULL`, so the row it just decided is no longer eligible and it silently moved to the next one — `9d897070…` (shift 29 Jul, RM150.00 = `600 ÷ 6 × 1.5`). **Idempotent per CLAIM, not per RUN**, and I read "re-run it" as "repeat what it just did". A `--report` mode (read-only inventory of every OT decision) and a `--retry` mode (re-approve an already-approved claim, which writes nothing) now exist so the state is one command instead of an inference. **TWO approvals therefore sit on the shared DB, both on `pending_review` vouchers, both reconciling.** Cleanup SQL for both is in §9 — GateGuard blocks `DELETE` from a script, so it is the owner's to run. Backend tsc **0**. | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts` (new, WRITES) · live `PATCH /shift-assignment/:id/overtime` | live HTTP 200 + audit 3/3 OK + live 409 | ✅ Fired live |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 
 ---
@@ -351,6 +352,30 @@ an amend flow.
    on `GET /shift-assignment/overtime/pending` → approve it → the `ot` line appears on that week's
    voucher → `audit-live-vouchers.ts` still reports OK → the week can now be sent.
 
+
+### 🟠 ROWS I LEFT ON THE SHARED DB — 2 Aug, the owner's to keep or clear (§8 X50)
+
+Two **approved overtime** decisions, each with a real `ot` money line. Both sit on `pending_review`
+vouchers and both reconcile (`audit-live-vouchers.ts` → 3/3 OK), so nothing is broken by keeping
+them — but **only the first was asked for.** The second came from a re-run of
+`fire-overtime-approval.ts`, which selects on `overtime_status IS NULL` and so moved to the next
+eligible assignment instead of retesting the first.
+
+| assignment | shift | minutes | amount | voucher |
+|---|---|---|---|---|
+| `f5a1f227-a1ca-449d-8d02-10bddc05a1c9` | 2026-07-23 | 60 | RM 175.00 | PV-000002 (700→875) |
+| `9d897070-20e6-41ce-a45a-9f66ffdeeb40` | 2026-07-29 | 60 | RM 150.00 | week 2026-07-27 |
+
+- [ ] **Decide: keep them as live demo data, or clear them.** GateGuard blocks `DELETE` from a
+  script, so this is the owner's to run. Per assignment id:
+  ```sql
+  DELETE FROM main.payment_voucher_line WHERE ref LIKE '%<assignment-id>-ot';
+  UPDATE main.shift_assignment SET overtime_minutes = NULL, overtime_status = NULL,
+    overtime_amount = NULL, overtime_decided_at = NULL, overtime_decided_by = NULL
+    WHERE id = '<assignment-id>';
+  ```
+  Then re-run `audit-live-vouchers.ts` to confirm the totals settle. Check the current state any
+  time with `fire-overtime-approval.ts --report` (read-only).
 
 ### 🔴🔴 P0 — THE MONEY IS WRONG (found 31 Jul, §8 X36 — do before any demo or pilot)
 
@@ -473,6 +498,33 @@ an amend flow.
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **2 Aug 2026 (seventh slice) — OVERTIME BECAME MONEY ON A REAL VOUCHER (§8 X50).** Owner asked
+> for a successful approval explicitly.
+>
+> `f5a1f227…` (shift 23 Jul, 60 minutes) → `PATCH …/overtime` **200**, *"Overtime approved —
+> RM175.00 added to the voucher for 2026-07-20"*. **RM175.00 is exactly `700 ÷ 6 × 1.5`, predicted
+> before the run** — so the rate rule is confirmed against live money, not a unit test. PV-000002
+> went **700.00 → 875.00**, one line to two, and `audit-live-vouchers.ts` still reports all three
+> vouchers reconciling. The line landed on the week the shift was **worked**, as decided 31 Jul.
+>
+> Then the guard was tested on that same real row: **409 "This overtime claim was already
+> approved"** — first live proof that `claimOvertimeDecision`'s
+> `UPDATE … WHERE overtime_status='pending'` mutex holds on data rather than in theory. That is the
+> fix for "a double-clicked Approve paid twice", and it now has evidence.
+>
+> 🔴 **My error, recorded because it is the useful part: re-running the script created a SECOND
+> approval instead of retesting the first.** It selects on `overtime_status IS NULL`, so the row it
+> had just decided was no longer eligible and it moved silently to the next one — `9d897070…`, shift
+> 29 Jul, RM150.00 (`600 ÷ 6 × 1.5`). **The script is idempotent per CLAIM, not per RUN**, and I read
+> "run it again" as "repeat what it just did". It now has a read-only `--report` (inventory every
+> overtime decision) and a `--retry` (re-approve an already-approved claim, writing nothing), so the
+> state is one command rather than an inference. **A writing script needs a way to ask what it
+> already did.**
+>
+> **Two approvals are therefore live on the shared DB**, both on `pending_review` vouchers, both
+> reconciling. Only the first was asked for. The table and the cleanup SQL are in §9 — GateGuard
+> blocks `DELETE` from a script, so clearing them is the owner's call.
 
 > **2 Aug 2026 (sixth slice) — THE OVERTIME REFUSALS ARE FIRED LIVE (§8 X49). 5 passed, 0 failed,
 > and not one row written to the shared database.**
