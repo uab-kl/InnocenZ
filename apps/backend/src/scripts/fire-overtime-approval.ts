@@ -34,6 +34,18 @@ const BASE = process.env.PROBE_API_URL ?? 'http://localhost:7777/api/v1';
 const EMAIL = process.env.DEFAULT_ADMIN_EMAIL;
 const PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD;
 const DRY_RUN = process.argv.includes('--dry-run');
+/**
+ * Prove the OTHER arm instead: a commission-only assignment has no sealed daily
+ * wage, so there is no hourly rate to derive and the approval must refuse rather
+ * than write a 0.00 line — "we paid you nothing for those hours" is a different
+ * and worse claim than "this cannot be priced".
+ *
+ * Deliberately NOT restricted to `completed`, unlike the success path. The
+ * endpoint's unpriceable 409 is raised before the week lookup and before the
+ * claim is taken, and it never consults the assignment's status — so narrowing
+ * by status here would only shrink the pool of rows that can demonstrate it.
+ */
+const WANT_UNPRICED = process.argv.includes('--unpriced');
 
 /** A plausible one-hour overrun — not a figure anyone would mistake for real payroll. */
 const OVERTIME_MINUTES = 60;
@@ -116,28 +128,60 @@ async function main() {
       prId: ShiftAssignmentTable.prId,
       agencyId: ShiftAssignmentTable.agencyId,
       payAmount: ShiftAssignmentTable.payAmount,
+      status: ShiftAssignmentTable.status,
       shiftDate: ShiftTable.shiftDate,
     })
     .from(ShiftAssignmentTable)
     .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
     .where(
-      and(
-        eq(ShiftAssignmentTable.status, 'completed'),
-        isNull(ShiftAssignmentTable.overtimeStatus),
-      ),
+      WANT_UNPRICED
+        ? isNull(ShiftAssignmentTable.overtimeStatus)
+        : and(
+            eq(ShiftAssignmentTable.status, 'completed'),
+            isNull(ShiftAssignmentTable.overtimeStatus),
+          ),
     )
     .orderBy(asc(ShiftTable.shiftDate), asc(ShiftAssignmentTable.id));
 
-  console.log(`  ${candidates.length} completed assignment(s) carry no overtime decision.`);
+  console.log(
+    `  ${candidates.length} ${WANT_UNPRICED ? '' : 'completed '}assignment(s) carry no overtime decision.`,
+  );
 
   // Eligible = PRICED (an unpriced one is the 409 arm, not the success arm) AND
   // its week's voucher is a DRAFT. Appending to a sent or signed document is
   // what the send gate exists to prevent, so it must not happen here either.
   let chosen: (typeof candidates)[number] | null = null;
   let voucher: { id: string; voucherNo: string | null; status: string } | null = null;
+  /** Non-null only when --unpriced had to borrow a priced row; the value to put back. */
+  let borrowedWage: string | null = null;
 
-  for (const c of candidates) {
-    if (!c.payAmount || Number(c.payAmount) <= 0) continue;
+  if (WANT_UNPRICED) {
+    // Prefer a genuinely unpriced row. On this database there is none — every
+    // assignment carries a positive wage — so the fallback BORROWS one: blank
+    // its wage, fire, and restore it in a `finally` so a crash still puts it
+    // back. Least-consequential status first, and `completed` is excluded
+    // outright: those rows are what vouchers are built from, and a wage that
+    // blinks out mid-generation would be a real payroll fault, not a test.
+    const RANK: Record<string, number> = { cancelled: 0, no_show: 1, assigned: 2, confirmed: 3 };
+    const natural = candidates.find((c) => !c.payAmount || Number(c.payAmount) <= 0);
+    const borrowed = candidates
+      .filter((c) => c.status !== 'completed' && RANK[c.status] !== undefined)
+      .sort((a, b) => RANK[a.status] - RANK[b.status])[0];
+    chosen = natural ?? borrowed ?? null;
+    borrowedWage = natural ? null : (chosen?.payAmount ?? null);
+    voucher = { id: '(no voucher needed — the 409 precedes the week lookup)', voucherNo: null, status: 'n/a' };
+    if (chosen) {
+      console.log(
+        natural
+          ? `  found a genuinely unpriced assignment.`
+          : `  no unpriced assignment exists — BORROWING ${chosen.assignmentId} (${chosen.status}, RM ${chosen.payAmount}), wage restored afterwards.`,
+      );
+    }
+  }
+
+  for (const c of WANT_UNPRICED ? [] : candidates) {
+    const priced = !!c.payAmount && Number(c.payAmount) > 0;
+    if (!priced) continue;
     const week = weekOfDate(c.shiftDate);
     if (!week) continue;
     const [v] = await db
@@ -182,6 +226,17 @@ async function main() {
 
   // Guarded on `overtime_status IS NULL` so a concurrent run or a re-run cannot
   // overwrite a decision somebody else made in between.
+  if (borrowedWage !== null) {
+    await db
+      .update(ShiftAssignmentTable)
+      // '0.00', not NULL: the column is NOT NULL, and zero reaches the same
+      // guard anyway — `amountCents <= 0` is what the endpoint actually tests,
+      // because a commission-only PR's wage is absent in VALUE, not in schema.
+      .set({ payAmount: '0.00' })
+      .where(eq(ShiftAssignmentTable.id, chosen.assignmentId));
+    console.log(`\n  [borrow] wage set to 0.00 (was RM ${borrowedWage}) — restored in a finally block.`);
+  }
+
   const claimed = await db
     .update(ShiftAssignmentTable)
     .set({ overtimeMinutes: OVERTIME_MINUTES, overtimeStatus: 'pending' })
@@ -195,27 +250,55 @@ async function main() {
   if (claimed.length === 0) throw new Error('The row gained an overtime decision underneath us.');
   console.log(`\n  [write 1] recorded a PENDING claim of ${OVERTIME_MINUTES} minutes.`);
 
-  const token = await login();
-  const res = await fetch(`${BASE}/shift-assignment/${chosen.assignmentId}/overtime`, {
-    method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify({ decision: 'approve' }),
-  });
-  const body = (await res.json()) as {
+  let res: Response;
+  let body: {
     message?: string;
     data?: { voucherId?: string; amount?: string; week?: { weekStart: string } };
   };
+  try {
+    const token = await login();
+    res = await fetch(`${BASE}/shift-assignment/${chosen.assignmentId}/overtime`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ decision: 'approve' }),
+    });
+    body = (await res.json()) as typeof body;
+  } finally {
+    // Unconditional: a borrowed wage goes back even if the request threw. An
+    // assignment left with no wage is a payroll fault, not a failed test.
+    if (borrowedWage !== null) {
+      await db
+        .update(ShiftAssignmentTable)
+        .set({ payAmount: borrowedWage })
+        .where(eq(ShiftAssignmentTable.id, chosen.assignmentId));
+      console.log(`  [borrow] wage restored to RM ${borrowedWage}.`);
+    }
+  }
 
   console.log(`\n  [write 2] PATCH …/overtime → ${res.status}`);
   console.log(`            "${body.message}"`);
 
   if (res.status !== 200) {
-    console.log('\n  The approval did NOT succeed. Rolling the claim back so the week is not held.');
+    // The rollback matters more in the --unpriced case than anywhere else: the
+    // pending claim this script had to create in order to reach the endpoint
+    // would otherwise sit there BLOCKING that PR's week from ever being sent,
+    // over a claim that can never be priced and so can never be approved.
+    console.log('\n  Rolling the claim back so the week is not left held.');
     await db
       .update(ShiftAssignmentTable)
       .set({ overtimeMinutes: null, overtimeStatus: null })
       .where(eq(ShiftAssignmentTable.id, chosen.assignmentId));
-    console.log('  Claim removed. Nothing durable was written.\n');
+    console.log('  Claim removed. Nothing durable was written.');
+
+    if (WANT_UNPRICED) {
+      const ok = res.status === 409 && /cannot be priced/i.test(body.message ?? '');
+      console.log(
+        ok
+          ? '\n  PASS — an unpriceable claim is a 409, not a 0.00 line on someone’s payslip.\n'
+          : `\n  FAIL — expected 409 "…cannot be priced", got ${res.status}.\n`,
+      );
+      process.exit(ok ? 0 : 1);
+    }
     process.exit(1);
   }
 
