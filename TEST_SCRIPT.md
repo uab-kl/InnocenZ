@@ -384,6 +384,87 @@ npx tsx --tsconfig tsconfig.json src/scripts/fire-overtime-approval.ts --clear=<
 Drop `--dry-run` to apply. Then confirm with `--report` (read-only inventory of every overtime
 decision) and `audit-live-vouchers.ts`. Both are safe to re-run at any time.
 
+### ▶️ jk's 31 Jul session hand-off — SUPERSEDED AS A "START HERE", KEPT FOR ITS ITEMS
+
+> ⚠️ **Arrived on the 2 Aug merge of `main` into `SL` (jk's `b6c5786`, PR #41). The block above is the
+> current start point; this one is kept because items 1–4 below and the whole P0-CLIENT list that
+> follows are still open work, not because it should be read first.** Its stated tree state is now
+> stale: branch `jk` **has** been pushed and merged — it is in `main` as `80efdc7`.
+
+**Working tree state when this was written:** the notification-crash fix (6 files under `apps/web`)
+and these `TEST_SCRIPT.md` edits are **saved on disk but NOT committed**. `git status` will show them.
+The merge commit `37d55f1` IS committed; branch `jk` has **not been pushed**, so GitHub still shows
+the old "Can't automatically merge".
+
+**Do these in order — 1 and 2 are unfinished business from this session, not new work:**
+
+1. **Open the owner's progress artifact — it was NEVER read.**
+   <https://claude.ai/code/artifact/0c66cb02-c767-4a67-ad9d-617e399983b3>
+   Everything in P0-CLIENT below came from the owner's typed message and screenshots only. Fold in
+   whatever the artifact adds, then delete this line so nobody re-reads it twice.
+2. **Verify the crash fix in a real browser.** It is type-checked and DB-evidenced but **never seen
+   rendering**. Boot with `pnpm dev:web` from the repo ROOT (**not** the `web-3001` launch config —
+   that path 500s on missing `apps/web/.env`), sign in as agency, confirm `/en/agency` loads and the
+   bell lists the `pr_rating_low` + `shift_cover_needed` rows. **Then promote §9 item 6 to §8.**
+3. **Get the four DECISIONS OWED answered** (§9 item 5) — platform fee 2.5% vs 5% first, it is money.
+   Nothing in P0-CLIENT can be scoped until "supervised pilot vs general client use" is answered.
+4. **Then, and only then, start P0-CLIENT item 1** (the PV functions).
+
+⚠️ **Standing rule that this session proved twice: RE-DERIVE, don't trust an entry.** §9 F claimed the
+agency dispute queue was missing when it was built; and `pv_day_review_pending` was described as a
+teammate's kind when it is our own X16 work whose producer has vanished from `apps/`.
+
+### 🔴🔴 P0-CLIENT — the owner's own list, to let a CLIENT use the app (given 31 Jul)
+
+> **Source: the owner, verbatim, not derived from code.** Everything else in §9 is something the
+> code told us; this block is what the *business* says must be true before a client touches it.
+> Where an item already has a technical entry below, it is cross-referenced rather than restated —
+> **do not treat the two as separate work.**
+> Progress artifact: <https://claude.ai/code/artifact/0c66cb02-c767-4a67-ad9d-617e399983b3>
+
+**The three headline blockers:**
+
+- [ ] **🔴🔴 Fix the PV functions — "right now most are not working"** — the owner's blunt assessment, and it outranks the per-fault entries in P0/P0b below. Those fix *correctness* (the money is wrong); this one is about *function* (the buttons do not do things). ⚠️ **Re-derive before building** — walk the PV screens one control at a time and record which are dead, rather than assuming the P0 list already covers them.
+- [ ] **🔴🔴 Registration end to end** — **WhatsApp OTP is completely untouched** (nothing built), and **Agency + Outlet registration both need checking** — they exist but have not been walked through. ⚠️ **WhatsApp Business verification is an EXTERNAL process measured in weeks** — if there is a client date, it starts now regardless of code readiness. Same for an **email provider API key**: no mailer exists at all today, so there are no password resets and no OTP by email either. Same item as 4) below.
+- [ ] **🔴🔴 Every page must read the DATABASE, not the prototype's demo store** — the single largest source of "it works on my screen but the client sees nothing". ⚠️ **This is the standing #1 bug class in this repo**: a page that falls back to demo data looks healthy while being disconnected. Sweep every screen, not only recently-touched ones.
+
+**1) Dispute and receipt — the state machine the owner wants**
+
+- [ ] **🔴 The receipt lifecycle, as specified:** `PENDING` → agency reviews the receipt (**photo + the PR's note**) and may **EDIT price / quantity / drink / category** → `APPROVED` (the PR now sees "APPROVED", and **only now may the PR dispute it**) → if disputed: resolve → `VERIFIED` → **if untouched when the week closes: `APPROVED` → `VERIFIED` automatically**. ✅ **The rollover is buildable now — `node-cron` is installed and a scheduler already runs** (the weekly-payout job), so auto-verify is a new job on existing plumbing, not new infrastructure.
+- [ ] **🔴 Split the PR's two sections by week:** **disputes are raised in the LAST-week section; the approve view appears only in the THIS-week section.** ⚠️ **This is the "remaining" half already flagged at §9 F / Payroll below** — the agency side of receipt review was built 30 Jul, the PR's two sections were not. One job, not two.
+- [ ] **🟠 The agency's decision screen must show EVERYTHING the OCR returned**, not a summary — the owner is explicit that all scanned detail is needed to decide. The same surface handles this week's review and approval.
+
+**1a) Open questions the owner raised — answer these before the above is finished**
+
+- [ ] **🔴 Photo proof on EVERY action that creates money.** A scan needs a picture to prove it; **a self-log needs one too, and without it the PR cannot check out**; an **edit** reuses the same capture flow and **replaces the stored photo with the latest one**. ⚠️ Decide whether "replace" means *overwrite* or *supersede with history* — an edit that silently discards the original photo destroys the evidence a dispute would rest on.
+- [ ] **🔴 Tips have no receipt path at all.** There is no tip self-log, so tips never form a receipt — **and from the photo alone the PR cannot tell which capture is drinks and which is tips.** Needs a category chosen at capture time, not guessed afterwards.
+- [ ] **🟠 DECISION OWED: two shifts checked out on the same day — one combined payment line, or two separate ones?** **The owner recommends SEPARATE**, and notes separate is the harder *design* while combined is the harder *backend*. ⚠️ **Answer before the PR payment page is built on top of it** — it changes the shape of a voucher line, and [[pv-money-classification]] requires all insert paths to share one rule.
+
+**2) PV** — the owner left this heading empty; the technical backlog for it is the P0 / P0b blocks below.
+
+**3) Cancel shift**
+
+- [ ] **🔴 An MC approved BEFORE the shift, once the agency verifies it, must remove the shift from the PR's view entirely** — not merely mark it. ⚠️ Extend the existing leave/MC work (migration 0076, `shift_assignment` status + notes + `leave_proof_photos`); do not build a second path.
+- [ ] **🔴 A cancellation is charged against the PENALTY RULES.** ⚠️ **Penalty amounts are still undefined except for Velvet 23** — a money figure only the owner can set, and this cannot ship without it.
+- [ ] **🟠 QUESTION (open, not a decision): when a cancellation leaves a shift short, does the agency get AUTO-ASSIGN to fill it?** The owner marked this "??". Do not build until answered.
+
+**4) OTP and sign up** — the same work as the registration blocker above, kept here under the owner's own numbering. **Both long-lead externals (WhatsApp Business verification, email provider API key) start now if a client date exists.**
+
+**5) DECISIONS OWED — from the owner's GENERAL QUESTIONS doc, NOT yet anywhere else in this file**
+
+> Checked by grep on 31 Jul: suspension and no-shows already have entries; the three below have **none**.
+> These are owner calls, not engineering work — none can be built until answered.
+
+- [ ] **🔴 Platform fee: 2.5% or 5%?** The live value is **2.5%**; the spec has been read as **5%** in several places. **Confirm before anyone invoices from it** — every historical invoice derived from the wrong figure is a money error, not a display one.
+- [ ] **🟠 Should a PR see the list of ALL agencies?** Any PR can currently enumerate all three. Probably harmless, but it is a scoping decision the owner has not made.
+- [ ] **🟠 Agency and outlet accounts have NO admin screen** — those logins can only be disabled over the API. New tab, or a section on the existing organisation tabs? (~half a day either way; the shared logic already exists.)
+- [ ] **🔴 What must be true before a CLIENT touches it?** There are **no tests, no rate limiting, and no per-session logout**. A **supervised pilot** is reasonable on that basis; **general client use is not**. ⚠️ **Get the owner to say which one is planned** — the two need very different work, and everything else in P0-CLIENT is scoped by that answer.
+
+**6) Not yet recorded from today's session (31 Jul) — write up before this doc is trusted again**
+
+- [ ] **🔴 §10 has NO row for today's agency-portal crash fix.** The bug: the web app kept a hand-written copy of the `notification_kind` enum and the merge added two kinds (`pr_rating_low`, `shift_cover_needed`) it never got, so `KIND_MAP[kind]` returned `undefined` and the bell called `.startsWith` on it — **the whole `/agency` page white-screened** for any agency user holding one, which the live DB confirms `owner@atlas-agency.my` does. Fixed across 6 files, with an `unknown` fallback so a future kind degrades to a readable row instead of taking the page down. **Also missing: the `GeoFenceCard.tsx` merge-conflict resolution** (took main's redesign; jk's hemisphere-paste parsing was dropped because main deleted the manual lat/lng entry it enhanced).
+- [ ] **🔴 `pv_day_review_pending` EXISTS IN THE DB BUT NO CODE PRODUCES IT ANY MORE** *(SL)* — ⚠️ **corrects an assumption made earlier today that it came from a teammate's branch: it is OUR OWN X16 work from 30 Jul.** A row of that kind is live in `notification`, and §9 still carries "fire the producer live" — yet **grep finds the string nowhere under `apps/`**, including `notification.model.ts`. So either the producer was lost in a merge or the row was written by hand. **Re-derive before building on it**, and note the missing model entry is exactly the drift class that caused the crash above.
+
 ### 🔴🔴 P0 — THE MONEY IS WRONG (found 31 Jul, §8 X36 — do before any demo or pilot)
 
 > **Status after §8 X37: the RULES are enforced in code, the EXISTING BAD ROWS are not repaired.**
@@ -506,6 +587,32 @@ decision) and `audit-live-vouchers.ts`. Both are safe to re-run at any time.
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **2 Aug 2026 — `main` merged into `SL`, and for once the merge was boring.** `SL` was **22 ahead /
+> 2 behind**; the incoming pair was jk's `b6c5786` plus its PR #41 merge `80efdc7`. **The whole
+> incoming change is 110 lines of `TEST_SCRIPT.md` and NOTHING ELSE** — no code, no migration, so
+> none of the 0076-style landmines the last two merges hit were possible here.
+>
+> **One conflict, in `TEST_SCRIPT.md`, and the resolution rule was decided by a diff, not by taste:**
+> `git diff <base> origin/main` shows **110 insertions and 0 deletions**, so jk deleted nothing and
+> the correct resolve is *keep both sides* — the conflict is only "both branches appended at the same
+> two anchors". Both hunks resolved **ours-then-theirs**, which happens to be chronological in both
+> places (SL's 2 Aug §9 block above jk's 31 Jul one; SL's 2 Aug §10 entries above jk's 31 Jul one,
+> which lands immediately before the shared "SL merged into main" entry it originally preceded).
+>
+> **Verified by diffing the resolved file against BOTH parents, not by eye:** zero lines lost from
+> `HEAD`, and the only six lines "missing" versus `origin/main` are **pre-existing base lines that SL
+> itself rewrote** when it closed those very items (org suspension, overtime-as-money, the `auditLogs`
+> guard). Confirmed each of the six exists unchanged in the merge base — i.e. main is simply behind,
+> nothing of jk's was dropped. ⚠️ **The trap worth remembering: a raw marker-strip silently welds two
+> Markdown blockquotes into one and glues a `###` heading onto the preceding paragraph.** Both
+> junctions needed a blank line inserted; that is why the resolved file is 107 lines longer than
+> `HEAD` and not 110.
+>
+> **jk's "▶️ START HERE NEXT SESSION" heading was retitled, not deleted** — two blocks both claiming
+> to be the start point is worse than one marked superseded, and its items 1–4 plus the entire
+> **P0-CLIENT** list (the owner's own client-readiness list, which SL had never seen) are still open
+> work. Its stated tree state was stale on arrival: `jk` **is** pushed and merged.
 
 > **2 Aug 2026 (eleventh slice) — SUSPENDING AN ORGANISATION NOW STOPS ITS PEOPLE (§8 X55).**
 >
@@ -1027,6 +1134,39 @@ decision) and `audit-live-vouchers.ts`. Both are safe to re-run at any time.
 > Backend tsc **0**; `probe-pv-audit` **ALL PASS**. ⚠️ **NOT yet fired against the live DB** — proving
 > the refusal needs a real write attempt on the shared database, which leaves rows. The pure half of
 > the rule is proven; the repository half is reasoned, not observed.
+
+> **31 Jul 2026 — the agency portal white-screened on login, and the cause is a class of bug, not one typo.**
+> Symptom: signing in as agency (`owner@atlas-agency.my`) landed on `/en/agency` showing only
+> *"Cannot read properties of undefined (reading 'startsWith')"*. **Root cause: the web app keeps a
+> HAND-WRITTEN copy of the backend's `notification_kind` enum, and the SL merge added two kinds it
+> never received** — `pr_rating_low` (migration 0067) and `shift_cover_needed` (0068). So
+> `KIND_MAP[record.kind]` yielded `undefined`, and `kindIcon` called `.startsWith("pv")` on it.
+>
+> **Why the WHOLE page died rather than one row:** `IzSheet` returns `null` when closed, but **JSX
+> children are built eagerly**, so the notification list renders on every bell render — closed or not.
+> **Why only the agency portal:** both new kinds are agency-addressed (`rating.controller.ts` and
+> `shift-assignment.controller.ts` notify agency members). PR and outlet users never receive them.
+> Confirmed against the live DB: that exact account holds one of each.
+>
+> **Fixed across 6 files** — both kinds added to the web union, `KIND_MAP` and `PR_KIND_MAP`;
+> deep-links (`shift_cover_needed` → `/agency/roster`, the backfill list its own message names;
+> `pr_rating_low` → `/agency/prs`); labels + Star icon. **The durable half: an `unknown` fallback
+> kind.** The `Record<NotificationKind, …>` maps stay compiler-total, so a future kind still forces
+> an explicit mapping, but a kind the bundle has never heard of now renders as a neutral "Update"
+> row. ⚠️ **This is not hypothetical — the live DB enum has NINE values and the backend model
+> declares EIGHT** (see §9 item 6). **Verified:** `tsc` error count unchanged at 124 (no new errors,
+> and the compiler accepted both widened maps, which is what proves totality); biome clean on all
+> six files. ❌ **NOT verified in a browser** — a dev server started from `.claude/launch.json`
+> 500s because `apps/web/.env` does not exist and `VITE_API_URL` fails `env.ts` validation. Boot it
+> with `pnpm dev:web` from the repo root instead, which loads the root `.env`.
+>
+> **Same day, the merge of main into jk was finished.** It had been sitting UNRESOLVED in the working
+> tree, which is why GitHub said *"Can't automatically merge"*. One conflict, in `GeoFenceCard.tsx`:
+> **main deleted the manual lat/lng entry that jk's commit had enhanced** (hemisphere-aware paste,
+> `"3.211991° N"`). Resolved by taking main's redesign — keeping jk's two functions would have
+> referenced state that no longer exists. ⚠️ **jk's hemisphere parsing is therefore GONE**; re-port it
+> into the new address-search card if that paste format still matters. Also regenerated the stale
+> TanStack route tree. Committed as `37d55f1`; the PR to main then shrank to **5 additive files**.
 
 
 > **31 Jul 2026 — SL merged into main, and the merge itself found a landmine.** `SL` was 9 ahead /
