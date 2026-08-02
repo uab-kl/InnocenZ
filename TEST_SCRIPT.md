@@ -283,6 +283,37 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ NEXT SESSION STARTS HERE (logged 2 Aug 2026 — HEAD `f616891`, tree clean, 7 unpushed)
+
+> Nothing is pushed; **that is the owner's call — ask, do not assume.** Backend `tsc` **0**,
+> `probe-pv-audit.ts` **44/44**. ⚠️ **Run both from `apps/backend`, never the repo root** — a root
+> `npx tsc -p tsconfig.json` picks the ROOT config and reports a meaningless 0. That happened this
+> session; the clean result was worthless until re-run in the right directory.
+
+**🔴 DO NOT RE-ASK THE OVERTIME PAYOUT DECISION — it is answered** (owner, 31 Jul): *"the OT should
+be sent together with the week PV it originates from, as that is the most fair and direct."* So
+overtime is paid on the voucher of the week it was **WORKED**, and the consequence is already
+shipped (`882afd7`): **an undecided claim blocks its own week's send.** **There is therefore no
+reopen-a-sent-voucher path to build** — a week cannot close with a claim outstanding. Do not design
+an amend flow.
+
+1. **`PATCH /shift-assignment/:id/overtime` (approve/reject) + the `component='ot'` line** — the next
+   job, and everything it needs exists: columns from migration **0077**; minutes recorded at
+   check-out (`7e47502`, `features/shift-assignment/overtime.ts`); the gate read
+   `listPendingOvertimeForPrWeek`; approver **`agencyOwnerOrFinance`**; rate **`daily ÷ 6 × 1.5`**.
+   ⚠️ **`component='ot'` is derived in the REPOSITORY** from a `ref` whose dedupe field **ends
+   `-ot`** (`payment-voucher-component.ts`) — write the ref in that shape rather than setting the
+   column. ⚠️ **The line must pass `assertLinesAgreeWithShifts`, so date it the shift's own
+   `shift_date`**, not the approval date.
+2. **The agency screen** for deciding OT.
+3. **Admin PV page is under-wired** — `resolveDispute` and the `receipts[]` evidence array come back
+   from the API and are never rendered.
+4. **Receipt numbers on every self-log / OCR scan**, plus a PR detail button.
+5. **Fire the refusals LIVE** — the 400 (bad line date), the 409 (closed week), the mid-week send and
+   the OT gate. **All four of this session's refusals are unit-proven only**, and a refusal's real
+   risk is refusing something legitimate, which a pure probe cannot rule out.
+
+
 ### 🔴🔴 P0 — THE MONEY IS WRONG (found 31 Jul, §8 X36 — do before any demo or pilot)
 
 > **Status after §8 X37: the RULES are enforced in code, the EXISTING BAD ROWS are not repaired.**
