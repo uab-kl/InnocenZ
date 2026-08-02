@@ -405,6 +405,44 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **31 Jul 2026 — undecided OVERTIME now blocks its own week from being sent, and this is the OWNER'S
+> PAYOUT DECISION in code.** Asked where OT money goes when its week has already been sent, the owner
+> answered: **"the OT should be sent together with the week PV it originates from, as that is the most
+> fair and direct."** Overtime is therefore paid on the voucher of the week it was **worked**.
+>
+> **That rule only holds if the agency decides before the week goes out — so the awkward case is
+> PREVENTED, not handled.** A pending claim blocks its own week's send, exactly as a held day and an
+> unreviewed receipt already do. **There is no reopen-a-sent-voucher path to build**, because a week
+> cannot close with a claim outstanding. Added as a **fourth rule inside `voucherSendGate`**, keeping
+> one refusal path rather than two that can disagree.
+>
+> New repository read **`listPendingOvertimeForPrWeek`**, keyed on the **PR and the week**, not on the
+> voucher. The link between a voucher and its shifts is the line `ref`, and **a shift whose overtime
+> was never approved has no line to be referenced by** — the rows that matter most are exactly the
+> ones a voucher-join would miss.
+>
+> ⚠️ **The trap, and the reason this is checked in BOTH early returns:** an unapproved OT claim writes
+> **no voucher line**, so a voucher can carry one while having **no dated lines and no receipts at
+> all**. The existing shortcut `view.length === 0 && pendingReceipts.length === 0` would have waved
+> through precisely the case the rule exists for. Covered directly by the probe.
+>
+> **Ordering preserved:** a week that has not finished is still refused **for the week** and returns
+> alone, so nobody is sent to decide overtime on a week still being worked. That branch now returns
+> `pendingOvertime: []` like its three siblings instead of omitting it — a caller rendering "decide
+> these claims" must be told there is nothing to decide *yet*, not `undefined`. **The probe caught
+> that inconsistency**, the second time this session a probe corrected the code rather than confirming
+> it.
+>
+> `PaymentVoucherController` gains a **sixth repository**. The line-date check solved the same
+> missing-repository problem by moving into the payment-voucher repository, which worked because every
+> insert path passes through it; **this one cannot**, because the gate is a controller-level decision
+> about a request rather than an invariant of a write.
+>
+> **Proof:** `probe-pv-audit.ts` §10 — 8 cases, **all pass**, backend `tsc` **0** (run from
+> `apps/backend`, not the repo root). ⚠️ **Not fired live.** ❌ **Still owed for overtime:** the
+> `PATCH /shift-assignment/:id/overtime` approve/reject endpoint, the `component='ot'` line it writes
+> on approval, and the agency screen.
+
 > **31 Jul 2026 — the dead `users` / `user` GraphQL queries are REMOVED, and the backlog entry that
 > asked for them to be gated was wrong.** It read: *"the `users` GraphQL resolver reads the same table
 > behind `@auth` only, so the leak path is narrowed, not closed."* **There is no resolver.**
