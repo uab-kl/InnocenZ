@@ -55,3 +55,38 @@ export function previousCompleteWeek(ref: Date = new Date()): {
 export function klToday(ref: Date = new Date()): string {
   return isoDate(new Date(ref.getTime() + KL_OFFSET_MINUTES * 60_000));
 }
+
+/**
+ * The Monday–Sunday week CONTAINING a given calendar date.
+ *
+ * Takes a `YYYY-MM-DD` string rather than a Date, and that is the point: a
+ * `shift_date` is already a calendar date with no time and no zone, so parsing
+ * it into an instant only creates an opportunity to shift it by eight hours. The
+ * arithmetic runs on a UTC-anchored Date built from the parts, which cannot
+ * drift because midnight UTC never rolls over.
+ *
+ * Used to place an approved overtime line on the voucher of the week the shift
+ * was WORKED — the owner's rule ("sent together with the week PV it originates
+ * from"), which is not necessarily the week the approval happens in.
+ *
+ * Returns null for anything that is not a well-formed date, so a caller cannot
+ * quietly place money on the week of `NaN`.
+ */
+export function weekOfDate(date: string): { weekStart: string; weekEnd: string } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(date ?? '');
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const anchor = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  if (Number.isNaN(anchor.getTime())) return null;
+  // A round trip catches an impossible date that Date.UTC silently rolls over,
+  // such as 2026-02-30 becoming 2026-03-02.
+  if (isoDate(anchor) !== date) return null;
+
+  const daysSinceMonday = (anchor.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
+  const monday = new Date(anchor);
+  monday.setUTCDate(anchor.getUTCDate() - daysSinceMonday);
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+
+  return { weekStart: isoDate(monday), weekEnd: isoDate(sunday) };
+}

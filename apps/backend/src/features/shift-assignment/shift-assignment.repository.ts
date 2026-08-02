@@ -755,6 +755,176 @@ export class ShiftAssignmentRepositoryClass {
   }
 
   /**
+   * Atomically CLAIMS the pending overtime decision on one assignment.
+   *
+   * ⚠️ This exists because the obvious shape — read the row, see 'pending',
+   * write the voucher line, then stamp the decision — pays twice on a double
+   * click. Both requests read 'pending', both find no existing line, both
+   * insert one. A read-then-write check is not a lock, and the thing being
+   * guarded here is money leaving the business.
+   *
+   * The `WHERE overtime_status = 'pending'` makes the transition itself the
+   * mutex: exactly one caller can move the row out of 'pending', and the loser
+   * gets null and answers 409. The decision is therefore stamped BEFORE the line
+   * is written, and the caller compensates with `revertOvertimeDecision` if the
+   * write then fails — an approval that left no line is recoverable, a line paid
+   * twice is not.
+   */
+  async claimOvertimeDecision(params: {
+    assignmentId: string;
+    status: 'approved' | 'rejected';
+    amount: string;
+    actor: string;
+  }): Promise<ShiftAssignmentType | null> {
+    try {
+      const [row] = await db
+        .update(ShiftAssignmentTable)
+        .set({
+          overtimeStatus: params.status,
+          overtimeAmount: params.amount,
+          overtimeDecidedAt: new Date(),
+          overtimeDecidedBy: params.actor,
+          updatedAt: new Date(),
+          updatedBy: params.actor,
+        })
+        .where(
+          and(
+            eq(ShiftAssignmentTable.id, params.assignmentId),
+            eq(ShiftAssignmentTable.overtimeStatus, 'pending'),
+          ),
+        )
+        .returning();
+      return row ?? null;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.claimOvertimeDecision] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Puts a claimed decision back to 'pending' after the voucher write failed.
+   *
+   * The compensating half of `claimOvertimeDecision`. Without it a failed line
+   * write would leave the claim marked approved with nothing on the voucher —
+   * unpaid overtime that no longer appears on anyone's worklist, and which the
+   * send gate would happily let the week close over.
+   *
+   * Deliberately unconditional on the current status: it only ever runs on a row
+   * this request just claimed, and refusing to undo because the row moved again
+   * would strand exactly the case it exists for.
+   */
+  async revertOvertimeDecision(assignmentId: string, actor: string): Promise<void> {
+    try {
+      await db
+        .update(ShiftAssignmentTable)
+        .set({
+          overtimeStatus: 'pending',
+          overtimeAmount: null,
+          overtimeDecidedAt: null,
+          overtimeDecidedBy: null,
+          updatedAt: new Date(),
+          updatedBy: actor,
+        })
+        .where(eq(ShiftAssignmentTable.id, assignmentId));
+    } catch (error) {
+      // Logged, never rethrown: this runs inside a failure path, and replacing
+      // the original error with this one hides why the approval failed.
+      logger.error('[ShiftAssignmentRepository.revertOvertimeDecision] Error:', error);
+    }
+  }
+
+  /**
+   * Everything the overtime decision needs about one assignment, in one read.
+   *
+   * The approval has to place a voucher line on the week the shift was WORKED,
+   * so it needs the shift's own `shift_date` — the assignment has no date of its
+   * own — and the outlet name the line is labelled with. Fetched together rather
+   * than as three round trips because they are one fact: which shift this claim
+   * is for.
+   */
+  async getOvertimeContext(assignmentId: string): Promise<{
+    assignment: ShiftAssignmentType;
+    shiftDate: string;
+    slot: string | null;
+    outletName: string | null;
+  } | null> {
+    try {
+      const [row] = await db
+        .select({
+          assignment: ShiftAssignmentTable,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          outletName: OutletTable.name,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(eq(ShiftAssignmentTable.id, assignmentId))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.getOvertimeContext] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Every overtime claim awaiting a decision across one agency — the worklist
+   * behind the agency's overtime screen.
+   *
+   * Distinct from `listPendingOvertimeForPrWeek`, which answers the send gate's
+   * narrow question about ONE PR's week. This one answers "what is waiting on
+   * us", and carries the PR name and the sealed daily wage so the screen can
+   * price each claim without a second call per row.
+   *
+   * Oldest first: a claim that has been waiting since last Tuesday is the one
+   * blocking a week from being sent, and it should not be buried under today's.
+   */
+  async listPendingOvertimeForAgency(agencyId: string): Promise<
+    Array<{
+      assignmentId: string;
+      prId: string;
+      prName: string | null;
+      shiftId: string;
+      shiftDate: string;
+      slot: string | null;
+      outletName: string | null;
+      overtimeMinutes: number | null;
+      payAmount: string | null;
+    }>
+  > {
+    try {
+      return await db
+        .select({
+          assignmentId: ShiftAssignmentTable.id,
+          prId: ShiftAssignmentTable.prId,
+          // Nickname-or-name, the same display rule the roster uses.
+          prName: prDisplayNameSql,
+          shiftId: ShiftAssignmentTable.shiftId,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          outletName: OutletTable.name,
+          overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
+          payAmount: ShiftAssignmentTable.payAmount,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+            eq(ShiftAssignmentTable.overtimeStatus, 'pending'),
+          ),
+        )
+        .orderBy(ShiftTable.shiftDate);
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listPendingOvertimeForAgency] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Attendance position fixes for one agency on one shift date, joined to the
    * shift for its slot and to the outlet for its pin.
    *

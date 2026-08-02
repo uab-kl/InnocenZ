@@ -14,7 +14,15 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
-import { MAX_PLAUSIBLE_SHIFT_HOURS } from '@/features/payment-voucher/payment-voucher-audit';
+import {
+  LineDateConflictError,
+  MAX_PLAUSIBLE_SHIFT_HOURS,
+  overtimeAmountCents,
+} from '@/features/payment-voucher/payment-voucher-audit';
+import { formatCents } from '@/features/payment-voucher/payment-voucher-balance';
+import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository';
+import { buildOvertimeLine, overtimeDedupeRef } from '@/features/payment-voucher/overtime-line';
+import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
 import { overtimeFromStamps } from './overtime';
 import { shiftsOverlap } from '@/util/slot-window';
 import {
@@ -101,6 +109,12 @@ export class ShiftAssignmentControllerClass {
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
+    // Approving overtime writes a voucher line, so this controller owns the one
+    // path that turns attendance into money. Injected rather than reached for
+    // through the payment-voucher controller: the RULES that make such a line
+    // safe (component classification, the line-date assertion) live in the
+    // repository, so going through it is what keeps this path under them.
+    private paymentVoucherRepository: PaymentVoucherRepositoryClass,
   ) {}
 
   /**
@@ -691,6 +705,318 @@ export class ShiftAssignmentControllerClass {
     } catch (error) {
       logger.error('[ShiftAssignmentController.rejectLeave] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Overtime claims waiting on this agency — the worklist for the OT screen.
+   *
+   * Each row carries what the claim is WORTH, priced here rather than on the
+   * client. The rate is daily wage ÷ a standard shift × 1.5, and it must be one
+   * number everywhere: if the screen derived its own, an agency could approve a
+   * figure that differs from the line the approval then writes.
+   */
+  async listPendingOvertime(req: Request, res: Response) {
+    try {
+      const scope = await this.resolveScope(req);
+      const agencyId = scope.isAdmin ? (req.query.agencyId as string | undefined) : scope.agencyId;
+      if (!agencyId) {
+        return res.status(scope.isAdmin ? 400 : 403).json({
+          success: false,
+          message: scope.isAdmin
+            ? 'agencyId is required'
+            : 'No agency associated with this account',
+          data: null,
+        });
+      }
+
+      const rows = await this.shiftAssignmentRepository.listPendingOvertimeForAgency(agencyId);
+      const claims = rows.map((row) => ({
+        ...row,
+        // The week this claim will be paid on, so the screen can say which
+        // voucher is being held rather than leaving it to be worked out.
+        week: weekOfDate(row.shiftDate),
+        // Priced by the same function the approval uses, so what the agency
+        // approves and what lands on the voucher cannot be two numbers. Zero
+        // means the claim cannot be priced (a commission-only PR has no daily
+        // wage) — the approval refuses that case rather than paying nothing.
+        amount: formatCents(overtimeAmountCents(row.payAmount, row.overtimeMinutes)),
+      }));
+      res.status(200).json({ success: true, message: 'OK', data: claims });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.listPendingOvertime] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency approves or rejects one overtime claim.
+   *
+   * This is the endpoint that turns recorded minutes into money, and it is the
+   * ONLY thing that ever does — check-out records a claim and deliberately
+   * cannot approve its own pay.
+   *
+   * Four rules are load-bearing here, none of them obvious from the signature:
+   *
+   *  1. **The line lands on the week the shift was WORKED**, not the week of the
+   *     approval (owner's decision, 31 Jul 2026: "sent together with the week PV
+   *     it originates from"). So the voucher is looked up by `weekOfDate(shift
+   *     date)`. That rule is only coherent because a pending claim already blocks
+   *     its own week from being sent — which is why the 409 below should be
+   *     unreachable rather than routine.
+   *  2. **The line is dated the shift's own date.** The repository refuses
+   *     otherwise, and that refusal exists because a live voucher once carried
+   *     overtime dated a day its shift was not on.
+   *  3. **The amount is computed once** and written to both the line and
+   *     `overtime_amount`. That column FREEZES the decision, so a later change to
+   *     the tier rate cannot restate what somebody already approved.
+   *  4. **Writing is idempotent.** The line is written before the decision is
+   *     stamped, and a re-run finds the existing line by its `-ot` dedupe ref
+   *     instead of paying twice. A retry after a half-completed approval must
+   *     never be able to double the money.
+   */
+  async decideOvertime(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const decision = req.body?.decision;
+      if (decision !== 'approve' && decision !== 'reject') {
+        return res.status(400).json({
+          success: false,
+          message: "decision must be 'approve' or 'reject'",
+          data: null,
+        });
+      }
+
+      const context = await this.shiftAssignmentRepository.getOvertimeContext(id);
+      if (!context) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const { assignment, shiftDate, outletName } = context;
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && assignment.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // 409 rather than 400: the claim's state is a fact about the record, not a
+      // malformed request, and the distinction matters to a screen deciding
+      // whether to re-fetch. Already-decided lands here too, which is what makes
+      // a double approval impossible rather than merely unlikely.
+      if (assignment.overtimeStatus !== 'pending' || assignment.overtimeMinutes == null) {
+        return res.status(409).json({
+          success: false,
+          message: assignment.overtimeStatus
+            ? `This overtime claim was already ${assignment.overtimeStatus}`
+            : 'There is no overtime claim on this shift',
+          data: null,
+        });
+      }
+
+      const actor = getActor(req);
+      const minutes = assignment.overtimeMinutes;
+      const pr = await this.prRepository.getById(assignment.prId);
+
+      if (decision === 'reject') {
+        // 0.00, not null: the column then records "decided, worth nothing"
+        // rather than "never decided", which is the distinction the audit and
+        // the send gate both read.
+        const rejected = await this.shiftAssignmentRepository.claimOvertimeDecision({
+          assignmentId: id,
+          status: 'rejected',
+          amount: '0.00',
+          actor,
+        });
+        if (!rejected) {
+          return res.status(409).json({
+            success: false,
+            message: 'This overtime claim was decided by someone else a moment ago',
+            data: null,
+          });
+        }
+        res.status(200).json({
+          success: true,
+          message: 'Overtime rejected — no line was added to the voucher',
+          data: rejected,
+        });
+        void this.notifyPrOvertimeDecided({
+          pr,
+          decision: 'reject',
+          minutes,
+          shiftDate,
+          assignmentId: id,
+          amount: '0.00',
+          actor,
+        });
+        return;
+      }
+
+      const week = weekOfDate(shiftDate);
+      if (!week) {
+        logger.error(
+          `[ShiftAssignmentController.decideOvertime] ${id}: unusable shift date ${shiftDate}`,
+        );
+        return res.status(409).json({
+          success: false,
+          message: 'This shift has no usable date, so overtime cannot be placed on a week',
+          data: null,
+        });
+      }
+
+      const { line, amountCents } = buildOvertimeLine({
+        assignmentId: id,
+        shiftDate,
+        minutes,
+        payAmount: assignment.payAmount,
+        outlet: outletName,
+        actor,
+      });
+      // A commission-only PR has no sealed daily wage, so there is no hourly
+      // rate to derive and nothing to approve. Refusing is the honest answer: a
+      // 0.00 overtime line on a voucher reads as "we paid you nothing for those
+      // hours", which is a different and worse claim than "this cannot be
+      // priced". Reject the claim instead, or seal a wage on the assignment.
+      if (amountCents <= 0) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'This assignment carries no daily wage, so overtime cannot be priced. ' +
+            'Seal a wage on the shift first, or reject the claim.',
+          data: null,
+        });
+      }
+
+      // CLAIM the decision before writing any money. This is the mutex: only one
+      // request can move the row out of 'pending', so a double-clicked Approve
+      // cannot put two overtime lines on the voucher. The read above is not
+      // enough — two requests can both read 'pending' and both find no existing
+      // line before either inserts one.
+      const approved = await this.shiftAssignmentRepository.claimOvertimeDecision({
+        assignmentId: id,
+        status: 'approved',
+        amount: line.amount,
+        actor,
+      });
+      if (!approved) {
+        return res.status(409).json({
+          success: false,
+          message: 'This overtime claim was decided by someone else a moment ago',
+          data: null,
+        });
+      }
+
+      let voucherId: string;
+      try {
+        const voucherResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
+          prId: assignment.prId,
+          agencyId: assignment.agencyId,
+          prName: pr?.name ?? 'PR',
+          prIc: pr?.icNo,
+          outlet: outletName,
+          weekStart: week.weekStart,
+          weekEnd: week.weekEnd,
+          actor,
+        });
+        // Should be unreachable: a pending claim blocks its own week from being
+        // sent, so the week cannot have closed underneath it. Kept because
+        // "should be unreachable" is not "is", and appending to a document a PR
+        // already signed is the exact failure the send gate was built to prevent.
+        if (!voucherResult.ok) {
+          await this.shiftAssignmentRepository.revertOvertimeDecision(id, actor);
+          return res.status(409).json({ success: false, message: voucherResult.reason, data: null });
+        }
+        voucherId = voucherResult.voucher.id;
+
+        // Belt and braces beside the claim above: the claim stops two concurrent
+        // approvals, this stops a line being added twice across separate
+        // attempts — a revert-then-retry arrives here with the first attempt's
+        // line possibly already written.
+        const full = await this.paymentVoucherRepository.getById(voucherId);
+        const dedupe = overtimeDedupeRef(id);
+        if (!full?.lines.some((l) => (l.ref ?? '').includes(dedupe))) {
+          await this.paymentVoucherRepository.addLine(voucherId, line);
+        }
+      } catch (writeError) {
+        // The decision is stamped but the money never landed. Put the claim back
+        // so it reappears on the agency's worklist: an approval with no line is
+        // unpaid overtime that nothing would ever surface again, and the send
+        // gate would let the week close straight over it.
+        await this.shiftAssignmentRepository.revertOvertimeDecision(id, actor);
+        throw writeError;
+      }
+
+      res.status(200).json({
+        success: true,
+        message: `Overtime approved — RM${line.amount} added to the voucher for ${week.weekStart}`,
+        data: { assignment: approved, voucherId, amount: line.amount, week },
+      });
+      void this.notifyPrOvertimeDecided({
+        pr,
+        decision: 'approve',
+        minutes,
+        shiftDate,
+        assignmentId: id,
+        amount: line.amount,
+        actor,
+      });
+    } catch (error) {
+      // The line-date rule is the caller's fault, not the server's, so it keeps
+      // its 400 here as it does on the six payment-voucher routes. Reaching it
+      // would mean the shift moved between the two reads above.
+      if (error instanceof LineDateConflictError) {
+        return res.status(400).json({ success: false, message: error.reason, data: null });
+      }
+      logger.error('[ShiftAssignmentController.decideOvertime] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Tells the PR what the agency decided about their overtime.
+   *
+   * Fire-and-forget after the response, like the other producers here: a
+   * notification that fails must not undo a decision that succeeded. Rejection
+   * is the case this exists for — an approved claim shows up as money on the
+   * voucher, but a rejected one shows up as nothing at all, and an absence is
+   * indistinguishable from a bug from where the PR is standing.
+   */
+  private async notifyPrOvertimeDecided(input: {
+    pr: { userId?: string | null } | null;
+    decision: 'approve' | 'reject';
+    minutes: number;
+    shiftDate: string;
+    assignmentId: string;
+    amount: string;
+    actor: string;
+  }): Promise<void> {
+    try {
+      const userId = input.pr?.userId;
+      // A PR row with no user account cannot be notified — that is a data gap,
+      // not a failure of this decision, so it is logged and not thrown.
+      if (!userId) {
+        logger.warn(
+          `[ShiftAssignmentController.notifyPrOvertimeDecided] assignment=${input.assignmentId}: PR has no user account`,
+        );
+        return;
+      }
+      const approved = input.decision === 'approve';
+      await notify({
+        userId,
+        kind: 'overtime_decided',
+        title: approved ? 'Overtime approved' : 'Overtime not approved',
+        body: approved
+          ? `Your ${input.minutes} min of overtime on ${input.shiftDate} was approved — RM${input.amount} is on that week's payment voucher.`
+          : `Your ${input.minutes} min of overtime on ${input.shiftDate} was not approved. Ask your agency if you think this is wrong.`,
+        payload: {
+          assignmentId: input.assignmentId,
+          decision: input.decision,
+          overtimeMinutes: input.minutes,
+          shiftDate: input.shiftDate,
+          amount: input.amount,
+        },
+        actor: input.actor,
+      });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.notifyPrOvertimeDecided] Error:', error);
     }
   }
 

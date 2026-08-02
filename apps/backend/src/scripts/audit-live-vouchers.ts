@@ -119,6 +119,13 @@ async function main() {
         payAmount: ShiftAssignmentTable.payAmount,
         checkInAt: ShiftAssignmentTable.checkInAt,
         checkOutAt: ShiftAssignmentTable.checkOutAt,
+        // Load-bearing, not extra detail: check-out CLAMPS check_out_at to the
+        // scheduled end, so the stamps of a shift that genuinely ran late
+        // describe one that finished on time. Without these two columns the
+        // overtime budget derives to 0 and every APPROVED overtime line reads as
+        // money the stamps cannot justify. See maxOvertimeCents.
+        overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
+        overtimeStatus: ShiftAssignmentTable.overtimeStatus,
         shiftDate: ShiftTable.shiftDate,
       })
       .from(ShiftAssignmentTable)

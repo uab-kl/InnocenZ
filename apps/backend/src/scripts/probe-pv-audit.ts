@@ -11,13 +11,17 @@ import {
   checkLineAgainstWeek,
   checkLineAgainstShift,
   assignmentIdFromRef,
+  maxOvertimeCents,
+  overtimeAmountCents,
 } from '@/features/payment-voucher/payment-voucher-audit';
+import { buildOvertimeLine } from '@/features/payment-voucher/overtime-line';
+import { componentFromRef } from '@/features/payment-voucher/payment-voucher-component';
 import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance';
 import {
   voucherSendGate,
   type DayReviewView,
 } from '@/features/payment-voucher/payment-voucher-day-review';
-import { klToday } from '@/features/payment-voucher/payment-voucher-week';
+import { klToday, weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
 import { overtimeFromStamps } from '@/features/shift-assignment/overtime';
 import { MAX_PLAUSIBLE_SHIFT_HOURS } from '@/features/payment-voucher/payment-voucher-audit';
 
@@ -375,6 +379,110 @@ check(
   'a running week is refused for the week, not the overtime',
   !midWeekOt.allowed && midWeekOt.pendingOvertime?.length === 0,
 );
+
+console.log('\n--- 11. the overtime DECISION: pricing, the line, and the clamp trap ---');
+
+// 700.00 a day over a 6-hour standard shift = 116.6667/h; overtime is 1.5x that
+// = 175.00/h. Two hours is therefore 350.00.
+check('120 min of OT on a 700.00 day is 350.00', overtimeAmountCents('700.00', 120) === 35_000);
+check('60 min is half that', overtimeAmountCents('700.00', 60) === 17_500);
+check('zero minutes is worth nothing', overtimeAmountCents('700.00', 0) === 0);
+check('a commission-only PR (no wage) prices to 0', overtimeAmountCents(null, 120) === 0);
+check('an unreadable wage prices to 0, it does not throw', overtimeAmountCents('abc', 120) === 0);
+
+const built = buildOvertimeLine({
+  assignmentId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+  shiftDate: '2026-07-27',
+  minutes: 120,
+  payAmount: '700.00',
+  outlet: 'Velvet 23',
+  actor: 'probe',
+});
+check('the built line carries the priced amount', built.line.amount === '350.00');
+check('…dated the SHIFT, not today', built.line.lineDate === '2026-07-27');
+check(
+  '…and its ref names the assignment, so the write-time date rule can see it',
+  assignmentIdFromRef(built.line.ref) === 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+);
+check(
+  '…with a dedupe field ending -ot, which is what classifies it as component=ot',
+  componentFromRef(built.line.ref) === 'ot',
+);
+
+// THE TRAP this whole slice turns on. Check-out CLAMPS check_out_at to the
+// scheduled end, so a shift that genuinely ran two hours late leaves stamps
+// describing a shift that finished exactly on time. Derived from those stamps
+// the overtime budget is 0 — so before the recorded columns were consulted,
+// every legitimately APPROVED overtime line was reported as invented money.
+const clamped = {
+  id: 'a-27',
+  shiftDate: '2026-07-27',
+  status: 'completed',
+  payAmount: '700.00',
+  checkInAt: '2026-07-27T12:00:00Z',
+  checkOutAt: '2026-07-27T18:00:00Z', // clamped back to the scheduled end
+};
+check(
+  'clamped stamps alone justify NO overtime (this is why the columns exist)',
+  maxOvertimeCents(clamped) === 0,
+);
+check(
+  'the same row with an APPROVED 120-min claim justifies 350.00',
+  maxOvertimeCents({ ...clamped, overtimeMinutes: 120, overtimeStatus: 'approved' }) === 35_000,
+);
+check(
+  'a PENDING claim justifies nothing — OT becomes money at approval, not before',
+  maxOvertimeCents({ ...clamped, overtimeMinutes: 120, overtimeStatus: 'pending' }) === 0,
+);
+check(
+  'a REJECTED claim justifies nothing',
+  maxOvertimeCents({ ...clamped, overtimeMinutes: 120, overtimeStatus: 'rejected' }) === 0,
+);
+
+const approvedOt = auditVoucher({
+  voucher,
+  lines: [
+    { id: 'w1', lineDate: '2026-07-27', amount: '700.00', component: 'wages' },
+    { id: 'w2', lineDate: '2026-07-27', amount: '350.00', component: 'ot', ref: built.line.ref },
+  ],
+  sources: {
+    assignments: [{ ...clamped, overtimeMinutes: 120, overtimeStatus: 'approved' }],
+  },
+});
+check(
+  'an approved OT line on a CLAMPED shift reconciles',
+  approvedOt.ok,
+  JSON.stringify(approvedOt.problems),
+);
+// The bound still bites: approving 120 minutes does not license any amount.
+const inflatedOt = auditVoucher({
+  voucher,
+  lines: [
+    { id: 'w1', lineDate: '2026-07-27', amount: '700.00', component: 'wages' },
+    { id: 'w2', lineDate: '2026-07-27', amount: '900.00', component: 'ot' },
+  ],
+  sources: {
+    assignments: [{ ...clamped, overtimeMinutes: 120, overtimeStatus: 'approved' }],
+  },
+});
+check(
+  '…but 900.00 against the same 120-min approval is still refused',
+  inflatedOt.findings.some((f) => f.code === 'overtime_exceeds_shift_window'),
+);
+// A row with no decision at all keeps the old stamp-derived behaviour, so
+// vouchers written before migration 0077 do not suddenly start failing.
+check(
+  'a row with NO overtime decision still falls back to the stamps',
+  maxOvertimeCents({ ...clamped, checkOutAt: '2026-07-27T20:00:00Z' }) === 35_000,
+);
+
+console.log('\n--- 12. which week an approved claim is paid on ---');
+check('a Monday shift belongs to its own week', weekOfDate('2026-07-27')?.weekStart === '2026-07-27');
+check('a Sunday shift belongs to the week that STARTED six days earlier', weekOfDate('2026-08-02')?.weekStart === '2026-07-27');
+check('…and that week ends on the Sunday', weekOfDate('2026-08-02')?.weekEnd === '2026-08-02');
+check('a mid-week shift lands on the same Monday', weekOfDate('2026-07-30')?.weekStart === '2026-07-27');
+check('a malformed date yields null rather than the week of NaN', weekOfDate('not-a-date') === null);
+check('an impossible date is rejected, not rolled over', weekOfDate('2026-02-30') === null);
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED\n' : `\n${failures} CHECK(S) FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

@@ -156,7 +156,12 @@ export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 export const paymentVoucherDisputeRepository = new PaymentVoucherDisputeRepositoryClass();
 export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository, shiftAssignmentRepository);
 
-export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+// Takes paymentVoucherRepository (declared above) because approving overtime
+// writes a voucher line — the one place attendance becomes money outside the
+// payment-voucher feature. It goes through the repository so that write is
+// subject to the same component classification and line-date assertion as
+// every other line.
+export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository);
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
 export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
