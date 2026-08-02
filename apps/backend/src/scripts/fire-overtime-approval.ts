@@ -25,7 +25,12 @@
 import '@/env.js'; // FIRST — the pg pool builds from unset credentials otherwise
 import { and, asc, eq, isNull } from 'drizzle-orm';
 import { db } from '@/db/index.js';
-import { PaymentVoucherTable } from '@/features/payment-voucher/payment-voucher.model.js';
+import { paymentVoucherRepository } from '@/composition-root.js';
+import {
+  PaymentVoucherLineTable,
+  PaymentVoucherTable,
+} from '@/features/payment-voucher/payment-voucher.model.js';
+import { overtimeDedupeRef } from '@/features/payment-voucher/overtime-line.js';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week.js';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model.js';
 import { ShiftTable } from '@/features/shift/shift.model.js';
@@ -154,6 +159,58 @@ async function main() {
   let voucher: { id: string; voucherNo: string | null; status: string } | null = null;
   /** Non-null only when --unpriced had to borrow a priced row; the value to put back. */
   let borrowedWage: string | null = null;
+
+  // --clear=<assignmentId>: undo one approval completely.
+  //
+  // Goes through the repository's own `deleteLine`, NOT a raw DELETE, because
+  // that method calls `recomputeTotals` — the voucher's subtotal and net were
+  // recomputed when the line was added, so removing the row behind their backs
+  // would leave a voucher whose stated total no longer matches its own lines.
+  // That is the precise shape of the fault this whole audit exists to catch.
+  const clearArg = process.argv.find((a) => a.startsWith('--clear='));
+  if (clearArg) {
+    const assignmentId = clearArg.slice('--clear='.length);
+    const dedupe = overtimeDedupeRef(assignmentId);
+    const lines = await db
+      .select({
+        id: PaymentVoucherLineTable.id,
+        voucherId: PaymentVoucherLineTable.voucherId,
+        ref: PaymentVoucherLineTable.ref,
+        amount: PaymentVoucherLineTable.amount,
+        lineDate: PaymentVoucherLineTable.lineDate,
+      })
+      .from(PaymentVoucherLineTable);
+    const mine = lines.filter((l) => (l.ref ?? '').includes(dedupe));
+
+    console.log(`\nCLEAR ${assignmentId}`);
+    console.log(`  dedupe ref: …${dedupe}`);
+    console.log(`  ${mine.length} overtime line(s) found:`);
+    for (const l of mine) {
+      console.log(`    ${l.id}  voucher ${l.voucherId}  ${l.lineDate}  RM ${l.amount}`);
+    }
+    if (DRY_RUN) {
+      console.log('\n  --dry-run: nothing removed.\n');
+      process.exit(0);
+    }
+
+    for (const l of mine) {
+      const ok = await paymentVoucherRepository.deleteLine(l.id);
+      console.log(`  removed line ${l.id} → ${ok} (voucher totals recomputed)`);
+    }
+    await db
+      .update(ShiftAssignmentTable)
+      .set({
+        overtimeMinutes: null,
+        overtimeStatus: null,
+        overtimeAmount: null,
+        overtimeDecidedAt: null,
+        overtimeDecidedBy: null,
+      })
+      .where(eq(ShiftAssignmentTable.id, assignmentId));
+    console.log('  overtime columns cleared on the assignment.');
+    console.log('\n  Re-run --report and audit-live-vouchers.ts to confirm.\n');
+    process.exit(0);
+  }
 
   // --race: two SIMULTANEOUS decisions on one pending claim. This is the test
   // `claimOvertimeDecision` was written for — a read-then-check is not a lock,

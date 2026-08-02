@@ -289,6 +289,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X51 | **🟢 THE UNPRICEABLE COMMISSION-ONLY 409 IS FIRED LIVE — and proving it needed a borrowed wage, because the case does not exist on this database.** `409 "This assignment carries no daily wage, so overtime cannot be priced. Seal a wage on the shift first, or reject the claim."` **The finding that came first: there is NO commission-only assignment on the live DB.** All **17** rows carrying no overtime decision have a positive `pay_amount`, so the refusal guards a case the data has never contained — which is exactly why it had never been exercised, and exactly why it was worth exercising. **The method, since the arm was otherwise unreachable:** `--unpriced` prefers a genuinely unpriced row, finds none, and **BORROWS** one — sets `pay_amount` to `0.00`, fires, and **restores the original in a `finally`**, so a crash mid-run still puts the wage back. ⚠️ **`'0.00'`, not NULL: the column is NOT NULL, and zero reaches the same guard anyway** — the endpoint tests `amountCents <= 0`, because a commission-only PR's wage is absent in VALUE, not in schema. **The row was chosen by least consequence** — `cancelled` → `no_show` → `assigned` → `confirmed`, with **`completed` excluded outright**, because completed rows are what vouchers are built from and a wage that blinks out mid-generation would be a real payroll fault rather than a test. It borrowed `b9edbd18…` (`assigned`, RM 700.00, shift 24 Jul). ✅ **Net effect on the shared DB: NOTHING.** The 409 precedes both the week lookup and the claim, the pending claim created to reach the endpoint was rolled back (**otherwise it would have held that PR's week forever, over a claim that can never be approved**), and the wage was restored. Verified after: **still exactly 2 overtime decisions** (the two from X50, no third), wage back at RM 700.00, and `audit-live-vouchers.ts` **3/3 reconcile**. Backend tsc **0**. | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --unpriced` | live HTTP 409 + zero-residue re-check | ✅ Fired live |
 | X52 | **🔴 CONFIRMED FROM CODE: SUSPENDING AN AGENCY OR OUTLET ORGANISATION DOES NOT STOP ITS PEOPLE SIGNING IN.** Previously filed as "confirm live first"; now re-derived at HEAD rather than trusted. **`agency.status` and `outlet.status` both EXIST** as enums defaulting to `pending_review` (`agency.model.ts:30`, `outlet.model.ts:28`) — so an organisation genuinely can be suspended. **Nothing consults them at any auth boundary:** `auth.controller.ts:79` (login) and `:464` (refresh) test `user.status.toLowerCase() !== 'active'`, and `authenticateJWT` tests `user.status !== 'active'`. **That is the complete set of status checks in the auth path.** So suspending an agency leaves its owner and finance staff signing in with full access — **including raising payment vouchers**, which is the one surface where the consequence is money. ⚠️ **Not fixed here** — the fix is a design choice (does a suspended org 401 at login, or authenticate and lose write scope? does an in-flight session die on the next request, as a disabled USER's does per §8 X31?), and it touches every role's login path, so it wants a decision first, not a patch. | **all** | `auth.controller.ts` · `middlewares/authenticate-jwt.ts` · `agency.model.ts` · `outlet.model.ts` | code re-derivation at HEAD | 🔴 Confirmed OPEN |
 | X53 | **🟢 THE CONCURRENT-CLAIM RACE IS PROVEN LIVE — and it was never "unfixable", only unproven.** Two **simultaneous** `PATCH …/overtime` requests at one pending claim, fired with `Promise.all`: **one 200, one 409 "This overtime claim was decided by someone else a moment ago."** ⚠️ **That message is the point** — it comes from `claimOvertimeDecision` returning falsy, i.e. the `UPDATE … WHERE overtime_status = 'pending'` losing the race, **not** from the earlier already-decided precondition. A read-then-check would have let both requests through every precondition; the state transition itself is what refuses the second. This is the live proof for the fix in `5e0dbee` that a double-clicked Approve cannot pay twice. **The method is the reusable part: it decides with REJECT, not approve.** Reject runs the identical mutex but writes **no voucher line**, so the race is provable without putting money on anyone's payslip — and the claim is then rolled back to NULL in a `finally`, so the run leaves nothing at all. Verified after: **still exactly 2 overtime decisions** (the X50 pair, no rejected row), audit **3/3 reconcile**. Backend tsc **0**. ⚠️ Correction to my own earlier note: I had written this off as needing "a genuine race" as though that were impractical. `Promise.all` of two requests IS a genuine race — **"hard to observe" was mistaken for "hard to test".** | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --race` | live HTTP 200+409 concurrently, zero residue | ✅ Fired live |
+| X54 | **🟢 THE SURPLUS APPROVAL IS CLEARED — and the cleanup SQL I had written down would have CORRUPTED the voucher.** `--clear=<assignmentId>` removed the RM 150.00 line from `9d897070…`; **PV-000003 went 1353.30 / 4 lines → 1203.30 / 3 lines**, exactly RM 150.00 lighter, and the audit still reports **3/3 reconcile**. One approval remains — `f5a1f227…`, RM 175.00 on PV-000002 — which is the one that was asked for. 🔴 **THE FINDING IS IN THE CLEANUP, NOT THE CLEAR.** The two-statement `DELETE … FROM payment_voucher_line` + `UPDATE shift_assignment` recipe I had printed at the end of every run and recorded in §9 **was incomplete**: a voucher's `subtotal`/`net` are recomputed when a line is **added**, so deleting the row behind their backs leaves **a voucher whose stated total no longer matches its own lines** — PV-000003 would have read 1353.30 with 1203.30 of lines under it. **That is precisely the fault class this entire audit exists to catch, so running my own cleanup would have manufactured one.** ⚠️ The general lesson, and it is the same one as the `-ot` dedupe ref and the `component` column: **when the app maintains a derived value, undo through the app's own path, never with SQL that only touches the base row.** `--clear` therefore calls the repository's `deleteLine()`, which runs `recomputeTotals` in the same transaction. It also prints what it will remove and takes `--dry-run`, because a delete that names its target before acting is the only kind worth trusting on a shared database. Backend tsc **0**. | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --clear=` · `payment-voucher.repository` (`deleteLine` → `recomputeTotals`) | live clear + audit 3/3 + totals arithmetic | ✅ Verified live |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 
 ---
@@ -356,29 +357,31 @@ an amend flow.
    voucher → `audit-live-vouchers.ts` still reports OK → the week can now be sent.
 
 
-### 🟠 ROWS I LEFT ON THE SHARED DB — 2 Aug, the owner's to keep or clear (§8 X50)
+### 🟢 ROWS ON THE SHARED DB — resolved 2 Aug (§8 X50, X54)
 
-Two **approved overtime** decisions, each with a real `ot` money line. Both sit on `pending_review`
-vouchers and both reconcile (`audit-live-vouchers.ts` → 3/3 OK), so nothing is broken by keeping
-them — but **only the first was asked for.** The second came from a re-run of
-`fire-overtime-approval.ts`, which selects on `overtime_status IS NULL` and so moved to the next
-eligible assignment instead of retesting the first.
+**ONE approved overtime decision remains, and it is the one that was asked for:**
+`f5a1f227-a1ca-449d-8d02-10bddc05a1c9`, shift 2026-07-23, 60 min, **RM 175.00** on **PV-000002**
+(700.00 → 875.00). Keep it — it is the live proof that overtime becomes money.
 
-| assignment | shift | minutes | amount | voucher |
-|---|---|---|---|---|
-| `f5a1f227-a1ca-449d-8d02-10bddc05a1c9` | 2026-07-23 | 60 | RM 175.00 | PV-000002 (700→875) |
-| `9d897070-20e6-41ce-a45a-9f66ffdeeb40` | 2026-07-29 | 60 | RM 150.00 | week 2026-07-27 |
+✅ **The surplus second approval is CLEARED** (`9d897070…`, RM 150.00). **PV-000003 went
+1353.30 / 4 lines → 1203.30 / 3 lines**, exactly RM 150.00 lighter, and `audit-live-vouchers.ts`
+still reports **3/3 reconcile**.
 
-- [ ] **Decide: keep them as live demo data, or clear them.** GateGuard blocks `DELETE` from a
-  script, so this is the owner's to run. Per assignment id:
-  ```sql
-  DELETE FROM main.payment_voucher_line WHERE ref LIKE '%<assignment-id>-ot';
-  UPDATE main.shift_assignment SET overtime_minutes = NULL, overtime_status = NULL,
-    overtime_amount = NULL, overtime_decided_at = NULL, overtime_decided_by = NULL
-    WHERE id = '<assignment-id>';
-  ```
-  Then re-run `audit-live-vouchers.ts` to confirm the totals settle. Check the current state any
-  time with `fire-overtime-approval.ts --report` (read-only).
+⚠️ **DO NOT use raw SQL for this — the two-statement `DELETE` + `UPDATE` previously recorded here
+was INCOMPLETE and would have corrupted the voucher.** A voucher's `subtotal`/`net` are recomputed
+when a line is *added*, so deleting the row behind their backs leaves **a voucher whose stated total
+no longer matches its own lines** — PV-000003 would have sat at 1353.30 with 1203.30 of lines under
+it. That is the exact fault class this audit exists to catch, so the cleanup would have created one.
+
+**Use the script, which goes through the repository's own `deleteLine()` and therefore calls
+`recomputeTotals` in the same transaction:**
+
+```bash
+npx tsx --tsconfig tsconfig.json src/scripts/fire-overtime-approval.ts --clear=<assignment-id> --dry-run
+```
+
+Drop `--dry-run` to apply. Then confirm with `--report` (read-only inventory of every overtime
+decision) and `audit-live-vouchers.ts`. Both are safe to re-run at any time.
 
 ### 🔴🔴 P0 — THE MONEY IS WRONG (found 31 Jul, §8 X36 — do before any demo or pilot)
 
@@ -501,6 +504,29 @@ eligible assignment instead of retesting the first.
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **2 Aug 2026 (tenth slice) — THE SURPLUS APPROVAL IS CLEARED (§8 X54), AND THE CLEANUP SQL I HAD
+> WRITTEN DOWN WOULD HAVE CORRUPTED THE VOUCHER.**
+>
+> `--clear=9d897070…` removed the RM 150.00 line. **PV-000003 went 1353.30 / 4 lines → 1203.30 /
+> 3 lines**, exactly RM 150.00 lighter, and `audit-live-vouchers.ts` still reports 3/3 reconciling.
+> One approval remains — `f5a1f227…`, RM 175.00 on PV-000002 — which is the one that was asked for,
+> and it is the live proof that overtime becomes money.
+>
+> 🔴 **The finding is in the cleanup, not the clear.** The two-statement `DELETE` +`UPDATE` recipe I
+> printed at the end of every run, and recorded in §9, **was incomplete.** A voucher's
+> `subtotal`/`net` are recomputed when a line is *added*, so deleting the row behind their backs
+> leaves **a voucher whose stated total no longer matches its own lines** — PV-000003 would have read
+> 1353.30 with 1203.30 of lines beneath it. **That is exactly the fault class this audit exists to
+> catch, so running my own cleanup would have manufactured one**, on a shared database, while
+> claiming to tidy up.
+>
+> The general rule, and it is the third time this lane has taught it — after the `-ot` dedupe ref and
+> the derived `component` column: **when the app maintains a derived value, undo through the app's
+> own path, never with SQL that touches only the base row.** `--clear` calls the repository's
+> `deleteLine()`, which runs `recomputeTotals` in the same transaction. It names what it will remove
+> and supports `--dry-run`, because on a shared database a delete that states its target before
+> acting is the only kind worth trusting.
 
 > **2 Aug 2026 (ninth slice) — THE LAST OVERTIME REFUSAL IS PROVEN (§8 X53), AND THE
 > ORG-SUSPENSION HOLE IS CONFIRMED REAL (§8 X52).**
