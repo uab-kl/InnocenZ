@@ -193,6 +193,12 @@ export class PaymentVoucherGeneratorClass {
               payAmount: row.assignment.payAmount,
               checkInAt: row.assignment.checkInAt,
               checkOutAt: row.assignment.checkOutAt,
+              // The overtime budget is derived from these, NOT from the stamps,
+              // whenever a claim was decided — check-out clamps check_out_at to
+              // the scheduled end, so a shift that ran late leaves stamps saying
+              // it did not. See maxOvertimeCents.
+              overtimeMinutes: row.assignment.overtimeMinutes,
+              overtimeStatus: row.assignment.overtimeStatus,
             })),
           },
         });

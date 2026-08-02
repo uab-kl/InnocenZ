@@ -11,8 +11,19 @@ import {
   checkLineAgainstWeek,
   checkLineAgainstShift,
   assignmentIdFromRef,
+  maxOvertimeCents,
+  overtimeAmountCents,
 } from '@/features/payment-voucher/payment-voucher-audit';
+import { buildOvertimeLine } from '@/features/payment-voucher/overtime-line';
+import { componentFromRef } from '@/features/payment-voucher/payment-voucher-component';
 import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance';
+import {
+  voucherSendGate,
+  type DayReviewView,
+} from '@/features/payment-voucher/payment-voucher-day-review';
+import { klToday, weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
+import { overtimeFromStamps } from '@/features/shift-assignment/overtime';
+import { MAX_PLAUSIBLE_SHIFT_HOURS } from '@/features/payment-voucher/payment-voucher-audit';
 
 let failures = 0;
 function check(label: string, condition: boolean, detail = '') {
@@ -206,6 +217,272 @@ const badQty = checkVoucherBalance({ subtotal: '10.00', deduction: '0.00', net: 
 ]);
 check('non-integer quantity is reported', badQty.problems.some((p) => p.includes('whole number')));
 check('…and its amount still counts', badQty.lineTotalCents === 1000, `got ${badQty.lineTotalCents}`);
+
+console.log('\n--- 8. send gate: a week that has not FINISHED cannot be sent ---');
+// The act that created the live PV-000002 / PV-000004 duplicate pair. Every
+// other fix in this area addressed the consequence; this one refuses the act.
+const reviewed: DayReviewView[] = [
+  {
+    date: '2026-07-27',
+    totalCents: 70000,
+    status: 'approved',
+    approvedTotalCents: 70000,
+    stale: false,
+    note: null,
+    bulk: false,
+    reviewedAt: null,
+    reviewedBy: null,
+  },
+];
+const WEEK_END = '2026-08-02';
+
+check(
+  'mid-week send is refused',
+  !voucherSendGate(reviewed, [], { weekEnd: WEEK_END, today: '2026-07-29' }).allowed,
+);
+check(
+  'the LAST day of the week is still mid-week',
+  !voucherSendGate(reviewed, [], { weekEnd: WEEK_END, today: WEEK_END }).allowed,
+);
+check(
+  'the day AFTER the week ends is allowed',
+  voucherSendGate(reviewed, [], { weekEnd: WEEK_END, today: '2026-08-03' }).allowed,
+);
+// The over-fire guard that matters most: the Monday job runs on
+// `previousCompleteWeek`, so if this ever refused, no voucher would ever issue.
+check(
+  'the Monday payout case is NOT refused',
+  voucherSendGate(reviewed, [], { weekEnd: '2026-07-26', today: '2026-07-27' }).allowed,
+);
+check(
+  'a voucher with no weekEnd is not judged',
+  voucherSendGate(reviewed, [], { weekEnd: null, today: '2026-07-29' }).allowed,
+);
+check('omitting the week argument keeps the old behaviour', voucherSendGate(reviewed, []).allowed);
+
+// The refusal must be the WEEK one, not a review one — an unreviewed day inside
+// a running week would otherwise mask the real reason with a misleading message.
+const midWeek = voucherSendGate(
+  [{ ...reviewed[0], status: null, approvedTotalCents: null }],
+  [{ receiptNo: 'RCP-000009', status: 'pending' }],
+  { weekEnd: WEEK_END, today: '2026-07-29' },
+);
+check(
+  'the reason given is the week, not the review',
+  !midWeek.allowed && midWeek.weekEndsOn === WEEK_END,
+);
+check(
+  '…and it does not also blame unreviewed days',
+  !midWeek.allowed && midWeek.unreviewedDays.length === 0 && midWeek.pendingReceipts.length === 0,
+);
+
+// klToday must read KL local, not UTC. 2026-08-02T17:00Z is already 01:00 on the
+// 3rd in KL — the case a UTC date gets wrong, and the one that would hold the
+// 02:00 Monday job for its first eight hours.
+check('klToday reads KL, not UTC', klToday(new Date('2026-08-02T17:00:00Z')) === '2026-08-03');
+check('klToday is stable mid-day', klToday(new Date('2026-08-03T00:30:00Z')) === '2026-08-03');
+
+console.log('\n--- 9. overtime is RECORDED at check-out, before the clamp destroys the evidence ---');
+// A 22:00–04:00 slot: check in at 22:00, scheduled to end 04:00.
+const IN = new Date('2026-07-27T22:00:00+08:00');
+const SCHED = new Date('2026-07-28T04:00:00+08:00');
+const at = (iso: string) => new Date(iso);
+
+check(
+  '90 minutes past the scheduled end is recorded',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T05:30:00+08:00')).minutes === 90,
+);
+check(
+  'checking out on time claims nothing',
+  overtimeFromStamps(IN, SCHED, SCHED).minutes === null,
+);
+check(
+  'checking out EARLY claims nothing',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T03:00:00+08:00')).minutes === null,
+);
+check(
+  'seconds past the end round to no claim, not a 0-minute one',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T04:00:20+08:00')).minutes === null,
+);
+check(
+  'an unparseable slot (no scheduled end) claims nothing',
+  overtimeFromStamps(IN, null, at('2026-07-28T05:30:00+08:00')).reason === 'no_schedule',
+);
+
+// The 113.1h bug, in the place it would be born rather than where it was found.
+const forgotten = overtimeFromStamps(IN, SCHED, at('2026-07-30T09:00:00+08:00'));
+check('a forgotten check-out claims NOTHING', forgotten.minutes === null);
+check('…and says why', forgotten.reason === 'implausible_stamp');
+check(
+  '…and is NOT capped to a plausible-looking figure',
+  forgotten.minutes !== MAX_PLAUSIBLE_SHIFT_HOURS * 60,
+);
+// The boundary itself: 16h elapsed is still believable, a minute more is not.
+check(
+  'exactly MAX_PLAUSIBLE_SHIFT_HOURS elapsed still records',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T14:00:00+08:00')).minutes === 600,
+);
+check(
+  'one minute beyond it does not',
+  overtimeFromStamps(IN, SCHED, at('2026-07-28T14:01:00+08:00')).minutes === null,
+);
+
+console.log('\n--- 10. send gate: undecided OVERTIME blocks its own week ---');
+// The owner's rule: overtime is paid on the voucher of the week it was WORKED,
+// "together with the week PV it originates from". That only holds if the agency
+// decides before the week goes out — so a pending claim blocks the send, and
+// approving OT onto a document the PR already holds becomes impossible rather
+// than something needing a reopen path.
+const PAST_WEEK = { weekEnd: '2026-07-26', today: '2026-07-27' };
+const OT_PENDING = [{ shiftDate: '2026-07-24', overtimeMinutes: 90 }];
+
+check(
+  'a pending overtime claim blocks the send',
+  !voucherSendGate(reviewed, [], PAST_WEEK, OT_PENDING).allowed,
+);
+check(
+  'no pending overtime still allows the send',
+  voucherSendGate(reviewed, [], PAST_WEEK, []).allowed,
+);
+check(
+  'omitting the argument keeps the old behaviour',
+  voucherSendGate(reviewed, [], PAST_WEEK).allowed,
+);
+
+// THE TRAP, and the reason this rule had to go in BOTH early returns: an
+// unapproved OT claim writes NO voucher line, so the shift it belongs to can be
+// entirely absent from the day view. The `view.length === 0 && no receipts`
+// shortcut would have waved through exactly the case the rule exists for.
+const bare = voucherSendGate([], [], PAST_WEEK, OT_PENDING);
+check('a voucher with NO dated lines is still blocked by pending OT', !bare.allowed);
+check(
+  '…and names the shift date',
+  !bare.allowed && bare.pendingOvertime?.includes('2026-07-24') === true,
+);
+// Second early return: every day reviewed and every receipt approved — the shape
+// a voucher is in the moment before it is sent.
+const allClear = voucherSendGate(reviewed, [], PAST_WEEK, OT_PENDING);
+check('a fully-reviewed voucher is still blocked by pending OT', !allClear.allowed);
+check(
+  'the message says what is undecided',
+  !allClear.allowed && allClear.message.includes('overtime claim(s) not yet decided'),
+);
+// Ordering: a running week is refused for the WEEK, not the overtime — the week
+// rule returns alone, so nobody is sent to decide OT on a week still being worked.
+const midWeekOt = voucherSendGate(
+  reviewed,
+  [],
+  { weekEnd: '2026-08-02', today: '2026-07-29' },
+  OT_PENDING,
+);
+check(
+  'a running week is refused for the week, not the overtime',
+  !midWeekOt.allowed && midWeekOt.pendingOvertime?.length === 0,
+);
+
+console.log('\n--- 11. the overtime DECISION: pricing, the line, and the clamp trap ---');
+
+// 700.00 a day over a 6-hour standard shift = 116.6667/h; overtime is 1.5x that
+// = 175.00/h. Two hours is therefore 350.00.
+check('120 min of OT on a 700.00 day is 350.00', overtimeAmountCents('700.00', 120) === 35_000);
+check('60 min is half that', overtimeAmountCents('700.00', 60) === 17_500);
+check('zero minutes is worth nothing', overtimeAmountCents('700.00', 0) === 0);
+check('a commission-only PR (no wage) prices to 0', overtimeAmountCents(null, 120) === 0);
+check('an unreadable wage prices to 0, it does not throw', overtimeAmountCents('abc', 120) === 0);
+
+const built = buildOvertimeLine({
+  assignmentId: 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+  shiftDate: '2026-07-27',
+  minutes: 120,
+  payAmount: '700.00',
+  outlet: 'Velvet 23',
+  actor: 'probe',
+});
+check('the built line carries the priced amount', built.line.amount === '350.00');
+check('…dated the SHIFT, not today', built.line.lineDate === '2026-07-27');
+check(
+  '…and its ref names the assignment, so the write-time date rule can see it',
+  assignmentIdFromRef(built.line.ref) === 'aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee',
+);
+check(
+  '…with a dedupe field ending -ot, which is what classifies it as component=ot',
+  componentFromRef(built.line.ref) === 'ot',
+);
+
+// THE TRAP this whole slice turns on. Check-out CLAMPS check_out_at to the
+// scheduled end, so a shift that genuinely ran two hours late leaves stamps
+// describing a shift that finished exactly on time. Derived from those stamps
+// the overtime budget is 0 — so before the recorded columns were consulted,
+// every legitimately APPROVED overtime line was reported as invented money.
+const clamped = {
+  id: 'a-27',
+  shiftDate: '2026-07-27',
+  status: 'completed',
+  payAmount: '700.00',
+  checkInAt: '2026-07-27T12:00:00Z',
+  checkOutAt: '2026-07-27T18:00:00Z', // clamped back to the scheduled end
+};
+check(
+  'clamped stamps alone justify NO overtime (this is why the columns exist)',
+  maxOvertimeCents(clamped) === 0,
+);
+check(
+  'the same row with an APPROVED 120-min claim justifies 350.00',
+  maxOvertimeCents({ ...clamped, overtimeMinutes: 120, overtimeStatus: 'approved' }) === 35_000,
+);
+check(
+  'a PENDING claim justifies nothing — OT becomes money at approval, not before',
+  maxOvertimeCents({ ...clamped, overtimeMinutes: 120, overtimeStatus: 'pending' }) === 0,
+);
+check(
+  'a REJECTED claim justifies nothing',
+  maxOvertimeCents({ ...clamped, overtimeMinutes: 120, overtimeStatus: 'rejected' }) === 0,
+);
+
+const approvedOt = auditVoucher({
+  voucher,
+  lines: [
+    { id: 'w1', lineDate: '2026-07-27', amount: '700.00', component: 'wages' },
+    { id: 'w2', lineDate: '2026-07-27', amount: '350.00', component: 'ot', ref: built.line.ref },
+  ],
+  sources: {
+    assignments: [{ ...clamped, overtimeMinutes: 120, overtimeStatus: 'approved' }],
+  },
+});
+check(
+  'an approved OT line on a CLAMPED shift reconciles',
+  approvedOt.ok,
+  JSON.stringify(approvedOt.problems),
+);
+// The bound still bites: approving 120 minutes does not license any amount.
+const inflatedOt = auditVoucher({
+  voucher,
+  lines: [
+    { id: 'w1', lineDate: '2026-07-27', amount: '700.00', component: 'wages' },
+    { id: 'w2', lineDate: '2026-07-27', amount: '900.00', component: 'ot' },
+  ],
+  sources: {
+    assignments: [{ ...clamped, overtimeMinutes: 120, overtimeStatus: 'approved' }],
+  },
+});
+check(
+  '…but 900.00 against the same 120-min approval is still refused',
+  inflatedOt.findings.some((f) => f.code === 'overtime_exceeds_shift_window'),
+);
+// A row with no decision at all keeps the old stamp-derived behaviour, so
+// vouchers written before migration 0077 do not suddenly start failing.
+check(
+  'a row with NO overtime decision still falls back to the stamps',
+  maxOvertimeCents({ ...clamped, checkOutAt: '2026-07-27T20:00:00Z' }) === 35_000,
+);
+
+console.log('\n--- 12. which week an approved claim is paid on ---');
+check('a Monday shift belongs to its own week', weekOfDate('2026-07-27')?.weekStart === '2026-07-27');
+check('a Sunday shift belongs to the week that STARTED six days earlier', weekOfDate('2026-08-02')?.weekStart === '2026-07-27');
+check('…and that week ends on the Sunday', weekOfDate('2026-08-02')?.weekEnd === '2026-08-02');
+check('a mid-week shift lands on the same Monday', weekOfDate('2026-07-30')?.weekStart === '2026-07-27');
+check('a malformed date yields null rather than the week of NaN', weekOfDate('not-a-date') === null);
+check('an impossible date is rejected, not rolled over', weekOfDate('2026-02-30') === null);
 
 console.log(failures === 0 ? '\nALL CHECKS PASSED\n' : `\n${failures} CHECK(S) FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

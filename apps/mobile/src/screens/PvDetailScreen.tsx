@@ -66,6 +66,16 @@ const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
 type LinkedReceipt = {
   id: string;
   ref: string;
+  /**
+   * The receipt's own running number, or null when this line has no receipt
+   * behind it (a bare self-logged line, a legacy row).
+   *
+   * Worth showing even though `ref` already names the ORIGIN: this is the
+   * identifier the server quotes back when it refuses the PR — "RCP-000007 has
+   * already been reviewed by the agency" — and until now the PR had no way to
+   * see it, so the refusal named something invisible to them.
+   */
+  receiptNo: string | null;
   item: string;
   category: 'Drinks' | 'Tips';
   qty: number;
@@ -208,6 +218,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         .map((l) => ({
           id: l.id,
           ref: SOURCE_LABEL[l.source],
+          receiptNo: l.receiptNo ?? null,
           item: l.item,
           category: l.kind === 'drinks' ? ('Drinks' as const) : ('Tips' as const),
           qty: l.quantity,
@@ -560,7 +571,18 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                 <Text style={styles.detailK}>OUTLET</Text>
                 <Text style={styles.detailV}>{receiptDetail.outlet}</Text>
                 <Text style={styles.detailK}>RECEIPT</Text>
-                <Text style={styles.detailV}>{receiptDetail.ref}</Text>
+                <Text style={styles.detailV}>
+                  {/* The number FIRST when there is one: it is what the agency
+                      and the server both call this receipt, so it is the thing
+                      a PR quotes when they ask about it. The origin stays
+                      beside it rather than being replaced — "RCP-000007" alone
+                      does not say whether it was scanned or self-logged. A line
+                      with no receipt behind it keeps showing the origin only,
+                      which is the honest answer, not a blank. */}
+                  {receiptDetail.receiptNo
+                    ? `${receiptDetail.receiptNo} · ${receiptDetail.ref}`
+                    : receiptDetail.ref}
+                </Text>
                 <Text style={styles.detailK}>COMMISSION</Text>
                 <Text style={[styles.detailV, { color: C.accentL }]}>
                   {formatRM(receiptDetail.commission)}

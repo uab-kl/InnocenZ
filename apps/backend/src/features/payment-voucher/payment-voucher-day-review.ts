@@ -100,7 +100,24 @@ export type SendGateResult =
       unreviewedDays: string[];
       /** Receipt numbers (RCP-000123) still waiting on the agency's review. */
       pendingReceipts: string[];
+      /**
+       * Set ONLY when the refusal is "this week has not finished yet", carrying
+       * the day it finishes. Optional so every existing consumer of this shape
+       * keeps compiling; a caller that ignores it still gets the right message.
+       */
+      weekEndsOn?: string;
+      /**
+       * Shift dates whose overtime the agency has not decided yet. Optional for
+       * the same reason as `weekEndsOn` — no existing consumer breaks.
+       */
+      pendingOvertime?: string[];
     };
+
+/** Just enough of an assignment for the gate: when it was, and how much is claimed. */
+export type PendingOvertimeRow = {
+  shiftDate: string;
+  overtimeMinutes: number | null;
+};
 
 /** Just enough of a receipt for the gate — its number, and where it sits. */
 export type ReceiptGateRow = {
@@ -135,19 +152,87 @@ export type ReceiptGateRow = {
  * silence blocks. A receipt is born in a state, and only `manual` self-logs are
  * born pending — a scan does not wait on anybody.
  *
+ * THIRD RULE (31 Jul 2026): a week that has not FINISHED cannot be sent. This
+ * one is not about review at all — it is about arithmetic. Closing a week early
+ * declares a total for days that have not happened, and the rest of that week's
+ * earnings then have nowhere to go: the duplicate-week guard correctly refuses a
+ * second voucher, so a Thursday drink logged after a Wednesday send is simply
+ * lost. That is not hypothetical — a mid-week send is exactly how the live
+ * `PV-000002` / `PV-000004` pair came to exist, and every other fix in this area
+ * addressed the *consequence* rather than the act.
+ *
+ * It is checked FIRST and returns alone, because it is a different kind of
+ * refusal: listing unreviewed days beside it would be noise, since of course
+ * nothing has been reviewed on a week still being worked.
+ *
+ * A voucher with no `weekEnd` passes, for the same reason a voucher with no
+ * dated lines does — there is no window to be inside or outside of, and
+ * blocking on a missing value would be a deadlock rather than a control.
+ *
+ * `today` is injected rather than read here so the rule stays pure and the probe
+ * can walk a voucher across its own week-end without waiting a day. Callers pass
+ * `klToday()`; see its docstring for why a UTC date would break the Monday job.
+ *
+ * FOURTH RULE (31 Jul 2026): undecided OVERTIME blocks the send, and this one is
+ * a direct consequence of the owner's payout decision rather than a safety net.
+ * The rule is that overtime is paid on the voucher of the week it was WORKED —
+ * "together with the week PV it originates from" — and that only holds if the
+ * agency decides before the week goes out. Blocking here means the awkward case,
+ * approving overtime onto a document the PR already holds, is PREVENTED rather
+ * than handled: there is no reopen path to design because the week cannot close
+ * with a claim outstanding.
+ *
+ * ⚠️ It is checked in BOTH early returns above, not only in the message. An
+ * unapproved overtime claim writes no voucher line, so a voucher can carry one
+ * while having no dated lines and no receipts whatsoever — the shortcut
+ * `view.length === 0 && pendingReceipts.length === 0` would have waved through
+ * exactly the case this rule exists for.
+ *
  * Used by BOTH the HTTP send and the Monday payout job. A gate the scheduler
  * walks past every week is not a gate.
  */
 export function voucherSendGate(
   view: DayReviewView[],
   receipts: ReceiptGateRow[] = [],
+  week?: { weekEnd: string | null; today: string },
+  pendingOvertimeRows: PendingOvertimeRow[] = [],
 ): SendGateResult {
+  if (week?.weekEnd && week.weekEnd >= week.today) {
+    return {
+      allowed: false,
+      message:
+        `This voucher cannot be sent yet — its week does not finish until ${week.weekEnd}. ` +
+        'Sending a week early declares a total for days that have not happened, and anything ' +
+        'earned in the rest of the week can no longer be added to it.',
+      heldDays: [],
+      unreviewedDays: [],
+      pendingReceipts: [],
+      // Empty like its three siblings, not omitted: this branch returns alone,
+      // and a caller reading `pendingOvertime` to render "decide these claims"
+      // must be told there is nothing to decide YET rather than `undefined`.
+      pendingOvertime: [],
+      weekEndsOn: week.weekEnd,
+    };
+  }
+
   const pendingReceipts = receipts.filter((r) => r.status === 'pending').map((r) => r.receiptNo);
-  if (view.length === 0 && pendingReceipts.length === 0) return { allowed: true };
+  // Overtime the agency has not decided. Both early returns below have to know
+  // about it: a voucher can carry pending overtime while having no dated lines
+  // and no receipts at all — an unapproved OT claim writes no line, which is
+  // precisely why the shift it belongs to may be invisible here otherwise.
+  const pendingOvertime = pendingOvertimeRows.map((r) => r.shiftDate);
+  if (view.length === 0 && pendingReceipts.length === 0 && pendingOvertime.length === 0) {
+    return { allowed: true };
+  }
 
   const heldDays = view.filter((d) => d.status === 'held').map((d) => d.date);
   const unreviewedDays = view.filter((d) => d.status === null).map((d) => d.date);
-  if (heldDays.length === 0 && unreviewedDays.length === 0 && pendingReceipts.length === 0) {
+  if (
+    heldDays.length === 0 &&
+    unreviewedDays.length === 0 &&
+    pendingReceipts.length === 0 &&
+    pendingOvertime.length === 0
+  ) {
     return { allowed: true };
   }
 
@@ -161,6 +246,11 @@ export function voucherSendGate(
       `${pendingReceipts.length} receipt(s) not yet reviewed: ${pendingReceipts.join(', ')}`,
     );
   }
+  if (pendingOvertime.length > 0) {
+    parts.push(
+      `${pendingOvertime.length} overtime claim(s) not yet decided: ${pendingOvertime.join(', ')}`,
+    );
+  }
 
   return {
     allowed: false,
@@ -168,5 +258,6 @@ export function voucherSendGate(
     heldDays,
     unreviewedDays,
     pendingReceipts,
+    pendingOvertime,
   };
 }

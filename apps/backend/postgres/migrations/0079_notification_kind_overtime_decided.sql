@@ -1,0 +1,15 @@
+-- The agency's decision on an overtime claim now reaches the PR who made it.
+--
+-- `overtime_pending_approval` already tells the AGENCY a claim is waiting. The
+-- other half was missing: whatever the agency decided, the PR was never told.
+-- That matters most on a rejection — the hours simply never appear on the
+-- voucher, and an absence is indistinguishable from a bug from where the PR is
+-- standing. Added alongside its producer in shift-assignment.controller.ts, per
+-- the rule in notification.model.ts ("add one when the code that raises it
+-- lands").
+--
+-- PR-addressed, unlike the three agency-addressed kinds around it.
+--
+-- Additive and idempotent: IF NOT EXISTS makes a re-run a no-op, which matters
+-- because ALTER TYPE ... ADD VALUE cannot be rolled back inside a transaction.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'overtime_decided';

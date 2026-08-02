@@ -18,6 +18,14 @@ export const notificationKindValues = [
   'payment_voucher_dispute_resolved',
   /** Overtime is waiting on agency approval — see the OT rules. */
   'overtime_pending_approval',
+  /**
+   * The agency approved or rejected an overtime claim (migration 0079).
+   *
+   * PR-addressed, unlike the kind above it. Both halves are needed: without
+   * this, a rejected claim just never appears on the voucher, and from where
+   * the PR is standing an absence looks exactly like a bug.
+   */
+  'overtime_decided',
   /** A PR was put on a shift. */
   'shift_assigned',
   /** A shift the PR was on was cancelled or reassigned. */

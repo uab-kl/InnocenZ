@@ -1,5 +1,6 @@
 import { AgencyPvDayReviewPanel } from "@agency-portal/components/agency/AgencyPvDayReviewPanel";
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
+import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
 import {
 	EMPTY_PAYROLL_RANGE,
 	PayrollRangeFilterCard,
@@ -553,6 +554,12 @@ function AgencyPV() {
 			{/* Above the PV list on purpose: a contested voucher is the thing that
 			    needs a human before anything else on this page does. */}
 			<DisputeQueuePanel />
+
+			{/* Directly beneath the disputes and above the weeks, because an
+			    undecided overtime claim is WHY a week below refuses to send. Not on
+			    the approvals page: that page is gated on `approvePrSignups`, which
+			    agency finance does not hold — and finance may decide overtime. */}
+			<OvertimeQueuePanel />
 
 			<div className="iz-payroll-tabs mt-3">
 				{/* The week still running. Vouchers accrue into it as shifts complete, so

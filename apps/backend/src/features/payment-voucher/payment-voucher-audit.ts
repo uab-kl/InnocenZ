@@ -56,7 +56,7 @@ export const STANDARD_SHIFT_HOURS = 6;
 export const MAX_PLAUSIBLE_SHIFT_HOURS = 16;
 
 /** Overtime is paid at 1.5x the derived hourly rate. */
-const OT_MULTIPLIER = 1.5;
+export const OT_MULTIPLIER = 1.5;
 
 /**
  * How far a line's amount may sit from the record behind it before it is a
@@ -90,6 +90,18 @@ export type AuditAssignment = {
   payAmount: string | number | null;
   checkInAt: Date | string | null;
   checkOutAt: Date | string | null;
+  /**
+   * The overtime claim RECORDED at check-out, before the clamp (migration 0077).
+   *
+   * These two are load-bearing for the overtime budget below, not decoration.
+   * Check-out clamps `checkOutAt` to the shift's scheduled end, so on a shift
+   * that genuinely ran late the stamps describe a shift that finished on time —
+   * and a budget derived from them is 0. Without these columns every approved
+   * hour of overtime would be reported as money the stamps cannot justify.
+   */
+  overtimeMinutes?: number | null;
+  /** 'pending' | 'approved' | 'rejected', or null when there was no claim. */
+  overtimeStatus?: string | null;
 };
 
 /** One receipt behind the commission lines, as stored. */
@@ -252,6 +264,25 @@ export function checkLineAgainstShift(
   );
 }
 
+/**
+ * Thrown when a line about to be WRITTEN contradicts the shift its own ref names.
+ *
+ * A distinct class rather than a plain Error because it is the one failure here
+ * that is the caller's fault: every route that writes lines maps it to a 400,
+ * and anything else out of the repository stays a 500. `reason` is carried
+ * separately from `message` so the HTTP body matches the `checkLineAgainstWeek`
+ * refusals these same routes already return — the two halves of one rule must
+ * not drift into two error formats.
+ */
+export class LineDateConflictError extends Error {
+  readonly reason: string;
+  constructor(reason: string) {
+    super(reason);
+    this.name = 'LineDateConflictError';
+    this.reason = reason;
+  }
+}
+
 /** Elapsed hours between two stamps, or null when they cannot be trusted. */
 function elapsedHours(from: Date | string | null, to: Date | string | null): number | null {
   if (!from || !to) return null;
@@ -265,30 +296,71 @@ function elapsedHours(from: Date | string | null, to: Date | string | null): num
 }
 
 /**
- * The most overtime this assignment's own stamps can justify, in cents.
+ * What N minutes of overtime are worth against a sealed daily wage, in cents.
  *
- * Mirrors the phone's derivation exactly: the hourly rate comes from the sealed
- * daily wage divided by a standard shift, and overtime is 1.5x it. Stamps that
- * cannot be trusted yield 0 rather than a capped figure — at that point the
- * record says nothing, and a capped number is still invented money that lands on
- * a voucher looking deliberate.
+ * The ONE place this arithmetic lives. The rate is the daily wage over a
+ * standard shift, times 1.5 — the same derivation the phone displays and the
+ * approval endpoint freezes onto the assignment, so a PR, an agency and this
+ * auditor can never quote three different figures for the same hour.
+ *
+ * Returns 0 rather than throwing on an unreadable or absent wage: a
+ * commission-only PR has no daily wage at all, and that is not an error.
+ */
+export function overtimeAmountCents(
+  payAmount: string | number | null | undefined,
+  minutes: number | null | undefined,
+): number {
+  if (!minutes || minutes <= 0) return 0;
+  let dailyWageCents: number;
+  try {
+    dailyWageCents = toCents(payAmount ?? 0);
+  } catch {
+    return 0;
+  }
+  if (dailyWageCents <= 0) return 0;
+  const hourlyCents = dailyWageCents / STANDARD_SHIFT_HOURS;
+  return Math.round((hourlyCents * OT_MULTIPLIER * minutes) / 60);
+}
+
+/**
+ * The most overtime this assignment can justify, in cents.
+ *
+ * TWO sources, and the order matters. A row that carries an overtime DECISION
+ * (migration 0077) is answered from that decision; only a row with no decision
+ * at all falls back to deriving hours from the attendance stamps.
+ *
+ * ⚠️ The fallback cannot be the primary rule any more, and this is the trap that
+ * would otherwise flag every legitimate approval. Check-out CLAMPS `checkOutAt`
+ * to the shift's scheduled end — that is deliberate, it seals wages to the shift
+ * window — so a PR who worked two hours late leaves stamps describing a shift
+ * that finished exactly on time. Derived from those, the budget is 0, and the
+ * approved `component='ot'` line reads as money invented out of a stamp gap.
+ * The recorded minutes ARE the evidence the clamp destroys, which is the whole
+ * reason check-out writes them.
+ *
+ * A claim that is `pending` or `rejected` budgets 0 on purpose: overtime becomes
+ * money at approval and at no other moment, so a line that exists before the
+ * agency decided is exactly the fault worth reporting.
+ *
+ * The stamp fallback stays for rows written before 0077 (and for any path that
+ * does not record a claim), where returning 0 would raise a finding against a
+ * voucher nobody can now explain. Stamps that cannot be trusted still yield 0
+ * rather than a capped figure — at that point the record says nothing, and a
+ * capped number is still invented money that lands on a voucher looking
+ * deliberate.
  */
 export function maxOvertimeCents(assignment: AuditAssignment): number {
+  if (assignment.overtimeStatus != null) {
+    if (assignment.overtimeStatus !== 'approved') return 0;
+    return overtimeAmountCents(assignment.payAmount, assignment.overtimeMinutes);
+  }
+
   const hours = elapsedHours(assignment.checkInAt, assignment.checkOutAt);
   if (hours === null) return 0;
   const overtimeHours = Math.max(0, hours - STANDARD_SHIFT_HOURS);
   if (overtimeHours === 0) return 0;
 
-  let dailyWageCents: number;
-  try {
-    dailyWageCents = toCents(assignment.payAmount);
-  } catch {
-    return 0;
-  }
-  if (dailyWageCents <= 0) return 0;
-
-  const hourlyCents = dailyWageCents / STANDARD_SHIFT_HOURS;
-  return Math.round(hourlyCents * OT_MULTIPLIER * overtimeHours);
+  return overtimeAmountCents(assignment.payAmount, overtimeHours * 60);
 }
 
 /**

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { shiftAssignmentController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
-import { agencyOwnerOnly } from '@/middlewares/require-sub-role.js';
+import { agencyOwnerOnly, agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -36,6 +36,11 @@ router.get('/backfill', canWrite, shiftAssignmentController.listBackfill.bind(sh
 // stamped at check-in and check-out only, so a live-sounding path would promise
 // tracking the system does not do. Must precede '/:id'.
 router.get('/attendance-fixes', canReadPositions, shiftAssignmentController.listAttendanceFixes.bind(shiftAssignmentController));
+// Overtime claims awaiting a decision. READ is open to the whole agency (and
+// admin) — seeing what is holding a payroll week is not the same authority as
+// deciding it — but the outlet is left out, as it is for positions: a venue
+// does not review the agency's pay decisions. Must precede '/:id'.
+router.get('/overtime/pending', canWrite, shiftAssignmentController.listPendingOvertime.bind(shiftAssignmentController));
 router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignmentController));
 // Ranked replacement PRs for a released assignment; assigning the pick goes
 // through the normal POST '/' below.
@@ -44,6 +49,11 @@ router.get('/:id/replacement-candidates', canWrite, shiftAssignmentController.li
 // controller): approve excuses the PR, reject puts the row back to assigned.
 router.post('/:id/leave/approve', canWrite, shiftAssignmentController.approveLeave.bind(shiftAssignmentController));
 router.post('/:id/leave/reject', canWrite, shiftAssignmentController.rejectLeave.bind(shiftAssignmentController));
+// Deciding overtime IS raising money onto a payment voucher, so it takes the
+// same sub-role as the rest of the PV attestation surface — agencyCan('raisePv')
+// = owner + finance — rather than `agencyOwnerOnly`, which would shut finance
+// out of a payroll decision. Admin passes the sub-role guard by design.
+router.patch('/:id/overtime', canWrite, agencyOwnerOrFinance, shiftAssignmentController.decideOvertime.bind(shiftAssignmentController));
 // Rostering is agencyCan('assignShifts'), which Agency Finance does not hold —
 // so the org-level `canWrite` is not enough on its own. Admin passes the
 // sub-role guard by design.

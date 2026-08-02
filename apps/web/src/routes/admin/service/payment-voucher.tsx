@@ -1,4 +1,9 @@
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import {
+	keepPreviousData,
+	useMutation,
+	useQuery,
+	useQueryClient,
+} from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Loader2, ReceiptText } from "lucide-react";
 import { useState } from "react";
@@ -39,10 +44,16 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { formatDate, formatNumber, formatPrice } from "@/lib/utils";
 import {
+	type DisputeComponent,
+	fetchDisputes,
 	fetchPaymentVoucher,
 	fetchPaymentVouchers,
+	type PaymentVoucherReceipt,
+	type PaymentVoucherReceiptSource,
+	type PaymentVoucherReceiptStatus,
 	type PaymentVoucherStatus,
 	type PaymentVouchersQueryParams,
+	resolveDispute,
 } from "@/services/payment-voucher";
 
 export const Route = createFileRoute("/admin/service/payment-voucher")({
@@ -405,10 +416,19 @@ function VoucherDetail({
 					<TotalRow label="Net" value={voucher.net} emphasize />
 				</dl>
 
+				<ReceiptEvidence receipts={voucher.receipts} />
+
+				<VoucherDisputes voucherId={voucher.id} onRefreshFail={onRefreshFail} />
+
 				{voucher.disputeReason && (
 					<div className="rounded-md border border-rose-500/30 bg-rose-500/5 p-3 text-sm">
+						{/* The voucher's own dispute COLUMNS, which predate the
+						    payment_voucher_dispute table. Kept and labelled rather than
+						    folded into the queue above: a legacy value with no row behind
+						    it cannot be resolved, and showing it as an open dispute would
+						    offer a decision that has nothing to write to. */}
 						<p className="font-medium text-rose-600 dark:text-rose-400">
-							Dispute
+							Dispute note on the voucher record
 						</p>
 						<p className="mt-1 text-muted-foreground">
 							{voucher.disputeReason}
@@ -422,6 +442,348 @@ function VoucherDetail({
 				)}
 			</div>
 		</>
+	);
+}
+
+const RECEIPT_SOURCE_LABEL: Record<PaymentVoucherReceiptSource, string> = {
+	scan: "Scanned",
+	manual: "Self-logged",
+	checkin: "Auto-sealed",
+};
+
+const RECEIPT_STATUS_TONE: Record<
+	PaymentVoucherReceiptStatus,
+	{ label: string; className: string }
+> = {
+	pending: {
+		label: "Pending review",
+		className: "border-amber-500/40 text-amber-600 dark:text-amber-400",
+	},
+	approved: {
+		label: "Approved",
+		className: "border-emerald-500/40 text-emerald-600 dark:text-emerald-400",
+	},
+	verified: {
+		label: "Verified",
+		className: "border-sky-500/40 text-sky-600 dark:text-sky-400",
+	},
+};
+
+/**
+ * The receipts backing this voucher's commission lines.
+ *
+ * READ-ONLY on purpose. Reviewing a receipt is the agency's job — they are the
+ * party who can check it against the venue — and admin is an escalation path
+ * for disputes, not a second reviewer. Rendering it here answers "what is this
+ * money resting on?", which is the question an escalation actually needs.
+ *
+ * A voucher with no receipts says so rather than rendering nothing: several
+ * live commission lines have no receipt behind them at all, and an empty gap
+ * reads as "not loaded" when it means "nothing backs this".
+ */
+function ReceiptEvidence({
+	receipts,
+}: {
+	receipts: PaymentVoucherReceipt[] | undefined;
+}) {
+	// undefined = the list route, which does not return receipts. An empty array
+	// = the detail route saying there genuinely are none. Different facts.
+	if (receipts === undefined) return null;
+
+	return (
+		<div>
+			<h3 className="mb-2 text-sm font-semibold">
+				Receipt evidence{receipts.length > 0 ? ` (${receipts.length})` : ""}
+			</h3>
+			{receipts.length === 0 ? (
+				<p className="text-sm text-muted-foreground">
+					No receipts are attached to this voucher — any commission lines here
+					are not backed by a scanned or self-logged receipt.
+				</p>
+			) : (
+				<ul className="space-y-2">
+					{receipts.map((receipt) => {
+						const tone = RECEIPT_STATUS_TONE[receipt.status];
+						const photos = receipt.proofPhotos ?? [];
+						return (
+							<li key={receipt.id} className="rounded-md border p-3 text-sm">
+								<div className="flex flex-wrap items-center justify-between gap-2">
+									<span className="font-medium">
+										{receipt.receiptNo}
+										{receipt.orderNo ? ` · ${receipt.orderNo}` : ""}
+									</span>
+									<Badge variant="outline" className={tone.className}>
+										{tone.label}
+									</Badge>
+								</div>
+								<p className="mt-1 text-xs text-muted-foreground">
+									{RECEIPT_SOURCE_LABEL[receipt.source]}
+									{receipt.receiptDate
+										? ` · ${fmtDate(receipt.receiptDate)}`
+										: ""}
+									{receipt.receiptTime ? ` ${receipt.receiptTime}` : ""}
+								</p>
+								{receipt.note && (
+									<p className="mt-1 text-xs text-muted-foreground">
+										{receipt.note}
+									</p>
+								)}
+								<p className="mt-1 text-xs text-muted-foreground">
+									{/* A null reviewedAt beside `approved` means the row
+									    predates the review flow — never print a date derived
+									    from something else. */}
+									Reviewed: {fmtDateTime(receipt.reviewedAt)}
+									{receipt.reviewedBy ? ` by ${receipt.reviewedBy}` : ""}
+								</p>
+								{photos.length > 0 && (
+									<div className="mt-2 flex flex-wrap gap-2">
+										{photos.map((src) => (
+											<a
+												key={`${receipt.id}-${src}`}
+												href={src}
+												target="_blank"
+												rel="noreferrer"
+												title="Open full size"
+											>
+												<img
+													src={src}
+													alt={`Proof for receipt ${receipt.receiptNo}`}
+													className="h-20 w-20 rounded border object-cover transition hover:brightness-110"
+												/>
+											</a>
+										))}
+									</div>
+								)}
+							</li>
+						);
+					})}
+				</ul>
+			)}
+		</div>
+	);
+}
+
+const DISPUTE_COMPONENT_LABEL: Record<DisputeComponent, string> = {
+	wages: "Daily wages",
+	drinks: "Drinks",
+	tips: "Tips",
+	others: "Others",
+};
+
+/**
+ * Disputes raised against this voucher, and the admin's escalation decision.
+ *
+ * This is the ONE write on an otherwise read-only page, and it exists for a
+ * single reason (owner's decision, 31 Jul 2026, Option A): resolving a dispute
+ * belongs to the agency, but agency-only leaves a PR with **no recourse if
+ * their agency goes quiet**. The server's `agencyOwnerOrFinance` guard waves
+ * admin through by design, so nothing had to be widened to build this.
+ *
+ * The queue endpoint is not voucher-scoped, so the filter is client-side. That
+ * is safe HERE and nowhere else: admin is authorised for every tenant, so this
+ * narrows a list it may already see in full, rather than being the thing that
+ * keeps tenants apart.
+ */
+function VoucherDisputes({
+	voucherId,
+	onRefreshFail,
+}: {
+	voucherId: string;
+	onRefreshFail: () => void;
+}) {
+	const queryClient = useQueryClient();
+	const [note, setNote] = useState("");
+	const [needsNote, setNeedsNote] = useState(false);
+
+	// openOnly = false: an escalation needs to see what was ALREADY decided as
+	// much as what is outstanding — "the agency rejected this" is the usual
+	// reason a PR escalates in the first place.
+	const disputesQuery = useQuery({
+		queryKey: ["payment-voucher", "disputes", "all"],
+		queryFn: () => fetchDisputes(onRefreshFail, false),
+		staleTime: 30_000,
+	});
+
+	const resolveMut = useMutation({
+		mutationFn: (input: {
+			disputeId: string;
+			outcome: "accepted" | "rejected";
+		}) =>
+			resolveDispute(
+				input.disputeId,
+				{ outcome: input.outcome, resolutionNote: note.trim() || undefined },
+				onRefreshFail,
+			),
+		onSettled: () => {
+			setNote("");
+			queryClient.invalidateQueries({
+				queryKey: ["payment-voucher", "disputes", "all"],
+			});
+			// Resolving the last open dispute hands the voucher back to 'sent', so
+			// the detail and the list both move.
+			queryClient.invalidateQueries({
+				queryKey: ["payment-voucher", voucherId],
+			});
+			queryClient.invalidateQueries({ queryKey: ["payment-vouchers"] });
+		},
+	});
+
+	if (disputesQuery.isLoading) {
+		return (
+			<div>
+				<h3 className="mb-2 text-sm font-semibold">Disputes</h3>
+				<p className="text-sm text-muted-foreground">Loading disputes…</p>
+			</div>
+		);
+	}
+
+	const disputes = (disputesQuery.data ?? []).filter(
+		(d) => d.voucherId === voucherId,
+	);
+	if (disputes.length === 0) return null;
+
+	const submit = (disputeId: string, outcome: "accepted" | "rejected") => {
+		// The server enforces this too; surfacing it here is about not making an
+		// admin discover the rule through a 400.
+		if (outcome === "rejected" && !note.trim()) {
+			setNeedsNote(true);
+			return;
+		}
+		setNeedsNote(false);
+		resolveMut.mutate({ disputeId, outcome });
+	};
+
+	return (
+		<div>
+			<h3 className="mb-2 text-sm font-semibold">
+				Disputes ({disputes.length})
+			</h3>
+			<p className="mb-2 text-xs text-muted-foreground">
+				Resolving here is an escalation path for when the agency has not acted.
+				It records the decision and tells the PR; it does not change the
+				voucher's amounts.
+			</p>
+			<ul className="space-y-2">
+				{disputes.map((dispute) => (
+					<li key={dispute.id} className="rounded-md border p-3 text-sm">
+						<div className="flex flex-wrap items-center justify-between gap-2">
+							<span className="font-medium">
+								{DISPUTE_COMPONENT_LABEL[dispute.component]} ·{" "}
+								{fmtDate(dispute.disputeDate)}
+							</span>
+							{dispute.outcome ? (
+								<Badge variant="outline">Resolved · {dispute.outcome}</Badge>
+							) : (
+								<Badge
+									variant="outline"
+									className="border-amber-500/40 text-amber-600 dark:text-amber-400"
+								>
+									Open
+								</Badge>
+							)}
+						</div>
+
+						<div className="mt-2 flex flex-wrap gap-4 text-xs">
+							<span>
+								<span className="block text-muted-foreground">
+									Voucher says
+								</span>
+								<span className="tabular-nums">
+									RM {formatPrice(dispute.disputedAmount ?? "0")}
+								</span>
+							</span>
+							{dispute.claimedAmount !== null && (
+								<span>
+									<span className="block text-muted-foreground">PR claims</span>
+									<span className="tabular-nums">
+										RM {formatPrice(dispute.claimedAmount)}
+									</span>
+								</span>
+							)}
+						</div>
+
+						{dispute.reason && (
+							<p className="mt-2 text-xs text-muted-foreground">
+								Reason: {dispute.reason}
+							</p>
+						)}
+						{dispute.proofPhotos && dispute.proofPhotos.length > 0 ? (
+							<div className="mt-2 flex flex-wrap gap-2">
+								{dispute.proofPhotos.map((src) => (
+									<a
+										key={`${dispute.id}-${src}`}
+										href={src}
+										target="_blank"
+										rel="noreferrer"
+										title="Open full size"
+									>
+										<img
+											src={src}
+											alt={`Proof for the ${dispute.component} dispute on ${dispute.disputeDate}`}
+											className="h-20 w-20 rounded border object-cover transition hover:brightness-110"
+										/>
+									</a>
+								))}
+							</div>
+						) : (
+							// Not a defect: a "missing record" claim has nothing to
+							// photograph.
+							<p className="mt-2 text-xs text-muted-foreground">
+								No proof attached
+							</p>
+						)}
+
+						{dispute.outcome ? (
+							<p className="mt-2 text-xs text-muted-foreground">
+								{fmtDateTime(dispute.resolvedAt)}
+								{dispute.resolvedBy ? ` · ${dispute.resolvedBy}` : ""}
+								{dispute.resolutionNote ? ` — ${dispute.resolutionNote}` : ""}
+							</p>
+						) : (
+							<div className="mt-3 space-y-2">
+								<Label
+									htmlFor={`dispute-note-${dispute.id}`}
+									className="text-xs"
+								>
+									Note to the PR (required when rejecting)
+								</Label>
+								<Input
+									id={`dispute-note-${dispute.id}`}
+									value={note}
+									onChange={(e) => {
+										setNote(e.target.value);
+										if (e.target.value.trim()) setNeedsNote(false);
+									}}
+									placeholder="Why this was accepted or rejected…"
+								/>
+								{needsNote && (
+									<p className="text-xs text-amber-600 dark:text-amber-400">
+										Tell the PR why this was rejected.
+									</p>
+								)}
+								<div className="flex gap-2">
+									<Button
+										size="sm"
+										disabled={resolveMut.isPending}
+										onClick={() => submit(dispute.id, "accepted")}
+									>
+										Accept
+									</Button>
+									<Button
+										size="sm"
+										variant="outline"
+										disabled={resolveMut.isPending}
+										onClick={() => submit(dispute.id, "rejected")}
+									>
+										Reject
+									</Button>
+								</div>
+							</div>
+						)}
+					</li>
+				))}
+			</ul>
+		</div>
 	);
 }
 

@@ -11,13 +11,32 @@ import {
 } from './payment-voucher-excel.js';
 import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
 import { buildVoucherPdf } from './payment-voucher-pdf.js';
-import { checkLineAgainstWeek } from './payment-voucher-audit.js';
+import { checkLineAgainstWeek, LineDateConflictError } from './payment-voucher-audit.js';
+
+/**
+ * Turns the repository's line-vs-shift refusal into a 400.
+ *
+ * The check itself lives in the repository so all four insert paths get it,
+ * including the weekly generator, which never touches a controller. What HTTP
+ * owns is only the status code: this is the caller's fault, not a fault, so it
+ * must not fall through to the 500 every catch block otherwise returns — a
+ * client told "internal server error" will retry the same bad date forever.
+ *
+ * Returns true when it has answered, so a catch block reads as one line.
+ */
+function respondIfLineDateConflict(res: Response, error: unknown): boolean {
+  if (!(error instanceof LineDateConflictError)) return false;
+  res.status(400).json({ success: false, message: error.reason, data: null });
+  return true;
+}
 import {
   allDaysReviewed,
   buildDayReviewView,
   dayTotalsCents,
   voucherSendGate,
 } from './payment-voucher-day-review.js';
+import { klToday } from './payment-voucher-week.js';
+import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -182,6 +201,18 @@ type PrReceiptLineDTO = {
    */
   receiptStatus: PaymentVoucherReceiptStatus | null;
   /**
+   * The parent receipt's running number (`RCP-000007`), or null when this line
+   * has no receipt behind it.
+   *
+   * It rides on the LINE because `payment_voucher_line` has no such column and
+   * never should — the number belongs to the receipt, and copying it onto the
+   * line would break the one-fact-one-table rule. Before this the PR's own
+   * receipt detail could show everything about a receipt EXCEPT the identifier
+   * the server uses when it refuses them: "RCP-000007 has already been reviewed
+   * by the agency" named something the PR had no way to see.
+   */
+  receiptNo: string | null;
+  /**
    * May the PR contest this money yet?
    *
    * ADVISORY — it exists so the app can grey a button instead of offering an
@@ -206,10 +237,11 @@ type PrReceiptLineDTO = {
  */
 function toReceiptLineDTO(
   line: PaymentVoucherLineType,
-  receiptStatusById?: Map<string, PaymentVoucherReceiptStatus>,
+  receiptInfoById?: Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }>,
 ): PrReceiptLineDTO {
   const { kind, source, sales } = decodeRef(line.ref);
-  const receiptStatus = line.receiptId ? (receiptStatusById?.get(line.receiptId) ?? null) : null;
+  const info = line.receiptId ? (receiptInfoById?.get(line.receiptId) ?? null) : null;
+  const receiptStatus = info?.status ?? null;
   return {
     id: line.id,
     kind,
@@ -224,15 +256,16 @@ function toReceiptLineDTO(
     pending: receiptStatus ? receiptStatus === 'pending' : source === 'manual',
     proofPhotos: line.proofPhotos ?? [],
     receiptStatus,
+    receiptNo: info?.receiptNo ?? null,
     disputable: kind === 'wages' || receiptStatus === null || receiptStatus !== 'pending',
   };
 }
 
 /** receipt id -> review state, for the DTO mapper above. */
-function receiptStatusMap(
-  receipts: { id: string; status: PaymentVoucherReceiptStatus }[],
-): Map<string, PaymentVoucherReceiptStatus> {
-  return new Map(receipts.map((r) => [r.id, r.status]));
+function receiptInfoMap(
+  receipts: { id: string; status: PaymentVoucherReceiptStatus; receiptNo: string }[],
+): Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }> {
+  return new Map(receipts.map((r) => [r.id, { status: r.status, receiptNo: r.receiptNo }]));
 }
 
 /** Wage lines only — History summary "RM X wages" beside net. */
@@ -251,6 +284,14 @@ export class PaymentVoucherControllerClass {
     private authRepository: AuthRepositoryClass,
     private prRepository: PrRepositoryClass,
     private paymentVoucherDisputeRepository: PaymentVoucherDisputeRepositoryClass,
+    // Needed by the send gate: overtime lives on the shift assignment, and an
+    // undecided claim must block its own week from going out (owner's rule —
+    // overtime is paid on the voucher of the week it was worked). The line-date
+    // check solved the same missing-repository problem by moving into the
+    // payment-voucher repository, which worked because every insert path passes
+    // through it. This one cannot: the gate is a controller-level decision about
+    // a request, not an invariant of a write.
+    private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
   ) {}
 
   /**
@@ -603,6 +644,7 @@ export class PaymentVoucherControllerClass {
       );
       res.status(201).json({ success: true, message: 'Payment voucher created', data: voucher });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.create] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -650,7 +692,31 @@ export class PaymentVoucherControllerClass {
         // (owner's decision #2), so the send has one refusal path rather than
         // two that can disagree about whether a week may go out.
         const receipts = await this.paymentVoucherRepository.listReceipts(id);
-        const gate = voucherSendGate(buildDayReviewView(existing.lines, reviews), receipts);
+        // Judged against the week the voucher will HAVE after this update — the
+        // same reasoning the line-date check below uses: an agency correcting a
+        // voucher's week and sending it in one call must be measured against the
+        // corrected week, not the stale one.
+        // Undecided overtime blocks its own week, so the claim is always settled
+        // BEFORE the voucher it belongs to goes out. Only queryable when the
+        // voucher names a PR and a week; a week-less or PR-less voucher has no
+        // shifts to ask about, and an empty list correctly blocks nothing.
+        const weekStart = data.weekStart ?? existing.weekStart;
+        const weekEnd = data.weekEnd ?? existing.weekEnd;
+        const prId = existing.prId;
+        const pendingOvertime =
+          prId && weekStart && weekEnd
+            ? await this.shiftAssignmentRepository.listPendingOvertimeForPrWeek({
+                prId,
+                fromDate: weekStart,
+                toDate: weekEnd,
+              })
+            : [];
+        const gate = voucherSendGate(
+          buildDayReviewView(existing.lines, reviews),
+          receipts,
+          { weekEnd, today: klToday() },
+          pendingOvertime,
+        );
         if (!gate.allowed) {
           return res.status(409).json({
             success: false,
@@ -659,6 +725,8 @@ export class PaymentVoucherControllerClass {
               heldDays: gate.heldDays,
               unreviewedDays: gate.unreviewedDays,
               pendingReceipts: gate.pendingReceipts,
+              weekEndsOn: gate.weekEndsOn ?? null,
+              pendingOvertime: gate.pendingOvertime ?? [],
             },
           });
         }
@@ -703,6 +771,7 @@ export class PaymentVoucherControllerClass {
       if (!voucher) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'Payment voucher updated', data: voucher });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.update] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -744,7 +813,7 @@ export class PaymentVoucherControllerClass {
       // This is the THIS-WEEK section, where the PR watches the agency approve
       // what they logged — so the receipt states have to come with the lines.
       const statuses = draft
-        ? receiptStatusMap(await this.paymentVoucherRepository.listReceipts(draft.id))
+        ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(draft.id))
         : undefined;
       res.status(200).json({
         success: true,
@@ -779,7 +848,7 @@ export class PaymentVoucherControllerClass {
       // may be disputed depends on its receipt's state — so this read carries
       // the same statuses as this-week rather than guessing from `source`.
       const statuses = voucher
-        ? receiptStatusMap(await this.paymentVoucherRepository.listReceipts(voucher.id))
+        ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(voucher.id))
         : undefined;
       res.status(200).json({
         success: true,
@@ -825,7 +894,7 @@ export class PaymentVoucherControllerClass {
       // cancelled subscription rendering "Paid".
       const weeks = [];
       for (const v of vouchers) {
-        const statuses = receiptStatusMap(await this.paymentVoucherRepository.listReceipts(v.id));
+        const statuses = receiptInfoMap(await this.paymentVoucherRepository.listReceipts(v.id));
         weeks.push({
           voucherId: v.id,
           voucherNo: v.voucherNo,
@@ -915,6 +984,7 @@ export class PaymentVoucherControllerClass {
       });
       res.status(201).json({ success: true, message: 'Logged', data: toReceiptLineDTO(line) });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.addMyLine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -1039,10 +1109,11 @@ export class PaymentVoucherControllerClass {
           receiptTime: receipt.receiptTime,
           source: receipt.source,
           status: receipt.status,
-          lines: lines.map((l) => toReceiptLineDTO(l, receiptStatusMap([receipt]))),
+          lines: lines.map((l) => toReceiptLineDTO(l, receiptInfoMap([receipt]))),
         },
       });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.addMyReceipt] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -1275,10 +1346,11 @@ export class PaymentVoucherControllerClass {
             : 'Line corrected',
         data: {
           receipt,
-          line: toReceiptLineDTO(updated, receiptStatusMap(receipt ? [receipt] : [])),
+          line: toReceiptLineDTO(updated, receiptInfoMap(receipt ? [receipt] : [])),
         },
       });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.editReceiptLine] Error:', error);
       return res
         .status(500)
@@ -1376,13 +1448,14 @@ export class PaymentVoucherControllerClass {
       // to the source-based guess and answered `pending: false` /
       // `disputable: true` for a line whose receipt is genuinely pending — so the
       // app would offer a dispute button the server then refuses.
-      const statuses = receiptStatusMap(
+      const statuses = receiptInfoMap(
         await this.paymentVoucherRepository.listReceipts(owned.voucher.id),
       );
       res
         .status(200)
         .json({ success: true, message: 'Updated', data: toReceiptLineDTO(line, statuses) });
     } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.updateMyLine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
@@ -1839,11 +1912,11 @@ export class PaymentVoucherControllerClass {
       // pending_review, which a PR can also dispute.
       if (component !== 'wages') {
         const receipts = await this.paymentVoucherRepository.listReceipts(voucherId);
-        const statuses = receiptStatusMap(receipts);
+        const statuses = receiptInfoMap(receipts);
         const waiting = existing.lines
           .filter((l) => l.lineDate === disputeDate && decodeRef(l.ref).kind === component)
           .map((l) => (l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null))
-          .filter((r) => r && statuses.get(r.id) === 'pending');
+          .filter((r) => r && statuses.get(r.id)?.status === 'pending');
         if (waiting.length > 0) {
           const numbers = [...new Set(waiting.map((r) => r!.receiptNo))].join(', ');
           return res.status(409).json({
