@@ -155,6 +155,68 @@ async function main() {
   /** Non-null only when --unpriced had to borrow a priced row; the value to put back. */
   let borrowedWage: string | null = null;
 
+  // --race: two SIMULTANEOUS decisions on one pending claim. This is the test
+  // `claimOvertimeDecision` was written for — a read-then-check is not a lock,
+  // so without the `UPDATE … WHERE overtime_status = 'pending'` mutex both
+  // requests would pass every precondition and both would act.
+  //
+  // It decides with REJECT, not approve, on purpose: reject runs through the
+  // identical mutex but writes no voucher line, so the race can be proven
+  // without putting money on anyone's payslip. The claim is rolled back to NULL
+  // afterwards, leaving nothing behind at all.
+  if (process.argv.includes('--race')) {
+    const target = candidates.find((c) => !!c.payAmount && Number(c.payAmount) > 0);
+    if (!target) {
+      console.log('\n  No priced candidate free of an overtime decision — cannot stage a race.\n');
+      process.exit(2);
+    }
+    console.log(`\n  RACE on ${target.assignmentId} (shift ${target.shiftDate})`);
+    await db
+      .update(ShiftAssignmentTable)
+      .set({ overtimeMinutes: OVERTIME_MINUTES, overtimeStatus: 'pending' })
+      .where(eq(ShiftAssignmentTable.id, target.assignmentId));
+    console.log('  staged one PENDING claim, then firing two REJECTs at once…');
+
+    const raceToken = await login();
+    const fire = () =>
+      fetch(`${BASE}/shift-assignment/${target.assignmentId}/overtime`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${raceToken}` },
+        body: JSON.stringify({ decision: 'reject' }),
+      }).then(async (r) => ({
+        status: r.status,
+        message: ((await r.json()) as { message?: string }).message,
+      }));
+
+    let outcomes: Array<{ status: number; message?: string }> = [];
+    try {
+      outcomes = await Promise.all([fire(), fire()]);
+    } finally {
+      // Unconditional: leave the row exactly as it was found.
+      await db
+        .update(ShiftAssignmentTable)
+        .set({
+          overtimeMinutes: null,
+          overtimeStatus: null,
+          overtimeAmount: null,
+          overtimeDecidedAt: null,
+          overtimeDecidedBy: null,
+        })
+        .where(eq(ShiftAssignmentTable.id, target.assignmentId));
+      console.log('  claim rolled back to NULL — nothing left behind.');
+    }
+
+    for (const o of outcomes) console.log(`    → ${o.status} "${o.message}"`);
+    const winners = outcomes.filter((o) => o.status === 200).length;
+    const losers = outcomes.filter((o) => o.status === 409).length;
+    console.log(
+      winners === 1 && losers === 1
+        ? '\n  PASS — exactly one decision landed, the other was refused. The transition IS the mutex.\n'
+        : `\n  FAIL — expected 1×200 and 1×409, got ${winners}×200 and ${losers}×409.\n`,
+    );
+    process.exit(winners === 1 && losers === 1 ? 0 : 1);
+  }
+
   if (WANT_UNPRICED) {
     // Prefer a genuinely unpriced row. On this database there is none — every
     // assignment carries a positive wage — so the fallback BORROWS one: blank
