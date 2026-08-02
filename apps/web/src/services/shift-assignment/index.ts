@@ -244,6 +244,101 @@ export async function rejectLeaveRequest(
 	return response.data.data;
 }
 
+/** The Mon–Sun payroll week a claim's shift falls in, computed server-side. */
+export interface OvertimeWeek {
+	weekStart: string;
+	weekEnd: string;
+}
+
+/**
+ * One overtime claim awaiting an agency decision.
+ *
+ * `amount` and `week` are computed by the SERVER, by the same functions the
+ * approval itself uses. Render them; never re-derive either one here. A screen
+ * that computed its own figure could show the agency one number and write a
+ * different one onto the voucher, and the agency would have attested to the
+ * number it saw.
+ */
+export interface PendingOvertimeClaim {
+	assignmentId: string;
+	prId: string;
+	prName: string | null;
+	shiftId: string;
+	shiftDate: string;
+	slot: string | null;
+	outletName: string | null;
+	overtimeMinutes: number | null;
+	// numeric(12,2), serialized as a string — the sealed daily wage the hourly
+	// overtime rate is derived from.
+	payAmount: string | null;
+	week: OvertimeWeek | null;
+	amount: string;
+}
+
+/** What an approval returns: the money that landed, and where it landed. */
+export interface OvertimeDecisionResult {
+	message: string;
+	voucherId?: string;
+	amount?: string;
+	week?: OvertimeWeek;
+}
+
+/**
+ * Overtime claims this agency has not yet decided.
+ *
+ * Every row here is holding its own payroll week: an undecided claim blocks
+ * that week's voucher from being sent, so this list doubles as the answer to
+ * "why can't I send last week?".
+ */
+export async function fetchPendingOvertime(
+	onRefreshFail: () => void,
+): Promise<PendingOvertimeClaim[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: PendingOvertimeClaim[];
+	}>("/shift-assignment/overtime/pending");
+	return response.data.data ?? [];
+}
+
+/**
+ * Approve or reject one overtime claim — the only thing that turns recorded
+ * minutes into money.
+ *
+ * Approving writes an `ot` line onto the voucher for the week the shift was
+ * WORKED (owner's rule, 31 Jul 2026), so the amount is frozen at the moment of
+ * the decision. Rejecting records "decided, worth nothing" and writes no line;
+ * either way the claim stops blocking its week.
+ *
+ * Refusals worth surfacing verbatim rather than flattening into one message:
+ * 409 already-decided (someone else got there first, so re-fetch), 409
+ * unpriceable (a commission-only PR has no daily wage to derive an hourly rate
+ * from — the honest answer is not a 0.00 line), and the 400 line-date rule.
+ */
+export async function decideOvertimeClaim(
+	assignmentId: string,
+	decision: "approve" | "reject",
+	onRefreshFail: () => void,
+): Promise<OvertimeDecisionResult> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: {
+			voucherId?: string;
+			amount?: string;
+			week?: OvertimeWeek;
+		} | null;
+	}>(`/shift-assignment/${assignmentId}/overtime`, { decision });
+	return {
+		message: response.data.message,
+		voucherId: response.data.data?.voucherId,
+		amount: response.data.data?.amount,
+		week: response.data.data?.week,
+	};
+}
+
 export async function removeShiftAssignment(
 	id: string,
 	onRefreshFail: () => void,
