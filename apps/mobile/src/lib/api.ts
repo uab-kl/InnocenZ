@@ -824,6 +824,15 @@ export type PrReceiptLine = {
    */
   receiptStatus?: 'pending' | 'approved' | 'verified' | null;
   /**
+   * The parent receipt's running number (`RCP-000007`), or null when this line
+   * has no receipt behind it.
+   *
+   * This is the identifier the server quotes when it refuses the PR ("RCP-000007
+   * has already been reviewed by the agency"), so without it the refusal names
+   * something the PR cannot see anywhere in their own app.
+   */
+  receiptNo?: string | null;
+  /**
    * May this money be disputed yet? ADVISORY — for greying a control, never as
    * the rule: the server refuses with a 409 whose message names the receipt.
    *

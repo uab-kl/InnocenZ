@@ -201,6 +201,18 @@ type PrReceiptLineDTO = {
    */
   receiptStatus: PaymentVoucherReceiptStatus | null;
   /**
+   * The parent receipt's running number (`RCP-000007`), or null when this line
+   * has no receipt behind it.
+   *
+   * It rides on the LINE because `payment_voucher_line` has no such column and
+   * never should — the number belongs to the receipt, and copying it onto the
+   * line would break the one-fact-one-table rule. Before this the PR's own
+   * receipt detail could show everything about a receipt EXCEPT the identifier
+   * the server uses when it refuses them: "RCP-000007 has already been reviewed
+   * by the agency" named something the PR had no way to see.
+   */
+  receiptNo: string | null;
+  /**
    * May the PR contest this money yet?
    *
    * ADVISORY — it exists so the app can grey a button instead of offering an
@@ -225,10 +237,11 @@ type PrReceiptLineDTO = {
  */
 function toReceiptLineDTO(
   line: PaymentVoucherLineType,
-  receiptStatusById?: Map<string, PaymentVoucherReceiptStatus>,
+  receiptInfoById?: Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }>,
 ): PrReceiptLineDTO {
   const { kind, source, sales } = decodeRef(line.ref);
-  const receiptStatus = line.receiptId ? (receiptStatusById?.get(line.receiptId) ?? null) : null;
+  const info = line.receiptId ? (receiptInfoById?.get(line.receiptId) ?? null) : null;
+  const receiptStatus = info?.status ?? null;
   return {
     id: line.id,
     kind,
@@ -243,15 +256,16 @@ function toReceiptLineDTO(
     pending: receiptStatus ? receiptStatus === 'pending' : source === 'manual',
     proofPhotos: line.proofPhotos ?? [],
     receiptStatus,
+    receiptNo: info?.receiptNo ?? null,
     disputable: kind === 'wages' || receiptStatus === null || receiptStatus !== 'pending',
   };
 }
 
 /** receipt id -> review state, for the DTO mapper above. */
-function receiptStatusMap(
-  receipts: { id: string; status: PaymentVoucherReceiptStatus }[],
-): Map<string, PaymentVoucherReceiptStatus> {
-  return new Map(receipts.map((r) => [r.id, r.status]));
+function receiptInfoMap(
+  receipts: { id: string; status: PaymentVoucherReceiptStatus; receiptNo: string }[],
+): Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }> {
+  return new Map(receipts.map((r) => [r.id, { status: r.status, receiptNo: r.receiptNo }]));
 }
 
 /** Wage lines only — History summary "RM X wages" beside net. */
@@ -799,7 +813,7 @@ export class PaymentVoucherControllerClass {
       // This is the THIS-WEEK section, where the PR watches the agency approve
       // what they logged — so the receipt states have to come with the lines.
       const statuses = draft
-        ? receiptStatusMap(await this.paymentVoucherRepository.listReceipts(draft.id))
+        ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(draft.id))
         : undefined;
       res.status(200).json({
         success: true,
@@ -834,7 +848,7 @@ export class PaymentVoucherControllerClass {
       // may be disputed depends on its receipt's state — so this read carries
       // the same statuses as this-week rather than guessing from `source`.
       const statuses = voucher
-        ? receiptStatusMap(await this.paymentVoucherRepository.listReceipts(voucher.id))
+        ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(voucher.id))
         : undefined;
       res.status(200).json({
         success: true,
@@ -880,7 +894,7 @@ export class PaymentVoucherControllerClass {
       // cancelled subscription rendering "Paid".
       const weeks = [];
       for (const v of vouchers) {
-        const statuses = receiptStatusMap(await this.paymentVoucherRepository.listReceipts(v.id));
+        const statuses = receiptInfoMap(await this.paymentVoucherRepository.listReceipts(v.id));
         weeks.push({
           voucherId: v.id,
           voucherNo: v.voucherNo,
@@ -1095,7 +1109,7 @@ export class PaymentVoucherControllerClass {
           receiptTime: receipt.receiptTime,
           source: receipt.source,
           status: receipt.status,
-          lines: lines.map((l) => toReceiptLineDTO(l, receiptStatusMap([receipt]))),
+          lines: lines.map((l) => toReceiptLineDTO(l, receiptInfoMap([receipt]))),
         },
       });
     } catch (error) {
@@ -1332,7 +1346,7 @@ export class PaymentVoucherControllerClass {
             : 'Line corrected',
         data: {
           receipt,
-          line: toReceiptLineDTO(updated, receiptStatusMap(receipt ? [receipt] : [])),
+          line: toReceiptLineDTO(updated, receiptInfoMap(receipt ? [receipt] : [])),
         },
       });
     } catch (error) {
@@ -1434,7 +1448,7 @@ export class PaymentVoucherControllerClass {
       // to the source-based guess and answered `pending: false` /
       // `disputable: true` for a line whose receipt is genuinely pending — so the
       // app would offer a dispute button the server then refuses.
-      const statuses = receiptStatusMap(
+      const statuses = receiptInfoMap(
         await this.paymentVoucherRepository.listReceipts(owned.voucher.id),
       );
       res
@@ -1898,11 +1912,11 @@ export class PaymentVoucherControllerClass {
       // pending_review, which a PR can also dispute.
       if (component !== 'wages') {
         const receipts = await this.paymentVoucherRepository.listReceipts(voucherId);
-        const statuses = receiptStatusMap(receipts);
+        const statuses = receiptInfoMap(receipts);
         const waiting = existing.lines
           .filter((l) => l.lineDate === disputeDate && decodeRef(l.ref).kind === component)
           .map((l) => (l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null))
-          .filter((r) => r && statuses.get(r.id) === 'pending');
+          .filter((r) => r && statuses.get(r.id)?.status === 'pending');
         if (waiting.length > 0) {
           const numbers = [...new Set(waiting.map((r) => r!.receiptNo))].join(', ');
           return res.status(409).json({
