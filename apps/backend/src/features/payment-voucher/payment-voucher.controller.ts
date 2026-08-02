@@ -36,6 +36,7 @@ import {
   voucherSendGate,
 } from './payment-voucher-day-review.js';
 import { klToday } from './payment-voucher-week.js';
+import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -269,6 +270,14 @@ export class PaymentVoucherControllerClass {
     private authRepository: AuthRepositoryClass,
     private prRepository: PrRepositoryClass,
     private paymentVoucherDisputeRepository: PaymentVoucherDisputeRepositoryClass,
+    // Needed by the send gate: overtime lives on the shift assignment, and an
+    // undecided claim must block its own week from going out (owner's rule —
+    // overtime is paid on the voucher of the week it was worked). The line-date
+    // check solved the same missing-repository problem by moving into the
+    // payment-voucher repository, which worked because every insert path passes
+    // through it. This one cannot: the gate is a controller-level decision about
+    // a request, not an invariant of a write.
+    private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
   ) {}
 
   /**
@@ -673,10 +682,27 @@ export class PaymentVoucherControllerClass {
         // same reasoning the line-date check below uses: an agency correcting a
         // voucher's week and sending it in one call must be measured against the
         // corrected week, not the stale one.
-        const gate = voucherSendGate(buildDayReviewView(existing.lines, reviews), receipts, {
-          weekEnd: data.weekEnd ?? existing.weekEnd,
-          today: klToday(),
-        });
+        // Undecided overtime blocks its own week, so the claim is always settled
+        // BEFORE the voucher it belongs to goes out. Only queryable when the
+        // voucher names a PR and a week; a week-less or PR-less voucher has no
+        // shifts to ask about, and an empty list correctly blocks nothing.
+        const weekStart = data.weekStart ?? existing.weekStart;
+        const weekEnd = data.weekEnd ?? existing.weekEnd;
+        const prId = existing.prId;
+        const pendingOvertime =
+          prId && weekStart && weekEnd
+            ? await this.shiftAssignmentRepository.listPendingOvertimeForPrWeek({
+                prId,
+                fromDate: weekStart,
+                toDate: weekEnd,
+              })
+            : [];
+        const gate = voucherSendGate(
+          buildDayReviewView(existing.lines, reviews),
+          receipts,
+          { weekEnd, today: klToday() },
+          pendingOvertime,
+        );
         if (!gate.allowed) {
           return res.status(409).json({
             success: false,
@@ -686,6 +712,7 @@ export class PaymentVoucherControllerClass {
               unreviewedDays: gate.unreviewedDays,
               pendingReceipts: gate.pendingReceipts,
               weekEndsOn: gate.weekEndsOn ?? null,
+              pendingOvertime: gate.pendingOvertime ?? [],
             },
           });
         }

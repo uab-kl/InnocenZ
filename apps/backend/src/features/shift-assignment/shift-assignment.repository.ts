@@ -710,6 +710,51 @@ export class ShiftAssignmentRepositoryClass {
   }
 
   /**
+   * Overtime still awaiting an agency decision, for one PR's week.
+   *
+   * Exists to serve the send gate. The owner's rule (31 Jul 2026) is that
+   * overtime is paid on the voucher of the week it was WORKED — "together with
+   * the week PV it originates from" — which only holds if the decision is made
+   * before that week goes out. So a pending row here blocks the send, the same
+   * way a held day and an unreviewed receipt already do, and approving overtime
+   * onto a voucher the PR already holds is prevented rather than handled.
+   *
+   * Keyed on the PR and the week rather than on the voucher, because the link
+   * between a voucher and its shifts is the line `ref` — and a shift whose
+   * overtime was never approved has no line to be referenced by. The rows that
+   * matter most are exactly the ones a voucher-join would miss.
+   */
+  async listPendingOvertimeForPrWeek(params: {
+    prId: string;
+    fromDate: string;
+    toDate: string;
+  }): Promise<Array<{ assignmentId: string; shiftDate: string; overtimeMinutes: number | null }>> {
+    try {
+      const { prId, fromDate, toDate } = params;
+      return await db
+        .select({
+          assignmentId: ShiftAssignmentTable.id,
+          shiftDate: ShiftTable.shiftDate,
+          overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.prId, prId),
+            eq(ShiftAssignmentTable.overtimeStatus, 'pending'),
+            gte(ShiftTable.shiftDate, fromDate),
+            lte(ShiftTable.shiftDate, toDate),
+          ),
+        )
+        .orderBy(ShiftTable.shiftDate);
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listPendingOvertimeForPrWeek] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Attendance position fixes for one agency on one shift date, joined to the
    * shift for its slot and to the outlet for its pin.
    *

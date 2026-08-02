@@ -323,5 +323,58 @@ check(
   overtimeFromStamps(IN, SCHED, at('2026-07-28T14:01:00+08:00')).minutes === null,
 );
 
+console.log('\n--- 10. send gate: undecided OVERTIME blocks its own week ---');
+// The owner's rule: overtime is paid on the voucher of the week it was WORKED,
+// "together with the week PV it originates from". That only holds if the agency
+// decides before the week goes out — so a pending claim blocks the send, and
+// approving OT onto a document the PR already holds becomes impossible rather
+// than something needing a reopen path.
+const PAST_WEEK = { weekEnd: '2026-07-26', today: '2026-07-27' };
+const OT_PENDING = [{ shiftDate: '2026-07-24', overtimeMinutes: 90 }];
+
+check(
+  'a pending overtime claim blocks the send',
+  !voucherSendGate(reviewed, [], PAST_WEEK, OT_PENDING).allowed,
+);
+check(
+  'no pending overtime still allows the send',
+  voucherSendGate(reviewed, [], PAST_WEEK, []).allowed,
+);
+check(
+  'omitting the argument keeps the old behaviour',
+  voucherSendGate(reviewed, [], PAST_WEEK).allowed,
+);
+
+// THE TRAP, and the reason this rule had to go in BOTH early returns: an
+// unapproved OT claim writes NO voucher line, so the shift it belongs to can be
+// entirely absent from the day view. The `view.length === 0 && no receipts`
+// shortcut would have waved through exactly the case the rule exists for.
+const bare = voucherSendGate([], [], PAST_WEEK, OT_PENDING);
+check('a voucher with NO dated lines is still blocked by pending OT', !bare.allowed);
+check(
+  '…and names the shift date',
+  !bare.allowed && bare.pendingOvertime?.includes('2026-07-24') === true,
+);
+// Second early return: every day reviewed and every receipt approved — the shape
+// a voucher is in the moment before it is sent.
+const allClear = voucherSendGate(reviewed, [], PAST_WEEK, OT_PENDING);
+check('a fully-reviewed voucher is still blocked by pending OT', !allClear.allowed);
+check(
+  'the message says what is undecided',
+  !allClear.allowed && allClear.message.includes('overtime claim(s) not yet decided'),
+);
+// Ordering: a running week is refused for the WEEK, not the overtime — the week
+// rule returns alone, so nobody is sent to decide OT on a week still being worked.
+const midWeekOt = voucherSendGate(
+  reviewed,
+  [],
+  { weekEnd: '2026-08-02', today: '2026-07-29' },
+  OT_PENDING,
+);
+check(
+  'a running week is refused for the week, not the overtime',
+  !midWeekOt.allowed && midWeekOt.pendingOvertime?.length === 0,
+);
+
 console.log(failures === 0 ? '\nALL CHECKS PASSED\n' : `\n${failures} CHECK(S) FAILED\n`);
 process.exit(failures === 0 ? 0 : 1);

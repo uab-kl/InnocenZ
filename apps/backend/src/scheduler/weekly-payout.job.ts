@@ -5,6 +5,7 @@ import {
   paymentVoucherRepository,
   prRepository,
   collectionInvoiceRepository,
+  shiftAssignmentRepository,
 } from '@/composition-root.js';
 import { klToday, previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
 import { checkVoucherBalance } from '@/features/payment-voucher/payment-voucher-balance.js';
@@ -148,10 +149,23 @@ export async function runWeeklyPayout(): Promise<void> {
     // a gate the scheduler is exempted from is a gate with an unguarded way
     // around it, and if the week arithmetic ever drifts, the job says so on a
     // Monday instead of quietly issuing a voucher for days nobody has worked.
-    const gate = voucherSendGate(buildDayReviewView(voucher.lines, reviews), receipts, {
-      weekEnd: voucher.weekEnd,
-      today: klToday(),
-    });
+    // Overtime too, and this job is where the rule actually bites: it is the
+    // path by which a week normally closes, so an undecided claim held here is
+    // what keeps overtime on the voucher of the week it was worked.
+    const pendingOvertime =
+      voucher.prId && voucher.weekStart && voucher.weekEnd
+        ? await shiftAssignmentRepository.listPendingOvertimeForPrWeek({
+            prId: voucher.prId,
+            fromDate: voucher.weekStart,
+            toDate: voucher.weekEnd,
+          })
+        : [];
+    const gate = voucherSendGate(
+      buildDayReviewView(voucher.lines, reviews),
+      receipts,
+      { weekEnd: voucher.weekEnd, today: klToday() },
+      pendingOvertime,
+    );
     if (!gate.allowed) {
       awaitingReview += 1;
       logger.warn(`[weekly-payout] awaiting agency day review ${voucher.id}: ${gate.message}`);

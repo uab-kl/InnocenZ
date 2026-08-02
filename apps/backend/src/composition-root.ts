@@ -154,7 +154,7 @@ export const shiftController = new ShiftControllerClass(shiftRepository, agencyM
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 export const paymentVoucherDisputeRepository = new PaymentVoucherDisputeRepositoryClass();
-export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository);
+export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository, shiftAssignmentRepository);
 
 export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
