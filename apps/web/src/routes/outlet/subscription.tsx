@@ -319,10 +319,13 @@ function OutletSubscriptionPage() {
 					fromPlanLabel: currentPlan.label,
 					contact: { email: outletOwner.email, phone: outletOwner.mobile },
 				})
-				.then((filed) => {
-					if (!filed) {
+				.then((result) => {
+					if (!result.ok) {
+						// The server's own words when it has them — "Already on
+						// Essential — no switch needed" tells the venue what to do;
+						// "try again" told it nothing and it kept retrying.
 						toast(
-							`${next.label} is not in the InnocenZ plan list — contact admin`,
+							result.reason ?? "Could not send the switch — try again",
 							"warn",
 						);
 						return;
@@ -332,8 +335,7 @@ function OutletSubscriptionPage() {
 						`Switch to ${next.label} sent to InnocenZ admin for approval`,
 						"success",
 					);
-				})
-				.catch(() => toast("Could not send the switch — try again", "warn"));
+				});
 			return;
 		}
 		saveOutletOwner({ subscriptionPlanId: planId });
@@ -440,10 +442,16 @@ function OutletSubscriptionPage() {
 									<button
 										type="button"
 										className="iz-btn iz-btn-soft mt-3 w-full"
-										disabled={backend.isRequestingPlanChange}
+										// Until the venue's real plan has loaded, the Current pill
+										// is a demo guess — offering a switch here let a venue ask
+										// for the plan it was already on, which the server then
+										// (rightly) refused.
+										disabled={
+											backend.isRequestingPlanChange || backend.isLoading
+										}
 										onClick={() => selectPlan(plan.id)}
 									>
-										Switch to {plan.label}
+										{backend.isLoading ? "Loading…" : `Switch to ${plan.label}`}
 									</button>
 								))
 							)}

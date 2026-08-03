@@ -26,6 +26,16 @@ export interface PosQuoteContact {
 }
 
 /**
+ * Outcome of asking to switch. `reason` carries the server's own words when it
+ * refuses (e.g. "Already on Essential — no switch needed") so the venue is told
+ * what actually happened instead of a blanket "try again".
+ */
+export interface PlanChangeResult {
+	ok: boolean;
+	reason?: string;
+}
+
+/**
  * Backend-driven subscription data for the outlet portal.
  *
  * Gated on a real session (`getOutletIdentity()`); demo sessions get `backed:
@@ -221,28 +231,45 @@ export function useOutletSubscription() {
 		toPlanLabel: string;
 		fromPlanLabel?: string;
 		contact?: PosQuoteContact;
-	}): Promise<boolean> => {
-		if (!identity) return false;
+	}): Promise<PlanChangeResult> => {
+		if (!identity) return { ok: false };
 		const target = findPlan(params.toPlanLabel);
-		if (!target) return false;
+		if (!target) {
+			return {
+				ok: false,
+				reason: `${params.toPlanLabel} is not in the InnocenZ plan list — contact admin`,
+			};
+		}
 		const from = params.fromPlanLabel ? findPlan(params.fromPlanLabel) : null;
 		const email = params.contact?.email?.trim();
-		await planChangeMut.mutateAsync({
-			type: "plan_change",
-			subscriberType: "outlet",
-			subscriberId: UUID_RE.test(identity.outletId)
-				? identity.outletId
-				: undefined,
-			subscriberName: identity.outletName,
-			currentPlanId: from?.id,
-			requestedPlanId: target.id,
-			contactEmail: email && EMAIL_RE.test(email) ? email : undefined,
-			contactPhone: params.contact?.phone?.trim() || undefined,
-			message: `Requesting a switch${
-				from ? ` from ${from.name}` : ""
-			} to ${target.name} (RM ${target.price} / ${target.billingCycle}).`,
-		});
-		return true;
+		try {
+			await planChangeMut.mutateAsync({
+				type: "plan_change",
+				subscriberType: "outlet",
+				subscriberId: UUID_RE.test(identity.outletId)
+					? identity.outletId
+					: undefined,
+				subscriberName: identity.outletName,
+				currentPlanId: from?.id,
+				requestedPlanId: target.id,
+				contactEmail: email && EMAIL_RE.test(email) ? email : undefined,
+				contactPhone: params.contact?.phone?.trim() || undefined,
+				message: `Requesting a switch${
+					from ? ` from ${from.name}` : ""
+				} to ${target.name} (RM ${target.price} / ${target.billingCycle}).`,
+			});
+			return { ok: true };
+		} catch (error) {
+			// The server refuses for reasons the venue can act on ("Already on
+			// Essential — no switch needed"). Swallowing that behind a generic
+			// "try again" sent one venue round in circles, so pass it through.
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			// Its plan may have moved under us; re-read so the card is honest.
+			void billingQuery.refetch();
+			void pendingQuery.refetch();
+			return { ok: false, reason: message };
+		}
 	};
 
 	const requestPosQuote = async (contact: PosQuoteContact = {}) => {
