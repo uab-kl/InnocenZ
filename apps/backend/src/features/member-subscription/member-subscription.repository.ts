@@ -33,6 +33,20 @@ export class MemberSubscriptionRepositoryClass {
     if (filter?.subscriptionId) conditions.push(eq(MemberSubscriptionTable.subscriptionId, filter.subscriptionId));
     if (filter?.status) conditions.push(eq(MemberSubscriptionTable.status, filter.status));
     if (filter?.search) conditions.push(ilike(MemberSubscriptionTable.subscriberName, `%${filter.search}%`));
+    // Plans and add-ons share this ledger, told apart by the product they
+    // reference. Legacy rows with no subscription_id count as plans — they
+    // predate add-ons entirely.
+    if (filter?.kind) {
+      conditions.push(
+        filter.kind === 'plan'
+          ? sql`(${MemberSubscriptionTable.subscriptionId} is null or exists (
+              select 1 from "main"."subscription" s
+              where s.id = ${MemberSubscriptionTable.subscriptionId} and s.kind = 'plan'))`
+          : sql`exists (
+              select 1 from "main"."subscription" s
+              where s.id = ${MemberSubscriptionTable.subscriptionId} and s.kind = 'addon')`,
+      );
+    }
 
     if (filter?.dates && filter.dates.length > 0) {
       const dayClauses = filter.dates

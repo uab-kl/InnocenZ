@@ -14,12 +14,22 @@ export const subscriptionTypeValues = ['agency', 'outlet'] as const;
 export type SubscriptionType = (typeof subscriptionTypeValues)[number];
 export const subscriptionTypeEnum = MainSchema.enum('subscription_type', subscriptionTypeValues);
 
+// A PLAN is held one at a time (Essential..Premier); an ADD-ON is held ALONGSIDE
+// a plan (POS Integration). Reads that ask "what is this subscriber on?" filter
+// to plans — otherwise a venue's add-on line, being the newest, would be
+// mistaken for its plan. Migration 0081.
+export const subscriptionKindValues = ['plan', 'addon'] as const;
+export type SubscriptionKind = (typeof subscriptionKindValues)[number];
+export const subscriptionKindEnum = MainSchema.enum('subscription_kind', subscriptionKindValues);
+
 export const SubscriptionTable = MainSchema.table('subscription', {
     id: uuid('id').defaultRandom().notNull().primaryKey(),
     name: varchar('name', { length: 255 }).notNull(),
     price: decimal('price', { precision: 10, scale: 2 }).notNull(),
     billingCycle: billingCycleEnum('billing_cycle').notNull().default('monthly'),
     subscriptionType: subscriptionTypeEnum('subscription_type').notNull(),
+    // plan (held one at a time) vs addon (held alongside a plan). Migration 0081.
+    kind: subscriptionKindEnum('kind').notNull().default('plan'),
     /** The role this plan grants — main.role 'agency' or 'outlet'. */
     roleId: uuid('role_id').references(() => RoleTable.id, { onDelete: 'set null' }),
     status: varchar('status').notNull().default('active'),

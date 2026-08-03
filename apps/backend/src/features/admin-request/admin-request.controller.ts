@@ -245,6 +245,94 @@ export class AdminRequestControllerClass {
   }
 
   /**
+   * Turn a resolved negotiation into something that actually bills.
+   *
+   * - **POS quote** → the venue is now under "Integrate with POS": an ADD-ON
+   *   line in the ledger at the agreed price, held ALONGSIDE its plan (its plan
+   *   is untouched — POS is not a plan). Re-resolving replaces the venue's
+   *   existing add-on line rather than stacking a second one.
+   * - **Custom renegotiation** → the agency's own plan row takes the agreed
+   *   amount. The Custom tier is priced per agency (its catalog price is 0, a
+   *   placeholder), so without this the agency would be billed nothing.
+   *
+   * A contact/other request prices nothing and is left alone. Failures are
+   * logged, never thrown: the admin's decision must not be lost because the
+   * ledger write failed.
+   */
+  private async applyResolvedPriceToLedger(record: AdminRequest, actor: string): Promise<void> {
+    try {
+      const amount = record.quotedAmount;
+      if (!amount || !record.subscriberId || !record.subscriberType) return;
+
+      if (record.type === 'pos_integration_quote') {
+        const addon = await this.subscriptionRepository.findAddonByName('POS Integration');
+        if (!addon) {
+          logger.warn('[AdminRequestController] POS Integration add-on missing from the catalog');
+          return;
+        }
+        const { records: existing } = await this.memberSubscriptionRepository.listPaginated({
+          filter: {
+            subscriberType: record.subscriberType,
+            subscriberId: record.subscriberId,
+            status: 'active',
+            kind: 'addon',
+          },
+          page: 1,
+          pageSize: 20,
+        });
+        const now = new Date();
+        for (const row of existing) {
+          await this.memberSubscriptionRepository.update(row.id, {
+            status: 'expired',
+            endedAt: now,
+            updatedBy: actor,
+          });
+        }
+        await this.memberSubscriptionRepository.create({
+          subscriberType: record.subscriberType,
+          subscriberId: record.subscriberId,
+          subscriberName: record.subscriberName,
+          subscriptionId: addon.id,
+          planName: addon.name,
+          amount,
+          billingCycle: addon.billingCycle,
+          status: 'active',
+          startedAt: now,
+          adminRequestId: record.id,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+        return;
+      }
+
+      if (record.type === 'custom_renegotiation') {
+        const { records: active } = await this.memberSubscriptionRepository.listPaginated({
+          filter: {
+            subscriberType: record.subscriberType,
+            subscriberId: record.subscriberId,
+            status: 'active',
+            kind: 'plan',
+          },
+          page: 1,
+          pageSize: 1,
+        });
+        const current = active[0];
+        if (!current) {
+          logger.warn(`[AdminRequestController] ${record.subscriberName} has no active plan to price`);
+          return;
+        }
+        await this.memberSubscriptionRepository.update(current.id, {
+          amount,
+          adminRequestId: record.id,
+          updatedBy: actor,
+        });
+      }
+    } catch (error) {
+      logger.error('[AdminRequestController.applyResolvedPriceToLedger] Error:', error);
+    }
+  }
+
+  /**
    * Re-point "from plan" at what the subscriber is on TODAY, for requests still
    * awaiting an answer.
    *
@@ -390,14 +478,19 @@ export class AdminRequestControllerClass {
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
+      const actor = getActor(req);
       const payload: Parameters<AdminRequestRepositoryClass['update']>[1] = {
         status: 'resolved',
-        updatedBy: getActor(req),
+        updatedBy: actor,
       };
       if (parsed.data.quotedAmount !== undefined) payload.quotedAmount = parsed.data.quotedAmount.toFixed(2);
 
       const record = await this.repository.update(paramId(req.params.id), payload);
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // Resolving is where a negotiated price becomes real — until now the
+      // figure lived only on this row, so nothing billed it and the subscriber
+      // never saw it.
+      await this.applyResolvedPriceToLedger(record, actor);
       res.status(200).json({ success: true, message: 'Request resolved', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.resolve] Error:', error);
