@@ -317,11 +317,11 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 > approved. **Do not record that screen as fully exercised**; its populated state needs a pending
 > claim, which means a write to the shared DB.
 >
-> ⚠️ **The working tree carries ~19 files of BIOME REFORMATTING that nobody authored in this session**
-> (quotes/tabs/semicolons in `store.ts`, `GeoFenceCard.tsx`, `hard-navigate.ts`, …). **They were left
-> UNCOMMITTED on purpose** — they are unreviewed churn, and `GeoFenceCard.tsx` in particular is the
-> file the last merge fought over. Decide whether to keep or discard them before they get swept into
-> an unrelated commit.
+> ✅ **RESOLVED — and the earlier warning here was wrong.** This block previously claimed ~19 files of
+> unauthored reformatting sat in the tree, naming `GeoFenceCard.tsx`. **16 of those 19 were CRLF/LF
+> line-ending noise with no content change at all**; only 3 were real, all pure biome formatting, and
+> `GeoFenceCard.tsx` was **not** among them. All committed; tree clean. See the correction at the top
+> of §10 — the mistake was generalising from one sampled diff to a whole file list.
 
 ### ▶ (2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
 
@@ -613,6 +613,21 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (later) — 🔴 CORRECTION: the "~19 files of unauthored biome churn" recorded below was
+> WRONG, and the way it was wrong is worth more than the fix.** `git status` really did list 19
+> modified files, and one sampled diff really did show quote/tab/semicolon changes — so the whole set
+> was reported as reformatting churn. **It was 3.** The other **16 were CRLF/LF line-ending noise**:
+> the working copies sat as LF while the index expected CRLF, which git reports as "modified" with no
+> content difference at all. That is exactly what every `warning: LF will be replaced by CRLF` line
+> was saying, and they were read as harmless log spam for a whole session. A `git stash` +
+> `git stash pop` re-checked-out the files and 16 of the 19 resolved themselves.
+> ⚠️ **The lesson: generalising from ONE sampled diff to a whole file list is the same mistake as
+> trusting a stale checkbox** — and it produced a scary-sounding warning in §9 about `GeoFenceCard.tsx`
+> that had nothing behind it. **Count before characterising.** The 3 genuine ones
+> (`go-welcome.ts`, `hard-navigate.ts`, `use-outlet-swap-mutations.ts`) are pure biome formatting to
+> the project's own config — single→double quotes, spaces→tabs, added semicolons — with **no semantic
+> change**, and are committed as a formatting chore.
 
 > **3 Aug 2026 — THE PV LANE WAS TAKEN OUT OF THE COMPILER AND PUT IN FRONT OF A BROWSER, and both
 > things that proved it also corrected it (§8 X56, X57).**
