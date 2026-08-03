@@ -491,6 +491,25 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 - [ ] **🔴 §10 has NO row for today's agency-portal crash fix.** The bug: the web app kept a hand-written copy of the `notification_kind` enum and the merge added two kinds (`pr_rating_low`, `shift_cover_needed`) it never got, so `KIND_MAP[kind]` returned `undefined` and the bell called `.startsWith` on it — **the whole `/agency` page white-screened** for any agency user holding one, which the live DB confirms `owner@atlas-agency.my` does. Fixed across 6 files, with an `unknown` fallback so a future kind degrades to a readable row instead of taking the page down. **Also missing: the `GeoFenceCard.tsx` merge-conflict resolution** (took main's redesign; jk's hemisphere-paste parsing was dropped because main deleted the manual lat/lng entry it enhanced).
 - [ ] **🔴 `pv_day_review_pending` EXISTS IN THE DB BUT NO CODE PRODUCES IT ANY MORE** *(SL)* — ⚠️ **corrects an assumption made earlier today that it came from a teammate's branch: it is OUR OWN X16 work from 30 Jul.** A row of that kind is live in `notification`, and §9 still carries "fire the producer live" — yet **grep finds the string nowhere under `apps/`**, including `notification.model.ts`. So either the producer was lost in a merge or the row was written by hand. **Re-derive before building on it**, and note the missing model entry is exactly the drift class that caused the crash above.
 
+### 🟠 UI — `/agency/pv` layout change requested by the OWNER (3 Aug 2026, from a screenshot)
+
+- [ ] **🟠 DISPUTES and OVERTIME must NOT sit permanently expanded at the top of `/agency/pv`** —
+  *"the Dispute and Overtime should only show when it is clicked below"*. **Owner's words, from a
+  screenshot of the live page**, so this is a product instruction, not a code-derived item. Today
+  both panels render open above the week tabs and push the voucher list below the fold; on a week
+  with nothing outstanding they occupy most of the first screen saying only *"No open disputes"* and
+  *"No overtime awaiting a decision"*. **Intended shape: fold them into the EXISTING tab row that
+  already carries `Payment Vouchers (n)` / `Receipts (n)`, so the row becomes four tabs and each
+  panel appears only when its tab is selected.** ⚠️ **Keep the COUNT visible on the tab label**
+  (`Disputes (n)`, `Overtime (n)`) — the whole reason these were placed on top was that an undecided
+  overtime claim is *why* the week below refuses to send (§8 X43), and hiding that behind a click
+  with no count would turn a visible blocker into an invisible one. ⚠️ **Do NOT move them to
+  `/agency/pending`** — that route is gated on `approvePrSignups`, which agency finance does not
+  hold, and finance is one of the two roles allowed to decide overtime (the trap X43 already avoided).
+  ⚠️ **Confirm the reading before building**: "clicked below" is being read as *the existing tab row*;
+  the other possible reading is *collapsed-by-default accordions kept in place*. Ask the owner which
+  — the two look very different and only one was asked for.
+
 ### 🔴🔴 P0 — THE MONEY IS WRONG (found 31 Jul, §8 X36 — do before any demo or pilot)
 
 > **Status after §8 X37: the RULES are enforced in code, the EXISTING BAD ROWS are not repaired.**
