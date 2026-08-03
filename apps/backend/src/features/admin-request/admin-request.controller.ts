@@ -1,6 +1,8 @@
 import { Request, Response } from 'express';
 import { AdminRequestRepositoryClass } from './admin-request.repository.js';
-import { AdminRequestFilter, AdminRequestType, AdminRequestStatus } from './admin-request.model.js';
+import { AdminRequest, AdminRequestFilter, AdminRequestType, AdminRequestStatus } from './admin-request.model.js';
+import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
+import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import {
   CreateAdminRequestSchema,
   ResolveAdminRequestSchema,
@@ -13,7 +15,80 @@ import { logger } from '@/util/logger.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
 
 export class AdminRequestControllerClass {
-  constructor(private repository: AdminRequestRepositoryClass) {}
+  constructor(
+    private repository: AdminRequestRepositoryClass,
+    private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
+    private subscriptionRepository: SubscriptionRepositoryClass,
+  ) {}
+
+  /**
+   * Move a subscriber onto the plan they asked for, in the `member_subscription`
+   * ledger that the admin History page reads. Called when an outlet's plan change
+   * is APPROVED, and when an agency's is recorded as 'direct' (agency switches
+   * apply automatically — see create()).
+   *
+   * The ledger is a history of charges, so a switch is a NEW row: the old active
+   * row is closed (`ended_at` stamped, status 'expired') rather than overwritten,
+   * which is what lets History still show what the venue used to pay.
+   *
+   * Never throws into the caller: a request that cannot be reflected (no
+   * subscriber id, unknown plan) is still approved, and the mismatch is logged —
+   * refusing the approval would leave the admin unable to answer the request at
+   * all.
+   */
+  private async applyPlanChangeToLedger(record: AdminRequest, actor: string): Promise<void> {
+    try {
+      if (!record.subscriberId || !record.subscriberType || !record.requestedPlanId) {
+        logger.warn(
+          `[AdminRequestController] plan change ${record.id} not reflected in the ledger: ` +
+            `subscriberId=${record.subscriberId} requestedPlanId=${record.requestedPlanId}`,
+        );
+        return;
+      }
+      const plan = await this.subscriptionRepository.getSubscriptionById(record.requestedPlanId);
+      if (!plan) {
+        logger.warn(`[AdminRequestController] plan ${record.requestedPlanId} not found; ledger untouched`);
+        return;
+      }
+
+      // Close whatever this subscriber is on today.
+      const { records: current } = await this.memberSubscriptionRepository.listPaginated({
+        filter: {
+          subscriberType: record.subscriberType,
+          subscriberId: record.subscriberId,
+          status: 'active',
+        },
+        page: 1,
+        pageSize: 50,
+      });
+      const endedAt = new Date();
+      for (const row of current) {
+        await this.memberSubscriptionRepository.update(row.id, {
+          status: 'expired',
+          endedAt,
+          updatedBy: actor,
+        });
+      }
+
+      // The negotiated price wins when the admin set one; otherwise the plan's.
+      const amount = record.quotedAmount ?? plan.price;
+      await this.memberSubscriptionRepository.create({
+        subscriberType: record.subscriberType,
+        subscriberId: record.subscriberId,
+        subscriberName: record.subscriberName,
+        subscriptionId: plan.id,
+        planName: plan.name,
+        amount,
+        billingCycle: plan.billingCycle,
+        status: 'active',
+        startedAt: endedAt,
+        createdBy: actor,
+        updatedBy: actor,
+      });
+    } catch (error) {
+      logger.error('[AdminRequestController.applyPlanChangeToLedger] Error:', error);
+    }
+  }
 
   async list(req: Request, res: Response) {
     try {
@@ -99,6 +174,11 @@ export class AdminRequestControllerClass {
         updatedBy: actor,
       });
       if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      // An agency switch needs no approval ('direct'), so it takes effect in the
+      // ledger straight away. An outlet's waits for approve().
+      if (record.type === 'plan_change' && record.status === 'direct') {
+        await this.applyPlanChangeToLedger(record, actor);
+      }
       res.status(201).json({ success: true, message: 'Request submitted', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.create] Error:', error);
@@ -207,6 +287,9 @@ export class AdminRequestControllerClass {
 
       const record = await this.repository.update(existing.id, payload);
       if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+      // Approval is what makes the switch real: reflect it in the billing ledger
+      // so the admin History page and the subscriber's own screen agree.
+      await this.applyPlanChangeToLedger(record, getActor(req));
       res.status(200).json({ success: true, message: 'Plan change approved', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.approve] Error:', error);

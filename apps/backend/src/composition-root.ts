@@ -126,7 +126,13 @@ export const outletTransactionRepository = new OutletTransactionRepositoryClass(
 export const outletTransactionController = new OutletTransactionControllerClass(outletTransactionRepository);
 
 export const adminRequestRepository = new AdminRequestRepositoryClass();
-export const adminRequestController = new AdminRequestControllerClass(adminRequestRepository);
+// Approving a plan change writes the member_subscription ledger, so the
+// controller also holds the ledger + plan-catalog repositories.
+export const adminRequestController = new AdminRequestControllerClass(
+  adminRequestRepository,
+  memberSubscriptionRepository,
+  subscriptionRepository,
+);
 
 export const prRepository = new PrRepositoryClass();
 

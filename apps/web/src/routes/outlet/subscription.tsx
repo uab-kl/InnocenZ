@@ -176,6 +176,11 @@ function OutletSubscriptionPage() {
 	const showCollections =
 		collections.backed && outletCan(outletSubRole, "viewBilling");
 	const [quoteSentLocal, setQuoteSentLocal] = useState(false);
+	// The venue cannot READ admin_requests (admin-only route), so the "waiting for
+	// admin" badge on the plan it asked for is a local flag, like the POS one.
+	const [planChangeRequested, setPlanChangeRequested] = useState<string | null>(
+		null,
+	);
 
 	/**
 	 * Real sessions read the `member_subscription` ledger; demo sessions keep the
@@ -264,6 +269,37 @@ function OutletSubscriptionPage() {
 			);
 			return;
 		}
+		// A real session must not switch itself: the venue files a plan_change
+		// request and stays on its current plan until an admin approves, which is
+		// what writes the billing ledger. Only the demo store flips instantly.
+		if (backend.backed) {
+			if (!backend.planCatalogReady) {
+				toast("Plan list still loading — try again in a moment", "warn");
+				return;
+			}
+			backend
+				.requestPlanChange({
+					toPlanLabel: next.label,
+					fromPlanLabel: currentPlan.label,
+					contact: { email: outletOwner.email, phone: outletOwner.mobile },
+				})
+				.then((filed) => {
+					if (!filed) {
+						toast(
+							`${next.label} is not in the InnocenZ plan list — contact admin`,
+							"warn",
+						);
+						return;
+					}
+					setPlanChangeRequested(next.label);
+					toast(
+						`Switch to ${next.label} sent to InnocenZ admin for approval`,
+						"success",
+					);
+				})
+				.catch(() => toast("Could not send the switch — try again", "warn"));
+			return;
+		}
 		saveOutletOwner({ subscriptionPlanId: planId });
 		recordOutletSubscriptionPlanChange(planId);
 		toast(
@@ -324,6 +360,9 @@ function OutletSubscriptionPage() {
 									<div className="flex flex-wrap items-center gap-2">
 										<p className="font-sora text-sm font-bold">{plan.label}</p>
 										{isCurrent && <IzPill variant="green">Current</IzPill>}
+										{planChangeRequested === plan.label && !isCurrent && (
+											<IzPill variant="violet">Awaiting admin</IzPill>
+										)}
 										{atCapacity && !isCurrent && (
 											<IzPill variant="amber">At daily limit</IzPill>
 										)}
@@ -354,15 +393,22 @@ function OutletSubscriptionPage() {
 									requested PRs today · pool of {plan.prPoolSize}
 								</p>
 							) : (
-								canEdit && (
+								canEdit &&
+								(planChangeRequested === plan.label ? (
+									<p className="iz-tiny iz-muted2 mt-3">
+										Sent to InnocenZ admin — you stay on {currentPlan.label}{" "}
+										until it is approved.
+									</p>
+								) : (
 									<button
 										type="button"
 										className="iz-btn iz-btn-soft mt-3 w-full"
+										disabled={backend.isRequestingPlanChange}
 										onClick={() => selectPlan(plan.id)}
 									>
 										Switch to {plan.label}
 									</button>
-								)
+								))
 							)}
 						</IzCard>
 					);
