@@ -113,8 +113,14 @@ export class AdminRequestControllerClass {
           typeof req.query.search === 'string' && req.query.search.trim().length > 0
             ? req.query.search.trim()
             : undefined,
-        includeNegotiatedExits: req.query.includeNegotiatedExits === 'true',
-        includeOpenNegotiations: req.query.includeOpenNegotiations === 'true',
+        // ?negotiated=only → Plan Request (POS / Custom, either direction);
+        // ?negotiated=exclude → Plan Change (ordinary plan-to-plan switches).
+        negotiated:
+          req.query.negotiated === 'only'
+            ? 'only'
+            : req.query.negotiated === 'exclude'
+              ? 'exclude'
+              : undefined,
       };
       const { records: rawRecords, totalCount } = await this.repository.listPaginated({
         filter,

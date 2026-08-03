@@ -94,13 +94,13 @@ const PAGE_SIZE = 10;
 type StatusFilter = "all" | AdminRequestStatus;
 type RoleFilter = "all" | SubscriberType;
 
-// This inbox holds exactly two request kinds:
-//  • outlet  → "Integrate with POS" add-on quote ("Request admin quote")
-//  • agency  → Custom (151+ PV) tier "Renegotiate Price"
-const INBOX_TYPES: AdminRequestType[] = [
-	"pos_integration_quote",
-	"custom_renegotiation",
-];
+// This inbox holds everything that touches a NEGOTIATED arrangement, in either
+// direction — the server decides membership (`negotiated: "only"`), because a
+// move INTO Custom is filed as an ordinary plan_change and a request type alone
+// would miss it:
+//  • outlet  → "Integrate with POS" add-on: the quote to join, and the request
+//              to leave (which names the plan being kept)
+//  • agency  → Custom (151+ PV): "Renegotiate Price", entering, and leaving
 
 const requestTypeLabels: Record<AdminRequestType, string> = {
 	pos_integration_quote: "POS quote",
@@ -145,11 +145,30 @@ function planForRequest(
 		: undefined;
 }
 
-/** From plan = the tier the subscriber is on right now. */
+/** True when the request is a subscriber LEAVING the POS add-on. */
+function isAddonExitRequest(
+	request: AdminRequest,
+	planById: Map<string, Subscription>,
+): boolean {
+	if (request.type !== "pos_integration_quote" || !request.requestedPlanId) {
+		return false;
+	}
+	const requested = planById.get(request.requestedPlanId);
+	return Boolean(requested && requested.kind !== "addon");
+}
+
+/**
+ * From plan = what the subscriber is moving away from.
+ *
+ * For an EXIT that is the add-on being dropped, not the plan — the plan is
+ * being kept. Reading the current plan on both sides rendered "Pro → Pro",
+ * which said nothing about what was actually changing.
+ */
 function fromPlanLabel(
 	request: AdminRequest,
 	planById: Map<string, Subscription>,
 ): string {
+	if (isAddonExitRequest(request, planById)) return "Integrate with POS";
 	return planForRequest(request, planById)?.name ?? "—";
 }
 
@@ -218,14 +237,14 @@ function RequestsPage() {
 		return () => clearTimeout(timer);
 	}, [searchInput]);
 
-	// The two inbox kinds, PLUS the plan changes that end a negotiated
-	// arrangement (an agency switching off Custom) — the admin who agreed that
-	// price needs to see it stop, not only see it start.
+	// Everything that touches a negotiated arrangement, in either direction: the
+	// POS add-on and the Custom tier, joining or leaving. A move INTO Custom is
+	// filed as an ordinary plan_change, so type alone would miss it — and the
+	// admin who agrees that price must see it start and stop in one place.
 	const queryParams: AdminRequestsQueryParams = {
 		page,
 		pageSize: PAGE_SIZE,
-		types: INBOX_TYPES,
-		includeNegotiatedExits: true,
+		negotiated: "only",
 	};
 	if (search) queryParams.search = search;
 	if (statusFilter !== "all") queryParams.status = statusFilter;

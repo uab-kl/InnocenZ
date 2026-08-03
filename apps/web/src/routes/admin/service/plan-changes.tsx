@@ -282,11 +282,10 @@ function PlanChangesPage() {
 		// make, not three, and approving a stale request would apply a plan it has
 		// since moved off. Older rows are never deleted — the All view shows them.
 		latestPerSubscriber: view === "latest",
-		// Moving between a normal plan and a negotiated arrangement is a plan
-		// switch too — a venue taking or dropping POS, an agency entering or
-		// leaving Custom — so those belong here while they are still outstanding.
-		// Once resolved they live on Plan Request, where the price was agreed.
-		includeOpenNegotiations: true,
+		// Ordinary plan-to-plan switches only. Anything touching the POS add-on
+		// or the Custom tier carries a negotiated price and belongs on Plan
+		// Request, so it is excluded here rather than shown in both places.
+		negotiated: "exclude",
 	};
 	if (search) queryParams.search = search;
 	if (statusFilter !== "all") queryParams.status = statusFilter;

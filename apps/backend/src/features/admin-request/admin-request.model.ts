@@ -81,16 +81,17 @@ export type AdminRequestFilter = {
   /** Case-insensitive partial match on the subscriber (outlet/agency) name. */
   search?: string;
   /**
-   * Also return plan changes that END a negotiated arrangement (an agency
-   * switching off Custom), so the Plan Request inbox shows a negotiation
-   * closing as well as opening.
+   * Split the two admin inboxes by whether a request touches a NEGOTIATED
+   * arrangement — the POS add-on, or the Custom tier — in any direction.
+   *
+   * - `'only'`  → Plan Request: everything involving POS/Custom, joining or
+   *               leaving, because those carry a price somebody agreed.
+   * - `'exclude'` → Plan Change: ordinary plan-to-plan switches only.
+   *
+   * A request counts as negotiated when its type is a POS quote or a Custom
+   * renegotiation, OR when it is a plan change whose from- or to-plan is Custom
+   * or an add-on. Without the second half, "Enterprise → Custom" is a plain
+   * plan_change and would sit in the wrong inbox.
    */
-  includeNegotiatedExits?: boolean;
-  /**
-   * Also return negotiations that are still OPEN (a POS quote or a Custom
-   * renegotiation not yet resolved), so the Plan Change page shows every move
-   * between a normal plan and a negotiated arrangement while it is outstanding.
-   * Resolved ones stay on the Plan Request page, which is where they are priced.
-   */
-  includeOpenNegotiations?: boolean;
+  negotiated?: 'only' | 'exclude';
 };

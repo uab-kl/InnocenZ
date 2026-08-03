@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, isNotNull, ne, or, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNotNull, ne, not, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -19,6 +19,29 @@ export type NegotiatedByRoleRow = {
 };
 
 export class AdminRequestRepositoryClass {
+  /**
+   * "Touches a negotiated arrangement" — the POS add-on or the Custom tier, in
+   * either direction. The two admin inboxes are split on exactly this: Plan
+   * Request owns everything that carries a negotiated price, Plan Change owns
+   * ordinary plan-to-plan switches.
+   *
+   * The second half matters: a venue moving Enterprise → Custom files a plain
+   * `plan_change`, so type alone would file it under the wrong page.
+   */
+  private negotiatedClause(): SQL {
+    return sql`(
+      ${AdminRequestTable.type} in ('pos_integration_quote', 'custom_renegotiation')
+      or (
+        ${AdminRequestTable.type} = 'plan_change'
+        and exists (
+          select 1 from "main"."subscription" s
+          where s.id in (${AdminRequestTable.currentPlanId}, ${AdminRequestTable.requestedPlanId})
+            and (s.name = 'Custom' or s.kind = 'addon')
+        )
+      )
+    )`;
+  }
+
   private buildConditions(filter?: AdminRequestFilter): SQL | undefined {
     const conditions: SQL[] = [];
     if (filter?.type) {
@@ -30,25 +53,12 @@ export class AdminRequestRepositoryClass {
       // and the admin who set that price needs to see it end. Such a row is a
       // plain plan_change, so without this it would only appear on the Plan
       // Change page and the negotiation would look open forever.
-      const extras: SQL[] = [];
-      if (filter.includeNegotiatedExits) {
-        extras.push(
-          and(
-            eq(AdminRequestTable.type, 'plan_change'),
-            sql`exists (select 1 from "main"."subscription" s
-                where s.id = ${AdminRequestTable.currentPlanId} and s.name = 'Custom')`,
-          )!,
-        );
-      }
-      if (filter.includeOpenNegotiations) {
-        extras.push(
-          and(
-            inArray(AdminRequestTable.type, ['pos_integration_quote', 'custom_renegotiation']),
-            ne(AdminRequestTable.status, 'resolved'),
-          )!,
-        );
-      }
-      conditions.push(extras.length > 0 ? or(typeClause, ...extras)! : typeClause);
+      conditions.push(typeClause);
+    }
+
+    if (filter?.negotiated) {
+      const clause = this.negotiatedClause();
+      conditions.push(filter.negotiated === 'only' ? clause : not(clause));
     }
     if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
     if (filter?.status) conditions.push(eq(AdminRequestTable.status, filter.status));
