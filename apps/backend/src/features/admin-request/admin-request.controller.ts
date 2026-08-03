@@ -182,6 +182,10 @@ export class AdminRequestControllerClass {
             subscriberType: parsed.data.subscriberType,
             subscriberId: parsed.data.subscriberId,
             status: 'active',
+            // The PLAN, never an add-on: a venue holding POS has two active
+            // lines and the add-on is the newer one, so without this the
+            // request recorded "from plan: POS Integration, RM 0".
+            kind: 'plan',
           },
           page: 1,
           pageSize: 1,

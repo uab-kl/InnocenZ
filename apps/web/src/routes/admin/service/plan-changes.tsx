@@ -389,8 +389,9 @@ function PlanChangesPage() {
 								)}
 							</CardTitle>
 							<CardDescription>
-								Click a row to open the editor — review the before/after plans
-								and approve or decline outlet switches
+								{view === "latest"
+									? "One row per subscriber — the switch that still needs answering. Choose Full history to see every previous plan change."
+									: "Every plan change ever filed by an outlet or agency, newest first — including moves to and from POS / Custom."}
 							</CardDescription>
 						</div>
 
@@ -424,12 +425,12 @@ function PlanChangesPage() {
 									setPage(1);
 								}}
 							>
-								<SelectTrigger className="sm:w-44">
+								<SelectTrigger className="sm:w-40">
 									<SelectValue />
 								</SelectTrigger>
 								<SelectContent>
-									<SelectItem value="latest">Latest per subscriber</SelectItem>
-									<SelectItem value="all">All changes (history)</SelectItem>
+									<SelectItem value="latest">Latest only</SelectItem>
+									<SelectItem value="all">Full history</SelectItem>
 								</SelectContent>
 							</Select>
 

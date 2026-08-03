@@ -680,6 +680,11 @@ function RequestsPage() {
 							fromPlan={fromPlanLabel(editRequest, planById)}
 							toPlan={toPlanLabel(editRequest, planById)}
 							plan={planForRequest(editRequest, planById)}
+							requestedPlan={
+								editRequest.requestedPlanId
+									? planById.get(editRequest.requestedPlanId)
+									: undefined
+							}
 							isSaving={isSaving}
 							onSaveRemarks={(id, remarks) =>
 								updateFieldsMutation.mutateAsync({ id, remarks })
@@ -705,6 +710,8 @@ interface RequestEditFormProps {
 	fromPlan: string;
 	toPlan: string;
 	plan: Subscription | undefined;
+	/** The plan named by the request — set only when it is an exit request. */
+	requestedPlan: Subscription | undefined;
 	isSaving: boolean;
 	onSaveRemarks: (id: string, remarks: string | null) => Promise<unknown>;
 	onSaveQuote: (id: string, quotedAmount: number | null) => Promise<unknown>;
@@ -718,6 +725,7 @@ function RequestEditForm({
 	fromPlan,
 	toPlan,
 	plan,
+	requestedPlan,
 	isSaving,
 	onSaveRemarks,
 	onSaveQuote,
@@ -733,6 +741,14 @@ function RequestEditForm({
 	 * expect the venue to leave Pro, so an add-on request is labelled as one.
 	 */
 	const isAddonRequest = request.type === "pos_integration_quote";
+	/**
+	 * The same request type covers JOINING the add-on and LEAVING it — an exit
+	 * names the ordinary plan the venue is returning to. Rendered with the
+	 * joining labels it read backwards: the plan it keeps appeared as the
+	 * "add-on", and the add-on it is dropping appeared as the plan.
+	 */
+	const isAddonExit = isAddonRequest && Boolean(requestedPlan);
+	const addonName = "Integrate with POS";
 	const editableQuote = canEditQuote(request);
 	const [remarks, setRemarks] = useState(request.remarks ?? "");
 	const [quote, setQuote] = useState(request.quotedAmount ?? "");
@@ -864,13 +880,21 @@ function RequestEditForm({
 					</div>
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">
-							{isAddonRequest ? "Plan (stays)" : "From plan"}
+							{isAddonExit
+								? "Add-on (ends)"
+								: isAddonRequest
+									? "Plan (stays)"
+									: "From plan"}
 						</dt>
-						<dd className="text-right">{fromPlan}</dd>
+						<dd className="text-right">{isAddonExit ? addonName : fromPlan}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">
-							{isAddonRequest ? "Add-on" : "To plan"}
+							{isAddonExit
+								? "Plan (continues)"
+								: isAddonRequest
+									? "Add-on"
+									: "To plan"}
 						</dt>
 						<dd className="text-right">{toPlan}</dd>
 					</div>
@@ -885,36 +909,58 @@ function RequestEditForm({
 					<div className="flex items-center gap-2">
 						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								{isAddonRequest ? "Plan · unchanged" : "Before · From plan"}
+								{isAddonExit
+									? "Add-on · ending"
+									: isAddonRequest
+										? "Plan · unchanged"
+										: "Before · From plan"}
 							</p>
-							<p className="text-lg font-medium">{fromPlan}</p>
+							<p className="text-lg font-medium">
+								{isAddonExit ? addonName : fromPlan}
+							</p>
 							<p className="text-base text-muted-foreground">
-								{plan
-									? plan.name === "Custom"
-										? "Negotiated"
-										: `RM ${formatPrice(plan.price)}`
-									: "—"}
+								{isAddonExit
+									? "Charge stops on resolve"
+									: plan
+										? plan.name === "Custom"
+											? "Negotiated"
+											: `RM ${formatPrice(plan.price)}`
+										: "—"}
 							</p>
 						</div>
 						<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
 						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								{isAddonRequest ? "Add-on · billed on top" : "After · To plan"}
+								{isAddonExit
+									? "Plan · continues"
+									: isAddonRequest
+										? "Add-on · billed on top"
+										: "After · To plan"}
 							</p>
 							<p className="text-lg font-medium">{toPlan}</p>
-							<p className="text-base text-muted-foreground">{estimateLabel}</p>
+							<p className="text-base text-muted-foreground">
+								{isAddonExit
+									? requestedPlan
+										? `RM ${formatPrice(requestedPlan.price)} — the venue keeps paying this`
+										: "—"
+									: estimateLabel}
+							</p>
 						</div>
 					</div>
 					<p className="text-base text-muted-foreground">
-						{negotiable
+						{isAddonExit
 							? request.status === "resolved"
-								? isAddonRequest
-									? "Resolved — the venue keeps its plan and is billed this add-on price on top of it."
-									: "Resolved — the price is final."
-								: isAddonRequest
-									? "Reminder: this add-on is billed ON TOP of the venue's plan — the plan does not change. The amount is an estimate until you Resolve."
-									: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
-							: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
+								? "Resolved — the POS add-on has ended. The venue pays its plan only."
+								: "This venue is dropping the POS add-on. Resolving ends that charge — no price to negotiate; it keeps paying its plan."
+							: negotiable
+								? request.status === "resolved"
+									? isAddonRequest
+										? "Resolved — the venue keeps its plan and is billed this add-on price on top of it."
+										: "Resolved — the price is final."
+									: isAddonRequest
+										? "Reminder: this add-on is billed ON TOP of the venue's plan — the plan does not change. The amount is an estimate until you Resolve."
+										: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
+								: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
 					</p>
 				</div>
 
