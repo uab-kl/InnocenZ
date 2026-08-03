@@ -29,6 +29,10 @@ export type OpsNotificationKind =
 	| "agency_join_resolved"
 	| "pr_rating_low"
 	| "shift_cover_needed"
+	// A week that did NOT go out because a day is held or unreviewed. Its own
+	// kind rather than `pv_ready`: that one announces a voucher the PR can sign,
+	// this one is the opposite — money stuck, and the agency has to act.
+	| "pv_day_review_pending"
 	// Last resort for a row whose backend kind this build has never heard of.
 	// The `notification_kind` DB enum grows by migration and a shared dev database
 	// routinely runs ahead of the web app — mapping such a row to a neutral kind

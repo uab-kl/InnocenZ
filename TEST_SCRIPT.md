@@ -291,13 +291,39 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X53 | **🟢 THE CONCURRENT-CLAIM RACE IS PROVEN LIVE — and it was never "unfixable", only unproven.** Two **simultaneous** `PATCH …/overtime` requests at one pending claim, fired with `Promise.all`: **one 200, one 409 "This overtime claim was decided by someone else a moment ago."** ⚠️ **That message is the point** — it comes from `claimOvertimeDecision` returning falsy, i.e. the `UPDATE … WHERE overtime_status = 'pending'` losing the race, **not** from the earlier already-decided precondition. A read-then-check would have let both requests through every precondition; the state transition itself is what refuses the second. This is the live proof for the fix in `5e0dbee` that a double-clicked Approve cannot pay twice. **The method is the reusable part: it decides with REJECT, not approve.** Reject runs the identical mutex but writes **no voucher line**, so the race is provable without putting money on anyone's payslip — and the claim is then rolled back to NULL in a `finally`, so the run leaves nothing at all. Verified after: **still exactly 2 overtime decisions** (the X50 pair, no rejected row), audit **3/3 reconcile**. Backend tsc **0**. ⚠️ Correction to my own earlier note: I had written this off as needing "a genuine race" as though that were impractical. `Promise.all` of two requests IS a genuine race — **"hard to observe" was mistaken for "hard to test".** | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --race` | live HTTP 200+409 concurrently, zero residue | ✅ Fired live |
 | X54 | **🟢 THE SURPLUS APPROVAL IS CLEARED — and the cleanup SQL I had written down would have CORRUPTED the voucher.** `--clear=<assignmentId>` removed the RM 150.00 line from `9d897070…`; **PV-000003 went 1353.30 / 4 lines → 1203.30 / 3 lines**, exactly RM 150.00 lighter, and the audit still reports **3/3 reconcile**. One approval remains — `f5a1f227…`, RM 175.00 on PV-000002 — which is the one that was asked for. 🔴 **THE FINDING IS IN THE CLEANUP, NOT THE CLEAR.** The two-statement `DELETE … FROM payment_voucher_line` + `UPDATE shift_assignment` recipe I had printed at the end of every run and recorded in §9 **was incomplete**: a voucher's `subtotal`/`net` are recomputed when a line is **added**, so deleting the row behind their backs leaves **a voucher whose stated total no longer matches its own lines** — PV-000003 would have read 1353.30 with 1203.30 of lines under it. **That is precisely the fault class this entire audit exists to catch, so running my own cleanup would have manufactured one.** ⚠️ The general lesson, and it is the same one as the `-ot` dedupe ref and the `component` column: **when the app maintains a derived value, undo through the app's own path, never with SQL that only touches the base row.** `--clear` therefore calls the repository's `deleteLine()`, which runs `recomputeTotals` in the same transaction. It also prints what it will remove and takes `--dry-run`, because a delete that names its target before acting is the only kind worth trusting on a shared database. Backend tsc **0**. | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --clear=` · `payment-voucher.repository` (`deleteLine` → `recomputeTotals`) | live clear + audit 3/3 + totals arithmetic | ✅ Verified live |
 | X55 | **🟢 SUSPENDING AN ORGANISATION NOW ACTUALLY STOPS ITS PEOPLE — refused at login AND live sessions killed.** New `features/auth/org-status.ts` → `suspendedOrgBlock(userId)`, called from **`auth.controller` login** and from **`authenticateJWT`**. Two call sites on purpose: refusing the next login alone would leave anyone holding a token at the moment of suspension working until it expired — **which for an agency finance user means they could still raise payment vouchers.** The middleware already re-reads the account every request (§8 X31), so that cost was being paid and this rides along with it. **The login check sits BEFORE the password compare**, mirroring the lockout: a refusal that only fires once the password is right confirms the password to anyone who tries it. **🔴 THE DESIGN IS ALL IN WHAT IT DOES *NOT* BLOCK, and each carve-out is a lockout that nearly happened. (1) `pending_review` is ALLOWED** — only `suspended` and `inactive` deny. `pending_review` is the column **DEFAULT** for both `agency` and `outlet`, so a rule reading "not active" would have shut out **every organisation nobody has reviewed yet**, and no review screen exists. **(2) No membership means no opinion** — a platform admin and a PR hold no `agency_user`/`outlet_user` row at all, so an "is your org active?" test would have refused everyone who has no organisation, **locking every admin out of their own platform**. Absence of a membership is not a suspended membership. **(3) One live organisation is enough** — a user in a suspended agency AND an active one keeps access, rather than being punished for the other org's status. **(4) The membership row's own `status` is filtered first**, since `agency_user.status` is independent of `agency.status`. The refusal **names the organisation and its state** rather than saying "invalid credentials", which would send someone to reset a password that was never the problem — and it is their own org, so it discloses nothing. **LIVE PROOF, `probe-org-suspension.ts`, 5/5:** an active agency does not block → suspend → **blocked with the right message** → restore → access returns → and **admin is never blocked**. ✅ **Nothing was newly locked out: all 3 agencies and all 7 outlets are `active`** (asserted by the probe, not assumed). The suspension is restored in a `finally`. HTTP login re-verified after the change: admin logs in and all 6 authenticated requests pass the middleware. Backend tsc **0**. | **all** | `features/auth/org-status.ts` (new) · `auth.controller` (login) · `middlewares/authenticate-jwt.ts` · `probe-org-suspension.ts` (new) | live probe 5/5 + HTTP login re-verified | ✅ Fired live |
+| X56 | **🟢 `/agency/pv` IS RENDERED IN A BROWSER AT LAST — on a REAL agency login, and it immediately produced a bug.** X43 and X45 shipped this screen proven only by `tsc`/biome/`vite build`; this is the first time a browser has loaded it. Signed in as `owner@atlas-agency.my` against the live backend: the page renders **real DB rows** (Alice `RM 1,203.30`, Victoria `RM 700.00`, both `Pending Agency Review`), the **dispute panel and `OvertimeQueuePanel` both mount**, console **clean — zero errors**. ⚠️ **The OT panel rendered its EMPTY state** ("No overtime awaiting a decision"), because the only live claim is already approved (X50). **Its POPULATED state is still unproven, and populating it means writing to the shared DB** — do not report this screen as fully exercised. **🔴 THE BUG IT FOUND: `pv_day_review_pending` was never mapped in `apps/web` at all.** The kind has existed since migration 0073 and is produced by `weekly-payout.job.ts`; the web app's hand-written `NotificationKind` union never received it. jk's `unknown` fallback stopped it white-screening, so it degraded quietly to a generic **"Update"** row — and `hrefFor` fell to `default: return undefined`, so **a notification whose own body reads "Approve each day on Payroll & PV, then send" navigated NOWHERE when tapped.** ⚠️ **Same class as jk's crash, one kind later, and the fallback is exactly why nobody noticed: it turned a loud failure into a silent one.** Fixed across 5 files (union → `KIND_MAP` → `PR_KIND_MAP` → `OPS_KIND_LABEL` → `hrefFor` case). **Verified in the browser, not by compiler:** the row now reads **"Day review"** and clicking it lands on `/en/agency/pv`. ✅ **Bonus — closes jk's §9 item 2:** his crash fix had never been seen rendering; `shift_cover_needed` and `pr_rating_low` both display correctly, no crash. `tsc` **121, unchanged from baseline**; biome clean (format only — pre-existing `prType` warning left alone). | **Agency** | `services/notification/index.ts` · `agency-portal/lib/ops-notifications.ts` · `agency-portal/hooks/use-notifications.ts` · `agency-portal/lib/push-notifications.ts` · `agency-portal/components/pr/PrNotificationBell.tsx` | real browser login + click-through | ✅ Rendered live, bug fixed |
+| X57 | **🟢 THE WAGE ARITHMETIC IS PROVEN AGAINST THE RATE CARD — §9 P1's "Verify Payment Voucher ↔ PR wage calc" is answerable YES for the first time.** ⚠️ **First the correction that matters: `audit-live-vouchers.ts` reporting "3/3 reconcile" DOES NOT mean the wages are right.** `wages_amount_mismatch` matches a line against **`shift_assignment.pay_amount` — the amount check-out SEALED** — and never asks whether that sealed amount was itself derived correctly from the outlet's rate card. **A wrong rate card therefore yields a voucher that reconciles perfectly and still pays the wrong money.** The audit's green is *voucher ↔ assignment*, one link short of *the money is correct*. New read-only **`check-wage-vs-ratecard.ts`** closes that link and prints both sides. **Result: 4 completed assignments since 2026-07-20, agree 4 · disagree 0 · no-card 0** — `700.00 = 700.00` (Victoria, tier_3) and `600.00 = 600.00` (Alice, tier_2), each resolved from the **per-shift override** (`shift_pay_tier`), the precedence the app itself uses. The full chain **rate card → sealed pay → voucher line** is now machine-verified on live data. **🔴 TWO TRAPS WORTH KEEPING:** (1) the first run reported **SKIP — 4 rows, 0 comparable**, because `pr.tier` is the enum `tier_3` while `outlet_tier_rate.tier` holds the DISPLAY label `"Tier III"`; **they never join raw**, and the app bridges them with `PR_TIER_TO_OUTLET_LABEL` in `shift-assignment.controller.ts`. The fault was the probe's, not the app's — **re-derive before reporting a money bug.** (2) The table is **`outlet_tier_rate`, not `tier_rate`**, and `shift_date` lives on **`shift`, not `shift_assignment`** — the same column-guessing tax as every prior probe. ✅ **The script reports SKIP, never a pass, over zero comparable rows** — that is what stopped a false green here, and it must stay. | **Agency ← PR** | `apps/backend/src/scripts/check-wage-vs-ratecard.ts` (new, read-only) | live: agree 4 · disagree 0 | ✅ Verified live |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ NEXT SESSION STARTS HERE (logged 2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
+### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (read this amendment, then the 2 Aug block below)
+
+> **3 Aug: `main` was merged in (jk's PR #41 — docs only), and TWO of the five open items closed.**
+> ✅ **§9 P1 "Verify PV ↔ PR wage calc" is DONE (§8 X57)** — the rate-card link the audit never
+> checked is now machine-proven live, `agree 4 · disagree 0`.
+> ✅ **`/agency/pv` is RENDERED on a real agency login (§8 X56)**, and doing so found and fixed a
+> dead notification deep-link. **jk's own §9 item 2 closed with it** — his crash fix now verified
+> in a browser.
+>
+> **🔴 STILL OPEN, and both are blocked on the same thing — a login I could not obtain:**
+> 1. **The ADMIN PV page has still never been rendered** (§8 X45 shipped it compiler-proven only).
+> 2. **The 400 (bad line date) and 409 (closed week) refusals have still never been fired from the
+>    PHONE.** The overtime refusals WERE fired live (X49/X51/X53); these two were not.
+>
+> ⚠️ **The OT panel on `/agency/pv` rendered only its EMPTY state** — the sole live claim is already
+> approved. **Do not record that screen as fully exercised**; its populated state needs a pending
+> claim, which means a write to the shared DB.
+>
+> ⚠️ **The working tree carries ~19 files of BIOME REFORMATTING that nobody authored in this session**
+> (quotes/tabs/semicolons in `store.ts`, `GeoFenceCard.tsx`, `hard-navigate.ts`, …). **They were left
+> UNCOMMITTED on purpose** — they are unreviewed churn, and `GeoFenceCard.tsx` in particular is the
+> file the last merge fought over. Decide whether to keep or discard them before they get swept into
+> an unrelated commit.
+
+### ▶ (2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
 
 > **THE PV BACKLOG HAS NO BUILD LEFT ON THE BACKEND.** `5e0dbee` closed the overtime endpoint, which
 > was the last one. What remains below is **one frontend screen (item 2), two under-wired admin/PR
@@ -500,7 +526,7 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 - [x] **E · Wage/tip/commission auto-sync** — PR wages/drinks(HH/NH)/tips/OT pull from the **outlet rate card** (mobile consumes `/shift-assignment/mine` `rate`+`drinkMenu`; `pr-rate.ts`). ⚠️ **jk done in code — SL/user must run `pnpm migrate` (pr_tier 7-enum) + restart backend to go live, then verify §3 S7.** *(Outlet → PR)* — §3 S7
 - [x] **F · This-week dispute ↔ verify** — ✅ **BOTH SIDES EXIST. This entry was STALE and it misled me on 31 Jul** into telling the owner "the agency has no verify/reject", which is false. The agency queue is built and wired: **`DisputeQueuePanel.tsx` + `use-agency-disputes.ts`** with a real `resolveDispute` accept/reject mutation, on **`/agency/pv`**; the backend route comment says so too (*"The agency's dispute queue and its decisions"*). ⚠️ **Left as a worked example of [[audit-entries-are-leads]]: I read this line instead of re-deriving, and reported a gap that did not exist.** *(PR → Agency)* — §3 S9–S10
 - [x] **Payroll page: surface "this week"** so scanned receipts can be **approved** — ✅ **agency half done (30 Jul)**: the receipts card in `PayrollVerifyPanel` is now the review surface, fed by the receipts that already ride on `GET /payment-voucher/:id` (the same read the day-review panel uses, so one voucher on screen is still one request and an approval refreshes both panels). It shows the **proof photo and the PR's note** beside the figures — neither was rendered before — with per-line **quantity/commission correction**, Approve / Withdraw approval, and the send button now blocked while any receipt is pending. Writes gated on `raisePv`, mirroring `agencyOwnerOrFinance`. **Not** built on the agency-wide `GET /payment-voucher/receipts` feed: the owner's spec places the review on the **this-week PV**, and that endpoint is a cross-voucher queue. ⚠️ **Remaining: the PR's two sections** (this-week shows APPROVED, last-week is where a dispute is raised). *(Agency)*
-- [ ] **Verify Payment Voucher ↔ PR wage calc** logic is correct (auto-generated weekly from PR shifts). *(Agency ← PR)*
+- [x] **Verify Payment Voucher ↔ PR wage calc** logic is correct (auto-generated weekly from PR shifts). *(Agency ← PR)* — ✅ **DONE 3 Aug (§8 X57), and it needed a NEW check because the audit could never answer it.** `audit-live-vouchers.ts` compares a wages line to `shift_assignment.pay_amount` (what check-out sealed), **not to the rate card** — so its "3/3 reconcile" was voucher↔assignment, one link short of the money being right. `check-wage-vs-ratecard.ts` (read-only) closes the last link: **agree 4 · disagree 0 · no-card 0.** ⚠️ **Re-run it after ANY rate-card or tier change** — and note it prints **SKIP, not a pass**, when it sees no comparable rows.
 - [ ] **Confirm Post Job end-to-end** across roles: outlet post → shift → agency roster → PR assignment. *(Outlet → Agency → PR)*
 
 ### 🟠 P0b — PV gaps found by re-derivation on 31 Jul (X39 closed the first three)
@@ -587,6 +613,49 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 — THE PV LANE WAS TAKEN OUT OF THE COMPILER AND PUT IN FRONT OF A BROWSER, and both
+> things that proved it also corrected it (§8 X56, X57).**
+>
+> **`/agency/pv` had never been loaded by a browser.** X43 and X45 shipped it on `tsc` + biome +
+> `vite build` alone. On a real `owner@atlas-agency.my` login against the live backend it renders
+> correctly — real vouchers, both panels mounted, **zero console errors**. ⚠️ **But the OT panel
+> showed its EMPTY state**, because the only live claim is already approved, so **the populated state
+> remains unproven** and the screen must not be called fully exercised.
+>
+> **🔴 Rendering it found a dead deep-link, and the interesting part is why it was invisible.**
+> `pv_day_review_pending` (migration 0073, produced by `weekly-payout.job.ts`) was **never added to
+> the web app's hand-written `NotificationKind` union**. jk's `unknown` fallback — added after the
+> white-screen he documented — caught it, so instead of crashing it rendered a bland **"Update"** row
+> whose `hrefFor` returned `undefined`. **A notification whose own body says "Approve each day on
+> Payroll & PV, then send" went NOWHERE when tapped.** ⚠️ **The lesson is about the fallback, not the
+> kind: it converted a loud failure into a silent one, which is why this survived a merge, a review
+> and two sessions.** A fallback needs a way to SAY it fired. Fixed across 5 files and verified by
+> clicking, not compiling: the row now reads **"Day review"** and lands on `/en/agency/pv`.
+> ✅ **jk's §9 item 2 closed on the way past** — his crash fix is now browser-verified.
+>
+> **🔴 The audit's "3/3 reconcile" was narrower than everyone has been reading it.**
+> `wages_amount_mismatch` compares a line to `shift_assignment.pay_amount` — **what check-out
+> SEALED** — and never to the outlet's rate card. **So a wrong rate card produces a voucher that
+> reconciles perfectly and still pays the wrong money.** New read-only `check-wage-vs-ratecard.ts`
+> closes that last link: **agree 4 · disagree 0 · no-card 0**, resolving through the per-shift
+> override exactly as the app does. §9 P1 is finally answerable **yes**.
+>
+> ⚠️ **The probe was wrong before the app was — twice.** Its first run said **SKIP, 0 comparable**
+> because `pr.tier` is the enum `tier_3` while `outlet_tier_rate.tier` stores the label `"Tier III"`;
+> the app bridges them with `PR_TIER_TO_OUTLET_LABEL` and the probe did not. It also guessed
+> `tier_rate` (really `outlet_tier_rate`) and `shift_assignment.shift_date` (really `shift`).
+> **Had it reported "0 agree" as a finding, that would have been a fabricated money bug.** It printed
+> **SKIP instead of a pass** — keep that behaviour in every probe.
+>
+> **Still open, both blocked on a login:** the **admin PV page is still unrendered**, and the
+> **400/409 refusals are still unfired from the phone**. A script to mint an admin token from `.env`
+> without printing it was **blocked by the permission classifier and NOT worked around**.
+>
+> ⚠️ **~19 files of biome reformatting appeared in the tree unauthored** (quotes/tabs/semicolons).
+> **Deliberately left uncommitted** — unreviewed churn, and one of them is `GeoFenceCard.tsx`, the
+> file the previous merge fought over. This commit stages only the 5 intended web files, the new
+> script, and this document.
 
 > **2 Aug 2026 — `main` merged into `SL`, and for once the merge was boring.** `SL` was **22 ahead /
 > 2 behind**; the incoming pair was jk's `b6c5786` plus its PR #41 merge `80efdc7`. **The whole

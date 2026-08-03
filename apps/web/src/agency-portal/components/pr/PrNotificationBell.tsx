@@ -38,6 +38,9 @@ const PR_KIND_MAP: Record<NotificationKind, PrNotificationKind> = {
 	overtime_pending_approval: "assignment",
 	pr_rating_low: "assignment",
 	shift_cover_needed: "assignment",
+	// Also agency-addressed: it is the agency that reviews a held day. Mapped to
+	// "pv" so that if one ever reaches a PR bell it still reads as money news.
+	pv_day_review_pending: "pv",
 };
 
 /**
