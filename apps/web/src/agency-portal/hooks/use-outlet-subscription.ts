@@ -71,6 +71,20 @@ export function useOutletSubscription() {
 		);
 	}, [backed, billingQuery.data]);
 
+	/**
+	 * The plan this venue is ACTUALLY on, from its active `member_subscription`
+	 * row — the same ledger admin History reads, so the two screens can no longer
+	 * disagree. Null when the venue has no active row, and the caller then falls
+	 * back to the demo plan rather than inventing one.
+	 */
+	const activePlanName = useMemo<string | null>(() => {
+		if (!backed) return null;
+		const active = sortMemberSubscriptions(billingQuery.data?.data ?? []).find(
+			(sub) => sub.status === "active",
+		);
+		return active?.planName ?? null;
+	}, [backed, billingQuery.data]);
+
 	const posQuoteMut = useMutation({
 		mutationFn: (input: CreateAdminRequestInput) =>
 			createAdminRequest(input, logout),
@@ -167,6 +181,7 @@ export function useOutletSubscription() {
 	return {
 		backed,
 		billingHistory,
+		activePlanName,
 		isLoading: billingQuery.isLoading,
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,

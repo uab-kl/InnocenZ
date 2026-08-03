@@ -1,0 +1,147 @@
+/**
+ * Repairs the `member_subscription` ledger so admin History tells the truth
+ * about who is subscribed.
+ *
+ *   pnpm tsx --tsconfig tsconfig.json src/scripts/repair-member-subscription-links.ts
+ *   (add --apply to write; without it the script only reports)
+ *
+ * Two defects in the seeded ledger, both found 3 Aug 2026 from the admin
+ * History page:
+ *
+ * 1. **Broken links.** Every agency row and two outlet rows carry a
+ *    `subscriber_id` that matches NO row in `agency`/`outlet` — the seed wrote
+ *    random uuids and leaned on the snapshot name instead. So Atlas Agency was
+ *    listed as subscribed AND as never charged at the same time: the ledger row
+ *    said "Atlas Agency" while pointing at nothing. Where the snapshot name
+ *    matches exactly one real organisation, this relinks the row to that
+ *    organisation's primary id (Rule: reference other tables by their id).
+ *
+ * 2. **Missing rows.** Organisations that can sign in but have never been
+ *    charged have no ledger row at all, so they cannot appear in History. The
+ *    BACKFILL list below gives the named ones the plan their own portal shows.
+ *    Nothing else is invented: an organisation not in that list is reported and
+ *    left alone.
+ *
+ * Rows whose name matches no organisation (e.g. "Marble Hall") are REPORTED,
+ * never deleted — deleting billing history is the owner's call, not a script's.
+ *
+ * Safe to re-run: relinking is skipped once a row already points at its
+ * organisation, and a backfill is skipped once that organisation has an active
+ * row.
+ */
+import '@/env.js';
+import { db } from '@/db/index.js';
+import { and, eq } from 'drizzle-orm';
+import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
+import { AgencyTable } from '@/features/agency/agency.model.js';
+import { OutletTable } from '@/features/outlet/outlet.model.js';
+import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
+
+const ACTOR = 'repair-member-subscription-links';
+const APPLY = process.argv.includes('--apply');
+
+/**
+ * Organisations to give a first ledger row, and the plan to give them — taken
+ * from what their own portal shows, not guessed by the script. Names must match
+ * `outlet.name` / `agency.name`; plans must match `subscription.name`.
+ */
+const BACKFILL: { name: string; type: 'outlet' | 'agency'; plan: string }[] = [
+  { name: 'JK House', type: 'outlet', plan: 'Enterprise' },
+  { name: 'Emhub Testing', type: 'outlet', plan: 'Essential' },
+];
+
+async function main() {
+  const ledger = await db.select().from(MemberSubscriptionTable);
+  const outlets = await db.select({ id: OutletTable.id, name: OutletTable.name }).from(OutletTable);
+  const agencies = await db.select({ id: AgencyTable.id, name: AgencyTable.name }).from(AgencyTable);
+  const plans = await db.select().from(SubscriptionTable);
+
+  const byName = (rows: { id: string; name: string }[], name: string) =>
+    rows.filter((row) => row.name.trim().toLowerCase() === name.trim().toLowerCase());
+
+  let relinked = 0;
+  const orphans: string[] = [];
+
+  for (const row of ledger) {
+    const pool = row.subscriberType === 'outlet' ? outlets : agencies;
+    if (pool.some((org) => org.id === row.subscriberId)) continue; // already linked
+
+    const matches = byName(pool, row.subscriberName);
+    if (matches.length !== 1) {
+      orphans.push(`${row.subscriberName} (${row.subscriberType}, ${matches.length} name matches)`);
+      continue;
+    }
+    console.log(`relink  ${row.subscriberName} -> ${matches[0].id}`);
+    if (APPLY) {
+      await db
+        .update(MemberSubscriptionTable)
+        .set({ subscriberId: matches[0].id, updatedAt: new Date(), updatedBy: ACTOR })
+        .where(eq(MemberSubscriptionTable.id, row.id));
+    }
+    relinked += 1;
+  }
+
+  let added = 0;
+  for (const wanted of BACKFILL) {
+    const pool = wanted.type === 'outlet' ? outlets : agencies;
+    const org = byName(pool, wanted.name)[0];
+    if (!org) {
+      console.log(`skip    ${wanted.name}: no such ${wanted.type}`);
+      continue;
+    }
+    const [existing] = await db
+      .select({ id: MemberSubscriptionTable.id })
+      .from(MemberSubscriptionTable)
+      .where(
+        and(
+          eq(MemberSubscriptionTable.subscriberId, org.id),
+          eq(MemberSubscriptionTable.status, 'active'),
+        ),
+      )
+      .limit(1);
+    if (existing) {
+      console.log(`skip    ${wanted.name}: already has an active subscription`);
+      continue;
+    }
+    const plan = plans.find(
+      (p) =>
+        p.name.trim().toLowerCase() === wanted.plan.trim().toLowerCase() &&
+        p.subscriptionType === wanted.type,
+    );
+    if (!plan) {
+      console.log(`skip    ${wanted.name}: no ${wanted.type} plan named ${wanted.plan}`);
+      continue;
+    }
+    console.log(`add     ${wanted.name} -> ${plan.name} (RM ${plan.price} / ${plan.billingCycle})`);
+    if (APPLY) {
+      await db.insert(MemberSubscriptionTable).values({
+        subscriberType: wanted.type,
+        subscriberId: org.id,
+        subscriberName: org.name,
+        subscriptionId: plan.id,
+        planName: plan.name,
+        amount: plan.price,
+        billingCycle: plan.billingCycle,
+        status: 'active',
+        createdBy: ACTOR,
+        updatedBy: ACTOR,
+      });
+    }
+    added += 1;
+  }
+
+  console.log(
+    `\n${APPLY ? 'APPLIED' : 'DRY RUN (pass --apply to write)'}: ${relinked} relinked, ${added} added.`,
+  );
+  if (orphans.length) {
+    console.log(
+      `\nLedger rows naming an organisation that does not exist — left untouched, decide by hand:\n  ${orphans.join('\n  ')}`,
+    );
+  }
+  process.exit(0);
+}
+
+main().catch((error) => {
+  console.error(error);
+  process.exit(1);
+});

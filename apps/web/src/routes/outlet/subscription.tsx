@@ -206,7 +206,25 @@ function OutletSubscriptionPage() {
 	}, [backend.backed, backend.billingHistory, demoBilling]);
 
 	const outletName = tonightShiftOutletName(shifts);
-	const currentPlan = getOutletSubscriptionPlan(outletOwner.subscriptionPlanId);
+	/**
+	 * Which plan this venue is on. A real session reads its ACTIVE
+	 * `member_subscription` row — the same ledger the admin History page reads —
+	 * so the Current pill here and the admin's screen state the same fact, and an
+	 * approved switch shows up on its own. The demo store is the fallback (demo
+	 * sessions, or a venue with no active row yet).
+	 */
+	const currentPlan = useMemo(() => {
+		const fromLedger = backend.activePlanName
+			? MONTHLY_PLANS.find(
+					(plan) =>
+						plan.label.trim().toLowerCase() ===
+						backend.activePlanName?.trim().toLowerCase(),
+				)
+			: undefined;
+		return (
+			fromLedger ?? getOutletSubscriptionPlan(outletOwner.subscriptionPlanId)
+		);
+	}, [backend.activePlanName, outletOwner.subscriptionPlanId]);
 	const contactLine = outletOwner.email || outletOwner.mobile;
 
 	const posQuotePending = useMemo(
