@@ -4,7 +4,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	ArrowRight,
@@ -396,7 +396,17 @@ function PlanChangesPage() {
 							<CardDescription>
 								{view === "latest"
 									? "One row per subscriber — the switch that still needs answering. Choose Full history for every previous change."
-									: "Every plan change ever filed — a subscriber appears once per switch, so the same outlet or agency repeats down the list. POS and Custom moves live on Plan Request."}
+									: "Every plan change ever filed — a subscriber appears once per switch, so the same outlet or agency repeats down the list. POS and Custom moves live on Plan Request."}{" "}
+								This is the log of switches ASKED FOR; for what each subscriber
+								has actually been billed — the same record it sees on its own
+								Subscription page — open{" "}
+								<Link
+									to="/admin/business/history"
+									className="text-lavender underline underline-offset-2"
+								>
+									Current Plan → Full history
+								</Link>
+								.
 							</CardDescription>
 						</div>
 

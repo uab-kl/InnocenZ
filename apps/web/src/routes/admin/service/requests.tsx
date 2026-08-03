@@ -145,30 +145,24 @@ function planForRequest(
 		: undefined;
 }
 
-/** True when the request is a subscriber LEAVING the POS add-on. */
-function isAddonExitRequest(
-	request: AdminRequest,
-	planById: Map<string, Subscription>,
-): boolean {
-	if (request.type !== "pos_integration_quote" || !request.requestedPlanId) {
-		return false;
-	}
-	const requested = planById.get(request.requestedPlanId);
-	return Boolean(requested && requested.kind !== "addon");
-}
-
 /**
  * From plan = what the subscriber is moving away from.
  *
- * For an EXIT that is the add-on being dropped, not the plan — the plan is
- * being kept. Reading the current plan on both sides rendered "Pro → Pro",
- * which said nothing about what was actually changing.
+ * A POS request is NOT a move between plans — the add-on is bought, re-priced
+ * or dropped while the plan carries on untouched — so the from-side shows the
+ * add-on and its previous price when there is one, and nothing at all for a
+ * first-time request. Showing the plan there read as "Scale → Integrate with
+ * POS", a swap that never happens.
  */
 function fromPlanLabel(
 	request: AdminRequest,
 	planById: Map<string, Subscription>,
 ): string {
-	if (isAddonExitRequest(request, planById)) return "Integrate with POS";
+	if (request.type === "pos_integration_quote") {
+		return request.previousAddonAmount
+			? `Integrate with POS · RM ${formatPrice(request.previousAddonAmount)}`
+			: "—";
+	}
 	return planForRequest(request, planById)?.name ?? "—";
 }
 
@@ -187,8 +181,14 @@ function toPlanLabel(
 	const requested = request.requestedPlanId
 		? planById?.get(request.requestedPlanId)
 		: undefined;
+	// A POS request naming a plan is a CANCELLATION — the venue keeps that plan
+	// and the add-on ends.
+	if (request.type === "pos_integration_quote") {
+		return requested && requested.kind !== "addon"
+			? `Cancel · ${requested.name} only`
+			: "Integrate with POS";
+	}
 	if (requested && requested.kind !== "addon") return requested.name;
-	if (request.type === "pos_integration_quote") return "Integrate with POS";
 	if (request.type === "custom_renegotiation") return "Custom";
 	return "—";
 }
@@ -923,65 +923,100 @@ function RequestEditForm({
 					</div>
 				</dl>
 
-				{/* Before/after price reminder — the estimate stays negotiable until Resolve. */}
-				<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
-					<div className="flex items-center gap-2">
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+				{/*
+				 * A POS request stands on its own: the add-on being bought, re-priced
+				 * or dropped, with the price it replaces beside it. There is no
+				 * before/after plan — the venue's plan is untouched throughout, and
+				 * showing one read as "Scale → Integrate with POS", a swap that never
+				 * happens.
+				 */}
+				{isAddonRequest ? (
+					<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
+						<div className="rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								{isAddonExit
-									? "Add-on · ending"
-									: isAddonRequest
-										? "Plan · unchanged"
-										: "Before · From plan"}
+								{isAddonExit ? "Add-on · cancelling" : "Add-on · billed on top"}
 							</p>
-							<p className="text-lg font-medium">
-								{isAddonExit ? addonName : fromPlan}
-							</p>
+							<p className="text-lg font-medium">{addonName}</p>
 							<p className="text-base text-muted-foreground">
-								{isAddonExit
-									? "Charge stops on resolve"
-									: plan
-										? plan.name === "Custom"
-											? "Negotiated"
-											: `RM ${formatPrice(plan.price)}`
-										: "—"}
+								{isAddonExit ? "Charge stops on resolve" : estimateLabel}
 							</p>
+							{request.previousAddonAmount && (
+								<p className="text-base text-muted-foreground">
+									Previous price RM {formatPrice(request.previousAddonAmount)}
+									{isAddonExit ? " — ends" : " — negotiating again"}
+								</p>
+							)}
 						</div>
-						<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
-							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								{isAddonExit
-									? "Plan · continues"
-									: isAddonRequest
-										? "Add-on · billed on top"
-										: "After · To plan"}
-							</p>
-							<p className="text-lg font-medium">{toPlan}</p>
-							<p className="text-base text-muted-foreground">
-								{isAddonExit
-									? requestedPlan
-										? `RM ${formatPrice(requestedPlan.price)} — the venue keeps paying this`
-										: "—"
-									: estimateLabel}
-							</p>
-						</div>
-					</div>
-					<p className="text-base text-muted-foreground">
-						{isAddonExit
-							? request.status === "resolved"
-								? "Resolved — the POS add-on has ended. The venue pays its plan only."
-								: "This venue is dropping the POS add-on. Resolving ends that charge — no price to negotiate; it keeps paying its plan."
-							: negotiable
+						<p className="text-base text-muted-foreground">
+							{isAddonExit
 								? request.status === "resolved"
-									? isAddonRequest
-										? "Resolved — the venue keeps its plan and is billed this add-on price on top of it."
-										: "Resolved — the price is final."
-									: isAddonRequest
-										? "Reminder: this add-on is billed ON TOP of the venue's plan — the plan does not change. The amount is an estimate until you Resolve."
-										: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
-								: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
-					</p>
-				</div>
+									? "Resolved — the POS add-on has ended. The venue pays its plan only."
+									: `Cancellation requested — waiting for you. ${fromPlan === "—" ? "The venue" : `On ${fromPlan}, the venue`} keeps its plan and the add-on charge stands until you resolve this.`
+								: request.status === "resolved"
+									? "Resolved — billed on top of the venue's plan, which is unchanged."
+									: "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change."}
+						</p>
+					</div>
+				) : (
+					<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
+						<div className="flex items-center gap-2">
+							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+									{isAddonExit
+										? "Add-on · ending"
+										: isAddonRequest
+											? "Plan · unchanged"
+											: "Before · From plan"}
+								</p>
+								<p className="text-lg font-medium">
+									{isAddonExit ? addonName : fromPlan}
+								</p>
+								<p className="text-base text-muted-foreground">
+									{isAddonExit
+										? "Charge stops on resolve"
+										: plan
+											? plan.name === "Custom"
+												? "Negotiated"
+												: `RM ${formatPrice(plan.price)}`
+											: "—"}
+								</p>
+							</div>
+							<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+									{isAddonExit
+										? "Plan · continues"
+										: isAddonRequest
+											? "Add-on · billed on top"
+											: "After · To plan"}
+								</p>
+								<p className="text-lg font-medium">{toPlan}</p>
+								<p className="text-base text-muted-foreground">
+									{isAddonExit
+										? requestedPlan
+											? `RM ${formatPrice(requestedPlan.price)} — the venue keeps paying this`
+											: "—"
+										: estimateLabel}
+								</p>
+							</div>
+						</div>
+						<p className="text-base text-muted-foreground">
+							{isAddonExit
+								? request.status === "resolved"
+									? "Resolved — the POS add-on has ended. The venue pays its plan only."
+									: "This venue is dropping the POS add-on. Resolving ends that charge — no price to negotiate; it keeps paying its plan."
+								: negotiable
+									? request.status === "resolved"
+										? isAddonRequest
+											? "Resolved — the venue keeps its plan and is billed this add-on price on top of it."
+											: "Resolved — the price is final."
+										: isAddonRequest
+											? "Reminder: this add-on is billed ON TOP of the venue's plan — the plan does not change. The amount is an estimate until you Resolve."
+											: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
+									: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
+						</p>
+					</div>
+				)}
 
 				<div className="space-y-1.5">
 					<Label htmlFor="request-remarks">Remarks</Label>

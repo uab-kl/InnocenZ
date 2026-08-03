@@ -127,7 +127,7 @@ export class AdminRequestControllerClass {
         page,
         pageSize,
       });
-      const records = await this.withLiveFromPlan(rawRecords);
+      const records = await this.withPreviousAddonPrice(await this.withLiveFromPlan(rawRecords));
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
@@ -160,8 +160,8 @@ export class AdminRequestControllerClass {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      const [withLive] = await this.withLiveFromPlan([record]);
-      res.status(200).json({ success: true, message: 'OK', data: withLive ?? record });
+      const [enriched] = await this.withPreviousAddonPrice(await this.withLiveFromPlan([record]));
+      res.status(200).json({ success: true, message: 'OK', data: enriched ?? record });
     } catch (error) {
       logger.error('[AdminRequestController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -392,6 +392,47 @@ export class AdminRequestControllerClass {
    * admin would negotiate against the wrong plan and price. Answered requests
    * keep their stamp — that IS what they were decided against.
    */
+  /**
+   * Attach the add-on price the subscriber is on TODAY, for POS requests.
+   *
+   * A re-quote or a cancellation is only meaningful next to the figure it
+   * replaces or ends — "negotiate again" against nothing tells the admin
+   * nothing. It is null for a first-time request, which has no previous price.
+   */
+  private async withPreviousAddonPrice(records: AdminRequest[]): Promise<AdminRequest[]> {
+    const posRows = records.filter(
+      (row) => row.type === 'pos_integration_quote' && row.subscriberId && row.subscriberType,
+    );
+    if (posRows.length === 0) return records;
+    try {
+      const priceBySubscriber = new Map<string, string | null>();
+      for (const row of posRows) {
+        if (!row.subscriberId || !row.subscriberType || priceBySubscriber.has(row.subscriberId)) {
+          continue;
+        }
+        const { records: addons } = await this.memberSubscriptionRepository.listPaginated({
+          filter: {
+            subscriberType: row.subscriberType,
+            subscriberId: row.subscriberId,
+            status: 'active',
+            kind: 'addon',
+          },
+          page: 1,
+          pageSize: 1,
+        });
+        priceBySubscriber.set(row.subscriberId, addons[0]?.amount ?? null);
+      }
+      return records.map((row) =>
+        row.type === 'pos_integration_quote' && row.subscriberId
+          ? { ...row, previousAddonAmount: priceBySubscriber.get(row.subscriberId) ?? null }
+          : row,
+      );
+    } catch (error) {
+      logger.error('[AdminRequestController.withPreviousAddonPrice] Error:', error);
+      return records;
+    }
+  }
+
   private async withLiveFromPlan(records: AdminRequest[]): Promise<AdminRequest[]> {
     const pending = records.filter((row) => row.status === 'pending' && row.subscriberId);
     if (pending.length === 0) return records;

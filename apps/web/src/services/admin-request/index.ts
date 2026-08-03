@@ -51,6 +51,12 @@ export interface AdminRequest {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	/**
+	 * POS requests only: the add-on price this subscriber is on today, so a
+	 * re-quote or a cancellation can be read against the figure it replaces or
+	 * ends. Null for a first-time request. Computed server-side from the ledger.
+	 */
+	previousAddonAmount?: string | null;
 }
 
 export interface AdminRequestsQueryParams {
