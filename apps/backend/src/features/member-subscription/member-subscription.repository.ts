@@ -55,6 +55,45 @@ export class MemberSubscriptionRepositoryClass {
     return conditions.length > 0 ? and(...conditions) : undefined;
   }
 
+  /**
+   * One row per subscriber — the plan it is on NOW.
+   *
+   * A switch closes the old row and opens a new one, so a venue accumulates a
+   * row per plan it has held. Admin History wants the current picture, not the
+   * whole trail: keep the newest by `started_at`. Nothing is deleted; the older
+   * rows remain the record of what was charged before.
+   */
+  private async listLatestPerSubscriber(params: {
+    whereClause: SQL | undefined;
+    page: number;
+    pageSize: number;
+  }): Promise<{ records: MemberSubscription[]; totalCount: number }> {
+    const { whereClause, page, pageSize } = params;
+
+    const latest = db
+      .selectDistinctOn([MemberSubscriptionTable.subscriberType, MemberSubscriptionTable.subscriberId])
+      .from(MemberSubscriptionTable)
+      .where(whereClause)
+      .orderBy(
+        MemberSubscriptionTable.subscriberType,
+        MemberSubscriptionTable.subscriberId,
+        desc(MemberSubscriptionTable.startedAt),
+      )
+      .as('latest');
+
+    const [countRow] = await db.select({ value: sql<number>`count(*)::int` }).from(latest);
+    const totalCount = Number(countRow?.value ?? 0);
+
+    const records = (await db
+      .select()
+      .from(latest)
+      .orderBy(desc(latest.startedAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)) as MemberSubscription[];
+
+    return { records, totalCount };
+  }
+
   async listPaginated(params: {
     filter?: MemberSubscriptionFilter;
     page: number;
@@ -63,6 +102,10 @@ export class MemberSubscriptionRepositoryClass {
     try {
       const { filter, page, pageSize } = params;
       const whereClause = this.buildConditions(filter);
+
+      if (filter?.latestPerSubscriber) {
+        return await this.listLatestPerSubscriber({ whereClause, page, pageSize });
+      }
 
       const [countRow] = await db
         .select({ value: sql<number>`count(*)::int` })

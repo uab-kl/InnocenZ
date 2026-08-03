@@ -54,4 +54,10 @@ export type MemberSubscriptionFilter = {
   dates?: string[];
   /** Case-insensitive partial match on the subscriber (outlet/agency) name. */
   search?: string;
+  /**
+   * Collapse to ONE row per subscriber — the one it is on now (newest by
+   * started_at). The admin History page uses it so a venue that switched plans
+   * shows its current plan, not every plan it has ever been on.
+   */
+  latestPerSubscriber?: boolean;
 };

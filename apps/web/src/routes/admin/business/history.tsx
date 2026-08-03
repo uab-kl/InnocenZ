@@ -105,6 +105,10 @@ function HistoryPage() {
 	const queryParams: MemberSubscriptionsQueryParams = {
 		page,
 		pageSize: PAGE_SIZE,
+		// The plan each subscriber is on NOW. A switch closes the old row and opens
+		// a new one, so without this a venue would list every plan it has held and
+		// the page could not answer "what is this venue on today?".
+		latestPerSubscriber: true,
 	};
 	if (subscriberTypeFilter !== "all")
 		queryParams.subscriberType = subscriberTypeFilter;
@@ -209,7 +213,8 @@ function HistoryPage() {
 								)}
 							</CardTitle>
 							<CardDescription>
-								Each row is one subscription charge in the member ledger
+								The plan each outlet and agency is on now — one row per
+								subscriber, updated when a switch is approved
 							</CardDescription>
 						</div>
 
