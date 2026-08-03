@@ -146,15 +146,36 @@ function PosIntegrationAddonCard({
 							InnocenZ admin agreed {formatRM(activeAddonPriceRm)} / month for
 							your venue. This is billed on top of your plan.
 						</p>
-						{canEdit && (
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel"
-								onClick={onRemoveAddon}
-							>
-								Remove POS integration
-							</button>
-						)}
+						{/*
+						 * Two ways out, and BOTH go to the admin: the venue can ask for the
+						 * price to be quoted again, or drop POS entirely and keep its plan
+						 * only. Neither takes effect until the admin answers — a venue must
+						 * not be able to end its own billing.
+						 */}
+						{canEdit &&
+							(quotePending ? (
+								<p className="iz-outlet-pos-addon__sent-body">
+									Your request is with InnocenZ admin — the current price
+									applies until they answer.
+								</p>
+							) : (
+								<div className="flex flex-col gap-2 sm:flex-row">
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										onClick={onRequestQuote}
+									>
+										Ask for a new price
+									</button>
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										onClick={onRemoveAddon}
+									>
+										Cancel POS · plan only
+									</button>
+								</div>
+							))}
 					</div>
 				) : quotePending ? (
 					<div className="iz-outlet-pos-addon__sent">
@@ -317,7 +338,12 @@ function OutletSubscriptionPage() {
 				})
 				.then(() => {
 					setQuoteSentLocal(true);
-					toast("POS integration request sent to admin", "success");
+					toast(
+						backend.addonAmountRm !== null
+							? "New price requested — InnocenZ admin will re-quote your POS integration"
+							: "POS integration request sent to admin",
+						"success",
+					);
 				})
 				.catch(() => toast("Could not send request — try again", "warn"));
 			return;
