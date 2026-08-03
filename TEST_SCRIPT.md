@@ -620,6 +620,25 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **3 Aug 2026 (eighteenth slice) — THE CHURN IS CLEARED, AND THE SECOND BUG IT EXPOSED IS FIXED.**
+>
+> Listing Atlas’s rows before deleting them turned up a defect the churn had been hiding: **`Starter RM
+> 100,000.00`**. A Custom quote resolved with no `requested_plan_id` falls to the *re-price in place*
+> branch, which updated whatever plan row was active — and by then the auto-reset had already put Atlas
+> back on Starter, so a RM 125 banded tier was stamped with the Custom figure. **In-place re-pricing now
+> refuses unless the active row IS Custom**, and logs the refusal: a banded tier’s price is the catalog’s,
+> not anyone’s to negotiate.
+>
+> **`clear-agency-churn.ts`** (new, one-off) removed **10 ledger rows + 10 request rows** in the 09:30–10:30
+> window and left Atlas on **Starter RM 125.00**, its 2-PV band. Rollback JSON written BEFORE the first
+> delete: `%TEMP%\agency-churn-Atlas-Agency-2026-08-03.json` (15,856 bytes) — re-inserting it restores
+> every row exactly. **Deliberately not general:** explicit agency, explicit window, explicit landing tier,
+> because "delete this organisation’s billing history" must not be possible by accident.
+>
+> **Verified after:** Atlas ledger **12 → 3 rows** (Growth expired 7 Jul, Custom RM 0 expired 08:02,
+> Starter RM 125 active) and requests **13 → 3**, all pre-09:30 — its real history is intact and nothing
+> outside the window was touched. Plan Request total 13.
+
 > **3 Aug 2026 (seventeenth slice) — 🔴 THE AUTO-RESET WAS EATING THE ADMIN’S NEGOTIATED PRICE.**
 >
 > Owner: *"why admin set 99 to the agency then automatically reset?"* — because I wired a branch that did

@@ -387,6 +387,21 @@ export class AdminRequestControllerClass {
           logger.warn(`[AdminRequestController] ${record.subscriberName} has no active plan to price`);
           return;
         }
+        /**
+         * Only a CUSTOM row can be re-priced in place. An old quote resolved
+         * after the agency has moved back to a banded tier would otherwise stamp
+         * the negotiated figure onto that tier — which is exactly what happened:
+         * a Custom quote of 100,000 landed on Atlas's Starter row, so a RM 125
+         * tier read as RM 100,000. A banded tier's price is the catalog's, not
+         * anyone's to negotiate.
+         */
+        if (current.planName !== 'Custom') {
+          logger.warn(
+            `[AdminRequestController] ${record.subscriberName} is on ${current.planName}, not Custom — ` +
+              `quote ${amount} not applied (a banded tier keeps its list price)`,
+          );
+          return;
+        }
         await this.memberSubscriptionRepository.update(current.id, {
           amount,
           adminRequestId: record.id,
