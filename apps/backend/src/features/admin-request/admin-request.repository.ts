@@ -55,11 +55,19 @@ export class AdminRequestRepositoryClass {
     const { whereClause, page, pageSize } = params;
     const key = sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`;
 
+    // An OUTSTANDING request wins over an answered one, then the newest.
+    // Without the first clause the row picked is whatever sorts first among
+    // equal timestamps: a venue that filed two switches in the same minute and
+    // had one approved could show the approved row in the admin queue while its
+    // own screen showed the other still awaiting — the two screens reading the
+    // same subscriber by different rules.
+    const outstandingFirst = sql`(${AdminRequestTable.status} = 'pending') desc`;
+
     const latest = db
       .selectDistinctOn([sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`])
       .from(AdminRequestTable)
       .where(whereClause)
-      .orderBy(key, desc(AdminRequestTable.createdAt))
+      .orderBy(key, outstandingFirst, desc(AdminRequestTable.createdAt))
       .as('latest');
 
     const [countRow] = await db.select({ value: sql<number>`count(*)::int` }).from(latest);
