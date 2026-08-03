@@ -629,7 +629,10 @@ function RequestsPage() {
 					if (!open) setEditRequest(null);
 				}}
 			>
-				<SheetContent side="right" className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+				<SheetContent
+					side="right"
+					className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+				>
 					{editRequest && (
 						<RequestEditForm
 							key={editRequest.id}
@@ -683,6 +686,13 @@ function RequestEditForm({
 	onDone,
 }: RequestEditFormProps) {
 	const negotiable = isPriceNegotiable(request);
+	/**
+	 * A POS quote buys an ADD-ON, not a plan: resolving it leaves the venue on
+	 * its plan and bills the agreed price on top. Borrowing the plan-change
+	 * wording ("From plan → To plan") read as a replacement and made the admin
+	 * expect the venue to leave Pro, so an add-on request is labelled as one.
+	 */
+	const isAddonRequest = request.type === "pos_integration_quote";
 	const editableQuote = canEditQuote(request);
 	const [remarks, setRemarks] = useState(request.remarks ?? "");
 	const [quote, setQuote] = useState(request.quotedAmount ?? "");
@@ -699,7 +709,7 @@ function RequestEditForm({
 				: request.type === "pos_integration_quote" && plan
 					? `RM ${formatPrice(plan.price)}`
 					: negotiable
-					? "Set before resolve"
+						? "Set before resolve"
 						: "—";
 
 	const remarksChanged = remarks.trim() !== (request.remarks ?? "").trim();
@@ -813,11 +823,15 @@ function RequestEditForm({
 						<dd className="text-right">{requestTypeLabels[request.type]}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">From plan</dt>
+						<dt className="text-muted-foreground">
+							{isAddonRequest ? "Plan (stays)" : "From plan"}
+						</dt>
 						<dd className="text-right">{fromPlan}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">To plan</dt>
+						<dt className="text-muted-foreground">
+							{isAddonRequest ? "Add-on" : "To plan"}
+						</dt>
 						<dd className="text-right">{toPlan}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
@@ -831,7 +845,7 @@ function RequestEditForm({
 					<div className="flex items-center gap-2">
 						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								Before · From plan
+								{isAddonRequest ? "Plan · unchanged" : "Before · From plan"}
 							</p>
 							<p className="text-lg font-medium">{fromPlan}</p>
 							<p className="text-base text-muted-foreground">
@@ -845,7 +859,7 @@ function RequestEditForm({
 						<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
 						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								After · To plan
+								{isAddonRequest ? "Add-on · billed on top" : "After · To plan"}
 							</p>
 							<p className="text-lg font-medium">{toPlan}</p>
 							<p className="text-base text-muted-foreground">{estimateLabel}</p>
@@ -854,8 +868,12 @@ function RequestEditForm({
 					<p className="text-base text-muted-foreground">
 						{negotiable
 							? request.status === "resolved"
-								? "Resolved — the price is final."
-								: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
+								? isAddonRequest
+									? "Resolved — the venue keeps its plan and is billed this add-on price on top of it."
+									: "Resolved — the price is final."
+								: isAddonRequest
+									? "Reminder: this add-on is billed ON TOP of the venue's plan — the plan does not change. The amount is an estimate until you Resolve."
+									: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
 							: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
 					</p>
 				</div>
