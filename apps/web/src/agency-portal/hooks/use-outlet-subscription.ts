@@ -78,13 +78,42 @@ export function useOutletSubscription() {
 	 * disagree. Null when the venue has no active row, and the caller then falls
 	 * back to the demo plan rather than inventing one.
 	 */
-	const activePlanName = useMemo<string | null>(() => {
+	const activeSubscription = useMemo(() => {
 		if (!backed) return null;
-		const active = sortMemberSubscriptions(billingQuery.data?.data ?? []).find(
-			(sub) => sub.status === "active",
+		return (
+			sortMemberSubscriptions(billingQuery.data?.data ?? []).find(
+				(sub) => sub.status === "active",
+			) ?? null
 		);
-		return active?.planName ?? null;
 	}, [backed, billingQuery.data]);
+
+	const activePlanName = activeSubscription?.planName ?? null;
+
+	/**
+	 * When this venue is next billed: its subscription start rolled forward by
+	 * the billing cycle until the date is in the future. Null when there is no
+	 * active row — the caller then shows nothing rather than a made-up date. The
+	 * page used to print a hardcoded "15 Jul 2026", which was both invented and
+	 * in the past.
+	 */
+	const nextRenewalDate = useMemo<Date | null>(() => {
+		if (!activeSubscription?.startedAt) return null;
+		const next = new Date(activeSubscription.startedAt);
+		if (Number.isNaN(next.getTime())) return null;
+		const now = new Date();
+		let guard = 0;
+		while (next <= now && guard < 600) {
+			if (activeSubscription.billingCycle === "weekly") {
+				next.setDate(next.getDate() + 7);
+			} else if (activeSubscription.billingCycle === "annually") {
+				next.setFullYear(next.getFullYear() + 1);
+			} else {
+				next.setMonth(next.getMonth() + 1);
+			}
+			guard += 1;
+		}
+		return next;
+	}, [activeSubscription]);
 
 	const posQuoteMut = useMutation({
 		mutationFn: (input: CreateAdminRequestInput) =>
@@ -211,6 +240,8 @@ export function useOutletSubscription() {
 		backed,
 		billingHistory,
 		activePlanName,
+		/** Real next billing date from the ledger; null when nothing is active. */
+		nextRenewalDate,
 		/** Plan awaiting admin approval — survives a refresh; null once answered. */
 		pendingPlanLabel,
 		isLoading: billingQuery.isLoading,

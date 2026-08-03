@@ -229,6 +229,21 @@ function OutletSubscriptionPage() {
 		);
 	}, [backend.activePlanName, outletOwner.subscriptionPlanId]);
 	const contactLine = outletOwner.email || outletOwner.mobile;
+	/**
+	 * The next billing date, derived from this venue's own subscription row. A
+	 * real session shows a real date; when the ledger has nothing active the
+	 * label is omitted entirely rather than printing the old hardcoded
+	 * "15 Jul 2026", which was invented and already in the past.
+	 */
+	const renewalLabel = backend.backed
+		? backend.nextRenewalDate
+			? backend.nextRenewalDate.toLocaleDateString("en-GB", {
+					day: "numeric",
+					month: "short",
+					year: "numeric",
+				})
+			: null
+		: RENEWAL_DATE;
 
 	const posQuotePending = useMemo(
 		() =>
@@ -410,8 +425,9 @@ function OutletSubscriptionPage() {
 							</div>
 							{isCurrent ? (
 								<p className="iz-tiny iz-muted2 mt-2">
-									Renewal {RENEWAL_DATE} · {namedPrsToday} / {plan.prPerDayMax}{" "}
-									requested PRs today · pool of {plan.prPoolSize}
+									{renewalLabel ? `Renewal ${renewalLabel} · ` : ""}
+									{namedPrsToday} / {plan.prPerDayMax} requested PRs today ·
+									pool of {plan.prPoolSize}
 								</p>
 							) : (
 								canEdit &&

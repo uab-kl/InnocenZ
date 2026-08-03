@@ -157,6 +157,35 @@ export class AdminRequestControllerClass {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
       const actor = getActor(req);
+
+      // A switch to the plan the subscriber is ALREADY on is not a decision for
+      // the admin to make — it would sit in the queue as Pending forever while
+      // the venue's own screen shows the plan as current, which reads as the two
+      // screens disagreeing. Refuse it with the reason instead of filing it.
+      if (
+        parsed.data.type === 'plan_change' &&
+        parsed.data.subscriberId &&
+        parsed.data.subscriberType &&
+        parsed.data.requestedPlanId
+      ) {
+        const { records: active } = await this.memberSubscriptionRepository.listPaginated({
+          filter: {
+            subscriberType: parsed.data.subscriberType,
+            subscriberId: parsed.data.subscriberId,
+            status: 'active',
+          },
+          page: 1,
+          pageSize: 1,
+        });
+        if (active[0]?.subscriptionId === parsed.data.requestedPlanId) {
+          return res.status(400).json({
+            success: false,
+            message: `Already on ${active[0].planName} — no switch needed`,
+            data: null,
+          });
+        }
+      }
+
       const record = await this.repository.create({
         type: parsed.data.type,
         subscriberType: parsed.data.subscriberType ?? null,
