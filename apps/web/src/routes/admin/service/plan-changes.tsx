@@ -12,9 +12,10 @@ import {
 	CheckCircle2,
 	Loader2,
 	RefreshCw,
+	Search,
 	XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	DateMultiFilter,
@@ -31,6 +32,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
 	Select,
@@ -235,17 +237,35 @@ function PlanChangesPage() {
 	const [switchedDates, setSwitchedDates] = useState<Date[]>([]);
 	const [page, setPage] = useState(1);
 	const [editRequest, setEditRequest] = useState<AdminRequest | null>(null);
+	/**
+	 * Latest = one row per subscriber, what still needs answering. All = every
+	 * switch ever filed, so a venue that has moved plan several times can be
+	 * traced rather than appearing once.
+	 */
+	const [view, setView] = useState<"latest" | "all">("latest");
+	const [searchInput, setSearchInput] = useState("");
+	const [search, setSearch] = useState("");
+
+	// Debounce the search box so a keystroke doesn't fire a request each time.
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setSearch(searchInput.trim());
+			setPage(1);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [searchInput]);
 
 	// Only plan-change activity is listed here.
 	const queryParams: AdminRequestsQueryParams = {
 		page,
 		pageSize: PAGE_SIZE,
 		type: "plan_change",
-		// One row per subscriber — a venue that tapped Switch three times is one
-		// decision to make, not three, and approving a stale request would apply a
-		// plan it has since moved off. The older rows stay in the table.
-		latestPerSubscriber: true,
+		// Latest view: a venue that tapped Switch three times is one decision to
+		// make, not three, and approving a stale request would apply a plan it has
+		// since moved off. Older rows are never deleted — the All view shows them.
+		latestPerSubscriber: view === "latest",
 	};
+	if (search) queryParams.search = search;
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;
 	const switchedDatesParam = datesToQueryParam(switchedDates);
@@ -360,6 +380,35 @@ function PlanChangesPage() {
 									setPage(1);
 								}}
 							/>
+
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={searchInput}
+									onChange={(event) => setSearchInput(event.target.value)}
+									placeholder="Search outlet or agency..."
+									className="pl-8"
+									aria-label="Search outlet or agency"
+								/>
+							</div>
+
+							{/* Latest = what still needs answering; All = every switch a
+							    subscriber has ever filed, so its history can be traced. */}
+							<Select
+								value={view}
+								onValueChange={(value) => {
+									setView(value as "latest" | "all");
+									setPage(1);
+								}}
+							>
+								<SelectTrigger className="sm:w-44">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="latest">Latest per subscriber</SelectItem>
+									<SelectItem value="all">All changes (history)</SelectItem>
+								</SelectContent>
+							</Select>
 
 							<Select
 								value={statusFilter}

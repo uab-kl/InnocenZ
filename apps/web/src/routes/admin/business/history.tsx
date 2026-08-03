@@ -92,6 +92,12 @@ function HistoryPage() {
 	const [searchInput, setSearchInput] = useState("");
 	const [search, setSearch] = useState("");
 	const [page, setPage] = useState(1);
+	/**
+	 * Current = one row per subscriber, the plan it is on today. History = every
+	 * subscription row, so a venue that has changed plan several times shows each
+	 * one with its dates instead of appearing once.
+	 */
+	const [view, setView] = useState<"current" | "history">("current");
 
 	// Debounce the search box so a keystroke doesn't fire a request each time.
 	useEffect(() => {
@@ -105,10 +111,11 @@ function HistoryPage() {
 	const queryParams: MemberSubscriptionsQueryParams = {
 		page,
 		pageSize: PAGE_SIZE,
-		// The plan each subscriber is on NOW. A switch closes the old row and opens
-		// a new one, so without this a venue would list every plan it has held and
-		// the page could not answer "what is this venue on today?".
-		latestPerSubscriber: true,
+		// Current view: the plan each subscriber is on NOW. A switch closes the old
+		// row and opens a new one, so without this a venue lists every plan it has
+		// ever held and the page cannot answer "what is this venue on today?".
+		// History view shows exactly those older rows — nothing is deleted.
+		latestPerSubscriber: view === "current",
 	};
 	if (subscriberTypeFilter !== "all")
 		queryParams.subscriberType = subscriberTypeFilter;
@@ -213,8 +220,9 @@ function HistoryPage() {
 								)}
 							</CardTitle>
 							<CardDescription>
-								The plan each outlet and agency is on now — one row per
-								subscriber, updated when a switch is approved
+								{view === "current"
+									? "The plan each outlet and agency is on now — one row per subscriber, updated when a switch is approved"
+									: "Every subscription ever held — each row is one plan a subscriber was on, newest first"}
 							</CardDescription>
 						</div>
 
@@ -238,6 +246,24 @@ function HistoryPage() {
 									aria-label="Search outlet or agency"
 								/>
 							</div>
+
+							{/* Current = the plan each subscriber is on today; History =
+							    every subscription it has held, with dates. */}
+							<Select
+								value={view}
+								onValueChange={(value) => {
+									setView(value as "current" | "history");
+									resetToFirstPage();
+								}}
+							>
+								<SelectTrigger className="sm:w-40">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="current">Current plan</SelectItem>
+									<SelectItem value="history">Full history</SelectItem>
+								</SelectContent>
+							</Select>
 
 							<Select
 								value={statusFilter}

@@ -109,6 +109,10 @@ export class AdminRequestControllerClass {
         dates: parseDatesQuery(req.query.dates),
         // ?latestPerSubscriber=true → one row per venue/agency, the newest.
         latestPerSubscriber: req.query.latestPerSubscriber === 'true',
+        search:
+          typeof req.query.search === 'string' && req.query.search.trim().length > 0
+            ? req.query.search.trim()
+            : undefined,
       };
       const { records: rawRecords, totalCount } = await this.repository.listPaginated({
         filter,

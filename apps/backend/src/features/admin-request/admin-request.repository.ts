@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, ne, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNotNull, ne, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -30,6 +30,7 @@ export class AdminRequestRepositoryClass {
     }
     if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
     if (filter?.status) conditions.push(eq(AdminRequestTable.status, filter.status));
+    if (filter?.search) conditions.push(ilike(AdminRequestTable.subscriberName, `%${filter.search}%`));
     if (filter?.subscriberType) conditions.push(eq(AdminRequestTable.subscriberType, filter.subscriberType));
     const requestedOn = buildMultiDayWhere(AdminRequestTable.createdAt, filter?.dates);
     if (requestedOn) conditions.push(requestedOn);

@@ -78,4 +78,6 @@ export type AdminRequestFilter = {
    * so a venue that switched three times is one row to answer, not three.
    */
   latestPerSubscriber?: boolean;
+  /** Case-insensitive partial match on the subscriber (outlet/agency) name. */
+  search?: string;
 };

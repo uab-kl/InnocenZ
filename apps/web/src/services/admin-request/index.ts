@@ -66,6 +66,8 @@ export interface AdminRequestsQueryParams {
 	pageSize?: number;
 	/** One row per subscriber — the newest request only (Plan Change page). */
 	latestPerSubscriber?: boolean;
+	/** Case-insensitive partial match on the outlet/agency name. */
+	search?: string;
 }
 
 export interface AdminRequestsApiResponse {
@@ -107,6 +109,7 @@ export async function fetchAdminRequests(
 		page: params.page,
 		pageSize: params.pageSize,
 		latestPerSubscriber: params.latestPerSubscriber ? "true" : undefined,
+		search: params.search,
 	});
 
 	const response = await client.get<AdminRequestsApiResponse>(
