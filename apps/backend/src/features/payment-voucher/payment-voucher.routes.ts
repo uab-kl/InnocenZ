@@ -143,6 +143,15 @@ router.get('/:id', paymentVoucherController.getById.bind(paymentVoucherControlle
 // roster work, and narrowing that would blank live screens.
 router.post('/', agencyOwnerOrFinance, paymentVoucherController.create.bind(paymentVoucherController));
 router.put('/:id', agencyOwnerOrFinance, paymentVoucherController.update.bind(paymentVoucherController));
+// The agency's half of the dual signature, taken BEFORE the voucher is sent —
+// `update` now refuses the pending_review -> sent transition without it. Same
+// guard as every other money write here: signing is an attestation, and the
+// sub-role enum holds exactly owner and finance, which is who may make one.
+router.post(
+  '/:id/finance-sign',
+  agencyOwnerOrFinance,
+  paymentVoucherController.financeSignVoucher.bind(paymentVoucherController),
+);
 router.delete('/:id', canDelete, paymentVoucherController.remove.bind(paymentVoucherController));
 
 export default router;

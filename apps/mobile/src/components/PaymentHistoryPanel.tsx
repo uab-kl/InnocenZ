@@ -555,17 +555,20 @@ function WeekCard({
   onPdf: () => void;
   onExcel: () => void;
 }) {
+  // Three states, not two. 'Pending' is the honest badge for a week the PR has
+  // not signed — it used to read "Signed", asserting a signature that had never
+  // been given, on the very screen a PR opens to check exactly that.
   const border =
     week.status === 'paid' ? 'rgba(93,217,160,0.35)' : 'rgba(232,198,106,0.35)';
+  const statusLabel =
+    week.status === 'paid' ? 'Paid' : week.status === 'signed' ? 'Signed' : 'Pending';
   return (
     <View style={[styles.card, { borderColor: border }]}>
       <Pressable onPress={onToggle} style={styles.cardHd}>
         <View style={{ flex: 1, minWidth: 0 }}>
           <View style={styles.cardTitleRow}>
             <Text style={styles.cardWeek}>{week.weekLabel}</Text>
-            <Pill variant={week.status === 'paid' ? 'green' : 'amber'}>
-              {week.status === 'paid' ? 'Paid' : 'Signed'}
-            </Pill>
+            <Pill variant={week.status === 'paid' ? 'green' : 'amber'}>{statusLabel}</Pill>
           </View>
           <Text style={styles.cardSub} numberOfLines={1}>
             {week.ref} · {week.outlet}

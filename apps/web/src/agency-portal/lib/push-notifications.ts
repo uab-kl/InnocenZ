@@ -927,6 +927,7 @@ export const OPS_KIND_LABEL: Record<OpsNotification["kind"], string> = {
 	agency_join_resolved: "Agency",
 	pr_rating_low: "Rating drop",
 	shift_cover_needed: "Cover needed",
+	pv_day_review_pending: "Day review",
 	unknown: "Update",
 };
 

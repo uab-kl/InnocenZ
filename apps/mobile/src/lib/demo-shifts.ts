@@ -741,13 +741,16 @@ export function weekPayGridTotal(grid: WeeklyDayPay[]): number {
 
 export function weekRangeLabel(weeksAgo: number, baseline = todayYmd()): string {
   const [y, m, d] = baseline;
-  // Monday-start weeks, matching the backend payroll cycle (weekBounds) — a
-  // Sunday anchor made the label read one day earlier than the grid columns.
-  const monday = new Date(y, m - 1, d);
-  monday.setDate(monday.getDate() - ((monday.getDay() + 6) % 7) - weeksAgo * 7);
-  const end = new Date(monday);
-  end.setDate(monday.getDate() + 6);
-  const a = `${String(monday.getDate()).padStart(2, '0')} ${MONTH_NAMES[monday.getMonth()]}`;
+  // Sunday-start weeks, matching the backend payroll cycle (weekBounds) and the
+  // agency portal. This was Monday-anchored to follow the backend; the backend
+  // moved to Sun–Sat on 3 Aug 2026 at the owner's instruction, so this follows it
+  // back. The anchor must equal the backend's, or the label names a different
+  // week from the one the grid columns are filled from.
+  const sunday = new Date(y, m - 1, d);
+  sunday.setDate(sunday.getDate() - sunday.getDay() - weeksAgo * 7);
+  const end = new Date(sunday);
+  end.setDate(sunday.getDate() + 6);
+  const a = `${String(sunday.getDate()).padStart(2, '0')} ${MONTH_NAMES[sunday.getMonth()]}`;
   const b = `${String(end.getDate()).padStart(2, '0')} ${MONTH_NAMES[end.getMonth()]} ${end.getFullYear()}`;
   return `${a} – ${b}`;
 }

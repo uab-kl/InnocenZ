@@ -50,6 +50,9 @@ function lineToRow(line: PaymentVoucherLine): PrPvRow {
 		qty: line.quantity,
 		amt: num(line.amount),
 		ref: line.ref ?? "",
+		// Carried so the earnings breakdown can classify by the typed column
+		// instead of searching the description text for the word "wage".
+		component: line.component ?? null,
 	};
 }
 

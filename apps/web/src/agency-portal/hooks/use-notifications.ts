@@ -33,6 +33,7 @@ const KIND_MAP: Record<NotificationKind, OpsNotificationKind> = {
 	agency_join_resolved: "agency_join_resolved",
 	pr_rating_low: "pr_rating_low",
 	shift_cover_needed: "shift_cover_needed",
+	pv_day_review_pending: "pv_day_review_pending",
 };
 
 /**
@@ -61,6 +62,10 @@ function hrefFor(
 		switch (record.kind) {
 			case "payment_voucher_issued":
 			case "payment_voucher_dispute_resolved":
+			// The body literally says "Approve each day on Payroll & PV, then
+			// send" — so the row has to land there. It fell to `default` before
+			// and returned undefined, which made the instruction a dead end.
+			case "pv_day_review_pending":
 				return "/agency/pv";
 			case "overtime_pending_approval":
 			case "shift_assigned":

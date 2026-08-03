@@ -4,7 +4,17 @@
  * stays empty so History never invents amounts for weeks with no shifts.
  */
 
-export type HistPayStatus = 'paid' | 'signed';
+/**
+ * What the PR's History badge says about a past week's voucher.
+ *
+ * `pending` exists because History used to be fed only signed and paid vouchers,
+ * so a two-value union was safe. Once every CLOSED week started appearing
+ * (3 Aug 2026) that binary began labelling `pending_review` weeks "Signed" —
+ * asserting a signature the PR had never given, on the one screen they visit to
+ * check exactly that. A week still awaiting the agency, or awaiting the PR's own
+ * signature, has to say so.
+ */
+export type HistPayStatus = 'paid' | 'signed' | 'pending';
 
 export type HistPayLine = {
   date: string;

@@ -14,7 +14,8 @@ export type NotificationKind =
 	| "shift_cancelled"
 	| "agency_join_resolved"
 	| "pr_rating_low"
-	| "shift_cover_needed";
+	| "shift_cover_needed"
+	| "pv_day_review_pending";
 
 export interface NotificationRecord {
 	id: string;

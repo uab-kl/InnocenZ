@@ -1,4 +1,4 @@
-import { localizeHref } from '@/paraglide/runtime'
+import { localizeHref } from "@/paraglide/runtime";
 
 /**
  * Full-page navigation that keeps the locale prefix.
@@ -14,6 +14,6 @@ import { localizeHref } from '@/paraglide/runtime'
  * `window.location.assign` directly.
  */
 export function hardNavigate(path: string): void {
-  if (typeof window === 'undefined') return
-  window.location.assign(localizeHref(path))
+	if (typeof window === "undefined") return;
+	window.location.assign(localizeHref(path));
 }

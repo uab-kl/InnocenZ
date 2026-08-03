@@ -276,3 +276,30 @@ export const PrSignVoucherSchema = z.object({
 });
 
 export type PrSignVoucherInput = z.infer<typeof PrSignVoucherSchema>;
+
+/**
+ * The AGENCY's half of the dual signature, taken before the voucher is sent.
+ *
+ * Same ink shape as the PR's, but `signature` is REQUIRED here where the PR's is
+ * optional. The PR signs a figure that was put in front of them; the agency is
+ * the party ATTESTING to that figure, and an attestation with no mark behind it
+ * is exactly the state this voucher was already in — a name column nobody ever
+ * filled and a workflow step nothing enforced.
+ *
+ * `financeHeadName` is optional because the server falls back to the signed-in
+ * account: the person clicking is the person signing, and letting a caller type
+ * any name is how a signature stops meaning anything.
+ */
+export const FinanceSignVoucherSchema = z.object({
+  financeHeadName: z.string().min(2).max(255).optional(),
+  signature: z.object({
+    w: z.number().min(20).max(4000),
+    h: z.number().min(20).max(2000),
+    strokes: z
+      .array(z.array(z.tuple([z.number(), z.number()])).min(2).max(2000))
+      .min(1)
+      .max(100),
+  }),
+});
+
+export type FinanceSignVoucherInput = z.infer<typeof FinanceSignVoucherSchema>;
