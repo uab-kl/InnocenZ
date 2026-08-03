@@ -166,6 +166,59 @@ async function main() {
     purged = ghosts.length;
   }
 
+  /**
+   * The same ghosts, one table over. `admin_request` rows naming an organisation
+   * that does not exist put fictional subscribers in the admin's Plan Request and
+   * Plan Change queues — Summit Staffing, Pioneer Crew and Horizon Talent are in
+   * neither `agency` nor the ledger, yet all three sit in the inbox asking to
+   * negotiate a price.
+   *
+   * Only the SUBSCRIBER types are judged. A `contact`/`other` request can
+   * legitimately come from someone who is not an organisation yet, and deleting an
+   * enquiry because the enquirer has no account is not this script's call.
+   */
+  const SUBSCRIBER_TYPES: readonly string[] = [
+    'plan_change',
+    'pos_integration_quote',
+    'custom_renegotiation',
+  ];
+  const allRequests = await db.select().from(AdminRequestTable);
+  const requestGhosts = allRequests.filter((row) => {
+    if (!SUBSCRIBER_TYPES.includes(row.type) || !row.subscriberType) return false;
+    const pool = row.subscriberType === 'outlet' ? outlets : agencies;
+    if (row.subscriberId && pool.some((org) => org.id === row.subscriberId)) return false;
+    return byName(pool, row.subscriberName).length === 0;
+  });
+
+  let purgedRequests = 0;
+  if (requestGhosts.length) {
+    console.log(`\nRequest rows naming an organisation that does not exist (${requestGhosts.length}):`);
+    for (const row of requestGhosts) {
+      console.log(
+        `  ${row.subscriberName} (${row.subscriberType}) ${row.type} · ${row.status} · created_by=${row.createdBy}`,
+      );
+    }
+    if (PURGE_GHOSTS) {
+      const backup = join(
+        tmpdir(),
+        `admin-request-ghosts-${new Date().toISOString().replace(/[:.]/g, '-')}.json`,
+      );
+      writeFileSync(backup, JSON.stringify(requestGhosts, null, 2), 'utf8');
+      console.log(`  backup written to ${backup}`);
+      if (APPLY) {
+        await db.delete(AdminRequestTable).where(
+          inArray(
+            AdminRequestTable.id,
+            requestGhosts.map((row) => row.id),
+          ),
+        );
+      }
+      purgedRequests = requestGhosts.length;
+    } else {
+      console.log('  left untouched — pass --purge-ghosts (with --apply) to delete');
+    }
+  }
+
   // Requests raised before the controller started stamping it have no
   // `current_plan_id`, so the admin drawer's "BEFORE · FROM PLAN" is blank.
   // Fill it from the subscriber's active plan — for an unanswered request that
@@ -199,7 +252,8 @@ async function main() {
   }
 
   console.log(
-    `\n${APPLY ? 'APPLIED' : 'DRY RUN (pass --apply to write)'}: ${relinked} relinked, ${added} added, ${purged} deleted, ${stamped} from-plans stamped.`,
+    `\n${APPLY ? 'APPLIED' : 'DRY RUN (pass --apply to write)'}: ${relinked} relinked, ${added} added, ` +
+      `${purged} ledger rows deleted, ${purgedRequests} request rows deleted, ${stamped} from-plans stamped.`,
   );
   if (orphans.length && !PURGE_GHOSTS) {
     console.log(

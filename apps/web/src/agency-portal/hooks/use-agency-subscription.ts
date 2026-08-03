@@ -216,6 +216,21 @@ export function useAgencySubscription() {
 		return `Cancel · ${requested} only`;
 	}, [customQuery.data, planNameById]);
 
+	/**
+	 * WHICH Custom request is open — naming an ordinary tier is an exit, anything
+	 * else is a quote or re-quote. Only that action is blocked: an agency that
+	 * asked for a new price must still be able to decide it would rather leave
+	 * Custom, the same way a venue can change its mind about POS.
+	 */
+	const customRequestKind = useMemo<"requote" | "exit" | null>(() => {
+		const open = customQuery.data;
+		if (!open) return null;
+		const requested = open.requestedPlanId
+			? (planNameById.get(open.requestedPlanId) ?? null)
+			: null;
+		return requested && requested !== CUSTOM ? "exit" : "requote";
+	}, [customQuery.data, planNameById]);
+
 	const requestMut = useMutation({
 		mutationFn: (input: CreateAdminRequestInput) =>
 			createAdminRequest(input, logout),
@@ -321,6 +336,7 @@ export function useAgencySubscription() {
 		/** True while a Custom price request is with the admin (server truth). */
 		customRequestPending: Boolean(customQuery.data),
 		customRequestLabel,
+		customRequestKind,
 		requestPlanChange,
 		requestCustomRequote,
 		isRequesting: requestMut.isPending,

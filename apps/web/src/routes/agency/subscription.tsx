@@ -331,7 +331,15 @@ function AgencySubscription() {
 								<div className="flex flex-wrap items-center gap-2">
 									<p className="font-sora text-base font-bold">Custom</p>
 									<IzPill variant="violet">Negotiated</IzPill>
-									{waitingOn && <IzPill variant="green">Request sent</IzPill>}
+									{/* Amber, and alongside — an agency on Custom with an open
+									    request is in both states at once. */}
+									{waitingOn && (
+										<IzPill variant="amber">
+											{sub.customRequestKind === "exit"
+												? "Cancel · pending admin"
+												: "New price · pending admin"}
+										</IzPill>
+									)}
 								</div>
 								<p className="iz-tiny iz-muted mt-1">
 									Priced for your agency by InnocenZ admin — it replaces the
@@ -344,28 +352,42 @@ function AgencySubscription() {
 									: "Awaiting price"}
 							</p>
 						</div>
-						{canEdit &&
-							(waitingOn ? (
-								<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
-									Your request is with InnocenZ admin — {waitingOn}. The current
-									price applies until they answer.
-								</p>
-							) : (
+						{canEdit && (
+							<>
+								{waitingOn && (
+									<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
+										{sub.customRequestKind === "exit"
+											? `Your request to end Custom is with InnocenZ admin — ${waitingOn}. The agreed price stands until they answer.`
+											: "Your request for a new price is with InnocenZ admin — the current price applies until they answer."}
+									</p>
+								)}
+								{/*
+								 * Both ways out stay available while a request is open; only the
+								 * one already asked for is blocked. An agency that asked for a new
+								 * price must still be able to decide it would rather leave Custom
+								 * altogether — the same choice the venue has over its POS add-on.
+								 */}
 								<div className="mt-3 flex flex-col gap-2 border-t border-[var(--iz-line)] pt-3 sm:flex-row">
 									<button
 										type="button"
 										className="iz-btn iz-btn-soft flex-1"
-										disabled={sub.isRequesting}
+										disabled={
+											sub.isRequesting || sub.customRequestKind === "requote"
+										}
 										onClick={handleRequote}
 									>
-										Ask for a new price
+										{sub.customRequestKind === "requote"
+											? "New price · requested"
+											: "Ask for a new price"}
 									</button>
 									<p className="iz-tiny iz-muted2 flex-1 self-center">
-										To leave Custom, pick a rate-card tier below — that also
-										goes to the admin.
+										{sub.customRequestKind === "exit"
+											? "Leaving Custom — waiting for InnocenZ admin to resolve it."
+											: "To leave Custom, pick a rate-card tier below — that also goes to the admin."}
 									</p>
 								</div>
-							))}
+							</>
+						)}
 					</IzCard>
 				</>
 			)}
@@ -442,11 +464,13 @@ function AgencySubscription() {
 								<button
 									type="button"
 									className="iz-btn iz-btn-soft mt-2 w-full !py-1 !text-[11px]"
+									// Only an exit already asked for blocks these — an open
+									// re-quote must not trap the agency on Custom.
 									disabled={
 										sub.isRequesting ||
 										sub.isLoading ||
 										!sub.planCatalogReady ||
-										waitingOn !== null
+										sub.customRequestKind === "exit"
 									}
 									onClick={() => handleSwitch(plan.label)}
 								>

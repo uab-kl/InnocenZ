@@ -63,6 +63,7 @@ function PosIntegrationAddonCard({
 	canEdit,
 	canCancel,
 	quotePending,
+	pendingKind,
 	activeAddonPriceRm,
 	contactLine,
 	onRequestQuote,
@@ -87,6 +88,13 @@ function PosIntegrationAddonCard({
 	 */
 	canCancel: boolean;
 	quotePending: boolean;
+	/**
+	 * WHICH request is with the admin, so only that one action is blocked. A
+	 * venue that asked for a new price must still be able to decide it would
+	 * rather drop POS altogether — hiding both buttons left it with no way to
+	 * say so until the admin happened to answer the other question.
+	 */
+	pendingKind: "requote" | "cancel" | null;
 	contactLine: string;
 	onRequestQuote: () => void;
 	onCancelQuote: () => void;
@@ -105,16 +113,26 @@ function PosIntegrationAddonCard({
 							<IzPill variant="violet" className="!py-0.5 !text-[10px]">
 								Add-on
 							</IzPill>
-							{activeAddonPriceRm !== null ? (
+							{activeAddonPriceRm !== null && (
 								<IzPill variant="green" className="!py-0.5 !text-[10px]">
 									Active
 								</IzPill>
-							) : (
-								quotePending && (
-									<IzPill variant="green" className="!py-0.5 !text-[10px]">
-										Request sent
-									</IzPill>
-								)
+							)}
+							{/*
+							 * The pending badge shows ALONGSIDE Active, not instead of it.
+							 * A venue on POS that has asked for a re-quote or a cancellation
+							 * is in both states at once, and the card previously showed only
+							 * the first — so an open request was invisible unless you read
+							 * the paragraph at the bottom.
+							 */}
+							{quotePending && (
+								<IzPill variant="amber" className="!py-0.5 !text-[10px]">
+									{pendingKind === "cancel"
+										? "Cancel · pending admin"
+										: activeAddonPriceRm !== null
+											? "New price · pending admin"
+											: "Request sent · pending admin"}
+								</IzPill>
 							)}
 						</div>
 						<p className="iz-outlet-pos-addon__subtitle">
@@ -152,30 +170,46 @@ function PosIntegrationAddonCard({
 						 * only. Neither takes effect until the admin answers — a venue must
 						 * not be able to end its own billing.
 						 */}
-						{canEdit &&
-							(quotePending ? (
-								<p className="iz-outlet-pos-addon__sent-body">
-									Your request is with InnocenZ admin — the current price
-									applies until they answer.
-								</p>
-							) : (
+						{canEdit && (
+							<>
+								{quotePending && (
+									<p className="iz-outlet-pos-addon__sent-body">
+										{pendingKind === "cancel"
+											? "Your request to cancel POS is with InnocenZ admin — the charge stands until they answer."
+											: "Your request for a new price is with InnocenZ admin — the current price applies until they answer."}
+									</p>
+								)}
+								{/*
+								 * Both ways out stay on screen while a request is open; only the
+								 * one already asked for is disabled. Hiding both meant a venue
+								 * that asked for a new price could not then decide to drop POS
+								 * instead — it had to wait for an answer to a question it no
+								 * longer wanted asked.
+								 */}
 								<div className="flex flex-col gap-2 sm:flex-row">
 									<button
 										type="button"
 										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										disabled={pendingKind === "requote"}
 										onClick={onRequestQuote}
 									>
-										Ask for a new price
+										{pendingKind === "requote"
+											? "New price · requested"
+											: "Ask for a new price"}
 									</button>
 									<button
 										type="button"
 										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										disabled={pendingKind === "cancel"}
 										onClick={onRemoveAddon}
 									>
-										Cancel POS · plan only
+										{pendingKind === "cancel"
+											? "Cancel POS · requested"
+											: "Cancel POS · plan only"}
 									</button>
 								</div>
-							))}
+							</>
+						)}
 					</div>
 				) : quotePending ? (
 					<div className="iz-outlet-pos-addon__sent">
@@ -242,6 +276,8 @@ function OutletSubscriptionPage() {
 	const showCollections =
 		collections.backed && outletCan(outletSubRole, "viewBilling");
 	const [quoteSentLocal, setQuoteSentLocal] = useState(false);
+	// The cancellation's counterpart to the flag above — see `pendingKind`.
+	const [removalSentLocal, setRemovalSentLocal] = useState(false);
 	// Instant feedback for the tap; the server's answer (backend.pendingPlanLabel)
 	// takes over as soon as it arrives and is what survives a refresh.
 	const [planChangeRequestedLocal, setPlanChangeRequestedLocal] = useState<
@@ -326,8 +362,20 @@ function OutletSubscriptionPage() {
 	// "Request sent" survives a refresh; the local flag only covers the moment
 	// between the tap and the refetch. Demo sessions keep the store's flag.
 	const quotePending = backend.backed
-		? backend.posQuotePending || quoteSentLocal
+		? backend.posQuotePending || quoteSentLocal || removalSentLocal
 		: posQuotePending;
+
+	/**
+	 * Which of the two requests is open. The server's answer wins as soon as it
+	 * arrives — the local flags only cover the moment between the tap and the
+	 * refetch, and only the tapped action is blocked, never both.
+	 */
+	const pendingKind: "requote" | "cancel" | null = backend.backed
+		? (backend.posRequestKind ??
+			(removalSentLocal ? "cancel" : quoteSentLocal ? "requote" : null))
+		: posQuotePending
+			? "requote"
+			: null;
 
 	const handleRequestQuote = () => {
 		if (backend.backed) {
@@ -360,6 +408,10 @@ function OutletSubscriptionPage() {
 		backend
 			.requestPosRemoval()
 			.then((filed) => {
+				// Same reason as the quote's local flag: hold the state for the moment
+				// between the tap and the server's answer, so the button cannot be
+				// pressed twice into two identical requests.
+				if (filed) setRemovalSentLocal(true);
 				toast(
 					filed
 						? "Request to remove POS integration sent to InnocenZ admin"
@@ -564,6 +616,7 @@ function OutletSubscriptionPage() {
 						canEdit={canEdit}
 						canCancel={!backend.backed}
 						quotePending={quotePending}
+						pendingKind={pendingKind}
 						activeAddonPriceRm={backend.addonAmountRm}
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}

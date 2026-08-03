@@ -360,6 +360,17 @@ export function useOutletSubscription() {
 		nextRenewalDate,
 		/** True while a POS-integration quote is with the admin (server truth). */
 		posQuotePending: Boolean(posQuoteQuery.data),
+		/**
+		 * WHICH POS request is open — a cancellation names the plan the venue is
+		 * keeping, everything else is a quote or re-quote. The card blocks only the
+		 * action already asked for, so a venue that asked for a new price can still
+		 * change its mind and drop POS instead.
+		 */
+		posRequestKind: posQuoteQuery.data
+			? posQuoteQuery.data.requestedPlanId
+				? ("cancel" as const)
+				: ("requote" as const)
+			: null,
 		/** Live POS add-on at the agreed price, once the admin has resolved it. */
 		addonName: activeAddon?.planName ?? null,
 		addonAmountRm: activeAddon ? Number(activeAddon.amount) : null,

@@ -310,13 +310,15 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
    that appears in **Plan Request** (not Plan Change) as `Custom · RM <figure>` → `Cancel · <tier>
    only`; resolving it must move the ledger onto that tier at its list price.
 
-2. **THREE GHOST AGENCIES ARE POLLUTING PLAN REQUEST.** `admin_request` holds rows for **Summit
-   Staffing**, **Pioneer Crew** and **Horizon Talent** — `GET /agency` returns only **Atlas Agency,
-   Delta Agency, Starline PR**, and none of the three has a single `member_subscription` row. They
-   are `seed-sample-activity.ts` leftovers of the same family as the 6 ledger ghosts purged on 2 Aug.
-   **Not deleted:** the earlier purge had a rollback JSON and the owner's go-ahead; this one needs the
-   same. Extend `repair-member-subscription-links.ts` (`--purge-ghosts`) to cover `admin_request`
-   rows whose `subscriber_id` matches no outlet/agency, dry-run first.
+2. ✅ **GHOST SUBSCRIBERS PURGED FROM `admin_request` — DONE 3 Aug.** `repair-member-subscription-links.ts`
+   now detects request rows naming an organisation that does not exist, and `--purge-ghosts --apply`
+   deleted **4**: Marble Hall (outlet, plan_change/declined), Horizon Talent, Pioneer Crew and Summit
+   Staffing (agency, custom_renegotiation). **All four carried `created_by=seed-sample`** — that stamp
+   is what made it safe to delete without guessing. Rollback JSON written BEFORE the delete to
+   `%TEMP%admin-request-ghosts-2026-08-03T08-55-52-748Z.json`; re-inserting it restores them exactly.
+   Plan Request went **16 → 13 rows**, and every remaining row belongs to a real outlet or agency.
+   ⚠️ Only the three SUBSCRIBER types are judged — a `contact`/`other` enquiry from someone without an
+   account is legitimate and is never touched.
 
 3. **`seed-sample-activity.ts` still recreates them if anyone re-runs it** — carried over from the
    2 Aug list, now with three named victims as proof it matters.
@@ -617,6 +619,32 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (thirteenth slice) — BOTH WAYS OUT STAY ON SCREEN, AND PENDING IS VISIBLE.**
+>
+> Owner, looking at a venue already on POS: *"where is that 2 buttons renegotiate POS and the cancel
+> POS"* and *"where is the pending status show at the outlet subcription page"*. Both were the same
+> design mistake. **The card hid BOTH buttons whenever any request was open**, so a venue that had
+> asked for a new price could not then decide it would rather drop POS altogether — it had to wait for
+> an answer to a question it no longer wanted asked. And the only sign a request existed was a
+> sentence at the bottom of the card; the pill area showed **Active** alone.
+>
+> **Now:** both buttons stay, and only the action already asked for is disabled and relabelled (*New
+> price · requested* / *Cancel POS · requested*). An amber **pending admin** pill sits BESIDE the green
+> Active one, because a venue on POS with an open request is in both states at once. Which request is
+> open comes from the server — `/mine/pos-quote` naming a plan means a cancellation, anything else is a
+> quote — with local flags covering only the gap between the tap and the refetch. `removalSentLocal`
+> was added for the cancel path, which had no flag at all and so could be double-tapped into two
+> identical requests.
+>
+> **Mirrored on the agency Custom card**, same rule: an open re-quote no longer traps the agency on
+> Custom, and only a pending EXIT disables the rate-card tier buttons.
+>
+> **Seed ghosts purged from `admin_request` (4 rows).** Marble Hall, Horizon Talent, Pioneer Crew,
+> Summit Staffing — none exists in `outlet`/`agency`, all four stamped `created_by=seed-sample`, which
+> is the evidence that made deleting them a repair rather than a guess. Rollback JSON written first.
+> Plan Request **16 → 13**, every remaining row a real subscriber. ⚠️ `contact`/`other` enquiries are
+> never judged this way — someone asking about the product legitimately has no account yet.
 
 > **3 Aug 2026 (twelfth slice) — THE AGENCY GETS THE OUTLET'S NEGOTIATED-PRICE LOGIC (§8 X56).**
 >
