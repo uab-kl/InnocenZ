@@ -61,6 +61,7 @@ export const Route = createFileRoute("/outlet/subscription")({
 function PosIntegrationAddonCard({
 	addon,
 	canEdit,
+	canCancel,
 	quotePending,
 	contactLine,
 	onRequestQuote,
@@ -68,6 +69,13 @@ function PosIntegrationAddonCard({
 }: {
 	addon: OutletSubscriptionAddon;
 	canEdit: boolean;
+	/**
+	 * Whether withdrawing is actually possible. In a real session the request
+	 * lives with the admin and there is no withdraw endpoint, so offering
+	 * "Cancel request" would clear the badge here while the admin still holds
+	 * the request — a button that lies.
+	 */
+	canCancel: boolean;
 	quotePending: boolean;
 	contactLine: string;
 	onRequestQuote: () => void;
@@ -118,7 +126,7 @@ function PosIntegrationAddonCard({
 							InnocenZ admin received your request and will contact{" "}
 							{contactLine} to negotiate pricing.
 						</p>
-						{canEdit && (
+						{canEdit && canCancel && (
 							<button
 								type="button"
 								className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel"
@@ -256,9 +264,12 @@ function OutletSubscriptionPage() {
 			),
 		[posIntegrationQuoteRequests, outletName],
 	);
-	// The outlet can't READ admin_requests (admin-only route), so in a real
-	// session the "request sent" pill is an optimistic local flag.
-	const quotePending = backend.backed ? quoteSentLocal : posQuotePending;
+	// A real session reads its own outstanding quote back from the server, so
+	// "Request sent" survives a refresh; the local flag only covers the moment
+	// between the tap and the refetch. Demo sessions keep the store's flag.
+	const quotePending = backend.backed
+		? backend.posQuotePending || quoteSentLocal
+		: posQuotePending;
 
 	const handleRequestQuote = () => {
 		if (backend.backed) {
@@ -469,6 +480,7 @@ function OutletSubscriptionPage() {
 						key={addon.id}
 						addon={addon}
 						canEdit={canEdit}
+						canCancel={!backend.backed}
 						quotePending={quotePending}
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}

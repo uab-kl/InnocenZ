@@ -298,16 +298,29 @@ export class AdminRequestControllerClass {
    * subscriber's own view, and they have the full queue.
    */
   async myLatestPlanChange(req: Request, res: Response) {
+    return this.myLatestPending(req, res, 'plan_change');
+  }
+
+  /**
+   * The caller's own outstanding POS-integration quote, or null. Same reason as
+   * the plan change: the "Request sent" state was React-only, so a refresh made
+   * the venue think nothing had been sent and it asked again.
+   */
+  async myLatestPosQuote(req: Request, res: Response) {
+    return this.myLatestPending(req, res, 'pos_integration_quote');
+  }
+
+  private async myLatestPending(req: Request, res: Response, type: AdminRequestType) {
     try {
       const scope = await resolveOrgScope(req, this.orgScopeDeps);
       const subscriberIds = scope.agencyId ? [scope.agencyId] : scope.outletIds;
       if (scope.isAdmin || subscriberIds.length === 0) {
         return res.status(200).json({ success: true, message: 'OK', data: null });
       }
-      const record = await this.repository.latestPendingPlanChange(subscriberIds);
+      const record = await this.repository.latestPendingByType(subscriberIds, type);
       res.status(200).json({ success: true, message: 'OK', data: record });
     } catch (error) {
-      logger.error('[AdminRequestController.myLatestPlanChange] Error:', error);
+      logger.error('[AdminRequestController.myLatestPending] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

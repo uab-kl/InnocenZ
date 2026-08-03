@@ -229,6 +229,19 @@ export async function fetchMyPlanChange(
 	return response.data.data ?? null;
 }
 
+/** The signed-in subscriber's own outstanding POS-integration quote, or null. */
+export async function fetchMyPosQuote(
+	onRefreshFail: () => void,
+): Promise<AdminRequest | null> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: AdminRequest | null;
+	}>("/admin-request/mine/pos-quote");
+	return response.data.data ?? null;
+}
+
 export async function fetchPendingCount(
 	onRefreshFail: () => void,
 	params: { type?: AdminRequestType; excludeType?: AdminRequestType } = {},

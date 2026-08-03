@@ -18,6 +18,11 @@ router.get(
   requireRole('outlet', 'agency', 'admin'),
   adminRequestController.myLatestPlanChange.bind(adminRequestController),
 );
+router.get(
+  '/mine/pos-quote',
+  requireRole('outlet', 'agency', 'admin'),
+  adminRequestController.myLatestPosQuote.bind(adminRequestController),
+);
 
 router.get('/pending-count', requireAdmin, adminRequestController.pendingCount.bind(adminRequestController));
 router.get(

@@ -11,6 +11,7 @@ import {
 	type CreateAdminRequestInput,
 	createAdminRequest,
 	fetchMyPlanChange,
+	fetchMyPosQuote,
 } from "@/services/admin-request";
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
 import { fetchSubscriptions } from "@/services/subscription";
@@ -150,9 +151,22 @@ export function useOutletSubscription() {
 		return next;
 	}, [activeSubscription]);
 
+	/**
+	 * The venue's own outstanding POS-integration quote, from the server — so the
+	 * "Request sent" state survives a refresh instead of resetting to a button
+	 * that invites the venue to ask a second time.
+	 */
+	const posQuoteQuery = useQuery({
+		queryKey: ["admin-request", "mine", "pos-quote"],
+		queryFn: () => fetchMyPosQuote(logout),
+		enabled: backed,
+		staleTime: 15_000,
+	});
+
 	const posQuoteMut = useMutation({
 		mutationFn: (input: CreateAdminRequestInput) =>
 			createAdminRequest(input, logout),
+		onSuccess: () => void posQuoteQuery.refetch(),
 	});
 
 	/**
@@ -294,6 +308,8 @@ export function useOutletSubscription() {
 		activePlanName,
 		/** Real next billing date from the ledger; null when nothing is active. */
 		nextRenewalDate,
+		/** True while a POS-integration quote is with the admin (server truth). */
+		posQuotePending: Boolean(posQuoteQuery.data),
 		/** Plan awaiting admin approval — survives a refresh; null once answered. */
 		pendingPlanLabel,
 		isLoading: billingQuery.isLoading,

@@ -8,6 +8,7 @@ import {
   AdminRequestFilter,
   AdminRequestInsertType,
   AdminRequestTable,
+  AdminRequestType,
 } from './admin-request.model.js';
 
 export type NegotiatedByRoleRow = {
@@ -117,8 +118,11 @@ export class AdminRequestRepositoryClass {
     }
   }
 
-  /** The newest plan change still awaiting an admin, for these subscribers. */
-  async latestPendingPlanChange(subscriberIds: string[]): Promise<AdminRequest | null> {
+  /** The newest request of this type still awaiting an admin, for these subscribers. */
+  async latestPendingByType(
+    subscriberIds: string[],
+    type: AdminRequestType,
+  ): Promise<AdminRequest | null> {
     try {
       if (subscriberIds.length === 0) return null;
       const [row] = await db
@@ -126,7 +130,7 @@ export class AdminRequestRepositoryClass {
         .from(AdminRequestTable)
         .where(
           and(
-            eq(AdminRequestTable.type, 'plan_change'),
+            eq(AdminRequestTable.type, type),
             eq(AdminRequestTable.status, 'pending'),
             inArray(AdminRequestTable.subscriberId, subscriberIds),
           ),
@@ -135,7 +139,7 @@ export class AdminRequestRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
-      logger.error('[AdminRequestRepository.latestPendingPlanChange] Error:', error);
+      logger.error('[AdminRequestRepository.latestPendingByType] Error:', error);
       return null;
     }
   }
