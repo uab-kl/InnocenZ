@@ -33,6 +33,20 @@ export class MemberSubscriptionRepositoryClass {
     if (filter?.subscriptionId) conditions.push(eq(MemberSubscriptionTable.subscriptionId, filter.subscriptionId));
     if (filter?.status) conditions.push(eq(MemberSubscriptionTable.status, filter.status));
     if (filter?.search) conditions.push(ilike(MemberSubscriptionTable.subscriberName, `%${filter.search}%`));
+    // Plans and add-ons share this ledger, told apart by the product they
+    // reference. Legacy rows with no subscription_id count as plans — they
+    // predate add-ons entirely.
+    if (filter?.kind) {
+      conditions.push(
+        filter.kind === 'plan'
+          ? sql`(${MemberSubscriptionTable.subscriptionId} is null or exists (
+              select 1 from "main"."subscription" s
+              where s.id = ${MemberSubscriptionTable.subscriptionId} and s.kind = 'plan'))`
+          : sql`exists (
+              select 1 from "main"."subscription" s
+              where s.id = ${MemberSubscriptionTable.subscriptionId} and s.kind = 'addon')`,
+      );
+    }
 
     if (filter?.dates && filter.dates.length > 0) {
       const dayClauses = filter.dates
@@ -55,6 +69,45 @@ export class MemberSubscriptionRepositoryClass {
     return conditions.length > 0 ? and(...conditions) : undefined;
   }
 
+  /**
+   * One row per subscriber — the plan it is on NOW.
+   *
+   * A switch closes the old row and opens a new one, so a venue accumulates a
+   * row per plan it has held. Admin History wants the current picture, not the
+   * whole trail: keep the newest by `started_at`. Nothing is deleted; the older
+   * rows remain the record of what was charged before.
+   */
+  private async listLatestPerSubscriber(params: {
+    whereClause: SQL | undefined;
+    page: number;
+    pageSize: number;
+  }): Promise<{ records: MemberSubscription[]; totalCount: number }> {
+    const { whereClause, page, pageSize } = params;
+
+    const latest = db
+      .selectDistinctOn([MemberSubscriptionTable.subscriberType, MemberSubscriptionTable.subscriberId])
+      .from(MemberSubscriptionTable)
+      .where(whereClause)
+      .orderBy(
+        MemberSubscriptionTable.subscriberType,
+        MemberSubscriptionTable.subscriberId,
+        desc(MemberSubscriptionTable.startedAt),
+      )
+      .as('latest');
+
+    const [countRow] = await db.select({ value: sql<number>`count(*)::int` }).from(latest);
+    const totalCount = Number(countRow?.value ?? 0);
+
+    const records = (await db
+      .select()
+      .from(latest)
+      .orderBy(desc(latest.startedAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)) as MemberSubscription[];
+
+    return { records, totalCount };
+  }
+
   async listPaginated(params: {
     filter?: MemberSubscriptionFilter;
     page: number;
@@ -63,6 +116,10 @@ export class MemberSubscriptionRepositoryClass {
     try {
       const { filter, page, pageSize } = params;
       const whereClause = this.buildConditions(filter);
+
+      if (filter?.latestPerSubscriber) {
+        return await this.listLatestPerSubscriber({ whereClause, page, pageSize });
+      }
 
       const [countRow] = await db
         .select({ value: sql<number>`count(*)::int` })

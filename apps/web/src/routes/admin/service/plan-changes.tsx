@@ -4,7 +4,7 @@ import {
 	useQuery,
 	useQueryClient,
 } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import {
 	AlertCircle,
 	ArrowRight,
@@ -12,9 +12,10 @@ import {
 	CheckCircle2,
 	Loader2,
 	RefreshCw,
+	Search,
 	XCircle,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	DateMultiFilter,
@@ -31,6 +32,7 @@ import {
 	CardHeader,
 	CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import {
 	Select,
@@ -167,6 +169,24 @@ function toPlanOf(
 }
 
 /**
+ * What the subscriber is moving TO, in words.
+ *
+ * A plan switch names a plan. A negotiated move does not always: joining the
+ * POS add-on or entering Custom has no requested plan row, and LEAVING one
+ * names the ordinary plan being returned to. Without this such rows rendered
+ * "—" and the page could not show a move to or from POS/Custom at all.
+ */
+function toLabelOf(
+	request: AdminRequest,
+	requested: Subscription | undefined,
+): string {
+	if (requested && requested.kind !== "addon") return requested.name;
+	if (request.type === "pos_integration_quote") return "Integrate with POS";
+	if (request.type === "custom_renegotiation") return "Custom";
+	return "—";
+}
+
+/**
  * Agency Custom (151+ PV) is the only negotiated tier on this page — its price
  * is the quoted amount, never the plan-table price. Everything else follows
  * the Plan page exactly.
@@ -235,13 +255,45 @@ function PlanChangesPage() {
 	const [switchedDates, setSwitchedDates] = useState<Date[]>([]);
 	const [page, setPage] = useState(1);
 	const [editRequest, setEditRequest] = useState<AdminRequest | null>(null);
+	/**
+	 * Latest = one row per subscriber, what still needs answering. All = every
+	 * switch ever filed, so a venue that has moved plan several times can be
+	 * traced rather than appearing once.
+	 */
+	/**
+	 * Defaults to the FULL record: every switch each outlet and agency has ever
+	 * filed, so a subscriber appears once per change rather than once in total —
+	 * that trail is what the page is for. "Latest only" narrows it to the one
+	 * row per subscriber that still needs answering.
+	 */
+	const [view, setView] = useState<"latest" | "all">("all");
+	const [searchInput, setSearchInput] = useState("");
+	const [search, setSearch] = useState("");
+
+	// Debounce the search box so a keystroke doesn't fire a request each time.
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setSearch(searchInput.trim());
+			setPage(1);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [searchInput]);
 
 	// Only plan-change activity is listed here.
 	const queryParams: AdminRequestsQueryParams = {
 		page,
 		pageSize: PAGE_SIZE,
 		type: "plan_change",
+		// Latest view: a venue that tapped Switch three times is one decision to
+		// make, not three, and approving a stale request would apply a plan it has
+		// since moved off. Older rows are never deleted — the All view shows them.
+		latestPerSubscriber: view === "latest",
+		// Ordinary plan-to-plan switches only. Anything touching the POS add-on
+		// or the Custom tier carries a negotiated price and belongs on Plan
+		// Request, so it is excluded here rather than shown in both places.
+		negotiated: "exclude",
 	};
+	if (search) queryParams.search = search;
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;
 	const switchedDatesParam = datesToQueryParam(switchedDates);
@@ -342,8 +394,19 @@ function PlanChangesPage() {
 								)}
 							</CardTitle>
 							<CardDescription>
-								Click a row to open the editor — review the before/after plans
-								and approve or decline outlet switches
+								{view === "latest"
+									? "One row per subscriber — the switch that still needs answering. Choose Full history for every previous change."
+									: "Every plan change ever filed — a subscriber appears once per switch, so the same outlet or agency repeats down the list. POS and Custom moves live on Plan Request."}{" "}
+								This is the log of switches ASKED FOR; for what each subscriber
+								has actually been billed — the same record it sees on its own
+								Subscription page — open{" "}
+								<Link
+									to="/admin/business/history"
+									className="text-lavender underline underline-offset-2"
+								>
+									Current Plan → Full history
+								</Link>
+								.
 							</CardDescription>
 						</div>
 
@@ -356,6 +419,35 @@ function PlanChangesPage() {
 									setPage(1);
 								}}
 							/>
+
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={searchInput}
+									onChange={(event) => setSearchInput(event.target.value)}
+									placeholder="Search outlet or agency..."
+									className="pl-8"
+									aria-label="Search outlet or agency"
+								/>
+							</div>
+
+							{/* Latest = what still needs answering; All = every switch a
+							    subscriber has ever filed, so its history can be traced. */}
+							<Select
+								value={view}
+								onValueChange={(value) => {
+									setView(value as "latest" | "all");
+									setPage(1);
+								}}
+							>
+								<SelectTrigger className="sm:w-40">
+									<SelectValue />
+								</SelectTrigger>
+								<SelectContent>
+									<SelectItem value="latest">Latest only</SelectItem>
+									<SelectItem value="all">Full history</SelectItem>
+								</SelectContent>
+							</Select>
 
 							<Select
 								value={statusFilter}
@@ -486,8 +578,8 @@ function PlanChangesPage() {
 													{fromPlan?.name ?? "—"}
 												</TableCell>
 												<TableCell className="text-base font-medium">
-													{toPlan?.name ?? "—"}
-													{status === "pending" && toPlan && (
+													{toLabelOf(request, toPlan)}
+													{status === "pending" && (
 														<div className="text-sm text-muted-foreground">
 															Requested
 														</div>
@@ -735,7 +827,9 @@ function PlanChangeEditForm({
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
 								After · To plan
 							</p>
-							<p className="text-lg font-medium">{toPlan?.name ?? "—"}</p>
+							<p className="text-lg font-medium">
+								{toLabelOf(request, toPlan)}
+							</p>
 							<p className="text-base text-muted-foreground">
 								{planPriceLabel(request, toPlan, request.quotedAmount)}
 							</p>

@@ -294,6 +294,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X56 | **🟢 `/agency/pv` IS RENDERED IN A BROWSER AT LAST — on a REAL agency login, and it immediately produced a bug.** X43 and X45 shipped this screen proven only by `tsc`/biome/`vite build`; this is the first time a browser has loaded it. Signed in as `owner@atlas-agency.my` against the live backend: the page renders **real DB rows** (Alice `RM 1,203.30`, Victoria `RM 700.00`, both `Pending Agency Review`), the **dispute panel and `OvertimeQueuePanel` both mount**, console **clean — zero errors**. ⚠️ **The OT panel rendered its EMPTY state** ("No overtime awaiting a decision"), because the only live claim is already approved (X50). **Its POPULATED state is still unproven, and populating it means writing to the shared DB** — do not report this screen as fully exercised. **🔴 THE BUG IT FOUND: `pv_day_review_pending` was never mapped in `apps/web` at all.** The kind has existed since migration 0073 and is produced by `weekly-payout.job.ts`; the web app's hand-written `NotificationKind` union never received it. jk's `unknown` fallback stopped it white-screening, so it degraded quietly to a generic **"Update"** row — and `hrefFor` fell to `default: return undefined`, so **a notification whose own body reads "Approve each day on Payroll & PV, then send" navigated NOWHERE when tapped.** ⚠️ **Same class as jk's crash, one kind later, and the fallback is exactly why nobody noticed: it turned a loud failure into a silent one.** Fixed across 5 files (union → `KIND_MAP` → `PR_KIND_MAP` → `OPS_KIND_LABEL` → `hrefFor` case). **Verified in the browser, not by compiler:** the row now reads **"Day review"** and clicking it lands on `/en/agency/pv`. ✅ **Bonus — closes jk's §9 item 2:** his crash fix had never been seen rendering; `shift_cover_needed` and `pr_rating_low` both display correctly, no crash. `tsc` **121, unchanged from baseline**; biome clean (format only — pre-existing `prType` warning left alone). | **Agency** | `services/notification/index.ts` · `agency-portal/lib/ops-notifications.ts` · `agency-portal/hooks/use-notifications.ts` · `agency-portal/lib/push-notifications.ts` · `agency-portal/components/pr/PrNotificationBell.tsx` | real browser login + click-through | ✅ Rendered live, bug fixed |
 | X57 | **🟢 THE WAGE ARITHMETIC IS PROVEN AGAINST THE RATE CARD — §9 P1's "Verify Payment Voucher ↔ PR wage calc" is answerable YES for the first time.** ⚠️ **First the correction that matters: `audit-live-vouchers.ts` reporting "3/3 reconcile" DOES NOT mean the wages are right.** `wages_amount_mismatch` matches a line against **`shift_assignment.pay_amount` — the amount check-out SEALED** — and never asks whether that sealed amount was itself derived correctly from the outlet's rate card. **A wrong rate card therefore yields a voucher that reconciles perfectly and still pays the wrong money.** The audit's green is *voucher ↔ assignment*, one link short of *the money is correct*. New read-only **`check-wage-vs-ratecard.ts`** closes that link and prints both sides. **Result: 4 completed assignments since 2026-07-20, agree 4 · disagree 0 · no-card 0** — `700.00 = 700.00` (Victoria, tier_3) and `600.00 = 600.00` (Alice, tier_2), each resolved from the **per-shift override** (`shift_pay_tier`), the precedence the app itself uses. The full chain **rate card → sealed pay → voucher line** is now machine-verified on live data. **🔴 TWO TRAPS WORTH KEEPING:** (1) the first run reported **SKIP — 4 rows, 0 comparable**, because `pr.tier` is the enum `tier_3` while `outlet_tier_rate.tier` holds the DISPLAY label `"Tier III"`; **they never join raw**, and the app bridges them with `PR_TIER_TO_OUTLET_LABEL` in `shift-assignment.controller.ts`. The fault was the probe's, not the app's — **re-derive before reporting a money bug.** (2) The table is **`outlet_tier_rate`, not `tier_rate`**, and `shift_date` lives on **`shift`, not `shift_assignment`** — the same column-guessing tax as every prior probe. ✅ **The script reports SKIP, never a pass, over zero comparable rows** — that is what stopped a false green here, and it must stay. | **Agency ← PR** | `apps/backend/src/scripts/check-wage-vs-ratecard.ts` (new, read-only) | live: agree 4 · disagree 0 | ✅ Verified live |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
+| X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
 ---
 
@@ -340,6 +341,43 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 > line-ending noise with no content change at all**; only 3 were real, all pure biome formatting, and
 > `GeoFenceCard.tsx` was **not** among them. All committed; tree clean. See the correction at the top
 > of §10 — the mistake was generalising from one sampled diff to a whole file list.
+
+### ▶ 3 Aug 2026 — ARRIVED WITH THE MERGE, NOT MINE TO SILENTLY FIX (SL’s files)
+
+1. **🔴 `PrNotificationBell.tsx` navigates to `/host/PaymentVoucher`, a route that does not exist.**
+   `apps/web/src/routes/host/` is not in this repo at all and `routeTree.gen.ts` has no such entry, so
+   `npx tsr generate` will not help — three TS2322/TS2353 errors at lines 110 and 186. A PR tapping a
+   payment-voucher notification cannot navigate. Left exactly as `main` has it: rewriting a teammate’s
+   feature inside a merge resolution hides the problem instead of surfacing it.
+
+2. **🟡 Unused symbols in `ops-notifications.ts` (`prType`) and `pr-demo.ts`** (`getPreviousWeekSundayIso`,
+   `remapIsoByWeekSlide`, `addDays`, `y`) — TS6133, harmless, but they are new to the baseline.
+### ▶ 3 Aug 2026 — AGENCY CUSTOM: two things left, both need a click on a running app
+
+1. **PROVE THE CUSTOM WRITE PATH — one clean loop, now that Atlas is reset.** The READ side is
+   verified live; the ledger write still needs a human click, because proving it means putting a real
+   price in the shared DB. ⚠️ **Steps updated 3 Aug (evening): the buttons this originally named no
+   longer exist** — the agency picks no tier, and the two Custom actions were split apart. In order:
+   **(a)** Atlas → Subscription → Custom tile → **✦ Ask admin for a price**; **(b)** admin → Plan
+   Request → the row reads `Custom` pending → set a figure → **Resolve** → Atlas' active
+   `member_subscription` row becomes `Custom <figure>`; **(c)** back on Atlas, the **Negotiated tier**
+   card shows that figure and the price MUST STILL BE THERE after a refresh — the auto-reset that used
+   to eat it is gone; **(d)** press **↺ Reset to normal subscription** → applies immediately, ledger
+   moves to `Starter RM 125.00`, and the admin sees `Reset · Starter` (status Direct) in Plan Request.
+
+2. ✅ **GHOST SUBSCRIBERS PURGED FROM `admin_request` — DONE 3 Aug.** `repair-member-subscription-links.ts`
+   now detects request rows naming an organisation that does not exist, and `--purge-ghosts --apply`
+   deleted **4**: Marble Hall (outlet, plan_change/declined), Horizon Talent, Pioneer Crew and Summit
+   Staffing (agency, custom_renegotiation). **All four carried `created_by=seed-sample`** — that stamp
+   is what made it safe to delete without guessing. Rollback JSON written BEFORE the delete to
+   `%TEMP%admin-request-ghosts-2026-08-03T08-55-52-748Z.json`; re-inserting it restores them exactly.
+   Plan Request went **16 → 13 rows**, and every remaining row belongs to a real outlet or agency.
+   ⚠️ Only the three SUBSCRIBER types are judged — a `contact`/`other` enquiry from someone without an
+   account is legitimate and is never touched.
+
+3. **`seed-sample-activity.ts` still recreates them if anyone re-runs it** — carried over from the
+   2 Aug list, now with three named victims as proof it matters.
+
 
 ### ▶ (2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
 
@@ -645,12 +683,241 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 - [x] **Double-booking guard** — ✅ **done (30 Jul, `fa44ce4`, overnight gap closed in `b73aa93`)**: assign already refused a clash; the missing half was a shift **timing edit** dragging onto another shift the same PR works. Live-proven both ways (refuses the clash, allows a clear window). *(Agency → PR)* — §8 X9
 - [x] **🔴 Decide what a VENUE may read about a person** — ✅ **decided + shipped (30 Jul)**. Owner's call: **neither** — coordinates stay agency+admin only, and IC/passport no., DOB, address, `state`/`country`, and both ID-photo paths are now **blanked for outlet-only callers**. Done as a response **shape**, not a gate, because `GET /user` is how the venue Today/History screens resolve PR names — removing outlet from the role guard would blank those screens. Fields are set to `null` rather than deleted so a venue screen reading `profile.idNo` renders empty instead of throwing. Names, nationality, gender, race, languages and the comcard/portfolio survive: that is the profile a venue books from. §8 X13 *(Outlet / Agency)*
 - [ ] **Re-run the live role sweep after ANY auth or gating change** — the 4 logins, ~60 checks and the expected-outcome list are the cheapest regression net in the repo (it found the hash leak in its second minute, after days of clean typechecks). PR password is `password`; agency/outlet owners `Password123!`; admin from `.env`. *(all)*
+- [x] **🔴 Outlet plan switch now reaches the backend** — ✅ **built 3 Aug.** Three links, no new tables and no migration: (1) the outlet's "Switch to <plan>" resolves the tapped plan against the REAL `subscription` catalog (reads are open to any signed-in role — verified: an outlet token gets 12 plans) and files `admin_request` `type='plan_change'`, `status='pending'`, carrying `currentPlanId`/`requestedPlanId`, so it lands in admin **Plan Change**; the venue's card shows *Awaiting admin* and stays on its current plan, because an outlet switch is a REQUEST, not an act. (2) `approve()` now writes the `member_subscription` ledger — the old active row is CLOSED (`ended_at` + `expired`) and a new active row inserted with the plan's name/price/cycle (admin's negotiated `quotedAmount` wins when set) — so admin **History** and the venue's own billing list agree. (3) an agency switch (`status='direct'`, no approval step) applies to the ledger immediately on create. Ledger failures are logged, never block the approval. **Live-proven:** JK House filed Pro→Enterprise as `jk@house.test` (`admin_request` d7d019d9, pending, visible in Plan Change). ⚠️ **The approve→ledger half has NOT been fired live** — it needs an admin session and no admin password exists in `.env`; click **Approve** on that row and confirm a new JK House Enterprise row appears in History. *(Outlet → Admin)*
+- [ ] **~~🔴 Outlet plan switch never reaches the backend~~** (found 3 Aug, from the owner's live JK House Pro→Enterprise switch) — original finding, kept for context. `selectPlan` in `routes/outlet/subscription.tsx` writes **zustand only** (`saveOutletOwner` + `recordOutletSubscriptionPlanChange`) — no request is made, so admin **Plan Change** (which reads `admin_request` where `type='plan_change'`) never sees it and the change dies with browser storage. Wire it: switch → create an `admin_request` plan_change row for that outlet; on admin approval write/update that outlet's `member_subscription` row so admin **History** reflects it. **REUSE both tables — no new ones.** Related decision: the outlet's rate card (prices, PRs/day, "Current" pill, renewal date) is demo data, NOT the admin-managed `subscription` catalog — decide whether the outlet should read the real catalog. *(Outlet → Admin)*
+- [ ] **Outlet Subscription card still counts PRs from DEMO shifts** — `0 / 50 requested PRs today · pool of 100` comes from the zustand `shifts` store via `outletNamedPrCountForDate`/`maxDailyOutletNamedPrCount`, not from the venue's real `shift`/`shift_assignment` rows, so the number is meaningless in a real session (always 0 today). The plan's own limits (PRs/day, pool size) ARE real — they come from the plan definition. Wire the counters to the backend, or drop them until they are real. The renewal date beside them was fixed 3 Aug (now from `member_subscription.started_at` + `billing_cycle`). *(Outlet)*
+- [ ] **⚠️ `seed-sample-activity.ts` will re-create the fake subscribers if re-run** — its MEMBER_SEED list invents subscriber names ("Marble Hall", "Summit Staffing", …) with RANDOM `subscriber_id`s instead of seeding only organisations that exist in `outlet`/`agency`. That is what put 6 ghost rows in the ledger (deleted 3 Aug). Fix the seed to resolve real org ids — or stop seeding `member_subscription` at all — before anyone runs it again; otherwise admin History fills with venues that do not exist. `seed-sample-orgs.ts` also touches this table. *(Admin / DB)*
+- [x] **🟠 Ledger links repaired, every real org has a row, fake rows deleted** — ✅ **done 3 Aug, APPLIED to the shared DB.** Purge (owner's call, `--purge-ghosts --apply`): **6 seeded rows deleted** (Marble Hall, Jade Garden Bar, Summit Staffing, Horizon Talent, Pioneer Crew, Vanguard PR — all `created_by='seed-sample'`, all naming organisations that exist in NO table). Each was printed and written to a rollback JSON under the OS temp dir BEFORE deletion; re-inserting that file restores them. **The ledger is now exactly the operation section: 7 outlets + 3 agencies = 10 rows, every one linked by primary id, no duplicate names, no ghosts.** The seed wrote RANDOM `subscriber_id`s: **no agency row and 2 outlet rows matched a real organisation**, so Atlas/Delta/Starline showed as subscribed AND as never-charged at once (name matched, id pointed nowhere). New idempotent script `apps/backend/src/scripts/repair-member-subscription-links.ts` (dry run by default, `--apply` to write): relinks a row to the real org when its snapshot name matches exactly one, and backfills orgs with no active row. Applied: **3 relinked** (Atlas, Delta, Starline) + **2 added** (JK House → Enterprise, Emhub Testing → Essential). All 10 real orgs are now linked by primary id. ⚠️ **6 ghost rows remain** (Marble Hall, Jade Garden Bar, Summit Staffing, Horizon Talent, Pioneer Crew, Vanguard PR) — they name organisations that do not exist; REPORTED, never deleted, because deleting billing history is the owner's call. ⚠️ **Emhub Testing's Essential is an assumption** (no evidence of its real plan) — change it in one admin approval if wrong. *(Admin / DB)*
+- [ ] **~~🟠 `member_subscription` has orphan rows + missing venues~~** (found 3 Aug) — original finding, kept for context. "Marble Hall" and "Jade Garden Bar" carry a `subscriber_id` that matches **no row in `outlet`** — name-only ledger entries, the copied-name pattern Rule 3 forbids. All 14 rows are `created_by='seed-sample'`; **JK House and Emhub Testing have none**, which is exactly why they never appear in admin History (the page is a ledger read, not an outlet list). Clean up the orphans and give the real venues real rows. *(Admin / DB)*
 - [ ] **Every table linked to each role** that should access it (Outlet / Agency / PR / Admin). *(all)*
 - [ ] **/service/other redesign** (admin). *(Admin)*
 
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 — `main` merged into `jk` (`0f339b8`, PR #43 from SL). Two conflicts, both resolved from
+> evidence rather than by taste.**
+>
+> **`_journal.json` — keep BOTH, ordered by `when`.** SL took **0080** (the number I had used before
+> renaming mine to 0081 at the owner’s request), so there is no filename collision — but their
+> `when` is **1785520000000**, which is SMALLER than my 0081 (…600) and 0082 (…700). Drizzle replays in
+> array order and skips anything at or below the last applied stamp, so leaving 0080 after mine would
+> make a FRESH database skip it forever. Resolved to 79 → 80 → 81 → 82, ascending. **Checked the shared
+> DB before deciding:** `__drizzle_migrations` already holds all three stamps and
+> `payment_voucher.finance_head_signature` exists, so nothing needs applying — this only matters for a
+> new database. (One pre-existing non-ascending pair remains at idx 15 → 16; older than everything
+> applied, and not this merge’s to fix.)
+>
+> **`TEST_SCRIPT.md` — keep both sides, one START HERE.** Both branches appended a 3 Aug block at the
+> same two anchors, and SL had RETITLED the old "NEXT SESSION STARTS HERE" heading, which is what made
+> §9 collide. **Theirs keeps the title** (it is the amendment that says read-me-first), my block follows
+> as its own dated section, and their retitled `▶ (2 Aug 2026 …)` heading stays last so the 2 Aug
+> content below still has one. Two blocks both claiming to be the start point is worse than one.
+>
+> **Verified by diffing the resolved file against BOTH parents, not by eye:** **0 lines lost from
+> origin/main**, and exactly **4 from HEAD** — the retitled heading, plus **3 checkbox items SL
+> themselves deleted** when they closed that work (receipt lifecycle, `pv_day_review_pending`, PV wage
+> calc). Taking their deletion is correct. ⚠️ **The blockquote trap again:** a raw marker strip welds two
+> Markdown blockquotes into one; both junctions got an explicit blank line.
+>
+> **Typecheck after merge — the merge broke nothing.** `apps/web` reports 121 errors across 44 files,
+> its known baseline. Intersecting those files with the merge’s changed files: **zero on my side**, and
+> **three on the incoming side** — see §9. Backend is clean apart from its documented TS2883 baseline.
+
+> **3 Aug 2026 (eighteenth slice) — THE CHURN IS CLEARED, AND THE SECOND BUG IT EXPOSED IS FIXED.**
+>
+> Listing Atlas’s rows before deleting them turned up a defect the churn had been hiding: **`Starter RM
+> 100,000.00`**. A Custom quote resolved with no `requested_plan_id` falls to the *re-price in place*
+> branch, which updated whatever plan row was active — and by then the auto-reset had already put Atlas
+> back on Starter, so a RM 125 banded tier was stamped with the Custom figure. **In-place re-pricing now
+> refuses unless the active row IS Custom**, and logs the refusal: a banded tier’s price is the catalog’s,
+> not anyone’s to negotiate.
+>
+> **`clear-agency-churn.ts`** (new, one-off) removed **10 ledger rows + 10 request rows** in the 09:30–10:30
+> window and left Atlas on **Starter RM 125.00**, its 2-PV band. Rollback JSON written BEFORE the first
+> delete: `%TEMP%\agency-churn-Atlas-Agency-2026-08-03.json` (15,856 bytes) — re-inserting it restores
+> every row exactly. **Deliberately not general:** explicit agency, explicit window, explicit landing tier,
+> because "delete this organisation’s billing history" must not be possible by accident.
+>
+> **Verified after:** Atlas ledger **12 → 3 rows** (Growth expired 7 Jul, Custom RM 0 expired 08:02,
+> Starter RM 125 active) and requests **13 → 3**, all pre-09:30 — its real history is intact and nothing
+> outside the window was touched. Plan Request total 13.
+
+> **3 Aug 2026 (seventeenth slice) — 🔴 THE AUTO-RESET WAS EATING THE ADMIN’S NEGOTIATED PRICE.**
+>
+> Owner: *"why admin set 99 to the agency then automatically reset?"* — because I wired a branch that did
+> exactly that. The volume rule reset any agency on Custom whose weekly PV count sat inside the rate card,
+> and Atlas issues **0 PVs**, so every price the admin agreed was undone within the same minute. The ledger
+> proves it: **12 rows for Atlas**, alternating Custom → Starter — `Custom RM 99.00` started **09:47** and
+> expired **09:47**; RM 9,999 at 09:46, RM 999 at 09:50, same story. Four negotiations destroyed.
+>
+> **The branch is gone, and the rule is now stated the other way round: NOTHING AUTOMATIC EVER TAKES AN
+> AGENCY OFF CUSTOM.** A negotiated price is an agreement between two people; volume is evidence about it,
+> not authority over it — least of all a 0-PV week, which is what every agency reads as before its first
+> voucher. Leaving Custom is a deliberate act: the agency presses Reset, or the admin ends it. The rule
+> still does the two things it should: apply the banded tier when the agency is NOT on Custom and on the
+> wrong one, and notify the admin past 150 PV.
+>
+> **Both Custom actions are now on the Custom card**, which is what the owner could not find (they had
+> vanished because the auto-reset had already thrown Atlas back to Starter, so the card stopped rendering):
+> **Renegotiate price** (violet, asks the admin for a different figure, current price stands until they
+> answer) and **Reset to normal subscription** (neutral, leaves Custom for the banded tier, applies
+> immediately). Each carries one line saying which of those two things it does — they are different acts
+> and were previously one button.
+>
+> ⚠️ **Atlas’s ledger still holds the 10 churn rows** this bug produced. They are a true record of what
+> happened, so they were not quietly deleted — say the word and they go, rollback file first.
+
+> **3 Aug 2026 (sixteenth slice) — THE CUSTOM TILE READS AS A STATE, NOT A BROKEN BUTTON.**
+>
+> Owner: *"design a bit this agency status, the requested or not"* and *"this also redesign ask admin"*.
+> The requested state was a **disabled full-width button** — which reads as something broken rather than
+> something in progress. An agency waiting on a price cannot act, so it is no longer shown a control at
+> all: an amber strip with a pulsing dot, *Requested · with InnocenZ admin*, and one line saying its
+> current tier is unchanged until they answer.
+>
+> The call to action is styled to the tile it sits on — violet border/fill and a Sparkles glyph, matching
+> the accent Custom already carries on this screen. A grey soft button under a violet "Renegotiate Price"
+> looked disabled. Label shortened to *Ask admin for a price*, which fits the tile at one line.
+>
+> **The duplicate banner above the rate card is gone.** "Waiting for InnocenZ admin — Custom" said the
+> same thing two inches from the tile that now says it in context.
+
+> **3 Aug 2026 (fifteenth slice) — THE AGENCY GETS THE SAME REAL CARD, AND A WAY TO ASK FOR CUSTOM.**
+>
+> Owner: *"this renew date also wrong and the card cannot update like the outlet in the agency subcription
+> page"*, then *"agency how can select the custom to notify the admin?"*.
+>
+> **The card is now ONE component, not two.** `PaymentMethodCard` moved to
+> `components/iz/PaymentMethodCard.tsx` and both Subscription screens render it. Copying it would have
+> left the agency on its hardcoded "Visa ···· 4242" the moment anything changed — which is exactly the
+> state it was in. Same for the renewal rule: `nextRenewalFrom()` now lives in `subscription-record.ts`
+> and both hooks call it, so the two screens cannot drift a month apart.
+>
+> **The agency renewal date was demo-clock fiction** — "next charge 2 Aug 2026" printed beside a ledger
+> that says something else. It now rolls the agency’s own `started_at` forward by its billing cycle, and
+> shows nothing at all when no subscription is active rather than inventing a date.
+>
+> **Custom can now be requested by hand** (the rate card’s one actionable tile). The volume rule fires at
+> 151 PV in a settled payroll week, which is right for billing but useless for an agency that has just
+> signed a client it cannot serve inside the rate card — and untestable with 0 PVs on file, which is the
+> position the owner was in. Same request either way: `custom_renegotiation`, pending, nothing bills until
+> the admin sets a figure. No other tile has a button, because no other tier is a choice.
+
+> **3 Aug 2026 (fourteenth slice) — THE AGENCY TIER IS AUTOMATIC, AND THE CARD IS REAL.**
+>
+> Owner: *"in the agency is auto selected rate card not manually based on how many pv of that agency, how
+> can i leave custom?, and if over 151 pv of the agency need to auto notify the admin to negotiate the
+> price. no this leave custom starter"*. Correct — the switch buttons I had just added were the wrong
+> model entirely. **An agency never picks a tier: the rate card is a band table and the week’s PV count
+> picks the row.** All the per-tier buttons are gone.
+>
+> **The volume rule** (one guarded effect) now reconciles ledger against volume: inside the rate card on
+> the wrong tier → apply the right one (`plan_change`, direct, list price); **past 150 PV → notify the
+> admin to negotiate** (`custom_renegotiation`, pending — the 151+ band has NO list price, so nothing can
+> be auto-applied); on Custom but back inside the card → reset. It writes, so it is guarded hard: real
+> session only, only once the REAL weekly PV count and the plan catalog have loaded, never while a request
+> is open, at most once per mount.
+>
+> **The PV count is real**, counted from `payment_voucher` rows in the payroll week — not the demo store,
+> which is empty for a real agency and would have read "0 PV" for everyone and auto-reset them all off
+> Custom on first page load. Null while unknown, and the rule refuses to act on null.
+>
+> **Reset, not cancel/renegotiate.** Owner: *"make in the agency only the custom can reset back, no cancel
+> and the renegotiate"*, then showed the two existing rows as the reference: Delta’s `plan_change` Custom →
+> Growth (**Direct**) = the reset, Atlas’s `custom_renegotiation` Custom → Custom (**Pending**) = the
+> renegotiate. So reset is filed as a plan_change and **applies immediately**, matching that row exactly;
+> it still surfaces in Plan Request because it touches Custom. Admin labels read `Reset · Growth` for an
+> agency (vs `Cancel · Pro only` for a venue), including for the older rows filed before the reset had a
+> shape of its own.
+>
+> **"InnocenZ Agency · Custom" on Atlas’s own screen** was a hardcoded prefix passed into
+> `subscriptionRecordFromMember`. The ledger row already carries `subscriberName`; it now wins, and the
+> fixed label is only a fallback. Verified the admin reads the same two rows for Atlas (Custom 0.00 active,
+> Growth 500.00 expired) that Atlas sees.
+>
+> **The payment card is now a real record (migration 0082, `main.payment_method`).** Owner: *"makes really
+> can change the outlet card credential and save it to the database"*. ⚠️ **THERE IS NO COLUMN FOR THE CARD
+> NUMBER OR THE CVV, AND THERE MUST NEVER BE ONE** — a stored PAN puts this database in PCI-DSS scope and a
+> stored CVV is forbidden outright. The browser derives brand + last four and discards the number; the zod
+> schema caps `last4` at four digits so a full PAN is REJECTED at the edge (verified live: posting
+> 4242424242424242 returns 400). Ownership is two nullable FKs with a CHECK that exactly one is set —
+> unlike `member_subscription`’s unFK-able subscriber pair, which is how six rows came to point at nothing.
+> One active card per organisation (partial unique index), `GET/PUT /payment-method/mine` scoped from the
+> session. **The card can be RECORDED but not CHARGED** until a gateway fills `gateway_token`, and the form
+> says so instead of implying auto-pay works. The old "Update card" button invented a random four digits.
+>
+> **Renewal date on the payment section** followed a hardcoded "15 Jul 2026" while the plan card above it
+> showed the real 3 Sept 2026; both now read the same anchored renewal.
+
+> **3 Aug 2026 (thirteenth slice) — BOTH WAYS OUT STAY ON SCREEN, AND PENDING IS VISIBLE.**
+>
+> Owner, looking at a venue already on POS: *"where is that 2 buttons renegotiate POS and the cancel
+> POS"* and *"where is the pending status show at the outlet subcription page"*. Both were the same
+> design mistake. **The card hid BOTH buttons whenever any request was open**, so a venue that had
+> asked for a new price could not then decide it would rather drop POS altogether — it had to wait for
+> an answer to a question it no longer wanted asked. And the only sign a request existed was a
+> sentence at the bottom of the card; the pill area showed **Active** alone.
+>
+> **Now:** both buttons stay, and only the action already asked for is disabled and relabelled (*New
+> price · requested* / *Cancel POS · requested*). An amber **pending admin** pill sits BESIDE the green
+> Active one, because a venue on POS with an open request is in both states at once. Which request is
+> open comes from the server — `/mine/pos-quote` naming a plan means a cancellation, anything else is a
+> quote — with local flags covering only the gap between the tap and the refetch. `removalSentLocal`
+> was added for the cancel path, which had no flag at all and so could be double-tapped into two
+> identical requests.
+>
+> **Mirrored on the agency Custom card**, same rule: an open re-quote no longer traps the agency on
+> Custom, and only a pending EXIT disables the rate-card tier buttons.
+>
+> **Seed ghosts purged from `admin_request` (4 rows).** Marble Hall, Horizon Talent, Pioneer Crew,
+> Summit Staffing — none exists in `outlet`/`agency`, all four stamped `created_by=seed-sample`, which
+> is the evidence that made deleting them a repair rather than a guess. Rollback JSON written first.
+> Plan Request **16 → 13**, every remaining row a real subscriber. ⚠️ `contact`/`other` enquiries are
+> never judged this way — someone asking about the product legitimately has no account yet.
+
+> **3 Aug 2026 (twelfth slice) — THE AGENCY GETS THE OUTLET'S NEGOTIATED-PRICE LOGIC (§8 X56).**
+>
+> Owner: *"why the agency logic also no change follow the outlet logic"*. Correct, and the reason was
+> plain: every piece of that pipeline had been built on the OUTLET path only. The agency Subscription
+> screen was read-only — no switch, no re-quote, no exit, no waiting state — its Custom rows carried
+> no previous price, and the admin drawer still framed Custom as an ordinary plan swap.
+>
+> **The one asymmetry worth keeping, and why.** POS is an ADD-ON billed beside the plan; Custom IS the
+> agency's plan. So the from-side of a POS row is never a plan ("Scale → Integrate with POS" is a swap
+> that never happens), but an agency moving from Growth onto Custom really is leaving Growth, and the
+> from-side says so. Custom only takes the POS treatment — `Custom · RM 2,400.00` — once the agency is
+> ALREADY on it, which is exactly when there is a figure being replaced or ended.
+>
+> **A zero is not a price.** `previousNegotiatedAmount` treats `0.00` as absent, because the Custom
+> catalog row is a placeholder. Atlas sitting on `Custom 0.00` is not a negotiation that happened —
+> printing "Previous price RM 0.00 — negotiating again" would have invented one.
+>
+> **Where the RM 0 came from, now closed.** Joining Custom used to be filed as a `plan_change`, and an
+> agency plan_change is applied ON THE SPOT (`direct`) — so the moment an agency tapped Custom it was
+> billed the placeholder. Anything touching Custom is now `custom_renegotiation` and WAITS for the
+> admin, in both directions. Ordinary tier→tier stays `direct`: those have list prices and there is
+> nothing for an admin to decide.
+>
+> **Resolve now moves the ledger instead of re-pricing in place.** A `custom_renegotiation` naming a
+> plan goes through `applyPlanChangeToLedger`, so joining / re-agreeing / leaving each write a NEW row
+> and the old price survives as history — the same shape a POS re-quote already had. Re-pricing in
+> place left an agency that asked for Custom recorded on Growth while billed the Custom figure.
+>
+> **The agency hero was lying about the tier.** It rendered the demo PV curve's tier, so an agency on
+> Custom was told it was on Starter — the same class of bug as the venue that displayed another
+> venue's plan. It reads the ledger now, and falls back to the curve only for demo sessions.
+>
+> **Verified live, not asserted:** `previousNegotiatedAmount` = 99999.00 on all five Emhub POS rows;
+> **null** for Delta (it moved off Custom to Growth 500.00 — correct) and **null** for Atlas (0.00
+> placeholder — correct); `GET /admin-request/mine/custom-quote` returns 200; `tsc` clean on both apps
+> for every touched file. ⚠️ **The ledger WRITE is not verified** — proving it means inventing a price
+> in the shared DB, which is the owner's call. §9 has the two clicks that close it.
+>
+> **Found while verifying:** `admin_request` carries rows for **Summit Staffing, Pioneer Crew and
+> Horizon Talent**, none of which exist in `GET /agency` or have a single ledger row — seed ghosts of
+> the family purged on 2 Aug. Left in place pending the same rollback-file treatment (§9).
 
 > **3 Aug 2026 (evening, part 3) — a whole-project survey, and THREE §9 entries were found to be
 > describing work that was already finished. No code changed; doc only.**
@@ -1709,6 +1976,29 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 | 2026-07-30 | **"Reset demo" removed from the admin header.** The button never wrote to the DB (it only ran `queryClient.invalidateQueries()` and toasted "Demo data refreshed"), but in a live admin portal the label reads as a destructive data wipe. `ResetDemoButton` deleted from `apps/web/src/components/layout/header.tsx` plus its now-unused imports (`useQueryClient`, `RotateCcw`, `useState`, `toast`); `useQuery`/`Button` kept for the notification bell + user dropdown. Scope is admin-only — that `Header` is imported solely by `layout/admin-layout.tsx`, so agency/outlet demo controls are unaffected. Verified: `header.tsx` typechecks clean (124 `apps/web` errors are the pre-existing agency-portal baseline), Vite serves the module with no `ResetDemoButton`/`RotateCcw`/"Reset demo" left, and the reloaded dashboard renders its header with only Theme · Notifications (3) · user menu — no error boundary. | Admin (§4d · §9) | ✅ done |
 | 2026-07-30 | **Admin portal run against the LIVE DB — §8 promoted from Reported to Verified.** Signed in as the seeded admin (token seeded into the tab, no credential typed into a form) against `103.224.93.109:6543/innocenz-test` and proved what the portal really does with the database. **✅ Verified live:** dashboard (3 agencies / 7 outlets / 13 jobs / 3 requests / 2 job posts — UI matched API exactly), PR list (6 PRs with legal names + NRIC + agency links), payment vouchers (4 real, both Vicky rows = duplicate-PV issue confirmed on screen), plan catalog (12 plans), plan-request inbox, platform settings. **✅ Writes proven reversibly:** `PUT /platform-config` geofence 50→57→50 persisted, stamped `updatedAt`, and **appeared in the dashboard activity feed**; `PATCH /admin-request/:id` remarks written→re-read→restored. **✅ Guards proven:** PR token = **403** on `/admin-request`, `/platform-config`, RBAC writes. **🔥 Both security holes confirmed live, not theoretical:** a PR token listed **all 17 users** via ungated `GET /user`, and read **865 audit rows** via GraphQL. **New bug confirmed in UI:** admin-audit page shows 1 row while the footer claims "1–10 of 2752 · Page 1 of 276" (client-side role filter after server pagination). **Also logged:** audit rows render `Table = unknown` for `Auth`; the header's "Reset demo" button is only a refetch but reads as a data wipe. **☐ No data (not a defect):** approve/suspend on agency/outlet + legacy-member page have zero rows in the required state — retest once SL creates pending signups. Backend fix required to get here: `pnpm install` (missing `pdfkit`/`exceljs` crashed boot → "Internal server error" on web + "cannot reach backend" on phone). | Admin (§8 AD3–AD18 · §9) | ✅ done |
 | 2026-07-30 | **Admin side fully mapped — §8 grown 2 → 18 rows.** 6-agent code audit traced every `/admin` page to its backend: **all pages live-wired, zero demo screens in the admin tree** (demo-store split is agency/outlet only). New §8 rows AD3–AD18 (dashboard · 5 user-mgmt tabs · RBAC CRUD+pending · 4 service tabs · plan/history · audit-log · settings · profile — all ⚠️ Reported pending one real sign-in run); §4d itemized per tab; §2 link H flipped ❌→⚠️ wired. New **Admin hardening backlog** in §9: 🔥 `/api/v1/user` ungated (any token lists/patches any user) · 🔥 GraphQL `auditLogs` readable by any token · Create-Admin drops status + fakes phone · no admin lifecycle actions · PR filters client-side over first 200 rows · admin PV `resolveDispute`/receipts unwired · RBAC pending 20-row cap + badge/list count mismatch · plan audience filter proxies billingCycle · audit-log role filter client-side · `outlet_transaction` API with zero UI. | Admin (§2 H · §4d · §8 · §9) | ✅ done |
+| 2026-08-03 | **POS shown as a thing in its own right, and the two admin records told apart.** (1) A POS request no longer renders as a plan transition — no more *"Scale → Integrate with POS"*, a swap that never happens. The drawer shows **one add-on block**: *Add-on · billed on top / Integrate with POS / RM x*, and when the venue already holds it, **"Previous price RM 99,999.00 — negotiating again"** (re-quote) or **"— ends"** (cancel), with the cancel note saying the charge stands until the admin resolves. The previous figure is computed server-side from the venue's active add-on line (`previousAddonAmount`), since a request row does not carry it. In the table a POS row now reads *from* `Integrate with POS · RM 99,999.00` (or "—" first time) *to* `Integrate with POS` / `Cancel · Pro only`. (2) **The two admin pages read DIFFERENT tables and this confused the record:** Plan Change is `admin_request` — switches ASKED FOR (Emhub: 2 rows); **Current Plan → Full history** is `member_subscription` — what was actually BILLED, the very same rows the venue sees on its own Subscription page (Emhub: 6, incl. three POS lines). Plan Change now links across to it in so many words. | Admin ↔ Outlet (§9) | ✅ done |
+| 2026-08-03 | **Plan Change defaults to the FULL record.** The page is the subscription trail, so it now opens on every switch each outlet and agency has ever filed — a subscriber appears **once per change**, repeating down the list, rather than once in total. Live: **12 rows across 8 subscribers** (JK House 4 changes, Emhub 2, the rest 1 each). *Latest only* is still one click away for the narrower "what needs answering" view, and POS/Custom moves remain on Plan Request. | Admin (§9) | ✅ done |
+| 2026-08-03 | **A venue on POS has TWO ways out, both through the admin.** Owner's rule: removing POS is allowed, but the admin must be notified — either to **quote the price again** or to **cancel POS back to plan-only**. The active add-on card now offers both: **"Ask for a new price"** files a fresh POS quote (resolving it replaces the add-on line at the new figure) and **"Cancel POS · plan only"** files an exit (resolving it cancels the line). While either is outstanding the buttons are replaced by *"Your request is with InnocenZ admin — the current price applies until they answer"*, because **a venue must never be able to end its own billing**; the charge stands until the admin answers. | Outlet ↔ Admin (§9) | ✅ done |
+| 2026-08-03 | **Agency Custom cycle PROVEN live, and a test agency left ready.** The owner has no PV volume to reach 151/week, so the cycle was driven through the real endpoints as the agency's own login. **Delta Agency, full circle:** Starter → **Custom** (auto `direct`) — ledger wrote **Custom RM 0.00**, exactly the placeholder-price hole, since Custom's catalog price is 0; the agency asked for a quote (`custom_renegotiation`); admin resolved at **RM 2,400** → ledger amount moved **RM 0 → RM 2,400**, traced to that quote; then Custom → **Growth**, closing Custom (`expired`) and opening Growth RM 500. Routing verified: all three Custom moves (in, priced, out) appear in **Plan Request**, and only Delta's ordinary switch stays on **Plan Change**. **Left ready for the owner: Atlas Agency is on Custom (RM 0.00) with a PENDING renegotiation** — resolve it with a price to watch the ledger fill, then switch Atlas back to a normal tier to see the exit land in Plan Request. ⚠️ Delta and Atlas now carry real subscription rows created by this test; the ledger shows the trail. | Agency ↔ Admin (§9) | ✅ done |
+| 2026-08-03 | **The two admin inboxes are split on ONE rule, and an exit row names what it leaves.** Owner's rule: POS / Custom belong **only** on Plan Request; Plan Change is ordinary plan-to-plan. Implemented server-side as `negotiated=only|exclude` — a request counts as negotiated when its type is a POS quote or Custom renegotiation, **OR when it is a plain `plan_change` whose from- or to-plan is Custom or an add-on**. That second half matters: "Enterprise → Custom" is filed as a plan_change, so type alone would file it under the wrong page. Verified live: **Plan Change 12 rows, none POS/Custom; Plan Request 9 rows, all POS/Custom** (both directions, both roles). Also fixed: an exit row read **"Pro → Pro"** because both sides showed the venue's plan — the from-side now names the thing being dropped (**Integrate with POS → Pro**). A subscriber can hold a normal plan AND a negotiated arrangement at once; that is the point of the add-on, and the ledger keeps them as separate lines. | Admin (§9) | ✅ done |
+| 2026-08-03 | **An exit request no longer reads backwards, and its prices are shown.** A "remove POS" row rendered as *Plan (stays): **POS Integration** RM 0.00 → Add-on: **Pro** RM 0.00* — both sides inverted and priced at zero. Two causes, both fixed: (1) `create()` stamped `current_plan_id` from the venue's newest ACTIVE ledger row, which for a venue holding POS is the **add-on**, so the request recorded the add-on as its plan — it now filters `kind: 'plan'`; the one existing row was repaired to Pro. (2) The drawer rendered an exit with the joining labels. An exit now reads **Add-on (ends): Integrate with POS · "Charge stops on resolve"** → **Plan (continues): Pro · "RM 2,999.00 — the venue keeps paying this"**, with a note saying the add-on charge ends and no price is negotiable. **Where to find history:** the Plan Change page's dropdown beside the search box — *Latest only* (default, what still needs answering) / **Full history** (every switch ever filed, including moves to and from POS/Custom). Labels were truncating to "Latest per subscrib…", so they are now short and the card description says which view is showing. | Admin (§9) | ✅ done |
+| 2026-08-03 | **Switching BACK off a negotiated arrangement now exists, and both admin pages show it.** A venue could take the POS add-on but never leave it, so it would pay two subscriptions forever. Now: the venue's card has **Remove POS integration**, which files a POS request naming its own PLAN as the target — that is what marks it an EXIT, and resolving it **cancels** the add-on line instead of starting another (no quote needed; starting one still requires an agreed figure). Proven live: Emhub's POS line reads `cancelled` while Pro stays `active` — no double billing. **Plan Request** (`includeNegotiatedExits`) also lists plan changes that END a negotiation — an agency switching off **Custom** — because the admin who agreed that price must see it stop, not only start; and it gained a **search box**. **Plan Change** (`includeOpenNegotiations`) now lists moves to/from POS and Custom while they are still outstanding, labelled by `toLabelOf` (a request with no requested plan reads "Integrate with POS"/"Custom"; one naming a plan reads that plan) — **resolved negotiations stay on Plan Request**, where the price was agreed. | Admin ↔ Outlet ↔ Agency (§9) | ✅ done |
+| 2026-08-03 | **A POS quote is labelled as an ADD-ON, not a plan replacement.** The drawer reused the plan-change layout — *"From plan: Pro → To plan: Integrate with POS"* — which reads as a swap, so the venue's page (correctly showing **Pro AND POS**) looked wrong to the admin. **Both is correct:** POS integration carries no PR allowance, so replacing the plan would leave the venue with no PRs/day and no plan billing while paying RM 99,999 for a sales feed. For a POS quote the drawer now reads **Plan (stays) / Add-on**, cards **"Plan · unchanged" / "Add-on · billed on top"**, and the resolved note says the venue keeps its plan and is billed the add-on on top. Wording only — no data or API change. ⚠️ **Owner decision if ever revisited:** making POS replace the plan would strip the venue's PR-per-day allowance and show "POS Integration" where a plan belongs on Current Plan. | Admin (§9) | ✅ done |
+| 2026-08-03 | **Add-ons are real, and both admin pages can show full history + search (migration 0081).** (1) **Resolving a quote now writes the ledger** — the figure used to live only on the `admin_request` row, so nothing billed it and the venue never saw it. A resolved POS quote creates an **ADD-ON** line at the agreed price **alongside** the venue's plan (the plan is untouched — POS is not a plan); a Custom renegotiation writes the agreed amount onto the agency's plan row, which otherwise bills **RM 0** because Custom's catalog price is a placeholder. (2) **Migration 0081** adds `subscription.kind` (`plan`|`addon`), the **POS Integration** product, and `member_subscription.admin_request_id` so any price traces back to the negotiation that agreed it; reads gained a `kind` filter so a venue's add-on line is never mistaken for its plan. (3) The venue's POS card reads **Active · RM x / month · billed on top of your plan**. (4) **Plan Change** gained a search box + a *Latest per subscriber / All changes (history)* switch; **Current Plan** gained *Current plan / Full history* — older rows were always kept, they just had no view. Live: JK House shows 1 row latest / 4 in history; Emhub shows POS RM 99,999 (addon) + Pro RM 2,999 (plan) + Essential expired. ⚠️ **Migration numbering trap:** drizzle applies only entries whose journal `when` is newer than the last applied stamp — a smaller value is skipped **silently while reporting success**. | Admin ↔ Outlet (§9) | ✅ done |
+| 2026-08-03 | **POS-quote status now persists for the venue too.** "Request sent" was React state, so a refresh reset the card to *Request admin quote* while the admin still held the request — the venue would ask twice. New session-scoped `GET /admin-request/mine/pos-quote` (same scoping as `/mine/plan-change`; repository method generalised to `latestPendingByType`) so the badge is server truth and clears when the admin resolves it. The **"Cancel request" button is hidden in a real session**: the request lives with the admin and there is no withdraw endpoint, so the button would clear the badge while the request stood — a button that lies. Verified live: Emhub reads its own pending quote. ⚠️ A real withdraw endpoint is the follow-up if venues should be able to retract. | Outlet ↔ Admin (§9) | ✅ done |
+| 2026-08-03 | **🔴 A venue could be shown ANOTHER venue's plan as its own.** Emhub Testing's page read *Scale · RM 6,999* while the database (and its own API response) said **Pro · RM 2,999** — Emhub has no Scale subscription in its entire history. Cause: when the ledger lookup produced nothing, the page fell back to the DEMO store, which is shared by every venue opened in the same browser, so it displayed a plan left over from another venue. **A real session no longer falls back at all**: with no active row there is simply no current plan and the card renders none (`currentPlan` is nullable; every use made null-safe). Demo sessions keep the demo plan. Money on screen must come from that venue's own row or not be shown. Separately: a request still AWAITING an answer now resolves its "from plan" live from the ledger (answered requests keep their stamp — that is what they were decided against), so a POS quote raised on one plan is not negotiated against a stale price. | Outlet ↔ Admin (§9) | ✅ done |
+| 2026-08-03 | **"BEFORE · FROM PLAN" now shows the subscriber's real current plan.** It was blank for POS quotes, custom renegotiations and contact requests — only a plan_change carried a `current_plan_id` (sent by the client) — so the admin drawer told the admin nothing about who they were negotiating with. `POST /admin-request` now stamps `current_plan_id` from the subscriber's ACTIVE ledger row whenever the client did not send one, for every request type. Existing rows backfilled by `repair-member-subscription-links.ts` (new pass, dry run unless `--apply`): 1 stamped. Verified live — every pending request now names its from-plan (Emhub POS quote → Pro, Horizon Talent renegotiation → Growth, Velvet 23 POS quote → Pro). **Also proof the whole loop works: Emhub Testing switched Essential → Pro and the approval moved the ledger (Essential `expired`, Pro `active`) by the owner's own account.** | Admin ↔ Outlet (§9) | ✅ done |
+| 2026-08-03 | **Admin "History" renamed to "Current Plan".** Sidebar entry, page heading, browser tab title and card title all now say Current Plan, matching what the page shows since the collapse (one row per subscriber, the plan it is on now). **The route path stays `/admin/business/history`** — renaming it would break deep links and require regenerating the route tree for a label change. | Admin | ✅ done |
+| 2026-08-03 | **"Could not send the switch" now says WHY.** Emhub Testing could not switch: the server answered **400 "Already on Essential — no switch needed"**, and the page replaced that with a useless *"Could not send the switch — try again"*, so the venue retried forever. Cause: the demo store is shared across venues in one browser, so before the ledger loaded the card showed another venue's plan as Current and offered a switch to the plan Emhub was actually on. Fixed both ends — `requestPlanChange` now returns `{ok, reason}` and the toast prints the server's own words (and refetches, since the plan may have moved), and the Switch buttons are **disabled with "Loading…" until the real plan has loaded**, so the mis-click cannot be made. Reproduced live before and after. My reproduction row was deleted from the queue. | Outlet (§9) | ✅ done |
+| 2026-08-03 | **Admin Plan Change now shows what is OUTSTANDING, matching the venue's screen.** The collapse picked "newest by `created_at`", and JK House had two requests filed in the SAME minute — one approved, one still pending. Ties resolved arbitrarily, so the admin queue showed the *approved* row while the venue's own page showed the *pending* one: the same subscriber read by two different rules. The `DISTINCT ON` now orders **pending first, then newest**, so an unanswered request always wins over an answered one. Verified live: JK House reads `pending` in the admin queue, matching its "Awaiting admin" badge. ⚠️ Older redundant pendings are NOT auto-declined (a script should not void a venue's ask) — decline them by hand; the create-guard stops new ones. | Admin ↔ Outlet (§9) | ✅ done |
+| 2026-08-03 | **Renewal is anchored to the subscription's start day, not recomputed daily.** Owner's rule: *"when it start from that month then is auto renew that month, no everyday change unless that time just switch or auto switch plan."* Every renewal date is now computed FROM the original `started_at` (period arithmetic), not by stepping a date forward — stepping drifts: 31 Jan + 1 month lands on 3 Mar because "31 Feb" overflows. The day is clamped to the target month's length instead, so a 31st subscription bills 28 Feb / 31 Mar / 30 Apr and keeps its anchor. Weekly (agency) steps 7 days. Checked across a day change, a month boundary and the 31st case. It re-anchors only when a switch is approved, because that writes a new `started_at`. | Outlet (§9) | ✅ done |
+| 2026-08-03 | **A switch to the plan you are already on is refused, and the renewal date is real.** (1) `POST /admin-request` now checks the subscriber's ACTIVE ledger row first: asking for the plan it already holds returns **400 "Already on <plan> — no switch needed"** instead of filing a request that would sit Pending forever while the venue's own screen shows that plan as current (exactly the contradiction seen today). Verified live: refused for Enterprise, still accepted a genuine switch to Pro. (2) The outlet Subscription card's **"Renewal 15 Jul 2026" was a hardcoded constant** — invented and already in the past. It is now derived from the venue's own subscription: `started_at` rolled forward by `billing_cycle` to the next future date, and OMITTED entirely when the ledger has nothing active. ⚠️ The PR counters beside it (`0 / 50 requested PRs today · pool of 100`) still come from demo shift data — logged in §9. | Outlet ↔ Admin (§9) | ✅ done |
+| 2026-08-03 | **History shows the CURRENT plan per subscriber.** `GET /member-subscription?latestPerSubscriber=true` (Postgres `DISTINCT ON (subscriber_type, subscriber_id)`, newest `started_at`) — used by admin History, so a venue that has switched shows the plan it is on today, not every plan it has ever held; the closed rows stay in the table as the record of what was charged. Card wording corrected to match ("the plan each outlet and agency is on now"). The venue's own billing list and the coverage check deliberately do NOT send the flag. Verified live: 10 rows, one per organisation. ⚠️ **Known confusion from the stale-bundle window:** JK House's page read *Essential* (demo fallback) while the ledger already said *Enterprise*, so the switch it filed at 12:16 asks for the plan it is already on — decline that request, or approve it to write a fresh Enterprise row. | Admin (§9) | ✅ done |
+| 2026-08-03 | **A venue can see its own pending switch, and Plan Change shows one row per subscriber.** Two halves of the same defect — the venue's "Awaiting admin" badge was React state only, so a REFRESH forgot it, the Switch buttons came back, the venue asked again, and the admin queue filled with duplicates (JK House had 3 pending for one decision). Now: new session-scoped `GET /admin-request/mine/plan-change` (outlet/agency, id resolved server-side via `resolveOrgScope` — never from a query param) lets the subscriber's own screen keep showing the pending plan across refreshes and clear itself the moment the admin answers; and `GET /admin-request?latestPerSubscriber=true` (Postgres `DISTINCT ON`, used by the Plan Change page) collapses to the newest request per subscriber so a stale one can't be approved. Older requests are NOT deleted — they remain the record of what was asked. Approve applies the new plan immediately (ledger write); decline leaves the venue on its current plan and the badge disappears. Verified live: JK House reads its own pending row, an outlet is still **403** on the full queue, and the list goes 9 rows → 7 with the flag. | Outlet ↔ Admin (§9) | ✅ done |
+| 2026-08-03 | **Fake subscription rows deleted — History is now only real organisations.** Owner's call, applied: `repair-member-subscription-links.ts --purge-ghosts --apply` deleted the **6 seeded rows** that named organisations existing in no table (Marble Hall, Jade Garden Bar, Summit Staffing, Horizon Talent, Pioneer Crew, Vanguard PR — all `created_by='seed-sample'`). Every row was printed and written to a rollback JSON in the OS temp dir before the delete. **The ledger now mirrors the operation section exactly: 7 outlets + 3 agencies = 10 rows, all linked by primary id, no duplicate names.** ⚠️ **Re-running `seed-sample-activity.ts` would recreate them** — its MEMBER_SEED invents names with random ids; logged in §9 as a fix-before-reseed. | Admin / DB (§9) | ✅ done |
+| 2026-08-03 | **The venue's own page and admin History now read ONE truth.** The outlet Subscription page's *Current* pill comes from its ACTIVE `member_subscription` row (the same ledger admin History reads), falling back to demo data only when there is no row — so an approved switch appears on the venue's screen by itself. Ledger repaired in the shared DB via the new idempotent `repair-member-subscription-links.ts` (dry run unless `--apply`): the seed's random `subscriber_id`s meant NO agency row and 2 outlet rows linked to a real organisation, which is why Atlas/Delta/Starline appeared as subscribed *and* never-charged at once. 3 relinked, 2 backfilled (JK House → Enterprise, Emhub Testing → Essential); all 10 real orgs now linked by primary id. Verified live: JK House's own endpoint returns Enterprise · RM 3,999 · active. 6 ghost rows naming non-existent organisations are reported, not deleted. | Outlet ↔ Admin (§9) | ✅ done |
+| 2026-08-03 | **Outlet plan switch is real, and History accounts for every organisation.** (1) The venue's "Switch to <plan>" now files a real `admin_request` plan_change (plan resolved against the admin `subscription` catalog, `currentPlanId`/`requestedPlanId` carried) → it appears in admin **Plan Change**; the card shows *Awaiting admin* and the venue stays on its current plan until approval. (2) **Approving writes the `member_subscription` ledger** — old active row closed (`ended_at` + `expired`), new active row inserted with the plan's name/price/cycle (negotiated `quotedAmount` wins) — so History syncs; an agency's `direct` switch applies immediately. (3) Admin **History** gained a *"No subscription on record"* section listing every registered outlet/agency with no ledger row (JK House, Emhub Testing today), honouring the filters — nothing invented, they are shown as not-subscribed rather than silently missing. No new tables, no migration. Live: JK House filed Pro→Enterprise (`admin_request` d7d019d9, pending). ⚠️ approve→ledger not fired live (no admin password in `.env`). | Outlet → Admin (§9) | ✅ done |
+| 2026-07-30 | **Admin sidebar: "Jobs & Special Services" hidden.** Its nav entry in `apps/web/src/constants/links.tsx` (admin → Service group) is commented out, so the item no longer appears in the admin sidebar; the `LayoutGrid` icon import is commented with it to keep lint clean. The route `/admin/service/other` and the whole page remain in the codebase (still reachable by direct URL, and still linked from the Dashboard "Job postings" card + job to-dos) — uncomment the entry to restore. | Admin | ✅ done |
 | 2026-07-30 | **TEST_SCRIPT renewal is now ENFORCED by a hook.** New Stop hook `.claude/hooks/renew-test-script.js` (+ registration in project `.claude/settings.json` → `hooks.Stop`): Claude Code cannot end a turn while changes under `apps/`/`packages/`/`tools/` (uncommitted, or in a last commit < 60 min old) are not reflected by a renewed TEST_SCRIPT.md — it is forced to update §8/§9 + append a §10 row first. Fails open on errors; never double-blocks one stop. Both files are committed, so the rule enforces itself on every device after `git pull`. | all (doc-roles rule) | ✅ done |
 | 2026-07-30 | **Cross-device memory sync.** Full Claude Code session memory mirrored into the repo: `docs/claude-memory/*.md` refreshed (new `innocenz-pv-pipeline.md` + `innocenz-env-gotchas.md`, updated index/wiring/backlog/sync files) and the Excel **"Claude Code Memory"** tab regenerated with every memory in full + restore steps + the to-do queue. New device: `git pull`, then copy `docs/claude-memory/*.md` into `%USERPROFILE%\.claude\projects\C--Users-jinkg-Downloads-InnocenZ-InnocenZ\memory\`. Rules going forward: renew TEST_SCRIPT.md on EVERY slice; CLAUDE.md only when rules change. | all | ✅ done |
 | 2026-07-30 | **PV signature is REAL drawn ink.** Sign sheet now has a finger-drawn pad (`SignaturePad.tsx`, PanResponder + react-native-svg — no APK rebuild needed); Confirm is blocked until something is drawn; strokes stored on `payment_voucher.pr_signature` (migration 0071, server-validated — malformed ink = 400, never silently dropped) and re-drawn on the PDF as small fitted vector ink. Older signed-without-ink vouchers fall back to a small script name; unsigned print blank. Vicky's voucher reset to `sent` for the first live draw. | PR (§9 G) | ✅ done |

@@ -73,4 +73,25 @@ export type AdminRequestFilter = {
   subscriberType?: 'outlet' | 'agency';
   /** Match rows requested on any of these calendar days (createdAt). */
   dates?: string[];
+  /**
+   * Collapse to the newest request per subscriber. The Plan Change page uses it
+   * so a venue that switched three times is one row to answer, not three.
+   */
+  latestPerSubscriber?: boolean;
+  /** Case-insensitive partial match on the subscriber (outlet/agency) name. */
+  search?: string;
+  /**
+   * Split the two admin inboxes by whether a request touches a NEGOTIATED
+   * arrangement — the POS add-on, or the Custom tier — in any direction.
+   *
+   * - `'only'`  → Plan Request: everything involving POS/Custom, joining or
+   *               leaving, because those carry a price somebody agreed.
+   * - `'exclude'` → Plan Change: ordinary plan-to-plan switches only.
+   *
+   * A request counts as negotiated when its type is a POS quote or a Custom
+   * renegotiation, OR when it is a plan change whose from- or to-plan is Custom
+   * or an add-on. Without the second half, "Enterprise → Custom" is a plain
+   * plan_change and would sit in the wrong inbox.
+   */
+  negotiated?: 'only' | 'exclude';
 };

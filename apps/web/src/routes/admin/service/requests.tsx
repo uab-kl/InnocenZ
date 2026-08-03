@@ -13,8 +13,9 @@ import {
 	Loader2,
 	MailCheck,
 	RefreshCw,
+	Search,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	DateMultiFilter,
@@ -93,13 +94,13 @@ const PAGE_SIZE = 10;
 type StatusFilter = "all" | AdminRequestStatus;
 type RoleFilter = "all" | SubscriberType;
 
-// This inbox holds exactly two request kinds:
-//  • outlet  → "Integrate with POS" add-on quote ("Request admin quote")
-//  • agency  → Custom (151+ PV) tier "Renegotiate Price"
-const INBOX_TYPES: AdminRequestType[] = [
-	"pos_integration_quote",
-	"custom_renegotiation",
-];
+// This inbox holds everything that touches a NEGOTIATED arrangement, in either
+// direction — the server decides membership (`negotiated: "only"`), because a
+// move INTO Custom is filed as an ordinary plan_change and a request type alone
+// would miss it:
+//  • outlet  → "Integrate with POS" add-on: the quote to join, and the request
+//              to leave (which names the plan being kept)
+//  • agency  → Custom (151+ PV): "Renegotiate Price", entering, and leaving
 
 const requestTypeLabels: Record<AdminRequestType, string> = {
 	pos_integration_quote: "POS quote",
@@ -144,18 +145,98 @@ function planForRequest(
 		: undefined;
 }
 
-/** From plan = the tier the subscriber is on right now. */
+/**
+ * The negotiated arrangement a request is about, or null for an ordinary switch.
+ *
+ * Both work the same way — quoted, re-quoted, dropped — so both are labelled by
+ * the same rules below. They differ in one respect only: the outlet's POS add-on
+ * is billed BESIDE the plan, while the agency's Custom IS the plan.
+ */
+function negotiatedArrangement(request: AdminRequest): string | null {
+	if (request.type === "pos_integration_quote") return "Integrate with POS";
+	if (request.type === "custom_renegotiation") return "Custom";
+	return null;
+}
+
+/**
+ * True when the request is the subscriber LEAVING the arrangement — a venue
+ * dropping POS, or an agency coming off Custom — which is what naming an
+ * ordinary tier as the requested plan means.
+ */
+function isNegotiatedExit(
+	request: AdminRequest,
+	requested: Subscription | undefined,
+): boolean {
+	const arrangement = negotiatedArrangement(request);
+	if (!arrangement || !requested) return false;
+	return requested.kind !== "addon" && requested.name !== arrangement;
+}
+
+/**
+ * From plan = what the subscriber is moving away from.
+ *
+ * A POS request is NOT a move between plans — the add-on is bought, re-priced
+ * or dropped while the plan carries on untouched — so the from-side shows the
+ * add-on and its previous price when there is one, and nothing at all for a
+ * first-time request. Showing the plan there read as "Scale → Integrate with
+ * POS", a swap that never happens.
+ *
+ * Custom follows the same rule where it applies: an agency already ON Custom
+ * shows the price being replaced or ended. But Custom IS the agency's tier, so
+ * one moving onto it from Growth really is leaving Growth, and that is what the
+ * from-side says — blanking it would hide a plan change that genuinely happens.
+ */
 function fromPlanLabel(
 	request: AdminRequest,
 	planById: Map<string, Subscription>,
 ): string {
-	return planForRequest(request, planById)?.name ?? "—";
+	const price = request.previousNegotiatedAmount;
+	if (request.type === "pos_integration_quote") {
+		return price ? `Integrate with POS · RM ${formatPrice(price)}` : "—";
+	}
+	const current = planForRequest(request, planById);
+	const arrangement = negotiatedArrangement(request);
+	if (arrangement && current?.name === arrangement) {
+		return price ? `${arrangement} · RM ${formatPrice(price)}` : arrangement;
+	}
+	return current?.name ?? "—";
 }
 
-/** To plan = what the request is for: the POS add-on or the Custom tier. */
-function toPlanLabel(request: AdminRequest): string {
-	if (request.type === "pos_integration_quote") return "Integrate with POS";
-	if (request.type === "custom_renegotiation") return "Custom";
+/**
+ * To plan = what the request is for.
+ *
+ * Usually entering a negotiated arrangement (the POS add-on, the Custom tier).
+ * But a request can also be a subscriber LEAVING one — a venue dropping POS to
+ * go back to plan-only billing, or an agency switching off Custom — and those
+ * name the ordinary plan they are returning to.
+ */
+function toPlanLabel(
+	request: AdminRequest,
+	planById?: Map<string, Subscription>,
+): string {
+	const requested = request.requestedPlanId
+		? planById?.get(request.requestedPlanId)
+		: undefined;
+	const arrangement = negotiatedArrangement(request);
+	if (arrangement) {
+		// Naming an ordinary tier ends the negotiated price. For a venue that is a
+		// cancellation of its add-on; for an agency it is a RESET back to the rate
+		// card, because an agency's tier follows its PV volume rather than a choice.
+		if (isNegotiatedExit(request, requested)) {
+			return request.subscriberType === "agency"
+				? `Reset · ${requested?.name}`
+				: `Cancel · ${requested?.name} only`;
+		}
+		return arrangement;
+	}
+	if (requested && requested.kind !== "addon") {
+		// Older resets were filed as ordinary plan changes, before the reset had a
+		// type of its own. Read them the same way so history stays legible.
+		const from = planForRequest(request, planById ?? new Map());
+		return request.subscriberType === "agency" && from?.name === "Custom"
+			? `Reset · ${requested.name}`
+			: requested.name;
+	}
 	return "—";
 }
 
@@ -191,14 +272,28 @@ function RequestsPage() {
 	const [requestedDates, setRequestedDates] = useState<Date[]>([]);
 	const [page, setPage] = useState(1);
 	const [editRequest, setEditRequest] = useState<AdminRequest | null>(null);
+	const [searchInput, setSearchInput] = useState("");
+	const [search, setSearch] = useState("");
 
-	// Only the two inbox kinds are listed here — plan changes have their own
-	// page, and contact/other requests are not part of this flow.
+	// Debounce the search box so a keystroke doesn't fire a request each time.
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setSearch(searchInput.trim());
+			setPage(1);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [searchInput]);
+
+	// Everything that touches a negotiated arrangement, in either direction: the
+	// POS add-on and the Custom tier, joining or leaving. A move INTO Custom is
+	// filed as an ordinary plan_change, so type alone would miss it — and the
+	// admin who agrees that price must see it start and stop in one place.
 	const queryParams: AdminRequestsQueryParams = {
 		page,
 		pageSize: PAGE_SIZE,
-		types: INBOX_TYPES,
+		negotiated: "only",
 	};
+	if (search) queryParams.search = search;
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;
 	const requestedDatesParam = datesToQueryParam(requestedDates);
@@ -367,6 +462,17 @@ function RequestsPage() {
 								}}
 							/>
 
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={searchInput}
+									onChange={(event) => setSearchInput(event.target.value)}
+									placeholder="Search outlet or agency..."
+									className="pl-8"
+									aria-label="Search outlet or agency"
+								/>
+							</div>
+
 							<Select
 								value={statusFilter}
 								onValueChange={(value) => {
@@ -462,7 +568,7 @@ function RequestsPage() {
 									records.map((request) => {
 										const plan = planForRequest(request, planById);
 										const fromPlan = fromPlanLabel(request, planById);
-										const toPlan = toPlanLabel(request);
+										const toPlan = toPlanLabel(request, planById);
 										const negotiable = isPriceNegotiable(request);
 
 										return (
@@ -629,14 +735,22 @@ function RequestsPage() {
 					if (!open) setEditRequest(null);
 				}}
 			>
-				<SheetContent side="right" className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl">
+				<SheetContent
+					side="right"
+					className="w-full sm:max-w-2xl md:max-w-3xl lg:max-w-4xl"
+				>
 					{editRequest && (
 						<RequestEditForm
 							key={editRequest.id}
 							request={editRequest}
 							fromPlan={fromPlanLabel(editRequest, planById)}
-							toPlan={toPlanLabel(editRequest)}
+							toPlan={toPlanLabel(editRequest, planById)}
 							plan={planForRequest(editRequest, planById)}
+							requestedPlan={
+								editRequest.requestedPlanId
+									? planById.get(editRequest.requestedPlanId)
+									: undefined
+							}
 							isSaving={isSaving}
 							onSaveRemarks={(id, remarks) =>
 								updateFieldsMutation.mutateAsync({ id, remarks })
@@ -662,6 +776,8 @@ interface RequestEditFormProps {
 	fromPlan: string;
 	toPlan: string;
 	plan: Subscription | undefined;
+	/** The plan named by the request — set only when it is an exit request. */
+	requestedPlan: Subscription | undefined;
 	isSaving: boolean;
 	onSaveRemarks: (id: string, remarks: string | null) => Promise<unknown>;
 	onSaveQuote: (id: string, quotedAmount: number | null) => Promise<unknown>;
@@ -675,6 +791,7 @@ function RequestEditForm({
 	fromPlan,
 	toPlan,
 	plan,
+	requestedPlan,
 	isSaving,
 	onSaveRemarks,
 	onSaveQuote,
@@ -683,6 +800,26 @@ function RequestEditForm({
 	onDone,
 }: RequestEditFormProps) {
 	const negotiable = isPriceNegotiable(request);
+	/**
+	 * A POS quote buys an ADD-ON, not a plan: resolving it leaves the venue on
+	 * its plan and bills the agreed price on top. Borrowing the plan-change
+	 * wording ("From plan → To plan") read as a replacement and made the admin
+	 * expect the venue to leave Pro, so an add-on request is labelled as one.
+	 *
+	 * The agency's Custom tier is the same negotiation with one difference: it
+	 * REPLACES the tier price rather than being billed beside it. Both render
+	 * through the block below; `isAddonRequest` is what decides the wording.
+	 */
+	const arrangementName = negotiatedArrangement(request);
+	const isNegotiatedRequest = arrangementName !== null;
+	const isAddonRequest = request.type === "pos_integration_quote";
+	/**
+	 * Each type covers JOINING the arrangement and LEAVING it — an exit names the
+	 * ordinary tier the subscriber is returning to. Rendered with the joining
+	 * labels it read backwards: the plan being kept appeared as the arrangement,
+	 * and the arrangement being dropped appeared as the plan.
+	 */
+	const isExit = isNegotiatedExit(request, requestedPlan);
 	const editableQuote = canEditQuote(request);
 	const [remarks, setRemarks] = useState(request.remarks ?? "");
 	const [quote, setQuote] = useState(request.quotedAmount ?? "");
@@ -699,8 +836,30 @@ function RequestEditForm({
 				: request.type === "pos_integration_quote" && plan
 					? `RM ${formatPrice(plan.price)}`
 					: negotiable
-					? "Set before resolve"
+						? "Set before resolve"
 						: "—";
+
+	/**
+	 * What resolving actually does, in the subscriber's own terms. The two
+	 * arrangements end differently — dropping POS leaves the venue's plan alone,
+	 * while dropping Custom puts the agency back on an ordinary tier's list price
+	 * — so the note says which, rather than one line covering both loosely.
+	 */
+	const negotiatedNote = isExit
+		? request.status === "resolved"
+			? isAddonRequest
+				? "Resolved — the POS add-on has ended. The venue pays its plan only."
+				: `Resolved — the Custom price has ended. The agency is on ${requestedPlan?.name ?? "its tier"} at the list price.`
+			: isAddonRequest
+				? `Cancellation requested — waiting for you. The venue keeps ${requestedPlan?.name ?? "its plan"} and the add-on charge stands until you resolve this.`
+				: `Cancellation requested — waiting for you. The agency stays on Custom at the agreed price until you resolve this, then moves to ${requestedPlan?.name ?? "the tier it named"}.`
+		: request.status === "resolved"
+			? isAddonRequest
+				? "Resolved — billed on top of the venue's plan, which is unchanged."
+				: "Resolved — this is the agency's tier price from now on."
+			: isAddonRequest
+				? "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change."
+				: "Set the price, then Resolve. It becomes the agency's tier price — Custom has no list price to fall back on.";
 
 	const remarksChanged = remarks.trim() !== (request.remarks ?? "").trim();
 	const quoteChanged =
@@ -751,8 +910,10 @@ function RequestEditForm({
 	}
 
 	async function handleResolve() {
-		// Resolve finalises the price. Custom renegotiations must carry an
-		// entered amount; POS quotes can default to the outlet's current tier.
+		// Resolve finalises the price. Entering or re-pricing a negotiation must
+		// carry a figure — Custom has no list price to fall back on. LEAVING one
+		// needs none: the subscriber lands on the ordinary tier it named, and that
+		// tier's own price is what gets stamped.
 		let amount: number | undefined;
 		if (negotiable) {
 			if (rawQuote !== "") {
@@ -761,6 +922,8 @@ function RequestEditForm({
 					return;
 				}
 				amount = parsedQuote;
+			} else if (isExit) {
+				amount = requestedPlan?.price ? Number(requestedPlan.price) : undefined;
 			} else if (request.type === "custom_renegotiation") {
 				toast.error("Set a Custom price before resolving");
 				return;
@@ -813,11 +976,29 @@ function RequestEditForm({
 						<dd className="text-right">{requestTypeLabels[request.type]}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">From plan</dt>
-						<dd className="text-right">{fromPlan}</dd>
+						<dt className="text-muted-foreground">
+							{isExit
+								? `${arrangementName} (ends)`
+								: isAddonRequest
+									? "Plan (stays)"
+									: "From plan"}
+						</dt>
+						<dd className="text-right">
+							{isExit && fromPlan === "—" ? arrangementName : fromPlan}
+						</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">To plan</dt>
+						<dt className="text-muted-foreground">
+							{isExit
+								? isAddonRequest
+									? "Plan (continues)"
+									: "Tier (returns to)"
+								: isAddonRequest
+									? "Add-on"
+									: isNegotiatedRequest
+										? "Tier"
+										: "To plan"}
+						</dt>
 						<dd className="text-right">{toPlan}</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
@@ -826,39 +1007,73 @@ function RequestEditForm({
 					</div>
 				</dl>
 
-				{/* Before/after price reminder — the estimate stays negotiable until Resolve. */}
-				<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
-					<div className="flex items-center gap-2">
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+				{/*
+				 * A negotiated request stands on its own: the arrangement being bought,
+				 * re-priced or dropped, with the price it replaces beside it. The POS
+				 * add-on has no before/after plan at all — the venue's plan is untouched
+				 * throughout, and showing one read as "Scale → Integrate with POS", a
+				 * swap that never happens. Custom does replace the agency's tier price,
+				 * so only the wording differs; the shape is the same, which is the point.
+				 */}
+				{isNegotiatedRequest ? (
+					<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
+						<div className="rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								Before · From plan
+								{isExit
+									? isAddonRequest
+										? "Add-on · cancelling"
+										: "Negotiated tier · resetting to the rate card"
+									: isAddonRequest
+										? "Add-on · billed on top"
+										: "Negotiated tier · replaces the tier price"}
 							</p>
-							<p className="text-lg font-medium">{fromPlan}</p>
+							<p className="text-lg font-medium">{arrangementName}</p>
 							<p className="text-base text-muted-foreground">
-								{plan
-									? plan.name === "Custom"
-										? "Negotiated"
-										: `RM ${formatPrice(plan.price)}`
-									: "—"}
+								{isExit ? "Charge stops on resolve" : estimateLabel}
 							</p>
+							{request.previousNegotiatedAmount && (
+								<p className="text-base text-muted-foreground">
+									Previous price RM{" "}
+									{formatPrice(request.previousNegotiatedAmount)}
+									{isExit ? " — ends" : " — negotiating again"}
+								</p>
+							)}
 						</div>
-						<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
-						<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
-							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								After · To plan
-							</p>
-							<p className="text-lg font-medium">{toPlan}</p>
-							<p className="text-base text-muted-foreground">{estimateLabel}</p>
-						</div>
+						<p className="text-base text-muted-foreground">{negotiatedNote}</p>
 					</div>
-					<p className="text-base text-muted-foreground">
-						{negotiable
-							? request.status === "resolved"
-								? "Resolved — the price is final."
-								: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
-							: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
-					</p>
-				</div>
+				) : (
+					<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
+						<div className="flex items-center gap-2">
+							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+									Before · From plan
+								</p>
+								<p className="text-lg font-medium">{fromPlan}</p>
+								<p className="text-base text-muted-foreground">
+									{plan
+										? plan.name === "Custom"
+											? "Negotiated"
+											: `RM ${formatPrice(plan.price)}`
+										: "—"}
+								</p>
+							</div>
+							<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
+							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
+								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+									After · To plan
+								</p>
+								<p className="text-lg font-medium">{toPlan}</p>
+								<p className="text-base text-muted-foreground">
+									{estimateLabel}
+								</p>
+							</div>
+						</div>
+						<p className="text-base text-muted-foreground">
+							This request type carries no price — only outlet POS quotes and
+							agency Custom renegotiations are negotiable.
+						</p>
+					</div>
+				)}
 
 				<div className="space-y-1.5">
 					<Label htmlFor="request-remarks">Remarks</Label>

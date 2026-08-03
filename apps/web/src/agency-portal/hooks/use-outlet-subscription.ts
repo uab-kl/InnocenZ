@@ -1,5 +1,6 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
+	nextRenewalFrom,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
@@ -10,8 +11,16 @@ import { useAuth } from "@/lib/auth-context";
 import {
 	type CreateAdminRequestInput,
 	createAdminRequest,
+	fetchMyPlanChange,
+	fetchMyPosQuote,
 } from "@/services/admin-request";
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
+import {
+	fetchMyPaymentMethod,
+	type SavePaymentMethodInput,
+	saveMyPaymentMethod,
+} from "@/services/payment-method";
+import { fetchSubscriptions } from "@/services/subscription";
 
 const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -21,6 +30,16 @@ const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export interface PosQuoteContact {
 	email?: string;
 	phone?: string;
+}
+
+/**
+ * Outcome of asking to switch. `reason` carries the server's own words when it
+ * refuses (e.g. "Already on Essential — no switch needed") so the venue is told
+ * what actually happened instead of a blanket "try again".
+ */
+export interface PlanChangeResult {
+	ok: boolean;
+	reason?: string;
 }
 
 /**
@@ -70,10 +89,263 @@ export function useOutletSubscription() {
 		);
 	}, [backed, billingQuery.data]);
 
+	/**
+	 * The admin-managed plan catalog. Reads are open to any signed-in role, which
+	 * is what lets the venue turn the plan it tapped into the real `subscription`
+	 * row id the admin queue and the billing ledger are keyed on, and what tells
+	 * a plan apart from an add-on. Declared here because the reads below need it.
+	 */
+	const plansQuery = useQuery({
+		queryKey: ["subscriptions", "outlet-plan-catalog"],
+		queryFn: () => fetchSubscriptions({ pageSize: 100 }, logout),
+		enabled: backed,
+		staleTime: 5 * 60_000,
+	});
+
+	const outletPlans = useMemo(
+		() =>
+			(plansQuery.data?.data ?? []).filter(
+				(plan) => plan.subscriptionType === "outlet" && plan.kind !== "addon",
+			),
+		[plansQuery.data],
+	);
+
+	/**
+	 * Add-ons (POS Integration) sit in the same ledger as plans, so they are told
+	 * apart by the product they reference. Without this split the venue's add-on
+	 * line — newer than its plan — would be read as its current plan.
+	 */
+	const addonPlanIds = useMemo(
+		() =>
+			new Set(
+				(plansQuery.data?.data ?? [])
+					.filter((plan) => plan.kind === "addon")
+					.map((plan) => plan.id),
+			),
+		[plansQuery.data],
+	);
+
+	const activeSubscription = useMemo(() => {
+		if (!backed) return null;
+		return (
+			sortMemberSubscriptions(billingQuery.data?.data ?? []).find(
+				(sub) =>
+					sub.status === "active" &&
+					!(sub.subscriptionId && addonPlanIds.has(sub.subscriptionId)),
+			) ?? null
+		);
+	}, [backed, billingQuery.data, addonPlanIds]);
+
+	/** The venue's live POS add-on, at the price the admin agreed. */
+	const activeAddon = useMemo(() => {
+		if (!backed) return null;
+		return (
+			sortMemberSubscriptions(billingQuery.data?.data ?? []).find(
+				(sub) =>
+					sub.status === "active" &&
+					sub.subscriptionId &&
+					addonPlanIds.has(sub.subscriptionId),
+			) ?? null
+		);
+	}, [backed, billingQuery.data, addonPlanIds]);
+
+	const activePlanName = activeSubscription?.planName ?? null;
+
+	/**
+	 * When this venue is next billed. The rule lives in subscription-record.ts
+	 * because the agency screen bills on the same rule — two copies is how one of
+	 * them ends up a month out.
+	 */
+	const nextRenewalDate = useMemo<Date | null>(
+		() =>
+			nextRenewalFrom(
+				activeSubscription?.startedAt,
+				activeSubscription?.billingCycle,
+			),
+		[activeSubscription],
+	);
+
+	/**
+	 * The venue's own outstanding POS-integration quote, from the server — so the
+	 * "Request sent" state survives a refresh instead of resetting to a button
+	 * that invites the venue to ask a second time.
+	 */
+	const posQuoteQuery = useQuery({
+		queryKey: ["admin-request", "mine", "pos-quote"],
+		queryFn: () => fetchMyPosQuote(logout),
+		enabled: backed,
+		staleTime: 15_000,
+	});
+
 	const posQuoteMut = useMutation({
 		mutationFn: (input: CreateAdminRequestInput) =>
 			createAdminRequest(input, logout),
+		onSuccess: () => void posQuoteQuery.refetch(),
 	});
+
+	/**
+	 * The venue's saved card. Real, and the only source — the page used to print
+	 * a hardcoded "Visa ···· 4242", which is a card nobody owns.
+	 *
+	 * Scoped from the session server-side; `outletId` is sent so an operator who
+	 * holds several venues edits the right one's card, and the server checks it
+	 * against the venues they actually hold.
+	 */
+	const cardQuery = useQuery({
+		queryKey: ["payment-method", "mine", outletId ?? "none"],
+		queryFn: () => fetchMyPaymentMethod(logout, outletId ?? undefined),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const cardMut = useMutation({
+		mutationFn: (input: SavePaymentMethodInput) =>
+			saveMyPaymentMethod(input, logout),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Save the venue's card. `last4` and `brand` are derived in the CALLER from
+	 * the number typed, which is discarded there — this only ever carries four
+	 * digits, and the server rejects anything longer.
+	 */
+	const saveCard = async (
+		input: Omit<SavePaymentMethodInput, "outletId">,
+	): Promise<{ ok: boolean; reason?: string }> => {
+		try {
+			await cardMut.mutateAsync({
+				...input,
+				outletId: outletId && UUID_RE.test(outletId) ? outletId : undefined,
+			});
+			return { ok: true };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, reason: message };
+		}
+	};
+
+	/** Match a plan by name, case/space-insensitively ("Pro" -> the Pro row). */
+	const findPlan = (label: string) =>
+		outletPlans.find(
+			(plan) => plan.name.trim().toLowerCase() === label.trim().toLowerCase(),
+		) ?? null;
+
+	/**
+	 * This venue's own outstanding switch, straight from the server.
+	 *
+	 * It used to be React state only, so a refresh forgot that the venue had
+	 * already asked — the switch buttons came back, the venue tapped again, and
+	 * the admin queue filled with duplicate requests for one decision. Reading it
+	 * back means the "awaiting admin" state survives a refresh and clears by
+	 * itself the moment the admin approves or declines.
+	 */
+	const pendingQuery = useQuery({
+		queryKey: ["admin-request", "mine", "plan-change"],
+		queryFn: () => fetchMyPlanChange(logout),
+		enabled: backed,
+		staleTime: 15_000,
+	});
+
+	/** The plan name the venue is waiting on, or null when nothing is pending. */
+	const pendingPlanLabel = useMemo<string | null>(() => {
+		const requestedId = pendingQuery.data?.requestedPlanId;
+		if (!requestedId) return null;
+		return (
+			(plansQuery.data?.data ?? []).find((plan) => plan.id === requestedId)
+				?.name ?? null
+		);
+	}, [pendingQuery.data, plansQuery.data]);
+
+	const planChangeMut = useMutation({
+		mutationFn: (input: CreateAdminRequestInput) =>
+			createAdminRequest(input, logout),
+		// Re-read the server's answer so the badge reflects what was actually filed.
+		onSuccess: () => void pendingQuery.refetch(),
+	});
+
+	/**
+	 * Ask the admin to move this venue onto another plan.
+	 *
+	 * An outlet switch is a REQUEST, not an act: the backend files it as
+	 * `admin_request` (type `plan_change`, status `pending`) and only an admin
+	 * approval writes the `member_subscription` ledger. So the venue's own screen
+	 * must not claim the new plan is live — see the caller, which shows "waiting
+	 * for admin" rather than switching the Current pill.
+	 *
+	 * Returns false when the plan cannot be resolved against the real catalog, so
+	 * the caller can say so instead of showing a success it did not get.
+	 */
+	const requestPlanChange = async (params: {
+		toPlanLabel: string;
+		fromPlanLabel?: string;
+		contact?: PosQuoteContact;
+	}): Promise<PlanChangeResult> => {
+		if (!identity) return { ok: false };
+		const target = findPlan(params.toPlanLabel);
+		if (!target) {
+			return {
+				ok: false,
+				reason: `${params.toPlanLabel} is not in the InnocenZ plan list — contact admin`,
+			};
+		}
+		const from = params.fromPlanLabel ? findPlan(params.fromPlanLabel) : null;
+		const email = params.contact?.email?.trim();
+		try {
+			await planChangeMut.mutateAsync({
+				type: "plan_change",
+				subscriberType: "outlet",
+				subscriberId: UUID_RE.test(identity.outletId)
+					? identity.outletId
+					: undefined,
+				subscriberName: identity.outletName,
+				currentPlanId: from?.id,
+				requestedPlanId: target.id,
+				contactEmail: email && EMAIL_RE.test(email) ? email : undefined,
+				contactPhone: params.contact?.phone?.trim() || undefined,
+				message: `Requesting a switch${
+					from ? ` from ${from.name}` : ""
+				} to ${target.name} (RM ${target.price} / ${target.billingCycle}).`,
+			});
+			return { ok: true };
+		} catch (error) {
+			// The server refuses for reasons the venue can act on ("Already on
+			// Essential — no switch needed"). Swallowing that behind a generic
+			// "try again" sent one venue round in circles, so pass it through.
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			// Its plan may have moved under us; re-read so the card is honest.
+			void billingQuery.refetch();
+			void pendingQuery.refetch();
+			return { ok: false, reason: message };
+		}
+	};
+
+	/**
+	 * Ask to come OFF the POS add-on and go back to plan-only billing.
+	 *
+	 * Filed as the same POS request type but naming the venue's PLAN as the
+	 * target — that is what tells the admin (and the resolve handler) this is an
+	 * exit, ending the add-on line instead of starting another one. It lands in
+	 * the same Plan Request inbox, so the admin who agreed the price sees it
+	 * stop as well as start.
+	 */
+	const requestPosRemoval = async (): Promise<boolean> => {
+		if (!identity) return false;
+		const current = activePlanName ? findPlan(activePlanName) : null;
+		if (!current) return false;
+		await posQuoteMut.mutateAsync({
+			type: "pos_integration_quote",
+			subscriberType: "outlet",
+			subscriberId: UUID_RE.test(identity.outletId)
+				? identity.outletId
+				: undefined,
+			subscriberName: identity.outletName,
+			requestedPlanId: current.id,
+			message: `Requesting to remove POS integration and stay on ${current.name} only.`,
+		});
+		return true;
+	};
 
 	const requestPosQuote = async (contact: PosQuoteContact = {}) => {
 		if (!identity) return;
@@ -94,8 +366,40 @@ export function useOutletSubscription() {
 	return {
 		backed,
 		billingHistory,
+		activePlanName,
+		/** Real next billing date from the ledger; null when nothing is active. */
+		nextRenewalDate,
+		/** True while a POS-integration quote is with the admin (server truth). */
+		posQuotePending: Boolean(posQuoteQuery.data),
+		/**
+		 * WHICH POS request is open — a cancellation names the plan the venue is
+		 * keeping, everything else is a quote or re-quote. The card blocks only the
+		 * action already asked for, so a venue that asked for a new price can still
+		 * change its mind and drop POS instead.
+		 */
+		posRequestKind: posQuoteQuery.data
+			? posQuoteQuery.data.requestedPlanId
+				? ("cancel" as const)
+				: ("requote" as const)
+			: null,
+		/** Live POS add-on at the agreed price, once the admin has resolved it. */
+		addonName: activeAddon?.planName ?? null,
+		addonAmountRm: activeAddon ? Number(activeAddon.amount) : null,
+		addonBillingCycle: activeAddon?.billingCycle ?? null,
+		/** Plan awaiting admin approval — survives a refresh; null once answered. */
+		pendingPlanLabel,
+		/** The venue's saved card, or null when it has never saved one. */
+		card: cardQuery.data ?? null,
+		isCardLoading: cardQuery.isLoading,
+		isSavingCard: cardMut.isPending,
+		saveCard,
 		isLoading: billingQuery.isLoading,
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,
+		requestPosRemoval,
+		requestPlanChange,
+		isRequestingPlanChange: planChangeMut.isPending,
+		/** False until the catalog has loaded — the switch cannot be filed yet. */
+		planCatalogReady: outletPlans.length > 0,
 	};
 }

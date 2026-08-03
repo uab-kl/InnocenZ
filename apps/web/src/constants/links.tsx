@@ -4,7 +4,7 @@ import {
 	FileText,
 	Handshake,
 	LayoutDashboard,
-	LayoutGrid,
+	// LayoutGrid, // only used by the hidden Jobs & Special Services entry below
 	ReceiptText,
 	Settings,
 	Shield,
@@ -111,13 +111,16 @@ export const sidebarSections: SidebarSection[] = [
 				icon: ArrowRightLeft,
 				allowedPermission: ["*"],
 			},
-			{
-				key: "sidebar-service-other",
-				title: "Jobs & Special Services",
-				href: "/admin/service/other",
-				icon: LayoutGrid,
-				allowedPermission: ["*"],
-			},
+			// Hidden on request (30 Jul 2026): Jobs & Special Services no longer
+			// shows in the admin sidebar. The route and page code still exist —
+			// uncomment this entry (and the LayoutGrid import above) to restore it.
+			// {
+			// 	key: "sidebar-service-other",
+			// 	title: "Jobs & Special Services",
+			// 	href: "/admin/service/other",
+			// 	icon: LayoutGrid,
+			// 	allowedPermission: ["*"],
+			// },
 			{
 				key: "sidebar-service-payment-voucher",
 				title: "Payment Vouchers",

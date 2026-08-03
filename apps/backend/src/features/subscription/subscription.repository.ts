@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { Subscription, SubscriptionTable, SubscriptionInsertType, SubscriptionType } from './subscription.model.js';
 import { RoleTable } from '@/features/rbac/role/role.model.js';
@@ -32,6 +32,21 @@ export class SubscriptionRepositoryClass {
       return rows[0] ?? null;
     } catch (error) {
       logger.error('[SubscriptionRepository.getSubscriptionById] Error:', error);
+      return null;
+    }
+  }
+
+  /** An add-on product by name, e.g. 'POS Integration' (migration 0081). */
+  async findAddonByName(name: string): Promise<Subscription | null> {
+    try {
+      const [row] = await db
+        .select()
+        .from(SubscriptionTable)
+        .where(and(eq(SubscriptionTable.name, name), eq(SubscriptionTable.kind, 'addon')))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[SubscriptionRepository.findAddonByName] Error:', error);
       return null;
     }
   }

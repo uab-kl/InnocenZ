@@ -1,14 +1,48 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import {
+	addDaysToIso,
+	getLiveTodayIso,
+	getPayrollWeekSundayIso,
+} from "@agency-portal/lib/demo-clock";
+import {
+	nextRenewalFrom,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
 } from "@agency-portal/lib/subscription-record";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import {
+	type CreateAdminRequestInput,
+	createAdminRequest,
+	fetchMyCustomQuote,
+	fetchMyPlanChange,
+} from "@/services/admin-request";
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
+import {
+	fetchMyPaymentMethod,
+	type SavePaymentMethodInput,
+	saveMyPaymentMethod,
+} from "@/services/payment-method";
+import { fetchPaymentVouchers } from "@/services/payment-voucher";
 import { fetchSubscriptions, type Subscription } from "@/services/subscription";
+
+const UUID_RE =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The agency tier priced per agency rather than off the rate card. */
+const CUSTOM = "Custom";
+
+/**
+ * Outcome of asking to switch. `reason` carries the server's own words when it
+ * refuses (e.g. "Already on Growth — no switch needed"), so the agency is told
+ * what actually happened instead of a blanket "try again".
+ */
+export interface AgencyPlanChangeResult {
+	ok: boolean;
+	reason?: string;
+}
 
 /** Rate-card plan shape the Subscription screen renders (demo-plan compatible). */
 export interface AgencyRatePlan {
@@ -137,12 +171,306 @@ export function useAgencySubscription() {
 		[memberQuery.data],
 	);
 
+	/**
+	 * When this agency is next charged — its subscription start rolled forward by
+	 * the billing cycle. Same rule as the outlet's, from one place: the screen
+	 * used to print a demo-clock date that had nothing to do with the ledger.
+	 */
+	const nextRenewalDate = useMemo<Date | null>(
+		() => nextRenewalFrom(current?.startedAt, current?.billingCycle),
+		[current],
+	);
+
+	/**
+	 * The agency's saved card. The screen printed a hardcoded "Visa ···· 4242"
+	 * whose Update button only raised a toast — a card nobody owns, that nothing
+	 * could ever be billed to.
+	 */
+	const cardQuery = useQuery({
+		queryKey: ["payment-method", "mine", agencyId ?? "none"],
+		queryFn: () => fetchMyPaymentMethod(logout),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const cardMut = useMutation({
+		mutationFn: (input: SavePaymentMethodInput) =>
+			saveMyPaymentMethod(input, logout),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Save the agency's card. No `outletId`: an agency session resolves to its own
+	 * agency server-side, and passing one would be meaningless here.
+	 */
+	const saveCard = async (
+		input: Omit<SavePaymentMethodInput, "outletId">,
+	): Promise<{ ok: boolean; reason?: string }> => {
+		try {
+			await cardMut.mutateAsync(input);
+			return { ok: true };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, reason: message };
+		}
+	};
+
+	/** Whether this agency is on the negotiated tier today, and at what price. */
+	const onCustom = current?.planName === CUSTOM;
+	const customAmountRm = onCustom ? Number(current?.amount ?? 0) : null;
+
+	/** Match a catalog plan by name, case/space-insensitively. */
+	const findPlan = (label: string): Subscription | null =>
+		(plansQuery.data?.data ?? []).find(
+			(plan) =>
+				plan.subscriptionType === "agency" &&
+				plan.name.trim().toLowerCase() === label.trim().toLowerCase(),
+		) ?? null;
+
+	/**
+	 * This agency's own outstanding requests, read back from the server — the
+	 * same pair the outlet reads. Without them the "waiting for admin" state
+	 * lived only in React: a refresh forgot it, the agency asked again, and the
+	 * admin queue filled with duplicates for one decision.
+	 */
+	const pendingQuery = useQuery({
+		queryKey: ["admin-request", "mine", "plan-change"],
+		queryFn: () => fetchMyPlanChange(logout),
+		enabled: backed,
+		staleTime: 15_000,
+	});
+
+	const customQuery = useQuery({
+		queryKey: ["admin-request", "mine", "custom-quote"],
+		queryFn: () => fetchMyCustomQuote(logout),
+		enabled: backed,
+		staleTime: 15_000,
+	});
+
+	const planNameById = useMemo(
+		() => new Map((plansQuery.data?.data ?? []).map((p) => [p.id, p.name])),
+		[plansQuery.data],
+	);
+
+	/**
+	 * PVs this agency issued in the current payroll week, from the REAL vouchers.
+	 *
+	 * The tier is not a choice — it follows this number — so it has to come from
+	 * the ledger of vouchers, not from the demo store's PV list, which is empty
+	 * for a real agency and would read as "0 PV" for everyone. Null while the
+	 * count is unknown (loading, or a demo session), which is what stops the
+	 * caller acting on a number it does not have yet.
+	 */
+	const vouchersQuery = useQuery({
+		queryKey: ["agency", "subscription", "weekly-pv"],
+		queryFn: () => fetchPaymentVouchers({ pageSize: 500 }, logout),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const weeklyPvCount = useMemo<number | null>(() => {
+		if (!backed || vouchersQuery.isLoading || !vouchersQuery.data) return null;
+		const weekStart = getPayrollWeekSundayIso(getLiveTodayIso());
+		const weekEnd = addDaysToIso(weekStart, 6);
+		return vouchersQuery.data.data.filter((pv) => {
+			// Prefer the voucher's own payroll week; fall back to when it was
+			// issued, since a voucher without a week still belongs to one.
+			const day = (pv.weekStart ?? pv.issuedDate ?? "").slice(0, 10);
+			return day >= weekStart && day <= weekEnd;
+		}).length;
+	}, [backed, vouchersQuery.isLoading, vouchersQuery.data]);
+
+	/** The tier this agency is waiting on, or null when nothing is pending. */
+	const pendingPlanLabel = useMemo<string | null>(() => {
+		const requestedId = pendingQuery.data?.requestedPlanId;
+		return requestedId ? (planNameById.get(requestedId) ?? null) : null;
+	}, [pendingQuery.data, planNameById]);
+
+	/**
+	 * What the open Custom request asks for: joining/re-pricing Custom, or coming
+	 * off it onto the named tier. Null when there is no open request.
+	 */
+	const customRequestLabel = useMemo<string | null>(() => {
+		const open = customQuery.data;
+		if (!open) return null;
+		const requested = open.requestedPlanId
+			? (planNameById.get(open.requestedPlanId) ?? null)
+			: null;
+		if (!requested || requested === CUSTOM) return CUSTOM;
+		return `Cancel · ${requested} only`;
+	}, [customQuery.data, planNameById]);
+
+	/**
+	 * WHICH Custom request is open — naming an ordinary tier is an exit, anything
+	 * else is a quote or re-quote. Only that action is blocked: an agency that
+	 * asked for a new price must still be able to decide it would rather leave
+	 * Custom, the same way a venue can change its mind about POS.
+	 */
+	const customRequestKind = useMemo<"requote" | "exit" | null>(() => {
+		const open = customQuery.data;
+		if (!open) return null;
+		const requested = open.requestedPlanId
+			? (planNameById.get(open.requestedPlanId) ?? null)
+			: null;
+		return requested && requested !== CUSTOM ? "exit" : "requote";
+	}, [customQuery.data, planNameById]);
+
+	const requestMut = useMutation({
+		mutationFn: (input: CreateAdminRequestInput) =>
+			createAdminRequest(input, logout),
+		// Re-read the server's answer so the badge reflects what was actually filed.
+		// The ledger too: an ordinary agency switch is applied on the spot
+		// ('direct'), so the current tier and the record below change immediately.
+		onSuccess: () => {
+			void pendingQuery.refetch();
+			void customQuery.refetch();
+			void memberQuery.refetch();
+			void historyQuery.refetch();
+		},
+	});
+
+	const fileRequest = async (
+		input: Omit<CreateAdminRequestInput, "subscriberType" | "subscriberName">,
+	): Promise<AgencyPlanChangeResult> => {
+		if (!identity || !agencyId) return { ok: false };
+		try {
+			await requestMut.mutateAsync({
+				...input,
+				subscriberType: "agency",
+				subscriberId: UUID_RE.test(agencyId) ? agencyId : undefined,
+				subscriberName: identity.orgName,
+			});
+			return { ok: true };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			// Its plan may have moved under us; re-read so the card is honest.
+			void memberQuery.refetch();
+			return { ok: false, reason: message };
+		}
+	};
+
+	/**
+	 * Move this agency onto the tier its PV volume implies.
+	 *
+	 * An agency does NOT choose its tier — the rate card is a band table and the
+	 * week’s PV count picks the row. So this is driven by the volume rule, never
+	 * by a button, and is filed as a `plan_change`, which the server applies
+	 * straight away ('direct'): every banded tier has a list price, so there is
+	 * nothing for an admin to decide.
+	 */
+	const applyAutoTier = async (
+		toPlanLabel: string,
+		weeklyPv: number,
+	): Promise<AgencyPlanChangeResult> => {
+		const target = findPlan(toPlanLabel);
+		if (!target) {
+			return {
+				ok: false,
+				reason: `${toPlanLabel} is not in the InnocenZ agency plan list — contact admin`,
+			};
+		}
+		return fileRequest({
+			type: "plan_change",
+			currentPlanId: current?.subscriptionId ?? undefined,
+			requestedPlanId: target.id,
+			message: `Auto-tier: ${weeklyPv} PV issued this payroll week puts this agency on ${target.name} (RM ${target.price} / ${target.billingCycle}).`,
+		});
+	};
+
+	/**
+	 * Tell the admin this agency needs a Custom price — the 151+ PV band has no
+	 * list price, so there is nothing to auto-apply and the tier cannot move until
+	 * a human agrees a figure.
+	 *
+	 * Filed as `custom_renegotiation` (pending), never a plan_change: a plan_change
+	 * is applied on the spot, which would put the agency on Custom at its RM 0
+	 * catalog placeholder. That is exactly how Atlas ended up billing nothing.
+	 */
+	const notifyAdminForCustom = async (
+		weeklyPv: number,
+	): Promise<AgencyPlanChangeResult> => {
+		const custom = findPlan(CUSTOM);
+		if (!custom) {
+			return {
+				ok: false,
+				reason: "Custom is not in the InnocenZ agency plans",
+			};
+		}
+		return fileRequest({
+			type: "custom_renegotiation",
+			currentPlanId: current?.subscriptionId ?? undefined,
+			requestedPlanId: custom.id,
+			message: onCustom
+				? `Requesting a new Custom price — ${weeklyPv} PV issued this payroll week.`
+				: `${weeklyPv} PV issued this payroll week is past the 150 PV rate card. Requesting a Custom price.`,
+		});
+	};
+
+	/**
+	 * Reset off Custom, back onto the banded rate card.
+	 *
+	 * Filed as a `plan_change`, which the server applies ON THE SPOT for an
+	 * agency ('direct') — the same shape as the Custom → Growth row already in
+	 * the queue. The tier it lands on has a list price and was chosen by PV
+	 * volume rather than by anyone's judgement, so there is nothing for an admin
+	 * to approve; the row exists so they can SEE it, and Plan Request shows it
+	 * because it touches Custom.
+	 *
+	 * Re-pricing is the opposite case and stays a pending `custom_renegotiation`:
+	 * a figure nobody has agreed cannot bill anything.
+	 */
+	const requestLeaveCustom = async (
+		toPlanLabel: string,
+		weeklyPv: number,
+	): Promise<AgencyPlanChangeResult> => {
+		const target = findPlan(toPlanLabel);
+		if (!target) {
+			return { ok: false, reason: `${toPlanLabel} is not in the plan list` };
+		}
+		return fileRequest({
+			type: "plan_change",
+			currentPlanId: current?.subscriptionId ?? undefined,
+			requestedPlanId: target.id,
+			message: `Reset off Custom to ${target.name} — ${weeklyPv} PV issued this payroll week (RM ${target.price} / ${target.billingCycle}).`,
+		});
+	};
+
 	return {
 		backed,
 		plans,
 		billingHistory,
 		currentSubscriptionId: current?.subscriptionId ?? null,
 		currentPlanName: current?.planName ?? null,
+		/** Real next charge date from the ledger; null when nothing is active. */
+		nextRenewalDate,
+		/** The agency's saved card, or null when it has never saved one. */
+		card: cardQuery.data ?? null,
+		isCardLoading: cardQuery.isLoading,
+		isSavingCard: cardMut.isPending,
+		saveCard,
+		/** Real amount billed for the current tier; null when nothing is active. */
+		currentAmountRm: current ? Number(current.amount) : null,
+		onCustom,
+		customAmountRm,
+		/** Tier awaiting admin approval — survives a refresh; null once answered. */
+		pendingPlanLabel,
+		/** True while a Custom price request is with the admin (server truth). */
+		customRequestPending: Boolean(customQuery.data),
+		customRequestLabel,
+		customRequestKind,
+		/**
+		 * PVs issued this payroll week, from the real vouchers. Null while unknown
+		 * — the volume rule must not act on a number it does not have.
+		 */
+		weeklyPvCount,
+		applyAutoTier,
+		notifyAdminForCustom,
+		requestLeaveCustom,
+		isRequesting: requestMut.isPending,
+		/** False until the catalog has loaded — no switch can be filed yet. */
+		planCatalogReady: plans.length > 0,
 		isLoading: plansQuery.isLoading || memberQuery.isLoading,
 		isHistoryLoading: historyQuery.isLoading,
 	};

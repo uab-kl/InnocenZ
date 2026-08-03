@@ -87,6 +87,9 @@ export class MemberSubscriptionControllerClass {
         typeof req.query.search === 'string' && req.query.search.trim().length > 0
           ? req.query.search.trim()
           : undefined,
+      // ?latestPerSubscriber=true → the plan each subscriber is on now, one row
+      // each, instead of every plan it has ever held.
+      latestPerSubscriber: req.query.latestPerSubscriber === 'true',
     };
   }
 

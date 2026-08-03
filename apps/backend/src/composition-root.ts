@@ -32,6 +32,8 @@ import { PlatformConfigRepositoryClass } from '@/features/platform-config/platfo
 import { PlatformConfigControllerClass } from '@/features/platform-config/platform-config.controller.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { MemberSubscriptionControllerClass } from '@/features/member-subscription/member-subscription.controller.js';
+import { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
+import { PaymentMethodControllerClass } from '@/features/payment-method/payment-method.controller.js';
 import { OutletTransactionRepositoryClass } from '@/features/outlet-transaction/outlet-transaction.repository.js';
 import { OutletTransactionControllerClass } from '@/features/outlet-transaction/outlet-transaction.controller.js';
 import { AdminRequestRepositoryClass } from '@/features/admin-request/admin-request.repository.js';
@@ -122,11 +124,28 @@ export const orgScopeDeps = {
 
 export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository, orgScopeDeps);
 
+// The card a venue/agency pays with. Same scope resolver: the owner comes from
+// the session, never from the request body.
+export const paymentMethodRepository = new PaymentMethodRepositoryClass();
+export const paymentMethodController = new PaymentMethodControllerClass(
+  paymentMethodRepository,
+  orgScopeDeps,
+);
+
 export const outletTransactionRepository = new OutletTransactionRepositoryClass();
 export const outletTransactionController = new OutletTransactionControllerClass(outletTransactionRepository);
 
 export const adminRequestRepository = new AdminRequestRepositoryClass();
-export const adminRequestController = new AdminRequestControllerClass(adminRequestRepository);
+// Approving a plan change writes the member_subscription ledger, so the
+// controller also holds the ledger + plan-catalog repositories.
+export const adminRequestController = new AdminRequestControllerClass(
+  adminRequestRepository,
+  memberSubscriptionRepository,
+  subscriptionRepository,
+  // A venue reads its OWN pending switch through the same scope resolver the
+  // other member-facing controllers use — never from a client-supplied id.
+  orgScopeDeps,
+);
 
 export const prRepository = new PrRepositoryClass();
 

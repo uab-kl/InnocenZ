@@ -1,4 +1,4 @@
-import { and, desc, eq, inArray, isNotNull, ne, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNotNull, ne, not, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -8,6 +8,7 @@ import {
   AdminRequestFilter,
   AdminRequestInsertType,
   AdminRequestTable,
+  AdminRequestType,
 } from './admin-request.model.js';
 
 export type NegotiatedByRoleRow = {
@@ -18,21 +19,102 @@ export type NegotiatedByRoleRow = {
 };
 
 export class AdminRequestRepositoryClass {
+  /**
+   * "Touches a negotiated arrangement" — the POS add-on or the Custom tier, in
+   * either direction. The two admin inboxes are split on exactly this: Plan
+   * Request owns everything that carries a negotiated price, Plan Change owns
+   * ordinary plan-to-plan switches.
+   *
+   * The second half matters: a venue moving Enterprise → Custom files a plain
+   * `plan_change`, so type alone would file it under the wrong page.
+   */
+  private negotiatedClause(): SQL {
+    return sql`(
+      ${AdminRequestTable.type} in ('pos_integration_quote', 'custom_renegotiation')
+      or (
+        ${AdminRequestTable.type} = 'plan_change'
+        and exists (
+          select 1 from "main"."subscription" s
+          where s.id in (${AdminRequestTable.currentPlanId}, ${AdminRequestTable.requestedPlanId})
+            and (s.name = 'Custom' or s.kind = 'addon')
+        )
+      )
+    )`;
+  }
+
   private buildConditions(filter?: AdminRequestFilter): SQL | undefined {
     const conditions: SQL[] = [];
     if (filter?.type) {
-      conditions.push(
-        Array.isArray(filter.type)
-          ? inArray(AdminRequestTable.type, filter.type)
-          : eq(AdminRequestTable.type, filter.type),
-      );
+      const typeClause = Array.isArray(filter.type)
+        ? inArray(AdminRequestTable.type, filter.type)
+        : eq(AdminRequestTable.type, filter.type);
+      // Leaving a negotiated arrangement belongs in the same inbox as entering
+      // one: when an agency switches OFF Custom the agreed price stops applying,
+      // and the admin who set that price needs to see it end. Such a row is a
+      // plain plan_change, so without this it would only appear on the Plan
+      // Change page and the negotiation would look open forever.
+      conditions.push(typeClause);
+    }
+
+    if (filter?.negotiated) {
+      const clause = this.negotiatedClause();
+      conditions.push(filter.negotiated === 'only' ? clause : not(clause));
     }
     if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
     if (filter?.status) conditions.push(eq(AdminRequestTable.status, filter.status));
+    if (filter?.search) conditions.push(ilike(AdminRequestTable.subscriberName, `%${filter.search}%`));
     if (filter?.subscriberType) conditions.push(eq(AdminRequestTable.subscriberType, filter.subscriberType));
     const requestedOn = buildMultiDayWhere(AdminRequestTable.createdAt, filter?.dates);
     if (requestedOn) conditions.push(requestedOn);
     return conditions.length > 0 ? and(...conditions) : undefined;
+  }
+
+  /**
+   * One row per subscriber — the most recent request only.
+   *
+   * A venue that taps "Switch to…" three times files three requests, and the
+   * admin queue then shows three competing answers for the same venue, where
+   * approving an older one would apply a plan the venue has since moved off.
+   * Superseded requests are NOT deleted: they stay in the table as the record of
+   * what was asked, they are simply not offered for action.
+   *
+   * Rows with no `subscriber_id` (a request that named no organisation) each
+   * count as their own subscriber, so none of them swallow the others.
+   */
+  private async listLatestPerSubscriber(params: {
+    whereClause: SQL | undefined;
+    page: number;
+    pageSize: number;
+  }): Promise<{ records: AdminRequest[]; totalCount: number }> {
+    const { whereClause, page, pageSize } = params;
+    const key = sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`;
+
+    // An OUTSTANDING request wins over an answered one, then the newest.
+    // Without the first clause the row picked is whatever sorts first among
+    // equal timestamps: a venue that filed two switches in the same minute and
+    // had one approved could show the approved row in the admin queue while its
+    // own screen showed the other still awaiting — the two screens reading the
+    // same subscriber by different rules.
+    const outstandingFirst = sql`(${AdminRequestTable.status} = 'pending') desc`;
+
+    const latest = db
+      .selectDistinctOn([sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`])
+      .from(AdminRequestTable)
+      .where(whereClause)
+      .orderBy(key, outstandingFirst, desc(AdminRequestTable.createdAt))
+      .as('latest');
+
+    const [countRow] = await db.select({ value: sql<number>`count(*)::int` }).from(latest);
+    const totalCount = Number(countRow?.value ?? 0);
+
+    const records = (await db
+      .select()
+      .from(latest)
+      .orderBy(desc(latest.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)) as AdminRequest[];
+
+    return { records, totalCount };
   }
 
   async listPaginated(params: {
@@ -43,6 +125,10 @@ export class AdminRequestRepositoryClass {
     try {
       const { filter, page, pageSize } = params;
       const whereClause = this.buildConditions(filter);
+
+      if (filter?.latestPerSubscriber) {
+        return await this.listLatestPerSubscriber({ whereClause, page, pageSize });
+      }
 
       const [countRow] = await db
         .select({ value: sql<number>`count(*)::int` })
@@ -62,6 +148,32 @@ export class AdminRequestRepositoryClass {
     } catch (error) {
       logger.error('[AdminRequestRepository.listPaginated] Error:', error);
       return { records: [], totalCount: 0 };
+    }
+  }
+
+  /** The newest request of this type still awaiting an admin, for these subscribers. */
+  async latestPendingByType(
+    subscriberIds: string[],
+    type: AdminRequestType,
+  ): Promise<AdminRequest | null> {
+    try {
+      if (subscriberIds.length === 0) return null;
+      const [row] = await db
+        .select()
+        .from(AdminRequestTable)
+        .where(
+          and(
+            eq(AdminRequestTable.type, type),
+            eq(AdminRequestTable.status, 'pending'),
+            inArray(AdminRequestTable.subscriberId, subscriberIds),
+          ),
+        )
+        .orderBy(desc(AdminRequestTable.createdAt))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[AdminRequestRepository.latestPendingByType] Error:', error);
+      return null;
     }
   }
 

@@ -1,3 +1,4 @@
+import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import {
 	formatRM,
 	IzCard,
@@ -15,6 +16,7 @@ import {
 	AGENCY_SUBSCRIPTION_PLANS,
 	agencySubscriptionBillingForWeeklyPv,
 	agencyWeeklyPvCount,
+	resolveAgencySubscriptionPlanForWeeklyPv,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
@@ -37,12 +39,13 @@ import { format, parseISO } from "date-fns";
 import {
 	Building2,
 	Calendar,
-	CreditCard,
 	Receipt,
+	RotateCcw,
+	Sparkles,
 	TriangleAlert,
 	Users,
 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 const CARD_LAST4 = "4242";
 
@@ -150,6 +153,87 @@ function AgencySubscription() {
 			}));
 	}, [sub.backed, sub.billingHistory, agencyCollections]);
 
+	/**
+	 * What this agency has asked InnocenZ for and not been answered on yet — the
+	 * agency's half of the same handshake the outlet has for its POS add-on.
+	 * Ordinary tier switches never appear here: the server applies those on the
+	 * spot ('direct'), so there is nothing to wait for. Only Custom waits.
+	 */
+	const waitingOn = sub.backed
+		? (sub.customRequestLabel ?? sub.pendingPlanLabel)
+		: null;
+
+	/**
+	 * The volume rule, and the only thing that moves this agency's tier.
+	 *
+	 * An agency does NOT pick a plan — the rate card is a band table and the PVs
+	 * it issued this payroll week choose the row. So there are no switch buttons;
+	 * this effect reconciles what the ledger says with what the volume says:
+	 *
+	 *  • inside the rate card, on the wrong tier → apply the right one (list
+	 *    price, applied on the spot, nothing for an admin to decide)
+	 *  • past 150 PV → NOTIFY THE ADMIN to negotiate, because the 151+ band has
+	 *    no list price. The agency stays on its current tier until they answer.
+	 *  • already on Custom → NOTHING. A negotiated price is not the volume rule's
+	 *    to undo; leaving Custom is the agency pressing Reset, or the admin.
+	 *
+	 * Guarded hard, because this WRITES: only for a real session, only once the
+	 * real PV count and the plan catalog have loaded, never while a request is
+	 * already open, and at most once per mount.
+	 */
+	const autoTierFiled = useRef(false);
+	useEffect(() => {
+		if (!sub.backed || !canEdit) return;
+		if (sub.weeklyPvCount === null || !sub.planCatalogReady) return;
+		if (sub.isLoading || sub.isRequesting) return;
+		if (waitingOn || autoTierFiled.current) return;
+
+		const pv = sub.weeklyPvCount;
+		const banded = resolveAgencySubscriptionPlanForWeeklyPv(pv);
+		const needsCustom = Boolean(banded.renegotiate);
+
+		if (needsCustom && !sub.onCustom) {
+			autoTierFiled.current = true;
+			sub.notifyAdminForCustom(pv).then((r) => {
+				toast(
+					r.ok
+						? `${pv} PV this week — InnocenZ admin notified to negotiate your Custom price`
+						: (r.reason ?? "Could not notify InnocenZ admin — try again"),
+					r.ok ? "success" : "warn",
+				);
+			});
+			return;
+		}
+
+		/*
+		 * ⚠️ NOTHING AUTOMATIC EVER TAKES AN AGENCY OFF CUSTOM. There used to be a
+		 * branch here that reset a Custom agency the moment its weekly PV count sat
+		 * inside the rate card, and it destroyed the admin's work: a price agreed at
+		 * 17:46 was reset at 17:47, then re-quoted and reset again, four times over.
+		 *
+		 * A Custom price is a negotiated agreement between two people. Volume is
+		 * evidence about it, not authority over it — least of all a 0-PV week, which
+		 * is what an agency reads as before its first voucher is issued. Leaving
+		 * Custom is a deliberate act: the agency presses Reset, or the admin ends it.
+		 */
+		if (
+			!needsCustom &&
+			!sub.onCustom &&
+			sub.currentPlanName &&
+			sub.currentPlanName !== banded.label
+		) {
+			autoTierFiled.current = true;
+			sub.applyAutoTier(banded.label, pv).then((r) => {
+				if (r.ok) {
+					toast(
+						`${pv} PV this week — your tier is now ${banded.label}`,
+						"success",
+					);
+				}
+			});
+		}
+	}, [sub, canEdit, waitingOn, toast]);
+
 	if (!agencyCan(agencySubRole, "viewSettings")) {
 		return (
 			<div className="iz-screen">
@@ -167,6 +251,78 @@ function AgencySubscription() {
 
 	const isFinanceReadOnly = agencySubRole === "agency_finance";
 	const renewalDate = nextChargeDate;
+
+	/**
+	 * A real session is billed for the tier in its `member_subscription` row, not
+	 * the one this week's PV count implies. Showing the derived tier told an
+	 * agency on Custom that it was on Starter — the same mistake that had one
+	 * venue displaying another venue's plan.
+	 */
+	const billedTierLabel = sub.backed
+		? (sub.currentPlanName ?? billing.plan.label)
+		: billing.plan.label;
+	/**
+	 * The real next charge, from this agency's own subscription row. The demo
+	 * clock's date sat beside it and disagreed — the screen showed "2 Aug 2026"
+	 * for an agency whose week rolls from its actual start date.
+	 */
+	const realRenewalLabel = sub.nextRenewalDate
+		? sub.nextRenewalDate.toLocaleDateString("en-GB", {
+				day: "numeric",
+				month: "short",
+				year: "numeric",
+			})
+		: null;
+
+	const billedPriceLabel = sub.backed
+		? sub.currentAmountRm
+			? formatRM(sub.currentAmountRm)
+			: sub.onCustom
+				? "Awaiting price"
+				: billing.priceLabel
+		: billing.priceLabel;
+
+	/**
+	 * Leave Custom and go back to the banded rate card.
+	 *
+	 * The ONLY thing an agency can do to its own tier by hand. It is still a
+	 * REQUEST — the admin resolving it is what moves the ledger — because an
+	 * agency must not be able to end a price a human negotiated. Re-negotiating
+	 * is not offered here at all: that is the volume rule's job when the week's
+	 * PVs go past the rate card.
+	 */
+	/**
+	 * Ask the admin to price Custom before the volume rule would.
+	 *
+	 * The rule fires at 151 PV in a settled payroll week, which is the right
+	 * trigger for billing but a poor one for an agency that has just signed a
+	 * client it cannot serve inside the rate card. Same request either way — the
+	 * admin sets the price and nothing bills until they do.
+	 */
+	const handleAskForCustom = () => {
+		const pv = sub.weeklyPvCount ?? 0;
+		sub.notifyAdminForCustom(pv).then((result) => {
+			toast(
+				result.ok
+					? "InnocenZ admin notified — they will quote your Custom price"
+					: (result.reason ?? "Could not notify InnocenZ admin — try again"),
+				result.ok ? "success" : "warn",
+			);
+		});
+	};
+
+	const handleResetToNormal = () => {
+		const pv = sub.weeklyPvCount ?? 0;
+		const banded = resolveAgencySubscriptionPlanForWeeklyPv(pv);
+		sub.requestLeaveCustom(banded.label, pv).then((result) => {
+			toast(
+				result.ok
+					? `Reset off Custom — you are on ${banded.label} now`
+					: (result.reason ?? "Could not send the request — try again"),
+				result.ok ? "success" : "warn",
+			);
+		});
+	};
 
 	// Not `editSettings`: finance is read-only for the card above but is exactly
 	// the role that chases receivables, and it holds both of these.
@@ -227,13 +383,15 @@ function AgencySubscription() {
 							{issuedWeeklyPv} PV{issuedWeeklyPv === 1 ? "" : "s"} issued
 						</p>
 						<p className="iz-tiny iz-muted mt-1">
-							Tier auto-selected from weekly PV volume — no plan changes needed
+							{sub.backed && sub.onCustom
+								? "Custom is priced by InnocenZ admin — PV volume does not change it"
+								: "Tier auto-selected from weekly PV volume — no plan changes needed"}
 						</p>
 					</div>
 					<div className="text-right shrink-0">
-						<IzPill variant="green">{billing.plan.label}</IzPill>
+						<IzPill variant="green">{billedTierLabel}</IzPill>
 						<p className="mt-2 text-lg font-bold text-[var(--iz-gold-l)]">
-							{billing.priceLabel}
+							{billedPriceLabel}
 						</p>
 						<p className="iz-tiny iz-muted2 mt-0.5">
 							{billing.plan.capacityLabel}
@@ -242,16 +400,111 @@ function AgencySubscription() {
 				</div>
 				<p className="iz-tiny iz-muted2 mt-3 border-t border-[var(--iz-line)] pt-2">
 					Next weekly charge {renewalDate}
-					{billing.plan.renegotiate
-						? " · contact InnocenZ admin for custom pricing"
-						: ` · ${billing.priceLabel} based on ${issuedWeeklyPv} PV${issuedWeeklyPv === 1 ? "" : "s"}`}
+					{sub.backed && sub.onCustom
+						? " · at the price agreed with InnocenZ admin"
+						: billing.plan.renegotiate
+							? " · contact InnocenZ admin for custom pricing"
+							: ` · ${billedPriceLabel} based on ${issuedWeeklyPv} PV${issuedWeeklyPv === 1 ? "" : "s"}`}
 				</p>
 			</IzCard>
 
+			{/*
+			 * Custom is the agency's negotiated arrangement — the counterpart to the
+			 * outlet's POS add-on, and handled the same way: InnocenZ admin sets the
+			 * price, the agency can ask for it to be quoted again, and it stands
+			 * until the admin answers. The difference is that Custom REPLACES the
+			 * tier price rather than being billed on top of it.
+			 */}
+			{sub.backed && sub.onCustom && (
+				<>
+					<IzSectionLabel>Negotiated tier</IzSectionLabel>
+					<IzCard className="border-[rgba(139,124,246,.35)] bg-[rgba(139,124,246,.06)]">
+						<div className="flex flex-wrap items-start justify-between gap-3">
+							<div className="min-w-0">
+								<div className="flex flex-wrap items-center gap-2">
+									<p className="font-sora text-base font-bold">Custom</p>
+									<IzPill variant="violet">Negotiated</IzPill>
+									{/* Amber, and alongside — an agency on Custom with an open
+									    request is in both states at once. */}
+									{waitingOn && (
+										<IzPill variant="amber">Price · pending admin</IzPill>
+									)}
+								</div>
+								<p className="iz-tiny iz-muted mt-1">
+									Priced for your agency by InnocenZ admin — it replaces the
+									rate card, so PV volume does not change what you pay.
+								</p>
+							</div>
+							<p className="shrink-0 text-lg font-bold text-[var(--iz-gold-l)]">
+								{sub.customAmountRm
+									? formatRM(sub.customAmountRm)
+									: "Awaiting price"}
+							</p>
+						</div>
+						{canEdit && (
+							<>
+								{waitingOn && (
+									<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
+										InnocenZ admin is negotiating your Custom price — nothing
+										changes until they answer.
+									</p>
+								)}
+								{/*
+								 * TWO ways to change a negotiated tier, and they are not the
+								 * same act. RENEGOTIATE asks the admin for a different figure
+								 * and changes nothing until they answer. RESET leaves Custom
+								 * altogether for the banded tier the agency's PV volume implies,
+								 * and applies straight away because that tier has a list price.
+								 * Neither happens on its own: nothing automatic takes an agency
+								 * off a price two people agreed.
+								 */}
+								<div className="mt-3 grid gap-2 border-t border-[var(--iz-line)] pt-3 sm:grid-cols-2">
+									<div>
+										<button
+											type="button"
+											className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(139,124,246,.4)] bg-[rgba(139,124,246,.1)] px-3 py-2 transition-colors hover:bg-[rgba(139,124,246,.18)] disabled:opacity-60"
+											disabled={sub.isRequesting || Boolean(waitingOn)}
+											onClick={handleAskForCustom}
+										>
+											<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
+											<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
+												{waitingOn ? "Renegotiating…" : "Renegotiate price"}
+											</span>
+										</button>
+										<p className="iz-tiny iz-muted2 mt-1.5">
+											Ask InnocenZ admin for a different figure. Your current
+											price stands until they answer.
+										</p>
+									</div>
+									<div>
+										<button
+											type="button"
+											className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,.03)] px-3 py-2 transition-colors hover:bg-[rgba(255,255,255,.07)] disabled:opacity-60"
+											disabled={sub.isRequesting}
+											onClick={handleResetToNormal}
+										>
+											<RotateCcw className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
+											<span className="iz-tiny font-semibold">
+												Reset to normal subscription
+											</span>
+										</button>
+										<p className="iz-tiny iz-muted2 mt-1.5">
+											Leaves Custom for the tier your weekly PVs fall into,
+											straight away. InnocenZ admin sees it in Plan Request.
+										</p>
+									</div>
+								</div>
+							</>
+						)}
+					</IzCard>
+				</>
+			)}
+
 			<IzSectionLabel>Rate card</IzSectionLabel>
 			<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-				Reference tiers — your charge each week follows PVs issued in that
-				payroll week
+				{sub.backed
+					? "Your tier is chosen by the PVs you issue each payroll week — there is nothing to pick. Past 150 PV the rate card runs out and InnocenZ admin is notified to negotiate a Custom price."
+					: "Reference tiers — your charge each week follows PVs issued in that payroll week"}
 			</p>
 			<div className="grid grid-cols-2 gap-2">
 				{ratePlans.map((plan) => {
@@ -299,6 +552,64 @@ function AgencySubscription() {
 								</div>
 							</div>
 							<p className="iz-tiny iz-muted mt-2">{plan.description}</p>
+							{/*
+							 * The ONE actionable tile on an otherwise read-only rate card.
+							 * Custom is the only band with no list price, so it is the only
+							 * one a human has to be involved in — and an agency that knows
+							 * its volume is about to pass 150 should not have to wait for the
+							 * week to prove it. Every other tier is chosen by PV count alone,
+							 * which is why no other tile has a button.
+							 */}
+							{sub.backed &&
+								canEdit &&
+								plan.label === "Custom" &&
+								!isBilledTier && (
+									<div className="mt-2">
+										{waitingOn ? (
+											/*
+											 * A waiting state, not a dead button. The disabled button
+											 * that used to sit here read as something broken rather
+											 * than something in progress — the agency cannot act, so
+											 * it should not be shown a control at all.
+											 */
+											<div className="flex items-center gap-2 rounded-lg border border-[rgba(244,183,64,.28)] bg-[var(--iz-amber-bg,rgba(244,183,64,.12))] px-2.5 py-2">
+												<span className="relative flex h-2 w-2 shrink-0">
+													<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--iz-amber,#f4b740)] opacity-60" />
+													<span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--iz-amber,#f4b740)]" />
+												</span>
+												<div className="min-w-0">
+													<p className="iz-tiny font-semibold text-[var(--iz-amber,#f4b740)]">
+														Requested · with InnocenZ admin
+													</p>
+													<p className="iz-tiny iz-muted2">
+														They are preparing your price — your current tier is
+														unchanged until then.
+													</p>
+												</div>
+											</div>
+										) : (
+											/*
+											 * Styled to the tile it sits on rather than the neutral
+											 * soft button used elsewhere: Custom carries the violet
+											 * accent everywhere on this screen, and a grey button
+											 * under a violet "Renegotiate Price" read as disabled.
+											 */
+											<button
+												type="button"
+												className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(139,124,246,.4)] bg-[rgba(139,124,246,.1)] px-3 py-2 transition-colors hover:bg-[rgba(139,124,246,.18)] disabled:opacity-60"
+												disabled={sub.isRequesting}
+												onClick={handleAskForCustom}
+											>
+												<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
+												<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
+													{sub.isRequesting
+														? "Sending…"
+														: "Ask admin for a price"}
+												</span>
+											</button>
+										)}
+									</div>
+								)}
 						</IzCard>
 					);
 				})}
@@ -519,38 +830,44 @@ function AgencySubscription() {
 
 			<OutletSection
 				title="Payment method"
-				hint={`Visa ···· ${CARD_LAST4} · next charge ${renewalDate}`}
+				hint={
+					sub.backed
+						? sub.card
+							? `${sub.card.brand} ···· ${sub.card.last4}${realRenewalLabel ? ` · next charge ${realRenewalLabel}` : ""}`
+							: "No card saved yet"
+						: `Visa ···· ${CARD_LAST4} · next charge ${renewalDate}`
+				}
 				collapsible
 				defaultOpen={false}
 				className="!mt-5"
 			>
-				<IzCard flat>
-					<div className="flex items-center gap-2">
-						<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
-						<div>
-							<p className="iz-sm font-semibold">Visa ···· {CARD_LAST4}</p>
-							<p className="iz-tiny iz-muted">
-								Billed weekly from PV usage · current tier {billing.plan.label}{" "}
-								· {billing.priceLabel} · auto-renew
-							</p>
-						</div>
-					</div>
-					{canEdit && (
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft mt-3 w-full"
-							onClick={() =>
-								toast("Card updated for subscription billing", "success")
-							}
-						>
-							Update card
-						</button>
-					)}
-				</IzCard>
+				<PaymentMethodCard
+					card={sub.backed ? sub.card : null}
+					backed={sub.backed}
+					demoLast4={CARD_LAST4}
+					canEdit={canEdit}
+					isLoading={sub.backed && sub.isCardLoading}
+					isSaving={sub.isSavingCard}
+					billedLabel={`Billed weekly from PV usage · current tier ${billedTierLabel} · ${billedPriceLabel}`}
+					onSave={async (input) => {
+						const result = await sub.saveCard(input);
+						toast(
+							result.ok
+								? "Card saved for subscription billing"
+								: (result.reason ?? "Could not save the card — try again"),
+							result.ok ? "success" : "warn",
+						);
+						return result.ok;
+					}}
+				/>
 
 				<div className="mt-2 flex items-center gap-2 iz-tiny iz-muted">
 					<Calendar className="h-3.5 w-3.5" />
-					Next weekly charge {renewalDate}
+					{sub.backed
+						? realRenewalLabel
+							? `Next weekly charge ${realRenewalLabel}`
+							: "No active subscription — nothing to charge"
+						: `Next weekly charge ${renewalDate}`}
 				</div>
 			</OutletSection>
 		</div>

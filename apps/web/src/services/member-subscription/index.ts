@@ -50,6 +50,8 @@ export interface MemberSubscriptionsQueryParams {
 	search?: string;
 	page?: number;
 	pageSize?: number;
+	/** One row per subscriber — the plan it is on now (admin History). */
+	latestPerSubscriber?: boolean;
 }
 
 export interface MemberSubscriptionsApiResponse {
@@ -74,6 +76,7 @@ export async function fetchMemberSubscriptions(
 		to: params.to,
 		dates: params.dates,
 		search: params.search,
+		latestPerSubscriber: params.latestPerSubscriber ? "true" : undefined,
 		page: params.page,
 		pageSize: params.pageSize,
 	});

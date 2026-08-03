@@ -1,4 +1,5 @@
 import { isoKeyFromDate } from "@agency-portal/components/iz/HistDateCalendar";
+import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import {
 	formatRM,
 	IzCard,
@@ -33,15 +34,7 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
 import { createFileRoute } from "@tanstack/react-router";
-import {
-	Calendar,
-	Check,
-	CreditCard,
-	Plug,
-	Receipt,
-	Sparkles,
-	Users,
-} from "lucide-react";
+import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const RENEWAL_DATE = "15 Jul 2026";
@@ -61,14 +54,40 @@ export const Route = createFileRoute("/outlet/subscription")({
 function PosIntegrationAddonCard({
 	addon,
 	canEdit,
+	canCancel,
 	quotePending,
+	pendingKind,
+	activeAddonPriceRm,
 	contactLine,
 	onRequestQuote,
 	onCancelQuote,
+	onRemoveAddon,
 }: {
+	/** Ask the admin to end the add-on and go back to plan-only billing. */
+	onRemoveAddon: () => void;
 	addon: OutletSubscriptionAddon;
 	canEdit: boolean;
+	/**
+	 * The agreed price once the admin has resolved the quote — at which point
+	 * this venue IS on the add-on, alongside its plan. Null while it is only a
+	 * product on offer.
+	 */
+	activeAddonPriceRm: number | null;
+	/**
+	 * Whether withdrawing is actually possible. In a real session the request
+	 * lives with the admin and there is no withdraw endpoint, so offering
+	 * "Cancel request" would clear the badge here while the admin still holds
+	 * the request — a button that lies.
+	 */
+	canCancel: boolean;
 	quotePending: boolean;
+	/**
+	 * WHICH request is with the admin, so only that one action is blocked. A
+	 * venue that asked for a new price must still be able to decide it would
+	 * rather drop POS altogether — hiding both buttons left it with no way to
+	 * say so until the admin happened to answer the other question.
+	 */
+	pendingKind: "requote" | "cancel" | null;
 	contactLine: string;
 	onRequestQuote: () => void;
 	onCancelQuote: () => void;
@@ -87,14 +106,32 @@ function PosIntegrationAddonCard({
 							<IzPill variant="violet" className="!py-0.5 !text-[10px]">
 								Add-on
 							</IzPill>
-							{quotePending && (
+							{activeAddonPriceRm !== null && (
 								<IzPill variant="green" className="!py-0.5 !text-[10px]">
-									Request sent
+									Active
+								</IzPill>
+							)}
+							{/*
+							 * The pending badge shows ALONGSIDE Active, not instead of it.
+							 * A venue on POS that has asked for a re-quote or a cancellation
+							 * is in both states at once, and the card previously showed only
+							 * the first — so an open request was invisible unless you read
+							 * the paragraph at the bottom.
+							 */}
+							{quotePending && (
+								<IzPill variant="amber" className="!py-0.5 !text-[10px]">
+									{pendingKind === "cancel"
+										? "Cancel · pending admin"
+										: activeAddonPriceRm !== null
+											? "New price · pending admin"
+											: "Request sent · pending admin"}
 								</IzPill>
 							)}
 						</div>
 						<p className="iz-outlet-pos-addon__subtitle">
-							{addon.capacityLabel} · {addon.priceLabel}
+							{activeAddonPriceRm !== null
+								? `${addon.capacityLabel} · ${formatRM(activeAddonPriceRm)} / month · agreed with InnocenZ admin`
+								: `${addon.capacityLabel} · ${addon.priceLabel}`}
 						</p>
 					</div>
 					<Sparkles className="h-5 w-5 shrink-0 text-[var(--iz-violet-l)] opacity-80" />
@@ -111,14 +148,70 @@ function PosIntegrationAddonCard({
 					))}
 				</ul>
 
-				{quotePending ? (
+				{activeAddonPriceRm !== null ? (
+					<div className="iz-outlet-pos-addon__sent">
+						<p className="iz-outlet-pos-addon__sent-title">
+							POS integration active
+						</p>
+						<p className="iz-outlet-pos-addon__sent-body">
+							InnocenZ admin agreed {formatRM(activeAddonPriceRm)} / month for
+							your venue. This is billed on top of your plan.
+						</p>
+						{/*
+						 * Two ways out, and BOTH go to the admin: the venue can ask for the
+						 * price to be quoted again, or drop POS entirely and keep its plan
+						 * only. Neither takes effect until the admin answers — a venue must
+						 * not be able to end its own billing.
+						 */}
+						{canEdit && (
+							<>
+								{quotePending && (
+									<p className="iz-outlet-pos-addon__sent-body">
+										{pendingKind === "cancel"
+											? "Your request to cancel POS is with InnocenZ admin — the charge stands until they answer."
+											: "Your request for a new price is with InnocenZ admin — the current price applies until they answer."}
+									</p>
+								)}
+								{/*
+								 * Both ways out stay on screen while a request is open; only the
+								 * one already asked for is disabled. Hiding both meant a venue
+								 * that asked for a new price could not then decide to drop POS
+								 * instead — it had to wait for an answer to a question it no
+								 * longer wanted asked.
+								 */}
+								<div className="flex flex-col gap-2 sm:flex-row">
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										disabled={pendingKind === "requote"}
+										onClick={onRequestQuote}
+									>
+										{pendingKind === "requote"
+											? "New price · requested"
+											: "Ask for a new price"}
+									</button>
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel flex-1"
+										disabled={pendingKind === "cancel"}
+										onClick={onRemoveAddon}
+									>
+										{pendingKind === "cancel"
+											? "Cancel POS · requested"
+											: "Cancel POS · plan only"}
+									</button>
+								</div>
+							</>
+						)}
+					</div>
+				) : quotePending ? (
 					<div className="iz-outlet-pos-addon__sent">
 						<p className="iz-outlet-pos-addon__sent-title">Admin notified</p>
 						<p className="iz-outlet-pos-addon__sent-body">
 							InnocenZ admin received your request and will contact{" "}
 							{contactLine} to negotiate pricing.
 						</p>
-						{canEdit && (
+						{canEdit && canCancel && (
 							<button
 								type="button"
 								className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel"
@@ -163,7 +256,6 @@ function OutletSubscriptionPage() {
 		(s) => s.cancelPosIntegrationQuoteRequest,
 	);
 	const demoBilling = useStore((s) => s.outletSubscriptionBilling);
-	const updateOutletPaymentCard = useStore((s) => s.updateOutletPaymentCard);
 	const toast = useStore((s) => s.toast);
 	const canEdit = outletCan(outletSubRole, "editSettings");
 	// Real login → backend billing ledger + real POS-quote create (see the hook).
@@ -176,6 +268,16 @@ function OutletSubscriptionPage() {
 	const showCollections =
 		collections.backed && outletCan(outletSubRole, "viewBilling");
 	const [quoteSentLocal, setQuoteSentLocal] = useState(false);
+	// The cancellation's counterpart to the flag above — see `pendingKind`.
+	const [removalSentLocal, setRemovalSentLocal] = useState(false);
+	// Instant feedback for the tap; the server's answer (backend.pendingPlanLabel)
+	// takes over as soon as it arrives and is what survives a refresh.
+	const [planChangeRequestedLocal, setPlanChangeRequestedLocal] = useState<
+		string | null
+	>(null);
+	const planChangeRequested = backend.backed
+		? (backend.pendingPlanLabel ?? planChangeRequestedLocal)
+		: null;
 
 	/**
 	 * Real sessions read the `member_subscription` ledger; demo sessions keep the
@@ -201,8 +303,45 @@ function OutletSubscriptionPage() {
 	}, [backend.backed, backend.billingHistory, demoBilling]);
 
 	const outletName = tonightShiftOutletName(shifts);
-	const currentPlan = getOutletSubscriptionPlan(outletOwner.subscriptionPlanId);
+	/**
+	 * Which plan this venue is on. A real session reads its ACTIVE
+	 * `member_subscription` row — the same ledger the admin History page reads —
+	 * so the Current pill here and the admin's screen state the same fact, and an
+	 * approved switch shows up on its own. The demo store is the fallback (demo
+	 * sessions, or a venue with no active row yet).
+	 */
+	const currentPlan = useMemo(() => {
+		const fromLedger = backend.activePlanName
+			? MONTHLY_PLANS.find(
+					(plan) =>
+						plan.label.trim().toLowerCase() ===
+						backend.activePlanName?.trim().toLowerCase(),
+				)
+			: undefined;
+		// A REAL session never falls back to the demo store. The store is shared
+		// by every venue opened in this browser, so falling back showed one venue
+		// another's plan as "Current" — a venue on Pro (RM 2,999) was told it was
+		// on Scale (RM 6,999). With no active row there is simply no current plan,
+		// and the card renders none.
+		if (backend.backed) return fromLedger ?? null;
+		return getOutletSubscriptionPlan(outletOwner.subscriptionPlanId);
+	}, [backend.backed, backend.activePlanName, outletOwner.subscriptionPlanId]);
 	const contactLine = outletOwner.email || outletOwner.mobile;
+	/**
+	 * The next billing date, derived from this venue's own subscription row. A
+	 * real session shows a real date; when the ledger has nothing active the
+	 * label is omitted entirely rather than printing the old hardcoded
+	 * "15 Jul 2026", which was invented and already in the past.
+	 */
+	const renewalLabel = backend.backed
+		? backend.nextRenewalDate
+			? backend.nextRenewalDate.toLocaleDateString("en-GB", {
+					day: "numeric",
+					month: "short",
+					year: "numeric",
+				})
+			: null
+		: RENEWAL_DATE;
 
 	const posQuotePending = useMemo(
 		() =>
@@ -211,9 +350,24 @@ function OutletSubscriptionPage() {
 			),
 		[posIntegrationQuoteRequests, outletName],
 	);
-	// The outlet can't READ admin_requests (admin-only route), so in a real
-	// session the "request sent" pill is an optimistic local flag.
-	const quotePending = backend.backed ? quoteSentLocal : posQuotePending;
+	// A real session reads its own outstanding quote back from the server, so
+	// "Request sent" survives a refresh; the local flag only covers the moment
+	// between the tap and the refetch. Demo sessions keep the store's flag.
+	const quotePending = backend.backed
+		? backend.posQuotePending || quoteSentLocal || removalSentLocal
+		: posQuotePending;
+
+	/**
+	 * Which of the two requests is open. The server's answer wins as soon as it
+	 * arrives — the local flags only cover the moment between the tap and the
+	 * refetch, and only the tapped action is blocked, never both.
+	 */
+	const pendingKind: "requote" | "cancel" | null = backend.backed
+		? (backend.posRequestKind ??
+			(removalSentLocal ? "cancel" : quoteSentLocal ? "requote" : null))
+		: posQuotePending
+			? "requote"
+			: null;
 
 	const handleRequestQuote = () => {
 		if (backend.backed) {
@@ -224,12 +378,40 @@ function OutletSubscriptionPage() {
 				})
 				.then(() => {
 					setQuoteSentLocal(true);
-					toast("POS integration request sent to admin", "success");
+					toast(
+						backend.addonAmountRm !== null
+							? "New price requested — InnocenZ admin will re-quote your POS integration"
+							: "POS integration request sent to admin",
+						"success",
+					);
 				})
 				.catch(() => toast("Could not send request — try again", "warn"));
 			return;
 		}
 		requestPosIntegrationQuote();
+	};
+
+	/**
+	 * Leaving the add-on is a request, like joining it: the admin ends the
+	 * billing. The card keeps showing Active until they do, so the venue is never
+	 * told a charge stopped before it actually did.
+	 */
+	const handleRemoveAddon = () => {
+		backend
+			.requestPosRemoval()
+			.then((filed) => {
+				// Same reason as the quote's local flag: hold the state for the moment
+				// between the tap and the server's answer, so the button cannot be
+				// pressed twice into two identical requests.
+				if (filed) setRemovalSentLocal(true);
+				toast(
+					filed
+						? "Request to remove POS integration sent to InnocenZ admin"
+						: "Could not send the request — try again",
+					filed ? "success" : "warn",
+				);
+			})
+			.catch(() => toast("Could not send the request — try again", "warn"));
 	};
 
 	const handleCancelQuote = () => {
@@ -254,7 +436,7 @@ function OutletSubscriptionPage() {
 	);
 
 	const selectPlan = (planId: OutletSubscriptionPlanId) => {
-		if (!canEdit || planId === currentPlan.id) return;
+		if (!canEdit || planId === currentPlan?.id) return;
 		const next = getOutletSubscriptionPlan(planId);
 		if (next.renegotiate) return;
 		if (peakDailyNamedPrs > next.prPerDayMax) {
@@ -262,6 +444,39 @@ function OutletSubscriptionPage() {
 				`Peak day has ${peakDailyNamedPrs} requested PRs — reduce to ${next.prPerDayMax}/day before downgrading to ${next.label}`,
 				"warn",
 			);
+			return;
+		}
+		// A real session must not switch itself: the venue files a plan_change
+		// request and stays on its current plan until an admin approves, which is
+		// what writes the billing ledger. Only the demo store flips instantly.
+		if (backend.backed) {
+			if (!backend.planCatalogReady) {
+				toast("Plan list still loading — try again in a moment", "warn");
+				return;
+			}
+			backend
+				.requestPlanChange({
+					toPlanLabel: next.label,
+					fromPlanLabel: currentPlan?.label,
+					contact: { email: outletOwner.email, phone: outletOwner.mobile },
+				})
+				.then((result) => {
+					if (!result.ok) {
+						// The server's own words when it has them — "Already on
+						// Essential — no switch needed" tells the venue what to do;
+						// "try again" told it nothing and it kept retrying.
+						toast(
+							result.reason ?? "Could not send the switch — try again",
+							"warn",
+						);
+						return;
+					}
+					setPlanChangeRequestedLocal(next.label);
+					toast(
+						`Switch to ${next.label} sent to InnocenZ admin for approval`,
+						"success",
+					);
+				});
 			return;
 		}
 		saveOutletOwner({ subscriptionPlanId: planId });
@@ -308,7 +523,7 @@ function OutletSubscriptionPage() {
 			</p>
 			<div className="grid grid-cols-2 gap-2">
 				{MONTHLY_PLANS.map((plan) => {
-					const isCurrent = plan.id === currentPlan.id;
+					const isCurrent = plan.id === currentPlan?.id;
 					const atCapacity = namedPrsToday >= plan.prPerDayMax;
 					return (
 						<IzCard
@@ -324,6 +539,9 @@ function OutletSubscriptionPage() {
 									<div className="flex flex-wrap items-center gap-2">
 										<p className="font-sora text-sm font-bold">{plan.label}</p>
 										{isCurrent && <IzPill variant="green">Current</IzPill>}
+										{planChangeRequested === plan.label && !isCurrent && (
+											<IzPill variant="violet">Awaiting admin</IzPill>
+										)}
 										{atCapacity && !isCurrent && (
 											<IzPill variant="amber">At daily limit</IzPill>
 										)}
@@ -350,19 +568,34 @@ function OutletSubscriptionPage() {
 							</div>
 							{isCurrent ? (
 								<p className="iz-tiny iz-muted2 mt-2">
-									Renewal {RENEWAL_DATE} · {namedPrsToday} / {plan.prPerDayMax}{" "}
-									requested PRs today · pool of {plan.prPoolSize}
+									{renewalLabel ? `Renewal ${renewalLabel} · ` : ""}
+									{namedPrsToday} / {plan.prPerDayMax} requested PRs today ·
+									pool of {plan.prPoolSize}
 								</p>
 							) : (
-								canEdit && (
+								canEdit &&
+								(planChangeRequested === plan.label ? (
+									<p className="iz-tiny iz-muted2 mt-3">
+										Sent to InnocenZ admin — you stay on{" "}
+										{currentPlan?.label ?? "your current plan"} until it is
+										approved.
+									</p>
+								) : (
 									<button
 										type="button"
 										className="iz-btn iz-btn-soft mt-3 w-full"
+										// Until the venue's real plan has loaded, the Current pill
+										// is a demo guess — offering a switch here let a venue ask
+										// for the plan it was already on, which the server then
+										// (rightly) refused.
+										disabled={
+											backend.isRequestingPlanChange || backend.isLoading
+										}
 										onClick={() => selectPlan(plan.id)}
 									>
-										Switch to {plan.label}
+										{backend.isLoading ? "Loading…" : `Switch to ${plan.label}`}
 									</button>
-								)
+								))
 							)}
 						</IzCard>
 					);
@@ -373,10 +606,14 @@ function OutletSubscriptionPage() {
 						key={addon.id}
 						addon={addon}
 						canEdit={canEdit}
+						canCancel={!backend.backed}
 						quotePending={quotePending}
+						pendingKind={pendingKind}
+						activeAddonPriceRm={backend.addonAmountRm}
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}
 						onCancelQuote={handleCancelQuote}
+						onRemoveAddon={handleRemoveAddon}
 					/>
 				))}
 			</div>
@@ -546,42 +783,46 @@ function OutletSubscriptionPage() {
 
 			<OutletSection
 				title="Payment method"
-				hint={`Visa ···· ${paymentCardLast4} · renewal ${RENEWAL_DATE}`}
+				hint={
+					backend.backed
+						? backend.card
+							? `${backend.card.brand} ···· ${backend.card.last4}${renewalLabel ? ` · renewal ${renewalLabel}` : ""}`
+							: "No card saved yet"
+						: `Visa ···· ${paymentCardLast4} · renewal ${RENEWAL_DATE}`
+				}
 				collapsible
 				defaultOpen={false}
 				className="!mt-5"
 			>
-				<IzCard flat>
-					<div className="flex items-center gap-2">
-						<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
-						<div>
-							<p className="iz-sm font-semibold">
-								Visa ···· {paymentCardLast4}
-							</p>
-							<p className="iz-tiny iz-muted">
-								Billed monthly · {formatRM(currentPlan.monthlyRm)} · auto-pay
-								enabled
-							</p>
-						</div>
-					</div>
-					{canEdit && (
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft mt-3 w-full"
-							onClick={() =>
-								updateOutletPaymentCard(
-									String(Math.floor(1000 + Math.random() * 9000)),
-								)
-							}
-						>
-							Update card
-						</button>
-					)}
-				</IzCard>
+				<PaymentMethodCard
+					card={backend.backed ? backend.card : null}
+					backed={backend.backed}
+					demoLast4={paymentCardLast4}
+					canEdit={canEdit}
+					isLoading={backend.backed && backend.isCardLoading}
+					isSaving={backend.isSavingCard}
+					billedLabel={
+						currentPlan
+							? `Billed monthly · ${formatRM(currentPlan.monthlyRm)}`
+							: "—"
+					}
+					onSave={async (input) => {
+						const result = await backend.saveCard(input);
+						toast(
+							result.ok
+								? "Card saved for subscription billing"
+								: (result.reason ?? "Could not save the card — try again"),
+							result.ok ? "success" : "warn",
+						);
+						return result.ok;
+					}}
+				/>
 
 				<div className="iz-tiny iz-muted mt-2 flex items-center gap-2">
 					<Calendar className="h-3.5 w-3.5" />
-					Next renewal {RENEWAL_DATE}
+					{renewalLabel
+						? `Next renewal ${renewalLabel}`
+						: "No active subscription — nothing to renew"}
 				</div>
 			</OutletSection>
 		</div>

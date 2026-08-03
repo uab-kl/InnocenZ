@@ -30,10 +30,17 @@ const root = process.env.CLAUDE_PROJECT_DIR || process.cwd();
 const git = (cmd) => execSync(`git ${cmd}`, { cwd: root, encoding: 'utf8' });
 
 try {
-  const dirty = git('status --porcelain')
+  // Files with REAL content changes vs HEAD, plus untracked files. Deliberately
+  // not `git status --porcelain`: on Windows a formatter rewriting line endings
+  // marks a file modified with an empty diff, which used to fire this hook on a
+  // turn that changed no code at all.
+  const changed = git('diff --name-only HEAD').split('\n').filter(Boolean);
+  const untracked = git('ls-files --others --exclude-standard')
     .split('\n')
-    .filter(Boolean)
-    .map((l) => l.slice(3).trim().replace(/^"|"$/g, ''));
+    .filter(Boolean);
+  const dirty = [...changed, ...untracked].map((f) =>
+    f.trim().replace(/^"|"$/g, ''),
+  );
   const dirtyCode = dirty.filter((f) => CODE_RE.test(f));
   const dirtyScript = dirty.some((f) => f.endsWith('TEST_SCRIPT.md'));
 

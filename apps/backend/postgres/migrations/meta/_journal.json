@@ -568,6 +568,20 @@
       "when": 1785520000000,
       "tag": "0080_pv_finance_signature",
       "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1785600000000,
+      "tag": "0081_subscription_addons",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1785700000000,
+      "tag": "0082_payment_method",
+      "breakpoints": true
     }
   ]
 }

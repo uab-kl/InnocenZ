@@ -32,6 +32,10 @@ export const MemberSubscriptionTable = MainSchema.table('member_subscription', {
   billingCycle: billingCycleEnum('billing_cycle').notNull().default('monthly'),
   currency: varchar('currency', { length: 8 }).notNull().default('MYR'),
   status: memberSubscriptionStatusEnum('status').notNull().default('active'),
+  // Which negotiation set this price, when one did (POS quote, Custom
+  // renegotiation). Without it an unusual amount cannot be traced back to the
+  // quote that agreed it. Migration 0081.
+  adminRequestId: uuid('admin_request_id'),
   startedAt: timestamp('started_at', { withTimezone: true }).defaultNow().notNull(),
   endedAt: timestamp('ended_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -54,4 +58,15 @@ export type MemberSubscriptionFilter = {
   dates?: string[];
   /** Case-insensitive partial match on the subscriber (outlet/agency) name. */
   search?: string;
+  /**
+   * Collapse to ONE row per subscriber — the one it is on now (newest by
+   * started_at). The admin History page uses it so a venue that switched plans
+   * shows its current plan, not every plan it has ever been on.
+   */
+  latestPerSubscriber?: boolean;
+  /**
+   * Plans only, or add-ons only. "What is this venue on?" means its PLAN — its
+   * POS add-on line is newer and would otherwise be mistaken for it.
+   */
+  kind?: 'plan' | 'addon';
 };
