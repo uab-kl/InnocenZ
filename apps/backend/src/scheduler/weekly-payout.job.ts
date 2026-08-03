@@ -25,10 +25,17 @@ const ACTOR = 'weekly-payout-job';
 // pair that drifts apart unnoticed.
 
 /**
- * Mondays at 02:00 Asia/Kuala_Lumpur — after the last Sunday shift has certainly
- * been checked out, and while nobody is looking at the vouchers.
+ * Sundays at 02:00 Asia/Kuala_Lumpur — after the last Saturday shift has
+ * certainly been checked out, and while nobody is looking at the vouchers.
+ *
+ * Moved from Monday with the payroll week's re-anchor to Sun–Sat (3 Aug 2026,
+ * owner's instruction). The cron day and the week anchor are ONE decision: a
+ * Sun–Sat week ends Saturday, so a Monday run would issue every voucher a day
+ * late and fire in the middle of the next week rather than at its start. Sunday
+ * is also what "PV issued every Sunday" — the copy on four PR and agency
+ * screens — has always promised.
  */
-const SCHEDULE = '0 2 * * 1';
+const SCHEDULE = '0 2 * * 0';
 
 /**
  * Rolls the week that just ended into one payment voucher per PR per agency, and

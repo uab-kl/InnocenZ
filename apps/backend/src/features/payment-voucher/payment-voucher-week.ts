@@ -9,13 +9,18 @@ function isoDate(d: Date): string {
 }
 
 /**
- * The most recently FINISHED Monday–Sunday, in Kuala Lumpur local time.
+ * The most recently FINISHED Sunday–Saturday, in Kuala Lumpur local time.
  *
- * The timezone is the whole point of this function existing. The weekly payout
- * job fires at 02:00 Asia/Kuala_Lumpur on a Monday, which is 18:00 **Sunday**
- * UTC — so computing the week from UTC calendar fields, as the manual script
- * originally did, still sees "Sunday" and rolls back to the week before the one
- * that just ended. Every voucher would be generated for the wrong seven days.
+ * Sunday-anchored on the owner's instruction (3 Aug 2026) — see `weekBounds()`
+ * in payment-voucher.controller.ts for why the Monday anchor was dropped. The
+ * payout cron moved to Sunday 02:00 with it, which is also what the "PV issued
+ * every Sunday" copy on the PR and agency screens always claimed.
+ *
+ * The timezone is the whole point of this function existing. The job fires at
+ * 02:00 Asia/Kuala_Lumpur, which is 18:00 the **previous day** UTC — so
+ * computing the week from UTC calendar fields, as the manual script originally
+ * did, still sees the day before and rolls back to the week before the one that
+ * just ended. Every voucher would be generated for the wrong seven days.
  *
  * Shifting the instant by the offset and then reading UTC fields off it yields
  * the KL-local calendar date, which is what a shift_date column holds.
@@ -26,17 +31,17 @@ export function previousCompleteWeek(ref: Date = new Date()): {
 } {
   const kl = new Date(ref.getTime() + KL_OFFSET_MINUTES * 60_000);
 
-  const daysSinceMonday = (kl.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
-  const thisMonday = new Date(kl);
-  thisMonday.setUTCDate(kl.getUTCDate() - daysSinceMonday);
+  const daysSinceSunday = kl.getUTCDay(); // Sun=0 … Sat=6
+  const thisSunday = new Date(kl);
+  thisSunday.setUTCDate(kl.getUTCDate() - daysSinceSunday);
 
-  const lastMonday = new Date(thisMonday);
-  lastMonday.setUTCDate(thisMonday.getUTCDate() - 7);
+  const lastSunday = new Date(thisSunday);
+  lastSunday.setUTCDate(thisSunday.getUTCDate() - 7);
 
-  const lastSunday = new Date(lastMonday);
-  lastSunday.setUTCDate(lastMonday.getUTCDate() + 6);
+  const lastSaturday = new Date(lastSunday);
+  lastSaturday.setUTCDate(lastSunday.getUTCDate() + 6);
 
-  return { weekStart: isoDate(lastMonday), weekEnd: isoDate(lastSunday) };
+  return { weekStart: isoDate(lastSunday), weekEnd: isoDate(lastSaturday) };
 }
 
 /**
@@ -57,7 +62,7 @@ export function klToday(ref: Date = new Date()): string {
 }
 
 /**
- * The Monday–Sunday week CONTAINING a given calendar date.
+ * The Sunday–Saturday week CONTAINING a given calendar date.
  *
  * Takes a `YYYY-MM-DD` string rather than a Date, and that is the point: a
  * `shift_date` is already a calendar date with no time and no zone, so parsing
@@ -82,11 +87,11 @@ export function weekOfDate(date: string): { weekStart: string; weekEnd: string }
   // such as 2026-02-30 becoming 2026-03-02.
   if (isoDate(anchor) !== date) return null;
 
-  const daysSinceMonday = (anchor.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
-  const monday = new Date(anchor);
-  monday.setUTCDate(anchor.getUTCDate() - daysSinceMonday);
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const daysSinceSunday = anchor.getUTCDay(); // Sun=0 … Sat=6
+  const sunday = new Date(anchor);
+  sunday.setUTCDate(anchor.getUTCDate() - daysSinceSunday);
+  const saturday = new Date(sunday);
+  saturday.setUTCDate(sunday.getUTCDate() + 6);
 
-  return { weekStart: isoDate(monday), weekEnd: isoDate(sunday) };
+  return { weekStart: isoDate(sunday), weekEnd: isoDate(saturday) };
 }
