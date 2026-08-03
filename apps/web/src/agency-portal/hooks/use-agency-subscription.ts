@@ -5,6 +5,7 @@ import {
 	getPayrollWeekSundayIso,
 } from "@agency-portal/lib/demo-clock";
 import {
+	nextRenewalFrom,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
@@ -19,6 +20,11 @@ import {
 	fetchMyPlanChange,
 } from "@/services/admin-request";
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
+import {
+	fetchMyPaymentMethod,
+	type SavePaymentMethodInput,
+	saveMyPaymentMethod,
+} from "@/services/payment-method";
 import { fetchPaymentVouchers } from "@/services/payment-voucher";
 import { fetchSubscriptions, type Subscription } from "@/services/subscription";
 
@@ -164,6 +170,51 @@ export function useAgencySubscription() {
 		() => memberQuery.data?.data?.[0] ?? null,
 		[memberQuery.data],
 	);
+
+	/**
+	 * When this agency is next charged — its subscription start rolled forward by
+	 * the billing cycle. Same rule as the outlet's, from one place: the screen
+	 * used to print a demo-clock date that had nothing to do with the ledger.
+	 */
+	const nextRenewalDate = useMemo<Date | null>(
+		() => nextRenewalFrom(current?.startedAt, current?.billingCycle),
+		[current],
+	);
+
+	/**
+	 * The agency's saved card. The screen printed a hardcoded "Visa ···· 4242"
+	 * whose Update button only raised a toast — a card nobody owns, that nothing
+	 * could ever be billed to.
+	 */
+	const cardQuery = useQuery({
+		queryKey: ["payment-method", "mine", agencyId ?? "none"],
+		queryFn: () => fetchMyPaymentMethod(logout),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const cardMut = useMutation({
+		mutationFn: (input: SavePaymentMethodInput) =>
+			saveMyPaymentMethod(input, logout),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Save the agency's card. No `outletId`: an agency session resolves to its own
+	 * agency server-side, and passing one would be meaningless here.
+	 */
+	const saveCard = async (
+		input: Omit<SavePaymentMethodInput, "outletId">,
+	): Promise<{ ok: boolean; reason?: string }> => {
+		try {
+			await cardMut.mutateAsync(input);
+			return { ok: true };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, reason: message };
+		}
+	};
 
 	/** Whether this agency is on the negotiated tier today, and at what price. */
 	const onCustom = current?.planName === CUSTOM;
@@ -392,6 +443,13 @@ export function useAgencySubscription() {
 		billingHistory,
 		currentSubscriptionId: current?.subscriptionId ?? null,
 		currentPlanName: current?.planName ?? null,
+		/** Real next charge date from the ledger; null when nothing is active. */
+		nextRenewalDate,
+		/** The agency's saved card, or null when it has never saved one. */
+		card: cardQuery.data ?? null,
+		isCardLoading: cardQuery.isLoading,
+		isSavingCard: cardMut.isPending,
+		saveCard,
 		/** Real amount billed for the current tier; null when nothing is active. */
 		currentAmountRm: current ? Number(current.amount) : null,
 		onCustom,

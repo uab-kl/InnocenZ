@@ -1,5 +1,6 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
+	nextRenewalFrom,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
@@ -151,55 +152,18 @@ export function useOutletSubscription() {
 	const activePlanName = activeSubscription?.planName ?? null;
 
 	/**
-	 * When this venue is next billed: its subscription start rolled forward by
-	 * the billing cycle until the date is in the future. Null when there is no
-	 * active row — the caller then shows nothing rather than a made-up date. The
-	 * page used to print a hardcoded "15 Jul 2026", which was both invented and
-	 * in the past.
+	 * When this venue is next billed. The rule lives in subscription-record.ts
+	 * because the agency screen bills on the same rule — two copies is how one of
+	 * them ends up a month out.
 	 */
-	const nextRenewalDate = useMemo<Date | null>(() => {
-		if (!activeSubscription?.startedAt) return null;
-		const start = new Date(activeSubscription.startedAt);
-		if (Number.isNaN(start.getTime())) return null;
-		const now = new Date();
-		const cycle = activeSubscription.billingCycle;
-
-		if (cycle === "weekly") {
-			const next = new Date(start);
-			while (next <= now) next.setDate(next.getDate() + 7);
-			return next;
-		}
-
-		// Monthly/annual bill on the SAME DAY each period, so every date is
-		// computed from the original start — never by stepping a date forward
-		// repeatedly, which drifts: stepping 31 Jan by one month lands on 3 Mar,
-		// because "31 Feb" overflows. The day is clamped to the target month's
-		// length instead, so a 31st subscription bills on the 28th/30th in short
-		// months and returns to the 31st afterwards.
-		const step = cycle === "annually" ? 12 : 1;
-		const anchorDay = start.getDate();
-		const at = (periods: number) => {
-			const year = start.getFullYear();
-			const month = start.getMonth() + periods * step;
-			const lastDay = new Date(year, month + 1, 0).getDate();
-			return new Date(
-				year,
-				month,
-				Math.min(anchorDay, lastDay),
-				start.getHours(),
-				start.getMinutes(),
-				start.getSeconds(),
-			);
-		};
-
-		let periods = 0;
-		let next = at(0);
-		while (next <= now && periods < 600) {
-			periods += 1;
-			next = at(periods);
-		}
-		return next;
-	}, [activeSubscription]);
+	const nextRenewalDate = useMemo<Date | null>(
+		() =>
+			nextRenewalFrom(
+				activeSubscription?.startedAt,
+				activeSubscription?.billingCycle,
+			),
+		[activeSubscription],
+	);
 
 	/**
 	 * The venue's own outstanding POS-integration quote, from the server — so the

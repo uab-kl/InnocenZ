@@ -1,3 +1,4 @@
+import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import {
 	formatRM,
 	IzCard,
@@ -38,7 +39,6 @@ import { format, parseISO } from "date-fns";
 import {
 	Building2,
 	Calendar,
-	CreditCard,
 	Receipt,
 	TriangleAlert,
 	Users,
@@ -262,6 +262,19 @@ function AgencySubscription() {
 	const billedTierLabel = sub.backed
 		? (sub.currentPlanName ?? billing.plan.label)
 		: billing.plan.label;
+	/**
+	 * The real next charge, from this agency's own subscription row. The demo
+	 * clock's date sat beside it and disagreed — the screen showed "2 Aug 2026"
+	 * for an agency whose week rolls from its actual start date.
+	 */
+	const realRenewalLabel = sub.nextRenewalDate
+		? sub.nextRenewalDate.toLocaleDateString("en-GB", {
+				day: "numeric",
+				month: "short",
+				year: "numeric",
+			})
+		: null;
+
 	const billedPriceLabel = sub.backed
 		? sub.currentAmountRm
 			? formatRM(sub.currentAmountRm)
@@ -279,6 +292,26 @@ function AgencySubscription() {
 	 * is not offered here at all: that is the volume rule's job when the week's
 	 * PVs go past the rate card.
 	 */
+	/**
+	 * Ask the admin to price Custom before the volume rule would.
+	 *
+	 * The rule fires at 151 PV in a settled payroll week, which is the right
+	 * trigger for billing but a poor one for an agency that has just signed a
+	 * client it cannot serve inside the rate card. Same request either way — the
+	 * admin sets the price and nothing bills until they do.
+	 */
+	const handleAskForCustom = () => {
+		const pv = sub.weeklyPvCount ?? 0;
+		sub.notifyAdminForCustom(pv).then((result) => {
+			toast(
+				result.ok
+					? "InnocenZ admin notified — they will quote your Custom price"
+					: (result.reason ?? "Could not notify InnocenZ admin — try again"),
+				result.ok ? "success" : "warn",
+			);
+		});
+	};
+
 	const handleResetToNormal = () => {
 		const pv = sub.weeklyPvCount ?? 0;
 		const banded = resolveAgencySubscriptionPlanForWeeklyPv(pv);
@@ -504,6 +537,29 @@ function AgencySubscription() {
 								</div>
 							</div>
 							<p className="iz-tiny iz-muted mt-2">{plan.description}</p>
+							{/*
+							 * The ONE actionable tile on an otherwise read-only rate card.
+							 * Custom is the only band with no list price, so it is the only
+							 * one a human has to be involved in — and an agency that knows
+							 * its volume is about to pass 150 should not have to wait for the
+							 * week to prove it. Every other tier is chosen by PV count alone,
+							 * which is why no other tile has a button.
+							 */}
+							{sub.backed &&
+								canEdit &&
+								plan.label === "Custom" &&
+								!isBilledTier && (
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft mt-2 w-full !py-1 !text-[11px]"
+										disabled={sub.isRequesting || Boolean(waitingOn)}
+										onClick={handleAskForCustom}
+									>
+										{waitingOn
+											? "Requested · pending admin"
+											: "Ask InnocenZ admin to price Custom"}
+									</button>
+								)}
 						</IzCard>
 					);
 				})}
@@ -724,38 +780,44 @@ function AgencySubscription() {
 
 			<OutletSection
 				title="Payment method"
-				hint={`Visa ···· ${CARD_LAST4} · next charge ${renewalDate}`}
+				hint={
+					sub.backed
+						? sub.card
+							? `${sub.card.brand} ···· ${sub.card.last4}${realRenewalLabel ? ` · next charge ${realRenewalLabel}` : ""}`
+							: "No card saved yet"
+						: `Visa ···· ${CARD_LAST4} · next charge ${renewalDate}`
+				}
 				collapsible
 				defaultOpen={false}
 				className="!mt-5"
 			>
-				<IzCard flat>
-					<div className="flex items-center gap-2">
-						<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
-						<div>
-							<p className="iz-sm font-semibold">Visa ···· {CARD_LAST4}</p>
-							<p className="iz-tiny iz-muted">
-								Billed weekly from PV usage · current tier {billing.plan.label}{" "}
-								· {billing.priceLabel} · auto-renew
-							</p>
-						</div>
-					</div>
-					{canEdit && (
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft mt-3 w-full"
-							onClick={() =>
-								toast("Card updated for subscription billing", "success")
-							}
-						>
-							Update card
-						</button>
-					)}
-				</IzCard>
+				<PaymentMethodCard
+					card={sub.backed ? sub.card : null}
+					backed={sub.backed}
+					demoLast4={CARD_LAST4}
+					canEdit={canEdit}
+					isLoading={sub.backed && sub.isCardLoading}
+					isSaving={sub.isSavingCard}
+					billedLabel={`Billed weekly from PV usage · current tier ${billedTierLabel} · ${billedPriceLabel}`}
+					onSave={async (input) => {
+						const result = await sub.saveCard(input);
+						toast(
+							result.ok
+								? "Card saved for subscription billing"
+								: (result.reason ?? "Could not save the card — try again"),
+							result.ok ? "success" : "warn",
+						);
+						return result.ok;
+					}}
+				/>
 
 				<div className="mt-2 flex items-center gap-2 iz-tiny iz-muted">
 					<Calendar className="h-3.5 w-3.5" />
-					Next weekly charge {renewalDate}
+					{sub.backed
+						? realRenewalLabel
+							? `Next weekly charge ${realRenewalLabel}`
+							: "No active subscription — nothing to charge"
+						: `Next weekly charge ${renewalDate}`}
 				</div>
 			</OutletSection>
 		</div>

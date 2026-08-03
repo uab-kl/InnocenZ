@@ -620,6 +620,27 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **3 Aug 2026 (fifteenth slice) — THE AGENCY GETS THE SAME REAL CARD, AND A WAY TO ASK FOR CUSTOM.**
+>
+> Owner: *"this renew date also wrong and the card cannot update like the outlet in the agency subcription
+> page"*, then *"agency how can select the custom to notify the admin?"*.
+>
+> **The card is now ONE component, not two.** `PaymentMethodCard` moved to
+> `components/iz/PaymentMethodCard.tsx` and both Subscription screens render it. Copying it would have
+> left the agency on its hardcoded "Visa ···· 4242" the moment anything changed — which is exactly the
+> state it was in. Same for the renewal rule: `nextRenewalFrom()` now lives in `subscription-record.ts`
+> and both hooks call it, so the two screens cannot drift a month apart.
+>
+> **The agency renewal date was demo-clock fiction** — "next charge 2 Aug 2026" printed beside a ledger
+> that says something else. It now rolls the agency’s own `started_at` forward by its billing cycle, and
+> shows nothing at all when no subscription is active rather than inventing a date.
+>
+> **Custom can now be requested by hand** (the rate card’s one actionable tile). The volume rule fires at
+> 151 PV in a settled payroll week, which is right for billing but useless for an agency that has just
+> signed a client it cannot serve inside the rate card — and untestable with 0 PVs on file, which is the
+> position the owner was in. Same request either way: `custom_renegotiation`, pending, nothing bills until
+> the admin sets a figure. No other tile has a button, because no other tier is a choice.
+
 > **3 Aug 2026 (fourteenth slice) — THE AGENCY TIER IS AUTOMATIC, AND THE CARD IS REAL.**
 >
 > Owner: *"in the agency is auto selected rate card not manually based on how many pv of that agency, how

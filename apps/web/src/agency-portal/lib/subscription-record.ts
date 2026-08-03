@@ -78,3 +78,72 @@ export function sortMemberSubscriptions(
 ): MemberSubscription[] {
 	return rows.slice().sort((a, b) => b.startedAt.localeCompare(a.startedAt));
 }
+
+/**
+ * When this subscription is next billed: its start rolled forward by the billing
+ * cycle until the date is in the future. Null when there is nothing active — the
+ * caller then shows nothing rather than a made-up date. Both Subscription screens
+ * printed a hardcoded date before this existed, and both printed one that had
+ * already passed.
+ *
+ * Monthly/annual bill on the SAME DAY each period, so every date is computed from
+ * the ORIGINAL start rather than by stepping a date forward repeatedly, which
+ * drifts: stepping 31 Jan by one month lands on 3 Mar, because "31 Feb" overflows.
+ * The day is clamped to the target month's length instead, so a subscription that
+ * started on the 31st bills on the 28th/30th in short months and returns to the
+ * 31st afterwards.
+ */
+export function nextRenewalFrom(
+	startedAt: string | null | undefined,
+	billingCycle: string | null | undefined,
+): Date | null {
+	if (!startedAt) return null;
+	const start = new Date(startedAt);
+	if (Number.isNaN(start.getTime())) return null;
+	const now = new Date();
+
+	if (billingCycle === "weekly") {
+		const next = new Date(start);
+		while (next <= now) next.setDate(next.getDate() + 7);
+		return next;
+	}
+
+	const step = billingCycle === "annually" ? 12 : 1;
+	const anchorDay = start.getDate();
+	const at = (periods: number) => {
+		const year = start.getFullYear();
+		const month = start.getMonth() + periods * step;
+		const lastDay = new Date(year, month + 1, 0).getDate();
+		return new Date(
+			year,
+			month,
+			Math.min(anchorDay, lastDay),
+			start.getHours(),
+			start.getMinutes(),
+			start.getSeconds(),
+		);
+	};
+
+	let periods = 0;
+	let next = at(0);
+	while (next <= now && periods < 600) {
+		periods += 1;
+		next = at(periods);
+	}
+	return next;
+}
+
+/** The same date as a short label ("3 Sept 2026"), or null. */
+export function renewalLabelFrom(
+	startedAt: string | null | undefined,
+	billingCycle: string | null | undefined,
+): string | null {
+	const next = nextRenewalFrom(startedAt, billingCycle);
+	return next
+		? next.toLocaleDateString("en-GB", {
+				day: "numeric",
+				month: "short",
+				year: "numeric",
+			})
+		: null;
+}
