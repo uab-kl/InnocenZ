@@ -32,6 +32,8 @@ import { PlatformConfigRepositoryClass } from '@/features/platform-config/platfo
 import { PlatformConfigControllerClass } from '@/features/platform-config/platform-config.controller.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { MemberSubscriptionControllerClass } from '@/features/member-subscription/member-subscription.controller.js';
+import { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
+import { PaymentMethodControllerClass } from '@/features/payment-method/payment-method.controller.js';
 import { OutletTransactionRepositoryClass } from '@/features/outlet-transaction/outlet-transaction.repository.js';
 import { OutletTransactionControllerClass } from '@/features/outlet-transaction/outlet-transaction.controller.js';
 import { AdminRequestRepositoryClass } from '@/features/admin-request/admin-request.repository.js';
@@ -121,6 +123,14 @@ export const orgScopeDeps = {
 };
 
 export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository, orgScopeDeps);
+
+// The card a venue/agency pays with. Same scope resolver: the owner comes from
+// the session, never from the request body.
+export const paymentMethodRepository = new PaymentMethodRepositoryClass();
+export const paymentMethodController = new PaymentMethodControllerClass(
+  paymentMethodRepository,
+  orgScopeDeps,
+);
 
 export const outletTransactionRepository = new OutletTransactionRepositoryClass();
 export const outletTransactionController = new OutletTransactionControllerClass(outletTransactionRepository);

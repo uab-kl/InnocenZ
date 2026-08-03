@@ -43,6 +43,12 @@ import {
 	Users,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import {
+	cardBrandFromNumber,
+	isPlausibleCardNumber,
+	type PaymentMethod,
+	type SavePaymentMethodInput,
+} from "@/services/payment-method";
 
 const RENEWAL_DATE = "15 Jul 2026";
 
@@ -53,6 +59,221 @@ const POS_FEATURES = [
 	"Custom setup for your venue layout",
 	"Pricing quoted by InnocenZ admin",
 ] as const;
+
+/**
+ * The card this venue pays with — real, saved, and editable.
+ *
+ * ⚠️ THE FULL NUMBER NEVER LEAVES THIS COMPONENT. The brand and the last four
+ * are derived here and only those are sent; the number itself is dropped when
+ * the form closes. Nothing else is possible without a payment gateway, and
+ * pretending otherwise — storing a PAN to look complete — is how an app ends up
+ * holding card data it has no right to.
+ *
+ * So the card can be RECORDED but not CHARGED, and the note under the form says
+ * exactly that rather than implying auto-pay is live.
+ */
+function PaymentMethodCard({
+	card,
+	backed,
+	demoLast4,
+	canEdit,
+	isLoading,
+	isSaving,
+	billedLabel,
+	onSave,
+}: {
+	card: PaymentMethod | null;
+	backed: boolean;
+	demoLast4: string;
+	canEdit: boolean;
+	isLoading: boolean;
+	isSaving: boolean;
+	billedLabel: string;
+	onSave: (input: Omit<SavePaymentMethodInput, "outletId">) => Promise<boolean>;
+}) {
+	const [editing, setEditing] = useState(false);
+	const [number, setNumber] = useState("");
+	const [holder, setHolder] = useState("");
+	const [expiry, setExpiry] = useState("");
+	const [email, setEmail] = useState("");
+	const [error, setError] = useState<string | null>(null);
+
+	const openForm = () => {
+		// Prefilled from the saved card EXCEPT the number, which we do not have —
+		// re-typing it is the only way to change the last four, and a masked
+		// placeholder that looked editable would be a lie.
+		setNumber("");
+		setHolder(card?.holderName ?? "");
+		setExpiry(
+			card
+				? `${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}`
+				: "",
+		);
+		setEmail(card?.billingEmail ?? "");
+		setError(null);
+		setEditing(true);
+	};
+
+	const submit = async () => {
+		const digits = number.replace(/\D/g, "");
+		if (!isPlausibleCardNumber(digits)) {
+			setError("That card number does not look right — check the digits");
+			return;
+		}
+		const match = expiry.match(/^(\d{1,2})\s*\/\s*(\d{2}|\d{4})$/);
+		if (!match) {
+			setError("Expiry must be MM/YY");
+			return;
+		}
+		const month = Number(match[1]);
+		const year =
+			match[2].length === 2 ? 2000 + Number(match[2]) : Number(match[2]);
+		if (month < 1 || month > 12) {
+			setError("Expiry month must be 01–12");
+			return;
+		}
+		const now = new Date();
+		if (
+			year < now.getFullYear() ||
+			(year === now.getFullYear() && month < now.getMonth() + 1)
+		) {
+			setError("That card has already expired");
+			return;
+		}
+		setError(null);
+		const saved = await onSave({
+			brand: cardBrandFromNumber(digits),
+			last4: digits.slice(-4),
+			expMonth: month,
+			expYear: year,
+			holderName: holder.trim() || null,
+			billingEmail: email.trim() || null,
+		});
+		if (saved) {
+			setNumber("");
+			setEditing(false);
+		}
+	};
+
+	const summary = backed
+		? card
+			? `${card.brand} ···· ${card.last4}`
+			: "No card saved"
+		: `Visa ···· ${demoLast4}`;
+
+	return (
+		<IzCard flat>
+			<div className="flex items-center gap-2">
+				<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
+				<div className="min-w-0">
+					<p className="iz-sm font-semibold">
+						{isLoading ? "Loading card…" : summary}
+					</p>
+					<p className="iz-tiny iz-muted">
+						{backed && card
+							? `${billedLabel} · expires ${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}${card.holderName ? ` · ${card.holderName}` : ""}`
+							: backed
+								? `${billedLabel} · add a card so billing has somewhere to go`
+								: `${billedLabel} · auto-pay enabled`}
+					</p>
+				</div>
+			</div>
+
+			{canEdit && !editing && (
+				<button
+					type="button"
+					className="iz-btn iz-btn-soft mt-3 w-full"
+					onClick={openForm}
+				>
+					{backed && card ? "Edit card" : "Add card"}
+				</button>
+			)}
+
+			{canEdit && editing && (
+				<div className="mt-3 space-y-2 border-t border-[var(--iz-line)] pt-3">
+					<div className="iz-field">
+						<label htmlFor="pm-number">Card number</label>
+						<input
+							id="pm-number"
+							inputMode="numeric"
+							autoComplete="cc-number"
+							placeholder="4242 4242 4242 4242"
+							value={number}
+							onChange={(e) => setNumber(e.target.value)}
+						/>
+					</div>
+					<div className="grid grid-cols-2 gap-2">
+						<div className="iz-field">
+							<label htmlFor="pm-exp">Expiry (MM/YY)</label>
+							<input
+								id="pm-exp"
+								inputMode="numeric"
+								autoComplete="cc-exp"
+								placeholder="09/28"
+								value={expiry}
+								onChange={(e) => setExpiry(e.target.value)}
+							/>
+						</div>
+						<div className="iz-field">
+							<label htmlFor="pm-holder">Name on card</label>
+							<input
+								id="pm-holder"
+								autoComplete="cc-name"
+								placeholder="As printed"
+								value={holder}
+								onChange={(e) => setHolder(e.target.value)}
+							/>
+						</div>
+					</div>
+					<div className="iz-field">
+						<label htmlFor="pm-email">Billing email (optional)</label>
+						<input
+							id="pm-email"
+							type="email"
+							placeholder="accounts@venue.com"
+							value={email}
+							onChange={(e) => setEmail(e.target.value)}
+						/>
+					</div>
+
+					{error && (
+						<p
+							className="iz-tiny"
+							style={{ color: "var(--iz-red-l, #ff8080)" }}
+						>
+							{error}
+						</p>
+					)}
+					<p className="iz-tiny iz-muted2">
+						Only the brand and the last four digits are saved — the number stays
+						in this browser and no CVV is ever asked for. InnocenZ records the
+						card; charging it needs a payment gateway, which is not connected
+						yet.
+					</p>
+
+					<div className="flex gap-2">
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft flex-1"
+							disabled={isSaving}
+							onClick={() => setEditing(false)}
+						>
+							Cancel
+						</button>
+						<button
+							type="button"
+							className="iz-btn iz-btn-gold flex-1"
+							disabled={isSaving}
+							onClick={submit}
+						>
+							{isSaving ? "Saving…" : "Save card"}
+						</button>
+					</div>
+				</div>
+			)}
+		</IzCard>
+	);
+}
 
 export const Route = createFileRoute("/outlet/subscription")({
 	component: OutletSubscriptionPage,
@@ -263,7 +484,6 @@ function OutletSubscriptionPage() {
 		(s) => s.cancelPosIntegrationQuoteRequest,
 	);
 	const demoBilling = useStore((s) => s.outletSubscriptionBilling);
-	const updateOutletPaymentCard = useStore((s) => s.updateOutletPaymentCard);
 	const toast = useStore((s) => s.toast);
 	const canEdit = outletCan(outletSubRole, "editSettings");
 	// Real login → backend billing ledger + real POS-quote create (see the hook).
@@ -791,43 +1011,46 @@ function OutletSubscriptionPage() {
 
 			<OutletSection
 				title="Payment method"
-				hint={`Visa ···· ${paymentCardLast4} · renewal ${RENEWAL_DATE}`}
+				hint={
+					backend.backed
+						? backend.card
+							? `${backend.card.brand} ···· ${backend.card.last4}${renewalLabel ? ` · renewal ${renewalLabel}` : ""}`
+							: "No card saved yet"
+						: `Visa ···· ${paymentCardLast4} · renewal ${RENEWAL_DATE}`
+				}
 				collapsible
 				defaultOpen={false}
 				className="!mt-5"
 			>
-				<IzCard flat>
-					<div className="flex items-center gap-2">
-						<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
-						<div>
-							<p className="iz-sm font-semibold">
-								Visa ···· {paymentCardLast4}
-							</p>
-							<p className="iz-tiny iz-muted">
-								Billed monthly ·{" "}
-								{currentPlan ? formatRM(currentPlan.monthlyRm) : "—"} · auto-pay
-								enabled
-							</p>
-						</div>
-					</div>
-					{canEdit && (
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft mt-3 w-full"
-							onClick={() =>
-								updateOutletPaymentCard(
-									String(Math.floor(1000 + Math.random() * 9000)),
-								)
-							}
-						>
-							Update card
-						</button>
-					)}
-				</IzCard>
+				<PaymentMethodCard
+					card={backend.backed ? backend.card : null}
+					backed={backend.backed}
+					demoLast4={paymentCardLast4}
+					canEdit={canEdit}
+					isLoading={backend.backed && backend.isCardLoading}
+					isSaving={backend.isSavingCard}
+					billedLabel={
+						currentPlan
+							? `Billed monthly · ${formatRM(currentPlan.monthlyRm)}`
+							: "—"
+					}
+					onSave={async (input) => {
+						const result = await backend.saveCard(input);
+						toast(
+							result.ok
+								? "Card saved for subscription billing"
+								: (result.reason ?? "Could not save the card — try again"),
+							result.ok ? "success" : "warn",
+						);
+						return result.ok;
+					}}
+				/>
 
 				<div className="iz-tiny iz-muted mt-2 flex items-center gap-2">
 					<Calendar className="h-3.5 w-3.5" />
-					Next renewal {RENEWAL_DATE}
+					{renewalLabel
+						? `Next renewal ${renewalLabel}`
+						: "No active subscription — nothing to renew"}
 				</div>
 			</OutletSection>
 		</div>

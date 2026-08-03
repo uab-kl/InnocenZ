@@ -14,6 +14,11 @@ import {
 	fetchMyPosQuote,
 } from "@/services/admin-request";
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
+import {
+	fetchMyPaymentMethod,
+	type SavePaymentMethodInput,
+	saveMyPaymentMethod,
+} from "@/services/payment-method";
 import { fetchSubscriptions } from "@/services/subscription";
 
 const UUID_RE =
@@ -214,6 +219,48 @@ export function useOutletSubscription() {
 		onSuccess: () => void posQuoteQuery.refetch(),
 	});
 
+	/**
+	 * The venue's saved card. Real, and the only source — the page used to print
+	 * a hardcoded "Visa ···· 4242", which is a card nobody owns.
+	 *
+	 * Scoped from the session server-side; `outletId` is sent so an operator who
+	 * holds several venues edits the right one's card, and the server checks it
+	 * against the venues they actually hold.
+	 */
+	const cardQuery = useQuery({
+		queryKey: ["payment-method", "mine", outletId ?? "none"],
+		queryFn: () => fetchMyPaymentMethod(logout, outletId ?? undefined),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const cardMut = useMutation({
+		mutationFn: (input: SavePaymentMethodInput) =>
+			saveMyPaymentMethod(input, logout),
+		onSuccess: () => void cardQuery.refetch(),
+	});
+
+	/**
+	 * Save the venue's card. `last4` and `brand` are derived in the CALLER from
+	 * the number typed, which is discarded there — this only ever carries four
+	 * digits, and the server rejects anything longer.
+	 */
+	const saveCard = async (
+		input: Omit<SavePaymentMethodInput, "outletId">,
+	): Promise<{ ok: boolean; reason?: string }> => {
+		try {
+			await cardMut.mutateAsync({
+				...input,
+				outletId: outletId && UUID_RE.test(outletId) ? outletId : undefined,
+			});
+			return { ok: true };
+		} catch (error) {
+			const message = (error as { response?: { data?: { message?: string } } })
+				?.response?.data?.message;
+			return { ok: false, reason: message };
+		}
+	};
+
 	/** Match a plan by name, case/space-insensitively ("Pro" -> the Pro row). */
 	const findPlan = (label: string) =>
 		outletPlans.find(
@@ -377,6 +424,11 @@ export function useOutletSubscription() {
 		addonBillingCycle: activeAddon?.billingCycle ?? null,
 		/** Plan awaiting admin approval — survives a refresh; null once answered. */
 		pendingPlanLabel,
+		/** The venue's saved card, or null when it has never saved one. */
+		card: cardQuery.data ?? null,
+		isCardLoading: cardQuery.isLoading,
+		isSavingCard: cardMut.isPending,
+		saveCard,
 		isLoading: billingQuery.isLoading,
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,

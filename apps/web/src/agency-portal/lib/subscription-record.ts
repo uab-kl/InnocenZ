@@ -60,7 +60,7 @@ export function subscriptionRecordFromMember(
 	};
 	return {
 		id: sub.id,
-		title: `${orgLabel} · ${sub.planName}`,
+		title: `${sub.subscriberName?.trim() || orgLabel} · ${sub.planName}`,
 		detail: sub.endedAt
 			? `${cycle} billing · ended ${fmtDateLabelFromIso(sub.endedAt.slice(0, 10))}`
 			: `${cycle} billing`,

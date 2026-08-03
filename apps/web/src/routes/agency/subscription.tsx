@@ -15,6 +15,7 @@ import {
 	AGENCY_SUBSCRIPTION_PLANS,
 	agencySubscriptionBillingForWeeklyPv,
 	agencyWeeklyPvCount,
+	resolveAgencySubscriptionPlanForWeeklyPv,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
@@ -42,7 +43,7 @@ import {
 	TriangleAlert,
 	Users,
 } from "lucide-react";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 const CARD_LAST4 = "4242";
 
@@ -150,6 +151,90 @@ function AgencySubscription() {
 			}));
 	}, [sub.backed, sub.billingHistory, agencyCollections]);
 
+	/**
+	 * What this agency has asked InnocenZ for and not been answered on yet — the
+	 * agency's half of the same handshake the outlet has for its POS add-on.
+	 * Ordinary tier switches never appear here: the server applies those on the
+	 * spot ('direct'), so there is nothing to wait for. Only Custom waits.
+	 */
+	const waitingOn = sub.backed
+		? (sub.customRequestLabel ?? sub.pendingPlanLabel)
+		: null;
+
+	/**
+	 * The volume rule, and the only thing that moves this agency's tier.
+	 *
+	 * An agency does NOT pick a plan — the rate card is a band table and the PVs
+	 * it issued this payroll week choose the row. So there are no switch buttons;
+	 * this effect reconciles what the ledger says with what the volume says:
+	 *
+	 *  • inside the rate card, on the wrong tier → apply the right one (list
+	 *    price, applied on the spot, nothing for an admin to decide)
+	 *  • past 150 PV → NOTIFY THE ADMIN to negotiate, because the 151+ band has
+	 *    no list price. The agency stays on its current tier until they answer.
+	 *  • on Custom but back inside the rate card → ask the admin to end Custom.
+	 *    Still a request: an agency's own PV count must not end a negotiated
+	 *    price by itself.
+	 *
+	 * Guarded hard, because this WRITES: only for a real session, only once the
+	 * real PV count and the plan catalog have loaded, never while a request is
+	 * already open, and at most once per mount.
+	 */
+	const autoTierFiled = useRef(false);
+	useEffect(() => {
+		if (!sub.backed || !canEdit) return;
+		if (sub.weeklyPvCount === null || !sub.planCatalogReady) return;
+		if (sub.isLoading || sub.isRequesting) return;
+		if (waitingOn || autoTierFiled.current) return;
+
+		const pv = sub.weeklyPvCount;
+		const banded = resolveAgencySubscriptionPlanForWeeklyPv(pv);
+		const needsCustom = Boolean(banded.renegotiate);
+
+		if (needsCustom && !sub.onCustom) {
+			autoTierFiled.current = true;
+			sub.notifyAdminForCustom(pv).then((r) => {
+				toast(
+					r.ok
+						? `${pv} PV this week — InnocenZ admin notified to negotiate your Custom price`
+						: (r.reason ?? "Could not notify InnocenZ admin — try again"),
+					r.ok ? "success" : "warn",
+				);
+			});
+			return;
+		}
+
+		if (!needsCustom && sub.onCustom) {
+			autoTierFiled.current = true;
+			sub.requestLeaveCustom(banded.label, pv).then((r) => {
+				toast(
+					r.ok
+						? `${pv} PV this week is back inside the rate card — asked InnocenZ admin to move you to ${banded.label}`
+						: (r.reason ?? "Could not send the request — try again"),
+					r.ok ? "success" : "warn",
+				);
+			});
+			return;
+		}
+
+		if (
+			!needsCustom &&
+			!sub.onCustom &&
+			sub.currentPlanName &&
+			sub.currentPlanName !== banded.label
+		) {
+			autoTierFiled.current = true;
+			sub.applyAutoTier(banded.label, pv).then((r) => {
+				if (r.ok) {
+					toast(
+						`${pv} PV this week — your tier is now ${banded.label}`,
+						"success",
+					);
+				}
+			});
+		}
+	}, [sub, canEdit, waitingOn, toast]);
+
 	if (!agencyCan(agencySubRole, "viewSettings")) {
 		return (
 			<div className="iz-screen">
@@ -169,16 +254,6 @@ function AgencySubscription() {
 	const renewalDate = nextChargeDate;
 
 	/**
-	 * What this agency has asked InnocenZ for and not been answered on yet — the
-	 * agency's half of the same handshake the outlet has for its POS add-on.
-	 * Ordinary tier switches never appear here: the server applies those on the
-	 * spot ('direct'), so there is nothing to wait for. Only Custom waits.
-	 */
-	const waitingOn = sub.backed
-		? (sub.customRequestLabel ?? sub.pendingPlanLabel)
-		: null;
-
-	/**
 	 * A real session is billed for the tier in its `member_subscription` row, not
 	 * the one this week's PV count implies. Showing the derived tier told an
 	 * agency on Custom that it was on Starter — the same mistake that had one
@@ -196,35 +271,21 @@ function AgencySubscription() {
 		: billing.priceLabel;
 
 	/**
-	 * Ask for a tier. Anything touching Custom goes to the admin and the card
-	 * keeps showing the current price until they answer — an agency must not be
-	 * able to set or end its own negotiated price.
+	 * Leave Custom and go back to the banded rate card.
+	 *
+	 * The ONLY thing an agency can do to its own tier by hand. It is still a
+	 * REQUEST — the admin resolving it is what moves the ledger — because an
+	 * agency must not be able to end a price a human negotiated. Re-negotiating
+	 * is not offered here at all: that is the volume rule's job when the week's
+	 * PVs go past the rate card.
 	 */
-	const handleSwitch = (label: string) => {
-		sub.requestPlanChange(label).then((result) => {
-			if (!result.ok) {
-				toast(
-					result.reason ?? "Could not send the request — try again",
-					"warn",
-				);
-				return;
-			}
-			toast(
-				label === "Custom"
-					? "Custom price request sent to InnocenZ admin"
-					: sub.onCustom
-						? `Request to end Custom and move to ${label} sent to InnocenZ admin`
-						: `Switched to ${label}`,
-				"success",
-			);
-		});
-	};
-
-	const handleRequote = () => {
-		sub.requestCustomRequote().then((result) => {
+	const handleResetToNormal = () => {
+		const pv = sub.weeklyPvCount ?? 0;
+		const banded = resolveAgencySubscriptionPlanForWeeklyPv(pv);
+		sub.requestLeaveCustom(banded.label, pv).then((result) => {
 			toast(
 				result.ok
-					? "New Custom price request sent to InnocenZ admin"
+					? `Reset off Custom — you are on ${banded.label} now`
 					: (result.reason ?? "Could not send the request — try again"),
 				result.ok ? "success" : "warn",
 			);
@@ -334,11 +395,7 @@ function AgencySubscription() {
 									{/* Amber, and alongside — an agency on Custom with an open
 									    request is in both states at once. */}
 									{waitingOn && (
-										<IzPill variant="amber">
-											{sub.customRequestKind === "exit"
-												? "Cancel · pending admin"
-												: "New price · pending admin"}
-										</IzPill>
+										<IzPill variant="amber">Price · pending admin</IzPill>
 									)}
 								</div>
 								<p className="iz-tiny iz-muted mt-1">
@@ -356,34 +413,29 @@ function AgencySubscription() {
 							<>
 								{waitingOn && (
 									<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
-										{sub.customRequestKind === "exit"
-											? `Your request to end Custom is with InnocenZ admin — ${waitingOn}. The agreed price stands until they answer.`
-											: "Your request for a new price is with InnocenZ admin — the current price applies until they answer."}
+										InnocenZ admin is negotiating your Custom price — nothing
+										changes until they answer.
 									</p>
 								)}
 								{/*
-								 * Both ways out stay available while a request is open; only the
-								 * one already asked for is blocked. An agency that asked for a new
-								 * price must still be able to decide it would rather leave Custom
-								 * altogether — the same choice the venue has over its POS add-on.
+								 * ONE action, deliberately: reset back to the rate card. There is
+								 * no "renegotiate" button because re-pricing is not the agency's
+								 * call — the volume rule raises that when the week's PVs pass the
+								 * rate card — and no "cancel", because an agency cannot end a
+								 * negotiated price by itself. This asks; the admin decides.
 								 */}
 								<div className="mt-3 flex flex-col gap-2 border-t border-[var(--iz-line)] pt-3 sm:flex-row">
 									<button
 										type="button"
 										className="iz-btn iz-btn-soft flex-1"
-										disabled={
-											sub.isRequesting || sub.customRequestKind === "requote"
-										}
-										onClick={handleRequote}
+										disabled={sub.isRequesting}
+										onClick={handleResetToNormal}
 									>
-										{sub.customRequestKind === "requote"
-											? "New price · requested"
-											: "Ask for a new price"}
+										Reset to normal subscription
 									</button>
 									<p className="iz-tiny iz-muted2 flex-1 self-center">
-										{sub.customRequestKind === "exit"
-											? "Leaving Custom — waiting for InnocenZ admin to resolve it."
-											: "To leave Custom, pick a rate-card tier below — that also goes to the admin."}
+										Puts you back on the tier your weekly PVs fall into,
+										straight away. InnocenZ admin sees it in Plan Request.
 									</p>
 								</div>
 							</>
@@ -395,7 +447,7 @@ function AgencySubscription() {
 			<IzSectionLabel>Rate card</IzSectionLabel>
 			<p className="iz-tiny iz-muted2 -mt-1 mb-2">
 				{sub.backed
-					? "Reference tiers — your charge each week follows PVs issued in that payroll week. Switching tier applies straight away; Custom is priced by InnocenZ admin."
+					? "Your tier is chosen by the PVs you issue each payroll week — there is nothing to pick. Past 150 PV the rate card runs out and InnocenZ admin is notified to negotiate a Custom price."
 					: "Reference tiers — your charge each week follows PVs issued in that payroll week"}
 			</p>
 			{sub.backed && waitingOn && (
@@ -452,37 +504,6 @@ function AgencySubscription() {
 								</div>
 							</div>
 							<p className="iz-tiny iz-muted mt-2">{plan.description}</p>
-							{/*
-							 * Real sessions can act on the rate card. Ordinary tiers apply on
-							 * the spot — they have a list price and follow PV volume, so
-							 * there is nothing for an admin to decide. Custom, in either
-							 * direction, is a request: joining has no price until the admin
-							 * sets one, and leaving ends a price the agency must not be able
-							 * to end by itself.
-							 */}
-							{sub.backed && canEdit && !isBilledTier && (
-								<button
-									type="button"
-									className="iz-btn iz-btn-soft mt-2 w-full !py-1 !text-[11px]"
-									// Only an exit already asked for blocks these — an open
-									// re-quote must not trap the agency on Custom.
-									disabled={
-										sub.isRequesting ||
-										sub.isLoading ||
-										!sub.planCatalogReady ||
-										sub.customRequestKind === "exit"
-									}
-									onClick={() => handleSwitch(plan.label)}
-								>
-									{sub.isLoading
-										? "Loading…"
-										: plan.label === "Custom"
-											? "Ask for a Custom price"
-											: sub.onCustom
-												? `Leave Custom · ${plan.label}`
-												: `Switch to ${plan.label}`}
-								</button>
-							)}
 						</IzCard>
 					);
 				})}

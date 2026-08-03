@@ -620,6 +620,52 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **3 Aug 2026 (fourteenth slice) — THE AGENCY TIER IS AUTOMATIC, AND THE CARD IS REAL.**
+>
+> Owner: *"in the agency is auto selected rate card not manually based on how many pv of that agency, how
+> can i leave custom?, and if over 151 pv of the agency need to auto notify the admin to negotiate the
+> price. no this leave custom starter"*. Correct — the switch buttons I had just added were the wrong
+> model entirely. **An agency never picks a tier: the rate card is a band table and the week’s PV count
+> picks the row.** All the per-tier buttons are gone.
+>
+> **The volume rule** (one guarded effect) now reconciles ledger against volume: inside the rate card on
+> the wrong tier → apply the right one (`plan_change`, direct, list price); **past 150 PV → notify the
+> admin to negotiate** (`custom_renegotiation`, pending — the 151+ band has NO list price, so nothing can
+> be auto-applied); on Custom but back inside the card → reset. It writes, so it is guarded hard: real
+> session only, only once the REAL weekly PV count and the plan catalog have loaded, never while a request
+> is open, at most once per mount.
+>
+> **The PV count is real**, counted from `payment_voucher` rows in the payroll week — not the demo store,
+> which is empty for a real agency and would have read "0 PV" for everyone and auto-reset them all off
+> Custom on first page load. Null while unknown, and the rule refuses to act on null.
+>
+> **Reset, not cancel/renegotiate.** Owner: *"make in the agency only the custom can reset back, no cancel
+> and the renegotiate"*, then showed the two existing rows as the reference: Delta’s `plan_change` Custom →
+> Growth (**Direct**) = the reset, Atlas’s `custom_renegotiation` Custom → Custom (**Pending**) = the
+> renegotiate. So reset is filed as a plan_change and **applies immediately**, matching that row exactly;
+> it still surfaces in Plan Request because it touches Custom. Admin labels read `Reset · Growth` for an
+> agency (vs `Cancel · Pro only` for a venue), including for the older rows filed before the reset had a
+> shape of its own.
+>
+> **"InnocenZ Agency · Custom" on Atlas’s own screen** was a hardcoded prefix passed into
+> `subscriptionRecordFromMember`. The ledger row already carries `subscriberName`; it now wins, and the
+> fixed label is only a fallback. Verified the admin reads the same two rows for Atlas (Custom 0.00 active,
+> Growth 500.00 expired) that Atlas sees.
+>
+> **The payment card is now a real record (migration 0082, `main.payment_method`).** Owner: *"makes really
+> can change the outlet card credential and save it to the database"*. ⚠️ **THERE IS NO COLUMN FOR THE CARD
+> NUMBER OR THE CVV, AND THERE MUST NEVER BE ONE** — a stored PAN puts this database in PCI-DSS scope and a
+> stored CVV is forbidden outright. The browser derives brand + last four and discards the number; the zod
+> schema caps `last4` at four digits so a full PAN is REJECTED at the edge (verified live: posting
+> 4242424242424242 returns 400). Ownership is two nullable FKs with a CHECK that exactly one is set —
+> unlike `member_subscription`’s unFK-able subscriber pair, which is how six rows came to point at nothing.
+> One active card per organisation (partial unique index), `GET/PUT /payment-method/mine` scoped from the
+> session. **The card can be RECORDED but not CHARGED** until a gateway fills `gateway_token`, and the form
+> says so instead of implying auto-pay works. The old "Update card" button invented a random four digits.
+>
+> **Renewal date on the payment section** followed a hardcoded "15 Jul 2026" while the plan card above it
+> showed the real 3 Sept 2026; both now read the same anchored renewal.
+
 > **3 Aug 2026 (thirteenth slice) — BOTH WAYS OUT STAY ON SCREEN, AND PENDING IS VISIBLE.**
 >
 > Owner, looking at a venue already on POS: *"where is that 2 buttons renegotiate POS and the cancel

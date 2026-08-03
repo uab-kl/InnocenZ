@@ -219,13 +219,24 @@ function toPlanLabel(
 		: undefined;
 	const arrangement = negotiatedArrangement(request);
 	if (arrangement) {
-		// Naming an ordinary tier is a CANCELLATION — the subscriber keeps (or
-		// returns to) that tier and the negotiated price ends.
-		return isNegotiatedExit(request, requested)
-			? `Cancel · ${requested?.name} only`
-			: arrangement;
+		// Naming an ordinary tier ends the negotiated price. For a venue that is a
+		// cancellation of its add-on; for an agency it is a RESET back to the rate
+		// card, because an agency's tier follows its PV volume rather than a choice.
+		if (isNegotiatedExit(request, requested)) {
+			return request.subscriberType === "agency"
+				? `Reset · ${requested?.name}`
+				: `Cancel · ${requested?.name} only`;
+		}
+		return arrangement;
 	}
-	if (requested && requested.kind !== "addon") return requested.name;
+	if (requested && requested.kind !== "addon") {
+		// Older resets were filed as ordinary plan changes, before the reset had a
+		// type of its own. Read them the same way so history stays legible.
+		const from = planForRequest(request, planById ?? new Map());
+		return request.subscriberType === "agency" && from?.name === "Custom"
+			? `Reset · ${requested.name}`
+			: requested.name;
+	}
 	return "—";
 }
 
@@ -1011,7 +1022,7 @@ function RequestEditForm({
 								{isExit
 									? isAddonRequest
 										? "Add-on · cancelling"
-										: "Negotiated tier · cancelling"
+										: "Negotiated tier · resetting to the rate card"
 									: isAddonRequest
 										? "Add-on · billed on top"
 										: "Negotiated tier · replaces the tier price"}
