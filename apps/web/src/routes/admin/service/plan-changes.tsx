@@ -260,7 +260,13 @@ function PlanChangesPage() {
 	 * switch ever filed, so a venue that has moved plan several times can be
 	 * traced rather than appearing once.
 	 */
-	const [view, setView] = useState<"latest" | "all">("latest");
+	/**
+	 * Defaults to the FULL record: every switch each outlet and agency has ever
+	 * filed, so a subscriber appears once per change rather than once in total —
+	 * that trail is what the page is for. "Latest only" narrows it to the one
+	 * row per subscriber that still needs answering.
+	 */
+	const [view, setView] = useState<"latest" | "all">("all");
 	const [searchInput, setSearchInput] = useState("");
 	const [search, setSearch] = useState("");
 
@@ -389,8 +395,8 @@ function PlanChangesPage() {
 							</CardTitle>
 							<CardDescription>
 								{view === "latest"
-									? "One row per subscriber — the switch that still needs answering. Choose Full history to see every previous plan change."
-									: "Every plan change ever filed by an outlet or agency, newest first — including moves to and from POS / Custom."}
+									? "One row per subscriber — the switch that still needs answering. Choose Full history for every previous change."
+									: "Every plan change ever filed — a subscriber appears once per switch, so the same outlet or agency repeats down the list. POS and Custom moves live on Plan Request."}
 							</CardDescription>
 						</div>
 
