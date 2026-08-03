@@ -301,6 +301,24 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (read this amendment, then the 2 Aug block below)
 
+> **3 Aug (latest) — a wage-classification fault found while wiring the PR History tabs, then FIXED
+> at the owner's instruction (§10 latest).** No open item left from it.
+>
+> - [x] **🟠 Generated WAGE lines were classified `others`, so daily wages read RM 0.00 on three
+>   screens** — ✅ **DONE 3 Aug.** The weekly generator writes `ref = <shift assignment id>` (a bare
+>   uuid, no packed kind) and sets `component: 'wages'` explicitly, but `toReceiptLineDTO` derived
+>   the PR bucket from `ref` alone, so `decodeRef()` fell through to `'others'`. New `lineKind()`:
+>   **a packed ref still wins** (a self-log states its own kind and is the authority on itself); the
+>   `component` column answers **only** when the ref packs nothing. `sumWages()` goes through the
+>   same helper — it was returning 0.00 for the same reason. Proven per line by
+>   `src/scripts/probe-pr-history.ts`: Vicky's 2 × RM 700.00 wage lines **MOVED** others → wages, her
+>   RM 175.00 `ot` line correctly **stayed** in others, and Alice's already-packed lines were
+>   **untouched** (wages stayed wages, drinks stayed drinks). ⚠️ The earlier note here claimed this
+>   was risky because `kind` drives `disputable: kind === 'wages'` — **that was wrong**: a wage line
+>   carries no receipt, so `receiptStatus === null` already made it disputable. The only other effect
+>   is that a dispute raised on that cell now files under `wages` instead of `others`, which is the
+>   correct bucket.
+
 > **3 Aug: `main` was merged in (jk's PR #41 — docs only), and TWO of the five open items closed.**
 > ✅ **§9 P1 "Verify PV ↔ PR wage calc" is DONE (§8 X57)** — the rate-card link the audit never
 > checked is now machine-proven live, `agree 4 · disagree 0`.
@@ -633,6 +651,164 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (evening, part 2) — the agency can finally SIGN and PAY; the rail is no longer
+> decorative.**
+>
+> **(1) Finance signature — built end to end, at the owner's instruction ("required before Send to
+> PR").** The rail has always shown `Raise PV → Finance sign → Sent to PR → PR signed → Paid`, but
+> the second step had **no action, no endpoint and no column**: `finance_head_name` and
+> `finance_head_signed_at` existed and nothing ever set either, while the PR's half was fully real —
+> and the PR's own screen printed *"Finance Head already signed"* as hardcoded copy. Now:
+> migration **0080** adds `finance_head_signature text` (mirroring `pr_signature`/0071, same stroke
+> JSON); `POST /payment-voucher/:id/finance-sign` behind `agencyOwnerOrFinance`; **`PUT` refuses the
+> `pending_review → sent` transition with 409 when unsigned**; and the agency PV detail grows a
+> signature pad with Send disabled until it is used. Signing is a SEPARATE endpoint because
+> `PUT /:id` deletes and re-inserts every line — an attestation must never be a side effect of an
+> edit. The signer's name comes from the session, never the body. Re-signing after send is refused
+> (the PR may have counter-signed). `PrSignaturePad` turned out to have **zero importers** — dead
+> code, now live, extended with an optional `onConfirmInk` that emits stroke points.
+>
+> ⚠️ **`drizzle-kit generate` CANNOT RUN in this repo** — snapshots `0063`/`0064` are missing and
+> `0065–0070` are six identical copies, so 17 migrations have no valid snapshot. `drizzle-kit
+> migrate` reads only `_journal.json` + the SQL files, so **0080 was hand-authored** and deployed
+> normally (`when` set above the live max, or it is silently skipped). Every future migration needs
+> the same treatment until the snapshot history is baselined — a separate job, and one to coordinate
+> with jk since he migrates the same database.
+>
+> **(2) "To pay" → "Paid" now exists.** The payment-week card has always said *"use To pay to record
+> each bank transfer"* while offering nothing to record it with, so a SIGNED voucher could never
+> become PAID. A **Record payment** block on a signed voucher takes an optional bank reference and
+> marks it paid; the server stamps `paid_at` only when unset, so recording twice cannot re-date a
+> transfer. Only on SIGNED — paying a voucher the PR has not counter-signed settles a figure nobody
+> agreed to.
+>
+> **(3) Payment Week hides Disputes and Overtime** (owner's rule): by then every voucher is signed
+> and its figures are settled. ⚠️ The two queues stay deliberately NOT week-scoped on the other
+> tabs — a claim blocks whichever week it belongs to. Selecting the payment week while one of them
+> is open falls back to Vouchers, so no panel is ever left open with no tab above it.
+>
+> **(4) PR sign-sheet corrections** (all three from the owner reading a real screen): the sign CTA no
+> longer appears on a voucher the agency has not issued (the server answered that with a 400 — the
+> PR drew a signature to be told no); the **Name field is gone**, replaced by "Signing as {account}"
+> — it was an empty input with "Vicky" as a *placeholder*, so a PR had to retype their own name and
+> `confirmSign` blocked until they did, and being editable meant the recorded name need not match
+> the account; and the false "Finance Head already signed" banner is replaced by what is actually
+> true.
+>
+> `tsc`: backend **0**, web **121** (baseline), mobile **10** (baseline). ⚠️ **Not click-verified** —
+> signing in requires a password, so every claim here is compiler- and database-verified only.
+
+> **3 Aug 2026 (evening) — the payroll week is now Sun–Sat everywhere, and History stops
+> claiming signatures that were never given.**
+>
+> **(1) Week re-anchored Mon–Sun → Sun–Sat, on the owner's instruction.** The backend and the PR
+> app were Monday-anchored while the agency portal was Sunday-anchored, so the same money read
+> `27 Jul – 02 Aug` on the phone and `26 Jul – 01 Aug` on the web, and the agency could only find
+> its vouchers through a containment match written to paper over the gap. Changed together, because
+> they are one decision: `weekBounds()` (controller), `previousCompleteWeek()` + `weekOfDate()`
+> (payment-voucher-week.ts), the payout cron **`0 2 * * 1` → `0 2 * * 0`** (a Sun–Sat week ends
+> Saturday, so a Monday run would issue a day late and fire mid-week — Sunday is also what the
+> "PV issued every Sunday" copy on four screens always promised), and mobile `weekRangeLabel()`
+> back to a Sunday anchor. **Existing rows migrated** with `src/scripts/reanchor-voucher-weeks.ts`
+> — report-only by default, `--apply` to write, and it **REFUSES the whole run** if any line would
+> fall outside its voucher's new window. Checked first: every line is a Wed or Thu, **no line falls
+> on a Sunday**, so re-anchoring moved **zero money between vouchers**. All 3 vouchers shifted back
+> one day (PV-000004/000003 → 26 Jul–01 Aug, PV-000002 → 19–25 Jul); re-running now reports
+> "already Sun–Sat", so it is idempotent. `tsc` backend 0, mobile 10 (baseline).
+>
+> **(2) History → Payment badge tells the truth.** ⚠️ **A regression from earlier the same day, and
+> it was mine.** Widening `/mine/history` to include `pending_review` (see the previous entry) fed
+> vouchers to a mapper whose status was a two-value binary — `v.status === 'paid' ? 'paid' :
+> 'signed'` — so two unsigned weeks rendered **"Signed"** with `pr_signed_at` NULL in the database.
+> That is the worst possible place for it: History → Payment is the screen a PR opens *to check
+> whether they signed*. `HistPayStatus` now carries `'pending'`; `payStatus()` reports `signed` only
+> when the voucher says so; `statusMeta` distinguishes the two waits the PR cannot act on the same
+> way — *"Waiting for your signature"* (sent) vs *"Waiting for your agency to issue"*
+> (pending_review) vs *"Disputed — waiting on your agency"*. On the Shifts tab a past shift is
+> `'sealed'` (true of any checked-out shift) unless the voucher is genuinely signed, with the
+> caption saying which. **The owner's earlier "Last Week shows as Signed" rule is superseded by the
+> tab semantics given today:** Last Week is where signing *happens*, so pre-ticking it removes the
+> reason the tab exists.
+>
+> **(4) The late-PV signing hole — the SAME regression as (2), in a second place I missed.**
+> `PvDetailScreen` computed `alreadySigned = hist ? true : false` — *being reachable from History
+> WAS proof of a signature*, because History only ever held signed and paid vouchers. Once it
+> carried every closed week that stopped being true, and the consequence was the worst possible one:
+> a voucher the agency sends LATE appears only in History (it is not last week, so it is not on the
+> Payment screen), so it was **sealed on arrival and the PR had nowhere to sign it**. It now asks the
+> voucher, not the screen it was opened from; a History voucher that is neither signed nor paid maps
+> to `awaiting_pr`, so **Open PV → sign pad** works for any sent voucher of any age. The submit path
+> already resolved `backendPvId` from `histVoucher.voucherId`, so nothing else changed.
+> ⚠️ **Lesson: when a query is widened, every consumer that inferred a fact from the OLD narrowness
+> becomes wrong.** The badge and this gate were two such inferences from one change, and I found the
+> second only because the owner hit it.
+>
+> **(5) Payment Week no longer hides what it cannot pay.** The tab filtered to `SIGNED` — the right
+> *expectation* ("everything should already be signed") enforced the wrong way: it was the ONLY tab
+> whose window contains a two-week-old voucher, so an unsigned one was invisible everywhere —
+> RM 875.00 that could not be reviewed, sent, or therefore signed, with nothing anywhere saying so.
+> The tab now shows the whole week, the status chips apply to it (they were bypassed), **"To pay"**
+> still isolates the payment run, and an amber card names each overdue voucher with PR, amount and
+> status. Also corrected two doc comments still claiming `week_start` is a Monday.
+>
+> **(6) Receipt proof photos enlarge on click** (agency Receipts tab) — a 64px thumbnail cannot be
+> read, and reading the printed figures against the line is the entire point of the photo. Backdrop
+> click, a Close button and **Escape** all dismiss; bounded to `90vh`/`90vw` so a tall receipt
+> scrolls rather than overflowing off-screen.
+>
+> **(3) Two "missing" things that are not missing — both one root cause.** The PR's **"Review &
+> sign" button already exists** (PaymentScreen.tsx:527, finger-drawn `SignaturePad` → real ink to
+> `POST /mine/:id/sign`); it is gated on `status === 'sent' | 'awaiting_pr'`. The agency's **Payment
+> Week tab** is `SIGNED`-only by design, which the owner confirmed today ("everything should already
+> be signed"). Both are hidden for the same reason: **no voucher has ever been issued** — all three
+> sit at `pending_review` with **0 day-reviews**, and the payout job holds any voucher whose days
+> are unreviewed. Nothing is broken in either surface; the chain
+> `pending_review → sent → signed → paid` has never been started.
+
+> **3 Aug 2026 (latest) — two screens that said "none" while the database held the rows.**
+> Same shape of fault in both apps: the data existed, the screen was reading somewhere else.
+>
+> **(1) Agency `/agency/pv` → Receipts now reads the DATABASE.** The tab was rendering the demo
+> Zustand store (`prReceiptScans`), which is empty on every real login — meanwhile
+> `GET /payment-voucher/receipts` had shipped with the receipt-review flow and had **zero web
+> callers**. New `fetchAgencyReceipts()` (services) + `useAgencyReceipts()` (hook) + a rebuilt
+> `AgencyReceiptsPanel`: three stat tiles (receipts · **waiting on you** · commission logged), status
+> chips with counts, a search box, and the seven filter fields folded behind a toggle instead of
+> filling the first screen; rows are **grouped by shift working day**, expand to line items + proof
+> photos, and carry **Approve / Withdraw approval** hitting the SAME endpoint as the per-voucher
+> verify panel (so one receipt has one decision under one server rule). The week tab is a FILTER, so
+> receipts in other weeks are **counted and stated** rather than left to look like absence. Demo
+> `ReceiptsSection` + `ReceiptScanDetailSheet` deleted (277 lines); `ReceiptScanRow` kept — the PV
+> detail still uses it. Live DB: 2 receipts (`RCP-000005`, `RCP-000007`) on PV-000003, Atlas Agency,
+> both `verified` so no approve button renders; **RCP-000005 has zero lines and now says so** instead
+> of printing a bare RM 0.00. `tsc` 121 (baseline unchanged), 0 errors in the four touched files.
+>
+> **(2) PR History → Shifts + Payment history stop hiding a week that has closed.** Both read
+> "No payments yet" while the Payment tab showed **RM 700.00** for the very same week:
+> `listHistoryForPr` defaulted to `signed`+`paid`, and every live voucher is `pending_review` — the
+> state a voucher sits in from the moment the week closes until the agency issues it, which is
+> exactly when a PR goes looking for it. `getMyHistory` now passes all five statuses; the **current
+> week stays excluded** (it belongs to the Payment tab, the screen that can still change it). The
+> whole mobile chain was already wired to `/mine/history`, so this one filter unblocked both tabs.
+> Proven with `src/scripts/probe-pr-history.ts` (read-only, calls the repository the controller
+> calls): Vicky old filter **0 weeks** → new filter **2 weeks** — PV-000004 27 Jul–02 Aug RM 700.00
+> and PV-000002 20–26 Jul RM 875.00. **The owner's rule needed no code change**: the mapper already
+> renders anything not `paid` as **Signed**, and only a genuinely paid voucher as **Paid**.
+>
+> **(3) Daily wages stop showing up as "Others"** — found while doing (2), then fixed on the owner's
+> instruction the same session. The weekly generator writes `ref = <shift assignment id>` (bare uuid)
+> and sets `component: 'wages'` explicitly, but `toReceiptLineDTO` read the bucket off `ref` alone,
+> so `decodeRef()` fell through to `'others'`: **every generated wage line — 4 lines, RM 2,600.00 —
+> displayed under Others, and every "daily wages" figure the PR saw read RM 0.00**, on the Payment
+> grid, History → Shifts and History → Payment at once. The database was right the whole time; only
+> the read was wrong. New `lineKind()` in the controller: **a packed ref still wins** (a self-log or
+> receipt line states its own kind and is the authority on itself), and the `component` column
+> answers **only** when the ref packs nothing. `sumWages()` shares the helper — it was returning 0.00
+> for the identical reason. `kindFromComponent()` / `refPacksKind()` live in
+> `payment-voucher-component.ts`, the module that already owns the kind↔component relation, so the
+> map exists once. Proven per line: Vicky's 2 × RM 700.00 **MOVED** others → wages, her RM 175.00
+> `ot` line correctly **stayed** in others, Alice's already-packed lines **unchanged**. `tsc` 0.
 
 > **3 Aug 2026 (later still) — `/agency/pv` disputes + overtime are now TABS, at the owner's request.**
 > They rendered permanently open above the week tabs, so on a quiet week two empty panels ate the

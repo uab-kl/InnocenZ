@@ -3,7 +3,7 @@
  * Source of truth is the DB — no demo seed weeks/amounts.
  */
 import type { PrHistoryVoucher, PrReceiptLine } from './api';
-import type { HistPayLine, HistPayWeek } from './demo-payment-history';
+import type { HistPayLine, HistPayStatus, HistPayWeek } from './demo-payment-history';
 import {
   DAY_NAMES,
   MONTH_NAMES,
@@ -60,13 +60,34 @@ function issuedLabel(v: PrHistoryVoucher): string {
   return `${d} ${MONTH_SHORT[m - 1]} ${y}`;
 }
 
+/**
+ * The PR-facing badge for a voucher, from its REAL status.
+ *
+ * Never infers a signature. `signed` is reported only when the voucher actually
+ * says so — a `pending_review`, `sent` or `disputed` week is 'pending', because
+ * signing is the action the PR still has to take and a screen that has already
+ * ticked it off removes the reason to look.
+ */
+function payStatus(v: PrHistoryVoucher): HistPayStatus {
+  if (v.status === 'paid') return 'paid';
+  if (v.status === 'signed' || v.prSignedAt) return 'signed';
+  return 'pending';
+}
+
+/** The line under the badge — what actually happened, and whose move it is. */
 function statusMeta(v: PrHistoryVoucher): string {
   if (v.status === 'paid') {
     const when = asIsoDate(v.paidAt);
     return when ? `Paid ${issuedLabel({ ...v, issuedDate: when })}` : 'Paid';
   }
-  const when = asIsoDate(v.prSignedAt);
-  return when ? `Signed ${issuedLabel({ ...v, issuedDate: when })}` : 'Signed';
+  if (payStatus(v) === 'signed') {
+    const when = asIsoDate(v.prSignedAt);
+    return when ? `Signed ${issuedLabel({ ...v, issuedDate: when })}` : 'Signed';
+  }
+  // Two different waits, and the PR can only act on one of them.
+  if (v.status === 'disputed') return 'Disputed — waiting on your agency';
+  if (v.status === 'sent') return 'Waiting for your signature';
+  return 'Waiting for your agency to issue';
 }
 
 /** Short aggregate label — "(2)-outlet" instead of the long "Multi-outlet (2)". */
@@ -119,7 +140,7 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
   const wages = Number(v.wages) || lines.filter((l) => /wage/i.test(l.type)).reduce((s, l) => s + l.amount, 0);
   const net = Number(v.net) || lines.reduce((s, l) => s + l.amount, 0);
   const commission = Math.round((net - wages) * 100) / 100;
-  const status: HistPayWeek['status'] = v.status === 'paid' ? 'paid' : 'signed';
+  const status = payStatus(v);
   return {
     id: v.voucherId,
     ref: pvRefForWeek(v.weekEnd, v.voucherId, v.voucherNo),
@@ -178,7 +199,18 @@ export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): Dem
     byDate.set(dateIso, rec);
   }
 
-  const status: DemoHistoryShift['status'] = v.status === 'paid' ? 'sealed' : 'signed';
+  // 'sealed' is a statement about the SHIFT — check-out fixed its money — and is
+  // true whether or not the voucher has been signed. Only a genuinely signed
+  // voucher gets 'signed', so the Shifts filter cannot claim a signature the PR
+  // never gave; the caption below says which of the two sealed cases it is.
+  const payStatus = historyVoucherToPayWeek(v).status;
+  const status: DemoHistoryShift['status'] = payStatus === 'signed' ? 'signed' : 'sealed';
+  const timeLabel =
+    payStatus === 'paid'
+      ? 'Paid · sealed'
+      : payStatus === 'signed'
+        ? 'Sealed · signed PV'
+        : 'Sealed · PV not signed yet';
   return [...byDate.entries()]
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([dateIso, b]) => {
@@ -193,7 +225,7 @@ export function historyVoucherToShifts(v: PrHistoryVoucher, weekId: string): Dem
         outlet,
         dateLabel: fmtDFriendly(y, m, d),
         dateIso,
-        time: v.status === 'paid' ? 'Paid · sealed' : 'Sealed · signed PV',
+        time: timeLabel,
         payout,
         wages: b.wages,
         drinks: b.drinks,

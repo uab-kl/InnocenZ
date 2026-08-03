@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
 	fetchPaymentVoucher,
 	fetchPaymentVouchers,
+	financeSignPaymentVoucher,
 	type UpdatePaymentVoucherInput,
 	updatePaymentVoucher,
 } from "@/services/payment-voucher";
@@ -75,6 +76,25 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 	const patch = (id: string, input: UpdatePaymentVoucherInput) =>
 		updateMut.mutate({ id, input });
 
+	/**
+	 * The agency's signature. Its own mutation rather than a `patch`, because it
+	 * hits its own endpoint — `PUT /:id` rewrites every line, and an attestation
+	 * must never be a side effect of an edit. Invalidates the list AND the shared
+	 * evidence detail, since signing is what unlocks the send button on both.
+	 */
+	const financeSignMut = useMutation({
+		mutationFn: (vars: {
+			id: string;
+			signature: { w: number; h: number; strokes: [number, number][][] };
+		}) => financeSignPaymentVoucher(vars.id, vars.signature, logout),
+		onSuccess: () => {
+			invalidate();
+			queryClient.invalidateQueries({
+				queryKey: ["agency", "payment-voucher", "evidence"],
+			});
+		},
+	});
+
 	return {
 		pvs,
 		isLoading: pvQuery.isLoading,
@@ -90,6 +110,20 @@ export function useAgencyPvs(params: { enabled?: boolean } = {}) {
 		// Dispute-resolution line edit: replace lines and the deduction.
 		editLines: (id: string, rows: PrPvRow[], deduction: number) =>
 			patch(id, { lines: pvLineInputsFromRows(rows), deduction }),
+		// The agency's half of the dual signature — required before sendToPr.
+		financeSign: financeSignMut.mutateAsync,
+		isSigning: financeSignMut.isPending,
+		/**
+		 * Records a bank transfer against a SIGNED voucher — the last step of the
+		 * rail, and the one that had no action behind it: the payment week said
+		 * "use To pay to record each bank transfer" while offering nothing to
+		 * record it with.
+		 *
+		 * The server stamps `paid_at` only when it is not already set, so a second
+		 * click cannot re-date a payment that already happened.
+		 */
+		markPaid: (id: string, bankRef?: string) =>
+			patch(id, { status: "paid", ...(bankRef ? { bankRef } : {}) }),
 	};
 }
 

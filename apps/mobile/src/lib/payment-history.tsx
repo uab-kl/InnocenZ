@@ -1,6 +1,10 @@
 /**
- * Loads signed/paid payment_voucher rows for History tabs.
- * Empty list when the PR has no completed PVs (e.g. no last-week shifts).
+ * Loads every CLOSED week's payment_voucher row for the History tabs — not just
+ * signed/paid ones, because a week sits in `pending_review` from the moment it
+ * closes until the agency issues it, and that is exactly when a PR comes looking
+ * for it. Anything not paid renders as "Signed".
+ *
+ * Empty list when the PR has no closed weeks yet (e.g. no last-week shifts).
  */
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
 import { useSession } from './session';

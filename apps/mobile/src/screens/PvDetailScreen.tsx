@@ -130,7 +130,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const keyboardInset = useKeyboardInset();
   const { isSigned, signPv } = useSignedPvs();
   const { weeks: apiWeeks, vouchers: apiVouchers, refresh: refreshHistory } = usePaymentHistory();
-  const { token } = useSession();
+  const { token, me } = useSession();
   // The real last-week voucher — the only PV a PR can still sign ("one week,
   // one PV"). Signed/paid weeks arrive through payment history instead.
   const { lastWeek } = useAwaitingLastWeekPv();
@@ -182,7 +182,16 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         outlet: hist.outlet,
         weekLabel: hist.weekLabel,
         net: hist.net,
-        status: hist.status === 'paid' ? ('paid' as const) : ('signed' as const),
+        // Three states, not two. A History voucher used to be signed or paid by
+        // definition; since History began carrying every CLOSED week it can also
+        // be one the PR has not signed, and calling that 'signed' is what removed
+        // the only route to signing a voucher older than last week.
+        status:
+          hist.status === 'paid'
+            ? ('paid' as const)
+            : hist.status === 'signed'
+              ? ('signed' as const)
+              : ('awaiting_pr' as const),
         statusLabel: hist.statusMeta,
       }
     : {
@@ -199,11 +208,35 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   /** Net always matches Payment → Last week total. */
   const netDisplay = !hist && gridTotal > 0 ? gridTotal : pv.net;
   const displayWeekLabel = pv.weekLabel;
+  /**
+   * Has this voucher actually been signed?
+   *
+   * This read `hist ? true : false` — being reachable from History WAS proof of a
+   * signature, because History only ever held signed and paid vouchers. Once it
+   * began carrying every closed week (3 Aug 2026) that stopped being true, and
+   * the consequence was severe: a voucher the agency sent LATE appears only in
+   * History, so it was sealed on arrival and the PR had nowhere left to sign it.
+   * Ask the voucher, never the screen it was opened from.
+   */
   const alreadySigned =
-    (hist ? true : false) ||
+    (hist ? hist.status === 'signed' || hist.status === 'paid' : false) ||
     isSigned(pv.id) ||
     lastWeek?.status === 'signed' ||
     lastWeek?.status === 'paid';
+
+  /**
+   * Is this voucher actually waiting for THIS PR's signature?
+   *
+   * "Not signed" is two states, not one: a voucher the agency has not issued yet
+   * (`pending_review`) and one it has sent (`sent`). Only the second can be
+   * signed — the server answers the first with
+   * `400 · "This voucher has not been sent to you yet"` — so offering the pad on a
+   * pending voucher makes the PR draw a signature to be told no. That is exactly
+   * what happened when the History sign-gate was first widened.
+   */
+  const awaitingMySignature = histVoucher
+    ? histVoucher.status === 'sent'
+    : lastWeek?.status === 'sent' || lastWeek?.status === 'awaiting_pr';
 
   const [signed, setSigned] = useState(alreadySigned);
   // hist / lastWeek load async, so the seal must follow the data, not the
@@ -236,7 +269,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         })),
     [weekForGrid],
   );
-  const [sigName, setSigName] = useState('');
+  // The signer IS the signed-in account, so this is derived, not typed.
+  const sigName = me?.username?.trim() ?? '';
   const [signOpen, setSignOpen] = useState(false);
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
@@ -348,8 +382,21 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
 
       {!isSealed && !anyDisputed && (
         <View style={styles.banner}>
-          <Text style={styles.bannerTitle}>Pending your review</Text>
-          <Text style={styles.bannerBody}>Sign-by Sunday · Finance Head already signed</Text>
+          <Text style={styles.bannerTitle}>
+            {awaitingMySignature ? 'Pending your review' : 'Waiting for your agency'}
+          </Text>
+          {/*
+           * Was hardcoded "Sign-by Sunday · Finance Head already signed". The
+           * second half was simply untrue — no agency signature is captured
+           * anywhere in the product, so `finance_head_signed_at` is NULL on every
+           * voucher — and a PV screen that invents a counter-signature is telling
+           * the PR the money has been approved by someone who never saw it.
+           */}
+          <Text style={styles.bannerBody}>
+            {awaitingMySignature
+              ? 'Review each day, then sign to confirm this week’s earnings.'
+              : 'Your agency has not issued this voucher yet — you can review it, but there is nothing to sign until they send it.'}
+          </Text>
         </View>
       )}
       {anyDisputed && (
@@ -523,12 +570,18 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
               Signed{sigName ? ` · ${sigName}` : ''} — Dual-signed · transfer processing
             </Text>
           </View>
-        ) : (
+        ) : awaitingMySignature ? (
           <Text style={styles.pendingSig}>Pending</Text>
+        ) : (
+          // Names whose move it is. "Pending" alone read as "yours to do" beside a
+          // Sign button that the server would have refused.
+          <Text style={styles.pendingSig}>
+            Not sent to you yet — waiting for your agency
+          </Text>
         )}
       </View>
 
-      {!isSealed && (
+      {!isSealed && awaitingMySignature && (
         <Pressable
           style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
           onPress={() => setSignOpen(true)}
@@ -621,14 +674,18 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
               Draw your signature with your finger — it is stored on the voucher
               and printed on the PDF.
             </Text>
-            <Text style={styles.fieldLabel}>Name</Text>
-            <TextInput
-              value={sigName}
-              onChangeText={setSigName}
-              style={styles.input}
-              placeholder="Vicky"
-              placeholderTextColor={C.muted2}
-            />
+            {/*
+             * The name is the signed-in account's, not a field.
+             *
+             * It used to be an empty TextInput with "Vicky" as a PLACEHOLDER, so
+             * the PR had to retype their own name and `confirmSign` refused until
+             * they did — a hard blocker made of nothing. It was also editable,
+             * which meant the name recorded against a signature need not be the
+             * account that gave it. The app already knows who is signed in, so it
+             * states that and signs as them.
+             */}
+            <Text style={styles.fieldLabel}>Signing as</Text>
+            <Text style={styles.sigAsName}>{sigName || 'this account'}</Text>
             <Text style={styles.fieldLabel}>Signature</Text>
             <SignaturePad onChange={setSigInk} />
             <Pressable
@@ -976,6 +1033,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.8,
     color: C.prMuted2,
+  },
+  sigAsName: {
+    fontFamily: F.sora,
+    fontSize: 15,
+    fontWeight: '700',
+    color: C.txt,
   },
   input: {
     fontFamily: F.sora,

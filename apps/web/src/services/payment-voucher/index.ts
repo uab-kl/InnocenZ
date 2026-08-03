@@ -252,6 +252,107 @@ export async function editPaymentVoucherReceiptLine(
 	};
 }
 
+/** One line of a receipt as the agency feed returns it (a trimmed voucher line). */
+export interface AgencyReceiptLine {
+	id: string;
+	lineDate: string | null;
+	outlet: string | null;
+	description: string;
+	quantity: number;
+	/** numeric(12,2), serialized as a string. */
+	amount: string;
+	ref: string | null;
+}
+
+/**
+ * One receipt in the agency's CROSS-VOUCHER feed (`GET /payment-voucher/receipts`).
+ *
+ * Distinct from `PaymentVoucherReceipt`, which rides on one voucher's detail and
+ * therefore needs no voucher or PR context. This row carries both, because the
+ * feed spans every voucher the agency owns and a receipt with no PR name on it is
+ * unreviewable — the reviewer cannot tell whose money it is.
+ */
+export interface AgencyReceipt {
+	id: string;
+	receiptNo: string;
+	orderNo: string | null;
+	source: PaymentVoucherReceiptSource;
+	receiptDate: string | null;
+	receiptTime: string | null;
+	note: string | null;
+	proofPhotos: string[];
+	status: PaymentVoucherReceiptStatus;
+	reviewedAt: string | null;
+	reviewedBy: string | null;
+	/** When the PR logged it — server time, not the time printed on the paper. */
+	loggedAt: string;
+	voucherId: string;
+	voucherStatus: PaymentVoucherStatus;
+	weekStart: string | null;
+	weekEnd: string | null;
+	prId: string | null;
+	prName: string | null;
+	prNickname: string | null;
+	shiftAssignmentId: string | null;
+	lines: AgencyReceiptLine[];
+}
+
+/**
+ * Every receipt logged against this agency's vouchers, newest first.
+ *
+ * Agency-scoped server-side through the voucher join, so there is no client-side
+ * tenant filter — a receipt carries no agency of its own, and filtering after the
+ * fact is how cross-tenant leaks happen.
+ *
+ * `fromDate`/`toDate` bound the LOGGED-AT date (Asia/Kuala_Lumpur), not the
+ * voucher's week. The two differ whenever a receipt is logged after midnight or
+ * after the week rolls, so callers that mean "this payroll week" filter on
+ * `weekStart` instead of passing dates here.
+ */
+export async function fetchAgencyReceipts(
+	onRefreshFail: () => void,
+	params: { fromDate?: string; toDate?: string } = {},
+): Promise<AgencyReceipt[]> {
+	const client = getClient(onRefreshFail);
+	const queryString = buildQueryParams({
+		fromDate: params.fromDate,
+		toDate: params.toDate,
+	});
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: AgencyReceipt[] | null;
+	}>(`/payment-voucher/receipts${queryString}`);
+	return response.data.data ?? [];
+}
+
+/**
+ * The agency's signature on a voucher — the "Finance sign" step, taken BEFORE
+ * the voucher goes to the PR.
+ *
+ * Its own endpoint rather than a field on `updatePaymentVoucher`, because that
+ * route rewrites the whole voucher and deletes and re-inserts every line: an
+ * attestation must not be a side effect of an edit. The server takes the signer's
+ * name from the session, never from here.
+ *
+ * Two refusals to expect, both 409: a voucher already sent cannot be re-signed
+ * (the PR may have counter-signed it), and `PUT {status:'sent'}` is refused
+ * outright until this has been called.
+ */
+export async function financeSignPaymentVoucher(
+	id: string,
+	signature: { w: number; h: number; strokes: [number, number][][] },
+	onRefreshFail: () => void,
+): Promise<PaymentVoucher> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: PaymentVoucher;
+	}>(`/payment-voucher/${id}/finance-sign`, { signature });
+	return response.data.data;
+}
+
 export interface PaymentVouchersQueryParams {
 	prId?: string;
 	status?: PaymentVoucherStatus;
