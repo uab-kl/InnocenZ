@@ -3,6 +3,12 @@ export type SubscriptionType = "agency" | "outlet";
 
 export type BillingCycle = "weekly" | "monthly" | "annually";
 
+/**
+ * A plan is held one at a time (Essential..Premier); an add-on is held
+ * alongside a plan (POS Integration). Backend migration 0081.
+ */
+export type SubscriptionKind = "plan" | "addon";
+
 export interface SubscriptionPagination {
 	page: number;
 	pageSize: number;
@@ -18,6 +24,7 @@ export interface Subscription {
 	price: string;
 	billingCycle: BillingCycle;
 	subscriptionType: SubscriptionType;
+	kind: SubscriptionKind;
 	roleId: string | null;
 	status: SubscriptionStatus;
 	coverage: string | null;

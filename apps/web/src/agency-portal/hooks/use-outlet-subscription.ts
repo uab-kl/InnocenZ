@@ -84,19 +84,64 @@ export function useOutletSubscription() {
 	}, [backed, billingQuery.data]);
 
 	/**
-	 * The plan this venue is ACTUALLY on, from its active `member_subscription`
-	 * row — the same ledger admin History reads, so the two screens can no longer
-	 * disagree. Null when the venue has no active row, and the caller then falls
-	 * back to the demo plan rather than inventing one.
+	 * The admin-managed plan catalog. Reads are open to any signed-in role, which
+	 * is what lets the venue turn the plan it tapped into the real `subscription`
+	 * row id the admin queue and the billing ledger are keyed on, and what tells
+	 * a plan apart from an add-on. Declared here because the reads below need it.
 	 */
+	const plansQuery = useQuery({
+		queryKey: ["subscriptions", "outlet-plan-catalog"],
+		queryFn: () => fetchSubscriptions({ pageSize: 100 }, logout),
+		enabled: backed,
+		staleTime: 5 * 60_000,
+	});
+
+	const outletPlans = useMemo(
+		() =>
+			(plansQuery.data?.data ?? []).filter(
+				(plan) => plan.subscriptionType === "outlet" && plan.kind !== "addon",
+			),
+		[plansQuery.data],
+	);
+
+	/**
+	 * Add-ons (POS Integration) sit in the same ledger as plans, so they are told
+	 * apart by the product they reference. Without this split the venue's add-on
+	 * line — newer than its plan — would be read as its current plan.
+	 */
+	const addonPlanIds = useMemo(
+		() =>
+			new Set(
+				(plansQuery.data?.data ?? [])
+					.filter((plan) => plan.kind === "addon")
+					.map((plan) => plan.id),
+			),
+		[plansQuery.data],
+	);
+
 	const activeSubscription = useMemo(() => {
 		if (!backed) return null;
 		return (
 			sortMemberSubscriptions(billingQuery.data?.data ?? []).find(
-				(sub) => sub.status === "active",
+				(sub) =>
+					sub.status === "active" &&
+					!(sub.subscriptionId && addonPlanIds.has(sub.subscriptionId)),
 			) ?? null
 		);
-	}, [backed, billingQuery.data]);
+	}, [backed, billingQuery.data, addonPlanIds]);
+
+	/** The venue's live POS add-on, at the price the admin agreed. */
+	const activeAddon = useMemo(() => {
+		if (!backed) return null;
+		return (
+			sortMemberSubscriptions(billingQuery.data?.data ?? []).find(
+				(sub) =>
+					sub.status === "active" &&
+					sub.subscriptionId &&
+					addonPlanIds.has(sub.subscriptionId),
+			) ?? null
+		);
+	}, [backed, billingQuery.data, addonPlanIds]);
 
 	const activePlanName = activeSubscription?.planName ?? null;
 
@@ -168,27 +213,6 @@ export function useOutletSubscription() {
 			createAdminRequest(input, logout),
 		onSuccess: () => void posQuoteQuery.refetch(),
 	});
-
-	/**
-	 * The admin-managed plan catalog. Reads are open to any signed-in role, which
-	 * is what lets the venue turn the plan it tapped into the real `subscription`
-	 * row id the admin queue and the billing ledger are keyed on. Without the id
-	 * the request would arrive as prose that nothing can act on.
-	 */
-	const plansQuery = useQuery({
-		queryKey: ["subscriptions", "outlet-plan-catalog"],
-		queryFn: () => fetchSubscriptions({ pageSize: 100 }, logout),
-		enabled: backed,
-		staleTime: 5 * 60_000,
-	});
-
-	const outletPlans = useMemo(
-		() =>
-			(plansQuery.data?.data ?? []).filter(
-				(plan) => plan.subscriptionType === "outlet",
-			),
-		[plansQuery.data],
-	);
 
 	/** Match a plan by name, case/space-insensitively ("Pro" -> the Pro row). */
 	const findPlan = (label: string) =>
@@ -310,6 +334,10 @@ export function useOutletSubscription() {
 		nextRenewalDate,
 		/** True while a POS-integration quote is with the admin (server truth). */
 		posQuotePending: Boolean(posQuoteQuery.data),
+		/** Live POS add-on at the agreed price, once the admin has resolved it. */
+		addonName: activeAddon?.planName ?? null,
+		addonAmountRm: activeAddon ? Number(activeAddon.amount) : null,
+		addonBillingCycle: activeAddon?.billingCycle ?? null,
 		/** Plan awaiting admin approval — survives a refresh; null once answered. */
 		pendingPlanLabel,
 		isLoading: billingQuery.isLoading,

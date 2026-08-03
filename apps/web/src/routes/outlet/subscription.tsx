@@ -63,12 +63,19 @@ function PosIntegrationAddonCard({
 	canEdit,
 	canCancel,
 	quotePending,
+	activeAddonPriceRm,
 	contactLine,
 	onRequestQuote,
 	onCancelQuote,
 }: {
 	addon: OutletSubscriptionAddon;
 	canEdit: boolean;
+	/**
+	 * The agreed price once the admin has resolved the quote — at which point
+	 * this venue IS on the add-on, alongside its plan. Null while it is only a
+	 * product on offer.
+	 */
+	activeAddonPriceRm: number | null;
 	/**
 	 * Whether withdrawing is actually possible. In a real session the request
 	 * lives with the admin and there is no withdraw endpoint, so offering
@@ -95,14 +102,22 @@ function PosIntegrationAddonCard({
 							<IzPill variant="violet" className="!py-0.5 !text-[10px]">
 								Add-on
 							</IzPill>
-							{quotePending && (
+							{activeAddonPriceRm !== null ? (
 								<IzPill variant="green" className="!py-0.5 !text-[10px]">
-									Request sent
+									Active
 								</IzPill>
+							) : (
+								quotePending && (
+									<IzPill variant="green" className="!py-0.5 !text-[10px]">
+										Request sent
+									</IzPill>
+								)
 							)}
 						</div>
 						<p className="iz-outlet-pos-addon__subtitle">
-							{addon.capacityLabel} · {addon.priceLabel}
+							{activeAddonPriceRm !== null
+								? `${addon.capacityLabel} · ${formatRM(activeAddonPriceRm)} / month · agreed with InnocenZ admin`
+								: `${addon.capacityLabel} · ${addon.priceLabel}`}
 						</p>
 					</div>
 					<Sparkles className="h-5 w-5 shrink-0 text-[var(--iz-violet-l)] opacity-80" />
@@ -119,7 +134,17 @@ function PosIntegrationAddonCard({
 					))}
 				</ul>
 
-				{quotePending ? (
+				{activeAddonPriceRm !== null ? (
+					<div className="iz-outlet-pos-addon__sent">
+						<p className="iz-outlet-pos-addon__sent-title">
+							POS integration active
+						</p>
+						<p className="iz-outlet-pos-addon__sent-body">
+							InnocenZ admin agreed {formatRM(activeAddonPriceRm)} / month for
+							your venue. This is billed on top of your plan.
+						</p>
+					</div>
+				) : quotePending ? (
 					<div className="iz-outlet-pos-addon__sent">
 						<p className="iz-outlet-pos-addon__sent-title">Admin notified</p>
 						<p className="iz-outlet-pos-addon__sent-body">
@@ -482,6 +507,7 @@ function OutletSubscriptionPage() {
 						canEdit={canEdit}
 						canCancel={!backend.backed}
 						quotePending={quotePending}
+						activeAddonPriceRm={backend.addonAmountRm}
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}
 						onCancelQuote={handleCancelQuote}
