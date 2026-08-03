@@ -30,8 +30,11 @@
  * row.
  */
 import '@/env.js';
+import { writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { db } from '@/db/index.js';
-import { and, eq } from 'drizzle-orm';
+import { and, eq, inArray } from 'drizzle-orm';
 import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
@@ -39,6 +42,13 @@ import { SubscriptionTable } from '@/features/subscription/subscription.model.js
 
 const ACTOR = 'repair-member-subscription-links';
 const APPLY = process.argv.includes('--apply');
+/**
+ * Also DELETE the ledger rows that name an organisation which does not exist —
+ * seeded demo billing for venues and agencies that were never real. Opt-in and
+ * separate from --apply, because deleting billing history is a decision, not a
+ * repair. Every deleted row is printed and written to a rollback file first.
+ */
+const PURGE_GHOSTS = process.argv.includes('--purge-ghosts');
 
 /**
  * Organisations to give a first ledger row, and the plan to give them — taken
@@ -61,6 +71,7 @@ async function main() {
 
   let relinked = 0;
   const orphans: string[] = [];
+  const ghosts: typeof ledger = [];
 
   for (const row of ledger) {
     const pool = row.subscriberType === 'outlet' ? outlets : agencies;
@@ -69,6 +80,7 @@ async function main() {
     const matches = byName(pool, row.subscriberName);
     if (matches.length !== 1) {
       orphans.push(`${row.subscriberName} (${row.subscriberType}, ${matches.length} name matches)`);
+      if (matches.length === 0) ghosts.push(row);
       continue;
     }
     console.log(`relink  ${row.subscriberName} -> ${matches[0].id}`);
@@ -130,12 +142,35 @@ async function main() {
     added += 1;
   }
 
+  let purged = 0;
+  if (ghosts.length && PURGE_GHOSTS) {
+    // The rollback: the complete rows, printed and saved, BEFORE the delete.
+    // Re-inserting this file restores them exactly.
+    const backup = join(tmpdir(), `member-subscription-ghosts-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+    writeFileSync(backup, JSON.stringify(ghosts, null, 2), 'utf8');
+    console.log(`\nbackup written to ${backup}`);
+    for (const row of ghosts) {
+      console.log(
+        `delete  ${row.subscriberName} (${row.subscriberType}) ${row.planName} RM${row.amount} · ${row.status} · created_by=${row.createdBy}`,
+      );
+    }
+    if (APPLY) {
+      await db.delete(MemberSubscriptionTable).where(
+        inArray(
+          MemberSubscriptionTable.id,
+          ghosts.map((row) => row.id),
+        ),
+      );
+    }
+    purged = ghosts.length;
+  }
+
   console.log(
-    `\n${APPLY ? 'APPLIED' : 'DRY RUN (pass --apply to write)'}: ${relinked} relinked, ${added} added.`,
+    `\n${APPLY ? 'APPLIED' : 'DRY RUN (pass --apply to write)'}: ${relinked} relinked, ${added} added, ${purged} deleted.`,
   );
-  if (orphans.length) {
+  if (orphans.length && !PURGE_GHOSTS) {
     console.log(
-      `\nLedger rows naming an organisation that does not exist — left untouched, decide by hand:\n  ${orphans.join('\n  ')}`,
+      `\nLedger rows naming an organisation that does not exist — left untouched (pass --purge-ghosts to delete):\n  ${orphans.join('\n  ')}`,
     );
   }
   process.exit(0);
