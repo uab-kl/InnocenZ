@@ -146,6 +146,33 @@ function planForRequest(
 }
 
 /**
+ * The negotiated arrangement a request is about, or null for an ordinary switch.
+ *
+ * Both work the same way — quoted, re-quoted, dropped — so both are labelled by
+ * the same rules below. They differ in one respect only: the outlet's POS add-on
+ * is billed BESIDE the plan, while the agency's Custom IS the plan.
+ */
+function negotiatedArrangement(request: AdminRequest): string | null {
+	if (request.type === "pos_integration_quote") return "Integrate with POS";
+	if (request.type === "custom_renegotiation") return "Custom";
+	return null;
+}
+
+/**
+ * True when the request is the subscriber LEAVING the arrangement — a venue
+ * dropping POS, or an agency coming off Custom — which is what naming an
+ * ordinary tier as the requested plan means.
+ */
+function isNegotiatedExit(
+	request: AdminRequest,
+	requested: Subscription | undefined,
+): boolean {
+	const arrangement = negotiatedArrangement(request);
+	if (!arrangement || !requested) return false;
+	return requested.kind !== "addon" && requested.name !== arrangement;
+}
+
+/**
  * From plan = what the subscriber is moving away from.
  *
  * A POS request is NOT a move between plans — the add-on is bought, re-priced
@@ -153,17 +180,26 @@ function planForRequest(
  * add-on and its previous price when there is one, and nothing at all for a
  * first-time request. Showing the plan there read as "Scale → Integrate with
  * POS", a swap that never happens.
+ *
+ * Custom follows the same rule where it applies: an agency already ON Custom
+ * shows the price being replaced or ended. But Custom IS the agency's tier, so
+ * one moving onto it from Growth really is leaving Growth, and that is what the
+ * from-side says — blanking it would hide a plan change that genuinely happens.
  */
 function fromPlanLabel(
 	request: AdminRequest,
 	planById: Map<string, Subscription>,
 ): string {
+	const price = request.previousNegotiatedAmount;
 	if (request.type === "pos_integration_quote") {
-		return request.previousAddonAmount
-			? `Integrate with POS · RM ${formatPrice(request.previousAddonAmount)}`
-			: "—";
+		return price ? `Integrate with POS · RM ${formatPrice(price)}` : "—";
 	}
-	return planForRequest(request, planById)?.name ?? "—";
+	const current = planForRequest(request, planById);
+	const arrangement = negotiatedArrangement(request);
+	if (arrangement && current?.name === arrangement) {
+		return price ? `${arrangement} · RM ${formatPrice(price)}` : arrangement;
+	}
+	return current?.name ?? "—";
 }
 
 /**
@@ -181,15 +217,15 @@ function toPlanLabel(
 	const requested = request.requestedPlanId
 		? planById?.get(request.requestedPlanId)
 		: undefined;
-	// A POS request naming a plan is a CANCELLATION — the venue keeps that plan
-	// and the add-on ends.
-	if (request.type === "pos_integration_quote") {
-		return requested && requested.kind !== "addon"
-			? `Cancel · ${requested.name} only`
-			: "Integrate with POS";
+	const arrangement = negotiatedArrangement(request);
+	if (arrangement) {
+		// Naming an ordinary tier is a CANCELLATION — the subscriber keeps (or
+		// returns to) that tier and the negotiated price ends.
+		return isNegotiatedExit(request, requested)
+			? `Cancel · ${requested?.name} only`
+			: arrangement;
 	}
 	if (requested && requested.kind !== "addon") return requested.name;
-	if (request.type === "custom_renegotiation") return "Custom";
 	return "—";
 }
 
@@ -758,16 +794,21 @@ function RequestEditForm({
 	 * its plan and bills the agreed price on top. Borrowing the plan-change
 	 * wording ("From plan → To plan") read as a replacement and made the admin
 	 * expect the venue to leave Pro, so an add-on request is labelled as one.
+	 *
+	 * The agency's Custom tier is the same negotiation with one difference: it
+	 * REPLACES the tier price rather than being billed beside it. Both render
+	 * through the block below; `isAddonRequest` is what decides the wording.
 	 */
+	const arrangementName = negotiatedArrangement(request);
+	const isNegotiatedRequest = arrangementName !== null;
 	const isAddonRequest = request.type === "pos_integration_quote";
 	/**
-	 * The same request type covers JOINING the add-on and LEAVING it — an exit
-	 * names the ordinary plan the venue is returning to. Rendered with the
-	 * joining labels it read backwards: the plan it keeps appeared as the
-	 * "add-on", and the add-on it is dropping appeared as the plan.
+	 * Each type covers JOINING the arrangement and LEAVING it — an exit names the
+	 * ordinary tier the subscriber is returning to. Rendered with the joining
+	 * labels it read backwards: the plan being kept appeared as the arrangement,
+	 * and the arrangement being dropped appeared as the plan.
 	 */
-	const isAddonExit = isAddonRequest && Boolean(requestedPlan);
-	const addonName = "Integrate with POS";
+	const isExit = isNegotiatedExit(request, requestedPlan);
 	const editableQuote = canEditQuote(request);
 	const [remarks, setRemarks] = useState(request.remarks ?? "");
 	const [quote, setQuote] = useState(request.quotedAmount ?? "");
@@ -786,6 +827,28 @@ function RequestEditForm({
 					: negotiable
 						? "Set before resolve"
 						: "—";
+
+	/**
+	 * What resolving actually does, in the subscriber's own terms. The two
+	 * arrangements end differently — dropping POS leaves the venue's plan alone,
+	 * while dropping Custom puts the agency back on an ordinary tier's list price
+	 * — so the note says which, rather than one line covering both loosely.
+	 */
+	const negotiatedNote = isExit
+		? request.status === "resolved"
+			? isAddonRequest
+				? "Resolved — the POS add-on has ended. The venue pays its plan only."
+				: `Resolved — the Custom price has ended. The agency is on ${requestedPlan?.name ?? "its tier"} at the list price.`
+			: isAddonRequest
+				? `Cancellation requested — waiting for you. The venue keeps ${requestedPlan?.name ?? "its plan"} and the add-on charge stands until you resolve this.`
+				: `Cancellation requested — waiting for you. The agency stays on Custom at the agreed price until you resolve this, then moves to ${requestedPlan?.name ?? "the tier it named"}.`
+		: request.status === "resolved"
+			? isAddonRequest
+				? "Resolved — billed on top of the venue's plan, which is unchanged."
+				: "Resolved — this is the agency's tier price from now on."
+			: isAddonRequest
+				? "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change."
+				: "Set the price, then Resolve. It becomes the agency's tier price — Custom has no list price to fall back on.";
 
 	const remarksChanged = remarks.trim() !== (request.remarks ?? "").trim();
 	const quoteChanged =
@@ -836,8 +899,10 @@ function RequestEditForm({
 	}
 
 	async function handleResolve() {
-		// Resolve finalises the price. Custom renegotiations must carry an
-		// entered amount; POS quotes can default to the outlet's current tier.
+		// Resolve finalises the price. Entering or re-pricing a negotiation must
+		// carry a figure — Custom has no list price to fall back on. LEAVING one
+		// needs none: the subscriber lands on the ordinary tier it named, and that
+		// tier's own price is what gets stamped.
 		let amount: number | undefined;
 		if (negotiable) {
 			if (rawQuote !== "") {
@@ -846,6 +911,8 @@ function RequestEditForm({
 					return;
 				}
 				amount = parsedQuote;
+			} else if (isExit) {
+				amount = requestedPlan?.price ? Number(requestedPlan.price) : undefined;
 			} else if (request.type === "custom_renegotiation") {
 				toast.error("Set a Custom price before resolving");
 				return;
@@ -899,21 +966,27 @@ function RequestEditForm({
 					</div>
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">
-							{isAddonExit
-								? "Add-on (ends)"
+							{isExit
+								? `${arrangementName} (ends)`
 								: isAddonRequest
 									? "Plan (stays)"
 									: "From plan"}
 						</dt>
-						<dd className="text-right">{isAddonExit ? addonName : fromPlan}</dd>
+						<dd className="text-right">
+							{isExit && fromPlan === "—" ? arrangementName : fromPlan}
+						</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">
-							{isAddonExit
-								? "Plan (continues)"
+							{isExit
+								? isAddonRequest
+									? "Plan (continues)"
+									: "Tier (returns to)"
 								: isAddonRequest
 									? "Add-on"
-									: "To plan"}
+									: isNegotiatedRequest
+										? "Tier"
+										: "To plan"}
 						</dt>
 						<dd className="text-right">{toPlan}</dd>
 					</div>
@@ -924,96 +997,69 @@ function RequestEditForm({
 				</dl>
 
 				{/*
-				 * A POS request stands on its own: the add-on being bought, re-priced
-				 * or dropped, with the price it replaces beside it. There is no
-				 * before/after plan — the venue's plan is untouched throughout, and
-				 * showing one read as "Scale → Integrate with POS", a swap that never
-				 * happens.
+				 * A negotiated request stands on its own: the arrangement being bought,
+				 * re-priced or dropped, with the price it replaces beside it. The POS
+				 * add-on has no before/after plan at all — the venue's plan is untouched
+				 * throughout, and showing one read as "Scale → Integrate with POS", a
+				 * swap that never happens. Custom does replace the agency's tier price,
+				 * so only the wording differs; the shape is the same, which is the point.
 				 */}
-				{isAddonRequest ? (
+				{isNegotiatedRequest ? (
 					<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
 						<div className="rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-								{isAddonExit ? "Add-on · cancelling" : "Add-on · billed on top"}
+								{isExit
+									? isAddonRequest
+										? "Add-on · cancelling"
+										: "Negotiated tier · cancelling"
+									: isAddonRequest
+										? "Add-on · billed on top"
+										: "Negotiated tier · replaces the tier price"}
 							</p>
-							<p className="text-lg font-medium">{addonName}</p>
+							<p className="text-lg font-medium">{arrangementName}</p>
 							<p className="text-base text-muted-foreground">
-								{isAddonExit ? "Charge stops on resolve" : estimateLabel}
+								{isExit ? "Charge stops on resolve" : estimateLabel}
 							</p>
-							{request.previousAddonAmount && (
+							{request.previousNegotiatedAmount && (
 								<p className="text-base text-muted-foreground">
-									Previous price RM {formatPrice(request.previousAddonAmount)}
-									{isAddonExit ? " — ends" : " — negotiating again"}
+									Previous price RM{" "}
+									{formatPrice(request.previousNegotiatedAmount)}
+									{isExit ? " — ends" : " — negotiating again"}
 								</p>
 							)}
 						</div>
-						<p className="text-base text-muted-foreground">
-							{isAddonExit
-								? request.status === "resolved"
-									? "Resolved — the POS add-on has ended. The venue pays its plan only."
-									: `Cancellation requested — waiting for you. ${fromPlan === "—" ? "The venue" : `On ${fromPlan}, the venue`} keeps its plan and the add-on charge stands until you resolve this.`
-								: request.status === "resolved"
-									? "Resolved — billed on top of the venue's plan, which is unchanged."
-									: "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change."}
-						</p>
+						<p className="text-base text-muted-foreground">{negotiatedNote}</p>
 					</div>
 				) : (
 					<div className="space-y-3 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-4 py-4">
 						<div className="flex items-center gap-2">
 							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-									{isAddonExit
-										? "Add-on · ending"
-										: isAddonRequest
-											? "Plan · unchanged"
-											: "Before · From plan"}
+									Before · From plan
 								</p>
-								<p className="text-lg font-medium">
-									{isAddonExit ? addonName : fromPlan}
-								</p>
+								<p className="text-lg font-medium">{fromPlan}</p>
 								<p className="text-base text-muted-foreground">
-									{isAddonExit
-										? "Charge stops on resolve"
-										: plan
-											? plan.name === "Custom"
-												? "Negotiated"
-												: `RM ${formatPrice(plan.price)}`
-											: "—"}
+									{plan
+										? plan.name === "Custom"
+											? "Negotiated"
+											: `RM ${formatPrice(plan.price)}`
+										: "—"}
 								</p>
 							</div>
 							<ArrowRight className="h-5 w-5 shrink-0 text-muted-foreground" />
 							<div className="flex-1 rounded-md border border-(--lavender-soft)/25 bg-card px-4 py-4">
 								<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
-									{isAddonExit
-										? "Plan · continues"
-										: isAddonRequest
-											? "Add-on · billed on top"
-											: "After · To plan"}
+									After · To plan
 								</p>
 								<p className="text-lg font-medium">{toPlan}</p>
 								<p className="text-base text-muted-foreground">
-									{isAddonExit
-										? requestedPlan
-											? `RM ${formatPrice(requestedPlan.price)} — the venue keeps paying this`
-											: "—"
-										: estimateLabel}
+									{estimateLabel}
 								</p>
 							</div>
 						</div>
 						<p className="text-base text-muted-foreground">
-							{isAddonExit
-								? request.status === "resolved"
-									? "Resolved — the POS add-on has ended. The venue pays its plan only."
-									: "This venue is dropping the POS add-on. Resolving ends that charge — no price to negotiate; it keeps paying its plan."
-								: negotiable
-									? request.status === "resolved"
-										? isAddonRequest
-											? "Resolved — the venue keeps its plan and is billed this add-on price on top of it."
-											: "Resolved — the price is final."
-										: isAddonRequest
-											? "Reminder: this add-on is billed ON TOP of the venue's plan — the plan does not change. The amount is an estimate until you Resolve."
-											: "Reminder: the To-plan amount is an estimate — negotiate or change it before Resolve. Once resolved the price is final."
-									: "This request type carries no price — only outlet POS quotes and agency Custom renegotiations are negotiable."}
+							This request type carries no price — only outlet POS quotes and
+							agency Custom renegotiations are negotiable.
 						</p>
 					</div>
 				)}

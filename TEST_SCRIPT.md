@@ -292,10 +292,34 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X54 | **🟢 THE SURPLUS APPROVAL IS CLEARED — and the cleanup SQL I had written down would have CORRUPTED the voucher.** `--clear=<assignmentId>` removed the RM 150.00 line from `9d897070…`; **PV-000003 went 1353.30 / 4 lines → 1203.30 / 3 lines**, exactly RM 150.00 lighter, and the audit still reports **3/3 reconcile**. One approval remains — `f5a1f227…`, RM 175.00 on PV-000002 — which is the one that was asked for. 🔴 **THE FINDING IS IN THE CLEANUP, NOT THE CLEAR.** The two-statement `DELETE … FROM payment_voucher_line` + `UPDATE shift_assignment` recipe I had printed at the end of every run and recorded in §9 **was incomplete**: a voucher's `subtotal`/`net` are recomputed when a line is **added**, so deleting the row behind their backs leaves **a voucher whose stated total no longer matches its own lines** — PV-000003 would have read 1353.30 with 1203.30 of lines under it. **That is precisely the fault class this entire audit exists to catch, so running my own cleanup would have manufactured one.** ⚠️ The general lesson, and it is the same one as the `-ot` dedupe ref and the `component` column: **when the app maintains a derived value, undo through the app's own path, never with SQL that only touches the base row.** `--clear` therefore calls the repository's `deleteLine()`, which runs `recomputeTotals` in the same transaction. It also prints what it will remove and takes `--dry-run`, because a delete that names its target before acting is the only kind worth trusting on a shared database. Backend tsc **0**. | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --clear=` · `payment-voucher.repository` (`deleteLine` → `recomputeTotals`) | live clear + audit 3/3 + totals arithmetic | ✅ Verified live |
 | X55 | **🟢 SUSPENDING AN ORGANISATION NOW ACTUALLY STOPS ITS PEOPLE — refused at login AND live sessions killed.** New `features/auth/org-status.ts` → `suspendedOrgBlock(userId)`, called from **`auth.controller` login** and from **`authenticateJWT`**. Two call sites on purpose: refusing the next login alone would leave anyone holding a token at the moment of suspension working until it expired — **which for an agency finance user means they could still raise payment vouchers.** The middleware already re-reads the account every request (§8 X31), so that cost was being paid and this rides along with it. **The login check sits BEFORE the password compare**, mirroring the lockout: a refusal that only fires once the password is right confirms the password to anyone who tries it. **🔴 THE DESIGN IS ALL IN WHAT IT DOES *NOT* BLOCK, and each carve-out is a lockout that nearly happened. (1) `pending_review` is ALLOWED** — only `suspended` and `inactive` deny. `pending_review` is the column **DEFAULT** for both `agency` and `outlet`, so a rule reading "not active" would have shut out **every organisation nobody has reviewed yet**, and no review screen exists. **(2) No membership means no opinion** — a platform admin and a PR hold no `agency_user`/`outlet_user` row at all, so an "is your org active?" test would have refused everyone who has no organisation, **locking every admin out of their own platform**. Absence of a membership is not a suspended membership. **(3) One live organisation is enough** — a user in a suspended agency AND an active one keeps access, rather than being punished for the other org's status. **(4) The membership row's own `status` is filtered first**, since `agency_user.status` is independent of `agency.status`. The refusal **names the organisation and its state** rather than saying "invalid credentials", which would send someone to reset a password that was never the problem — and it is their own org, so it discloses nothing. **LIVE PROOF, `probe-org-suspension.ts`, 5/5:** an active agency does not block → suspend → **blocked with the right message** → restore → access returns → and **admin is never blocked**. ✅ **Nothing was newly locked out: all 3 agencies and all 7 outlets are `active`** (asserted by the probe, not assumed). The suspension is restored in a `finally`. HTTP login re-verified after the change: admin logs in and all 6 authenticated requests pass the middleware. Backend tsc **0**. | **all** | `features/auth/org-status.ts` (new) · `auth.controller` (login) · `middlewares/authenticate-jwt.ts` · `probe-org-suspension.ts` (new) | live probe 5/5 + HTTP login re-verified | ✅ Fired live |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
+| X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
+
+### ▶ 3 Aug 2026 — AGENCY CUSTOM: two things left, both need a click on a running app
+
+1. **PROVE THE CUSTOM WRITE PATH (one admin click + one agency click).** The READ side is verified
+   live; the ledger write is not, because proving it means inventing a price in the shared DB and
+   that is the owner's call, not mine. Do this in order: **(a)** admin → Plan Request → resolve
+   **Atlas Agency · Custom (pending)** with a real figure → expect Atlas' active `member_subscription`
+   row to change from `Custom 0.00` to `Custom <figure>`; **(b)** sign in as Atlas → Subscription →
+   the new **Negotiated tier** card shows that figure with *Ask for a new price*; **(c)** pick any
+   rate-card tier → the button reads **Leave Custom · <tier>** and files a `custom_renegotiation`
+   that appears in **Plan Request** (not Plan Change) as `Custom · RM <figure>` → `Cancel · <tier>
+   only`; resolving it must move the ledger onto that tier at its list price.
+
+2. **THREE GHOST AGENCIES ARE POLLUTING PLAN REQUEST.** `admin_request` holds rows for **Summit
+   Staffing**, **Pioneer Crew** and **Horizon Talent** — `GET /agency` returns only **Atlas Agency,
+   Delta Agency, Starline PR**, and none of the three has a single `member_subscription` row. They
+   are `seed-sample-activity.ts` leftovers of the same family as the 6 ledger ghosts purged on 2 Aug.
+   **Not deleted:** the earlier purge had a rollback JSON and the owner's go-ahead; this one needs the
+   same. Extend `repair-member-subscription-links.ts` (`--purge-ghosts`) to cover `admin_request`
+   rows whose `subscriber_id` matches no outlet/agency, dry-run first.
+
+3. **`seed-sample-activity.ts` still recreates them if anyone re-runs it** — carried over from the
+   2 Aug list, now with three named victims as proof it matters.
 
 ### ▶ NEXT SESSION STARTS HERE (logged 2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
 
@@ -593,6 +617,48 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (twelfth slice) — THE AGENCY GETS THE OUTLET'S NEGOTIATED-PRICE LOGIC (§8 X56).**
+>
+> Owner: *"why the agency logic also no change follow the outlet logic"*. Correct, and the reason was
+> plain: every piece of that pipeline had been built on the OUTLET path only. The agency Subscription
+> screen was read-only — no switch, no re-quote, no exit, no waiting state — its Custom rows carried
+> no previous price, and the admin drawer still framed Custom as an ordinary plan swap.
+>
+> **The one asymmetry worth keeping, and why.** POS is an ADD-ON billed beside the plan; Custom IS the
+> agency's plan. So the from-side of a POS row is never a plan ("Scale → Integrate with POS" is a swap
+> that never happens), but an agency moving from Growth onto Custom really is leaving Growth, and the
+> from-side says so. Custom only takes the POS treatment — `Custom · RM 2,400.00` — once the agency is
+> ALREADY on it, which is exactly when there is a figure being replaced or ended.
+>
+> **A zero is not a price.** `previousNegotiatedAmount` treats `0.00` as absent, because the Custom
+> catalog row is a placeholder. Atlas sitting on `Custom 0.00` is not a negotiation that happened —
+> printing "Previous price RM 0.00 — negotiating again" would have invented one.
+>
+> **Where the RM 0 came from, now closed.** Joining Custom used to be filed as a `plan_change`, and an
+> agency plan_change is applied ON THE SPOT (`direct`) — so the moment an agency tapped Custom it was
+> billed the placeholder. Anything touching Custom is now `custom_renegotiation` and WAITS for the
+> admin, in both directions. Ordinary tier→tier stays `direct`: those have list prices and there is
+> nothing for an admin to decide.
+>
+> **Resolve now moves the ledger instead of re-pricing in place.** A `custom_renegotiation` naming a
+> plan goes through `applyPlanChangeToLedger`, so joining / re-agreeing / leaving each write a NEW row
+> and the old price survives as history — the same shape a POS re-quote already had. Re-pricing in
+> place left an agency that asked for Custom recorded on Growth while billed the Custom figure.
+>
+> **The agency hero was lying about the tier.** It rendered the demo PV curve's tier, so an agency on
+> Custom was told it was on Starter — the same class of bug as the venue that displayed another
+> venue's plan. It reads the ledger now, and falls back to the curve only for demo sessions.
+>
+> **Verified live, not asserted:** `previousNegotiatedAmount` = 99999.00 on all five Emhub POS rows;
+> **null** for Delta (it moved off Custom to Growth 500.00 — correct) and **null** for Atlas (0.00
+> placeholder — correct); `GET /admin-request/mine/custom-quote` returns 200; `tsc` clean on both apps
+> for every touched file. ⚠️ **The ledger WRITE is not verified** — proving it means inventing a price
+> in the shared DB, which is the owner's call. §9 has the two clicks that close it.
+>
+> **Found while verifying:** `admin_request` carries rows for **Summit Staffing, Pioneer Crew and
+> Horizon Talent**, none of which exist in `GET /agency` or have a single ledger row — seed ghosts of
+> the family purged on 2 Aug. Left in place pending the same rollback-file treatment (§9).
 
 > **2 Aug 2026 — `main` merged into `SL`, and for once the merge was boring.** `SL` was **22 ahead /
 > 2 behind**; the incoming pair was jk's `b6c5786` plus its PR #41 merge `80efdc7`. **The whole

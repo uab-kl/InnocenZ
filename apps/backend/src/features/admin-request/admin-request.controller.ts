@@ -127,7 +127,7 @@ export class AdminRequestControllerClass {
         page,
         pageSize,
       });
-      const records = await this.withPreviousAddonPrice(await this.withLiveFromPlan(rawRecords));
+      const records = await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan(rawRecords));
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
@@ -160,7 +160,7 @@ export class AdminRequestControllerClass {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      const [enriched] = await this.withPreviousAddonPrice(await this.withLiveFromPlan([record]));
+      const [enriched] = await this.withPreviousNegotiatedPrice(await this.withLiveFromPlan([record]));
       res.status(200).json({ success: true, message: 'OK', data: enriched ?? record });
     } catch (error) {
       logger.error('[AdminRequestController.getById] Error:', error);
@@ -355,6 +355,22 @@ export class AdminRequestControllerClass {
       }
 
       if (record.type === 'custom_renegotiation') {
+        // Naming a plan makes this a MOVE, not a re-price — the agency joining
+        // Custom, re-agreeing its price, or leaving it for an ordinary tier. All
+        // three write a new ledger row so the old price stays readable as history,
+        // exactly as a POS re-quote does. Re-pricing in place left an agency that
+        // asked for Custom still recorded on Growth while billed the Custom figure.
+        const requested = record.requestedPlanId
+          ? await this.subscriptionRepository.getSubscriptionById(record.requestedPlanId)
+          : null;
+        if (requested) {
+          // Leaving needs no agreed figure (the tier has a list price); joining or
+          // re-pricing does, and applyPlanChangeToLedger falls back to the plan's
+          // own price when quotedAmount is null.
+          await this.applyPlanChangeToLedger(record, actor);
+          return;
+        }
+
         if (!amount) return;
         const { records: active } = await this.memberSubscriptionRepository.listPaginated({
           filter: {
@@ -393,42 +409,65 @@ export class AdminRequestControllerClass {
    * keep their stamp — that IS what they were decided against.
    */
   /**
-   * Attach the add-on price the subscriber is on TODAY, for POS requests.
+   * Attach the negotiated price the subscriber is on TODAY.
    *
-   * A re-quote or a cancellation is only meaningful next to the figure it
-   * replaces or ends — "negotiate again" against nothing tells the admin
-   * nothing. It is null for a first-time request, which has no previous price.
+   * The two negotiated arrangements behave identically — the outlet's POS add-on
+   * and the agency's Custom tier are both quoted, re-quoted and dropped — so both
+   * carry the figure a re-quote replaces or a cancellation ends. "Negotiate
+   * again" against nothing tells the admin nothing.
+   *
+   * They sit in DIFFERENT ledger lines: POS is an add-on held beside the plan,
+   * Custom IS the plan. Hence the kind split. A price of zero is the catalog
+   * placeholder, not a figure anyone agreed, so it counts as no previous price —
+   * as does a first-time request.
    */
-  private async withPreviousAddonPrice(records: AdminRequest[]): Promise<AdminRequest[]> {
-    const posRows = records.filter(
-      (row) => row.type === 'pos_integration_quote' && row.subscriberId && row.subscriberType,
+  private static negotiatedKindFor(type: AdminRequestType): 'addon' | 'plan' | null {
+    if (type === 'pos_integration_quote') return 'addon';
+    if (type === 'custom_renegotiation') return 'plan';
+    return null;
+  }
+
+  private async withPreviousNegotiatedPrice(records: AdminRequest[]): Promise<AdminRequest[]> {
+    const negotiated = records.filter(
+      (row) =>
+        AdminRequestControllerClass.negotiatedKindFor(row.type) && row.subscriberId && row.subscriberType,
     );
-    if (posRows.length === 0) return records;
+    if (negotiated.length === 0) return records;
     try {
-      const priceBySubscriber = new Map<string, string | null>();
-      for (const row of posRows) {
-        if (!row.subscriberId || !row.subscriberType || priceBySubscriber.has(row.subscriberId)) {
-          continue;
-        }
-        const { records: addons } = await this.memberSubscriptionRepository.listPaginated({
+      const priceByKey = new Map<string, string | null>();
+      for (const row of negotiated) {
+        const kind = AdminRequestControllerClass.negotiatedKindFor(row.type);
+        if (!kind || !row.subscriberId || !row.subscriberType) continue;
+        const key = `${row.subscriberId}:${kind}`;
+        if (priceByKey.has(key)) continue;
+        const { records: live } = await this.memberSubscriptionRepository.listPaginated({
           filter: {
             subscriberType: row.subscriberType,
             subscriberId: row.subscriberId,
             status: 'active',
-            kind: 'addon',
+            kind,
           },
           page: 1,
           pageSize: 1,
         });
-        priceBySubscriber.set(row.subscriberId, addons[0]?.amount ?? null);
+        const current = live[0];
+        // An agency's plan line only holds a NEGOTIATED price while that plan is
+        // Custom. One still on Growth has a list price, and calling that a
+        // "previous negotiated price" would invent a negotiation that never happened.
+        const onNegotiatedLine = kind === 'addon' || current?.planName === 'Custom';
+        const amount = onNegotiatedLine ? (current?.amount ?? null) : null;
+        priceByKey.set(key, amount && Number(amount) > 0 ? amount : null);
       }
-      return records.map((row) =>
-        row.type === 'pos_integration_quote' && row.subscriberId
-          ? { ...row, previousAddonAmount: priceBySubscriber.get(row.subscriberId) ?? null }
-          : row,
-      );
+      return records.map((row) => {
+        const kind = AdminRequestControllerClass.negotiatedKindFor(row.type);
+        if (!kind || !row.subscriberId) return row;
+        return {
+          ...row,
+          previousNegotiatedAmount: priceByKey.get(`${row.subscriberId}:${kind}`) ?? null,
+        };
+      });
     } catch (error) {
-      logger.error('[AdminRequestController.withPreviousAddonPrice] Error:', error);
+      logger.error('[AdminRequestController.withPreviousNegotiatedPrice] Error:', error);
       return records;
     }
   }
@@ -487,6 +526,16 @@ export class AdminRequestControllerClass {
    */
   async myLatestPosQuote(req: Request, res: Response) {
     return this.myLatestPending(req, res, 'pos_integration_quote');
+  }
+
+  /**
+   * The caller's own outstanding Custom price request, or null — the agency's
+   * counterpart to the POS quote above. Joining Custom, re-agreeing its price
+   * and leaving it are all filed as this type, so one read covers all three and
+   * the agency's screen keeps saying "waiting for admin" across a refresh.
+   */
+  async myLatestCustomQuote(req: Request, res: Response) {
+    return this.myLatestPending(req, res, 'custom_renegotiation');
   }
 
   private async myLatestPending(req: Request, res: Response, type: AdminRequestType) {

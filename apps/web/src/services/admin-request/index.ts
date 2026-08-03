@@ -52,11 +52,12 @@ export interface AdminRequest {
 	createdBy: string;
 	updatedBy: string;
 	/**
-	 * POS requests only: the add-on price this subscriber is on today, so a
-	 * re-quote or a cancellation can be read against the figure it replaces or
-	 * ends. Null for a first-time request. Computed server-side from the ledger.
+	 * Negotiated requests only (outlet POS add-on, agency Custom tier): the price
+	 * this subscriber is on today, so a re-quote or a cancellation can be read
+	 * against the figure it replaces or ends. Null for a first-time request, and
+	 * for a catalog placeholder of zero. Computed server-side from the ledger.
 	 */
-	previousAddonAmount?: string | null;
+	previousNegotiatedAmount?: string | null;
 }
 
 export interface AdminRequestsQueryParams {
@@ -255,6 +256,23 @@ export async function fetchMyPosQuote(
 		message: string;
 		data: AdminRequest | null;
 	}>("/admin-request/mine/pos-quote");
+	return response.data.data ?? null;
+}
+
+/**
+ * The signed-in agency's own outstanding Custom price request, or null — the
+ * counterpart to the POS quote above. Covers joining Custom, re-agreeing its
+ * price and leaving it, since all three are filed as `custom_renegotiation`.
+ */
+export async function fetchMyCustomQuote(
+	onRefreshFail: () => void,
+): Promise<AdminRequest | null> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: AdminRequest | null;
+	}>("/admin-request/mine/custom-quote");
 	return response.data.data ?? null;
 }
 

@@ -23,6 +23,13 @@ router.get(
   requireRole('outlet', 'agency', 'admin'),
   adminRequestController.myLatestPosQuote.bind(adminRequestController),
 );
+// The agency's counterpart to the POS quote: joining Custom, re-agreeing its
+// price and leaving it are all filed as 'custom_renegotiation'.
+router.get(
+  '/mine/custom-quote',
+  requireRole('outlet', 'agency', 'admin'),
+  adminRequestController.myLatestCustomQuote.bind(adminRequestController),
+);
 
 router.get('/pending-count', requireAdmin, adminRequestController.pendingCount.bind(adminRequestController));
 router.get(

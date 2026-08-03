@@ -168,6 +168,69 @@ function AgencySubscription() {
 	const isFinanceReadOnly = agencySubRole === "agency_finance";
 	const renewalDate = nextChargeDate;
 
+	/**
+	 * What this agency has asked InnocenZ for and not been answered on yet — the
+	 * agency's half of the same handshake the outlet has for its POS add-on.
+	 * Ordinary tier switches never appear here: the server applies those on the
+	 * spot ('direct'), so there is nothing to wait for. Only Custom waits.
+	 */
+	const waitingOn = sub.backed
+		? (sub.customRequestLabel ?? sub.pendingPlanLabel)
+		: null;
+
+	/**
+	 * A real session is billed for the tier in its `member_subscription` row, not
+	 * the one this week's PV count implies. Showing the derived tier told an
+	 * agency on Custom that it was on Starter — the same mistake that had one
+	 * venue displaying another venue's plan.
+	 */
+	const billedTierLabel = sub.backed
+		? (sub.currentPlanName ?? billing.plan.label)
+		: billing.plan.label;
+	const billedPriceLabel = sub.backed
+		? sub.currentAmountRm
+			? formatRM(sub.currentAmountRm)
+			: sub.onCustom
+				? "Awaiting price"
+				: billing.priceLabel
+		: billing.priceLabel;
+
+	/**
+	 * Ask for a tier. Anything touching Custom goes to the admin and the card
+	 * keeps showing the current price until they answer — an agency must not be
+	 * able to set or end its own negotiated price.
+	 */
+	const handleSwitch = (label: string) => {
+		sub.requestPlanChange(label).then((result) => {
+			if (!result.ok) {
+				toast(
+					result.reason ?? "Could not send the request — try again",
+					"warn",
+				);
+				return;
+			}
+			toast(
+				label === "Custom"
+					? "Custom price request sent to InnocenZ admin"
+					: sub.onCustom
+						? `Request to end Custom and move to ${label} sent to InnocenZ admin`
+						: `Switched to ${label}`,
+				"success",
+			);
+		});
+	};
+
+	const handleRequote = () => {
+		sub.requestCustomRequote().then((result) => {
+			toast(
+				result.ok
+					? "New Custom price request sent to InnocenZ admin"
+					: (result.reason ?? "Could not send the request — try again"),
+				result.ok ? "success" : "warn",
+			);
+		});
+	};
+
 	// Not `editSettings`: finance is read-only for the card above but is exactly
 	// the role that chases receivables, and it holds both of these.
 	const showCollections =
@@ -227,13 +290,15 @@ function AgencySubscription() {
 							{issuedWeeklyPv} PV{issuedWeeklyPv === 1 ? "" : "s"} issued
 						</p>
 						<p className="iz-tiny iz-muted mt-1">
-							Tier auto-selected from weekly PV volume — no plan changes needed
+							{sub.backed && sub.onCustom
+								? "Custom is priced by InnocenZ admin — PV volume does not change it"
+								: "Tier auto-selected from weekly PV volume — no plan changes needed"}
 						</p>
 					</div>
 					<div className="text-right shrink-0">
-						<IzPill variant="green">{billing.plan.label}</IzPill>
+						<IzPill variant="green">{billedTierLabel}</IzPill>
 						<p className="mt-2 text-lg font-bold text-[var(--iz-gold-l)]">
-							{billing.priceLabel}
+							{billedPriceLabel}
 						</p>
 						<p className="iz-tiny iz-muted2 mt-0.5">
 							{billing.plan.capacityLabel}
@@ -242,17 +307,83 @@ function AgencySubscription() {
 				</div>
 				<p className="iz-tiny iz-muted2 mt-3 border-t border-[var(--iz-line)] pt-2">
 					Next weekly charge {renewalDate}
-					{billing.plan.renegotiate
-						? " · contact InnocenZ admin for custom pricing"
-						: ` · ${billing.priceLabel} based on ${issuedWeeklyPv} PV${issuedWeeklyPv === 1 ? "" : "s"}`}
+					{sub.backed && sub.onCustom
+						? " · at the price agreed with InnocenZ admin"
+						: billing.plan.renegotiate
+							? " · contact InnocenZ admin for custom pricing"
+							: ` · ${billedPriceLabel} based on ${issuedWeeklyPv} PV${issuedWeeklyPv === 1 ? "" : "s"}`}
 				</p>
 			</IzCard>
 
+			{/*
+			 * Custom is the agency's negotiated arrangement — the counterpart to the
+			 * outlet's POS add-on, and handled the same way: InnocenZ admin sets the
+			 * price, the agency can ask for it to be quoted again, and it stands
+			 * until the admin answers. The difference is that Custom REPLACES the
+			 * tier price rather than being billed on top of it.
+			 */}
+			{sub.backed && sub.onCustom && (
+				<>
+					<IzSectionLabel>Negotiated tier</IzSectionLabel>
+					<IzCard className="border-[rgba(139,124,246,.35)] bg-[rgba(139,124,246,.06)]">
+						<div className="flex flex-wrap items-start justify-between gap-3">
+							<div className="min-w-0">
+								<div className="flex flex-wrap items-center gap-2">
+									<p className="font-sora text-base font-bold">Custom</p>
+									<IzPill variant="violet">Negotiated</IzPill>
+									{waitingOn && <IzPill variant="green">Request sent</IzPill>}
+								</div>
+								<p className="iz-tiny iz-muted mt-1">
+									Priced for your agency by InnocenZ admin — it replaces the
+									rate card, so PV volume does not change what you pay.
+								</p>
+							</div>
+							<p className="shrink-0 text-lg font-bold text-[var(--iz-gold-l)]">
+								{sub.customAmountRm
+									? formatRM(sub.customAmountRm)
+									: "Awaiting price"}
+							</p>
+						</div>
+						{canEdit &&
+							(waitingOn ? (
+								<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
+									Your request is with InnocenZ admin — {waitingOn}. The current
+									price applies until they answer.
+								</p>
+							) : (
+								<div className="mt-3 flex flex-col gap-2 border-t border-[var(--iz-line)] pt-3 sm:flex-row">
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft flex-1"
+										disabled={sub.isRequesting}
+										onClick={handleRequote}
+									>
+										Ask for a new price
+									</button>
+									<p className="iz-tiny iz-muted2 flex-1 self-center">
+										To leave Custom, pick a rate-card tier below — that also
+										goes to the admin.
+									</p>
+								</div>
+							))}
+					</IzCard>
+				</>
+			)}
+
 			<IzSectionLabel>Rate card</IzSectionLabel>
 			<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-				Reference tiers — your charge each week follows PVs issued in that
-				payroll week
+				{sub.backed
+					? "Reference tiers — your charge each week follows PVs issued in that payroll week. Switching tier applies straight away; Custom is priced by InnocenZ admin."
+					: "Reference tiers — your charge each week follows PVs issued in that payroll week"}
 			</p>
+			{sub.backed && waitingOn && (
+				<IzCard flat className="!mb-2">
+					<p className="iz-tiny iz-muted">
+						Waiting for InnocenZ admin — {waitingOn}. Nothing changes on your
+						account until they answer.
+					</p>
+				</IzCard>
+			)}
 			<div className="grid grid-cols-2 gap-2">
 				{ratePlans.map((plan) => {
 					const isBilledTier = sub.backed
@@ -299,6 +430,35 @@ function AgencySubscription() {
 								</div>
 							</div>
 							<p className="iz-tiny iz-muted mt-2">{plan.description}</p>
+							{/*
+							 * Real sessions can act on the rate card. Ordinary tiers apply on
+							 * the spot — they have a list price and follow PV volume, so
+							 * there is nothing for an admin to decide. Custom, in either
+							 * direction, is a request: joining has no price until the admin
+							 * sets one, and leaving ends a price the agency must not be able
+							 * to end by itself.
+							 */}
+							{sub.backed && canEdit && !isBilledTier && (
+								<button
+									type="button"
+									className="iz-btn iz-btn-soft mt-2 w-full !py-1 !text-[11px]"
+									disabled={
+										sub.isRequesting ||
+										sub.isLoading ||
+										!sub.planCatalogReady ||
+										waitingOn !== null
+									}
+									onClick={() => handleSwitch(plan.label)}
+								>
+									{sub.isLoading
+										? "Loading…"
+										: plan.label === "Custom"
+											? "Ask for a Custom price"
+											: sub.onCustom
+												? `Leave Custom · ${plan.label}`
+												: `Switch to ${plan.label}`}
+								</button>
+							)}
 						</IzCard>
 					);
 				})}
