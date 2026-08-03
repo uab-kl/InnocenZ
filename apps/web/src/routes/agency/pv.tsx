@@ -1,6 +1,8 @@
 import { AgencyPvDayReviewPanel } from "@agency-portal/components/agency/AgencyPvDayReviewPanel";
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
+import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
+import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
 import {
 	EMPTY_PAYROLL_RANGE,
 	PayrollRangeFilterCard,
@@ -136,7 +138,7 @@ type PvStatusFilter = "all" | "TO_PAY" | PrPvStatus;
 
 type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
 
-type PvSubTab = "vouchers" | "receipts";
+type PvSubTab = "vouchers" | "receipts" | "disputes" | "overtime";
 
 const LAST_WEEK_REVIEW_STATUSES = new Set<PrPvStatus>([
 	"SENT",
@@ -240,6 +242,13 @@ function AgencyPV() {
 	const [payrollWeekTab, setPayrollWeekTab] =
 		useState<PayrollWeekTab>("last_week");
 	const [pvSubTab, setPvSubTab] = useState<PvSubTab>("vouchers");
+	// Counts only. Both panels fetch the same queries themselves, and React Query
+	// dedupes, so this costs no extra request. The COUNT is the point: these two
+	// used to sit open above the fold, and an undecided overtime claim is WHY the
+	// week below refuses to send — hiding that behind a click with no number
+	// would turn a visible blocker into an invisible one.
+	const { disputes: openDisputes } = useAgencyDisputes();
+	const { claims: pendingOtClaims } = useAgencyOvertime();
 	const [statusFilter, setStatusFilter] = useState<PvStatusFilter>("all");
 	const [payrollRange, setPayrollRange] =
 		useState<PayrollRangeFilter>(EMPTY_PAYROLL_RANGE);
@@ -551,15 +560,14 @@ function AgencyPV() {
 				</p>
 			</header>
 
-			{/* Above the PV list on purpose: a contested voucher is the thing that
-			    needs a human before anything else on this page does. */}
-			<DisputeQueuePanel />
-
-			{/* Directly beneath the disputes and above the weeks, because an
-			    undecided overtime claim is WHY a week below refuses to send. Not on
-			    the approvals page: that page is gated on `approvePrSignups`, which
-			    agency finance does not hold — and finance may decide overtime. */}
-			<OvertimeQueuePanel />
+			{/* Disputes and overtime used to render open here, above the weeks. They
+			    now live in the sub-tab row below beside Payment Vouchers / Receipts,
+			    at the owner's request, because on a quiet week two empty panels ate
+			    the first screen. Their COUNTS ride on the tab labels so an
+			    outstanding item is still visible without opening the tab — an
+			    undecided overtime claim is why a week refuses to send. Still NOT on
+			    the approvals page: that route is gated on `approvePrSignups`, which
+			    agency finance does not hold, and finance may decide overtime. */}
 
 			<div className="iz-payroll-tabs mt-3">
 				{/* The week still running. Vouchers accrue into it as shifts complete, so
@@ -639,7 +647,28 @@ function AgencyPV() {
 				>
 					Receipts ({activeWeekReceiptScans.length})
 				</button>
+				{/* Deliberately NOT week-scoped, unlike the two tabs above: a dispute
+				    or an overtime claim blocks whichever week it belongs to, so
+				    filtering it to the selected week would hide the thing that is
+				    stopping a DIFFERENT week from going out. */}
+				<button
+					type="button"
+					className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
+					onClick={() => setPvSubTab("disputes")}
+				>
+					Disputes ({openDisputes.length})
+				</button>
+				<button
+					type="button"
+					className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
+					onClick={() => setPvSubTab("overtime")}
+				>
+					Overtime ({pendingOtClaims.length})
+				</button>
 			</div>
+
+			{pvSubTab === "disputes" && <DisputeQueuePanel />}
+			{pvSubTab === "overtime" && <OvertimeQueuePanel />}
 
 			{pvSubTab === "vouchers" && (
 				<OutletSection title="Payment Vouchers" hint={activeWeekBounds.cycle}>

@@ -493,7 +493,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ### 🟠 UI — `/agency/pv` layout change requested by the OWNER (3 Aug 2026, from a screenshot)
 
-- [ ] **🟠 DISPUTES and OVERTIME must NOT sit permanently expanded at the top of `/agency/pv`** —
+- [x] **🟠 DISPUTES and OVERTIME must NOT sit permanently expanded at the top of `/agency/pv`** — ✅ **DONE 3 Aug, owner confirmed the reading ("make them tabs alongside Payment Vouchers and Receipts").** `PvSubTab` widened to 4; both panels moved out of the header into the sub-tab row; **counts ride on the labels** via `useAgencyDisputes()` / `useAgencyOvertime()` called at page level (React Query dedupes with the panels' own fetches, so no extra request). ⚠️ **The two new tabs are deliberately NOT week-scoped**, unlike Vouchers/Receipts: a claim blocks whichever week it belongs to, so filtering to the selected week would hide the thing stopping a *different* week from going out. **Verified in a browser:** tab row reads `Payment Vouchers (2) · Receipts (0) · Disputes (0) · Overtime (0)`, the top of the page no longer renders either panel, and clicking Overtime reveals it. `tsc` 121 (baseline unchanged), 0 errors in `pv.tsx`. Original request kept below for the reasoning.
+- [ ] ~~**🟠 DISPUTES and OVERTIME must NOT sit permanently expanded at the top of `/agency/pv`**~~ —
   *"the Dispute and Overtime should only show when it is clicked below"*. **Owner's words, from a
   screenshot of the live page**, so this is a product instruction, not a code-derived item. Today
   both panels render open above the week tabs and push the voucher list below the fold; on a week
@@ -632,6 +633,26 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (later still) — `/agency/pv` disputes + overtime are now TABS, at the owner's request.**
+> They rendered permanently open above the week tabs, so on a quiet week two empty panels ate the
+> first screen. Both now sit in the existing sub-tab row: **`Payment Vouchers (2) · Receipts (0) ·
+> Disputes (0) · Overtime (0)`**. **The counts are the part that matters** — they ride on the tab
+> labels via `useAgencyDisputes()` / `useAgencyOvertime()` called at page level, so an outstanding
+> item stays visible without opening the tab. **An undecided overtime claim is WHY a week refuses to
+> send; hiding it behind an unlabelled click would have turned a visible blocker into an invisible
+> one.** React Query dedupes against the panels' own fetches, so the counts cost no extra request.
+> ⚠️ **The two new tabs are deliberately NOT week-scoped** while Vouchers/Receipts are: a claim blocks
+> whichever week it belongs to, and week-filtering it would hide the item stopping a *different* week
+> from going out. Still not on `/agency/pending` — that route is gated on `approvePrSignups`, which
+> agency finance does not hold. **Verified in a browser, not just compiled:** top of page no longer
+> renders either panel, and clicking Overtime reveals it. `tsc` **121, baseline unchanged**.
+>
+> ⚠️ **Also this session: I nearly filed a false P0 on the admin PV page.** The first DOM read showed
+> an empty voucher table while the API had returned `totalCount: 3` — I had read it **before React
+> Query resolved**. Re-reading showed all three rows and the `data?.data ?? []` parse is correct.
+> **There was no bug.** Second time this pattern has bitten (see the retracted mobile-tsc claim):
+> **a screen read too early looks exactly like a screen that is broken.** Wait for the query, then judge.
 
 > **3 Aug 2026 (later) — 🔴 CORRECTION: the "~19 files of unauthored biome churn" recorded below was
 > WRONG, and the way it was wrong is worth more than the fix.** `git status` really did list 19
