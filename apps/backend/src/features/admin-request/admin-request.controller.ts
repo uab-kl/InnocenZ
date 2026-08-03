@@ -158,6 +158,25 @@ export class AdminRequestControllerClass {
       }
       const actor = getActor(req);
 
+      // Every request records the plan the subscriber was on when it was raised,
+      // whatever its type: the admin drawer's "BEFORE · FROM PLAN" is otherwise
+      // empty for POS quotes and contact requests, which tells the admin nothing
+      // about who they are negotiating with. Only filled when the client did not
+      // send one — the client knows its own from-plan for a switch.
+      let currentPlanId = parsed.data.currentPlanId ?? null;
+      if (!currentPlanId && parsed.data.subscriberId && parsed.data.subscriberType) {
+        const { records } = await this.memberSubscriptionRepository.listPaginated({
+          filter: {
+            subscriberType: parsed.data.subscriberType,
+            subscriberId: parsed.data.subscriberId,
+            status: 'active',
+          },
+          page: 1,
+          pageSize: 1,
+        });
+        currentPlanId = records[0]?.subscriptionId ?? null;
+      }
+
       // A switch to the plan the subscriber is ALREADY on is not a decision for
       // the admin to make — it would sit in the queue as Pending forever while
       // the venue's own screen shows the plan as current, which reads as the two
@@ -194,7 +213,7 @@ export class AdminRequestControllerClass {
         contactName: parsed.data.contactName ?? null,
         contactEmail: parsed.data.contactEmail ?? null,
         contactPhone: parsed.data.contactPhone ?? null,
-        currentPlanId: parsed.data.currentPlanId ?? null,
+        currentPlanId,
         requestedPlanId: parsed.data.requestedPlanId ?? null,
         message: parsed.data.message ?? null,
         // Agency plan changes are applied automatically (by PR count) and only

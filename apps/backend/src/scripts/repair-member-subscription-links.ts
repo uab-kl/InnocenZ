@@ -34,7 +34,8 @@ import { writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { db } from '@/db/index.js';
-import { and, eq, inArray } from 'drizzle-orm';
+import { and, eq, inArray, isNull } from 'drizzle-orm';
+import { AdminRequestTable } from '@/features/admin-request/admin-request.model.js';
 import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
@@ -165,8 +166,40 @@ async function main() {
     purged = ghosts.length;
   }
 
+  // Requests raised before the controller started stamping it have no
+  // `current_plan_id`, so the admin drawer's "BEFORE · FROM PLAN" is blank.
+  // Fill it from the subscriber's active plan — for an unanswered request that
+  // IS the plan it is on, which is what the admin needs to see.
+  let stamped = 0;
+  const openRequests = await db
+    .select()
+    .from(AdminRequestTable)
+    .where(isNull(AdminRequestTable.currentPlanId));
+  for (const request of openRequests) {
+    if (!request.subscriberId || !request.subscriberType) continue;
+    const [active] = await db
+      .select({ subscriptionId: MemberSubscriptionTable.subscriptionId })
+      .from(MemberSubscriptionTable)
+      .where(
+        and(
+          eq(MemberSubscriptionTable.subscriberId, request.subscriberId),
+          eq(MemberSubscriptionTable.status, 'active'),
+        ),
+      )
+      .limit(1);
+    if (!active?.subscriptionId) continue;
+    console.log(`stamp   ${request.subscriberName} (${request.type}) from-plan <- current`);
+    if (APPLY) {
+      await db
+        .update(AdminRequestTable)
+        .set({ currentPlanId: active.subscriptionId, updatedAt: new Date(), updatedBy: ACTOR })
+        .where(eq(AdminRequestTable.id, request.id));
+    }
+    stamped += 1;
+  }
+
   console.log(
-    `\n${APPLY ? 'APPLIED' : 'DRY RUN (pass --apply to write)'}: ${relinked} relinked, ${added} added, ${purged} deleted.`,
+    `\n${APPLY ? 'APPLIED' : 'DRY RUN (pass --apply to write)'}: ${relinked} relinked, ${added} added, ${purged} deleted, ${stamped} from-plans stamped.`,
   );
   if (orphans.length && !PURGE_GHOSTS) {
     console.log(
