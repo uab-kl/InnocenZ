@@ -10,6 +10,7 @@ import { useAuth } from "@/lib/auth-context";
 import {
 	type CreateAdminRequestInput,
 	createAdminRequest,
+	fetchMyPlanChange,
 } from "@/services/admin-request";
 import { fetchMemberSubscriptions } from "@/services/member-subscription";
 import { fetchSubscriptions } from "@/services/subscription";
@@ -117,9 +118,37 @@ export function useOutletSubscription() {
 			(plan) => plan.name.trim().toLowerCase() === label.trim().toLowerCase(),
 		) ?? null;
 
+	/**
+	 * This venue's own outstanding switch, straight from the server.
+	 *
+	 * It used to be React state only, so a refresh forgot that the venue had
+	 * already asked — the switch buttons came back, the venue tapped again, and
+	 * the admin queue filled with duplicate requests for one decision. Reading it
+	 * back means the "awaiting admin" state survives a refresh and clears by
+	 * itself the moment the admin approves or declines.
+	 */
+	const pendingQuery = useQuery({
+		queryKey: ["admin-request", "mine", "plan-change"],
+		queryFn: () => fetchMyPlanChange(logout),
+		enabled: backed,
+		staleTime: 15_000,
+	});
+
+	/** The plan name the venue is waiting on, or null when nothing is pending. */
+	const pendingPlanLabel = useMemo<string | null>(() => {
+		const requestedId = pendingQuery.data?.requestedPlanId;
+		if (!requestedId) return null;
+		return (
+			(plansQuery.data?.data ?? []).find((plan) => plan.id === requestedId)
+				?.name ?? null
+		);
+	}, [pendingQuery.data, plansQuery.data]);
+
 	const planChangeMut = useMutation({
 		mutationFn: (input: CreateAdminRequestInput) =>
 			createAdminRequest(input, logout),
+		// Re-read the server's answer so the badge reflects what was actually filed.
+		onSuccess: () => void pendingQuery.refetch(),
 	});
 
 	/**
@@ -182,6 +211,8 @@ export function useOutletSubscription() {
 		backed,
 		billingHistory,
 		activePlanName,
+		/** Plan awaiting admin approval — survives a refresh; null once answered. */
+		pendingPlanLabel,
 		isLoading: billingQuery.isLoading,
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,

@@ -241,6 +241,10 @@ function PlanChangesPage() {
 		page,
 		pageSize: PAGE_SIZE,
 		type: "plan_change",
+		// One row per subscriber — a venue that tapped Switch three times is one
+		// decision to make, not three, and approving a stale request would apply a
+		// plan it has since moved off. The older rows stay in the table.
+		latestPerSubscriber: true,
 	};
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;

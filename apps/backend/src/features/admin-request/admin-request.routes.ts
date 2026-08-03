@@ -1,11 +1,23 @@
 import { Router } from 'express';
 import { adminRequestController } from '@/composition-root.js';
-import { requireAdmin } from '@/middlewares/require-role.js';
+import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
 
 const router = Router();
 
 // Outlets/agencies submit requests; only admin can list/action the inbox.
 router.post('/', adminRequestController.create.bind(adminRequestController));
+
+/**
+ * A subscriber's OWN outstanding plan change. Deliberately NOT behind
+ * requireAdmin — it is the venue/agency asking about itself — and placed before
+ * `/:id` so the literal path is not swallowed by the admin-only id route. The
+ * controller scopes it from the session, so no id is accepted from the client.
+ */
+router.get(
+  '/mine/plan-change',
+  requireRole('outlet', 'agency', 'admin'),
+  adminRequestController.myLatestPlanChange.bind(adminRequestController),
+);
 
 router.get('/pending-count', requireAdmin, adminRequestController.pendingCount.bind(adminRequestController));
 router.get(

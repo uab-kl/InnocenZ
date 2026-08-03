@@ -35,6 +35,46 @@ export class AdminRequestRepositoryClass {
     return conditions.length > 0 ? and(...conditions) : undefined;
   }
 
+  /**
+   * One row per subscriber — the most recent request only.
+   *
+   * A venue that taps "Switch to…" three times files three requests, and the
+   * admin queue then shows three competing answers for the same venue, where
+   * approving an older one would apply a plan the venue has since moved off.
+   * Superseded requests are NOT deleted: they stay in the table as the record of
+   * what was asked, they are simply not offered for action.
+   *
+   * Rows with no `subscriber_id` (a request that named no organisation) each
+   * count as their own subscriber, so none of them swallow the others.
+   */
+  private async listLatestPerSubscriber(params: {
+    whereClause: SQL | undefined;
+    page: number;
+    pageSize: number;
+  }): Promise<{ records: AdminRequest[]; totalCount: number }> {
+    const { whereClause, page, pageSize } = params;
+    const key = sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`;
+
+    const latest = db
+      .selectDistinctOn([sql`coalesce(${AdminRequestTable.subscriberId}::text, ${AdminRequestTable.id}::text)`])
+      .from(AdminRequestTable)
+      .where(whereClause)
+      .orderBy(key, desc(AdminRequestTable.createdAt))
+      .as('latest');
+
+    const [countRow] = await db.select({ value: sql<number>`count(*)::int` }).from(latest);
+    const totalCount = Number(countRow?.value ?? 0);
+
+    const records = (await db
+      .select()
+      .from(latest)
+      .orderBy(desc(latest.createdAt))
+      .limit(pageSize)
+      .offset((page - 1) * pageSize)) as AdminRequest[];
+
+    return { records, totalCount };
+  }
+
   async listPaginated(params: {
     filter?: AdminRequestFilter;
     page: number;
@@ -43,6 +83,10 @@ export class AdminRequestRepositoryClass {
     try {
       const { filter, page, pageSize } = params;
       const whereClause = this.buildConditions(filter);
+
+      if (filter?.latestPerSubscriber) {
+        return await this.listLatestPerSubscriber({ whereClause, page, pageSize });
+      }
 
       const [countRow] = await db
         .select({ value: sql<number>`count(*)::int` })
@@ -62,6 +106,29 @@ export class AdminRequestRepositoryClass {
     } catch (error) {
       logger.error('[AdminRequestRepository.listPaginated] Error:', error);
       return { records: [], totalCount: 0 };
+    }
+  }
+
+  /** The newest plan change still awaiting an admin, for these subscribers. */
+  async latestPendingPlanChange(subscriberIds: string[]): Promise<AdminRequest | null> {
+    try {
+      if (subscriberIds.length === 0) return null;
+      const [row] = await db
+        .select()
+        .from(AdminRequestTable)
+        .where(
+          and(
+            eq(AdminRequestTable.type, 'plan_change'),
+            eq(AdminRequestTable.status, 'pending'),
+            inArray(AdminRequestTable.subscriberId, subscriberIds),
+          ),
+        )
+        .orderBy(desc(AdminRequestTable.createdAt))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[AdminRequestRepository.latestPendingPlanChange] Error:', error);
+      return null;
     }
   }
 

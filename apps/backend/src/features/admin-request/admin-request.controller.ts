@@ -3,6 +3,7 @@ import { AdminRequestRepositoryClass } from './admin-request.repository.js';
 import { AdminRequest, AdminRequestFilter, AdminRequestType, AdminRequestStatus } from './admin-request.model.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
+import { resolveOrgScope, type OrgScopeDeps } from '@/util/org-scope.js';
 import {
   CreateAdminRequestSchema,
   ResolveAdminRequestSchema,
@@ -19,6 +20,7 @@ export class AdminRequestControllerClass {
     private repository: AdminRequestRepositoryClass,
     private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
     private subscriptionRepository: SubscriptionRepositoryClass,
+    private orgScopeDeps: OrgScopeDeps,
   ) {}
 
   /**
@@ -105,6 +107,8 @@ export class AdminRequestControllerClass {
         status: req.query.status as AdminRequestStatus | undefined,
         subscriberType: req.query.subscriberType as 'outlet' | 'agency' | undefined,
         dates: parseDatesQuery(req.query.dates),
+        // ?latestPerSubscriber=true → one row per venue/agency, the newest.
+        latestPerSubscriber: req.query.latestPerSubscriber === 'true',
       };
       const { records, totalCount } = await this.repository.listPaginated({ filter, page, pageSize });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
@@ -182,6 +186,32 @@ export class AdminRequestControllerClass {
       res.status(201).json({ success: true, message: 'Request submitted', data: record });
     } catch (error) {
       logger.error('[AdminRequestController.create] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The caller's own OUTSTANDING plan change, or null.
+   *
+   * Without this a venue could not tell that it had already asked: the "awaiting
+   * admin" state lived only in React, so a refresh forgot it and the venue filed
+   * the same switch again — three rows for one decision in the admin queue.
+   *
+   * Scoped server-side from the session (`resolveOrgScope`), never from a query
+   * parameter, so one venue cannot read another's. Admins get null: this is the
+   * subscriber's own view, and they have the full queue.
+   */
+  async myLatestPlanChange(req: Request, res: Response) {
+    try {
+      const scope = await resolveOrgScope(req, this.orgScopeDeps);
+      const subscriberIds = scope.agencyId ? [scope.agencyId] : scope.outletIds;
+      if (scope.isAdmin || subscriberIds.length === 0) {
+        return res.status(200).json({ success: true, message: 'OK', data: null });
+      }
+      const record = await this.repository.latestPendingPlanChange(subscriberIds);
+      res.status(200).json({ success: true, message: 'OK', data: record });
+    } catch (error) {
+      logger.error('[AdminRequestController.myLatestPlanChange] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

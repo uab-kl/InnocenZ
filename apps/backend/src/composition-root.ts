@@ -132,6 +132,9 @@ export const adminRequestController = new AdminRequestControllerClass(
   adminRequestRepository,
   memberSubscriptionRepository,
   subscriptionRepository,
+  // A venue reads its OWN pending switch through the same scope resolver the
+  // other member-facing controllers use — never from a client-supplied id.
+  orgScopeDeps,
 );
 
 export const prRepository = new PrRepositoryClass();

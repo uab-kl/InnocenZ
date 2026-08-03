@@ -176,11 +176,14 @@ function OutletSubscriptionPage() {
 	const showCollections =
 		collections.backed && outletCan(outletSubRole, "viewBilling");
 	const [quoteSentLocal, setQuoteSentLocal] = useState(false);
-	// The venue cannot READ admin_requests (admin-only route), so the "waiting for
-	// admin" badge on the plan it asked for is a local flag, like the POS one.
-	const [planChangeRequested, setPlanChangeRequested] = useState<string | null>(
-		null,
-	);
+	// Instant feedback for the tap; the server's answer (backend.pendingPlanLabel)
+	// takes over as soon as it arrives and is what survives a refresh.
+	const [planChangeRequestedLocal, setPlanChangeRequestedLocal] = useState<
+		string | null
+	>(null);
+	const planChangeRequested = backend.backed
+		? (backend.pendingPlanLabel ?? planChangeRequestedLocal)
+		: null;
 
 	/**
 	 * Real sessions read the `member_subscription` ledger; demo sessions keep the
@@ -309,7 +312,7 @@ function OutletSubscriptionPage() {
 						);
 						return;
 					}
-					setPlanChangeRequested(next.label);
+					setPlanChangeRequestedLocal(next.label);
 					toast(
 						`Switch to ${next.label} sent to InnocenZ admin for approval`,
 						"success",

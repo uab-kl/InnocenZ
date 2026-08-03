@@ -73,4 +73,9 @@ export type AdminRequestFilter = {
   subscriberType?: 'outlet' | 'agency';
   /** Match rows requested on any of these calendar days (createdAt). */
   dates?: string[];
+  /**
+   * Collapse to the newest request per subscriber. The Plan Change page uses it
+   * so a venue that switched three times is one row to answer, not three.
+   */
+  latestPerSubscriber?: boolean;
 };

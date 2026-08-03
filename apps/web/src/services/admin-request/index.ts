@@ -64,6 +64,8 @@ export interface AdminRequestsQueryParams {
 	dates?: string;
 	page?: number;
 	pageSize?: number;
+	/** One row per subscriber — the newest request only (Plan Change page). */
+	latestPerSubscriber?: boolean;
 }
 
 export interface AdminRequestsApiResponse {
@@ -104,6 +106,7 @@ export async function fetchAdminRequests(
 		dates: params.dates,
 		page: params.page,
 		pageSize: params.pageSize,
+		latestPerSubscriber: params.latestPerSubscriber ? "true" : undefined,
 	});
 
 	const response = await client.get<AdminRequestsApiResponse>(
@@ -205,6 +208,25 @@ export async function createAdminRequest(
 		data: AdminRequest;
 	}>("/admin-request", input);
 	return response.data;
+}
+
+/**
+ * The signed-in venue's/agency's own outstanding plan change, or null.
+ *
+ * Scoped server-side from the session — there is no id to pass. Lets the
+ * subscriber's own screen keep showing "awaiting admin" across a refresh, which
+ * is what stops it filing the same switch twice.
+ */
+export async function fetchMyPlanChange(
+	onRefreshFail: () => void,
+): Promise<AdminRequest | null> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: AdminRequest | null;
+	}>("/admin-request/mine/plan-change");
+	return response.data.data ?? null;
 }
 
 export async function fetchPendingCount(
