@@ -67,7 +67,10 @@ function PosIntegrationAddonCard({
 	contactLine,
 	onRequestQuote,
 	onCancelQuote,
+	onRemoveAddon,
 }: {
+	/** Ask the admin to end the add-on and go back to plan-only billing. */
+	onRemoveAddon: () => void;
 	addon: OutletSubscriptionAddon;
 	canEdit: boolean;
 	/**
@@ -143,6 +146,15 @@ function PosIntegrationAddonCard({
 							InnocenZ admin agreed {formatRM(activeAddonPriceRm)} / month for
 							your venue. This is billed on top of your plan.
 						</p>
+						{canEdit && (
+							<button
+								type="button"
+								className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel"
+								onClick={onRemoveAddon}
+							>
+								Remove POS integration
+							</button>
+						)}
 					</div>
 				) : quotePending ? (
 					<div className="iz-outlet-pos-addon__sent">
@@ -311,6 +323,25 @@ function OutletSubscriptionPage() {
 			return;
 		}
 		requestPosIntegrationQuote();
+	};
+
+	/**
+	 * Leaving the add-on is a request, like joining it: the admin ends the
+	 * billing. The card keeps showing Active until they do, so the venue is never
+	 * told a charge stopped before it actually did.
+	 */
+	const handleRemoveAddon = () => {
+		backend
+			.requestPosRemoval()
+			.then((filed) => {
+				toast(
+					filed
+						? "Request to remove POS integration sent to InnocenZ admin"
+						: "Could not send the request — try again",
+					filed ? "success" : "warn",
+				);
+			})
+			.catch(() => toast("Could not send the request — try again", "warn"));
 	};
 
 	const handleCancelQuote = () => {
@@ -511,6 +542,7 @@ function OutletSubscriptionPage() {
 						contactLine={contactLine}
 						onRequestQuote={handleRequestQuote}
 						onCancelQuote={handleCancelQuote}
+						onRemoveAddon={handleRemoveAddon}
 					/>
 				))}
 			</div>

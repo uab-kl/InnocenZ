@@ -113,6 +113,8 @@ export class AdminRequestControllerClass {
           typeof req.query.search === 'string' && req.query.search.trim().length > 0
             ? req.query.search.trim()
             : undefined,
+        includeNegotiatedExits: req.query.includeNegotiatedExits === 'true',
+        includeOpenNegotiations: req.query.includeOpenNegotiations === 'true',
       };
       const { records: rawRecords, totalCount } = await this.repository.listPaginated({
         filter,
@@ -265,10 +267,43 @@ export class AdminRequestControllerClass {
    */
   private async applyResolvedPriceToLedger(record: AdminRequest, actor: string): Promise<void> {
     try {
+      if (!record.subscriberId || !record.subscriberType) return;
       const amount = record.quotedAmount;
-      if (!amount || !record.subscriberId || !record.subscriberType) return;
 
       if (record.type === 'pos_integration_quote') {
+        // A POS request that names a PLAN is the venue asking to come OFF the
+        // add-on and go back to plan-only billing. Resolving it ends the add-on
+        // rather than starting another one — otherwise "switch back" would add a
+        // second charge instead of removing the first.
+        const requested = record.requestedPlanId
+          ? await this.subscriptionRepository.getSubscriptionById(record.requestedPlanId)
+          : null;
+        if (requested && requested.kind === 'plan') {
+          const { records: live } = await this.memberSubscriptionRepository.listPaginated({
+            filter: {
+              subscriberType: record.subscriberType,
+              subscriberId: record.subscriberId,
+              status: 'active',
+              kind: 'addon',
+            },
+            page: 1,
+            pageSize: 20,
+          });
+          const endedAt = new Date();
+          for (const row of live) {
+            await this.memberSubscriptionRepository.update(row.id, {
+              status: 'cancelled',
+              endedAt,
+              adminRequestId: record.id,
+              updatedBy: actor,
+            });
+          }
+          return;
+        }
+
+        // Starting the add-on needs an agreed figure; ending it does not, which
+        // is why the removal above runs before this check.
+        if (!amount) return;
         const addon = await this.subscriptionRepository.findAddonByName('POS Integration');
         if (!addon) {
           logger.warn('[AdminRequestController] POS Integration add-on missing from the catalog');
@@ -310,6 +345,7 @@ export class AdminRequestControllerClass {
       }
 
       if (record.type === 'custom_renegotiation') {
+        if (!amount) return;
         const { records: active } = await this.memberSubscriptionRepository.listPaginated({
           filter: {
             subscriberType: record.subscriberType,

@@ -1,4 +1,4 @@
-import { and, desc, eq, ilike, inArray, isNotNull, ne, sql, SQL } from 'drizzle-orm';
+import { and, desc, eq, ilike, inArray, isNotNull, ne, or, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
@@ -22,11 +22,33 @@ export class AdminRequestRepositoryClass {
   private buildConditions(filter?: AdminRequestFilter): SQL | undefined {
     const conditions: SQL[] = [];
     if (filter?.type) {
-      conditions.push(
-        Array.isArray(filter.type)
-          ? inArray(AdminRequestTable.type, filter.type)
-          : eq(AdminRequestTable.type, filter.type),
-      );
+      const typeClause = Array.isArray(filter.type)
+        ? inArray(AdminRequestTable.type, filter.type)
+        : eq(AdminRequestTable.type, filter.type);
+      // Leaving a negotiated arrangement belongs in the same inbox as entering
+      // one: when an agency switches OFF Custom the agreed price stops applying,
+      // and the admin who set that price needs to see it end. Such a row is a
+      // plain plan_change, so without this it would only appear on the Plan
+      // Change page and the negotiation would look open forever.
+      const extras: SQL[] = [];
+      if (filter.includeNegotiatedExits) {
+        extras.push(
+          and(
+            eq(AdminRequestTable.type, 'plan_change'),
+            sql`exists (select 1 from "main"."subscription" s
+                where s.id = ${AdminRequestTable.currentPlanId} and s.name = 'Custom')`,
+          )!,
+        );
+      }
+      if (filter.includeOpenNegotiations) {
+        extras.push(
+          and(
+            inArray(AdminRequestTable.type, ['pos_integration_quote', 'custom_renegotiation']),
+            ne(AdminRequestTable.status, 'resolved'),
+          )!,
+        );
+      }
+      conditions.push(extras.length > 0 ? or(typeClause, ...extras)! : typeClause);
     }
     if (filter?.excludeType) conditions.push(ne(AdminRequestTable.type, filter.excludeType));
     if (filter?.status) conditions.push(eq(AdminRequestTable.status, filter.status));

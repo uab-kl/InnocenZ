@@ -68,6 +68,10 @@ export interface AdminRequestsQueryParams {
 	latestPerSubscriber?: boolean;
 	/** Case-insensitive partial match on the outlet/agency name. */
 	search?: string;
+	/** Also include plan changes that END a negotiated arrangement (off Custom). */
+	includeNegotiatedExits?: boolean;
+	/** Also include still-open POS / Custom negotiations (Plan Change page). */
+	includeOpenNegotiations?: boolean;
 }
 
 export interface AdminRequestsApiResponse {
@@ -110,6 +114,10 @@ export async function fetchAdminRequests(
 		pageSize: params.pageSize,
 		latestPerSubscriber: params.latestPerSubscriber ? "true" : undefined,
 		search: params.search,
+		includeNegotiatedExits: params.includeNegotiatedExits ? "true" : undefined,
+		includeOpenNegotiations: params.includeOpenNegotiations
+			? "true"
+			: undefined,
 	});
 
 	const response = await client.get<AdminRequestsApiResponse>(

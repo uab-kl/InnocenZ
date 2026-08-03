@@ -169,6 +169,24 @@ function toPlanOf(
 }
 
 /**
+ * What the subscriber is moving TO, in words.
+ *
+ * A plan switch names a plan. A negotiated move does not always: joining the
+ * POS add-on or entering Custom has no requested plan row, and LEAVING one
+ * names the ordinary plan being returned to. Without this such rows rendered
+ * "—" and the page could not show a move to or from POS/Custom at all.
+ */
+function toLabelOf(
+	request: AdminRequest,
+	requested: Subscription | undefined,
+): string {
+	if (requested && requested.kind !== "addon") return requested.name;
+	if (request.type === "pos_integration_quote") return "Integrate with POS";
+	if (request.type === "custom_renegotiation") return "Custom";
+	return "—";
+}
+
+/**
  * Agency Custom (151+ PV) is the only negotiated tier on this page — its price
  * is the quoted amount, never the plan-table price. Everything else follows
  * the Plan page exactly.
@@ -264,6 +282,11 @@ function PlanChangesPage() {
 		// make, not three, and approving a stale request would apply a plan it has
 		// since moved off. Older rows are never deleted — the All view shows them.
 		latestPerSubscriber: view === "latest",
+		// Moving between a normal plan and a negotiated arrangement is a plan
+		// switch too — a venue taking or dropping POS, an agency entering or
+		// leaving Custom — so those belong here while they are still outstanding.
+		// Once resolved they live on Plan Request, where the price was agreed.
+		includeOpenNegotiations: true,
 	};
 	if (search) queryParams.search = search;
 	if (statusFilter !== "all") queryParams.status = statusFilter;
@@ -539,8 +562,8 @@ function PlanChangesPage() {
 													{fromPlan?.name ?? "—"}
 												</TableCell>
 												<TableCell className="text-base font-medium">
-													{toPlan?.name ?? "—"}
-													{status === "pending" && toPlan && (
+													{toLabelOf(request, toPlan)}
+													{status === "pending" && (
 														<div className="text-sm text-muted-foreground">
 															Requested
 														</div>
@@ -788,7 +811,9 @@ function PlanChangeEditForm({
 							<p className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
 								After · To plan
 							</p>
-							<p className="text-lg font-medium">{toPlan?.name ?? "—"}</p>
+							<p className="text-lg font-medium">
+								{toLabelOf(request, toPlan)}
+							</p>
 							<p className="text-base text-muted-foreground">
 								{planPriceLabel(request, toPlan, request.quotedAmount)}
 							</p>

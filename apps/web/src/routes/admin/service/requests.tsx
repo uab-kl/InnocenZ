@@ -13,8 +13,9 @@ import {
 	Loader2,
 	MailCheck,
 	RefreshCw,
+	Search,
 } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import {
 	DateMultiFilter,
@@ -152,8 +153,22 @@ function fromPlanLabel(
 	return planForRequest(request, planById)?.name ?? "—";
 }
 
-/** To plan = what the request is for: the POS add-on or the Custom tier. */
-function toPlanLabel(request: AdminRequest): string {
+/**
+ * To plan = what the request is for.
+ *
+ * Usually entering a negotiated arrangement (the POS add-on, the Custom tier).
+ * But a request can also be a subscriber LEAVING one — a venue dropping POS to
+ * go back to plan-only billing, or an agency switching off Custom — and those
+ * name the ordinary plan they are returning to.
+ */
+function toPlanLabel(
+	request: AdminRequest,
+	planById?: Map<string, Subscription>,
+): string {
+	const requested = request.requestedPlanId
+		? planById?.get(request.requestedPlanId)
+		: undefined;
+	if (requested && requested.kind !== "addon") return requested.name;
 	if (request.type === "pos_integration_quote") return "Integrate with POS";
 	if (request.type === "custom_renegotiation") return "Custom";
 	return "—";
@@ -191,14 +206,28 @@ function RequestsPage() {
 	const [requestedDates, setRequestedDates] = useState<Date[]>([]);
 	const [page, setPage] = useState(1);
 	const [editRequest, setEditRequest] = useState<AdminRequest | null>(null);
+	const [searchInput, setSearchInput] = useState("");
+	const [search, setSearch] = useState("");
 
-	// Only the two inbox kinds are listed here — plan changes have their own
-	// page, and contact/other requests are not part of this flow.
+	// Debounce the search box so a keystroke doesn't fire a request each time.
+	useEffect(() => {
+		const timer = setTimeout(() => {
+			setSearch(searchInput.trim());
+			setPage(1);
+		}, 300);
+		return () => clearTimeout(timer);
+	}, [searchInput]);
+
+	// The two inbox kinds, PLUS the plan changes that end a negotiated
+	// arrangement (an agency switching off Custom) — the admin who agreed that
+	// price needs to see it stop, not only see it start.
 	const queryParams: AdminRequestsQueryParams = {
 		page,
 		pageSize: PAGE_SIZE,
 		types: INBOX_TYPES,
+		includeNegotiatedExits: true,
 	};
+	if (search) queryParams.search = search;
 	if (statusFilter !== "all") queryParams.status = statusFilter;
 	if (roleFilter !== "all") queryParams.subscriberType = roleFilter;
 	const requestedDatesParam = datesToQueryParam(requestedDates);
@@ -367,6 +396,17 @@ function RequestsPage() {
 								}}
 							/>
 
+							<div className="relative sm:w-56">
+								<Search className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+								<Input
+									value={searchInput}
+									onChange={(event) => setSearchInput(event.target.value)}
+									placeholder="Search outlet or agency..."
+									className="pl-8"
+									aria-label="Search outlet or agency"
+								/>
+							</div>
+
 							<Select
 								value={statusFilter}
 								onValueChange={(value) => {
@@ -462,7 +502,7 @@ function RequestsPage() {
 									records.map((request) => {
 										const plan = planForRequest(request, planById);
 										const fromPlan = fromPlanLabel(request, planById);
-										const toPlan = toPlanLabel(request);
+										const toPlan = toPlanLabel(request, planById);
 										const negotiable = isPriceNegotiable(request);
 
 										return (
@@ -638,7 +678,7 @@ function RequestsPage() {
 							key={editRequest.id}
 							request={editRequest}
 							fromPlan={fromPlanLabel(editRequest, planById)}
-							toPlan={toPlanLabel(editRequest)}
+							toPlan={toPlanLabel(editRequest, planById)}
 							plan={planForRequest(editRequest, planById)}
 							isSaving={isSaving}
 							onSaveRemarks={(id, remarks) =>

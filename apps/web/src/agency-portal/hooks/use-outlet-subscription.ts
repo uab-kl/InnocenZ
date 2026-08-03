@@ -310,6 +310,32 @@ export function useOutletSubscription() {
 		}
 	};
 
+	/**
+	 * Ask to come OFF the POS add-on and go back to plan-only billing.
+	 *
+	 * Filed as the same POS request type but naming the venue's PLAN as the
+	 * target — that is what tells the admin (and the resolve handler) this is an
+	 * exit, ending the add-on line instead of starting another one. It lands in
+	 * the same Plan Request inbox, so the admin who agreed the price sees it
+	 * stop as well as start.
+	 */
+	const requestPosRemoval = async (): Promise<boolean> => {
+		if (!identity) return false;
+		const current = activePlanName ? findPlan(activePlanName) : null;
+		if (!current) return false;
+		await posQuoteMut.mutateAsync({
+			type: "pos_integration_quote",
+			subscriberType: "outlet",
+			subscriberId: UUID_RE.test(identity.outletId)
+				? identity.outletId
+				: undefined,
+			subscriberName: identity.outletName,
+			requestedPlanId: current.id,
+			message: `Requesting to remove POS integration and stay on ${current.name} only.`,
+		});
+		return true;
+	};
+
 	const requestPosQuote = async (contact: PosQuoteContact = {}) => {
 		if (!identity) return;
 		const email = contact.email?.trim();
@@ -343,6 +369,7 @@ export function useOutletSubscription() {
 		isLoading: billingQuery.isLoading,
 		isRequestingQuote: posQuoteMut.isPending,
 		requestPosQuote,
+		requestPosRemoval,
 		requestPlanChange,
 		isRequestingPlanChange: planChangeMut.isPending,
 		/** False until the catalog has loaded — the switch cannot be filed yet. */

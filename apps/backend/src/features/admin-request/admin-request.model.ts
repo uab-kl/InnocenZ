@@ -80,4 +80,17 @@ export type AdminRequestFilter = {
   latestPerSubscriber?: boolean;
   /** Case-insensitive partial match on the subscriber (outlet/agency) name. */
   search?: string;
+  /**
+   * Also return plan changes that END a negotiated arrangement (an agency
+   * switching off Custom), so the Plan Request inbox shows a negotiation
+   * closing as well as opening.
+   */
+  includeNegotiatedExits?: boolean;
+  /**
+   * Also return negotiations that are still OPEN (a POS quote or a Custom
+   * renegotiation not yet resolved), so the Plan Change page shows every move
+   * between a normal plan and a negotiated arrangement while it is outstanding.
+   * Resolved ones stay on the Plan Request page, which is where they are priced.
+   */
+  includeOpenNegotiations?: boolean;
 };
