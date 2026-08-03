@@ -40,6 +40,7 @@ import {
 	Building2,
 	Calendar,
 	Receipt,
+	Sparkles,
 	TriangleAlert,
 	Users,
 } from "lucide-react";
@@ -483,14 +484,6 @@ function AgencySubscription() {
 					? "Your tier is chosen by the PVs you issue each payroll week — there is nothing to pick. Past 150 PV the rate card runs out and InnocenZ admin is notified to negotiate a Custom price."
 					: "Reference tiers — your charge each week follows PVs issued in that payroll week"}
 			</p>
-			{sub.backed && waitingOn && (
-				<IzCard flat className="!mb-2">
-					<p className="iz-tiny iz-muted">
-						Waiting for InnocenZ admin — {waitingOn}. Nothing changes on your
-						account until they answer.
-					</p>
-				</IzCard>
-			)}
 			<div className="grid grid-cols-2 gap-2">
 				{ratePlans.map((plan) => {
 					const isBilledTier = sub.backed
@@ -549,16 +542,51 @@ function AgencySubscription() {
 								canEdit &&
 								plan.label === "Custom" &&
 								!isBilledTier && (
-									<button
-										type="button"
-										className="iz-btn iz-btn-soft mt-2 w-full !py-1 !text-[11px]"
-										disabled={sub.isRequesting || Boolean(waitingOn)}
-										onClick={handleAskForCustom}
-									>
-										{waitingOn
-											? "Requested · pending admin"
-											: "Ask InnocenZ admin to price Custom"}
-									</button>
+									<div className="mt-2">
+										{waitingOn ? (
+											/*
+											 * A waiting state, not a dead button. The disabled button
+											 * that used to sit here read as something broken rather
+											 * than something in progress — the agency cannot act, so
+											 * it should not be shown a control at all.
+											 */
+											<div className="flex items-center gap-2 rounded-lg border border-[rgba(244,183,64,.28)] bg-[var(--iz-amber-bg,rgba(244,183,64,.12))] px-2.5 py-2">
+												<span className="relative flex h-2 w-2 shrink-0">
+													<span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[var(--iz-amber,#f4b740)] opacity-60" />
+													<span className="relative inline-flex h-2 w-2 rounded-full bg-[var(--iz-amber,#f4b740)]" />
+												</span>
+												<div className="min-w-0">
+													<p className="iz-tiny font-semibold text-[var(--iz-amber,#f4b740)]">
+														Requested · with InnocenZ admin
+													</p>
+													<p className="iz-tiny iz-muted2">
+														They are preparing your price — your current tier is
+														unchanged until then.
+													</p>
+												</div>
+											</div>
+										) : (
+											/*
+											 * Styled to the tile it sits on rather than the neutral
+											 * soft button used elsewhere: Custom carries the violet
+											 * accent everywhere on this screen, and a grey button
+											 * under a violet "Renegotiate Price" read as disabled.
+											 */
+											<button
+												type="button"
+												className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(139,124,246,.4)] bg-[rgba(139,124,246,.1)] px-3 py-2 transition-colors hover:bg-[rgba(139,124,246,.18)] disabled:opacity-60"
+												disabled={sub.isRequesting}
+												onClick={handleAskForCustom}
+											>
+												<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
+												<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
+													{sub.isRequesting
+														? "Sending…"
+														: "Ask admin for a price"}
+												</span>
+											</button>
+										)}
+									</div>
 								)}
 						</IzCard>
 					);

@@ -620,6 +620,21 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **3 Aug 2026 (sixteenth slice) — THE CUSTOM TILE READS AS A STATE, NOT A BROKEN BUTTON.**
+>
+> Owner: *"design a bit this agency status, the requested or not"* and *"this also redesign ask admin"*.
+> The requested state was a **disabled full-width button** — which reads as something broken rather than
+> something in progress. An agency waiting on a price cannot act, so it is no longer shown a control at
+> all: an amber strip with a pulsing dot, *Requested · with InnocenZ admin*, and one line saying its
+> current tier is unchanged until they answer.
+>
+> The call to action is styled to the tile it sits on — violet border/fill and a Sparkles glyph, matching
+> the accent Custom already carries on this screen. A grey soft button under a violet "Renegotiate Price"
+> looked disabled. Label shortened to *Ask admin for a price*, which fits the tile at one line.
+>
+> **The duplicate banner above the rate card is gone.** "Waiting for InnocenZ admin — Custom" said the
+> same thing two inches from the tile that now says it in context.
+
 > **3 Aug 2026 (fifteenth slice) — THE AGENCY GETS THE SAME REAL CARD, AND A WAY TO ASK FOR CUSTOM.**
 >
 > Owner: *"this renew date also wrong and the card cannot update like the outlet in the agency subcription
