@@ -474,7 +474,7 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 **1) Dispute and receipt — the state machine the owner wants**
 
-- [ ] **🔴 The receipt lifecycle, as specified:** `PENDING` → agency reviews the receipt (**photo + the PR's note**) and may **EDIT price / quantity / drink / category** → `APPROVED` (the PR now sees "APPROVED", and **only now may the PR dispute it**) → if disputed: resolve → `VERIFIED` → **if untouched when the week closes: `APPROVED` → `VERIFIED` automatically**. ✅ **The rollover is buildable now — `node-cron` is installed and a scheduler already runs** (the weekly-payout job), so auto-verify is a new job on existing plumbing, not new infrastructure.
+- [ ] **🔴 The receipt lifecycle, as specified:** `PENDING` → agency reviews the receipt (**photo + the PR's note**) and may **EDIT price / quantity / drink / category** → `APPROVED` (the PR now sees "APPROVED", and **only now may the PR dispute it**) → if disputed: resolve → `VERIFIED` → **if untouched when the week closes: `APPROVED` → `VERIFIED` automatically**. ✅ **AMENDED 3 Aug — the rollover is not "buildable", it is BUILT and running.** This line used to read *"the rollover is buildable now — `node-cron` is installed and a scheduler already runs"*, which understated it and left the item looking like unstarted work. Re-derived at `aa572c8`: `paymentVoucherRepository.verifyApprovedReceipts()` is called from **`scheduler/weekly-payout.job.ts:106`**, deliberately **before** the send gate (after it, every week's receipts would sit an extra seven days at `approved` — a whole cadence skipped, invisibly). The resolved-dispute arm lives in `resolveDispute`. See the fuller entry in P3 below, which had this right all along. ⚠️ **What is still open in THIS item is the agency EDIT surface** — the spec's *edit price / quantity / drink / category* — and the OCR-detail requirement in the sibling item, not the rollover.
 - [ ] **🔴 Split the PR's two sections by week:** **disputes are raised in the LAST-week section; the approve view appears only in the THIS-week section.** ⚠️ **This is the "remaining" half already flagged at §9 F / Payroll below** — the agency side of receipt review was built 30 Jul, the PR's two sections were not. One job, not two.
 - [ ] **🟠 The agency's decision screen must show EVERYTHING the OCR returned**, not a summary — the owner is explicit that all scanned detail is needed to decide. The same surface handles this week's review and approval.
 
@@ -507,7 +507,7 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 **6) Not yet recorded from today's session (31 Jul) — write up before this doc is trusted again**
 
 - [ ] **🔴 §10 has NO row for today's agency-portal crash fix.** The bug: the web app kept a hand-written copy of the `notification_kind` enum and the merge added two kinds (`pr_rating_low`, `shift_cover_needed`) it never got, so `KIND_MAP[kind]` returned `undefined` and the bell called `.startsWith` on it — **the whole `/agency` page white-screened** for any agency user holding one, which the live DB confirms `owner@atlas-agency.my` does. Fixed across 6 files, with an `unknown` fallback so a future kind degrades to a readable row instead of taking the page down. **Also missing: the `GeoFenceCard.tsx` merge-conflict resolution** (took main's redesign; jk's hemisphere-paste parsing was dropped because main deleted the manual lat/lng entry it enhanced).
-- [ ] **🔴 `pv_day_review_pending` EXISTS IN THE DB BUT NO CODE PRODUCES IT ANY MORE** *(SL)* — ⚠️ **corrects an assumption made earlier today that it came from a teammate's branch: it is OUR OWN X16 work from 30 Jul.** A row of that kind is live in `notification`, and §9 still carries "fire the producer live" — yet **grep finds the string nowhere under `apps/`**, including `notification.model.ts`. So either the producer was lost in a merge or the row was written by hand. **Re-derive before building on it**, and note the missing model entry is exactly the drift class that caused the crash above.
+- [x] **~~🔴 `pv_day_review_pending` EXISTS IN THE DB BUT NO CODE PRODUCES IT ANY MORE~~ — ✅ RETRACTED 3 Aug: the producer exists and always did** *(SL)*. Re-derived against the tree at `aa572c8`: the kind is declared at `notification.model.ts:51` and **fired at `scheduler/weekly-payout.job.ts:264`**. The original entry's evidence was *"grep finds the string nowhere under `apps/`"* — that grep was wrong, and the entry was believed for three days on the strength of it. ⚠️ **The lesson is the one §9 keeps re-learning: a NEGATIVE grep result is the weakest evidence in this repo and must be re-run before it is written down as a fact.** Nothing was lost in a merge and no row was hand-written. **The genuinely open half is unchanged and still below: the producer has never been FIRED live** (it needs a payout run against the shared DB).
 
 ### 🟠 UI — `/agency/pv` layout change requested by the OWNER (3 Aug 2026, from a screenshot)
 
@@ -651,6 +651,39 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (evening, part 3) — a whole-project survey, and THREE §9 entries were found to be
+> describing work that was already finished. No code changed; doc only.**
+>
+> Owner asked what is still pending besides registration. Every claim was re-derived against the
+> tree at `aa572c8` instead of being copied out of §9 — and three entries turned out to be reporting
+> **closed work as open**, which is the more expensive direction of error: it hides real progress and
+> invites someone to rebuild what already exists.
+>
+> 1. **`pv_day_review_pending` "has no producer".** ❌ It has one, at
+>    `scheduler/weekly-payout.job.ts:264`, with the kind declared at `notification.model.ts:51`. The
+>    entry rested entirely on *"grep finds the string nowhere under `apps/`"* — **the grep was
+>    simply wrong**, and nobody re-ran it for three days. ⚠️ **Standing rule earned here: a NEGATIVE
+>    grep is the weakest evidence in this repo. Re-run it before it becomes a recorded fact.**
+> 2. **Receipt `APPROVED → VERIFIED` rollover "buildable now".** ❌ Built and running —
+>    `verifyApprovedReceipts()` is called from `weekly-payout.job.ts:106`. The P3 entry had this
+>    right all along while the P0-CLIENT entry above it understated it, so the same feature was
+>    described two ways in one document. **When two entries disagree, the more specific one usually
+>    won a re-derivation and the vaguer one was never revisited.**
+> 3. **Outlet swap "IN PROGRESS, only the model file exists".** ❌ Shipped end to end (migration
+>    `0052`, mounted at `router/v1.ts:64`, agency hooks + PR mobile `OutletSwapRequests.tsx`). This
+>    one was **not** in `TEST_SCRIPT.md` at all — it was the one-line hook in the memory INDEX, whose
+>    own memory file said DONE. **An index line rots independently of the entry it points at.**
+>
+> **What the survey CONFIRMED is still missing** (all by re-derivation, not recall): no mailer of any
+> kind, no rate limiting, no logout route, **zero tests**, and only ONE registered background job.
+> The demo store is the headline: `agency-portal/lib/store.ts` is **7,330 lines** and **63 web files
+> call `useStore` against 37 that call a real backend hook**; `agency/special-service.tsx`,
+> `outlet/special-service.tsx` and `outlet/billing.tsx` have **no backend call at all**. The admin
+> portal is clean. Also confirmed open: `AuditLogFilterInput` has no `role` field (so the per-role
+> audit pages under-fill), agency/outlet **login accounts** still have no admin screen (the tabs
+> manage the ORG), `outlet_transaction` has zero UI, and `platform_config.platform_fee_percent`
+> defaults to **`'5.00'`** in the model while the fee decision is still recorded as owed.
 
 > **3 Aug 2026 (evening, part 2) — the agency can finally SIGN and PAY; the rail is no longer
 > decorative.**
