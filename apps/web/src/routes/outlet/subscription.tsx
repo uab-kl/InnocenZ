@@ -224,10 +224,14 @@ function OutletSubscriptionPage() {
 						backend.activePlanName?.trim().toLowerCase(),
 				)
 			: undefined;
-		return (
-			fromLedger ?? getOutletSubscriptionPlan(outletOwner.subscriptionPlanId)
-		);
-	}, [backend.activePlanName, outletOwner.subscriptionPlanId]);
+		// A REAL session never falls back to the demo store. The store is shared
+		// by every venue opened in this browser, so falling back showed one venue
+		// another's plan as "Current" — a venue on Pro (RM 2,999) was told it was
+		// on Scale (RM 6,999). With no active row there is simply no current plan,
+		// and the card renders none.
+		if (backend.backed) return fromLedger ?? null;
+		return getOutletSubscriptionPlan(outletOwner.subscriptionPlanId);
+	}, [backend.backed, backend.activePlanName, outletOwner.subscriptionPlanId]);
 	const contactLine = outletOwner.email || outletOwner.mobile;
 	/**
 	 * The next billing date, derived from this venue's own subscription row. A
@@ -295,7 +299,7 @@ function OutletSubscriptionPage() {
 	);
 
 	const selectPlan = (planId: OutletSubscriptionPlanId) => {
-		if (!canEdit || planId === currentPlan.id) return;
+		if (!canEdit || planId === currentPlan?.id) return;
 		const next = getOutletSubscriptionPlan(planId);
 		if (next.renegotiate) return;
 		if (peakDailyNamedPrs > next.prPerDayMax) {
@@ -316,7 +320,7 @@ function OutletSubscriptionPage() {
 			backend
 				.requestPlanChange({
 					toPlanLabel: next.label,
-					fromPlanLabel: currentPlan.label,
+					fromPlanLabel: currentPlan?.label,
 					contact: { email: outletOwner.email, phone: outletOwner.mobile },
 				})
 				.then((result) => {
@@ -382,7 +386,7 @@ function OutletSubscriptionPage() {
 			</p>
 			<div className="grid grid-cols-2 gap-2">
 				{MONTHLY_PLANS.map((plan) => {
-					const isCurrent = plan.id === currentPlan.id;
+					const isCurrent = plan.id === currentPlan?.id;
 					const atCapacity = namedPrsToday >= plan.prPerDayMax;
 					return (
 						<IzCard
@@ -435,8 +439,9 @@ function OutletSubscriptionPage() {
 								canEdit &&
 								(planChangeRequested === plan.label ? (
 									<p className="iz-tiny iz-muted2 mt-3">
-										Sent to InnocenZ admin — you stay on {currentPlan.label}{" "}
-										until it is approved.
+										Sent to InnocenZ admin — you stay on{" "}
+										{currentPlan?.label ?? "your current plan"} until it is
+										approved.
 									</p>
 								) : (
 									<button
@@ -650,7 +655,8 @@ function OutletSubscriptionPage() {
 								Visa ···· {paymentCardLast4}
 							</p>
 							<p className="iz-tiny iz-muted">
-								Billed monthly · {formatRM(currentPlan.monthlyRm)} · auto-pay
+								Billed monthly ·{" "}
+								{currentPlan ? formatRM(currentPlan.monthlyRm) : "—"} · auto-pay
 								enabled
 							</p>
 						</div>

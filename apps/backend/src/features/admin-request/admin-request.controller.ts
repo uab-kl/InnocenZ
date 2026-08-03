@@ -110,7 +110,12 @@ export class AdminRequestControllerClass {
         // ?latestPerSubscriber=true → one row per venue/agency, the newest.
         latestPerSubscriber: req.query.latestPerSubscriber === 'true',
       };
-      const { records, totalCount } = await this.repository.listPaginated({ filter, page, pageSize });
+      const { records: rawRecords, totalCount } = await this.repository.listPaginated({
+        filter,
+        page,
+        pageSize,
+      });
+      const records = await this.withLiveFromPlan(rawRecords);
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
@@ -143,7 +148,8 @@ export class AdminRequestControllerClass {
     try {
       const record = await this.repository.getById(paramId(req.params.id));
       if (!record) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      res.status(200).json({ success: true, message: 'OK', data: record });
+      const [withLive] = await this.withLiveFromPlan([record]);
+      res.status(200).json({ success: true, message: 'OK', data: withLive ?? record });
     } catch (error) {
       logger.error('[AdminRequestController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -235,6 +241,48 @@ export class AdminRequestControllerClass {
     } catch (error) {
       logger.error('[AdminRequestController.create] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Re-point "from plan" at what the subscriber is on TODAY, for requests still
+   * awaiting an answer.
+   *
+   * `current_plan_id` is stamped when the request is raised, which is right for
+   * history but goes stale while the request waits: a venue that raised a POS
+   * quote on Pro and has since moved to Scale was still shown as Pro, so the
+   * admin would negotiate against the wrong plan and price. Answered requests
+   * keep their stamp — that IS what they were decided against.
+   */
+  private async withLiveFromPlan(records: AdminRequest[]): Promise<AdminRequest[]> {
+    const pending = records.filter((row) => row.status === 'pending' && row.subscriberId);
+    if (pending.length === 0) return records;
+    try {
+      const livePlanBySubscriber = new Map<string, string | null>();
+      for (const row of pending) {
+        if (!row.subscriberId || !row.subscriberType || livePlanBySubscriber.has(row.subscriberId)) {
+          continue;
+        }
+        const { records: active } = await this.memberSubscriptionRepository.listPaginated({
+          filter: {
+            subscriberType: row.subscriberType,
+            subscriberId: row.subscriberId,
+            status: 'active',
+          },
+          page: 1,
+          pageSize: 1,
+        });
+        livePlanBySubscriber.set(row.subscriberId, active[0]?.subscriptionId ?? null);
+      }
+      return records.map((row) => {
+        if (row.status !== 'pending' || !row.subscriberId) return row;
+        const live = livePlanBySubscriber.get(row.subscriberId);
+        return live ? { ...row, currentPlanId: live } : row;
+      });
+    } catch (error) {
+      // A failed lookup must not blank the queue — fall back to the stamp.
+      logger.error('[AdminRequestController.withLiveFromPlan] Error:', error);
+      return records;
     }
   }
 
