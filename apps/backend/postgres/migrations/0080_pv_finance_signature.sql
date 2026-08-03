@@ -1,0 +1,16 @@
+-- The AGENCY's finger-drawn signature for a voucher — the mirror of
+-- `pr_signature` (0071), same compact stroke JSON ({w,h,strokes:[[[x,y],...],...]}),
+-- written ONLY by POST /payment-voucher/:id/finance-sign.
+--
+-- The voucher already had `finance_head_name` and `finance_head_signed_at` and
+-- nothing ever set either: the agency's "Finance sign" step was a label on a
+-- workflow rail with no action behind it, while the PR's half of the same
+-- dual-signature was fully real. With this column the send gate can require the
+-- attestation before a voucher ever reaches the PR.
+--
+-- Hand-authored rather than generated: `drizzle-kit generate` cannot run in this
+-- repo — snapshots 0065-0070 are six identical copies and 0063/0064 are absent,
+-- so the chain it diffs against is broken. `drizzle-kit migrate` reads only
+-- _journal.json and these SQL files, so this deploys normally. Repairing the
+-- snapshot history is a separate, larger job.
+ALTER TABLE "main"."payment_voucher" ADD COLUMN IF NOT EXISTS "finance_head_signature" text;

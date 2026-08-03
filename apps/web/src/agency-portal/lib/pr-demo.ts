@@ -23,6 +23,7 @@ import {
 } from "@agency-portal/lib/finance-head-stamp";
 import { getDrinkMenuForOutlet } from "@agency-portal/lib/outlet-drink-menu";
 import { addDays, differenceInCalendarDays, format, parseISO } from "date-fns";
+import type { PaymentVoucherComponent } from "@/services/payment-voucher";
 
 export type PrSubRole = "pr_tied";
 
@@ -337,6 +338,17 @@ export interface PrPvRow {
 	qty: number;
 	amt: number;
 	ref: string;
+	/**
+	 * The line's money bucket, straight from `payment_voucher_line.component`.
+	 *
+	 * Present on rows mapped from a BACKEND voucher, absent on demo rows — hence
+	 * optional. The earnings breakdown used to classify by searching the
+	 * DESCRIPTION for "wage"/"drink"/"tip", so a real line described "Friday
+	 * lounge" landed in Other and the agency read RM 0.00 of wages on a RM 700.00
+	 * wage voucher. The typed column is the answer; the text search survives only
+	 * as the fallback for rows that have no column.
+	 */
+	component?: PaymentVoucherComponent | null;
 	/** Receipt scan IDs that roll into this PV line */
 	receiptIds?: string[];
 }

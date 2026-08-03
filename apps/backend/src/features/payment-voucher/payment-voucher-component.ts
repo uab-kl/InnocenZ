@@ -44,6 +44,49 @@ export function componentFromRef(
 }
 
 /**
+ * The reverse of `COMPONENT_BY_KIND`, for READING a line whose ref carries no
+ * packed kind.
+ *
+ * The weekly generator writes `ref = <shift assignment id>` and sets
+ * `component: 'wages'` explicitly, so for those lines the classification lives in
+ * the column and nowhere else. Deriving a PR-facing bucket from the ref alone put
+ * every generated wage line in "Others" and reported daily wages as RM 0.00 — on
+ * the Payment grid, History → Shifts and History → Payment at once.
+ *
+ * `ot` and `deduction` map to 'others' because the PR-facing split has only four
+ * buckets; that is the same coarse bucket the phone already logs overtime under.
+ */
+const KIND_BY_COMPONENT: Readonly<Record<PaymentVoucherComponent, string>> = {
+  wages: 'wages',
+  drink_commission: 'drinks',
+  tip_commission: 'tips',
+  ot: 'others',
+  deduction: 'others',
+  other: 'others',
+};
+
+/**
+ * The PR-facing bucket for a classified line, or undefined when the column is
+ * NULL (a row written before classification — honestly unknown, not 'others').
+ */
+export function kindFromComponent(
+  component: PaymentVoucherComponent | null | undefined,
+): string | undefined {
+  return component ? KIND_BY_COMPONENT[component] : undefined;
+}
+
+/**
+ * Does this ref carry a packed `kind|source|sales|dedupe|category`?
+ *
+ * The one test that separates a PR self-log or receipt line (packed, so the ref
+ * is authoritative) from a generated wage line (a bare assignment id, so the
+ * `component` column is).
+ */
+export function refPacksKind(ref: string | null | undefined): boolean {
+  return Boolean(ref?.includes(REF_SEP));
+}
+
+/**
  * Fills in `component` on a line about to be inserted, without ever overwriting
  * one the caller set deliberately. Applied in the repository so every write path
  * — weekly generator, agency create/update, PR self-log, receipt import — is

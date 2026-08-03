@@ -36,6 +36,7 @@ import {
   voucherSendGate,
 } from './payment-voucher-day-review.js';
 import { klToday } from './payment-voucher-week.js';
+import { kindFromComponent, refPacksKind } from './payment-voucher-component.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
@@ -53,6 +54,7 @@ import {
   CreatePrReceiptSchema,
   UpdatePrReceiptLineSchema,
   PrRaiseDisputeSchema,
+  FinanceSignVoucherSchema,
   PrSignVoucherSchema,
   ReviewVoucherDaySchema,
   ReviewReceiptSchema,
@@ -128,19 +130,31 @@ function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
 }
 
-/** The Mon–Sun window (yyyy-MM-dd) containing `now`, matching the PV cycle. */
+/**
+ * The Sun–Sat window (yyyy-MM-dd) containing `now`, matching the PV cycle.
+ *
+ * Sunday-anchored on the owner's instruction (3 Aug 2026). It was Monday-
+ * anchored, which put the backend and the PR app one day out from the agency
+ * portal — the same money read `27 Jul – 02 Aug` on the phone and
+ * `26 Jul – 01 Aug` on the web, and the agency could only find its vouchers via
+ * a containment match written to paper over the gap.
+ *
+ * The anchor is the whole payroll cycle, so it must agree with
+ * `previousCompleteWeek()` and `weekOfDate()` in payment-voucher-week.ts and
+ * with the weekly payout cron. Change one, change all four.
+ */
 function weekBounds(now = new Date()): { weekStart: string; weekEnd: string } {
   const base = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
-  const daysSinceMonday = (base.getUTCDay() + 6) % 7; // Sun=0 → 6, Mon=1 → 0
-  const monday = new Date(base);
-  monday.setUTCDate(base.getUTCDate() - daysSinceMonday);
-  const sunday = new Date(monday);
-  sunday.setUTCDate(monday.getUTCDate() + 6);
+  const daysSinceSunday = base.getUTCDay(); // Sun=0 → 0, Sat=6 → 6
+  const sunday = new Date(base);
+  sunday.setUTCDate(base.getUTCDate() - daysSinceSunday);
+  const saturday = new Date(sunday);
+  saturday.setUTCDate(sunday.getUTCDate() + 6);
   const iso = (d: Date) => d.toISOString().slice(0, 10);
-  return { weekStart: iso(monday), weekEnd: iso(sunday) };
+  return { weekStart: iso(sunday), weekEnd: iso(saturday) };
 }
 
-/** The Mon–Sun window immediately before the one containing `now`. */
+/** The Sun–Sat window immediately before the one containing `now`. */
 function previousWeekBounds(now = new Date()): { weekStart: string; weekEnd: string } {
   const prior = new Date(now);
   prior.setUTCDate(now.getUTCDate() - 7);
@@ -235,11 +249,34 @@ type PrReceiptLineDTO = {
  * PR-facing read passes the map — a line that says "pending" on one screen and
  * "approved" on another is worse than either.
  */
+/**
+ * Which of the PR's four buckets this line belongs in.
+ *
+ * A packed ref wins — a self-log or receipt line states its own kind and is the
+ * authority on itself. Only when the ref carries NO packed kind does the typed
+ * `component` column answer, which is the weekly generator's case: it writes
+ * `ref = <shift assignment id>` and sets `component: 'wages'` explicitly.
+ *
+ * Reading the ref alone was why every generated wage line showed under **Others**
+ * and every "daily wages" figure the PR saw read RM 0.00 — the money was
+ * classified correctly in the database the whole time, on a column this never
+ * looked at. `decodeRef`'s own 'others' stays the last resort, for a line with
+ * neither a packed ref nor a classified column.
+ */
+function lineKind(line: PaymentVoucherLineType, refKind: PrReceiptKind): PrReceiptKind {
+  if (refPacksKind(line.ref)) return refKind;
+  const fromColumn = kindFromComponent(line.component);
+  return (prReceiptKindValues as readonly string[]).includes(fromColumn ?? '')
+    ? (fromColumn as PrReceiptKind)
+    : refKind;
+}
+
 function toReceiptLineDTO(
   line: PaymentVoucherLineType,
   receiptInfoById?: Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }>,
 ): PrReceiptLineDTO {
-  const { kind, source, sales } = decodeRef(line.ref);
+  const { kind: refKind, source, sales } = decodeRef(line.ref);
+  const kind = lineKind(line, refKind);
   const info = line.receiptId ? (receiptInfoById?.get(line.receiptId) ?? null) : null;
   const receiptStatus = info?.status ?? null;
   return {
@@ -268,10 +305,16 @@ function receiptInfoMap(
   return new Map(receipts.map((r) => [r.id, { status: r.status, receiptNo: r.receiptNo }]));
 }
 
-/** Wage lines only — History summary "RM X wages" beside net. */
+/**
+ * Wage lines only — History summary "RM X wages" beside net.
+ *
+ * Goes through `lineKind` for the same reason the DTO does: reading the ref alone
+ * made this return 0.00 for every generated wage line, so History showed a week's
+ * net beside RM 0.00 of wages.
+ */
 function sumWages(lines: PaymentVoucherLineType[]): string {
   const total = lines.reduce((sum, line) => {
-    const { kind } = decodeRef(line.ref);
+    const kind = lineKind(line, decodeRef(line.ref).kind);
     return kind === 'wages' ? sum + Number(line.amount) : sum;
   }, 0);
   return total.toFixed(2);
@@ -687,6 +730,21 @@ export class PaymentVoucherControllerClass {
             data: null,
           });
         }
+        // The agency's OWN signature is the first thing the gate asks for.
+        // Sending a voucher is an attestation — "this is what we owe you" — and
+        // the workflow rail has always shown "Finance sign" ahead of "Sent to
+        // PR". Until 3 Aug 2026 nothing enforced that and no column could even
+        // hold the mark, so every voucher reached its PR unattested while the
+        // PR's own screen claimed the finance head had already signed.
+        if (!existing.financeHeadSignedAt) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'Sign this voucher first — the finance signature is what the PR is asked to counter-sign.',
+            data: null,
+          });
+        }
+
         const reviews = await this.paymentVoucherRepository.listDayReviews(id);
         // Receipts too: a PENDING receipt blocks the send through the SAME gate
         // (owner's decision #2), so the send has one refusal path rather than
@@ -875,8 +933,82 @@ export class PaymentVoucherControllerClass {
   }
 
   /**
-   * Signed/paid vouchers for History → Payment (and past payroll weeks on
-   * History → Shifts). Sourced only from payment_voucher — never demo seed.
+   * The AGENCY's signature on one voucher — the "Finance sign" step of the rail.
+   *
+   * Deliberately its own endpoint rather than a field on `PUT /:id`. That route
+   * rewrites the whole voucher (and deletes and re-inserts every line), so
+   * signing through it would make an attestation a side effect of an edit — and
+   * the one thing a signature must not be is something that happened while you
+   * were changing the numbers.
+   *
+   * The name comes from the signed-in account, never the client. A caller-typed
+   * name on a signature is how a signature stops meaning anything.
+   *
+   * Refuses once the voucher has left review: after it is sent, the PR may
+   * already have counter-signed, and re-signing underneath them would change the
+   * document they agreed to.
+   */
+  async financeSignVoucher(req: Request, res: Response) {
+    try {
+      const parsed = FinanceSignVoucherSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const id = paramId(req.params.id);
+      const existing = await this.paymentVoucherRepository.getById(id);
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const scope = await this.resolveScope(req);
+      // Cross-tenant reads 404 rather than 403 — never confirm a record exists.
+      if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      if (existing.status !== 'pending_review') {
+        return res.status(409).json({
+          success: false,
+          message:
+            'This voucher has already been sent — the finance signature belongs before it goes to the PR.',
+          data: null,
+        });
+      }
+
+      const actor = getActor(req);
+      const voucher = await this.paymentVoucherRepository.update(id, {
+        financeHeadName: parsed.data.financeHeadName ?? actor,
+        financeHeadSignedAt: new Date(),
+        financeHeadSignature: JSON.stringify(parsed.data.signature),
+        updatedBy: actor,
+      });
+
+      res.status(200).json({ success: true, message: 'Voucher signed', data: voucher });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.financeSignVoucher] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Every CLOSED payroll week's voucher, for History → Payment and the past
+   * weeks on History → Shifts. Sourced only from payment_voucher — never demo
+   * seed.
+   *
+   * Deliberately NOT restricted to signed/paid. That was the filter, and it made
+   * both History tabs read "No payments yet" for a PR whose Payment screen was
+   * showing RM 700.00 for the very same week: a voucher sits in `pending_review`
+   * from the moment the week closes until the agency issues it, which is exactly
+   * the window in which a PR goes looking for it. A week the PR has finished
+   * working is history whatever the agency has done with it yet.
+   *
+   * The current week is still excluded (`excludeWeekStart`), so the live draft
+   * that is still accruing never appears here — it belongs to the Payment tab,
+   * the screen that can still change it.
+   *
+   * The client renders anything not `paid` as "Signed"; only a genuinely paid
+   * voucher reads "Paid".
    */
   async getMyHistory(req: Request, res: Response) {
     try {
@@ -885,6 +1017,7 @@ export class PaymentVoucherControllerClass {
 
       const { weekStart: currentWeekStart } = weekBounds();
       const vouchers = await this.paymentVoucherRepository.listHistoryForPr(pr.id, {
+        statuses: ['pending_review', 'sent', 'signed', 'paid', 'disputed'],
         excludeWeekStart: currentWeekStart,
       });
 

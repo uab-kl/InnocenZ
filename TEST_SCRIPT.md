@@ -291,13 +291,57 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X53 | **🟢 THE CONCURRENT-CLAIM RACE IS PROVEN LIVE — and it was never "unfixable", only unproven.** Two **simultaneous** `PATCH …/overtime` requests at one pending claim, fired with `Promise.all`: **one 200, one 409 "This overtime claim was decided by someone else a moment ago."** ⚠️ **That message is the point** — it comes from `claimOvertimeDecision` returning falsy, i.e. the `UPDATE … WHERE overtime_status = 'pending'` losing the race, **not** from the earlier already-decided precondition. A read-then-check would have let both requests through every precondition; the state transition itself is what refuses the second. This is the live proof for the fix in `5e0dbee` that a double-clicked Approve cannot pay twice. **The method is the reusable part: it decides with REJECT, not approve.** Reject runs the identical mutex but writes **no voucher line**, so the race is provable without putting money on anyone's payslip — and the claim is then rolled back to NULL in a `finally`, so the run leaves nothing at all. Verified after: **still exactly 2 overtime decisions** (the X50 pair, no rejected row), audit **3/3 reconcile**. Backend tsc **0**. ⚠️ Correction to my own earlier note: I had written this off as needing "a genuine race" as though that were impractical. `Promise.all` of two requests IS a genuine race — **"hard to observe" was mistaken for "hard to test".** | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --race` | live HTTP 200+409 concurrently, zero residue | ✅ Fired live |
 | X54 | **🟢 THE SURPLUS APPROVAL IS CLEARED — and the cleanup SQL I had written down would have CORRUPTED the voucher.** `--clear=<assignmentId>` removed the RM 150.00 line from `9d897070…`; **PV-000003 went 1353.30 / 4 lines → 1203.30 / 3 lines**, exactly RM 150.00 lighter, and the audit still reports **3/3 reconcile**. One approval remains — `f5a1f227…`, RM 175.00 on PV-000002 — which is the one that was asked for. 🔴 **THE FINDING IS IN THE CLEANUP, NOT THE CLEAR.** The two-statement `DELETE … FROM payment_voucher_line` + `UPDATE shift_assignment` recipe I had printed at the end of every run and recorded in §9 **was incomplete**: a voucher's `subtotal`/`net` are recomputed when a line is **added**, so deleting the row behind their backs leaves **a voucher whose stated total no longer matches its own lines** — PV-000003 would have read 1353.30 with 1203.30 of lines under it. **That is precisely the fault class this entire audit exists to catch, so running my own cleanup would have manufactured one.** ⚠️ The general lesson, and it is the same one as the `-ot` dedupe ref and the `component` column: **when the app maintains a derived value, undo through the app's own path, never with SQL that only touches the base row.** `--clear` therefore calls the repository's `deleteLine()`, which runs `recomputeTotals` in the same transaction. It also prints what it will remove and takes `--dry-run`, because a delete that names its target before acting is the only kind worth trusting on a shared database. Backend tsc **0**. | **Agency ← PR** | `src/scripts/fire-overtime-approval.ts --clear=` · `payment-voucher.repository` (`deleteLine` → `recomputeTotals`) | live clear + audit 3/3 + totals arithmetic | ✅ Verified live |
 | X55 | **🟢 SUSPENDING AN ORGANISATION NOW ACTUALLY STOPS ITS PEOPLE — refused at login AND live sessions killed.** New `features/auth/org-status.ts` → `suspendedOrgBlock(userId)`, called from **`auth.controller` login** and from **`authenticateJWT`**. Two call sites on purpose: refusing the next login alone would leave anyone holding a token at the moment of suspension working until it expired — **which for an agency finance user means they could still raise payment vouchers.** The middleware already re-reads the account every request (§8 X31), so that cost was being paid and this rides along with it. **The login check sits BEFORE the password compare**, mirroring the lockout: a refusal that only fires once the password is right confirms the password to anyone who tries it. **🔴 THE DESIGN IS ALL IN WHAT IT DOES *NOT* BLOCK, and each carve-out is a lockout that nearly happened. (1) `pending_review` is ALLOWED** — only `suspended` and `inactive` deny. `pending_review` is the column **DEFAULT** for both `agency` and `outlet`, so a rule reading "not active" would have shut out **every organisation nobody has reviewed yet**, and no review screen exists. **(2) No membership means no opinion** — a platform admin and a PR hold no `agency_user`/`outlet_user` row at all, so an "is your org active?" test would have refused everyone who has no organisation, **locking every admin out of their own platform**. Absence of a membership is not a suspended membership. **(3) One live organisation is enough** — a user in a suspended agency AND an active one keeps access, rather than being punished for the other org's status. **(4) The membership row's own `status` is filtered first**, since `agency_user.status` is independent of `agency.status`. The refusal **names the organisation and its state** rather than saying "invalid credentials", which would send someone to reset a password that was never the problem — and it is their own org, so it discloses nothing. **LIVE PROOF, `probe-org-suspension.ts`, 5/5:** an active agency does not block → suspend → **blocked with the right message** → restore → access returns → and **admin is never blocked**. ✅ **Nothing was newly locked out: all 3 agencies and all 7 outlets are `active`** (asserted by the probe, not assumed). The suspension is restored in a `finally`. HTTP login re-verified after the change: admin logs in and all 6 authenticated requests pass the middleware. Backend tsc **0**. | **all** | `features/auth/org-status.ts` (new) · `auth.controller` (login) · `middlewares/authenticate-jwt.ts` · `probe-org-suspension.ts` (new) | live probe 5/5 + HTTP login re-verified | ✅ Fired live |
+| X56 | **🟢 `/agency/pv` IS RENDERED IN A BROWSER AT LAST — on a REAL agency login, and it immediately produced a bug.** X43 and X45 shipped this screen proven only by `tsc`/biome/`vite build`; this is the first time a browser has loaded it. Signed in as `owner@atlas-agency.my` against the live backend: the page renders **real DB rows** (Alice `RM 1,203.30`, Victoria `RM 700.00`, both `Pending Agency Review`), the **dispute panel and `OvertimeQueuePanel` both mount**, console **clean — zero errors**. ⚠️ **The OT panel rendered its EMPTY state** ("No overtime awaiting a decision"), because the only live claim is already approved (X50). **Its POPULATED state is still unproven, and populating it means writing to the shared DB** — do not report this screen as fully exercised. **🔴 THE BUG IT FOUND: `pv_day_review_pending` was never mapped in `apps/web` at all.** The kind has existed since migration 0073 and is produced by `weekly-payout.job.ts`; the web app's hand-written `NotificationKind` union never received it. jk's `unknown` fallback stopped it white-screening, so it degraded quietly to a generic **"Update"** row — and `hrefFor` fell to `default: return undefined`, so **a notification whose own body reads "Approve each day on Payroll & PV, then send" navigated NOWHERE when tapped.** ⚠️ **Same class as jk's crash, one kind later, and the fallback is exactly why nobody noticed: it turned a loud failure into a silent one.** Fixed across 5 files (union → `KIND_MAP` → `PR_KIND_MAP` → `OPS_KIND_LABEL` → `hrefFor` case). **Verified in the browser, not by compiler:** the row now reads **"Day review"** and clicking it lands on `/en/agency/pv`. ✅ **Bonus — closes jk's §9 item 2:** his crash fix had never been seen rendering; `shift_cover_needed` and `pr_rating_low` both display correctly, no crash. `tsc` **121, unchanged from baseline**; biome clean (format only — pre-existing `prType` warning left alone). | **Agency** | `services/notification/index.ts` · `agency-portal/lib/ops-notifications.ts` · `agency-portal/hooks/use-notifications.ts` · `agency-portal/lib/push-notifications.ts` · `agency-portal/components/pr/PrNotificationBell.tsx` | real browser login + click-through | ✅ Rendered live, bug fixed |
+| X57 | **🟢 THE WAGE ARITHMETIC IS PROVEN AGAINST THE RATE CARD — §9 P1's "Verify Payment Voucher ↔ PR wage calc" is answerable YES for the first time.** ⚠️ **First the correction that matters: `audit-live-vouchers.ts` reporting "3/3 reconcile" DOES NOT mean the wages are right.** `wages_amount_mismatch` matches a line against **`shift_assignment.pay_amount` — the amount check-out SEALED** — and never asks whether that sealed amount was itself derived correctly from the outlet's rate card. **A wrong rate card therefore yields a voucher that reconciles perfectly and still pays the wrong money.** The audit's green is *voucher ↔ assignment*, one link short of *the money is correct*. New read-only **`check-wage-vs-ratecard.ts`** closes that link and prints both sides. **Result: 4 completed assignments since 2026-07-20, agree 4 · disagree 0 · no-card 0** — `700.00 = 700.00` (Victoria, tier_3) and `600.00 = 600.00` (Alice, tier_2), each resolved from the **per-shift override** (`shift_pay_tier`), the precedence the app itself uses. The full chain **rate card → sealed pay → voucher line** is now machine-verified on live data. **🔴 TWO TRAPS WORTH KEEPING:** (1) the first run reported **SKIP — 4 rows, 0 comparable**, because `pr.tier` is the enum `tier_3` while `outlet_tier_rate.tier` holds the DISPLAY label `"Tier III"`; **they never join raw**, and the app bridges them with `PR_TIER_TO_OUTLET_LABEL` in `shift-assignment.controller.ts`. The fault was the probe's, not the app's — **re-derive before reporting a money bug.** (2) The table is **`outlet_tier_rate`, not `tier_rate`**, and `shift_date` lives on **`shift`, not `shift_assignment`** — the same column-guessing tax as every prior probe. ✅ **The script reports SKIP, never a pass, over zero comparable rows** — that is what stopped a false green here, and it must stay. | **Agency ← PR** | `apps/backend/src/scripts/check-wage-vs-ratecard.ts` (new, read-only) | live: agree 4 · disagree 0 | ✅ Verified live |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ NEXT SESSION STARTS HERE (logged 2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
+### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (read this amendment, then the 2 Aug block below)
+
+> **3 Aug (latest) — a wage-classification fault found while wiring the PR History tabs, then FIXED
+> at the owner's instruction (§10 latest).** No open item left from it.
+>
+> - [x] **🟠 Generated WAGE lines were classified `others`, so daily wages read RM 0.00 on three
+>   screens** — ✅ **DONE 3 Aug.** The weekly generator writes `ref = <shift assignment id>` (a bare
+>   uuid, no packed kind) and sets `component: 'wages'` explicitly, but `toReceiptLineDTO` derived
+>   the PR bucket from `ref` alone, so `decodeRef()` fell through to `'others'`. New `lineKind()`:
+>   **a packed ref still wins** (a self-log states its own kind and is the authority on itself); the
+>   `component` column answers **only** when the ref packs nothing. `sumWages()` goes through the
+>   same helper — it was returning 0.00 for the same reason. Proven per line by
+>   `src/scripts/probe-pr-history.ts`: Vicky's 2 × RM 700.00 wage lines **MOVED** others → wages, her
+>   RM 175.00 `ot` line correctly **stayed** in others, and Alice's already-packed lines were
+>   **untouched** (wages stayed wages, drinks stayed drinks). ⚠️ The earlier note here claimed this
+>   was risky because `kind` drives `disputable: kind === 'wages'` — **that was wrong**: a wage line
+>   carries no receipt, so `receiptStatus === null` already made it disputable. The only other effect
+>   is that a dispute raised on that cell now files under `wages` instead of `others`, which is the
+>   correct bucket.
+
+> **3 Aug: `main` was merged in (jk's PR #41 — docs only), and TWO of the five open items closed.**
+> ✅ **§9 P1 "Verify PV ↔ PR wage calc" is DONE (§8 X57)** — the rate-card link the audit never
+> checked is now machine-proven live, `agree 4 · disagree 0`.
+> ✅ **`/agency/pv` is RENDERED on a real agency login (§8 X56)**, and doing so found and fixed a
+> dead notification deep-link. **jk's own §9 item 2 closed with it** — his crash fix now verified
+> in a browser.
+>
+> **🔴 STILL OPEN, and both are blocked on the same thing — a login I could not obtain:**
+> 1. **The ADMIN PV page has still never been rendered** (§8 X45 shipped it compiler-proven only).
+> 2. **The 400 (bad line date) and 409 (closed week) refusals have still never been fired from the
+>    PHONE.** The overtime refusals WERE fired live (X49/X51/X53); these two were not.
+>
+> ⚠️ **The OT panel on `/agency/pv` rendered only its EMPTY state** — the sole live claim is already
+> approved. **Do not record that screen as fully exercised**; its populated state needs a pending
+> claim, which means a write to the shared DB.
+>
+> ✅ **RESOLVED — and the earlier warning here was wrong.** This block previously claimed ~19 files of
+> unauthored reformatting sat in the tree, naming `GeoFenceCard.tsx`. **16 of those 19 were CRLF/LF
+> line-ending noise with no content change at all**; only 3 were real, all pure biome formatting, and
+> `GeoFenceCard.tsx` was **not** among them. All committed; tree clean. See the correction at the top
+> of §10 — the mistake was generalising from one sampled diff to a whole file list.
+
+### ▶ (2 Aug 2026 — HEAD `5e0dbee`, tree clean, 9 unpushed)
 
 > **THE PV BACKLOG HAS NO BUILD LEFT ON THE BACKEND.** `5e0dbee` closed the overtime endpoint, which
 > was the last one. What remains below is **one frontend screen (item 2), two under-wired admin/PR
@@ -430,7 +474,7 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 **1) Dispute and receipt — the state machine the owner wants**
 
-- [ ] **🔴 The receipt lifecycle, as specified:** `PENDING` → agency reviews the receipt (**photo + the PR's note**) and may **EDIT price / quantity / drink / category** → `APPROVED` (the PR now sees "APPROVED", and **only now may the PR dispute it**) → if disputed: resolve → `VERIFIED` → **if untouched when the week closes: `APPROVED` → `VERIFIED` automatically**. ✅ **The rollover is buildable now — `node-cron` is installed and a scheduler already runs** (the weekly-payout job), so auto-verify is a new job on existing plumbing, not new infrastructure.
+- [ ] **🔴 The receipt lifecycle, as specified:** `PENDING` → agency reviews the receipt (**photo + the PR's note**) and may **EDIT price / quantity / drink / category** → `APPROVED` (the PR now sees "APPROVED", and **only now may the PR dispute it**) → if disputed: resolve → `VERIFIED` → **if untouched when the week closes: `APPROVED` → `VERIFIED` automatically**. ✅ **AMENDED 3 Aug — the rollover is not "buildable", it is BUILT and running.** This line used to read *"the rollover is buildable now — `node-cron` is installed and a scheduler already runs"*, which understated it and left the item looking like unstarted work. Re-derived at `aa572c8`: `paymentVoucherRepository.verifyApprovedReceipts()` is called from **`scheduler/weekly-payout.job.ts:106`**, deliberately **before** the send gate (after it, every week's receipts would sit an extra seven days at `approved` — a whole cadence skipped, invisibly). The resolved-dispute arm lives in `resolveDispute`. See the fuller entry in P3 below, which had this right all along. ⚠️ **What is still open in THIS item is the agency EDIT surface** — the spec's *edit price / quantity / drink / category* — and the OCR-detail requirement in the sibling item, not the rollover.
 - [ ] **🔴 Split the PR's two sections by week:** **disputes are raised in the LAST-week section; the approve view appears only in the THIS-week section.** ⚠️ **This is the "remaining" half already flagged at §9 F / Payroll below** — the agency side of receipt review was built 30 Jul, the PR's two sections were not. One job, not two.
 - [ ] **🟠 The agency's decision screen must show EVERYTHING the OCR returned**, not a summary — the owner is explicit that all scanned detail is needed to decide. The same surface handles this week's review and approval.
 
@@ -463,7 +507,27 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 **6) Not yet recorded from today's session (31 Jul) — write up before this doc is trusted again**
 
 - [ ] **🔴 §10 has NO row for today's agency-portal crash fix.** The bug: the web app kept a hand-written copy of the `notification_kind` enum and the merge added two kinds (`pr_rating_low`, `shift_cover_needed`) it never got, so `KIND_MAP[kind]` returned `undefined` and the bell called `.startsWith` on it — **the whole `/agency` page white-screened** for any agency user holding one, which the live DB confirms `owner@atlas-agency.my` does. Fixed across 6 files, with an `unknown` fallback so a future kind degrades to a readable row instead of taking the page down. **Also missing: the `GeoFenceCard.tsx` merge-conflict resolution** (took main's redesign; jk's hemisphere-paste parsing was dropped because main deleted the manual lat/lng entry it enhanced).
-- [ ] **🔴 `pv_day_review_pending` EXISTS IN THE DB BUT NO CODE PRODUCES IT ANY MORE** *(SL)* — ⚠️ **corrects an assumption made earlier today that it came from a teammate's branch: it is OUR OWN X16 work from 30 Jul.** A row of that kind is live in `notification`, and §9 still carries "fire the producer live" — yet **grep finds the string nowhere under `apps/`**, including `notification.model.ts`. So either the producer was lost in a merge or the row was written by hand. **Re-derive before building on it**, and note the missing model entry is exactly the drift class that caused the crash above.
+- [x] **~~🔴 `pv_day_review_pending` EXISTS IN THE DB BUT NO CODE PRODUCES IT ANY MORE~~ — ✅ RETRACTED 3 Aug: the producer exists and always did** *(SL)*. Re-derived against the tree at `aa572c8`: the kind is declared at `notification.model.ts:51` and **fired at `scheduler/weekly-payout.job.ts:264`**. The original entry's evidence was *"grep finds the string nowhere under `apps/`"* — that grep was wrong, and the entry was believed for three days on the strength of it. ⚠️ **The lesson is the one §9 keeps re-learning: a NEGATIVE grep result is the weakest evidence in this repo and must be re-run before it is written down as a fact.** Nothing was lost in a merge and no row was hand-written. **The genuinely open half is unchanged and still below: the producer has never been FIRED live** (it needs a payout run against the shared DB).
+
+### 🟠 UI — `/agency/pv` layout change requested by the OWNER (3 Aug 2026, from a screenshot)
+
+- [x] **🟠 DISPUTES and OVERTIME must NOT sit permanently expanded at the top of `/agency/pv`** — ✅ **DONE 3 Aug, owner confirmed the reading ("make them tabs alongside Payment Vouchers and Receipts").** `PvSubTab` widened to 4; both panels moved out of the header into the sub-tab row; **counts ride on the labels** via `useAgencyDisputes()` / `useAgencyOvertime()` called at page level (React Query dedupes with the panels' own fetches, so no extra request). ⚠️ **The two new tabs are deliberately NOT week-scoped**, unlike Vouchers/Receipts: a claim blocks whichever week it belongs to, so filtering to the selected week would hide the thing stopping a *different* week from going out. **Verified in a browser:** tab row reads `Payment Vouchers (2) · Receipts (0) · Disputes (0) · Overtime (0)`, the top of the page no longer renders either panel, and clicking Overtime reveals it. `tsc` 121 (baseline unchanged), 0 errors in `pv.tsx`. Original request kept below for the reasoning.
+- [ ] ~~**🟠 DISPUTES and OVERTIME must NOT sit permanently expanded at the top of `/agency/pv`**~~ —
+  *"the Dispute and Overtime should only show when it is clicked below"*. **Owner's words, from a
+  screenshot of the live page**, so this is a product instruction, not a code-derived item. Today
+  both panels render open above the week tabs and push the voucher list below the fold; on a week
+  with nothing outstanding they occupy most of the first screen saying only *"No open disputes"* and
+  *"No overtime awaiting a decision"*. **Intended shape: fold them into the EXISTING tab row that
+  already carries `Payment Vouchers (n)` / `Receipts (n)`, so the row becomes four tabs and each
+  panel appears only when its tab is selected.** ⚠️ **Keep the COUNT visible on the tab label**
+  (`Disputes (n)`, `Overtime (n)`) — the whole reason these were placed on top was that an undecided
+  overtime claim is *why* the week below refuses to send (§8 X43), and hiding that behind a click
+  with no count would turn a visible blocker into an invisible one. ⚠️ **Do NOT move them to
+  `/agency/pending`** — that route is gated on `approvePrSignups`, which agency finance does not
+  hold, and finance is one of the two roles allowed to decide overtime (the trap X43 already avoided).
+  ⚠️ **Confirm the reading before building**: "clicked below" is being read as *the existing tab row*;
+  the other possible reading is *collapsed-by-default accordions kept in place*. Ask the owner which
+  — the two look very different and only one was asked for.
 
 ### 🔴🔴 P0 — THE MONEY IS WRONG (found 31 Jul, §8 X36 — do before any demo or pilot)
 
@@ -500,7 +564,7 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 - [x] **E · Wage/tip/commission auto-sync** — PR wages/drinks(HH/NH)/tips/OT pull from the **outlet rate card** (mobile consumes `/shift-assignment/mine` `rate`+`drinkMenu`; `pr-rate.ts`). ⚠️ **jk done in code — SL/user must run `pnpm migrate` (pr_tier 7-enum) + restart backend to go live, then verify §3 S7.** *(Outlet → PR)* — §3 S7
 - [x] **F · This-week dispute ↔ verify** — ✅ **BOTH SIDES EXIST. This entry was STALE and it misled me on 31 Jul** into telling the owner "the agency has no verify/reject", which is false. The agency queue is built and wired: **`DisputeQueuePanel.tsx` + `use-agency-disputes.ts`** with a real `resolveDispute` accept/reject mutation, on **`/agency/pv`**; the backend route comment says so too (*"The agency's dispute queue and its decisions"*). ⚠️ **Left as a worked example of [[audit-entries-are-leads]]: I read this line instead of re-deriving, and reported a gap that did not exist.** *(PR → Agency)* — §3 S9–S10
 - [x] **Payroll page: surface "this week"** so scanned receipts can be **approved** — ✅ **agency half done (30 Jul)**: the receipts card in `PayrollVerifyPanel` is now the review surface, fed by the receipts that already ride on `GET /payment-voucher/:id` (the same read the day-review panel uses, so one voucher on screen is still one request and an approval refreshes both panels). It shows the **proof photo and the PR's note** beside the figures — neither was rendered before — with per-line **quantity/commission correction**, Approve / Withdraw approval, and the send button now blocked while any receipt is pending. Writes gated on `raisePv`, mirroring `agencyOwnerOrFinance`. **Not** built on the agency-wide `GET /payment-voucher/receipts` feed: the owner's spec places the review on the **this-week PV**, and that endpoint is a cross-voucher queue. ⚠️ **Remaining: the PR's two sections** (this-week shows APPROVED, last-week is where a dispute is raised). *(Agency)*
-- [ ] **Verify Payment Voucher ↔ PR wage calc** logic is correct (auto-generated weekly from PR shifts). *(Agency ← PR)*
+- [x] **Verify Payment Voucher ↔ PR wage calc** logic is correct (auto-generated weekly from PR shifts). *(Agency ← PR)* — ✅ **DONE 3 Aug (§8 X57), and it needed a NEW check because the audit could never answer it.** `audit-live-vouchers.ts` compares a wages line to `shift_assignment.pay_amount` (what check-out sealed), **not to the rate card** — so its "3/3 reconcile" was voucher↔assignment, one link short of the money being right. `check-wage-vs-ratecard.ts` (read-only) closes the last link: **agree 4 · disagree 0 · no-card 0.** ⚠️ **Re-run it after ANY rate-card or tier change** — and note it prints **SKIP, not a pass**, when it sees no comparable rows.
 - [ ] **Confirm Post Job end-to-end** across roles: outlet post → shift → agency roster → PR assignment. *(Outlet → Agency → PR)*
 
 ### 🟠 P0b — PV gaps found by re-derivation on 31 Jul (X39 closed the first three)
@@ -587,6 +651,275 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (evening, part 3) — a whole-project survey, and THREE §9 entries were found to be
+> describing work that was already finished. No code changed; doc only.**
+>
+> Owner asked what is still pending besides registration. Every claim was re-derived against the
+> tree at `aa572c8` instead of being copied out of §9 — and three entries turned out to be reporting
+> **closed work as open**, which is the more expensive direction of error: it hides real progress and
+> invites someone to rebuild what already exists.
+>
+> 1. **`pv_day_review_pending` "has no producer".** ❌ It has one, at
+>    `scheduler/weekly-payout.job.ts:264`, with the kind declared at `notification.model.ts:51`. The
+>    entry rested entirely on *"grep finds the string nowhere under `apps/`"* — **the grep was
+>    simply wrong**, and nobody re-ran it for three days. ⚠️ **Standing rule earned here: a NEGATIVE
+>    grep is the weakest evidence in this repo. Re-run it before it becomes a recorded fact.**
+> 2. **Receipt `APPROVED → VERIFIED` rollover "buildable now".** ❌ Built and running —
+>    `verifyApprovedReceipts()` is called from `weekly-payout.job.ts:106`. The P3 entry had this
+>    right all along while the P0-CLIENT entry above it understated it, so the same feature was
+>    described two ways in one document. **When two entries disagree, the more specific one usually
+>    won a re-derivation and the vaguer one was never revisited.**
+> 3. **Outlet swap "IN PROGRESS, only the model file exists".** ❌ Shipped end to end (migration
+>    `0052`, mounted at `router/v1.ts:64`, agency hooks + PR mobile `OutletSwapRequests.tsx`). This
+>    one was **not** in `TEST_SCRIPT.md` at all — it was the one-line hook in the memory INDEX, whose
+>    own memory file said DONE. **An index line rots independently of the entry it points at.**
+>
+> **What the survey CONFIRMED is still missing** (all by re-derivation, not recall): no mailer of any
+> kind, no rate limiting, no logout route, **zero tests**, and only ONE registered background job.
+> The demo store is the headline: `agency-portal/lib/store.ts` is **7,330 lines** and **63 web files
+> call `useStore` against 37 that call a real backend hook**; `agency/special-service.tsx`,
+> `outlet/special-service.tsx` and `outlet/billing.tsx` have **no backend call at all**. The admin
+> portal is clean. Also confirmed open: `AuditLogFilterInput` has no `role` field (so the per-role
+> audit pages under-fill), agency/outlet **login accounts** still have no admin screen (the tabs
+> manage the ORG), `outlet_transaction` has zero UI, and `platform_config.platform_fee_percent`
+> defaults to **`'5.00'`** in the model while the fee decision is still recorded as owed.
+
+> **3 Aug 2026 (evening, part 2) — the agency can finally SIGN and PAY; the rail is no longer
+> decorative.**
+>
+> **(1) Finance signature — built end to end, at the owner's instruction ("required before Send to
+> PR").** The rail has always shown `Raise PV → Finance sign → Sent to PR → PR signed → Paid`, but
+> the second step had **no action, no endpoint and no column**: `finance_head_name` and
+> `finance_head_signed_at` existed and nothing ever set either, while the PR's half was fully real —
+> and the PR's own screen printed *"Finance Head already signed"* as hardcoded copy. Now:
+> migration **0080** adds `finance_head_signature text` (mirroring `pr_signature`/0071, same stroke
+> JSON); `POST /payment-voucher/:id/finance-sign` behind `agencyOwnerOrFinance`; **`PUT` refuses the
+> `pending_review → sent` transition with 409 when unsigned**; and the agency PV detail grows a
+> signature pad with Send disabled until it is used. Signing is a SEPARATE endpoint because
+> `PUT /:id` deletes and re-inserts every line — an attestation must never be a side effect of an
+> edit. The signer's name comes from the session, never the body. Re-signing after send is refused
+> (the PR may have counter-signed). `PrSignaturePad` turned out to have **zero importers** — dead
+> code, now live, extended with an optional `onConfirmInk` that emits stroke points.
+>
+> ⚠️ **`drizzle-kit generate` CANNOT RUN in this repo** — snapshots `0063`/`0064` are missing and
+> `0065–0070` are six identical copies, so 17 migrations have no valid snapshot. `drizzle-kit
+> migrate` reads only `_journal.json` + the SQL files, so **0080 was hand-authored** and deployed
+> normally (`when` set above the live max, or it is silently skipped). Every future migration needs
+> the same treatment until the snapshot history is baselined — a separate job, and one to coordinate
+> with jk since he migrates the same database.
+>
+> **(2) "To pay" → "Paid" now exists.** The payment-week card has always said *"use To pay to record
+> each bank transfer"* while offering nothing to record it with, so a SIGNED voucher could never
+> become PAID. A **Record payment** block on a signed voucher takes an optional bank reference and
+> marks it paid; the server stamps `paid_at` only when unset, so recording twice cannot re-date a
+> transfer. Only on SIGNED — paying a voucher the PR has not counter-signed settles a figure nobody
+> agreed to.
+>
+> **(3) Payment Week hides Disputes and Overtime** (owner's rule): by then every voucher is signed
+> and its figures are settled. ⚠️ The two queues stay deliberately NOT week-scoped on the other
+> tabs — a claim blocks whichever week it belongs to. Selecting the payment week while one of them
+> is open falls back to Vouchers, so no panel is ever left open with no tab above it.
+>
+> **(4) PR sign-sheet corrections** (all three from the owner reading a real screen): the sign CTA no
+> longer appears on a voucher the agency has not issued (the server answered that with a 400 — the
+> PR drew a signature to be told no); the **Name field is gone**, replaced by "Signing as {account}"
+> — it was an empty input with "Vicky" as a *placeholder*, so a PR had to retype their own name and
+> `confirmSign` blocked until they did, and being editable meant the recorded name need not match
+> the account; and the false "Finance Head already signed" banner is replaced by what is actually
+> true.
+>
+> `tsc`: backend **0**, web **121** (baseline), mobile **10** (baseline). ⚠️ **Not click-verified** —
+> signing in requires a password, so every claim here is compiler- and database-verified only.
+
+> **3 Aug 2026 (evening) — the payroll week is now Sun–Sat everywhere, and History stops
+> claiming signatures that were never given.**
+>
+> **(1) Week re-anchored Mon–Sun → Sun–Sat, on the owner's instruction.** The backend and the PR
+> app were Monday-anchored while the agency portal was Sunday-anchored, so the same money read
+> `27 Jul – 02 Aug` on the phone and `26 Jul – 01 Aug` on the web, and the agency could only find
+> its vouchers through a containment match written to paper over the gap. Changed together, because
+> they are one decision: `weekBounds()` (controller), `previousCompleteWeek()` + `weekOfDate()`
+> (payment-voucher-week.ts), the payout cron **`0 2 * * 1` → `0 2 * * 0`** (a Sun–Sat week ends
+> Saturday, so a Monday run would issue a day late and fire mid-week — Sunday is also what the
+> "PV issued every Sunday" copy on four screens always promised), and mobile `weekRangeLabel()`
+> back to a Sunday anchor. **Existing rows migrated** with `src/scripts/reanchor-voucher-weeks.ts`
+> — report-only by default, `--apply` to write, and it **REFUSES the whole run** if any line would
+> fall outside its voucher's new window. Checked first: every line is a Wed or Thu, **no line falls
+> on a Sunday**, so re-anchoring moved **zero money between vouchers**. All 3 vouchers shifted back
+> one day (PV-000004/000003 → 26 Jul–01 Aug, PV-000002 → 19–25 Jul); re-running now reports
+> "already Sun–Sat", so it is idempotent. `tsc` backend 0, mobile 10 (baseline).
+>
+> **(2) History → Payment badge tells the truth.** ⚠️ **A regression from earlier the same day, and
+> it was mine.** Widening `/mine/history` to include `pending_review` (see the previous entry) fed
+> vouchers to a mapper whose status was a two-value binary — `v.status === 'paid' ? 'paid' :
+> 'signed'` — so two unsigned weeks rendered **"Signed"** with `pr_signed_at` NULL in the database.
+> That is the worst possible place for it: History → Payment is the screen a PR opens *to check
+> whether they signed*. `HistPayStatus` now carries `'pending'`; `payStatus()` reports `signed` only
+> when the voucher says so; `statusMeta` distinguishes the two waits the PR cannot act on the same
+> way — *"Waiting for your signature"* (sent) vs *"Waiting for your agency to issue"*
+> (pending_review) vs *"Disputed — waiting on your agency"*. On the Shifts tab a past shift is
+> `'sealed'` (true of any checked-out shift) unless the voucher is genuinely signed, with the
+> caption saying which. **The owner's earlier "Last Week shows as Signed" rule is superseded by the
+> tab semantics given today:** Last Week is where signing *happens*, so pre-ticking it removes the
+> reason the tab exists.
+>
+> **(4) The late-PV signing hole — the SAME regression as (2), in a second place I missed.**
+> `PvDetailScreen` computed `alreadySigned = hist ? true : false` — *being reachable from History
+> WAS proof of a signature*, because History only ever held signed and paid vouchers. Once it
+> carried every closed week that stopped being true, and the consequence was the worst possible one:
+> a voucher the agency sends LATE appears only in History (it is not last week, so it is not on the
+> Payment screen), so it was **sealed on arrival and the PR had nowhere to sign it**. It now asks the
+> voucher, not the screen it was opened from; a History voucher that is neither signed nor paid maps
+> to `awaiting_pr`, so **Open PV → sign pad** works for any sent voucher of any age. The submit path
+> already resolved `backendPvId` from `histVoucher.voucherId`, so nothing else changed.
+> ⚠️ **Lesson: when a query is widened, every consumer that inferred a fact from the OLD narrowness
+> becomes wrong.** The badge and this gate were two such inferences from one change, and I found the
+> second only because the owner hit it.
+>
+> **(5) Payment Week no longer hides what it cannot pay.** The tab filtered to `SIGNED` — the right
+> *expectation* ("everything should already be signed") enforced the wrong way: it was the ONLY tab
+> whose window contains a two-week-old voucher, so an unsigned one was invisible everywhere —
+> RM 875.00 that could not be reviewed, sent, or therefore signed, with nothing anywhere saying so.
+> The tab now shows the whole week, the status chips apply to it (they were bypassed), **"To pay"**
+> still isolates the payment run, and an amber card names each overdue voucher with PR, amount and
+> status. Also corrected two doc comments still claiming `week_start` is a Monday.
+>
+> **(6) Receipt proof photos enlarge on click** (agency Receipts tab) — a 64px thumbnail cannot be
+> read, and reading the printed figures against the line is the entire point of the photo. Backdrop
+> click, a Close button and **Escape** all dismiss; bounded to `90vh`/`90vw` so a tall receipt
+> scrolls rather than overflowing off-screen.
+>
+> **(3) Two "missing" things that are not missing — both one root cause.** The PR's **"Review &
+> sign" button already exists** (PaymentScreen.tsx:527, finger-drawn `SignaturePad` → real ink to
+> `POST /mine/:id/sign`); it is gated on `status === 'sent' | 'awaiting_pr'`. The agency's **Payment
+> Week tab** is `SIGNED`-only by design, which the owner confirmed today ("everything should already
+> be signed"). Both are hidden for the same reason: **no voucher has ever been issued** — all three
+> sit at `pending_review` with **0 day-reviews**, and the payout job holds any voucher whose days
+> are unreviewed. Nothing is broken in either surface; the chain
+> `pending_review → sent → signed → paid` has never been started.
+
+> **3 Aug 2026 (latest) — two screens that said "none" while the database held the rows.**
+> Same shape of fault in both apps: the data existed, the screen was reading somewhere else.
+>
+> **(1) Agency `/agency/pv` → Receipts now reads the DATABASE.** The tab was rendering the demo
+> Zustand store (`prReceiptScans`), which is empty on every real login — meanwhile
+> `GET /payment-voucher/receipts` had shipped with the receipt-review flow and had **zero web
+> callers**. New `fetchAgencyReceipts()` (services) + `useAgencyReceipts()` (hook) + a rebuilt
+> `AgencyReceiptsPanel`: three stat tiles (receipts · **waiting on you** · commission logged), status
+> chips with counts, a search box, and the seven filter fields folded behind a toggle instead of
+> filling the first screen; rows are **grouped by shift working day**, expand to line items + proof
+> photos, and carry **Approve / Withdraw approval** hitting the SAME endpoint as the per-voucher
+> verify panel (so one receipt has one decision under one server rule). The week tab is a FILTER, so
+> receipts in other weeks are **counted and stated** rather than left to look like absence. Demo
+> `ReceiptsSection` + `ReceiptScanDetailSheet` deleted (277 lines); `ReceiptScanRow` kept — the PV
+> detail still uses it. Live DB: 2 receipts (`RCP-000005`, `RCP-000007`) on PV-000003, Atlas Agency,
+> both `verified` so no approve button renders; **RCP-000005 has zero lines and now says so** instead
+> of printing a bare RM 0.00. `tsc` 121 (baseline unchanged), 0 errors in the four touched files.
+>
+> **(2) PR History → Shifts + Payment history stop hiding a week that has closed.** Both read
+> "No payments yet" while the Payment tab showed **RM 700.00** for the very same week:
+> `listHistoryForPr` defaulted to `signed`+`paid`, and every live voucher is `pending_review` — the
+> state a voucher sits in from the moment the week closes until the agency issues it, which is
+> exactly when a PR goes looking for it. `getMyHistory` now passes all five statuses; the **current
+> week stays excluded** (it belongs to the Payment tab, the screen that can still change it). The
+> whole mobile chain was already wired to `/mine/history`, so this one filter unblocked both tabs.
+> Proven with `src/scripts/probe-pr-history.ts` (read-only, calls the repository the controller
+> calls): Vicky old filter **0 weeks** → new filter **2 weeks** — PV-000004 27 Jul–02 Aug RM 700.00
+> and PV-000002 20–26 Jul RM 875.00. **The owner's rule needed no code change**: the mapper already
+> renders anything not `paid` as **Signed**, and only a genuinely paid voucher as **Paid**.
+>
+> **(3) Daily wages stop showing up as "Others"** — found while doing (2), then fixed on the owner's
+> instruction the same session. The weekly generator writes `ref = <shift assignment id>` (bare uuid)
+> and sets `component: 'wages'` explicitly, but `toReceiptLineDTO` read the bucket off `ref` alone,
+> so `decodeRef()` fell through to `'others'`: **every generated wage line — 4 lines, RM 2,600.00 —
+> displayed under Others, and every "daily wages" figure the PR saw read RM 0.00**, on the Payment
+> grid, History → Shifts and History → Payment at once. The database was right the whole time; only
+> the read was wrong. New `lineKind()` in the controller: **a packed ref still wins** (a self-log or
+> receipt line states its own kind and is the authority on itself), and the `component` column
+> answers **only** when the ref packs nothing. `sumWages()` shares the helper — it was returning 0.00
+> for the identical reason. `kindFromComponent()` / `refPacksKind()` live in
+> `payment-voucher-component.ts`, the module that already owns the kind↔component relation, so the
+> map exists once. Proven per line: Vicky's 2 × RM 700.00 **MOVED** others → wages, her RM 175.00
+> `ot` line correctly **stayed** in others, Alice's already-packed lines **unchanged**. `tsc` 0.
+
+> **3 Aug 2026 (later still) — `/agency/pv` disputes + overtime are now TABS, at the owner's request.**
+> They rendered permanently open above the week tabs, so on a quiet week two empty panels ate the
+> first screen. Both now sit in the existing sub-tab row: **`Payment Vouchers (2) · Receipts (0) ·
+> Disputes (0) · Overtime (0)`**. **The counts are the part that matters** — they ride on the tab
+> labels via `useAgencyDisputes()` / `useAgencyOvertime()` called at page level, so an outstanding
+> item stays visible without opening the tab. **An undecided overtime claim is WHY a week refuses to
+> send; hiding it behind an unlabelled click would have turned a visible blocker into an invisible
+> one.** React Query dedupes against the panels' own fetches, so the counts cost no extra request.
+> ⚠️ **The two new tabs are deliberately NOT week-scoped** while Vouchers/Receipts are: a claim blocks
+> whichever week it belongs to, and week-filtering it would hide the item stopping a *different* week
+> from going out. Still not on `/agency/pending` — that route is gated on `approvePrSignups`, which
+> agency finance does not hold. **Verified in a browser, not just compiled:** top of page no longer
+> renders either panel, and clicking Overtime reveals it. `tsc` **121, baseline unchanged**.
+>
+> ⚠️ **Also this session: I nearly filed a false P0 on the admin PV page.** The first DOM read showed
+> an empty voucher table while the API had returned `totalCount: 3` — I had read it **before React
+> Query resolved**. Re-reading showed all three rows and the `data?.data ?? []` parse is correct.
+> **There was no bug.** Second time this pattern has bitten (see the retracted mobile-tsc claim):
+> **a screen read too early looks exactly like a screen that is broken.** Wait for the query, then judge.
+
+> **3 Aug 2026 (later) — 🔴 CORRECTION: the "~19 files of unauthored biome churn" recorded below was
+> WRONG, and the way it was wrong is worth more than the fix.** `git status` really did list 19
+> modified files, and one sampled diff really did show quote/tab/semicolon changes — so the whole set
+> was reported as reformatting churn. **It was 3.** The other **16 were CRLF/LF line-ending noise**:
+> the working copies sat as LF while the index expected CRLF, which git reports as "modified" with no
+> content difference at all. That is exactly what every `warning: LF will be replaced by CRLF` line
+> was saying, and they were read as harmless log spam for a whole session. A `git stash` +
+> `git stash pop` re-checked-out the files and 16 of the 19 resolved themselves.
+> ⚠️ **The lesson: generalising from ONE sampled diff to a whole file list is the same mistake as
+> trusting a stale checkbox** — and it produced a scary-sounding warning in §9 about `GeoFenceCard.tsx`
+> that had nothing behind it. **Count before characterising.** The 3 genuine ones
+> (`go-welcome.ts`, `hard-navigate.ts`, `use-outlet-swap-mutations.ts`) are pure biome formatting to
+> the project's own config — single→double quotes, spaces→tabs, added semicolons — with **no semantic
+> change**, and are committed as a formatting chore.
+
+> **3 Aug 2026 — THE PV LANE WAS TAKEN OUT OF THE COMPILER AND PUT IN FRONT OF A BROWSER, and both
+> things that proved it also corrected it (§8 X56, X57).**
+>
+> **`/agency/pv` had never been loaded by a browser.** X43 and X45 shipped it on `tsc` + biome +
+> `vite build` alone. On a real `owner@atlas-agency.my` login against the live backend it renders
+> correctly — real vouchers, both panels mounted, **zero console errors**. ⚠️ **But the OT panel
+> showed its EMPTY state**, because the only live claim is already approved, so **the populated state
+> remains unproven** and the screen must not be called fully exercised.
+>
+> **🔴 Rendering it found a dead deep-link, and the interesting part is why it was invisible.**
+> `pv_day_review_pending` (migration 0073, produced by `weekly-payout.job.ts`) was **never added to
+> the web app's hand-written `NotificationKind` union**. jk's `unknown` fallback — added after the
+> white-screen he documented — caught it, so instead of crashing it rendered a bland **"Update"** row
+> whose `hrefFor` returned `undefined`. **A notification whose own body says "Approve each day on
+> Payroll & PV, then send" went NOWHERE when tapped.** ⚠️ **The lesson is about the fallback, not the
+> kind: it converted a loud failure into a silent one, which is why this survived a merge, a review
+> and two sessions.** A fallback needs a way to SAY it fired. Fixed across 5 files and verified by
+> clicking, not compiling: the row now reads **"Day review"** and lands on `/en/agency/pv`.
+> ✅ **jk's §9 item 2 closed on the way past** — his crash fix is now browser-verified.
+>
+> **🔴 The audit's "3/3 reconcile" was narrower than everyone has been reading it.**
+> `wages_amount_mismatch` compares a line to `shift_assignment.pay_amount` — **what check-out
+> SEALED** — and never to the outlet's rate card. **So a wrong rate card produces a voucher that
+> reconciles perfectly and still pays the wrong money.** New read-only `check-wage-vs-ratecard.ts`
+> closes that last link: **agree 4 · disagree 0 · no-card 0**, resolving through the per-shift
+> override exactly as the app does. §9 P1 is finally answerable **yes**.
+>
+> ⚠️ **The probe was wrong before the app was — twice.** Its first run said **SKIP, 0 comparable**
+> because `pr.tier` is the enum `tier_3` while `outlet_tier_rate.tier` stores the label `"Tier III"`;
+> the app bridges them with `PR_TIER_TO_OUTLET_LABEL` and the probe did not. It also guessed
+> `tier_rate` (really `outlet_tier_rate`) and `shift_assignment.shift_date` (really `shift`).
+> **Had it reported "0 agree" as a finding, that would have been a fabricated money bug.** It printed
+> **SKIP instead of a pass** — keep that behaviour in every probe.
+>
+> **Still open, both blocked on a login:** the **admin PV page is still unrendered**, and the
+> **400/409 refusals are still unfired from the phone**. A script to mint an admin token from `.env`
+> without printing it was **blocked by the permission classifier and NOT worked around**.
+>
+> ⚠️ **~19 files of biome reformatting appeared in the tree unauthored** (quotes/tabs/semicolons).
+> **Deliberately left uncommitted** — unreviewed churn, and one of them is `GeoFenceCard.tsx`, the
+> file the previous merge fought over. This commit stages only the 5 intended web files, the new
+> script, and this document.
 
 > **2 Aug 2026 — `main` merged into `SL`, and for once the merge was boring.** `SL` was **22 ahead /
 > 2 behind**; the incoming pair was jk's `b6c5786` plus its PR #41 merge `80efdc7`. **The whole

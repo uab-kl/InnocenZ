@@ -70,6 +70,16 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   status: paymentVoucherStatusEnum('status').notNull().default('pending_review'),
   financeHeadName: varchar('finance_head_name', { length: 255 }),
   financeHeadSignedAt: timestamp('finance_head_signed_at', { withTimezone: true }),
+  /**
+   * The agency's finger-drawn signature ({w,h,strokes}), mirroring `prSignature`.
+   *
+   * Until 3 Aug 2026 the voucher had a name and a timestamp for the finance head
+   * but nowhere to put the ink — and nothing ever set even those two. The
+   * "Finance sign" step on the agency's workflow rail was a label with no action
+   * behind it, while the PR's half was fully real. The dual in "dual-sign" now
+   * exists on both sides.
+   */
+  financeHeadSignature: text('finance_head_signature'),
   prSignedAt: timestamp('pr_signed_at', { withTimezone: true }),
   /** Finger-drawn signature strokes ({w,h,strokes}) — written only on PR sign. */
   prSignature: text('pr_signature'),

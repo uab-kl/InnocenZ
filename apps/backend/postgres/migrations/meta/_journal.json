@@ -561,6 +561,13 @@
       "when": 1785510000000,
       "tag": "0079_notification_kind_overtime_decided",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1785520000000,
+      "tag": "0080_pv_finance_signature",
+      "breakpoints": true
     }
   ]
 }

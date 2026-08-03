@@ -1,8 +1,8 @@
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
 import {
-	cancelOutletSwap,
 	type CreateOutletSwapInput,
+	cancelOutletSwap,
 	createOutletSwap,
 } from "@/services/outlet-swap";
 

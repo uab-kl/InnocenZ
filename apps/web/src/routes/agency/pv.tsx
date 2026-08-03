@@ -1,10 +1,10 @@
 import { AgencyPvDayReviewPanel } from "@agency-portal/components/agency/AgencyPvDayReviewPanel";
+import {
+	AgencyReceiptsPanel,
+	receiptsInPayrollWeek,
+} from "@agency-portal/components/agency/AgencyReceiptsPanel";
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
-import {
-	EMPTY_PAYROLL_RANGE,
-	PayrollRangeFilterCard,
-} from "@agency-portal/components/agency/PayrollRangeFilter";
 import { PayrollVerifyPanel } from "@agency-portal/components/agency/PayrollVerifyPanel";
 import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
@@ -15,17 +15,18 @@ import {
 	IzKpiLabel,
 	IzPageTitle,
 	IzPill,
-	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
-import { ReceiptScanSlip } from "@agency-portal/components/pr/ReceiptScanSlip";
+import { PrSignaturePad } from "@agency-portal/components/pr/PrSignaturePad";
+import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
+import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
 import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-review";
 import {
 	useAgencyPvDetail,
 	useAgencyPvs,
 } from "@agency-portal/hooks/use-agency-pvs";
-import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
+import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import {
 	agencySubscriptionBillingForWeeklyPv,
 	nowAgencyDateTime,
@@ -35,7 +36,6 @@ import {
 	AGENCY_PV_STATUS_LABELS,
 	agencyPvStatusLabel,
 	getAgencyManagedReceiptScans,
-	receiptBelongsToAgencyPr,
 	receiptsForPv,
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
@@ -43,11 +43,6 @@ import {
 	AGENCY_SUB_ROLE_LABELS,
 	agencyCan,
 } from "@agency-portal/lib/agency-rbac";
-import {
-	matchesReceiptShiftWorkRange,
-	type PayrollRangeFilter,
-	receiptShiftDateIso,
-} from "@agency-portal/lib/payroll-filters";
 import {
 	DEMO_PV_ISSUED_WEEKS_AGO,
 	demoPayrollWeekBoundsForWeeksAgo,
@@ -63,11 +58,9 @@ import {
 	type PrReceiptScan,
 	parsePvIssuedMs,
 	pvStatusPillVariant,
-	type ReceiptEntryMethod,
 	receiptEntryLoggedLabel,
 	receiptEntryMethod,
 	receiptEntryMethodLabel,
-	receiptShiftDetails,
 	receiptStatusLabel,
 	reconcilePvTotals,
 	resolvePvPayByDue,
@@ -136,7 +129,7 @@ type PvStatusFilter = "all" | "TO_PAY" | PrPvStatus;
 
 type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
 
-type PvSubTab = "vouchers" | "receipts";
+type PvSubTab = "vouchers" | "receipts" | "disputes" | "overtime";
 
 const LAST_WEEK_REVIEW_STATUSES = new Set<PrPvStatus>([
 	"SENT",
@@ -147,15 +140,16 @@ const LAST_WEEK_REVIEW_STATUSES = new Set<PrPvStatus>([
 /**
  * Does this voucher belong to the tab covering `weekStartIso`–`weekEndIso`?
  *
- * The tabs are Sun–Sat payroll weeks. A **backend** voucher's own `week_start` is
- * a MONDAY, so it is matched by asking whether that date falls inside the tab's
- * window — never by string equality, which could not match a Sunday tab start
- * against a Monday week start and so silently hid every real voucher on this
- * screen. Containment is unambiguous: a date sits in exactly one Sun–Sat week.
+ * The tabs are Sun–Sat payroll weeks, and since 3 Aug 2026 so is the backend —
+ * `week_start` is now a SUNDAY, matching this screen exactly.
  *
- * Because the two conventions differ by a day, a real voucher's own week range is
- * not the tab's range. The row prints its own week wherever they diverge rather
- * than letting the tab label speak for it.
+ * Matching stays containment-based rather than string equality even though the
+ * two now agree. It was written because they did NOT agree: a Sunday tab start
+ * could never equal a Monday `week_start`, and equality silently hid every real
+ * voucher here. Containment is correct under either convention — a date sits in
+ * exactly one Sun–Sat week — so it is the test that cannot break again if the
+ * cadence is ever changed. The row still prints its own week wherever one
+ * diverges, rather than letting the tab label speak for it.
  */
 function pvBelongsToPayrollWeek(
 	pv: PrPaymentVoucher,
@@ -201,10 +195,9 @@ function shortIsoDay(iso: string): string {
  * The week a BACKEND voucher itself covers, or null for a demo one (whose
  * `cycle` string already is a date range).
  *
- * Needed because the two conventions differ: `payment_voucher.week_start` is a
- * Monday, the tabs on this screen are Sun–Sat, and the backend's `cycle` column
- * holds a cadence ("Weekly") rather than a range — so without this the row shows
- * no dates at all and the only week on screen is the tab's.
+ * Still needed after the weeks were aligned to Sun–Sat (3 Aug 2026): the
+ * backend's `cycle` column holds a CADENCE ("Weekly"), not a range, so without
+ * this the row shows no dates at all and the only week on screen is the tab's.
  */
 function pvOwnWeekLabel(pv: PrPaymentVoucher): string | null {
 	if (!pv.weekStartIso || !pv.weekEndIso) return null;
@@ -240,12 +233,16 @@ function AgencyPV() {
 	const [payrollWeekTab, setPayrollWeekTab] =
 		useState<PayrollWeekTab>("last_week");
 	const [pvSubTab, setPvSubTab] = useState<PvSubTab>("vouchers");
+	// Counts only. Both panels fetch the same queries themselves, and React Query
+	// dedupes, so this costs no extra request. The COUNT is the point: these two
+	// used to sit open above the fold, and an undecided overtime claim is WHY the
+	// week below refuses to send — hiding that behind a click with no number
+	// would turn a visible blocker into an invisible one.
+	const { disputes: openDisputes } = useAgencyDisputes();
+	const { claims: pendingOtClaims } = useAgencyOvertime();
 	const [statusFilter, setStatusFilter] = useState<PvStatusFilter>("all");
-	const [payrollRange, setPayrollRange] =
-		useState<PayrollRangeFilter>(EMPTY_PAYROLL_RANGE);
-	const verifyAgencyReceiptSelfLog = useStore(
-		(s) => s.verifyAgencyReceiptSelfLog,
-	);
+	// Count only — the panel below runs the same query and React Query dedupes it.
+	const { receipts: backendReceipts } = useAgencyReceipts();
 	const { date, time } = nowAgencyDateTime();
 
 	const payrollActivePvs = useMemo(
@@ -314,16 +311,29 @@ function AgencyPV() {
 		lastLastWeekBounds.weekStartIso,
 	]);
 
+	/**
+	 * The payment week — EVERY voucher in it, not only the signed ones.
+	 *
+	 * By this week a voucher is *expected* to be signed and ready to pay, and the
+	 * tab was written to show only `SIGNED` on that basis. But this is the ONLY
+	 * tab whose window contains a two-week-old voucher, so filtering by status
+	 * made an unsigned one invisible everywhere: the agency could not review it,
+	 * could not send it, and the PR could therefore never sign it — RM 875.00 with
+	 * no screen in the whole product, and nothing anywhere saying so.
+	 *
+	 * A voucher that missed its window is the exception the agency most needs to
+	 * see. So the tab shows the week and flags what has not been signed; the
+	 * "To pay" status chip still isolates the signed ones for the payment run.
+	 */
 	const lastLastWeekPvs = useMemo(() => {
-		return payrollActivePvs.filter(
-			(p) =>
-				pvBelongsToPayrollWeek(
-					p,
-					lastLastWeekBounds.weekStartIso,
-					lastLastWeekBounds.weekEndIso,
-					lastWeekBounds.weekStartIso,
-					lastLastWeekBounds.weekStartIso,
-				) && p.status === "SIGNED",
+		return payrollActivePvs.filter((p) =>
+			pvBelongsToPayrollWeek(
+				p,
+				lastLastWeekBounds.weekStartIso,
+				lastLastWeekBounds.weekEndIso,
+				lastWeekBounds.weekStartIso,
+				lastLastWeekBounds.weekStartIso,
+			),
 		);
 	}, [
 		payrollActivePvs,
@@ -432,30 +442,40 @@ function AgencyPV() {
 		[activeWeekStats.pvCount],
 	);
 
-	const activeWeekReceiptScans = useMemo(() => {
-		const linked = new Map<string, PrReceiptScan>();
-		for (const pv of weekTabPvs) {
-			for (const scan of receiptsForPv(agencyReceiptScans, pv)) {
-				linked.set(scan.id, scan);
-			}
-		}
-		return [...linked.values()].filter((scan) => {
-			const iso = receiptShiftDateIso(scan);
-			return (
-				iso >= activeWeekBounds.weekStartIso &&
-				iso <= activeWeekBounds.weekEndIso
-			);
-		});
-	}, [
-		agencyReceiptScans,
-		weekTabPvs,
-		activeWeekBounds.weekStartIso,
-		activeWeekBounds.weekEndIso,
-	]);
+	/**
+	 * The DATABASE's receipts for the selected week — what the Receipts sub-tab
+	 * counts and lists.
+	 *
+	 * Anchored on the voucher's own `week_start`, the same containment rule the
+	 * voucher rows use, rather than on when the receipt was uploaded: a receipt
+	 * logged on Monday for last week's shift is last week's money.
+	 */
+	const activeWeekReceipts = useMemo(
+		() =>
+			receiptsInPayrollWeek(
+				backendReceipts,
+				activeWeekBounds.weekStartIso,
+				activeWeekBounds.weekEndIso,
+			),
+		[
+			backendReceipts,
+			activeWeekBounds.weekStartIso,
+			activeWeekBounds.weekEndIso,
+		],
+	);
 
 	const selectPayrollWeekTab = (tab: PayrollWeekTab) => {
 		setPayrollWeekTab(tab);
 		setStatusFilter("all");
+		// The payment week hides Disputes and Overtime, so landing on it while one
+		// of them is selected would leave a panel open with no tab above it — and
+		// no way back except guessing. Fall back to the tab that always exists.
+		if (
+			tab === "last_last_week" &&
+			(pvSubTab === "disputes" || pvSubTab === "overtime")
+		) {
+			setPvSubTab("vouchers");
+		}
 		// Drop the incoming ?status/?pv. They are an instruction about where to land,
 		// and once the user has picked a tab themselves that instruction is spent —
 		// leaving it in the URL lets the effect above re-apply it on the next refetch
@@ -473,13 +493,22 @@ function AgencyPV() {
 		return weekTabPvs.filter((p) => p.status === statusFilter);
 	}, [weekTabPvs, statusFilter]);
 
+	// The status chips apply on every tab now, including the payment week. They
+	// were bypassed there because that tab held only SIGNED vouchers and a filter
+	// over one status is pointless — now that it shows unsigned ones too, "To pay"
+	// is what narrows it back down to the payment run.
 	const filteredVouchers = useMemo(
-		() =>
-			sortPvsBySales(
-				payrollWeekTab === "last_last_week" ? weekTabPvs : statusFilteredPvs,
-				"default",
-			),
-		[payrollWeekTab, weekTabPvs, statusFilteredPvs],
+		() => sortPvsBySales(statusFilteredPvs, "default"),
+		[statusFilteredPvs],
+	);
+
+	/**
+	 * Payment-week vouchers nobody has signed — overdue by the screen's own rule.
+	 * Counted rather than hidden: this is the number that says money is stuck.
+	 */
+	const unsignedPaymentWeekPvs = useMemo(
+		() => lastLastWeekPvs.filter((p) => p.status !== "SIGNED"),
+		[lastLastWeekPvs],
 	);
 
 	const visibleStatusFilters = useMemo(
@@ -551,15 +580,14 @@ function AgencyPV() {
 				</p>
 			</header>
 
-			{/* Above the PV list on purpose: a contested voucher is the thing that
-			    needs a human before anything else on this page does. */}
-			<DisputeQueuePanel />
-
-			{/* Directly beneath the disputes and above the weeks, because an
-			    undecided overtime claim is WHY a week below refuses to send. Not on
-			    the approvals page: that page is gated on `approvePrSignups`, which
-			    agency finance does not hold — and finance may decide overtime. */}
-			<OvertimeQueuePanel />
+			{/* Disputes and overtime used to render open here, above the weeks. They
+			    now live in the sub-tab row below beside Payment Vouchers / Receipts,
+			    at the owner's request, because on a quiet week two empty panels ate
+			    the first screen. Their COUNTS ride on the tab labels so an
+			    outstanding item is still visible without opening the tab — an
+			    undecided overtime claim is why a week refuses to send. Still NOT on
+			    the approvals page: that route is gated on `approvePrSignups`, which
+			    agency finance does not hold, and finance may decide overtime. */}
 
 			<div className="iz-payroll-tabs mt-3">
 				{/* The week still running. Vouchers accrue into it as shifts complete, so
@@ -593,7 +621,11 @@ function AgencyPV() {
 					? `${thisWeekBounds.cycle} · in progress · not yet closed`
 					: payrollWeekTab === "last_week"
 						? `${lastWeekBounds.cycle} · pending PR review or dispute`
-						: `${lastLastWeekBounds.cycle} · signed · ready to pay`}
+						: `${lastLastWeekBounds.cycle} · ${
+								unsignedPaymentWeekPvs.length > 0
+									? `${unsignedPaymentWeekPvs.length} not signed yet`
+									: "signed · ready to pay"
+							}`}
 				{" · "}
 				{activeWeekStats.pvCount} PV{activeWeekStats.pvCount === 1 ? "" : "s"} ·{" "}
 				{activeWeekBilling.plan.label} · {activeWeekBilling.priceLabel}
@@ -637,9 +669,38 @@ function AgencyPV() {
 					className={`iz-payroll-tab${pvSubTab === "receipts" ? " on" : ""}`}
 					onClick={() => setPvSubTab("receipts")}
 				>
-					Receipts ({activeWeekReceiptScans.length})
+					Receipts ({activeWeekReceipts.length})
 				</button>
+				{/* Hidden on the PAYMENT week (owner's rule, 3 Aug 2026): by then every
+				    voucher is signed, and a signed voucher's figures are settled — a
+				    dispute or an overtime claim belongs to a week still under review.
+				    ⚠️ These two remain deliberately NOT week-scoped on the other tabs:
+				    a claim blocks whichever week it belongs to, so filtering them to the
+				    selected week would hide the thing stopping a DIFFERENT week from
+				    going out. Hiding here is about the payment week having nothing left
+				    to contest — not about scoping the queues. */}
+				{payrollWeekTab !== "last_last_week" && (
+					<>
+						<button
+							type="button"
+							className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
+							onClick={() => setPvSubTab("disputes")}
+						>
+							Disputes ({openDisputes.length})
+						</button>
+						<button
+							type="button"
+							className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
+							onClick={() => setPvSubTab("overtime")}
+						>
+							Overtime ({pendingOtClaims.length})
+						</button>
+					</>
+				)}
 			</div>
+
+			{pvSubTab === "disputes" && <DisputeQueuePanel />}
+			{pvSubTab === "overtime" && <OvertimeQueuePanel />}
 
 			{pvSubTab === "vouchers" && (
 				<OutletSection title="Payment Vouchers" hint={activeWeekBounds.cycle}>
@@ -676,6 +737,38 @@ function AgencyPV() {
 							</p>
 						</IzCard>
 					)}
+					{payrollWeekTab === "last_last_week" &&
+						unsignedPaymentWeekPvs.length > 0 && (
+							<IzCard
+								flat
+								className="!mb-2.5 border-[rgba(244,183,64,.4)] bg-[rgba(244,183,64,.08)]"
+							>
+								<p className="iz-sm font-bold text-[var(--iz-amber)]">
+									{unsignedPaymentWeekPvs.length} voucher
+									{unsignedPaymentWeekPvs.length === 1 ? "" : "s"} in this week
+									{unsignedPaymentWeekPvs.length === 1 ? " is" : " are"} still
+									not signed
+								</p>
+								{/* The whole reason this card exists: by the payment week a voucher
+								    should already be signed, so one that is not has fallen out of
+								    the flow — and before this tab showed it, nothing anywhere in
+								    the product would ever have mentioned it again. */}
+								<p className="iz-tiny iz-muted2 mt-0.5">
+									These are overdue — a PR cannot sign a voucher that was never
+									sent. Review each day, then send it, and it moves to the
+									PR&apos;s Payment screen to e-sign.
+								</p>
+								<ul className="mt-1.5 space-y-0.5">
+									{unsignedPaymentWeekPvs.map((p) => (
+										<li key={p.id} className="iz-tiny iz-muted2">
+											{resolvePvPrName(p, agencyPRs)} ·{" "}
+											{formatRM(getPvNetTotal(p))} ·{" "}
+											{agencyPvStatusLabel(p.status)}
+										</li>
+									))}
+								</ul>
+							</IzCard>
+						)}
 					{payrollWeekTab !== "last_last_week" && (
 						<IzCard flat className="!mb-2.5">
 							<div className="flex items-center gap-2 iz-tiny iz-muted">
@@ -791,15 +884,10 @@ function AgencyPV() {
 			)}
 
 			{pvSubTab === "receipts" && (
-				<ReceiptsSection
-					scans={activeWeekReceiptScans}
-					agencyPRs={agencyPRs}
-					pvs={prPaymentVouchers}
-					payrollRange={payrollRange}
-					onRangeChange={setPayrollRange}
-					onClearRange={() => setPayrollRange(EMPTY_PAYROLL_RANGE)}
-					onVerifySelfLog={verifyAgencyReceiptSelfLog}
-					onOpenPv={(pvId) => setDetailId(pvId)}
+				<AgencyReceiptsPanel
+					weekStartIso={activeWeekBounds.weekStartIso}
+					weekEndIso={activeWeekBounds.weekEndIso}
+					onOpenPv={(voucherId) => setDetailId(voucherId)}
 				/>
 			)}
 		</div>
@@ -947,283 +1035,6 @@ function ReceiptScanRow({
 	return body;
 }
 
-function ReceiptScanDetailSheet({
-	scan,
-	pv,
-	open,
-	onClose,
-	onOpenPv,
-}: {
-	scan: PrReceiptScan | null;
-	pv?: PrPaymentVoucher;
-	open: boolean;
-	onClose: () => void;
-	onOpenPv?: (pvId: string) => void;
-}) {
-	if (!scan) return null;
-
-	const [y, m, d] = scan.date;
-	const entry = receiptEntryMethod(scan);
-	const shift = receiptShiftDetails(scan, pv);
-
-	return (
-		<IzSheet open={open} onClose={onClose}>
-			<div className="iz-sheet-body">
-				<div className="iz-between items-start gap-2">
-					<div className="min-w-0">
-						<h3 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-							{scan.receiptRef}
-						</h3>
-						<p className="iz-tiny iz-muted2 mt-0.5 font-mono">{scan.id}</p>
-					</div>
-					<IzPill variant={entry === "manual" ? "violet" : "ink"}>
-						{receiptEntryMethodLabel(entry)}
-					</IzPill>
-				</div>
-
-				<p className="iz-tiny iz-muted mt-2">
-					{scan.prName} · {scan.outlet}
-					{scan.prId ? ` · PR ID ${scan.prId}` : ""}
-				</p>
-				<p className="iz-tiny iz-muted2">{receiptEntryLoggedLabel(scan)}</p>
-				<p className="iz-tiny iz-muted2">
-					Shift date {d}/{m}/{y}
-					{shift.window ? ` · ${shift.shiftTime} ${shift.window}` : ""}
-				</p>
-
-				<IzCard flat className="mt-3 border-[rgba(232,194,122,.25)]">
-					<p className="iz-tiny iz-muted2 tracking-wide">PAYMENT VOUCHER</p>
-					{scan.pvId ? (
-						<>
-							<p className="font-sora mt-1 text-sm font-bold text-[var(--iz-gold-l)]">
-								{scan.pvId}
-							</p>
-							{pv ? (
-								<p className="iz-tiny iz-muted mt-1">
-									{pv.prName} · {pv.outlet} · issued {pv.issued}
-								</p>
-							) : (
-								<p className="iz-tiny iz-muted2 mt-1">
-									PV not in agency payroll list
-								</p>
-							)}
-							{pv && (
-								<div className="mt-2 flex flex-wrap items-center gap-2">
-									<IzPill variant={pvStatusPillVariant(pv.status)}>
-										{agencyPvStatusLabel(pv.status)}
-									</IzPill>
-									<span className="iz-ledger text-sm font-bold">
-										{formatRM(pv.net)}
-									</span>
-								</div>
-							)}
-							{onOpenPv && (
-								<button
-									type="button"
-									className="iz-btn iz-btn-soft iz-btn-sm mt-3 w-full"
-									onClick={() => {
-										onOpenPv(scan.pvId!);
-										onClose();
-									}}
-								>
-									<FileText className="h-3.5 w-3.5" /> View full PV
-								</button>
-							)}
-						</>
-					) : (
-						<p className="iz-sm iz-muted mt-1">
-							Not on a PV yet — receipt is attached to the PR&apos;s active
-							shift until Time-Out.
-						</p>
-					)}
-				</IzCard>
-
-				<div className="mt-3">
-					<ReceiptScanSlip scan={scan} />
-				</div>
-			</div>
-		</IzSheet>
-	);
-}
-
-function ReceiptsSection({
-	scans,
-	agencyPRs,
-	pvs,
-	payrollRange,
-	onRangeChange,
-	onClearRange,
-	onOpenPv,
-	onVerifySelfLog,
-}: {
-	scans: PrReceiptScan[];
-	agencyPRs: AgencyManagedPR[];
-	pvs: PrPaymentVoucher[];
-	payrollRange: PayrollRangeFilter;
-	onRangeChange: (r: PayrollRangeFilter) => void;
-	onClearRange: () => void;
-	onOpenPv?: (pvId: string) => void;
-	onVerifySelfLog?: (scanId: string, decision: "approved" | "rejected") => void;
-}) {
-	const [outlet, setOutlet] = useState("");
-	const [prId, setPrId] = useState("");
-	const [entryMethod, setEntryMethod] = useState<"" | ReceiptEntryMethod>("");
-	const [detailScan, setDetailScan] = useState<PrReceiptScan | null>(null);
-	const detailPv = useMemo(
-		() =>
-			detailScan?.pvId ? pvs.find((p) => p.id === detailScan.pvId) : undefined,
-		[detailScan, pvs],
-	);
-	const outlets = useMemo(
-		() => [...new Set(scans.map((s) => s.outlet))].sort(),
-		[scans],
-	);
-	const prOptions = useMemo(
-		() =>
-			agencyPRs
-				.filter((pr) => scans.some((s) => receiptBelongsToAgencyPr(s, pr)))
-				.sort((a, b) => a.name.localeCompare(b.name)),
-		[agencyPRs, scans],
-	);
-	const filtered = useMemo(
-		() =>
-			scans.filter((s) => {
-				if (outlet && s.outlet !== outlet) return false;
-				if (prId) {
-					const pr = agencyPRs.find((p) => p.id === prId);
-					if (!pr || !receiptBelongsToAgencyPr(s, pr)) return false;
-				}
-				if (entryMethod && receiptEntryMethod(s) !== entryMethod) return false;
-				return matchesReceiptShiftWorkRange(s, payrollRange);
-			}),
-		[scans, outlet, prId, entryMethod, agencyPRs, payrollRange],
-	);
-	const receiptFiltersActive = Boolean(outlet || prId || entryMethod);
-
-	const clearReceiptFilters = () => {
-		onClearRange();
-		setOutlet("");
-		setPrId("");
-		setEntryMethod("");
-	};
-
-	const pendingSelfLogs = useMemo(
-		() =>
-			scans.filter(
-				(s) => s.logSource === "manual" && s.agencyVerification === "pending",
-			),
-		[scans],
-	);
-
-	return (
-		<OutletSection
-			title="Receipt scans"
-			hint={`${scans.length} from managed PRs`}
-		>
-			{pendingSelfLogs.length > 0 && (
-				<IzCard
-					flat
-					className="mb-2 border-[rgba(244,183,64,.4)] bg-[rgba(244,183,64,.08)]"
-				>
-					<p className="iz-sm font-bold text-[var(--iz-amber)]">
-						{pendingSelfLogs.length} manual self-log
-						{pendingSelfLogs.length !== 1 ? "s" : ""} awaiting verify
-					</p>
-					<p className="iz-tiny iz-muted2 mt-0.5">
-						PR keyed in amounts when OCR could not read blurry or water-damaged
-						receipts.
-					</p>
-				</IzCard>
-			)}
-			<IzCard flat>
-				<p className="iz-tiny iz-muted">
-					Agency copy of PR receipt logs — grouped by shift working day. Tap a
-					receipt for line items and the PV it belongs to.
-				</p>
-			</IzCard>
-			<PayrollRangeFilterCard
-				range={payrollRange}
-				onChange={onRangeChange}
-				onClear={clearReceiptFilters}
-				clearLabel="Clear filters"
-				clearActive={receiptFiltersActive}
-				hint="Shift work date for range · scan time when a time range is set · filter by PR, outlet, or entry method."
-			>
-				<IzSelect
-					block
-					className="!text-xs"
-					value={prId}
-					onChange={(e) => setPrId(e.target.value)}
-				>
-					<option value="">All PRs</option>
-					{prOptions.map((pr) => (
-						<option key={pr.id} value={pr.id}>
-							{pr.name}
-						</option>
-					))}
-				</IzSelect>
-				<IzSelect
-					block
-					className="!text-xs"
-					value={outlet}
-					onChange={(e) => setOutlet(e.target.value)}
-				>
-					<option value="">All outlets</option>
-					{outlets.map((o) => (
-						<option key={o} value={o}>
-							{o}
-						</option>
-					))}
-				</IzSelect>
-				<IzSelect
-					block
-					className="!text-xs"
-					value={entryMethod}
-					onChange={(e) =>
-						setEntryMethod(e.target.value as "" | ReceiptEntryMethod)
-					}
-				>
-					<option value="">All entry methods</option>
-					<option value="scan">Scanned</option>
-					<option value="manual">Manual</option>
-				</IzSelect>
-			</PayrollRangeFilterCard>
-			<p className="iz-tiny iz-muted2 mt-2 mb-2">
-				{filtered.length} scan{filtered.length !== 1 ? "s" : ""} for managed PRs
-			</p>
-			<div className="space-y-2">
-				{filtered.length === 0 ? (
-					<IzCard className="text-center">
-						<p className="iz-sm iz-muted">No receipt scans in this range</p>
-					</IzCard>
-				) : (
-					filtered.map((scan) => {
-						const pendingSelfLog =
-							scan.logSource === "manual" &&
-							scan.agencyVerification === "pending";
-						return (
-							<ReceiptScanRow
-								key={scan.id}
-								scan={scan}
-								compact
-								onVerify={onVerifySelfLog}
-								onClick={pendingSelfLog ? undefined : () => setDetailScan(scan)}
-							/>
-						);
-					})
-				)}
-			</div>
-			<ReceiptScanDetailSheet
-				scan={detailScan}
-				pv={detailPv}
-				open={detailScan !== null}
-				onClose={() => setDetailScan(null)}
-				onOpenPv={onOpenPv}
-			/>
-		</OutletSection>
-	);
-}
-
 function PvWorkflowRail({ status }: { status: PrPvStatus }) {
 	const active = pvWorkflowStepIndex(status);
 	return (
@@ -1287,8 +1098,19 @@ function PvDetail({
 	receiptScans: PrReceiptScan[];
 	onClose: () => void;
 }) {
-	const { editLines, sendToPr, resend, resolveDispute, overrideSigned } =
-		useAgencyPvs();
+	const {
+		editLines,
+		sendToPr,
+		resend,
+		resolveDispute,
+		overrideSigned,
+		financeSign,
+		isSigning,
+		markPaid,
+	} = useAgencyPvs();
+	const [signOpen, setSignOpen] = useState(false);
+	const [signError, setSignError] = useState<string | null>(null);
+	const [bankRef, setBankRef] = useState("");
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const toast = useStore((s) => s.toast);
@@ -1305,6 +1127,33 @@ function PvDetail({
 	const canOverride = agencyCan(agencySubRole, "overrideSignedPv");
 	const [rows, setRows] = useState<PrPvRow[]>(v.rows);
 	const [deduct, setDeduct] = useState(v.deduct);
+
+	/**
+	 * Has the agency signed? Read from the voucher, never from local state — the
+	 * server is the authority, and a locally-remembered signature would leave the
+	 * Send button enabled against a 409.
+	 */
+	const financeSigned = Boolean(v.financeHeadSignedAt);
+
+	const handleFinanceSign = async (ink: {
+		w: number;
+		h: number;
+		strokes: [number, number][][];
+	}) => {
+		setSignError(null);
+		try {
+			await financeSign({ id: pv.id, signature: ink });
+			setSignOpen(false);
+			toast("Voucher signed — you can send it now", "success");
+		} catch (error) {
+			// The server's refusal verbatim: each one is a real rule (already sent,
+			// wrong role), not a generic failure the agency has to guess at.
+			setSignError(
+				(error as { response?: { data?: { message?: string } } } | null)
+					?.response?.data?.message ?? "Could not record that signature",
+			);
+		}
+	};
 	// Refresh the editable copy when the real line items arrive.
 	useEffect(() => {
 		if (!editing) {
@@ -1563,14 +1412,60 @@ function PvDetail({
 			{pv.status === "PENDING_REVIEW" &&
 				agencyCan(agencySubRole, "raisePv") && (
 					<>
+						{/*
+						 * The agency's own signature, ahead of the send — the rail's
+						 * "Finance sign" step, which until 3 Aug 2026 was a label with no
+						 * action behind it. The server refuses the send without it (409),
+						 * so the pad is offered here rather than letting the button fail.
+						 */}
+						{!financeSigned && (
+							<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
+								<p className="iz-sm font-bold">Finance signature required</p>
+								<p className="iz-tiny iz-muted2 mt-0.5">
+									Sign to attest these figures. The PR counter-signs what you
+									sign here, so it comes before the voucher is sent.
+								</p>
+								{signError && (
+									<p className="iz-tiny mt-1.5 text-[var(--iz-red,#c0554f)]">
+										{signError}
+									</p>
+								)}
+								{signOpen ? (
+									<div className="mt-2">
+										<PrSignaturePad
+											label="Draw your signature"
+											onConfirm={() => {
+												/* the PNG is not persisted — strokes are */
+											}}
+											onConfirmInk={(ink) => void handleFinanceSign(ink)}
+											onCancel={() => setSignOpen(false)}
+										/>
+									</div>
+								) : (
+									<button
+										type="button"
+										className="iz-btn iz-btn-primary mt-2 w-full"
+										disabled={isSigning}
+										onClick={() => setSignOpen(true)}
+									>
+										<Pencil className="h-4 w-4" /> Sign this voucher
+									</button>
+								)}
+							</div>
+						)}
 						<button
 							type="button"
 							className="iz-btn iz-btn-primary mt-2 w-full"
-							disabled={!sendGate.allowed}
+							disabled={!sendGate.allowed || !financeSigned}
 							onClick={() => sendToPr(pv.id)}
 						>
 							<Send className="h-4 w-4" /> Send to PR for e-sign
 						</button>
+						{!financeSigned && (
+							<p className="iz-tiny iz-muted2 mt-1 text-center">
+								Sign above first — the PR counter-signs your signature.
+							</p>
+						)}
 						{/* Only once we know WHY. While the fetch is in flight the button is
 						    disabled with no caption — a reason would be a guess. */}
 						{!sendGate.allowed &&
@@ -1600,6 +1495,49 @@ function PvDetail({
 				>
 					Resolve dispute &amp; reassign
 				</button>
+			)}
+
+			{/*
+			 * Recording the bank transfer — the last step of the rail, and the one
+			 * that had no action behind it: the payment week card has always said
+			 * "use To pay to record each bank transfer" while offering nothing to
+			 * record it with, so a signed voucher could never become paid.
+			 *
+			 * Only on a SIGNED voucher: paying one the PR has not counter-signed
+			 * would settle a figure nobody agreed to. The bank reference is optional
+			 * because a transfer can be real without its reference being to hand,
+			 * and blocking the record would lose the more important fact.
+			 */}
+			{pv.status === "SIGNED" && agencyCan(agencySubRole, "raisePv") && (
+				<div className="mt-2 rounded-xl border border-[rgba(93,217,160,.35)] p-3">
+					<p className="iz-sm font-bold">Record payment</p>
+					<p className="iz-tiny iz-muted2 mt-0.5">
+						Marks this voucher paid and moves it to History. The paid date is
+						stamped once — recording twice cannot re-date a transfer.
+					</p>
+					<input
+						type="text"
+						className="mt-2 w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-2 py-1.5 text-xs"
+						placeholder="Bank reference (optional)"
+						value={bankRef}
+						onChange={(e) => setBankRef(e.target.value)}
+						aria-label="Bank reference"
+					/>
+					<button
+						type="button"
+						className="iz-btn iz-btn-primary mt-2 w-full"
+						onClick={() => {
+							markPaid(pv.id, bankRef.trim() || undefined);
+							setBankRef("");
+							toast(
+								`${formatRM(getPvNetTotal(pv))} recorded as paid`,
+								"success",
+							);
+						}}
+					>
+						<CheckCircle2 className="h-4 w-4" /> Mark as paid
+					</button>
+				</div>
 			)}
 
 			{pv.overrideAudit && (
