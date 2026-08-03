@@ -59,7 +59,7 @@ import { fetchOutlets } from "@/services/outlet";
 export const Route = createFileRoute("/admin/business/history")({
 	component: HistoryPage,
 	head: () => ({
-		meta: [{ title: "History — Innocenz Admin" }],
+		meta: [{ title: "Current Plan — Innocenz Admin" }],
 	}),
 });
 
@@ -198,8 +198,8 @@ function HistoryPage() {
 		<PageShell>
 			<PageHeader
 				icon={HistoryIcon}
-				title="History"
-				description="Who subscribed and when — outlets and agencies, by date."
+				title="Current Plan"
+				description="The plan each outlet and agency is on now — updated when a switch is approved."
 			/>
 
 			<Card className="border-(--lavender-soft)/40 bg-card">
@@ -207,7 +207,7 @@ function HistoryPage() {
 					<div className="space-y-4">
 						<div>
 							<CardTitle className="flex items-center gap-2">
-								Subscription History
+								Current Plan
 								{historyQuery.isFetching && !showLoading && (
 									<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 								)}
