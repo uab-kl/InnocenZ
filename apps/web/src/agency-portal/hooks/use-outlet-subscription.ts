@@ -98,19 +98,44 @@ export function useOutletSubscription() {
 	 */
 	const nextRenewalDate = useMemo<Date | null>(() => {
 		if (!activeSubscription?.startedAt) return null;
-		const next = new Date(activeSubscription.startedAt);
-		if (Number.isNaN(next.getTime())) return null;
+		const start = new Date(activeSubscription.startedAt);
+		if (Number.isNaN(start.getTime())) return null;
 		const now = new Date();
-		let guard = 0;
-		while (next <= now && guard < 600) {
-			if (activeSubscription.billingCycle === "weekly") {
-				next.setDate(next.getDate() + 7);
-			} else if (activeSubscription.billingCycle === "annually") {
-				next.setFullYear(next.getFullYear() + 1);
-			} else {
-				next.setMonth(next.getMonth() + 1);
-			}
-			guard += 1;
+		const cycle = activeSubscription.billingCycle;
+
+		if (cycle === "weekly") {
+			const next = new Date(start);
+			while (next <= now) next.setDate(next.getDate() + 7);
+			return next;
+		}
+
+		// Monthly/annual bill on the SAME DAY each period, so every date is
+		// computed from the original start — never by stepping a date forward
+		// repeatedly, which drifts: stepping 31 Jan by one month lands on 3 Mar,
+		// because "31 Feb" overflows. The day is clamped to the target month's
+		// length instead, so a 31st subscription bills on the 28th/30th in short
+		// months and returns to the 31st afterwards.
+		const step = cycle === "annually" ? 12 : 1;
+		const anchorDay = start.getDate();
+		const at = (periods: number) => {
+			const year = start.getFullYear();
+			const month = start.getMonth() + periods * step;
+			const lastDay = new Date(year, month + 1, 0).getDate();
+			return new Date(
+				year,
+				month,
+				Math.min(anchorDay, lastDay),
+				start.getHours(),
+				start.getMinutes(),
+				start.getSeconds(),
+			);
+		};
+
+		let periods = 0;
+		let next = at(0);
+		while (next <= now && periods < 600) {
+			periods += 1;
+			next = at(periods);
 		}
 		return next;
 	}, [activeSubscription]);
