@@ -40,6 +40,7 @@ import {
 	Building2,
 	Calendar,
 	Receipt,
+	RotateCcw,
 	Sparkles,
 	TriangleAlert,
 	Users,
@@ -173,9 +174,8 @@ function AgencySubscription() {
 	 *    price, applied on the spot, nothing for an admin to decide)
 	 *  • past 150 PV → NOTIFY THE ADMIN to negotiate, because the 151+ band has
 	 *    no list price. The agency stays on its current tier until they answer.
-	 *  • on Custom but back inside the rate card → ask the admin to end Custom.
-	 *    Still a request: an agency's own PV count must not end a negotiated
-	 *    price by itself.
+	 *  • already on Custom → NOTHING. A negotiated price is not the volume rule's
+	 *    to undo; leaving Custom is the agency pressing Reset, or the admin.
 	 *
 	 * Guarded hard, because this WRITES: only for a real session, only once the
 	 * real PV count and the plan catalog have loaded, never while a request is
@@ -205,19 +205,17 @@ function AgencySubscription() {
 			return;
 		}
 
-		if (!needsCustom && sub.onCustom) {
-			autoTierFiled.current = true;
-			sub.requestLeaveCustom(banded.label, pv).then((r) => {
-				toast(
-					r.ok
-						? `${pv} PV this week is back inside the rate card — asked InnocenZ admin to move you to ${banded.label}`
-						: (r.reason ?? "Could not send the request — try again"),
-					r.ok ? "success" : "warn",
-				);
-			});
-			return;
-		}
-
+		/*
+		 * ⚠️ NOTHING AUTOMATIC EVER TAKES AN AGENCY OFF CUSTOM. There used to be a
+		 * branch here that reset a Custom agency the moment its weekly PV count sat
+		 * inside the rate card, and it destroyed the admin's work: a price agreed at
+		 * 17:46 was reset at 17:47, then re-quoted and reset again, four times over.
+		 *
+		 * A Custom price is a negotiated agreement between two people. Volume is
+		 * evidence about it, not authority over it — least of all a 0-PV week, which
+		 * is what an agency reads as before its first voucher is issued. Leaving
+		 * Custom is a deliberate act: the agency presses Reset, or the admin ends it.
+		 */
 		if (
 			!needsCustom &&
 			!sub.onCustom &&
@@ -452,25 +450,49 @@ function AgencySubscription() {
 									</p>
 								)}
 								{/*
-								 * ONE action, deliberately: reset back to the rate card. There is
-								 * no "renegotiate" button because re-pricing is not the agency's
-								 * call — the volume rule raises that when the week's PVs pass the
-								 * rate card — and no "cancel", because an agency cannot end a
-								 * negotiated price by itself. This asks; the admin decides.
+								 * TWO ways to change a negotiated tier, and they are not the
+								 * same act. RENEGOTIATE asks the admin for a different figure
+								 * and changes nothing until they answer. RESET leaves Custom
+								 * altogether for the banded tier the agency's PV volume implies,
+								 * and applies straight away because that tier has a list price.
+								 * Neither happens on its own: nothing automatic takes an agency
+								 * off a price two people agreed.
 								 */}
-								<div className="mt-3 flex flex-col gap-2 border-t border-[var(--iz-line)] pt-3 sm:flex-row">
-									<button
-										type="button"
-										className="iz-btn iz-btn-soft flex-1"
-										disabled={sub.isRequesting}
-										onClick={handleResetToNormal}
-									>
-										Reset to normal subscription
-									</button>
-									<p className="iz-tiny iz-muted2 flex-1 self-center">
-										Puts you back on the tier your weekly PVs fall into,
-										straight away. InnocenZ admin sees it in Plan Request.
-									</p>
+								<div className="mt-3 grid gap-2 border-t border-[var(--iz-line)] pt-3 sm:grid-cols-2">
+									<div>
+										<button
+											type="button"
+											className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(139,124,246,.4)] bg-[rgba(139,124,246,.1)] px-3 py-2 transition-colors hover:bg-[rgba(139,124,246,.18)] disabled:opacity-60"
+											disabled={sub.isRequesting || Boolean(waitingOn)}
+											onClick={handleAskForCustom}
+										>
+											<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
+											<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
+												{waitingOn ? "Renegotiating…" : "Renegotiate price"}
+											</span>
+										</button>
+										<p className="iz-tiny iz-muted2 mt-1.5">
+											Ask InnocenZ admin for a different figure. Your current
+											price stands until they answer.
+										</p>
+									</div>
+									<div>
+										<button
+											type="button"
+											className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,.03)] px-3 py-2 transition-colors hover:bg-[rgba(255,255,255,.07)] disabled:opacity-60"
+											disabled={sub.isRequesting}
+											onClick={handleResetToNormal}
+										>
+											<RotateCcw className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
+											<span className="iz-tiny font-semibold">
+												Reset to normal subscription
+											</span>
+										</button>
+										<p className="iz-tiny iz-muted2 mt-1.5">
+											Leaves Custom for the tier your weekly PVs fall into,
+											straight away. InnocenZ admin sees it in Plan Request.
+										</p>
+									</div>
 								</div>
 							</>
 						)}

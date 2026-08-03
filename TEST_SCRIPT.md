@@ -620,6 +620,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **3 Aug 2026 (seventeenth slice) — 🔴 THE AUTO-RESET WAS EATING THE ADMIN’S NEGOTIATED PRICE.**
+>
+> Owner: *"why admin set 99 to the agency then automatically reset?"* — because I wired a branch that did
+> exactly that. The volume rule reset any agency on Custom whose weekly PV count sat inside the rate card,
+> and Atlas issues **0 PVs**, so every price the admin agreed was undone within the same minute. The ledger
+> proves it: **12 rows for Atlas**, alternating Custom → Starter — `Custom RM 99.00` started **09:47** and
+> expired **09:47**; RM 9,999 at 09:46, RM 999 at 09:50, same story. Four negotiations destroyed.
+>
+> **The branch is gone, and the rule is now stated the other way round: NOTHING AUTOMATIC EVER TAKES AN
+> AGENCY OFF CUSTOM.** A negotiated price is an agreement between two people; volume is evidence about it,
+> not authority over it — least of all a 0-PV week, which is what every agency reads as before its first
+> voucher. Leaving Custom is a deliberate act: the agency presses Reset, or the admin ends it. The rule
+> still does the two things it should: apply the banded tier when the agency is NOT on Custom and on the
+> wrong one, and notify the admin past 150 PV.
+>
+> **Both Custom actions are now on the Custom card**, which is what the owner could not find (they had
+> vanished because the auto-reset had already thrown Atlas back to Starter, so the card stopped rendering):
+> **Renegotiate price** (violet, asks the admin for a different figure, current price stands until they
+> answer) and **Reset to normal subscription** (neutral, leaves Custom for the banded tier, applies
+> immediately). Each carries one line saying which of those two things it does — they are different acts
+> and were previously one button.
+>
+> ⚠️ **Atlas’s ledger still holds the 10 churn rows** this bug produced. They are a true record of what
+> happened, so they were not quietly deleted — say the word and they go, rollback file first.
+
 > **3 Aug 2026 (sixteenth slice) — THE CUSTOM TILE READS AS A STATE, NOT A BROKEN BUTTON.**
 >
 > Owner: *"design a bit this agency status, the requested or not"* and *"this also redesign ask admin"*.
