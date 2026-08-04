@@ -696,6 +696,27 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — AN ITEM OCR MISSES IS NO LONGER INVISIBLE.**
+>
+> Owner, third report of the same shape: *"again where is the tips i scan sometimes missing tips
+> sometimes missing booking commision in the tips self log and scan"*.
+>
+> **The parser was the wrong thing to keep tuning.** `manualRows = editId ? categoryMenu : detected` —
+> a scan listed ONLY what OCR read, so an item it missed did not exist on screen and the single remedy
+> offered was *"Scan again to catch a tip / service item OCR missed"*. OCR misses a short line often
+> enough — glare, a fold, a tilted photo — that scanning again is a lottery, and the owner has now
+> played it four times: Havoc alone, then Booking commission alone, then Booking + Havoc.
+>
+> **Added: NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER** — the outlet’s configured items the scan
+> did not find, each with a one-tap **+ Add**. The PR is standing at the bar holding the receipt; they
+> can say what is on it. An item added this way carries an ASSUMED quantity, so it shows the same
+> *"Receipt printed no quantity — check this one"* flag as any other guess rather than posing as read,
+> and the block says plainly that the agency checks these against the photo.
+>
+> ⚠️ **The parser was NOT touched again.** Its harness (11 fixtures) passes on the exact text of this
+> receipt, so a fifth blind tweak would be guesswork. If the reveal ever shows `1 Tips` present in the
+> lines while Tips is still not detected, THAT is a parser bug and there is now a fixture slot for it.
+
 > **4 Aug 2026 — ONE SCAN FOUND HAVOC, THE NEXT FOUND ONLY BOOKING COMMISSION. THE OCR WRAPPER WAS
 > THROWING HALF THE READ AWAY.**
 >

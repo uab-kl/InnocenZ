@@ -250,6 +250,28 @@ export function ScanScreen({
   // edit mode, where the whole list shows so quantities can be adjusted).
   const manualRows = editId ? categoryMenu : detected;
   const manualScanAttempted = receiptShot != null || detectedIds.length > 0;
+  /**
+   * This outlet's items that the scan did NOT find.
+   *
+   * They used to be invisible — the list showed only what OCR read, so an item
+   * it missed left the PR with one option: scan again, and hope. OCR misses a
+   * short line often enough (glare, a fold, a tilted photo) that "scan again"
+   * became a lottery. Showing them with a one-tap Add ends that: the PR is
+   * standing at the bar with the paper in hand and can say what is on it.
+   *
+   * Added this way the quantity is a GUESS, so it is flagged like any other
+   * assumed one rather than passed off as read.
+   */
+  const missingRows = useMemo(
+    () => (editId ? [] : categoryMenu.filter((d) => !detectedIds.includes(d.id))),
+    [editId, categoryMenu, detectedIds],
+  );
+
+  const addMissingItem = (id: string) => {
+    setDetectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setDrinkQtys((prev) => ({ ...prev, [id]: prev[id] ?? 1 }));
+    setAssumedQtyIds((prev) => new Set(prev).add(id));
+  };
   // The agency note is REQUIRED on a fresh self-log: what was unclear on the
   // paper, or a confirmation the items & prices match.
   const manualNoteMissing = !editId && note.trim().length === 0;
@@ -703,6 +725,34 @@ export function ScanScreen({
                             )}
                           </>
                         )}
+                      </View>
+                    )}
+
+                    {!editId && manualScanAttempted && missingRows.length > 0 && (
+                      <View style={styles.missingBlock}>
+                        <Text style={styles.fieldLabel}>
+                          NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER
+                        </Text>
+                        {missingRows.map((d) => (
+                          <View key={d.id} style={styles.drinkRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.drinkName}>{d.name}</Text>
+                              <Text style={styles.drinkUnit}>
+                                {formatRM(d.priceRm)} each · OCR did not read this one
+                              </Text>
+                            </View>
+                            <Pressable
+                              style={styles.missingAddBtn}
+                              onPress={() => addMissingItem(d.id)}
+                            >
+                              <Text style={styles.missingAddText}>+ Add</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                        <Text style={styles.missingHint}>
+                          Only add what the receipt actually shows — the agency checks these against
+                          your photo.
+                        </Text>
                       </View>
                     )}
 
@@ -1214,6 +1264,23 @@ const styles = StyleSheet.create({
   },
   ocrRawLine: { fontFamily: F.manrope, fontSize: 11, color: C.txt, lineHeight: 16 },
   ocrRawHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted, marginTop: 6 },
+  missingBlock: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  missingAddBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.goldL,
+  },
+  missingAddText: { fontFamily: F.manrope, fontSize: 12, color: C.goldL, fontWeight: '700' },
+  missingHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted, marginTop: 8 },
   qtyCtrl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: {
     width: 32,
