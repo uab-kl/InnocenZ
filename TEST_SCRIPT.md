@@ -324,16 +324,21 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   `08:39:10.735Z` by a **stale backend process still running pre-merge Monday-anchored code** — the
 >   documented `tsx watch` trap. The backend has since been restarted from current disk.
 >
-> **Still open from this slice:**
-> - [ ] **Live-verify the anchor** — one fresh self-logged line should now produce a Sun–Sat week.
->   Not done: all dev servers were down and the PR app needs a fresh login. **The fix is inferred from
->   code + a clean restart, NOT observed.**
-> - [ ] **Re-anchor `PV-000005`** from `2026-08-03..09` to `2026-08-02..08`
->   (`scripts/reanchor-voucher-weeks.ts` exists for this).
-> - [ ] **Backfill `due_date`** — blocked: the bulk UPDATE on `payment_voucher` was refused by the
->   permission classifier. Run manually:
+> **Still open from this slice — amended 4 Aug (later):**
+> - [x] **Live-verify the anchor — ✅ DONE, and it cost no data.** `GET /shift-assignment/overtime/pending`
+>   returns `week` straight from `weekOfDate` **as the running process computes it**. Shift date
+>   **Monday `2026-08-03`** → **`2026-08-02 .. 2026-08-08`**, Sunday to Saturday, confirmed with
+>   `getUTCDay()` rather than eyeballed. **Observed, not inferred**, and the call is read-only — no
+>   self-logged test line was needed after all. **Generalise this: before staging a write to verify a
+>   derived value, check whether some read endpoint already returns it.**
+> - [ ] **Re-anchor `PV-000005`** `2026-08-03..09` → `2026-08-02..08`. **Pre-verified in report mode:**
+>   exactly one voucher moves, its single line stays inside the new window, the money guard passed.
+>   **`--apply` was refused by the permission classifier — needs the owner's own shell:**
+>   `npx tsx --tsconfig tsconfig.json src/scripts/reanchor-voucher-weeks.ts --apply`
+> - [ ] **Backfill `due_date`** — same refusal. **Run the re-anchor FIRST**, or this computes
+>   `PV-000005`'s due date from a week that is still wrong:
 >   `update main.payment_voucher set due_date = week_end + 7 where due_date is null and extract(dow from week_start) = 0;`
->   Deliberately skips `PV-000005`, whose week is wrong, so its due date would need redoing.
+>   The `dow = 0` filter is what makes the ordering matter — it skips any voucher not yet Sun-anchored.
 >
 > **⚠️ Nearly a FOURTH over-call: I was about to write a Sunday-anchor "fix" for code that was already
 > correct. The data said Monday, the code said Sunday, and the answer was neither — the RUNNING PROCESS
@@ -365,7 +370,12 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   money records — needs an explicit go-ahead, not a drive-by UPDATE.
 >
 > **Defects found by the sweep, ranked. #1 is the money risk:**
-> - [ ] **🔴 P0 — OVERTIME IS UNBOUNDED.** A check-in at 16:38 and check-out at 16:39 (**12 seconds**)
+> - [x] **🔴 P0 — OVERTIME IS UNBOUNDED — ✅ FIXED 4 Aug (later).** The window now opens at the **later**
+>   of the scheduled end and the check-in, so minutes claimed can never exceed minutes present.
+>   `overtime.test.ts`, 7/7, written RED first (3 failed, the invariant case at *540 claimed for 480
+>   present*). The live 279-minute claim was **rejected** through the agency API — `0.00`, no money
+>   moved. Original finding below, kept for the mechanism:
+> - [x] ~~**🔴 P0 — OVERTIME IS UNBOUNDED.**~~ A check-in at 16:38 and check-out at 16:39 (**12 seconds**)
 >   produced **`overtime_minutes = 279`** on assignment `6574b2ee`. Overtime is measured from the
 >   shift's scheduled end to the check-out wall-clock and never looks at check-in, so a PR who forgets
 >   to check out accrues overtime for as long as they stay forgotten. This is the mechanism behind the
@@ -801,6 +811,45 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (later) — OVERTIME BOUNDED, and the Sun–Sat anchor VERIFIED IN THE RUNNING PROCESS.**
+>
+> **🔴 P0 closed — overtime could be claimed for hours the PR was absent for.** `overtimeFromStamps`
+> measured the overrun from the shift's scheduled end to the check-out clock and **never consulted
+> `checkInAt`**. Assignment `6574b2ee` therefore claimed **279 minutes (RM813.75)** for **11.6 seconds**
+> of attendance: slot `10:00 – 12:00`, check-in `08:38:58.504Z`, check-out `08:39:10.090Z` — and
+> `12:00 + 279 min = 16:39`, the check-out stamp to the minute. Every minute since noon was billed to a
+> shift nobody was standing in. **The existing plausibility guard could not catch this** — 11.6 seconds
+> elapsed is entirely believable — because the fault was never an unbelievable stamp; it was counting
+> absence. Fix: the overtime window now opens at the **later** of the scheduled end and the check-in,
+> restoring the invariant **minutes claimed ≤ minutes present**.
+>
+> **`overtime.test.ts` — second test file in the repo, 7/7 green** (12 total with the due-date spec).
+> Written RED first: 3 of 7 failed against the old code, the invariant case reporting *540 minutes
+> claimed for 480 minutes present*. It sweeps every late check-in hour from 08:00 to 20:00, so the
+> invariant is enforced across the range rather than at one example. `tsc` clean, 0 errors.
+>
+> **Live claim disposed through the app's own path.** `PATCH /shift-assignment/6574b2ee/overtime`
+> `{"decision":"reject"}` on the agency owner session → `overtimeStatus: rejected`,
+> `overtimeAmount: 0.00`, pending list now empty. **Reject, not approve — no money moved**, and 0.00
+> records "decided, worth nothing" rather than "never decided". Owner's call, asked and given.
+>
+> **🟢 The Sun–Sat anchor is now OBSERVED, not inferred — the last doubt from the stale-process episode
+> is closed.** `GET /shift-assignment/overtime/pending` returns `week` straight from `weekOfDate` **in
+> the running process**; for shift date **Monday `2026-08-03`** it returned
+> **`2026-08-02 .. 2026-08-08`** — Sunday to Saturday, verified by `getUTCDay()` rather than asserted.
+> **The check is READ-ONLY and wrote nothing** — a live verification that costs no data, the cheapest
+> technique found so far for this class of question.
+>
+> **Still needing the owner's hand — both refused by the permission classifier, not by the code:**
+> `reanchor-voucher-weeks.ts --apply` (report mode pre-verified: exactly one voucher moves,
+> `PV-000005` `08-03..09` → `08-02..08`, its single line inside the new window, money guard passed) and
+> the `due_date` backfill. **Run the re-anchor FIRST**, or the backfill computes `PV-000005`'s due date
+> from a week that is still wrong.
+>
+> ⚠️ **One thing NOT verified: whether the running dev backend reloaded the overtime fix.** The unit
+> test proves the source; `tsx watch` should have picked the file up, but that is exactly the
+> assumption that produced the phantom anchor bug. Confirm at the next real check-out, or restart.
 
 > **4 Aug 2026 — double-billing found and closed at the guard.** A PR held two vouchers for one shift:
 > `PV-000005` (self-log, Mon-anchored `08-03..08-09`) and `PV-000006` (generator, Sun-anchored
