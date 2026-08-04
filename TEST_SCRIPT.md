@@ -868,21 +868,30 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ## 10. Changelog (what changed / what's done — append newest at top)
 > **4 Aug 2026 (late, housekeeping) — biome rewrap of ; §9 renewed with what d513e5c LEFT OPEN.**
 >
-> Formatting only on  — the save-formatter rewrapped the > call added minutes earlier in . No behaviour change, no new export, no signature change.
+> Formatting only on `services/agency/agency.ts` — the save-formatter rewrapped the `client.put`
+> call added minutes earlier in `d513e5c`. No behaviour change, no new export, no signature change.
 >
 > **The substantive part is §9, which had no entry for the three things that session deliberately did
-> NOT finish.** Chief among them: **the scoped owner guard shipped in  has never been fired
+> NOT finish.** Chief among them: **the scoped owner guard shipped in `d513e5c` has never been fired
 > at a running server.** It closed a real cross-tenant write — any agency owner could rewrite any
 > agency, any outlet owner could move another venue's geo-fence — and it is backed by nothing but a
-> typecheck. ⚠️ **A security fix proven only by  is exactly the shape this project has recorded
-> lying to it before**, and refusals write nothing, so there is no cost argument for the delay. The
-> six free refusal cases and the one same-values 200 are written out in §9, along with the reminder
-> that **admin must still pass every one of them** ( short-circuits ahead of the scope test,
-> and an over-applied denial fails silently until somebody cannot work).
+> typecheck. ⚠️ **A security fix proven only by `tsc` is exactly the shape of green signal this
+> project has already recorded being lied to by**, and refusals write nothing, so there is no cost
+> argument for the delay. The six free refusal cases and the one same-values 200 are written out in
+> §9, along with the reminder that **admin must still pass every one of them** (`isAdmin`
+> short-circuits ahead of the scope test, and an over-applied denial fails silently until somebody
+> cannot work).
 >
 > Also open: the outlet Settings save (still store-only) and member management for org owners (the
-> endpoints exist and are  by design; widening needs ownership scope + escalation,
+> endpoints exist and are `requireAdmin` by design; widening needs ownership scope + escalation,
 > last-owner and self-demotion guards).
+>
+> ⚠️ **Method note — this entry was written twice.** The first attempt built the Markdown inside a
+> JS template literal passed through `bash -c`, and **the shell consumed every escaped backtick
+> before node ever saw it**, so each code span silently became an empty string: *"biome rewrap of ;"*,
+> *"proven only by  is"*. It committed clean and read as gibberish. **Nesting three quoting layers
+> (bash → node → Markdown) has no safe escape for a backtick** — write the file with an editor tool,
+> or pass it via a heredoc, and never assemble Markdown containing code spans in a shell string.
 
 > **4 Aug 2026 (late) — the agency Settings save is WIRED, and wiring it exposed a cross-tenant
 > write hole in the endpoint it was wired to.**
