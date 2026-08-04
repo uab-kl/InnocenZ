@@ -696,6 +696,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — THE MIS-FILED HAVOC LINE RE-FILED, USING THE ROW’S OWN EVIDENCE.**
+>
+> Owner: *"then how u can change this ?"* — the code fix (`1a3a243`) only governs NEW logs; the row
+> already saved still read **OT · RM 2,000.00**, and RM 340.00 sat under *others* on the Payment week.
+>
+> **Two fields had to move, not one.** `lineKind()` lets a PACKED REF outrank the `component` column, so
+> changing `component` alone would have displayed nothing different:
+>
+> ```
+> ref = "others|manual|2000.00|ORD1111:2|service"
+>        ^ kind says overtime            ^ the row’s OWN category says service
+> ```
+>
+> **That self-contradiction is the match rule** — `refile-service-lines.ts` touches only rows whose packed
+> kind is `others` while their own category segment reads `service`/`tip`. A genuine overtime line carries
+> no category there and can never be caught. Far safer than matching descriptions against the menu, which
+> was the first idea.
+>
+> ⚠️ **MONEY UNTOUCHED:** `quantity`, `amount` and the sales figure inside the ref are never written —
+> only the bucket. Dry-run first (1 row), then applied. Verified after: Havoc now
+> `component=tip_commission ref=tips|manual|2000.00|ORD1111:2|service`, commission still **RM 340.00**,
+> and the four other lines of that day are byte-identical.
+>
+> It also restores the check-out gate: a Havoc-only tips scan now counts as a tips action.
+
 > **4 Aug 2026 — A BAR SERVICE WAS BEING LOGGED AS AN OVERTIME CLAIM.**
 >
 > Owner: *"why put the havoc under the other? In the outlet workspace I no put like this"* / *"seperate
