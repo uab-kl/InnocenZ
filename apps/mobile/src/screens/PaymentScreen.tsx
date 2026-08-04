@@ -693,6 +693,20 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>THIS WEEK</Text>
+                {/*
+                  * The voucher-level fact, stated once.
+                  *
+                  * A dispute moves `payment_voucher.status` to 'disputed' for the
+                  * WHOLE voucher, and that used to be invisible here — the week
+                  * simply went blank, because the reader could not find a
+                  * non-`pending_review` voucher at all. It reads correctly now,
+                  * so the state it is in has to be legible: an open claim on a
+                  * week the PR is still working is not an error, and saying so
+                  * beats a silently normal-looking grid.
+                  */}
+                {current?.status === 'disputed' && (
+                  <Text style={styles.disputePill}>DISPUTED</Text>
+                )}
                 <Text style={styles.sectionFrac}>{thisApprovedDays}/7</Text>
               </View>
               <Text style={styles.sectionAction}>
@@ -800,23 +814,40 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <View style={styles.gridRow}>
                     <Text style={styles.gridLabel}>Status</Text>
                     {thisGrid.map((d) => {
+                      /*
+                       * Marked from the DAY's own claims, not the voucher flag.
+                       *
+                       * Last week paints every day DISPUTED off
+                       * `payment_voucher.status`, which is a voucher-grain
+                       * summary. Doing that here would brand all seven days
+                       * over one contested drinks cell — on the week the PR is
+                       * still working. `disputedKeys` holds the cells actually
+                       * claimed, so only those say so; the card header carries
+                       * the voucher-level fact.
+                       */
+                      const dayDisputed = INCOME_ROWS.some((r) =>
+                        disputedKeys.has(`${d.dateIso}-${r.key}`),
+                      );
                       // APPROVED is the state this week actually reaches: the
                       // agency signs a day off mid-week, and VERIFIED only
                       // arrives with the Monday rollover after the PV is sent.
                       const label =
                         d.status === 'empty'
                           ? '—'
-                          : d.status === 'pending'
-                            ? 'PENDING'
-                            : d.status === 'approved'
-                              ? 'APPROVED'
-                              : 'VERIFIED';
+                          : dayDisputed
+                            ? 'DISPUTED'
+                            : d.status === 'pending'
+                              ? 'PENDING'
+                              : d.status === 'approved'
+                                ? 'APPROVED'
+                                : 'VERIFIED';
                       return (
                         <View key={`st-${d.dateIso}`} style={styles.gridCol}>
                           <Text
                             style={[
                               styles.statusPill,
                               d.status === 'pending' && styles.statusPillPending,
+                              dayDisputed && styles.statusPillDisputed,
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
                           >
@@ -1184,6 +1215,20 @@ const styles = StyleSheet.create({
   },
   statusPillPending: { color: C.amber },
   statusPillDisputed: { color: C.red },
+  /** Voucher-level DISPUTED chip in the This-week card header. */
+  disputePill: {
+    fontFamily: F.sora,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    color: C.red,
+    backgroundColor: C.redBg,
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.35)',
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
+  },
   disputeHint: {
     marginTop: 10,
     fontFamily: F.manrope,

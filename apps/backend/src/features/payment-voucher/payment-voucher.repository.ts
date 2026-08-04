@@ -436,6 +436,35 @@ export class PaymentVoucherRepositoryClass {
   // idempotent). Each self-log / wages seal is a single line on it.
 
   /** The PR's current-week draft voucher (pending_review) with its lines, or null. */
+  /**
+   * Statuses that mean "this week is still OPEN" — the PR is working it and it
+   * has not left their hands.
+   *
+   * `disputed` belongs here, and leaving it out did real damage. Raising a
+   * dispute moves the VOUCHER to `disputed`, so this lookup stopped finding it
+   * and two things broke at once on 4 Aug 2026:
+   *
+   *   1. `getMyCurrentWeek` returned no voucher and the PR's whole Payment week
+   *      went blank — RM 0.00, 0/7, every cell a dash — over a RM 7.21 claim.
+   *      Nothing had been deleted: 12 lines totalling RM 3,708.21 sat in the
+   *      table, simply unreachable.
+   *   2. Worse and quieter: `getOrCreateCurrentWeekDraft` falls back to
+   *      `getWeekVoucher` when this returns null, finds the disputed voucher and
+   *      REFUSES the write — so a PR who disputed on Tuesday could not log a
+   *      receipt for the rest of the week.
+   *
+   * A dispute is about one DAY and one COMPONENT. It is an open question on part
+   * of a week, never a statement that the week has closed — the PR keeps working
+   * and keeps scanning while the argument is settled.
+   *
+   * `sent`, `signed` and `paid` stay OUT: those have left the PR's hands, and
+   * appending to them would silently change a document already handed over.
+   */
+  private static readonly OPEN_WEEK_STATUSES: PaymentVoucherStatus[] = [
+    'pending_review',
+    'disputed',
+  ];
+
   async getCurrentWeekDraft(prId: string, weekStart: string): Promise<PaymentVoucherWithLines | null> {
     try {
       const [voucher] = await db
@@ -445,7 +474,10 @@ export class PaymentVoucherRepositoryClass {
           and(
             eq(PaymentVoucherTable.prId, prId),
             eq(PaymentVoucherTable.weekStart, weekStart),
-            eq(PaymentVoucherTable.status, 'pending_review'),
+            inArray(
+              PaymentVoucherTable.status,
+              PaymentVoucherRepositoryClass.OPEN_WEEK_STATUSES,
+            ),
           ),
         )
         .limit(1);
@@ -647,8 +679,9 @@ export class PaymentVoucherRepositoryClass {
    * Finds the PR's current-week draft voucher, creating an empty one if absent.
    *
    * ⚠️ THIS IS WHERE THE DOUBLE VOUCHER CAME FROM. `getCurrentWeekDraft` filters
-   * `status = 'pending_review'`, so once a week's voucher had been SENT, the next
-   * self-log found nothing and cheerfully created a SECOND voucher for the very
+   * on OPEN_WEEK_STATUSES (`pending_review`, `disputed`), so once a week's
+   * voucher had been SENT, the next self-log found nothing and created a SECOND
+   * voucher for the very
    * same PR and week. That is exactly how Victoria ended up with `PV-000002`
    * (sent, RM1,581.48) and `PV-000004` (pending_review, RM703.60) — the same
    * seven days billed twice, the wrong one already in the PR's hands.
@@ -930,6 +963,90 @@ export class PaymentVoucherRepositoryClass {
       return row ?? null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.setReceiptStatus] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The agency correcting a receipt's OWN facts — its order number, its date —
+   * and, when the date moves, the lines whose money that date is.
+   *
+   * ONE TRANSACTION, and that is the whole point of the method existing rather
+   * than two calls. `payment_voucher_day_review.approved_total_cents` is compared
+   * against a day's live line total on every read, so a receipt that landed on
+   * the new date while its lines were still on the old one is money the day
+   * review can no longer describe. Half of this write is worse than none of it.
+   *
+   * Both the old and the new day are LEFT to go stale: their totals change, and
+   * that is precisely what must force a re-approval before the voucher can be
+   * sent.
+   */
+  async updateReceiptHeader(
+    receiptId: string,
+    patch: { orderNo?: string | null; receiptDate?: string; receiptTime?: string | null },
+    actor: string,
+  ): Promise<{ receipt: PaymentVoucherReceiptType; movedLines: number } | null> {
+    try {
+      return await db.transaction(async (tx) => {
+        const [receipt] = await tx
+          .update(PaymentVoucherReceiptTable)
+          .set({ ...patch, updatedAt: new Date(), updatedBy: actor })
+          .where(eq(PaymentVoucherReceiptTable.id, receiptId))
+          .returning();
+        if (!receipt) return null;
+        if (patch.receiptDate === undefined) return { receipt, movedLines: 0 };
+
+        const moved = await tx
+          .update(PaymentVoucherLineTable)
+          .set({ lineDate: patch.receiptDate, updatedAt: new Date(), updatedBy: actor })
+          .where(eq(PaymentVoucherLineTable.receiptId, receiptId))
+          .returning({ id: PaymentVoucherLineTable.id });
+        return { receipt, movedLines: moved.length };
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.updateReceiptHeader] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * PENDING -> APPROVED for the receipts an approved DAY already attests to.
+   *
+   * One statement rather than a loop over `setReceiptStatus`, because a day
+   * approval is one decision: approving four of a day's five receipts and then
+   * failing would leave the agency's sign-off half-recorded, with no screen
+   * showing which half.
+   *
+   * `status = 'pending'` is re-asserted in the WHERE even though the caller
+   * already filtered on it — the read and the write are not in one transaction,
+   * and this is what stops a receipt approved (or verified) in between from
+   * having its `reviewed_by` overwritten by a sweep that never looked at it.
+   */
+  async approvePendingReceipts(
+    receiptIds: string[],
+    actor: string,
+  ): Promise<PaymentVoucherReceiptType[]> {
+    if (receiptIds.length === 0) return [];
+    try {
+      const now = new Date();
+      return await db
+        .update(PaymentVoucherReceiptTable)
+        .set({
+          status: 'approved',
+          reviewedAt: now,
+          reviewedBy: actor,
+          updatedAt: now,
+          updatedBy: actor,
+        })
+        .where(
+          and(
+            inArray(PaymentVoucherReceiptTable.id, receiptIds),
+            eq(PaymentVoucherReceiptTable.status, 'pending'),
+          ),
+        )
+        .returning();
+    } catch (error) {
+      logger.error('[PaymentVoucherRepository.approvePendingReceipts] Error:', error);
       throw error;
     }
   }

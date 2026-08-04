@@ -325,6 +325,15 @@ typechecks — backend past the TS2883 baseline, `apps/web` on every touched fil
   DDL" for the whole batch.
 - [ ] Untracked alongside them: `AgencyReceiptEditor.tsx`, `use-agency-receipt-edit.ts`,
   `use-receipt-catalogue.ts`, `write-failure-message.ts`, `src/scripts/repair-day-approved-receipts.ts`.
+- [ ] **`DisputeQueuePanel.tsx` (the receipt editor inside the dispute queue) rides with this slice.**
+  It is MY change but it `import`s the untracked `AgencyReceiptEditor.tsx`, so committing it alone would
+  produce a commit that does not build. It must land in the same commit as the editor. `tsc` clean on
+  the file, biome-formatted; its §10 row is already written.
+- [ ] ⚠️ **PROCESS NOTE — do not commit `TEST_SCRIPT.md` wholesale while it carries rows for
+  uncommitted code.** Twice today a doc row landed in a commit for an unrelated slice (`927ec8a`,
+  `afa8dd1`) while the code it described stayed in the working tree, which is exactly the doc/code split
+  the doc-roles rule exists to prevent. When a row describes work that is not being committed, leave
+  `TEST_SCRIPT.md` dirty so it lands WITH that work.
 
 
 ### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
@@ -893,6 +902,41 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — 🔴 DISPUTING ONE CELL BLANKED THE WHOLE WEEK (and silently froze logging).**
+>
+> Owner: *"im just dispute for that drinks then all gone ? can mark the status to disputed and remain
+> back the missings ?"* — after raising a RM 7.21 drinks claim, This week read **RM 0.00, 0/7, every
+> cell a dash**.
+>
+> **NOTHING WAS LOST.** The live DB still held `PV-000006` with **12 lines totalling RM 3,708.21**, plus
+> the dispute row (4 Aug · drinks · RM 7.21 · open). The money was unreachable, not deleted.
+>
+> **Cause:** raising a dispute moves the VOUCHER to `status = 'disputed'`, and
+> `getCurrentWeekDraft` matched `eq(status, 'pending_review')` — one status, exact match. The disputed
+> voucher stopped existing as far as `getMyCurrentWeek` was concerned.
+>
+> **The second failure was worse and would have been found later.** `getOrCreateCurrentWeekDraft` calls
+> the same reader, and when it returns null falls back to `getWeekVoucher`, finds the disputed voucher
+> and REFUSES the write: *"has already been disputed and can no longer be added to."* So a PR who
+> disputed RM 7.21 on Tuesday **could not log another receipt for the rest of the week** — the dispute
+> would have quietly cost them far more than it could ever recover.
+>
+> **Fix:** `OPEN_WEEK_STATUSES = ['pending_review', 'disputed']`. A dispute is an open question about one
+> DAY and one COMPONENT; it is not a statement that the week has closed. `sent` / `signed` / `paid` stay
+> out — those have left the PR's hands and appending would rewrite a document already handed over.
+>
+> Verified against the live disputed voucher: the reader returns `PV-000006 · 12 lines · RM 3,708.21`, a
+> receipt write still targets `PV-000006`, and the week still holds exactly **1** voucher — no duplicate,
+> which is the failure the surrounding doc-comment was written about.
+>
+> **Also, the status is now legible.** A `DISPUTED` chip sits in the This-week card header (the
+> voucher-grain fact), and the Status row marks the disputed DAY. Deliberately not last week's
+> behaviour, which paints all seven days off the voucher flag — branding a whole week the PR is still
+> working, over one contested cell, would be its own kind of wrong.
+>
+> `tsc` clean both sides; 30 `check-cell-evidence.ts` checks pass. No migration. **Backend restart
+> required.**
 
 > **4 Aug 2026 — THIS WEEK IS DISPUTABLE TOO (the button was hidden by the wrong test).**
 >
