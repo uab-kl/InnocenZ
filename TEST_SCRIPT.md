@@ -696,6 +696,27 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — REMOVE THE RECEIPT, NOT ONE ITEM OFF IT (and the uncaught `RCP-…` toast).**
+>
+> Owner: *"Makes the scan I also can remove and scan again"* and *"if user need remove that picture that
+> related scanned receipt also will be remove it together"*.
+>
+> **The backend was already right:** `deleteMyLine` deletes the RECEIPT once its last line goes
+> (controller ~1653), which is exactly what frees the order number to be scanned again. The phone was
+> deleting ONE line per tap — so a three-item tips receipt needed three deletes, and any re-scan in the
+> gap was refused with *"ORD1111 is already logged on this shift (RCP-…)"*. That refusal escaped as
+> **"Uncaught (in promise, id: 1)"** in a red system toast, because nothing caught it.
+>
+> **Now the paper is the unit.** The row’s trash removes every line sharing that `receiptNo`, letting the
+> backend’s cleanup fire on the last one; a bare self-log with no receipt still deletes alone. The refusal
+> is caught and shown in the gallery — an agency-reviewed receipt genuinely cannot be pulled, and that is
+> worth reading rather than crashing past.
+>
+> **Removing the PICTURE now removes its receipt too.** The photo IS the receipt’s proof: stripping it
+> would leave the items standing with nothing behind them, and check-out refuses picture-less rows anyway
+> — the PR would be stuck holding money they cannot prove. The gallery caption says so outright: *"✕
+> removes the receipt and everything logged from it"*.
+
 > **4 Aug 2026 — the same one-picture rule applied to the Scanned receipts card.**
 >
 > Owner: *"for all of the receipt also like this makes"*. `collectReceiptPhotoGroups` counted a photo per
