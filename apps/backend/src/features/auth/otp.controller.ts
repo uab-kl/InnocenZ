@@ -8,16 +8,23 @@ import {
   normalizePhoneDigits,
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
+import {
+  phoneVerificationPurposeValues,
+  type PhoneVerificationPurpose,
+} from './phone-verification.model.js';
 import { sendWhatsAppOtp, whatsappSendConfigured } from '@/features/whatsapp/whatsapp-client.js';
+import { UserRepositoryClass } from '@/features/user/user.repository.js';
 
 const SendSchema = z.object({
   phoneNum: z.string().min(8, 'Phone number is required'),
   channel: z.enum(['whatsapp']).optional().default('whatsapp'),
+  purpose: z.enum(phoneVerificationPurposeValues).optional().default('signup'),
 });
 
 const VerifySchema = z.object({
   phoneNum: z.string().min(8, 'Phone number is required'),
   code: z.string().regex(/^\d{6}$/, 'Enter the 6-digit code'),
+  purpose: z.enum(phoneVerificationPurposeValues).optional().default('signup'),
 });
 
 const EXPIRES_IN_SEC = 5 * 60;
@@ -25,7 +32,10 @@ const RESEND_AFTER_SEC = 60;
 const MAX_VERIFY_ATTEMPTS = 5;
 
 export class OtpControllerClass {
-  constructor(private phoneVerificationRepository: PhoneVerificationRepositoryClass) {}
+  constructor(
+    private phoneVerificationRepository: PhoneVerificationRepositoryClass,
+    private userRepository: UserRepositoryClass,
+  ) {}
 
   async send(req: Request, res: Response) {
     try {
@@ -39,6 +49,7 @@ export class OtpControllerClass {
       }
 
       const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
+      const purpose: PhoneVerificationPurpose = parsed.data.purpose;
       if (phoneNum.length < 8) {
         return res.status(400).json({
           success: false,
@@ -47,7 +58,50 @@ export class OtpControllerClass {
         });
       }
 
-      const existing = await this.phoneVerificationRepository.findActivePending(phoneNum);
+      if (purpose === 'forgot_password') {
+        const user = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
+        if (!user || user.status.toLowerCase() !== 'active') {
+          // Same shape as a real send so callers cannot probe accounts cheaply,
+          // but no WhatsApp message goes out.
+          return res.status(200).json({
+            success: true,
+            message: 'If that number is registered, a code was sent on WhatsApp.',
+            data: { expiresInSec: EXPIRES_IN_SEC, resendAfterSec: RESEND_AFTER_SEC },
+          });
+        }
+      }
+
+      if (purpose === 'change_phone') {
+        const actor = req.user;
+        if (!actor) {
+          return res.status(401).json({
+            success: false,
+            message: 'Sign in required to change phone number',
+            data: null,
+          });
+        }
+        const currentDigits = normalizePhoneDigits(actor.phoneNum ?? '');
+        if (currentDigits && currentDigits === phoneNum) {
+          return res.status(400).json({
+            success: false,
+            message: 'That is already your phone number',
+            data: null,
+          });
+        }
+        const taken = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
+        if (taken && taken.id !== actor.id) {
+          return res.status(409).json({
+            success: false,
+            message: 'That phone number is already in use',
+            data: null,
+          });
+        }
+      }
+
+      const existing = await this.phoneVerificationRepository.findActivePending(
+        phoneNum,
+        purpose,
+      );
       if (existing) {
         const ageSec = (Date.now() - existing.createdAt.getTime()) / 1000;
         if (ageSec < RESEND_AFTER_SEC) {
@@ -61,13 +115,14 @@ export class OtpControllerClass {
       }
 
       const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-      const actor = phoneNum;
-      await this.phoneVerificationRepository.expirePendingForPhone(phoneNum, actor);
+      const actor = req.user?.id ?? phoneNum;
+      await this.phoneVerificationRepository.expirePendingForPhone(phoneNum, purpose, actor);
 
       const row = await this.phoneVerificationRepository.create({
         phoneNum,
         codeHash: hashOtpCode(code),
         channel: 'whatsapp',
+        purpose,
         status: 'pending',
         attempts: 0,
         expiresAt: new Date(Date.now() + EXPIRES_IN_SEC * 1000),
@@ -86,8 +141,6 @@ export class OtpControllerClass {
       }
 
       if (!whatsappSendConfigured()) {
-        // Dev escape hatch: log the code so mobile sign-up can be exercised
-        // before Meta phone-number-id is wired. Never enable this in production.
         if (process.env.NODE_ENV === 'production') {
           await this.phoneVerificationRepository.update(row.id, {
             status: 'expired',
@@ -101,10 +154,11 @@ export class OtpControllerClass {
         }
         logger.warn('[OtpController.send] WhatsApp not configured — OTP logged for local dev only', {
           phoneNum,
+          purpose,
           code,
         });
       } else {
-        const sent = await sendWhatsAppOtp(phoneNum, code);
+        const sent = await sendWhatsAppOtp(phoneNum, code, purpose);
         if (!sent.ok) {
           await this.phoneVerificationRepository.update(row.id, {
             status: 'expired',
@@ -151,7 +205,8 @@ export class OtpControllerClass {
       }
 
       const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
-      const row = await this.phoneVerificationRepository.findActivePending(phoneNum);
+      const purpose: PhoneVerificationPurpose = parsed.data.purpose;
+      const row = await this.phoneVerificationRepository.findActivePending(phoneNum, purpose);
       if (!row) {
         return res.status(400).json({
           success: false,

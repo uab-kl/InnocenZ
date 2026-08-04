@@ -74,7 +74,7 @@ export const roleRepository = new RoleRepositoryClass();
 // TOTP enrolments. Declared above authController, which challenges at login.
 export const adminMfaRepository = new AdminMfaRepositoryClass();
 export const phoneVerificationRepository = new PhoneVerificationRepositoryClass();
-export const otpController = new OtpControllerClass(phoneVerificationRepository);
+export const otpController = new OtpControllerClass(phoneVerificationRepository, userRepository);
 // Declared before authController — PR register writes agency_pr by user_id.
 export const agencyPrRepository = new AgencyPrRepository();
 export const authController = new AuthControllerClass(

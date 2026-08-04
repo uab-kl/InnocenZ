@@ -30,13 +30,35 @@ router.get('/agencies', async (_req, res) => {
   }
 });
 
-/** PR phone verification via WhatsApp — public (no account yet). */
-router.post('/otp/send', otpController.send.bind(otpController));
+/**
+ * WhatsApp OTP send/verify. purpose=signup|forgot_password are public;
+ * purpose=change_phone requires a JWT (optionalAuthenticateJWT + controller check).
+ */
+router.post(
+  '/otp/send',
+  optionalAuthenticateJWT,
+  otpController.send.bind(otpController),
+);
 router.post('/otp/verify', otpController.verify.bind(otpController));
 
 router.post('/forgot-password', authController.forgotPassword.bind(authController));
 router.post('/reset-password', authController.resetPassword.bind(authController));
+/** PR mobile: reset password with WhatsApp OTP receipt (purpose=forgot_password). */
+router.post(
+  '/password/reset-otp',
+  authController.resetPasswordWithOtp.bind(authController),
+);
 router.get('/me', authenticateJWT, authController.me.bind(authController));
+router.post(
+  '/password/change',
+  authenticateJWT,
+  authController.changePassword.bind(authController),
+);
+router.post(
+  '/phone/change',
+  authenticateJWT,
+  authController.changePhoneWithOtp.bind(authController),
+);
 
 // TOTP enrolment. Both require a signed-in caller and act only on THEIR OWN
 // account — there is no user id in either route, so one user cannot enrol or

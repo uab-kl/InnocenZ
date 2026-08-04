@@ -1,22 +1,41 @@
 import { logger } from '@/util/logger.js';
+import type { PhoneVerificationPurpose } from '@/features/auth/phone-verification.model.js';
 
 /**
  * WhatsApp Cloud API (Meta Graph) — send OTP for PR phone verification.
  *
+ * Expected template body (one template for all purposes), e.g.:
+ *   OTP Code: {{1}}. This is your OTP code for {{2}}. For your security, do not share this code.
+ * where {{1}} = 6-digit code, {{2}} = purpose label (Login / Password reset / Change phone).
+ *
  * Env:
- *   META_WHATSAPP_TOKEN            — permanent / system-user access token
- *   META_WHATSAPP_PHONE_NUMBER_ID  — phone number id from Meta app dashboard
- *   META_WHATSAPP_API_VERSION      — default v21.0
- *   META_WHATSAPP_OTP_TEMPLATE     — optional approved auth template name
- *                                    (e.g. login_code); if unset, sends plain
- *                                    text (allow-listed numbers / unpublished app)
- *   META_WHATSAPP_OTP_TEMPLATE_LANG — template language code (e.g. en_US for
- *                                    English US). Must match Meta exactly.
+ *   META_WHATSAPP_TOKEN
+ *   META_WHATSAPP_PHONE_NUMBER_ID
+ *   META_WHATSAPP_API_VERSION              — default v21.0
+ *   META_WHATSAPP_OTP_TEMPLATE             — approved template name
+ *   META_WHATSAPP_OTP_TEMPLATE_LANG        — e.g. en / en_US (must match Meta)
+ *   META_WHATSAPP_OTP_HAS_BUTTON           — "true" (default) sends Copy-code button param;
+ *                                           set "false" if the template has no button
+ *
+ * Optional per-purpose template names still fall back to META_WHATSAPP_OTP_TEMPLATE.
  */
 
 export type WhatsAppSendResult =
   | { ok: true; messageId: string }
   | { ok: false; error: string };
+
+/** Human label for template {{2}} — matches app purpose. */
+export function otpPurposeLabel(purpose: PhoneVerificationPurpose): string {
+  switch (purpose) {
+    case 'forgot_password':
+      return 'Password reset';
+    case 'change_phone':
+      return 'Change phone';
+    case 'signup':
+    default:
+      return 'Login';
+  }
+}
 
 function graphBase(): string {
   const version = process.env.META_WHATSAPP_API_VERSION?.trim() || 'v21.0';
@@ -30,10 +49,32 @@ export function whatsappSendConfigured(): boolean {
   );
 }
 
+export function resolveOtpTemplateName(
+  purpose: PhoneVerificationPurpose = 'signup',
+): string | undefined {
+  const byPurpose: Record<PhoneVerificationPurpose, string | undefined> = {
+    signup: process.env.META_WHATSAPP_OTP_TEMPLATE_SIGNUP?.trim(),
+    forgot_password: process.env.META_WHATSAPP_OTP_TEMPLATE_FORGOT_PASSWORD?.trim(),
+    change_phone: process.env.META_WHATSAPP_OTP_TEMPLATE_CHANGE_PHONE?.trim(),
+  };
+  return byPurpose[purpose] || process.env.META_WHATSAPP_OTP_TEMPLATE?.trim() || undefined;
+}
+
+function templateLanguage(): string {
+  return process.env.META_WHATSAPP_OTP_TEMPLATE_LANG?.trim() || 'en_US';
+}
+
+function templateHasButton(): boolean {
+  const raw = process.env.META_WHATSAPP_OTP_HAS_BUTTON?.trim().toLowerCase();
+  if (raw === 'false' || raw === '0' || raw === 'no') return false;
+  return true;
+}
+
 /** E.164 without '+' — Meta's `to` field wants digits only. */
 export async function sendWhatsAppOtp(
   phoneDigits: string,
   code: string,
+  purpose: PhoneVerificationPurpose = 'signup',
 ): Promise<WhatsAppSendResult> {
   const token = process.env.META_WHATSAPP_TOKEN?.trim();
   const phoneNumberId = process.env.META_WHATSAPP_PHONE_NUMBER_ID?.trim();
@@ -46,7 +87,30 @@ export async function sendWhatsAppOtp(
     return { ok: false, error: 'Invalid phone number' };
   }
 
-  const template = process.env.META_WHATSAPP_OTP_TEMPLATE?.trim();
+  // Always 6 digits for the app + Meta variable {{1}}.
+  const otp = code.replace(/\D/g, '').padStart(6, '0').slice(-6);
+  const purposeText = otpPurposeLabel(purpose);
+
+  const template = resolveOtpTemplateName(purpose);
+  const lang = templateLanguage();
+  const components: Array<Record<string, unknown>> = [
+    {
+      type: 'body',
+      parameters: [
+        { type: 'text', text: otp },
+        { type: 'text', text: purposeText },
+      ],
+    },
+  ];
+  if (templateHasButton()) {
+    components.push({
+      type: 'button',
+      sub_type: 'url',
+      index: '0',
+      parameters: [{ type: 'text', text: otp }],
+    });
+  }
+
   const body = template
     ? {
         messaging_product: 'whatsapp',
@@ -54,21 +118,8 @@ export async function sendWhatsAppOtp(
         type: 'template',
         template: {
           name: template,
-          language: {
-            code: process.env.META_WHATSAPP_OTP_TEMPLATE_LANG?.trim() || 'en_US',
-          },
-          components: [
-            {
-              type: 'body',
-              parameters: [{ type: 'text', text: code }],
-            },
-            {
-              type: 'button',
-              sub_type: 'url',
-              index: '0',
-              parameters: [{ type: 'text', text: code }],
-            },
-          ],
+          language: { code: lang },
+          components,
         },
       }
     : {
@@ -77,7 +128,7 @@ export async function sendWhatsAppOtp(
         type: 'text',
         text: {
           preview_url: false,
-          body: `InnocenZ verification code: ${code}\n\nValid for 5 minutes. Do not share this code.`,
+          body: `OTP Code: ${otp}. This is your OTP code for ${purposeText}. For your security, do not share this code.`,
         },
       };
 
@@ -101,10 +152,10 @@ export async function sendWhatsAppOtp(
         status: res.status,
         message,
         phoneNumberId,
+        purpose,
+        purposeText,
         template: template || '(plain text)',
-        lang: template
-          ? process.env.META_WHATSAPP_OTP_TEMPLATE_LANG?.trim() || 'en_US'
-          : undefined,
+        lang: template ? lang : undefined,
       });
       return { ok: false, error: message };
     }

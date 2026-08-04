@@ -5,6 +5,7 @@ import { logger } from '@/util/logger.js';
 import {
   NewPhoneVerification,
   PhoneVerification,
+  PhoneVerificationPurpose,
   PhoneVerificationTable,
 } from './phone-verification.model.js';
 
@@ -24,6 +25,20 @@ export function codesMatch(code: string, codeHash: string): boolean {
   return crypto.timingSafeEqual(a, b);
 }
 
+/** Verified receipt still usable for ~30 min after its OTP window (matches signup). */
+export function isVerifiedOtpUsable(
+  proof: PhoneVerification | null | undefined,
+  phoneNum: string,
+  purpose: PhoneVerificationPurpose,
+): proof is PhoneVerification {
+  if (!proof) return false;
+  if (proof.status !== 'verified') return false;
+  if (proof.purpose !== purpose) return false;
+  if (proof.phoneNum !== phoneNum) return false;
+  const graceMs = 30 * 60_000;
+  return !proof.expiresAt || proof.expiresAt.getTime() > Date.now() - graceMs;
+}
+
 export class PhoneVerificationRepositoryClass {
   async create(
     data: Omit<NewPhoneVerification, 'id' | 'createdAt' | 'updatedAt'>,
@@ -37,8 +52,11 @@ export class PhoneVerificationRepositoryClass {
     }
   }
 
-  /** Newest still-pending, unexpired challenge for this phone. */
-  async findActivePending(phoneNum: string): Promise<PhoneVerification | null> {
+  /** Newest still-pending, unexpired challenge for this phone + purpose. */
+  async findActivePending(
+    phoneNum: string,
+    purpose: PhoneVerificationPurpose,
+  ): Promise<PhoneVerification | null> {
     try {
       const [row] = await db
         .select()
@@ -46,6 +64,7 @@ export class PhoneVerificationRepositoryClass {
         .where(
           and(
             eq(PhoneVerificationTable.phoneNum, phoneNum),
+            eq(PhoneVerificationTable.purpose, purpose),
             eq(PhoneVerificationTable.status, 'pending'),
             gt(PhoneVerificationTable.expiresAt, new Date()),
           ),
@@ -90,8 +109,12 @@ export class PhoneVerificationRepositoryClass {
     }
   }
 
-  /** Expire any other pending rows for this phone when a fresh code is issued. */
-  async expirePendingForPhone(phoneNum: string, actor: string): Promise<void> {
+  /** Expire other pending rows for this phone + purpose when a fresh code is issued. */
+  async expirePendingForPhone(
+    phoneNum: string,
+    purpose: PhoneVerificationPurpose,
+    actor: string,
+  ): Promise<void> {
     try {
       await db
         .update(PhoneVerificationTable)
@@ -103,6 +126,7 @@ export class PhoneVerificationRepositoryClass {
         .where(
           and(
             eq(PhoneVerificationTable.phoneNum, phoneNum),
+            eq(PhoneVerificationTable.purpose, purpose),
             eq(PhoneVerificationTable.status, 'pending'),
           ),
         );

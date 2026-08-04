@@ -145,20 +145,71 @@ export function fetchPublicAgencies(): Promise<PublicAgency[]> {
 /** Seconds the code stays valid, and how long before Resend is allowed. */
 export type OtpSendResult = { expiresInSec: number; resendAfterSec: number };
 
-/** Receipt proving this number passed — handed back to registerPr. */
+/** Receipt proving this number passed — handed back to register / reset / change-phone. */
 export type OtpVerifyResult = { verificationId: string };
 
-export function sendPrOtp(phoneNum: string): Promise<OtpSendResult> {
+export type OtpPurpose = 'signup' | 'forgot_password' | 'change_phone';
+
+export function sendPrOtp(
+  phoneNum: string,
+  purpose: OtpPurpose = 'signup',
+  accessToken?: string | null,
+): Promise<OtpSendResult> {
+  const headers: Record<string, string> = {};
+  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
   return request<OtpSendResult>('/auth/otp/send', {
     method: 'POST',
-    body: JSON.stringify({ phoneNum, channel: 'whatsapp' }),
+    headers,
+    body: JSON.stringify({ phoneNum, channel: 'whatsapp', purpose }),
   });
 }
 
-export function verifyPrOtp(phoneNum: string, code: string): Promise<OtpVerifyResult> {
+export function verifyPrOtp(
+  phoneNum: string,
+  code: string,
+  purpose: OtpPurpose = 'signup',
+): Promise<OtpVerifyResult> {
   return request<OtpVerifyResult>('/auth/otp/verify', {
     method: 'POST',
-    body: JSON.stringify({ phoneNum, code }),
+    body: JSON.stringify({ phoneNum, code, purpose }),
+  });
+}
+
+/** Forgot password — consume WhatsApp OTP receipt (purpose=forgot_password). */
+export function resetPasswordWithOtp(
+  phoneNum: string,
+  verificationId: string,
+  password: string,
+): Promise<null> {
+  return request<null>('/auth/password/reset-otp', {
+    method: 'POST',
+    body: JSON.stringify({ phoneNum, verificationId, password }),
+  });
+}
+
+/** Signed-in password change (current password — no OTP). */
+export function changePassword(
+  accessToken: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<null> {
+  return request<null>('/auth/password/change', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+/** Signed-in phone change — OTP on the new number (purpose=change_phone). */
+export function changePhoneWithOtp(
+  accessToken: string,
+  phoneNum: string,
+  verificationId: string,
+): Promise<Me> {
+  return request<Me>('/auth/phone/change', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ phoneNum, verificationId }),
   });
 }
 

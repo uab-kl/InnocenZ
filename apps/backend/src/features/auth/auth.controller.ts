@@ -5,7 +5,15 @@ import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { Error } from '@/error/index.js';
 import { hashPassword, comparePassword } from '@/util/password.js';
 import { logger } from '@/util/logger.js';
-import { LoginSchema, RegisterSchema, ForgotPasswordSchema, ResetPasswordSchema } from '@/schema/auth.schema.js';
+import {
+  LoginSchema,
+  RegisterSchema,
+  ForgotPasswordSchema,
+  ResetPasswordSchema,
+  ResetPasswordWithOtpSchema,
+  ChangePasswordSchema,
+  ChangePhoneWithOtpSchema,
+} from '@/schema/auth.schema.js';
 import { UserRepositoryClass as UserRepository } from '@/features/user/user.repository.js';
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository.js';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
@@ -21,6 +29,7 @@ import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.reposito
 import { generateSecret, otpauthUri, verifyTotp } from '@/util/totp.js';
 import { suspendedOrgBlock } from '@/features/auth/org-status.js';
 import {
+  isVerifiedOtpUsable,
   normalizePhoneDigits,
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
@@ -412,12 +421,7 @@ export class AuthControllerClass {
           parsedBody.verificationId,
         );
         const phoneDigits = normalizePhoneDigits(parsedBody.phoneNum);
-        const proofOk =
-          proof &&
-          proof.status === 'verified' &&
-          proof.phoneNum === phoneDigits &&
-          (!proof.expiresAt || proof.expiresAt.getTime() > Date.now() - 30 * 60_000);
-        if (!proofOk) {
+        if (!isVerifiedOtpUsable(proof, phoneDigits, 'signup')) {
           return res.status(400).json({
             success: false,
             message: 'Phone verification is missing or expired — verify again',
@@ -722,6 +726,198 @@ export class AuthControllerClass {
       });
     } catch (error) {
       logger.error('[AuthController.resetPassword] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * PR forgot-password via WhatsApp OTP. Consumes a verified
+   * purpose=forgot_password receipt from POST /auth/otp/verify.
+   */
+  async resetPasswordWithOtp(req: Request, res: Response) {
+    try {
+      const parsed = ResetPasswordWithOtpSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message ?? 'Validation failed',
+          data: null,
+        });
+      }
+
+      const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
+      const proof = await this.phoneVerificationRepository.getById(parsed.data.verificationId);
+      if (!isVerifiedOtpUsable(proof, phoneNum, 'forgot_password')) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone verification is missing or expired — verify again',
+          data: null,
+        });
+      }
+
+      const user = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
+      if (!user || user.status.toLowerCase() !== 'active') {
+        return res.status(400).json({
+          success: false,
+          message: 'No active account for this number',
+          data: null,
+        });
+      }
+
+      const passwordHash = await hashPassword(parsed.data.password);
+      await this.authRepository.updateUserPassword(user.id, passwordHash);
+      await this.phoneVerificationRepository.update(proof.id, {
+        status: 'consumed',
+        updatedBy: user.id,
+      });
+
+      logger.info('[AuthController.resetPasswordWithOtp] Password reset for userId:', user.id);
+      return res.status(200).json({
+        success: true,
+        message: 'Password updated. You can sign in with the new password.',
+        data: null,
+      });
+    } catch (error) {
+      logger.error('[AuthController.resetPasswordWithOtp] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /** Signed-in change password (current password proof — no OTP). */
+  async changePassword(req: Request, res: Response) {
+    try {
+      const actor = req.user;
+      if (!actor) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const parsed = ChangePasswordSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message ?? 'Validation failed',
+          data: null,
+        });
+      }
+
+      const user = await this.userRepository.getUserById(actor.id);
+      if (!user?.passwordHash) {
+        return res.status(400).json({
+          success: false,
+          message: 'This account cannot change password here',
+          data: null,
+        });
+      }
+
+      const ok = await comparePassword(parsed.data.currentPassword, user.passwordHash);
+      if (!ok) {
+        return res.status(401).json({
+          success: false,
+          message: 'Current password is incorrect',
+          data: null,
+        });
+      }
+
+      const passwordHash = await hashPassword(parsed.data.newPassword);
+      await this.authRepository.updateUserPassword(user.id, passwordHash);
+
+      return res.status(200).json({
+        success: true,
+        message: 'Password updated',
+        data: null,
+      });
+    } catch (error) {
+      logger.error('[AuthController.changePassword] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * Signed-in change phone. OTP must have been verified on the NEW number
+   * (purpose=change_phone). Updates user.phone_num — source of truth for login.
+   */
+  async changePhoneWithOtp(req: Request, res: Response) {
+    try {
+      const actor = req.user;
+      if (!actor) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const parsed = ChangePhoneWithOtpSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message ?? 'Validation failed',
+          data: null,
+        });
+      }
+
+      const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
+      const proof = await this.phoneVerificationRepository.getById(parsed.data.verificationId);
+      if (!isVerifiedOtpUsable(proof, phoneNum, 'change_phone')) {
+        return res.status(400).json({
+          success: false,
+          message: 'Phone verification is missing or expired — verify again',
+          data: null,
+        });
+      }
+
+      const currentDigits = normalizePhoneDigits(actor.phoneNum ?? '');
+      if (currentDigits === phoneNum) {
+        return res.status(400).json({
+          success: false,
+          message: 'That is already your phone number',
+          data: null,
+        });
+      }
+
+      const taken = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
+      if (taken && taken.id !== actor.id) {
+        return res.status(409).json({
+          success: false,
+          message: 'That phone number is already in use',
+          data: null,
+        });
+      }
+
+      const storedPhone = `+${phoneNum}`;
+      const updated = await this.userRepository.updateUser(
+        { phoneNum: storedPhone, updatedBy: actor.id },
+        actor.id,
+      );
+      if (!updated) {
+        return res.status(500).json({
+          success: false,
+          message: 'Could not update phone number',
+          data: null,
+        });
+      }
+
+      await this.phoneVerificationRepository.update(proof.id, {
+        status: 'consumed',
+        updatedBy: actor.id,
+      });
+
+      const profile = await this.userProfileRepository.getByUserId(actor.id);
+      return res.status(200).json({
+        success: true,
+        message: 'Phone number updated',
+        data: withUserProfile(updated, profile),
+      });
+    } catch (error) {
+      logger.error('[AuthController.changePhoneWithOtp] Error:', error);
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,

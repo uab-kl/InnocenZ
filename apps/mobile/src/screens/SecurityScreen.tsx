@@ -1,79 +1,140 @@
 /**
- * Security settings — port of InnocenZ-proto `/host/security`
- * (change password / phone / email + OTP + delete account sheets).
+ * Security settings — change password (current password) and change phone
+ * (WhatsApp OTP on the new number).
  */
-import React, { useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { usePrNav } from '../lib/pr-nav';
 import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import {
+  ApiError,
+  changePassword,
+  changePhoneWithOtp,
+  sendPrOtp,
+  verifyPrOtp,
+} from '../lib/api';
+import {
+  loadPhoneCountryCode,
+  localPhoneDigits,
+  phoneLoginIdentifier,
+  savePhoneCountryCode,
+} from '../lib/phone-prefs';
 import { ChevronLeft, Lock, Phone, Shield, Trash2 } from '../components/icons';
+import { COUNTRY_BY_CODE, COUNTRY_DIAL_OPTIONS } from './sign-up/constants';
+import { Picker } from './sign-up/fields';
+import { normalizeOtpInput } from './sign-up/step-6';
 
-type Sheet =
-  | null
-  | 'menu'
-  | 'password'
-  | 'phone'
-  | 'email'
-  | 'otp'
-  | 'delete';
+type Sheet = null | 'menu' | 'password' | 'phone' | 'otp' | 'delete';
 
-type OtpTarget = 'phone' | 'email';
+const DIAL_PICKER_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
+  value: c.countryCode,
+  label: c.label,
+  flag: c.flag,
+  name: c.name,
+  meta: c.dialCode,
+}));
 
 export function SecurityScreen() {
   const { goBack } = usePrNav();
-  // Detail screen outside the tab shell — the back row must clear the status bar.
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
-  const { me, signOut } = useSession();
+  const { me, token, signOut, refreshMe } = useSession();
   const [sheet, setSheet] = useState<Sheet>('menu');
-  const [otpTarget, setOtpTarget] = useState<OtpTarget>('phone');
   const [msg, setMsg] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
 
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
-  const [phone, setPhone] = useState(me?.phoneNum ?? '');
-  const [email, setEmail] = useState(me?.email ?? '');
+
+  const [phoneCountryCode, setPhoneCountryCode] = useState(loadPhoneCountryCode);
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [otp, setOtp] = useState('');
+  const [resendIn, setResendIn] = useState(0);
+
+  const localDigits = useMemo(() => localPhoneDigits(phoneNumber), [phoneNumber]);
+  const country = COUNTRY_BY_CODE[phoneCountryCode];
+  const fullPhone = phoneLoginIdentifier(phoneCountryCode, phoneNumber);
+  const closedDialLabel = country
+    ? `${country.flag ? `${country.flag} ` : ''}${country.dialCode}`
+    : null;
+
+  useEffect(() => {
+    if (resendIn <= 0) return;
+    const t = setTimeout(() => setResendIn((n) => n - 1), 1000);
+    return () => clearTimeout(t);
+  }, [resendIn]);
 
   const closeAll = () => {
     setSheet(null);
     goBack();
   };
 
-  const savePassword = () => {
+  const savePassword = async () => {
+    if (!token || busy) return;
     if (newPw.length < 6) {
-      setMsg('Password must be at least 6 characters');
+      setError('Password must be at least 6 characters');
       return;
     }
     if (newPw !== confirmPw) {
-      setMsg('Passwords do not match');
+      setError('Passwords do not match');
       return;
     }
-    setMsg('Password updated (demo)');
-    setSheet('menu');
-    setCurPw('');
-    setNewPw('');
-    setConfirmPw('');
-  };
-
-  const sendOtp = (target: OtpTarget) => {
-    setOtpTarget(target);
-    setOtp('');
-    setSheet('otp');
-    setMsg(`OTP sent (demo code 123456)`);
-  };
-
-  const verifyOtp = () => {
-    if (otp.trim() !== '123456') {
-      setMsg('Invalid OTP — use 123456 in demo');
-      return;
+    setBusy(true);
+    setError(null);
+    try {
+      await changePassword(token, curPw, newPw);
+      setMsg('Password updated');
+      setSheet('menu');
+      setCurPw('');
+      setNewPw('');
+      setConfirmPw('');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not update password');
+    } finally {
+      setBusy(false);
     }
-    setMsg(otpTarget === 'phone' ? 'Phone updated (demo)' : 'Email updated (demo)');
-    setSheet('menu');
+  };
+
+  const sendPhoneOtp = async () => {
+    if (!token || !localDigits || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      savePhoneCountryCode(phoneCountryCode);
+      const res = await sendPrOtp(fullPhone, 'change_phone', token);
+      setResendIn(res.resendAfterSec ?? 60);
+      setOtp('');
+      setSheet('otp');
+      setMsg(`Code sent on WhatsApp to ${country?.dialCode ?? ''} ${localDigits}`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not send code');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const verifyPhoneOtp = async () => {
+    if (!token || otp.length !== 6 || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const verified = await verifyPrOtp(fullPhone, otp, 'change_phone');
+      await changePhoneWithOtp(token, fullPhone, verified.verificationId);
+      await refreshMe();
+      setMsg('Phone number updated');
+      setSheet('menu');
+      setPhoneNumber('');
+      setOtp('');
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not update phone');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const deleteAccount = () => {
@@ -94,7 +155,8 @@ export function SecurityScreen() {
         <Text style={styles.title}>Security settings</Text>
       </View>
       <Text style={styles.meta}>
-        Change password, phone, or email. Demo OTP is always 123456.
+        Change password with your current one, or change phone via WhatsApp OTP.
+        {me?.phoneNum ? ` Current: ${me.phoneNum}` : ''}
       </Text>
 
       {msg ? <Text style={styles.toast}>{msg}</Text> : null}
@@ -103,7 +165,7 @@ export function SecurityScreen() {
         <Lock size={18} color={C.goldL} />
         <View style={{ flex: 1 }}>
           <Text style={styles.cardTitle}>Open security settings</Text>
-          <Text style={styles.cardSub}>Password · Phone · Email</Text>
+          <Text style={styles.cardSub}>Password · Phone</Text>
         </View>
       </Pressable>
 
@@ -111,11 +173,16 @@ export function SecurityScreen() {
         <Trash2 size={18} color={C.red} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.cardTitle, { color: C.red }]}>Delete account</Text>
-          <Text style={styles.cardSub}>Permanently remove this PR account</Text>
+          <Text style={styles.cardSub}>Sign out of this device (demo delete)</Text>
         </View>
       </Pressable>
 
-      <Modal visible={sheet !== null} transparent animationType="slide" onRequestClose={() => setSheet(null)}>
+      <Modal
+        visible={sheet !== null}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setSheet(null)}
+      >
         <Pressable style={styles.backdrop} onPress={() => setSheet(null)}>
           <Pressable
             style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
@@ -127,17 +194,18 @@ export function SecurityScreen() {
                 <MenuRow
                   icon={Lock}
                   label="Change password"
-                  onPress={() => setSheet('password')}
+                  onPress={() => {
+                    setError(null);
+                    setSheet('password');
+                  }}
                 />
                 <MenuRow
                   icon={Phone}
                   label="Change phone"
-                  onPress={() => setSheet('phone')}
-                />
-                <MenuRow
-                  icon={Lock}
-                  label="Change email"
-                  onPress={() => setSheet('email')}
+                  onPress={() => {
+                    setError(null);
+                    setSheet('phone');
+                  }}
                 />
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet(null)}>
                   <Text style={styles.sheetCancelText}>Close</Text>
@@ -150,12 +218,21 @@ export function SecurityScreen() {
                 <Text style={styles.sheetTitle}>Change password</Text>
                 <Field label="Current password" value={curPw} onChange={setCurPw} secure />
                 <Field label="New password" value={newPw} onChange={setNewPw} secure />
-                <Field label="Confirm new password" value={confirmPw} onChange={setConfirmPw} secure />
+                <Field
+                  label="Confirm new password"
+                  value={confirmPw}
+                  onChange={setConfirmPw}
+                  secure
+                />
+                {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-                  onPress={savePassword}
+                  onPress={() => void savePassword()}
+                  disabled={busy}
                 >
-                  <Text style={styles.primaryText}>Save password</Text>
+                  <Text style={styles.primaryText}>
+                    {busy ? 'Saving…' : 'Save password'}
+                  </Text>
                 </Pressable>
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet('menu')}>
                   <Text style={styles.sheetCancelText}>Back</Text>
@@ -166,28 +243,43 @@ export function SecurityScreen() {
             {sheet === 'phone' && (
               <>
                 <Text style={styles.sheetTitle}>Change phone</Text>
-                <Field label="New phone" value={phone} onChange={setPhone} />
+                <Text style={styles.sheetHint}>
+                  Enter the new number. We will send a WhatsApp code to verify it.
+                </Text>
+                <Text style={styles.fieldLabel}>New mobile number</Text>
+                <View style={styles.phoneRow}>
+                  <Picker
+                    value={phoneCountryCode}
+                    options={DIAL_PICKER_OPTIONS}
+                    onSelect={(code) => {
+                      setPhoneCountryCode(code);
+                      savePhoneCountryCode(code);
+                    }}
+                    width={118}
+                    placeholder="Code"
+                    displayValue={closedDialLabel}
+                    title="Country & dial code"
+                    searchable
+                  />
+                  <TextInput
+                    style={[styles.input, styles.phoneInput]}
+                    value={phoneNumber}
+                    onChangeText={setPhoneNumber}
+                    placeholder="123456789"
+                    placeholderTextColor={C.muted2}
+                    keyboardType="phone-pad"
+                    autoCapitalize="none"
+                  />
+                </View>
+                {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-                  onPress={() => sendOtp('phone')}
+                  onPress={() => void sendPhoneOtp()}
+                  disabled={busy || !localDigits}
                 >
-                  <Text style={styles.primaryText}>Send OTP &amp; update</Text>
-                </Pressable>
-                <Pressable style={styles.sheetCancel} onPress={() => setSheet('menu')}>
-                  <Text style={styles.sheetCancelText}>Back</Text>
-                </Pressable>
-              </>
-            )}
-
-            {sheet === 'email' && (
-              <>
-                <Text style={styles.sheetTitle}>Change email</Text>
-                <Field label="New email" value={email} onChange={setEmail} />
-                <Pressable
-                  style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-                  onPress={() => sendOtp('email')}
-                >
-                  <Text style={styles.primaryText}>Send OTP &amp; update</Text>
+                  <Text style={styles.primaryText}>
+                    {busy ? 'Sending…' : 'Send WhatsApp code'}
+                  </Text>
                 </Pressable>
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet('menu')}>
                   <Text style={styles.sheetCancelText}>Back</Text>
@@ -199,16 +291,35 @@ export function SecurityScreen() {
               <>
                 <Text style={styles.sheetTitle}>Verify OTP</Text>
                 <Text style={styles.sheetHint}>
-                  Enter the 6-digit code sent to your {otpTarget}. Demo: 123456
+                  Enter the 6-digit code sent on WhatsApp to {country?.dialCode ?? ''}{' '}
+                  {localDigits}
                 </Text>
-                <Field label="OTP" value={otp} onChange={setOtp} />
+                <Field
+                  label="OTP"
+                  value={otp}
+                  onChange={(v) => setOtp(normalizeOtpInput(v))}
+                  keyboardType="number-pad"
+                />
+                {error ? <Text style={styles.sheetError}>{error}</Text> : null}
                 <Pressable
                   style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-                  onPress={verifyOtp}
+                  onPress={() => void verifyPhoneOtp()}
+                  disabled={busy || otp.length !== 6}
                 >
-                  <Text style={styles.primaryText}>Verify &amp; save</Text>
+                  <Text style={styles.primaryText}>
+                    {busy ? 'Saving…' : 'Verify & save'}
+                  </Text>
                 </Pressable>
-                <Pressable style={styles.sheetCancel} onPress={() => setSheet('menu')}>
+                <Pressable
+                  style={styles.sheetCancel}
+                  onPress={() => resendIn === 0 && void sendPhoneOtp()}
+                  disabled={resendIn > 0 || busy}
+                >
+                  <Text style={styles.sheetCancelText}>
+                    {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
+                  </Text>
+                </Pressable>
+                <Pressable style={styles.sheetCancel} onPress={() => setSheet('phone')}>
                   <Text style={styles.sheetCancelText}>Back</Text>
                 </Pressable>
               </>
@@ -218,10 +329,11 @@ export function SecurityScreen() {
               <>
                 <Text style={styles.sheetTitle}>Delete account?</Text>
                 <Text style={styles.sheetHint}>
-                  This permanently removes your PR account from this device session (demo).
+                  This signs you out of this device. Full account deletion is not
+                  available yet.
                 </Text>
                 <Pressable style={styles.dangerBtn} onPress={deleteAccount}>
-                  <Text style={styles.dangerBtnText}>Delete account</Text>
+                  <Text style={styles.dangerBtnText}>Sign out</Text>
                 </Pressable>
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet(null)}>
                   <Text style={styles.sheetCancelText}>Cancel</Text>
@@ -257,11 +369,13 @@ function Field({
   value,
   onChange,
   secure,
+  keyboardType,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   secure?: boolean;
+  keyboardType?: 'default' | 'number-pad' | 'phone-pad';
 }) {
   return (
     <View style={{ marginTop: 10 }}>
@@ -270,6 +384,7 @@ function Field({
         value={value}
         onChangeText={onChange}
         secureTextEntry={secure}
+        keyboardType={keyboardType}
         style={styles.input}
         placeholderTextColor={C.muted2}
         autoCapitalize="none"
@@ -331,6 +446,7 @@ const styles = StyleSheet.create({
   },
   sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt, marginBottom: 8 },
   sheetHint: { fontFamily: F.manrope, fontSize: 13, color: C.prMuted, marginBottom: 8, lineHeight: 18 },
+  sheetError: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.red },
   menuRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -348,6 +464,8 @@ const styles = StyleSheet.create({
     color: C.prMuted2,
     marginBottom: 4,
   },
+  phoneRow: { flexDirection: 'row', gap: 10, alignItems: 'stretch' },
+  phoneInput: { flex: 1 },
   input: {
     fontFamily: F.sora,
     fontSize: 16,

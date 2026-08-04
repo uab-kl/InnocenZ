@@ -1,10 +1,11 @@
 /**
- * PR sign-in — brand-led first screen: atmosphere, wordmark, one form, one CTA.
+ * PR sign-in — brand-led first screen: logo, atmosphere, one form, one CTA.
  * Phone is country code + local number; last dial country is remembered.
  */
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Animated,
+  Image,
   KeyboardAvoidingView,
   Platform,
   Pressable,
@@ -17,6 +18,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
 import { ApiError } from '../lib/api';
+import { useKeyboardHeight } from '../lib/keyboard';
 import {
   loadPhoneCountryCode,
   localPhoneDigits,
@@ -26,8 +28,16 @@ import {
 import { useSession } from '../lib/session';
 import { IzButton } from '../components/ui';
 import { Eye, EyeOff, Lock, LogIn } from '../components/icons';
+import { ForgotPasswordModal } from './ForgotPasswordModal';
 import { COUNTRY_BY_CODE, COUNTRY_DIAL_OPTIONS } from './sign-up/constants';
 import { Picker } from './sign-up/fields';
+import {
+  KeyboardScrollProvider,
+  reportFocusFromView,
+  useKeyboardScroll,
+} from './sign-up/keyboard-scroll';
+
+const LOGO = require('../../assets/images/innocenz-logo.png');
 
 const DIAL_PICKER_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
   value: c.countryCode,
@@ -38,8 +48,28 @@ const DIAL_PICKER_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
 }));
 
 export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void } = {}) {
+  const scroller = useRef<ScrollView | null>(null);
+  return (
+    <KeyboardScrollProvider scrollRef={scroller} footerReserve={24}>
+      <LoginScreenInner onCreateAccount={onCreateAccount} scroller={scroller} />
+    </KeyboardScrollProvider>
+  );
+}
+
+function LoginScreenInner({
+  onCreateAccount,
+  scroller,
+}: {
+  onCreateAccount?: () => void;
+  scroller: React.RefObject<ScrollView | null>;
+}) {
   const { signIn } = useSession();
   const insets = useSafeAreaInsets();
+  const keyboardScroll = useKeyboardScroll();
+  const keyboardHeight = useKeyboardHeight();
+  const phoneWrapRef = useRef<View>(null);
+  const passWrapRef = useRef<View>(null);
+
   const [phoneCountryCode, setPhoneCountryCode] = useState(loadPhoneCountryCode);
   const [phoneNumber, setPhoneNumber] = useState('');
   const [password, setPassword] = useState('');
@@ -48,6 +78,7 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
   const [error, setError] = useState<string | null>(null);
   const [phoneFocused, setPhoneFocused] = useState(false);
   const [passFocused, setPassFocused] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
 
   const enter = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -70,6 +101,16 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
     : null;
 
   const canSubmit = Boolean(phoneCountryCode && localDigits && password);
+  const liftedPad =
+    keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) + 12 : 0;
+
+  const reveal = (wrap: View | null) => {
+    const run = () =>
+      reportFocusFromView(wrap, keyboardScroll?.ensureVisible);
+    run();
+    setTimeout(run, 120);
+    setTimeout(run, 360);
+  };
 
   const submit = async () => {
     if (busy || !canSubmit) return;
@@ -97,27 +138,43 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <ScrollView
+          ref={scroller}
           contentContainerStyle={[
             styles.scroll,
+            keyboardHeight > 0 ? styles.scrollKeyboard : styles.scrollIdle,
             {
-              paddingTop: Math.max(insets.top, 20) + 36,
-              paddingBottom: 28 + Math.max(insets.bottom, 16),
+              paddingTop: Math.max(insets.top, 20) + (keyboardHeight > 0 ? 12 : 28),
+              paddingBottom: 28 + Math.max(insets.bottom, 16) + liftedPad,
             },
           ]}
           keyboardShouldPersistTaps="handled"
+          keyboardDismissMode="on-drag"
           showsVerticalScrollIndicator={false}
+          onScroll={(e) => keyboardScroll?.onScrollY(e.nativeEvent.contentOffset.y)}
+          scrollEventThrottle={16}
         >
           <Animated.View
             style={[
               styles.brand,
+              keyboardHeight > 0 && styles.brandCompact,
               { opacity: brandOpacity, transform: [{ translateY: brandY }] },
             ]}
           >
-            <Text style={styles.wordmark}>InnocenZ</Text>
-            <View style={styles.brandRule} />
-            <Text style={styles.brandLine}>For promotional models</Text>
+            <Image
+              source={LOGO}
+              style={[styles.logo, keyboardHeight > 0 && styles.logoCompact]}
+              resizeMode="contain"
+              accessibilityLabel="InnocenZ logo"
+            />
+            <Text style={[styles.wordmark, keyboardHeight > 0 && styles.wordmarkCompact]}>
+              InnocenZ
+            </Text>
+            {keyboardHeight === 0 ? (
+              <Text style={styles.brandLine}>For promotional models</Text>
+            ) : null}
           </Animated.View>
 
           <Animated.View
@@ -131,7 +188,7 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
 
             <View style={styles.field}>
               <Text style={styles.fieldLabel}>Mobile number</Text>
-              <View style={styles.phoneRow}>
+              <View ref={phoneWrapRef} style={styles.phoneRow} collapsable={false}>
                 <Picker
                   value={phoneCountryCode}
                   options={DIAL_PICKER_OPTIONS}
@@ -161,7 +218,10 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
                       setPhoneNumber(t);
                       if (error) setError(null);
                     }}
-                    onFocus={() => setPhoneFocused(true)}
+                    onFocus={() => {
+                      setPhoneFocused(true);
+                      reveal(phoneWrapRef.current);
+                    }}
                     onBlur={() => setPhoneFocused(false)}
                     placeholder="123456789"
                     placeholderTextColor={C.muted2}
@@ -174,7 +234,7 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
               </View>
             </View>
 
-            <View style={styles.field}>
+            <View style={styles.field} ref={passWrapRef} collapsable={false}>
               <Text style={styles.fieldLabel}>Password</Text>
               <View
                 style={[
@@ -191,7 +251,10 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
                     setPassword(t);
                     if (error) setError(null);
                   }}
-                  onFocus={() => setPassFocused(true)}
+                  onFocus={() => {
+                    setPassFocused(true);
+                    reveal(passWrapRef.current);
+                  }}
                   onBlur={() => setPassFocused(false)}
                   placeholder="Your password"
                   placeholderTextColor={C.muted2}
@@ -217,6 +280,14 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
 
             {error ? <Text style={styles.error}>{error}</Text> : null}
 
+            <Pressable
+              onPress={() => setForgotOpen(true)}
+              hitSlop={10}
+              style={styles.forgotLink}
+            >
+              <Text style={styles.forgotText}>Forgot password?</Text>
+            </Pressable>
+
             <IzButton
               label={busy ? 'Signing in…' : 'Sign in'}
               icon={LogIn}
@@ -235,6 +306,13 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
           </Animated.View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      <ForgotPasswordModal
+        visible={forgotOpen}
+        onClose={() => setForgotOpen(false)}
+        initialCountryCode={phoneCountryCode}
+        initialLocalNumber={phoneNumber}
+      />
     </View>
   );
 }
@@ -281,33 +359,49 @@ const styles = StyleSheet.create({
   scroll: {
     flexGrow: 1,
     paddingHorizontal: 24,
+  },
+  scrollIdle: {
     justifyContent: 'center',
+  },
+  scrollKeyboard: {
+    justifyContent: 'flex-start',
   },
   brand: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: 32,
+  },
+  brandCompact: {
+    marginBottom: 16,
+  },
+  logo: {
+    width: 88,
+    height: 88,
+    marginBottom: 14,
+    borderRadius: 44,
+  },
+  logoCompact: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    marginBottom: 8,
   },
   wordmark: {
     fontFamily: F.playfair,
-    fontSize: 44,
+    fontSize: 36,
     fontWeight: '700',
     letterSpacing: 0.5,
     color: C.accentL,
     textAlign: 'center',
   },
-  brandRule: {
-    width: 36,
-    height: 1.5,
-    backgroundColor: C.accent,
-    marginTop: 14,
-    marginBottom: 12,
-    opacity: 0.85,
+  wordmarkCompact: {
+    fontSize: 26,
   },
   brandLine: {
     fontFamily: F.manrope,
     fontSize: 13,
     letterSpacing: 0.4,
     color: C.prMuted,
+    marginTop: 8,
   },
   formBlock: {
     width: '100%',
@@ -381,6 +475,17 @@ const styles = StyleSheet.create({
     lineHeight: 20,
     color: C.red,
     marginBottom: 12,
+  },
+  forgotLink: {
+    alignSelf: 'flex-end',
+    marginBottom: 10,
+    paddingVertical: 4,
+  },
+  forgotText: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '600',
+    color: C.accentL,
   },
   cta: {
     marginTop: 6,

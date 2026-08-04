@@ -2,11 +2,14 @@ import { integer, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 
 /**
- * Short-lived WhatsApp OTP proof for PR phone sign-up. Migration 0084.
+ * Short-lived WhatsApp OTP proof. Migration 0084 (+ purpose in 0088).
  *
  * The plaintext code never lives here — only `code_hash` (sha256 hex). Status
  * machine: pending → verified → consumed. Expired rows stay for audit; send
  * simply stops accepting them.
+ *
+ * `purpose` isolates signup / forgot-password / change-phone so one flow cannot
+ * consume another's receipt.
  */
 export const phoneVerificationStatusValues = [
   'pending',
@@ -16,12 +19,23 @@ export const phoneVerificationStatusValues = [
 ] as const;
 export type PhoneVerificationStatus = (typeof phoneVerificationStatusValues)[number];
 
+export const phoneVerificationPurposeValues = [
+  'signup',
+  'forgot_password',
+  'change_phone',
+] as const;
+export type PhoneVerificationPurpose = (typeof phoneVerificationPurposeValues)[number];
+
 export const PhoneVerificationTable = MainSchema.table('phone_verification', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   /** Digits-only E.164-ish form (e.g. 60123456789) — matches login normalisation. */
   phoneNum: varchar('phone_num').notNull(),
   codeHash: varchar('code_hash', { length: 64 }).notNull(),
   channel: varchar('channel', { length: 20 }).notNull().default('whatsapp'),
+  purpose: varchar('purpose', { length: 32 })
+    .$type<PhoneVerificationPurpose>()
+    .notNull()
+    .default('signup'),
   status: varchar('status', { length: 20 })
     .$type<PhoneVerificationStatus>()
     .notNull()

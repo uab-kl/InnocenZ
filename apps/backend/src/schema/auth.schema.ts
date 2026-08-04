@@ -23,6 +23,25 @@ const ResetPasswordSchema = z.object({
   password: z.string().min(6, 'Password must be at least 6 characters long'),
 });
 
+/** WhatsApp OTP password reset (PR mobile) — after POST /auth/otp/verify purpose=forgot_password. */
+const ResetPasswordWithOtpSchema = z.object({
+  phoneNum: z.string().min(8, 'Phone number is required'),
+  verificationId: z.string().uuid('Phone verification is required'),
+  password: z.string().min(6, 'Password must be at least 6 characters long'),
+});
+
+/** Signed-in password change — current password, no OTP. */
+const ChangePasswordSchema = z.object({
+  currentPassword: z.string().min(1, 'Current password is required'),
+  newPassword: z.string().min(6, 'Password must be at least 6 characters long'),
+});
+
+/** Signed-in phone change — OTP on the NEW number (purpose=change_phone). */
+const ChangePhoneWithOtpSchema = z.object({
+  phoneNum: z.string().min(8, 'Phone number is required'),
+  verificationId: z.string().uuid('Phone verification is required'),
+});
+
 /** Comcard size integers — coerce so JSON numbers or digit strings both work. */
 const comcardCm = z.coerce.number().int().min(40).max(250);
 const comcardKg = z.coerce.number().int().min(25).max(250);
@@ -97,10 +116,13 @@ const FirstTimeLoginSchema = z.object({
     token: z.string().min(1, 'Token is required'),
 });
 
-export { 
+export {
     LoginSchema,
     ForgotPasswordSchema,
     ResetPasswordSchema,
+    ResetPasswordWithOtpSchema,
+    ChangePasswordSchema,
+    ChangePhoneWithOtpSchema,
     RegisterSchema,
-    FirstTimeLoginSchema
+    FirstTimeLoginSchema,
 };
