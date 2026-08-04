@@ -894,6 +894,103 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — THIS WEEK IS DISPUTABLE TOO (the button was hidden by the wrong test).**
+>
+> Owner: *"where is the dispute button for the pr at the drinks and the tips"* — asked while looking at
+> the THIS-WEEK evidence sheet, where there wasn't one.
+>
+> **My gate was wrong, and it was the second wrong version of the same gate.** I had written
+> `week === 'last'`, reasoning "nothing is issued yet to contest". The server disagrees:
+> `DISPUTABLE_STATUSES = ['pending_review', 'sent', 'disputed']`, and the current week's voucher
+> (`PV-000006`) is **`pending_review`** — disputable all along. Only `signed` and `paid` are locked,
+> because the PR has put their name to it or the money has moved.
+>
+> The tab was never the rule. Both halves now mirror the server: `kindDisputable` (drinks/tips) and the
+> new `weekDisputable(week)`, which reads the VOUCHER's own status — the same two-mistake pattern the
+> earlier wages fix had, so the comment names both so a third version does not appear.
+>
+> **The flow was hardwired to last week and had to be threaded.** `submitDispute` posted to
+> `lastWeek.voucherId` and wrote the response into last week's state, so a This-week claim would have
+> landed on the WRONG VOUCHER (or been refused when no last-week voucher existed). `DisputeTarget` now
+> carries its `week`; the post goes to that week's voucher; and because This week lives in the shared
+> earnings CONTEXT rather than local state, it is re-read via `refreshEarnings()` instead of patched —
+> Check-In renders off the same object and would otherwise show a voucher the server no longer holds.
+> `openDispute` likewise resolves `cellDisputable` and the withdraw check against the right week.
+>
+> This-week cells now show the **flag** where a dispute is possible and the inspect glyph where tapping
+> only opens the evidence — the same honesty rule as Last week.
+>
+> Why it matters beyond the button: a PR who spots a wrong figure on Tuesday can now say so on Tuesday,
+> while the paper is still in their pocket, instead of waiting for Sunday's voucher.
+>
+> `tsc` clean; 30 `check-cell-evidence.ts` checks still pass. No backend change — the server already
+> allowed this.
+
+> **4 Aug 2026 — THE DISPUTE QUEUE CAN CORRECT THE RECEIPT IT IS ARGUING ABOUT.**
+>
+> Owner: *"after agency approved the pr can make disput eon the drinks and the tips , then in the agency
+> also the same , can edit the approval receipt like in the receipt section in the agency payroll page ,
+> just the status different in the disputes page , same edit receipt function"*.
+>
+> **The PR half already worked** and needed no change: `lineDisputable` returns true for drinks/tips as
+> soon as the receipt leaves `pending`, so an APPROVED receipt is contestable — which is the whole
+> point, since until the agency states a figure there is nothing to argue with.
+>
+> **The agency half was a deliberate refusal that had outlived its reason.** `DisputeQueuePanel`'s own
+> doc-comment said accepting *"does not change the voucher amounts — edit the voucher itself for that"*,
+> because the only edit path was `PUT /payment-voucher/:id`, which deletes and re-inserts every line.
+> Upholding a PR's claim through it would have destroyed the self-logged receipts the claim rested on.
+> The targeted receipt endpoints removed that trap, so the correction now happens in the queue.
+>
+> The **same `AgencyReceiptEditor` component** the Receipts sub-tab uses — not a copy, so a correction
+> made while settling a dispute obeys exactly the rules a correction made anywhere else obeys.
+>
+> **A dispute names a DAY and a COMPONENT, never a receipt** (the PR tapped a grid cell, and a cell is a
+> sum), so `receiptsForDispute` finds the paper the same way the cell was built: lines matching
+> `lineDate` + `kind`, scoped by `voucherId` as well — `lineDate` alone would pull in another PR working
+> the same night. Each row shows what THAT receipt contributed to the disputed cell, not its whole
+> total. A line whose `kind` is missing (backend not restarted) is NOT matched: showing an unrelated
+> receipt as "the evidence" is worse than showing none and saying so.
+>
+> **Two statuses, deliberately both on screen** — the amber *Open* pill is the DISPUTE; the pill beside
+> each receipt is that RECEIPT's own review state. A reviewer settling a claim needs both facts.
+> `verified` withholds the editor (week closed, server answers 409), matching the Receipts sub-tab.
+> Wages/OT disputes say plainly that there is no receipt behind them and the fix is the shift record.
+>
+> ⚠️ **NOT COMMITTED, and must land WITH the receipt-editor slice.** `DisputeQueuePanel.tsx` imports
+> `AgencyReceiptEditor.tsx`, which is still untracked (see §9) — committing the panel alone would
+> produce a commit that does not build. `tsc` clean on the file and biome-formatted.
+>
+> ⚠️ **Not visually verified:** the queue reads **Disputes (0)**, so there is nothing on screen to check.
+> Raise one from the PR app (Payment → Last week → tap an approved Drinks or Tips amount → Dispute this
+> amount) and the editor should appear under that row.
+
+> **4 Aug 2026 — A SIGNED VOUCHER NOW REACHES THE PAYMENT QUEUE.**
+>
+> Owner: *"after the pr sign the pv, the pv should come out at the payment week section at the payroll
+> page agency"*.
+>
+> The **Payment Week** tab filtered by CALENDAR DATE alone (`last_last_week`), so it showed the week
+> before last and nothing else. PV-000002 sat there purely by being old enough; PV-000004 — signed by
+> the PR at 16:30 on 4 Aug — stayed in **Last Week**, because its week was 26 Jul–01 Aug. The
+> signature changed nothing on the one screen that pays it, and the agency's own PR History was
+> already reporting `2 signed · RM 1,575.00` while the payment screen showed one voucher at RM 875.
+>
+> **A signature is what makes a voucher payable, so a signature is what puts it in the queue.**
+> `lastLastWeekPvs` now returns its existing window PLUS every `SIGNED` voucher from any week, deduped
+> by id. `payrollActivePvs` already drops `PAID`, so a voucher leaves the queue the moment the
+> transfer is recorded — no second rule needed for that.
+>
+> Two deliberate choices: a signed voucher **stays in its own week tab as well** (an agency looks for
+> "last week's voucher" by the week it was worked, and removing it from there would hide it where
+> they actually look), and the tab caption changed — `19 Jul – 25 Jul 2026 · signed · ready to pay`
+> became `Signed vouchers · … and earlier · ready to pay`, because naming one week describes a list
+> this tab no longer is.
+>
+> Web typecheck clean on the route. **Check after a refresh:** Payment Week should read 2 PV ·
+> RM 1,575.00, matching the PR's History total. If those two disagree, the agency↔PR mapping is the
+> next thing to look at, not this filter.
+
 > **4 Aug 2026 — AN ADDED LINE MUST BE SOMETHING THE OUTLET ACTUALLY SELLS.**
 >
 > Owner: *"the drinks need verified is the outlet else cannot add so in his way can make list the the

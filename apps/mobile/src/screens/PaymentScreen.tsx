@@ -37,7 +37,12 @@ import { useSignedPvs } from '../lib/signed-pv';
 import { buildWeekGridFromLines, VERIFIED_STATUSES } from '../lib/week-pay-grid';
 import { buildCellEvidence } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
-import { cellDisputable, kindDisputable, receiptReviewCaption } from '../lib/receipt-review';
+import {
+  cellDisputable,
+  kindDisputable,
+  receiptReviewCaption,
+  weekDisputable,
+} from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
@@ -56,6 +61,15 @@ type DisputeTarget = {
   incomeKey: IncomeKey;
   incomeLabel: string;
   amount: number;
+  /**
+   * WHICH WEEK's voucher this claim is against.
+   *
+   * Carried on the target because the whole flow used to assume `lastWeek` — it
+   * posted to `lastWeek.voucherId` and wrote the response back into last week's
+   * state. That silently made This-week undisputable even though the server
+   * accepts `pending_review`, which is exactly what the current week is.
+   */
+  week: WeekTab;
 };
 
 type HtmlFileInput = {
@@ -275,7 +289,14 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setEvidenceTarget({ dateIso: day.dateIso, incomeKey: row.key, amount, week, day, row });
   };
 
-  const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
+  const openDispute = (
+    day: WeeklyDayPay,
+    row: (typeof INCOME_ROWS)[number],
+    week: WeekTab = 'last',
+  ) => {
+    const weekData = week === 'last' ? lastWeek : current;
+    const weekDisputed =
+      week === 'last' ? voucherDisputed : current?.status === 'disputed';
     const amount = cellAmount(day, row.key);
     if (amount <= 0 || day.status === 'empty') return;
     // A receipt the agency has not reviewed is still the PR's own claim, not a
@@ -283,7 +304,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // Withdrawing an existing dispute is never blocked: that would trap a claim
     // already raised. Wages and OT are refused outright by `kindDisputable`,
     // server-side too (DISPUTABLE_KINDS), so they never reach the dispute sheet.
-    if (!voucherDisputed && !cellDisputable(lastWeek, day.dateIso, row.key)) {
+    if (!weekDisputed && !cellDisputable(weekData, day.dateIso, row.key)) {
       // Two different refusals, and they must not share a message. "Still being
       // reviewed" tells the PR to wait — useless advice for wages, where waiting
       // changes nothing and the actual route is the attendance record.
@@ -309,10 +330,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       incomeKey: row.key,
       incomeLabel: row.label,
       amount,
+      week,
     };
     setDisputeTarget(target);
     // A PV already under dispute → tapping any amount offers to withdraw it.
-    if (voucherDisputed) {
+    if (weekDisputed) {
       setDisputeMode('withdraw');
       setDisputeNote('');
       setDisputePhotos([]);
@@ -335,11 +357,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   const submitDispute = async () => {
     if (!disputeTarget || disputeBusy) return;
-    const voucherId = lastWeek?.voucherId;
+    // The claim goes to the voucher of the week the tapped cell belongs to.
+    // Reading `lastWeek` unconditionally is what made a This-week dispute post
+    // against last week's voucher — or, with no last-week voucher, refuse.
+    const forLast = disputeTarget.week === 'last';
+    const voucherId = forLast ? lastWeek?.voucherId : current?.voucherId;
     if (!token || !voucherId) {
       Alert.alert(
         'No voucher to dispute yet',
-        'Last week’s payment voucher hasn’t been issued yet — there’s nothing to dispute.',
+        forLast
+          ? 'Last week’s payment voucher hasn’t been issued yet — there’s nothing to dispute.'
+          : 'This week’s voucher hasn’t been opened yet — log a shift first, then you can dispute an amount on it.',
       );
       return;
     }
@@ -365,17 +393,26 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       const next = result.voucher;
       // Reflect the persisted state so the grid + header pill update immediately
       // and survive a reload (getMyLastWeek returns these fields).
-      setLastWeek((prev) =>
-        prev
-          ? {
-              ...prev,
-              status: next.status,
-              disputeReason: next.disputeReason,
-              disputeNote: next.disputeNote,
-              disputedAt: next.disputedAt,
-            }
-          : prev,
-      );
+      //
+      // Only LAST week is local state here. This week lives in the shared
+      // earnings context, so it is re-read rather than patched in place —
+      // Check-In renders off the same object and would otherwise keep showing a
+      // voucher that is no longer what the server holds.
+      if (forLast) {
+        setLastWeek((prev) =>
+          prev
+            ? {
+                ...prev,
+                status: next.status,
+                disputeReason: next.disputeReason,
+                disputeNote: next.disputeNote,
+                disputedAt: next.disputedAt,
+              }
+            : prev,
+        );
+      } else {
+        void refreshEarnings();
+      }
       setDisputedKeys((prev) => {
         // Withdraw clears the whole voucher dispute; raise echoes the tapped cell.
         if (disputeMode === 'withdraw') return new Set();
@@ -739,9 +776,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               >
                                 {formatCell(amount)}
                               </Text>
-                              {canTap && (
-                                <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
-                              )}
+                              {/*
+                                * Same honesty rule as Last week: a flag where a
+                                * dispute is actually possible, the inspect glyph
+                                * where tapping only opens the evidence.
+                                */}
+                              {canTap &&
+                                (kindDisputable(row.key) && weekDisputable(current) ? (
+                                  <Flag size={9} color={C.muted2} style={{ marginTop: 2 }} />
+                                ) : (
+                                  <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
+                                ))}
                             </Pressable>
                           );
                         })}
@@ -828,22 +873,29 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
            */
           onDispute={
             /*
-             * DRINKS AND TIPS ONLY, on an issued voucher.
+             * DRINKS AND TIPS, on a voucher the server will still accept.
              *
-             * `week === 'last'` alone was not enough and shipped a button the
-             * server would have refused: Daily wages · Thu 30 Jul offered
-             * "Dispute this amount" on a kind the backend rejects with a 400
-             * (DISPUTABLE_KINDS). Wages and OT are derived from the attendance
-             * stamps, so the fix for a wrong one is the shift record.
+             * Both halves are the SERVER's rules mirrored, not a guess about
+             * which tab we are on — and each half was got wrong once:
              *
-             * `kindDisputable` is the shared client mirror of that server rule —
-             * do not re-test the kinds inline here.
+             * - `week === 'last'` alone offered Dispute on Daily wages, which
+             *   `DISPUTABLE_KINDS` rejects with a 400. Hence `kindDisputable`.
+             * - Then `week === 'last'` was itself wrong. `DISPUTABLE_STATUSES`
+             *   is ['pending_review','sent','disputed'] — the CURRENT week is
+             *   `pending_review`, so it was disputable all along and the tab
+             *   test was hiding a button the PR was entitled to. Hence
+             *   `weekDisputable`, which reads the voucher's own status.
+             *
+             * The third test, whether the RECEIPT has been reviewed yet, stays
+             * inside `openDispute` (`cellDisputable`) because it also decides
+             * which refusal message to show.
              */
-            evidenceTarget.week === 'last' && kindDisputable(evidenceTarget.incomeKey)
+            kindDisputable(evidenceTarget.incomeKey) &&
+            weekDisputable(evidenceTarget.week === 'last' ? lastWeek : current)
               ? () => {
-                  const { day, row } = evidenceTarget;
+                  const { day, row, week } = evidenceTarget;
                   setEvidenceTarget(null);
-                  openDispute(day, row);
+                  openDispute(day, row, week);
                 }
               : undefined
           }

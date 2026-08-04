@@ -83,6 +83,32 @@ export function kindDisputable(kind: PrReceiptLine['kind']): boolean {
   return DISPUTABLE_KINDS.includes(kind);
 }
 
+/**
+ * Voucher states a PR may still contest — the exact mirror of the server's
+ * `DISPUTABLE_STATUSES` (payment-voucher.controller.ts).
+ *
+ * NOTE `pending_review`: the CURRENT week qualifies. Disputes are not a
+ * last-week-only affair, and gating the button on "which tab am I on" was wrong
+ * — a PR whose approved drinks are already wrong today should say so today,
+ * while the paper is still in their pocket, not wait for Sunday.
+ *
+ * `signed` and `paid` are absent on purpose: the PR has put their name to it, or
+ * the money has moved.
+ */
+const DISPUTABLE_VOUCHER_STATUSES = ['pending_review', 'sent', 'disputed'];
+
+/**
+ * Is there an issued-enough voucher here to argue with at all?
+ *
+ * False with no voucher id: nothing exists to attach a claim to, and the server
+ * would 404. The kind and the receipt's review state are separate tests —
+ * `kindDisputable` and `cellDisputable` — and all three have to pass.
+ */
+export function weekDisputable(week: PrCurrentWeek | null): boolean {
+  if (!week?.voucherId || !week.status) return false;
+  return DISPUTABLE_VOUCHER_STATUSES.includes(week.status);
+}
+
 export function cellDisputable(
   week: PrCurrentWeek | null,
   dateIso: string,
