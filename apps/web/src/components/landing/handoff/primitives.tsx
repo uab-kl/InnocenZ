@@ -4,47 +4,8 @@ import { LANDING_IMAGES } from "@/lib/landing-assets";
 /** Source asset is 447×434 — keep display ≤ ~120px for crisp zoom. */
 const LOGO_INTRINSIC = { width: 447, height: 434 } as const;
 
-export function useCursorGlow() {
-	useEffect(() => {
-		const finePointer = window.matchMedia("(pointer: fine)");
-		const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
-		if (!finePointer.matches || reduceMotion.matches) return;
-
-		const root = document.documentElement;
-		let raf = 0;
-		let latestX = 0;
-		let latestY = 0;
-
-		const flush = () => {
-			raf = 0;
-			root.style.setProperty("--mx", `${latestX}px`);
-			root.style.setProperty("--my", `${latestY}px`);
-		};
-
-		const onMove = (e: MouseEvent) => {
-			latestX = e.clientX;
-			latestY = e.clientY;
-			if (!raf) raf = requestAnimationFrame(flush);
-		};
-
-		window.addEventListener("mousemove", onMove, { passive: true });
-		return () => {
-			window.removeEventListener("mousemove", onMove);
-			if (raf) cancelAnimationFrame(raf);
-		};
-	}, []);
-}
-
 export function LandingBackground() {
-	useCursorGlow();
-	return (
-		<>
-			<div className="hz-aurora" aria-hidden />
-			<div className="hz-aurora-3" aria-hidden />
-			<div className="hz-spotlight" aria-hidden />
-			<div className="hz-grain" aria-hidden />
-		</>
-	);
+	return <div className="hz-aurora" aria-hidden />;
 }
 
 export function CountUp({

@@ -53,6 +53,13 @@ function SignupPageContent() {
 							© {new Date().getFullYear()}{" "}
 							<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
 							. {copy.aside.rightsReserved}
+							{" · "}
+							<Link
+								to="/privacy"
+								className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
+							>
+								Privacy Policy
+							</Link>
 						</p>
 					</div>
 				</div>
@@ -102,6 +109,13 @@ function SignupPageContent() {
 							InnocenZ
 						</span>
 						. {copy.aside.rightsReserved}
+						{" · "}
+						<Link
+							to="/privacy"
+							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
+						>
+							Privacy Policy
+						</Link>
 					</p>
 				</div>
 			</main>

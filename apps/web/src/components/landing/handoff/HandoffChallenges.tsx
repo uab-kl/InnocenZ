@@ -345,10 +345,10 @@ function FlowDiagram() {
 				<FlowNode key={n.label} {...n} idx={i} />
 			))}
 			<div
-				className="absolute bottom-0 left-1/2 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border px-5 py-3 text-xs uppercase tracking-[0.14em] backdrop-blur-md"
+				className="absolute bottom-0 left-1/2 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border px-5 py-3 text-xs uppercase tracking-[0.14em]"
 				style={{
 					borderColor: "var(--hz-line-strong)",
-					background: "rgba(10,10,14,.72)",
+					background: "rgba(10,10,14,.9)",
 					fontFamily: "var(--hz-font-mono)",
 					color: "var(--hz-gold)",
 				}}

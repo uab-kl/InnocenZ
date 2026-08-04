@@ -42,7 +42,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
           ? (notFoundHead().meta ?? [])
           : [{ title: 'Innocenz' }]),
       ],
-      links: [{ rel: 'stylesheet', href: appCss }],
+      links: [
+        { rel: 'stylesheet', href: appCss },
+        { rel: 'icon', href: '/assets/innocenz-logo.png', type: 'image/png' },
+        { rel: 'apple-touch-icon', href: '/assets/innocenz-logo.png' },
+      ],
     }
   },
 

@@ -11,6 +11,12 @@ import { LogoMark, SplitTitle } from "./primitives";
 const OUTLET_POPULAR_INDEX = 2;
 const AGENCY_POPULAR_INDEX = 2;
 
+/** Map footer link labels (EN + ZH) to real routes when available. */
+function footerHref(label: string): string {
+	if (label === "Privacy" || label === "隐私") return "/privacy";
+	return "#top";
+}
+
 export function HandoffPricing() {
 	const { t } = useLandingLocale();
 	const [tab, setTab] = useState<"outlet" | "agency">("outlet");
@@ -45,10 +51,10 @@ export function HandoffPricing() {
 
 				<div className="mb-10 flex justify-center">
 					<div
-						className="inline-flex rounded-full border p-1.5 backdrop-blur-md"
+						className="inline-flex rounded-full border p-1.5"
 						style={{
 							borderColor: "var(--hz-line-strong)",
-							background: "rgba(10,10,14,.55)",
+							background: "rgba(10,10,14,.88)",
 						}}
 					>
 						{(
@@ -218,8 +224,7 @@ export function HandoffFinalCTA() {
 							width: 400,
 							height: 400,
 							background:
-								"radial-gradient(circle, rgba(242,198,107,.4), transparent 60%)",
-							filter: "blur(60px)",
+								"radial-gradient(circle, rgba(242,198,107,.28), transparent 60%)",
 						}}
 					/>
 					<div
@@ -230,8 +235,7 @@ export function HandoffFinalCTA() {
 							width: 400,
 							height: 400,
 							background:
-								"radial-gradient(circle, rgba(182,124,255,.4), transparent 60%)",
-							filter: "blur(60px)",
+								"radial-gradient(circle, rgba(182,124,255,.28), transparent 60%)",
 						}}
 					/>
 					<div className="relative">
@@ -311,7 +315,7 @@ export function HandoffFooter() {
 								{c.links.map((l) => (
 									<a
 										key={l}
-										href="#top"
+										href={footerHref(l)}
 										className="text-[13.5px] no-underline"
 										style={{ color: "var(--hz-ink-dim)" }}
 									>
@@ -337,7 +341,12 @@ export function HandoffFooter() {
 						style={{ color: "var(--hz-ink-mute)" }}
 					>
 						{t.footer.legal.map((l) => (
-							<a key={l} href="#top" className="no-underline" style={{ color: "inherit" }}>
+							<a
+								key={l}
+								href={footerHref(l)}
+								className="no-underline"
+								style={{ color: "inherit" }}
+							>
 								{l}
 							</a>
 						))}

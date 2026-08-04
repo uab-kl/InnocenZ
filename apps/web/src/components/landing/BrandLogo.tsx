@@ -3,7 +3,7 @@ import { LANDING_IMAGES } from "@/lib/landing-assets";
 /** Circular crown + Z mark (gold on dark). */
 const LOGO_MARK_SRC = LANDING_IMAGES.innocenzLogo;
 /** Full lockup — circular mark + gold "InnocenZ" wordmark. */
-const LOGO_HORIZONTAL_SRC = "/innocenz-logo-horizontal.png";
+const LOGO_HORIZONTAL_SRC = "/assets/innocenz-logo-horizontal.png";
 const LOGO_INTRINSIC = { width: 447, height: 434 } as const;
 
 const markClass =

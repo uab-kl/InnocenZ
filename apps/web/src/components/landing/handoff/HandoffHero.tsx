@@ -81,16 +81,16 @@ function OrbitBadge() {
 					inset: "-8%",
 					background:
 						"radial-gradient(circle, rgba(242,198,107,.28) 0%, transparent 55%)",
-					filter: "blur(30px)",
 				}}
 			/>
 			<img
 				src={LANDING_IMAGES.heroBadge}
 				alt={t.hero.badgeAlt}
+				width={1024}
+				height={1024}
+				fetchPriority="high"
+				decoding="async"
 				className="absolute inset-0 z-[1] h-full w-full rounded-full object-contain"
-				style={{
-					filter: "drop-shadow(0 32px 64px rgba(0,0,0,.75))",
-				}}
 			/>
 			<svg
 				viewBox="0 0 400 400"
@@ -107,13 +107,6 @@ function OrbitBadge() {
 						<stop offset="50%" stopColor="#b67cff" stopOpacity="0.6" />
 						<stop offset="100%" stopColor="#f2c66b" stopOpacity="0.75" />
 					</linearGradient>
-					<filter id="hz-tri-glow" x="-20%" y="-20%" width="140%" height="140%">
-						<feGaussianBlur stdDeviation="3" result="blur" />
-						<feMerge>
-							<feMergeNode in="blur" />
-							<feMergeNode in="SourceGraphic" />
-						</feMerge>
-					</filter>
 				</defs>
 				<polygon
 					points={ROLE_TRIANGLE}
@@ -123,7 +116,6 @@ function OrbitBadge() {
 					strokeLinejoin="round"
 					strokeDasharray="7 9"
 					mask="url(#hz-tri-mask)"
-					filter="url(#hz-tri-glow)"
 					className="hz-tri-link"
 				/>
 			</svg>
@@ -168,13 +160,13 @@ function OrbitBadge() {
 				<circle cx="200" cy="8" r="2" fill="#b67cff" />
 			</svg>
 			<div
-				className="hz-orbit-pill absolute z-[4] flex items-center rounded-full border uppercase backdrop-blur-md"
+				className="hz-orbit-pill absolute z-[4] flex items-center rounded-full border uppercase"
 				style={{
 					top: "50%",
 					left: "20%",
 					transform: "translate(-100%, -50%)",
 					borderColor: "var(--hz-line-strong)",
-					background: "rgba(10,10,14,.7)",
+					background: "rgba(10,10,14,.85)",
 					fontFamily: "var(--hz-font-mono)",
 				}}
 			>
@@ -188,13 +180,13 @@ function OrbitBadge() {
 				{t.hero.liveOnShift}
 			</div>
 			<div
-				className="hz-orbit-pill absolute z-[4] flex items-center rounded-full border uppercase backdrop-blur-md"
+				className="hz-orbit-pill absolute z-[4] flex items-center rounded-full border uppercase"
 				style={{
 					left: "79%",
 					top: "84%",
 					transform: "translate(0%, 10%)",
 					borderColor: "var(--hz-line-strong)",
-					background: "rgba(10,10,14,.7)",
+					background: "rgba(10,10,14,.85)",
 					fontFamily: "var(--hz-font-mono)",
 					color: "var(--hz-gold)",
 				}}

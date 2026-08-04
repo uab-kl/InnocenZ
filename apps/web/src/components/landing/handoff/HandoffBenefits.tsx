@@ -219,7 +219,6 @@ function AgencyLogoWall() {
 					height: 220,
 					background:
 						"radial-gradient(circle, rgba(182,124,255,.35), transparent 65%)",
-					filter: "blur(30px)",
 				}}
 			/>
 			<div
@@ -231,16 +230,15 @@ function AgencyLogoWall() {
 					height: 200,
 					background:
 						"radial-gradient(circle, rgba(242,198,107,.22), transparent 65%)",
-					filter: "blur(30px)",
 				}}
 			/>
 			<div className="absolute inset-0 grid grid-cols-3 grid-rows-3 gap-2.5 p-[18px]">
 				{logos.map((L, i) => (
 					<div
 						key={L.name}
-						className="flex items-center justify-center gap-2 rounded-xl border px-2.5 py-2 backdrop-blur-md"
+						className="flex items-center justify-center gap-2 rounded-xl border px-2.5 py-2"
 						style={{
-							background: "rgba(10,10,14,.55)",
+							background: "rgba(10,10,14,.72)",
 							borderColor: "rgba(255,255,255,.06)",
 							color:
 								i % 3 === 0
@@ -280,9 +278,9 @@ function AgencyLogoWall() {
 				}}
 			/>
 			<div
-				className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em] backdrop-blur-md"
+				className="absolute top-3 left-3 flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-[10px] uppercase tracking-[0.16em]"
 				style={{
-					background: "rgba(10,10,14,.7)",
+					background: "rgba(10,10,14,.88)",
 					borderColor: "rgba(182,124,255,.28)",
 					fontFamily: "var(--hz-font-mono)",
 					color: "var(--hz-violet)",

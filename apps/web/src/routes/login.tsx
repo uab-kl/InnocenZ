@@ -1,12 +1,11 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import axios from "axios";
-import { AlertCircle, ArrowLeft, Loader2 } from "lucide-react";
+import { AlertCircle, ArrowLeft, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/landing/BrandLogo";
 import { LoginAsideBackdrop } from "@/components/landing/LoginDecor";
-import { MaterialIcon } from "@/components/landing/MaterialIcon";
 import { Button } from "@/components/ui/button";
 import {
 	Field,
@@ -156,6 +155,13 @@ function RouteComponent() {
 						© {new Date().getFullYear()}{" "}
 						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
 						. All rights reserved.
+						{" · "}
+						<a
+							href="/privacy"
+							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
+						>
+							Privacy Policy
+						</a>
 					</p>
 				</div>
 			</aside>
@@ -216,9 +222,10 @@ function RouteComponent() {
 												</FieldLabel>
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
-														<MaterialIcon
-															name="mail"
-															className="!text-3xl text-royal-gold"
+														<Mail
+															className="size-5 text-royal-gold"
+															strokeWidth={1.75}
+															aria-hidden
 														/>
 													</InputGroupAddon>
 													<InputGroupInput
@@ -264,9 +271,10 @@ function RouteComponent() {
 												</FieldLabel>
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
-														<MaterialIcon
-															name="lock"
-															className="text-3xl! text-royal-gold"
+														<Lock
+															className="size-5 text-royal-gold"
+															strokeWidth={1.75}
+															aria-hidden
 														/>
 													</InputGroupAddon>
 													<InputGroupInput
@@ -294,12 +302,19 @@ function RouteComponent() {
 															variant="ghost"
 															size="icon-sm"
 														>
-															<MaterialIcon
-																name={
-																	showPassword ? "visibility_off" : "visibility"
-																}
-																className="text-3xl! text-muted-foreground"
-															/>
+															{showPassword ? (
+																<EyeOff
+																	className="size-5 text-muted-foreground"
+																	strokeWidth={1.75}
+																	aria-hidden
+																/>
+															) : (
+																<Eye
+																	className="size-5 text-muted-foreground"
+																	strokeWidth={1.75}
+																	aria-hidden
+																/>
+															)}
 														</InputGroupButton>
 													</InputGroupAddon>
 												</InputGroup>
@@ -375,6 +390,13 @@ function RouteComponent() {
 						© {new Date().getFullYear()}{" "}
 						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
 						. All rights reserved.
+						{" · "}
+						<a
+							href="/privacy"
+							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
+						>
+							Privacy Policy
+						</a>
 					</p>
 				</div>
 			</main>

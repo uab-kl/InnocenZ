@@ -1,9 +1,22 @@
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import {
+	AtSign,
+	BadgeCheck,
+	Building2,
+	Eye,
+	EyeOff,
+	ImagePlus,
+	Loader2,
+	Lock,
+	Mail,
+	Phone,
+	UserRound,
+	X,
+	type LucideIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { SignupAcknowledgements } from "@/components/auth/signup-acknowledgements";
-import { MaterialIcon } from "@/components/landing/MaterialIcon";
 import { Button } from "@/components/ui/button";
 import {
 	Field,
@@ -157,7 +170,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.companyName.label}
-								icon="business"
+								icon={Building2}
 								placeholder={fields.companyName.placeholder}
 								autoComplete="organization"
 								isSubmitting={form.state.isSubmitting}
@@ -171,7 +184,7 @@ export function SignupForm() {
 								<SignupTextField
 									field={field}
 									label={fields.companyRegistrationOld.label}
-									icon="badge"
+									icon={BadgeCheck}
 									placeholder={fields.companyRegistrationOld.placeholder}
 									isSubmitting={form.state.isSubmitting}
 								/>
@@ -183,7 +196,7 @@ export function SignupForm() {
 								<SignupTextField
 									field={field}
 									label={fields.companyRegistrationNew.label}
-									icon="badge"
+									icon={BadgeCheck}
 									placeholder={fields.companyRegistrationNew.placeholder}
 									isSubmitting={form.state.isSubmitting}
 								/>
@@ -235,7 +248,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.personInCharge.label}
-								icon="person"
+								icon={UserRound}
 								placeholder={fields.personInCharge.placeholder}
 								autoComplete="name"
 								isSubmitting={form.state.isSubmitting}
@@ -248,7 +261,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.phoneNum.label}
-								icon="phone"
+								icon={Phone}
 								placeholder={fields.phoneNum.placeholder}
 								type="tel"
 								autoComplete="tel"
@@ -262,7 +275,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.email.label}
-								icon="mail"
+								icon={Mail}
 								placeholder={fields.email.placeholder}
 								type="email"
 								autoComplete="email"
@@ -281,7 +294,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.loginEmail.label}
-								icon="alternate_email"
+								icon={AtSign}
 								placeholder={fields.loginEmail.placeholder}
 								type="email"
 								autoComplete="username"
@@ -536,7 +549,7 @@ interface SignupTextFieldProps {
 		handleChange: (value: string) => void;
 	};
 	label: string;
-	icon: string;
+	icon: LucideIcon;
 	placeholder: string;
 	type?: string;
 	autoComplete?: string;
@@ -547,7 +560,7 @@ interface SignupTextFieldProps {
 function SignupTextField({
 	field,
 	label,
-	icon,
+	icon: Icon,
 	placeholder,
 	type = "text",
 	autoComplete,
@@ -564,7 +577,11 @@ function SignupTextField({
 			</FieldLabel>
 			<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 				<InputGroupAddon align="inline-start">
-					<MaterialIcon name={icon} className="!text-3xl text-royal-gold" />
+					<Icon
+						className="size-5 text-royal-gold"
+						strokeWidth={1.75}
+						aria-hidden
+					/>
 				</InputGroupAddon>
 				<InputGroupInput
 					id={field.name}
@@ -633,7 +650,11 @@ function SignupPasswordField({
 			</FieldLabel>
 			<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 				<InputGroupAddon align="inline-start">
-					<MaterialIcon name="lock" className="!text-3xl text-royal-gold" />
+					<Lock
+						className="size-5 text-royal-gold"
+						strokeWidth={1.75}
+						aria-hidden
+					/>
 				</InputGroupAddon>
 				<InputGroupInput
 					id={field.name}
@@ -659,10 +680,19 @@ function SignupPasswordField({
 						variant="ghost"
 						size="icon-sm"
 					>
-						<MaterialIcon
-							name={showPassword ? "visibility_off" : "visibility"}
-							className="!text-3xl text-muted-foreground"
-						/>
+						{showPassword ? (
+							<EyeOff
+								className="size-5 text-muted-foreground"
+								strokeWidth={1.75}
+								aria-hidden
+							/>
+						) : (
+							<Eye
+								className="size-5 text-muted-foreground"
+								strokeWidth={1.75}
+								aria-hidden
+							/>
+						)}
 					</InputGroupButton>
 				</InputGroupAddon>
 			</InputGroup>
