@@ -696,6 +696,20 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — CHECK-OUT NOW REQUIRES BOTH HALVES OF THE NIGHT, EACH WITH ITS PICTURE.**
+>
+> Owner: *"before check out need upload the receipt picture , need to do the action of scan or self log
+> the drink and the tips , else cannot check out"*.
+>
+> The gate only counted PICTURES — a shift with no drinks action and no tips action at all checked out
+> clean, because zero rows means zero rows missing a photo. Now both must exist: **≥1 drinks action AND
+> ≥1 tips action**, and every logged row must carry its photo. `kind: wages` and the check-in stamp are
+> the shift itself, not an action, so neither satisfies either half.
+>
+> **Refusals are stated in one place** (`checkOutBlock`), photos first, then the missing half — with the
+> reason it matters: *"Once the shift closes, that commission cannot be claimed"*. A PR who forgets the
+> tips receipt does not lose a tick-box, they lose money, after the paper is gone and the week has shut.
+
 > **4 Aug 2026 — 🔴 CHECK-OUT WAS BLOCKED BY ROWS WHOSE PROOF PHOTO WAS NEVER SENT.**
 >
 > Owner: *"just make sure every action submitted that picture as the ocr proof of the drink and the tips
