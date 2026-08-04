@@ -833,6 +833,24 @@ export type PrReceiptLine = {
    */
   receiptNo?: string | null;
   /**
+   * The ORDER NUMBER printed on the paper (`ORD0389`) — what the PR can hold up
+   * against the figure. Null when the paper carried none.
+   */
+  orderNo?: string | null;
+  /** Date/time PRINTED on the paper — may legitimately differ from `lineDate`. */
+  receiptDate?: string | null;
+  receiptTime?: string | null;
+  /**
+   * WHICH SHIFT earned this — join it against `PrCurrentWeek.shifts`.
+   *
+   * Null means nothing links the line to a shift (logged with no active shift,
+   * or a row predating the phone sending it). Show that honestly as "not linked"
+   * — never fall back to matching on timestamps. Check-In and ShiftStatusPanel
+   * do attribute lines by `loggedAt >= checkInAt`, which is fine for a live
+   * display but WRONG as proof: it misfiles a receipt logged between two shifts.
+   */
+  shiftAssignmentId?: string | null;
+  /**
    * May this money be disputed yet? ADVISORY — for greying a control, never as
    * the rule: the server refuses with a 409 whose message names the receipt.
    *
@@ -841,6 +859,28 @@ export type PrReceiptLine = {
    * that could never be contested.
    */
   disputable?: boolean;
+};
+
+/**
+ * One shift a week's lines point back at, with the attendance stamps that prove
+ * when it was worked. A SIBLING array rather than fields on every line: a
+ * three-item receipt would otherwise carry the same two timestamps three times.
+ */
+export type PrWeekShift = {
+  id: string;
+  shiftDate: string;
+  slot: string | null;
+  eventName: string | null;
+  outletName: string | null;
+  /** ISO timestamp, or null when the shift was never started. */
+  checkInAt: string | null;
+  /**
+   * ⚠️ CLAMPED to the shift's scheduled end when the PR taps out late — the
+   * overrun survives only in `overtimeMinutes`. Label this "shift end", never
+   * "when you tapped out".
+   */
+  checkOutAt: string | null;
+  overtimeMinutes: number | null;
 };
 
 /** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */
@@ -864,6 +904,12 @@ export type PrCurrentWeek = {
   disputeNote?: string | null;
   disputedAt?: string | null;
   lines: PrReceiptLine[];
+  /**
+   * The shifts `lines[].shiftAssignmentId` point at. Optional so the app keeps
+   * working against a backend that has not restarted yet — absent means "cannot
+   * prove the shift", which the evidence sheet says out loud rather than hiding.
+   */
+  shifts?: PrWeekShift[];
 };
 
 /** The four buckets a day's earnings split into — one dispute each, per day. */

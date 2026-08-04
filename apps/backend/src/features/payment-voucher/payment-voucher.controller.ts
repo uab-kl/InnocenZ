@@ -227,6 +227,34 @@ type PrReceiptLineDTO = {
    */
   receiptNo: string | null;
   /**
+   * The ORDER NUMBER printed on the paper (`ORD0389`) — the thing the PR can
+   * physically hold up against the figure. Null when the paper carried none.
+   *
+   * A PR could see this exactly ONCE before now: the 201 echo of `addMyReceipt`.
+   * After a reload it was gone, and the only read that carried it on every fetch
+   * was `listAgencyReceipts` — behind the agency/admin guard. So the agency could
+   * see a PR's own order numbers and the PR could not, which is precisely
+   * backwards for a number whose job is to let the PR prove their own pay.
+   */
+  orderNo: string | null;
+  /** Date/time PRINTED on the paper — deliberately free to differ from lineDate. */
+  receiptDate: string | null;
+  receiptTime: string | null;
+  /**
+   * WHICH SHIFT this money came from — the FK, never the stamps themselves.
+   *
+   * For a drink/tip line it is the parent receipt's `shift_assignment_id`. For a
+   * wage or overtime line, which has no receipt at all, it is recovered from the
+   * `ref`: the weekly generator writes the assignment id bare, and the check-out
+   * seal packs it in the dedupe slot (with a `-ot` suffix for overtime).
+   *
+   * Null when nothing links the line to a shift — a receipt logged with no
+   * active shift, or a row predating the phone sending `assignmentId`. Those are
+   * shown as "not linked", never guessed at: the caller resolves stamps through
+   * this id, so a guess here would be a fabricated alibi for real money.
+   */
+  shiftAssignmentId: string | null;
+  /**
    * May the PR contest this money yet?
    *
    * ADVISORY — it exists so the app can grey a button instead of offering an
@@ -271,14 +299,34 @@ function lineKind(line: PaymentVoucherLineType, refKind: PrReceiptKind): PrRecei
     : refKind;
 }
 
+/**
+ * What a line needs to know about its parent receipt. One named type so the
+ * builder and the consumer cannot drift apart as fields are added.
+ */
+type ReceiptInfo = {
+  status: PaymentVoucherReceiptStatus;
+  receiptNo: string;
+  proofPhotos: string[];
+  orderNo: string | null;
+  receiptDate: string | null;
+  receiptTime: string | null;
+  shiftAssignmentId: string | null;
+};
+
+/** A uuid, or null. Guards ids recovered from the free-text `ref`. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function asAssignmentId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  // The check-out seal marks its overtime line `<assignment id>-ot`.
+  const bare = raw.replace(/-ot$/i, '');
+  return UUID_RE.test(bare) ? bare : null;
+}
+
 function toReceiptLineDTO(
   line: PaymentVoucherLineType,
-  receiptInfoById?: Map<
-    string,
-    { status: PaymentVoucherReceiptStatus; receiptNo: string; proofPhotos: string[] }
-  >,
+  receiptInfoById?: Map<string, ReceiptInfo>,
 ): PrReceiptLineDTO {
-  const { kind: refKind, source, sales } = decodeRef(line.ref);
+  const { kind: refKind, source, sales, dedupe } = decodeRef(line.ref);
   const kind = lineKind(line, refKind);
   const info = line.receiptId ? (receiptInfoById?.get(line.receiptId) ?? null) : null;
   const receiptStatus = info?.status ?? null;
@@ -308,26 +356,50 @@ function toReceiptLineDTO(
     proofPhotos: line.proofPhotos?.length ? line.proofPhotos : (info?.proofPhotos ?? []),
     receiptStatus,
     receiptNo: info?.receiptNo ?? null,
+    orderNo: info?.orderNo ?? null,
+    receiptDate: info?.receiptDate ?? null,
+    receiptTime: info?.receiptTime ?? null,
+    /*
+     * The receipt's FK first; failing that, the id hiding in the ref.
+     *
+     * Wage and overtime lines never have a receipt — `assertReceiptBacked` only
+     * demands one for drink/tip commission — so reading the receipt alone would
+     * have made Daily wages the one row on the grid that could not be traced to
+     * a shift. The generator writes `ref = <assignment id>` bare, and the
+     * check-out seal packs it into the dedupe slot; `decodeRef` already computed
+     * that and this used to throw it away.
+     */
+    shiftAssignmentId:
+      info?.shiftAssignmentId ?? asAssignmentId(dedupe) ?? asAssignmentId(line.ref),
     disputable: kind === 'wages' || receiptStatus === null || receiptStatus !== 'pending',
   };
 }
 
-/** receipt id -> review state, for the DTO mapper above. */
+/** receipt id -> everything a line inherits from its receipt, for the mapper above. */
 function receiptInfoMap(
   receipts: {
     id: string;
     status: PaymentVoucherReceiptStatus;
     receiptNo: string;
     proofPhotos?: string[] | null;
+    orderNo?: string | null;
+    receiptDate?: string | null;
+    receiptTime?: string | null;
+    shiftAssignmentId?: string | null;
   }[],
-): Map<
-  string,
-  { status: PaymentVoucherReceiptStatus; receiptNo: string; proofPhotos: string[] }
-> {
+): Map<string, ReceiptInfo> {
   return new Map(
     receipts.map((r) => [
       r.id,
-      { status: r.status, receiptNo: r.receiptNo, proofPhotos: r.proofPhotos ?? [] },
+      {
+        status: r.status,
+        receiptNo: r.receiptNo,
+        proofPhotos: r.proofPhotos ?? [],
+        orderNo: r.orderNo ?? null,
+        receiptDate: r.receiptDate ?? null,
+        receiptTime: r.receiptTime ?? null,
+        shiftAssignmentId: r.shiftAssignmentId ?? null,
+      },
     ]),
   );
 }
@@ -887,6 +959,22 @@ export class PaymentVoucherControllerClass {
   // Scoped server-side by the signed-in PR, so these sit OUTSIDE the
   // admin/agency role guard (mounted before it in the router).
 
+  /**
+   * The shifts the week's lines point at — the stamps behind the money.
+   *
+   * A SIBLING ARRAY, not a field on every line: a shift's two timestamps would
+   * otherwise be repeated on each of its item lines, and a three-item receipt
+   * would ship the same pair three times. Keyed by id, the app joins them back.
+   *
+   * Scoped by `prId` inside the repository, so an assignment id that a line
+   * carries but the PR does not own resolves to nothing rather than to somebody
+   * else's shift.
+   */
+  private async weekShifts(prId: string, lines: PrReceiptLineDTO[]) {
+    const ids = [...new Set(lines.map((l) => l.shiftAssignmentId).filter((id): id is string => !!id))];
+    return this.shiftAssignmentRepository.listByIdsForPr(prId, ids);
+  }
+
   /** The signed-in PR's live current-week earnings (Check-In STATUS + Payment This-week). */
   async getMyCurrentWeek(req: Request, res: Response) {
     try {
@@ -900,6 +988,7 @@ export class PaymentVoucherControllerClass {
       const statuses = draft
         ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(draft.id))
         : undefined;
+      const lines = (draft?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses));
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -912,7 +1001,10 @@ export class PaymentVoucherControllerClass {
           weekEnd,
           net: draft?.net ?? '0.00',
           status: draft?.status ?? null,
-          lines: (draft?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses)),
+          lines,
+          // The shifts those lines came from, so the Payment grid can prove a
+          // day's figure against the check-in/check-out that earned it.
+          shifts: await this.weekShifts(pr.id, lines),
         },
       });
     } catch (error) {
@@ -935,6 +1027,7 @@ export class PaymentVoucherControllerClass {
       const statuses = voucher
         ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(voucher.id))
         : undefined;
+      const lines = (voucher?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses));
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -950,7 +1043,10 @@ export class PaymentVoucherControllerClass {
           disputeReason: voucher?.disputeReason ?? null,
           disputeNote: voucher?.disputeNote ?? null,
           disputedAt: voucher?.disputedAt ?? null,
-          lines: (voucher?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses)),
+          lines,
+          // Same evidence trail as this-week: the PR must be able to see which
+          // shift a figure came from BEFORE deciding whether to dispute it.
+          shifts: await this.weekShifts(pr.id, lines),
         },
       });
     } catch (error) {

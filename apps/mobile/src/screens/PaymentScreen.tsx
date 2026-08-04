@@ -35,11 +35,13 @@ import {
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { buildCellEvidence } from '../lib/cell-evidence';
+import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import { cellDisputable, receiptReviewCaption } from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
-import { ChevronDown, Flag, ImagePlus, Wallet, XIcon } from '../components/icons';
+import { ChevronDown, Flag, ImagePlus, Search, Wallet, XIcon } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { usePrNav } from '../lib/pr-nav';
 
@@ -184,6 +186,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeMode, setDisputeMode] = useState<'dispute' | 'withdraw'>('dispute');
   const [disputeTarget, setDisputeTarget] = useState<DisputeTarget | null>(null);
+  /** Which cell's evidence is open, and the day/row it came from (to hand on to dispute). */
+  const [evidenceTarget, setEvidenceTarget] = useState<{
+    dateIso: string;
+    incomeKey: IncomeKey;
+    amount: number;
+    week: WeekTab;
+    day: WeeklyDayPay;
+    row: (typeof INCOME_ROWS)[number];
+  } | null>(null);
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
@@ -209,6 +220,31 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // The dispute is persisted at the voucher grain (payment_voucher.status), so
   // the whole "Last week" PV is either under dispute or not (§3 F).
   const voucherDisputed = lastWeek?.status === 'disputed';
+
+  /*
+   * PROOF FIRST, DISPUTE SECOND.
+   *
+   * Tapping a Last-week cell used to open the dispute sheet straight away, which
+   * asked the PR to contest a number they had no way to inspect: the order
+   * number off the paper never reached this app at all, so "Drinks 7.20" was a
+   * figure to be believed or challenged blind. The cell now opens its evidence,
+   * and the dispute is one button INSIDE that — same `openDispute`, unchanged,
+   * including the withdraw variant for a voucher already under dispute.
+   *
+   * This-week cells are tappable too, and deliberately have no dispute button:
+   * nothing is issued yet, so there is nothing to contest — but a PR should be
+   * able to check tonight's takings against the papers still in their pocket,
+   * which is the moment a wrong figure is cheapest to fix.
+   */
+  const openEvidence = (
+    day: WeeklyDayPay,
+    row: (typeof INCOME_ROWS)[number],
+    week: WeekTab,
+  ) => {
+    const amount = cellAmount(day, row.key);
+    if (amount <= 0 || day.status === 'empty') return;
+    setEvidenceTarget({ dateIso: day.dateIso, incomeKey: row.key, amount, week, day, row });
+  };
 
   const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
     const amount = cellAmount(day, row.key);
@@ -430,7 +466,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 canTap && styles.gridColTap,
                                 isDisputed && styles.gridColDisputed,
                               ]}
-                              onPress={() => canTap && openDispute(d, row)}
+                              onPress={() => canTap && openEvidence(d, row, 'last')}
                               disabled={!canTap}
                             >
                               <Text
@@ -501,7 +537,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     </Text>
                   ) : null}
                   <Text style={styles.disputeBannerHint}>
-                    Tap any amount to withdraw this dispute.
+                    Tap any amount to see its receipts, then withdraw this dispute.
                   </Text>
                 </View>
               )}
@@ -509,7 +545,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               {hasLastWeekRows ? (
                 <>
                   <Text style={styles.disputeHint}>
-                    Tap any amount to dispute · tap a{' '}
+                    Tap any amount to see the order number, shift and items behind it —
+                    dispute it from there · tap a{' '}
                     <Text style={{ color: C.red }}>red</Text> amount to withdraw a mistaken dispute.
                   </Text>
 
@@ -606,8 +643,14 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         <Text style={styles.gridLabel}>{row.label}</Text>
                         {thisGrid.map((d) => {
                           const amount = cellAmount(d, row.key);
+                          const canTap = amount > 0 && d.status !== 'empty';
                           return (
-                            <View key={`${d.dateIso}-${row.key}`} style={styles.gridCol}>
+                            <Pressable
+                              key={`${d.dateIso}-${row.key}`}
+                              style={[styles.gridCol, canTap && styles.gridColTap]}
+                              onPress={() => canTap && openEvidence(d, row, 'current')}
+                              disabled={!canTap}
+                            >
                               <Text
                                 style={[
                                   styles.gridVal,
@@ -616,7 +659,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               >
                                 {formatCell(amount)}
                               </Text>
-                            </View>
+                              {canTap && (
+                                <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
+                              )}
+                            </Pressable>
                           );
                         })}
                         <View style={styles.gridCol}>
@@ -672,6 +718,32 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </View>
           )}
         </View>
+      )}
+
+      {evidenceTarget && (
+        <CellEvidenceSheet
+          evidence={buildCellEvidence(
+            evidenceTarget.week === 'last' ? lastWeek : current,
+            evidenceTarget.dateIso,
+            evidenceTarget.incomeKey,
+          )}
+          cellAmount={evidenceTarget.amount}
+          onClose={() => setEvidenceTarget(null)}
+          /*
+           * Dispute only exists for an ISSUED voucher. On This-week there is no
+           * figure the agency has stated back to the PR yet, so offering to
+           * contest one would promise an action the server would refuse.
+           */
+          onDispute={
+            evidenceTarget.week === 'last'
+              ? () => {
+                  const { day, row } = evidenceTarget;
+                  setEvidenceTarget(null);
+                  openDispute(day, row);
+                }
+              : undefined
+          }
+        />
       )}
 
       <Modal

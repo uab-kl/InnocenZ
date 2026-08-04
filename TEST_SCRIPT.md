@@ -300,6 +300,23 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ PR PAYMENT — CELL EVIDENCE (added 4 Aug 2026, awaiting owner verification → promote to §8)
+
+- [ ] **Tapping any Payment-grid amount (This week AND Last week) opens the proof behind it.** Per
+  contributing line the sheet must show: the ORDER NUMBER off the paper (`ORD0389`, or "No order
+  number" when the paper carried none) with its `RCP-…`, the shift's CHECK-IN and SHIFT END stamps and
+  duration, the QUANTITY, and the ITEM name — grouped shift → receipt → items. **The sheet total must
+  equal the cell**; when it does not, a red warning says so rather than showing a short list silently.
+- [ ] ⚠️ **This CHANGES an already-verified §8 step.** Last-week cells used to open the dispute sheet
+  directly; they now open evidence, and **Dispute this amount** is a button inside it. Re-word the §8
+  dispute step to "tap the cell, then Dispute this amount" — including the withdraw variant for a
+  voucher already under dispute — rather than leaving it stale.
+- [ ] **Phase 2 (deferred):** `getMyHistory` does not carry `shifts`, so the sheet reached from a past
+  voucher in `PvDetailScreen` would show "Shift times are unavailable". Widen it by gathering assignment
+  ids across ALL weeks into ONE `listByIdsForPr` call — a per-week fetch there is an N+1 (it already
+  calls `listReceipts` per week). Then point PvDetailScreen's grid at the same sheet and delete its
+  now-false comment at ~92 ("the /mine payloads do not join `payment_voucher_receipt`" — they do now).
+
 ### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (read this amendment, then the 2 Aug block below)
 
 > **3 Aug (latest) — a wage-classification fault found while wiring the PR History tabs, then FIXED
@@ -695,6 +712,111 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — TAP AN AMOUNT, SEE THE PAPER BEHIND IT (PR Payment cell evidence).**
+>
+> Owner: *"makes the pr can see the how come the amount of the drinks from what order No what shift
+> check in, check out time , what quantity , what drinks item to proof them is from which today's
+> shift"*, then *"so where can i open one by one where can i check proof ?"* — the honest answer being
+> **nowhere**: no screen broke a day's total back into the receipts behind it.
+>
+> **NO MIGRATION. ZERO DDL.** Every fact was already a live column — `payment_voucher_receipt.order_no`
+> / `receipt_date` / `receipt_time` / `shift_assignment_id`, `shift_assignment.check_in_at` /
+> `check_out_at` / `overtime_minutes`, `payment_voucher_line.quantity` / `description`. The gap was the
+> WIRE: a PR could see their own order number exactly once, in the 201 echo of `addMyReceipt`, gone
+> after a reload — while `listAgencyReceipts` carried it on every read behind the agency guard. The
+> agency could see a PR's order numbers and the PR could not.
+>
+> **Backend** — `PrReceiptLineDTO` gains `orderNo`, `receiptDate`, `receiptTime`, `shiftAssignmentId`;
+> `receiptInfoMap` widened into a named `ReceiptInfo`. Wage/OT lines have no receipt, so their shift is
+> recovered from the `ref` (`decodeRef` already computed `dedupe` and the mapper threw it away),
+> uuid-guarded and `-ot`-stripped — that is what makes **Daily wages** drillable too, not just drinks.
+> New `ShiftAssignmentRepository.listByIdsForPr(prId, ids)` reads the stamps through the FK; both
+> `/mine/current-week` and `/mine/last-week` now ship a sibling `shifts[]` array (not fields repeated on
+> every line — a three-item receipt would otherwise carry the same two timestamps three times).
+>
+> ⚠️ **`prId` in that WHERE is a security boundary, not an optimisation.** `shift_assignment_id` is
+> written from client input at receipt creation and is not validated against the PR there, so a bare
+> `inArray(ids)` would surface someone else's shift times. Verified live: a different PR asking for
+> Victoria's two assignment ids gets **0 rows**.
+>
+> **Mobile** — new pure `lib/cell-evidence.ts` (`buildCellEvidence`, `evidenceMatchesCell`) using the
+> IDENTICAL filter as `week-pay-grid.ts`, so the sheet total is the same arithmetic as the cell rather
+> than a drifting re-derivation; new `components/CellEvidenceSheet.tsx` reusing PvDetailScreen's sheet
+> chrome, ShiftStatusPanel's fixed-width table and `shift-session`'s stamp helpers. `PaymentScreen`
+> cells on BOTH weeks are now tappable → evidence, and **Dispute** moved inside the sheet, calling the
+> untouched `openDispute` so the withdraw path is unchanged. This-week has no dispute button — nothing
+> is issued yet to contest.
+>
+> **Two deliberate refusals of a convenient lie:** the check-out stamp is labelled **SHIFT END**, never
+> "you tapped out at", because `check_out_at` is CLAMPED to the scheduled end when a PR taps out late
+> (the overrun survives only in `overtime_minutes`, printed beside it). And a line with no shift link
+> shows as **"Not linked to a shift"** — never attributed by the `loggedAt >= checkInAt` heuristic
+> Check-In uses for display, which misfiles a receipt logged between two shifts.
+>
+> New harness `apps/mobile/scripts/check-cell-evidence.ts` — 30 checks over Victoria's real 4 Aug
+> voucher, all passing, including that the duplicated ORD0389 stays visible as TWO receipts instead of
+> being tidied into one. `tsc` clean both sides (mobile 0-error baseline held). **Backend restart
+> required** — tsx watch serves stale routes.
+
+> **4 Aug 2026 — THE AGENCY'S RESET OFF CUSTOM APPLIED ITSELF; THE ADMIN COULD ONLY AGREE.**
+>
+> Owner: *"makes the agency reset back need wait admin to resolve or cancel in status"*, and
+> *"the admin can cancel status also in the plan request page"*.
+>
+> `requestLeaveCustom` filed the reset as a `plan_change`, and the server applies an AGENCY plan change
+> on the spot (`status: 'direct'`). So the tier moved the instant the agency tapped Reset, and the row
+> that reached Plan Request was a decision already taken — `Custom → Reset · Starter`, **Direct**, no
+> price, one button. The agency ended a price two people had negotiated, by itself. The hook's own
+> doc-comment already said the opposite (*"the admin resolving it is what moves the ledger"*); the code
+> had drifted from it.
+>
+> Now filed as `custom_renegotiation` **naming the tier it wants** — the shape that already means *exit*
+> and the exact mirror of a venue dropping POS. It lands Pending, the ledger does not move, and
+> `applyResolvedPriceToLedger` already knew how to finish it (a Custom request naming a plan → move).
+>
+> The other half was missing everywhere in that inbox: **Resolve was the only answer**. A POS quote, a
+> Custom re-price or either cancellation could not be refused, so a request the admin disagreed with sat
+> Pending forever while the subscriber's screen kept saying "waiting for admin".
+>
+> | surface | change |
+> |---|---|
+> | `decline()` | widened past `plan_change` to the two negotiated types; refuses `resolved`/`approved`/`direct` — a `direct` row was applied when filed, so cancelling it would move the badge and not the ledger |
+> | Plan Request drawer | **Cancel request** beside Resolve (hidden on Direct/resolved/declined); saves remarks first, so the reason survives |
+> | `declinePlanChange` → `declineRequest` | the name was wrong the moment a POS quote could use it |
+> | Agency Subscription | Reset now says it waits — pill `Reset · pending admin`, button `Reset requested…`, and the toast no longer claims the tier already moved. Renegotiate/Reset now block only THEMSELVES (`customRequestKind`), not each other |
+>
+> Backend + web, no schema change, no migration. Declining writes `status` only — the ledger is never
+> touched, which is the point: the venue keeps its add-on, the agency keeps Custom at the agreed price.
+> **Not yet clicked through** — needs an agency and an admin session on a running app.
+> Rows already filed as **Direct** (e.g. Atlas's `Custom → Reset · Starter`) stay uncancellable by design:
+> that move already happened, so the honest fix is a new request, not a retro-cancel.
+
+> **4 Aug 2026 — A PLAN SWITCH SILENTLY CANCELLED THE VENUE'S POS ADD-ON.**
+>
+> Owner: *"i have integrate with POS so leave it remain, then i switch the normal plan why does it also
+> change the integrate with POS in the outlet"*.
+>
+> The whole point of an add-on is that it is held ALONGSIDE a plan (migration `0081`), but
+> `applyPlanChangeToLedger` closed **every** active `member_subscription` row for the venue before opening
+> the new plan row — no `kind` filter at all. So approving a switch stamped the POS line `expired` too,
+> and the venue's Subscription page fell back to "Request admin quote" as if the integration had never
+> been priced. The negotiated figure went with it. It now closes `kind: 'plan'` only; the add-on line is
+> untouched by a tier move and can still only be ended by the venue's own removal request
+> (`applyResolvedPriceToLedger`, the POS-request-naming-a-plan branch).
+>
+> Two sibling reads had the same blind spot, both because a venue holding POS has **two** active lines and
+> the add-on is the NEWER one, so a `pageSize: 1` read returned "POS Integration, RM 0" instead of the plan:
+>
+> | read | was | now |
+> |---|---|---|
+> | `create()` duplicate-switch guard | compared the requested plan against the add-on, so "Already on X — no switch needed" never fired for a POS venue | `kind: 'plan'` |
+> | `withLiveFromPlan()` | admin drawer showed a pending request's "BEFORE · FROM PLAN" as POS Integration | `kind: 'plan'` |
+>
+> Backend-only, no schema change, no migration. `apps/web` already reads the add-on independently
+> (`useOutletSubscription.activeAddon` / `addonAmountRm`) — it was telling the truth about a ledger that
+> had been wrongly closed. A venue whose add-on was already expired by a past switch must be re-quoted
+> through the normal POS flow; this fix does not resurrect those rows.
 
 > **4 Aug 2026 — "UPCOMING 3" ON A DAY WITH NO UPCOMING SHIFT.**
 >
