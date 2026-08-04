@@ -329,11 +329,24 @@ typechecks — backend past the TS2883 baseline, `apps/web` on every touched fil
   It is MY change but it `import`s the untracked `AgencyReceiptEditor.tsx`, so committing it alone would
   produce a commit that does not build. It must land in the same commit as the editor. `tsc` clean on
   the file, biome-formatted; its §10 row is already written.
-- [ ] ⚠️ **PROCESS NOTE — do not commit `TEST_SCRIPT.md` wholesale while it carries rows for
-  uncommitted code.** Twice today a doc row landed in a commit for an unrelated slice (`927ec8a`,
-  `afa8dd1`) while the code it described stayed in the working tree, which is exactly the doc/code split
-  the doc-roles rule exists to prevent. When a row describes work that is not being committed, leave
-  `TEST_SCRIPT.md` dirty so it lands WITH that work.
+- [ ] ⚠️ **PROCESS NOTE — `TEST_SCRIPT.md` cannot be committed cleanly while it carries rows for
+  uncommitted code, and writing "don't do that" did not stop it.** Three times today a doc row landed in
+  a commit for an unrelated slice (`927ec8a`, `afa8dd1`, `e2f5e4f` — the last one swept up this very
+  note) while the code it described stayed in the working tree. That is the doc/code split the
+  doc-roles rule exists to prevent.
+  **The cause is structural, not carelessness:** git stages whole files, so any commit that renews this
+  doc for slice A also ships slice B's pending rows. Interactive `git add -p` is unavailable in this
+  environment.
+  **The only real fix is to stop leaving code uncommitted** — i.e. land the receipt-editor slice below.
+  Until then this block is deliberately kept DIRTY after every commit, so the doc always travels with
+  the work it describes, and this checklist stays the honest record of what is outstanding.
+
+**Current pending set (refreshed 4 Aug 2026, after `e2f5e4f`):** 20 modified + 7 untracked. Beyond the
+files listed above, the slice has since grown to touch `payment-voucher.routes.ts`,
+`payment-voucher-day-review.ts`, `payment-voucher-component.ts`, `payment-voucher.schema.ts`,
+`week-pay-grid.ts`, `demo-shifts.ts`, `routes/agency/pv.tsx` and `docs/claude-memory/
+innocenz-receipt-lifecycle.md`. Everything typechecks; nothing here is half-written — it is waiting on a
+decision about ownership, not on more code.
 
 
 ### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
@@ -902,6 +915,42 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — A DISPUTED DAY NOW SAYS SO, SURVIVES A RELOAD, AND OPENS.**
+>
+> Owner: *"where is the red when i click that one is dispute and the status why still approved of the
+> disputed day?"*, *"UI of this red , when i disputed this section"*, *"for the status on that day show
+> disputed clickable show what was disputed drinks or tips"*, and *"then after solve dispute turn from
+> the approved to the verified"*.
+>
+> **One cause behind all of it: the claim only ever lived in React state.** `disputedKeys` was built up
+> as the PR raised disputes in-session, so the red cell and the DISPUTED marker were gone the moment the
+> app restarted — while the agency still had the claim open in their queue. The one party who needed to
+> keep chasing it was the only one who could no longer see it. `payment_voucher.status` was the phone's
+> only other signal, and being voucher-grain it cannot say WHICH day or WHICH bucket.
+>
+> **Backend:** `/mine/current-week` and `/mine/last-week` now carry `disputes[]` (id, disputeDate,
+> component, reason, note, raisedAt, disputedAmount, claimedAmount, outcome, resolvedAt,
+> resolutionNote) via the existing `listForVoucher`. Additive; no column, no migration. ANSWERED claims
+> ship too, not just open ones — *"your Tuesday drinks claim was rejected, here is why"* is the answer
+> to a question the PR asked, and dropping it at the API leaves them re-raising it.
+>
+> **The day lifecycle, in precedence order:** `PENDING → APPROVED → DISPUTED → VERIFIED`. An open claim
+> OUTRANKS an approval, because the approval is the very thing being argued with. Once the claim is
+> answered the day reads **VERIFIED** — a stronger statement than approved: the figure was questioned
+> and settled. A `withdrawn` claim colours the day neither red nor green; the PR took it back, so the
+> day returns to whatever the agency's review says.
+>
+> **Red survives now** because `disputedCells` is the UNION of the server's open claims and the
+> in-session set: red the instant it is submitted, and still red after a restart.
+>
+> **The status cell is tappable** where claims exist, opening a sheet naming each contested bucket with
+> its state (OPEN / ACCEPTED / REJECTED / WITHDRAWN), what the voucher said, the PR's reason and note,
+> and the agency's resolution note verbatim.
+>
+> Verified live against `PV-000006`: 1 dispute returned — `2026-08-04 · drinks · voucher said 7.21 ·
+> Unmatch commission · OPEN` — so key `2026-08-04-drinks` reddens and Tue 4 reads DISPUTED. `tsc` clean
+> both sides; 30 `check-cell-evidence.ts` checks pass. **Backend restart required.**
 
 > **4 Aug 2026 — 🔴 DISPUTING ONE CELL BLANKED THE WHOLE WEEK (and silently froze logging).**
 >

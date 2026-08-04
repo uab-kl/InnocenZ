@@ -866,6 +866,32 @@ export type PrReceiptLine = {
  * when it was worked. A SIBLING array rather than fields on every line: a
  * three-item receipt would otherwise carry the same two timestamps three times.
  */
+/**
+ * One claim the PR has raised on this voucher — the day and bucket they
+ * contested, and where it got to.
+ *
+ * Comes from the server so a disputed cell SURVIVES A RELOAD. It used to live
+ * only in React state, so the PR's own open claim disappeared from their screen
+ * on restart while the agency still had it in their queue — the one party who
+ * needed to keep chasing it was the one who could no longer see it.
+ */
+export type PrWeekDispute = {
+  id: string;
+  /** The contested day, YYYY-MM-DD — pairs with `PrReceiptLine.lineDate`. */
+  disputeDate: string;
+  component: PrReceiptKind;
+  reason: string | null;
+  note: string | null;
+  raisedAt: string;
+  /** What the voucher said when raised — computed server-side, not claimed. */
+  disputedAmount: string | null;
+  claimedAmount: string | null;
+  /** null = STILL OPEN. Otherwise the agency has answered. */
+  outcome: 'accepted' | 'rejected' | 'withdrawn' | null;
+  resolvedAt: string | null;
+  resolutionNote: string | null;
+};
+
 export type PrWeekShift = {
   id: string;
   shiftDate: string;
@@ -910,6 +936,29 @@ export type PrCurrentWeek = {
    * prove the shift", which the evidence sheet says out loud rather than hiding.
    */
   shifts?: PrWeekShift[];
+  /**
+   * The agency's day-by-day sign-off, `date` matching `lines[].lineDate`.
+   *
+   * This is the only way the phone can tell that Tuesday has been ACCEPTED: the
+   * voucher's own `status` stays `pending_review` for the entire week, so
+   * without this a day the agency approved on Tuesday still read PENDING to the
+   * PR until the voucher was sent on Sunday.
+   *
+   * `null` means nobody has decided yet, OR the day was approved and its total
+   * has since changed — the server collapses a stale approval to null rather
+   * than let it describe a figure that no longer exists.
+   *
+   * Optional so the app keeps working against a backend that has not restarted:
+   * absent means no day is approved, which is what the screen assumed before.
+   */
+  dayReviews?: { date: string; status: 'approved' | 'held' | null }[];
+  /**
+   * Every claim the PR has raised on this voucher, OPEN and ANSWERED alike.
+   *
+   * Optional for the same not-yet-restarted reason; absent means the grid falls
+   * back to in-session state, which is all it had before.
+   */
+  disputes?: PrWeekDispute[];
 };
 
 /** The four buckets a day's earnings split into — one dispute each, per day. */

@@ -39,7 +39,10 @@ import { buildCellEvidence } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
   cellDisputable,
+  dayStatusLabel,
+  disputesForDay,
   kindDisputable,
+  openDisputeKeys,
   receiptReviewCaption,
   weekDisputable,
 } from '../lib/receipt-review';
@@ -207,9 +210,26 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
   }, [focusWeek, refreshEarnings]);
   const [disputedKeys, setDisputedKeys] = useState<Set<string>>(() => new Set());
+  /**
+   * Cells to paint RED — the server's open claims, plus anything raised in this
+   * session.
+   *
+   * The in-session set alone was why a disputed cell went back to looking normal
+   * after a reload: React state is not where a claim lives. The union keeps the
+   * cell red the instant it is submitted AND after the app restarts, and the two
+   * agree as soon as the next refetch lands.
+   */
+  const disputedCells = useMemo(() => {
+    const keys = new Set<string>(disputedKeys);
+    for (const k of openDisputeKeys(lastWeek)) keys.add(k);
+    for (const k of openDisputeKeys(current)) keys.add(k);
+    return keys;
+  }, [disputedKeys, lastWeek, current]);
   const [disputeOpen, setDisputeOpen] = useState(false);
   const [disputeMode, setDisputeMode] = useState<'dispute' | 'withdraw'>('dispute');
   const [disputeTarget, setDisputeTarget] = useState<DisputeTarget | null>(null);
+  /** Which day's CLAIMS are open — set by tapping a DISPUTED / VERIFIED status cell. */
+  const [claimDay, setClaimDay] = useState<{ dateIso: string; week: WeekTab } | null>(null);
   /** Which cell's evidence is open, and the day/row it came from (to hand on to dispute). */
   const [evidenceTarget, setEvidenceTarget] = useState<{
     dateIso: string;
@@ -545,7 +565,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         {grid.map((d) => {
                           const amount = cellAmount(d, row.key);
                           const key = `${d.dateIso}-${row.key}`;
-                          const isDisputed = disputedKeys.has(key);
+                          const isDisputed = disputedCells.has(key);
                           const canTap = amount > 0 && d.status !== 'empty';
                           return (
                             <Pressable
@@ -597,9 +617,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <View style={styles.gridRow}>
                     <Text style={styles.gridLabel}>Status</Text>
                     {grid.map((d) => {
-                      const dayDisputed =
-                        voucherDisputed ||
-                        INCOME_ROWS.some((r) => disputedKeys.has(`${d.dateIso}-${r.key}`));
+                      const dayDisputed = INCOME_ROWS.some((r) =>
+                        disputedCells.has(`${d.dateIso}-${r.key}`),
+                      );
                       // Read from the day, not hardcoded. This row printed
                       // VERIFIED for every non-empty day regardless of what the
                       // agency had actually decided — including days it had
@@ -612,27 +632,34 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       // apart (see its own Status row) because a mid-week
                       // approval is a checkpoint — more receipts can still
                       // arrive on that day. Same reason `verifiedDays` counts it.
-                      const label =
-                        d.status === 'empty'
-                          ? '—'
-                          : dayDisputed
-                            ? 'DISPUTED'
-                            : d.status === 'pending'
-                              ? 'PENDING'
-                              : 'VERIFIED';
+                      const label = dayStatusLabel(
+                        lastWeek,
+                        d.dateIso,
+                        d.status === 'approved' ? 'verified' : d.status,
+                        dayDisputed,
+                      );
+                      const claims = disputesForDay(lastWeek, d.dateIso);
+                      const openable = claims.open.length + claims.settled.length > 0;
                       return (
-                        <View key={`st-${d.dateIso}`} style={styles.gridCol}>
+                        <Pressable
+                          key={`st-${d.dateIso}`}
+                          style={styles.gridCol}
+                          onPress={() =>
+                            openable && setClaimDay({ dateIso: d.dateIso, week: 'last' })
+                          }
+                          disabled={!openable}
+                        >
                           <Text
                             style={[
                               styles.statusPill,
                               d.status === 'pending' && styles.statusPillPending,
-                              dayDisputed && styles.statusPillDisputed,
+                              label === 'DISPUTED' && styles.statusPillDisputed,
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
                           >
                             {label}
                           </Text>
-                        </View>
+                        </Pressable>
                       );
                     })}
                     <View style={styles.gridCol}>
@@ -826,34 +853,42 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                        * the voucher-level fact.
                        */
                       const dayDisputed = INCOME_ROWS.some((r) =>
-                        disputedKeys.has(`${d.dateIso}-${r.key}`),
+                        disputedCells.has(`${d.dateIso}-${r.key}`),
                       );
-                      // APPROVED is the state this week actually reaches: the
-                      // agency signs a day off mid-week, and VERIFIED only
-                      // arrives with the Monday rollover after the PV is sent.
-                      const label =
-                        d.status === 'empty'
-                          ? '—'
-                          : dayDisputed
-                            ? 'DISPUTED'
-                            : d.status === 'pending'
-                              ? 'PENDING'
-                              : d.status === 'approved'
-                                ? 'APPROVED'
-                                : 'VERIFIED';
+                      /*
+                       * PENDING → APPROVED → DISPUTED → VERIFIED.
+                       *
+                       * APPROVED is the state this week reaches on its own: the
+                       * agency signs a day off mid-week. A claim then outranks
+                       * it — the approval is the very thing being argued with —
+                       * and once that claim is ANSWERED the day reads VERIFIED,
+                       * a stronger statement than approved: the figure was
+                       * questioned and settled (owner, 4 Aug 2026).
+                       */
+                      const label = dayStatusLabel(current, d.dateIso, d.status, dayDisputed);
+                      const claims = disputesForDay(current, d.dateIso);
+                      const openable = claims.open.length + claims.settled.length > 0;
                       return (
-                        <View key={`st-${d.dateIso}`} style={styles.gridCol}>
+                        <Pressable
+                          key={`st-${d.dateIso}`}
+                          style={styles.gridCol}
+                          onPress={() =>
+                            openable && setClaimDay({ dateIso: d.dateIso, week: 'current' })
+                          }
+                          disabled={!openable}
+                        >
                           <Text
                             style={[
                               styles.statusPill,
                               d.status === 'pending' && styles.statusPillPending,
-                              dayDisputed && styles.statusPillDisputed,
+                              label === 'DISPUTED' && styles.statusPillDisputed,
+                              label === 'VERIFIED' && styles.statusPillVerified,
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
                           >
                             {label}
                           </Text>
-                        </View>
+                        </Pressable>
                       );
                     })}
                     <View style={styles.gridCol}>
@@ -886,6 +921,72 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             </View>
           )}
         </View>
+      )}
+
+      {/*
+        * WHAT was disputed on this day — the answer to "it says DISPUTED, but
+        * which of my four rows?". Reachable by tapping the status cell, and fed
+        * by the server's own dispute rows, so it is the same record the agency
+        * is working from rather than a client-side echo of it.
+        */}
+      {claimDay && (
+        <Modal visible transparent animationType="slide" onRequestClose={() => setClaimDay(null)}>
+          <Pressable style={styles.backdrop} onPress={() => setClaimDay(null)}>
+            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+              {(() => {
+                const week = claimDay.week === 'last' ? lastWeek : current;
+                const { open, settled } = disputesForDay(week, claimDay.dateIso);
+                const rows = [...open, ...settled];
+                const labelOf = (k: string) =>
+                  INCOME_ROWS.find((r) => r.key === k)?.label ?? k;
+                return (
+                  <>
+                    <Text style={styles.claimTitle}>What you disputed</Text>
+                    <Text style={styles.claimDay}>{claimDay.dateIso}</Text>
+                    {rows.map((d) => (
+                      <View key={d.id} style={styles.claimRow}>
+                        <View style={styles.claimHead}>
+                          <Text style={styles.claimComponent}>{labelOf(d.component)}</Text>
+                          <Text
+                            style={[
+                              styles.claimState,
+                              d.outcome === null && styles.statusPillDisputed,
+                              d.outcome === 'accepted' && styles.statusPillVerified,
+                            ]}
+                          >
+                            {d.outcome === null
+                              ? 'OPEN'
+                              : d.outcome === 'accepted'
+                                ? 'ACCEPTED'
+                                : d.outcome === 'rejected'
+                                  ? 'REJECTED'
+                                  : 'WITHDRAWN'}
+                          </Text>
+                        </View>
+                        <Text style={styles.claimMeta}>
+                          Voucher said {formatRM(Number(d.disputedAmount ?? 0))}
+                          {d.reason ? ` · ${d.reason}` : ''}
+                        </Text>
+                        {!!d.note && <Text style={styles.claimNote}>{d.note}</Text>}
+                        {/*
+                          * The agency's answer, verbatim. A rejected claim
+                          * without its reason is the PR asked to accept "no"
+                          * and given nothing to act on.
+                          */}
+                        {!!d.resolutionNote && (
+                          <Text style={styles.claimAnswer}>
+                            Agency: {d.resolutionNote}
+                          </Text>
+                        )}
+                      </View>
+                    ))}
+                    <IzButton label="Close" variant="soft" onPress={() => setClaimDay(null)} />
+                  </>
+                );
+              })()}
+            </Pressable>
+          </Pressable>
+        </Modal>
       )}
 
       {evidenceTarget && (
@@ -1215,6 +1316,24 @@ const styles = StyleSheet.create({
   },
   statusPillPending: { color: C.amber },
   statusPillDisputed: { color: C.red },
+  /** A day whose claim has been ANSWERED — settled, not merely approved. */
+  statusPillVerified: { color: C.green },
+  claimTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
+  claimDay: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  claimRow: {
+    marginTop: 12,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.line,
+    backgroundColor: C.glass,
+  },
+  claimHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  claimComponent: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.txt },
+  claimState: { fontFamily: F.sora, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+  claimMeta: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  claimNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
+  claimAnswer: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.goldL },
   /** Voucher-level DISPUTED chip in the This-week card header. */
   disputePill: {
     fontFamily: F.sora,

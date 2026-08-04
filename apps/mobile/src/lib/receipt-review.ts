@@ -10,7 +10,7 @@
  * naming the receipt; this only decides whether to offer the control, so that
  * the PR is told why instead of being handed an action that fails.
  */
-import type { PrCurrentWeek, PrReceiptLine } from './api';
+import type { PrCurrentWeek, PrReceiptLine, PrWeekDispute } from './api';
 
 /** Lines with a receipt behind them, split by where that receipt sits. */
 export type ReceiptReviewCounts = {
@@ -107,6 +107,75 @@ const DISPUTABLE_VOUCHER_STATUSES = ['pending_review', 'sent', 'disputed'];
 export function weekDisputable(week: PrCurrentWeek | null): boolean {
   if (!week?.voucherId || !week.status) return false;
   return DISPUTABLE_VOUCHER_STATUSES.includes(week.status);
+}
+
+/**
+ * A `withdrawn` claim is one the PR took back — it never reached a decision, so
+ * it must not colour the day either red (still arguing) or green (settled). It
+ * is simply gone, and the day goes back to whatever the agency's review says.
+ */
+function isLive(d: PrWeekDispute): boolean {
+  return d.outcome !== 'withdrawn';
+}
+
+/** The PR's claims on one day, split by whether anybody has answered them. */
+export function disputesForDay(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+): { open: PrWeekDispute[]; settled: PrWeekDispute[] } {
+  const all = (week?.disputes ?? []).filter(
+    (d) => d.disputeDate === dateIso && isLive(d),
+  );
+  return {
+    open: all.filter((d) => d.outcome === null),
+    settled: all.filter((d) => d.outcome !== null),
+  };
+}
+
+/**
+ * `${date}-${component}` for every OPEN claim — the keys the grid paints RED.
+ *
+ * Derived from the server rather than accumulated in React state, which is why
+ * a disputed cell now survives a reload. The in-session set is still merged on
+ * top so the cell reddens the instant the PR submits, without waiting for a
+ * refetch.
+ */
+export function openDisputeKeys(week: PrCurrentWeek | null): Set<string> {
+  return new Set(
+    (week?.disputes ?? [])
+      .filter((d) => d.outcome === null)
+      .map((d) => `${d.disputeDate}-${d.component}`),
+  );
+}
+
+/**
+ * What the Status cell should read for one day.
+ *
+ * The lifecycle the owner described, in order of precedence:
+ *
+ *   PENDING  → nobody has looked
+ *   APPROVED → the agency signed the day off
+ *   DISPUTED → the PR contested it, and it is still open
+ *   VERIFIED → that claim was ANSWERED — the figure was questioned and settled,
+ *              which is a stronger statement than merely approved
+ *
+ * An open claim outranks everything: a day the agency approved on Tuesday and
+ * the PR contested on Wednesday is DISPUTED, not APPROVED, because the approval
+ * is exactly what is being argued with.
+ */
+export type DayStatusLabel = 'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | '—';
+
+export function dayStatusLabel(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+  gridStatus: 'verified' | 'approved' | 'pending' | 'empty',
+  extraOpen = false,
+): DayStatusLabel {
+  if (gridStatus === 'empty') return '—';
+  const { open, settled } = disputesForDay(week, dateIso);
+  if (open.length > 0 || extraOpen) return 'DISPUTED';
+  if (settled.length > 0) return 'VERIFIED';
+  return gridStatus === 'pending' ? 'PENDING' : gridStatus === 'approved' ? 'APPROVED' : 'VERIFIED';
 }
 
 export function cellDisputable(
