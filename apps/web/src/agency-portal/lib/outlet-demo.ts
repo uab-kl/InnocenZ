@@ -22,7 +22,7 @@ import {
 import {
 	DEFAULT_PER_DRINK_RM,
 	DEFAULT_PER_TABLE_RM,
-} from "@agency-portal/lib/outlet-financial-sync";
+} from "@agency-portal/lib/outlet-financial-defaults";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import {
 	COMMISSION_ONLY_DEFAULT_DRINK_PCT,

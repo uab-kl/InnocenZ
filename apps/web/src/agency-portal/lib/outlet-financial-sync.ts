@@ -54,12 +54,23 @@ import {
 	shiftSalesLogged,
 } from "@agency-portal/lib/pr-shift-status";
 import { receiptDateIso } from "@agency-portal/lib/receipt-scan-utils";
+import {
+	DEFAULT_DRINK_UNITS,
+	DEFAULT_PER_DRINK_RM,
+	DEFAULT_PER_TABLE_RM,
+	DEFAULT_TABLE_UNITS,
+} from "@agency-portal/lib/outlet-financial-defaults";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 
-export const DEFAULT_PER_DRINK_RM = 120;
-export const DEFAULT_PER_TABLE_RM = 100;
-export const DEFAULT_DRINK_UNITS = 4;
-export const DEFAULT_TABLE_UNITS = 0.9;
+// Declared in a leaf module so `outlet-demo` can read them without importing
+// this file — see `outlet-financial-defaults.ts` for why that cycle was fatal.
+// Re-exported here so every existing import site keeps working unchanged.
+export {
+	DEFAULT_DRINK_UNITS,
+	DEFAULT_PER_DRINK_RM,
+	DEFAULT_PER_TABLE_RM,
+	DEFAULT_TABLE_UNITS,
+};
 
 export function totalDrinkUnits(shift: {
 	drinkUnits?: number;

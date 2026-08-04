@@ -331,6 +331,10 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   `getUTCDay()` rather than eyeballed. **Observed, not inferred**, and the call is read-only — no
 >   self-logged test line was needed after all. **Generalise this: before staging a write to verify a
 >   derived value, check whether some read endpoint already returns it.**
+> - [x] **✅ CLOSED 4 Aug (night) — `PV-000005` was MERGED into `PV-000006` (net RM707.20), and
+>   `PV-000005` is deleted.** Owner's decision, executed via `scripts/merge-voucher-into.ts` in one
+>   transaction; `audit-live-vouchers` now reports **4 of 4 reconcile**. The history below is kept
+>   because the *refusal* is the lesson, not the repair.
 > - [!] **Re-anchor `PV-000005` — RAN 4 Aug, REFUSED BY THE DATABASE. Do not retry as-is.**
 >   `--apply` was authorised and executed; Postgres rejected the UPDATE outright:
 >   `duplicate key value violates unique constraint "payment_voucher_one_per_pr_week"`,
@@ -833,6 +837,42 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (night) — `PV-000005` MERGED into `PV-000006`; the agency portal's fatal import
+> cycle broken. All 4 live vouchers now reconcile.**
+>
+> **🟢 The split week is closed. `PV-000006` = RM707.20**, 2 lines, 1 receipt. New
+> `scripts/merge-voucher-into.ts --from PV-000005 --into PV-000006`, report-only by default, all
+> writes in **one transaction**. It refuses unless the two vouchers are the **same PR, same agency,
+> both still editable** (`pending_review`/`draft` — a `sent`/`signed`/`paid` voucher is a record, not
+> a draft), and **every line being moved already falls inside the destination's week**. Totals are
+> **recomputed from the lines**, never by adding the two stored nets, so a wrong stored subtotal
+> cannot survive the merge. The `delete` runs last inside the transaction, so any child row left
+> behind trips its FK and rolls the whole thing back.
+> **Verified three independent ways:** the script's own re-read (2 lines, net 707.20, `PV-000005`
+> deleted); `audit-live-vouchers` → **4 of 4 reconcile** with `PV-000006`'s
+> `completed_shift_without_wages` flag now GONE (the wages were never missing — they were on its
+> twin); and the due-date script → "every voucher already has a due date".
+>
+> **🔴 The agency portal was dead on arrival — `Cannot access 'DEFAULT_PER_TABLE_RM' before
+> initialization`.** A genuine circular import: `outlet-demo.ts` imported that **value** from
+> `outlet-financial-sync.ts`, which imports back from `outlet-demo.ts`. `outlet-demo` reads it at
+> **module-evaluation time** (its `priceRm`/`perTableRm` literals), so whichever module the bundler
+> entered first decided whether the app booted. **The cycle pre-dates this work; regenerating the
+> route tree with `npx tsr generate` re-ordered the route imports and changed that entry order,
+> which turned a latent cycle into a fatal one.**
+> Fix: the four defaults now live in **`outlet-financial-defaults.ts`, a LEAF module with no
+> imports** — a module that imports nothing can never be half-initialised. `outlet-financial-sync`
+> imports them for its own use and **re-exports all four**, so every existing import site is
+> unchanged. `outlet-demo` no longer imports `outlet-financial-sync` at all, so the edge is gone
+> rather than merely reordered. Agency dashboard renders (Atlas Agency, 3 PRs / 4 outlets) and the
+> outlet Ratings screen still loads, both with **zero console errors**.
+>
+> **⚠️ Trap worth remembering: a stale Vite HMR graph reported the fix as still broken.** After the
+> edit the console kept throwing `DEFAULT_DRINK_UNITS is not defined` from a module URL carrying an
+> **older `?t=` timestamp** than the one Vite was serving; fetching the transformed source showed the
+> import present and correct. A **fresh tab** was clean. Check the `?t=` stamp in the stack trace
+> before believing a post-edit error, and reach for a new tab rather than a reload.
 
 > **4 Aug 2026 (evening) — OUTLET RATINGS SCREEN BUILT; `due_date` BACKFILLED; the re-anchor was
 > REFUSED BY THE DATABASE and that refusal was the finding.**
