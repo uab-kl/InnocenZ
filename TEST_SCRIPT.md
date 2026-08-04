@@ -903,10 +903,17 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > Nothing added, removed or repathed; the generator simply emits a different order than the committed
 > file has.
 >
-> **Reverted deliberately.** It is a side effect of running the server rather than a product of any
-> edit, and a 1,121-line reorder landing on `SL` is a merge-conflict magnet against `jk`'s lane.
-> ⚠️ **But it will come back every time anyone runs the web dev server** — worth an owner decision to
-> regenerate and commit ONCE, on a quiet branch, to stop the recurring dirty tree.
+> **Reverting was ATTEMPTED and does not hold — the line above claiming "reverted" was wrong within a
+> minute of being written.** `git checkout --` restored the file and it was rewritten immediately:
+> mtime landed *after* the checkout, and `netstat` shows **a dev server still LISTENING on port
+> 3000** — another session's, not this one's (this session's was 3001 and was stopped). Its `tsr`
+> watcher regenerates the file the instant git restores it.
+> ⚠️ **So the working tree cannot be made clean from here.** Not killed, because that process belongs
+> to another session; not committed either, because a 1,121-line reorder landing on `SL` is a
+> merge-conflict magnet against `jk`'s lane. **It is an owner decision:** stop every web dev server
+> and revert, or regenerate and commit ONCE on a quiet branch to end the churn permanently.
+> *A revert is not done when the command exits 0 — it is done when the file is still reverted
+> afterwards.* Nothing here checked that until the second look.
 >
 > ✅ **The genuinely useful finding: the reordered tree BOOTS.** Both portals were loaded on real
 > logins with **zero console errors while this exact regenerated file was on disk.** That matters
