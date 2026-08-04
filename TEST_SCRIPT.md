@@ -838,6 +838,37 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 (night) — audit page brought current; one entry CORRECTED; registration DEFERRED.**
+>
+> Republished to the same URL (`0c66cb02-…`) by patching the previous session's source, not
+> rebuilding — 278.5 KB → 290.9 KB. Provenance now reads **HEAD `7e3d275` · 8 unpushed**, web `tsc`
+> **120**, **12 tests across 2 files**, live vouchers **4/4 reconcile**. Added a lead section for
+> this pass (overtime bounded, the Ratings screen, the `PV-000005` merge, the import cycle) since
+> the page had still been sitting at `bb416bc` / 2 Aug.
+>
+> **🔴 CORRECTED — "agency and outlet accounts have no screen at all" was being read too broadly.**
+> That clause is true of the ADMIN portal. But the **agency and outlet portals do carry their own
+> member surfaces**: `routes/agency/profile.tsx` has a Finance Head *"sub-role invite · requires IC +
+> e-signature for dual-sign PV"*, and `routes/outlet/settings.tsx` holds the owner profile with
+> `accountActivated`. **Neither manages an account** — neither file makes a single API call, the
+> agency save lands in the zustand action `saveAgencyProfileSettings` (`store.ts:3370`), and the
+> invite is a **toast** saying *"Invite queued for …"* when nothing is queued. **There is also no
+> endpoint to call:** `grep -rnE "invite" apps/backend/src/features/*/*.routes.ts` returns nothing.
+> So it re-files from **"feature missing" to "not wired"** — a built screen with no capability behind
+> it — which makes the feature count slightly better and the wiring count slightly worse. Fixing it
+> needs a member-management API first; a working invite additionally waits on the mailer.
+> ⚠️ **It was filed wrongly because it was judged from route FILENAMES instead of by opening the
+> files** — the owner caught it. **A filename is not a feature.**
+>
+> **⏸️ Registration for the three roles — DEFERRED by the owner, 4 Aug.** Not a gap; out of scope
+> this cycle. For the record of what exists: `signupAccountTypes` covers **outlet and agency only**,
+> and PR registration lives in the mobile wizard — so it is 2-on-web + 1-on-mobile, not one unified
+> flow. Marked `Deferred` on the audit page so it stops reading as open work.
+>
+> **Still not represented on the audit page:** the 3 Aug slice (PV day-review screens, the receipt
+> lifecycle) has no section of its own — only what this session touched was written up. Worth a
+> dedicated pass.
+
 > **4 Aug 2026 (night) — `biome check --write` applied across ALL of `apps/web`. 330 files,
 > +52,972 / −52,576. No behaviour change; typecheck IMPROVED by one.**
 >
