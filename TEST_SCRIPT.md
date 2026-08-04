@@ -696,6 +696,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — "2 LOGGED ACTIONS HAVE NO PICTURE" WAS THE APP LYING TO ITSELF.**
+>
+> Owner: *"why have this ??"* — and the database answered it. The three tips items came off ONE scan and
+> share **one receipt (`98977499`, ORD1111), which holds the photo**:
+>
+> | line | own photos | receipt photos |
+> | --- | --- | --- |
+> | Tips | 1 | 1 |
+> | Booking commission | **0** | 1 |
+> | Havoc | **0** | 1 |
+>
+> **The picture is proof of the RECEIPT, and one photo covers every item printed on it** — which is why
+> `submitReceipt` stores it on `payment_voucher_receipt` and not on each line. But the check-out gate asks
+> every LINE for a picture, so the 2nd and 3rd item off one scan looked unproven while their receipt’s
+> photo sat in the database three feet away.
+>
+> **Fixed in the DTO, not by copying the image onto every row:** `toReceiptLineDTO` now reports the
+> line’s own photos, or its receipt’s when it has none. That honours the standing rule — one fact lives
+> in one table — and it needed **no data migration**: the existing rows unblock on the next read.
+> Verified against the live DB: all four of 4 Aug’s lines now resolve to a photo, `0 still blocking`.
+>
+> ⚠️ Keep both the mobile fix (`3d51a6d`, every submit path sends the scan photo) and this one: the
+> mobile change covers a line with NO receipt behind it (a bare self-log), this covers the 2nd+ item of a
+> receipt. Neither makes the other redundant.
+
 > **4 Aug 2026 — CHECK-OUT NOW REQUIRES BOTH HALVES OF THE NIGHT, EACH WITH ITS PICTURE.**
 >
 > Owner: *"before check out need upload the receipt picture , need to do the action of scan or self log

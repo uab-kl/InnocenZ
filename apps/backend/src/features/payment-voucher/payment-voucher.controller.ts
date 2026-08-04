@@ -273,7 +273,10 @@ function lineKind(line: PaymentVoucherLineType, refKind: PrReceiptKind): PrRecei
 
 function toReceiptLineDTO(
   line: PaymentVoucherLineType,
-  receiptInfoById?: Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }>,
+  receiptInfoById?: Map<
+    string,
+    { status: PaymentVoucherReceiptStatus; receiptNo: string; proofPhotos: string[] }
+  >,
 ): PrReceiptLineDTO {
   const { kind: refKind, source, sales } = decodeRef(line.ref);
   const kind = lineKind(line, refKind);
@@ -291,7 +294,18 @@ function toReceiptLineDTO(
     outlet: line.outlet,
     at: line.createdAt,
     pending: receiptStatus ? receiptStatus === 'pending' : source === 'manual',
-    proofPhotos: line.proofPhotos ?? [],
+    /**
+     * A line's own photos, or its RECEIPT's when it has none.
+     *
+     * The picture is proof of the RECEIPT, and one photo covers every item
+     * printed on it — that is why `submitReceipt` stores it on the receipt and
+     * not on each line. But the PR app's check-out gate asks every LINE for a
+     * picture, so the second and third item off one scan looked unproven and
+     * blocked check-out while their receipt's photo sat in the database.
+     * Inheriting it here fixes that without copying the same image onto every
+     * row: one fact, one place, read by whoever needs it.
+     */
+    proofPhotos: line.proofPhotos?.length ? line.proofPhotos : (info?.proofPhotos ?? []),
     receiptStatus,
     receiptNo: info?.receiptNo ?? null,
     disputable: kind === 'wages' || receiptStatus === null || receiptStatus !== 'pending',
@@ -300,9 +314,22 @@ function toReceiptLineDTO(
 
 /** receipt id -> review state, for the DTO mapper above. */
 function receiptInfoMap(
-  receipts: { id: string; status: PaymentVoucherReceiptStatus; receiptNo: string }[],
-): Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }> {
-  return new Map(receipts.map((r) => [r.id, { status: r.status, receiptNo: r.receiptNo }]));
+  receipts: {
+    id: string;
+    status: PaymentVoucherReceiptStatus;
+    receiptNo: string;
+    proofPhotos?: string[] | null;
+  }[],
+): Map<
+  string,
+  { status: PaymentVoucherReceiptStatus; receiptNo: string; proofPhotos: string[] }
+> {
+  return new Map(
+    receipts.map((r) => [
+      r.id,
+      { status: r.status, receiptNo: r.receiptNo, proofPhotos: r.proofPhotos ?? [] },
+    ]),
+  );
 }
 
 /**
