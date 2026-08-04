@@ -678,8 +678,7 @@ export function normalizeOutletWorkspace(
 		drinkPct: migratedBaseTier.drinkPct,
 		tipPct: migratedBaseTier.tipPct,
 		tablePct: migratedBaseTier.tablePct,
-		otAfterHours:
-			migratedBaseTier.otAfterHours ?? merged.otAfterHours ?? 6,
+		otAfterHours: migratedBaseTier.otAfterHours ?? merged.otAfterHours ?? 6,
 		happyHourStart: ws?.happyHourStart ?? merged.happyHourStart ?? "20:00",
 		happyHourEnd: ws?.happyHourEnd ?? merged.happyHourEnd ?? "22:00",
 		happyHourDrinkDiscountPct: resolveHappyHourDrinkDiscountPct(ws),
