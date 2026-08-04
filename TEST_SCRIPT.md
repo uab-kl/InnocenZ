@@ -300,6 +300,35 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ OPENED 4 Aug 2026 (late) — the scoped owner guard is UNPROVEN, and two wiring jobs are left
+
+> Left open deliberately at the end of the session that shipped `d513e5c`. Item 1 first: it is a
+> security guard that exists only as a typecheck.
+>
+> - [ ] **🔴 Live-fire the scoped owner guard — it has NEVER hit a running server.** `d513e5c` fixed
+>   a cross-tenant write (`agencyOwnerOnly` asked *"are you an owner?"* without comparing the
+>   membership to `req.params.id`, so any agency owner could rewrite any agency, and any outlet owner
+>   could move another venue's geo-fence). **A refusal writes nothing, so every case below is free on
+>   the shared DB** — see the standing method note on proving guards without writing:
+>   - agency owner → `PUT /agency/<ANOTHER agency id>` ⇒ **403** "not a member of this organisation"
+>   - agency owner → `PUT /agency/<own id>` with `status` in the body ⇒ **403** (refused, not dropped)
+>   - agency owner → `PUT /agency/<own id>` with the CURRENT values ⇒ **200** (the only writing case;
+>     it re-sends what is already stored, so nothing changes but `updated_at`/`updated_by`)
+>   - the same three for `PUT /outlet/:id`, plus `PATCH` and `DELETE /outlet/:id/geo-fence`
+>   - ⚠️ **admin must still pass all of them** — `isAdmin` short-circuits before the scope test, and an
+>     over-applied denial fails silently until somebody cannot work
+> - [ ] **Wire the outlet Settings save.** `routes/outlet/settings.tsx` still persists nothing;
+>   `PUT /outlet/:id` exists and is now correctly scoped. Mirror the agency shape: a
+>   `save`/`isSaving` pair on `useOutletProfile`, save BEFORE the screen shows a saved state, and send
+>   only fields with a column behind them.
+> - [ ] **Member management for org owners.** `POST`/`PUT`/`DELETE /agency/:id/members` (and the four
+>   outlet equivalents) **exist** but are `requireAdmin` **on purpose** — the route file argues that
+>   *membership IS identity*, since an `agency_user` row is what every sub-role guard reads. Widening
+>   needs: the same `:id` ownership scope, an **escalation guard** (an owner must not mint an owner in
+>   an org they do not own), a **last-owner guard**, and a **self-demotion guard**. The Finance Head
+>   *invite* additionally waits on the mailer, which does not exist — but **adding an existing user as
+>   a member does not**, and that is the useful half.
+
 ### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (duplicate-voucher guard FIXED; the "anchor bug" was a stale process)
 
 > **A PR was billed TWICE for one shift, and the guard that should have stopped it did nothing.**
@@ -837,6 +866,24 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+> **4 Aug 2026 (late, housekeeping) — biome rewrap of ; §9 renewed with what d513e5c LEFT OPEN.**
+>
+> Formatting only on  — the save-formatter rewrapped the > call added minutes earlier in . No behaviour change, no new export, no signature change.
+>
+> **The substantive part is §9, which had no entry for the three things that session deliberately did
+> NOT finish.** Chief among them: **the scoped owner guard shipped in  has never been fired
+> at a running server.** It closed a real cross-tenant write — any agency owner could rewrite any
+> agency, any outlet owner could move another venue's geo-fence — and it is backed by nothing but a
+> typecheck. ⚠️ **A security fix proven only by  is exactly the shape this project has recorded
+> lying to it before**, and refusals write nothing, so there is no cost argument for the delay. The
+> six free refusal cases and the one same-values 200 are written out in §9, along with the reminder
+> that **admin must still pass every one of them** ( short-circuits ahead of the scope test,
+> and an over-applied denial fails silently until somebody cannot work).
+>
+> Also open: the outlet Settings save (still store-only) and member management for org owners (the
+> endpoints exist and are  by design; widening needs ownership scope + escalation,
+> last-owner and self-demotion guards).
+
 > **4 Aug 2026 (late) — the agency Settings save is WIRED, and wiring it exposed a cross-tenant
 > write hole in the endpoint it was wired to.**
 >

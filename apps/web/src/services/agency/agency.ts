@@ -62,7 +62,10 @@ export async function updateAgency(
 	onRefreshFail: () => void,
 ): Promise<AgencyApiResponse> {
 	const client = getClient(onRefreshFail);
-	const response = await client.put<AgencyApiResponse>(`/agency/${id}`, payload);
+	const response = await client.put<AgencyApiResponse>(
+		`/agency/${id}`,
+		payload,
+	);
 	return response.data;
 }
 
