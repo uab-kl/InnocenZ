@@ -909,6 +909,39 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 (late) — 🔴 CANCEL AND NO-SHOW DID NOTHING FROM THE ROSTER'S LIVE TAB, silently. Same
+> bug as the outlet-swap one recorded three lines above it in the same file.**
+>
+> The by-id write handlers branched on **`viewMode === "planning"`**: planning hit the backend, live
+> fell through to the demo store. But `agencyRoster` is **`backendRoster.slots` in BOTH views** — the
+> file's own comment says *"Both views read live backend data"* — so a live-view slot id is a
+> **`shift_assignment` UUID**. The demo actions look that id up in a demo slice that has never held
+> backend UUIDs, find nothing, and return. **Cancelling a shift or flagging a no-show from the Live
+> tab wrote nothing at all, while the sheet closed as though it had worked.**
+>
+> ⚠️ **This is the IDENTICAL failure already documented a few lines up for outlet swap** —
+> *"matched the slot id against `agencyRoster` … silently found nothing and the button did nothing"*.
+> It was missed because that fix got written up as being **about swaps** instead of **about ids**.
+> *When a screen changes where its rows come from, every action keyed by row id has to move with
+> them* — and a fix recorded by its symptom will not find its own siblings.
+>
+> **Fixed:** `cancel`, `flagNoShow` and the status edit now go through `useRosterMutations` in both
+> views, and `unassign` is offered in both (hiding it in live withheld a working action rather than
+> protecting anything). The three demo store subscriptions are **deleted, not left dangling** — a demo
+> action still subscribed beside a backend one is how these got wired together by accident.
+> **Two honesty fixes alongside:** `late` has no backend field, so it now says *"Late flags are not
+> recorded yet"* instead of writing to a store that does not hold the row; and the edit sheet reports
+> `Not saved: <fields> — only status persists`, since `status` is the only key with a write behind it.
+>
+> **Verified:** web `tsc` **120** (baseline), roster clean; the Live tab renders real data unchanged
+> (2 planned PRs · RM 1,000.00 · 3/5 stamped · 3/3 within fence) with **zero console errors**, so
+> removing the subscriptions broke nothing.
+> ⚠️ **NOT fired: the rewired cancel / no-show themselves.** Both mutate real roster rows on the
+> shared database, and unlike a refusal there is no free version of a successful write. The `late`
+> toast sits behind an edit sheet the session expired before reaching (`kickToLogin` again). **The
+> rewiring is typechecked and render-verified, not exercised** — which on this project is exactly the
+> distinction that keeps mattering.
+
 > **4 Aug 2026 (late) — the demo-data leak into REAL sessions is down from 21 slices to 1.**
 > Web `tsc` **120** (baseline), zero console errors, roster + settings still render real data.
 >
