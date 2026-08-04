@@ -102,6 +102,11 @@ const QTY_SUFFIX_RE = /(?:^|\s)[x×](\d{1,2})(?:\s|$)|(?:^|\s)(\d{1,2})[x×](?:\
 //    an amount rather than a name.
 const LEADING_QTY_RE = /^(\d{1,2})\s+(?=\D)/;
 
+// 5. ...and the same line with the space lost: "2Havoc". Guarded by the item
+//    name at the call site, because a name can legitimately START with digits —
+//    "7Up" must never be read as seven Ups.
+const LEADING_QTY_NOSPACE_RE = /^(\d{1,2})(?=[a-z])/i;
+
 export type ParsedReceipt = {
   /** Receipt date normalised to YYYY-MM-DD, or null when unreadable. */
   date: string | null;
@@ -163,7 +168,31 @@ function editDistance(a: string, b: string, max = 2): number {
 
 /** Words of a raw line, lowercased ("Lemon Drop 12" → ['lemon','drop','12']). */
 function lineTokens(line: string): string[] {
-  return line.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  const lower = line.toLowerCase();
+  const plain = lower.split(/[^a-z0-9]+/).filter(Boolean);
+  // Thermal receipts kern tight and OCR often loses the space between the
+  // quantity and the name — "1 Tips" comes back as "1Tips", one token, so an
+  // exact-word test on a short name finds nothing. Splitting digit/letter
+  // boundaries recovers it. The plain tokens are kept as well, because a name
+  // may legitimately contain digits ("7Up") and must still match whole.
+  const split = lower
+    .replace(/(\d)([a-z])/g, '$1 $2')
+    .replace(/([a-z])(\d)/g, '$1 $2')
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean);
+  return [...new Set([...plain, ...split])];
+}
+
+/**
+ * Fold the digit-for-letter substitutions OCR actually makes on receipt paper:
+ * 0/o, 1/i, 5/s, 8/b. Applied to BOTH sides before comparing, so "T1ps" reaches
+ * "tips" — while a real word cannot: "this" folds to "this", not "tips".
+ *
+ * Only digits become letters, never the reverse. Letter-to-letter guesses (l→i,
+ * rn→m) are where short-name matching starts inventing hits.
+ */
+function foldOcrDigits(token: string): string {
+  return token.replace(/0/g, 'o').replace(/1/g, 'i').replace(/5/g, 's').replace(/8/g, 'b');
 }
 
 /**
@@ -182,7 +211,16 @@ export function lineMentionsItem(line: string, itemName: string): boolean {
     // Exact standalone word — but accept the singular/plural twin: receipts
     // print "TIP 5.00" while outlets configure the item as "Tips", and that
     // pair must match without opening the door to typo-matching short words.
-    return lineTokens(line).some((t) => t === n || `${t}s` === n || t === `${n}s`);
+    const folded = foldOcrDigits(n);
+    return lineTokens(line).some((raw) => {
+      for (const t of [raw, foldOcrDigits(raw)]) {
+        // The singular/plural twin is allowed both ways: receipts print
+        // "TIP 5.00" while the outlet configures the item as "Tips".
+        if (t === n || `${t}s` === n || t === `${n}s`) return true;
+        if (t === folded || `${t}s` === folded || t === `${folded}s`) return true;
+      }
+      return false;
+    });
   }
   if (l.includes(n)) return true;
   const maxTypos = n.length >= 9 ? 2 : 1;
@@ -201,7 +239,7 @@ export function lineMentionsItem(line: string, itemName: string): boolean {
  * what makes the bare-leading-number case safe: a date or a table number cannot
  * reach here unless it shares a line with the item.
  */
-function qtyFromLine(line: string): { qty: number; read: boolean } {
+function qtyFromLine(line: string, itemName: string): { qty: number; read: boolean } {
   const trimmed = line.trim();
   const item = ITEM_RE.exec(trimmed);
   if (item) {
@@ -213,10 +251,31 @@ function qtyFromLine(line: string): { qty: number; read: boolean } {
     const q = Number(suffix[1] ?? suffix[2]);
     if (q >= 1 && q <= 99) return { qty: q, read: true };
   }
-  // Last, because it is the loosest: a leading number with no price after it.
+  /*
+   * A name that itself starts with digits — "1664", "100 Plus", "7Up", all
+   * ordinary bar items here — defeats the `\D` lookahead below: "2 1664" is a
+   * quantity followed by a name, and no general rule can tell that from a
+   * number followed by an amount. The name we already matched settles it.
+   */
+  const nameKey = normalize(itemName);
+  if (/^\d/.test(nameKey)) {
+    const split = /^(\d{1,2})\s+(.*)$/.exec(trimmed);
+    if (split && normalize(split[2]).startsWith(nameKey)) {
+      const q = Number(split[1]);
+      if (q >= 1 && q <= 99) return { qty: q, read: true };
+    }
+  }
+
+  // Last, because they are the loosest: a leading number with no price after it,
+  // then the same with the space lost.
   const leading = LEADING_QTY_RE.exec(trimmed);
   if (leading) {
     const q = Number(leading[1]);
+    if (q >= 1 && q <= 99) return { qty: q, read: true };
+  }
+  const glued = LEADING_QTY_NOSPACE_RE.exec(trimmed);
+  if (glued && !normalize(itemName).startsWith(glued[1])) {
+    const q = Number(glued[1]);
     if (q >= 1 && q <= 99) return { qty: q, read: true };
   }
   return { qty: 1, read: false };
@@ -253,7 +312,7 @@ export function parseReceipt(text: string, menu: MenuDrink[]): ParsedReceipt {
   for (const line of lines) {
     for (const item of menu) {
       if (!lineMentionsItem(line, item.name)) continue;
-      const { qty, read } = qtyFromLine(line);
+      const { qty, read } = qtyFromLine(line, item.name);
       const prev = byId.get(item.id);
       if (!prev) {
         byId.set(item.id, {

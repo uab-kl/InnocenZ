@@ -696,6 +696,44 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — WHY "TIPS" WAS SOMETIMES INVISIBLE TO THE SCAN (and Havoc never was).**
+>
+> Owner: *"Why sometimes in the tips scan ocr no detected the tips it's in the outlet"*. It IS in the
+> outlet menu — the matcher was the problem, and the **"sometimes" was the clue**: same receipt, same
+> item, different scan.
+>
+> **The asymmetry is by design and it backfired.** `lineMentionsItem` scales its forgiveness with name
+> length: **< 5 letters must appear as an EXACT standalone word** (so "Tip" can never be faked by
+> "this"), 5–8 letters allow a typo, 9+ allow two. **Havoc is 5 letters and matches as a substring;
+> "Tips" is 4 and does not.** So the two items on one receipt line fail differently — exactly what the
+> owner saw.
+>
+> **Two OCR realities break the exact-word test, both reproduced before fixing:**
+> **(a) the lost space** — thermal receipts kern tight and ML Kit returns `"1Tips"`, ONE token, so the
+> word test finds nothing; **(b) the digit-for-letter read** — `"1 T1ps"`, i read as 1. Both returned
+> **false** for Tips and **true** for Havoc.
+>
+> **Fixed narrowly, not by loosening the short-name rule** (which exists for a good reason):
+> tokens are now also split at digit/letter boundaries — `"1Tips"` → `['1','tips']`, with the plain
+> tokens KEPT so a name containing digits still matches whole — and `foldOcrDigits` maps only the four
+> confusables OCR actually produces (**0→o, 1→i, 5→s, 8→b**) on both sides before comparing. Digits
+> become letters, never the reverse: `"t1ps"` reaches `"tips"`, while `"this"` folds to `"this"` and
+> still does not match.
+>
+> **The same lost space hides the QUANTITY**, so `"2Havoc"` read as one. Added a glued-quantity pattern
+> guarded by the item name, plus a name-aware rule for the digit-leading names this bar trade is full of
+> — **1664, 100 Plus, 7Up** — where `"2 1664"` is a quantity and a name that no general rule can
+> separate from a number and an amount.
+>
+> **Verified across seven receipt shapes:** the owner’s real text, spaces lost, i-as-1, priced lines,
+> digit-leading names with and without a quantity, and nothing printed at all — every one now reads
+> `Tips ×1 | Havoc ×2 = RM 2,050`, and the genuinely unreadable cases stay flagged *(assumed)* rather
+> than pretending. False-positive guards re-checked: `this round`, `Shots`, `TIGER`, `5 Tops`,
+> `Table No. S4`, `CASHIER 1` all still refuse to match Tips. `apps/mobile` tsc **0**.
+>
+> ⚠️ **Known and left alone:** `"tip top beer"` matches Tips through the pre-existing singular/plural
+> rule. Not introduced here, and not worth tightening blind — no such line exists on a real receipt.
+
 > **4 Aug 2026 — OCR READ THE ITEMS AND THREW THE QUANTITIES AWAY (PR self-log).**
 >
 > Owner: *"in the check in page pr is 2 quantity of the Havoc, why i self log still ocr shows default one?"*
