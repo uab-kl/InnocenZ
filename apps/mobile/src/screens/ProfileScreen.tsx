@@ -50,6 +50,9 @@ type Draft = {
   email: string;
   height: number;
   weight: number;
+  bust: number;
+  waist: number;
+  hip: number;
   age: number;
   languages: string[];
   agencyIds: string[];
@@ -199,6 +202,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       email: me?.email ?? '',
       height: me?.profile.comcardHeightCm ?? 0,
       weight: me?.profile.comcardWeightKg ?? 0,
+      bust: me?.profile.comcardBustCm ?? 0,
+      waist: me?.profile.comcardWaistCm ?? 0,
+      hip: me?.profile.comcardHipCm ?? 0,
       age: me?.profile.dob
         ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
         : 0,
@@ -249,6 +255,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         // A blank field means "not set" — never write 0 over a real measurement.
         comcardHeightCm: draft.height || null,
         comcardWeightKg: draft.weight || null,
+        comcardBustCm: draft.bust || null,
+        comcardWaistCm: draft.waist || null,
+        comcardHipCm: draft.hip || null,
         // Spoken languages → user_profile.languages.
         languages: draft.languages,
       });
@@ -584,58 +593,111 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           )}
 
           {!editing && (
-            <View style={styles.measureGrid}>
-              <View style={styles.measure}>
-                <Text style={styles.measureLabel}>HEIGHT</Text>
-                <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{me?.profile.comcardHeightCm || '—'}</Text>
-                  <Text style={styles.measureSuffix}>cm</Text>
+            <>
+              <View style={styles.measureGrid}>
+                <View style={styles.measure}>
+                  <Text style={styles.measureLabel}>HEIGHT</Text>
+                  <View style={styles.measureRow}>
+                    <Text style={styles.measureValue}>{me?.profile.comcardHeightCm || '—'}</Text>
+                    <Text style={styles.measureSuffix}>cm</Text>
+                  </View>
+                </View>
+                <View style={styles.measure}>
+                  <Text style={styles.measureLabel}>WEIGHT</Text>
+                  <View style={styles.measureRow}>
+                    <Text style={styles.measureValue}>{me?.profile.comcardWeightKg || '—'}</Text>
+                    <Text style={styles.measureSuffix}>kg</Text>
+                  </View>
+                </View>
+                <View style={styles.measure}>
+                  <Text style={styles.measureLabel}>AGE</Text>
+                  <View style={styles.measureRow}>
+                    <Text style={styles.measureValue}>{me?.profile.dob ? age : '—'}</Text>
+                    <Text style={styles.measureSuffix}>y</Text>
+                  </View>
                 </View>
               </View>
-              <View style={styles.measure}>
-                <Text style={styles.measureLabel}>WEIGHT</Text>
-                <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{me?.profile.comcardWeightKg || '—'}</Text>
-                  <Text style={styles.measureSuffix}>kg</Text>
+              <View style={styles.measureGrid}>
+                <View style={styles.measure}>
+                  <Text style={styles.measureLabel}>BUST</Text>
+                  <View style={styles.measureRow}>
+                    <Text style={styles.measureValue}>{me?.profile.comcardBustCm || '—'}</Text>
+                    <Text style={styles.measureSuffix}>cm</Text>
+                  </View>
+                </View>
+                <View style={styles.measure}>
+                  <Text style={styles.measureLabel}>WAIST</Text>
+                  <View style={styles.measureRow}>
+                    <Text style={styles.measureValue}>{me?.profile.comcardWaistCm || '—'}</Text>
+                    <Text style={styles.measureSuffix}>cm</Text>
+                  </View>
+                </View>
+                <View style={styles.measure}>
+                  <Text style={styles.measureLabel}>HIP</Text>
+                  <View style={styles.measureRow}>
+                    <Text style={styles.measureValue}>{me?.profile.comcardHipCm || '—'}</Text>
+                    <Text style={styles.measureSuffix}>cm</Text>
+                  </View>
                 </View>
               </View>
-              <View style={styles.measure}>
-                <Text style={styles.measureLabel}>AGE</Text>
-                <View style={styles.measureRow}>
-                  <Text style={styles.measureValue}>{me?.profile.dob ? age : '—'}</Text>
-                  <Text style={styles.measureSuffix}>y</Text>
-                </View>
-              </View>
-            </View>
+            </>
           )}
 
           {editing && (
-            <View style={styles.measureGrid}>
-              <MeasureField
-                label="HEIGHT"
-                suffix="cm"
-                value={draft.height ? String(draft.height) : ''}
-                onChange={(v) =>
-                  setDraft((d) => ({ ...d, height: Number(v.replace(/\D/g, '')) || 0 }))
-                }
-              />
-              <MeasureField
-                label="WEIGHT"
-                suffix="kg"
-                value={draft.weight ? String(draft.weight) : ''}
-                onChange={(v) =>
-                  setDraft((d) => ({ ...d, weight: Number(v.replace(/\D/g, '')) || 0 }))
-                }
-              />
-              <MeasureField
-                label="AGE"
-                suffix="y"
-                value={draft.age ? String(draft.age) : ''}
-                onChange={(v) =>
-                  setDraft((d) => ({ ...d, age: Number(v.replace(/\D/g, '')) || 0 }))
-                }
-              />
-            </View>
+            <>
+              <View style={styles.measureGrid}>
+                <MeasureField
+                  label="HEIGHT"
+                  suffix="cm"
+                  value={draft.height ? String(draft.height) : ''}
+                  onChange={(v) =>
+                    setDraft((d) => ({ ...d, height: Number(v.replace(/\D/g, '')) || 0 }))
+                  }
+                />
+                <MeasureField
+                  label="WEIGHT"
+                  suffix="kg"
+                  value={draft.weight ? String(draft.weight) : ''}
+                  onChange={(v) =>
+                    setDraft((d) => ({ ...d, weight: Number(v.replace(/\D/g, '')) || 0 }))
+                  }
+                />
+                <MeasureField
+                  label="AGE"
+                  suffix="y"
+                  value={draft.age ? String(draft.age) : ''}
+                  onChange={(v) =>
+                    setDraft((d) => ({ ...d, age: Number(v.replace(/\D/g, '')) || 0 }))
+                  }
+                />
+              </View>
+              <View style={styles.measureGrid}>
+                <MeasureField
+                  label="BUST"
+                  suffix="cm"
+                  value={draft.bust ? String(draft.bust) : ''}
+                  onChange={(v) =>
+                    setDraft((d) => ({ ...d, bust: Number(v.replace(/\D/g, '')) || 0 }))
+                  }
+                />
+                <MeasureField
+                  label="WAIST"
+                  suffix="cm"
+                  value={draft.waist ? String(draft.waist) : ''}
+                  onChange={(v) =>
+                    setDraft((d) => ({ ...d, waist: Number(v.replace(/\D/g, '')) || 0 }))
+                  }
+                />
+                <MeasureField
+                  label="HIP"
+                  suffix="cm"
+                  value={draft.hip ? String(draft.hip) : ''}
+                  onChange={(v) =>
+                    setDraft((d) => ({ ...d, hip: Number(v.replace(/\D/g, '')) || 0 }))
+                  }
+                />
+              </View>
+            </>
           )}
         </View>
 
@@ -776,6 +838,9 @@ function emptyDraft(): Draft {
     email: '',
     height: 0,
     weight: 0,
+    bust: 0,
+    waist: 0,
+    hip: 0,
     age: 0,
     languages: [],
     agencyIds: [],

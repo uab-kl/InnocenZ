@@ -12,9 +12,10 @@ export type AgencyUserSubRole = "owner" | "finance";
 
 export type AgencyPrApproveStatus = "pending" | "approved" | "rejected";
 
-/** Which agency a PR user account is under — one row per (agency, PR). */
+/** Which agency a PR user account is under — one row per (agency, user). */
 export interface PrAgencyLink {
-	prId: string;
+	/** Operational pr row when present; null if account-only membership. */
+	prId: string | null;
 	userId: string;
 	agencyId: string;
 	agencyName: string;
@@ -22,11 +23,11 @@ export interface PrAgencyLink {
 	approveStatus: AgencyPrApproveStatus;
 }
 
-/** A PR on an agency's roster. */
+/** A PR on an agency's membership list (agency_pr keyed by user_id). */
 export interface AgencyPr {
-	prId: string;
+	prId: string | null;
 	agencyId: string;
-	userId: string | null;
+	userId: string;
 	name: string;
 	nickname: string | null;
 	approveStatus: AgencyPrApproveStatus;

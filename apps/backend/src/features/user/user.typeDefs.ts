@@ -23,6 +23,7 @@ export const typeDefs = `#graphql
     dob: String
     addressLine1: String
     addressLine2: String
+    city: String
     postcode: String
     state: String
     country: String

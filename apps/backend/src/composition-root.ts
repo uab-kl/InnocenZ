@@ -75,6 +75,8 @@ export const roleRepository = new RoleRepositoryClass();
 export const adminMfaRepository = new AdminMfaRepositoryClass();
 export const phoneVerificationRepository = new PhoneVerificationRepositoryClass();
 export const otpController = new OtpControllerClass(phoneVerificationRepository);
+// Declared before authController — PR register writes agency_pr by user_id.
+export const agencyPrRepository = new AgencyPrRepository();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -83,6 +85,7 @@ export const authController = new AuthControllerClass(
   roleRepository,
   adminMfaRepository,
   phoneVerificationRepository,
+  agencyPrRepository,
 );
 export const healthController = new HealthControllerClass();
 
@@ -112,7 +115,6 @@ export const subscriptionController = new SubscriptionControllerClass(subscripti
 
 export const agencyRepository = new AgencyRepositoryClass();
 export const agencyMemberRepository = new AgencyMemberRepositoryClass();
-export const agencyPrRepository = new AgencyPrRepository();
 export const agencyController = new AgencyControllerClass(agencyRepository, agencyMemberRepository, agencyPrRepository);
 
 export const outletRepository = new OutletRepositoryClass();

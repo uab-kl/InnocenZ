@@ -1,1 +1,1 @@
-export { SignUpScreen } from './SignUpScreen';
+export { SignUpScreen } from './sign-up-screen';

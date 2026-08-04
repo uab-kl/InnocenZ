@@ -73,12 +73,14 @@ export function OrgMembersPanel({ orgId }: { orgId: string }) {
 				<ul className="space-y-1.5">
 					{members.map((member) => (
 						<li
-							key={member.prId}
+							key={member.userId}
 							className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-(--lavender-soft)/25 bg-muted/30 px-3 py-2.5 text-base"
 						>
 							<div className="min-w-0 flex-1">
 								<div className="font-medium">
-									{member.name || member.nickname || member.prId.slice(0, 8)}
+									{member.name ||
+										member.nickname ||
+										member.userId.slice(0, 8)}
 								</div>
 								<div className="text-sm text-muted-foreground">
 									{[member.email, member.phoneNum]

@@ -66,6 +66,9 @@ export type MeProfile = {
   comcardImage: string | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
+  comcardBustCm: number | null;
+  comcardWaistCm: number | null;
+  comcardHipCm: number | null;
 };
 
 export type Me = {
@@ -159,27 +162,81 @@ export function verifyPrOtp(phoneNum: string, code: string): Promise<OtpVerifyRe
   });
 }
 
+export type RegisterPrProfile = {
+  fullName: string;
+  nationality: string;
+  idType: string;
+  idNo: string;
+  dob: string;
+  addressLine1: string;
+  addressLine2?: string;
+  city: string;
+  postcode: string;
+  state: string;
+  country: string;
+  comcardHeightCm?: number;
+  comcardWeightKg?: number;
+  comcardBustCm?: number;
+  comcardWaistCm?: number;
+  comcardHipCm?: number;
+  languages: string[];
+};
+
 export function registerPr(input: {
   verificationId: string;
   phoneNum: string;
   username: string;
   password: string;
   email?: string;
+  /** Optional agency join request — creates agency_pr by user_id (pending). */
+  agencyId?: string;
+  /** Identity + address → user_profile (required for public PR sign-up). */
+  profile: RegisterPrProfile;
+  /** Optional avatar — register route already accepts multipart `profileImage`. */
+  profileImage?: { file: Blob; filename: string };
 }): Promise<null> {
-  return request<null>('/auth/register', {
-    method: 'POST',
-    body: JSON.stringify({
-      // The server maps this to the 'pr' role. A PR sign-up cannot ask for any
-      // other one — see backend features/auth/signup-roles.ts.
-      accountType: 'pr',
-      verificationId: input.verificationId,
-      phoneNum: input.phoneNum,
-      username: input.username,
-      password: input.password,
-      // Email stays optional — RegisterSchema already allows it to be absent.
-      ...(input.email ? { email: input.email } : {}),
-    }),
-  });
+  const fields = {
+    accountType: 'pr',
+    verificationId: input.verificationId,
+    phoneNum: input.phoneNum,
+    username: input.username,
+    password: input.password,
+    ...(input.email ? { email: input.email } : {}),
+    ...(input.agencyId ? { agencyId: input.agencyId } : {}),
+    ...input.profile,
+  };
+
+  if (!input.profileImage) {
+    return request<null>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(fields),
+    });
+  }
+
+  const form = new FormData();
+  for (const [key, value] of Object.entries(fields)) {
+    form.append(key, value);
+  }
+  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
+    'profileImage',
+    input.profileImage.file,
+    input.profileImage.filename,
+  );
+
+  return (async () => {
+    let res: Response;
+    try {
+      // Do not set Content-Type — RN/fetch must attach the multipart boundary.
+      res = await fetch(`${API_BASE}/auth/register`, { method: 'POST', body: form });
+    } catch {
+      throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+    }
+    const body = (await res.json().catch(() => null)) as ApiEnvelope<null> | null;
+    if (!res.ok || !body?.success) {
+      throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
+    }
+    return body.data;
+  })();
 }
 
 export function fetchMe(accessToken: string): Promise<Me> {
@@ -198,7 +255,8 @@ export type AgencyMembership = {
 
 /** One agency_pr link, including links still waiting on agency approval. */
 export type PrAgencyLink = {
-  prId: string;
+  /** Operational pr row when present; null if account-only membership. */
+  prId: string | null;
   userId: string;
   agencyId: string;
   agencyName: string;
@@ -257,6 +315,9 @@ export type ProfileUpdate = {
   portfolioPhotos?: (string | null)[];
   comcardHeightCm?: number | null;
   comcardWeightKg?: number | null;
+  comcardBustCm?: number | null;
+  comcardWaistCm?: number | null;
+  comcardHipCm?: number | null;
   /** Spoken languages — persisted to user_profile.languages. */
   languages?: string[];
 };
@@ -364,6 +425,37 @@ export async function uploadUserComcardImage(
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/user/${userId}/comcard-image`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: form,
+    });
+  } catch {
+    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  }
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
+  if (!res.ok || !body?.success) {
+    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
+  }
+  return body.data;
+}
+
+/** Upload NRIC/passport side — stored on user_profile.id_photo_front / id_photo_back. */
+export async function uploadUserIdDoc(
+  accessToken: string,
+  userId: string,
+  side: 'front' | 'back',
+  file: Blob,
+  filename = 'id.jpg',
+): Promise<Me> {
+  const form = new FormData();
+  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
+    'idPhoto',
+    file,
+    filename,
+  );
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/user/${userId}/id-photo/${side}`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,

@@ -1,12 +1,21 @@
 import React from 'react';
 import { View } from 'react-native';
+import { PR_LANGUAGE_OPTIONS } from '../../lib/demo-services';
 import {
 	COUNTRY_BY_CODE,
 	COUNTRY_DIAL_OPTIONS,
 	ID_TYPES,
 	NATIONALITY_OPTIONS,
 } from './constants';
-import { Field, Input, Picker, DatePicker, Row, fieldStyles as styles } from './fields';
+import {
+	Field,
+	Input,
+	Picker,
+	DatePicker,
+	Row,
+	LanguageMultiPicker,
+	fieldStyles as styles,
+} from './fields';
 import { mergeNricWithDob, type Draft, type FieldErrors, type IdType } from './types';
 
 type Props = {
@@ -117,6 +126,7 @@ export function Step1Persona({
 					onChangeText={(t) => patch({ email: t })}
 					placeholder="you@example.com"
 					keyboardType="email-address"
+					autoCapitalize="none"
 				/>
 			</Field>
 			<Field label="Nationality*" error={fieldErrors.nationality}>
@@ -147,6 +157,13 @@ export function Step1Persona({
 									idType === 'NRIC' && draft.dob
 										? mergeNricWithDob(draft.dob, draft.idNo)
 										: draft.idNo,
+								// Changing ID type invalidates prior captures; passport needs no back.
+								idPhotoFrontUri: '',
+								idPhotoBackUri: '',
+								idPhotoFrontFile: null,
+								idPhotoBackFile: null,
+								idFrontOcrOk: false,
+								idBackOcrOk: idType === 'Passport',
 							});
 						}}
 						title="ID type"
@@ -168,10 +185,15 @@ export function Step1Persona({
 					/>
 				</Field>
 			</Row>
-			<Field label="ID No*" error={fieldErrors.idNo}>
+			<Field
+				label="ID No*"
+				error={fieldErrors.idNo}
+			>
 				<Input
 					value={draft.idType ? draft.idNo : ''}
 					editable={Boolean(draft.idType)}
+					keyboardType={draft.idType === 'NRIC' ? 'number-pad' : 'default'}
+					maxLength={draft.idType === 'NRIC' ? 12 : undefined}
 					onChangeText={(t) => {
 						clearFieldError('idNo');
 						patch({ idNo: draft.idType === 'NRIC' ? mergeNricWithDob(draft.dob, t) : t });
@@ -179,10 +201,90 @@ export function Step1Persona({
 					placeholder={
 						draft.idType
 							? draft.idType === 'NRIC'
-								? '000000000000'
+								? '1234881234'
 								: 'Document number'
 							: 'Please select ID type first'
 					}
+				/>
+			</Field>
+			<Row>
+				<Field label="Height" flex error={fieldErrors.heightCm}>
+					<Input
+						value={draft.heightCm}
+						onChangeText={(t) => {
+							clearFieldError('heightCm');
+							patch({ heightCm: t.replace(/\D/g, '').slice(0, 3) });
+						}}
+						placeholder="in cm"
+						keyboardType="number-pad"
+					/>
+				</Field>
+				<Field label="Weight" flex error={fieldErrors.weightKg}>
+					<Input
+						value={draft.weightKg}
+						onChangeText={(t) => {
+							clearFieldError('weightKg');
+							patch({ weightKg: t.replace(/\D/g, '').slice(0, 3) });
+						}}
+						placeholder="in kg"
+						keyboardType="number-pad"
+					/>
+				</Field>
+			</Row>
+			<Field
+				label="3 dimensions (BWH)"
+				hint="Optional — Bust · Waist · Hip in cm"
+				error={
+					fieldErrors.bustCm || fieldErrors.waistCm || fieldErrors.hipCm || null
+				}
+			>
+				<View style={styles.inline}>
+					<View style={{ flex: 1 }}>
+						<Input
+							value={draft.bustCm}
+							onChangeText={(t) => {
+								clearFieldError('bustCm');
+								patch({ bustCm: t.replace(/\D/g, '').slice(0, 3) });
+							}}
+							placeholder="Bust"
+							keyboardType="number-pad"
+						/>
+					</View>
+					<View style={{ flex: 1 }}>
+						<Input
+							value={draft.waistCm}
+							onChangeText={(t) => {
+								clearFieldError('waistCm');
+								patch({ waistCm: t.replace(/\D/g, '').slice(0, 3) });
+							}}
+							placeholder="Waist"
+							keyboardType="number-pad"
+						/>
+					</View>
+					<View style={{ flex: 1 }}>
+						<Input
+							value={draft.hipCm}
+							onChangeText={(t) => {
+								clearFieldError('hipCm');
+								patch({ hipCm: t.replace(/\D/g, '').slice(0, 3) });
+							}}
+							placeholder="Hip"
+							keyboardType="number-pad"
+						/>
+					</View>
+				</View>
+			</Field>
+			<Field
+				label="Preferred languages*"
+				error={fieldErrors.languages}
+			>
+				<LanguageMultiPicker
+					value={draft.languages}
+					options={PR_LANGUAGE_OPTIONS}
+					onChange={(languages) => {
+						clearFieldError('languages');
+						patch({ languages });
+					}}
 				/>
 			</Field>
 		</>

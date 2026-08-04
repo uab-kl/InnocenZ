@@ -74,7 +74,7 @@ export class PrControllerClass {
 
       // A request already on the agency's desk locks the selection: the PR
       // cannot add or drop agencies until it is approved or rejected.
-      const current = await this.agencyPrRepository.listByPr(pr.id);
+      const current = await this.agencyPrRepository.listByUser(userId);
       const pendingLink = current.find((link) => link.approveStatus === 'pending');
       if (pendingLink) {
         return res.status(409).json({
@@ -94,7 +94,7 @@ export class PrControllerClass {
         });
       }
 
-      await this.agencyPrRepository.syncLinksForPr(pr.id, known, getActor(req));
+      await this.agencyPrRepository.syncLinksForUser(userId, known, getActor(req));
       const links = await this.agencyPrRepository.listLinksByUserIds([userId]);
 
       res.status(200).json({ success: true, message: 'Agencies updated', data: links });

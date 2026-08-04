@@ -1,5 +1,4 @@
-import React from 'react';
-import { NATIONALITY_OPTIONS, statesForCountry } from './constants';
+import { COUNTRY_OPTIONS, statesForCountry } from './constants';
 import { Field, Input, Picker } from './fields';
 import type { Draft, FieldErrors } from './types';
 
@@ -33,17 +32,28 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 					placeholder="Unit, street"
 				/>
 			</Field>
-			<Field label="Address line 2" hint="Optional.">
+			<Field label="Address line 2">
 				<Input
 					value={draft.addressLine2}
 					onChangeText={(t) => patch({ addressLine2: t })}
 					placeholder="Area"
 				/>
 			</Field>
+			<Field label="City*" error={fieldErrors.city}>
+				<Input
+					value={draft.city}
+					onChangeText={(t) => {
+						clearFieldError('city');
+						patch({ city: t });
+					}}
+					placeholder="City"
+					autoCapitalize="words"
+				/>
+			</Field>
 			<Field label="Country*" error={fieldErrors.country}>
 				<Picker
 					value={country || null}
-					options={NATIONALITY_OPTIONS}
+					options={COUNTRY_OPTIONS}
 					onSelect={(v) => {
 						clearFieldError('country');
 						clearFieldError('state');
@@ -95,7 +105,6 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 			<Field
 				label="Postcode*"
 				error={fieldErrors.postcode}
-				hint={!country ? 'Choose a country first.' : isMalaysia ? '5 digits.' : undefined}
 			>
 				{!country ? (
 					<Input value="" editable={false} placeholder="Choose country first" />

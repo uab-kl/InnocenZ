@@ -42,7 +42,7 @@ export async function seedSamplePrPersonnel(): Promise<void> {
     return;
   }
 
-  // Every PR-to-agency link, joined to the user + profile behind it.
+  // Every PR-to-agency link (keyed by user_id), joined to user + optional pr.
   const links = await db
     .select({
       prId: PrTable.id,
@@ -55,8 +55,8 @@ export async function seedSamplePrPersonnel(): Promise<void> {
       idNo: UserProfileTable.idNo,
     })
     .from(AgencyPrTable)
-    .innerJoin(PrTable, eq(PrTable.id, AgencyPrTable.prId))
-    .innerJoin(UserTable, eq(UserTable.id, PrTable.userId))
+    .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
+    .leftJoin(PrTable, eq(PrTable.userId, AgencyPrTable.userId))
     .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
     .where(
       inArray(

@@ -18,7 +18,7 @@ import { PhoneFrame } from '../components/PhoneFrame';
 import { BottomNav } from '../components/BottomNav';
 import { TopBar } from '../components/TopBar';
 import { LoginScreen } from '../screens/LoginScreen';
-import { SignUpScreen } from '../screens/sign-up/SignUpScreen';
+import { SignUpScreen } from '../screens/sign-up';
 import { ShiftsScreen } from '../screens/ShiftsScreen';
 import { CheckInScreen } from '../screens/CheckInScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';

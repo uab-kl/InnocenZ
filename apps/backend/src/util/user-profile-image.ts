@@ -96,6 +96,7 @@ const IDENTITY_DOC_FIELDS = [
   'dob',
   'addressLine1',
   'addressLine2',
+  'city',
   'postcode',
   'state',
   'country',

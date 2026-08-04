@@ -193,9 +193,9 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   btnSm: {
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 11,
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    borderRadius: 12,
   },
   btnSoft: {
     backgroundColor: C.glass2,
@@ -209,7 +209,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   btnTextSm: {
-    fontSize: 16,
+    fontSize: 14,
+    letterSpacing: 0.1,
   },
   emptyDashed: {
     borderWidth: 1,

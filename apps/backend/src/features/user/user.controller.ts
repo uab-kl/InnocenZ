@@ -18,7 +18,7 @@ import {
 import { portfolioImagePathFromFile } from '@/middlewares/upload-portfolio-image';
 import { comcardImagePathFromFile } from '@/middlewares/upload-comcard-image';
 import { deleteComcardImageFile } from '@/util/comcard-image';
-import { withUserProfile, withUserProfiles } from '@/util/user-profile-image';
+import { saveUserIdDocFile, withUserProfile, withUserProfiles } from '@/util/user-profile-image';
 import { logger } from '@/util/logger';
 
 const SORT_FIELDS: UserSortField[] = ['CREATED_AT', 'UPDATED_AT', 'USERNAME', 'EMAIL', 'STATUS'];
@@ -250,6 +250,9 @@ export class UserControllerClass {
       const portfolioPhotos = parsePortfolioPhotosBody(req.body?.portfolioPhotos);
       const comcardHeightCm = parseOptionalInt(req.body?.comcardHeightCm);
       const comcardWeightKg = parseOptionalInt(req.body?.comcardWeightKg);
+      const comcardBustCm = parseOptionalInt(req.body?.comcardBustCm);
+      const comcardWaistCm = parseOptionalInt(req.body?.comcardWaistCm);
+      const comcardHipCm = parseOptionalInt(req.body?.comcardHipCm);
       const languages = parseLanguagesBody(req.body?.languages);
 
       // Bank details (migration 0077) — the fields that decide whether the
@@ -281,6 +284,9 @@ export class UserControllerClass {
         portfolioPhotos !== undefined ||
         comcardHeightCm !== undefined ||
         comcardWeightKg !== undefined ||
+        comcardBustCm !== undefined ||
+        comcardWaistCm !== undefined ||
+        comcardHipCm !== undefined ||
         languages !== undefined ||
         bankName !== undefined ||
         bankAccountNo !== undefined
@@ -306,6 +312,9 @@ export class UserControllerClass {
             : {}),
           ...(comcardHeightCm !== undefined ? { comcardHeightCm } : {}),
           ...(comcardWeightKg !== undefined ? { comcardWeightKg } : {}),
+          ...(comcardBustCm !== undefined ? { comcardBustCm } : {}),
+          ...(comcardWaistCm !== undefined ? { comcardWaistCm } : {}),
+          ...(comcardHipCm !== undefined ? { comcardHipCm } : {}),
           ...(languages !== undefined ? { languages } : {}),
           ...(bankName !== undefined ? { bankName } : {}),
           ...(bankAccountNo !== undefined ? { bankAccountNo } : {}),
@@ -498,6 +507,64 @@ export class UserControllerClass {
       });
     } catch (error) {
       logger.error('[UserController.uploadComcardImage] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  async uploadIdDoc(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const actorId = req.user?.id;
+      const side = req.params.side === 'back' ? 'back' : req.params.side === 'front' ? 'front' : null;
+
+      if (!actorId || actorId !== id) {
+        return res.status(403).json({
+          success: false,
+          message: Error.UNAUTHORIZED,
+          data: null,
+        });
+      }
+      if (!side) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID photo side must be front or back',
+          data: null,
+        });
+      }
+      if (!req.file) {
+        return res.status(400).json({
+          success: false,
+          message: 'ID photo file is required',
+          data: null,
+        });
+      }
+
+      const existingUser = await this.userRepository.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const actor = getActor(req);
+      let profile = await this.userProfileRepository.getByUserId(id);
+      if (!profile) {
+        profile = await this.userProfileRepository.createEmpty(id, actor);
+      }
+
+      const publicPath = saveUserIdDocFile(id, side, req.file);
+      await this.userProfileRepository.update(id, {
+        ...(side === 'front' ? { idPhotoFront: publicPath } : { idPhotoBack: publicPath }),
+        updatedBy: actor,
+      });
+
+      profile = await this.userProfileRepository.getByUserId(id);
+
+      res.status(200).json({
+        success: true,
+        message: `ID ${side} photo updated`,
+        data: withUserProfile(existingUser, profile),
+      });
+    } catch (error) {
+      logger.error('[UserController.uploadIdDoc] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

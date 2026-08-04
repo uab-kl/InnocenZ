@@ -26,7 +26,8 @@
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "edgeToEdgeEnabled": true
+      "edgeToEdgeEnabled": true,
+      "softwareKeyboardLayoutMode": "resize"
     },
     "web": {
       "bundler": "metro",
@@ -39,6 +40,13 @@
           "locationAlwaysAndWhenInUsePermission": "InnocenZ uses your location only when you check in or out of a shift, to confirm you are at the venue.",
           "locationWhenInUsePermission": "InnocenZ uses your location only when you check in or out of a shift, to confirm you are at the venue.",
           "isAndroidBackgroundLocationEnabled": false
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "InnocenZ needs the camera to photograph your ID for verification.",
+          "photosPermission": "InnocenZ may use your photos when the camera is unavailable."
         }
       ],
       [

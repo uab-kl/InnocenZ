@@ -1,4 +1,4 @@
-import React, { useMemo, useState, type ReactNode } from 'react';
+import React, { useMemo, useRef, useState, type ReactNode } from 'react';
 import {
 	Modal,
 	Pressable,
@@ -11,6 +11,8 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../../theme/theme';
 import { Calendar, Check, ChevronDown } from '../../components/icons';
+import { useKeyboardHeight } from '../../lib/keyboard';
+import { reportFocusFromView, useKeyboardScroll } from './keyboard-scroll';
 
 export function Row({ children }: { children: ReactNode }) {
 	return <View style={styles.row}>{children}</View>;
@@ -41,14 +43,25 @@ export function Field({
 
 export function Input(props: React.ComponentProps<typeof TextInput>) {
 	const disabled = props.editable === false;
+	const wrapRef = useRef<View>(null);
+	const keyboardScroll = useKeyboardScroll();
 	return (
-		<View style={[styles.inputWrap, disabled && styles.inputWrapDisabled]}>
+		<View ref={wrapRef} style={[styles.inputWrap, disabled && styles.inputWrapDisabled]}>
 			<TextInput
 				{...props}
 				style={styles.input}
 				placeholderTextColor={C.muted2}
 				autoCapitalize={props.autoCapitalize ?? 'none'}
 				autoCorrect={false}
+				onFocus={(e) => {
+					props.onFocus?.(e);
+					const reveal = () =>
+						reportFocusFromView(wrapRef.current, keyboardScroll?.ensureVisible);
+					reveal();
+					// Re-measure after the keyboard (and screen lift) settle.
+					setTimeout(reveal, 120);
+					setTimeout(reveal, 360);
+				}}
 			/>
 		</View>
 	);
@@ -95,6 +108,7 @@ export function Picker({
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
 	const insets = useSafeAreaInsets();
+	const keyboardHeight = useKeyboardHeight();
 	const items = useMemo(() => normalizeOptions(options), [options]);
 	const selected = items.find((o) => o.value === value);
 	const shown = displayValue ?? selected?.label ?? placeholder;
@@ -113,6 +127,11 @@ export function Picker({
 		setOpen(false);
 		setQuery('');
 	};
+
+	// Lift the sheet above the keyboard so search + options stay visible.
+	const sheetPadBottom =
+		10 + Math.max(insets.bottom, 16) + (searchable ? keyboardHeight : 0);
+	const listMaxHeight = searchable && keyboardHeight > 0 ? 200 : 320;
 
 	return (
 		<>
@@ -134,7 +153,10 @@ export function Picker({
 					<Pressable
 						style={[
 							styles.pickerSheet,
-							{ paddingBottom: 10 + Math.max(insets.bottom, 16) },
+							{
+								paddingBottom: sheetPadBottom,
+								maxHeight: searchable && keyboardHeight > 0 ? '88%' : '70%',
+							},
 						]}
 						onPress={(e) => e.stopPropagation()}
 					>
@@ -154,8 +176,9 @@ export function Picker({
 							</View>
 						) : null}
 						<ScrollView
-							style={styles.pickerSheetList}
+							style={[styles.pickerSheetList, { maxHeight: listMaxHeight }]}
 							keyboardShouldPersistTaps="handled"
+							keyboardDismissMode="on-drag"
 							bounces={false}
 						>
 							{filtered.map((o) => {
@@ -396,6 +419,217 @@ export function Choice({ label, on, onPress }: { label: string; on: boolean; onP
 	);
 }
 
+/**
+ * Compact multi-select for languages — closed field + sheet (not an inline list).
+ * Preset options plus free-text “Other” that the PR can add.
+ */
+export function LanguageMultiPicker({
+	value,
+	options,
+	onChange,
+	title = 'Preferred languages',
+	placeholder = 'Choose languages',
+}: {
+	value: string[];
+	options: readonly string[];
+	onChange: (next: string[]) => void;
+	title?: string;
+	placeholder?: string;
+}) {
+	const [open, setOpen] = useState(false);
+	const [query, setQuery] = useState('');
+	const [other, setOther] = useState('');
+	const insets = useSafeAreaInsets();
+	const keyboardHeight = useKeyboardHeight();
+
+	const selected = useMemo(
+		() => new Set(value.map((v) => v.trim()).filter(Boolean)),
+		[value],
+	);
+
+	const presetFiltered = useMemo(() => {
+		const q = query.trim().toLowerCase();
+		if (!q) return [...options];
+		return options.filter((o) => o.toLowerCase().includes(q));
+	}, [options, query]);
+
+	/** Custom picks that are not in the preset list. */
+	const customSelected = useMemo(() => {
+		const preset = new Set(options);
+		return value.filter((v) => !preset.has(v));
+	}, [value, options]);
+
+	const close = () => {
+		setOpen(false);
+		setQuery('');
+		setOther('');
+	};
+
+	const toggle = (lang: string) => {
+		if (selected.has(lang)) {
+			onChange(value.filter((v) => v !== lang));
+		} else {
+			onChange([...value, lang]);
+		}
+	};
+
+	const addOther = () => {
+		const next = other.trim().replace(/\s+/g, ' ');
+		if (!next) return;
+		const exists = value.some((v) => v.toLowerCase() === next.toLowerCase());
+		if (!exists) onChange([...value, next]);
+		setOther('');
+	};
+
+	const summary =
+		value.length === 0
+			? placeholder
+			: value.length <= 2
+				? value.join(', ')
+				: `${value.slice(0, 2).join(', ')} +${value.length - 2}`;
+
+	const sheetPadBottom = 10 + Math.max(insets.bottom, 16) + keyboardHeight;
+
+	return (
+		<>
+			<Pressable
+				style={[styles.inputWrap, styles.pickerTrigger]}
+				onPress={() => setOpen(true)}
+			>
+				<Text
+					style={[styles.pickerValue, value.length === 0 && styles.pickerPlaceholder]}
+					numberOfLines={1}
+				>
+					{summary}
+				</Text>
+				<ChevronDown size={16} color={C.muted2} strokeWidth={2.2} />
+			</Pressable>
+
+			{value.length > 0 ? (
+				<View style={styles.langTags}>
+					{value.map((lang) => (
+						<Pressable
+							key={lang}
+							onPress={() => toggle(lang)}
+							style={styles.langTag}
+							hitSlop={4}
+						>
+							<Text style={styles.langTagText}>{lang}</Text>
+							<Text style={styles.langTagX}>×</Text>
+						</Pressable>
+					))}
+				</View>
+			) : null}
+
+			<Modal visible={open} transparent animationType="fade" onRequestClose={close}>
+				<Pressable style={styles.pickerBackdrop} onPress={close}>
+					<Pressable
+						style={[
+							styles.pickerSheet,
+							{
+								paddingBottom: sheetPadBottom,
+								maxHeight: keyboardHeight > 0 ? '88%' : '70%',
+							},
+						]}
+						onPress={(e) => e.stopPropagation()}
+					>
+						<Text style={styles.pickerSheetTitle}>{title}</Text>
+						<View style={styles.pickerSearchWrap}>
+							<TextInput
+								style={styles.pickerSearch}
+								value={query}
+								onChangeText={setQuery}
+								placeholder="Search languages"
+								placeholderTextColor={C.muted2}
+								autoCorrect={false}
+								autoCapitalize="none"
+							/>
+						</View>
+						<ScrollView
+							style={[styles.pickerSheetList, { maxHeight: keyboardHeight > 0 ? 180 : 260 }]}
+							keyboardShouldPersistTaps="handled"
+							keyboardDismissMode="on-drag"
+							bounces={false}
+						>
+							{presetFiltered.map((lang) => {
+								const on = selected.has(lang);
+								return (
+									<Pressable
+										key={lang}
+										onPress={() => toggle(lang)}
+										style={[styles.pickerSheetRow, on && styles.pickerSheetRowOn]}
+									>
+										<Text
+											style={[
+												styles.pickerSheetRowText,
+												on && styles.pickerSheetRowTextOn,
+											]}
+										>
+											{lang}
+										</Text>
+										{on ? <Check size={16} color={C.accent} strokeWidth={2.6} /> : null}
+									</Pressable>
+								);
+							})}
+							{customSelected.map((lang) => {
+								const hide =
+									query.trim() &&
+									!lang.toLowerCase().includes(query.trim().toLowerCase());
+								if (hide) return null;
+								return (
+									<Pressable
+										key={`custom-${lang}`}
+										onPress={() => toggle(lang)}
+										style={[styles.pickerSheetRow, styles.pickerSheetRowOn]}
+									>
+										<Text style={[styles.pickerSheetRowText, styles.pickerSheetRowTextOn]}>
+											{lang}
+										</Text>
+										<Check size={16} color={C.accent} strokeWidth={2.6} />
+									</Pressable>
+								);
+							})}
+							{presetFiltered.length === 0 && customSelected.length === 0 ? (
+								<Text style={styles.pickerEmpty}>No matches — add it below.</Text>
+							) : null}
+						</ScrollView>
+
+						<View style={styles.langOtherRow}>
+							<TextInput
+								style={styles.langOtherInput}
+								value={other}
+								onChangeText={setOther}
+								placeholder="Other language"
+								placeholderTextColor={C.muted2}
+								autoCorrect={false}
+								autoCapitalize="words"
+								onSubmitEditing={addOther}
+								returnKeyType="done"
+							/>
+							<Pressable
+								style={[styles.langOtherAdd, !other.trim() && styles.langOtherAddOff]}
+								onPress={addOther}
+								disabled={!other.trim()}
+							>
+								<Text style={styles.langOtherAddText}>Add</Text>
+							</Pressable>
+						</View>
+
+						<Pressable style={styles.dateConfirm} onPress={close}>
+							<Text style={styles.dateConfirmText}>
+								{value.length ? `Done · ${value.length} selected` : 'Done'}
+							</Text>
+						</Pressable>
+						<Pressable style={styles.pickerCancel} onPress={close}>
+							<Text style={styles.pickerCancelText}>Cancel</Text>
+						</Pressable>
+					</Pressable>
+				</Pressable>
+			</Modal>
+		</>
+	);
+}
+
 export function SummaryRow({ label, value }: { label: string; value: string }) {
 	return (
 		<View style={styles.summaryRow}>
@@ -625,6 +859,71 @@ export const fieldStyles = StyleSheet.create({
 		fontSize: 13,
 		fontWeight: '600',
 		color: C.txt,
+	},
+	langTags: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		gap: 6,
+		marginTop: 8,
+	},
+	langTag: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 6,
+		paddingVertical: 6,
+		paddingLeft: 10,
+		paddingRight: 8,
+		borderRadius: 10,
+		borderWidth: 1,
+		borderColor: 'rgba(227,184,119,0.35)',
+		backgroundColor: 'rgba(227,184,119,0.10)',
+	},
+	langTagText: {
+		fontFamily: F.sora,
+		fontSize: 13,
+		fontWeight: '600',
+		color: C.accentL,
+	},
+	langTagX: {
+		fontFamily: F.sora,
+		fontSize: 15,
+		fontWeight: '700',
+		color: C.muted2,
+		lineHeight: 16,
+	},
+	langOtherRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 8,
+		marginHorizontal: 14,
+		marginTop: 8,
+		marginBottom: 6,
+	},
+	langOtherInput: {
+		flex: 1,
+		paddingVertical: 11,
+		paddingHorizontal: 12,
+		borderRadius: 12,
+		borderWidth: 1,
+		borderColor: C.line,
+		backgroundColor: C.bg,
+		fontFamily: F.sora,
+		fontSize: 15,
+		fontWeight: '600',
+		color: C.txt,
+	},
+	langOtherAdd: {
+		paddingVertical: 11,
+		paddingHorizontal: 14,
+		borderRadius: 12,
+		backgroundColor: C.accent,
+	},
+	langOtherAddOff: { opacity: 0.4 },
+	langOtherAddText: {
+		fontFamily: F.sora,
+		fontSize: 14,
+		fontWeight: '700',
+		color: '#241a08',
 	},
 });
 

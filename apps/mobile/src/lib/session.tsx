@@ -15,6 +15,7 @@ import {
   uploadUserProfileImage,
   uploadUserPortfolioPhoto,
   uploadUserComcardImage,
+  uploadUserIdDoc,
   type AgencyMembership,
   type Me,
   type ProfileUpdate,
@@ -85,6 +86,7 @@ type SessionState = {
   uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
   uploadPortfolioPhoto: (slot: number, file: Blob, filename?: string) => Promise<Me>;
   uploadComcardImage: (file: Blob, filename?: string) => Promise<Me>;
+  uploadIdDoc: (side: 'front' | 'back', file: Blob, filename?: string) => Promise<Me>;
   refreshMe: () => Promise<void>;
 };
 
@@ -202,6 +204,16 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [token, me],
   );
 
+  const uploadIdDoc = useCallback(
+    async (side: 'front' | 'back', file: Blob, filename = 'id.jpg') => {
+      if (!token || !me) throw new ApiError('Not signed in', 401);
+      const updated = await uploadUserIdDoc(token, me.id, side, file, filename);
+      setMe(updated);
+      return updated;
+    },
+    [token, me],
+  );
+
   const value = useMemo(
     () => ({
       me,
@@ -214,6 +226,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       uploadAvatar,
       uploadPortfolioPhoto,
       uploadComcardImage,
+      uploadIdDoc,
       refreshMe,
     }),
     [
@@ -227,6 +240,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       uploadAvatar,
       uploadPortfolioPhoto,
       uploadComcardImage,
+      uploadIdDoc,
       refreshMe,
     ],
   );

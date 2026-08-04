@@ -21,6 +21,9 @@ const profileColumns = {
   comcardImage: UserProfileTable.comcardImage,
   comcardHeightCm: UserProfileTable.comcardHeightCm,
   comcardWeightKg: UserProfileTable.comcardWeightKg,
+  comcardBustCm: UserProfileTable.comcardBustCm,
+  comcardWaistCm: UserProfileTable.comcardWaistCm,
+  comcardHipCm: UserProfileTable.comcardHipCm,
 };
 
 /** Collapses an all-null left-join result (no user, or no profile) to `null`. */

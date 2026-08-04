@@ -2,7 +2,7 @@ import { integer, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 
 /**
- * Short-lived WhatsApp OTP proof for PR phone sign-up. Migration 0083.
+ * Short-lived WhatsApp OTP proof for PR phone sign-up. Migration 0084.
  *
  * The plaintext code never lives here — only `code_hash` (sha256 hex). Status
  * machine: pending → verified → consumed. Expired rows stay for audit; send

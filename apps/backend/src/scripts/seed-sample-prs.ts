@@ -14,9 +14,9 @@ import { logger } from '@/util/logger';
 
 // Demo PR (promoter) users so the admin PR list page shows real accounts.
 // Each PR = a user + user_profile + a user_role link to the 'pr' role.
-// Linked to sample agencies via `pr` + `agency_pr`: one `pr` row per (agency,
-// user) pair, and an agency_pr row joining them. A PR can belong to more than
-// one agency — agency_pr is the source of truth.
+// Linked to sample agencies via `pr` (roster) + `agency_pr` (membership by
+// user_id). A PR account can belong to more than one agency — agency_pr is
+// the source of truth for membership.
 // Idempotent: upserts by email and reuses existing pr rows on every run.
 const ACTOR = 'seed-sample';
 const PR_ROLE_NAME = 'pr';
@@ -281,10 +281,8 @@ export async function seedSamplePrs(): Promise<void> {
       });
     }
 
-    // Rebuild this PR's agency links so multi-agency samples stay accurate.
-    // One `pr` row per (agency, user) pair, joined by agency_pr. Existing rows
-    // are reused rather than recreated so the roster keeps its ids — and so the
-    // richer fields seed-sample-pr-personnel writes afterwards survive a re-run.
+    // agency_pr is keyed by user_id (migration 0085). Still ensure a pr row per
+    // originating agency for roster/shifts; membership is the join table.
     for (const code of pr.agencyCodes) {
       const agencyId = agencyIdByCode.get(code);
       if (!agencyId) {
@@ -298,27 +296,22 @@ export async function seedSamplePrs(): Promise<void> {
         .where(and(eq(PrTable.agencyId, agencyId), eq(PrTable.userId, userId)))
         .limit(1);
 
-      let prId = existingPr?.id;
-      if (!prId) {
-        const [inserted] = await db
-          .insert(PrTable)
-          .values({
-            agencyId,
-            userId,
-            name: pr.fullName,
-            nickname: pr.username,
-            createdBy: ACTOR,
-            updatedBy: ACTOR,
-          })
-          .returning({ id: PrTable.id });
-        prId = inserted.id;
+      if (!existingPr) {
+        await db.insert(PrTable).values({
+          agencyId,
+          userId,
+          name: pr.fullName,
+          nickname: pr.username,
+          createdBy: ACTOR,
+          updatedBy: ACTOR,
+        });
       }
 
       await db
         .insert(AgencyPrTable)
         .values({
           agencyId,
-          prId,
+          userId,
           approveStatus: 'approved',
           createdBy: ACTOR,
           updatedBy: ACTOR,

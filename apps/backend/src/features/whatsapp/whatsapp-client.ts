@@ -7,10 +7,11 @@ import { logger } from '@/util/logger.js';
  *   META_WHATSAPP_TOKEN            — permanent / system-user access token
  *   META_WHATSAPP_PHONE_NUMBER_ID  — phone number id from Meta app dashboard
  *   META_WHATSAPP_API_VERSION      — default v21.0
- *   META_WHATSAPP_OTP_TEMPLATE     — optional approved auth template name; if
- *                                    unset, sends a plain text body (works for
- *                                    numbers on the app's allow-list while the
- *                                    Meta app is unpublished)
+ *   META_WHATSAPP_OTP_TEMPLATE     — optional approved auth template name
+ *                                    (e.g. login_code); if unset, sends plain
+ *                                    text (allow-listed numbers / unpublished app)
+ *   META_WHATSAPP_OTP_TEMPLATE_LANG — template language code (e.g. en_US for
+ *                                    English US). Must match Meta exactly.
  */
 
 export type WhatsAppSendResult =
@@ -53,7 +54,9 @@ export async function sendWhatsAppOtp(
         type: 'template',
         template: {
           name: template,
-          language: { code: process.env.META_WHATSAPP_OTP_TEMPLATE_LANG?.trim() || 'en' },
+          language: {
+            code: process.env.META_WHATSAPP_OTP_TEMPLATE_LANG?.trim() || 'en_US',
+          },
           components: [
             {
               type: 'body',
@@ -94,7 +97,15 @@ export async function sendWhatsAppOtp(
 
     if (!res.ok) {
       const message = json.error?.message ?? `WhatsApp API HTTP ${res.status}`;
-      logger.warn('[whatsapp] send failed', { status: res.status, message });
+      logger.warn('[whatsapp] send failed', {
+        status: res.status,
+        message,
+        phoneNumberId,
+        template: template || '(plain text)',
+        lang: template
+          ? process.env.META_WHATSAPP_OTP_TEMPLATE_LANG?.trim() || 'en_US'
+          : undefined,
+      });
       return { ok: false, error: message };
     }
 

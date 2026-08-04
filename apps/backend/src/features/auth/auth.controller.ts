@@ -24,6 +24,7 @@ import {
   normalizePhoneDigits,
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
+import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
 
 export class AuthControllerClass {
   constructor(
@@ -34,6 +35,7 @@ export class AuthControllerClass {
     private roleRepository: RoleRepositoryClass,
     private adminMfaRepository: AdminMfaRepositoryClass,
     private phoneVerificationRepository: PhoneVerificationRepositoryClass,
+    private agencyPrRepository: AgencyPrRepository,
   ) {}
 
   /** Wrong attempts before the account locks. */
@@ -78,7 +80,7 @@ export class AuthControllerClass {
         logger.warn('[AuthController.login] User not found');
         return res.status(401).json({
           success: false,
-          message: 'Invalid credentials',
+          message: 'This account is not registered yet.',
         });
       }
 
@@ -86,7 +88,7 @@ export class AuthControllerClass {
         logger.warn('[AuthController.login] User is not active');
         return res.status(401).json({
           success: false,
-          message: 'User is not active',
+          message: 'This account is inactive.',
         });
       }
 
@@ -121,7 +123,7 @@ export class AuthControllerClass {
         await this.recordFailedLogin(user);
         return res.status(401).json({
           success: false,
-          message: 'Invalid credentials',
+          message: 'Wrong password',
         });
       }
 
@@ -392,6 +394,13 @@ export class AuthControllerClass {
       const isPublicPr =
         parsedBody.accountType === 'pr' && !(await this.callerIsAdmin(req));
       if (isPublicPr) {
+        if (!parsedBody.password) {
+          return res.status(400).json({
+            success: false,
+            message: 'Password must be at least 6 characters long',
+            data: null,
+          });
+        }
         if (!parsedBody.verificationId) {
           return res.status(400).json({
             success: false,
@@ -412,6 +421,29 @@ export class AuthControllerClass {
           return res.status(400).json({
             success: false,
             message: 'Phone verification is missing or expired — verify again',
+            data: null,
+          });
+        }
+        // Validate before createUserWithRole — an empty profile after a 400 would
+        // leave a half-registered account with a consumed OTP receipt.
+        const hasProfileDetails = Boolean(
+          parsedBody.fullName &&
+            parsedBody.nationality &&
+            parsedBody.idType &&
+            parsedBody.idNo &&
+            parsedBody.dob &&
+            parsedBody.addressLine1 &&
+            parsedBody.city &&
+            parsedBody.postcode &&
+            parsedBody.state &&
+            parsedBody.country &&
+            Array.isArray(parsedBody.languages) &&
+            parsedBody.languages.length > 0,
+        );
+        if (!hasProfileDetails) {
+          return res.status(400).json({
+            success: false,
+            message: 'Profile details are required for PR sign-up',
             data: null,
           });
         }
@@ -477,6 +509,75 @@ export class AuthControllerClass {
         });
       }
 
+      // PR self-sign-up → agency membership request on agency_pr (user_id key).
+      if (isPublicPr && parsedBody.agencyId) {
+        const known = await this.agencyPrRepository.filterExistingAgencyIds([
+          parsedBody.agencyId,
+        ]);
+        if (known.length === 1) {
+          await this.agencyPrRepository.ensureLink(
+            user.id,
+            parsedBody.agencyId,
+            actor,
+            'pending',
+          );
+        } else {
+          logger.warn(
+            '[AuthController.register] Ignoring unknown agencyId on PR sign-up',
+            { agencyId: parsedBody.agencyId },
+          );
+        }
+      }
+
+      // createUserWithRole only inserts an empty user_profile — fill identity /
+      // address from the PR wizard (or any register body that sends them).
+      if (
+        parsedBody.fullName &&
+        parsedBody.nationality &&
+        parsedBody.idType &&
+        parsedBody.idNo &&
+        parsedBody.dob &&
+        parsedBody.addressLine1 &&
+        parsedBody.city &&
+        parsedBody.postcode &&
+        parsedBody.state &&
+        parsedBody.country
+      ) {
+        await this.userProfileRepository.update(user.id, {
+          fullName: parsedBody.fullName,
+          nationality: parsedBody.nationality,
+          idType: parsedBody.idType,
+          idNo: parsedBody.idNo,
+          dob: parsedBody.dob,
+          addressLine1: parsedBody.addressLine1,
+          addressLine2: parsedBody.addressLine2 ?? null,
+          city: parsedBody.city,
+          postcode: parsedBody.postcode,
+          state: parsedBody.state,
+          country: parsedBody.country,
+          ...(parsedBody.comcardHeightCm != null
+            ? { comcardHeightCm: parsedBody.comcardHeightCm }
+            : {}),
+          ...(parsedBody.comcardWeightKg != null
+            ? { comcardWeightKg: parsedBody.comcardWeightKg }
+            : {}),
+          ...(parsedBody.comcardBustCm != null
+            ? { comcardBustCm: parsedBody.comcardBustCm }
+            : {}),
+          ...(parsedBody.comcardWaistCm != null
+            ? { comcardWaistCm: parsedBody.comcardWaistCm }
+            : {}),
+          ...(parsedBody.comcardHipCm != null
+            ? { comcardHipCm: parsedBody.comcardHipCm }
+            : {}),
+          ...(parsedBody.languages?.length
+            ? { languages: parsedBody.languages }
+            : {}),
+          verificationStatus: 'pending',
+          updatedBy: actor,
+        });
+      }
+
       logger.info('[AuthController.register] User registered:', user.username);
 
       const profile = await this.userProfileRepository.getByUserId(user.id);
@@ -490,7 +591,8 @@ export class AuthControllerClass {
       if (error instanceof z.ZodError) {
         return res.status(400).json({
           success: false,
-          message: 'Please fill in all mandatory fields',
+          message: error.issues[0]?.message ?? 'Please fill in all mandatory fields',
+          data: null,
         });
       }
 

@@ -30,11 +30,16 @@ export const UserProfileTable = MainSchema.table('user_profile', {
   comcardImage: varchar('comcard_image'),
   comcardHeightCm: integer('comcard_height_cm'),
   comcardWeightKg: integer('comcard_weight_kg'),
+  /** Standard comcard 3-size (BWH), centimetres. */
+  comcardBustCm: integer('comcard_bust_cm'),
+  comcardWaistCm: integer('comcard_waist_cm'),
+  comcardHipCm: integer('comcard_hip_cm'),
   idType: idTypeEnum('id_type'),
   idNo: varchar('id_no', { length: 32 }),
   dob: date('dob'),
   addressLine1: varchar('address_line_1', { length: 255 }),
   addressLine2: varchar('address_line_2', { length: 255 }),
+  city: varchar('city', { length: 100 }),
   postcode: varchar('postcode', { length: 20 }),
   state: varchar('state', { length: 100 }),
   country: varchar('country', { length: 100 }),
@@ -83,11 +88,15 @@ export type UserProfileResponse = {
   comcardImage: string | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
+  comcardBustCm: number | null;
+  comcardWaistCm: number | null;
+  comcardHipCm: number | null;
   idType: IdType | null;
   idNo: string | null;
   dob: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
+  city: string | null;
   postcode: string | null;
   state: string | null;
   country: string | null;
@@ -116,11 +125,15 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     comcardImage: null,
     comcardHeightCm: null,
     comcardWeightKg: null,
+    comcardBustCm: null,
+    comcardWaistCm: null,
+    comcardHipCm: null,
     idType: null,
     idNo: null,
     dob: null,
     addressLine1: null,
     addressLine2: null,
+    city: null,
     postcode: null,
     state: null,
     country: null,
@@ -150,11 +163,15 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     comcardImage: profile.comcardImage,
     comcardHeightCm: profile.comcardHeightCm,
     comcardWeightKg: profile.comcardWeightKg,
+    comcardBustCm: profile.comcardBustCm,
+    comcardWaistCm: profile.comcardWaistCm,
+    comcardHipCm: profile.comcardHipCm,
     idType: profile.idType,
     idNo: profile.idNo,
     dob: profile.dob,
     addressLine1: profile.addressLine1,
     addressLine2: profile.addressLine2,
+    city: profile.city,
     postcode: profile.postcode,
     state: profile.state,
     country: profile.country,

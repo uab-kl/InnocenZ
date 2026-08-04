@@ -4,6 +4,7 @@ import { requireRole } from '@/middlewares/require-role.js';
 import { uploadProfileImage } from '@/middlewares/upload-profile-image';
 import { uploadPortfolioImage } from '@/middlewares/upload-portfolio-image';
 import { uploadComcardImage } from '@/middlewares/upload-comcard-image';
+import { uploadIdDoc } from '@/middlewares/upload-id-doc';
 import { redactIdentityDocsForOutlet } from '@/middlewares/redact-identity-docs';
 
 const router = Router();
@@ -64,6 +65,14 @@ router.post('/:id/comcard-image', (req, res, next) => {
     next();
   });
 }, userController.uploadComcardImage.bind(userController));
+router.post('/:id/id-photo/:side', (req, res, next) => {
+  uploadIdDoc.single('idPhoto')(req, res, (err) => {
+    if (err) {
+      return res.status(400).json({ success: false, message: err.message, data: null });
+    }
+    next();
+  });
+}, userController.uploadIdDoc.bind(userController));
 // Reading your OWN record stays open to every role — this is the call mobile's
 // profile screen makes for the signed-in PR. Reading someone else's is the same
 // staff action as listing: until 30 Jul 2026 any account could fetch any other

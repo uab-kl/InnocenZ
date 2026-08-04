@@ -1,9 +1,9 @@
 /**
  * PR self sign-up — six-step register wizard against the real backend.
- * Step UIs live in step1…step6; this file owns wizard state + navigation.
+ * Step UIs live in step-1…step-6; this file owns wizard state + navigation.
  */
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Platform, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../../theme/theme';
 import {
@@ -19,16 +19,35 @@ import { IzButton } from '../../components/ui';
 import { ChevronLeft } from '../../components/icons';
 import { CODE_LENGTH, RESEND_SECONDS, STEPS } from './constants';
 import { emptyDraft, phoneParts, validateStep, type Draft, type FieldErrors } from './types';
-import { Step1Persona } from './step1';
-import { Step2Address } from './step2';
-import { Step3Agency } from './step3';
-import { Step4VerifyPhotos } from './step4';
-import { Step5Summary } from './step5';
-import { Step6Otp } from './step6';
+import { KeyboardScrollProvider, useKeyboardScroll } from './keyboard-scroll';
+import { Step1Persona } from './step-1';
+import { Step2Address } from './step-2';
+import { Step3Agency } from './step-3';
+import { Step4VerifyPhotos } from './step-4';
+import { Step5Summary } from './step-5';
+import { Step6Otp } from './step-6';
 
 export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void }) {
-	const { signIn } = useSession();
+	const scroller = useRef<ScrollView | null>(null);
+	return (
+		<KeyboardScrollProvider scrollRef={scroller}>
+			<SignUpScreenInner onBackToSignIn={onBackToSignIn} scroller={scroller} />
+		</KeyboardScrollProvider>
+	);
+}
+
+function SignUpScreenInner({
+	onBackToSignIn,
+	scroller,
+}: {
+	onBackToSignIn: () => void;
+	scroller: React.RefObject<ScrollView | null>;
+}) {
+	const { signIn, uploadAvatar, uploadComcardImage, uploadIdDoc, uploadPortfolioPhoto } =
+		useSession();
 	const insets = useSafeAreaInsets();
+	const keyboardScroll = useKeyboardScroll();
+	const keyboardHeight = keyboardScroll?.keyboardHeight ?? 0;
 
 	const [step, setStep] = useState(1);
 	const [draft, setDraft] = useState<Draft>(emptyDraft);
@@ -63,7 +82,6 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 	}, []);
 
 	const agencyFetched = useRef(false);
-	const scroller = useRef<ScrollView | null>(null);
 	const current = STEPS[step - 1];
 	const patch = (part: Partial<Draft>) => setDraft((d) => ({ ...d, ...part }));
 	const clearFieldError = useCallback((key: keyof FieldErrors) => {
@@ -135,6 +153,15 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 	const proceedToVerification = useCallback(
 		async (resending = false) => {
 			if (busy) return;
+			if (!resending) {
+				const { fields, toast: toastMsg } = validateStep(5, draft, localDigits);
+				if (toastMsg) {
+					setFieldErrors(fields);
+					showToast(toastMsg);
+					return;
+				}
+				setFieldErrors({});
+			}
 			setBusy(true);
 			setError(null);
 			setNotice(null);
@@ -161,12 +188,12 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 				setBusy(false);
 			}
 		},
-		[busy, phoneNum, fullPhone, showToast],
+		[busy, draft, localDigits, phoneNum, fullPhone, showToast],
 	);
 
 	const verifyAndSubmit = async () => {
 		if (busy) return;
-		if (otp.length !== CODE_LENGTH) {
+		if (!verificationId && otp.length !== CODE_LENGTH) {
 			const msg = 'Enter all six digits.';
 			setError(msg);
 			showToast(msg);
@@ -175,23 +202,85 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 		setBusy(true);
 		setError(null);
 		setNotice(null);
+		let hasReceipt = Boolean(verificationId);
 		try {
+			// Verify OTP first (JSON). Register also JSON-only — multipart avatar on
+			// /auth/register often fails on device ("Cannot reach backend") even when
+			// OTP just succeeded. Avatar uploads after sign-in like comcard/portfolio.
 			const verified = verificationId ?? (await verifyPrOtp(phoneNum, otp)).verificationId;
+			hasReceipt = true;
 			setVerificationId(verified);
+			const optionalCm = (raw: string): number | undefined => {
+				const digits = raw.replace(/\D/g, '');
+				return digits ? Number(digits) : undefined;
+			};
+			const heightCm = optionalCm(draft.heightCm);
+			const weightKg = optionalCm(draft.weightKg);
+			const bustCm = optionalCm(draft.bustCm);
+			const waistCm = optionalCm(draft.waistCm);
+			const hipCm = optionalCm(draft.hipCm);
 			await registerPr({
 				verificationId: verified,
 				phoneNum,
 				username: draft.floorNickname.trim(),
 				password: draft.password,
 				email: draft.email.trim() || undefined,
+				...(draft.agencyId ? { agencyId: draft.agencyId } : {}),
+				profile: {
+					fullName: `${draft.firstName} ${draft.lastName}`.trim(),
+					nationality: draft.nationality.trim(),
+					idType: draft.idType,
+					idNo: draft.idNo.trim(),
+					dob: draft.dob.trim(),
+					addressLine1: draft.addressLine1.trim(),
+					...(draft.addressLine2.trim()
+						? { addressLine2: draft.addressLine2.trim() }
+						: {}),
+					city: draft.city.trim(),
+					postcode: draft.postcode.trim(),
+					state: draft.state.trim(),
+					country: draft.country.trim(),
+					...(heightCm != null ? { comcardHeightCm: heightCm } : {}),
+					...(weightKg != null ? { comcardWeightKg: weightKg } : {}),
+					...(bustCm != null ? { comcardBustCm: bustCm } : {}),
+					...(waistCm != null ? { comcardWaistCm: waistCm } : {}),
+					...(hipCm != null ? { comcardHipCm: hipCm } : {}),
+					languages: draft.languages,
+				},
 			});
 			await signIn(phoneNum, draft.password);
+			try {
+				if (draft.profileImageFile) {
+					await uploadAvatar(draft.profileImageFile, 'avatar.jpg');
+				}
+				if (draft.idPhotoFrontFile) {
+					await uploadIdDoc('front', draft.idPhotoFrontFile, 'id-front.jpg');
+				}
+				if (draft.idPhotoBackFile) {
+					await uploadIdDoc('back', draft.idPhotoBackFile, 'id-back.jpg');
+				}
+				if (draft.comcardImageFile) {
+					await uploadComcardImage(draft.comcardImageFile, 'comcard.jpg');
+				}
+				for (let i = 0; i < draft.portfolioPhotos.length; i++) {
+					await uploadPortfolioPhoto(
+						i,
+						draft.portfolioPhotos[i].file,
+						`portfolio-${i + 1}.jpg`,
+					);
+				}
+			} catch {
+				// Account exists — photos can be finished from Profile.
+				showToast('Account created. Some photos failed — finish them from Profile.');
+			}
 		} catch (e) {
-			setOtp('');
+			if (!hasReceipt) setOtp('');
 			const msg =
 				e instanceof ApiError && e.status === 410
 					? 'That code expired. Tap Resend for a new one.'
-					: describe(e, 'That code is not right. Check and try again.');
+					: hasReceipt
+						? describe(e, 'Could not finish creating your account. Tap Verify & submit again.')
+						: describe(e, 'That code is not right. Check and try again.');
 			setError(msg);
 			showToast(msg);
 		} finally {
@@ -206,13 +295,16 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 				? { label: busy ? 'Sending…' : 'Create account', onPress: () => proceedToVerification() }
 				: { label: busy ? 'Submitting…' : 'Verify & submit', onPress: verifyAndSubmit };
 
+	// Shrink the screen by the keyboard height so fields + footer stay above it.
+	const liftedPad = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0;
+
 	return (
 		<View
 			style={[
 				styles.screen,
 				{
 					paddingTop: Math.max(insets.top, 24) + 12,
-					paddingBottom: 12 + Math.max(insets.bottom, 16),
+					paddingBottom: 12 + Math.max(insets.bottom, 16) + liftedPad,
 				},
 			]}
 		>
@@ -244,6 +336,10 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 				style={styles.body}
 				contentContainerStyle={styles.bodyContent}
 				keyboardShouldPersistTaps="handled"
+				keyboardDismissMode="on-drag"
+				automaticallyAdjustKeyboardInsets={Platform.OS === 'ios'}
+				onScroll={(e) => keyboardScroll?.onScrollY(e.nativeEvent.contentOffset.y)}
+				scrollEventThrottle={16}
 			>
 				{step === 1 ? (
 					<Step1Persona
@@ -276,9 +372,23 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 						loadAgencies={loadAgencies}
 					/>
 				) : null}
-				{step === 4 ? <Step4VerifyPhotos /> : null}
+				{step === 4 ? (
+					<Step4VerifyPhotos
+						draft={draft}
+						fieldErrors={fieldErrors}
+						patch={patch}
+						clearFieldError={clearFieldError}
+					/>
+				) : null}
 				{step === 5 ? (
-					<Step5Summary draft={draft} fullPhone={fullPhone} agencies={agencies} />
+					<Step5Summary
+						draft={draft}
+						fullPhone={fullPhone}
+						agencies={agencies}
+						fieldErrors={fieldErrors}
+						patch={patch}
+						clearFieldError={clearFieldError}
+					/>
 				) : null}
 				{step === 6 ? (
 					<Step6Otp
@@ -301,12 +411,18 @@ export function SignUpScreen({ onBackToSignIn }: { onBackToSignIn: () => void })
 						label={step === 1 ? 'Back' : 'Previous'}
 						icon={ChevronLeft}
 						variant="soft"
+						small
 						onPress={goBack}
 						disabled={busy}
 					/>
 				</View>
 				<View style={styles.footerHalf}>
-					<IzButton label={primary.label} onPress={primary.onPress} disabled={busy} />
+					<IzButton
+						label={primary.label}
+						small
+						onPress={primary.onPress}
+						disabled={busy}
+					/>
 				</View>
 			</View>
 		</View>
@@ -347,8 +463,8 @@ const styles = StyleSheet.create({
 	dotOn: { backgroundColor: C.accent },
 	body: { flex: 1 },
 	bodyContent: { paddingBottom: 14 },
-	footer: { flexDirection: 'row', gap: 10, paddingTop: 10 },
-	footerHalf: { flex: 1 },
+	footer: { flexDirection: 'row', gap: 8, paddingTop: 8 },
+	footerHalf: { flex: 1, minWidth: 0 },
 	toast: {
 		position: 'absolute',
 		left: 18,

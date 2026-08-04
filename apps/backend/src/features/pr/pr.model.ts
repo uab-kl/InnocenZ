@@ -54,12 +54,11 @@ export type AgencyPrApproveStatus = (typeof agencyPrApproveStatusValues)[number]
 export const agencyPrApproveStatusEnum = MainSchema.enum('agency_pr_approve_status', agencyPrApproveStatusValues);
 
 /**
- * Which agencies a PR is under. A PR can be under many agencies, so this is the
- * many-to-many the single `pr.agency_id` column cannot express.
+ * Which agencies a PR *account* is under. Keyed by `user_id` (migration 0085) —
+ * not `pr.id` — so one login maps cleanly to many agencies.
  *
- * `pr.agency_id` is deliberately still in place and still drives every read path
- * (roster, shifts, payroll, tenant scoping); it is the PR's originating agency.
- * This table is backfilled from it and takes over once those reads are migrated.
+ * Pre-account roster rows (pr with null user_id) stay on `pr.agency_id` only.
+ * Operational reads (shifts, PV) still use `pr`; this table is membership.
  */
 export const AgencyPrTable = MainSchema.table(
   'agency_pr',
@@ -68,16 +67,16 @@ export const AgencyPrTable = MainSchema.table(
     agencyId: uuid('agency_id')
       .notNull()
       .references(() => AgencyTable.id, { onDelete: 'cascade' }),
-    prId: uuid('pr_id')
+    userId: uuid('user_id')
       .notNull()
-      .references(() => PrTable.id, { onDelete: 'cascade' }),
+      .references(() => UserTable.id, { onDelete: 'cascade' }),
     approveStatus: agencyPrApproveStatusEnum('approve_status').notNull().default('pending'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),
     updatedBy: varchar('updated_by').notNull(),
   },
-  (table) => [unique('agency_pr_agency_id_pr_id_unique').on(table.agencyId, table.prId)],
+  (table) => [unique('agency_pr_agency_id_user_id_unique').on(table.agencyId, table.userId)],
 );
 
 export type AgencyPrType = typeof AgencyPrTable.$inferSelect;
@@ -103,6 +102,9 @@ export type PrProfile = {
   comcardImage: string | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
+  comcardBustCm: number | null;
+  comcardWaistCm: number | null;
+  comcardHipCm: number | null;
 };
 
 /** A `pr` row with the linked user's comcard profile folded in. */
