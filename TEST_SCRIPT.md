@@ -696,6 +696,36 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — ONE SCAN FOUND HAVOC, THE NEXT FOUND ONLY BOOKING COMMISSION. THE OCR WRAPPER WAS
+> THROWING HALF THE READ AWAY.**
+>
+> Owner: *"tips section self log inaccurate"* — three scans of one receipt, three different subsets.
+>
+> **`recognizeReceiptText` returned `result.text` and ignored `result.blocks[].lines[]`.** The flat
+> blob is ML Kit’s blocks joined in ITS reading order, which on a tilted or glared photo interleaves a
+> receipt’s columns and tears "1 Tips" off its own line. `blocks[].lines[]` is the engine’s own line
+> segmentation and survives that far better. **Both are now fed, deduped** — the parser keys matches by
+> menu id, so a line present in both forms is still matched once, while a name mangled in one form can
+> be found in the other. It also gives the date/order/time regexes a second reading of the line they
+> need, which is why the Time went blank while the Date on the SAME printed line came through.
+>
+> **That raised a new risk, so it was closed in the same pass:** the flat blob can WELD item lines
+> together — `1 Tips 1 Booking Commision 5 Havoc` — and every quantity rule read the LEADING number,
+> which would bill five Havoc as one. Quantity is now taken from the digits immediately before **that
+> item’s own name**, using the index the matcher returns (`findItemInLine`, replacing the boolean
+> `lineMentionsItem`).
+>
+> **Two bugs found only because the fixtures were written to disagree with the code:**
+> **(1)** a fuzzy window can start one character EARLY — `3bookingcommision` is within two edits of
+> `bookingcommission` — so the index pointed at the quantity and swallowed it; the matcher now steps
+> past leading digits *unless the name itself starts with digits* (`1664 Blanc`). **(2)** `qtyFromLine`
+> was still re-deriving the index with an exact `indexOf`, which finds nothing for a misspelt name, so
+> the receipt’s own typo silently took the line’s first number. **`1 Tips 3 Booking Commision 5 Havoc`
+> read Booking as ×1 — RM 5,150 instead of RM 5,350 — and passed the earlier fixture only by luck,
+> because that one happened to use ×1.**
+>
+> Harness now **11 fixtures + 6 must-not-match**, all green, `apps/mobile` tsc 0.
+
 > **4 Aug 2026 — THE SCAN NOW SHOWS WHAT OCR ACTUALLY READ.**
 >
 > Owner, on a scan of the same receipt that worked twenty minutes earlier: *"i self log for the tips

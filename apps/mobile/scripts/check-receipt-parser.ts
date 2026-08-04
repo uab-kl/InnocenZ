@@ -59,6 +59,25 @@ const CASES: Case[] = [
     expect: { '7Up': 3, '1664 Blanc': 2 },
   },
   {
+    // ML Kit's flattened text can weld a receipt's item lines into one. Each
+    // item must still get ITS OWN number, not the line's leading one.
+    label: 'items welded into one line',
+    text: '1 Tips 1 Booking Commision 5 Havoc',
+    expect: { Tips: 1, 'Booking commission': 1, Havoc: 5 },
+  },
+  {
+    // The receipt's own typo, matched fuzzily, with a quantity that differs
+    // from the line's first number — the case that used to pass by luck.
+    label: 'welded, misspelt name, own quantity',
+    text: '1 Tips 3 Booking Commision 5 Havoc',
+    expect: { Tips: 1, 'Booking commission': 3, Havoc: 5 },
+  },
+  {
+    label: 'welded, priced',
+    text: '2 Havoc 2000.00 1 Tips 50.00',
+    expect: { Havoc: 2, Tips: 1 },
+  },
+  {
     label: 'no quantity printed — assumed, and flagged',
     text: 'Havoc\nTips',
     expect: { Tips: 1, Havoc: 1 },

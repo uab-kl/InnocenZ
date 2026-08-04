@@ -204,31 +204,74 @@ function foldOcrDigits(token: string): string {
  *   9+ letters   → up to 2 typos.
  */
 export function lineMentionsItem(line: string, itemName: string): boolean {
+  return findItemInLine(line, itemName) >= 0;
+}
+
+/**
+ * WHERE the item's name sits in the normalised line, or -1 if it is not there.
+ *
+ * Same test as `lineMentionsItem`, but returning the position — because the
+ * quantity is the number immediately BEFORE the name, and on a line OCR welded
+ * together ("1 Tips 1 Booking Commision 5 Havoc") that is the only way each item
+ * gets its own number instead of the line's first one. Folding preserves length,
+ * so an index found in the folded line is valid in the raw one.
+ */
+export function findItemInLine(line: string, itemName: string): number {
   const l = normalize(line);
   const n = normalize(itemName);
-  if (!l || !n) return false;
+  if (!l || !n) return -1;
+  const foldedName = foldOcrDigits(n);
+  const foldedLine = foldOcrDigits(l);
+
   if (n.length < 5) {
     // Exact standalone word — but accept the singular/plural twin: receipts
     // print "TIP 5.00" while outlets configure the item as "Tips", and that
     // pair must match without opening the door to typo-matching short words.
-    const folded = foldOcrDigits(n);
-    return lineTokens(line).some((raw) => {
-      for (const t of [raw, foldOcrDigits(raw)]) {
-        // The singular/plural twin is allowed both ways: receipts print
-        // "TIP 5.00" while the outlet configures the item as "Tips".
+    const hit = lineTokens(line).some((token) => {
+      for (const t of [token, foldOcrDigits(token)]) {
         if (t === n || `${t}s` === n || t === `${n}s`) return true;
-        if (t === folded || `${t}s` === folded || t === `${folded}s`) return true;
+        if (t === foldedName || `${t}s` === foldedName || t === `${foldedName}s`) return true;
       }
       return false;
     });
+    if (!hit) return -1;
+    // Position for the quantity lookup. The folded search is the fallback for a
+    // name OCR spelt with digits ("t1ps"); folding is 1:1 so the index still
+    // points at the same place in the raw normalised line. Singular-on-paper
+    // ("tip" for "Tips") won't index either — 0 is a safe answer there, since
+    // the caller only counts digits BEFORE the name.
+    const direct = l.indexOf(n);
+    if (direct >= 0) return direct;
+    const viaFold = foldedLine.indexOf(foldedName);
+    if (viaFold >= 0) return viaFold;
+    const singular = l.indexOf(n.replace(/s$/, ''));
+    return singular >= 0 ? singular : 0;
   }
-  if (l.includes(n)) return true;
+
+  const direct = l.indexOf(n);
+  if (direct >= 0) return direct;
+  const viaFold = foldedLine.indexOf(foldedName);
+  if (viaFold >= 0) return viaFold;
   const maxTypos = n.length >= 9 ? 2 : 1;
   for (let start = 0; start + n.length - maxTypos <= l.length; start++) {
     const win = l.slice(start, start + n.length);
-    if (editDistance(win, n, maxTypos) <= maxTypos) return true;
+    if (editDistance(win, n, maxTypos) <= maxTypos) {
+      /*
+       * A fuzzy window can begin one character EARLY and swallow the quantity:
+       * "3bookingcommision" is within two edits of "bookingcommission", so the
+       * index would point at the 3 and the caller would find no digits before
+       * the name. Step past leading digits so the index lands on the name
+       * itself — unless the name genuinely starts with digits ("1664 Blanc"),
+       * where those digits ARE the name.
+       */
+      let at = start;
+      if (!/^\d/.test(n)) {
+        while (at < l.length && /\d/.test(l[at])) at += 1;
+      }
+      return at;
+    }
   }
-  return false;
+  return -1;
 }
 
 /**
@@ -239,8 +282,35 @@ export function lineMentionsItem(line: string, itemName: string): boolean {
  * what makes the bare-leading-number case safe: a date or a table number cannot
  * reach here unless it shares a line with the item.
  */
-function qtyFromLine(line: string, itemName: string): { qty: number; read: boolean } {
+function qtyFromLine(
+  line: string,
+  itemName: string,
+  nameAt: number,
+): { qty: number; read: boolean } {
   const trimmed = line.trim();
+
+  /*
+   * FIRST: the digits sitting immediately before THIS item's name.
+   *
+   * OCR sometimes returns several items welded into one line —
+   * "1 Tips 1 Booking Commision 5 Havoc" — and every rule below reads the
+   * LEADING number, which would bill five Havoc as one and one Tips as five.
+   * Working from the name outwards gets each item its own quantity.
+   *
+   * `nameAt` comes from the matcher, so this works for a name found through the
+   * typo allowance too ("Commision" for "commission") — re-deriving the index
+   * here with an exact indexOf found nothing in exactly that case, and the
+   * misspelt item silently took the line's first number.
+   */
+  const flat = normalize(trimmed);
+  if (nameAt > 0) {
+    const before = /(\d{1,2})$/.exec(flat.slice(0, nameAt));
+    if (before) {
+      const q = Number(before[1]);
+      if (q >= 1 && q <= 99) return { qty: q, read: true };
+    }
+  }
+
   const item = ITEM_RE.exec(trimmed);
   if (item) {
     const q = Number(item[1]);
@@ -311,8 +381,9 @@ export function parseReceipt(text: string, menu: MenuDrink[]): ParsedReceipt {
   const byId = new Map<string, ReceiptMatch>();
   for (const line of lines) {
     for (const item of menu) {
-      if (!lineMentionsItem(line, item.name)) continue;
-      const { qty, read } = qtyFromLine(line, item.name);
+      const nameAt = findItemInLine(line, item.name);
+      if (nameAt < 0) continue;
+      const { qty, read } = qtyFromLine(line, item.name, nameAt);
       const prev = byId.get(item.id);
       if (!prev) {
         byId.set(item.id, {

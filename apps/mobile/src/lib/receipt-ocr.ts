@@ -111,9 +111,37 @@ export async function recognizeReceiptText(uri: string): Promise<string | null> 
     const TextRecognition = mod.default ?? mod;
     if (!TextRecognition?.recognize) return null;
     const result = await TextRecognition.recognize(uri); // ← reads the photo
-    // result.text            ← the whole receipt as one text
-    // result.blocks[].lines[] ← the same text, line by line
-    return typeof result?.text === 'string' ? result.text : '';
+
+    /*
+     * BOTH of ML Kit's representations, deduped — not just `result.text`.
+     *
+     * `result.text` is the flattened blob: the engine's blocks joined in ITS
+     * reading order, which on a tilted or glared photo can interleave a
+     * receipt's columns and separate "1 Tips" from its own line.
+     * `blocks[].lines[]` is ML Kit's own line segmentation and survives that
+     * far better.
+     *
+     * The two disagree often enough that one scan of this receipt found Havoc
+     * and the next found only Booking commission. Feeding both costs nothing:
+     * the parser matches per line and keys results by menu id, so a line
+     * present in both forms is still matched once, while a name mangled in one
+     * form can be found in the other. It also gives the date/order/time regexes
+     * a second reading of the line they need.
+     */
+    const lines = new Set<string>();
+    const add = (value: unknown) => {
+      if (typeof value !== 'string') return;
+      for (const raw of value.split(/\r?\n/)) {
+        const trimmed = raw.trim();
+        if (trimmed) lines.add(trimmed);
+      }
+    };
+
+    add(result?.text);
+    for (const block of result?.blocks ?? []) {
+      for (const line of block?.lines ?? []) add(line?.text);
+    }
+    return [...lines].join('\n');
   } catch {
     return null;
   }
