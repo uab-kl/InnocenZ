@@ -909,6 +909,37 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 (late) — ✅ PRE-PILOT GATE 2 CLOSED AND PROVEN. The demo login is DEV-only and absent
+> from a production build. And the gate's own description of the credential was WRONG.**
+>
+> 🔴 **The recorded credential was `owner@atlas-agency.my` + `password`. That is not it.**
+> `isAgencyDemoLogin` requires **`demo@atlas-agency.invalid`** exactly (outlet:
+> `demo@velvet23.invalid`), and **`.invalid` is a reserved TLD (RFC 2606) that can never be a real
+> address**. The real owner email falls straight through to the backend, which rejects the wrong
+> password. ⚠️ **The gate had been carried for days describing a credential that does not exist**, and
+> it was filed as *"an auth bypass into a real portal"* — a bigger claim than the code supports.
+>
+> **What it actually was:** `routes/login.tsx` checked the demo credentials BEFORE the real login, in
+> every build, with no environment guard anywhere in `lib/auth`. A match planted a placeholder JWT —
+> `alg: "none"`, signature literally `"demo"` — purely so the route guard passes. **The backend
+> verifies signatures, so that token could never read real data.** The blast radius was a client-side
+> demo shell, not real records. Gated anyway: a login that accepts a known password for a known
+> address should not exist in a build a client can reach.
+>
+> **Fixed** by wrapping the branch in `import.meta.env.DEV`, which Vite replaces with the literal
+> `false` at build time so the branch AND its dynamic import are dropped.
+>
+> ✅ **PROVEN BY BUILDING IT, not by reading it.** `vite build`, then grepped **1,147** emitted
+> `.js`/`.mjs` files:
+> `demo@atlas-agency.invalid` **0** · `demo@velvet23.invalid` **0** · `isAgencyDemoLogin` **0** ·
+> `startAgencyDemoSession` **0** — while `auth/login` **2** and `startAgencyRealSession` **4** confirm
+> the real path survived. ⚠️ **Counts, not blank output:** an empty grep result is indistinguishable
+> from a broken grep, so every symbol was counted and two known-present controls were included.
+>
+> **Also found:** `PortalSignInScreen.tsx` pre-fills the password box with the literal `"password"` —
+> but **no route mounts that component**; it is the orphaned island the audit already counts. Left
+> alone.
+
 > **4 Aug 2026 (late) — 🔴 CANCEL AND NO-SHOW DID NOTHING FROM THE ROSTER'S LIVE TAB, silently. Same
 > bug as the outlet-swap one recorded three lines above it in the same file.**
 >
