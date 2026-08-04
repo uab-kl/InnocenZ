@@ -696,6 +696,30 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — 🔴 CHECK-OUT WAS BLOCKED BY ROWS WHOSE PROOF PHOTO WAS NEVER SENT.**
+>
+> Owner: *"just make sure every action submitted that picture as the ocr proof of the drink and the tips
+> can check out already"* — *"2 logged actions have no picture"* on a shift where **both receipts were
+> photographed and both appear under Scanned receipts**.
+>
+> **The screen’s own comment was wrong.** It said *"The scanned receipt photo IS the proof —
+> runScanDetect auto-attaches it"*, but only the pure-scan submit sent `receiptShot`. The item-menu
+> submit sent `proofPhotos`, which `keepAsProof` fills **only when a scan FAILS**. So the successful
+> path — read the receipt, adjust quantities, confirm — saved every row with NO picture, and check-out
+> refuses those. The Tips page always goes through that path, which is why its rows were the picture-less
+> ones while the Drinks scan was fine.
+>
+> **Two more paths sent nothing at all:** rows added mid-edit (`for (const d of rest)`) had no
+> `proofPhotos` key whatsoever, and the amount-fallback edit sent only the manual photos.
+>
+> **Now one list feeds all five submits** — `proofForSubmit`: the receipt shot first, then any manually
+> added photos, deduped and capped at 6 like `keepAsProof`. The submit gate uses the same list, so it can
+> no longer demand a photo that is already on file.
+>
+> ⚠️ **The two rows already saved stay broken** — Tip RM 50.00 and Booking commission RM 100.00, 10:50.
+> The fix stops new ones; it cannot retro-fit a picture. Either re-log them after the rebuild, or say the
+> word and their shift’s receipt photo can be attached server-side.
+
 > **4 Aug 2026 — AN ITEM OCR MISSES IS NO LONGER INVISIBLE.**
 >
 > Owner, third report of the same shape: *"again where is the tips i scan sometimes missing tips

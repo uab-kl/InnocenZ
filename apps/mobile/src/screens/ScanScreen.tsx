@@ -211,7 +211,23 @@ export function ScanScreen({
   // only demanded on the no-menu amount fallback (nothing else captures one).
   const proofRequired =
     mode === 'selflog' && category === 'drinks' && !editId && !showItemMenu;
-  const missingProof = proofRequired && proofPhotos.length === 0;
+  /**
+   * EVERY line this screen saves carries the scanned receipt as its proof.
+   *
+   * The comment above has always claimed the scan photo IS the proof, but only
+   * the pure-scan submit sent it: the item-menu path sent `proofPhotos` alone,
+   * which is filled by `keepAsProof` only when a scan FAILS. So a scan that read
+   * the receipt fine and then went through the adjust-quantity list saved rows
+   * with no picture at all — and check-out refuses those: "2 logged actions have
+   * no picture", with both receipts photographed and on file.
+   *
+   * Deduped, receipt first, capped like keepAsProof does.
+   */
+  const proofForSubmit = useMemo(
+    () => [...new Set([...(receiptShot ? [receiptShot] : []), ...proofPhotos])].slice(0, 6),
+    [receiptShot, proofPhotos],
+  );
+  const missingProof = proofRequired && proofForSubmit.length === 0;
 
   // Commission at this PR's real tier rate (happy-hour aware); falls back to the
   // prototype flat rates only when the outlet has no rate card configured.
@@ -464,7 +480,7 @@ export function ScanScreen({
             commission: commissionForItem(first, firstAmt),
             outlet: outlet,
             // A retaken snap replaces the saved picture (and its receipt copy).
-            ...(proofPhotos.length ? { proofPhotos } : {}),
+            ...(proofForSubmit.length ? { proofPhotos: proofForSubmit } : {}),
           });
           // Any extra items the user added during the edit become new rows.
           for (const d of rest) {
@@ -478,6 +494,9 @@ export function ScanScreen({
               sales: amt,
               commission: commissionForItem(d, amt),
               outlet: outlet,
+              // Every row gets the picture, including ones added mid-edit —
+              // a row without one cannot be checked out.
+              ...(proofForSubmit.length ? { proofPhotos: proofForSubmit } : {}),
             });
           }
           return;
@@ -492,17 +511,17 @@ export function ScanScreen({
           commission: commissionFor(category, amt),
           outlet: outlet,
           // A retaken snap replaces the saved picture (and its receipt copy).
-          ...(proofPhotos.length ? { proofPhotos } : {}),
+          ...(proofForSubmit.length ? { proofPhotos: proofForSubmit } : {}),
         });
         return;
       }
       // Proof photo is mandatory for a fresh drink self-log (the submit button
       // is already gated on this; this is the backstop so it can never persist
       // without it).
-      if (proofRequired && proofPhotos.length === 0) {
+      if (proofRequired && proofForSubmit.length === 0) {
         throw new Error('Snap a proof photo before you submit.');
       }
-      const proof = proofPhotos.length ? proofPhotos : undefined;
+      const proof = proofForSubmit.length ? proofForSubmit : undefined;
       if (showItemMenu) {
         const items = buildReceiptItems(categoryMenu);
         if (items.length === 0) {
