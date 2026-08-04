@@ -1,6 +1,7 @@
 import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
+import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { GeoFenceCard } from "@agency-portal/components/outlet/GeoFenceCard";
 import {
 	OutletPage,
@@ -434,6 +435,14 @@ function OutletSettingsPage() {
 					onChange={(v) => saveOutletSettings({ notifyShiftUpdates: v })}
 				/>
 			</IzCard>
+
+			{/* Real staff of this venue, from `outlet_user`. Distinct from the
+			    Finance/Ops Head cards above, which are the demo profile form. */}
+			<OrgMembersPanel
+				kind="outlet"
+				orgId={profile.outletId}
+				canManage={canEdit}
+			/>
 
 			<IzSectionLabel>Login &amp; security</IzSectionLabel>
 			<IzCard>

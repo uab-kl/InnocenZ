@@ -5,6 +5,7 @@ import type {
 	GeoFencePayload,
 	OutletApiResponse,
 	OutletGeocodeApiResponse,
+	OutletMemberApiResponse,
 	OutletMembersApiResponse,
 	OutletMembershipsApiResponse,
 	OutletsApiResponse,
@@ -187,6 +188,56 @@ export async function fetchOutletMembershipsForUser(
 		message: response.data.message,
 		data: response.data.data ?? [],
 	};
+}
+
+/**
+ * Add an EXISTING user account to this venue (`POST /outlet/:id/members`).
+ * Takes a `userId`, not an email: there is no invite endpoint and no mailer, so
+ * the person must already have an account. See `useOrgMembers`.
+ */
+export async function addOutletMember(
+	outletId: string,
+	payload: { userId: string; subRole: string },
+	onRefreshFail: () => void,
+): Promise<OutletMemberApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<OutletMemberApiResponse>(
+		`/outlet/${outletId}/members`,
+		payload,
+	);
+	return response.data;
+}
+
+/**
+ * Change a member's sub-role or status. The server refuses (409) anything that
+ * would leave the venue with no active owner, and 404s a `memberId` belonging to
+ * a different venue.
+ */
+export async function updateOutletMember(
+	outletId: string,
+	memberId: string,
+	payload: { subRole?: string; status?: string },
+	onRefreshFail: () => void,
+): Promise<OutletMemberApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<OutletMemberApiResponse>(
+		`/outlet/${outletId}/members/${memberId}`,
+		payload,
+	);
+	return response.data;
+}
+
+/** Remove a member. Refused (409) if they are the last active owner. */
+export async function removeOutletMember(
+	outletId: string,
+	memberId: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.delete<{ success: boolean; message: string }>(
+		`/outlet/${outletId}/members/${memberId}`,
+	);
+	return response.data;
 }
 
 export async function fetchOutletMembers(

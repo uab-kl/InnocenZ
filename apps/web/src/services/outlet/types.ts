@@ -65,6 +65,13 @@ export interface OutletApiResponse {
 	data: Outlet;
 }
 
+/** Single-member responses: add / update. */
+export interface OutletMemberApiResponse {
+	success: boolean;
+	message: string;
+	data: OutletMember;
+}
+
 export interface OutletMembersApiResponse {
 	success: boolean;
 	message: string;

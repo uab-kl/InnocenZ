@@ -5,6 +5,7 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
+import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { useAgencyProfile } from "@agency-portal/hooks/use-agency-profile";
 import type {
 	AgencyFinanceHead,
@@ -388,6 +389,14 @@ function AgencyProfile() {
 					</IzCard>
 				</>
 			)}
+
+			{/* Real staff of this agency, from `agency_user`. Distinct from the
+			    Finance Head card above, which is the demo profile form. */}
+			<OrgMembersPanel
+				kind="agency"
+				orgId={profile.agencyId}
+				canManage={canEdit}
+			/>
 
 			<IzSectionLabel>Login &amp; security</IzSectionLabel>
 			<IzCard>

@@ -355,6 +355,14 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   `200`** — Atlas has exactly ONE member, so there was no second member to re-send; `POST` (add) was
 >   never fired at all, because creating a member leaves a permanent row. **Only the refusals are
 >   evidence.**
+> - [x] **✅ UI DONE + CLICKED THROUGH — the Team panel is live on both Settings screens.**
+>   `OrgMembersPanel` (one component, `kind="agency"|"outlet"`) lists real `agency_user` /
+>   `outlet_user` rows, changes a sub-role, removes with a confirm step, and adds by email.
+>   **Agency: `PUT` → 409 and the toast carried the SERVER'S words** — *"Cannot change the last active
+>   owner — appoint another owner first"* — with the select reverting to `owner`. **Outlet: 3 real
+>   members render** (Chen Wei Jie owner · Michelle Lim finance · Ahmad Razif ops) with the correct
+>   3-role select. Zero console errors on both. ⚠️ Add-member and remove were NOT fired live: both
+>   leave permanent rows on the shared DB.
 > - [ ] ~~**Member management for org owners.**~~ `POST`/`PUT`/`DELETE /agency/:id/members` (and the four
 >   outlet equivalents) **exist** but are `requireAdmin` **on purpose** — the route file argues that
 >   *membership IS identity*, since an `agency_user` row is what every sub-role guard reads. Widening
@@ -900,6 +908,44 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (late) — the member-management UI is BUILT and CLICKED THROUGH on both portals. The
+> capability finally moves from *unwired* to *done*.** Web `tsc` **120** (baseline), 0 in touched
+> files, biome clean.
+>
+> **One component for both orgs.** `OrgMembersPanel` takes `kind="agency" | "outlet"` and mounts on
+> the agency and outlet Settings screens: lists the real `agency_user` / `outlet_user` rows, changes a
+> sub-role, removes behind a Confirm/Cancel step, and adds by email.
+>
+> ✅ **Proven in a browser on real logins.** Agency: changing the only owner's role fired
+> **`PUT` → 409**, the toast carried **the server's exact words** — *"Cannot change the last active
+> owner — appoint another owner first"* — and the select reverted to `owner`. Outlet: **3 real members
+> render** (Chen Wei Jie owner · Michelle Lim finance · Ahmad Razif ops) with the correct 3-role
+> select. **Zero console errors on either.**
+>
+> **The panel deliberately re-implements NO rule.** Ownership and last-owner checks live only on the
+> server; the UI shows what the server said. *A client-side copy of a permission rule drifts, and the
+> copy that drifts is the one the user believes.* `serverMessage()` exists for exactly this: the 409
+> text is the ONLY explanation of why a change was refused, so collapsing it into "Something went
+> wrong" would leave an owner unable to tell a rule from an outage.
+>
+> ⚠️ **"Add member" takes an EMAIL but the API takes a `userId`,** so the hook resolves one to the
+> other via `GET /user?email=` — **exact match only, and the result is never rendered as a list.**
+> That endpoint is already open to agency and outlet callers, so this adds no new read; but rendering
+> what it returns would turn a lookup into a people-browser for every org owner, which is the open
+> privacy question this project already records. **The person must already have an account — no
+> invite is sent, because there is no mailer — and the panel says so on its face** rather than letting
+> it be discovered as a failure.
+>
+> ⚠️ **NOT fired live: add and remove.** Both leave permanent rows on the shared database. The
+> refusals are evidence; the successes are not.
+>
+> **Method note:** the session was kicked to the marketing landing page mid-run — the access token
+> expired during a long session, and `kickToLogin()` hard-redirects. Diagnosed from the network and
+> console buffers being EMPTY (a full reload clears them) rather than guessed at. Also: **a toast is
+> hard to catch by polling** — it had auto-dismissed by the next tool call twice. Captured properly
+> with a `MutationObserver` armed BEFORE dispatching the change. *If a thing is transient, observe it
+> from before it happens rather than looking for it afterwards.*
 
 > **4 Aug 2026 (late) — member management widened from admin-only to ORG OWNERS. Backend done and
 > live-proven 8/0/3; the UI is NOT built. Backend `tsc` 0 · unit tests 21/21 across 3 files.**

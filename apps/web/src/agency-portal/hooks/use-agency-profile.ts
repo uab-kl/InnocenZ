@@ -118,6 +118,8 @@ export function useAgencyProfile() {
 
 	return {
 		backed,
+		// Exposed for the Team panel, mirroring `useOutletProfile`'s `outletId`.
+		agencyId,
 		owner,
 		finance,
 		isLoading: agencyQuery.isLoading || membersQuery.isLoading,
