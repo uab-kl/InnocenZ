@@ -222,6 +222,33 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     (l) => l.source !== 'checkin' && (l.proofPhotos ?? []).length === 0,
   ).length;
 
+  /**
+   * A shift only closes once BOTH halves of the night are accounted for: a
+   * drinks action and a tips action, each carrying its picture.
+   *
+   * Leaving one side unlogged is not a neutral omission — it is commission the
+   * PR cannot claim later, once the paper is gone and the week has closed.
+   * Wages (`kind: 'wages'`) and the check-in stamp are the shift itself rather
+   * than an action, so neither counts towards either half.
+   */
+  const loggedActions = todayReceipts.filter(
+    (l) => l.source !== 'checkin' && l.kind !== 'wages',
+  );
+  const missingHalves = [
+    loggedActions.some((l) => l.kind === 'drinks') ? null : 'drinks',
+    loggedActions.some((l) => l.kind === 'tips') ? null : 'tips',
+  ].filter(Boolean) as string[];
+
+  /** Why check-out is refused, or null when it is allowed. Photos first. */
+  const missingPlural = linesMissingPhoto === 1 ? '' : 's';
+  const missingHasHave = linesMissingPhoto === 1 ? 'has' : 'have';
+  const checkOutBlock: string | null =
+    linesMissingPhoto > 0
+      ? `${linesMissingPhoto} logged action${missingPlural} ${missingHasHave} no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.`
+      : missingHalves.length > 0
+        ? `Nothing logged for ${missingHalves.join(' or ')} yet. Scan the receipt or self-log it — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.`
+        : null;
+
   const finalPayout = active
     ? (Number(active.rate?.wagePerHour) || Number(active.payAmount)) +
       receiptCommissionTotal(todayReceipts)
@@ -521,18 +548,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   label="Check out"
                   holding={holding}
                   progress={progress}
-                  disabled={linesMissingPhoto > 0}
+                  disabled={checkOutBlock !== null}
                   onPress={() => {
-                    if (linesMissingPhoto > 0) return;
+                    if (checkOutBlock !== null) return;
                     startHold(true);
                   }}
                 />
-                {linesMissingPhoto > 0 && (
-                  <Text style={[styles.gpsNote, { color: C.red }]}>
-                    {linesMissingPhoto} logged action{linesMissingPhoto === 1 ? '' : 's'} ha
-                    {linesMissingPhoto === 1 ? 's' : 've'} no picture — tap the red camera on
-                    that row to scan again, or remove the row, before you can check out.
-                  </Text>
+                {checkOutBlock !== null && (
+                  <Text style={[styles.gpsNote, { color: C.red }]}>{checkOutBlock}</Text>
                 )}
               </>
             )}
