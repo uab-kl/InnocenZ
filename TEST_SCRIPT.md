@@ -838,6 +838,21 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 (night, housekeeping) — biome formatting only, no behaviour change.**
+>
+> The save-formatter rewrote three pre-existing files that this session touched
+> (`lucide-label-icons.ts`, `nav-back.ts`, `outlet-rbac.ts`) from 2-space/single-quote to the
+> project's biome style (tabs, double quotes, sorted imports). **They were deliberately kept OUT of
+> `c0b732f` and `b536233`** so ~900 lines of cosmetic churn would not bury a ~15-line bugfix, and
+> are committed separately here.
+>
+> **Proven formatting-only before committing**, not assumed: for each file, the HEAD and working
+> copies were stripped of whitespace and quote characters and compared. Two matched outright;
+> `outlet-rbac.ts` appeared to differ, and the difference turned out to be **import ORDER** (the
+> formatter sorted `iconForNav` above the `LucideIcon` type import) — a sorted line-by-line diff was
+> empty. ⚠️ **A concatenated-hash comparison is order-sensitive and will call a re-sorted import
+> block "semantic"; diff the sorted lines before believing it.**
+
 > **4 Aug 2026 (night) — `PV-000005` MERGED into `PV-000006`; the agency portal's fatal import
 > cycle broken. All 4 live vouchers now reconcile.**
 >

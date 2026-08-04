@@ -33,6 +33,12 @@ import {
 	typicalDrinkPrice,
 } from "@agency-portal/lib/outlet-demo";
 import {
+	DEFAULT_DRINK_UNITS,
+	DEFAULT_PER_DRINK_RM,
+	DEFAULT_PER_TABLE_RM,
+	DEFAULT_TABLE_UNITS,
+} from "@agency-portal/lib/outlet-financial-defaults";
+import {
 	floorTipsForOutletFromRoster,
 	outletMatches,
 } from "@agency-portal/lib/portal-sync";
@@ -54,12 +60,6 @@ import {
 	shiftSalesLogged,
 } from "@agency-portal/lib/pr-shift-status";
 import { receiptDateIso } from "@agency-portal/lib/receipt-scan-utils";
-import {
-	DEFAULT_DRINK_UNITS,
-	DEFAULT_PER_DRINK_RM,
-	DEFAULT_PER_TABLE_RM,
-	DEFAULT_TABLE_UNITS,
-} from "@agency-portal/lib/outlet-financial-defaults";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 
 // Declared in a leaf module so `outlet-demo` can read them without importing
