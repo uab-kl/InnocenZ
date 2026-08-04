@@ -170,7 +170,28 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
         date: [d.getFullYear(), d.getMonth() + 1, d.getDate()] as Ymd,
       };
     });
-  const upcomingCount = shifts.filter((s) => ymdToIso(...s.date) >= todayIso).length;
+  /**
+   * Shifts STILL TO BE WORKED — not "shifts dated today or later".
+   *
+   * The date test alone counted shifts the PR had already finished: on 4 Aug
+   * Victoria checked in and out three times, and the hub strip read **UPCOMING 3**
+   * while the Agency Schedule directly below it said *"No shifts this week"* —
+   * the same three shifts, described as both pending and gone on one screen.
+   *
+   * The timetable was the honest one. It drops a shift the moment it is checked
+   * in or out (AgencySchedulePanel ~263: `!s.checkInAt && !s.checkOutAt &&
+   * s.status !== 'completed'`), because a shift being worked belongs to Today's
+   * section and a worked one belongs to Payment. This applies the same test:
+   * `assignmentToShift` sets 'complete' from checkOutAt/status and 'on-duty'
+   * from checkInAt, so excluding those two IS that predicate, expressed on the
+   * mapped shape.
+   *
+   * Still counted: future days, and today's not-yet-started shifts — which is
+   * what a PR reads the number for.
+   */
+  const upcomingCount = shifts.filter(
+    (s) => ymdToIso(...s.date) >= todayIso && s.status !== 'complete' && s.status !== 'on-duty',
+  ).length;
 
   const { width } = useViewportSize();
   const [open, setOpen] = useState<Record<SectionKey, boolean>>({

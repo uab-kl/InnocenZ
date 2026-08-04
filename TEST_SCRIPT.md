@@ -696,6 +696,30 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — "UPCOMING 3" ON A DAY WITH NO UPCOMING SHIFT.**
+>
+> Owner: *"in today page pr why still have 3 upcoming , but the agency schedule is already no shift"*.
+>
+> Today's hub strip read **UPCOMING 3** directly above an Agency Schedule saying *"No shifts this week"* —
+> the same three shifts called both pending and gone on one screen. The DB settles it: every 4 Aug
+> assignment is `completed` with both stamps —
+>
+> | assignment | shift_date | status | check_in_at | check_out_at |
+> |---|---|---|---|---|
+> | d24c4329 | 2026-08-04 | completed | 01:54:27Z | 03:08:59Z |
+> | 43f7e17e | 2026-08-04 | completed | 03:09:47Z | 03:14:13Z |
+> | ac63bead | 2026-08-04 | completed | 03:29:36Z | 04:05:08Z |
+>
+> `upcomingCount` tested the DATE only (`ymdToIso(...s.date) >= todayIso`), so a shift already worked still
+> counted as upcoming. The timetable was the honest one — it drops a shift the moment it is checked in or
+> out (`AgencySchedulePanel` ~263), because one being worked belongs to Today and a worked one belongs to
+> Payment. The count now applies that same predicate on the mapped shape (`status !== 'complete' &&
+> status !== 'on-duty'`), giving **0** for 4 Aug. Future days and today's not-yet-started shifts still
+> count. Client-side only — no endpoint, no schema, no migration; `apps/mobile` stays 0-error.
+>
+> Note the 3 Aug row (`assigned`, no stamps) is the RED missed-check-in day on the calendar; being dated
+> before today it was never in the count and still isn't.
+
 > **4 Aug 2026 — ONE PAPER = ONE LOG PER NIGHT (the duplicate guard was scoped to the check-in).**
 >
 > Owner: *"this shift got problem cause the user scanned the same receipt for the drink so is same order
