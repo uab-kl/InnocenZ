@@ -43,6 +43,34 @@ export async function fetchOutletById(
 	return response.data;
 }
 
+/**
+ * Owner-only edit of the venue's own record (`PUT /outlet/:id`).
+ *
+ * `status` is absent from the payload type: it is the admin approve/suspend
+ * lane, and the server refuses it from a non-admin caller rather than dropping
+ * it silently. `lat`/`lng` are absent too — moving a pin is
+ * `PATCH /outlet/:id/geo-fence`, deliberately its own endpoint because saving a
+ * pin is what switches hard geofencing on for that venue.
+ */
+export async function updateOutlet(
+	id: string,
+	payload: {
+		name?: string;
+		addressLine1?: string;
+		addressLine2?: string;
+		postcode?: string;
+		state?: string;
+		country?: string;
+		ssmNo?: string;
+		businessLicense?: string;
+	},
+	onRefreshFail: () => void,
+): Promise<OutletApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<OutletApiResponse>(`/outlet/${id}`, payload);
+	return response.data;
+}
+
 export async function approveOutlet(
 	id: string,
 	onRefreshFail: () => void,

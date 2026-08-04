@@ -332,7 +332,17 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   - the same three for `PUT /outlet/:id`, plus `PATCH` and `DELETE /outlet/:id/geo-fence`
 >   - ⚠️ **admin must still pass all of them** — `isAdmin` short-circuits before the scope test, and an
 >     over-applied denial fails silently until somebody cannot work
-> - [ ] **Wire the outlet Settings save.** `routes/outlet/settings.tsx` still persists nothing;
+> - [x] **✅ DONE (partly, and the partial is deliberate) — the outlet Settings save persists the
+>   VENUE NAME** through `PUT /outlet/:id`, same shape as the agency screen: save first, refuse to
+>   show a saved state the server rejected. ⚠️ **The address is NOT saved, and must not be wired as
+>   it stands.** The screen shows ONE location line, but that line is DERIVED — `joinAddress()`
+>   concatenates five columns (`addressLine1`, `addressLine2`, `postcode`, `state`, `country`).
+>   Writing the edited string back would have to choose a column to put it in, **flattening five
+>   fields into one and silently emptying the other four.** Splitting a free-text address is a
+>   parsing problem, not a wiring one — the input stays store-only until the FORM has five fields.
+>   The toast says so out loud: *"Venue name saved · address is not persisted yet"*.
+>   ⚠️ **Endpoint proven live (probe 7/0), React wiring only TYPECHECKED — not yet clicked through.**
+> - [ ] ~~**Wire the outlet Settings save.**~~ `routes/outlet/settings.tsx` still persists nothing;
 >   `PUT /outlet/:id` exists and is now correctly scoped. Mirror the agency shape: a
 >   `save`/`isSaving` pair on `useOutletProfile`, save BEFORE the screen shows a saved state, and send
 >   only fields with a column behind them.
@@ -881,6 +891,29 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (late) — the outlet Settings save is wired to `PUT /outlet/:id`, NAME ONLY, and the
+> part left unwired is the interesting one.**
+>
+> Same shape as the agency screen (`d513e5c`): persist first, bail out with a warning if the server
+> refuses, so the screen never shows a saved state the database rejected. Web `tsc` **120**
+> (baseline), **0 errors in the touched files**.
+>
+> 🔴 **The address is deliberately NOT saved, and wiring it as the form stands would have destroyed
+> data.** The screen shows one location line — but that line is DERIVED: `joinAddress()` concatenates
+> **five** columns (`addressLine1`, `addressLine2`, `postcode`, `state`, `country`). Writing the
+> edited string back means picking one column to hold it, which **flattens five fields into one and
+> silently empties the other four.** *A read that joins is not a write that splits.* Splitting a
+> free-text address is a parsing problem, not a wiring one, so the input stays store-only until the
+> form itself has five fields — and the toast now says so out loud rather than implying a full save:
+> *"Venue name saved · address is not persisted yet"*.
+>
+> `lat`/`lng` are excluded for a different reason: moving a pin is `PATCH /outlet/:id/geo-fence`, its
+> own endpoint precisely because saving a pin is what switches hard geofencing ON for a venue.
+>
+> ⚠️ **What is proven and what is not.** The ENDPOINT is live-proven (`probe-org-scope-guard`, own
+> outlet PUT → 200). The REACT WIRING is typechecked only — **the screen has not been clicked
+> through**, which on this project is the difference that has repeatedly mattered.
 
 > **4 Aug 2026 (late) — the scoped owner guard is LIVE-PROVEN, 7/0/1. The percentage table moves to
 > features ~93% · wired ~87% · proven ~86% spine / ~50% branches · production-ready ~20%.**

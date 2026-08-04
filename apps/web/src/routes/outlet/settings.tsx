@@ -172,7 +172,7 @@ function OutletSettingsPage() {
 		reader.readAsDataURL(file);
 	};
 
-	const saveEdit = () => {
+	const saveEdit = async () => {
 		if (!draft.ownerName.trim()) {
 			toast("Enter owner name", "warn");
 			return;
@@ -184,6 +184,19 @@ function OutletSettingsPage() {
 		if (!draft.orgName.trim()) {
 			toast("Enter venue name", "warn");
 			return;
+		}
+		// Real session: persist the venue name FIRST and bail out if the server
+		// refuses, so the screen never shows a saved state the database rejected.
+		// Only the name goes up — see the note on `save` in use-outlet-profile:
+		// the location line is five columns joined for display, and writing it
+		// back would flatten them into one.
+		if (profile.backed) {
+			try {
+				await profile.save({ venueName: draft.orgName.trim() });
+			} catch {
+				toast("Could not save — the server refused the change", "warn");
+				return;
+			}
 		}
 		saveOutletProfileSettings({
 			owner: {
@@ -197,6 +210,9 @@ function OutletSettingsPage() {
 			opsHead: { ...opsDraft },
 			location: locationDraft.trim(),
 		});
+		if (profile.backed) {
+			toast("Venue name saved · address is not persisted yet", "success");
+		}
 		setEditing(false);
 	};
 
