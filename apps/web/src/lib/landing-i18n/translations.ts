@@ -194,64 +194,172 @@ export interface LandingTranslations {
 }
 
 const enModules = [
-	{ title: "Smart Scheduling", desc: "AI-driven roster planning with live availability, tiers, and double-booking detection." },
-	{ title: "AI Workforce Matching", desc: "Best-fit PR selected per outlet per night — by tier, history, and demand curve." },
-	{ title: "Digital Payroll", desc: "Cycle-locked payouts, no spreadsheets, no cash reconciliation, no missed shifts." },
-	{ title: "Commission Engine", desc: "Daily wage + table + drink + target commission — auto-calculated by tier." },
-	{ title: "Outlet Dashboard", desc: "Book coverage, watch check-ins, close the night with a signed Net Sales Report." },
-	{ title: "Agency Dashboard", desc: "Roster planning across every outlet with live no-show alerts and PV signing." },
-	{ title: "PR Mobile App", desc: "GPS + selfie check-in, on-shift receipt scan, wallet withdrawals, tier history." },
-	{ title: "Business Intelligence", desc: "Live P&L, variance reporting, and executive KPI summaries across venues." },
-	{ title: "Customer Analytics", desc: "Table-level insights on which PR moves which product for which crowd." },
-	{ title: "Compliance & Audit", desc: "Full audit trail on every voucher — no cash leakage, no paper disputes." },
-	{ title: "Receipt Scanning", desc: "On-shift OCR of every receipt — attributed to PR, table, and target." },
-	{ title: "Trust & Disputes", desc: "E-signed vouchers, cycle-locked reconciliation, zero disputes lost." },
+	{
+		title: "Smart Scheduling",
+		desc: "AI-driven roster planning with live availability, tiers, and double-booking detection.",
+	},
+	{
+		title: "AI Workforce Matching",
+		desc: "Best-fit PR selected per outlet per night — by tier, history, and demand curve.",
+	},
+	{
+		title: "Digital Payroll",
+		desc: "Cycle-locked payouts, no spreadsheets, no cash reconciliation, no missed shifts.",
+	},
+	{
+		title: "Commission Engine",
+		desc: "Daily wage + table + drink + target commission — auto-calculated by tier.",
+	},
+	{
+		title: "Outlet Dashboard",
+		desc: "Book coverage, watch check-ins, close the night with a signed Net Sales Report.",
+	},
+	{
+		title: "Agency Dashboard",
+		desc: "Roster planning across every outlet with live no-show alerts and PV signing.",
+	},
+	{
+		title: "PR Mobile App",
+		desc: "GPS + selfie check-in, on-shift receipt scan, wallet withdrawals, tier history.",
+	},
+	{
+		title: "Business Intelligence",
+		desc: "Live P&L, variance reporting, and executive KPI summaries across venues.",
+	},
+	{
+		title: "Customer Analytics",
+		desc: "Table-level insights on which PR moves which product for which crowd.",
+	},
+	{
+		title: "Compliance & Audit",
+		desc: "Full audit trail on every voucher — no cash leakage, no paper disputes.",
+	},
+	{
+		title: "Receipt Scanning",
+		desc: "On-shift OCR of every receipt — attributed to PR, table, and target.",
+	},
+	{
+		title: "Trust & Disputes",
+		desc: "E-signed vouchers, cycle-locked reconciliation, zero disputes lost.",
+	},
 ];
 
 const zhModules = [
-	{ title: "智能排班", desc: "AI 驱动的排班规划，实时可用性、等级与重复预订检测。" },
-	{ title: "AI 人力匹配", desc: "按门店、每晚自动匹配最合适的 PR——依据等级、历史与需求曲线。" },
-	{ title: "数字薪资", desc: "周期锁定发薪，无需电子表格、现金对账或漏记班次。" },
-	{ title: "佣金引擎", desc: "日薪 + 桌台 + 酒水 + 目标佣金——按等级自动计算。" },
-	{ title: "门店仪表盘", desc: "预订人力、监控签到，以签字的净销售报告结束当晚。" },
+	{
+		title: "智能排班",
+		desc: "AI 驱动的排班规划，实时可用性、等级与重复预订检测。",
+	},
+	{
+		title: "AI 人力匹配",
+		desc: "按门店、每晚自动匹配最合适的 PR——依据等级、历史与需求曲线。",
+	},
+	{
+		title: "数字薪资",
+		desc: "周期锁定发薪，无需电子表格、现金对账或漏记班次。",
+	},
+	{
+		title: "佣金引擎",
+		desc: "日薪 + 桌台 + 酒水 + 目标佣金——按等级自动计算。",
+	},
+	{
+		title: "门店仪表盘",
+		desc: "预订人力、监控签到，以签字的净销售报告结束当晚。",
+	},
 	{ title: "代理仪表盘", desc: "跨门店排班规划，实时未到岗提醒与 PV 签署。" },
-	{ title: "PR 移动应用", desc: "GPS + 自拍签到、班内收据扫描、钱包提现、等级历史。" },
+	{
+		title: "PR 移动应用",
+		desc: "GPS + 自拍签到、班内收据扫描、钱包提现、等级历史。",
+	},
 	{ title: "商业智能", desc: "实时损益、差异报告及跨门店高管 KPI 摘要。" },
 	{ title: "客户分析", desc: "桌台级洞察：哪位 PR 为哪类客群推动哪款产品。" },
-	{ title: "合规与审计", desc: "每张凭证完整审计追踪——无现金流失、无纸质争议。" },
+	{
+		title: "合规与审计",
+		desc: "每张凭证完整审计追踪——无现金流失、无纸质争议。",
+	},
 	{ title: "收据扫描", desc: "班内 OCR 扫描每张收据——关联 PR、桌台与目标。" },
 	{ title: "信任与争议", desc: "电子签名凭证、周期锁定对账，零争议流失。" },
 ];
 
 const enAiFeatures = [
-	{ title: "Workforce Forecasting", desc: "Predict peak manpower demand three weeks out — by venue, night, and weather." },
-	{ title: "PR Recommendation", desc: "Best-fit PR chosen for every outlet — by tier, history, and revenue lift." },
-	{ title: "Revenue Insights", desc: "Identify leakage by table, night, and PR — before it drops off your P&L." },
-	{ title: "Smart Scheduling", desc: "Automatic workforce allocation across every venue and tier, in seconds." },
-	{ title: "Performance Score", desc: "Live ranking + incentive recommendations to lift attendance and quality." },
-	{ title: "Anomaly Detection", desc: "Detect payroll anomalies and no-show patterns before they hit your books." },
-	{ title: "Executive Dashboard", desc: "AI-generated KPI summaries: what happened tonight, what to do about it." },
+	{
+		title: "Workforce Forecasting",
+		desc: "Predict peak manpower demand three weeks out — by venue, night, and weather.",
+	},
+	{
+		title: "PR Recommendation",
+		desc: "Best-fit PR chosen for every outlet — by tier, history, and revenue lift.",
+	},
+	{
+		title: "Revenue Insights",
+		desc: "Identify leakage by table, night, and PR — before it drops off your P&L.",
+	},
+	{
+		title: "Smart Scheduling",
+		desc: "Automatic workforce allocation across every venue and tier, in seconds.",
+	},
+	{
+		title: "Performance Score",
+		desc: "Live ranking + incentive recommendations to lift attendance and quality.",
+	},
+	{
+		title: "Anomaly Detection",
+		desc: "Detect payroll anomalies and no-show patterns before they hit your books.",
+	},
+	{
+		title: "Executive Dashboard",
+		desc: "AI-generated KPI summaries: what happened tonight, what to do about it.",
+	},
 ];
 
 const zhAiFeatures = [
 	{ title: "人力预测", desc: "提前三周预测高峰人力需求——按门店、夜晚与天气。" },
-	{ title: "PR 推荐", desc: "为每家门店匹配最佳 PR——依据等级、历史与营收提升。" },
+	{
+		title: "PR 推荐",
+		desc: "为每家门店匹配最佳 PR——依据等级、历史与营收提升。",
+	},
 	{ title: "营收洞察", desc: "按桌台、夜晚与 PR 识别流失——在影响损益前发现。" },
 	{ title: "智能排班", desc: "数秒内自动分配各门店与各等级人力。" },
 	{ title: "绩效评分", desc: "实时排名 + 激励建议，提升出勤与质量。" },
 	{ title: "异常检测", desc: "在入账前发现薪资异常与未到岗模式。" },
-	{ title: "高管仪表盘", desc: "AI 生成 KPI 摘要：今晚发生了什么、该如何应对。" },
+	{
+		title: "高管仪表盘",
+		desc: "AI 生成 KPI 摘要：今晚发生了什么、该如何应对。",
+	},
 ];
 
 const enAdvantages = [
-	{ title: "One unified ecosystem", desc: "Outlet, agency, PR — one platform, one truth." },
-	{ title: "Real-time analytics", desc: "Every check-in, receipt, and voucher — live." },
-	{ title: "Automated payroll", desc: "Cycle-locked, no spreadsheets, no cash." },
-	{ title: "AI optimisation", desc: "Forecasting, matching, anomaly detection built in." },
-	{ title: "Compliance-ready", desc: "Full audit trail on every payout, every night." },
-	{ title: "Mobile-first PR app", desc: "Shift, scan, sign, and get paid in one place." },
-	{ title: "Scalable nationwide", desc: "From one venue to a hundred — same live floor." },
-	{ title: "Enterprise security", desc: "E-signed vouchers, SOC-grade infrastructure." },
+	{
+		title: "One unified ecosystem",
+		desc: "Outlet, agency, PR — one platform, one truth.",
+	},
+	{
+		title: "Real-time analytics",
+		desc: "Every check-in, receipt, and voucher — live.",
+	},
+	{
+		title: "Automated payroll",
+		desc: "Cycle-locked, no spreadsheets, no cash.",
+	},
+	{
+		title: "AI optimisation",
+		desc: "Forecasting, matching, anomaly detection built in.",
+	},
+	{
+		title: "Compliance-ready",
+		desc: "Full audit trail on every payout, every night.",
+	},
+	{
+		title: "Mobile-first PR app",
+		desc: "Shift, scan, sign, and get paid in one place.",
+	},
+	{
+		title: "Scalable nationwide",
+		desc: "From one venue to a hundred — same live floor.",
+	},
+	{
+		title: "Enterprise security",
+		desc: "E-signed vouchers, SOC-grade infrastructure.",
+	},
 ];
 
 const zhAdvantages = [
@@ -488,22 +596,84 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			bookDemo: "Book a demo",
 			talkToUs: "Talk to us",
 			outletFootnote: "PR = PR headcount booked per operating day",
-			agencyFootnote: "PV = Payment Voucher · issued each cycle · e-signed by PR",
+			agencyFootnote:
+				"PV = Payment Voucher · issued each cycle · e-signed by PR",
 			outletTiers: [
-				{ name: "Essential", capacity: "5 PRs / day", detail: "Choose 5 from 10 PRs", period: "/ month" },
-				{ name: "Plus", capacity: "6–10 PRs / day", detail: "Choose 10 from 20 PRs", period: "/ month" },
-				{ name: "Pro", capacity: "11–25 PRs / day", detail: "Choose 25 from 50 PRs", period: "/ month" },
-				{ name: "Enterprise", capacity: "26–50 PRs / day", detail: "Choose 50 from 100 PRs", period: "/ month" },
-				{ name: "Scale", capacity: "51–100 PRs / day", detail: "Choose 100 from 200 PRs", period: "/ month" },
-				{ name: "Premier", capacity: "101+ PRs / day", detail: "For the biggest operations", period: "/ month" },
+				{
+					name: "Essential",
+					capacity: "5 PRs / day",
+					detail: "Choose 5 from 10 PRs",
+					period: "/ month",
+				},
+				{
+					name: "Plus",
+					capacity: "6–10 PRs / day",
+					detail: "Choose 10 from 20 PRs",
+					period: "/ month",
+				},
+				{
+					name: "Pro",
+					capacity: "11–25 PRs / day",
+					detail: "Choose 25 from 50 PRs",
+					period: "/ month",
+				},
+				{
+					name: "Enterprise",
+					capacity: "26–50 PRs / day",
+					detail: "Choose 50 from 100 PRs",
+					period: "/ month",
+				},
+				{
+					name: "Scale",
+					capacity: "51–100 PRs / day",
+					detail: "Choose 100 from 200 PRs",
+					period: "/ month",
+				},
+				{
+					name: "Premier",
+					capacity: "101+ PRs / day",
+					detail: "For the biggest operations",
+					period: "/ month",
+				},
 			],
 			agencyTiers: [
-				{ name: "Starter", capacity: "5 PV / week", detail: "Core portal access", period: "/ week" },
-				{ name: "Plus", capacity: "6–10 PV / week", detail: "Growing roster · payroll & history", period: "/ week" },
-				{ name: "Growth", capacity: "11–25 PV / week", detail: "Expanded roster · payroll & reporting", period: "/ week" },
-				{ name: "Enterprise", capacity: "26–75 PV / week", detail: "Large roster · priority support", period: "/ week" },
-				{ name: "Scale", capacity: "76–150 PV / week", detail: "High volume · dedicated success", period: "/ week" },
-				{ name: "Custom", capacity: "151+ PV / week", detail: "Custom terms with InnocenZ admin", period: "", price: "Let's talk" },
+				{
+					name: "Starter",
+					capacity: "5 PV / week",
+					detail: "Core portal access",
+					period: "/ week",
+				},
+				{
+					name: "Plus",
+					capacity: "6–10 PV / week",
+					detail: "Growing roster · payroll & history",
+					period: "/ week",
+				},
+				{
+					name: "Growth",
+					capacity: "11–25 PV / week",
+					detail: "Expanded roster · payroll & reporting",
+					period: "/ week",
+				},
+				{
+					name: "Enterprise",
+					capacity: "26–75 PV / week",
+					detail: "Large roster · priority support",
+					period: "/ week",
+				},
+				{
+					name: "Scale",
+					capacity: "76–150 PV / week",
+					detail: "High volume · dedicated success",
+					period: "/ week",
+				},
+				{
+					name: "Custom",
+					capacity: "151+ PV / week",
+					detail: "Custom terms with InnocenZ admin",
+					period: "",
+					price: "Let's talk",
+				},
 			],
 		},
 		cta: {
@@ -519,9 +689,18 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 				"The AI-powered operating platform for Outlet, PR Agency, and the workforce that runs the night.",
 			copyright: "Crowned nightlife · All rights reserved",
 			columns: [
-				{ title: "Platform", links: ["Overview", "AI Layer", "Dashboards", "Modules", "Security"] },
-				{ title: "For", links: ["Outlet & KTV", "PR Agency", "PR", "Investors", "Partners"] },
-				{ title: "Company", links: ["About", "Careers", "Press", "Legal", "Privacy"] },
+				{
+					title: "Platform",
+					links: ["Overview", "AI Layer", "Dashboards", "Modules", "Security"],
+				},
+				{
+					title: "For",
+					links: ["Outlet & KTV", "PR Agency", "PR", "Investors", "Partners"],
+				},
+				{
+					title: "Company",
+					links: ["About", "Careers", "Press", "Legal", "Privacy"],
+				},
 			],
 			legal: ["Terms", "Privacy", "Security"],
 		},
@@ -755,20 +934,81 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			outletFootnote: "PR = 每个营业日预订的 PR 人数",
 			agencyFootnote: "PV = 支付凭证 · 每周期签发 · PR 电子签署",
 			outletTiers: [
-				{ name: "Essential", capacity: "5 PR / 天", detail: "从 10 名 PR 中选 5 名", period: "/ 月" },
-				{ name: "Plus", capacity: "6–10 PR / 天", detail: "从 20 名 PR 中选 10 名", period: "/ 月" },
-				{ name: "Pro", capacity: "11–25 PR / 天", detail: "从 50 名 PR 中选 25 名", period: "/ 月" },
-				{ name: "Enterprise", capacity: "26–50 PR / 天", detail: "从 100 名 PR 中选 50 名", period: "/ 月" },
-				{ name: "Scale", capacity: "51–100 PR / 天", detail: "从 200 名 PR 中选 100 名", period: "/ 月" },
-				{ name: "Premier", capacity: "101+ PR / 天", detail: "适用于最大规模运营", period: "/ 月" },
+				{
+					name: "Essential",
+					capacity: "5 PR / 天",
+					detail: "从 10 名 PR 中选 5 名",
+					period: "/ 月",
+				},
+				{
+					name: "Plus",
+					capacity: "6–10 PR / 天",
+					detail: "从 20 名 PR 中选 10 名",
+					period: "/ 月",
+				},
+				{
+					name: "Pro",
+					capacity: "11–25 PR / 天",
+					detail: "从 50 名 PR 中选 25 名",
+					period: "/ 月",
+				},
+				{
+					name: "Enterprise",
+					capacity: "26–50 PR / 天",
+					detail: "从 100 名 PR 中选 50 名",
+					period: "/ 月",
+				},
+				{
+					name: "Scale",
+					capacity: "51–100 PR / 天",
+					detail: "从 200 名 PR 中选 100 名",
+					period: "/ 月",
+				},
+				{
+					name: "Premier",
+					capacity: "101+ PR / 天",
+					detail: "适用于最大规模运营",
+					period: "/ 月",
+				},
 			],
 			agencyTiers: [
-				{ name: "Starter", capacity: "5 PV / 周", detail: "核心门户访问", period: "/ 周" },
-				{ name: "Plus", capacity: "6–10 PV / 周", detail: "成长型排班 · 薪资与历史", period: "/ 周" },
-				{ name: "Growth", capacity: "11–25 PV / 周", detail: "扩展排班 · 薪资与报告", period: "/ 周" },
-				{ name: "Enterprise", capacity: "26–75 PV / 周", detail: "大型排班 · 优先支持", period: "/ 周" },
-				{ name: "Scale", capacity: "76–150 PV / 周", detail: "高量级 · 专属成功经理", period: "/ 周" },
-				{ name: "Custom", capacity: "151+ PV / 周", detail: "与 InnocenZ 管理员定制条款", period: "", price: "面议" },
+				{
+					name: "Starter",
+					capacity: "5 PV / 周",
+					detail: "核心门户访问",
+					period: "/ 周",
+				},
+				{
+					name: "Plus",
+					capacity: "6–10 PV / 周",
+					detail: "成长型排班 · 薪资与历史",
+					period: "/ 周",
+				},
+				{
+					name: "Growth",
+					capacity: "11–25 PV / 周",
+					detail: "扩展排班 · 薪资与报告",
+					period: "/ 周",
+				},
+				{
+					name: "Enterprise",
+					capacity: "26–75 PV / 周",
+					detail: "大型排班 · 优先支持",
+					period: "/ 周",
+				},
+				{
+					name: "Scale",
+					capacity: "76–150 PV / 周",
+					detail: "高量级 · 专属成功经理",
+					period: "/ 周",
+				},
+				{
+					name: "Custom",
+					capacity: "151+ PV / 周",
+					detail: "与 InnocenZ 管理员定制条款",
+					period: "",
+					price: "面议",
+				},
 			],
 		},
 		cta: {
@@ -784,7 +1024,10 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 			copyright: "Crowned nightlife · 保留所有权利",
 			columns: [
 				{ title: "平台", links: ["概览", "AI 层", "仪表盘", "模块", "安全"] },
-				{ title: "面向", links: ["门店与 KTV", "PR 代理", "PR", "投资者", "合作伙伴"] },
+				{
+					title: "面向",
+					links: ["门店与 KTV", "PR 代理", "PR", "投资者", "合作伙伴"],
+				},
 				{ title: "公司", links: ["关于", "招聘", "媒体", "法律", "隐私"] },
 			],
 			legal: ["条款", "隐私", "安全"],
@@ -798,5 +1041,18 @@ export const translations: Record<LandingLocale, LandingTranslations> = {
 	},
 };
 
-export const OUTLET_TIER_PRICES = ["999", "1,699", "2,999", "3,999", "6,999", "9,999"] as const;
-export const AGENCY_TIER_PRICES = ["125", "250", "500", "1,000", "1,500"] as const;
+export const OUTLET_TIER_PRICES = [
+	"999",
+	"1,699",
+	"2,999",
+	"3,999",
+	"6,999",
+	"9,999",
+] as const;
+export const AGENCY_TIER_PRICES = [
+	"125",
+	"250",
+	"500",
+	"1,000",
+	"1,500",
+] as const;

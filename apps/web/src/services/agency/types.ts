@@ -103,6 +103,13 @@ export interface AgencyMembersApiResponse {
 	data: AgencyMember[];
 }
 
+/** Single-member responses: add / update. */
+export interface AgencyMemberApiResponse {
+	success: boolean;
+	message: string;
+	data: AgencyMember;
+}
+
 export interface AgencyMembershipsApiResponse {
 	success: boolean;
 	message: string;

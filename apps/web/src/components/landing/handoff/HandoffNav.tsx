@@ -29,15 +29,10 @@ export function HandoffNav() {
 			<div
 				className="hz-glass hz-nav-bar"
 				style={{
-					background: scrolled
-						? "rgba(10,10,14,.7)"
-						: "rgba(10,10,14,.35)",
+					background: scrolled ? "rgba(10,10,14,.7)" : "rgba(10,10,14,.35)",
 				}}
 			>
-				<a
-					href="#top"
-					className="flex items-center gap-3.5 no-underline"
-				>
+				<a href="#top" className="flex items-center gap-3.5 no-underline">
 					<LogoMark size={52} />
 					<span
 						className="hz-display hz-gold-text"

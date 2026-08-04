@@ -2,7 +2,10 @@ import { ArrowRight } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 import { BrandLogo } from "@/components/landing/BrandLogo";
 import { FloorConsole } from "@/components/landing/FloorConsole";
-import { HeroBackdrop, HeroPortraitRing } from "@/components/landing/LandingImagery";
+import {
+	HeroBackdrop,
+	HeroPortraitRing,
+} from "@/components/landing/LandingImagery";
 import { MaterialIcon } from "@/components/landing/MaterialIcon";
 import { PortalTrustStrip } from "@/components/landing/PortalTrustStrip";
 
@@ -28,9 +31,21 @@ const workflowSteps = [
 ] as const;
 
 const floatingSignals = [
-	{ icon: "verified_user", label: "GPS verified", pos: "left-0 top-[14%] -translate-x-[38%]" },
-	{ icon: "trending_up", label: "+6.2% variance", pos: "right-0 top-[6%] translate-x-[30%]" },
-	{ icon: "draw", label: "PV e-signed", pos: "right-0 bottom-[12%] translate-x-[28%]" },
+	{
+		icon: "verified_user",
+		label: "GPS verified",
+		pos: "left-0 top-[14%] -translate-x-[38%]",
+	},
+	{
+		icon: "trending_up",
+		label: "+6.2% variance",
+		pos: "right-0 top-[6%] translate-x-[30%]",
+	},
+	{
+		icon: "draw",
+		label: "PV e-signed",
+		pos: "right-0 bottom-[12%] translate-x-[28%]",
+	},
 ] as const;
 
 export function HeroSection() {
@@ -120,7 +135,10 @@ export function HeroSection() {
 									key={step.label}
 									className="hero-workflow-chip inline-flex items-center gap-2"
 								>
-									<MaterialIcon name={step.icon} className="!text-lg text-royal-gold" />
+									<MaterialIcon
+										name={step.icon}
+										className="!text-lg text-royal-gold"
+									/>
 									{step.label}
 								</span>
 							))}
@@ -192,7 +210,10 @@ export function HeroSection() {
 								transition={{ duration: 0.5, delay: 0.9 + i * 0.1 }}
 								className={`hero-signal-chip pointer-events-none absolute z-20 hidden items-center gap-2 lg:inline-flex ${signal.pos}`}
 							>
-								<MaterialIcon name={signal.icon} className="!text-lg text-royal-gold" />
+								<MaterialIcon
+									name={signal.icon}
+									className="!text-lg text-royal-gold"
+								/>
 								{signal.label}
 							</motion.div>
 						))}

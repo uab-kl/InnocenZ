@@ -1,797 +1,797 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { addMonths, format, startOfToday, subMonths } from 'date-fns';
 import {
-  CalendarIcon,
-  ChevronDown,
-  ChevronLeft,
-  ChevronRight,
-} from 'lucide-react';
-import type { DateRange } from 'react-day-picker';
+	dateFromIsoKey,
+	isoKeyFromDate,
+} from "@agency-portal/components/iz/HistDateCalendar";
 import {
-  Calendar,
-  CalendarDayButton,
-} from '@agency-portal/components/ui/calendar';
+	Calendar,
+	CalendarDayButton,
+} from "@agency-portal/components/ui/calendar";
 import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from '@agency-portal/components/ui/popover';
+	Popover,
+	PopoverContent,
+	PopoverTrigger,
+} from "@agency-portal/components/ui/popover";
+import { cn } from "@agency-portal/lib/utils";
+import { addMonths, format, startOfToday, subMonths } from "date-fns";
 import {
-  dateFromIsoKey,
-  isoKeyFromDate,
-} from '@agency-portal/components/iz/HistDateCalendar';
-import { cn } from '@agency-portal/lib/utils';
+	CalendarIcon,
+	ChevronDown,
+	ChevronLeft,
+	ChevronRight,
+} from "lucide-react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { DateRange } from "react-day-picker";
 
 export function formatOutletDateLabel(value: Date | string): string {
-  const d = typeof value === 'string' ? dateFromIsoKey(value) : value;
-  if (!d) return typeof value === 'string' ? value : '';
-  return d.toLocaleDateString('en-GB', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  });
+	const d = typeof value === "string" ? dateFromIsoKey(value) : value;
+	if (!d) return typeof value === "string" ? value : "";
+	return d.toLocaleDateString("en-GB", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	});
 }
 
 const compactCalClass =
-  'iz-outlet-report-cal-picker iz-outlet-report-cal-picker--popover p-0 [--cell-size:2rem]';
+	"iz-outlet-report-cal-picker iz-outlet-report-cal-picker--popover p-0 [--cell-size:2rem]";
 
 const compactCalClassNames = {
-  root: 'w-fit',
-  months: 'gap-0',
-  month: 'gap-1',
-  month_caption: 'h-7 !text-xs',
-  caption_label: '!text-xs',
-  nav: 'h-7',
-  button_previous: '!h-7 !w-7',
-  button_next: '!h-7 !w-7',
-  weekdays: 'gap-0',
-  weekday:
-    'w-[var(--cell-size)] flex-none p-0 text-center !text-[10px] font-medium text-[var(--iz-muted)]',
-  week: 'mt-0.5 gap-0',
-  day: 'h-[var(--cell-size)] w-[var(--cell-size)] flex-none p-0',
+	root: "w-fit",
+	months: "gap-0",
+	month: "gap-1",
+	month_caption: "h-7 !text-xs",
+	caption_label: "!text-xs",
+	nav: "h-7",
+	button_previous: "!h-7 !w-7",
+	button_next: "!h-7 !w-7",
+	weekdays: "gap-0",
+	weekday:
+		"w-[var(--cell-size)] flex-none p-0 text-center !text-[10px] font-medium text-[var(--iz-muted)]",
+	week: "mt-0.5 gap-0",
+	day: "h-[var(--cell-size)] w-[var(--cell-size)] flex-none p-0",
 } as const;
 
 type RangeHighlight = {
-  startIso: string;
-  endIso: string;
-  /** User picked start and is choosing end — only start should read as anchored */
-  pickingEnd?: boolean;
+	startIso: string;
+	endIso: string;
+	/** User picked start and is choosing end — only start should read as anchored */
+	pickingEnd?: boolean;
 };
 
 function RangeSelectionLegend({
-  start,
-  end,
-  pickingEnd,
+	start,
+	end,
+	pickingEnd,
 }: {
-  start: Date;
-  end: Date | null;
-  pickingEnd: boolean;
+	start: Date;
+	end: Date | null;
+	pickingEnd: boolean;
 }) {
-  return (
-    <div className="iz-outlet-report-range-legend" aria-live="polite">
-      <div className="iz-outlet-report-range-legend-item is-start">
-        <span className="iz-outlet-report-range-legend-badge">S</span>
-        <div className="min-w-0">
-          <span className="iz-outlet-report-range-legend-label">Start</span>
-          <span className="iz-outlet-report-range-legend-value">
-            {formatOutletDateLabel(start)}
-          </span>
-        </div>
-      </div>
-      <span className="iz-outlet-report-range-legend-arrow" aria-hidden>
-        →
-      </span>
-      <div
-        className={cn(
-          'iz-outlet-report-range-legend-item is-end',
-          pickingEnd && 'is-pending',
-        )}
-      >
-        <span className="iz-outlet-report-range-legend-badge">E</span>
-        <div className="min-w-0">
-          <span className="iz-outlet-report-range-legend-label">End</span>
-          <span className="iz-outlet-report-range-legend-value">
-            {end ? formatOutletDateLabel(end) : 'Tap a day'}
-          </span>
-        </div>
-      </div>
-    </div>
-  );
+	return (
+		<div className="iz-outlet-report-range-legend" aria-live="polite">
+			<div className="iz-outlet-report-range-legend-item is-start">
+				<span className="iz-outlet-report-range-legend-badge">S</span>
+				<div className="min-w-0">
+					<span className="iz-outlet-report-range-legend-label">Start</span>
+					<span className="iz-outlet-report-range-legend-value">
+						{formatOutletDateLabel(start)}
+					</span>
+				</div>
+			</div>
+			<span className="iz-outlet-report-range-legend-arrow" aria-hidden>
+				→
+			</span>
+			<div
+				className={cn(
+					"iz-outlet-report-range-legend-item is-end",
+					pickingEnd && "is-pending",
+				)}
+			>
+				<span className="iz-outlet-report-range-legend-badge">E</span>
+				<div className="min-w-0">
+					<span className="iz-outlet-report-range-legend-label">End</span>
+					<span className="iz-outlet-report-range-legend-value">
+						{end ? formatOutletDateLabel(end) : "Tap a day"}
+					</span>
+				</div>
+			</div>
+		</div>
+	);
 }
 
 function startOfDay(d: Date): Date {
-  const x = new Date(d);
-  x.setHours(0, 0, 0, 0);
-  return x;
+	const x = new Date(d);
+	x.setHours(0, 0, 0, 0);
+	return x;
 }
 
 function dayBefore(a: Date, b: Date): boolean {
-  return startOfDay(a).getTime() < startOfDay(b).getTime();
+	return startOfDay(a).getTime() < startOfDay(b).getTime();
 }
 
 export function OutletCompactRangeCalendar({
-  rangeFrom,
-  rangeTo,
-  defaultMonth,
-  startMonth,
-  endMonth,
-  onRangeSelect,
-  disabled,
+	rangeFrom,
+	rangeTo,
+	defaultMonth,
+	startMonth,
+	endMonth,
+	onRangeSelect,
+	disabled,
 }: {
-  rangeFrom?: Date;
-  rangeTo?: Date;
-  defaultMonth?: Date;
-  startMonth?: Date;
-  endMonth?: Date;
-  onRangeSelect: (from: Date, to: Date | undefined) => void;
-  disabled?: (date: Date) => boolean;
+	rangeFrom?: Date;
+	rangeTo?: Date;
+	defaultMonth?: Date;
+	startMonth?: Date;
+	endMonth?: Date;
+	onRangeSelect: (from: Date, to: Date | undefined) => void;
+	disabled?: (date: Date) => boolean;
 }) {
-  const selected: DateRange | undefined = rangeFrom
-    ? { from: rangeFrom, to: rangeTo }
-    : undefined;
+	const selected: DateRange | undefined = rangeFrom
+		? { from: rangeFrom, to: rangeTo }
+		: undefined;
 
-  return (
-    <Calendar
-      mode="range"
-      selected={selected}
-      defaultMonth={defaultMonth ?? rangeFrom ?? rangeTo}
-      startMonth={startMonth}
-      endMonth={endMonth}
-      disabled={disabled}
-      onSelect={(range) => {
-        if (!range?.from) return;
-        onRangeSelect(range.from, range.to);
-      }}
-      className={compactCalClass}
-      classNames={compactCalClassNames}
-    />
-  );
+	return (
+		<Calendar
+			mode="range"
+			selected={selected}
+			defaultMonth={defaultMonth ?? rangeFrom ?? rangeTo}
+			startMonth={startMonth}
+			endMonth={endMonth}
+			disabled={disabled}
+			onSelect={(range) => {
+				if (!range?.from) return;
+				onRangeSelect(range.from, range.to);
+			}}
+			className={compactCalClass}
+			classNames={compactCalClassNames}
+		/>
+	);
 }
 
 export function OutletDateRangePopover({
-  from,
-  to,
-  onRangeChange,
-  disabled,
-  startMonth,
-  endMonth,
-  formatRangeLabel,
-  className,
-  fieldLabel = 'Date range',
-  compact,
+	from,
+	to,
+	onRangeChange,
+	disabled,
+	startMonth,
+	endMonth,
+	formatRangeLabel,
+	className,
+	fieldLabel = "Date range",
+	compact,
 }: {
-  from: Date;
-  to: Date;
-  onRangeChange: (from: Date, to: Date) => void;
-  disabled?: (date: Date) => boolean;
-  startMonth?: Date;
-  endMonth?: Date;
-  formatRangeLabel: (from: Date, to: Date) => string;
-  className?: string;
-  fieldLabel?: string;
-  compact?: boolean;
+	from: Date;
+	to: Date;
+	onRangeChange: (from: Date, to: Date) => void;
+	disabled?: (date: Date) => boolean;
+	startMonth?: Date;
+	endMonth?: Date;
+	formatRangeLabel: (from: Date, to: Date) => string;
+	className?: string;
+	fieldLabel?: string;
+	compact?: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const [draftStart, setDraftStart] = useState<Date | null>(null);
-  const [awaitingEnd, setAwaitingEnd] = useState(false);
+	const [open, setOpen] = useState(false);
+	const [draftStart, setDraftStart] = useState<Date | null>(null);
+	const [awaitingEnd, setAwaitingEnd] = useState(false);
 
-  useEffect(() => {
-    if (open) {
-      setDraftStart(from);
-      setAwaitingEnd(false);
-    }
-  }, [open, from, to]);
+	useEffect(() => {
+		if (open) {
+			setDraftStart(from);
+			setAwaitingEnd(false);
+		}
+	}, [open, from, to]);
 
-  const normalizeRange = (a: Date, b: Date) => {
-    const start = startOfDay(a);
-    const end = startOfDay(b);
-    if (end < start) return { from: end, to: start };
-    return { from: start, to: end };
-  };
+	const normalizeRange = (a: Date, b: Date) => {
+		const start = startOfDay(a);
+		const end = startOfDay(b);
+		if (end < start) return { from: end, to: start };
+		return { from: start, to: end };
+	};
 
-  const previewRange = useMemo((): RangeHighlight | undefined => {
-    if (!draftStart) return undefined;
-    if (awaitingEnd) {
-      const iso = isoKeyFromDate(draftStart);
-      return { startIso: iso, endIso: iso, pickingEnd: true };
-    }
-    const n = normalizeRange(draftStart, to);
-    return {
-      startIso: isoKeyFromDate(n.from),
-      endIso: isoKeyFromDate(n.to),
-      pickingEnd: false,
-    };
-  }, [awaitingEnd, draftStart, to]);
+	const previewRange = useMemo((): RangeHighlight | undefined => {
+		if (!draftStart) return undefined;
+		if (awaitingEnd) {
+			const iso = isoKeyFromDate(draftStart);
+			return { startIso: iso, endIso: iso, pickingEnd: true };
+		}
+		const n = normalizeRange(draftStart, to);
+		return {
+			startIso: isoKeyFromDate(n.from),
+			endIso: isoKeyFromDate(n.to),
+			pickingEnd: false,
+		};
+	}, [awaitingEnd, draftStart, to]);
 
-  const legendStart = draftStart ?? from;
-  const legendEnd = awaitingEnd ? null : to;
+	const legendStart = draftStart ?? from;
+	const legendEnd = awaitingEnd ? null : to;
 
-  const commitRange = (start: Date, end: Date) => {
-    const n = normalizeRange(start, end);
-    onRangeChange(n.from, n.to);
-    setOpen(false);
-  };
+	const commitRange = (start: Date, end: Date) => {
+		const n = normalizeRange(start, end);
+		onRangeChange(n.from, n.to);
+		setOpen(false);
+	};
 
-  const handleDaySelect = (day: Date) => {
-    if (disabled?.(day)) return;
-    if (!awaitingEnd) {
-      setDraftStart(day);
-      setAwaitingEnd(true);
-      return;
-    }
-    const start = draftStart ?? day;
-    if (dayBefore(day, start)) {
-      setDraftStart(day);
-      return;
-    }
-    commitRange(start, day);
-  };
+	const handleDaySelect = (day: Date) => {
+		if (disabled?.(day)) return;
+		if (!awaitingEnd) {
+			setDraftStart(day);
+			setAwaitingEnd(true);
+			return;
+		}
+		const start = draftStart ?? day;
+		if (dayBefore(day, start)) {
+			setDraftStart(day);
+			return;
+		}
+		commitRange(start, day);
+	};
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            compact
-              ? 'iz-chip flex items-center gap-1.5 py-1.5 pl-2.5 pr-2 text-sm font-semibold text-[var(--iz-txt)]'
-              : cn(
-                  'iz-outlet-report-range-target iz-outlet-report-range-combined',
-                  open && 'is-active',
-                  className,
-                ),
-          )}
-          aria-label="Choose date range"
-        >
-          {compact ? (
-            <>
-              <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold)]" />
-              <span className="whitespace-nowrap">
-                {formatRangeLabel(from, to)}
-              </span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
-            </>
-          ) : (
-            <>
-              <span className="iz-outlet-report-range-target-label">
-                {fieldLabel}
-              </span>
-              <span className="iz-outlet-report-range-target-value">
-                {formatRangeLabel(from, to)}
-              </span>
-            </>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={6}
-        className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
-        data-range-step={awaitingEnd ? 'end' : 'start'}
-      >
-        <RangeSelectionLegend
-          start={legendStart}
-          end={legendEnd}
-          pickingEnd={awaitingEnd}
-        />
-        <div className="mb-2 mt-2 flex flex-wrap items-center gap-2 px-0.5">
-          <p className="iz-tiny iz-muted2">
-            {awaitingEnd
-              ? 'Step 2 · tap end date (same day = single shift)'
-              : 'Step 1 · tap your start date'}
-          </p>
-          {awaitingEnd && draftStart && (
-            <button
-              type="button"
-              className="iz-chip ml-auto px-2 py-0.5 text-[10px] font-semibold text-[var(--iz-gold-l)]"
-              onClick={() => commitRange(draftStart, draftStart)}
-            >
-              Single day
-            </button>
-          )}
-        </div>
-        <OutletCompactCalendar
-          selected={awaitingEnd ? undefined : (draftStart ?? from)}
-          defaultMonth={draftStart ?? from}
-          startMonth={startMonth}
-          endMonth={endMonth}
-          disabled={disabled}
-          range={previewRange}
-          onSelect={handleDaySelect}
-        />
-      </PopoverContent>
-    </Popover>
-  );
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className={cn(
+						compact
+							? "iz-chip flex items-center gap-1.5 py-1.5 pl-2.5 pr-2 text-sm font-semibold text-[var(--iz-txt)]"
+							: cn(
+									"iz-outlet-report-range-target iz-outlet-report-range-combined",
+									open && "is-active",
+									className,
+								),
+					)}
+					aria-label="Choose date range"
+				>
+					{compact ? (
+						<>
+							<CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold)]" />
+							<span className="whitespace-nowrap">
+								{formatRangeLabel(from, to)}
+							</span>
+							<ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
+						</>
+					) : (
+						<>
+							<span className="iz-outlet-report-range-target-label">
+								{fieldLabel}
+							</span>
+							<span className="iz-outlet-report-range-target-value">
+								{formatRangeLabel(from, to)}
+							</span>
+						</>
+					)}
+				</button>
+			</PopoverTrigger>
+			<PopoverContent
+				align="start"
+				sideOffset={6}
+				className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
+				data-range-step={awaitingEnd ? "end" : "start"}
+			>
+				<RangeSelectionLegend
+					start={legendStart}
+					end={legendEnd}
+					pickingEnd={awaitingEnd}
+				/>
+				<div className="mb-2 mt-2 flex flex-wrap items-center gap-2 px-0.5">
+					<p className="iz-tiny iz-muted2">
+						{awaitingEnd
+							? "Step 2 · tap end date (same day = single shift)"
+							: "Step 1 · tap your start date"}
+					</p>
+					{awaitingEnd && draftStart && (
+						<button
+							type="button"
+							className="iz-chip ml-auto px-2 py-0.5 text-[10px] font-semibold text-[var(--iz-gold-l)]"
+							onClick={() => commitRange(draftStart, draftStart)}
+						>
+							Single day
+						</button>
+					)}
+				</div>
+				<OutletCompactCalendar
+					selected={awaitingEnd ? undefined : (draftStart ?? from)}
+					defaultMonth={draftStart ?? from}
+					startMonth={startMonth}
+					endMonth={endMonth}
+					disabled={disabled}
+					range={previewRange}
+					onSelect={handleDaySelect}
+				/>
+			</PopoverContent>
+		</Popover>
+	);
 }
 
 export function OutletCompactCalendar({
-  selected,
-  defaultMonth,
-  startMonth,
-  endMonth,
-  onSelect,
-  disabled,
-  range,
+	selected,
+	defaultMonth,
+	startMonth,
+	endMonth,
+	onSelect,
+	disabled,
+	range,
 }: {
-  selected?: Date;
-  defaultMonth?: Date;
-  startMonth?: Date;
-  endMonth?: Date;
-  onSelect: (day: Date) => void;
-  disabled?: (date: Date) => boolean;
-  range?: RangeHighlight;
+	selected?: Date;
+	defaultMonth?: Date;
+	startMonth?: Date;
+	endMonth?: Date;
+	onSelect: (day: Date) => void;
+	disabled?: (date: Date) => boolean;
+	range?: RangeHighlight;
 }) {
-  return (
-    <Calendar
-      mode="single"
-      selected={selected}
-      defaultMonth={defaultMonth}
-      startMonth={startMonth}
-      endMonth={endMonth}
-      onSelect={(day) => {
-        if (day) onSelect(day);
-      }}
-      disabled={disabled}
-      modifiers={
-        range
-          ? {
-              reportRangeStart: (date) =>
-                isoKeyFromDate(date) === range.startIso,
-              reportRangeEnd: (date) =>
-                !range.pickingEnd &&
-                isoKeyFromDate(date) === range.endIso &&
-                range.endIso !== range.startIso,
-              reportRangeMiddle: (date) => {
-                if (range.pickingEnd) return false;
-                const iso = isoKeyFromDate(date);
-                return iso > range.startIso && iso < range.endIso;
-              },
-            }
-          : undefined
-      }
-      modifiersClassNames={
-        range
-          ? {
-              reportRangeStart: 'iz-report-range-start',
-              reportRangeEnd: 'iz-report-range-end',
-              reportRangeMiddle: 'iz-report-range-middle',
-            }
-          : undefined
-      }
-      className={compactCalClass}
-      classNames={compactCalClassNames}
-    />
-  );
+	return (
+		<Calendar
+			mode="single"
+			selected={selected}
+			defaultMonth={defaultMonth}
+			startMonth={startMonth}
+			endMonth={endMonth}
+			onSelect={(day) => {
+				if (day) onSelect(day);
+			}}
+			disabled={disabled}
+			modifiers={
+				range
+					? {
+							reportRangeStart: (date) =>
+								isoKeyFromDate(date) === range.startIso,
+							reportRangeEnd: (date) =>
+								!range.pickingEnd &&
+								isoKeyFromDate(date) === range.endIso &&
+								range.endIso !== range.startIso,
+							reportRangeMiddle: (date) => {
+								if (range.pickingEnd) return false;
+								const iso = isoKeyFromDate(date);
+								return iso > range.startIso && iso < range.endIso;
+							},
+						}
+					: undefined
+			}
+			modifiersClassNames={
+				range
+					? {
+							reportRangeStart: "iz-report-range-start",
+							reportRangeEnd: "iz-report-range-end",
+							reportRangeMiddle: "iz-report-range-middle",
+						}
+					: undefined
+			}
+			className={compactCalClass}
+			classNames={compactCalClassNames}
+		/>
+	);
 }
 
 function MultiDateSelectionLegend({
-  selectedIsos,
-  summary,
+	selectedIsos,
+	summary,
 }: {
-  selectedIsos: string[];
-  summary: string;
+	selectedIsos: string[];
+	summary: string;
 }) {
-  return (
-    <div
-      className="iz-outlet-report-range-legend !grid-cols-1"
-      aria-live="polite"
-    >
-      <div className="iz-outlet-report-range-legend-item is-start !col-span-1">
-        <span className="iz-outlet-report-range-legend-badge">✓</span>
-        <div className="min-w-0">
-          <span className="iz-outlet-report-range-legend-label">Selected</span>
-          <span className="iz-outlet-report-range-legend-value">
-            {selectedIsos.length === 0
-              ? 'No dates yet'
-              : `${selectedIsos.length} date${selectedIsos.length !== 1 ? 's' : ''}`}
-          </span>
-          {summary && (
-            <span className="iz-tiny iz-muted2 mt-0.5 block leading-snug">
-              {summary}
-            </span>
-          )}
-        </div>
-      </div>
-    </div>
-  );
+	return (
+		<div
+			className="iz-outlet-report-range-legend !grid-cols-1"
+			aria-live="polite"
+		>
+			<div className="iz-outlet-report-range-legend-item is-start !col-span-1">
+				<span className="iz-outlet-report-range-legend-badge">✓</span>
+				<div className="min-w-0">
+					<span className="iz-outlet-report-range-legend-label">Selected</span>
+					<span className="iz-outlet-report-range-legend-value">
+						{selectedIsos.length === 0
+							? "No dates yet"
+							: `${selectedIsos.length} date${selectedIsos.length !== 1 ? "s" : ""}`}
+					</span>
+					{summary && (
+						<span className="iz-tiny iz-muted2 mt-0.5 block leading-snug">
+							{summary}
+						</span>
+					)}
+				</div>
+			</div>
+		</div>
+	);
 }
 
 export type MultiDateQuickSpanOption = {
-  id: string;
-  label: string;
+	id: string;
+	label: string;
 };
 
 export type MultiDateQuickSpanHandlers = {
-  spans: MultiDateQuickSpanOption[];
-  isActive: (anchor: Date, spanId: string) => boolean;
-  onApply: (anchor: Date, spanId: string) => void;
+	spans: MultiDateQuickSpanOption[];
+	isActive: (anchor: Date, spanId: string) => boolean;
+	onApply: (anchor: Date, spanId: string) => void;
 };
 
 const DOUBLE_TAP_MS = 320;
 
 function MultiCalendarHeader({
-  month,
-  onMonthChange,
-  quickSpans,
-  spanAnchor,
+	month,
+	onMonthChange,
+	quickSpans,
+	spanAnchor,
 }: {
-  month: Date;
-  onMonthChange: (month: Date) => void;
-  quickSpans?: MultiDateQuickSpanHandlers;
-  spanAnchor: Date;
+	month: Date;
+	onMonthChange: (month: Date) => void;
+	quickSpans?: MultiDateQuickSpanHandlers;
+	spanAnchor: Date;
 }) {
-  return (
-    <div className="iz-multi-cal-header mb-1">
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          className="iz-multi-cal-nav-btn"
-          aria-label="Previous month"
-          onClick={() => onMonthChange(subMonths(month, 1))}
-        >
-          <ChevronLeft className="h-4 w-4" />
-        </button>
-        <button
-          type="button"
-          className="iz-multi-cal-nav-btn"
-          aria-label="Next month"
-          onClick={() => onMonthChange(addMonths(month, 1))}
-        >
-          <ChevronRight className="h-4 w-4" />
-        </button>
-        {quickSpans && (
-          <div className="ml-1 flex items-center gap-1">
-            {quickSpans.spans.map((span) => (
-              <button
-                key={span.id}
-                type="button"
-                onClick={() => quickSpans.onApply(spanAnchor, span.id)}
-                className={cn(
-                  'iz-pill !text-xs',
-                  quickSpans.isActive(spanAnchor, span.id)
-                    ? 'iz-pill-gold'
-                    : 'iz-pill-ink',
-                )}
-              >
-                {span.label}
-              </button>
-            ))}
-          </div>
-        )}
-      </div>
-      <p className="mt-0.5 text-xs font-semibold text-[var(--iz-txt)]">
-        {format(month, 'MMMM yyyy')}
-      </p>
-    </div>
-  );
+	return (
+		<div className="iz-multi-cal-header mb-1">
+			<div className="flex items-center gap-1">
+				<button
+					type="button"
+					className="iz-multi-cal-nav-btn"
+					aria-label="Previous month"
+					onClick={() => onMonthChange(subMonths(month, 1))}
+				>
+					<ChevronLeft className="h-4 w-4" />
+				</button>
+				<button
+					type="button"
+					className="iz-multi-cal-nav-btn"
+					aria-label="Next month"
+					onClick={() => onMonthChange(addMonths(month, 1))}
+				>
+					<ChevronRight className="h-4 w-4" />
+				</button>
+				{quickSpans && (
+					<div className="ml-1 flex items-center gap-1">
+						{quickSpans.spans.map((span) => (
+							<button
+								key={span.id}
+								type="button"
+								onClick={() => quickSpans.onApply(spanAnchor, span.id)}
+								className={cn(
+									"iz-pill !text-xs",
+									quickSpans.isActive(spanAnchor, span.id)
+										? "iz-pill-gold"
+										: "iz-pill-ink",
+								)}
+							>
+								{span.label}
+							</button>
+						))}
+					</div>
+				)}
+			</div>
+			<p className="mt-0.5 text-xs font-semibold text-[var(--iz-txt)]">
+				{format(month, "MMMM yyyy")}
+			</p>
+		</div>
+	);
 }
 
 function OutletCompactMultiCalendar({
-  selected,
-  month,
-  onMonthChange,
-  defaultMonth,
-  startMonth,
-  endMonth,
-  onSelect,
-  onDayDoubleClick,
-  disabled,
-  quickSpans,
-  spanAnchor,
+	selected,
+	month,
+	onMonthChange,
+	defaultMonth,
+	startMonth,
+	endMonth,
+	onSelect,
+	onDayDoubleClick,
+	disabled,
+	quickSpans,
+	spanAnchor,
 }: {
-  selected: Date[];
-  month?: Date;
-  onMonthChange?: (month: Date) => void;
-  defaultMonth?: Date;
-  startMonth?: Date;
-  endMonth?: Date;
-  onSelect: (days: Date[] | undefined) => void;
-  onDayDoubleClick?: (day: Date) => void;
-  disabled?: (date: Date) => boolean;
-  quickSpans?: MultiDateQuickSpanHandlers;
-  spanAnchor: Date;
+	selected: Date[];
+	month?: Date;
+	onMonthChange?: (month: Date) => void;
+	defaultMonth?: Date;
+	startMonth?: Date;
+	endMonth?: Date;
+	onSelect: (days: Date[] | undefined) => void;
+	onDayDoubleClick?: (day: Date) => void;
+	disabled?: (date: Date) => boolean;
+	quickSpans?: MultiDateQuickSpanHandlers;
+	spanAnchor: Date;
 }) {
-  const lastTapRef = useRef<{ iso: string; time: number } | null>(null);
-  const viewMonth = month ?? defaultMonth ?? selected[0] ?? startOfToday();
+	const lastTapRef = useRef<{ iso: string; time: number } | null>(null);
+	const viewMonth = month ?? defaultMonth ?? selected[0] ?? startOfToday();
 
-  const MultiDayButton = useCallback(
-    (props: React.ComponentProps<typeof CalendarDayButton>) => {
-      const day = props.day.date;
-      const dayIso = isoKeyFromDate(day);
+	const MultiDayButton = useCallback(
+		(props: React.ComponentProps<typeof CalendarDayButton>) => {
+			const day = props.day.date;
+			const dayIso = isoKeyFromDate(day);
 
-      return (
-        <CalendarDayButton
-          {...props}
-          onClick={(e) => {
-            if (disabled?.(day)) {
-              props.onClick?.(e);
-              return;
-            }
+			return (
+				<CalendarDayButton
+					{...props}
+					onClick={(e) => {
+						if (disabled?.(day)) {
+							props.onClick?.(e);
+							return;
+						}
 
-            const now = Date.now();
-            const last = lastTapRef.current;
-            if (
-              last &&
-              last.iso === dayIso &&
-              now - last.time < DOUBLE_TAP_MS
-            ) {
-              e.preventDefault();
-              e.stopPropagation();
-              lastTapRef.current = null;
-              onDayDoubleClick?.(day);
-              return;
-            }
+						const now = Date.now();
+						const last = lastTapRef.current;
+						if (
+							last &&
+							last.iso === dayIso &&
+							now - last.time < DOUBLE_TAP_MS
+						) {
+							e.preventDefault();
+							e.stopPropagation();
+							lastTapRef.current = null;
+							onDayDoubleClick?.(day);
+							return;
+						}
 
-            lastTapRef.current = { iso: dayIso, time: now };
-            props.onClick?.(e);
-          }}
-          onDoubleClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            if (disabled?.(day)) return;
-            lastTapRef.current = null;
-            onDayDoubleClick?.(day);
-          }}
-        />
-      );
-    },
-    [disabled, onDayDoubleClick],
-  );
+						lastTapRef.current = { iso: dayIso, time: now };
+						props.onClick?.(e);
+					}}
+					onDoubleClick={(e) => {
+						e.preventDefault();
+						e.stopPropagation();
+						if (disabled?.(day)) return;
+						lastTapRef.current = null;
+						onDayDoubleClick?.(day);
+					}}
+				/>
+			);
+		},
+		[disabled, onDayDoubleClick],
+	);
 
-  return (
-    <div>
-      {onMonthChange && (
-        <MultiCalendarHeader
-          month={viewMonth}
-          onMonthChange={onMonthChange}
-          quickSpans={quickSpans}
-          spanAnchor={spanAnchor}
-        />
-      )}
-      <Calendar
-        mode="multiple"
-        hideNavigation
-        selected={selected}
-        month={month}
-        onMonthChange={onMonthChange}
-        defaultMonth={defaultMonth ?? selected[0] ?? startOfToday()}
-        startMonth={startMonth}
-        endMonth={endMonth}
-        disabled={disabled}
-        onSelect={onSelect}
-        components={{ DayButton: MultiDayButton }}
-        className={compactCalClass}
-        classNames={{
-          ...compactCalClassNames,
-          month_caption: 'hidden',
-          nav: 'hidden',
-        }}
-      />
-    </div>
-  );
+	return (
+		<div>
+			{onMonthChange && (
+				<MultiCalendarHeader
+					month={viewMonth}
+					onMonthChange={onMonthChange}
+					quickSpans={quickSpans}
+					spanAnchor={spanAnchor}
+				/>
+			)}
+			<Calendar
+				mode="multiple"
+				hideNavigation
+				selected={selected}
+				month={month}
+				onMonthChange={onMonthChange}
+				defaultMonth={defaultMonth ?? selected[0] ?? startOfToday()}
+				startMonth={startMonth}
+				endMonth={endMonth}
+				disabled={disabled}
+				onSelect={onSelect}
+				components={{ DayButton: MultiDayButton }}
+				className={compactCalClass}
+				classNames={{
+					...compactCalClassNames,
+					month_caption: "hidden",
+					nav: "hidden",
+				}}
+			/>
+		</div>
+	);
 }
 
 export function OutletMultiDatePopover({
-  selectedIsos,
-  onChange,
-  disabled,
-  formatLabel,
-  compact,
-  quickSpans,
+	selectedIsos,
+	onChange,
+	disabled,
+	formatLabel,
+	compact,
+	quickSpans,
 }: {
-  selectedIsos: string[];
-  onChange: (isos: string[]) => void;
-  disabled?: (date: Date) => boolean;
-  formatLabel: (isos: string[]) => string;
-  compact?: boolean;
-  quickSpans?: MultiDateQuickSpanHandlers;
+	selectedIsos: string[];
+	onChange: (isos: string[]) => void;
+	disabled?: (date: Date) => boolean;
+	formatLabel: (isos: string[]) => string;
+	compact?: boolean;
+	quickSpans?: MultiDateQuickSpanHandlers;
 }) {
-  const [open, setOpen] = useState(false);
-  const sortedIsos = useMemo(() => [...selectedIsos].sort(), [selectedIsos]);
-  const selectedDates = useMemo(
-    () =>
-      sortedIsos
-        .map((iso) => dateFromIsoKey(iso))
-        .filter((day): day is Date => Boolean(day)),
-    [sortedIsos],
-  );
-  const [viewMonth, setViewMonth] = useState<Date>(
-    () => selectedDates[0] ?? startOfToday(),
-  );
+	const [open, setOpen] = useState(false);
+	const sortedIsos = useMemo(() => [...selectedIsos].sort(), [selectedIsos]);
+	const selectedDates = useMemo(
+		() =>
+			sortedIsos
+				.map((iso) => dateFromIsoKey(iso))
+				.filter((day): day is Date => Boolean(day)),
+		[sortedIsos],
+	);
+	const [viewMonth, setViewMonth] = useState<Date>(
+		() => selectedDates[0] ?? startOfToday(),
+	);
 
-  useEffect(() => {
-    if (open) {
-      setViewMonth(selectedDates[0] ?? startOfToday());
-    }
-  }, [open, selectedDates]);
+	useEffect(() => {
+		if (open) {
+			setViewMonth(selectedDates[0] ?? startOfToday());
+		}
+	}, [open, selectedDates]);
 
-  const spanAnchor = selectedDates[0] ?? viewMonth;
-  const label = formatLabel(sortedIsos);
-  const summary =
-    sortedIsos.length > 0 && sortedIsos.length <= 4
-      ? sortedIsos
-          .map((iso) => {
-            const day = dateFromIsoKey(iso);
-            return day
-              ? day.toLocaleDateString('en-GB', {
-                  day: 'numeric',
-                  month: 'short',
-                })
-              : iso;
-          })
-          .join(', ')
-      : '';
+	const spanAnchor = selectedDates[0] ?? viewMonth;
+	const label = formatLabel(sortedIsos);
+	const summary =
+		sortedIsos.length > 0 && sortedIsos.length <= 4
+			? sortedIsos
+					.map((iso) => {
+						const day = dateFromIsoKey(iso);
+						return day
+							? day.toLocaleDateString("en-GB", {
+									day: "numeric",
+									month: "short",
+								})
+							: iso;
+					})
+					.join(", ")
+			: "";
 
-  const handleSelect = (days: Date[] | undefined) => {
-    const next = (days ?? []).map((day) => isoKeyFromDate(day)).sort();
-    onChange(next);
-  };
+	const handleSelect = (days: Date[] | undefined) => {
+		const next = (days ?? []).map((day) => isoKeyFromDate(day)).sort();
+		onChange(next);
+	};
 
-  const handleDayDoubleClick = (day: Date) => {
-    onChange([isoKeyFromDate(day)]);
-  };
+	const handleDayDoubleClick = (day: Date) => {
+		onChange([isoKeyFromDate(day)]);
+	};
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            compact
-              ? 'iz-chip flex items-center gap-1.5 py-1.5 pl-2.5 pr-2 text-sm font-semibold text-[var(--iz-txt)]'
-              : cn(
-                  'iz-outlet-report-range-target iz-outlet-report-range-combined',
-                  open && 'is-active',
-                ),
-          )}
-          aria-label="Choose dates"
-        >
-          {compact ? (
-            <>
-              <CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold)]" />
-              <span className="whitespace-nowrap">{label}</span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
-            </>
-          ) : (
-            <>
-              <span className="iz-outlet-report-range-target-label">Dates</span>
-              <span className="iz-outlet-report-range-target-value">
-                {label}
-              </span>
-            </>
-          )}
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="start"
-        sideOffset={6}
-        className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
-      >
-        <MultiDateSelectionLegend selectedIsos={sortedIsos} summary={summary} />
-        <p className="iz-tiny iz-muted2 mb-2 mt-2 px-0.5 leading-snug">
-          Tap to add or remove · double-tap one day to select only that date
-        </p>
-        <OutletCompactMultiCalendar
-          selected={selectedDates}
-          month={viewMonth}
-          onMonthChange={setViewMonth}
-          disabled={disabled}
-          onSelect={handleSelect}
-          onDayDoubleClick={handleDayDoubleClick}
-          quickSpans={quickSpans}
-          spanAnchor={spanAnchor}
-        />
-      </PopoverContent>
-    </Popover>
-  );
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className={cn(
+						compact
+							? "iz-chip flex items-center gap-1.5 py-1.5 pl-2.5 pr-2 text-sm font-semibold text-[var(--iz-txt)]"
+							: cn(
+									"iz-outlet-report-range-target iz-outlet-report-range-combined",
+									open && "is-active",
+								),
+					)}
+					aria-label="Choose dates"
+				>
+					{compact ? (
+						<>
+							<CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold)]" />
+							<span className="whitespace-nowrap">{label}</span>
+							<ChevronDown className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
+						</>
+					) : (
+						<>
+							<span className="iz-outlet-report-range-target-label">Dates</span>
+							<span className="iz-outlet-report-range-target-value">
+								{label}
+							</span>
+						</>
+					)}
+				</button>
+			</PopoverTrigger>
+			<PopoverContent
+				align="start"
+				sideOffset={6}
+				className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
+			>
+				<MultiDateSelectionLegend selectedIsos={sortedIsos} summary={summary} />
+				<p className="iz-tiny iz-muted2 mb-2 mt-2 px-0.5 leading-snug">
+					Tap to add or remove · double-tap one day to select only that date
+				</p>
+				<OutletCompactMultiCalendar
+					selected={selectedDates}
+					month={viewMonth}
+					onMonthChange={setViewMonth}
+					disabled={disabled}
+					onSelect={handleSelect}
+					onDayDoubleClick={handleDayDoubleClick}
+					quickSpans={quickSpans}
+					spanAnchor={spanAnchor}
+				/>
+			</PopoverContent>
+		</Popover>
+	);
 }
 
 export function OutletDatePopoverField({
-  label,
-  value,
-  displayLabel,
-  onChange,
-  disabled,
-  startMonth,
-  endMonth,
-  range,
-  align = 'start',
-  className,
+	label,
+	value,
+	displayLabel,
+	onChange,
+	disabled,
+	startMonth,
+	endMonth,
+	range,
+	align = "start",
+	className,
 }: {
-  label: string;
-  value: Date;
-  displayLabel?: string;
-  onChange: (date: Date) => void;
-  disabled?: (date: Date) => boolean;
-  startMonth?: Date;
-  endMonth?: Date;
-  range?: RangeHighlight;
-  align?: 'start' | 'end' | 'center';
-  className?: string;
+	label: string;
+	value: Date;
+	displayLabel?: string;
+	onChange: (date: Date) => void;
+	disabled?: (date: Date) => boolean;
+	startMonth?: Date;
+	endMonth?: Date;
+	range?: RangeHighlight;
+	align?: "start" | "end" | "center";
+	className?: string;
 }) {
-  const [open, setOpen] = useState(false);
-  const shown = displayLabel ?? formatOutletDateLabel(value);
+	const [open, setOpen] = useState(false);
+	const shown = displayLabel ?? formatOutletDateLabel(value);
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className={cn(
-            'iz-outlet-report-range-target',
-            open && 'is-active',
-            className,
-          )}
-          aria-label={`Choose ${label.toLowerCase()} date`}
-        >
-          <span className="iz-outlet-report-range-target-label">{label}</span>
-          <span className="iz-outlet-report-range-target-value">{shown}</span>
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align={align}
-        sideOffset={6}
-        className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
-      >
-        <OutletCompactCalendar
-          selected={value}
-          defaultMonth={value}
-          startMonth={startMonth}
-          endMonth={endMonth}
-          disabled={disabled}
-          range={range}
-          onSelect={(day) => {
-            if (disabled?.(day)) return;
-            onChange(day);
-            setOpen(false);
-          }}
-        />
-      </PopoverContent>
-    </Popover>
-  );
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className={cn(
+						"iz-outlet-report-range-target",
+						open && "is-active",
+						className,
+					)}
+					aria-label={`Choose ${label.toLowerCase()} date`}
+				>
+					<span className="iz-outlet-report-range-target-label">{label}</span>
+					<span className="iz-outlet-report-range-target-value">{shown}</span>
+				</button>
+			</PopoverTrigger>
+			<PopoverContent
+				align={align}
+				sideOffset={6}
+				className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
+			>
+				<OutletCompactCalendar
+					selected={value}
+					defaultMonth={value}
+					startMonth={startMonth}
+					endMonth={endMonth}
+					disabled={disabled}
+					range={range}
+					onSelect={(day) => {
+						if (disabled?.(day)) return;
+						onChange(day);
+						setOpen(false);
+					}}
+				/>
+			</PopoverContent>
+		</Popover>
+	);
 }
 
 export function OutletDatePopoverChip({
-  value,
-  displayLabel,
-  onChange,
-  disabled,
+	value,
+	displayLabel,
+	onChange,
+	disabled,
 }: {
-  value: Date;
-  displayLabel: string;
-  onChange: (date: Date) => void;
-  disabled?: (date: Date) => boolean;
+	value: Date;
+	displayLabel: string;
+	onChange: (date: Date) => void;
+	disabled?: (date: Date) => boolean;
 }) {
-  const [open, setOpen] = useState(false);
+	const [open, setOpen] = useState(false);
 
-  return (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger asChild>
-        <button
-          type="button"
-          className="iz-chip flex items-center gap-1.5 py-1.5 pl-2.5 pr-2 text-sm font-semibold text-[var(--iz-txt)]"
-        >
-          <CalendarIcon className="h-3.5 w-3.5 text-[var(--iz-gold)]" />
-          {displayLabel}
-          <ChevronDown className="h-3.5 w-3.5 text-[var(--iz-muted)]" />
-        </button>
-      </PopoverTrigger>
-      <PopoverContent
-        align="end"
-        sideOffset={6}
-        className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
-      >
-        <OutletCompactCalendar
-          selected={value}
-          defaultMonth={value}
-          disabled={disabled}
-          onSelect={(day) => {
-            if (disabled?.(day)) return;
-            onChange(day);
-            setOpen(false);
-          }}
-        />
-      </PopoverContent>
-    </Popover>
-  );
+	return (
+		<Popover open={open} onOpenChange={setOpen}>
+			<PopoverTrigger asChild>
+				<button
+					type="button"
+					className="iz-chip flex items-center gap-1.5 py-1.5 pl-2.5 pr-2 text-sm font-semibold text-[var(--iz-txt)]"
+				>
+					<CalendarIcon className="h-3.5 w-3.5 text-[var(--iz-gold)]" />
+					{displayLabel}
+					<ChevronDown className="h-3.5 w-3.5 text-[var(--iz-muted)]" />
+				</button>
+			</PopoverTrigger>
+			<PopoverContent
+				align="end"
+				sideOffset={6}
+				className="iz-outlet-report-cal-popover w-auto border-[var(--iz-line)] bg-[var(--iz-panel)] p-2"
+			>
+				<OutletCompactCalendar
+					selected={value}
+					defaultMonth={value}
+					disabled={disabled}
+					onSelect={(day) => {
+						if (disabled?.(day)) return;
+						onChange(day);
+						setOpen(false);
+					}}
+				/>
+			</PopoverContent>
+		</Popover>
+	);
 }

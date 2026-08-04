@@ -1,5 +1,5 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import {
@@ -7,6 +7,7 @@ import {
 	fetchOutletMembers,
 	type Outlet,
 	type OutletMember,
+	updateOutlet,
 } from "@/services/outlet";
 
 /** Backend-backed subset of the demo owner settings shown on Settings/Profile. */
@@ -61,10 +62,21 @@ function joinAddress(outlet: Outlet): string {
  *
  * Gated on a real session (`getOutletIdentity()`); demo sessions get `backed:
  * false` and no overlays, keeping the pure demo form. Reads the real outlet
- * record + its members. The backend DOES expose PUT /outlet/:id, but this wire
- * is read-only by design (matching the agency Profile) — the demo edit/save flow
- * stays as-is and does NOT persist. Overlays carry only defined fields so a
- * spread never clobbers a demo value with `undefined`.
+ * record + its members. Overlays carry only defined fields so a spread never
+ * clobbers a demo value with `undefined`.
+ *
+ * `save` persists the venue NAME through `PUT /outlet/:id`, and nothing else.
+ *
+ * ⚠️ `location` is deliberately NOT saved. The screen shows one address line,
+ * but that line is DERIVED — `joinAddress()` above concatenates five columns
+ * (addressLine1/2, postcode, state, country). Writing the edited string back
+ * would have to pick a column to put it in, flattening five fields into one and
+ * silently emptying the other four. Splitting a free-text address is a parsing
+ * problem, not a wiring one, so the location input stays store-only until the
+ * form itself has five fields.
+ *
+ * The map pin is not here either: moving it is `PATCH /outlet/:id/geo-fence`,
+ * its own endpoint because saving a pin switches hard geofencing on.
  */
 export function useOutletProfile() {
 	const { logout } = useAuth();
@@ -138,6 +150,22 @@ export function useOutletProfile() {
 		return overlay;
 	}, [backed, outletQuery.data, identity]);
 
+	const queryClient = useQueryClient();
+	const saveMutation = useMutation({
+		mutationFn: (payload: { venueName?: string }) => {
+			if (!outletId) throw new Error("No real outlet session");
+			return updateOutlet(
+				outletId,
+				payload.venueName ? { name: payload.venueName } : {},
+				logout,
+			);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["outlet", "profile"] });
+			queryClient.invalidateQueries({ queryKey: ["outlet", "members"] });
+		},
+	});
+
 	return {
 		backed,
 		outletId,
@@ -150,5 +178,7 @@ export function useOutletProfile() {
 		ops,
 		settings,
 		isLoading: outletQuery.isLoading || membersQuery.isLoading,
+		save: saveMutation.mutateAsync,
+		isSaving: saveMutation.isPending,
 	};
 }

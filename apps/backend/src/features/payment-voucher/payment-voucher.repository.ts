@@ -9,6 +9,7 @@ import {
   lte,
   ne,
   notExists,
+  or,
   sql,
   SQL,
 } from 'drizzle-orm';
@@ -396,7 +397,35 @@ export class PaymentVoucherRepositoryClass {
    * Whether a voucher already exists for this PR + week (idempotency guard for
    * the weekly generation job, so re-running never double-pays).
    */
-  async existsForPrWeek(agencyId: string, prId: string, weekStart: string): Promise<boolean> {
+  /**
+   * Does this PR already have a voucher covering ANY DAY of the given window?
+   *
+   * Matches on OVERLAP, not on `week_start` equality, and that distinction is
+   * the whole point. On 3 Aug 2026 a stale backend process wrote a self-logged
+   * voucher anchored Mon–Sun (`2026-08-03`) while the generator asked for the
+   * Sun–Sat week (`2026-08-02`). Two different strings, so the old equality
+   * check saw no clash and minted a SECOND voucher — the same assignment billed
+   * twice, RM700 each, for one shift. Equality only ever protected against a
+   * repeat from the SAME writer using the SAME anchor; the moment two paths
+   * disagreed by a single day it silently stopped protecting anything.
+   *
+   * Overlap holds regardless of anchor, so a future timezone slip, a manual
+   * re-anchor, or a third write path cannot reopen double-billing.
+   *
+   * `weekEnd` defaults to `weekStart`, which degrades to "is this DATE inside an
+   * existing voucher's week" — still strictly stronger than equality, and it is
+   * what the create-voucher endpoint needs, where `weekEnd` is optional.
+   *
+   * The exact-`week_start` arm is kept as well: a legacy row with a NULL
+   * `week_end` cannot satisfy the range test, and dropping it would have made
+   * this guard weaker than the one it replaces for exactly those rows.
+   */
+  async existsForPrWeek(
+    agencyId: string,
+    prId: string,
+    weekStart: string,
+    weekEnd: string = weekStart,
+  ): Promise<boolean> {
     try {
       const [row] = await db
         .select({ id: PaymentVoucherTable.id })
@@ -405,7 +434,13 @@ export class PaymentVoucherRepositoryClass {
           and(
             eq(PaymentVoucherTable.agencyId, agencyId),
             eq(PaymentVoucherTable.prId, prId),
-            eq(PaymentVoucherTable.weekStart, weekStart),
+            or(
+              eq(PaymentVoucherTable.weekStart, weekStart),
+              and(
+                lte(PaymentVoucherTable.weekStart, weekEnd),
+                gte(PaymentVoucherTable.weekEnd, weekStart),
+              ),
+            ),
           ),
         )
         .limit(1);

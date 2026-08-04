@@ -28,8 +28,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { getSignupPackages } from "@/constants/signup-packages";
 import {
-	signupAccountTypes,
 	type SignupAccountType,
+	signupAccountTypes,
 } from "@/constants/signup-types";
 import { createSignupSchema } from "@/lib/auth/register-schemas";
 import { useLandingLocale } from "@/lib/landing-i18n";
@@ -198,7 +198,10 @@ export function SignupForm() {
 							const errorId = `${field.name}-error`;
 							return (
 								<Field data-invalid={isInvalid}>
-									<FieldLabel htmlFor={field.name} className="login-field-label">
+									<FieldLabel
+										htmlFor={field.name}
+										className="login-field-label"
+									>
 										{fields.companyAddress.label}
 									</FieldLabel>
 									<Textarea
@@ -329,11 +332,16 @@ export function SignupForm() {
 									const isInvalid =
 										field.state.meta.isDirty && !field.state.meta.isValid;
 									const errorId = `${field.name}-error`;
-									const selected = packages.find((pkg) => pkg.id === field.state.value);
+									const selected = packages.find(
+										(pkg) => pkg.id === field.state.value,
+									);
 
 									return (
 										<Field data-invalid={isInvalid}>
-											<FieldLabel htmlFor={field.name} className="login-field-label">
+											<FieldLabel
+												htmlFor={field.name}
+												className="login-field-label"
+											>
 												{fields.package.label}
 											</FieldLabel>
 											<Select
@@ -346,7 +354,9 @@ export function SignupForm() {
 													id={field.name}
 													className="login-input-group h-auto w-full border-royal-gold/20 bg-background/60 py-3"
 												>
-													<SelectValue placeholder={fields.package.placeholder} />
+													<SelectValue
+														placeholder={fields.package.placeholder}
+													/>
 												</SelectTrigger>
 												<SelectContent className="signup-package-select-content">
 													{packages.map((pkg) => (
@@ -392,7 +402,10 @@ export function SignupForm() {
 
 							return (
 								<Field data-invalid={isInvalid}>
-									<FieldLabel htmlFor="signup-logo" className="login-field-label">
+									<FieldLabel
+										htmlFor="signup-logo"
+										className="login-field-label"
+									>
 										{fields.logo.label}
 									</FieldLabel>
 									<div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -400,7 +413,8 @@ export function SignupForm() {
 											htmlFor="signup-logo"
 											className={cn(
 												"flex min-h-40 flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-8 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
-												form.state.isSubmitting && "pointer-events-none opacity-60",
+												form.state.isSubmitting &&
+													"pointer-events-none opacity-60",
 											)}
 										>
 											<ImagePlus className="h-10 w-10 text-royal-gold" />
@@ -421,7 +435,9 @@ export function SignupForm() {
 													const file = event.target.files?.[0] ?? null;
 													field.handleChange(file);
 													if (logoPreview) URL.revokeObjectURL(logoPreview);
-													setLogoPreview(file ? URL.createObjectURL(file) : null);
+													setLogoPreview(
+														file ? URL.createObjectURL(file) : null,
+													);
 												}}
 											/>
 										</label>
@@ -491,7 +507,9 @@ export function SignupForm() {
 				</form.Field>
 			</FieldGroup>
 
-			<form.Subscribe selector={(state) => [state.isSubmitting, state.canSubmit]}>
+			<form.Subscribe
+				selector={(state) => [state.isSubmitting, state.canSubmit]}
+			>
 				{([isSubmitting, canSubmit]) => (
 					<Button
 						type="submit"

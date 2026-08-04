@@ -643,6 +643,9 @@ export class PaymentVoucherControllerClass {
           agencyId,
           header.prId,
           header.weekStart,
+          // Optional on this schema; absent, the check degrades to "is this day
+          // inside a week the PR already has a voucher for" — still an overlap.
+          header.weekEnd ?? header.weekStart,
         );
         if (clash) {
           return res.status(409).json({

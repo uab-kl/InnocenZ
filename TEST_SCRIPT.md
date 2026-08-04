@@ -300,7 +300,220 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (read this amendment, then the 2 Aug block below)
+### ▶ OPENED 4 Aug 2026 (late) — the scoped owner guard is UNPROVEN, and two wiring jobs are left
+
+> Left open deliberately at the end of the session that shipped `d513e5c`. Item 1 first: it is a
+> security guard that exists only as a typecheck.
+>
+> - [x] **✅ DONE — the scoped owner guard is LIVE-PROVEN 7 passed / 0 failed / 1 skipped**
+>   (`probe-org-scope-guard.ts`, kept in the repo: it mutates nothing but two same-value writes, so it
+>   is safe to re-run whenever the org guards are touched). Cross-tenant agency PUT **403**,
+>   cross-tenant outlet PUT **403**, **cross-tenant geo-fence PATCH 403**, `status` in the body
+>   **403**, both own-org saves **200**, and **admin still passes** (`isAdmin` short-circuits ahead of
+>   the scope test — the check that matters most on a denial rule). ⚠️ **Two method notes worth
+>   keeping.** (1) **A 403 alone would not have proven anything** — the OLD guard also 403s, just for
+>   another reason — so every refusal is matched on its MESSAGE, which only the new code emits; that
+>   doubles as the stale-server detector, since `/health` 200 says nothing about which code is running.
+>   (2) **The first run reported `SKIP — target venue has no pin to echo back` on the geo-fence case,
+>   and that was a PROBE DEFECT wearing the costume of a fact about the data.** The columns are
+>   `lat`/`lng`/`geoFenceRadius`; the probe guessed `geoFenceLat`/`latitude`. Every outlet is pinned.
+>   **A skip is a claim about the world and has to be verified like one** — and it landed on the single
+>   most dangerous case in the set. Cross-tenant DELETE geo-fence stays skipped on purpose: it has no
+>   idempotent form, so if the guard had failed it would have unfenced a live venue.
+> - [ ] ~~**🔴 Live-fire the scoped owner guard — it has NEVER hit a running server.**~~ `d513e5c` fixed
+>   a cross-tenant write (`agencyOwnerOnly` asked *"are you an owner?"* without comparing the
+>   membership to `req.params.id`, so any agency owner could rewrite any agency, and any outlet owner
+>   could move another venue's geo-fence). **A refusal writes nothing, so every case below is free on
+>   the shared DB** — see the standing method note on proving guards without writing:
+>   - agency owner → `PUT /agency/<ANOTHER agency id>` ⇒ **403** "not a member of this organisation"
+>   - agency owner → `PUT /agency/<own id>` with `status` in the body ⇒ **403** (refused, not dropped)
+>   - agency owner → `PUT /agency/<own id>` with the CURRENT values ⇒ **200** (the only writing case;
+>     it re-sends what is already stored, so nothing changes but `updated_at`/`updated_by`)
+>   - the same three for `PUT /outlet/:id`, plus `PATCH` and `DELETE /outlet/:id/geo-fence`
+>   - ⚠️ **admin must still pass all of them** — `isAdmin` short-circuits before the scope test, and an
+>     over-applied denial fails silently until somebody cannot work
+> - [x] **✅ DONE (partly, and the partial is deliberate) — the outlet Settings save persists the
+>   VENUE NAME** through `PUT /outlet/:id`, same shape as the agency screen: save first, refuse to
+>   show a saved state the server rejected. ⚠️ **The address is NOT saved, and must not be wired as
+>   it stands.** The screen shows ONE location line, but that line is DERIVED — `joinAddress()`
+>   concatenates five columns (`addressLine1`, `addressLine2`, `postcode`, `state`, `country`).
+>   Writing the edited string back would have to choose a column to put it in, **flattening five
+>   fields into one and silently emptying the other four.** Splitting a free-text address is a
+>   parsing problem, not a wiring one — the input stays store-only until the FORM has five fields.
+>   The toast says so out loud: *"Venue name saved · address is not persisted yet"*.
+>   ✅ **CLICKED THROUGH 4 Aug on `owner@velvet23.my`** — `PUT 200`, `name` verified in the DB,
+>   **address columns and geo pin both intact after the name-only save**, restored afterwards, zero
+>   console errors. The agency screen was proven the same way on `owner@atlas-agency.my`.
+> - [ ] ~~**Wire the outlet Settings save.**~~ `routes/outlet/settings.tsx` still persists nothing;
+>   `PUT /outlet/:id` exists and is now correctly scoped. Mirror the agency shape: a
+>   `save`/`isSaving` pair on `useOutletProfile`, save BEFORE the screen shows a saved state, and send
+>   only fields with a column behind them.
+> - [x] **✅ BACKEND DONE + LIVE-PROVEN 8/0/3 — member management is open to org owners.** Three
+>   checks stack: route scope (`:id`), controller ownership of `:memberId` (**404**), and
+>   `guardMemberChange` (**409**). ⚠️ **STILL NOT DONE: the UI.** No screen calls these endpoints, and
+>   the Finance Head invite still delivers nothing (no mailer). ⚠️ **Also unproven: the happy-path
+>   `200`** — Atlas has exactly ONE member, so there was no second member to re-send; `POST` (add) was
+>   never fired at all, because creating a member leaves a permanent row. **Only the refusals are
+>   evidence.**
+> - [x] **✅ UI DONE + CLICKED THROUGH — the Team panel is live on both Settings screens.**
+>   `OrgMembersPanel` (one component, `kind="agency"|"outlet"`) lists real `agency_user` /
+>   `outlet_user` rows, changes a sub-role, removes with a confirm step, and adds by email.
+>   **Agency: `PUT` → 409 and the toast carried the SERVER'S words** — *"Cannot change the last active
+>   owner — appoint another owner first"* — with the select reverting to `owner`. **Outlet: 3 real
+>   members render** (Chen Wei Jie owner · Michelle Lim finance · Ahmad Razif ops) with the correct
+>   3-role select. Zero console errors on both. ⚠️ Add-member and remove were NOT fired live: both
+>   leave permanent rows on the shared DB.
+> - [ ] ~~**Member management for org owners.**~~ `POST`/`PUT`/`DELETE /agency/:id/members` (and the four
+>   outlet equivalents) **exist** but are `requireAdmin` **on purpose** — the route file argues that
+>   *membership IS identity*, since an `agency_user` row is what every sub-role guard reads. Widening
+>   needs: the same `:id` ownership scope, an **escalation guard** (an owner must not mint an owner in
+>   an org they do not own), a **last-owner guard**, and a **self-demotion guard**. The Finance Head
+>   *invite* additionally waits on the mailer, which does not exist — but **adding an existing user as
+>   a member does not**, and that is the useful half.
+
+### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (duplicate-voucher guard FIXED; the "anchor bug" was a stale process)
+
+> **A PR was billed TWICE for one shift, and the guard that should have stopped it did nothing.**
+> `PV-000005` (PR self-log) and `PV-000006` (generator) both carried a RM700 wages line whose `ref`
+> named the SAME assignment `6574b2ee` — RM1,400 for a single shift. `PV-000006` has been deleted;
+> `PV-000005` survives and is now the only record of that shift.
+>
+> - [x] **🔴 Duplicate guard matched `week_start` for EQUALITY — ✅ FIXED 4 Aug.**
+>   `existsForPrWeek()` now matches on **OVERLAP** (`week_start <= newEnd AND week_end >= newStart`),
+>   with the exact-`week_start` arm kept so a legacy row with a NULL `week_end` is still caught. Takes
+>   an optional 4th arg `weekEnd` defaulting to `weekStart`; the generator passes the real week, the
+>   create-voucher endpoint passes `header.weekEnd ?? header.weekStart` (both optional on that schema),
+>   which degrades to "is this DAY inside a week the PR already has" — still stronger than equality.
+>   **Regression-tested live: the exact call that minted `PV-000006` now returns `0 created, 1 skipped
+>   (already_exists)` and writes nothing.** Equality only ever protected against a repeat from the same
+>   writer using the same anchor; one day of disagreement disabled it silently.
+>
+> - [x] **⚠️ The "Mon–Sun anchor bug" does NOT exist in the code — do not fix it.** All three helpers
+>   are Sunday-anchored on disk (`previousCompleteWeek` :34, `weekOfDate` :90, `weekBounds`
+>   controller :148), the cron logs `0 2 * * 0`, and the PR app does **not** send a week
+>   (`PrReceiptLineInput` has no `weekStart`/`weekEnd`). `PV-000005` was written at
+>   `08:39:10.735Z` by a **stale backend process still running pre-merge Monday-anchored code** — the
+>   documented `tsx watch` trap. The backend has since been restarted from current disk.
+>
+> **Still open from this slice — amended 4 Aug (later):**
+> - [x] **Live-verify the anchor — ✅ DONE, and it cost no data.** `GET /shift-assignment/overtime/pending`
+>   returns `week` straight from `weekOfDate` **as the running process computes it**. Shift date
+>   **Monday `2026-08-03`** → **`2026-08-02 .. 2026-08-08`**, Sunday to Saturday, confirmed with
+>   `getUTCDay()` rather than eyeballed. **Observed, not inferred**, and the call is read-only — no
+>   self-logged test line was needed after all. **Generalise this: before staging a write to verify a
+>   derived value, check whether some read endpoint already returns it.**
+> - [x] **✅ CLOSED 4 Aug (night) — `PV-000005` was MERGED into `PV-000006` (net RM707.20), and
+>   `PV-000005` is deleted.** Owner's decision, executed via `scripts/merge-voucher-into.ts` in one
+>   transaction; `audit-live-vouchers` now reports **4 of 4 reconcile**. The history below is kept
+>   because the *refusal* is the lesson, not the repair.
+> - [!] **Re-anchor `PV-000005` — RAN 4 Aug, REFUSED BY THE DATABASE. Do not retry as-is.**
+>   `--apply` was authorised and executed; Postgres rejected the UPDATE outright:
+>   `duplicate key value violates unique constraint "payment_voucher_one_per_pr_week"`,
+>   `Key (pr_id, week_start)=(d48f38ad…, 2026-08-02) already exists`. **Nothing was written.**
+>   **`PV-000005` and `PV-000006` are the SAME PR (Victoria Tan Mei Lin) and the SAME Sun–Sat week** —
+>   and they are **NOT a double bill**. They are one week split across two rows by the old anchor:
+>   - `PV-000005` week `08-03..09`, 1 line `2026-08-03` **wages RM700.00**, ref assignment `6574b2ee`
+>   - `PV-000006` week `08-02..08` ✅, 1 line `2026-08-04` **drink_commission RM7.20**, receipt
+>     `RCP-000008` (pending)
+>
+>   Both line dates fall inside `08-02..08-08`, so the correct end state is **ONE voucher of RM707.20**.
+>   This also explains the audit's `completed_shift_without_wages` flag on `PV-000006`: the wages are
+>   not missing, they are sitting on its twin.
+>   **The repair is a MERGE and it is the owner's call** — fold `PV-000005`'s wages line into
+>   `PV-000006`, recompute subtotal/net to `707.20`, then delete `PV-000005`. `reanchor-voucher-weeks.ts`
+>   says in its own header that "re-parenting a money line is a separate, deliberate act", so it must
+>   not be widened to do this silently.
+>   **Script gap worth fixing:** it asserts every line still falls inside the NEW week, but **never
+>   checks whether the destination `(pr_id, week_start)` is already occupied** — which is why it
+>   planned a move the database could not accept.
+> - [x] **Backfill `due_date` — ✅ DONE 4 Aug for 4 of the 5 vouchers.** New
+>   `apps/backend/src/scripts/backfill-voucher-due-dates.ts` — **report-only by default**, `--apply` to
+>   write, mirroring the re-anchor script's shape. Wrote `PV-000002 → 2026-08-01`,
+>   `PV-000003` and `PV-000004 → 2026-08-08`, `PV-000006 → 2026-08-15`; re-running now reports nothing
+>   eligible, which is the verification.
+>   **`PV-000005` was deliberately SKIPPED and still has a NULL due date** — it is still
+>   Monday-anchored, so `week_end + 7` would land seven days after the *wrong* week end. The script
+>   prints it as outstanding rather than giving it a plausible, wrong date. It stays NULL until the
+>   merge above is decided.
+>
+> **⚠️ Nearly a FOURTH over-call: I was about to write a Sunday-anchor "fix" for code that was already
+> correct. The data said Monday, the code said Sunday, and the answer was neither — the RUNNING PROCESS
+> was stale. When live data contradicts the source, check what is actually executing before changing
+> the source.**
+
+### 3 Aug 2026 (evening) — amended (read the block above first)
+
+> **The spine is now LIVE-VERIFIED end to end for the first time** — all six links, on four real
+> simultaneous logins (agency `Dato' Lim Wei Khoon`, outlet `Chen Wei Jie`/Velvet 23, admin
+> `InnocenZ Admin`, PR `Vicky` on mobile web). Post job → persists + routes to Atlas → agency assigns
+> (tier rates correct: Vicky tier_3 → RM700, Haziq tier_1 → RM500) → PR sees it on the timetable →
+> check-in/out seals → **PV generation produced `PV-000006`, balanced and reconciled**. Test rows were
+> created and removed; DB returned to baseline (`shift 24, shift_assignment 23, shift_pay_tier 93`).
+>
+> - [x] **🟢 `due_date` was NULL on every voucher — ✅ DONE 3 Aug (evening).** The column and the API
+>   field both existed; nothing computed a value. New `paymentDueDate(weekEnd, termDays = 7)` in
+>   `payment-voucher-week.ts`, wired into the generator's `create()` payload. **Anchored to `week_end`,
+>   NOT `issued_date`** (owner's decision): the issued date is whenever the job happened to run, so
+>   anchoring there would let one week carry two different due dates and would silently extend the term
+>   every time the job slipped. Returns `null` on a malformed week end via the same round-trip guard as
+>   `weekOfDate`, so a voucher can never be stamped with the due date of `NaN`. Both entry points get it
+>   — the Sunday cron and `scripts/generate-weekly-pvs.ts`. **First test in the repo**:
+>   `payment-voucher-week.test.ts`, 5/5 passing (rollover, non-leap Feb, malformed, explicit term, the
+>   KL-offset trap). `tsc` 0 errors across 245 files.
+>
+> **Forward-only — superseded 4 Aug:**
+> - [x] **Backfill `due_date` on existing vouchers** (`due_date = week_end + 7`) — **✅ DONE 4 Aug**
+>   with the owner's explicit go-ahead, via `scripts/backfill-voucher-due-dates.ts`. 4 of 5 written;
+>   `PV-000005` skipped because it is not yet Sun-anchored. See the amended block at the top of §9.
+>
+> **Defects found by the sweep, ranked. #1 is the money risk:**
+> - [x] **🔴 P0 — OVERTIME IS UNBOUNDED — ✅ FIXED 4 Aug (later).** The window now opens at the **later**
+>   of the scheduled end and the check-in, so minutes claimed can never exceed minutes present.
+>   `overtime.test.ts`, 7/7, written RED first (3 failed, the invariant case at *540 claimed for 480
+>   present*). The live 279-minute claim was **rejected** through the agency API — `0.00`, no money
+>   moved. Original finding below, kept for the mechanism:
+> - [x] ~~**🔴 P0 — OVERTIME IS UNBOUNDED.**~~ A check-in at 16:38 and check-out at 16:39 (**12 seconds**)
+>   produced **`overtime_minutes = 279`** on assignment `6574b2ee`. Overtime is measured from the
+>   shift's scheduled end to the check-out wall-clock and never looks at check-in, so a PR who forgets
+>   to check out accrues overtime for as long as they stay forgotten. This is the mechanism behind the
+>   live RM678.78 / "113.1h" line **and** the 23 Jul record whose check-out is **5 days** after its
+>   check-in. Status `pending`, so no money has moved — but the agency approve button is one click away.
+> - [ ] **🔴 Portal role guard is bypassed on direct URL entry.** A live **outlet** session
+>   (`/auth/me` → `roles:[outlet]`) rendered `/en/admin/dashboard`, `/en/admin/user-management/admin`
+>   (with a **Create Admin** button) and `/en/admin/rbac/permission` (**Create Permission**). The agency
+>   session reached `/en/admin/rbac/role` the same way. `ensurePortal()` in `lib/auth/guards.ts` opens
+>   with `if (typeof window === "undefined") return;` — that no-ops during SSR, and `beforeLoad` does
+>   not re-run on client hydration, so only client-side link navigation is actually guarded.
+> - [ ] **🔴 `GET /api/v1/agency` has NO role guard at all** (`agency.routes.ts:8`) and the controller
+>   does not scope by caller — an outlet token received all 3 agencies. `outlet.routes.ts:20` is gated
+>   `admin|agency|outlet`, so PRs are excluded there, but any outlet can enumerate every outlet.
+> - [ ] **🟠 A 403 renders as money, not as an error.** Four confirmed: agency hub shows
+>   **"Pending payout RM 0.00"** when `GET /payment-voucher` 403s; admin dashboard shows **"All clear /
+>   0"** when `admin-request/pending-count` 403s; RBAC shows "No roles found" / "No permissions found".
+>   A refusal is indistinguishable from "nothing to do".
+> - [ ] **🟠 Server silently ignores requested page size** — client asks `pageSize=500`, response says
+>   `pagination.pageSize: 100`. Harmless at 3 rows; silently truncates any list over 100.
+>
+> **Smaller, still open:**
+> - [ ] `/outlet/ratings` renders `CalendarPage` — outlets have **no Ratings screen**, though the
+>   backend `rating` routes and `outletCan(…, "ratePrs")` both exist. **Verify before building.**
+> - [ ] Agency/outlet portals list ORGS, not accounts — no screen to disable a user or revoke a role.
+> - [ ] Registration for the 3 roles (carried, deliberately deferred).
+> - [ ] Outlet subscription shows **"Renewal 15 Jul 2026"**, three weeks in the past.
+>
+> **⚠️ Standing rule earned the hard way — I over-called THREE findings in one session and had to
+> retract each: (1) "TOTAL PR 0" (read the DOM before React Query resolved); (2) "Post Job is broken"
+> (queried the DB in the same breath as the click, before the mutation landed — the owner caught this
+> one); (3) "roster grid shows 2 of 4 assignments" (the counter counts SHIFTS, and the missing rows
+> were below a 1,400-char truncation). All three were the same error. A COUNT, a TRUNCATED PAGE, or a
+> READ TAKEN SECONDS AFTER A WRITE is not evidence yet — re-read before asserting.**
+>
+> **Corrections to earlier entries:** tips are **NOT** missing (`shift_sale.tip_units` /
+> `tip_sales_rm`, `outlet_workspace.tip_pct`, PV components `tip_commission` + `tips` all exist);
+> cancellation penalties are **NOT** undefined (Velvet 23 = RM175, Emhub + JK House = RM350 each);
+> the backend `tsc` baseline is now **0 errors**, not 26.
+
+### 3 Aug 2026 (earlier) — amended (read the block above first, then this, then the 2 Aug block below)
 
 > **3 Aug (latest) — a wage-classification fault found while wiring the PR History tabs, then FIXED
 > at the owner's instruction (§10 latest).** No open item left from it.
@@ -695,6 +908,631 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (late) — ✅ PRE-PILOT GATE 2 CLOSED AND PROVEN. The demo login is DEV-only and absent
+> from a production build. And the gate's own description of the credential was WRONG.**
+>
+> 🔴 **The recorded credential was `owner@atlas-agency.my` + `password`. That is not it.**
+> `isAgencyDemoLogin` requires **`demo@atlas-agency.invalid`** exactly (outlet:
+> `demo@velvet23.invalid`), and **`.invalid` is a reserved TLD (RFC 2606) that can never be a real
+> address**. The real owner email falls straight through to the backend, which rejects the wrong
+> password. ⚠️ **The gate had been carried for days describing a credential that does not exist**, and
+> it was filed as *"an auth bypass into a real portal"* — a bigger claim than the code supports.
+>
+> **What it actually was:** `routes/login.tsx` checked the demo credentials BEFORE the real login, in
+> every build, with no environment guard anywhere in `lib/auth`. A match planted a placeholder JWT —
+> `alg: "none"`, signature literally `"demo"` — purely so the route guard passes. **The backend
+> verifies signatures, so that token could never read real data.** The blast radius was a client-side
+> demo shell, not real records. Gated anyway: a login that accepts a known password for a known
+> address should not exist in a build a client can reach.
+>
+> **Fixed** by wrapping the branch in `import.meta.env.DEV`, which Vite replaces with the literal
+> `false` at build time so the branch AND its dynamic import are dropped.
+>
+> ✅ **PROVEN BY BUILDING IT, not by reading it.** `vite build`, then grepped **1,147** emitted
+> `.js`/`.mjs` files:
+> `demo@atlas-agency.invalid` **0** · `demo@velvet23.invalid` **0** · `isAgencyDemoLogin` **0** ·
+> `startAgencyDemoSession` **0** — while `auth/login` **2** and `startAgencyRealSession` **4** confirm
+> the real path survived. ⚠️ **Counts, not blank output:** an empty grep result is indistinguishable
+> from a broken grep, so every symbol was counted and two known-present controls were included.
+>
+> **Also found:** `PortalSignInScreen.tsx` pre-fills the password box with the literal `"password"` —
+> but **no route mounts that component**; it is the orphaned island the audit already counts. Left
+> alone.
+
+> **4 Aug 2026 (late) — 🔴 CANCEL AND NO-SHOW DID NOTHING FROM THE ROSTER'S LIVE TAB, silently. Same
+> bug as the outlet-swap one recorded three lines above it in the same file.**
+>
+> The by-id write handlers branched on **`viewMode === "planning"`**: planning hit the backend, live
+> fell through to the demo store. But `agencyRoster` is **`backendRoster.slots` in BOTH views** — the
+> file's own comment says *"Both views read live backend data"* — so a live-view slot id is a
+> **`shift_assignment` UUID**. The demo actions look that id up in a demo slice that has never held
+> backend UUIDs, find nothing, and return. **Cancelling a shift or flagging a no-show from the Live
+> tab wrote nothing at all, while the sheet closed as though it had worked.**
+>
+> ⚠️ **This is the IDENTICAL failure already documented a few lines up for outlet swap** —
+> *"matched the slot id against `agencyRoster` … silently found nothing and the button did nothing"*.
+> It was missed because that fix got written up as being **about swaps** instead of **about ids**.
+> *When a screen changes where its rows come from, every action keyed by row id has to move with
+> them* — and a fix recorded by its symptom will not find its own siblings.
+>
+> **Fixed:** `cancel`, `flagNoShow` and the status edit now go through `useRosterMutations` in both
+> views, and `unassign` is offered in both (hiding it in live withheld a working action rather than
+> protecting anything). The three demo store subscriptions are **deleted, not left dangling** — a demo
+> action still subscribed beside a backend one is how these got wired together by accident.
+> **Two honesty fixes alongside:** `late` has no backend field, so it now says *"Late flags are not
+> recorded yet"* instead of writing to a store that does not hold the row; and the edit sheet reports
+> `Not saved: <fields> — only status persists`, since `status` is the only key with a write behind it.
+>
+> **Verified:** web `tsc` **120** (baseline), roster clean; the Live tab renders real data unchanged
+> (2 planned PRs · RM 1,000.00 · 3/5 stamped · 3/3 within fence) with **zero console errors**, so
+> removing the subscriptions broke nothing.
+> ⚠️ **NOT fired: the rewired cancel / no-show themselves.** Both mutate real roster rows on the
+> shared database, and unlike a refusal there is no free version of a successful write. The `late`
+> toast sits behind an edit sheet the session expired before reaching (`kickToLogin` again). **The
+> rewiring is typechecked and render-verified, not exercised** — which on this project is exactly the
+> distinction that keeps mattering.
+
+> **4 Aug 2026 (late) — the demo-data leak into REAL sessions is down from 21 slices to 1.**
+> Web `tsc` **120** (baseline), zero console errors, roster + settings still render real data.
+>
+> `buildBlankPortalReset()` warns in DEV about demo slices it cannot blank, and **real sessions keep
+> whatever it cannot blank**. The list was **21**: `paymentCardLast4`, `postSealRatePrompt`,
+> `prSessionByRole`, `shiftAccepted`, `pendingApproval`, `acceptedShiftIndex`, `checkedIn`,
+> `checkedOut`, `prActiveShift`, `prComcard`, `prDisplayName`, `prIcName`, `prMobile`, `prEmail`,
+> `prAvatarPhoto`, `prPayrollAgencyId`, `prMarketplaceApplication`, `prAgencyTiedAt`, `prCheckInMeta`,
+> `prLeaveRequest`, `notificationPrefs`. **Now 1.**
+>
+> **Twelve went to a generic rule** — strings → `""`, booleans → `false`, and **`null` → `null`**,
+> that last one because `typeof null === "object"` so a slice ALREADY null was reported as unblankable
+> when null is precisely its blank. Eight more got explicit entries (nullable session objects → null,
+> a dictionary and an all-optional bag → `{}`, `notificationPrefs` → its real default).
+>
+> 🔴 **The generic number rule is WRONG for one field, and reading the types is what caught it.**
+> `acceptedShiftIndex` is `number | null`, and the pre-existing rule blanks every number to `0` — but
+> **`0` is a valid index meaning "the first shift was accepted"**, not "none". It is now explicit, with
+> the reason recorded beside it. *The empty value of an index is null, and a rule that maps every
+> number to 0 cannot know that.*
+>
+> ⚠️ **`prComcard` is deliberately left unblanked and still named in the warning.** The obvious
+> candidate, `DEFAULT_COMCARD` in `comcard-demo.ts`, is typed **`ComcardDemoStyle`** — a comcard's
+> STYLING, not a comcard. Importing it typechecked as a plan and would have written the wrong shape
+> into the slice **on the strength of the constant's name reading correctly**. Backed out; blanking it
+> needs a real empty `PrComcard`, which does not exist. *One remaining honest warning beats twenty-one
+> silenced ones.*
+>
+> **Why it hid so long:** every one of the 21 is a PR-portal slice, and **no agency or outlet screen
+> reads them** — the leak was invisible from the screens anyone was looking at. That is also why it
+> stays worth fixing: the web PR portal is where a real PR session would pick them up.
+
+> **4 Aug 2026 (late) — the member-management UI is BUILT and CLICKED THROUGH on both portals. The
+> capability finally moves from *unwired* to *done*.** Web `tsc` **120** (baseline), 0 in touched
+> files, biome clean.
+>
+> **One component for both orgs.** `OrgMembersPanel` takes `kind="agency" | "outlet"` and mounts on
+> the agency and outlet Settings screens: lists the real `agency_user` / `outlet_user` rows, changes a
+> sub-role, removes behind a Confirm/Cancel step, and adds by email.
+>
+> ✅ **Proven in a browser on real logins.** Agency: changing the only owner's role fired
+> **`PUT` → 409**, the toast carried **the server's exact words** — *"Cannot change the last active
+> owner — appoint another owner first"* — and the select reverted to `owner`. Outlet: **3 real members
+> render** (Chen Wei Jie owner · Michelle Lim finance · Ahmad Razif ops) with the correct 3-role
+> select. **Zero console errors on either.**
+>
+> **The panel deliberately re-implements NO rule.** Ownership and last-owner checks live only on the
+> server; the UI shows what the server said. *A client-side copy of a permission rule drifts, and the
+> copy that drifts is the one the user believes.* `serverMessage()` exists for exactly this: the 409
+> text is the ONLY explanation of why a change was refused, so collapsing it into "Something went
+> wrong" would leave an owner unable to tell a rule from an outage.
+>
+> ⚠️ **"Add member" takes an EMAIL but the API takes a `userId`,** so the hook resolves one to the
+> other via `GET /user?email=` — **exact match only, and the result is never rendered as a list.**
+> That endpoint is already open to agency and outlet callers, so this adds no new read; but rendering
+> what it returns would turn a lookup into a people-browser for every org owner, which is the open
+> privacy question this project already records. **The person must already have an account — no
+> invite is sent, because there is no mailer — and the panel says so on its face** rather than letting
+> it be discovered as a failure.
+>
+> ⚠️ **NOT fired live: add and remove.** Both leave permanent rows on the shared database. The
+> refusals are evidence; the successes are not.
+>
+> **Method note:** the session was kicked to the marketing landing page mid-run — the access token
+> expired during a long session, and `kickToLogin()` hard-redirects. Diagnosed from the network and
+> console buffers being EMPTY (a full reload clears them) rather than guessed at. Also: **a toast is
+> hard to catch by polling** — it had auto-dismissed by the next tool call twice. Captured properly
+> with a `MutationObserver` armed BEFORE dispatching the change. *If a thing is transient, observe it
+> from before it happens rather than looking for it afterwards.*
+
+> **4 Aug 2026 (late) — member management widened from admin-only to ORG OWNERS. Backend done and
+> live-proven 8/0/3; the UI is NOT built. Backend `tsc` 0 · unit tests 21/21 across 3 files.**
+>
+> 🔴 **The find: a scope check on the wrong parameter is not a scope check.** `updateMember` and
+> `removeMember` take `:memberId` and **never checked it belongs to the org in `:id`.** The route
+> scope guard could not catch this — it validates `:id` while the write targets `:memberId` — so an
+> owner passing their OWN agency id and a FOREIGN member id would have sailed through every gate.
+> Closed in the controller with a **404** (not 403: a foreign member id must not be confirmed as
+> existing). **Live-proven both ways, and the foreign member was re-read afterwards to confirm it
+> still exists** — a refusal that is not checked for side effects is only half a test.
+>
+> **`guardMemberChange` (`util/member-change-guard.ts`, 9 unit tests) refuses anything that would
+> leave an org with no ACTIVE owner** — removal, demotion or deactivation alike. No separate
+> self-demotion rule: *"you are the last owner"* already covers an owner locking themselves out **and**
+> covers one owner locking out the last OTHER owner, which a self-check alone would miss. An inactive
+> owner does not count as cover. Deliberately allowed: an owner may appoint another owner in their own
+> org, including handing ownership away — that is tenancy, not escalation.
+>
+> 🔴 **THE PROBE CAUGHT A REAL DEFECT — an over-applied denial, exactly the failure this file keeps
+> warning about.** The scoped guard refused ANY body containing `status`, because on `PUT /agency/:id`
+> that is the admin approve/suspend lane. Reusing that guard on the MEMBER routes carried the rule
+> with it, where `status` means the MEMBER'S status — a field an owner is entitled to set. It refused
+> a legal change **and cited admin approval while doing it**. *The rule was right; its blast radius
+> was not.* Split into its own middleware `refuseOrgStatusChange()`, applied only to the two
+> org-record PUTs. **One middleware, one job.** ⚠️ **`probe-org-scope-guard` was re-run afterwards and
+> still passes 7/0/1** — refactoring a guard voids its old proof.
+>
+> ⚠️ **What is NOT proven, stated plainly.** The happy-path **200 is SKIPPED**: Atlas has exactly one
+> member, so there was no second member whose own value could be re-sent idempotently. **`POST` (add
+> member) was never fired**, because creating a member leaves a permanent row on the shared DB. The
+> outlet cross-venue case skipped too — Onyx KL has no members. **Only the refusals are evidence.**
+>
+> **Vitest was only looking at `src/features/**`.** The first shared rule to get a test lives in
+> `src/util`, and the narrower glob found nothing and **exited 0** — with `passWithNoTests: true`, a
+> test outside the glob reports success having executed nothing. Widened to `src/**/*.test.ts`.
+> *A green suite that ran zero of your tests is the worst possible signal for a security rule.*
+
+> **4 Aug 2026 (late) — running the dev server rewrites `routeTree.gen.ts` into a DIFFERENT ORDER.
+> Reverted, not committed. And the reordered form boots clean, which is the useful part.**
+>
+> Starting `web-3001` regenerated `apps/web/src/routeTree.gen.ts`: **1,121 lines changed, 565/556** —
+> and **every one of them is reordering.** Verified rather than eyeballed: the route-import sets were
+> extracted from both versions and sorted — **58 routes before, 58 after, zero set difference.**
+> Nothing added, removed or repathed; the generator simply emits a different order than the committed
+> file has.
+>
+> **Reverting was ATTEMPTED and does not hold — the line above claiming "reverted" was wrong within a
+> minute of being written.** `git checkout --` restored the file and it was rewritten immediately:
+> mtime landed *after* the checkout, and `netstat` shows **a dev server still LISTENING on port
+> 3000** — another session's, not this one's (this session's was 3001 and was stopped). Its `tsr`
+> watcher regenerates the file the instant git restores it.
+> ⚠️ **So the working tree could not be made clean by reverting.** The other session's process was not
+> killed, because it is not this session's to kill.
+> *A revert is not done when the command exits 0 — it is done when the file is still reverted
+> afterwards.* Nothing here checked that until the second look.
+>
+> ✅ **RESOLVED on the owner's decision (4 Aug): regenerated and committed ONCE, and the churn is
+> over.** Checked before trusting it:
+> - **Deterministic.** `npx tsr generate` run explicitly produced **byte-identical** output
+>   (`sha1 f5f1fb9f…` before and after), so the watcher and the CLI agree — the committed bytes are
+>   what any machine will regenerate, not one process's opinion.
+> - **Compiles.** Web `tsc` **120**, exactly the baseline, **0 errors in `routeTree.gen.ts`**.
+> - **Boots.** Already established above — both portals loaded on real logins, zero console errors,
+>   with this exact file on disk.
+> - **Stays clean.** `git status` verified clean for the file after committing, with the other dev
+>   server still running — which is the only proof that the churn is actually ended rather than paused.
+>
+> ⚠️ **Expect a conflict when `jk`'s lane merges.** It is a generated file: resolve it by running
+> `npx tsr generate` on the merged route set and committing the result — **never by hand-picking
+> import lines**, since the order carries no meaning and hand-merging it is how a route silently goes
+> missing.
+>
+> ✅ **The genuinely useful finding: the reordered tree BOOTS.** Both portals were loaded on real
+> logins with **zero console errors while this exact regenerated file was on disk.** That matters
+> because **re-ordering these imports is what detonated the import cycle** that once took the whole
+> agency portal down with `Cannot access 'DEFAULT_PER_TABLE_RM' before initialization` — the cycle
+> "worked" only while it was lucky about entry order. **The leaf-module fix holds under the very
+> reordering that originally triggered the crash**, which is the strongest evidence that fix has had.
+> *A generated file changing by 1,121 lines is not automatically noise — but it is not automatically
+> danger either; the way to tell is to check whether the SET changed, then boot it.*
+
+> **4 Aug 2026 (late) — BOTH Settings screens clicked through on real logins. Edit → save → verified
+> in the database → restored. Zero console errors on either.**
+>
+> The gap named in the previous entry is closed: the React wiring was typechecked only, and on this
+> project that has repeatedly been the difference.
+>
+> - **Agency** (`owner@atlas-agency.my`): screen renders real identity matching the DB row exactly.
+>   Owner name → `Dato' Lim Wei Khoon QA`, Save → **`PUT /agency/c30fcd15… 200`**, then the two
+>   invalidation refetches fired (`GET` agency + members). **Database read back:
+>   `contactName = "Dato' Lim Wei Khoon QA"`.** Restored to `Dato' Lim Wei Khoon`.
+> - **Outlet** (`owner@velvet23.my`): venue name → `Velvet 23 QA`, Save → **`PUT /outlet/ed739c13… 200`**,
+>   refetches fired. **Database read back: `name = "Velvet 23 QA"`.** Restored to `Velvet 23`.
+>
+> ✅ **The check worth keeping — a partial save does NOT silently unfence a venue.** After a
+> `name`-ONLY `PUT`, all five address columns were still intact (`Jalan Bukit Bintang` ·
+> `Bukit Bintang` · `55100` · `Kuala Lumpur` · `Malaysia`) **and so was the geo pin**
+> (`3.14438770` / `101.70824200` / 50 m). The update schemas are `.partial()`, so omitted fields are
+> left alone. **That was an ASSUMPTION in the commit that shipped the partial payload, and it is now a
+> reading** — worth the thirty seconds, because the failure mode would have been a venue quietly
+> losing the coordinate every check-in is measured against.
+>
+> **Method:** own dev server on **3001** (`web-3001` in `launch.json`) — another chat's server is not
+> reachable from this session's browser tools. Baselines for both rows were captured over the API
+> BEFORE any UI write, so the restore values were known rather than remembered.
+
+> **4 Aug 2026 (late) — the outlet Settings save is wired to `PUT /outlet/:id`, NAME ONLY, and the
+> part left unwired is the interesting one.**
+>
+> Same shape as the agency screen (`d513e5c`): persist first, bail out with a warning if the server
+> refuses, so the screen never shows a saved state the database rejected. Web `tsc` **120**
+> (baseline), **0 errors in the touched files**.
+>
+> 🔴 **The address is deliberately NOT saved, and wiring it as the form stands would have destroyed
+> data.** The screen shows one location line — but that line is DERIVED: `joinAddress()` concatenates
+> **five** columns (`addressLine1`, `addressLine2`, `postcode`, `state`, `country`). Writing the
+> edited string back means picking one column to hold it, which **flattens five fields into one and
+> silently empties the other four.** *A read that joins is not a write that splits.* Splitting a
+> free-text address is a parsing problem, not a wiring one, so the input stays store-only until the
+> form itself has five fields — and the toast now says so out loud rather than implying a full save:
+> *"Venue name saved · address is not persisted yet"*.
+>
+> `lat`/`lng` are excluded for a different reason: moving a pin is `PATCH /outlet/:id/geo-fence`, its
+> own endpoint precisely because saving a pin is what switches hard geofencing ON for a venue.
+>
+> ⚠️ **What is proven and what is not.** The ENDPOINT is live-proven (`probe-org-scope-guard`, own
+> outlet PUT → 200). The REACT WIRING is typechecked only — **the screen has not been clicked
+> through**, which on this project is the difference that has repeatedly mattered.
+
+> **4 Aug 2026 (late) — the scoped owner guard is LIVE-PROVEN, 7/0/1. The percentage table moves to
+> features ~93% · wired ~87% · proven ~86% spine / ~50% branches · production-ready ~20%.**
+>
+> `probe-org-scope-guard.ts` fires the whole surface over HTTP on real logins: cross-tenant agency
+> PUT **403**, cross-tenant outlet PUT **403**, **cross-tenant geo-fence PATCH 403**, `status` in the
+> body **403**, both own-org saves **200**, admin **200**. Kept in the repo — it writes nothing but
+> two same-value saves, so it is safe to re-run whenever the org guards are touched.
+>
+> **Safe on the shared DB by construction: every cross-tenant case sends the TARGET'S OWN CURRENT
+> VALUES**, read back immediately before. If the guard works, the request is refused and nothing is
+> written; if the guard were absent or stale, the write is idempotent and corrupts nothing.
+> ⚠️ **A probe for a guard has to be harmless when the guard is the thing that is broken** — otherwise
+> the first honest run of it is the one that does the damage.
+>
+> ⚠️ **A 403 alone would have proven nothing:** the OLD guard also 403s, just for a different reason.
+> Every refusal is therefore matched on its MESSAGE, which only the new code can emit — and that
+> doubles as the stale-server detector, since `/health` answering 200 says nothing about which code
+> the process is running.
+>
+> 🔴 **The first run reported `SKIP — target venue has no pin to echo back`, and that was a PROBE
+> DEFECT wearing the costume of a fact about the data.** The columns are `lat`/`lng`/`geoFenceRadius`;
+> the probe guessed `geoFenceLat`/`latitude`. All seven outlets are pinned. It landed on the single
+> most dangerous case in the set — a venue's fence centre is what every check-in is measured against —
+> and a skip reads as *"nothing to test here"* rather than as *"I did not test this"*. **A SKIP is a
+> claim about the world and has to be verified like one.** Cross-tenant DELETE geo-fence remains
+> skipped deliberately: no idempotent form, so a failed guard would unfence a live venue.
+>
+> **Audit page republished** to the same URL with the four-dimension table updated. Production-ready
+> moves 19 → 20 for a closed-and-proven cross-tenant write, not for new features. The hole was found
+> only because a screen was finally being wired to the endpoint: **the gate looked fine for exactly as
+> long as nothing called it.**
+> **4 Aug 2026 (late, housekeeping) — biome rewrap of `updateAgency`; §9 renewed with what `d513e5c`
+> LEFT OPEN.**
+>
+> Formatting only on `services/agency/agency.ts` — the save-formatter rewrapped the `client.put`
+> call added minutes earlier in `d513e5c`. No behaviour change, no new export, no signature change.
+>
+> **The substantive part is §9, which had no entry for the three things that session deliberately did
+> NOT finish.** Chief among them: **the scoped owner guard shipped in `d513e5c` has never been fired
+> at a running server.** It closed a real cross-tenant write — any agency owner could rewrite any
+> agency, any outlet owner could move another venue's geo-fence — and it is backed by nothing but a
+> typecheck. ⚠️ **A security fix proven only by `tsc` is exactly the shape of green signal this
+> project has already recorded being lied to by**, and refusals write nothing, so there is no cost
+> argument for the delay. The six free refusal cases and the one same-values 200 are written out in
+> §9, along with the reminder that **admin must still pass every one of them** (`isAdmin`
+> short-circuits ahead of the scope test, and an over-applied denial fails silently until somebody
+> cannot work).
+>
+> Also open: the outlet Settings save (still store-only) and member management for org owners (the
+> endpoints exist and are `requireAdmin` by design; widening needs ownership scope + escalation,
+> last-owner and self-demotion guards).
+>
+> ⚠️ **Method note — this entry was written twice.** The first attempt built the Markdown inside a
+> JS template literal passed through `bash -c`, and **the shell consumed every escaped backtick
+> before node ever saw it**, so each code span silently became an empty string: *"biome rewrap of ;"*,
+> *"proven only by  is"*. It committed clean and read as gibberish. **Nesting three quoting layers
+> (bash → node → Markdown) has no safe escape for a backtick** — write the file with an editor tool,
+> or pass it via a heredoc, and never assemble Markdown containing code spans in a shell string.
+
+> **4 Aug 2026 (late) — the agency Settings save is WIRED, and wiring it exposed a cross-tenant
+> write hole in the endpoint it was wired to.**
+>
+> 🔴 **`PUT /agency/:id` let any agency owner edit ANY agency.** `agencyOwnerOnly` resolves to
+> `guard('agency', ['owner'])`, which asks *"are you an active owner?"* and **never compares the
+> membership against `req.params.id`**. Every agency owner satisfied it for every agency — name, SSM
+> number and contacts rewritable across tenants. Worse on the outlet side: the same unscoped
+> `outletOwnerOnly` guarded `PUT /outlet/:id` **and both geo-fence routes**, so one operator could
+> move another venue's fence centre — the point every check-in is measured against.
+> `UpdateAgencySchema` also accepts `status`, so an owner could self-approve a `pending_review` org.
+>
+> **Fixed** with a scoped variant — `requireAgencySubRoleScoped` / `requireOutletSubRoleScoped`, used
+> as `agencyOwnerOfParam` / `outletOwnerOfParam` — which additionally **refuses a body carrying
+> `status` (403) rather than dropping it**: a save that silently discards a field teaches the caller
+> the wrong thing about what persisted. Applied to 4 routes. The existing 7 exports are untouched, so
+> the unscoped guard still covers routes whose target comes from the session, not from `:id`.
+> ⚠️ **NOT yet live-fired.** Backend `tsc` 0, web `tsc` 120 (baseline), 0 errors in touched files —
+> but no refusal has been fired at a running server. A refusal writes nothing, so this is cheap and
+> is the next thing to do.
+>
+> **The wiring itself.** `agency/profile.tsx` now persists through `PUT /agency/:id` on a real
+> session — save first, bail out and warn if the server refuses, so the screen never shows a saved
+> state the database rejected. Only `name` and `contactName` go up: **`ic` has no column and stays
+> local**, since a field with nothing behind it is this project's most repeated defect. The Finance
+> Head invite toast no longer claims *"Invite queued"*; it says the invite is **not sent**.
+>
+> ⚠️ **Two claims published on the audit page last night were FALSE, and both were mine.**
+> (1) *"No invite or member-management endpoint exists"* — `POST/PUT/DELETE /agency/:id/members` and
+> the four outlet equivalents all exist. **The grep searched for `invite`; the capability is called
+> `members`.** Searching for the feature's name instead of the capability's name, one night after
+> writing down "a filename is not a feature". **An absent grep hit is evidence about the grep.**
+> (2) *"Neither file makes a single API call"* — true of the files, false of the screens: both call
+> `useAgencyProfile` / `useOutletProfile`, which do fetch. **One indirection defeats that test.**
+> Both corrected on the audit page, which now also carries the 4-dimension scoring table
+> (features ~93% · wired ~85% · proven ~85%/~45% · **production-ready ~19%**) in place of the single
+> 60/78/85/97 strip.
+
+
+> **4 Aug 2026 (night) — audit page brought current; one entry CORRECTED; registration DEFERRED.**
+>
+> Republished to the same URL (`0c66cb02-…`) by patching the previous session's source, not
+> rebuilding — 278.5 KB → 290.9 KB. Provenance now reads **HEAD `7e3d275` · 8 unpushed**, web `tsc`
+> **120**, **12 tests across 2 files**, live vouchers **4/4 reconcile**. Added a lead section for
+> this pass (overtime bounded, the Ratings screen, the `PV-000005` merge, the import cycle) since
+> the page had still been sitting at `bb416bc` / 2 Aug.
+>
+> **🔴 CORRECTED — "agency and outlet accounts have no screen at all" was being read too broadly.**
+> That clause is true of the ADMIN portal. But the **agency and outlet portals do carry their own
+> member surfaces**: `routes/agency/profile.tsx` has a Finance Head *"sub-role invite · requires IC +
+> e-signature for dual-sign PV"*, and `routes/outlet/settings.tsx` holds the owner profile with
+> `accountActivated`. **Neither manages an account** — neither file makes a single API call, the
+> agency save lands in the zustand action `saveAgencyProfileSettings` (`store.ts:3370`), and the
+> invite is a **toast** saying *"Invite queued for …"* when nothing is queued. **There is also no
+> endpoint to call:** `grep -rnE "invite" apps/backend/src/features/*/*.routes.ts` returns nothing.
+> So it re-files from **"feature missing" to "not wired"** — a built screen with no capability behind
+> it — which makes the feature count slightly better and the wiring count slightly worse. Fixing it
+> needs a member-management API first; a working invite additionally waits on the mailer.
+> ⚠️ **It was filed wrongly because it was judged from route FILENAMES instead of by opening the
+> files** — the owner caught it. **A filename is not a feature.**
+>
+> **⏸️ Registration for the three roles — DEFERRED by the owner, 4 Aug.** Not a gap; out of scope
+> this cycle. For the record of what exists: `signupAccountTypes` covers **outlet and agency only**,
+> and PR registration lives in the mobile wizard — so it is 2-on-web + 1-on-mobile, not one unified
+> flow. Marked `Deferred` on the audit page so it stops reading as open work.
+>
+> **Still not represented on the audit page:** the 3 Aug slice (PV day-review screens, the receipt
+> lifecycle) has no section of its own — only what this session touched was written up. Worth a
+> dedicated pass.
+
+> **4 Aug 2026 (night) — `biome check --write` applied across ALL of `apps/web`. 330 files,
+> +52,972 / −52,576. No behaviour change; typecheck IMPROVED by one.**
+>
+> Done so the save-formatter stops rewriting whole pre-existing files every time one is touched —
+> which had already forced two separate cosmetic commits this session and buried a ~15-line bugfix
+> in ~900 lines of churn.
+>
+> **⚠️ `check --write` is NOT just formatting — it applies safe LINT fixes too.** Two real code
+> changes landed alongside the quotes/tabs/semicolons/rewrapping:
+> 1. **`import * as React` → `import type * as React`** (biome's `useImportType`). This is only
+>    valid where React is used purely in type positions — a file calling `React.useState` would
+>    break. Legal here because the modern JSX transform means React need not be in scope.
+> 2. **Import member reordering** (`{ clsx, type ClassValue }` → `{ type ClassValue, clsx }`).
+>
+> **Verified, not assumed.** `tsc` went **121 → 120 errors** with an identical per-code
+> distribution (63 TS6133, 30 TS2322, 9 TS2353, …), so **no new error appeared** and one
+> pre-existing one was fixed. Then live-checked the three surfaces with the most reformatted
+> components — **agency portal, outlet Ratings, and the landing page — all render with zero console
+> errors.** The typecheck alone was not treated as sufficient: a wrong `import type` conversion can
+> pass `tsc` and still fail at runtime.
+>
+> **Method note worth keeping — "is this diff formatting-only?" needs THREE normalisations.**
+> Stripping whitespace and quotes is not enough because biome also **adds semicolons and trailing
+> commas**; and neither comparison alone is sufficient — **a sorted line-by-line diff catches
+> re-ordering but not re-wrapping, while a concatenated hash catches re-wrapping but not
+> re-ordering.** Using both, plus stripping `; ,`, cut the "suspicious" set from 191 files to 125,
+> and sampling those showed the remainder was the two lint fixes above.
+
+> **4 Aug 2026 (night, housekeeping) — biome formatting only, no behaviour change.**
+>
+> The save-formatter rewrote three pre-existing files that this session touched
+> (`lucide-label-icons.ts`, `nav-back.ts`, `outlet-rbac.ts`) from 2-space/single-quote to the
+> project's biome style (tabs, double quotes, sorted imports). **They were deliberately kept OUT of
+> `c0b732f` and `b536233`** so ~900 lines of cosmetic churn would not bury a ~15-line bugfix, and
+> are committed separately here.
+>
+> **Proven formatting-only before committing**, not assumed: for each file, the HEAD and working
+> copies were stripped of whitespace and quote characters and compared. Two matched outright;
+> `outlet-rbac.ts` appeared to differ, and the difference turned out to be **import ORDER** (the
+> formatter sorted `iconForNav` above the `LucideIcon` type import) — a sorted line-by-line diff was
+> empty. ⚠️ **A concatenated-hash comparison is order-sensitive and will call a re-sorted import
+> block "semantic"; diff the sorted lines before believing it.**
+
+> **4 Aug 2026 (night) — `PV-000005` MERGED into `PV-000006`; the agency portal's fatal import
+> cycle broken. All 4 live vouchers now reconcile.**
+>
+> **🟢 The split week is closed. `PV-000006` = RM707.20**, 2 lines, 1 receipt. New
+> `scripts/merge-voucher-into.ts --from PV-000005 --into PV-000006`, report-only by default, all
+> writes in **one transaction**. It refuses unless the two vouchers are the **same PR, same agency,
+> both still editable** (`pending_review`/`draft` — a `sent`/`signed`/`paid` voucher is a record, not
+> a draft), and **every line being moved already falls inside the destination's week**. Totals are
+> **recomputed from the lines**, never by adding the two stored nets, so a wrong stored subtotal
+> cannot survive the merge. The `delete` runs last inside the transaction, so any child row left
+> behind trips its FK and rolls the whole thing back.
+> **Verified three independent ways:** the script's own re-read (2 lines, net 707.20, `PV-000005`
+> deleted); `audit-live-vouchers` → **4 of 4 reconcile** with `PV-000006`'s
+> `completed_shift_without_wages` flag now GONE (the wages were never missing — they were on its
+> twin); and the due-date script → "every voucher already has a due date".
+>
+> **🔴 The agency portal was dead on arrival — `Cannot access 'DEFAULT_PER_TABLE_RM' before
+> initialization`.** A genuine circular import: `outlet-demo.ts` imported that **value** from
+> `outlet-financial-sync.ts`, which imports back from `outlet-demo.ts`. `outlet-demo` reads it at
+> **module-evaluation time** (its `priceRm`/`perTableRm` literals), so whichever module the bundler
+> entered first decided whether the app booted. **The cycle pre-dates this work; regenerating the
+> route tree with `npx tsr generate` re-ordered the route imports and changed that entry order,
+> which turned a latent cycle into a fatal one.**
+> Fix: the four defaults now live in **`outlet-financial-defaults.ts`, a LEAF module with no
+> imports** — a module that imports nothing can never be half-initialised. `outlet-financial-sync`
+> imports them for its own use and **re-exports all four**, so every existing import site is
+> unchanged. `outlet-demo` no longer imports `outlet-financial-sync` at all, so the edge is gone
+> rather than merely reordered. Agency dashboard renders (Atlas Agency, 3 PRs / 4 outlets) and the
+> outlet Ratings screen still loads, both with **zero console errors**.
+>
+> **⚠️ Trap worth remembering: a stale Vite HMR graph reported the fix as still broken.** After the
+> edit the console kept throwing `DEFAULT_DRINK_UNITS is not defined` from a module URL carrying an
+> **older `?t=` timestamp** than the one Vite was serving; fetching the transformed source showed the
+> import present and correct. A **fresh tab** was clean. Check the `?t=` stamp in the stack trace
+> before believing a post-edit error, and reach for a new tab rather than a reload.
+
+> **4 Aug 2026 (evening) — OUTLET RATINGS SCREEN BUILT; `due_date` BACKFILLED; the re-anchor was
+> REFUSED BY THE DATABASE and that refusal was the finding.**
+>
+> **🟢 The outlet Ratings screen exists — and `/outlet/ratings` never held ratings.** That path
+> rendered the **Calendar** (nav label "Calendar page", `outlet-rbac.ts`), so building on top of it
+> would have deleted the outlet's calendar. The Calendar moved to **`/outlet/calendar`** keeping its
+> label, and `/outlet/ratings` is now the real screen. `nav-back.ts`, `canAccessOutletPath` and the
+> nav array were all updated together; `npx tsr generate` re-emitted the route tree (it also
+> re-ordered its import list — generated-file churn, not a hand edit).
+>
+> **The service layer was already complete; only the screen was missing.** `fetchRatings` /
+> `submitRating` have existed in `@/services/rating` all along, and the agency could already read
+> ratings back (`use-agency-ratings`). The **outlet side was write-only**: the post-seal prompt on
+> Today posted a rating and the venue could never see what it had said. New
+> `use-outlet-ratings.ts` closes that; no backend change, no new endpoint, no gate moved.
+>
+> **Gating matches the backend exactly.** Viewing is `viewLiveDashboard` (all three sub-roles), because
+> `GET /rating` carries no sub-role guard; rating stays `ratePrs` (owner + ops, **not** Finance),
+> matching `outletOwnerOrOps` on `POST /rating`. The header line tells the reader which they hold.
+>
+> **Live-verified on two real outlet sessions, and the second one was the proof.** Emhub Testing
+> rendered the empty state — and `GET /rating` returned **200 with zero rows**, so the emptiness was
+> truthful rather than a swallowed failure. Signing in as **Velvet 23** (`owner@velvet23.my`) rendered
+> its real row end to end: **2.0 average, "1 rating"**, Alice Yee Mei Me 2/5, the `audit-test` tag and
+> the note, with the star filter and the no-match state both exercised. `tsc` clean, biome clean,
+> zero console errors.
+>
+> **⚠️ A cross-tenant leak was SUSPECTED and disproved — check before asserting.** A raw fetch with the
+> `access_token` localStorage key returned another outlet's rating while the session said "Emhub".
+> The cause was neither a leak nor a bug: **auth tokens are per-TAB (sessionStorage) with localStorage
+> as a seed only** (`auth-storage.ts`), so `access_token` in localStorage was a *stale leftover* from
+> an agency login in the same browser. The app uses `getAccessToken()` and was correctly on
+> `emhub@emhub.test` throughout; the agency token legitimately saw that row because the PR is Atlas's.
+> **Two "bugs" that were not bugs, caught by reading the storage layer instead of trusting the symptom.**
+>
+> **`due_date` backfilled — 4 of 5.** New `scripts/backfill-voucher-due-dates.ts`, report-only by
+> default. `PV-000005` skipped on purpose (not Sun-anchored); re-running reports nothing eligible.
+>
+> **🔴 The re-anchor of `PV-000005` was REFUSED by `payment_voucher_one_per_pr_week`, and nothing was
+> written.** `PV-000005` and `PV-000006` are the same PR and the same Sun–Sat week — **not a double
+> bill**, but one week split across two rows (`RM700.00` wages on one, `RM7.20` drink commission on the
+> other; correct total **RM707.20**). That also explains `PV-000006`'s `completed_shift_without_wages`
+> flag: the wages are on its twin. **The repair is a merge and is the owner's call** — see §9. The
+> re-anchor script guards money lines crossing weeks but does not check whether the destination
+> `(pr_id, week_start)` is already taken, which is why it planned an impossible move.
+
+> **4 Aug 2026 (later) — OVERTIME BOUNDED, and the Sun–Sat anchor VERIFIED IN THE RUNNING PROCESS.**
+>
+> **🔴 P0 closed — overtime could be claimed for hours the PR was absent for.** `overtimeFromStamps`
+> measured the overrun from the shift's scheduled end to the check-out clock and **never consulted
+> `checkInAt`**. Assignment `6574b2ee` therefore claimed **279 minutes (RM813.75)** for **11.6 seconds**
+> of attendance: slot `10:00 – 12:00`, check-in `08:38:58.504Z`, check-out `08:39:10.090Z` — and
+> `12:00 + 279 min = 16:39`, the check-out stamp to the minute. Every minute since noon was billed to a
+> shift nobody was standing in. **The existing plausibility guard could not catch this** — 11.6 seconds
+> elapsed is entirely believable — because the fault was never an unbelievable stamp; it was counting
+> absence. Fix: the overtime window now opens at the **later** of the scheduled end and the check-in,
+> restoring the invariant **minutes claimed ≤ minutes present**.
+>
+> **`overtime.test.ts` — second test file in the repo, 7/7 green** (12 total with the due-date spec).
+> Written RED first: 3 of 7 failed against the old code, the invariant case reporting *540 minutes
+> claimed for 480 minutes present*. It sweeps every late check-in hour from 08:00 to 20:00, so the
+> invariant is enforced across the range rather than at one example. `tsc` clean, 0 errors.
+>
+> **Live claim disposed through the app's own path.** `PATCH /shift-assignment/6574b2ee/overtime`
+> `{"decision":"reject"}` on the agency owner session → `overtimeStatus: rejected`,
+> `overtimeAmount: 0.00`, pending list now empty. **Reject, not approve — no money moved**, and 0.00
+> records "decided, worth nothing" rather than "never decided". Owner's call, asked and given.
+>
+> **🟢 The Sun–Sat anchor is now OBSERVED, not inferred — the last doubt from the stale-process episode
+> is closed.** `GET /shift-assignment/overtime/pending` returns `week` straight from `weekOfDate` **in
+> the running process**; for shift date **Monday `2026-08-03`** it returned
+> **`2026-08-02 .. 2026-08-08`** — Sunday to Saturday, verified by `getUTCDay()` rather than asserted.
+> **The check is READ-ONLY and wrote nothing** — a live verification that costs no data, the cheapest
+> technique found so far for this class of question.
+>
+> **Still needing the owner's hand — both refused by the permission classifier, not by the code:**
+> `reanchor-voucher-weeks.ts --apply` (report mode pre-verified: exactly one voucher moves,
+> `PV-000005` `08-03..09` → `08-02..08`, its single line inside the new window, money guard passed) and
+> the `due_date` backfill. **Run the re-anchor FIRST**, or the backfill computes `PV-000005`'s due date
+> from a week that is still wrong.
+>
+> ⚠️ **One thing NOT verified: whether the running dev backend reloaded the overtime fix.** The unit
+> test proves the source; `tsx watch` should have picked the file up, but that is exactly the
+> assumption that produced the phantom anchor bug. Confirm at the next real check-out, or restart.
+
+> **4 Aug 2026 — double-billing found and closed at the guard.** A PR held two vouchers for one shift:
+> `PV-000005` (self-log, Mon-anchored `08-03..08-09`) and `PV-000006` (generator, Sun-anchored
+> `08-02..08-08`), each with a RM700 wages line whose `ref` named the same assignment `6574b2ee`.
+> RM1,400 for twelve seconds of attendance. `PV-000006` deleted; `PV-000005` survives.
+>
+> **Fix — `existsForPrWeek()` now matches on OVERLAP, not `week_start` equality.** Equality only
+> protected against a repeat from the same writer using the same anchor, so one day of disagreement
+> between two write paths disabled it entirely and silently. Overlap holds whatever the anchor, so a
+> timezone slip, a manual re-anchor, or a third write path cannot reopen it. Optional 4th arg `weekEnd`
+> defaults to `weekStart`, which degrades to a day-inside-week check for the create endpoint where the
+> field is optional; the exact-`week_start` arm is retained so legacy rows with a NULL `week_end` stay
+> covered. **Regression-tested against the real defect: the same call that minted `PV-000006` now
+> reports `0 created, 1 skipped (already_exists)` and writes nothing.** `tsc` clean.
+>
+> **The anchor itself was never broken in code.** All three helpers are Sunday-anchored, the cron is
+> `0 2 * * 0`, and the PR app sends no week. `PV-000005` came from a **stale backend process** still
+> executing pre-merge Monday-anchored code — the `tsx watch` trap this file already warns about.
+> Restarting the backend from current disk is the whole remedy. **A Sunday-anchor "fix" was drafted and
+> then discarded: the source was already right.** The lesson is recorded in §9 — when live data
+> contradicts the source, check what is actually RUNNING before editing the source.
+>
+> **Left open:** the anchor is inferred, not observed (dev servers were down, PR app needs a login);
+> `PV-000005` still needs re-anchoring to `08-02..08-08`; and the `due_date` backfill is blocked on a
+> permission refusal for bulk UPDATEs against `payment_voucher` — the statement is in §9 to run by hand.
+
+> **3 Aug 2026 (evening) — the spine is proven end to end, and `due_date` now exists.** Two things
+> happened: a full four-role E2E sweep on real simultaneous logins, and one feature shipped off the
+> back of it.
+>
+> **Shipped — `due_date` computed at generation.** `paymentDueDate(weekEnd, termDays = 7)` +
+> `PAYMENT_TERM_DAYS` in `payment-voucher-week.ts`; the generator now sets `dueDate` in its `create()`
+> payload. Anchored to **`week_end`, not `issued_date`** — the issued date is whenever the job ran, so
+> anchoring there lets a late or repeated run hand the same seven days two different due dates, and
+> quietly extends the term every time the job slips. `week_end` is a property of the cycle, so the
+> answer is stable however often generation runs. Malformed input returns `null` (same round-trip guard
+> as `weekOfDate`) rather than a rolled-over date. Both callers benefit — the Sunday cron and
+> `scripts/generate-weekly-pvs.ts`. Added `payment-voucher-week.test.ts`, **the first test in the
+> repo**, 5/5 green; `tsc` clean at 0 errors / 245 files. **Forward-only: the 3 live vouchers and
+> `PV-000006` still hold `due_date = null` and need a deliberate backfill.**
+>
+> **Proven live for the first time — the whole spine.** Post job (outlet) → row persists and routes to
+> Atlas (`agency_id` correct, `created_by owner@velvet23.my`) → agency assigns two PRs with tier rates
+> sealed correctly from the rate card (tier_3 → RM700, tier_1 → RM500) → the PR app shows the shift
+> with real address and the right per-outlet cancellation penalty → check-in/check-out seals the wage →
+> **the generator produced `PV-000006` (RM700, `pending_review`), balanced and reconciled, with the
+> wage line carrying `component: 'wages'` and `ref` pointing at its own assignment.** The duplicate
+> guard was also proven: re-running for 26 Jul–1 Aug skipped both PRs with `already_exists` and wrote
+> nothing, because `existsForPrWeek` is status-agnostic. That is the RM2,285.08 double-voucher
+> mechanism, genuinely closed.
+>
+> **All test data was removed**; the six tracked tables returned to baseline. `PV-000006` was left in
+> place deliberately (tagged `created_by = claude-e2e-generate`) — deleting a voucher and its lines is
+> the operation flagged as having nearly corrupted one before, so it stays the owner's call.
+>
+> **Five defects opened (see §9, ranked).** The one that matters is **unbounded overtime**: 12 seconds
+> between check-in and check-out generated **279 minutes** of pending overtime, because the calculation
+> runs from the shift's scheduled end to the check-out clock and never consults check-in. It explains
+> both the live "113.1h" line and the 23 Jul assignment whose check-out is five days after its
+> check-in. Also opened: the portal guard is bypassed by direct URL entry (SSR no-op + `beforeLoad` not
+> re-running on hydration), `GET /agency` carries no role guard at all, 403s render as **RM 0.00** and
+> "All clear", and the server silently caps `pageSize` at 100.
+>
+> **Three findings were over-called and retracted in the same session** — a DOM read before React Query
+> resolved, a DB read taken in the same breath as the click that wrote (the owner caught that one), and
+> a "missing rows" claim that was a 1,400-char truncation. The rule now sits in §9: a count, a
+> truncated page, or a read taken seconds after a write is not evidence yet.
+>
+> **Two earlier entries corrected:** tips are not missing (capture exists end to end), and cancellation
+> penalties are not undefined (Velvet 23 RM175, Emhub/JK House RM350).
 
 > **3 Aug 2026 — `main` merged into `jk` (`0f339b8`, PR #43 from SL). Two conflicts, both resolved from
 > evidence rather than by taste.**

@@ -32,7 +32,11 @@ const portals: {
 		icon: "groups",
 		flowHeadline: ["Roster", "Live floor", "Payroll"],
 		desc: "Plan weekly rosters across outlets, monitor who's on duty, issue payment vouchers, and settle each payroll cycle.",
-		flow: ["Weekly roster plan", "Live workforce view", "Dispute payment vouchers management"],
+		flow: [
+			"Weekly roster plan",
+			"Live workforce view",
+			"Dispute payment vouchers management",
+		],
 	},
 	{
 		id: "pr",
@@ -94,7 +98,9 @@ function PortalDemo({ portal }: { portal: PortalId }) {
 		<div className="platform-demo-stage">
 			<div
 				className={`platform-demo-frame ${
-					isMobile ? "platform-demo-frame--mobile" : "platform-demo-frame--desktop"
+					isMobile
+						? "platform-demo-frame--mobile"
+						: "platform-demo-frame--desktop"
 				}`}
 			>
 				<div

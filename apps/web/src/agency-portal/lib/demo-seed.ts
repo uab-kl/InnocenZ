@@ -1509,6 +1509,35 @@ function explicitBlankSlices() {
 		agencyCollections: [],
 		agencyOwner: { ...DEFAULT_AGENCY_OWNER },
 		agencyFinanceHead: { ...DEFAULT_FINANCE_HEAD },
+
+		// ---- PR-portal slices ------------------------------------------------
+		// These are the web PR demo's own state. A real agency or outlet session
+		// reads none of them, which is exactly why they sat unblanked for so long:
+		// the leak was invisible from the screens anyone was looking at.
+		//
+		// ⚠️ `acceptedShiftIndex` MUST be listed here rather than left to the
+		// generic rule. It is `number | null`, and the generic rule blanks numbers
+		// to 0 — but 0 is a VALID index meaning "the first shift was accepted",
+		// not "none". The empty value of an index is null, and a rule that maps
+		// every number to 0 cannot know that.
+		acceptedShiftIndex: null,
+		// Nullable session objects: null is their genuine empty.
+		prActiveShift: null,
+		postSealRatePrompt: null,
+		prMarketplaceApplication: null,
+		prLeaveRequest: null,
+		// A dictionary and an all-optional bag: `{}` is complete, not a guess.
+		prSessionByRole: {},
+		prCheckInMeta: {},
+		// Non-nullable shape with a real default of its own.
+		notificationPrefs: { ...DEFAULT_NOTIFICATION_PREFS },
+		// ⚠️ `prComcard` is deliberately NOT blanked here, and stays named in the
+		// warning. The obvious candidate — `DEFAULT_COMCARD` in `comcard-demo` —
+		// is typed `ComcardDemoStyle`: a comcard's STYLING, not a comcard. Using
+		// it would have put a value of the wrong shape into the slice on the
+		// strength of the constant's name reading correctly. Blanking this needs
+		// a real empty `PrComcard`, which does not exist yet.
+
 		outletCommissionRules: [],
 		scalingTierMultipliers: { ...SCALING_TIER_MULTIPLIERS },
 		bookings: [],
@@ -1542,6 +1571,13 @@ export function buildBlankPortalReset() {
 		if (key in blank) continue;
 		if (Array.isArray(value)) blank[key] = [];
 		else if (typeof value === "number") blank[key] = 0;
+		// Primitives have an unambiguous empty, so they no longer need naming one
+		// by one. This alone cleared 12 of the 21 slices the warning used to list.
+		else if (typeof value === "string") blank[key] = "";
+		else if (typeof value === "boolean") blank[key] = false;
+		// `typeof null === "object"`, so a slice whose demo value is ALREADY null
+		// was being reported as unblankable when null is exactly its blank.
+		else if (value === null) blank[key] = null;
 		// Anything else needs a DEFAULT_* shape we cannot invent — emptying it
 		// blind risks crashing components that read nested fields, so report it
 		// instead of guessing and add it to explicitBlankSlices() above.

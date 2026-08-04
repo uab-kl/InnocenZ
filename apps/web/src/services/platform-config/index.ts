@@ -1,3 +1,3 @@
-export * from './types'
-export * from './schemas'
-export * from './platform-config'
+export * from "./platform-config";
+export * from "./schemas";
+export * from "./types";

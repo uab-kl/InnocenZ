@@ -78,7 +78,11 @@ const kpis = [
 	{ label: "Variance", value: "+6.2", unit: "%", live: true },
 ];
 
-export function FloorConsole({ variant = "default" }: { variant?: "default" | "hero" }) {
+export function FloorConsole({
+	variant = "default",
+}: {
+	variant?: "default" | "hero";
+}) {
 	const reduceMotion = useReducedMotion();
 	const isHero = variant === "hero";
 
@@ -94,18 +98,28 @@ export function FloorConsole({ variant = "default" }: { variant?: "default" | "h
 			}`}
 		>
 			{/* Console header */}
-			<div className={`flex items-center justify-between border-b border-console-line ${isHero ? "px-7 py-5" : "px-5 py-4"}`}>
+			<div
+				className={`flex items-center justify-between border-b border-console-line ${isHero ? "px-7 py-5" : "px-5 py-4"}`}
+			>
 				<div className="flex items-center gap-2.5">
 					<span className="relative flex h-2.5 w-2.5">
 						<span className="absolute inline-flex h-full w-full animate-glow-pulse rounded-full bg-signal-live" />
 						<span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-signal-live" />
 					</span>
-					<span className={`font-semibold tracking-wide text-foreground ${isHero ? "text-[1.375rem]" : "text-sm"}`}>
+					<span
+						className={`font-semibold tracking-wide text-foreground ${isHero ? "text-[1.375rem]" : "text-sm"}`}
+					>
 						Live floor
 					</span>
-					<span className={`text-foreground/45 ${isHero ? "text-[1.125rem]" : "text-xs"}`}>· Fri, 21:16</span>
+					<span
+						className={`text-foreground/45 ${isHero ? "text-[1.125rem]" : "text-xs"}`}
+					>
+						· Fri, 21:16
+					</span>
 				</div>
-				<span className={`rounded-md bg-gold/12 font-semibold uppercase tracking-wider text-gold-bright ${isHero ? "px-3.5 py-1.5 text-[1.0625rem]" : "px-2.5 py-1 text-xs"}`}>
+				<span
+					className={`rounded-md bg-gold/12 font-semibold uppercase tracking-wider text-gold-bright ${isHero ? "px-3.5 py-1.5 text-[1.0625rem]" : "px-2.5 py-1 text-xs"}`}
+				>
 					3 venues
 				</span>
 			</div>
@@ -113,8 +127,13 @@ export function FloorConsole({ variant = "default" }: { variant?: "default" | "h
 			{/* KPI strip */}
 			<div className="grid grid-cols-4 gap-px border-b border-console-line bg-console-line">
 				{kpis.map((k) => (
-					<div key={k.label} className={`bg-console-bg ${isHero ? "px-4 py-4.5" : "px-3 py-3.5"}`}>
-						<div className={`uppercase tracking-wider text-foreground/45 ${isHero ? "text-[1.0625rem]" : "text-xs"}`}>
+					<div
+						key={k.label}
+						className={`bg-console-bg ${isHero ? "px-4 py-4.5" : "px-3 py-3.5"}`}
+					>
+						<div
+							className={`uppercase tracking-wider text-foreground/45 ${isHero ? "text-[1.0625rem]" : "text-xs"}`}
+						>
 							{k.label}
 						</div>
 						<div className="mt-1.5 flex items-baseline gap-1">
@@ -125,7 +144,11 @@ export function FloorConsole({ variant = "default" }: { variant?: "default" | "h
 							>
 								{k.value}
 							</span>
-							<span className={`text-foreground/40 ${isHero ? "text-[1.0625rem]" : "text-xs"}`}>{k.unit}</span>
+							<span
+								className={`text-foreground/40 ${isHero ? "text-[1.0625rem]" : "text-xs"}`}
+							>
+								{k.unit}
+							</span>
 						</div>
 					</div>
 				))}
@@ -140,19 +163,27 @@ export function FloorConsole({ variant = "default" }: { variant?: "default" | "h
 							key={s.initials}
 							className={`flex items-center gap-3.5 transition-colors hover:bg-console-elevated ${isHero ? "h-[4.75rem] px-7" : "h-16 px-5"}`}
 						>
-							<div className={`flex shrink-0 items-center justify-center rounded-full bg-gold/12 font-bold text-gold-bright ${isHero ? "h-12 w-12 text-lg" : "h-10 w-10 text-sm"}`}>
+							<div
+								className={`flex shrink-0 items-center justify-center rounded-full bg-gold/12 font-bold text-gold-bright ${isHero ? "h-12 w-12 text-lg" : "h-10 w-10 text-sm"}`}
+							>
 								{s.initials}
 							</div>
 							<div className="min-w-0 flex-1">
 								<div className="flex items-center gap-2">
-									<span className={`truncate font-medium text-foreground ${isHero ? "text-[1.5625rem]" : "text-base"}`}>
+									<span
+										className={`truncate font-medium text-foreground ${isHero ? "text-[1.5625rem]" : "text-base"}`}
+									>
 										{s.name}
 									</span>
-									<span className={`shrink-0 rounded bg-foreground/8 font-semibold text-foreground/55 ${isHero ? "px-2 py-0.5 text-xs" : "px-1.5 py-0.5 text-[10px]"}`}>
+									<span
+										className={`shrink-0 rounded bg-foreground/8 font-semibold text-foreground/55 ${isHero ? "px-2 py-0.5 text-xs" : "px-1.5 py-0.5 text-[10px]"}`}
+									>
 										{s.tier}
 									</span>
 								</div>
-								<div className={`truncate text-foreground/45 ${isHero ? "text-[1.125rem]" : "text-xs"}`}>
+								<div
+									className={`truncate text-foreground/45 ${isHero ? "text-[1.125rem]" : "text-xs"}`}
+								>
 									{s.venue}
 								</div>
 							</div>
@@ -160,10 +191,14 @@ export function FloorConsole({ variant = "default" }: { variant?: "default" | "h
 								<span
 									className={`inline-flex items-center gap-1.5 rounded-full font-semibold ${isHero ? "px-3 py-1 text-[1.0625rem]" : "px-2.5 py-0.5 text-xs"} ${meta.className}`}
 								>
-									<span className={`rounded-full ${meta.dot} ${isHero ? "h-2 w-2" : "h-1.5 w-1.5"}`} />
+									<span
+										className={`rounded-full ${meta.dot} ${isHero ? "h-2 w-2" : "h-1.5 w-1.5"}`}
+									/>
 									{meta.label}
 								</span>
-								<span className={`tabular-nums text-foreground/40 ${isHero ? "text-[1.0625rem]" : "text-xs"}`}>
+								<span
+									className={`tabular-nums text-foreground/40 ${isHero ? "text-[1.0625rem]" : "text-xs"}`}
+								>
 									{s.at}
 								</span>
 							</div>
@@ -173,10 +208,10 @@ export function FloorConsole({ variant = "default" }: { variant?: "default" | "h
 			</div>
 
 			{/* Footer reconciliation bar */}
-			<div className={`flex items-center justify-between border-t border-console-line ${isHero ? "px-7 py-4.5 text-[1.125rem]" : "px-5 py-3.5 text-xs"}`}>
-				<span className="text-foreground/45">
-					Cycle reconciliation
-				</span>
+			<div
+				className={`flex items-center justify-between border-t border-console-line ${isHero ? "px-7 py-4.5 text-[1.125rem]" : "px-5 py-3.5 text-xs"}`}
+			>
+				<span className="text-foreground/45">Cycle reconciliation</span>
 				<span className="font-semibold text-signal-live">
 					On track · settles Sun
 				</span>

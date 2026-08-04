@@ -1,10 +1,4 @@
-import {
-	Briefcase,
-	Check,
-	MapPin,
-	ScanLine,
-	SignalHigh,
-} from "lucide-react";
+import { Briefcase, Check, MapPin, ScanLine, SignalHigh } from "lucide-react";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { SectionHead, SplitTitle, useTick } from "./primitives";
 
@@ -168,7 +162,11 @@ function OutletDashboard() {
 					val={`RM ${(sales / 1000).toFixed(1)}k`}
 					tone="gold"
 				/>
-				<Kpi label={t.dashboards.variance} val={`+${variance.toFixed(1)}%`} tone="violet" />
+				<Kpi
+					label={t.dashboards.variance}
+					val={`+${variance.toFixed(1)}%`}
+					tone="violet"
+				/>
 				<Kpi label={t.dashboards.checkedIn} val="31·GPS" tone="violet" />
 			</div>
 			<div className="h-px" style={{ background: "var(--hz-line)" }} />
@@ -220,7 +218,18 @@ function OutletDashboard() {
 				</div>
 				<Spark
 					data={[
-						12, 18, 14, 20, 26, 24, 32, 28, 38, 34, 42, 40 + ((tick * 3) % 10),
+						12,
+						18,
+						14,
+						20,
+						26,
+						24,
+						32,
+						28,
+						38,
+						34,
+						42,
+						40 + ((tick * 3) % 10),
 					]}
 					color="#f2c66b"
 					height={44}
@@ -271,10 +280,7 @@ function AgencyDashboard() {
 				>
 					{t.dashboards.bookingsByOutlet}
 				</div>
-				<div
-					className="flex items-end gap-2"
-					style={{ height: chartHeight }}
-				>
+				<div className="flex items-end gap-2" style={{ height: chartHeight }}>
 					{bars.map((b, i) => (
 						<div
 							key={days[i]}
@@ -294,7 +300,10 @@ function AgencyDashboard() {
 				</div>
 				<div
 					className="mt-1.5 flex justify-between text-[10px]"
-					style={{ color: "var(--hz-ink-mute)", fontFamily: "var(--hz-font-mono)" }}
+					style={{
+						color: "var(--hz-ink-mute)",
+						fontFamily: "var(--hz-font-mono)",
+					}}
 				>
 					{days.map((d) => (
 						<span key={d} className="flex-1 text-center">
