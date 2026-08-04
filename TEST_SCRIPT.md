@@ -204,6 +204,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
+| A6 | **Agency receipt editor (Approve + dispute queue)** — correct scanned/self-log drinks/tips in place via targeted `PATCH/POST /receipts/:id` (+ lines); never `PUT /payment-voucher/:id`. Same `AgencyReceiptEditor` in Receipts sub-tab and DisputeQueuePanel. Migrations **0083** (`payment_voucher_line.outlet_id`) + **0084** (`review_withdrawn_at`) applied on `innocenz-test`. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `payment-voucher.*` · `0083`/`0084` | receipt + line tables | ⚠️ Reported (landed `57bd165`; live click-through still owed — §9 audit items remain) |
 
 ### Admin side (jk)
 
@@ -295,6 +296,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X55 | **🟢 SUSPENDING AN ORGANISATION NOW ACTUALLY STOPS ITS PEOPLE — refused at login AND live sessions killed.** New `features/auth/org-status.ts` → `suspendedOrgBlock(userId)`, called from **`auth.controller` login** and from **`authenticateJWT`**. Two call sites on purpose: refusing the next login alone would leave anyone holding a token at the moment of suspension working until it expired — **which for an agency finance user means they could still raise payment vouchers.** The middleware already re-reads the account every request (§8 X31), so that cost was being paid and this rides along with it. **The login check sits BEFORE the password compare**, mirroring the lockout: a refusal that only fires once the password is right confirms the password to anyone who tries it. **🔴 THE DESIGN IS ALL IN WHAT IT DOES *NOT* BLOCK, and each carve-out is a lockout that nearly happened. (1) `pending_review` is ALLOWED** — only `suspended` and `inactive` deny. `pending_review` is the column **DEFAULT** for both `agency` and `outlet`, so a rule reading "not active" would have shut out **every organisation nobody has reviewed yet**, and no review screen exists. **(2) No membership means no opinion** — a platform admin and a PR hold no `agency_user`/`outlet_user` row at all, so an "is your org active?" test would have refused everyone who has no organisation, **locking every admin out of their own platform**. Absence of a membership is not a suspended membership. **(3) One live organisation is enough** — a user in a suspended agency AND an active one keeps access, rather than being punished for the other org's status. **(4) The membership row's own `status` is filtered first**, since `agency_user.status` is independent of `agency.status`. The refusal **names the organisation and its state** rather than saying "invalid credentials", which would send someone to reset a password that was never the problem — and it is their own org, so it discloses nothing. **LIVE PROOF, `probe-org-suspension.ts`, 5/5:** an active agency does not block → suspend → **blocked with the right message** → restore → access returns → and **admin is never blocked**. ✅ **Nothing was newly locked out: all 3 agencies and all 7 outlets are `active`** (asserted by the probe, not assumed). The suspension is restored in a `finally`. HTTP login re-verified after the change: admin logs in and all 6 authenticated requests pass the middleware. Backend tsc **0**. | **all** | `features/auth/org-status.ts` (new) · `auth.controller` (login) · `middlewares/authenticate-jwt.ts` · `probe-org-suspension.ts` (new) | live probe 5/5 + HTTP login re-verified | ✅ Fired live |
 | X56 | **🟢 `/agency/pv` IS RENDERED IN A BROWSER AT LAST — on a REAL agency login, and it immediately produced a bug.** X43 and X45 shipped this screen proven only by `tsc`/biome/`vite build`; this is the first time a browser has loaded it. Signed in as `owner@atlas-agency.my` against the live backend: the page renders **real DB rows** (Alice `RM 1,203.30`, Victoria `RM 700.00`, both `Pending Agency Review`), the **dispute panel and `OvertimeQueuePanel` both mount**, console **clean — zero errors**. ⚠️ **The OT panel rendered its EMPTY state** ("No overtime awaiting a decision"), because the only live claim is already approved (X50). **Its POPULATED state is still unproven, and populating it means writing to the shared DB** — do not report this screen as fully exercised. **🔴 THE BUG IT FOUND: `pv_day_review_pending` was never mapped in `apps/web` at all.** The kind has existed since migration 0073 and is produced by `weekly-payout.job.ts`; the web app's hand-written `NotificationKind` union never received it. jk's `unknown` fallback stopped it white-screening, so it degraded quietly to a generic **"Update"** row — and `hrefFor` fell to `default: return undefined`, so **a notification whose own body reads "Approve each day on Payroll & PV, then send" navigated NOWHERE when tapped.** ⚠️ **Same class as jk's crash, one kind later, and the fallback is exactly why nobody noticed: it turned a loud failure into a silent one.** Fixed across 5 files (union → `KIND_MAP` → `PR_KIND_MAP` → `OPS_KIND_LABEL` → `hrefFor` case). **Verified in the browser, not by compiler:** the row now reads **"Day review"** and clicking it lands on `/en/agency/pv`. ✅ **Bonus — closes jk's §9 item 2:** his crash fix had never been seen rendering; `shift_cover_needed` and `pr_rating_low` both display correctly, no crash. `tsc` **121, unchanged from baseline**; biome clean (format only — pre-existing `prType` warning left alone). | **Agency** | `services/notification/index.ts` · `agency-portal/lib/ops-notifications.ts` · `agency-portal/hooks/use-notifications.ts` · `agency-portal/lib/push-notifications.ts` · `agency-portal/components/pr/PrNotificationBell.tsx` | real browser login + click-through | ✅ Rendered live, bug fixed |
 | X57 | **🟢 THE WAGE ARITHMETIC IS PROVEN AGAINST THE RATE CARD — §9 P1's "Verify Payment Voucher ↔ PR wage calc" is answerable YES for the first time.** ⚠️ **First the correction that matters: `audit-live-vouchers.ts` reporting "3/3 reconcile" DOES NOT mean the wages are right.** `wages_amount_mismatch` matches a line against **`shift_assignment.pay_amount` — the amount check-out SEALED** — and never asks whether that sealed amount was itself derived correctly from the outlet's rate card. **A wrong rate card therefore yields a voucher that reconciles perfectly and still pays the wrong money.** The audit's green is *voucher ↔ assignment*, one link short of *the money is correct*. New read-only **`check-wage-vs-ratecard.ts`** closes that link and prints both sides. **Result: 4 completed assignments since 2026-07-20, agree 4 · disagree 0 · no-card 0** — `700.00 = 700.00` (Victoria, tier_3) and `600.00 = 600.00` (Alice, tier_2), each resolved from the **per-shift override** (`shift_pay_tier`), the precedence the app itself uses. The full chain **rate card → sealed pay → voucher line** is now machine-verified on live data. **🔴 TWO TRAPS WORTH KEEPING:** (1) the first run reported **SKIP — 4 rows, 0 comparable**, because `pr.tier` is the enum `tier_3` while `outlet_tier_rate.tier` holds the DISPLAY label `"Tier III"`; **they never join raw**, and the app bridges them with `PR_TIER_TO_OUTLET_LABEL` in `shift-assignment.controller.ts`. The fault was the probe's, not the app's — **re-derive before reporting a money bug.** (2) The table is **`outlet_tier_rate`, not `tier_rate`**, and `shift_date` lives on **`shift`, not `shift_assignment`** — the same column-guessing tax as every prior probe. ✅ **The script reports SKIP, never a pass, over zero comparable rows** — that is what stopped a false green here, and it must stay. | **Agency ← PR** | `apps/backend/src/scripts/check-wage-vs-ratecard.ts` (new, read-only) | live: agree 4 · disagree 0 | ✅ Verified live |
+| X58 | **🟢 AGENCY RECEIPT EDITOR LANDED (`57bd165`) — the slice that left the DB ahead of the repo.** Agency can correct drinks/tips on a scanned or self-logged receipt in place (order no, printed date/time, qty/commission, add missed line) through **targeted** receipt endpoints — never the destructive `PUT /payment-voucher/:id` line wipe. Same editor opens from the Receipts sub-tab **and** inside the dispute queue. Migrations **0083** (`outlet_id` FK on lines, 18/18 backfilled) and **0084** (`review_withdrawn_at`) were already live on `innocenz-test`; this commit ships the code that reads them. ⚠️ **Not a live agency click-through yet** — §9 day/receipt agreement audit items (PvDetail dispute, disputed-cell withdraw UX, etc.) stay open. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `0083`/`0084` | live schema + committed code | ⚠️ Reported |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 | X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
@@ -302,62 +304,21 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
+### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (jk — receipt editor committed)
 
-Left deliberately uncommitted: authored in a session running CONCURRENTLY with the PR-Payment work
-(`64fe35a`…`7b620c9`), so it is not mine to commit under a message I would be inventing. It all
-typechecks — backend past the TS2883 baseline, `apps/web` on every touched file, `apps/mobile` at 0.
+> **`57bd165` closed the "uncommitted receipt-editor tree" block.** Code + migrations are in the
+> repo; DB already had `0083`/`0084`. **Next:** live agency click-through of Approve + dispute-queue
+> edit paths, then work the §9 DAY/RECEIPT AGREEMENT AUDIT highs (PvDetail dispute never hits server,
+> disputed voucher turns every cell into withdraw). Do **not** treat §8 A6/X58 as verified until a
+> real agency login drives the editor.
 
-- [x] ✅ **APPLIED 4 Aug 2026 — and the DATABASE IS NOW AHEAD OF THE COMMITTED CODE.** `0083` and `0084`
-  are live on `innocenz-test`; `0083`'s fix is committed (`62243bc`) but `0084` and everything that
-  reads the two new columns is still in the working tree. That inverts the risk in this whole block:
-  it is no longer "unapplied DDL waiting", it is **schema without its code**, so landing the slice is
-  now more urgent, not less. A fresh clone will not match this database.
-  - ⚠️ `pnpm migrate:deploy` FAILED first with **`function min(uuid) does not exist` (SQLSTATE 42883)** —
-    `0083` backfilled with `min(o.id)` over a uuid column, and because drizzle wraps the run in one
-    transaction, NOTHING applied (the DB sat at `0082`). Fixed to `min(o.id::text)::uuid`, safe because
-    the row is only used where `m.n = 1` — one outlet in the group, so the aggregate picks the single
-    value rather than choosing between candidates. Both files were dry-run in a rolled-back transaction
-    before the real deploy.
-  - Verified after applying: `payment_voucher_line.outlet_id` uuid + FK `confdeltype = n` (SET NULL),
-    `payment_voucher_receipt.review_withdrawn_at` timestamp, and the backfill linked **18 of 18** lines
-    with **0** unmatched. Journal now records 1785800000000 and 1785900000000.
-  - `0083_pv_line_outlet_fk.sql` — `payment_voucher_line.outlet_id`, FK to outlet, ON DELETE SET NULL.
-    Closes one of the weak edges CLAUDE.md rule #3 was written about: the row's only outlet today is a
-    copied varchar NAME, so an outlet rename would start refusing catalogue checks for no visible
-    reason.
-  - `0084_receipt_review_withdrawn.sql` — `payment_voucher_receipt.review_withdrawn_at`, so a receipt
-    somebody REFUSED stops being byte-identical to one nobody has opened, and bulk approve cannot
-    re-approve a refusal under the refuser's own name.
-- [ ] ⚠️ **The §10 row "THE AGENCY CAN CORRECT A RECEIPT" says "NO MIGRATION. ZERO DDL."** That is true
-  of the receipt editor itself, but two migrations now sit in the same uncommitted tree from sibling
-  work. Correct that row (or give the migrations their own) before it reads as "this slice needed no
-  DDL" for the whole batch.
-- [ ] Untracked alongside them: `AgencyReceiptEditor.tsx`, `use-agency-receipt-edit.ts`,
-  `use-receipt-catalogue.ts`, `write-failure-message.ts`, `src/scripts/repair-day-approved-receipts.ts`.
-- [ ] **`DisputeQueuePanel.tsx` (the receipt editor inside the dispute queue) rides with this slice.**
-  It is MY change but it `import`s the untracked `AgencyReceiptEditor.tsx`, so committing it alone would
-  produce a commit that does not build. It must land in the same commit as the editor. `tsc` clean on
-  the file, biome-formatted; its §10 row is already written.
-- [ ] ⚠️ **PROCESS NOTE — `TEST_SCRIPT.md` cannot be committed cleanly while it carries rows for
-  uncommitted code, and writing "don't do that" did not stop it.** Three times today a doc row landed in
-  a commit for an unrelated slice (`927ec8a`, `afa8dd1`, `e2f5e4f` — the last one swept up this very
-  note) while the code it described stayed in the working tree. That is the doc/code split the
-  doc-roles rule exists to prevent.
-  **The cause is structural, not carelessness:** git stages whole files, so any commit that renews this
-  doc for slice A also ships slice B's pending rows. Interactive `git add -p` is unavailable in this
-  environment.
-  **The only real fix is to stop leaving code uncommitted** — i.e. land the receipt-editor slice below.
-  Until then this block is deliberately kept DIRTY after every commit, so the doc always travels with
-  the work it describes, and this checklist stays the honest record of what is outstanding.
+### ▶ ~~UNCOMMITTED WORK IN THE TREE~~ — ✅ CLOSED 4 Aug 2026 (`57bd165`)
 
-**Current pending set (refreshed 4 Aug 2026, after `e2f5e4f`):** 20 modified + 7 untracked. Beyond the
-files listed above, the slice has since grown to touch `payment-voucher.routes.ts`,
-`payment-voucher-day-review.ts`, `payment-voucher-component.ts`, `payment-voucher.schema.ts`,
-`week-pay-grid.ts`, `demo-shifts.ts`, `routes/agency/pv.tsx` and `docs/claude-memory/
-innocenz-receipt-lifecycle.md`. Everything typechecks; nothing here is half-written — it is waiting on a
-decision about ownership, not on more code.
-
+> Was: receipt editor + `0083`/`0084` readers sitting untracked while the DB already had the columns.
+> **Landed** as `feat(agency): correct a receipt under Approve, and inside the dispute queue`.
+> Checklist that used to live here (untracked editor files, DisputeQueuePanel blocked on them,
+> "doc rows without code") is **done**. Remaining product gaps are in RECEIPT EDITOR SCOPE verify +
+> DAY/RECEIPT AGREEMENT AUDIT below — not "commit the tree".
 
 ### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
 
@@ -373,11 +334,8 @@ else cannot add so in his way can make list the the drink on that shift from wha
 - [x] Price ≠ commission: the picker shows the outlet's price for matching against the paper and the
   commission stays typed. No per-item commission rule exists anywhere to auto-fill from (the web
   `AgencyCommissionRulesPanel` reads the client demo store, not the backend).
-- [ ] ⚠️ **DECIDE: drop or wire `0083_pv_line_outlet_fk`.** It is authored and journalled but NOT
-  run, and NOT used by any code — the shift-FK path above turned out sounder than the name-matched
-  `payment_voucher_line.outlet` backfill it was written for. Dropping it is the recommendation; an
-  unused column with a backfill is worse than no column. Wiring it would cover only the receipts that
-  have no shift link, and would also mean setting `outlet_id` on every line write.
+- [x] ⚠️ ~~**DECIDE: drop or wire `0083_pv_line_outlet_fk`.**~~ **APPLIED + shipped with `57bd165`.**
+  Column + FK live on `innocenz-test` (18/18 lines backfilled). Keep — do not drop.
 - [ ] `PUT /payment-voucher/:id` is a SECOND DOOR: it still writes receipt-linked lines with
   free-text descriptions under the same `agencyOwnerOrFinance` guard, so the catalogue rule is
   enforced on one path and not the other.
@@ -454,8 +412,11 @@ DO matter.
 *"the agency only can edit the scanned or self log of the drink or the tips at the receipt section"* —
 the editor is confined to **drinks and tips lines on a receipt** (scanned or self-logged), reached
 from the **Receipts section**. Wages and OT are never editable there: they carry no receipt, they are
-fixed by the outlet, and the way to change one is the attendance record. Check the delivered editor
-against this before promoting it to §8.
+fixed by the outlet, and the way to change one is the attendance record.
+
+- [x] **Editor shipped** (`57bd165` / §8 A6 · X58) — also opens inside the dispute queue.
+- [ ] **Verify against this scope on a live agency login** before promoting A6/X58 to ✅ Verified
+  (no wages/OT editable; drinks+tips only; catalogue match for add-line).
 
 ### ▶ DAY/RECEIPT AGREEMENT AUDIT — 12 confirmed, 2 FIXED, 10 OPEN (4 Aug 2026)
 
@@ -925,6 +886,12 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — Agency receipt editor + migrations 0083/0084 committed on `jk` (`57bd165`; §8 A6/X58).**
+> Closes the "DB ahead of repo" gap: editor code, dispute-queue wiring, and readers for
+> `payment_voucher_line.outlet_id` + `review_withdrawn_at` are in git. §9 uncommitted-tree block
+> marked closed; next is live agency click-through + day/receipt agreement audit highs.
+> Doc renew only in this commit (code already at `57bd165`).
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >
