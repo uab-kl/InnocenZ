@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { outletController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
-import { outletOwnerOnly } from '@/middlewares/require-sub-role.js';
+import { outletOwnerOfParam } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -36,11 +36,16 @@ router.post('/', requireAdmin, outletController.create.bind(outletController));
 // geo-fence centre the 50 m check-in rule is measured against.
 const canEditOutlet = requireRole('admin', 'outlet');
 
-router.put('/:id', canEditOutlet, outletOwnerOnly, outletController.update.bind(outletController));
+// The owner check is SCOPED to `:id`. `outletOwnerOnly` asked only "are you an
+// owner?" — true of every outlet owner for every venue — so one operator could
+// rewrite another venue's record AND move its geo-fence centre, which is what
+// the 50 m check-in rule is measured against. Found while wiring the outlet
+// Settings save; the gate was never wrong about the role, only about the venue.
+router.put('/:id', canEditOutlet, outletOwnerOfParam, outletController.update.bind(outletController));
 router.patch(
   '/:id/geo-fence',
   canEditOutlet,
-  outletOwnerOnly,
+  outletOwnerOfParam,
   outletController.setGeoFence.bind(outletController),
 );
 // Clearing the pin switches attendance verification OFF for the venue, so it
@@ -50,7 +55,7 @@ router.patch(
 router.delete(
   '/:id/geo-fence',
   canEditOutlet,
-  outletOwnerOnly,
+  outletOwnerOfParam,
   outletController.clearGeoFence.bind(outletController),
 );
 router.patch('/:id/approve', requireAdmin, outletController.approve.bind(outletController));

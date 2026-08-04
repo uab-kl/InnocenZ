@@ -43,6 +43,29 @@ export async function fetchAgencyById(
 	return response.data;
 }
 
+/**
+ * Owner-only edit of the agency's own record (`PUT /agency/:id`).
+ *
+ * `status` is deliberately absent from the payload type: it is the admin
+ * approve/suspend lane, and the server refuses it outright from a non-admin
+ * caller rather than dropping it silently.
+ */
+export async function updateAgency(
+	id: string,
+	payload: {
+		name?: string;
+		ssmNo?: string;
+		contactName?: string;
+		contactEmail?: string;
+		contactPhone?: string;
+	},
+	onRefreshFail: () => void,
+): Promise<AgencyApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<AgencyApiResponse>(`/agency/${id}`, payload);
+	return response.data;
+}
+
 export async function approveAgency(
 	id: string,
 	onRefreshFail: () => void,

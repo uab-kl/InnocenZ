@@ -1,8 +1,12 @@
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchAgencyById, fetchAgencyMembers } from "@/services/agency";
+import {
+	fetchAgencyById,
+	fetchAgencyMembers,
+	updateAgency,
+} from "@/services/agency";
 
 /** Backend-backed subset of the demo owner settings shown on the Profile screen. */
 export interface AgencyProfileOwnerOverlay {
@@ -22,12 +26,18 @@ export interface AgencyProfileFinanceOverlay {
  * Read-only real identity for the agency Settings/Profile screen.
  *
  * Gated on a real session (`getAgencyIdentity()`); demo sessions get `backed:
- * false` and no overlays, keeping the pure demo form. `services/agency` can READ
- * the agency record + its members but has NO agency-update endpoint (only admin
- * approve/suspend), so this only surfaces real values in read mode — the demo
- * edit/save flow stays as-is and does NOT persist to the backend (the accepted
- * hybrid tradeoff for this screen). Overlays carry only defined fields so a
- * spread never clobbers a demo value with `undefined`.
+ * false` and no overlays, keeping the pure demo form. Overlays carry only
+ * defined fields so a spread never clobbers a demo value with `undefined`.
+ *
+ * `save` persists the owner-editable fields through `PUT /agency/:id`.
+ * ⚠️ The note that used to sit here — "has NO agency-update endpoint (only admin
+ * approve/suspend), so the save does NOT persist" — was STALE, and it is why
+ * this screen was filed as unwired for weeks. The endpoint has existed since the
+ * ungated-write hole was closed; nothing was missing but the call. It is
+ * owner-gated, and as of the same commit that added this it is scoped to the
+ * agency in `:id` rather than to owner-of-anything.
+ *
+ * A demo session still saves to the store only — there is no agency id to PUT to.
  */
 export function useAgencyProfile() {
 	const { logout } = useAuth();
@@ -80,10 +90,38 @@ export function useAgencyProfile() {
 		return overlay;
 	}, [backed, membersQuery.data]);
 
+	const queryClient = useQueryClient();
+	const saveMutation = useMutation({
+		mutationFn: (payload: {
+			orgName?: string;
+			ownerName?: string;
+			ic?: string;
+		}) => {
+			if (!agencyId) throw new Error("No real agency session");
+			// Only the fields the agency record actually has a column for. `ic`
+			// stays demo-only: there is no column behind it, and this project's
+			// most repeated defect is a surface reporting a value nothing stores.
+			return updateAgency(
+				agencyId,
+				{
+					...(payload.orgName ? { name: payload.orgName } : {}),
+					...(payload.ownerName ? { contactName: payload.ownerName } : {}),
+				},
+				logout,
+			);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["agency", "profile"] });
+			queryClient.invalidateQueries({ queryKey: ["agency", "members"] });
+		},
+	});
+
 	return {
 		backed,
 		owner,
 		finance,
 		isLoading: agencyQuery.isLoading || membersQuery.isLoading,
+		save: saveMutation.mutateAsync,
+		isSaving: saveMutation.isPending,
 	};
 }

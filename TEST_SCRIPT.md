@@ -837,6 +837,43 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+> **4 Aug 2026 (late) — the agency Settings save is WIRED, and wiring it exposed a cross-tenant
+> write hole in the endpoint it was wired to.**
+>
+> 🔴 **`PUT /agency/:id` let any agency owner edit ANY agency.** `agencyOwnerOnly` resolves to
+> `guard('agency', ['owner'])`, which asks *"are you an active owner?"* and **never compares the
+> membership against `req.params.id`**. Every agency owner satisfied it for every agency — name, SSM
+> number and contacts rewritable across tenants. Worse on the outlet side: the same unscoped
+> `outletOwnerOnly` guarded `PUT /outlet/:id` **and both geo-fence routes**, so one operator could
+> move another venue's fence centre — the point every check-in is measured against.
+> `UpdateAgencySchema` also accepts `status`, so an owner could self-approve a `pending_review` org.
+>
+> **Fixed** with a scoped variant — `requireAgencySubRoleScoped` / `requireOutletSubRoleScoped`, used
+> as `agencyOwnerOfParam` / `outletOwnerOfParam` — which additionally **refuses a body carrying
+> `status` (403) rather than dropping it**: a save that silently discards a field teaches the caller
+> the wrong thing about what persisted. Applied to 4 routes. The existing 7 exports are untouched, so
+> the unscoped guard still covers routes whose target comes from the session, not from `:id`.
+> ⚠️ **NOT yet live-fired.** Backend `tsc` 0, web `tsc` 120 (baseline), 0 errors in touched files —
+> but no refusal has been fired at a running server. A refusal writes nothing, so this is cheap and
+> is the next thing to do.
+>
+> **The wiring itself.** `agency/profile.tsx` now persists through `PUT /agency/:id` on a real
+> session — save first, bail out and warn if the server refuses, so the screen never shows a saved
+> state the database rejected. Only `name` and `contactName` go up: **`ic` has no column and stays
+> local**, since a field with nothing behind it is this project's most repeated defect. The Finance
+> Head invite toast no longer claims *"Invite queued"*; it says the invite is **not sent**.
+>
+> ⚠️ **Two claims published on the audit page last night were FALSE, and both were mine.**
+> (1) *"No invite or member-management endpoint exists"* — `POST/PUT/DELETE /agency/:id/members` and
+> the four outlet equivalents all exist. **The grep searched for `invite`; the capability is called
+> `members`.** Searching for the feature's name instead of the capability's name, one night after
+> writing down "a filename is not a feature". **An absent grep hit is evidence about the grep.**
+> (2) *"Neither file makes a single API call"* — true of the files, false of the screens: both call
+> `useAgencyProfile` / `useOutletProfile`, which do fetch. **One indirection defeats that test.**
+> Both corrected on the audit page, which now also carries the 4-dimension scoring table
+> (features ~93% · wired ~85% · proven ~85%/~45% · **production-ready ~19%**) in place of the single
+> 60/78/85/97 strip.
+
 
 > **4 Aug 2026 (night) — audit page brought current; one entry CORRECTED; registration DEFERRED.**
 >

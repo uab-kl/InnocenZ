@@ -143,7 +143,7 @@ function AgencyProfile() {
 		reader.readAsDataURL(file);
 	};
 
-	const saveEdit = () => {
+	const saveEdit = async () => {
 		if (!draft.ownerName.trim()) {
 			toast("Enter owner name", "warn");
 			return;
@@ -151,6 +151,20 @@ function AgencyProfile() {
 		if (!draft.mobile.trim()) {
 			toast("Enter mobile number", "warn");
 			return;
+		}
+		// Real session: persist the backed fields FIRST and bail out if the server
+		// refuses, so the screen never shows a saved state the database did not
+		// accept. A demo session has no agency id and keeps the store-only path.
+		if (profile.backed) {
+			try {
+				await profile.save({
+					orgName: draft.orgName.trim(),
+					ownerName: draft.ownerName.trim(),
+				});
+			} catch {
+				toast("Could not save — the server refused the change", "warn");
+				return;
+			}
 		}
 		const nextFinance = { ...financeDraft };
 		const inviteChanged = inviteEmail.trim() !== agencyFinanceHead.email;
@@ -170,10 +184,16 @@ function AgencyProfile() {
 			scalingTierMultipliers,
 			outletCommissionRules: outletCommissionRules.map((r) => ({ ...r })),
 		});
+		if (profile.backed) {
+			toast("Settings saved", "success");
+		}
 		if (inviteChanged && inviteEmail.trim()) {
+			// ⚠️ Still a claim with nothing behind it: the member-write endpoints
+			// exist but are admin-only by design, so an agency owner cannot invite
+			// anyone yet. Worded as intent rather than as a completed action.
 			toast(
-				`Invite queued for ${inviteEmail.trim()} — Finance Head must complete IC + e-signature`,
-				"info",
+				`Finance Head invite for ${inviteEmail.trim()} is not sent yet — an admin must add the member`,
+				"warn",
 			);
 		}
 		setEditing(false);

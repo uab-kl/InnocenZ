@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { agencyController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
-import { agencyOwnerOnly } from '@/middlewares/require-sub-role.js';
+import { agencyOwnerOfParam } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -14,10 +14,16 @@ router.post('/', agencyController.create.bind(agencyController));
 // Editing the agency record is agencyCan('editSettings') — owner only. This
 // carried no role gate at all before, so any signed-in account could rewrite an
 // agency's own details.
+//
+// The owner check is SCOPED to `:id`. The unscoped `agencyOwnerOnly` asked only
+// "are you an owner?", which every agency owner satisfied for every agency — so
+// one agency's owner could rewrite another's name, SSM number and contacts, and
+// set `status` to skip admin approval. Found when wiring the Settings screen's
+// save to this endpoint: the gate was fine while nothing called it.
 router.put(
   '/:id',
   requireRole('admin', 'agency'),
-  agencyOwnerOnly,
+  agencyOwnerOfParam,
   agencyController.update.bind(agencyController),
 );
 router.patch('/:id/approve', requireAdmin, agencyController.approve.bind(agencyController));
