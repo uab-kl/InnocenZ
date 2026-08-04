@@ -13,7 +13,8 @@ import {
 
 const webRoot = `${root}/apps/web`;
 const children = [];
-const shutdown = makeShutdown(children);
+const ownedPorts = [];
+const shutdown = makeShutdown(children, () => ownedPorts);
 
 // Load root env files (later files override earlier ones). Process env wins.
 loadEnv({ path: `${root}/.env` });
@@ -40,6 +41,8 @@ const webPort = await findFreePort(WEB_PORT_START, new Set([BACKEND_PORT_START])
 const backendPort = BACKEND_PORT_START;
 const publicApiUrl = API_URL;
 const ownsBackend = await claimBackendOwnership(backendPort);
+ownedPorts.push(webPort);
+if (ownsBackend) ownedPorts.push(backendPort);
 
 console.log(`
 ${colors.bold}Web (frontend) + backend${colors.reset}
