@@ -696,6 +696,28 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — "THIS SHIFT" MEANT "TODAY", SO A SECOND CHECK-IN INHERITED THE FIRST SHIFT’S WORK.**
+>
+> Owner: *"When pr check in , New shift new receipt data please clear it"*. Checked in at **11:29** for a
+> new shift and the screen still showed a Havoc logged at **11:13**, four proof photos and three scanned
+> receipts from the session before — every one of those headings says *"this shift"*.
+>
+> **Three places filtered by DATE and called it a shift:** `CheckInScreen.todayReceipts`,
+> `ScanScreen.todayReceiptLines`, and `ShiftStatusPanel`’s own `logs` memo (which is what feeds the STATUS
+> table, TOTALS and the PROOF PHOTOS gallery). A PR working two shifts on one date got the first one’s
+> items, money and pictures carried into the second.
+>
+> **Now scoped by the check-in stamp** — the thing that actually separates two sessions on one date.
+> Anything logged before this check-in belongs to the shift before it. The wage/check-in row is stamped at
+> check-in itself so it lands on the right side, and with no stamp yet (pre-duty) the day is all there is
+> to go on.
+>
+> This also repairs the gates built earlier today: the missing-photo count and the drinks+tips
+> requirement now judge THIS shift instead of dragging a previous one’s rows in as satisfied.
+>
+> ⚠️ Time-based, not assignment-based. Correct for sequential shifts, which is what the day looks like;
+> the structural version would expose `shift_assignment_id` on the line DTO (receipts already carry it).
+
 > **4 Aug 2026 — THE MIS-FILED HAVOC LINE RE-FILED, USING THE ROW’S OWN EVIDENCE.**
 >
 > Owner: *"then how u can change this ?"* — the code fix (`1a3a243`) only governs NEW logs; the row

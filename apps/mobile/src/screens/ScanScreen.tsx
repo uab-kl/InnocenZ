@@ -293,10 +293,21 @@ export function ScanScreen({
   const manualNoteMissing = !editId && note.trim().length === 0;
 
   // Today's logged receipt lines — feeds the "what have I scanned" gallery.
-  const todayReceiptLines = useMemo(
-    () => receiptLines.filter((l) => l.lineDate === todayKey),
-    [receiptLines, todayKey],
-  );
+  /**
+   * THIS SHIFT's lines, matching the attendance screen: a PR can work twice in
+   * one day, and filtering by date alone showed the earlier shift's receipts
+   * under a card headed "this shift". Anything logged before this check-in
+   * belongs to the session before it.
+   */
+  const todayReceiptLines = useMemo(() => {
+    const startedAt = checkedInAt ? new Date(checkedInAt).getTime() : null;
+    return receiptLines.filter((l) => {
+      if (l.lineDate !== todayKey) return false;
+      if (startedAt === null) return true;
+      const loggedAt = new Date(l.at).getTime();
+      return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
+    });
+  }, [receiptLines, todayKey, checkedInAt]);
 
   /**
    * The REAL scan: camera → ML Kit words → parser match against this page's

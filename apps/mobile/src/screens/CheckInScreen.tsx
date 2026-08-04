@@ -215,7 +215,26 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // (the seed dates some shifts a day ahead, which would push earnings onto
   // tomorrow) and not a UTC day that rolls over at night.
   const todayKey = ymdToIso(...todayYmd());
-  const todayReceipts = receiptLines.filter((l) => l.lineDate === todayKey);
+  /**
+   * THIS SHIFT's logged actions — not the whole calendar day.
+   *
+   * A PR can work two shifts in one day. Filtering by date alone carried the
+   * first shift's items, photos and totals into the second: check in at 11:29
+   * and the screen still showed a Havoc logged at 11:13, under a heading that
+   * says "this shift".
+   *
+   * Scoped by the check-in stamp, because that is what separates two sessions on
+   * one date — anything logged before this check-in belongs to the shift before
+   * it. Wage/check-in rows are stamped at check-in itself, so they fall on the
+   * right side. With no check-in time yet (pre-duty), the day is all there is.
+   */
+  const shiftStartedAt = active?.checkInAt ? new Date(active.checkInAt).getTime() : null;
+  const todayReceipts = receiptLines.filter((l) => {
+    if (l.lineDate !== todayKey) return false;
+    if (shiftStartedAt === null) return true;
+    const loggedAt = new Date(l.at).getTime();
+    return Number.isNaN(loggedAt) ? true : loggedAt >= shiftStartedAt;
+  });
   // Every logged action (scan or self-log) must carry its picture — a row
   // without one blocks check-out until it is re-scanned or removed.
   const linesMissingPhoto = todayReceipts.filter(

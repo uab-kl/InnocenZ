@@ -51,10 +51,24 @@ export function ShiftStatusPanel({
   // Receipt rows come from the backend current-week draft voucher, scoped to
   // this shift's day so Check-In and Payment never disagree on the amount.
   const { receiptLines: allLogs, deleteLine, updateLine } = usePrEarnings();
-  const logs = useMemo(
-    () => (dayKey ? allLogs.filter((l) => l.lineDate === dayKey) : allLogs),
-    [allLogs, dayKey],
-  );
+  /**
+   * THIS SHIFT's rows. The day filter alone was not enough: a PR can work twice
+   * in one date, and the second check-in inherited the first shift's items,
+   * totals and proof photos — under headings that say "this shift".
+   *
+   * `checkInAt` is what separates two sessions on one day, so anything logged
+   * before it belongs to the shift before it. With no check-in stamp, the day is
+   * all there is to go on.
+   */
+  const logs = useMemo(() => {
+    const byDay = dayKey ? allLogs.filter((l) => l.lineDate === dayKey) : allLogs;
+    const startedAt = checkInAt ? new Date(checkInAt).getTime() : null;
+    if (startedAt === null || Number.isNaN(startedAt)) return byDay;
+    return byDay.filter((l) => {
+      const loggedAt = new Date(l.at).getTime();
+      return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
+    });
+  }, [allLogs, dayKey, checkInAt]);
   // Every proof photo the PR snapped for this shift's self-logs, each carrying
   // its owning line + index so it can be removed. Shown as an editable gallery
   // under the totals so the PR can confirm / add / remove what they uploaded.
