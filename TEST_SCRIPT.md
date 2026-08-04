@@ -184,6 +184,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | P4 | Check-In hides *tomorrow*; shows worked date; outlet **address** on card | PR ← **Outlet** (reads outlet address) | `CheckInScreen` + `shift-assignment.repository` | `outlet` FK (address reused, no new col) | ✅ Verified |
 | P5 | History **Shifts** tab reconciles **per-day** with **Payment** this-week (same `payment_voucher_line` source; verified vs live voucher 533.50 = Tue 270.50 + Wed 263.00); a day spanning 2 outlets now labels **both** venues (no silent mis-attribution) | PR (self) | `ShiftHistoryPanel` · `PaymentScreen` | current-week voucher lines `/mine` | ✅ Verified |
 | P6 | **F · Dispute now persists** — PR taps an amount on Payment → Last week → the PV flips to `status='disputed'` with reason+note on the **existing** `payment_voucher` columns (no new table). New PR-scoped endpoints `POST /payment-voucher/mine/:voucherId/dispute` + `…/dispute/withdraw`. Header shows a DISPUTED pill + open-dispute banner; withdraw reverts to `sent`. Agency web already reads these fields (`payment-voucher-map.ts`). | **PR → Agency** | `PaymentScreen` · backend `payment-voucher.*` | `payment_voucher` (status/disputeReason/disputeNote/disputedAt) | ⚠️ Reported (needs backend restart + agency-verify UI, §3 S10) |
+| P8 | **The PR sees APPROVED during the week** — `/mine/current-week` + `/mine/last-week` now ship `dayReviews[{date,status}]`, so a day the agency signs off on Tuesday reads **APPROVED** (green) on the phone instead of PENDING until Sunday's send. Header reads "Approved days n/7" — it used to say *Verified* over the PENDING count. A stale approval arrives as `null`, so a day whose total changed reads unreviewed on the phone too — **and so does a day carrying a PENDING receipt** (`prVisibleDayStatuses`), because APPROVED is what unlocks the dispute and must never over-claim. | **Agency → PR** | `payment-voucher.controller.ts` · `week-pay-grid.ts` · `PaymentScreen` | `payment_voucher_day_review` + `payment_voucher_receipt.status` (read-only, no DDL) | ⚠️ Reported (12/12 pure checks; needs a phone re-check after backend restart) |
 | P7 | **Self-log proof photo (P2)** — drink self-log requires ≥1 photo (camera capture + reminder above the Note; Submit gated); one-or-many photos saved on the new `payment_voucher_line.proof_photos` jsonb. | **PR → Agency** | `ScanScreen` · backend `payment-voucher.*` | `payment_voucher_line.proof_photos` (jsonb, reused table) | ⚠️ Reported (needs `pnpm migrate` + restart; agency display = SL) |
 
 ### Outlet side (SL)
@@ -202,6 +203,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A2 | Roster: read + add-shift / add-PR + **assign/unassign** | **Agency → PR** | `routes/agency/roster` + `shift-assignment` | `agency_pr` join | ⚠️ Reported (confirm assign shows on PR, §3 S2–S3) |
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
+| A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
 
 ### Admin side (jk)
 
@@ -299,6 +301,153 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
+
+### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
+
+*"if add a missing line section at the agency need for example the drinks need verified is the outlet
+else cannot add so in his way can make list the the drink on that shift from what outlet"*, then
+*"need to do same thing for the tips also"*.
+
+- [x] **Drinks** — in flight (workflow `agency-add-line-catalogue`): the agency picks from the
+  outlet's DRINKS PRICE list for the receipt's own outlet; the SERVER refuses an item that is not on
+  it, naming the outlet. Case-insensitive match, but the CATALOGUE's spelling is stored so the line
+  and the outlet list cannot drift. An outlet with no list configured refuses and says so rather than
+  silently falling back to free text.
+- [ ] **TIPS — same rule.** The outlet Workspace also carries **SERVICE ENTITLEMENT** (3 services,
+  RM 50–1000) beside DRINKS PRICE, and the live tips lines look like service items ("Booking
+  commission RM 17.00"). Validate a `tips` line against that list exactly as drinks are validated
+  against the drinks list. ⚠️ Confirm from the schema which list the tips bucket actually belongs to
+  before wiring it — do not assume SERVICE ENTITLEMENT without checking, and if a plain gratuity
+  ("Tips RM 8.50") has no catalogue entry, ask the owner rather than inventing one.
+- [ ] The outlet is resolved from the RECEIPT's lines, never from the request — a caller-supplied
+  outlet lets the agency choose whichever catalogue happens to contain the item they want.
+- [ ] Price ≠ commission: the catalogue holds the outlet's PRICE, the line holds the PR's cut. Show
+  the price for matching against the paper; never auto-fill the commission from it.
+
+### ▶ DAY GOES VERIFIED (decided 4 Aug 2026, SPEC'D — after the receipt editor)
+
+Owner: *"once after the agency approve, if the pr make disputation, change the status to verified of
+that day"* → confirmed: **VERIFIED when the dispute is RESOLVED**, not when it is raised. Raising a
+dispute must NOT verify — `verified` is terminal (not settable over HTTP, and both correction paths
+refuse to leave it), so verifying contested money would lock the agency out of fixing the very thing
+being argued about. While a claim is open the day reads **DISPUTED**.
+
+⚠️ **The week is SUNDAY–SATURDAY and the payout cron is SUNDAY 02:00 Asia/Kuala_Lumpur**
+(`previousCompleteWeek()`, re-anchored 3 Aug on the owner's instruction). Any note saying "Monday"
+is stale — that error came from `docs/claude-memory/innocenz-receipt-lifecycle.md`, now corrected.
+
+- [ ] **Two paths to the same state, which is why no new mechanism is needed:** the Sunday run
+  verifies the finished week's approved receipts and **already skips vouchers with an open dispute**;
+  `resolveDispute` closes those when the last claim is decided. Extend that from RECEIPTS to the DAY
+  the PR sees.
+- [ ] **NO DDL — derive it.** `payment_voucher_day_review.status` is only `approved|held`; do not add
+  a `verified` value. A day is verified when **every receipt on that day is `verified` and no dispute
+  on that day is open**. For a wages-only day (no receipts at all) it is verified once the voucher's
+  week has rolled and no dispute on that day is open.
+- [ ] Compute it in `prVisibleDayStatuses` alongside the existing pessimistic downgrade, so one
+  function still owns everything the PR is told about a day.
+- [ ] Mobile already renders `verified` — `week-pay-grid.ts` and both Status rows handle it since the
+  audit fix. Confirm a DISPUTED day still outranks it in the label.
+- [ ] Test: (1) approve day → PR disputes → day reads DISPUTED, not VERIFIED; (2) agency resolves →
+  day reads VERIFIED; (3) a day nobody disputes → VERIFIED on the Sunday run; (4) a day with a still-
+  pending receipt never reaches VERIFIED by either path.
+
+### ▶ WAGES-ONLY DAYS AUTO-APPROVE (decided 4 Aug 2026, SPEC'D — implement after the receipt-editor build)
+
+Owner: *"so if the shift either one daily wages or the status or both no need approve"* → confirmed as
+**auto-approved, Hold still available**, and the PR sees the normal green **APPROVED**.
+
+The reasoning that makes this safe: the day review exists so somebody checks the EVIDENCE behind a
+day. A day with no receipt on it has no evidence to check — wages and OT are fixed by the outlet from
+the check-in/check-out stamps, and the PR cannot dispute them (see the dispute rule, §10 4 Aug).
+Requiring a click there is ceremony, and ceremony is what makes people click through the days that
+DO matter.
+
+- [ ] **Definition (owner, restated 4 Aug):** *"either one daily wages or the others (OT) or both no
+  need approve"* — a day auto-approves when **every line on it has `component` in {`wages`, `ot`}**.
+  Either alone, or both together.
+  ⚠️ **NOT "no receipt on the day"**, which was the first draft of this rule and is wrong: `deduction`
+  and `other` carry no receipt either, so that definition would have silently auto-approved a day
+  where money was taken OFF the PR's pay — the one day most deserving a human look. A deduction or
+  adjustment on the day means the day still needs a click. One scanned drink likewise disqualifies it.
+- [ ] **`buildDayReviewView`** (`payment-voucher-day-review.ts`): a receipt-free day with **no review
+  row** reports `status: 'approved'` plus a new `autoApproved: true`. An explicit row always wins, so
+  **Hold still blocks** — that is the whole point of choosing this over "never reviewable".
+- [ ] **Staleness does not apply** to an auto-approved day: there is no `approved_total_cents`,
+  because nobody attested to a figure. A wages-only day whose total changes stays auto-approved.
+- [ ] **Send gate needs NO change** — the day already reads `approved`, so `voucherSendGate` passes
+  it. Verify that rather than assume it.
+- [ ] **PR side:** nothing to do. `prVisibleDayStatuses` cannot downgrade a receipt-free day (no
+  pending receipt can sit on it), so the phone shows APPROVED — the chosen answer.
+- [ ] **Agency panel** (`AgencyPvDayReviewPanel`): render the row approved with a quiet caption ("no
+  receipts on this day") and offer **Hold** / **Clear** but not Approve. A button whose only effect is
+  to convert an automatic yes into a manual yes is noise.
+- [ ] ⚠️ **Do not let this hide a held day.** Test: hold a wages-only day, confirm the send still
+  refuses and the phone does not show APPROVED.
+
+### ▶ RECEIPT EDITOR SCOPE (owner, 4 Aug 2026)
+
+*"the agency only can edit the scanned or self log of the drink or the tips at the receipt section"* —
+the editor is confined to **drinks and tips lines on a receipt** (scanned or self-logged), reached
+from the **Receipts section**. Wages and OT are never editable there: they carry no receipt, they are
+fixed by the outlet, and the way to change one is the attendance record. Check the delivered editor
+against this before promoting it to §8.
+
+### ▶ DAY/RECEIPT AGREEMENT AUDIT — 12 confirmed, 2 FIXED, 10 OPEN (4 Aug 2026)
+
+Four-lens adversarial audit of the day-approval carry. Every item below survived a refutation pass.
+**Fixed already:** the full-set re-sweep erasing a withdrawal (`receiptsCarriedByDays` now takes
+`justApprovedDates`), and the mobile grid letting voucher status outrank `dayReviews` (which also
+fixed the two hardcoded `VERIFIED` Status rows). **Open:**
+
+- [ ] **HIGH · PvDetail's dispute never reaches the server** (`PvDetailScreen.tsx:345`) — the PR is
+  shown an open dispute that does not exist.
+- [ ] **HIGH · A disputed voucher turns every cell into a withdraw button** (`PaymentScreen.tsx:285`)
+  — most taps 404, and raising a second dispute is unreachable.
+- [ ] **HIGH · Scheduler issues vouchers unsigned** (`weekly-payout.job.ts:187`) and the finance
+  signature can never be added afterwards.
+- [ ] **MED · Sunday job verifies receipts on vouchers it then refuses to send**
+  (`weekly-payout.job.ts:106`) — `verifyApprovedReceipts` has no voucher-status filter and runs
+  BEFORE the send loop, so `verified` (terminal, unreachable by both correction paths) is stamped on
+  a week that stays stuck. Freezes the agency's correction path permanently.
+- [ ] **MED · Client `buildSendGate` mirrors only 2 of the server gate's 4 rules**
+  (`use-agency-pv-day-review.ts:68`) — week-not-finished and pending-overtime are missing, and the
+  resulting 409 on Send is swallowed silently.
+- [ ] **MED · Receipt review from the Verify panel never invalidates the Receipts sub-tab**
+  (`use-agency-pv-receipt-review.ts:25`) — the mirror of the bug already fixed in the day-review hook.
+- [ ] **Agency day panel shows a day APPROVED while a receipt on it is PENDING** — no agency-side
+  equivalent of `prVisibleDayStatuses`. The PR now sees the honest answer and the agency does not.
+- [ ] **Zero-dated-day branch asserts the voucher "can be sent as it stands"** without consulting
+  `sendGate`, and the Send caption is suppressed when only receipts block.
+- [ ] **Undated (week-level) lines are bucketed onto `weekStart`** — Monday money that no day review
+  covers and no dispute can name a date for.
+- [ ] **"N entries approved by your agency"** is printed for scans nobody has looked at
+  (`receipt-review.ts`), and the held-voucher notification always blames days even when the blocker
+  is a receipt or overtime.
+
+### ▶ AGENCY — EDIT / ADD RECEIPT LINES UNDER *Approve* (added 4 Aug 2026, NOT STARTED)
+
+Owner: *"makes agency can change and edit the price and the quantity of drinks and tips or add drinks
+or tips category from the receipt scanned, under the approve add a edit button"*.
+
+- [ ] **Edit** button beside *Approve* on each receipt card in `AgencyReceiptsPanel` **and**
+  `PayrollVerifyPanel` (one component, both places — two editors would drift). Editing a line's
+  quantity/commission already has its endpoint:
+  `PATCH /payment-voucher/receipts/:receiptId/lines/:lineId` (`editReceiptLine`) — it exists and is
+  UNUSED by the UI. **Never route this through `PUT /payment-voucher/:id`**: that path deletes and
+  re-inserts every line, which is how an agency price edit once severed the receipt links and deleted
+  the PR's proof photos.
+- [ ] **ADD a drinks/tips line to an existing receipt** — no endpoint exists yet. Needs
+  `POST /payment-voucher/receipts/:receiptId/lines` under `agencyOwnerOrFinance`, writing a
+  `payment_voucher_line` with the receipt's FK, the day's `line_date`, and a `ref` packing the kind so
+  `componentFromRef` buckets it as drinks/tips.
+- [ ] Both writes must keep the two existing consequences intact: the day's total changes so
+  `approved_total_cents` flips that day **stale** (re-approval required), and an APPROVED receipt drops
+  back to **PENDING** — the receipt table stores no amount, so staleness there cannot be detected
+  afterwards and must be recorded at the moment of the edit.
+- [ ] Watch the interaction with the new day-approval carry: re-approving the stale day will
+  re-approve the receipt, which is correct — but confirm it does not approve a receipt whose newly
+  added line lands on a *different*, unapproved day.
 
 ### ▶ PR PAYMENT — CELL EVIDENCE (added 4 Aug 2026, awaiting owner verification → promote to §8)
 
@@ -712,6 +861,173 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — NO DISPUTE BUTTON ON WAGES/OT, AND "VERIFIED" MEANT TWO THINGS ON ONE SCREEN.**
+>
+> Owner: *"make sure the daily wages and the other(OT) cannot make dispute , remove it if have the
+> dispute button shown to pr"* and *"the status in the last week section should be verified"*.
+>
+> **(1) The dispute button was MY regression, shipped in `927ec8a`.** The rule itself was already right
+> everywhere it mattered — `lineDisputable` (payment-voucher-component.ts) drives both the `disputable`
+> flag and `raiseMyDispute`, which answers 400 for wages/OT, and `cellDisputable` mirrors it on the
+> phone. But the new evidence sheet gated its Dispute button on `week === 'last'` **only**, ignoring the
+> kind, so *Daily wages · Thu 30 Jul* offered a button the server would have refused.
+>
+> Added `kindDisputable(kind)` to `receipt-review.ts` as the ONE client mirror, used in three places:
+> the sheet's button, the cell's icon (a **flag promises a dispute** — wages/OT now get the same inspect
+> glyph as This-week, since tapping still opens the evidence), and `openDispute`'s guard, which held a
+> fourth inline copy of the kind list. Wages and OT are derived from the attendance stamps, so the route
+> for a wrong one is the shift record, and the alert says exactly that rather than "your agency is still
+> checking the receipt" — advice to wait for something that will never come.
+>
+> **(2) The two halves of the Payment screen used one word for two things.** Last week showed
+> **APPROVED** on Thu 30 above a header reading **"Verified days 0/7"** and a footer reading
+> **"0 verified"**. Both were "correct": the agency HAD approved that day (`payment_voucher_day_review`
+> 2026-07-30 = approved), but voucher `PV-000004` is still `pending_review`, so it never entered
+> `VERIFIED_STATUSES`. This week already counted `approved || verified`; last week counted `verified`
+> alone. That asymmetry was the whole bug.
+>
+> An agency-approved day now reads **VERIFIED** and counts — in Payment's Last-week row and in
+> PvDetailScreen, both of which are CLOSED weeks where a day sign-off is final. This week deliberately
+> keeps APPROVED distinct: a mid-week approval is a checkpoint, since more receipts can still land on
+> that day.
+>
+> ⚠️ **The trap in that change:** the LAST WEEK pill read `verifiedDays > 0 ? 'SENT' : 'PENDING'`, safe
+> only while the counter meant "voucher processed". Left alone it would now have printed **SENT** over a
+> `pending_review` voucher — telling a PR their week had gone out when nobody had issued it. The pill is
+> now driven by the voucher's own status (`weekIssued`): days are verified by day review, the WEEK is
+> issued by the agency — two facts, two sources.
+>
+> `tsc` clean; the 30 `check-cell-evidence.ts` checks still pass. No migration.
+
+> **4 Aug 2026 — THE AGENCY CAN CORRECT A RECEIPT (Edit under Approve).**
+>
+> Owner: *"under the approve button add edit button that really can makes changes"*, then four
+> refinements — the time must be editable too (*"the ocr sometimes will be wrong"*), the add-line
+> category must follow the receipt (*"id edit tips then is edit tips thats all"*), the add form should
+> not stand there when nothing is missing, and the whole editor is confined to *"the scanned or self
+> log of the drink or the tips at the receipt section"*.
+>
+> **NO MIGRATION. ZERO DDL.** `order_no`, `receipt_date`, `receipt_time`, `quantity`, `amount` all
+> existed. Three targeted endpoints, none of them `PUT /payment-voucher/:id` — that path deletes and
+> re-inserts every line and once severed the receipt links and destroyed a PR's proof photos:
+> `PATCH /receipts/:id/lines/:lineId` (existed, no UI had ever called it), `POST /receipts/:id/lines`
+> (new), `PATCH /receipts/:id` (new — order no, date, **and time**).
+>
+> Two consequences survive every write, and the editor says so on screen rather than letting them be
+> discovered afterwards: an **approved receipt drops to pending**, and any change to the MONEY makes
+> that day's approval **stale**. A time correction moves no money — a line's day is `line_date`, never
+> the printed clock — so it re-opens the receipt and stales nothing.
+>
+> **The add-line category is derived, not chosen.** A tips receipt adds tips, a drinks receipt adds
+> drinks; the kind comes from the receipt's own lines (`kind` now rides on the agency feed rather than
+> being re-parsed from `ref` on the client). Only a receipt with no lines, or mixed kinds, still
+> offers the choice. And the form is **collapsed** behind one link — the OCR usually reads the paper
+> correctly, and a permanent row of empty fields reads as work still to do.
+>
+> **Its own review found 7 defects; all 7 are fixed.** Two were serious. (1) The one-paper-one-log
+> duplicate guard only ran when the ORDER NUMBER was typed — but changing the DATE moves the paper
+> onto another day where its existing number may already be logged, so the double payment the rule
+> exists to stop walked through the date field instead; it is now gated on the RESULT. (2) The save
+> invalidated `["agency","payment-voucher","evidence"]` but not `["agency","payment-voucher", id]` —
+> two different keys, neither a prefix of the other, both on screen at once, so the voucher document
+> beside the editor kept quoting pre-edit figures. Also fixed: the receipt-review hook had the same
+> invalidation gap; a write that never reached the server produced NO message at all (which reads as
+> "it saved" — now a shared `writeFailureMessage` always says something); the Edit/Approve controls
+> were offered on a **PR-signed** voucher every endpoint refuses, and now explain their absence; the
+> added line's dedupe slot used `siblings.length` as an index, repeating a number still in use after
+> any deletion; and `invalidate()` now RETURNS its promises, so a saved row no longer flashes its old
+> figure while the refetch is in flight.
+>
+> **Design pass on the editor:** `.iz-btn` is `width:100%`, so the first cut rendered a full-width Save
+> slab per line — three items, three slabs, each as loud as Approve. Now one shared grid with aligned
+> Qty/RM columns, Save appearing only on a row actually changed (with Undo and a gold edge marker), a
+> running `3 items · RM 535.50` to check against the paper, column headers instead of a caption
+> explaining commission after the fact, and labelled order-no / date / time fields.
+>
+> Backend typecheck clean; web clean on every touched file.
+
+> **4 Aug 2026 — ONLY DRINKS AND TIPS CAN BE DISPUTED (reverses a 30 Jul rule).**
+>
+> Owner: *"makes the pr only can dispute for the drinks and the tips … Other (OT), Daily wages cannot
+> disputed"*.
+>
+> This **reverses** the 30 Jul decision that wages were the one thing always disputable (the reasoning
+> then: wages are sealed at check-out with no receipt to approve, so gating them on approval would make
+> a wage error uncontestable). The cost is recorded rather than hidden — **a wrong wage or OT figure now
+> has no in-app route to contest at all**. The new reasoning: wages and OT are not CLAIMED, they are
+> DERIVED from the check-in/check-out stamps and the shift rate, so the fix is the attendance record,
+> not an argument about the total. ⚠️ `others` covers OT **and deductions**, so a deduction is not
+> disputable either — if that ever needs contesting it gets its own bucket, never a re-opened OT.
+>
+> **One rule, two callers:** `lineDisputable(kind, receiptStatus)` in `payment-voucher-component.ts`
+> feeds BOTH the `disputable` flag the app reads and the refusal in `raiseMyDispute` — a client copy of
+> a rule is never the rule, and the two disagreeing is exactly how a PR gets offered a button that
+> 409s. Wages/OT are refused server-side with a 400 that says where to go instead, not merely hidden:
+> a rule the server does not enforce is one a replayed request walks past.
+>
+> Mobile mirrors it in `cellDisputable`, checking the kind **before** the line lookup so a day with no
+> lines still refuses instead of falling through to the permissive default. The two refusals get
+> different wording — telling a PR to "wait for review" on a wage figure is advice that never comes
+> true.
+>
+> Verified: backend typecheck clean, mobile clean (bar the pre-existing `scripts/` rootDir baseline).
+
+> **4 Aug 2026 — APPROVING A DAY APPROVES ITS RECEIPTS, AND THE PR IS TOLD.**
+>
+> Owner: *"in the agency role i have approved the at the pv section this week then the receipt section
+> should be automatically approve it also"*, then *"the pr should need to see the status was approved
+> for this week"*.
+>
+> **NO MIGRATION. ZERO DDL.** Both halves already existed as columns; what was missing was that they
+> never spoke. A day's `approved_total_cents` IS the sum of its lines, and those lines are the
+> receipts' lines — so an agency approving **RM 3008.20 for Tue 4 Aug** had already stated the receipt
+> behind it was right, yet `voucherSendGate()` still blocked the week on *"2 receipt(s) not yet
+> reviewed"*: evidence the same person had signed off one panel above.
+>
+> **Backend** — new pure `receiptsCarriedByDays(lines, receipts, approvedDates)`. A receipt is carried
+> only when **every** day it touches is approved (a Mon+Tue receipt waits for both — approving Mon
+> alone leaves half its money in a day nobody looked at), and a receipt with **no dated lines is never
+> carried**, because `dayTotalsCents` skips undated lines so no day's total ever contained it. New
+> `approvePendingReceipts(ids, actor)` does it in ONE statement re-asserting `status='pending'` in the
+> WHERE, so a receipt approved between the read and the write keeps its real reviewer. Both
+> `reviewDay` and `approveAllDays` sweep from the **full** set of approved days, not the one just
+> decided — the spanning receipt has to clear whichever order the agency worked in — and both now
+> answer with the post-sweep `receipts`, `approvedReceipts[]` and `pendingReceiptCount`.
+>
+> **The PR half** — `/mine/current-week` and `/mine/last-week` ship `dayReviews[{date,status}]`,
+> **date and status only**: the note and the reviewer's name are the agency's internal record. Without
+> it the phone could only read the VOUCHER's status, which sits at `pending_review` all week — which
+> is why a day approved on Tuesday still showed **PENDING** to the PR until Sunday. A **stale** day
+> arrives as `null` exactly as it does in the agency panel, so an approval of a figure that has since
+> changed never reads APPROVED on the phone.
+>
+> **Two bugs fell out of the same screen.** The This-week header read *"Verified days 2/7"* off the
+> **pending** count — a week with nothing approved still showed 2 as though it were — and
+> `hasThisWeekRows` was `thisPendingDays > 0`, so the section would have emptied itself the moment
+> every day got approved.
+>
+> **The gap the owner caught the same afternoon** — *"not all is approved by agency in the receipt
+> section … then the pr is showed approved?"*. The PR's APPROVED was driven by the day review ALONE,
+> so Tue 4 Aug read APPROVED on the phone while RCP-000011 and RCP-000013 sat *Waiting on you*. Two
+> states can legitimately disagree — a receipt straddling an unapproved day is held back by design,
+> and a day approved BEFORE the carry existed (13:03 / 13:11 on 4 Aug) never swept at all — so the
+> phone now takes the pessimistic one: `prVisibleDayStatuses()` drops a day back to `null` when any
+> PENDING receipt has a line on it. That matters beyond cosmetics, because APPROVED is what tells the
+> PR the figure has become the agency's statement and may be **disputed**; showing it early points
+> them at a dispute the server refuses, naming a receipt they cannot see.
+>
+> **Legacy days self-heal via a script, not a re-click:** `repair-day-approved-receipts.ts` runs the
+> SAME pure rule over every unsigned voucher — **dry run by default**, `--write` to apply — so days
+> approved before 4 Aug carry their receipts without the agency re-approving each one by hand.
+>
+> **Not done, deliberately:** withdrawing a day approval does **not** un-approve its receipts.
+> Dropping a receipt back to pending stays a deliberate act in the receipts panel, where the photo is.
+> The day panel now says out loud that approving a day approves its receipts — silent would be a trap.
+>
+> Verified: 7/7 pure checks on the carry rule (spanning / undated / already-approved / nothing-
+> approved), backend + mobile + web typecheck clean on every touched file. The live agency→PR
+> round-trip still needs a click-through.
 
 > **4 Aug 2026 — TAP AN AMOUNT, SEE THE PAPER BEHIND IT (PR Payment cell evidence).**
 >

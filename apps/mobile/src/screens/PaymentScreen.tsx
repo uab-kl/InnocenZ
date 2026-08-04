@@ -34,10 +34,10 @@ import {
 } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
-import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { buildWeekGridFromLines, VERIFIED_STATUSES } from '../lib/week-pay-grid';
 import { buildCellEvidence } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
-import { cellDisputable, receiptReviewCaption } from '../lib/receipt-review';
+import { cellDisputable, kindDisputable, receiptReviewCaption } from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
@@ -141,7 +141,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const thisGrid = useMemo(() => buildWeekGridFromLines(current), [current]);
   const thisWeekTotal = useMemo(() => weekPayGridTotal(thisGrid), [thisGrid]);
   const thisPendingDays = thisGrid.filter((d) => d.status === 'pending').length;
-  const hasThisWeekRows = thisPendingDays > 0;
+  // Days the agency has signed off. Counted separately from `thisPendingDays`
+  // rather than as `worked - pending`: those two used to be the same number, and
+  // the header read "Verified days 2/7" off the PENDING count — so a week where
+  // the agency had approved nothing still showed 2 as if it had.
+  const thisApprovedDays = thisGrid.filter(
+    (d) => d.status === 'approved' || d.status === 'verified',
+  ).length;
+  // Any day with money on it, whatever the agency has done with it. Was derived
+  // from the pending count, which meant the whole section emptied itself out the
+  // moment every day got approved.
+  const hasThisWeekRows = thisGrid.some((d) => d.status !== 'empty');
   const thisReviewCaption = useMemo(() => receiptReviewCaption(current), [current]);
 
   // Last week's voucher comes from the same backend as this week — real data,
@@ -207,7 +217,26 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const issueDay = weekPvIssueDayLabel(0);
   const grid = useMemo(() => buildWeekGridFromLines(lastWeek), [lastWeek]);
   const weekTotal = useMemo(() => weekPayGridTotal(grid), [grid]);
-  const verifiedDays = grid.filter((d) => d.status === 'verified').length;
+  /*
+   * AN AGENCY-APPROVED DAY IS A VERIFIED DAY — same definition This week uses
+   * (`thisApprovedDays`, above), which is the whole point of touching this.
+   *
+   * Counting only `'verified'` here meant the two halves of one screen used the
+   * same word for different things: last week showed **APPROVED** on Thu 30
+   * above a header reading **"Verified days 0/7"** and a footer reading
+   * **"0 verified"**. Both were "right" — the agency had approved that day, but
+   * the voucher itself was still `pending_review`, so it never reached
+   * VERIFIED_STATUSES — and together they were nonsense.
+   *
+   * A day review is an explicit human decision about THAT DAY's money; the
+   * voucher status is paperwork about the week. For a week that is over, the
+   * former is the stronger statement, not the weaker one.
+   */
+  const verifiedDays = grid.filter(
+    (d) => d.status === 'approved' || d.status === 'verified',
+  ).length;
+  /** Has the AGENCY issued this week's voucher? The paperwork, not the days. */
+  const weekIssued = !!lastWeek?.status && VERIFIED_STATUSES.includes(lastWeek.status);
   const hasLastWeekRows = grid.some((d) => d.status !== 'empty');
   // Only a real, agency-sent voucher the PR hasn't signed yet is reviewable.
   const awaiting =
@@ -252,12 +281,23 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // A receipt the agency has not reviewed is still the PR's own claim, not a
     // figure anybody has stated back to them — there is nothing to contest yet.
     // Withdrawing an existing dispute is never blocked: that would trap a claim
-    // already raised. Wages are exempt server-side and come back disputable.
+    // already raised. Wages and OT are refused outright by `kindDisputable`,
+    // server-side too (DISPUTABLE_KINDS), so they never reach the dispute sheet.
     if (!voucherDisputed && !cellDisputable(lastWeek, day.dateIso, row.key)) {
-      Alert.alert(
-        'Not reviewed yet',
-        `Your agency is still checking the receipt behind ${row.label.toLowerCase()} on ${day.day} ${day.date}. Once they approve it you can dispute the amount here.`,
-      );
+      // Two different refusals, and they must not share a message. "Still being
+      // reviewed" tells the PR to wait — useless advice for wages, where waiting
+      // changes nothing and the actual route is the attendance record.
+      if (!kindDisputable(row.key)) {
+        Alert.alert(
+          'Not disputed here',
+          `${row.label} is calculated from your check-in and check-out times, not from a receipt. If it looks wrong, ask your agency to correct the shift record for ${day.day} ${day.date}.`,
+        );
+      } else {
+        Alert.alert(
+          'Not reviewed yet',
+          `Your agency is still checking the receipt behind ${row.label.toLowerCase()} on ${day.day} ${day.date}. Once they approve it you can dispute the amount here.`,
+        );
+      }
       return;
     }
     const key = `${day.dateIso}-${row.key}`;
@@ -396,14 +436,26 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>LAST WEEK</Text>
                 {lastWeek?.status && (
-                  <Pill variant={voucherDisputed ? 'red' : verifiedDays > 0 ? 'green' : 'amber'}>
+                  /*
+                   * THE PILL IS THE VOUCHER'S STATE, NOT THE DAY COUNT.
+                   *
+                   * It keyed off `verifiedDays`, which was safe only while that
+                   * counted `'verified'` alone. Now that an agency-approved day
+                   * counts too, the old test would have printed **SENT** over a
+                   * voucher still sitting at `pending_review` — telling a PR
+                   * their week had gone out when nobody had issued it.
+                   *
+                   * Days are verified by day review; the WEEK is issued by the
+                   * agency. Two different facts, two different sources.
+                   */
+                  <Pill variant={voucherDisputed ? 'red' : weekIssued ? 'green' : 'amber'}>
                     {voucherDisputed
                       ? 'DISPUTED'
                       : lastWeek.status === 'paid'
                         ? 'PAID'
                         : lastWeek.status === 'signed'
                           ? 'SIGNED'
-                          : verifiedDays > 0
+                          : weekIssued
                             ? 'SENT'
                             : 'PENDING'}
                   </Pill>
@@ -477,13 +529,24 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               >
                                 {formatCell(amount)}
                               </Text>
-                              {canTap && (
-                                <Flag
-                                  size={9}
-                                  color={isDisputed ? C.red : C.muted2}
-                                  style={{ marginTop: 2 }}
-                                />
-                              )}
+                              {/*
+                                * A FLAG PROMISES A DISPUTE — only draw it where
+                                * one is possible. Wages and OT can never be
+                                * contested, so a flag on them advertised an
+                                * action that ends in a 400; they get the same
+                                * inspect glyph as This-week, because tapping
+                                * still opens the evidence.
+                                */}
+                              {canTap &&
+                                (kindDisputable(row.key) ? (
+                                  <Flag
+                                    size={9}
+                                    color={isDisputed ? C.red : C.muted2}
+                                    style={{ marginTop: 2 }}
+                                  />
+                                ) : (
+                                  <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
+                                ))}
                             </Pressable>
                           );
                         })}
@@ -500,17 +563,32 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       const dayDisputed =
                         voucherDisputed ||
                         INCOME_ROWS.some((r) => disputedKeys.has(`${d.dateIso}-${r.key}`));
+                      // Read from the day, not hardcoded. This row printed
+                      // VERIFIED for every non-empty day regardless of what the
+                      // agency had actually decided — including days it had
+                      // held, and days the server downgraded because a receipt
+                      // on them is still pending.
+                      //
+                      // LAST WEEK collapses 'approved' into VERIFIED: the week
+                      // is closed, so the agency's day sign-off is final and
+                      // nothing further will land on it. This week keeps the two
+                      // apart (see its own Status row) because a mid-week
+                      // approval is a checkpoint — more receipts can still
+                      // arrive on that day. Same reason `verifiedDays` counts it.
                       const label =
                         d.status === 'empty'
                           ? '—'
                           : dayDisputed
                             ? 'DISPUTED'
-                            : 'VERIFIED';
+                            : d.status === 'pending'
+                              ? 'PENDING'
+                              : 'VERIFIED';
                       return (
                         <View key={`st-${d.dateIso}`} style={styles.gridCol}>
                           <Text
                             style={[
                               styles.statusPill,
+                              d.status === 'pending' && styles.statusPillPending,
                               dayDisputed && styles.statusPillDisputed,
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
@@ -578,7 +656,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <View style={{ flex: 1 }}>
               <View style={styles.sectionTitleRow}>
                 <Text style={styles.sectionTitle}>THIS WEEK</Text>
-                <Text style={styles.sectionFrac}>{thisPendingDays}/7</Text>
+                <Text style={styles.sectionFrac}>{thisApprovedDays}/7</Text>
               </View>
               <Text style={styles.sectionAction}>
                 {thisOpen ? 'Tap to collapse' : 'Tap to expand'}
@@ -599,8 +677,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <Text style={styles.weekCaptionRange}>{thisLabel}</Text>
                 </View>
                 <View style={{ alignItems: 'flex-end' }}>
-                  <Text style={styles.verifiedTiny}>Verified days</Text>
-                  <Text style={styles.sectionFrac}>{thisPendingDays}/7</Text>
+                  {/* "Approved", not "Verified": verification is the Monday
+                      rollover, and this week has not had one. */}
+                  <Text style={styles.verifiedTiny}>Approved days</Text>
+                  <Text style={styles.sectionFrac}>{thisApprovedDays}/7</Text>
                 </View>
               </View>
 
@@ -675,12 +755,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <View style={styles.gridRow}>
                     <Text style={styles.gridLabel}>Status</Text>
                     {thisGrid.map((d) => {
+                      // APPROVED is the state this week actually reaches: the
+                      // agency signs a day off mid-week, and VERIFIED only
+                      // arrives with the Monday rollover after the PV is sent.
                       const label =
                         d.status === 'empty'
                           ? '—'
                           : d.status === 'pending'
                             ? 'PENDING'
-                            : 'VERIFIED';
+                            : d.status === 'approved'
+                              ? 'APPROVED'
+                              : 'VERIFIED';
                       return (
                         <View key={`st-${d.dateIso}`} style={styles.gridCol}>
                           <Text
@@ -696,8 +781,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       );
                     })}
                     <View style={styles.gridCol}>
-                      <Text style={styles.statusPill}>
-                        {thisPendingDays > 0 ? `${thisPendingDays} pending` : '0 verified'}
+                      <Text
+                        style={[
+                          styles.statusPill,
+                          thisPendingDays > 0 && styles.statusPillPending,
+                        ]}
+                      >
+                        {thisPendingDays > 0
+                          ? `${thisPendingDays} pending`
+                          : `${thisApprovedDays} approved`}
                       </Text>
                     </View>
                   </View>
@@ -735,7 +827,19 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
            * contest one would promise an action the server would refuse.
            */
           onDispute={
-            evidenceTarget.week === 'last'
+            /*
+             * DRINKS AND TIPS ONLY, on an issued voucher.
+             *
+             * `week === 'last'` alone was not enough and shipped a button the
+             * server would have refused: Daily wages · Thu 30 Jul offered
+             * "Dispute this amount" on a kind the backend rejects with a 400
+             * (DISPUTABLE_KINDS). Wages and OT are derived from the attendance
+             * stamps, so the fix for a wrong one is the shift record.
+             *
+             * `kindDisputable` is the shared client mirror of that server rule —
+             * do not re-test the kinds inline here.
+             */
+            evidenceTarget.week === 'last' && kindDisputable(evidenceTarget.incomeKey)
               ? () => {
                   const { day, row } = evidenceTarget;
                   setEvidenceTarget(null);

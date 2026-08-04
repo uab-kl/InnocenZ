@@ -484,12 +484,22 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                 const dayDisputed = INCOME_ROWS.some((r) =>
                   disputedKeys.has(`${d.dateIso}-${r.key}`),
                 );
+                // From the day's own status, never hardcoded — this row read
+                // VERIFIED for every non-empty day, even under a banner saying
+                // the voucher had not been issued.
+                // 'approved' collapses into VERIFIED here for the same reason as
+                // Payment's Last-week row: this document is always a CLOSED week,
+                // so the agency's day sign-off is final. Showing APPROVED here
+                // while Payment showed VERIFIED for the same day would be two
+                // words for one fact, one tap apart.
                 const label =
                   d.status === 'empty'
                     ? '—'
                     : dayDisputed
                       ? 'DISPUTED'
-                      : 'VERIFIED';
+                      : d.status === 'pending'
+                        ? 'PENDING'
+                        : 'VERIFIED';
                 return (
                   <View key={`st-${d.dateIso}`} style={styles.gridCol}>
                     <Text
