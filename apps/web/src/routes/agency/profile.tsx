@@ -188,11 +188,15 @@ function AgencyProfile() {
 			toast("Settings saved", "success");
 		}
 		if (inviteChanged && inviteEmail.trim()) {
-			// ⚠️ Still a claim with nothing behind it: the member-write endpoints
-			// exist but are admin-only by design, so an agency owner cannot invite
-			// anyone yet. Worded as intent rather than as a completed action.
+			// The member-write endpoints are now open to the agency OWNER, not just
+			// admin — but there is still no screen that calls them, and sending an
+			// invite email needs a mailer that does not exist. So this stays worded
+			// as intent, never as a completed action: the previous version said an
+			// ADMIN had to add the member, which stopped being true the moment the
+			// routes were widened. A message about a capability has to be revisited
+			// when the capability moves.
 			toast(
-				`Finance Head invite for ${inviteEmail.trim()} is not sent yet — an admin must add the member`,
+				`Finance Head invite for ${inviteEmail.trim()} is not sent — no invite is delivered yet`,
 				"warn",
 			);
 		}

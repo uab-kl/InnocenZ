@@ -6,6 +6,7 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import { guardMemberChange } from '@/util/member-change-guard';
 import {
   CreateAgencySchema,
   UpdateAgencySchema,
@@ -267,11 +268,30 @@ export class AgencyControllerClass {
 
   async updateMember(req: Request, res: Response) {
     try {
+      const agencyId = paramId(req.params.id);
       const memberId = paramId(req.params.memberId);
       const parsed = UpdateAgencyMemberSchema.safeParse(req.body);
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
+
+      // The route's scope guard proves the caller owns the agency in `:id`. It
+      // says NOTHING about `:memberId`, which is the row actually being written
+      // — so without this an owner could address their OWN agency and mutate a
+      // member of somebody else's. A scope check on the wrong parameter is not
+      // a scope check. 404 rather than 403: a foreign member id must not be
+      // confirmed as existing.
+      const target = await this.agencyMemberRepository.getById(memberId);
+      if (!target || target.agencyId !== agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const members = await this.agencyMemberRepository.listByAgency(agencyId);
+      const refusal = guardMemberChange({ members, target, next: parsed.data });
+      if (refusal) {
+        return res.status(409).json({ success: false, message: refusal, data: null });
+      }
+
       const member = await this.agencyMemberRepository.update(memberId, { ...parsed.data, updatedBy: getActor(req) });
       if (!member) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'Member updated', data: member });
@@ -283,7 +303,21 @@ export class AgencyControllerClass {
 
   async removeMember(req: Request, res: Response) {
     try {
+      const agencyId = paramId(req.params.id);
       const memberId = paramId(req.params.memberId);
+
+      // Same two checks as updateMember, and for the same reasons.
+      const target = await this.agencyMemberRepository.getById(memberId);
+      if (!target || target.agencyId !== agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const members = await this.agencyMemberRepository.listByAgency(agencyId);
+      const refusal = guardMemberChange({ members, target });
+      if (refusal) {
+        return res.status(409).json({ success: false, message: refusal, data: null });
+      }
+
       const removed = await this.agencyMemberRepository.remove(memberId);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'Member removed', data: null });

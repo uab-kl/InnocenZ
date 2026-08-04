@@ -87,19 +87,6 @@ function guard(
             data: null,
           });
         }
-
-        // `status` is the admin approve/suspend lane. A non-admin owner sending
-        // it could activate their own pending organisation or suspend it back,
-        // so it is REFUSED rather than silently dropped — a save that quietly
-        // discards a field is how a caller learns the wrong thing about what
-        // persisted.
-        if (req.body && typeof req.body === 'object' && 'status' in req.body) {
-          return res.status(403).json({
-            success: false,
-            message: 'Forbidden — status is set by admin approval, not by this endpoint',
-            data: null,
-          });
-        }
       }
 
       return next();
@@ -200,6 +187,45 @@ export const agencyOwnerOfParam = requireAgencySubRoleScoped('id', 'owner');
  * and it matters more here, because the venue record carries the geo-fence
  * centre that every check-in is measured against. */
 export const outletOwnerOfParam = requireOutletSubRoleScoped('id', 'owner');
+
+/**
+ * Refuses a non-admin caller who sends `status` on an ORGANISATION record.
+ *
+ * `agency.status` / `outlet.status` are the admin approve/suspend lane, so an
+ * owner sending it could activate their own `pending_review` organisation.
+ * REFUSED rather than silently dropped: a save that quietly discards a field is
+ * how a caller learns the wrong thing about what persisted.
+ *
+ * ⚠️ Kept SEPARATE from the scope guard, which is where it started life. Bolted
+ * onto the scope guard it travelled to `PUT /:id/members/:memberId`, where
+ * `status` means the MEMBER'S status — a field an owner is entitled to set —
+ * and refused a legal change while citing admin approval. **The rule was right;
+ * its blast radius was not.** One middleware, one job: apply this only to the
+ * routes whose `status` really is the admin lane.
+ */
+export function refuseOrgStatusChange() {
+  return async (req: Request, res: Response, next: NextFunction) => {
+    const user = req.user;
+    if (!user) {
+      return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+    }
+    try {
+      if (await isAdmin(user.id)) return next();
+      if (req.body && typeof req.body === 'object' && 'status' in req.body) {
+        return res.status(403).json({
+          success: false,
+          message: 'Forbidden — status is set by admin approval, not by this endpoint',
+          data: null,
+        });
+      }
+      return next();
+    } catch {
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  };
+}
 
 /**
  * agencyCan 'raisePv' — owner + finance, which today is every agency sub-role.

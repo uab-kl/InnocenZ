@@ -348,7 +348,14 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   `PUT /outlet/:id` exists and is now correctly scoped. Mirror the agency shape: a
 >   `save`/`isSaving` pair on `useOutletProfile`, save BEFORE the screen shows a saved state, and send
 >   only fields with a column behind them.
-> - [ ] **Member management for org owners.** `POST`/`PUT`/`DELETE /agency/:id/members` (and the four
+> - [x] **✅ BACKEND DONE + LIVE-PROVEN 8/0/3 — member management is open to org owners.** Three
+>   checks stack: route scope (`:id`), controller ownership of `:memberId` (**404**), and
+>   `guardMemberChange` (**409**). ⚠️ **STILL NOT DONE: the UI.** No screen calls these endpoints, and
+>   the Finance Head invite still delivers nothing (no mailer). ⚠️ **Also unproven: the happy-path
+>   `200`** — Atlas has exactly ONE member, so there was no second member to re-send; `POST` (add) was
+>   never fired at all, because creating a member leaves a permanent row. **Only the refusals are
+>   evidence.**
+> - [ ] ~~**Member management for org owners.**~~ `POST`/`PUT`/`DELETE /agency/:id/members` (and the four
 >   outlet equivalents) **exist** but are `requireAdmin` **on purpose** — the route file argues that
 >   *membership IS identity*, since an `agency_user` row is what every sub-role guard reads. Widening
 >   needs: the same `:id` ownership scope, an **escalation guard** (an owner must not mint an owner in
@@ -893,6 +900,43 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (late) — member management widened from admin-only to ORG OWNERS. Backend done and
+> live-proven 8/0/3; the UI is NOT built. Backend `tsc` 0 · unit tests 21/21 across 3 files.**
+>
+> 🔴 **The find: a scope check on the wrong parameter is not a scope check.** `updateMember` and
+> `removeMember` take `:memberId` and **never checked it belongs to the org in `:id`.** The route
+> scope guard could not catch this — it validates `:id` while the write targets `:memberId` — so an
+> owner passing their OWN agency id and a FOREIGN member id would have sailed through every gate.
+> Closed in the controller with a **404** (not 403: a foreign member id must not be confirmed as
+> existing). **Live-proven both ways, and the foreign member was re-read afterwards to confirm it
+> still exists** — a refusal that is not checked for side effects is only half a test.
+>
+> **`guardMemberChange` (`util/member-change-guard.ts`, 9 unit tests) refuses anything that would
+> leave an org with no ACTIVE owner** — removal, demotion or deactivation alike. No separate
+> self-demotion rule: *"you are the last owner"* already covers an owner locking themselves out **and**
+> covers one owner locking out the last OTHER owner, which a self-check alone would miss. An inactive
+> owner does not count as cover. Deliberately allowed: an owner may appoint another owner in their own
+> org, including handing ownership away — that is tenancy, not escalation.
+>
+> 🔴 **THE PROBE CAUGHT A REAL DEFECT — an over-applied denial, exactly the failure this file keeps
+> warning about.** The scoped guard refused ANY body containing `status`, because on `PUT /agency/:id`
+> that is the admin approve/suspend lane. Reusing that guard on the MEMBER routes carried the rule
+> with it, where `status` means the MEMBER'S status — a field an owner is entitled to set. It refused
+> a legal change **and cited admin approval while doing it**. *The rule was right; its blast radius
+> was not.* Split into its own middleware `refuseOrgStatusChange()`, applied only to the two
+> org-record PUTs. **One middleware, one job.** ⚠️ **`probe-org-scope-guard` was re-run afterwards and
+> still passes 7/0/1** — refactoring a guard voids its old proof.
+>
+> ⚠️ **What is NOT proven, stated plainly.** The happy-path **200 is SKIPPED**: Atlas has exactly one
+> member, so there was no second member whose own value could be re-sent idempotently. **`POST` (add
+> member) was never fired**, because creating a member leaves a permanent row on the shared DB. The
+> outlet cross-venue case skipped too — Onyx KL has no members. **Only the refusals are evidence.**
+>
+> **Vitest was only looking at `src/features/**`.** The first shared rule to get a test lives in
+> `src/util`, and the narrower glob found nothing and **exited 0** — with `passWithNoTests: true`, a
+> test outside the glob reports success having executed nothing. Widened to `src/**/*.test.ts`.
+> *A green suite that ran zero of your tests is the worst possible signal for a security rule.*
 
 > **4 Aug 2026 (late) — running the dev server rewrites `routeTree.gen.ts` into a DIFFERENT ORDER.
 > Reverted, not committed. And the reordered form boots clean, which is the useful part.**

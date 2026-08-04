@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { outletController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
-import { outletOwnerOfParam } from '@/middlewares/require-sub-role.js';
+import { outletOwnerOfParam, refuseOrgStatusChange } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -41,7 +41,16 @@ const canEditOutlet = requireRole('admin', 'outlet');
 // rewrite another venue's record AND move its geo-fence centre, which is what
 // the 50 m check-in rule is measured against. Found while wiring the outlet
 // Settings save; the gate was never wrong about the role, only about the venue.
-router.put('/:id', canEditOutlet, outletOwnerOfParam, outletController.update.bind(outletController));
+// `refuseOrgStatusChange` only HERE, not on the member routes: `outlet.status`
+// is the admin approve/suspend lane, while `outlet_user.status` is an owner's
+// to set.
+router.put(
+  '/:id',
+  canEditOutlet,
+  outletOwnerOfParam,
+  refuseOrgStatusChange(),
+  outletController.update.bind(outletController),
+);
 router.patch(
   '/:id/geo-fence',
   canEditOutlet,
@@ -69,9 +78,17 @@ router.patch('/:id/suspend', requireAdmin, outletController.suspend.bind(outletC
 // reads stay open to the three org roles for the profile screens.
 const canReadMembers = requireRole('admin', 'agency', 'outlet');
 
+// Writes widened from admin-only to the OWNER OF THE OUTLET IN `:id`, on the
+// same three stacked checks as the agency member routes: the scope guard proves
+// you own the venue you addressed, the controller refuses (404) a `:memberId`
+// belonging to another venue — the scope guard checks `:id`, not the row being
+// written — and `guardMemberChange` refuses (409) anything that would leave the
+// venue with no active owner.
+const canWriteMembers = [requireRole('admin', 'outlet'), outletOwnerOfParam];
+
 router.get('/:id/members', canReadMembers, outletController.listMembers.bind(outletController));
-router.post('/:id/members', requireAdmin, outletController.addMember.bind(outletController));
-router.put('/:id/members/:memberId', requireAdmin, outletController.updateMember.bind(outletController));
-router.delete('/:id/members/:memberId', requireAdmin, outletController.removeMember.bind(outletController));
+router.post('/:id/members', ...canWriteMembers, outletController.addMember.bind(outletController));
+router.put('/:id/members/:memberId', ...canWriteMembers, outletController.updateMember.bind(outletController));
+router.delete('/:id/members/:memberId', ...canWriteMembers, outletController.removeMember.bind(outletController));
 
 export default router;

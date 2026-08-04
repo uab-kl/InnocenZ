@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { agencyController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
-import { agencyOwnerOfParam } from '@/middlewares/require-sub-role.js';
+import { agencyOwnerOfParam, refuseOrgStatusChange } from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -24,6 +24,9 @@ router.put(
   '/:id',
   requireRole('admin', 'agency'),
   agencyOwnerOfParam,
+  // Only HERE, not on the member routes: `agency.status` is the admin lane,
+  // while `agency_user.status` is an owner's to set.
+  refuseOrgStatusChange(),
   agencyController.update.bind(agencyController),
 );
 router.patch('/:id/approve', requireAdmin, agencyController.approve.bind(agencyController));
@@ -39,16 +42,31 @@ router.get('/:id/prs', agencyController.listAgencyPrs.bind(agencyController));
 // an active owner of any agency, which then satisfies every sub-role guard and
 // hands over that agency's shifts, vouchers, sales and ratings.
 //
-// Writes are admin-only: no client calls them (zero callers across web and
-// mobile) and every membership row in the database was written by a seed script,
-// never through the API. Reads stay open to the three org roles because the
-// agency and outlet profile screens list their own members; a PR has no reason
-// to enumerate an organisation's staff.
+// Reads stay open to the three org roles because the agency and outlet profile
+// screens list their own members; a PR has no reason to enumerate an
+// organisation's staff.
 const canReadMembers = requireRole('admin', 'agency', 'outlet');
 
+// Writes were admin-only while nothing called them. They are now open to the
+// OWNER OF THE AGENCY IN `:id` — the widening the note above said to do
+// "together with the UI, not before" — and that is safe only because three
+// separate checks stack up:
+//
+//   1. `agencyOwnerOfParam` — you own the agency you addressed.
+//   2. The controller re-reads `:memberId` and refuses (404) unless that row
+//      belongs to the SAME agency. The scope guard cannot do this: it checks
+//      `:id` while the write targets `:memberId`, so an owner could otherwise
+//      pass their own agency and a foreign member id.
+//   3. `guardMemberChange` refuses (409) any change that would leave the agency
+//      with no active owner — removal, demotion or deactivation alike.
+//
+// Not restricted: an owner may appoint another owner inside their own agency,
+// including handing ownership away. That is tenancy, not escalation.
+const canWriteMembers = [requireRole('admin', 'agency'), agencyOwnerOfParam];
+
 router.get('/:id/members', canReadMembers, agencyController.listMembers.bind(agencyController));
-router.post('/:id/members', requireAdmin, agencyController.addMember.bind(agencyController));
-router.put('/:id/members/:memberId', requireAdmin, agencyController.updateMember.bind(agencyController));
-router.delete('/:id/members/:memberId', requireAdmin, agencyController.removeMember.bind(agencyController));
+router.post('/:id/members', ...canWriteMembers, agencyController.addMember.bind(agencyController));
+router.put('/:id/members/:memberId', ...canWriteMembers, agencyController.updateMember.bind(agencyController));
+router.delete('/:id/members/:memberId', ...canWriteMembers, agencyController.removeMember.bind(agencyController));
 
 export default router;
