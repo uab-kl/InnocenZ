@@ -696,6 +696,30 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — A BAR SERVICE WAS BEING LOGGED AS AN OVERTIME CLAIM.**
+>
+> Owner: *"why put the havoc under the other? In the outlet workspace I no put like this"* / *"seperate
+> the OT with the Havoc"*. Havoc is configured under **Service Entitlement (RM 1,000)**, and the PR app
+> logged it as **"OT · RM 2,000.00"**.
+>
+> **Two rules disagreed about the same item.** `menuForScanCategory` puts `service` AND `tip` on the Tips
+> page together; `receiptKindForItem` only counted `tip` — plus **one hardcoded id, `booking-com`**, which
+> happened to be the seeded Booking commission. So Booking commission passed by accident of its id and
+> Havoc did not. Everything else fell to `others`, which the app labels **OT** (`ShiftStatusPanel:411`)
+> and the backend files as component `other` (`payment-voucher-component.ts:24`) — **the same bucket as
+> genuine overtime.** Any service an outlet adds itself with "+ Add More" hit this.
+>
+> The money was never wrong (commission already used the TIP rate), but the CLASSIFICATION was, and it
+> also broke the check-out gate landed minutes earlier: a Havoc-only tips scan counted as no tips action.
+>
+> **Now `service` classifies as `tips` and `others` is left to what really is other** — overtime and
+> unclassified. Verified: Lemon Drop→Drink, Tips→Tip, Booking commission→Tip, Havoc→Tip, and a made-up
+> "Anything the outlet adds"→Tip.
+>
+> ⚠️ **One row already saved carries the wrong bucket:** `Havoc, 4 Aug, qty 2, commission RM 340.00`,
+> component `other`. Query written and run; NOT changed — re-filing a line on a payment voucher is the
+> owner’s call. One statement fixes it when they say so.
+
 > **4 Aug 2026 — "2 LOGGED ACTIONS HAVE NO PICTURE" WAS THE APP LYING TO ITSELF.**
 >
 > Owner: *"why have this ??"* — and the database answered it. The three tips items came off ONE scan and
