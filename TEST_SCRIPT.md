@@ -302,27 +302,59 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
+
+Left deliberately uncommitted: authored in a session running CONCURRENTLY with the PR-Payment work
+(`64fe35a`…`7b620c9`), so it is not mine to commit under a message I would be inventing. It all
+typechecks — backend past the TS2883 baseline, `apps/web` on every touched file, `apps/mobile` at 0.
+
+- [ ] **Two migrations are written but NOT APPLIED.** `pnpm migrate:deploy` from the repo ROOT, then
+  restart the backend. Journal checked: `0083` (when 1785800000000) and `0084` (1785900000000) ascend
+  correctly, so they will not be silently skipped — the one non-ascending pair in `_journal.json` is
+  historical (`0015` vs `0014`) and long since applied.
+  - `0083_pv_line_outlet_fk.sql` — `payment_voucher_line.outlet_id`, FK to outlet, ON DELETE SET NULL.
+    Closes one of the weak edges CLAUDE.md rule #3 was written about: the row's only outlet today is a
+    copied varchar NAME, so an outlet rename would start refusing catalogue checks for no visible
+    reason.
+  - `0084_receipt_review_withdrawn.sql` — `payment_voucher_receipt.review_withdrawn_at`, so a receipt
+    somebody REFUSED stops being byte-identical to one nobody has opened, and bulk approve cannot
+    re-approve a refusal under the refuser's own name.
+- [ ] ⚠️ **The §10 row "THE AGENCY CAN CORRECT A RECEIPT" says "NO MIGRATION. ZERO DDL."** That is true
+  of the receipt editor itself, but two migrations now sit in the same uncommitted tree from sibling
+  work. Correct that row (or give the migrations their own) before it reads as "this slice needed no
+  DDL" for the whole batch.
+- [ ] Untracked alongside them: `AgencyReceiptEditor.tsx`, `use-agency-receipt-edit.ts`,
+  `use-receipt-catalogue.ts`, `write-failure-message.ts`, `src/scripts/repair-day-approved-receipts.ts`.
+
+
 ### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
 
 *"if add a missing line section at the agency need for example the drinks need verified is the outlet
 else cannot add so in his way can make list the the drink on that shift from what outlet"*, then
 *"need to do same thing for the tips also"*.
 
-- [x] **Drinks** — in flight (workflow `agency-add-line-catalogue`): the agency picks from the
-  outlet's DRINKS PRICE list for the receipt's own outlet; the SERVER refuses an item that is not on
-  it, naming the outlet. Case-insensitive match, but the CATALOGUE's spelling is stored so the line
-  and the outlet list cannot drift. An outlet with no list configured refuses and says so rather than
-  silently falling back to free text.
-- [ ] **TIPS — same rule.** The outlet Workspace also carries **SERVICE ENTITLEMENT** (3 services,
-  RM 50–1000) beside DRINKS PRICE, and the live tips lines look like service items ("Booking
-  commission RM 17.00"). Validate a `tips` line against that list exactly as drinks are validated
-  against the drinks list. ⚠️ Confirm from the schema which list the tips bucket actually belongs to
-  before wiring it — do not assume SERVICE ENTITLEMENT without checking, and if a plain gratuity
-  ("Tips RM 8.50") has no catalogue entry, ask the owner rather than inventing one.
-- [ ] The outlet is resolved from the RECEIPT's lines, never from the request — a caller-supplied
-  outlet lets the agency choose whichever catalogue happens to contain the item they want.
-- [ ] Price ≠ commission: the catalogue holds the outlet's PRICE, the line holds the PR's cut. Show
-  the price for matching against the paper; never auto-fill the commission from it.
+- [x] **Drinks AND tips — SHIPPED** (see §10, 4 Aug). One table `outlet_drink_menu` split by
+  `category`: `drink` → the DRINKS PRICE list, `service`/`tip` → SERVICE ENTITLEMENT. There is no
+  second catalogue, so tips needed no second design.
+- [x] The outlet is resolved by **FK, not by name**: `receipt.shift_assignment_id → shift.outlet_id`,
+  read through the existing `resolveDrinkMenusForOutlets` — the same list the PR's phone gets.
+- [x] Price ≠ commission: the picker shows the outlet's price for matching against the paper and the
+  commission stays typed. No per-item commission rule exists anywhere to auto-fill from (the web
+  `AgencyCommissionRulesPanel` reads the client demo store, not the backend).
+- [ ] ⚠️ **DECIDE: drop or wire `0083_pv_line_outlet_fk`.** It is authored and journalled but NOT
+  run, and NOT used by any code — the shift-FK path above turned out sounder than the name-matched
+  `payment_voucher_line.outlet` backfill it was written for. Dropping it is the recommendation; an
+  unused column with a backfill is worse than no column. Wiring it would cover only the receipts that
+  have no shift link, and would also mean setting `outlet_id` on every line write.
+- [ ] `PUT /payment-voucher/:id` is a SECOND DOOR: it still writes receipt-linked lines with
+  free-text descriptions under the same `agencyOwnerOrFinance` guard, so the catalogue rule is
+  enforced on one path and not the other.
+- [ ] The added line's `amount` is the WHOLE-LINE commission (the server stores it verbatim and every
+  total sums it without multiplying by quantity), but the form's `QTY × COMMISSION` layout reads as
+  per-unit. Re-word or re-derive.
+- [ ] `AgencyAddReceiptLineSchema.lineDate` still lets the caller pick the day, contradicting the
+  endpoint's own comment that a line inherits the receipt's day.
+- [ ] Item matching is on `name`, which has no unique constraint on `outlet_drink_menu`.
 
 ### ▶ DAY GOES VERIFIED (decided 4 Aug 2026, SPEC'D — after the receipt editor)
 
@@ -861,6 +893,46 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — AN ADDED LINE MUST BE SOMETHING THE OUTLET ACTUALLY SELLS.**
+>
+> Owner: *"the drinks need verified is the outlet else cannot add so in his way can make list the the
+> drink on that shift from what outlet"*, then *"need to do same thing for the tips also"*.
+>
+> **NO MIGRATION USED.** The catalogue is `outlet_drink_menu` (child of `outlet_workspace`, 1:1 with
+> an outlet), one table split by `category` — `drink` renders as DRINKS PRICE, `service` as SERVICE
+> ENTITLEMENT. **Tips therefore needed no second design**, which is the whole reason the discovery
+> pass ran before any code: the "two lists" on the Outlet screen are one table.
+>
+> **The outlet is resolved by FK, never by name.** `payment_voucher.outlet` and
+> `payment_voucher_line.outlet` are free-text varchars with no FK and no unique constraint on
+> `outlet.name`, so a name cannot be resolved to one outlet safely. The sound path already existed:
+> `payment_voucher_receipt.shift_assignment_id → shift.outlet_id → outlet.id`, read through
+> `resolveDrinkMenusForOutlets` — the SAME reader that feeds the PR's phone its self-log menu, already
+> injected into the PV controller. No new repository, no new wiring, no DDL.
+>
+> ⚠️ **This makes migration `0083_pv_line_outlet_fk` dead DDL.** It was authored earlier the same day
+> on the assumption that name-matching was the only option. It is journalled but NOT run and NOT
+> referenced by any code — decide in §9 whether to drop it (recommended) or wire it as the fallback
+> for receipts with no shift link.
+>
+> **Three refusals, each naming the outlet:** no shift link (the outlet cannot be established), no
+> list configured (worded for BOTH buckets — telling someone adding a tip that there is "no drinks
+> list" sends them to the wrong screen), and item not on the list. Matching is trimmed and
+> case-insensitive; the CATALOGUE's spelling is what gets stored, so a line can never drift from the
+> list it was checked against.
+>
+> **The review found 10 defects; the high one was mine to worry about.** `shift_assignment_id` is
+> supplied by the phone and was stored **unvalidated**. Cosmetic until now — but the catalogue check
+> resolves the outlet through it, so an assignment belonging to somebody else's shift would point the
+> price-list check at the WRONG VENUE, and an item that outlet happens to sell would then pass
+> verification on a receipt it has nothing to do with. `addMyReceipt` now refuses an assignment the
+> signed-in PR does not own, via the same `listByIdsForPr` reader `weekShifts` uses. Also fixed: the
+> empty-catalogue message no longer names only drinks, and the catalogue query no longer retries a
+> 404 three times before admitting it has nothing.
+>
+> Backend, web and mobile all typecheck clean. **Not exercised live** — the in-app browser is signed
+> in as a vendor account (every agency call 403s) and Claude in Chrome is not connected.
 
 > **4 Aug 2026 — NO DISPUTE BUTTON ON WAGES/OT, AND "VERIFIED" MEANT TWO THINGS ON ONE SCREEN.**
 >
