@@ -20,6 +20,10 @@ import { z } from 'zod';
 import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
 import { generateSecret, otpauthUri, verifyTotp } from '@/util/totp.js';
 import { suspendedOrgBlock } from '@/features/auth/org-status.js';
+import {
+  normalizePhoneDigits,
+  PhoneVerificationRepositoryClass,
+} from './phone-verification.repository.js';
 
 export class AuthControllerClass {
   constructor(
@@ -29,6 +33,7 @@ export class AuthControllerClass {
     private userProfileRepository: UserProfileRepositoryClass,
     private roleRepository: RoleRepositoryClass,
     private adminMfaRepository: AdminMfaRepositoryClass,
+    private phoneVerificationRepository: PhoneVerificationRepositoryClass,
   ) {}
 
   /** Wrong attempts before the account locks. */
@@ -382,6 +387,36 @@ export class AuthControllerClass {
       logger.info('[AuthController.register] Register request received');
       const parsedBody = RegisterSchema.parse(req.body);
 
+      // Public PR sign-up must present a verified WhatsApp OTP receipt. Admins
+      // creating accounts (or outlet/agency web signup) are not on this path.
+      const isPublicPr =
+        parsedBody.accountType === 'pr' && !(await this.callerIsAdmin(req));
+      if (isPublicPr) {
+        if (!parsedBody.verificationId) {
+          return res.status(400).json({
+            success: false,
+            message: 'Phone verification is required',
+            data: null,
+          });
+        }
+        const proof = await this.phoneVerificationRepository.getById(
+          parsedBody.verificationId,
+        );
+        const phoneDigits = normalizePhoneDigits(parsedBody.phoneNum);
+        const proofOk =
+          proof &&
+          proof.status === 'verified' &&
+          proof.phoneNum === phoneDigits &&
+          (!proof.expiresAt || proof.expiresAt.getTime() > Date.now() - 30 * 60_000);
+        if (!proofOk) {
+          return res.status(400).json({
+            success: false,
+            message: 'Phone verification is missing or expired — verify again',
+            data: null,
+          });
+        }
+      }
+
       if (parsedBody.email) {
         const existingEmail = await this.userRepository.getUserByLoginMethod('email', parsedBody.email);
         if (existingEmail) {
@@ -433,6 +468,13 @@ export class AuthControllerClass {
           user.id,
         );
         if (updatedUser) user = updatedUser;
+      }
+
+      if (isPublicPr && parsedBody.verificationId) {
+        await this.phoneVerificationRepository.update(parsedBody.verificationId, {
+          status: 'consumed',
+          updatedBy: actor,
+        });
       }
 
       logger.info('[AuthController.register] User registered:', user.username);

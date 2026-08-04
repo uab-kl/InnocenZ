@@ -1,15 +1,21 @@
 import { Briefcase, Building2 } from "lucide-react";
 import { useState } from "react";
+import { PoweredByBadge } from "@/components/landing/PoweredByBadge";
 import {
 	AGENCY_TIER_PRICES,
 	OUTLET_TIER_PRICES,
 	useLandingLocale,
 } from "@/lib/landing-i18n";
-import { PoweredByBadge } from "@/components/landing/PoweredByBadge";
 import { LogoMark, SplitTitle } from "./primitives";
 
 const OUTLET_POPULAR_INDEX = 2;
 const AGENCY_POPULAR_INDEX = 2;
+
+/** Map footer link labels (EN + ZH) to real routes when available. */
+function footerHref(label: string): string {
+	if (label === "Privacy" || label === "隐私") return "/privacy";
+	return "#top";
+}
 
 export function HandoffPricing() {
 	const { t } = useLandingLocale();
@@ -23,7 +29,9 @@ export function HandoffPricing() {
 		<section id="pricing" className="hz-section">
 			<div className="hz-wrap">
 				<div className="hz-section-head hz-section-head--center hz-section-head--pricing">
-					<span className="hz-eyebrow hz-eyebrow--center">{t.pricing.eyebrow}</span>
+					<span className="hz-eyebrow hz-eyebrow--center">
+						{t.pricing.eyebrow}
+					</span>
 					<h2 className="hz-display">
 						<span className="hz-gold-text">{t.pricing.title}</span>
 					</h2>
@@ -34,27 +42,36 @@ export function HandoffPricing() {
 						key={tab}
 						className={`hz-pricing-features ${isAgency ? "hz-pricing-features--agency" : ""}`}
 					>
-						{(isAgency ? t.pricing.agencyFeatures : t.pricing.outletFeatures).map(
-							(feature) => (
-								<li key={feature}>{feature}</li>
-							),
-						)}
+						{(isAgency
+							? t.pricing.agencyFeatures
+							: t.pricing.outletFeatures
+						).map((feature) => (
+							<li key={feature}>{feature}</li>
+						))}
 					</ul>
 					<p className="hz-pricing-note">{t.pricing.platformNote}</p>
 				</div>
 
 				<div className="mb-10 flex justify-center">
 					<div
-						className="inline-flex rounded-full border p-1.5 backdrop-blur-md"
+						className="inline-flex rounded-full border p-1.5"
 						style={{
 							borderColor: "var(--hz-line-strong)",
-							background: "rgba(10,10,14,.55)",
+							background: "rgba(10,10,14,.88)",
 						}}
 					>
 						{(
 							[
-								{ id: "outlet" as const, label: t.pricing.outletTab, icon: Building2 },
-								{ id: "agency" as const, label: t.pricing.agencyTab, icon: Briefcase },
+								{
+									id: "outlet" as const,
+									label: t.pricing.outletTab,
+									icon: Building2,
+								},
+								{
+									id: "agency" as const,
+									label: t.pricing.agencyTab,
+									icon: Briefcase,
+								},
 							] as const
 						).map((tabItem) => {
 							const active = tab === tabItem.id;
@@ -170,7 +187,10 @@ export function HandoffPricing() {
 										</>
 									)}
 								</div>
-								<div className="text-[13px]" style={{ color: "var(--hz-ink-dim)" }}>
+								<div
+									className="text-[13px]"
+									style={{ color: "var(--hz-ink-dim)" }}
+								>
 									{tier.detail}
 								</div>
 								<a
@@ -218,8 +238,7 @@ export function HandoffFinalCTA() {
 							width: 400,
 							height: 400,
 							background:
-								"radial-gradient(circle, rgba(242,198,107,.4), transparent 60%)",
-							filter: "blur(60px)",
+								"radial-gradient(circle, rgba(242,198,107,.28), transparent 60%)",
 						}}
 					/>
 					<div
@@ -230,8 +249,7 @@ export function HandoffFinalCTA() {
 							width: 400,
 							height: 400,
 							background:
-								"radial-gradient(circle, rgba(182,124,255,.4), transparent 60%)",
-							filter: "blur(60px)",
+								"radial-gradient(circle, rgba(182,124,255,.28), transparent 60%)",
 						}}
 					/>
 					<div className="relative">
@@ -311,7 +329,7 @@ export function HandoffFooter() {
 								{c.links.map((l) => (
 									<a
 										key={l}
-										href="#top"
+										href={footerHref(l)}
 										className="text-[13.5px] no-underline"
 										style={{ color: "var(--hz-ink-dim)" }}
 									>
@@ -337,7 +355,12 @@ export function HandoffFooter() {
 						style={{ color: "var(--hz-ink-mute)" }}
 					>
 						{t.footer.legal.map((l) => (
-							<a key={l} href="#top" className="no-underline" style={{ color: "inherit" }}>
+							<a
+								key={l}
+								href={footerHref(l)}
+								className="no-underline"
+								style={{ color: "inherit" }}
+							>
 								{l}
 							</a>
 						))}

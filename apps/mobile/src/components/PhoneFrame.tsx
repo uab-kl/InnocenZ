@@ -56,16 +56,21 @@ export function PhoneFrame({
       )}
       {scroll ? (
         <ScrollView
+          key="phone-scroll"
           style={styles.viewport}
           contentContainerStyle={
             footer ? { paddingBottom: C.tabbarH + insets.bottom } : undefined
           }
           showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          keyboardShouldPersistTaps="handled"
         >
           {children}
         </ScrollView>
       ) : (
-        <View style={styles.viewport}>{children}</View>
+        <View key="phone-static" style={styles.viewport}>
+          {children}
+        </View>
       )}
       {footer && (
         <View

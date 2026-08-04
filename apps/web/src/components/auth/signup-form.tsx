@@ -1,9 +1,22 @@
 import { useForm } from "@tanstack/react-form";
 import { Link, useNavigate } from "@tanstack/react-router";
-import { ImagePlus, Loader2, X } from "lucide-react";
+import {
+	AtSign,
+	BadgeCheck,
+	Building2,
+	Eye,
+	EyeOff,
+	ImagePlus,
+	Loader2,
+	Lock,
+	Mail,
+	Phone,
+	UserRound,
+	X,
+	type LucideIcon,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { SignupAcknowledgements } from "@/components/auth/signup-acknowledgements";
-import { MaterialIcon } from "@/components/landing/MaterialIcon";
 import { Button } from "@/components/ui/button";
 import {
 	Field,
@@ -28,8 +41,8 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import { getSignupPackages } from "@/constants/signup-packages";
 import {
-	signupAccountTypes,
 	type SignupAccountType,
+	signupAccountTypes,
 } from "@/constants/signup-types";
 import { createSignupSchema } from "@/lib/auth/register-schemas";
 import { useLandingLocale } from "@/lib/landing-i18n";
@@ -157,7 +170,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.companyName.label}
-								icon="business"
+								icon={Building2}
 								placeholder={fields.companyName.placeholder}
 								autoComplete="organization"
 								isSubmitting={form.state.isSubmitting}
@@ -171,7 +184,7 @@ export function SignupForm() {
 								<SignupTextField
 									field={field}
 									label={fields.companyRegistrationOld.label}
-									icon="badge"
+									icon={BadgeCheck}
 									placeholder={fields.companyRegistrationOld.placeholder}
 									isSubmitting={form.state.isSubmitting}
 								/>
@@ -183,7 +196,7 @@ export function SignupForm() {
 								<SignupTextField
 									field={field}
 									label={fields.companyRegistrationNew.label}
-									icon="badge"
+									icon={BadgeCheck}
 									placeholder={fields.companyRegistrationNew.placeholder}
 									isSubmitting={form.state.isSubmitting}
 								/>
@@ -198,7 +211,10 @@ export function SignupForm() {
 							const errorId = `${field.name}-error`;
 							return (
 								<Field data-invalid={isInvalid}>
-									<FieldLabel htmlFor={field.name} className="login-field-label">
+									<FieldLabel
+										htmlFor={field.name}
+										className="login-field-label"
+									>
 										{fields.companyAddress.label}
 									</FieldLabel>
 									<Textarea
@@ -235,7 +251,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.personInCharge.label}
-								icon="person"
+								icon={UserRound}
 								placeholder={fields.personInCharge.placeholder}
 								autoComplete="name"
 								isSubmitting={form.state.isSubmitting}
@@ -248,7 +264,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.phoneNum.label}
-								icon="phone"
+								icon={Phone}
 								placeholder={fields.phoneNum.placeholder}
 								type="tel"
 								autoComplete="tel"
@@ -262,7 +278,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.email.label}
-								icon="mail"
+								icon={Mail}
 								placeholder={fields.email.placeholder}
 								type="email"
 								autoComplete="email"
@@ -281,7 +297,7 @@ export function SignupForm() {
 							<SignupTextField
 								field={field}
 								label={fields.loginEmail.label}
-								icon="alternate_email"
+								icon={AtSign}
 								placeholder={fields.loginEmail.placeholder}
 								type="email"
 								autoComplete="username"
@@ -329,11 +345,16 @@ export function SignupForm() {
 									const isInvalid =
 										field.state.meta.isDirty && !field.state.meta.isValid;
 									const errorId = `${field.name}-error`;
-									const selected = packages.find((pkg) => pkg.id === field.state.value);
+									const selected = packages.find(
+										(pkg) => pkg.id === field.state.value,
+									);
 
 									return (
 										<Field data-invalid={isInvalid}>
-											<FieldLabel htmlFor={field.name} className="login-field-label">
+											<FieldLabel
+												htmlFor={field.name}
+												className="login-field-label"
+											>
 												{fields.package.label}
 											</FieldLabel>
 											<Select
@@ -346,7 +367,9 @@ export function SignupForm() {
 													id={field.name}
 													className="login-input-group h-auto w-full border-royal-gold/20 bg-background/60 py-3"
 												>
-													<SelectValue placeholder={fields.package.placeholder} />
+													<SelectValue
+														placeholder={fields.package.placeholder}
+													/>
 												</SelectTrigger>
 												<SelectContent className="signup-package-select-content">
 													{packages.map((pkg) => (
@@ -392,7 +415,10 @@ export function SignupForm() {
 
 							return (
 								<Field data-invalid={isInvalid}>
-									<FieldLabel htmlFor="signup-logo" className="login-field-label">
+									<FieldLabel
+										htmlFor="signup-logo"
+										className="login-field-label"
+									>
 										{fields.logo.label}
 									</FieldLabel>
 									<div className="flex flex-col gap-4 sm:flex-row sm:items-start">
@@ -400,7 +426,8 @@ export function SignupForm() {
 											htmlFor="signup-logo"
 											className={cn(
 												"flex min-h-40 flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-8 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
-												form.state.isSubmitting && "pointer-events-none opacity-60",
+												form.state.isSubmitting &&
+													"pointer-events-none opacity-60",
 											)}
 										>
 											<ImagePlus className="h-10 w-10 text-royal-gold" />
@@ -421,7 +448,9 @@ export function SignupForm() {
 													const file = event.target.files?.[0] ?? null;
 													field.handleChange(file);
 													if (logoPreview) URL.revokeObjectURL(logoPreview);
-													setLogoPreview(file ? URL.createObjectURL(file) : null);
+													setLogoPreview(
+														file ? URL.createObjectURL(file) : null,
+													);
 												}}
 											/>
 										</label>
@@ -491,7 +520,9 @@ export function SignupForm() {
 				</form.Field>
 			</FieldGroup>
 
-			<form.Subscribe selector={(state) => [state.isSubmitting, state.canSubmit]}>
+			<form.Subscribe
+				selector={(state) => [state.isSubmitting, state.canSubmit]}
+			>
 				{([isSubmitting, canSubmit]) => (
 					<Button
 						type="submit"
@@ -536,7 +567,7 @@ interface SignupTextFieldProps {
 		handleChange: (value: string) => void;
 	};
 	label: string;
-	icon: string;
+	icon: LucideIcon;
 	placeholder: string;
 	type?: string;
 	autoComplete?: string;
@@ -547,7 +578,7 @@ interface SignupTextFieldProps {
 function SignupTextField({
 	field,
 	label,
-	icon,
+	icon: Icon,
 	placeholder,
 	type = "text",
 	autoComplete,
@@ -564,7 +595,11 @@ function SignupTextField({
 			</FieldLabel>
 			<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 				<InputGroupAddon align="inline-start">
-					<MaterialIcon name={icon} className="!text-3xl text-royal-gold" />
+					<Icon
+						className="size-5 text-royal-gold"
+						strokeWidth={1.75}
+						aria-hidden
+					/>
 				</InputGroupAddon>
 				<InputGroupInput
 					id={field.name}
@@ -633,7 +668,11 @@ function SignupPasswordField({
 			</FieldLabel>
 			<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 				<InputGroupAddon align="inline-start">
-					<MaterialIcon name="lock" className="!text-3xl text-royal-gold" />
+					<Lock
+						className="size-5 text-royal-gold"
+						strokeWidth={1.75}
+						aria-hidden
+					/>
 				</InputGroupAddon>
 				<InputGroupInput
 					id={field.name}
@@ -659,10 +698,19 @@ function SignupPasswordField({
 						variant="ghost"
 						size="icon-sm"
 					>
-						<MaterialIcon
-							name={showPassword ? "visibility_off" : "visibility"}
-							className="!text-3xl text-muted-foreground"
-						/>
+						{showPassword ? (
+							<EyeOff
+								className="size-5 text-muted-foreground"
+								strokeWidth={1.75}
+								aria-hidden
+							/>
+						) : (
+							<Eye
+								className="size-5 text-muted-foreground"
+								strokeWidth={1.75}
+								aria-hidden
+							/>
+						)}
 					</InputGroupButton>
 				</InputGroupAddon>
 			</InputGroup>

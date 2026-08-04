@@ -53,7 +53,20 @@ export function overtimeFromStamps(
     return { minutes: null, reason: 'implausible_stamp', elapsedHours };
   }
 
-  const minutes = Math.round((actualEnd.getTime() - scheduledEnd.getTime()) / 60_000);
+  // Overtime accrues only while the PR is actually clocked in, so the window
+  // opens at the LATER of the two — the scheduled end, or the check-in.
+  //
+  // Measuring from `scheduledEnd` alone is what billed assignment `6574b2ee`
+  // 279 minutes (~RM813) for twelve seconds of attendance: the PR checked in at
+  // 16:38 on a slot that had closed at 12:00 and checked out at 16:38:12, and
+  // every minute since noon was charged to a shift nobody was standing in. The
+  // plausibility guard above cannot catch that — 12 seconds elapsed is entirely
+  // believable — because the fault is not an unbelievable stamp, it is counting
+  // hours the PR was absent for.
+  //
+  // The invariant this restores: minutes claimed can never exceed minutes present.
+  const overtimeStart = checkInAt > scheduledEnd ? checkInAt : scheduledEnd;
+  const minutes = Math.round((actualEnd.getTime() - overtimeStart.getTime()) / 60_000);
   // A check-out seconds past the scheduled end rounds to zero. Recording a
   // zero-minute claim would put a shift into `pending` for an agency to approve
   // nothing, so it is treated as no overrun at all.

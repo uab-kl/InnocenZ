@@ -7,6 +7,7 @@ import {
   findFreePort,
   claimBackendOwnership,
   releaseBackendLock,
+  clearStaleDevPorts,
   resolveBin,
   spawnProc,
   makeShutdown,
@@ -15,7 +16,9 @@ import {
 
 const webRoot = `${root}/apps/web`;
 const children = [];
-const shutdown = makeShutdown(children);
+/** Ports this run claimed — freed on Ctrl+C so Vite/Expo orphans can't pin them. */
+const ownedPorts = [];
+const shutdown = makeShutdown(children, () => ownedPorts);
 
 // Load root env files (later files override earlier ones). Process env wins.
 loadEnv({ path: `${root}/.env` });
@@ -42,9 +45,19 @@ process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 process.on('exit', releaseBackendLock);
 
+// Drop orphan Vite/Metro from a prior unclean stop (never touches WEB_PORT_START / Cursor).
+await clearStaleDevPorts({
+  webPortStart: WEB_PORT_START,
+  backendPort: BACKEND_PORT_START,
+});
+
 const webPort = await findFreePort(WEB_PORT_START, new Set([BACKEND_PORT_START]));
 const backendPort = BACKEND_PORT_START;
 const ownsBackend = await claimBackendOwnership(backendPort);
+ownedPorts.push(webPort);
+// Expo defaults to 8081; free it on stop even if Metro bumped to 8082 later.
+ownedPorts.push(8081, 8082);
+if (ownsBackend) ownedPorts.push(backendPort);
 
 console.log(`
 ${colors.bold}Web + Mobile + backend${colors.reset}

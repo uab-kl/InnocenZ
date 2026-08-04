@@ -4,6 +4,7 @@ import type {
 	AgenciesApiResponse,
 	AgenciesQueryParams,
 	AgencyApiResponse,
+	AgencyMemberApiResponse,
 	AgencyMembersApiResponse,
 	AgencyMembershipsApiResponse,
 	AgencyMembersQueryParams,
@@ -40,6 +41,32 @@ export async function fetchAgencyById(
 ): Promise<AgencyApiResponse> {
 	const client = getClient(onRefreshFail);
 	const response = await client.get<AgencyApiResponse>(`/agency/${id}`);
+	return response.data;
+}
+
+/**
+ * Owner-only edit of the agency's own record (`PUT /agency/:id`).
+ *
+ * `status` is deliberately absent from the payload type: it is the admin
+ * approve/suspend lane, and the server refuses it outright from a non-admin
+ * caller rather than dropping it silently.
+ */
+export async function updateAgency(
+	id: string,
+	payload: {
+		name?: string;
+		ssmNo?: string;
+		contactName?: string;
+		contactEmail?: string;
+		contactPhone?: string;
+	},
+	onRefreshFail: () => void,
+): Promise<AgencyApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<AgencyApiResponse>(
+		`/agency/${id}`,
+		payload,
+	);
 	return response.data;
 }
 
@@ -84,6 +111,59 @@ export async function fetchAgencyMembers(
 		message: response.data.message,
 		data: response.data.data ?? [],
 	};
+}
+
+/**
+ * Add an EXISTING user account to this agency (`POST /agency/:id/members`).
+ *
+ * Takes a `userId`, not an email — there is no invite endpoint and no mailer, so
+ * the person must already have an account. The caller resolves the email to a
+ * user first; see `useOrgMembers`.
+ */
+export async function addAgencyMember(
+	agencyId: string,
+	payload: { userId: string; subRole: string },
+	onRefreshFail: () => void,
+): Promise<AgencyMemberApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<AgencyMemberApiResponse>(
+		`/agency/${agencyId}/members`,
+		payload,
+	);
+	return response.data;
+}
+
+/**
+ * Change a member's sub-role or status.
+ *
+ * The server refuses (409) anything that would leave the agency with no active
+ * owner, and 404s a `memberId` belonging to a different agency.
+ */
+export async function updateAgencyMember(
+	agencyId: string,
+	memberId: string,
+	payload: { subRole?: string; status?: string },
+	onRefreshFail: () => void,
+): Promise<AgencyMemberApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.put<AgencyMemberApiResponse>(
+		`/agency/${agencyId}/members/${memberId}`,
+		payload,
+	);
+	return response.data;
+}
+
+/** Remove a member. Refused (409) if they are the last active owner. */
+export async function removeAgencyMember(
+	agencyId: string,
+	memberId: string,
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.delete<{ success: boolean; message: string }>(
+		`/agency/${agencyId}/members/${memberId}`,
+	);
+	return response.data;
 }
 
 /**

@@ -1,38 +1,11 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 
 /** Source asset is 447×434 — keep display ≤ ~120px for crisp zoom. */
 const LOGO_INTRINSIC = { width: 447, height: 434 } as const;
 
-export function useCursorGlow() {
-	useEffect(() => {
-		const onMove = (e: MouseEvent) => {
-			document.documentElement.style.setProperty("--mx", `${e.clientX}px`);
-			document.documentElement.style.setProperty("--my", `${e.clientY}px`);
-			document.querySelectorAll(".hz-glass").forEach((el) => {
-				const r = el.getBoundingClientRect();
-				(el as HTMLElement).style.setProperty(
-					"--cx",
-					`${e.clientX - r.left}px`,
-				);
-				(el as HTMLElement).style.setProperty("--cy", `${e.clientY - r.top}px`);
-			});
-		};
-		window.addEventListener("mousemove", onMove, { passive: true });
-		return () => window.removeEventListener("mousemove", onMove);
-	}, []);
-}
-
 export function LandingBackground() {
-	useCursorGlow();
-	return (
-		<>
-			<div className="hz-aurora" aria-hidden />
-			<div className="hz-aurora-3" aria-hidden />
-			<div className="hz-spotlight" aria-hidden />
-			<div className="hz-grain" aria-hidden />
-		</>
-	);
+	return <div className="hz-aurora" aria-hidden />;
 }
 
 export function CountUp({
@@ -49,12 +22,21 @@ export function CountUp({
 	decimals?: number;
 }) {
 	const ref = useRef<HTMLSpanElement>(null);
-	const [val, setVal] = useState(0);
 	const started = useRef(false);
 
 	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
+
+		const format = (n: number) => {
+			const display = decimals
+				? n.toFixed(decimals)
+				: Math.round(n).toLocaleString();
+			el.textContent = `${prefix}${display}${suffix}`;
+		};
+
+		format(0);
+
 		const io = new IntersectionObserver(
 			(entries) => {
 				entries.forEach((e) => {
@@ -64,7 +46,7 @@ export function CountUp({
 						const tick = (t: number) => {
 							const p = Math.min(1, (t - t0) / dur);
 							const eased = 1 - (1 - p) ** 3;
-							setVal(to * eased);
+							format(to * eased);
 							if (p < 1) requestAnimationFrame(tick);
 						};
 						requestAnimationFrame(tick);
@@ -75,19 +57,9 @@ export function CountUp({
 		);
 		io.observe(el);
 		return () => io.disconnect();
-	}, [to, dur]);
+	}, [to, dur, suffix, prefix, decimals]);
 
-	const display = decimals
-		? val.toFixed(decimals)
-		: Math.round(val).toLocaleString();
-
-	return (
-		<span ref={ref}>
-			{prefix}
-			{display}
-			{suffix}
-		</span>
-	);
+	return <span ref={ref} />;
 }
 
 export function SplitTitle({
@@ -101,8 +73,7 @@ export function SplitTitle({
 	suffix?: string;
 	accent?: "gold" | "violet";
 }) {
-	const accentClass =
-		accent === "violet" ? "hz-violet-text" : "hz-gold-text";
+	const accentClass = accent === "violet" ? "hz-violet-text" : "hz-gold-text";
 
 	if (prefix === undefined) {
 		return (
@@ -172,9 +143,7 @@ export function Tag({
 				borderRadius: 999,
 				border: `1px solid ${isGold ? "rgba(242,198,107,.35)" : "rgba(182,124,255,.35)"}`,
 				color: isGold ? "var(--hz-gold)" : "var(--hz-violet)",
-				background: isGold
-					? "rgba(242,198,107,.06)"
-					: "rgba(182,124,255,.06)",
+				background: isGold ? "rgba(242,198,107,.06)" : "rgba(182,124,255,.06)",
 			}}
 		>
 			{children}
@@ -201,9 +170,52 @@ export function LogoMark({ size = 52 }: { size?: number }) {
 
 export function useTick(interval = 1500) {
 	const [t, setT] = useState(0);
+
 	useEffect(() => {
-		const id = setInterval(() => setT((x) => x + 1), interval);
-		return () => clearInterval(id);
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			return;
+		}
+
+		let id: ReturnType<typeof setInterval> | undefined;
+		const start = () => {
+			if (id || document.hidden) return;
+			id = setInterval(() => setT((x) => x + 1), interval);
+		};
+		const stop = () => {
+			if (!id) return;
+			clearInterval(id);
+			id = undefined;
+		};
+
+		const onVisibility = () => {
+			if (document.hidden) stop();
+			else start();
+		};
+
+		const section = document.getElementById("dashboards");
+		let io: IntersectionObserver | undefined;
+		if (section) {
+			io = new IntersectionObserver(
+				(entries) => {
+					entries.forEach((entry) => {
+						if (entry.isIntersecting && !document.hidden) start();
+						else stop();
+					});
+				},
+				{ threshold: 0.12 },
+			);
+			io.observe(section);
+		} else {
+			start();
+		}
+
+		document.addEventListener("visibilitychange", onVisibility);
+		return () => {
+			stop();
+			io?.disconnect();
+			document.removeEventListener("visibilitychange", onVisibility);
+		};
 	}, [interval]);
+
 	return t;
 }

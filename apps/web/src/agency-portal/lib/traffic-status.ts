@@ -1,4 +1,4 @@
-export type TrafficLevel = 'red' | 'yellow' | 'green';
+export type TrafficLevel = "red" | "yellow" | "green";
 
 /**
  * red = alert/caution (nothing supplied yet), yellow = warning (partially filled),
@@ -6,12 +6,12 @@ export type TrafficLevel = 'red' | 'yellow' | 'green';
  * to special-case units (PRs, RM, drinks, etc).
  */
 export function trafficLevelForRatio(
-  actual: number,
-  target: number,
+	actual: number,
+	target: number,
 ): TrafficLevel {
-  if (target <= 0) return actual > 0 ? 'green' : 'yellow';
-  const ratio = actual / target;
-  if (ratio >= 1) return 'green';
-  if (ratio > 0) return 'yellow';
-  return 'red';
+	if (target <= 0) return actual > 0 ? "green" : "yellow";
+	const ratio = actual / target;
+	if (ratio >= 1) return "green";
+	if (ratio > 0) return "yellow";
+	return "red";
 }

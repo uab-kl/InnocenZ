@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoAccessRouteImport } from './routes/no-access'
 import { Route as NotFoundRouteImport } from './routes/not-found'
 import { Route as OutletRouteRouteImport } from './routes/outlet/route'
+import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log/route'
 import { Route as AdminBusinessRouteRouteImport } from './routes/admin/business/route'
@@ -39,6 +40,7 @@ import { Route as AgencySubscriptionRouteImport } from './routes/agency/subscrip
 import { Route as OutletIndexRouteImport } from './routes/outlet/index'
 import { Route as OutletBillingRouteImport } from './routes/outlet/billing'
 import { Route as OutletBookingsRouteImport } from './routes/outlet/bookings'
+import { Route as OutletCalendarRouteImport } from './routes/outlet/calendar'
 import { Route as OutletDashboardRouteImport } from './routes/outlet/dashboard'
 import { Route as OutletHistoryRouteImport } from './routes/outlet/history'
 import { Route as OutletProfileRouteImport } from './routes/outlet/profile'
@@ -99,6 +101,11 @@ const NotFoundRoute = NotFoundRouteImport.update({
 const OutletRouteRoute = OutletRouteRouteImport.update({
   id: '/outlet',
   path: '/outlet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -215,6 +222,11 @@ const OutletBillingRoute = OutletBillingRouteImport.update({
 const OutletBookingsRoute = OutletBookingsRouteImport.update({
   id: '/bookings',
   path: '/bookings',
+  getParentRoute: () => OutletRouteRoute,
+} as any)
+const OutletCalendarRoute = OutletCalendarRouteImport.update({
+  id: '/calendar',
+  path: '/calendar',
   getParentRoute: () => OutletRouteRoute,
 } as any)
 const OutletDashboardRoute = OutletDashboardRouteImport.update({
@@ -362,6 +374,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
+  '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
@@ -383,6 +396,7 @@ export interface FileRoutesByFullPath {
   '/agency/subscription': typeof AgencySubscriptionRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
+  '/outlet/calendar': typeof OutletCalendarRoute
   '/outlet/dashboard': typeof OutletDashboardRoute
   '/outlet/history': typeof OutletHistoryRoute
   '/outlet/profile': typeof OutletProfileRoute
@@ -418,6 +432,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
+  '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
   '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
@@ -438,6 +453,7 @@ export interface FileRoutesByTo {
   '/agency/subscription': typeof AgencySubscriptionRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
+  '/outlet/calendar': typeof OutletCalendarRoute
   '/outlet/dashboard': typeof OutletDashboardRoute
   '/outlet/history': typeof OutletHistoryRoute
   '/outlet/profile': typeof OutletProfileRoute
@@ -476,6 +492,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
+  '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
@@ -497,6 +514,7 @@ export interface FileRoutesById {
   '/agency/subscription': typeof AgencySubscriptionRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
+  '/outlet/calendar': typeof OutletCalendarRoute
   '/outlet/dashboard': typeof OutletDashboardRoute
   '/outlet/history': typeof OutletHistoryRoute
   '/outlet/profile': typeof OutletProfileRoute
@@ -536,6 +554,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/no-access'
     | '/not-found'
+    | '/privacy'
     | '/signup'
     | '/admin/audit-log'
     | '/admin/business'
@@ -557,6 +576,7 @@ export interface FileRouteTypes {
     | '/agency/subscription'
     | '/outlet/billing'
     | '/outlet/bookings'
+    | '/outlet/calendar'
     | '/outlet/dashboard'
     | '/outlet/history'
     | '/outlet/profile'
@@ -592,6 +612,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/no-access'
     | '/not-found'
+    | '/privacy'
     | '/signup'
     | '/admin/business'
     | '/admin/rbac'
@@ -612,6 +633,7 @@ export interface FileRouteTypes {
     | '/agency/subscription'
     | '/outlet/billing'
     | '/outlet/bookings'
+    | '/outlet/calendar'
     | '/outlet/dashboard'
     | '/outlet/history'
     | '/outlet/profile'
@@ -649,6 +671,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/no-access'
     | '/not-found'
+    | '/privacy'
     | '/signup'
     | '/admin/audit-log'
     | '/admin/business'
@@ -670,6 +693,7 @@ export interface FileRouteTypes {
     | '/agency/subscription'
     | '/outlet/billing'
     | '/outlet/bookings'
+    | '/outlet/calendar'
     | '/outlet/dashboard'
     | '/outlet/history'
     | '/outlet/profile'
@@ -708,6 +732,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   NoAccessRoute: typeof NoAccessRoute
   NotFoundRoute: typeof NotFoundRoute
+  PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
 }
 
@@ -760,6 +785,13 @@ declare module '@tanstack/react-router' {
       path: '/outlet'
       fullPath: '/outlet'
       preLoaderRoute: typeof OutletRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -921,6 +953,13 @@ declare module '@tanstack/react-router' {
       path: '/bookings'
       fullPath: '/outlet/bookings'
       preLoaderRoute: typeof OutletBookingsRouteImport
+      parentRoute: typeof OutletRouteRoute
+    }
+    '/outlet/calendar': {
+      id: '/outlet/calendar'
+      path: '/calendar'
+      fullPath: '/outlet/calendar'
+      preLoaderRoute: typeof OutletCalendarRouteImport
       parentRoute: typeof OutletRouteRoute
     }
     '/outlet/dashboard': {
@@ -1245,6 +1284,7 @@ const AgencyRouteRouteWithChildren = AgencyRouteRoute._addFileChildren(
 interface OutletRouteRouteChildren {
   OutletBillingRoute: typeof OutletBillingRoute
   OutletBookingsRoute: typeof OutletBookingsRoute
+  OutletCalendarRoute: typeof OutletCalendarRoute
   OutletDashboardRoute: typeof OutletDashboardRoute
   OutletHistoryRoute: typeof OutletHistoryRoute
   OutletProfileRoute: typeof OutletProfileRoute
@@ -1259,6 +1299,7 @@ interface OutletRouteRouteChildren {
 const OutletRouteRouteChildren: OutletRouteRouteChildren = {
   OutletBillingRoute: OutletBillingRoute,
   OutletBookingsRoute: OutletBookingsRoute,
+  OutletCalendarRoute: OutletCalendarRoute,
   OutletDashboardRoute: OutletDashboardRoute,
   OutletHistoryRoute: OutletHistoryRoute,
   OutletProfileRoute: OutletProfileRoute,
@@ -1282,6 +1323,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   NoAccessRoute: NoAccessRoute,
   NotFoundRoute: NotFoundRoute,
+  PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
 }
 export const routeTree = rootRouteImport

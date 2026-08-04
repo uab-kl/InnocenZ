@@ -493,7 +493,9 @@ function SpecialServicesPage() {
 						<Table>
 							<TableHeader>
 								<TableRow>
-									<TableHead className="w-[220px]">Special Service ID</TableHead>
+									<TableHead className="w-[220px]">
+										Special Service ID
+									</TableHead>
 									<TableHead>Title</TableHead>
 									<TableHead>Source</TableHead>
 									<TableHead className="w-[160px]">Category</TableHead>
@@ -587,7 +589,10 @@ function SpecialServicesPage() {
 												onClick={() => setEditRecord(record)}
 											>
 												<TableCell>
-													<code className="block max-w-[200px] truncate font-mono text-xs text-muted-foreground" title={record.id}>
+													<code
+														className="block max-w-[200px] truncate font-mono text-xs text-muted-foreground"
+														title={record.id}
+													>
 														{record.id}
 													</code>
 												</TableCell>
@@ -612,13 +617,15 @@ function SpecialServicesPage() {
 														variant="outline"
 														className="w-fit border-(--lavender-soft)/50 bg-(--lavender-soft)/15 text-lavender"
 													>
-														{categoryLabels[record.category] ??
-															record.category}
+														{categoryLabels[record.category] ?? record.category}
 													</Badge>
 												</TableCell>
 												<TableCell className="max-w-[280px] text-sm text-muted-foreground">
 													{record.description?.trim() ? (
-														<span className="line-clamp-3" title={record.description}>
+														<span
+															className="line-clamp-3"
+															title={record.description}
+														>
 															{record.description}
 														</span>
 													) : (

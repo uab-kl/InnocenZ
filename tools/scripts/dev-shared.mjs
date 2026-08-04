@@ -1,5 +1,5 @@
 import { createServer } from 'node:net';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -172,19 +172,92 @@ export function spawnProc(children, command, args, options = {}) {
   return child;
 }
 
+/** Kill a spawned child. On Windows, wait for the full process tree to die. */
 export function killChild(child) {
   if (!child?.pid || child.killed) return;
   if (isWin) {
-    spawn('taskkill', ['/pid', String(child.pid), '/f', '/t'], { stdio: 'ignore' });
+    // Must be sync: async taskkill + process.exit() races and leaves Vite orphans
+    // holding WEB_PORT (often 3001 when 3000 is taken by Cursor).
+    spawnSync('taskkill', ['/pid', String(child.pid), '/f', '/t'], {
+      stdio: 'ignore',
+      windowsHide: true,
+    });
   } else {
-    child.kill('SIGTERM');
+    try {
+      child.kill('SIGTERM');
+    } catch {
+      // Already gone.
+    }
   }
 }
 
-export function makeShutdown(children) {
+/**
+ * Force-free TCP listen ports we claimed. Catches Windows orphans where pnpm →
+ * cmd → vite left a node process outside the tracked child.pid tree.
+ */
+export function killPortListeners(ports) {
+  const unique = [...new Set(ports.filter((p) => Number.isInteger(p) && p > 0))];
+  if (!unique.length) return;
+
+  if (isWin) {
+    const list = unique.join(',');
+    spawnSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-ExecutionPolicy',
+        'Bypass',
+        '-Command',
+        `foreach ($p in @(${list})) { Get-NetTCPConnection -LocalPort $p -State Listen -ErrorAction SilentlyContinue | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force -ErrorAction SilentlyContinue } }`,
+      ],
+      { stdio: 'ignore', windowsHide: true },
+    );
+    return;
+  }
+
+  for (const port of unique) {
+    spawnSync('sh', ['-c', `fuser -k ${port}/tcp >/dev/null 2>&1 || true`], {
+      stdio: 'ignore',
+    });
+  }
+}
+
+/**
+ * Free leftovers from an unclean prior stop so the next `dev:all` / `dev:web`
+ * gets stable ports. Never touches `webPortStart` itself (often Cursor on 3000);
+ * clears webPortStart+1..+5, Metro, and a dead backend port only.
+ */
+export async function clearStaleDevPorts({
+  webPortStart,
+  backendPort,
+  clearBackend = true,
+}) {
+  const ports = [8081, 8082];
+  for (let p = webPortStart + 1; p <= webPortStart + 5; p++) ports.push(p);
+
+  if (clearBackend && Number.isInteger(backendPort)) {
+    // Keep a healthy backend (reused by claimBackendOwnership); only clear dead holds.
+    if (!(await isBackendResponding(backendPort))) ports.push(backendPort);
+  }
+
+  killPortListeners(ports);
+  // Brief settle so Windows releases the sockets before we probe/bind.
+  await new Promise((r) => setTimeout(r, 250));
+}
+
+/**
+ * @param {import('node:child_process').ChildProcess[]} children
+ * @param {number[] | (() => number[])} [ports] Ports to free on shutdown (web/backend/metro).
+ */
+export function makeShutdown(children, ports = []) {
+  let shuttingDown = false;
   return function shutdown(code = 0) {
+    if (shuttingDown) return;
+    shuttingDown = true;
     releaseBackendLock();
     for (const child of children) killChild(child);
+    const list = typeof ports === 'function' ? ports() : ports;
+    killPortListeners(list);
     process.exit(code);
   };
 }

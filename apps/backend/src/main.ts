@@ -113,7 +113,15 @@ app.use('/img', express.static(path.join(process.cwd(), 'public', 'img')));
 // Self-log proof photos ride in the JSON body as base64 data URLs (up to 6 ×
 // ~1.5 MB per the payment-voucher schema), so the default 100 kb limit is far
 // too small — raise it enough to hold a full proof set.
-app.use(express.json({ limit: '12mb' }));
+app.use(express.json({
+  limit: '12mb',
+  verify: (req, _res, buf) => {
+    // Meta signs webhook POSTs with X-Hub-Signature-256 over the raw body.
+    if (req.originalUrl?.includes('/webhooks/whatsapp')) {
+      (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
+    }
+  },
+}));
 app.use(express.urlencoded({ extended: true, limit: '12mb' }));
 app.use(platformAuditMiddleware);
 

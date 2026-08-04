@@ -1,10 +1,5 @@
-import {
-	Briefcase,
-	Building2,
-	ContactRound,
-	Sparkles,
-} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Briefcase, Building2, ContactRound, Sparkles } from "lucide-react";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { SectionHead, SplitTitle } from "./primitives";
@@ -58,6 +53,8 @@ export function HandoffChallenges() {
 				<img
 					src={LANDING_IMAGES.outletVenue}
 					alt=""
+					loading="lazy"
+					decoding="async"
 					className="absolute"
 					style={{
 						top: "-6%",
@@ -114,7 +111,10 @@ export function HandoffChallenges() {
 										</div>
 									</div>
 								</div>
-								<div className="h-px" style={{ background: "var(--hz-line)" }} />
+								<div
+									className="h-px"
+									style={{ background: "var(--hz-line)" }}
+								/>
 								<ul className="hz-pain-list m-0 flex list-none flex-col gap-2.5 p-0">
 									{g.pains.map((p) => (
 										<li
@@ -172,9 +172,7 @@ function FlowNode({
 	const borderColor = isGold
 		? "rgba(242,198,107,.35)"
 		: "rgba(182,124,255,.35)";
-	const glowColor = isGold
-		? "rgba(242,198,107,.4)"
-		: "rgba(182,124,255,.35)";
+	const glowColor = isGold ? "rgba(242,198,107,.4)" : "rgba(182,124,255,.35)";
 
 	return (
 		<div
@@ -286,9 +284,6 @@ function FlowDiagram() {
 						<stop offset="88%" stopColor="#f2c66b" stopOpacity="0.6" />
 						<stop offset="100%" stopColor="#f2c66b" stopOpacity="0" />
 					</linearGradient>
-					<filter id="softblur">
-						<feGaussianBlur stdDeviation="1.2" />
-					</filter>
 				</defs>
 				<path
 					d="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
@@ -303,42 +298,41 @@ function FlowDiagram() {
 					fill="none"
 					strokeDasharray="3 6"
 				/>
-				{Array.from({ length: 6 }).map((_, i) => (
-					<circle key={i} r="4" fill="#f2c66b" filter="url(#softblur)">
+				{Array.from({ length: 3 }).map((_, i) => (
+					<circle key={i} r="3.5" fill="#f2c66b">
 						<animateMotion
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66}s`}
+							begin={`${-i * 1.6}s`}
 							path="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
 						/>
 						<animate
 							attributeName="opacity"
 							values="0;1;1;0"
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66}s`}
+							begin={`${-i * 1.6}s`}
 						/>
 					</circle>
 				))}
-				{Array.from({ length: 6 }).map((_, i) => (
+				{Array.from({ length: 2 }).map((_, i) => (
 					<circle
 						key={`v${i}`}
 						r="2.5"
 						fill="#b67cff"
-						filter="url(#softblur)"
 					>
 						<animateMotion
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66 - 0.33}s`}
+							begin={`${-i * 2.4 - 0.8}s`}
 							path="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
 						/>
 						<animate
 							attributeName="opacity"
 							values="0;1;1;0"
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66 - 0.33}s`}
+							begin={`${-i * 2.4 - 0.8}s`}
 						/>
 					</circle>
 				))}
@@ -347,10 +341,10 @@ function FlowDiagram() {
 				<FlowNode key={n.label} {...n} idx={i} />
 			))}
 			<div
-				className="absolute bottom-0 left-1/2 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border px-5 py-3 text-xs uppercase tracking-[0.14em] backdrop-blur-md"
+				className="absolute bottom-0 left-1/2 flex -translate-x-1/2 items-center gap-3 whitespace-nowrap rounded-full border px-5 py-3 text-xs uppercase tracking-[0.14em]"
 				style={{
 					borderColor: "var(--hz-line-strong)",
-					background: "rgba(10,10,14,.72)",
+					background: "rgba(10,10,14,.9)",
 					fontFamily: "var(--hz-font-mono)",
 					color: "var(--hz-gold)",
 				}}

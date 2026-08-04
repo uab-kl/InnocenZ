@@ -1,1 +1,1 @@
-export { SecuritySettingsSheets as PrSecuritySettingsSheets } from '@agency-portal/components/auth/SecuritySettingsSheets';
+export { SecuritySettingsSheets as PrSecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";

@@ -1,11 +1,11 @@
 import {
 	createContext,
+	type ReactNode,
 	useCallback,
 	useContext,
 	useEffect,
 	useMemo,
 	useState,
-	type ReactNode,
 } from "react";
 import {
 	type LandingLocale,
@@ -67,7 +67,9 @@ export function LandingLocaleProvider({
 export function useLandingLocale() {
 	const ctx = useContext(LandingLocaleContext);
 	if (!ctx) {
-		throw new Error("useLandingLocale must be used within LandingLocaleProvider");
+		throw new Error(
+			"useLandingLocale must be used within LandingLocaleProvider",
+		);
 	}
 	return ctx;
 }

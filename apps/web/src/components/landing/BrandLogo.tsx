@@ -3,7 +3,7 @@ import { LANDING_IMAGES } from "@/lib/landing-assets";
 /** Circular crown + Z mark (gold on dark). */
 const LOGO_MARK_SRC = LANDING_IMAGES.innocenzLogo;
 /** Full lockup — circular mark + gold "InnocenZ" wordmark. */
-const LOGO_HORIZONTAL_SRC = "/innocenz-logo-horizontal.png";
+const LOGO_HORIZONTAL_SRC = "/assets/innocenz-logo-horizontal.png";
 const LOGO_INTRINSIC = { width: 447, height: 434 } as const;
 
 const markClass =
@@ -122,7 +122,9 @@ export function BrandLogo({
 			<div className="flex flex-col">
 				<Wordmark className={s.wordmark} />
 				{showMotto && (
-					<p className={`brand-motto mt-2 text-royal-gold-bright/90 ${s.motto}`}>
+					<p
+						className={`brand-motto mt-2 text-royal-gold-bright/90 ${s.motto}`}
+					>
 						Connect · Engage · Entertain
 					</p>
 				)}
