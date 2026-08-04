@@ -838,6 +838,34 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 (night) — `biome check --write` applied across ALL of `apps/web`. 330 files,
+> +52,972 / −52,576. No behaviour change; typecheck IMPROVED by one.**
+>
+> Done so the save-formatter stops rewriting whole pre-existing files every time one is touched —
+> which had already forced two separate cosmetic commits this session and buried a ~15-line bugfix
+> in ~900 lines of churn.
+>
+> **⚠️ `check --write` is NOT just formatting — it applies safe LINT fixes too.** Two real code
+> changes landed alongside the quotes/tabs/semicolons/rewrapping:
+> 1. **`import * as React` → `import type * as React`** (biome's `useImportType`). This is only
+>    valid where React is used purely in type positions — a file calling `React.useState` would
+>    break. Legal here because the modern JSX transform means React need not be in scope.
+> 2. **Import member reordering** (`{ clsx, type ClassValue }` → `{ type ClassValue, clsx }`).
+>
+> **Verified, not assumed.** `tsc` went **121 → 120 errors** with an identical per-code
+> distribution (63 TS6133, 30 TS2322, 9 TS2353, …), so **no new error appeared** and one
+> pre-existing one was fixed. Then live-checked the three surfaces with the most reformatted
+> components — **agency portal, outlet Ratings, and the landing page — all render with zero console
+> errors.** The typecheck alone was not treated as sufficient: a wrong `import type` conversion can
+> pass `tsc` and still fail at runtime.
+>
+> **Method note worth keeping — "is this diff formatting-only?" needs THREE normalisations.**
+> Stripping whitespace and quotes is not enough because biome also **adds semicolons and trailing
+> commas**; and neither comparison alone is sufficient — **a sorted line-by-line diff catches
+> re-ordering but not re-wrapping, while a concatenated hash catches re-wrapping but not
+> re-ordering.** Using both, plus stripping `; ,`, cut the "suspicious" set from 191 files to 125,
+> and sampling those showed the remainder was the two lint fixes above.
+
 > **4 Aug 2026 (night, housekeeping) — biome formatting only, no behaviour change.**
 >
 > The save-formatter rewrote three pre-existing files that this session touched

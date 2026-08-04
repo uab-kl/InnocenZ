@@ -1,3 +1,4 @@
+import type { LucideIcon } from "lucide-react";
 import {
 	BarChart3,
 	Brain,
@@ -6,14 +7,13 @@ import {
 	Lock,
 	ScanLine,
 	Shield,
+	Smartphone,
 	Sparkles,
 	Star,
-	Smartphone,
 	TrendingUp,
 	Users,
 	Wallet,
 } from "lucide-react";
-import type { LucideIcon } from "lucide-react";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { SectionHead, SplitTitle } from "./primitives";
@@ -135,12 +135,12 @@ export function HandoffAIFeatures() {
 							className="hz-display mt-5 mb-6"
 							style={{ fontSize: "clamp(38px, 5.6vw, 72px)" }}
 						>
-						<SplitTitle
-							prefix={t.ai.titlePrefix}
-							highlight={t.ai.titleHighlight}
-							suffix={t.ai.titleSuffix}
-							accent="violet"
-						/>
+							<SplitTitle
+								prefix={t.ai.titlePrefix}
+								highlight={t.ai.titleHighlight}
+								suffix={t.ai.titleSuffix}
+								accent="violet"
+							/>
 						</h2>
 						<p
 							className="max-w-[520px] text-lg"

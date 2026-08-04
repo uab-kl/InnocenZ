@@ -1,9 +1,16 @@
 import { motion, useReducedMotion } from "motion/react";
-import { heroPortraitFrames, landingGallery, LANDING_IMAGES } from "@/lib/landing-assets";
+import {
+	heroPortraitFrames,
+	LANDING_IMAGES,
+	landingGallery,
+} from "@/lib/landing-assets";
 
 export function HeroBackdrop() {
 	return (
-		<div aria-hidden className="pointer-events-none absolute inset-0 -z-20 overflow-hidden">
+		<div
+			aria-hidden
+			className="pointer-events-none absolute inset-0 -z-20 overflow-hidden"
+		>
 			<div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_40%,color-mix(in_oklab,var(--royal-gold)_18%,transparent),transparent_55%)]" />
 			<div className="absolute left-1/2 top-1/2 h-[520px] w-[520px] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,color-mix(in_oklab,var(--violet)_35%,transparent),transparent_70%)] blur-3xl" />
 			<img
@@ -64,7 +71,9 @@ export function AtmosphereMosaic({
 
 export function VenueStrip({ className = "" }: { className?: string }) {
 	return (
-		<div className={`flex flex-wrap items-center justify-center gap-4 ${className}`}>
+		<div
+			className={`flex flex-wrap items-center justify-center gap-4 ${className}`}
+		>
 			<div className="flex items-center">
 				{landingGallery.slice(0, 6).map((image, i) => (
 					<div

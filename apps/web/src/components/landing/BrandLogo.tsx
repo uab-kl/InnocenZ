@@ -122,7 +122,9 @@ export function BrandLogo({
 			<div className="flex flex-col">
 				<Wordmark className={s.wordmark} />
 				{showMotto && (
-					<p className={`brand-motto mt-2 text-royal-gold-bright/90 ${s.motto}`}>
+					<p
+						className={`brand-motto mt-2 text-royal-gold-bright/90 ${s.motto}`}
+					>
 						Connect · Engage · Entertain
 					</p>
 				)}

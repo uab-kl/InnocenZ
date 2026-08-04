@@ -9,7 +9,7 @@ import {
 	UserCog,
 	UserRound,
 } from "lucide-react";
-import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
@@ -116,9 +116,7 @@ export function DetailField({
 						{value}
 					</a>
 				) : (
-					<div className="break-words text-lg font-medium">
-						{value || "—"}
-					</div>
+					<div className="break-words text-lg font-medium">{value || "—"}</div>
 				)}
 			</div>
 		</div>

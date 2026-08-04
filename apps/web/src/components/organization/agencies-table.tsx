@@ -210,7 +210,9 @@ export function AgenciesTable({
 												</Button>
 											</TableCell>
 											<TableCell>
-												<div className="text-base font-medium">{agency.name}</div>
+												<div className="text-base font-medium">
+													{agency.name}
+												</div>
 												<div className="text-sm text-muted-foreground">
 													SSM {agency.ssmNo}
 												</div>
