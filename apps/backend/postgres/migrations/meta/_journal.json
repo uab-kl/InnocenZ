@@ -610,6 +610,13 @@
       "when": 1786100000000,
       "tag": "0086_user_profile_comcard_dimensions",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1786200000000,
+      "tag": "0087_retire_pr_foundation",
+      "breakpoints": true
     }
   ]
 }

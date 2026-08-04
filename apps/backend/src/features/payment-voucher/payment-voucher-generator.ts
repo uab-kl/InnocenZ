@@ -138,6 +138,8 @@ export class PaymentVoucherGeneratorClass {
           {
             agencyId,
             prId,
+            // Dual-write (0087) — ops will key on user_id after pr is dropped.
+            userId: pr.userId ?? undefined,
             prName: pr.name,
             prIc: pr.icNo ?? undefined,
             outlet: prRows[0]?.outletName ?? undefined,

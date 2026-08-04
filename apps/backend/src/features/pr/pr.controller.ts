@@ -1,16 +1,24 @@
 import { Request, Response } from 'express';
+import { randomUUID } from 'crypto';
 import { PrRepositoryClass } from './pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
-import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
+import {
+  AgencyPrRepository,
+  type AgencyPrEnriched,
+} from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
+import { UserRepositoryClass } from '@/features/user/user.repository';
+import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository';
+import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
+import { RoleRepositoryClass } from '@/features/rbac/role/role.repository';
 import { notify } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { CreatePrSchema, UpdatePrSchema } from '@/schema/pr.schema';
-import { PrFilter, PrStatus, PrTier } from './pr.model';
+import { PrFilter, PrStatus, PrTier, type PrWithProfileType } from './pr.model';
 import { OutletWorkspaceRepositoryClass } from '@/features/outlet-workspace/outlet-workspace.repository.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import type { PayClass } from '@/features/outlet-workspace/outlet-workspace.model.js';
@@ -18,6 +26,73 @@ import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
+
+/** Map agency_pr (+ optional pr bridge) into the personnel list shape the web already uses. */
+function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | null {
+  if (!row.prId) return null;
+  const status: PrStatus =
+    row.prStatus === 'suspended'
+      ? 'suspended'
+      : row.approveStatus === 'approved'
+        ? 'active'
+        : row.approveStatus === 'pending'
+          ? 'pending'
+          : 'inactive';
+  const profileHasValue = [
+    row.profileImage,
+    row.gender,
+    row.race,
+    row.dob,
+    row.nationality,
+    row.portfolioPhotos,
+    row.comcardImage,
+    row.comcardHeightCm,
+    row.comcardWeightKg,
+  ].some((v) => v !== null && v !== undefined);
+  return {
+    id: row.prId,
+    agencyId: row.agencyId,
+    userId: row.userId,
+    name: row.name,
+    nickname: row.nickname,
+    tier: row.tier,
+    status,
+    rejectReason: row.rejectReason,
+    phone: row.phoneNum,
+    email: row.email,
+    icNo: row.idNo,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+    createdBy: row.createdBy,
+    updatedBy: row.updatedBy,
+    profile: profileHasValue
+      ? {
+          profileImage: row.profileImage,
+          gender: row.gender,
+          race: row.race,
+          dob: row.dob != null ? String(row.dob).slice(0, 10) : null,
+          nationality: row.nationality,
+          portfolioPhotos: row.portfolioPhotos,
+          comcardImage: row.comcardImage,
+          comcardHeightCm: row.comcardHeightCm,
+          comcardWeightKg: row.comcardWeightKg,
+          comcardBustCm: row.comcardBustCm,
+          comcardWaistCm: row.comcardWaistCm,
+          comcardHipCm: row.comcardHipCm,
+        }
+      : null,
+  };
+}
+
+function inviteUsername(name: string): string {
+  const slug = name
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_|_$/g, '')
+    .slice(0, 40);
+  return `pr_${slug || 'member'}_${randomUUID().slice(0, 8)}`;
+}
 
 /**
  * A caller is scoped one of three ways: admin (everything), agency member (their
@@ -41,6 +116,10 @@ export class PrControllerClass {
     private agencyPrRepository: AgencyPrRepository,
     private outletWorkspaceRepository: OutletWorkspaceRepositoryClass,
     private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
+    private userRepository: UserRepositoryClass,
+    private userProfileRepository: UserProfileRepositoryClass,
+    private userRoleRepository: UserRoleRepositoryClass,
+    private roleRepository: RoleRepositoryClass,
   ) {}
 
   /**
@@ -141,13 +220,65 @@ export class PrControllerClass {
       }
 
       const { page, pageSize } = parsePaging(req);
+
+      // Agency roster reads membership (agency_pr) + user/user_profile. The
+      // temporary pr.id is kept on each row so assign / sales / PV keep working.
+      if (scope.agencyId && !scope.isAdmin) {
+        const actor = getActor(req);
+        const members = await this.agencyPrRepository.listByAgency(scope.agencyId, {
+          search: req.query.name as string | undefined,
+        });
+
+        const prs: PrWithProfileType[] = [];
+        for (const member of members) {
+          let row = member;
+          if (member.approveStatus === 'approved' && !member.prId) {
+            const bridge = await this.prRepository.ensureOpsBridge({
+              userId: member.userId,
+              agencyId: member.agencyId,
+              actor,
+              tier: member.tier,
+              name: member.name,
+              nickname: member.nickname,
+              phone: member.phoneNum,
+              email: member.email,
+              icNo: member.idNo,
+            });
+            row = { ...member, prId: bridge.id, prStatus: bridge.status };
+          }
+          const mapped = rosterRowFromMembership(row);
+          if (mapped) prs.push(mapped);
+        }
+
+        const status = req.query.status as PrStatus | undefined;
+        const tier = req.query.tier as PrTier | undefined;
+        const filtered = prs.filter((pr) => {
+          if (status && pr.status !== status) return false;
+          if (tier && pr.tier !== tier) return false;
+          return true;
+        });
+        const totalCount = filtered.length;
+        const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+        const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+        return res.status(200).json({
+          success: true,
+          message: 'OK',
+          data: pageRows,
+          pagination: {
+            page,
+            pageSize,
+            totalCount,
+            totalPages,
+            hasNextPage: page < totalPages,
+            hasPrevPage: page > 1,
+          },
+        });
+      }
+
       const filter: PrFilter = {
         status: req.query.status as PrStatus | undefined,
         tier: req.query.tier as PrTier | undefined,
         name: req.query.name as string | undefined,
-        // Admins may optionally filter by any agency; agency users are pinned to
-        // their own. An outlet has no agency — it is pinned by venue instead, so
-        // it sees each staffing agency's PRs but only those who worked for it.
         agencyId: scope.isAdmin
           ? (req.query.agencyId as string | undefined)
           : (scope.agencyId ?? undefined),
@@ -208,14 +339,84 @@ export class PrControllerClass {
       }
 
       const actor = getActor(req);
-      const pr = await this.prRepository.create({
-        ...parsed.data,
-        agencyId, // authoritative — overrides any client-supplied value
-        status: 'active',
-        createdBy: actor,
+      const phone = parsed.data.phone?.trim() || null;
+      const email = parsed.data.email?.trim() || null;
+
+      // Owner invite: stub user + agency_pr (approved) + ops bridge. Person facts
+      // live on user / user_profile — never invent a membership-less pr row.
+      let userId = parsed.data.userId;
+      let createdStub = false;
+      if (!userId && phone) {
+        const existingPhone = await this.userRepository.getUserByLoginMethod('phone', phone);
+        if (existingPhone) userId = existingPhone.id;
+      }
+      if (!userId && email) {
+        const existingEmail = await this.userRepository.getUserByLoginMethod('email', email);
+        if (existingEmail) userId = existingEmail.id;
+      }
+      if (!userId) {
+        const user = await this.userRepository.createUser({
+          username: inviteUsername(parsed.data.nickname || parsed.data.name),
+          phoneNum: phone,
+          email,
+          passwordHash: null,
+          status: 'active',
+          profileImage: null,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+        userId = user.id;
+        createdStub = true;
+        const prRole = await this.roleRepository.getRoleByName('pr');
+        if (prRole) {
+          try {
+            await this.userRoleRepository.assignRoleToUser({
+              userId,
+              roleId: prRole.id,
+              createdBy: actor,
+              updatedBy: actor,
+            });
+          } catch {
+            // Unique (user, role) — ignore if already assigned.
+          }
+        }
+      }
+
+      await this.userProfileRepository.update(userId, {
+        fullName: parsed.data.name,
+        idNo: parsed.data.icNo ?? undefined,
         updatedBy: actor,
       });
-      res.status(201).json({ success: true, message: 'PR created', data: pr });
+      // Never rewrite username on an existing account — that is their login handle.
+      if (createdStub && (phone || email)) {
+        await this.userRepository.updateUser(
+          {
+            ...(phone ? { phoneNum: phone } : {}),
+            ...(email ? { email } : {}),
+            updatedBy: actor,
+          },
+          userId,
+        );
+      }
+
+      await this.agencyPrRepository.upsertLink(userId, agencyId, actor, {
+        approveStatus: 'approved',
+        tier: parsed.data.tier,
+      });
+
+      const pr = await this.prRepository.ensureOpsBridge({
+        userId,
+        agencyId,
+        actor,
+        tier: parsed.data.tier,
+        name: parsed.data.name,
+        nickname: parsed.data.nickname ?? null,
+        phone,
+        email,
+        icNo: parsed.data.icNo ?? null,
+      });
+      const withProfile = await this.prRepository.getById(pr.id);
+      res.status(201).json({ success: true, message: 'PR created', data: withProfile ?? pr });
     } catch (error) {
       logger.error('[PrController.create] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -239,28 +440,62 @@ export class PrControllerClass {
       }
 
       const data = { ...parsed.data };
-      // Agency users cannot move a PR to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
+      const actor = getActor(req);
 
+      // Person facts → user / user_profile; membership tier/approval → agency_pr.
+      if (existing.userId) {
+        if (data.name !== undefined || data.icNo !== undefined) {
+          await this.userProfileRepository.update(existing.userId, {
+            ...(data.name !== undefined ? { fullName: data.name } : {}),
+            ...(data.icNo !== undefined ? { idNo: data.icNo } : {}),
+            updatedBy: actor,
+          });
+        }
+        if (data.phone !== undefined || data.email !== undefined || data.nickname !== undefined) {
+          await this.userRepository.updateUser(
+            {
+              ...(data.phone !== undefined ? { phoneNum: data.phone || null } : {}),
+              ...(data.email !== undefined ? { email: data.email || null } : {}),
+              ...(data.nickname !== undefined ? { username: data.nickname || existing.name } : {}),
+              updatedBy: actor,
+            },
+            existing.userId,
+          );
+        }
+        if (data.tier !== undefined || data.status !== undefined || data.rejectReason !== undefined) {
+          const approveStatus =
+            data.status === 'active'
+              ? ('approved' as const)
+              : data.status === 'inactive'
+                ? ('rejected' as const)
+                : data.status === 'pending'
+                  ? ('pending' as const)
+                  : undefined;
+          await this.agencyPrRepository.updateMembership(
+            existing.agencyId,
+            existing.userId,
+            {
+              ...(data.tier ? { tier: data.tier } : {}),
+              ...(approveStatus ? { approveStatus } : {}),
+              ...(data.status === 'inactive'
+                ? { rejectReason: data.rejectReason ?? null }
+                : data.status === 'active'
+                  ? { rejectReason: null }
+                  : {}),
+            },
+            actor,
+          );
+        }
+      }
 
       const pr = await this.prRepository.update(id, {
         ...data,
-        // Acceptance clears any earlier decline reason — the writer's job, not
-        // every caller's, so re-accepting someone previously declined cannot
-        // leave a stale reason hanging off an active roster member.
         ...(data.status === 'active' ? { rejectReason: null } : {}),
-        updatedBy: getActor(req),
+        updatedBy: actor,
       });
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
-      // The agency's Approvals screen decides a sign-up by writing this status
-      // ('active' = accepted, 'inactive' = rejected), so this transition IS the
-      // join resolution — there is no separate approve endpoint. Only fire when
-      // the status actually MOVED, so ordinary profile edits stay silent.
-      // Only these two are join decisions. `pr_status` also has 'pending' and
-      // 'suspended', and treating "not active" as a rejection would tell a
-      // suspended PR their application was declined — wrong, and alarming to
-      // someone the agency already accepted.
       const JOIN_DECISION: Record<string, boolean> = { active: true, inactive: false };
       const accepted = data.status ? JOIN_DECISION[data.status] : undefined;
 
@@ -272,12 +507,13 @@ export class PrControllerClass {
           body: accepted
             ? 'You can now be scheduled for shifts.'
             : (pr.rejectReason ?? undefined),
-          payload: { prId: pr.id, agencyId: pr.agencyId, status: data.status },
-          actor: getActor(req),
+          payload: { prId: pr.id, agencyId: pr.agencyId, userId: pr.userId, status: data.status },
+          actor,
         });
       }
 
-      res.status(200).json({ success: true, message: 'PR updated', data: pr });
+      const withProfile = await this.prRepository.getById(pr.id);
+      res.status(200).json({ success: true, message: 'PR updated', data: withProfile ?? pr });
     } catch (error) {
       logger.error('[PrController.update] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -296,8 +532,14 @@ export class PrControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const removed = await this.prRepository.remove(id);
-      if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // Detach membership — keep ops history on pr / assignment rows.
+      if (existing.userId) {
+        await this.agencyPrRepository.removeLink(existing.agencyId, existing.userId);
+      }
+      await this.prRepository.update(id, {
+        status: 'inactive',
+        updatedBy: getActor(req),
+      });
       res.status(200).json({ success: true, message: 'PR removed', data: null });
     } catch (error) {
       logger.error('[PrController.remove] Error:', error);

@@ -1,5 +1,6 @@
-import { COUNTRY_BY_CODE, ID_TYPES, MIN_PASSWORD, NRIC_LENGTH } from './constants';
+import { loadPhoneCountryCode } from '../../lib/phone-prefs';
 import { isValidNricFormat, nricMatchesDob } from '../../lib/id-ocr';
+import { COUNTRY_BY_CODE, ID_TYPES, MIN_PASSWORD, NRIC_LENGTH } from './constants';
 
 export type IdType = (typeof ID_TYPES)[number];
 
@@ -81,7 +82,7 @@ export function emptyDraft(): Draft {
 		firstName: '',
 		lastName: '',
 		email: '',
-		phoneCountryCode: null,
+		phoneCountryCode: loadPhoneCountryCode(),
 		phoneNumber: '',
 		nationality: '',
 		idType: '',

@@ -101,6 +101,16 @@ function isUniqueViolation(error: unknown): boolean {
   return e?.code === PG_UNIQUE_VIOLATION || e?.cause?.code === PG_UNIQUE_VIOLATION;
 }
 
+/** Mine ownership: prefer assignment.user_id, fall back to legacy pr.id. */
+function ownsMineAssignment(
+  existing: { prId: string; userId?: string | null },
+  userId: string,
+  pr: { id: string } | null,
+): boolean {
+  if (existing.userId && existing.userId === userId) return true;
+  return !!pr && existing.prId === pr.id;
+}
+
 export class ShiftAssignmentControllerClass {
   constructor(
     private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
@@ -200,17 +210,22 @@ export class ShiftAssignmentControllerClass {
   async listMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
-      if (!pr) {
+      if (!userId) {
         return res.status(200).json({ success: true, message: 'OK', data: [] });
       }
-      const assignments = await this.shiftAssignmentRepository.listForPr(pr.id);
+      const pr = await this.prRepository.getByUserId(userId);
+      const assignments = await this.shiftAssignmentRepository.listForUser(userId);
+      if (assignments.length === 0) {
+        return res.status(200).json({ success: true, message: 'OK', data: [] });
+      }
 
       // Resolve the PR's rate card once per outlet, then fold it onto each row so
       // the mobile app can compute wage/commission/OT/target against real rates
-      // instead of hardcoded percentages.
-      const commissionOnly = pr.tier === 'commission_only';
-      const tierLabel = PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null;
+      // instead of hardcoded percentages. Tier still comes from the ops bridge
+      // until /mine reads agency_pr.tier directly.
+      const tier = pr?.tier ?? 'tier_1';
+      const commissionOnly = tier === 'commission_only';
+      const tierLabel = PR_TIER_TO_OUTLET_LABEL[tier] ?? null;
       // Outlet workspace default (per outlet) + per-shift override (per shift);
       // the override wins field-by-field in mergeRate. The drink menu is resolved
       // per outlet too, so the PR self-log lists this outlet's real drinks.
@@ -231,7 +246,7 @@ export class ShiftAssignmentControllerClass {
       ]);
       const data = assignments.map((a) => ({
         ...a,
-        tier: pr.tier,
+        tier,
         rate: mergeRate(rateByOutlet.get(a.outletId), overrideByShift.get(a.shiftId)),
         drinkMenu: menuByOutlet.get(a.outletId) ?? [],
       }));
@@ -251,13 +266,15 @@ export class ShiftAssignmentControllerClass {
   async checkInMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!userId) {
+        return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+      const pr = await this.prRepository.getByUserId(userId);
 
       const id = paramId(req.params.id);
       const existing = await this.shiftAssignmentRepository.getById(id);
       // Hide assignments outside the caller's scope behind a 404.
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !ownsMineAssignment(existing, userId, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       // leave_approved = excused from the shift; leave_pending is NOT blocked —
@@ -289,7 +306,7 @@ export class ShiftAssignmentControllerClass {
           // audit trail for a disputed shift. Worth a warn, not an error: it is
           // a rejected attempt, not a broken server.
           logger.warn(
-            `[ShiftAssignmentController.checkInMine] Mock location rejected: assignment=${id} pr=${pr.id}`,
+            `[ShiftAssignmentController.checkInMine] Mock location rejected: assignment=${id} pr=${pr?.id ?? userId}`,
           );
         }
         // 422: the request was well-formed, the PR is simply not at the venue.
@@ -360,12 +377,14 @@ export class ShiftAssignmentControllerClass {
   async checkOutMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!userId) {
+        return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+      const pr = await this.prRepository.getByUserId(userId);
 
       const id = paramId(req.params.id);
       const existing = await this.shiftAssignmentRepository.getById(id);
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !ownsMineAssignment(existing, userId, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (!existing.checkInAt) {
@@ -388,16 +407,17 @@ export class ShiftAssignmentControllerClass {
       // with no position instead of a fabricated one.
       if (parsedOut.data.mocked === true) {
         logger.warn(
-          `[ShiftAssignmentController.checkOutMine] Mock location discarded: assignment=${id} pr=${pr.id}`,
+          `[ShiftAssignmentController.checkOutMine] Mock location discarded: assignment=${id} pr=${pr?.id ?? userId}`,
         );
       }
       const outFix = describeDeviceFix({ outlet: outletPinOut, device: parsedOut.data });
 
       const actor = getActor(req);
       const shift = await this.shiftRepository.getById(existing.shiftId);
-      const tierWages = shift
-        ? await this.resolveTierWages(pr, existing.shiftId, shift.outletId)
-        : null;
+      const tierWages =
+        shift && pr
+          ? await this.resolveTierWages(pr, existing.shiftId, shift.outletId)
+          : null;
       // Forgot-to-check-out guard: the stamp is CLAMPED to the shift's
       // scheduled end, so pay locks to the shift's duration — a check-out
       // hours late can't inflate wages/OT by itself. Hours past the window
@@ -468,10 +488,10 @@ export class ShiftAssignmentControllerClass {
         await notifyMany(memberUserIds, {
           kind: 'overtime_pending_approval',
           title: 'Overtime needs approval',
-          body: `${pr.name} worked ${overtime.minutes} min past the scheduled end${shift ? ` on ${shift.shiftDate}` : ''}`,
+          body: `${pr?.name ?? 'PR'} worked ${overtime.minutes} min past the scheduled end${shift ? ` on ${shift.shiftDate}` : ''}`,
           payload: {
             assignmentId: id,
-            prId: pr.id,
+            prId: pr?.id ?? existing.prId,
             shiftId: existing.shiftId,
             scheduledEnd: scheduledEnd?.toISOString() ?? null,
             checkedOutAt: now.toISOString(),
@@ -500,8 +520,10 @@ export class ShiftAssignmentControllerClass {
   async cancelMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!userId) {
+        return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+      const pr = await this.prRepository.getByUserId(userId);
 
       const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
       if (!reason) {
@@ -513,7 +535,7 @@ export class ShiftAssignmentControllerClass {
 
       const id = paramId(req.params.id);
       const existing = await this.shiftAssignmentRepository.getById(id);
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !ownsMineAssignment(existing, userId, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (existing.status === 'cancelled') {
@@ -544,7 +566,7 @@ export class ShiftAssignmentControllerClass {
         agencyId: existing.agencyId,
         assignmentId: id,
         shiftId: existing.shiftId,
-        prName: pr.name,
+        prName: pr?.name ?? 'PR',
         reason: 'cancelled',
         actor,
       });
@@ -565,8 +587,10 @@ export class ShiftAssignmentControllerClass {
   async requestLeaveMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
-      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
-      if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      if (!userId) {
+        return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
+      }
+      const pr = await this.prRepository.getByUserId(userId);
 
       const reason = typeof req.body?.reason === 'string' ? req.body.reason.trim() : '';
       if (!reason) {
@@ -600,7 +624,7 @@ export class ShiftAssignmentControllerClass {
 
       const id = paramId(req.params.id);
       const existing = await this.shiftAssignmentRepository.getById(id);
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !ownsMineAssignment(existing, userId, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (existing.status === 'leave_pending') {
@@ -908,6 +932,7 @@ export class ShiftAssignmentControllerClass {
       try {
         const voucherResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
           prId: assignment.prId,
+          userId: assignment.userId ?? pr?.userId,
           agencyId: assignment.agencyId,
           prName: pr?.name ?? 'PR',
           prIc: pr?.icNo,
@@ -1225,8 +1250,19 @@ export class ShiftAssignmentControllerClass {
         return res.status(404).json({ success: false, message: 'Shift not found', data: null });
       }
 
-      // The PR must belong to the same agency as the shift.
-      const pr = await this.prRepository.getById(parsed.data.prId);
+      // Resolve ops identity: prefer userId (ensure temporary pr bridge), else prId.
+      let pr = parsed.data.prId
+        ? await this.prRepository.getById(parsed.data.prId)
+        : parsed.data.userId
+          ? await this.prRepository.getByUserId(parsed.data.userId)
+          : null;
+      if (!pr && parsed.data.userId) {
+        pr = await this.prRepository.ensureOpsBridge({
+          userId: parsed.data.userId,
+          agencyId: shift.agencyId,
+          actor: getActor(req),
+        });
+      }
       if (!pr) return res.status(404).json({ success: false, message: 'PR not found', data: null });
       if (pr.agencyId !== shift.agencyId) {
         return res.status(400).json({ success: false, message: 'PR belongs to a different agency', data: null });
@@ -1257,6 +1293,8 @@ export class ShiftAssignmentControllerClass {
       const assignment = await this.shiftAssignmentRepository.create({
         shiftId: shift.id,
         prId: pr.id,
+        // Dual-write (0087) — ops will key on user_id after pr is dropped.
+        userId: pr.userId ?? undefined,
         agencyId: shift.agencyId, // authoritative — derived from the shift
         status: parsed.data.status ?? 'assigned',
         // Client override wins; otherwise Post Job / workspace tier wages.

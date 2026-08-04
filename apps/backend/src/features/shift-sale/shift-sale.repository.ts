@@ -44,6 +44,7 @@ export class ShiftSaleRepositoryClass {
         .onConflictDoUpdate({
           target: [ShiftSaleTable.shiftId, ShiftSaleTable.prId],
           set: {
+            userId: data.userId,
             drinkUnits: data.drinkUnits,
             drinkSalesRm: data.drinkSalesRm,
             tipUnits: data.tipUnits,

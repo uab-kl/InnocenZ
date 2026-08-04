@@ -85,8 +85,11 @@ export function useRosterMutations() {
 	});
 
 	const assign = useMutation({
-		mutationFn: (vars: { shiftId: string; prId: string }) =>
-			createShiftAssignment({ shiftId: vars.shiftId, prId: vars.prId }, logout),
+		mutationFn: (vars: { shiftId: string; prId: string; userId?: string }) =>
+			createShiftAssignment(
+				{ shiftId: vars.shiftId, prId: vars.prId, userId: vars.userId },
+				logout,
+			),
 		onSuccess: invalidate,
 	});
 

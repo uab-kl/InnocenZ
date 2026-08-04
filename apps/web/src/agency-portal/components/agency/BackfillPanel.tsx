@@ -107,11 +107,15 @@ function ReplacementSheet({
 	// Closing on success only. The bare mutate() here reported nothing when the
 	// write failed, so a backfill that never landed looked exactly like one that
 	// did — the sheet shut and the slot stayed on the worklist.
-	const assign = async (prId: string) => {
+	const assign = async (prId: string, userId?: string | null) => {
 		if (busy) return;
 		setError(null);
 		try {
-			await rosterMut.assign.mutateAsync({ shiftId: slot.shiftId, prId });
+			await rosterMut.assign.mutateAsync({
+				shiftId: slot.shiftId,
+				prId,
+				userId: userId ?? undefined,
+			});
 			onClose();
 		} catch (err) {
 			setError(
@@ -180,7 +184,7 @@ function ReplacementSheet({
 									type="button"
 									className="iz-btn iz-btn-primary shrink-0 !py-1.5 !text-xs"
 									disabled={busy}
-									onClick={() => assign(c.prId)}
+									onClick={() => assign(c.prId, c.userId)}
 								>
 									{busy ? "Assigning…" : "Assign"}
 								</button>

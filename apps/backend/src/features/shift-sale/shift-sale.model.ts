@@ -4,6 +4,7 @@ import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { PrTable } from '@/features/pr/pr.model';
+import { UserTable } from '@/features/user/user.model';
 
 /**
  * Floor sales a PR generated on a shift — the live-ops capture that was missing
@@ -24,6 +25,8 @@ export const ShiftSaleTable = MainSchema.table(
     prId: uuid('pr_id')
       .notNull()
       .references(() => PrTable.id, { onDelete: 'cascade' }),
+    /** Preferred ops key (0087) — replacing `pr_id` once cut over. */
+    userId: uuid('user_id').references(() => UserTable.id, { onDelete: 'set null' }),
     // Denormalized from the shift for scoping (outlet/agency) and day grouping.
     outletId: uuid('outlet_id')
       .notNull()

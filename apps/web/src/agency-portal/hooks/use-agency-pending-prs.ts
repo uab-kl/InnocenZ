@@ -7,10 +7,12 @@ import { useAuth } from "@/lib/auth-context";
 import {
 	type CreatePrPersonnelInput,
 	createPrPersonnel,
-	fetchPrPersonnel,
-	type PrPersonnel,
-	updatePrPersonnel,
 } from "@/services/pr-personnel";
+import {
+	fetchAgencyPrs,
+	setAgencyPrApproval,
+	type AgencyPr,
+} from "@/services/agency";
 
 /** Fields the owner-invite ("Add PR") sheet collects. */
 export interface AgencyPrInvite {
@@ -21,26 +23,23 @@ export interface AgencyPrInvite {
 }
 
 /**
- * Map a backend pending `PrPersonnel` into the demo `PendingPR` shape the
- * Approvals list renders. Backend-backed fields carry real data (name, IC,
- * contact); the verification docs (IC photos, selfie, gallery, comcard) and
- * physical stats have no backend, so they stay empty — the accepted hybrid
- * tradeoff (real identity, placeholder documents).
+ * Map an agency_pr pending membership into the Approvals list shape.
+ * Identity comes from user / user_profile (not the deprecated pr table).
  */
-function pendingPrFromBackend(pr: PrPersonnel): PendingPR {
+function pendingPrFromMembership(pr: AgencyPr): PendingPR {
 	return {
-		id: pr.id,
+		id: pr.userId,
 		name: pr.nickname?.trim() || pr.name,
 		icName: pr.name,
 		languages: "",
-		ic: pr.icNo ?? undefined,
-		mobile: pr.phone ?? undefined,
+		ic: pr.idNo ?? undefined,
+		mobile: pr.phoneNum ?? undefined,
 		email: pr.email ?? undefined,
 		hasIcPhotos: false,
 		hasSelfie: false,
 		portfolioPhotos: [],
 		submittedAt: pr.createdAt
-			? fmtDateLabelFromIso(pr.createdAt.slice(0, 10))
+			? fmtDateLabelFromIso(String(pr.createdAt).slice(0, 10))
 			: undefined,
 		status: "pending",
 		agencyId: pr.agencyId,
@@ -48,33 +47,26 @@ function pendingPrFromBackend(pr: PrPersonnel): PendingPR {
 }
 
 /**
- * Backend-driven Approvals queue (PR sign-ups) for the agency portal.
- *
- * Gated on a real session (`getAgencyIdentity()`); demo sessions get `backed:
- * false` and the screen keeps its demo store. Reads real pending PRs
- * (`status=pending`, agency-scoped server-side), and exposes the writes the
- * backend supports: approve → `active`, reject → `inactive` (no reject-reason
- * field, so the reason isn't persisted), and the owner invite → create a PR
- * record. Shares the roster's `["roster","prs"]` cache so an approved PR shows
- * up on the roster. Agency-link requests + cutlost requests have no backend and
- * stay on the demo store.
+ * Backend-driven Approvals queue — pending `agency_pr` memberships for this
+ * agency (mobile signup writes these). Approve/reject patches agency_pr, not pr.
  */
 export function useAgencyPendingPrs() {
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
+	const agencyId = identity?.agencyId ?? "";
 
 	const query = useQuery({
-		queryKey: ["agency", "pending-prs"],
+		queryKey: ["agency", "pending-prs", agencyId],
 		queryFn: () =>
-			fetchPrPersonnel({ status: "pending", pageSize: 200 }, logout),
-		enabled: backed,
+			fetchAgencyPrs(agencyId, { approveStatus: "pending" }, logout),
+		enabled: backed && Boolean(agencyId),
 		staleTime: 30_000,
 	});
 
 	const signups = useMemo<PendingPR[]>(
-		() => (query.data?.data ?? []).map(pendingPrFromBackend),
+		() => (query.data?.data ?? []).map(pendingPrFromMembership),
 		[query.data],
 	);
 
@@ -84,10 +76,18 @@ export function useAgencyPendingPrs() {
 	};
 
 	const statusMut = useMutation({
-		mutationFn: (vars: { id: string; status: string; rejectReason?: string }) =>
-			updatePrPersonnel(
-				vars.id,
-				{ status: vars.status, rejectReason: vars.rejectReason },
+		mutationFn: (vars: {
+			userId: string;
+			approveStatus: "approved" | "rejected";
+			rejectReason?: string;
+		}) =>
+			setAgencyPrApproval(
+				agencyId,
+				vars.userId,
+				{
+					approveStatus: vars.approveStatus,
+					rejectReason: vars.rejectReason,
+				},
 				logout,
 			),
 		onSuccess: invalidate,
@@ -102,9 +102,15 @@ export function useAgencyPendingPrs() {
 		backed,
 		signups,
 		isLoading: query.isLoading,
-		approve: (id: string) => statusMut.mutate({ id, status: "active" }),
-		reject: (id: string, reason?: string) =>
-			statusMut.mutate({ id, status: "inactive", rejectReason: reason }),
+		/** `id` is the pending member's userId. */
+		approve: (userId: string) =>
+			statusMut.mutate({ userId, approveStatus: "approved" }),
+		reject: (userId: string, reason?: string) =>
+			statusMut.mutate({
+				userId,
+				approveStatus: "rejected",
+				rejectReason: reason,
+			}),
 		invite: (input: AgencyPrInvite) =>
 			createMut.mutate({
 				name: input.name,

@@ -5,15 +5,23 @@ import { shiftAssignmentStatusValues } from '@/features/shift-assignment/shift-a
 // matching the numeric(12,2) column.
 const money = z.number().nonnegative().transform((n) => n.toFixed(2));
 
-export const CreateShiftAssignmentSchema = z.object({
-  shiftId: z.string().uuid('Invalid shift ID'),
-  prId: z.string().uuid('Invalid PR ID'),
-  status: z.enum(shiftAssignmentStatusValues).optional(),
-  payAmount: money.optional(),
-  checkInAt: z.string().datetime({ message: 'Invalid check-in timestamp' }).optional(),
-  checkOutAt: z.string().datetime({ message: 'Invalid check-out timestamp' }).optional(),
-  notes: z.string().max(500, 'Notes is too long').optional(),
-});
+export const CreateShiftAssignmentSchema = z
+  .object({
+    shiftId: z.string().uuid('Invalid shift ID'),
+    /** Preferred ops key — resolved to a temporary pr bridge until Phase C. */
+    userId: z.string().uuid('Invalid user ID').optional(),
+    /** @deprecated Prefer userId. Kept for roster UI during dual-write. */
+    prId: z.string().uuid('Invalid PR ID').optional(),
+    status: z.enum(shiftAssignmentStatusValues).optional(),
+    payAmount: money.optional(),
+    checkInAt: z.string().datetime({ message: 'Invalid check-in timestamp' }).optional(),
+    checkOutAt: z.string().datetime({ message: 'Invalid check-out timestamp' }).optional(),
+    notes: z.string().max(500, 'Notes is too long').optional(),
+  })
+  .refine((v) => Boolean(v.userId || v.prId), {
+    message: 'userId or prId is required',
+    path: ['userId'],
+  });
 
 // shiftId/prId are immutable after assignment — only status/pay/times/notes change.
 export const UpdateShiftAssignmentSchema = z.object({

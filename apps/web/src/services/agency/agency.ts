@@ -246,6 +246,24 @@ export async function fetchAgencyPrs(
 	};
 }
 
+/** Approvals — accept / decline membership by user_id (agency_pr). */
+export async function setAgencyPrApproval(
+	agencyId: string,
+	userId: string,
+	body: { approveStatus: "approved" | "rejected"; rejectReason?: string },
+	onRefreshFail: () => void,
+): Promise<{ success: boolean; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{ success: boolean; message: string }>(
+		`/agency/${agencyId}/prs/${userId}/approval`,
+		body,
+	);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+	};
+}
+
 export async function fetchAgencyMembershipsByUsers(
 	userIds: string[],
 	onRefreshFail: () => void,

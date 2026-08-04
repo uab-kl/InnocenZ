@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import { ShiftSaleRepositoryClass } from './shift-sale.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
+import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -21,6 +22,7 @@ export class ShiftSaleControllerClass {
     private shiftSaleRepository: ShiftSaleRepositoryClass,
     private shiftRepository: ShiftRepositoryClass,
     private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
+    private prRepository: PrRepositoryClass,
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
@@ -83,13 +85,25 @@ export class ShiftSaleControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      let pr = parsed.data.prId
+        ? await this.prRepository.getById(parsed.data.prId)
+        : parsed.data.userId
+          ? await this.prRepository.getByUserId(parsed.data.userId)
+          : null;
+      if (!pr) {
+        return res.status(404).json({ success: false, message: 'PR not found', data: null });
+      }
+
       // The PR must actually be staffing this shift — sales cannot be attributed
       // to a PR who was never assigned, and a cancelled/no-show PR generated no
       // floor sales (the cost side already excludes those statuses, so exclude
       // them here too for symmetry).
       const assignments = await this.shiftAssignmentRepository.listByShift(shift.id);
       const isStaffing = assignments.some(
-        (a) => a.prId === parsed.data.prId && a.status !== 'cancelled' && a.status !== 'no_show',
+        (a) =>
+          (a.prId === pr!.id || (pr!.userId && a.userId === pr!.userId)) &&
+          a.status !== 'cancelled' &&
+          a.status !== 'no_show',
       );
       if (!isStaffing) {
         return res.status(400).json({ success: false, message: 'PR is not actively assigned to this shift', data: null });
@@ -103,7 +117,9 @@ export class ShiftSaleControllerClass {
       const actor = getActor(req);
       const sale = await this.shiftSaleRepository.upsert({
         shiftId: shift.id,
-        prId: parsed.data.prId,
+        prId: pr.id,
+        // Dual-write (0087) — ops will key on user_id after pr is dropped.
+        userId: pr.userId ?? parsed.data.userId ?? undefined,
         // Derived from the shift — authoritative, cannot be forged by the client.
         outletId: shift.outletId,
         agencyId: shift.agencyId,

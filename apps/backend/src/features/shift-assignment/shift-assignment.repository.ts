@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lte, notInArray, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, notInArray, or, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -107,6 +107,7 @@ export type BackfillSlot = {
 /** One ranked replacement option for a released slot. */
 export type ReplacementCandidate = {
   prId: string;
+  userId: string | null;
   prName: string;
   tier: string;
   /** Completed shifts this PR has worked at the slot's outlet. */
@@ -260,7 +261,57 @@ export class ShiftAssignmentRepositoryClass {
       }
     >
   > {
+    return this.listMineAssignments({ prId });
+  }
+
+  /**
+   * PR mobile `/mine` — prefer `user_id` (0087), fall back to legacy `pr_id`.
+   */
+  async listForUser(userId: string): Promise<
+    Array<
+      ShiftAssignmentType & {
+        shiftDate: string;
+        slot: string | null;
+        eventName: string | null;
+        payPerHour: string;
+        outletId: string;
+        outletName: string | null;
+        outletAddress: string | null;
+        outletLat: number | null;
+        outletLng: number | null;
+        outletGeoFenceRadiusM: number;
+      }
+    >
+  > {
+    return this.listMineAssignments({ userId });
+  }
+
+  private async listMineAssignments(filter: { prId?: string; userId?: string }): Promise<
+    Array<
+      ShiftAssignmentType & {
+        shiftDate: string;
+        slot: string | null;
+        eventName: string | null;
+        payPerHour: string;
+        outletId: string;
+        outletName: string | null;
+        outletAddress: string | null;
+        outletLat: number | null;
+        outletLng: number | null;
+        outletGeoFenceRadiusM: number;
+      }
+    >
+  > {
     try {
+      const ownership = filter.userId
+        ? or(
+            eq(ShiftAssignmentTable.userId, filter.userId),
+            eq(PrTable.userId, filter.userId),
+          )
+        : filter.prId
+          ? eq(ShiftAssignmentTable.prId, filter.prId)
+          : sql`false`;
+
       const rows = await db
         .select({
           assignment: ShiftAssignmentTable,
@@ -284,7 +335,8 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
-        .where(eq(ShiftAssignmentTable.prId, prId))
+        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .where(ownership)
         .orderBy(ShiftTable.shiftDate);
       return rows.map((row) => {
         // "50000 Kuala Lumpur" — postcode + state read as one piece.
@@ -457,6 +509,7 @@ export class ShiftAssignmentRepositoryClass {
       const prs = await db
         .select({
           prId: PrTable.id,
+          userId: PrTable.userId,
           prName: prDisplayNameSql,
           tier: PrTable.tier,
         })
@@ -485,7 +538,13 @@ export class ShiftAssignmentRepositoryClass {
       const timesByPr = new Map(experienceRows.map((r) => [r.prId, r.times]));
 
       return free
-        .map((p) => ({ ...p, timesAtOutlet: timesByPr.get(p.prId) ?? 0 }))
+        .map((p) => ({
+          prId: p.prId,
+          userId: p.userId,
+          prName: p.prName,
+          tier: p.tier,
+          timesAtOutlet: timesByPr.get(p.prId) ?? 0,
+        }))
         .sort(
           (a, b) =>
             Number(b.tier === params.preferTier) - Number(a.tier === params.preferTier) ||

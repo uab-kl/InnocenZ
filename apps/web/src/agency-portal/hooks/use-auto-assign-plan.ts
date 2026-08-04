@@ -134,7 +134,11 @@ export function useAutoAssignPlan(scope: "today" | "week" = "today") {
 			for (const pair of valid) {
 				try {
 					await createShiftAssignment(
-						{ shiftId: pair.shiftId, prId: pair.prId },
+						{
+							shiftId: pair.shiftId,
+							prId: pair.prId,
+							userId: pair.userId ?? undefined,
+						},
 						logout,
 					);
 					assigned += 1;

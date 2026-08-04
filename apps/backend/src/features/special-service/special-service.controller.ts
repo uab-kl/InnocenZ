@@ -187,14 +187,18 @@ export class SpecialServiceControllerClass {
         hasPrevPage: false,
       };
       const userId = req.user?.id;
-      const pr = userId ? await this.prRepository.getByUserId(userId) : null;
-      if (!pr) {
+      if (!userId) {
         return res
           .status(200)
           .json({ success: true, message: 'OK', data: [], pagination: emptyPage });
       }
+      // Prefer posting_user_id (0087); fall back to legacy posting_pr_id bridge.
+      const pr = await this.prRepository.getByUserId(userId);
       const { records, totalCount } = await this.repository.listPaginated({
-        filter: { postingPrId: pr.id },
+        filter: {
+          postingUserId: userId,
+          ...(pr ? { postingPrId: pr.id } : {}),
+        },
         page,
         pageSize,
         order: this.parseOrder(req),
@@ -287,6 +291,7 @@ export class SpecialServiceControllerClass {
       // its pr.id is resolved server-side from the signed-in user account rather
       // than trusted from the client.
       let postingPrId = parsed.data.postingPrId ?? null;
+      let postingUserId: string | null = null;
       if (initiatedBy === 'pr') {
         const userId = req.user?.id;
         const pr = userId ? await this.prRepository.getByUserId(userId) : null;
@@ -298,6 +303,7 @@ export class SpecialServiceControllerClass {
           });
         }
         postingPrId = pr.id;
+        postingUserId = userId ?? pr.userId ?? null;
       }
 
       const record = await this.repository.create({
@@ -312,6 +318,7 @@ export class SpecialServiceControllerClass {
         postingAgencyId: parsed.data.postingAgencyId ?? null,
         postingAgencyName: parsed.data.postingAgencyName ?? null,
         postingPrId,
+        postingUserId,
         scheduledFor: parsed.data.scheduledFor ?? null,
         createdBy: actor,
         updatedBy: actor,

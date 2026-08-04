@@ -12,6 +12,7 @@ import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { PrTable } from '@/features/pr/pr.model';
+import { UserTable } from '@/features/user/user.model';
 
 // Roster lifecycle for a PR on a shift. Mirrors the frontend live-workforce
 // states. leave_pending/leave_approved are the PR MC/Leave flow: the PR files a
@@ -62,6 +63,8 @@ export const ShiftAssignmentTable = MainSchema.table(
     prId: uuid('pr_id')
       .notNull()
       .references(() => PrTable.id, { onDelete: 'cascade' }),
+    /** Preferred ops key (0087) — replacing `pr_id` once cut over. */
+    userId: uuid('user_id').references(() => UserTable.id, { onDelete: 'set null' }),
     status: shiftAssignmentStatusEnum('status').notNull().default('assigned'),
     payAmount: numeric('pay_amount', { precision: 12, scale: 2 }).notNull().default('0'),
     checkInAt: timestamp('check_in_at', { withTimezone: true }),

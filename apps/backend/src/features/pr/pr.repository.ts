@@ -6,7 +6,15 @@ import { ShiftTable } from '@/features/shift/shift.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
-import { PrTable, PrInsertType, PrType, PrFilter, PrProfile, PrWithProfileType } from './pr.model';
+import {
+  PrTable,
+  PrInsertType,
+  PrType,
+  PrFilter,
+  PrProfile,
+  PrWithProfileType,
+  type PrTier,
+} from './pr.model';
 
 // Comcard / identity columns exposed alongside each `pr` row. They live on the
 // linked user account, so the read paths left-join it — that is the same source
@@ -109,6 +117,54 @@ export class PrRepositoryClass {
       logger.error('[PrRepository.getByUserId] Error:', error);
       return null;
     }
+  }
+
+  /**
+   * Temporary ops bridge while shift/PV/sale still require `pr.id`.
+   * Creates (or refreshes) a `pr` row from `user` + `user_profile` so approved
+   * `agency_pr` members can be scheduled. Drop once ops key only on `user_id`.
+   */
+  async ensureOpsBridge(input: {
+    userId: string;
+    agencyId: string;
+    actor: string;
+    tier?: PrTier;
+    name?: string;
+    nickname?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    icNo?: string | null;
+  }): Promise<PrType> {
+    const existing = await this.getByUserId(input.userId);
+    if (existing) {
+      const patched = await this.update(existing.id, {
+        agencyId: input.agencyId,
+        status: 'active',
+        rejectReason: null,
+        ...(input.tier ? { tier: input.tier } : {}),
+        ...(input.name ? { name: input.name } : {}),
+        ...(input.nickname !== undefined ? { nickname: input.nickname } : {}),
+        ...(input.phone !== undefined ? { phone: input.phone } : {}),
+        ...(input.email !== undefined ? { email: input.email } : {}),
+        ...(input.icNo !== undefined ? { icNo: input.icNo } : {}),
+        updatedBy: input.actor,
+      });
+      return patched ?? existing;
+    }
+
+    return this.create({
+      agencyId: input.agencyId,
+      userId: input.userId,
+      name: input.name?.trim() || 'PR',
+      nickname: input.nickname ?? undefined,
+      tier: input.tier ?? 'tier_1',
+      status: 'active',
+      phone: input.phone ?? undefined,
+      email: input.email ?? undefined,
+      icNo: input.icNo ?? undefined,
+      createdBy: input.actor,
+      updatedBy: input.actor,
+    });
   }
 
   /**

@@ -470,15 +470,26 @@ export class PaymentVoucherRepositoryClass {
   // the weekly generator would otherwise create — existsForPrWeek makes the two
   // idempotent). Each self-log / wages seal is a single line on it.
 
+  /** Own a voucher by temporary pr.id and/or preferred user_id (0087). */
+  private ownershipOf(prId: string, userId?: string | null) {
+    return userId
+      ? or(eq(PaymentVoucherTable.prId, prId), eq(PaymentVoucherTable.userId, userId))
+      : eq(PaymentVoucherTable.prId, prId);
+  }
+
   /** The PR's current-week draft voucher (pending_review) with its lines, or null. */
-  async getCurrentWeekDraft(prId: string, weekStart: string): Promise<PaymentVoucherWithLines | null> {
+  async getCurrentWeekDraft(
+    prId: string,
+    weekStart: string,
+    userId?: string | null,
+  ): Promise<PaymentVoucherWithLines | null> {
     try {
       const [voucher] = await db
         .select()
         .from(PaymentVoucherTable)
         .where(
           and(
-            eq(PaymentVoucherTable.prId, prId),
+            this.ownershipOf(prId, userId),
             eq(PaymentVoucherTable.weekStart, weekStart),
             eq(PaymentVoucherTable.status, 'pending_review'),
           ),
@@ -498,16 +509,17 @@ export class PaymentVoucherRepositoryClass {
    * signed, paid…) with its lines — used for the Payment "Last week" view. The
    * most recently created one wins if more than one exists.
    */
-  async getWeekVoucher(prId: string, weekStart: string): Promise<PaymentVoucherWithLines | null> {
+  async getWeekVoucher(
+    prId: string,
+    weekStart: string,
+    userId?: string | null,
+  ): Promise<PaymentVoucherWithLines | null> {
     try {
       const [voucher] = await db
         .select()
         .from(PaymentVoucherTable)
         .where(
-          and(
-            eq(PaymentVoucherTable.prId, prId),
-            eq(PaymentVoucherTable.weekStart, weekStart),
-          ),
+          and(this.ownershipOf(prId, userId), eq(PaymentVoucherTable.weekStart, weekStart)),
         )
         .orderBy(desc(PaymentVoucherTable.createdAt))
         .limit(1);
@@ -527,12 +539,16 @@ export class PaymentVoucherRepositoryClass {
    */
   async listHistoryForPr(
     prId: string,
-    opts?: { statuses?: PaymentVoucherStatus[]; excludeWeekStart?: string },
+    opts?: {
+      statuses?: PaymentVoucherStatus[];
+      excludeWeekStart?: string;
+      userId?: string | null;
+    },
   ): Promise<PaymentVoucherWithLines[]> {
     try {
       const statuses = opts?.statuses ?? (['signed', 'paid'] as PaymentVoucherStatus[]);
       const conditions = [
-        eq(PaymentVoucherTable.prId, prId),
+        this.ownershipOf(prId, opts?.userId),
         inArray(PaymentVoucherTable.status, statuses),
       ];
       if (opts?.excludeWeekStart) {
@@ -699,6 +715,7 @@ export class PaymentVoucherRepositoryClass {
    */
   async getOrCreateCurrentWeekDraft(data: {
     prId: string;
+    userId?: string | null;
     agencyId: string;
     prName: string;
     prIc?: string | null;
@@ -711,12 +728,16 @@ export class PaymentVoucherRepositoryClass {
     | { ok: false; reason: string; existing: PaymentVoucherType }
   > {
     try {
-      const existing = await this.getCurrentWeekDraft(data.prId, data.weekStart);
+      const existing = await this.getCurrentWeekDraft(
+        data.prId,
+        data.weekStart,
+        data.userId,
+      );
       if (existing) return { ok: true, voucher: existing };
 
       // No DRAFT — but is there a voucher for this week at all? Checked across
       // every status precisely because the draft lookup cannot see one.
-      const closed = await this.getWeekVoucher(data.prId, data.weekStart);
+      const closed = await this.getWeekVoucher(data.prId, data.weekStart, data.userId);
       if (closed) {
         return {
           ok: false,
@@ -731,6 +752,8 @@ export class PaymentVoucherRepositoryClass {
       const values = {
         agencyId: data.agencyId,
         prId: data.prId,
+        // Dual-write (0087) — ops will key on user_id after pr is dropped.
+        userId: data.userId ?? undefined,
         prName: data.prName,
         prIc: data.prIc ?? undefined,
         outlet: data.outlet ?? undefined,

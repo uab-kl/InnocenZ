@@ -89,7 +89,11 @@ export function RosterAssignDialog({
 	const handleSubmit = (e: FormEvent) => {
 		e.preventDefault();
 		if (!isValid || assign.isPending) return;
-		assign.mutate({ shiftId, prId }, { onSuccess: handleClose });
+		const pr = prs.find((p) => p.id === prId);
+		assign.mutate(
+			{ shiftId, prId, userId: pr?.userId ?? undefined },
+			{ onSuccess: handleClose },
+		);
 	};
 
 	const shiftsLoading = shiftsQuery.isLoading || outletsQuery.isLoading;

@@ -33,6 +33,13 @@ router.patch('/:id/approve', requireAdmin, agencyController.approve.bind(agencyC
 router.patch('/:id/suspend', requireAdmin, agencyController.suspend.bind(agencyController));
 
 router.get('/:id/prs', agencyController.listAgencyPrs.bind(agencyController));
+// Approvals write path — membership by user_id (not deprecated pr.id).
+router.patch(
+  '/:id/prs/:userId/approval',
+  requireRole('admin', 'agency'),
+  agencyOwnerOfParam,
+  agencyController.setAgencyPrApproval.bind(agencyController),
+);
 
 // Membership IS identity. An agency_user row is what requireAgencySubRole and
 // resolveOrgScope() both read to decide who a caller is, so whoever can write

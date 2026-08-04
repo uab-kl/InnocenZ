@@ -115,7 +115,6 @@ export const subscriptionController = new SubscriptionControllerClass(subscripti
 
 export const agencyRepository = new AgencyRepositoryClass();
 export const agencyMemberRepository = new AgencyMemberRepositoryClass();
-export const agencyController = new AgencyControllerClass(agencyRepository, agencyMemberRepository, agencyPrRepository);
 
 export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();
@@ -162,6 +161,14 @@ export const adminRequestController = new AdminRequestControllerClass(
 );
 
 export const prRepository = new PrRepositoryClass();
+export const agencyController = new AgencyControllerClass(
+  agencyRepository,
+  agencyMemberRepository,
+  agencyPrRepository,
+  prRepository,
+  userRepository,
+  userProfileRepository,
+);
 
 export const specialServiceRepository = new SpecialServiceRepositoryClass();
 export const specialServiceController = new SpecialServiceControllerClass(
@@ -180,7 +187,19 @@ export const ratingController = new RatingControllerClass(ratingRepository, prRe
 // Takes no constructor args, so the move up is free.
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 
-export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository, agencyPrRepository, outletWorkspaceRepository, shiftAssignmentRepository);
+export const prController = new PrControllerClass(
+  prRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+  agencyPrRepository,
+  outletWorkspaceRepository,
+  shiftAssignmentRepository,
+  userRepository,
+  userProfileRepository,
+  userRoleRepository,
+  roleRepository,
+);
 
 export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository, shiftAssignmentRepository);
@@ -200,7 +219,15 @@ export const outletSwapRepository = new OutletSwapRepositoryClass();
 export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const shiftSaleRepository = new ShiftSaleRepositoryClass();
-export const shiftSaleController = new ShiftSaleControllerClass(shiftSaleRepository, shiftRepository, shiftAssignmentRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const shiftSaleController = new ShiftSaleControllerClass(
+  shiftSaleRepository,
+  shiftRepository,
+  shiftAssignmentRepository,
+  prRepository,
+  agencyMemberRepository,
+  authRepository,
+  outletMemberRepository,
+);
 
 export const paymentVoucherGenerator = new PaymentVoucherGeneratorClass(shiftAssignmentRepository, paymentVoucherRepository, prRepository);
 

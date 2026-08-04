@@ -60,6 +60,7 @@ export interface OpenShift {
 export interface AutoAssignPair {
 	shiftId: string;
 	prId: string;
+	userId?: string | null;
 	prName: string;
 	prTier: string | null;
 	outletName: string;
@@ -270,6 +271,7 @@ export function buildAutoAssignPlan(params: {
 			pairs.push({
 				shiftId: target.shiftId,
 				prId: pick.id,
+				userId: pick.userId,
 				prName: prDisplayName(pick),
 				prTier: pick.tier,
 				outletName: target.outletName,

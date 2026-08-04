@@ -360,6 +360,15 @@ export class PaymentVoucherControllerClass {
     return userId ? this.prRepository.getByUserId(userId) : null;
   }
 
+  /** Mine ownership: prefer voucher.user_id (0087), fall back to legacy pr.id. */
+  private ownsMineVoucher(
+    voucher: { prId?: string | null; userId?: string | null },
+    pr: PrType,
+  ): boolean {
+    if (voucher.userId && pr.userId && voucher.userId === pr.userId) return true;
+    return voucher.prId === pr.id;
+  }
+
   /**
    * Admins see everything; every other caller is confined to the agency they
    * belong to (resolved from the DB, never trusted from the request body).
@@ -870,7 +879,11 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const { weekStart, weekEnd } = weekBounds();
-      const draft = await this.paymentVoucherRepository.getCurrentWeekDraft(pr.id, weekStart);
+      const draft = await this.paymentVoucherRepository.getCurrentWeekDraft(
+        pr.id,
+        weekStart,
+        pr.userId,
+      );
       // This is the THIS-WEEK section, where the PR watches the agency approve
       // what they logged — so the receipt states have to come with the lines.
       const statuses = draft
@@ -904,7 +917,11 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const { weekStart, weekEnd } = previousWeekBounds();
-      const voucher = await this.paymentVoucherRepository.getWeekVoucher(pr.id, weekStart);
+      const voucher = await this.paymentVoucherRepository.getWeekVoucher(
+        pr.id,
+        weekStart,
+        pr.userId,
+      );
       // The LAST-WEEK section is where disputes are raised, and whether a line
       // may be disputed depends on its receipt's state — so this read carries
       // the same statuses as this-week rather than guessing from `source`.
@@ -1022,6 +1039,7 @@ export class PaymentVoucherControllerClass {
       const vouchers = await this.paymentVoucherRepository.listHistoryForPr(pr.id, {
         statuses: ['pending_review', 'sent', 'signed', 'paid', 'disputed'],
         excludeWeekStart: currentWeekStart,
+        userId: pr.userId,
       });
 
       // One receipt read per week, so a past line reports the state it actually
@@ -1081,6 +1099,7 @@ export class PaymentVoucherControllerClass {
 
       const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
         prId: pr.id,
+        userId: pr.userId,
         agencyId: pr.agencyId,
         prName: pr.name,
         prIc: pr.icNo,
@@ -1160,6 +1179,7 @@ export class PaymentVoucherControllerClass {
 
       const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
         prId: pr.id,
+        userId: pr.userId,
         agencyId: pr.agencyId,
         prName: pr.name,
         prIc: pr.icNo,
@@ -1506,7 +1526,7 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const owned = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
-      if (!owned || owned.voucher.prId !== pr.id) {
+      if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (owned.voucher.status !== 'pending_review') {
@@ -1605,7 +1625,7 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const owned = await this.paymentVoucherRepository.getLineWithVoucher(lineId);
-      if (!owned || owned.voucher.prId !== pr.id) {
+      if (!owned || !this.ownsMineVoucher(owned.voucher, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (owned.voucher.status !== 'pending_review') {
@@ -1700,7 +1720,7 @@ export class PaymentVoucherControllerClass {
       const existing = await this.paymentVoucherRepository.getById(voucherId);
       // Same rule as the dispute routes: someone else's voucher is a 404, never
       // a 403, so the response does not confirm the id exists.
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !this.ownsMineVoucher(existing, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
@@ -1786,7 +1806,7 @@ export class PaymentVoucherControllerClass {
       const voucherId = paramId(req.params.voucherId);
       const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
       // Someone else's voucher is a 404, never a 403 — same rule as sign/dispute.
-      if (!bundle || bundle.voucher.prId !== pr.id) {
+      if (!bundle || !this.ownsMineVoucher(bundle.voucher, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
@@ -1849,7 +1869,7 @@ export class PaymentVoucherControllerClass {
 
       const voucherId = paramId(req.params.voucherId);
       const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
-      if (!bundle || bundle.voucher.prId !== pr.id) {
+      if (!bundle || !this.ownsMineVoucher(bundle.voucher, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
@@ -1888,7 +1908,7 @@ export class PaymentVoucherControllerClass {
 
       const voucherId = paramId(req.params.voucherId);
       const existing = await this.paymentVoucherRepository.getById(voucherId);
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !this.ownsMineVoucher(existing, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
@@ -2005,7 +2025,7 @@ export class PaymentVoucherControllerClass {
       const voucherId = paramId(req.params.voucherId);
       const existing = await this.paymentVoucherRepository.getById(voucherId);
       // Hide vouchers that aren't this PR's own behind a 404 (never 403-leak).
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !this.ownsMineVoucher(existing, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (!PaymentVoucherControllerClass.DISPUTABLE_STATUSES.includes(existing.status)) {
@@ -2135,7 +2155,7 @@ export class PaymentVoucherControllerClass {
 
       const voucherId = paramId(req.params.voucherId);
       const existing = await this.paymentVoucherRepository.getById(voucherId);
-      if (!existing || existing.prId !== pr.id) {
+      if (!existing || !this.ownsMineVoucher(existing, pr)) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       const parsed = PrWithdrawDisputeSchema.safeParse(req.body);

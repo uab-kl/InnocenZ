@@ -2,6 +2,10 @@ import { Request, Response } from 'express';
 import { AgencyRepositoryClass } from './agency.repository';
 import { AgencyMemberRepositoryClass } from './agency-member.repository';
 import { AgencyPrRepository } from './agency-pr.repository';
+import { PrRepositoryClass } from '@/features/pr/pr.repository';
+import { UserRepositoryClass } from '@/features/user/user.repository';
+import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository';
+import { notify } from '@/features/notification/notify';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -35,6 +39,9 @@ export class AgencyControllerClass {
     private agencyRepository: AgencyRepositoryClass,
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private agencyPrRepository: AgencyPrRepository,
+    private prRepository: PrRepositoryClass,
+    private userRepository: UserRepositoryClass,
+    private userProfileRepository: UserProfileRepositoryClass,
   ) {}
 
   /**
@@ -82,6 +89,84 @@ export class AgencyControllerClass {
       res.status(200).json({ success: true, message: 'OK', data: prs });
     } catch (error) {
       logger.error('[AgencyController.listAgencyPrs] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Approvals — accept / decline a PR membership (`agency_pr`), not a `pr` row.
+   * Body: `{ approveStatus: 'approved' | 'rejected', rejectReason?: string }`.
+   */
+  async setAgencyPrApproval(req: Request, res: Response) {
+    try {
+      const agencyId = paramId(req.params.id);
+      const userId = paramId(req.params.userId);
+      const existing = await this.agencyRepository.getById(agencyId);
+      if (!existing) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const approveStatus = parseApproveStatus(req.body?.approveStatus);
+      if (approveStatus !== 'approved' && approveStatus !== 'rejected') {
+        return res.status(400).json({
+          success: false,
+          message: 'approveStatus must be approved or rejected',
+          data: null,
+        });
+      }
+
+      const rejectReason =
+        typeof req.body?.rejectReason === 'string' ? req.body.rejectReason : undefined;
+
+      const actor = getActor(req);
+      const row = await this.agencyPrRepository.setApproveStatus(
+        agencyId,
+        userId,
+        approveStatus,
+        actor,
+        rejectReason,
+      );
+      if (!row) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // Ops still require pr.id until Phase C — bridge from user / user_profile.
+      if (approveStatus === 'approved') {
+        const [user, profile] = await Promise.all([
+          this.userRepository.getUserById(userId),
+          this.userProfileRepository.getByUserId(userId),
+        ]);
+        await this.prRepository.ensureOpsBridge({
+          userId,
+          agencyId,
+          actor,
+          tier: row.tier,
+          name: profile?.fullName?.trim() || user?.username || 'PR',
+          nickname: user?.username ?? null,
+          phone: user?.phoneNum ?? null,
+          email: user?.email ?? null,
+          icNo: profile?.idNo ?? null,
+        });
+      }
+
+      await notify({
+        userId,
+        kind: 'agency_join_resolved',
+        title:
+          approveStatus === 'approved'
+            ? 'You were accepted by the agency'
+            : 'Your agency application was declined',
+        body:
+          approveStatus === 'approved'
+            ? 'You can now be scheduled for shifts.'
+            : (row.rejectReason ?? undefined),
+        payload: { agencyId, userId, approveStatus },
+        actor,
+      });
+
+      res.status(200).json({ success: true, message: 'OK', data: row });
+    } catch (error) {
+      logger.error('[AgencyController.setAgencyPrApproval] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

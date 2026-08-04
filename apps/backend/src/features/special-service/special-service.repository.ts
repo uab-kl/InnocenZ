@@ -1,4 +1,4 @@
-import { and, asc, desc, eq, sql, SQL } from 'drizzle-orm';
+import { and, asc, desc, eq, or, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
 import { PrTable } from '@/features/pr/pr.model.js';
@@ -39,6 +39,7 @@ const selectWithOutlet = {
   postingAgencyId: SpecialServiceTable.postingAgencyId,
   postingAgencyName: SpecialServiceTable.postingAgencyName,
   postingPrId: SpecialServiceTable.postingPrId,
+  postingUserId: SpecialServiceTable.postingUserId,
   postingPrName: PrTable.name,
   vendorName: SpecialServiceTable.vendorName,
   scheduledFor: SpecialServiceTable.scheduledFor,
@@ -56,7 +57,18 @@ export class SpecialServiceRepositoryClass {
     if (filter?.category) conditions.push(eq(SpecialServiceTable.category, filter.category));
     if (filter?.vendorName) conditions.push(eq(SpecialServiceTable.vendorName, filter.vendorName));
     if (filter?.initiatedBy) conditions.push(eq(SpecialServiceTable.initiatedBy, filter.initiatedBy));
-    if (filter?.postingPrId) conditions.push(eq(SpecialServiceTable.postingPrId, filter.postingPrId));
+    if (filter?.postingUserId && filter?.postingPrId) {
+      conditions.push(
+        or(
+          eq(SpecialServiceTable.postingUserId, filter.postingUserId),
+          eq(SpecialServiceTable.postingPrId, filter.postingPrId),
+        )!,
+      );
+    } else if (filter?.postingUserId) {
+      conditions.push(eq(SpecialServiceTable.postingUserId, filter.postingUserId));
+    } else if (filter?.postingPrId) {
+      conditions.push(eq(SpecialServiceTable.postingPrId, filter.postingPrId));
+    }
     if (filter?.adminAccepted)
       conditions.push(eq(SpecialServiceTable.adminAccepted, filter.adminAccepted));
     const idQuery = filter?.id?.trim();

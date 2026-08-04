@@ -25,15 +25,22 @@ export interface PrAgencyLink {
 
 /** A PR on an agency's membership list (agency_pr keyed by user_id). */
 export interface AgencyPr {
+	/** agency_pr.id */
+	id: string;
 	prId: string | null;
 	agencyId: string;
 	userId: string;
 	name: string;
 	nickname: string | null;
 	approveStatus: AgencyPrApproveStatus;
+	tier?: string;
+	rejectReason?: string | null;
 	username: string | null;
 	email: string | null;
 	phoneNum: string | null;
+	idNo?: string | null;
+	createdAt?: string;
+	updatedAt?: string;
 }
 
 export interface Agency {

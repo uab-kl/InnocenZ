@@ -65,7 +65,11 @@ type RosterBackendTimetableProps = {
 	 * reject on failure — the sheet reports the reason and stays open rather than
 	 * closing on a write that never landed.
 	 */
-	onAssign: (shiftId: string, prId: string) => Promise<unknown>;
+	onAssign: (
+		shiftId: string,
+		prId: string,
+		userId?: string,
+	) => Promise<unknown>;
 	todayIso?: string;
 };
 
@@ -408,7 +412,11 @@ function AssignBackendCellSheet({
 	dateIso: string;
 	shifts: Shift[];
 	outletNameById: Map<string, string>;
-	onAssign: (shiftId: string, prId: string) => Promise<unknown>;
+	onAssign: (
+		shiftId: string,
+		prId: string,
+		userId?: string,
+	) => Promise<unknown>;
 	onClose: () => void;
 }) {
 	const [pickId, setPickId] = useState(shifts[0]?.id ?? "");
@@ -429,7 +437,7 @@ function AssignBackendCellSheet({
 		setBusy(true);
 		setError(null);
 		try {
-			await onAssign(picked.id, pr.id);
+			await onAssign(picked.id, pr.id, pr.userId ?? undefined);
 			onClose();
 		} catch (err) {
 			setError(

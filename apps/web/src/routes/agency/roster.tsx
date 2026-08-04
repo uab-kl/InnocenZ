@@ -555,10 +555,11 @@ function AgencyRoster() {
 							canAssign={canAssign}
 							onEditSlot={openEdit}
 							onWeekChange={setPlanningDate}
-							onAssign={async (shiftId, prId) => {
+							onAssign={async (shiftId, prId, userId) => {
 								const created = await rosterMut.assign.mutateAsync({
 									shiftId,
 									prId,
+									userId,
 								});
 								// mutateAsync resolved = the server answered 201, so the
 								// assignment row is already committed — the pop-up never

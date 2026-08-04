@@ -3,6 +3,7 @@ import { numeric, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
 import { PrTable } from '@/features/pr/pr.model.js';
+import { UserTable } from '@/features/user/user.model.js';
 
 export const specialServiceCategoryValues = [
   'transportation',
@@ -78,6 +79,10 @@ export const SpecialServiceTable = MainSchema.table('special_service', {
   postingPrId: uuid('posting_pr_id').references(() => PrTable.id, {
     onDelete: 'set null',
   }),
+  /** Preferred poster key (0087) — replacing `posting_pr_id` once cut over. */
+  postingUserId: uuid('posting_user_id').references(() => UserTable.id, {
+    onDelete: 'set null',
+  }),
   /**
    * The external vendor fulfilling the order — free text, no `agency` row
    * behind it (MetroRide Transport, Atelier Threads, …). Was
@@ -112,6 +117,7 @@ export type SpecialServiceFilter = {
   vendorName?: string;
   initiatedBy?: SpecialServiceInitiatedBy;
   postingPrId?: string;
+  postingUserId?: string;
   adminAccepted?: SpecialServiceAdminAccepted;
   /** Partial or full match on special_service.id (UUID text). */
   id?: string;

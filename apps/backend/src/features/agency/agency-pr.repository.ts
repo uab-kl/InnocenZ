@@ -7,6 +7,8 @@ import {
   PrTable,
   type AgencyPrApproveStatus,
   type AgencyPrType,
+  type PrStatus,
+  type PrTier,
 } from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
@@ -28,15 +30,39 @@ export type PrAgencyLink = {
 
 /** A PR on an agency's membership list, with account fields folded in. */
 export type AgencyPrEnriched = {
+  /** Membership row id — use for approve/reject (not deprecated pr.id). */
+  id: string;
   prId: string | null;
+  /** Ops-bridge status when a pr row exists. */
+  prStatus: PrStatus | null;
   agencyId: string;
   userId: string;
   name: string;
   nickname: string | null;
   approveStatus: AgencyPrApproveStatus;
+  tier: PrTier;
+  rejectReason: string | null;
   username: string | null;
   email: string | null;
   phoneNum: string | null;
+  idNo: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+  profileImage: string | null;
+  gender: string | null;
+  race: string | null;
+  /** ISO date or drizzle date string. */
+  dob: string | Date | null;
+  nationality: string | null;
+  portfolioPhotos: (string | null)[] | null;
+  comcardImage: string | null;
+  comcardHeightCm: number | null;
+  comcardWeightKg: number | null;
+  comcardBustCm: number | null;
+  comcardWaistCm: number | null;
+  comcardHipCm: number | null;
 };
 
 const APPROVE_RANK: Record<string, number> = { approved: 3, pending: 2, rejected: 1 };
@@ -107,15 +133,36 @@ export class AgencyPrRepository {
 
       const rows = await db
         .select({
+          id: AgencyPrTable.id,
           prId: PrTable.id,
+          prStatus: PrTable.status,
           agencyId: AgencyPrTable.agencyId,
           userId: AgencyPrTable.userId,
           name: sql<string>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), ${PrTable.name}, ${UserTable.username}, 'PR')`,
           nickname: sql<string | null>`coalesce(nullif(trim(${UserTable.username}), ''), ${PrTable.nickname})`,
           approveStatus: AgencyPrTable.approveStatus,
+          tier: AgencyPrTable.tier,
+          rejectReason: AgencyPrTable.rejectReason,
           username: UserTable.username,
           email: UserTable.email,
           phoneNum: UserTable.phoneNum,
+          idNo: UserProfileTable.idNo,
+          createdAt: AgencyPrTable.createdAt,
+          updatedAt: AgencyPrTable.updatedAt,
+          createdBy: AgencyPrTable.createdBy,
+          updatedBy: AgencyPrTable.updatedBy,
+          profileImage: UserTable.profileImage,
+          gender: UserProfileTable.gender,
+          race: UserProfileTable.race,
+          dob: UserProfileTable.dob,
+          nationality: UserProfileTable.nationality,
+          portfolioPhotos: UserProfileTable.portfolioPhotos,
+          comcardImage: UserProfileTable.comcardImage,
+          comcardHeightCm: UserProfileTable.comcardHeightCm,
+          comcardWeightKg: UserProfileTable.comcardWeightKg,
+          comcardBustCm: UserProfileTable.comcardBustCm,
+          comcardWaistCm: UserProfileTable.comcardWaistCm,
+          comcardHipCm: UserProfileTable.comcardHipCm,
         })
         .from(AgencyPrTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
@@ -258,6 +305,107 @@ export class AgencyPrRepository {
     } catch (error) {
       logger.error('[AgencyPrRepository.ensureLink] Error:', error);
       throw error;
+    }
+  }
+
+  /** Insert or refresh membership (owner invite / approve path). */
+  async upsertLink(
+    userId: string,
+    agencyId: string,
+    actor: string,
+    data: { approveStatus: AgencyPrApproveStatus; tier?: PrTier },
+  ): Promise<AgencyPrType> {
+    try {
+      const [row] = await db
+        .insert(AgencyPrTable)
+        .values({
+          agencyId,
+          userId,
+          approveStatus: data.approveStatus,
+          tier: data.tier ?? 'tier_1',
+          createdBy: actor,
+          updatedBy: actor,
+        })
+        .onConflictDoUpdate({
+          target: [AgencyPrTable.agencyId, AgencyPrTable.userId],
+          set: {
+            approveStatus: data.approveStatus,
+            ...(data.tier ? { tier: data.tier } : {}),
+            rejectReason: data.approveStatus === 'approved' ? null : undefined,
+            updatedAt: new Date(),
+            updatedBy: actor,
+          },
+        })
+        .returning();
+      return row;
+    } catch (error) {
+      logger.error('[AgencyPrRepository.upsertLink] Error:', error);
+      throw error;
+    }
+  }
+
+  async updateMembership(
+    agencyId: string,
+    userId: string,
+    data: { tier?: PrTier; approveStatus?: AgencyPrApproveStatus; rejectReason?: string | null },
+    actor: string,
+  ): Promise<AgencyPrType | null> {
+    try {
+      const [row] = await db
+        .update(AgencyPrTable)
+        .set({
+          ...(data.tier ? { tier: data.tier } : {}),
+          ...(data.approveStatus ? { approveStatus: data.approveStatus } : {}),
+          ...(data.rejectReason !== undefined ? { rejectReason: data.rejectReason } : {}),
+          updatedAt: new Date(),
+          updatedBy: actor,
+        })
+        .where(and(eq(AgencyPrTable.agencyId, agencyId), eq(AgencyPrTable.userId, userId)))
+        .returning();
+      return row ?? null;
+    } catch (error) {
+      logger.error('[AgencyPrRepository.updateMembership] Error:', error);
+      return null;
+    }
+  }
+
+  async removeLink(agencyId: string, userId: string): Promise<boolean> {
+    try {
+      const rows = await db
+        .delete(AgencyPrTable)
+        .where(and(eq(AgencyPrTable.agencyId, agencyId), eq(AgencyPrTable.userId, userId)))
+        .returning({ id: AgencyPrTable.id });
+      return rows.length > 0;
+    } catch (error) {
+      logger.error('[AgencyPrRepository.removeLink] Error:', error);
+      return false;
+    }
+  }
+
+  /** Approvals screen — accept / decline a membership request. */
+  async setApproveStatus(
+    agencyId: string,
+    userId: string,
+    approveStatus: AgencyPrApproveStatus,
+    actor: string,
+    rejectReason?: string | null,
+  ): Promise<AgencyPrType | null> {
+    try {
+      const [row] = await db
+        .update(AgencyPrTable)
+        .set({
+          approveStatus,
+          rejectReason:
+            approveStatus === 'rejected' ? (rejectReason?.trim() || null) : null,
+          updatedAt: new Date(),
+          updatedBy: actor,
+        })
+        .where(and(eq(AgencyPrTable.agencyId, agencyId), eq(AgencyPrTable.userId, userId)))
+        .returning();
+      return row ?? null;
+    } catch (error) {
+      logger.error('[AgencyPrRepository.setApproveStatus] Error:', error);
+      return null;
     }
   }
 }

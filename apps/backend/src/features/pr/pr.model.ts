@@ -19,7 +19,11 @@ export const prStatusValues = ['active', 'inactive', 'pending', 'suspended'] as 
 export type PrStatus = (typeof prStatusValues)[number];
 export const prStatusEnum = MainSchema.enum('pr_status', prStatusValues);
 
-/** PR / personnel — a worker managed by an agency, optionally linked to a user account. */
+/**
+ * @deprecated Retiring in favour of `user` + `user_profile` + `agency_pr`
+ * (migration 0087 foundation). Do not add new columns or features here.
+ * Ops tables are gaining `user_id`; drop this table once dual-write is cut over.
+ */
 export const PrTable = MainSchema.table('pr', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   agencyId: uuid('agency_id')
@@ -54,11 +58,9 @@ export type AgencyPrApproveStatus = (typeof agencyPrApproveStatusValues)[number]
 export const agencyPrApproveStatusEnum = MainSchema.enum('agency_pr_approve_status', agencyPrApproveStatusValues);
 
 /**
- * Which agencies a PR *account* is under. Keyed by `user_id` (migration 0085) —
- * not `pr.id` — so one login maps cleanly to many agencies.
- *
- * Pre-account roster rows (pr with null user_id) stay on `pr.agency_id` only.
- * Operational reads (shifts, PV) still use `pr`; this table is membership.
+ * Agency ↔ PR-account membership. Source of truth for join approval + tier
+ * (migration 0085 user_id key, 0087 tier/reject_reason). Person identity is
+ * joined from `user` / `user_profile` — never duplicated here.
  */
 export const AgencyPrTable = MainSchema.table(
   'agency_pr',
@@ -71,6 +73,10 @@ export const AgencyPrTable = MainSchema.table(
       .notNull()
       .references(() => UserTable.id, { onDelete: 'cascade' }),
     approveStatus: agencyPrApproveStatusEnum('approve_status').notNull().default('pending'),
+    /** Per-agency rate class — moved off `pr.tier` (0087). */
+    tier: prTierEnum('tier').notNull().default('tier_1'),
+    /** Why the agency declined this membership request. */
+    rejectReason: varchar('reject_reason', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

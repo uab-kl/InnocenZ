@@ -5,5 +5,6 @@ import App from './App';
 
 test('renders the PR sign-in screen', async () => {
   const { getByText } = await render(<App />);
-  expect(getByText('PR sign in')).toBeTruthy();
+  expect(getByText('InnocenZ')).toBeTruthy();
+  expect(getByText('Welcome back')).toBeTruthy();
 });

@@ -1,6 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { PR_LANGUAGE_OPTIONS } from '../../lib/demo-services';
+import { savePhoneCountryCode } from '../../lib/phone-prefs';
 import {
 	COUNTRY_BY_CODE,
 	COUNTRY_DIAL_OPTIONS,
@@ -100,6 +101,7 @@ export function Step1Persona({
 						onSelect={(countryCode) => {
 							clearFieldError('phoneCountryCode');
 							patch({ phoneCountryCode: countryCode });
+							savePhoneCountryCode(countryCode);
 						}}
 						width={128}
 						placeholder="Code"

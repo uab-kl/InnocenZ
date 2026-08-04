@@ -82,7 +82,10 @@ export interface ShiftAssignmentsApiResponse {
 
 export interface CreateShiftAssignmentInput {
 	shiftId: string;
+	/** Temporary ops bridge id — still required by unique(shift, pr) until Phase C. */
 	prId: string;
+	/** Preferred identity key (dual-written on the assignment). */
+	userId?: string;
 	status?: ShiftAssignmentStatus;
 	payAmount?: number;
 	checkInAt?: string;
@@ -172,6 +175,7 @@ export interface BackfillSlot {
 /** One ranked replacement option for a released slot. */
 export interface ReplacementCandidate {
 	prId: string;
+	userId?: string | null;
 	prName: string;
 	tier: string;
 	timesAtOutlet: number;
