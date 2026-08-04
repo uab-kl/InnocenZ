@@ -908,12 +908,26 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > mtime landed *after* the checkout, and `netstat` shows **a dev server still LISTENING on port
 > 3000** — another session's, not this one's (this session's was 3001 and was stopped). Its `tsr`
 > watcher regenerates the file the instant git restores it.
-> ⚠️ **So the working tree cannot be made clean from here.** Not killed, because that process belongs
-> to another session; not committed either, because a 1,121-line reorder landing on `SL` is a
-> merge-conflict magnet against `jk`'s lane. **It is an owner decision:** stop every web dev server
-> and revert, or regenerate and commit ONCE on a quiet branch to end the churn permanently.
+> ⚠️ **So the working tree could not be made clean by reverting.** The other session's process was not
+> killed, because it is not this session's to kill.
 > *A revert is not done when the command exits 0 — it is done when the file is still reverted
 > afterwards.* Nothing here checked that until the second look.
+>
+> ✅ **RESOLVED on the owner's decision (4 Aug): regenerated and committed ONCE, and the churn is
+> over.** Checked before trusting it:
+> - **Deterministic.** `npx tsr generate` run explicitly produced **byte-identical** output
+>   (`sha1 f5f1fb9f…` before and after), so the watcher and the CLI agree — the committed bytes are
+>   what any machine will regenerate, not one process's opinion.
+> - **Compiles.** Web `tsc` **120**, exactly the baseline, **0 errors in `routeTree.gen.ts`**.
+> - **Boots.** Already established above — both portals loaded on real logins, zero console errors,
+>   with this exact file on disk.
+> - **Stays clean.** `git status` verified clean for the file after committing, with the other dev
+>   server still running — which is the only proof that the churn is actually ended rather than paused.
+>
+> ⚠️ **Expect a conflict when `jk`'s lane merges.** It is a generated file: resolve it by running
+> `npx tsr generate` on the merged route set and committing the result — **never by hand-picking
+> import lines**, since the order carries no meaning and hand-merging it is how a route silently goes
+> missing.
 >
 > ✅ **The genuinely useful finding: the reordered tree BOOTS.** Both portals were loaded on real
 > logins with **zero console errors while this exact regenerated file was on disk.** That matters
