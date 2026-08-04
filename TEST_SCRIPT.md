@@ -308,10 +308,20 @@ Left deliberately uncommitted: authored in a session running CONCURRENTLY with t
 (`64fe35a`…`7b620c9`), so it is not mine to commit under a message I would be inventing. It all
 typechecks — backend past the TS2883 baseline, `apps/web` on every touched file, `apps/mobile` at 0.
 
-- [ ] **Two migrations are written but NOT APPLIED.** `pnpm migrate:deploy` from the repo ROOT, then
-  restart the backend. Journal checked: `0083` (when 1785800000000) and `0084` (1785900000000) ascend
-  correctly, so they will not be silently skipped — the one non-ascending pair in `_journal.json` is
-  historical (`0015` vs `0014`) and long since applied.
+- [x] ✅ **APPLIED 4 Aug 2026 — and the DATABASE IS NOW AHEAD OF THE COMMITTED CODE.** `0083` and `0084`
+  are live on `innocenz-test`; `0083`'s fix is committed (`62243bc`) but `0084` and everything that
+  reads the two new columns is still in the working tree. That inverts the risk in this whole block:
+  it is no longer "unapplied DDL waiting", it is **schema without its code**, so landing the slice is
+  now more urgent, not less. A fresh clone will not match this database.
+  - ⚠️ `pnpm migrate:deploy` FAILED first with **`function min(uuid) does not exist` (SQLSTATE 42883)** —
+    `0083` backfilled with `min(o.id)` over a uuid column, and because drizzle wraps the run in one
+    transaction, NOTHING applied (the DB sat at `0082`). Fixed to `min(o.id::text)::uuid`, safe because
+    the row is only used where `m.n = 1` — one outlet in the group, so the aggregate picks the single
+    value rather than choosing between candidates. Both files were dry-run in a rolled-back transaction
+    before the real deploy.
+  - Verified after applying: `payment_voucher_line.outlet_id` uuid + FK `confdeltype = n` (SET NULL),
+    `payment_voucher_receipt.review_withdrawn_at` timestamp, and the backfill linked **18 of 18** lines
+    with **0** unmatched. Journal now records 1785800000000 and 1785900000000.
   - `0083_pv_line_outlet_fk.sql` — `payment_voucher_line.outlet_id`, FK to outlet, ON DELETE SET NULL.
     Closes one of the weak edges CLAUDE.md rule #3 was written about: the row's only outlet today is a
     copied varchar NAME, so an outlet rename would start refusing catalogue checks for no visible
@@ -915,6 +925,35 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
+>
+> Owner: *"i have solve the dispute then in this week section why all missing ?"*, then *"if status
+> verified for this week section , then next week section also status verified"*.
+>
+> **I fixed this wrong the first time.** Disputing moved the voucher to `disputed`, the reader filtered
+> `pending_review`, and the week went blank — so I widened the filter to `['pending_review','disputed']`.
+> Then RESOLVING the dispute moved `PV-000006` to **`sent`**, which was not on the list either, and the
+> week blanked a second time. Chasing statuses one at a time was the wrong shape.
+>
+> **The real fault: READING and WRITING were sharing one lookup.** They want opposite answers.
+>
+> | | question | correct set |
+> |---|---|---|
+> | `getMyCurrentWeek` (read) | *what did I earn this week?* | **every** status — that is the point of the screen |
+> | `getOrCreateCurrentWeekDraft` (write) | *may I append a receipt?* | only OPEN — appending to a sent voucher rewrites a document already handed over |
+>
+> The read now calls `getWeekVoucher` (unfiltered, and already used by last-week). The write keeps
+> `OPEN_WEEK_STATUSES` and still refuses. Verified live on the now-`sent` voucher: the read returns
+> `PV-000006 · sent · 12 lines · RM 3,708.20`, a receipt write is refused with *"has already been sent to
+> you"*, and the week still holds exactly **1** voucher — no duplicate.
+>
+> **Rollover pinned too.** A day reading VERIFIED in This week must not regress when Monday moves it into
+> Last week — a status that downgrades on its own is indistinguishable from work being undone. Both call
+> sites now provably agree (Last week maps `approved → verified` first; a settled claim reads VERIFIED
+> from either). 18 cases in `check-cell-evidence.ts`, all passing.
+>
+> `tsc` clean. No migration. **Backend restart required.**
 
 > **4 Aug 2026 — A DISPUTED DAY NOW SAYS SO, SURVIVES A RELOAD, AND OPENS.**
 >

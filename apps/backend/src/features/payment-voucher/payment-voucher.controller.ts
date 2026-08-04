@@ -1174,7 +1174,27 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const { weekStart, weekEnd } = weekBounds();
-      const draft = await this.paymentVoucherRepository.getCurrentWeekDraft(pr.id, weekStart);
+      /*
+       * READ THE WEEK'S VOUCHER WHATEVER ITS STATUS — not just an open one.
+       *
+       * READING and WRITING need different answers here, and sharing one lookup
+       * between them blanked the PR's screen twice in one afternoon:
+       *
+       *   - `getCurrentWeekDraft` filtered `pending_review`, so DISPUTING a cell
+       *     (voucher → 'disputed') emptied the week.
+       *   - Widening that to include 'disputed' fixed the symptom; then RESOLVING
+       *     the dispute moved the voucher to 'sent' and it emptied again.
+       *
+       * Chasing statuses one at a time was the wrong shape. The PR must be able
+       * to see THIS WEEK'S MONEY at every stage of its life — that is the whole
+       * purpose of the screen — so this read is unfiltered.
+       *
+       * The WRITE path keeps its narrow filter, and must: appending a receipt to
+       * a voucher already sent or signed would silently alter a document the PR
+       * has been given and the agency has signed off. `getOrCreateCurrentWeekDraft`
+       * still refuses that, by design, and still owns `OPEN_WEEK_STATUSES`.
+       */
+      const draft = await this.paymentVoucherRepository.getWeekVoucher(pr.id, weekStart);
       // This is the THIS-WEEK section, where the PR watches the agency approve
       // what they logged — so the receipt states have to come with the lines.
       // Held in a variable because the DAY statuses below are computed from the

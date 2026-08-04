@@ -236,6 +236,34 @@ check(
   dayStatusLabel(weekWith([claim(null)]), '2026-08-05', 'approved') === 'APPROVED',
 );
 
+/*
+ * ACROSS THE WEEK BOUNDARY — owner: "if status verified for this week section,
+ * then next week section also status verified".
+ *
+ * The same day is rendered by two call sites: This-week passes the grid status
+ * straight through, Last-week maps 'approved' → 'verified' first (a closed
+ * week's day sign-off is final). A day that reads VERIFIED must NOT regress
+ * when Monday rolls it into the Last-week card — a status that downgrades on
+ * its own is indistinguishable from work being undone.
+ */
+check(
+  'VERIFIED this week stays VERIFIED once it rolls into last week',
+  dayStatusLabel(weekWith([claim('accepted')]), DAY, 'verified') === 'VERIFIED',
+);
+check(
+  'a settled claim reads VERIFIED from BOTH call sites',
+  dayStatusLabel(weekWith([claim('accepted')]), DAY, 'approved') ===
+    dayStatusLabel(weekWith([claim('accepted')]), DAY, 'verified'),
+);
+check(
+  'no claim: a sent/closed week still reads VERIFIED, not PENDING',
+  dayStatusLabel(weekWith([]), DAY, 'verified') === 'VERIFIED',
+);
+check(
+  'an open claim still outranks a closed week',
+  dayStatusLabel(weekWith([claim(null)]), DAY, 'verified') === 'DISPUTED',
+);
+
 const painted = openDisputeKeys(weekWith([claim(null), claim('accepted')]));
 check('only the OPEN claim paints a cell red', painted.size === 1 && painted.has(`${DAY}-drinks`));
 check(
