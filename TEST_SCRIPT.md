@@ -305,7 +305,22 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 > Left open deliberately at the end of the session that shipped `d513e5c`. Item 1 first: it is a
 > security guard that exists only as a typecheck.
 >
-> - [ ] **🔴 Live-fire the scoped owner guard — it has NEVER hit a running server.** `d513e5c` fixed
+> - [x] **✅ DONE — the scoped owner guard is LIVE-PROVEN 7 passed / 0 failed / 1 skipped**
+>   (`probe-org-scope-guard.ts`, kept in the repo: it mutates nothing but two same-value writes, so it
+>   is safe to re-run whenever the org guards are touched). Cross-tenant agency PUT **403**,
+>   cross-tenant outlet PUT **403**, **cross-tenant geo-fence PATCH 403**, `status` in the body
+>   **403**, both own-org saves **200**, and **admin still passes** (`isAdmin` short-circuits ahead of
+>   the scope test — the check that matters most on a denial rule). ⚠️ **Two method notes worth
+>   keeping.** (1) **A 403 alone would not have proven anything** — the OLD guard also 403s, just for
+>   another reason — so every refusal is matched on its MESSAGE, which only the new code emits; that
+>   doubles as the stale-server detector, since `/health` 200 says nothing about which code is running.
+>   (2) **The first run reported `SKIP — target venue has no pin to echo back` on the geo-fence case,
+>   and that was a PROBE DEFECT wearing the costume of a fact about the data.** The columns are
+>   `lat`/`lng`/`geoFenceRadius`; the probe guessed `geoFenceLat`/`latitude`. Every outlet is pinned.
+>   **A skip is a claim about the world and has to be verified like one** — and it landed on the single
+>   most dangerous case in the set. Cross-tenant DELETE geo-fence stays skipped on purpose: it has no
+>   idempotent form, so if the guard had failed it would have unfenced a live venue.
+> - [ ] ~~**🔴 Live-fire the scoped owner guard — it has NEVER hit a running server.**~~ `d513e5c` fixed
 >   a cross-tenant write (`agencyOwnerOnly` asked *"are you an owner?"* without comparing the
 >   membership to `req.params.id`, so any agency owner could rewrite any agency, and any outlet owner
 >   could move another venue's geo-fence). **A refusal writes nothing, so every case below is free on
@@ -866,6 +881,38 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (late) — the scoped owner guard is LIVE-PROVEN, 7/0/1. The percentage table moves to
+> features ~93% · wired ~87% · proven ~86% spine / ~50% branches · production-ready ~20%.**
+>
+> `probe-org-scope-guard.ts` fires the whole surface over HTTP on real logins: cross-tenant agency
+> PUT **403**, cross-tenant outlet PUT **403**, **cross-tenant geo-fence PATCH 403**, `status` in the
+> body **403**, both own-org saves **200**, admin **200**. Kept in the repo — it writes nothing but
+> two same-value saves, so it is safe to re-run whenever the org guards are touched.
+>
+> **Safe on the shared DB by construction: every cross-tenant case sends the TARGET'S OWN CURRENT
+> VALUES**, read back immediately before. If the guard works, the request is refused and nothing is
+> written; if the guard were absent or stale, the write is idempotent and corrupts nothing.
+> ⚠️ **A probe for a guard has to be harmless when the guard is the thing that is broken** — otherwise
+> the first honest run of it is the one that does the damage.
+>
+> ⚠️ **A 403 alone would have proven nothing:** the OLD guard also 403s, just for a different reason.
+> Every refusal is therefore matched on its MESSAGE, which only the new code can emit — and that
+> doubles as the stale-server detector, since `/health` answering 200 says nothing about which code
+> the process is running.
+>
+> 🔴 **The first run reported `SKIP — target venue has no pin to echo back`, and that was a PROBE
+> DEFECT wearing the costume of a fact about the data.** The columns are `lat`/`lng`/`geoFenceRadius`;
+> the probe guessed `geoFenceLat`/`latitude`. All seven outlets are pinned. It landed on the single
+> most dangerous case in the set — a venue's fence centre is what every check-in is measured against —
+> and a skip reads as *"nothing to test here"* rather than as *"I did not test this"*. **A SKIP is a
+> claim about the world and has to be verified like one.** Cross-tenant DELETE geo-fence remains
+> skipped deliberately: no idempotent form, so a failed guard would unfence a live venue.
+>
+> **Audit page republished** to the same URL with the four-dimension table updated. Production-ready
+> moves 19 → 20 for a closed-and-proven cross-tenant write, not for new features. The hole was found
+> only because a screen was finally being wired to the endpoint: **the gate looked fine for exactly as
+> long as nothing called it.**
 > **4 Aug 2026 (late, housekeeping) — biome rewrap of `updateAgency`; §9 renewed with what `d513e5c`
 > LEFT OPEN.**
 >
