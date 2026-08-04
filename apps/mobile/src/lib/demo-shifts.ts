@@ -651,7 +651,12 @@ export type WeeklyDayPay = {
   drinks: number | null;
   tips: number | null;
   others: number | null;
-  status: 'verified' | 'pending' | 'empty';
+  /**
+   * 'pending'  — logged, nobody at the agency has looked yet
+   * 'approved' — the agency signed this day off in its day review (mid-week)
+   * 'verified' — the voucher itself has been processed (sent/signed/paid)
+   */
+  status: 'verified' | 'approved' | 'pending' | 'empty';
 };
 
 /** One sealed check-out day — feeds Payment → This week until PV issues Sunday. */

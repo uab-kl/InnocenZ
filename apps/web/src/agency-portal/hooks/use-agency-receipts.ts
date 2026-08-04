@@ -6,7 +6,14 @@ import {
 	reviewPaymentVoucherReceipt,
 } from "@/services/payment-voucher";
 
-const RECEIPTS_KEY = ["agency", "pv-receipts"] as const;
+/**
+ * Exported because the DAY review now moves receipts too — approving a day
+ * approves the receipts on it, so the panel listing them has to be refetched by
+ * a hook that never touches this file otherwise. A second literal copy of the
+ * key over there would go stale the day this one is renamed.
+ */
+export const agencyReceiptsKey = ["agency", "pv-receipts"] as const;
+const RECEIPTS_KEY = agencyReceiptsKey;
 
 /**
  * Every receipt logged against this agency's vouchers — the feed behind the

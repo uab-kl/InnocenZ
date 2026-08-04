@@ -252,6 +252,205 @@ export async function editPaymentVoucherReceiptLine(
 	};
 }
 
+/**
+ * One line as the three receipt WRITE endpoints answer with it — the PR-facing
+ * DTO, not the raw row.
+ *
+ * The two fields that matter carry DIFFERENT NAMES on each side: `item` and
+ * `commission` here against `description` and `amount` on `AgencyReceiptLine`
+ * below, and the commission is a number where the row serializes numeric(12,2)
+ * as a string. Callers therefore refetch the feed after a write instead of
+ * splicing this into it — one shape on screen rather than two that look alike.
+ */
+export interface PaymentVoucherReceiptLineDTO {
+	id: string;
+	/** Which bucket the line's `ref` put it in. An added line lands in drinks/tips. */
+	kind: "drinks" | "tips" | "wages" | "others";
+	source: string;
+	item: string;
+	quantity: number;
+	/** Gross off the paper. 0 on an agency-added line — gross is not editable. */
+	sales: number;
+	commission: number;
+	lineDate: string | null;
+	outlet: string | null;
+	receiptStatus: PaymentVoucherReceiptStatus | null;
+	receiptNo: string | null;
+	orderNo: string | null;
+	receiptDate: string | null;
+}
+
+/**
+ * The only two buckets the agency may ADD.
+ *
+ * Wages and overtime are derived from the check-in/check-out stamps and the
+ * shift's rate, so the fix for those is the attendance record, not a claimed
+ * line — the server rejects them for the same reason.
+ */
+export type AgencyAddedLineKind = "drinks" | "tips";
+
+/** One item the OUTLET on a receipt actually sells, as the catalogue read returns it. */
+export interface ReceiptCatalogueItem {
+	/** `outlet_drink_menu.slug` — stable even when the outlet re-spells the name. */
+	id: string;
+	/**
+	 * EXACTLY what has to be posted as the add-line `description`. The server
+	 * matches case-insensitively but STORES this spelling, so the line and the
+	 * outlet's own list can never drift into two names for one item.
+	 */
+	name: string;
+	/**
+	 * The OUTLET'S SALE PRICE, numeric(12,2) as a string. Shown so a reviewer can
+	 * check an item against the paper — it is NOT the PR's commission and must
+	 * never be written into the amount.
+	 */
+	priceRm: string;
+	/** The outlet's own section: "Drinks Price" or "Service Entitlement". */
+	category: "drink" | "service" | "tip";
+	/**
+	 * Which add-line bucket this row may be used for — the SERVER'S split, not one
+	 * the form re-derives from `category`. Two copies of that rule would disagree
+	 * the first time either changed, and the form would offer an item the add
+	 * endpoint then refuses. Null means neither bucket: never offer it.
+	 */
+	kind: AgencyAddedLineKind | null;
+}
+
+/** The outlet's published list for one receipt, plus why it may be empty. */
+export interface ReceiptCatalogue {
+	outletId: string | null;
+	outlet: string | null;
+	items: ReceiptCatalogueItem[];
+	/**
+	 * The server's own sentence. Degraded reads answer 200 with an EMPTY list and
+	 * the SAME words the add endpoint refuses with — a receipt with no shift link,
+	 * or an outlet that never configured a list. The form repeats it rather than
+	 * paraphrasing, so what it says is what the write would say.
+	 */
+	message: string;
+}
+
+/**
+ * The outlet catalogue an added line must be chosen from — the READ half of the
+ * rule `addPaymentVoucherReceiptLine` is refused by.
+ *
+ * Takes NO outlet id: the server derives the outlet from this receipt's own
+ * shift FK, so the agency cannot point the read at a catalogue that happens to
+ * contain the item it wants, and can only ever see an outlet one of its own
+ * vouchers was earned at. An unknown or another agency's receipt answers 404.
+ */
+export async function fetchPaymentVoucherReceiptCatalogue(
+	receiptId: string,
+	onRefreshFail: () => void,
+): Promise<ReceiptCatalogue> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: {
+			outletId: string | null;
+			outlet: string | null;
+			items: ReceiptCatalogueItem[];
+		} | null;
+	}>(`/payment-voucher/receipts/${receiptId}/catalogue`);
+	return {
+		outletId: response.data.data?.outletId ?? null,
+		outlet: response.data.data?.outlet ?? null,
+		items: response.data.data?.items ?? [],
+		message: response.data.message,
+	};
+}
+
+/**
+ * Add a drink or tip line the paper carries and the log missed.
+ *
+ * `description` must NAME AN ITEM THE OUTLET SELLS — it is checked against the
+ * catalogue above, server-side, and a name that is not on that outlet's list is
+ * refused with a sentence naming the outlet. Free text is no longer accepted:
+ * the outlet's price list is the only record of what was for sale that night,
+ * so a line with no entry on it is money with no source document behind it.
+ *
+ * `amount` is the COMMISSION in ringgit as a number; the gross sale is not
+ * accepted, because it is packed into the line's `ref` alongside the receipt
+ * links a dispute points at. An added line therefore records RM 0.00 gross and
+ * the agency's stated commission.
+ *
+ * Same two effects as a line correction: the day's total moves, so that day goes
+ * STALE, and an approved receipt drops back to pending.
+ */
+export async function addPaymentVoucherReceiptLine(
+	receiptId: string,
+	input: {
+		kind: AgencyAddedLineKind;
+		description: string;
+		quantity: number;
+		amount: number;
+		lineDate?: string;
+	},
+	onRefreshFail: () => void,
+): Promise<{ receipt: PaymentVoucherReceipt | null; message: string }> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<{
+		success: boolean;
+		message: string;
+		data: {
+			receipt: PaymentVoucherReceipt | null;
+			line: PaymentVoucherReceiptLineDTO;
+		};
+	}>(`/payment-voucher/receipts/${receiptId}/lines`, input);
+	return {
+		receipt: response.data.data?.receipt ?? null,
+		message: response.data.message,
+	};
+}
+
+/**
+ * Correct the receipt's OWN facts — the order number read off the paper, and the
+ * day it belongs to.
+ *
+ * `orderNo` absent leaves the stored number alone; `null` clears it, because a
+ * number OCR invented off a blurred photo has to be removable and not merely
+ * replaceable.
+ *
+ * `receiptDate` is not cosmetic: the server moves every one of this receipt's
+ * lines onto that date in the same transaction, so the OLD day and the NEW one
+ * both go stale. `movedLines` says how many followed.
+ */
+export async function editPaymentVoucherReceipt(
+	receiptId: string,
+	patch: {
+		orderNo?: string | null;
+		receiptDate?: string;
+		/**
+		 * The time printed on the paper. Absent leaves it alone, null clears it —
+		 * OCR misreads a photographed clock, and a wrong time has to be removable
+		 * rather than only replaceable. Moves no money, so no day goes stale.
+		 */
+		receiptTime?: string | null;
+	},
+	onRefreshFail: () => void,
+): Promise<{
+	receipt: PaymentVoucherReceipt | null;
+	movedLines: number;
+	message: string;
+}> {
+	const client = getClient(onRefreshFail);
+	const response = await client.patch<{
+		success: boolean;
+		message: string;
+		data: {
+			receipt: PaymentVoucherReceipt | null;
+			movedLines: number;
+			lines: PaymentVoucherReceiptLineDTO[];
+		};
+	}>(`/payment-voucher/receipts/${receiptId}`, patch);
+	return {
+		receipt: response.data.data?.receipt ?? null,
+		movedLines: response.data.data?.movedLines ?? 0,
+		message: response.data.message,
+	};
+}
+
 /** One line of a receipt as the agency feed returns it (a trimmed voucher line). */
 export interface AgencyReceiptLine {
 	id: string;
@@ -262,6 +461,12 @@ export interface AgencyReceiptLine {
 	/** numeric(12,2), serialized as a string. */
 	amount: string;
 	ref: string | null;
+	/**
+	 * Which bucket the line's ref/component put it in. Optional so a response
+	 * from a backend that has not restarted yet still parses — the editor then
+	 * cannot tell what kind of receipt it is and offers the choice instead.
+	 */
+	kind?: "drinks" | "tips" | "wages" | "others";
 }
 
 /**

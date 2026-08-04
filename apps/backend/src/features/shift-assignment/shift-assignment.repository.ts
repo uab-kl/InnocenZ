@@ -426,6 +426,34 @@ export class ShiftAssignmentRepositoryClass {
   }
 
   /**
+   * WHICH OUTLET one assignment was worked at, by the same FK chain as the
+   * geo-fence above: shift_assignment -> shift.outlet_id -> outlet.id/name.
+   *
+   * The sibling of `getOutletGeoFenceForAssignment` for callers that must NAME
+   * the outlet rather than fence it — the PV review has to say whose price list
+   * an item was checked against, and reusing the geo-fence row for that would
+   * tie a money refusal to whether the outlet has dropped its map pin. Null when
+   * the assignment (or its shift/outlet) is gone.
+   */
+  async getOutletForAssignment(
+    assignmentId: string,
+  ): Promise<{ outletId: string; outletName: string } | null> {
+    try {
+      const [row] = await db
+        .select({ outletId: OutletTable.id, outletName: OutletTable.name })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .innerJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(eq(ShiftAssignmentTable.id, assignmentId))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.getOutletForAssignment] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Upcoming shift slots that lost their PR (cancelled or approved MC/leave)
    * and are still short-staffed — the agency's backfill worklist. Staffing is
    * recounted per shift so a slot drops off as soon as a replacement is

@@ -91,6 +91,117 @@ export function allDaysReviewed(view: DayReviewView[]): boolean {
   return view.length > 0 && view.every((d) => d.status !== null);
 }
 
+/** Just enough of a receipt to decide whether a day's approval carries it. */
+export type ReceiptDayRow = {
+  id: string;
+  receiptNo: string;
+  status: PaymentVoucherReceiptStatus;
+};
+
+/**
+ * The PENDING receipts an approved day already attests to.
+ *
+ * OWNER DECISION (4 Aug 2026): approving a day approves the receipts sitting on
+ * it. The two reviews were never independent — a day's `approved_total_cents` IS
+ * the sum of its lines, and those lines are the receipts' lines, so an agency
+ * that approved RM 3008.20 for Tue has already stated the receipt behind it is
+ * right. Leaving those receipts pending meant the send gate blocked a voucher on
+ * evidence the same person had just signed off one panel above.
+ *
+ * A receipt is carried only when EVERY day it touches is approved. A receipt
+ * spanning Mon and Tue is not attested by approving Mon alone — half its money
+ * would still sit in a day nobody has looked at.
+ *
+ * A receipt with NO dated lines is never carried, and that is the point rather
+ * than an omission: `dayTotalsCents` skips undated lines, so its money is in no
+ * day's total and no day's approval can have covered it. It stays for the
+ * receipts panel, where somebody looks at the photo.
+ *
+ * Held and cleared days are simply absent from `approvedDates` — this returns
+ * what an approval CARRIES, never what a withdrawal should take back. Dropping a
+ * receipt back to pending stays a deliberate act in the receipts panel.
+ *
+ * `justApprovedDates` IS WHAT MAKES THAT LAST SENTENCE TRUE. Without it the
+ * sweep was a standing re-assertion rather than a transition: the agency
+ * approves Sat (carrying RCP-000007), opens the receipts panel, sees the wrong
+ * outlet on the photo and withdraws the approval — and then the NEXT day-review
+ * call of any kind, even an approve-all that approves zero days, re-ran the full
+ * sweep and flipped RCP-000007 back to approved, stamped with the name of the
+ * person who had just rejected it. The withdrawal vanished and the send gate
+ * opened on evidence the agency had explicitly refused.
+ *
+ * So a receipt must be TOUCHED by this call — at least one of its dates newly
+ * decided — and only then is the all-days-approved test applied. The spanning
+ * case still works: a Mon+Tue receipt with Mon approved yesterday carries when
+ * Tue is approved today, because Tue is newly approved and both days are in
+ * `approvedDates`.
+ *
+ * Defaults to `approvedDates` so a deliberate full re-sweep (the one-shot
+ * backfill) keeps working by passing three arguments.
+ */
+export function receiptsCarriedByDays(
+  lines: PaymentVoucherLineType[],
+  receipts: ReceiptDayRow[],
+  approvedDates: Set<string>,
+  justApprovedDates: Set<string> = approvedDates,
+): ReceiptDayRow[] {
+  const datesByReceipt = new Map<string, Set<string>>();
+  for (const line of lines) {
+    if (!line.receiptId || !line.lineDate) continue;
+    const dates = datesByReceipt.get(line.receiptId) ?? new Set<string>();
+    dates.add(line.lineDate);
+    datesByReceipt.set(line.receiptId, dates);
+  }
+
+  return receipts.filter((receipt) => {
+    if (receipt.status !== 'pending') return false;
+    const dates = datesByReceipt.get(receipt.id);
+    if (!dates || dates.size === 0) return false;
+    // Touched by THIS decision, not merely sitting under an old one.
+    if (![...dates].some((date) => justApprovedDates.has(date))) return false;
+    return [...dates].every((date) => approvedDates.has(date));
+  });
+}
+
+/**
+ * The day statuses the PR is shown — an approval they can actually rely on.
+ *
+ * A day reads APPROVED to the PR only when its day review is approved AND no
+ * PENDING receipt has a line on it. The two can disagree, and when they do the
+ * phone must take the pessimistic one: `receiptsCarriedByDays` deliberately
+ * holds back a receipt straddling an unapproved day, and a day approved before
+ * the carry existed never swept at all — in both cases the day review says
+ * "approved" over money whose evidence nobody has accepted.
+ *
+ * That matters beyond cosmetics. APPROVED is what tells the PR the figure has
+ * stopped being their own claim and become the agency's statement, which is the
+ * precondition for disputing it. Showing it early points them at a dispute the
+ * server will refuse, naming a receipt they cannot see.
+ *
+ * HELD is passed through untouched. A held day is a decision, and a pending
+ * receipt on it does not make the refusal any less real.
+ */
+export function prVisibleDayStatuses(
+  view: DayReviewView[],
+  lines: PaymentVoucherLineType[],
+  receipts: ReceiptDayRow[],
+): { date: string; status: DayReviewView['status'] }[] {
+  const pendingIds = new Set(
+    receipts.filter((r) => r.status === 'pending').map((r) => r.id),
+  );
+  const daysWithPendingEvidence = new Set<string>();
+  for (const line of lines) {
+    if (!line.receiptId || !line.lineDate) continue;
+    if (pendingIds.has(line.receiptId)) daysWithPendingEvidence.add(line.lineDate);
+  }
+
+  return view.map((d) => ({
+    date: d.date,
+    status:
+      d.status === 'approved' && daysWithPendingEvidence.has(d.date) ? null : d.status,
+  }));
+}
+
 export type SendGateResult =
   | { allowed: true }
   | {
