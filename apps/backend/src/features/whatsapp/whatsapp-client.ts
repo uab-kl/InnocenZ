@@ -6,7 +6,7 @@ import type { PhoneVerificationPurpose } from '@/features/auth/phone-verificatio
  *
  * Expected template body (one template for all purposes), e.g.:
  *   OTP Code: {{1}}. This is your OTP code for {{2}}. For your security, do not share this code.
- * where {{1}} = 6-digit code, {{2}} = purpose label (Login / Password reset / Change phone).
+ * where {{1}} = 6-digit code, {{2}} = purpose label (Register / Password reset / Change phone).
  *
  * Env:
  *   META_WHATSAPP_TOKEN
@@ -33,7 +33,7 @@ export function otpPurposeLabel(purpose: PhoneVerificationPurpose): string {
       return 'Change phone';
     case 'signup':
     default:
-      return 'Login';
+      return 'Register';
   }
 }
 
