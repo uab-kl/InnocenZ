@@ -1,6 +1,6 @@
 import React from 'react';
-import { MY_STATES, NATIONALITY_OPTIONS } from './constants';
-import { Field, Input, Picker, Row } from './fields';
+import { NATIONALITY_OPTIONS, statesForCountry } from './constants';
+import { Field, Input, Picker } from './fields';
 import type { Draft, FieldErrors } from './types';
 
 type Props = {
@@ -10,7 +10,17 @@ type Props = {
 	clearFieldError: (key: keyof FieldErrors) => void;
 };
 
+function sanitizePostcode(country: string, raw: string) {
+	if (country === 'Malaysia') return raw.replace(/\D/g, '').slice(0, 5);
+	return raw.replace(/[^\dA-Za-z\- ]/g, '').slice(0, 12);
+}
+
 export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Props) {
+	const country = draft.country.trim();
+	const isMalaysia = country === 'Malaysia';
+	const stateOptions = country ? [...statesForCountry(country)] : [];
+	const stateSet = new Set(stateOptions);
+
 	return (
 		<>
 			<Field label="Address line 1*" error={fieldErrors.addressLine1}>
@@ -30,43 +40,77 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 					placeholder="Area"
 				/>
 			</Field>
-			<Row>
-				<Field label="Postcode*" flex error={fieldErrors.postcode}>
-					<Input
-						value={draft.postcode}
-						onChangeText={(t) => {
-							clearFieldError('postcode');
-							patch({ postcode: t.replace(/\D/g, '').slice(0, 5) });
-						}}
-						placeholder="50000"
-						keyboardType="number-pad"
-					/>
-				</Field>
-				<Field label="State*" flex error={fieldErrors.state}>
-					<Picker
-						value={draft.state || null}
-						options={MY_STATES}
-						onSelect={(v) => {
-							clearFieldError('state');
-							patch({ state: v });
-						}}
-						title="State"
-						placeholder="Choose"
-					/>
-				</Field>
-			</Row>
 			<Field label="Country*" error={fieldErrors.country}>
 				<Picker
-					value={draft.country || null}
+					value={country || null}
 					options={NATIONALITY_OPTIONS}
 					onSelect={(v) => {
 						clearFieldError('country');
-						patch({ country: v });
+						clearFieldError('state');
+						clearFieldError('postcode');
+						const nextStates = new Set(statesForCountry(v));
+						patch({
+							country: v,
+							state: nextStates.has(draft.state) ? draft.state : '',
+							postcode: sanitizePostcode(v, draft.postcode),
+						});
 					}}
 					title="Country"
 					searchable
 					placeholder="Choose"
 				/>
+			</Field>
+			<Field
+				label={isMalaysia ? 'State*' : 'State / province*'}
+				error={fieldErrors.state}
+				hint={!country ? 'Choose a country first — the list depends on it.' : undefined}
+			>
+				{!country ? (
+					<Input value="" editable={false} placeholder="Choose country first" />
+				) : stateOptions.length > 0 ? (
+					<Picker
+						key={country}
+						value={stateSet.has(draft.state) ? draft.state : null}
+						options={stateOptions}
+						onSelect={(v) => {
+							clearFieldError('state');
+							patch({ state: v });
+						}}
+						title={isMalaysia ? 'State' : 'State / province'}
+						placeholder="Choose"
+						searchable={stateOptions.length > 12}
+					/>
+				) : (
+					<Input
+						value={draft.state}
+						onChangeText={(t) => {
+							clearFieldError('state');
+							patch({ state: t });
+						}}
+						placeholder="State or province"
+						autoCapitalize="words"
+					/>
+				)}
+			</Field>
+			<Field
+				label="Postcode*"
+				error={fieldErrors.postcode}
+				hint={!country ? 'Choose a country first.' : isMalaysia ? '5 digits.' : undefined}
+			>
+				{!country ? (
+					<Input value="" editable={false} placeholder="Choose country first" />
+				) : (
+					<Input
+						key={`postcode-${country}`}
+						value={draft.postcode}
+						onChangeText={(t) => {
+							clearFieldError('postcode');
+							patch({ postcode: sanitizePostcode(country, t) });
+						}}
+						placeholder={isMalaysia ? '50000' : 'Postcode'}
+						keyboardType={isMalaysia ? 'number-pad' : 'default'}
+					/>
+				)}
 			</Field>
 		</>
 	);

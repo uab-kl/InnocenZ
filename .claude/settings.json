@@ -14,19 +14,5 @@
     "network": {
       "allowedDomains": ["www.google-analytics.com"]
     }
-  },
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "node .claude/hooks/renew-test-script.js",
-            "timeout": 15,
-            "statusMessage": "Checking TEST_SCRIPT.md renewal"
-          }
-        ]
-      }
-    ]
   }
 }

@@ -8,6 +8,9 @@ import {
 	UserIcon,
 	type IconComponent,
 } from '../../components/icons';
+import { STATES_BY_COUNTRY, statesForCountry } from './imi-states';
+
+export { STATES_BY_COUNTRY, statesForCountry };
 
 export const STEPS: { title: string; subtitle: string; icon: IconComponent }[] = [
 	{ title: 'Persona', subtitle: 'Your details', icon: UserIcon },
@@ -89,24 +92,8 @@ export const NATIONALITY_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
 	name: c.name,
 }));
 
-export const MY_STATES = [
-	'Johor',
-	'Kedah',
-	'Kelantan',
-	'Malacca',
-	'Negeri Sembilan',
-	'Pahang',
-	'Penang',
-	'Perak',
-	'Perlis',
-	'Sabah',
-	'Sarawak',
-	'Selangor',
-	'Terengganu',
-	'Kuala Lumpur',
-	'Labuan',
-	'Putrajaya',
-];
+/** Malaysia states — same list as `STATES_BY_COUNTRY.Malaysia`. */
+export const MY_STATES = [...STATES_BY_COUNTRY.Malaysia];
 
 export const ID_TYPES = ['NRIC', 'Passport', 'Work permit'] as const;
 
