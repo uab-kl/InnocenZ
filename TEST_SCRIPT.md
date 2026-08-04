@@ -894,6 +894,29 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 (late) — running the dev server rewrites `routeTree.gen.ts` into a DIFFERENT ORDER.
+> Reverted, not committed. And the reordered form boots clean, which is the useful part.**
+>
+> Starting `web-3001` regenerated `apps/web/src/routeTree.gen.ts`: **1,121 lines changed, 565/556** —
+> and **every one of them is reordering.** Verified rather than eyeballed: the route-import sets were
+> extracted from both versions and sorted — **58 routes before, 58 after, zero set difference.**
+> Nothing added, removed or repathed; the generator simply emits a different order than the committed
+> file has.
+>
+> **Reverted deliberately.** It is a side effect of running the server rather than a product of any
+> edit, and a 1,121-line reorder landing on `SL` is a merge-conflict magnet against `jk`'s lane.
+> ⚠️ **But it will come back every time anyone runs the web dev server** — worth an owner decision to
+> regenerate and commit ONCE, on a quiet branch, to stop the recurring dirty tree.
+>
+> ✅ **The genuinely useful finding: the reordered tree BOOTS.** Both portals were loaded on real
+> logins with **zero console errors while this exact regenerated file was on disk.** That matters
+> because **re-ordering these imports is what detonated the import cycle** that once took the whole
+> agency portal down with `Cannot access 'DEFAULT_PER_TABLE_RM' before initialization` — the cycle
+> "worked" only while it was lucky about entry order. **The leaf-module fix holds under the very
+> reordering that originally triggered the crash**, which is the strongest evidence that fix has had.
+> *A generated file changing by 1,121 lines is not automatically noise — but it is not automatically
+> danger either; the way to tell is to check whether the SET changed, then boot it.*
+
 > **4 Aug 2026 (late) — BOTH Settings screens clicked through on real logins. Edit → save → verified
 > in the database → restored. Zero console errors on either.**
 >
