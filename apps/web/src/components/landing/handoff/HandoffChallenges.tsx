@@ -58,6 +58,8 @@ export function HandoffChallenges() {
 				<img
 					src={LANDING_IMAGES.outletVenue}
 					alt=""
+					loading="lazy"
+					decoding="async"
 					className="absolute"
 					style={{
 						top: "-6%",
@@ -286,9 +288,6 @@ function FlowDiagram() {
 						<stop offset="88%" stopColor="#f2c66b" stopOpacity="0.6" />
 						<stop offset="100%" stopColor="#f2c66b" stopOpacity="0" />
 					</linearGradient>
-					<filter id="softblur">
-						<feGaussianBlur stdDeviation="1.2" />
-					</filter>
 				</defs>
 				<path
 					d="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
@@ -303,42 +302,41 @@ function FlowDiagram() {
 					fill="none"
 					strokeDasharray="3 6"
 				/>
-				{Array.from({ length: 6 }).map((_, i) => (
-					<circle key={i} r="4" fill="#f2c66b" filter="url(#softblur)">
+				{Array.from({ length: 3 }).map((_, i) => (
+					<circle key={i} r="3.5" fill="#f2c66b">
 						<animateMotion
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66}s`}
+							begin={`${-i * 1.6}s`}
 							path="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
 						/>
 						<animate
 							attributeName="opacity"
 							values="0;1;1;0"
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66}s`}
+							begin={`${-i * 1.6}s`}
 						/>
 					</circle>
 				))}
-				{Array.from({ length: 6 }).map((_, i) => (
+				{Array.from({ length: 2 }).map((_, i) => (
 					<circle
 						key={`v${i}`}
 						r="2.5"
 						fill="#b67cff"
-						filter="url(#softblur)"
 					>
 						<animateMotion
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66 - 0.33}s`}
+							begin={`${-i * 2.4 - 0.8}s`}
 							path="M 170 250 C 350 120, 550 380, 750 250 S 1000 180, 1030 250"
 						/>
 						<animate
 							attributeName="opacity"
 							values="0;1;1;0"
-							dur="4s"
+							dur="5s"
 							repeatCount="indefinite"
-							begin={`${-i * 0.66 - 0.33}s`}
+							begin={`${-i * 2.4 - 0.8}s`}
 						/>
 					</circle>
 				))}

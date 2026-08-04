@@ -117,7 +117,7 @@ export function HandoffAIFeatures() {
 				backgroundImage: `linear-gradient(180deg, transparent, rgba(182,124,255,.06) 30%, transparent), url('${LANDING_IMAGES.aiAbstract}')`,
 				backgroundPosition: "center",
 				backgroundSize: "cover",
-				backgroundAttachment: "fixed",
+				backgroundRepeat: "no-repeat",
 			}}
 		>
 			<div

@@ -352,6 +352,8 @@ export function HandoffBenefits() {
 									<img
 										src={"img" in c ? c.img : ""}
 										alt=""
+										loading="lazy"
+										decoding="async"
 										className="h-full w-full object-cover"
 										style={{
 											objectPosition:

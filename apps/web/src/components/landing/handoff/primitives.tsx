@@ -6,20 +6,32 @@ const LOGO_INTRINSIC = { width: 447, height: 434 } as const;
 
 export function useCursorGlow() {
 	useEffect(() => {
-		const onMove = (e: MouseEvent) => {
-			document.documentElement.style.setProperty("--mx", `${e.clientX}px`);
-			document.documentElement.style.setProperty("--my", `${e.clientY}px`);
-			document.querySelectorAll(".hz-glass").forEach((el) => {
-				const r = el.getBoundingClientRect();
-				(el as HTMLElement).style.setProperty(
-					"--cx",
-					`${e.clientX - r.left}px`,
-				);
-				(el as HTMLElement).style.setProperty("--cy", `${e.clientY - r.top}px`);
-			});
+		const finePointer = window.matchMedia("(pointer: fine)");
+		const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+		if (!finePointer.matches || reduceMotion.matches) return;
+
+		const root = document.documentElement;
+		let raf = 0;
+		let latestX = 0;
+		let latestY = 0;
+
+		const flush = () => {
+			raf = 0;
+			root.style.setProperty("--mx", `${latestX}px`);
+			root.style.setProperty("--my", `${latestY}px`);
 		};
+
+		const onMove = (e: MouseEvent) => {
+			latestX = e.clientX;
+			latestY = e.clientY;
+			if (!raf) raf = requestAnimationFrame(flush);
+		};
+
 		window.addEventListener("mousemove", onMove, { passive: true });
-		return () => window.removeEventListener("mousemove", onMove);
+		return () => {
+			window.removeEventListener("mousemove", onMove);
+			if (raf) cancelAnimationFrame(raf);
+		};
 	}, []);
 }
 
@@ -49,12 +61,21 @@ export function CountUp({
 	decimals?: number;
 }) {
 	const ref = useRef<HTMLSpanElement>(null);
-	const [val, setVal] = useState(0);
 	const started = useRef(false);
 
 	useEffect(() => {
 		const el = ref.current;
 		if (!el) return;
+
+		const format = (n: number) => {
+			const display = decimals
+				? n.toFixed(decimals)
+				: Math.round(n).toLocaleString();
+			el.textContent = `${prefix}${display}${suffix}`;
+		};
+
+		format(0);
+
 		const io = new IntersectionObserver(
 			(entries) => {
 				entries.forEach((e) => {
@@ -64,7 +85,7 @@ export function CountUp({
 						const tick = (t: number) => {
 							const p = Math.min(1, (t - t0) / dur);
 							const eased = 1 - (1 - p) ** 3;
-							setVal(to * eased);
+							format(to * eased);
 							if (p < 1) requestAnimationFrame(tick);
 						};
 						requestAnimationFrame(tick);
@@ -75,19 +96,9 @@ export function CountUp({
 		);
 		io.observe(el);
 		return () => io.disconnect();
-	}, [to, dur]);
+	}, [to, dur, suffix, prefix, decimals]);
 
-	const display = decimals
-		? val.toFixed(decimals)
-		: Math.round(val).toLocaleString();
-
-	return (
-		<span ref={ref}>
-			{prefix}
-			{display}
-			{suffix}
-		</span>
-	);
+	return <span ref={ref} />;
 }
 
 export function SplitTitle({
@@ -201,9 +212,52 @@ export function LogoMark({ size = 52 }: { size?: number }) {
 
 export function useTick(interval = 1500) {
 	const [t, setT] = useState(0);
+
 	useEffect(() => {
-		const id = setInterval(() => setT((x) => x + 1), interval);
-		return () => clearInterval(id);
+		if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+			return;
+		}
+
+		let id: ReturnType<typeof setInterval> | undefined;
+		const start = () => {
+			if (id || document.hidden) return;
+			id = setInterval(() => setT((x) => x + 1), interval);
+		};
+		const stop = () => {
+			if (!id) return;
+			clearInterval(id);
+			id = undefined;
+		};
+
+		const onVisibility = () => {
+			if (document.hidden) stop();
+			else start();
+		};
+
+		const section = document.getElementById("dashboards");
+		let io: IntersectionObserver | undefined;
+		if (section) {
+			io = new IntersectionObserver(
+				(entries) => {
+					entries.forEach((entry) => {
+						if (entry.isIntersecting && !document.hidden) start();
+						else stop();
+					});
+				},
+				{ threshold: 0.12 },
+			);
+			io.observe(section);
+		} else {
+			start();
+		}
+
+		document.addEventListener("visibilitychange", onVisibility);
+		return () => {
+			stop();
+			io?.disconnect();
+			document.removeEventListener("visibilitychange", onVisibility);
+		};
 	}, [interval]);
+
 	return t;
 }
