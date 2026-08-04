@@ -696,6 +696,18 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — CHECK-OUT NEEDS ONE ACTION, NOT ONE OF EACH (corrects the rule shipped in `7d7bfa6`).**
+>
+> Owner: *"every shift must have either one drink or tips , or both also can to check out"*. I had read
+> the earlier *"scan or self log the drink and the tips"* as **AND** and enforced both halves — so a
+> drinks-only night was held with *"Nothing logged for tips yet"* and **no honest way to satisfy it**: the
+> only escape would be inventing a tip that never happened, which is the opposite of what these gates are
+> for.
+>
+> **Now: at least ONE action — a drink, a tip, or both.** What is still refused is an EMPTY shift, nothing
+> but the clock, plus the unchanged rule that every logged row carries its picture. Wages and the check-in
+> stamp remain the shift itself rather than an action, so neither satisfies it.
+
 > **4 Aug 2026 — REMOVE THE RECEIPT, NOT ONE ITEM OFF IT (and the uncaught `RCP-…` toast).**
 >
 > Owner: *"Makes the scan I also can remove and scan again"* and *"if user need remove that picture that

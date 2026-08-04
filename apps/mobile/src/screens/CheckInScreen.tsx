@@ -242,21 +242,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   ).length;
 
   /**
-   * A shift only closes once BOTH halves of the night are accounted for: a
-   * drinks action and a tips action, each carrying its picture.
+   * A shift closes once AT LEAST ONE action is logged — a drink, a tip, or
+   * both. Not one of each: plenty of nights are drinks-only or tips-only, and
+   * demanding both would strand a PR who genuinely had nothing on the other
+   * side, with no honest way to satisfy it.
    *
-   * Leaving one side unlogged is not a neutral omission — it is commission the
-   * PR cannot claim later, once the paper is gone and the week has closed.
+   * What is still refused is an EMPTY shift: no receipt, no self-log, nothing
+   * but the clock. That is commission which cannot be claimed once the paper is
+   * gone and the week has closed.
+   *
    * Wages (`kind: 'wages'`) and the check-in stamp are the shift itself rather
-   * than an action, so neither counts towards either half.
+   * than an action, so neither counts as one.
    */
   const loggedActions = todayReceipts.filter(
     (l) => l.source !== 'checkin' && l.kind !== 'wages',
   );
-  const missingHalves = [
-    loggedActions.some((l) => l.kind === 'drinks') ? null : 'drinks',
-    loggedActions.some((l) => l.kind === 'tips') ? null : 'tips',
-  ].filter(Boolean) as string[];
 
   /** Why check-out is refused, or null when it is allowed. Photos first. */
   const missingPlural = linesMissingPhoto === 1 ? '' : 's';
@@ -264,8 +264,8 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const checkOutBlock: string | null =
     linesMissingPhoto > 0
       ? `${linesMissingPhoto} logged action${missingPlural} ${missingHasHave} no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.`
-      : missingHalves.length > 0
-        ? `Nothing logged for ${missingHalves.join(' or ')} yet. Scan the receipt or self-log it — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.`
+      : loggedActions.length === 0
+        ? 'Nothing logged yet. Scan a receipt or self-log at least one drink or tip — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.'
         : null;
 
   const finalPayout = active
