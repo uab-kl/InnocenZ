@@ -909,6 +909,38 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 (late) — the demo-data leak into REAL sessions is down from 21 slices to 1.**
+> Web `tsc` **120** (baseline), zero console errors, roster + settings still render real data.
+>
+> `buildBlankPortalReset()` warns in DEV about demo slices it cannot blank, and **real sessions keep
+> whatever it cannot blank**. The list was **21**: `paymentCardLast4`, `postSealRatePrompt`,
+> `prSessionByRole`, `shiftAccepted`, `pendingApproval`, `acceptedShiftIndex`, `checkedIn`,
+> `checkedOut`, `prActiveShift`, `prComcard`, `prDisplayName`, `prIcName`, `prMobile`, `prEmail`,
+> `prAvatarPhoto`, `prPayrollAgencyId`, `prMarketplaceApplication`, `prAgencyTiedAt`, `prCheckInMeta`,
+> `prLeaveRequest`, `notificationPrefs`. **Now 1.**
+>
+> **Twelve went to a generic rule** — strings → `""`, booleans → `false`, and **`null` → `null`**,
+> that last one because `typeof null === "object"` so a slice ALREADY null was reported as unblankable
+> when null is precisely its blank. Eight more got explicit entries (nullable session objects → null,
+> a dictionary and an all-optional bag → `{}`, `notificationPrefs` → its real default).
+>
+> 🔴 **The generic number rule is WRONG for one field, and reading the types is what caught it.**
+> `acceptedShiftIndex` is `number | null`, and the pre-existing rule blanks every number to `0` — but
+> **`0` is a valid index meaning "the first shift was accepted"**, not "none". It is now explicit, with
+> the reason recorded beside it. *The empty value of an index is null, and a rule that maps every
+> number to 0 cannot know that.*
+>
+> ⚠️ **`prComcard` is deliberately left unblanked and still named in the warning.** The obvious
+> candidate, `DEFAULT_COMCARD` in `comcard-demo.ts`, is typed **`ComcardDemoStyle`** — a comcard's
+> STYLING, not a comcard. Importing it typechecked as a plan and would have written the wrong shape
+> into the slice **on the strength of the constant's name reading correctly**. Backed out; blanking it
+> needs a real empty `PrComcard`, which does not exist. *One remaining honest warning beats twenty-one
+> silenced ones.*
+>
+> **Why it hid so long:** every one of the 21 is a PR-portal slice, and **no agency or outlet screen
+> reads them** — the leak was invisible from the screens anyone was looking at. That is also why it
+> stays worth fixing: the web PR portal is where a real PR session would pick them up.
+
 > **4 Aug 2026 (late) — the member-management UI is BUILT and CLICKED THROUGH on both portals. The
 > capability finally moves from *unwired* to *done*.** Web `tsc` **120** (baseline), 0 in touched
 > files, biome clean.
