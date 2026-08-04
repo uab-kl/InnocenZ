@@ -409,7 +409,16 @@ export function HandoffBenefits() {
 	);
 }
 
-const advantageIcons = [Globe, SignalHigh, Wallet, Brain, Lock, Smartphone, TrendingUp, Shield];
+const advantageIcons = [
+	Globe,
+	SignalHigh,
+	Wallet,
+	Brain,
+	Lock,
+	Smartphone,
+	TrendingUp,
+	Shield,
+];
 
 export function HandoffWhyInnocenz() {
 	const { t } = useLandingLocale();
@@ -462,7 +471,10 @@ export function HandoffWhyInnocenz() {
 								>
 									{a.title}
 								</div>
-								<div className="text-[13px]" style={{ color: "var(--hz-ink-dim)" }}>
+								<div
+									className="text-[13px]"
+									style={{ color: "var(--hz-ink-dim)" }}
+								>
 									{a.desc}
 								</div>
 							</div>
@@ -493,10 +505,7 @@ export function HandoffTestimonials() {
 				/>
 				<div className="grid gap-5 md:grid-cols-3">
 					{t.testimonials.quotes.map((q, i) => (
-						<div
-							key={q.n}
-							className="hz-glass flex flex-col gap-5 p-8"
-						>
+						<div key={q.n} className="hz-glass flex flex-col gap-5 p-8">
 							<Quote size={28} className="hz-gold-text" />
 							<div
 								className="hz-display text-xl leading-snug"
@@ -510,7 +519,10 @@ export function HandoffTestimonials() {
 							>
 								<div>
 									<div className="text-sm font-semibold">{q.n}</div>
-									<div className="text-xs" style={{ color: "var(--hz-ink-mute)" }}>
+									<div
+										className="text-xs"
+										style={{ color: "var(--hz-ink-mute)" }}
+									>
 										{q.t}
 									</div>
 								</div>

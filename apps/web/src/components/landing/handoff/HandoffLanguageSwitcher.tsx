@@ -1,7 +1,7 @@
 import { ChevronDown } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useLandingLocale, type LandingLocale } from "@/lib/landing-i18n";
+import { type LandingLocale, useLandingLocale } from "@/lib/landing-i18n";
 
 const MENU_MIN_WIDTH = 148;
 

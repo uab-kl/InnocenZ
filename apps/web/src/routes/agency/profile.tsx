@@ -5,6 +5,7 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
+import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { useAgencyProfile } from "@agency-portal/hooks/use-agency-profile";
 import type {
 	AgencyFinanceHead,
@@ -143,7 +144,7 @@ function AgencyProfile() {
 		reader.readAsDataURL(file);
 	};
 
-	const saveEdit = () => {
+	const saveEdit = async () => {
 		if (!draft.ownerName.trim()) {
 			toast("Enter owner name", "warn");
 			return;
@@ -151,6 +152,20 @@ function AgencyProfile() {
 		if (!draft.mobile.trim()) {
 			toast("Enter mobile number", "warn");
 			return;
+		}
+		// Real session: persist the backed fields FIRST and bail out if the server
+		// refuses, so the screen never shows a saved state the database did not
+		// accept. A demo session has no agency id and keeps the store-only path.
+		if (profile.backed) {
+			try {
+				await profile.save({
+					orgName: draft.orgName.trim(),
+					ownerName: draft.ownerName.trim(),
+				});
+			} catch {
+				toast("Could not save — the server refused the change", "warn");
+				return;
+			}
 		}
 		const nextFinance = { ...financeDraft };
 		const inviteChanged = inviteEmail.trim() !== agencyFinanceHead.email;
@@ -170,10 +185,20 @@ function AgencyProfile() {
 			scalingTierMultipliers,
 			outletCommissionRules: outletCommissionRules.map((r) => ({ ...r })),
 		});
+		if (profile.backed) {
+			toast("Settings saved", "success");
+		}
 		if (inviteChanged && inviteEmail.trim()) {
+			// The member-write endpoints are now open to the agency OWNER, not just
+			// admin — but there is still no screen that calls them, and sending an
+			// invite email needs a mailer that does not exist. So this stays worded
+			// as intent, never as a completed action: the previous version said an
+			// ADMIN had to add the member, which stopped being true the moment the
+			// routes were widened. A message about a capability has to be revisited
+			// when the capability moves.
 			toast(
-				`Invite queued for ${inviteEmail.trim()} — Finance Head must complete IC + e-signature`,
-				"info",
+				`Finance Head invite for ${inviteEmail.trim()} is not sent — no invite is delivered yet`,
+				"warn",
 			);
 		}
 		setEditing(false);
@@ -364,6 +389,14 @@ function AgencyProfile() {
 					</IzCard>
 				</>
 			)}
+
+			{/* Real staff of this agency, from `agency_user`. Distinct from the
+			    Finance Head card above, which is the demo profile form. */}
+			<OrgMembersPanel
+				kind="agency"
+				orgId={profile.agencyId}
+				canManage={canEdit}
+			/>
 
 			<IzSectionLabel>Login &amp; security</IzSectionLabel>
 			<IzCard>

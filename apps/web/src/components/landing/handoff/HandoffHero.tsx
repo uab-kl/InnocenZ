@@ -218,7 +218,10 @@ export function HandoffHero() {
 					<h1 className="hz-display hz-hero-h1">
 						{t.hero.titleLine1}
 						<br />
-						<em className="hz-gold-text not-italic" style={{ fontStyle: "italic" }}>
+						<em
+							className="hz-gold-text not-italic"
+							style={{ fontStyle: "italic" }}
+						>
 							{t.hero.titleLine2}
 						</em>
 					</h1>

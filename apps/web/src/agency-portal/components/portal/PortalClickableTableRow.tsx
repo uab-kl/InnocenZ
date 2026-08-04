@@ -1,42 +1,42 @@
-import { useNavigate } from '@tanstack/react-router';
-import type { PrPvStatus } from '@agency-portal/lib/pr-demo';
-import type { KeyboardEvent, ReactNode } from 'react';
+import type { PrPvStatus } from "@agency-portal/lib/pr-demo";
+import { useNavigate } from "@tanstack/react-router";
+import type { KeyboardEvent, ReactNode } from "react";
 
 type RowTarget =
-  | { to: '/agency/prs'; search?: { pr?: string } }
-  | { to: '/agency/pv'; search?: { pv?: string; status?: PrPvStatus } }
-  | { to: '/agency/pending'; search?: { tab?: 'signups' | 'cutlost' } }
-  | { to: '/agency/roster' };
+	| { to: "/agency/prs"; search?: { pr?: string } }
+	| { to: "/agency/pv"; search?: { pv?: string; status?: PrPvStatus } }
+	| { to: "/agency/pending"; search?: { tab?: "signups" | "cutlost" } }
+	| { to: "/agency/roster" };
 
 export function PortalClickableTableRow({
-  target,
-  children,
+	target,
+	children,
 }: {
-  target?: RowTarget;
-  children: ReactNode;
+	target?: RowTarget;
+	children: ReactNode;
 }) {
-  const navigate = useNavigate();
+	const navigate = useNavigate();
 
-  if (!target) return <tr>{children}</tr>;
+	if (!target) return <tr>{children}</tr>;
 
-  const go = () => navigate(target);
+	const go = () => navigate(target);
 
-  const onKeyDown = (e: KeyboardEvent<HTMLTableRowElement>) => {
-    if (e.key === 'Enter' || e.key === ' ') {
-      e.preventDefault();
-      go();
-    }
-  };
+	const onKeyDown = (e: KeyboardEvent<HTMLTableRowElement>) => {
+		if (e.key === "Enter" || e.key === " ") {
+			e.preventDefault();
+			go();
+		}
+	};
 
-  return (
-    <tr
-      className="iz-portal-table-row--clickable"
-      onClick={go}
-      onKeyDown={onKeyDown}
-      tabIndex={0}
-      role="link"
-    >
-      {children}
-    </tr>
-  );
+	return (
+		<tr
+			className="iz-portal-table-row--clickable"
+			onClick={go}
+			onKeyDown={onKeyDown}
+			tabIndex={0}
+			role="link"
+		>
+			{children}
+		</tr>
+	);
 }

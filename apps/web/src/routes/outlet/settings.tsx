@@ -1,6 +1,7 @@
 import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
+import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { GeoFenceCard } from "@agency-portal/components/outlet/GeoFenceCard";
 import {
 	OutletPage,
@@ -172,7 +173,7 @@ function OutletSettingsPage() {
 		reader.readAsDataURL(file);
 	};
 
-	const saveEdit = () => {
+	const saveEdit = async () => {
 		if (!draft.ownerName.trim()) {
 			toast("Enter owner name", "warn");
 			return;
@@ -184,6 +185,19 @@ function OutletSettingsPage() {
 		if (!draft.orgName.trim()) {
 			toast("Enter venue name", "warn");
 			return;
+		}
+		// Real session: persist the venue name FIRST and bail out if the server
+		// refuses, so the screen never shows a saved state the database rejected.
+		// Only the name goes up — see the note on `save` in use-outlet-profile:
+		// the location line is five columns joined for display, and writing it
+		// back would flatten them into one.
+		if (profile.backed) {
+			try {
+				await profile.save({ venueName: draft.orgName.trim() });
+			} catch {
+				toast("Could not save — the server refused the change", "warn");
+				return;
+			}
 		}
 		saveOutletProfileSettings({
 			owner: {
@@ -197,6 +211,9 @@ function OutletSettingsPage() {
 			opsHead: { ...opsDraft },
 			location: locationDraft.trim(),
 		});
+		if (profile.backed) {
+			toast("Venue name saved · address is not persisted yet", "success");
+		}
 		setEditing(false);
 	};
 
@@ -418,6 +435,14 @@ function OutletSettingsPage() {
 					onChange={(v) => saveOutletSettings({ notifyShiftUpdates: v })}
 				/>
 			</IzCard>
+
+			{/* Real staff of this venue, from `outlet_user`. Distinct from the
+			    Finance/Ops Head cards above, which are the demo profile form. */}
+			<OrgMembersPanel
+				kind="outlet"
+				orgId={profile.outletId}
+				canManage={canEdit}
+			/>
 
 			<IzSectionLabel>Login &amp; security</IzSectionLabel>
 			<IzCard>

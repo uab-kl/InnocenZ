@@ -31,7 +31,9 @@ function ageFromDob(dob: string | null | undefined): number {
  * neighboring slots are still the seed gallery photos — swap those broken
  * `/img/users/portfolio/…` paths back to the matching `vicky-N.png` seed.
  */
-export function splitPortfolioComcard(photos: (string | null)[] | null | undefined): {
+export function splitPortfolioComcard(
+	photos: (string | null)[] | null | undefined,
+): {
 	comcardImageUrl: string | null;
 	portfolioPhotos: (string | null)[] | undefined;
 } {
@@ -62,7 +64,9 @@ export function splitPortfolioComcard(photos: (string | null)[] | null | undefin
 
 	return {
 		comcardImageUrl,
-		portfolioPhotos: portfolioPhotos.some(Boolean) ? portfolioPhotos : undefined,
+		portfolioPhotos: portfolioPhotos.some(Boolean)
+			? portfolioPhotos
+			: undefined,
 	};
 }
 

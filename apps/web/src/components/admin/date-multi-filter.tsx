@@ -52,7 +52,10 @@ export function DateMultiFilter({
 				<PopoverTrigger asChild>
 					<Button
 						variant="outline"
-						className={cn("justify-start font-normal sm:min-w-48", buttonClassName)}
+						className={cn(
+							"justify-start font-normal sm:min-w-48",
+							buttonClassName,
+						)}
 						aria-label={ariaLabel}
 					>
 						<CalendarIcon className="text-muted-foreground" />

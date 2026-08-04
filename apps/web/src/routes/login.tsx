@@ -64,25 +64,44 @@ function RouteComponent() {
 		onSubmit: async ({ value }) => {
 			setError("");
 
-			// Demo account for the ported agency portal (client-side demo data,
-			// no backend). Recognized here and routed straight to /agency.
-			const {
-				isAgencyDemoLogin,
-				startAgencyDemoSession,
-				isOutletDemoLogin,
-				startOutletDemoSession,
-				startAgencyRealSession,
-				startOutletRealSession,
-			} = await import("@/lib/auth/agency-demo-session");
-			if (isAgencyDemoLogin(value.email, value.password)) {
-				await startAgencyDemoSession(value.email);
-				hardNavigate("/agency");
-				return;
-			}
-			if (isOutletDemoLogin(value.email, value.password)) {
-				await startOutletDemoSession(value.email);
-				hardNavigate("/outlet");
-				return;
+			const { startAgencyRealSession, startOutletRealSession } = await import(
+				"@/lib/auth/agency-demo-session"
+			);
+
+			// Demo accounts for the ported portals (client-side demo data, no
+			// backend). DEV-ONLY: `import.meta.env.DEV` is replaced with the literal
+			// `false` at build time, so this whole branch — and the dynamic import
+			// of the demo starters with it — is dropped from a production bundle.
+			//
+			// ⚠️ The recorded gate said the credential was `owner@atlas-agency.my` +
+			// `password`. It is NOT: `isAgencyDemoLogin` requires
+			// `demo@atlas-agency.invalid` exactly, and `.invalid` is a reserved TLD
+			// that can never be a real address. The real owner email falls straight
+			// through to the backend, which rejects the wrong password.
+			//
+			// It plants a placeholder JWT (`alg: "none"`, signature literally
+			// "demo") purely so the route guard passes. The backend verifies
+			// signatures, so that token can never read real data — the blast radius
+			// was always a demo shell, not real records. Gated anyway, because a
+			// login that accepts a known password for a known address should not
+			// exist in a build a client can reach.
+			if (import.meta.env.DEV) {
+				const {
+					isAgencyDemoLogin,
+					startAgencyDemoSession,
+					isOutletDemoLogin,
+					startOutletDemoSession,
+				} = await import("@/lib/auth/agency-demo-session");
+				if (isAgencyDemoLogin(value.email, value.password)) {
+					await startAgencyDemoSession(value.email);
+					hardNavigate("/agency");
+					return;
+				}
+				if (isOutletDemoLogin(value.email, value.password)) {
+					await startOutletDemoSession(value.email);
+					hardNavigate("/outlet");
+					return;
+				}
 			}
 
 			try {

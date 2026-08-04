@@ -1,10 +1,5 @@
-import {
-	Briefcase,
-	Building2,
-	ContactRound,
-	Sparkles,
-} from "lucide-react";
 import type { LucideIcon } from "lucide-react";
+import { Briefcase, Building2, ContactRound, Sparkles } from "lucide-react";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { SectionHead, SplitTitle } from "./primitives";
@@ -116,7 +111,10 @@ export function HandoffChallenges() {
 										</div>
 									</div>
 								</div>
-								<div className="h-px" style={{ background: "var(--hz-line)" }} />
+								<div
+									className="h-px"
+									style={{ background: "var(--hz-line)" }}
+								/>
 								<ul className="hz-pain-list m-0 flex list-none flex-col gap-2.5 p-0">
 									{g.pains.map((p) => (
 										<li
@@ -174,9 +172,7 @@ function FlowNode({
 	const borderColor = isGold
 		? "rgba(242,198,107,.35)"
 		: "rgba(182,124,255,.35)";
-	const glowColor = isGold
-		? "rgba(242,198,107,.4)"
-		: "rgba(182,124,255,.35)";
+	const glowColor = isGold ? "rgba(242,198,107,.4)" : "rgba(182,124,255,.35)";
 
 	return (
 		<div

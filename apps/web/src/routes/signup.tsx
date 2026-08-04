@@ -13,8 +13,7 @@ export const Route = createFileRoute("/signup")({
 			{ title: "Sign up — InnocenZ" },
 			{
 				name: "description",
-				content:
-					"Create an InnocenZ account as an Outlet or PR Agency.",
+				content: "Create an InnocenZ account as an Outlet or PR Agency.",
 			},
 		],
 	}),
@@ -51,7 +50,9 @@ function SignupPageContent() {
 					<div className="relative z-10 mt-auto w-full pt-14">
 						<p className="login-footer text-center text-foreground/55 sm:text-left">
 							© {new Date().getFullYear()}{" "}
-							<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
+							<span className="brand-wordmark text-gradient-royal">
+								InnocenZ
+							</span>
 							. {copy.aside.rightsReserved}
 							{" · "}
 							<Link
@@ -105,9 +106,7 @@ function SignupPageContent() {
 
 					<p className="login-footer mt-10 text-center text-foreground/55 lg:hidden">
 						© {new Date().getFullYear()}{" "}
-						<span className="brand-wordmark text-gradient-royal">
-							InnocenZ
-						</span>
+						<span className="brand-wordmark text-gradient-royal">InnocenZ</span>
 						. {copy.aside.rightsReserved}
 						{" · "}
 						<Link

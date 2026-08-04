@@ -95,3 +95,43 @@ export function weekOfDate(date: string): { weekStart: string; weekEnd: string }
 
   return { weekStart: isoDate(sunday), weekEnd: isoDate(saturday) };
 }
+
+/** Payment terms: a voucher falls due a week after the week it covers closes. */
+export const PAYMENT_TERM_DAYS = 7;
+
+/**
+ * The date a voucher for a given week becomes payable.
+ *
+ * Anchored to `week_end`, NOT to `issued_date`, and that is the whole decision
+ * (owner's call, 3 Aug 2026). The issued date is whenever the payout job
+ * happened to run: late by a day after an outage, or twice if someone re-runs
+ * the generator. Anchoring there would let the same seven days of work carry
+ * two different due dates, and would quietly extend the term every time the job
+ * slipped. `week_end` is a property of the payroll cycle itself, so the answer
+ * is the same no matter when — or how often — generation runs.
+ *
+ * Takes and returns `YYYY-MM-DD` for the same reason as `weekOfDate`: both ends
+ * are calendar dates with no time and no zone, so the arithmetic runs on a
+ * UTC-anchored Date where midnight never rolls over. No KL offset is applied
+ * here — the input is ALREADY a KL-local calendar date, and shifting it again
+ * would land the due date a day early for half the day.
+ *
+ * Returns null for a malformed week end, so a caller cannot stamp a voucher
+ * with the due date of `NaN`. Callers should treat null as "no due date" — the
+ * column is nullable, which is exactly the state every voucher was already in
+ * before this rule existed.
+ */
+export function paymentDueDate(weekEnd: string, termDays: number = PAYMENT_TERM_DAYS): string | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(weekEnd ?? '');
+  if (!match) return null;
+  const [, y, m, d] = match;
+  const anchor = new Date(Date.UTC(Number(y), Number(m) - 1, Number(d)));
+  if (Number.isNaN(anchor.getTime())) return null;
+  // Same round-trip guard as weekOfDate: Date.UTC silently rolls 2026-02-30
+  // over into March rather than rejecting it.
+  if (isoDate(anchor) !== weekEnd) return null;
+
+  const due = new Date(anchor);
+  due.setUTCDate(anchor.getUTCDate() + termDays);
+  return isoDate(due);
+}

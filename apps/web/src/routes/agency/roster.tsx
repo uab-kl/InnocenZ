@@ -125,8 +125,10 @@ function AgencyRoster() {
 	const agencyRoster = backendRoster.slots;
 	const prCheckInMeta = useStore((s) => s.prCheckInMeta);
 	const prSubRole = useStore((s) => s.prSubRole);
-	const editRosterSlot = useStore((s) => s.editRosterSlot);
-	const cancelRosterShift = useStore((s) => s.cancelRosterShift);
+	// `editRosterSlot`, `cancelRosterShift` and `flagRosterAttendance` were read
+	// here until the live-view handlers were pointed at the backend. They are
+	// gone rather than left dangling: a demo action still subscribed beside a
+	// backend one is how the two got wired together by accident.
 	// Outlet swaps are backend-backed: the demo store's requestOutletSwap matched
 	// the slot id against `agencyRoster`, but the roster now renders backend
 	// slots whose id is a shift_assignment UUID, so it silently found nothing
@@ -138,7 +140,6 @@ function AgencyRoster() {
 	const declinePrSwapRequest = useStore((s) => s.declinePrSwapRequest);
 	const demoAutoAssignPr = useStore((s) => s.demoAutoAssignPr);
 	const assignPrToOutlet = useStore((s) => s.assignPrToOutlet);
-	const flagRosterAttendance = useStore((s) => s.flagRosterAttendance);
 	const syncLivePrCheckInToRoster = useStore(
 		(s) => s.syncLivePrCheckInToRoster,
 	);
@@ -153,29 +154,41 @@ function AgencyRoster() {
 	const [replacementPick, setReplacementPick] = useState("");
 	const canAssign = agencyCan(agencySubRole, "assignShifts");
 
-	// Phase 2: in planning view the by-id write actions hit the backend (a slot's
-	// id is the shift-assignment id); the live view keeps its demo store actions.
+	// The by-id write actions hit the backend in BOTH views.
+	//
+	// 🔴 They used to branch on `viewMode === "planning"`, sending the live view
+	// to the demo store instead — but `agencyRoster` above is the BACKEND slots in
+	// both views, so a live-view slot id is a shift_assignment UUID. The demo
+	// actions look that id up in a demo slice that has never contained backend
+	// UUIDs, find nothing, and return silently: cancelling a shift or flagging a
+	// no-show from the Live tab did NOTHING, while the sheet closed as though it
+	// had worked.
+	//
+	// This is the identical failure already recorded for outlet swap a few lines
+	// up — same cause, three more handlers, missed because that fix was described
+	// as being about swaps rather than about ids. *When a screen changes where its
+	// rows come from, every action keyed by row id has to move with them.*
 	const rosterMut = useRosterMutations();
-	const isPlanning = viewMode === "planning";
-	const handleCancelSlot = (slotId: string) =>
-		isPlanning ? rosterMut.cancel.mutate(slotId) : cancelRosterShift(slotId);
+	const handleCancelSlot = (slotId: string) => rosterMut.cancel.mutate(slotId);
 	const handleFlagNoShow = (slotId: string) =>
-		isPlanning
-			? rosterMut.flagNoShow.mutate(slotId)
-			: flagRosterAttendance(slotId, "no-show");
-	const handleFlagLate = (slotId: string) => {
-		// No backend field for 'late' yet; keep demo behaviour in live view only.
-		if (!isPlanning) flagRosterAttendance(slotId, "late");
+		rosterMut.flagNoShow.mutate(slotId);
+	const handleFlagLate = (_slotId: string) => {
+		// There is still no backend field for 'late'. Say so, rather than writing
+		// to a store that does not hold this row — which is how it came to look
+		// like a working button in the first place.
+		toast("Late flags are not recorded yet", "warn");
 	};
 	const handleEditSave = (slotId: string, patch: Partial<AgencyRosterSlot>) => {
-		if (isPlanning) {
-			const status = patch.status
-				? assignmentStatusFromRoster(patch.status)
-				: undefined;
-			if (status) rosterMut.setStatus.mutate({ id: slotId, status });
-			return;
+		const status = patch.status
+			? assignmentStatusFromRoster(patch.status)
+			: undefined;
+		if (status) rosterMut.setStatus.mutate({ id: slotId, status });
+		// Only `status` has a backend write behind it. Anything else in the patch
+		// is discarded, so the edit sheet must not imply it was saved.
+		const unsaved = Object.keys(patch).filter((k) => k !== "status");
+		if (unsaved.length > 0) {
+			toast(`Not saved: ${unsaved.join(", ")} — only status persists`, "warn");
 		}
-		editRosterSlot(slotId, patch);
 	};
 
 	useEffect(() => {
@@ -709,14 +722,14 @@ function AgencyRoster() {
 						handleCancelSlot(editSlot.id);
 						setEditId(null);
 					}}
-					onUnassign={
-						isPlanning
-							? () => {
-									rosterMut.unassign.mutate(editSlot.id);
-									setEditId(null);
-								}
-							: undefined
-					}
+					onUnassign={() => {
+						// Offered in both views for the same reason as the handlers above:
+						// the slot id is a backend shift_assignment id either way, so
+						// hiding this in the live view withheld a working action rather
+						// than protecting anything.
+						rosterMut.unassign.mutate(editSlot.id);
+						setEditId(null);
+					}}
 				/>
 			)}
 

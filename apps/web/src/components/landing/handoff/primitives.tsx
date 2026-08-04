@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 
 /** Source asset is 447×434 — keep display ≤ ~120px for crisp zoom. */
@@ -73,8 +73,7 @@ export function SplitTitle({
 	suffix?: string;
 	accent?: "gold" | "violet";
 }) {
-	const accentClass =
-		accent === "violet" ? "hz-violet-text" : "hz-gold-text";
+	const accentClass = accent === "violet" ? "hz-violet-text" : "hz-gold-text";
 
 	if (prefix === undefined) {
 		return (
@@ -144,9 +143,7 @@ export function Tag({
 				borderRadius: 999,
 				border: `1px solid ${isGold ? "rgba(242,198,107,.35)" : "rgba(182,124,255,.35)"}`,
 				color: isGold ? "var(--hz-gold)" : "var(--hz-violet)",
-				background: isGold
-					? "rgba(242,198,107,.06)"
-					: "rgba(182,124,255,.06)",
+				background: isGold ? "rgba(242,198,107,.06)" : "rgba(182,124,255,.06)",
 			}}
 		>
 			{children}

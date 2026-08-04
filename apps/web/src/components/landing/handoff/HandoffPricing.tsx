@@ -1,11 +1,11 @@
 import { Briefcase, Building2 } from "lucide-react";
 import { useState } from "react";
+import { PoweredByBadge } from "@/components/landing/PoweredByBadge";
 import {
 	AGENCY_TIER_PRICES,
 	OUTLET_TIER_PRICES,
 	useLandingLocale,
 } from "@/lib/landing-i18n";
-import { PoweredByBadge } from "@/components/landing/PoweredByBadge";
 import { LogoMark, SplitTitle } from "./primitives";
 
 const OUTLET_POPULAR_INDEX = 2;
@@ -29,7 +29,9 @@ export function HandoffPricing() {
 		<section id="pricing" className="hz-section">
 			<div className="hz-wrap">
 				<div className="hz-section-head hz-section-head--center hz-section-head--pricing">
-					<span className="hz-eyebrow hz-eyebrow--center">{t.pricing.eyebrow}</span>
+					<span className="hz-eyebrow hz-eyebrow--center">
+						{t.pricing.eyebrow}
+					</span>
 					<h2 className="hz-display">
 						<span className="hz-gold-text">{t.pricing.title}</span>
 					</h2>
@@ -40,11 +42,12 @@ export function HandoffPricing() {
 						key={tab}
 						className={`hz-pricing-features ${isAgency ? "hz-pricing-features--agency" : ""}`}
 					>
-						{(isAgency ? t.pricing.agencyFeatures : t.pricing.outletFeatures).map(
-							(feature) => (
-								<li key={feature}>{feature}</li>
-							),
-						)}
+						{(isAgency
+							? t.pricing.agencyFeatures
+							: t.pricing.outletFeatures
+						).map((feature) => (
+							<li key={feature}>{feature}</li>
+						))}
 					</ul>
 					<p className="hz-pricing-note">{t.pricing.platformNote}</p>
 				</div>
@@ -59,8 +62,16 @@ export function HandoffPricing() {
 					>
 						{(
 							[
-								{ id: "outlet" as const, label: t.pricing.outletTab, icon: Building2 },
-								{ id: "agency" as const, label: t.pricing.agencyTab, icon: Briefcase },
+								{
+									id: "outlet" as const,
+									label: t.pricing.outletTab,
+									icon: Building2,
+								},
+								{
+									id: "agency" as const,
+									label: t.pricing.agencyTab,
+									icon: Briefcase,
+								},
 							] as const
 						).map((tabItem) => {
 							const active = tab === tabItem.id;
@@ -176,7 +187,10 @@ export function HandoffPricing() {
 										</>
 									)}
 								</div>
-								<div className="text-[13px]" style={{ color: "var(--hz-ink-dim)" }}>
+								<div
+									className="text-[13px]"
+									style={{ color: "var(--hz-ink-dim)" }}
+								>
 									{tier.detail}
 								</div>
 								<a
