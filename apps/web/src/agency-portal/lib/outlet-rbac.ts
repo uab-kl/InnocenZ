@@ -101,9 +101,19 @@ const ALL_NAV: OutletNavItem[] = [
     permission: 'postJob',
   },
   {
-    to: '/outlet/ratings',
+    to: '/outlet/calendar',
     label: 'Calendar page',
     icon: iconForNav('Calendar page'),
+    permission: 'viewLiveDashboard',
+  },
+  {
+    // Viewing is `viewLiveDashboard`, not `ratePrs`, deliberately: GET /rating
+    // carries no sub-role guard, so Outlet Finance — who cannot rate — may still
+    // read what the venue has said about a PR. The screen itself says which of
+    // the two the reader holds.
+    to: '/outlet/ratings',
+    label: 'Ratings',
+    icon: iconForNav('Ratings'),
     permission: 'viewLiveDashboard',
   },
   {
@@ -156,6 +166,8 @@ export function canAccessOutletPath(
   }
   if (pathname.startsWith('/outlet/history'))
     return outletCan(r, 'viewHistory');
+  if (pathname.startsWith('/outlet/calendar'))
+    return outletCan(r, 'viewLiveDashboard');
   if (pathname.startsWith('/outlet/ratings'))
     return outletCan(r, 'viewLiveDashboard');
   if (pathname.startsWith('/outlet/billing')) {

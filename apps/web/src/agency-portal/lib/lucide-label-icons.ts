@@ -147,6 +147,9 @@ const EXACT_LABEL_ICONS: Record<string, LucideIcon> = {
   'shifts this week': Briefcase,
   'est. labour cost': Receipt,
   rating: Star,
+  // The plural is the outlet nav label and page title; without it both fall
+  // through every pattern rule to the CircleHelp fallback and render a "?".
+  ratings: Star,
   attendance: UserCheck,
   kpi: TrendingUp,
   paid: CheckCircle2,

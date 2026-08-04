@@ -20,6 +20,7 @@ const OUTLET_MAIN_TABS = [
   '/outlet',
   '/outlet/bookings',
   '/outlet/history',
+  '/outlet/calendar',
   '/outlet/ratings',
   '/outlet/billing',
 ] as const;

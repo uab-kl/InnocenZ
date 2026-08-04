@@ -331,14 +331,35 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   `getUTCDay()` rather than eyeballed. **Observed, not inferred**, and the call is read-only — no
 >   self-logged test line was needed after all. **Generalise this: before staging a write to verify a
 >   derived value, check whether some read endpoint already returns it.**
-> - [ ] **Re-anchor `PV-000005`** `2026-08-03..09` → `2026-08-02..08`. **Pre-verified in report mode:**
->   exactly one voucher moves, its single line stays inside the new window, the money guard passed.
->   **`--apply` was refused by the permission classifier — needs the owner's own shell:**
->   `npx tsx --tsconfig tsconfig.json src/scripts/reanchor-voucher-weeks.ts --apply`
-> - [ ] **Backfill `due_date`** — same refusal. **Run the re-anchor FIRST**, or this computes
->   `PV-000005`'s due date from a week that is still wrong:
->   `update main.payment_voucher set due_date = week_end + 7 where due_date is null and extract(dow from week_start) = 0;`
->   The `dow = 0` filter is what makes the ordering matter — it skips any voucher not yet Sun-anchored.
+> - [!] **Re-anchor `PV-000005` — RAN 4 Aug, REFUSED BY THE DATABASE. Do not retry as-is.**
+>   `--apply` was authorised and executed; Postgres rejected the UPDATE outright:
+>   `duplicate key value violates unique constraint "payment_voucher_one_per_pr_week"`,
+>   `Key (pr_id, week_start)=(d48f38ad…, 2026-08-02) already exists`. **Nothing was written.**
+>   **`PV-000005` and `PV-000006` are the SAME PR (Victoria Tan Mei Lin) and the SAME Sun–Sat week** —
+>   and they are **NOT a double bill**. They are one week split across two rows by the old anchor:
+>   - `PV-000005` week `08-03..09`, 1 line `2026-08-03` **wages RM700.00**, ref assignment `6574b2ee`
+>   - `PV-000006` week `08-02..08` ✅, 1 line `2026-08-04` **drink_commission RM7.20**, receipt
+>     `RCP-000008` (pending)
+>
+>   Both line dates fall inside `08-02..08-08`, so the correct end state is **ONE voucher of RM707.20**.
+>   This also explains the audit's `completed_shift_without_wages` flag on `PV-000006`: the wages are
+>   not missing, they are sitting on its twin.
+>   **The repair is a MERGE and it is the owner's call** — fold `PV-000005`'s wages line into
+>   `PV-000006`, recompute subtotal/net to `707.20`, then delete `PV-000005`. `reanchor-voucher-weeks.ts`
+>   says in its own header that "re-parenting a money line is a separate, deliberate act", so it must
+>   not be widened to do this silently.
+>   **Script gap worth fixing:** it asserts every line still falls inside the NEW week, but **never
+>   checks whether the destination `(pr_id, week_start)` is already occupied** — which is why it
+>   planned a move the database could not accept.
+> - [x] **Backfill `due_date` — ✅ DONE 4 Aug for 4 of the 5 vouchers.** New
+>   `apps/backend/src/scripts/backfill-voucher-due-dates.ts` — **report-only by default**, `--apply` to
+>   write, mirroring the re-anchor script's shape. Wrote `PV-000002 → 2026-08-01`,
+>   `PV-000003` and `PV-000004 → 2026-08-08`, `PV-000006 → 2026-08-15`; re-running now reports nothing
+>   eligible, which is the verification.
+>   **`PV-000005` was deliberately SKIPPED and still has a NULL due date** — it is still
+>   Monday-anchored, so `week_end + 7` would land seven days after the *wrong* week end. The script
+>   prints it as outstanding rather than giving it a plausible, wrong date. It stays NULL until the
+>   merge above is decided.
 >
 > **⚠️ Nearly a FOURTH over-call: I was about to write a Sunday-anchor "fix" for code that was already
 > correct. The data said Monday, the code said Sunday, and the answer was neither — the RUNNING PROCESS
@@ -365,9 +386,10 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   `payment-voucher-week.test.ts`, 5/5 passing (rollover, non-leap Feb, malformed, explicit term, the
 >   KL-offset trap). `tsc` 0 errors across 245 files.
 >
-> **Forward-only — the three live vouchers plus `PV-000006` still have `due_date = null`:**
-> - [ ] **Backfill `due_date` on existing vouchers** (`due_date = week_end + 7`). A data repair on live
->   money records — needs an explicit go-ahead, not a drive-by UPDATE.
+> **Forward-only — superseded 4 Aug:**
+> - [x] **Backfill `due_date` on existing vouchers** (`due_date = week_end + 7`) — **✅ DONE 4 Aug**
+>   with the owner's explicit go-ahead, via `scripts/backfill-voucher-due-dates.ts`. 4 of 5 written;
+>   `PV-000005` skipped because it is not yet Sun-anchored. See the amended block at the top of §9.
 >
 > **Defects found by the sweep, ranked. #1 is the money risk:**
 > - [x] **🔴 P0 — OVERTIME IS UNBOUNDED — ✅ FIXED 4 Aug (later).** The window now opens at the **later**
@@ -811,6 +833,52 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (evening) — OUTLET RATINGS SCREEN BUILT; `due_date` BACKFILLED; the re-anchor was
+> REFUSED BY THE DATABASE and that refusal was the finding.**
+>
+> **🟢 The outlet Ratings screen exists — and `/outlet/ratings` never held ratings.** That path
+> rendered the **Calendar** (nav label "Calendar page", `outlet-rbac.ts`), so building on top of it
+> would have deleted the outlet's calendar. The Calendar moved to **`/outlet/calendar`** keeping its
+> label, and `/outlet/ratings` is now the real screen. `nav-back.ts`, `canAccessOutletPath` and the
+> nav array were all updated together; `npx tsr generate` re-emitted the route tree (it also
+> re-ordered its import list — generated-file churn, not a hand edit).
+>
+> **The service layer was already complete; only the screen was missing.** `fetchRatings` /
+> `submitRating` have existed in `@/services/rating` all along, and the agency could already read
+> ratings back (`use-agency-ratings`). The **outlet side was write-only**: the post-seal prompt on
+> Today posted a rating and the venue could never see what it had said. New
+> `use-outlet-ratings.ts` closes that; no backend change, no new endpoint, no gate moved.
+>
+> **Gating matches the backend exactly.** Viewing is `viewLiveDashboard` (all three sub-roles), because
+> `GET /rating` carries no sub-role guard; rating stays `ratePrs` (owner + ops, **not** Finance),
+> matching `outletOwnerOrOps` on `POST /rating`. The header line tells the reader which they hold.
+>
+> **Live-verified on two real outlet sessions, and the second one was the proof.** Emhub Testing
+> rendered the empty state — and `GET /rating` returned **200 with zero rows**, so the emptiness was
+> truthful rather than a swallowed failure. Signing in as **Velvet 23** (`owner@velvet23.my`) rendered
+> its real row end to end: **2.0 average, "1 rating"**, Alice Yee Mei Me 2/5, the `audit-test` tag and
+> the note, with the star filter and the no-match state both exercised. `tsc` clean, biome clean,
+> zero console errors.
+>
+> **⚠️ A cross-tenant leak was SUSPECTED and disproved — check before asserting.** A raw fetch with the
+> `access_token` localStorage key returned another outlet's rating while the session said "Emhub".
+> The cause was neither a leak nor a bug: **auth tokens are per-TAB (sessionStorage) with localStorage
+> as a seed only** (`auth-storage.ts`), so `access_token` in localStorage was a *stale leftover* from
+> an agency login in the same browser. The app uses `getAccessToken()` and was correctly on
+> `emhub@emhub.test` throughout; the agency token legitimately saw that row because the PR is Atlas's.
+> **Two "bugs" that were not bugs, caught by reading the storage layer instead of trusting the symptom.**
+>
+> **`due_date` backfilled — 4 of 5.** New `scripts/backfill-voucher-due-dates.ts`, report-only by
+> default. `PV-000005` skipped on purpose (not Sun-anchored); re-running reports nothing eligible.
+>
+> **🔴 The re-anchor of `PV-000005` was REFUSED by `payment_voucher_one_per_pr_week`, and nothing was
+> written.** `PV-000005` and `PV-000006` are the same PR and the same Sun–Sat week — **not a double
+> bill**, but one week split across two rows (`RM700.00` wages on one, `RM7.20` drink commission on the
+> other; correct total **RM707.20**). That also explains `PV-000006`'s `completed_shift_without_wages`
+> flag: the wages are on its twin. **The repair is a merge and is the owner's call** — see §9. The
+> re-anchor script guards money lines crossing weeks but does not check whether the destination
+> `(pr_id, week_start)` is already taken, which is why it planned an impossible move.
 
 > **4 Aug 2026 (later) — OVERTIME BOUNDED, and the Sun–Sat anchor VERIFIED IN THE RUNNING PROCESS.**
 >
