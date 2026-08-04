@@ -5,6 +5,7 @@
  */
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
 import { ApiError } from '../lib/api';
 import { useSession } from '../lib/session';
@@ -13,6 +14,7 @@ import { Eye, EyeOff, Lock, LogIn, Phone } from '../components/icons';
 
 export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void } = {}) {
   const { signIn } = useSession();
+  const insets = useSafeAreaInsets();
   const [identifier, setIdentifier] = useState('60123456789');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -33,7 +35,15 @@ export function LoginScreen({ onCreateAccount }: { onCreateAccount?: () => void 
   };
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={[
+        styles.screen,
+        {
+          paddingTop: Math.max(insets.top, 24) + 24,
+          paddingBottom: 26 + Math.max(insets.bottom, 16),
+        },
+      ]}
+    >
       <View style={styles.brand}>
         <Text style={styles.wordmark}>InnocenZ</Text>
         <Text style={styles.tagline}>WORK · FLOW · ELEGANCE</Text>
@@ -109,8 +119,6 @@ const styles = StyleSheet.create({
   screen: {
     flex: 1,
     paddingHorizontal: 18,
-    paddingTop: 48,
-    paddingBottom: 26,
   },
   brand: {
     alignItems: 'center',

@@ -7,6 +7,7 @@ import {
   findFreePort,
   claimBackendOwnership,
   releaseBackendLock,
+  clearStaleDevPorts,
   resolveBin,
   spawnProc,
   makeShutdown,
@@ -43,6 +44,12 @@ const colors = {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 process.on('exit', releaseBackendLock);
+
+// Drop orphan Vite/Metro from a prior unclean stop (never touches WEB_PORT_START / Cursor).
+await clearStaleDevPorts({
+  webPortStart: WEB_PORT_START,
+  backendPort: BACKEND_PORT_START,
+});
 
 const webPort = await findFreePort(WEB_PORT_START, new Set([BACKEND_PORT_START]));
 const backendPort = BACKEND_PORT_START;

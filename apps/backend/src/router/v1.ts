@@ -1,6 +1,7 @@
 import express from 'express';
 import { authRoutes } from '@/features/auth/index.js';
 import { healthRoutes } from '@/features/health/index.js';
+import { whatsappRoutes } from '@/features/whatsapp/index.js';
 import userRoutes from '@/features/user/user.routes.js';
 import { rbacRoutes } from '@/features/rbac/index.js';
 import subscriptionRoutes from '@/features/subscription/subscription.routes.js';
@@ -33,6 +34,9 @@ v1Router.use(platformAuditMiddleware);
 
 v1Router.use('/health', healthRoutes);
 v1Router.use('/auth', authRoutes);
+// Meta WhatsApp Cloud API webhooks — must stay public (no JWT). Meta GETs to
+// verify the Callback URL and POSTs delivery/inbound events.
+v1Router.use('/webhooks/whatsapp', whatsappRoutes);
 // Ticket downloads open in the phone's system browser, which cannot send the
 // Bearer header — the short-lived voucher-scoped ticket in the path is the
 // credential (minted by an authenticated POST). Everything else stays behind

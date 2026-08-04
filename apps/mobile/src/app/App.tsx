@@ -5,7 +5,7 @@
  */
 import React, { useState } from 'react';
 import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
-import { SafeAreaProvider } from 'react-native-safe-area-context';
+import { AppSafeAreaProvider } from '../lib/safe-area';
 import { C, ensureWebFonts } from '../theme/theme';
 import { SessionProvider, useSession } from '../lib/session';
 import { ShiftSessionProvider } from '../lib/shift-session';
@@ -18,7 +18,7 @@ import { PhoneFrame } from '../components/PhoneFrame';
 import { BottomNav } from '../components/BottomNav';
 import { TopBar } from '../components/TopBar';
 import { LoginScreen } from '../screens/LoginScreen';
-import { SignUpScreen } from '../screens/SignUpScreen';
+import { SignUpScreen } from '../screens/sign-up';
 import { ShiftsScreen } from '../screens/ShiftsScreen';
 import { CheckInScreen } from '../screens/CheckInScreen';
 import { PaymentScreen } from '../screens/PaymentScreen';
@@ -97,12 +97,12 @@ function AppShell() {
 }
 
 export const App = () => (
-  <SafeAreaProvider>
+  <AppSafeAreaProvider>
     <SessionProvider>
       <StatusBar barStyle="light-content" />
       <AppShell />
     </SessionProvider>
-  </SafeAreaProvider>
+  </AppSafeAreaProvider>
 );
 
 const styles = StyleSheet.create({

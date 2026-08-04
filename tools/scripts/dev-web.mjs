@@ -6,6 +6,7 @@ import {
   findFreePort,
   claimBackendOwnership,
   releaseBackendLock,
+  clearStaleDevPorts,
   spawnProc,
   makeShutdown,
   prefixOutput,
@@ -36,6 +37,11 @@ const colors = {
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
 process.on('exit', releaseBackendLock);
+
+await clearStaleDevPorts({
+  webPortStart: WEB_PORT_START,
+  backendPort: BACKEND_PORT_START,
+});
 
 const webPort = await findFreePort(WEB_PORT_START, new Set([BACKEND_PORT_START]));
 const backendPort = BACKEND_PORT_START;

@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authController, agencyRepository } from '@/composition-root.js';
+import { authController, agencyRepository, otpController } from '@/composition-root.js';
 import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
@@ -29,6 +29,11 @@ router.get('/agencies', async (_req, res) => {
     res.status(500).json({ success: false, message: 'Could not list agencies', data: null });
   }
 });
+
+/** PR phone verification via WhatsApp — public (no account yet). */
+router.post('/otp/send', otpController.send.bind(otpController));
+router.post('/otp/verify', otpController.verify.bind(otpController));
+
 router.post('/forgot-password', authController.forgotPassword.bind(authController));
 router.post('/reset-password', authController.resetPassword.bind(authController));
 router.get('/me', authenticateJWT, authController.me.bind(authController));

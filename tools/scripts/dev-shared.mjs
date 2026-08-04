@@ -223,6 +223,29 @@ export function killPortListeners(ports) {
 }
 
 /**
+ * Free leftovers from an unclean prior stop so the next `dev:all` / `dev:web`
+ * gets stable ports. Never touches `webPortStart` itself (often Cursor on 3000);
+ * clears webPortStart+1..+5, Metro, and a dead backend port only.
+ */
+export async function clearStaleDevPorts({
+  webPortStart,
+  backendPort,
+  clearBackend = true,
+}) {
+  const ports = [8081, 8082];
+  for (let p = webPortStart + 1; p <= webPortStart + 5; p++) ports.push(p);
+
+  if (clearBackend && Number.isInteger(backendPort)) {
+    // Keep a healthy backend (reused by claimBackendOwnership); only clear dead holds.
+    if (!(await isBackendResponding(backendPort))) ports.push(backendPort);
+  }
+
+  killPortListeners(ports);
+  // Brief settle so Windows releases the sockets before we probe/bind.
+  await new Promise((r) => setTimeout(r, 250));
+}
+
+/**
  * @param {import('node:child_process').ChildProcess[]} children
  * @param {number[] | (() => number[])} [ports] Ports to free on shutdown (web/backend/metro).
  */

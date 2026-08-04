@@ -116,15 +116,14 @@ export function login(identifier: string, password: string): Promise<LoginResult
  * PR self sign-up (WhatsApp OTP)
  *
  * Agency + outlet accounts verify by EMAIL; only PRs verify by WhatsApp, so
- * these three calls are the PR-only path. The backend half is Build
- * Steps §4B and does NOT exist yet — until it lands these resolve to
- * 404 and SignUpScreen surfaces the error normally.
+ * these three calls are the PR-only path. Backend: POST /auth/otp/send|verify
+ * + WhatsApp Cloud API (META_WHATSAPP_*) and table phone_verification.
  *
  * `registerPr` deliberately sends NO roleId. `POST /auth/register`
  * currently takes one from the client while being unauthenticated
- * (auth.routes.ts:12 + auth.schema.ts:29), which lets a caller mint any
- * role. The OTP path must derive the PR role server-side from the
- * verified phone_verification row instead — see Build Steps 4B-4.
+ * (auth.routes.ts + auth.schema.ts), which lets a caller mint any
+ * role. The OTP path derives the PR role server-side from
+ * accountType + a verified phone_verification row.
  * ------------------------------------------------------------------ */
 
 /** Name + id only — enough to pick an agency during sign-up, nothing more. */

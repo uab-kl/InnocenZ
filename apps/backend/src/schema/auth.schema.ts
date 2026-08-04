@@ -39,6 +39,8 @@ const RegisterSchema = z.object({
      * required, unvalidated, and passed straight to createUserWithRole.
      */
     roleId: z.string().min(1).optional(),
+    /** Receipt from POST /auth/otp/verify — required for public PR sign-up. */
+    verificationId: z.string().uuid().optional(),
 });
 
 const FirstTimeLoginSchema = z.object({

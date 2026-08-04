@@ -1,5 +1,7 @@
 import { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
 import { AuthControllerClass } from '@/features/auth/auth.controller.js';
+import { OtpControllerClass } from '@/features/auth/otp.controller.js';
+import { PhoneVerificationRepositoryClass } from '@/features/auth/phone-verification.repository.js';
 import { JwtControllerClass } from '@/features/jwt/jwt.controller.js';
 import { HealthControllerClass } from '@/features/health/health.controller.js';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
@@ -71,7 +73,17 @@ export const authRepository = new AuthRepositoryClass(jwtController, userReposit
 export const roleRepository = new RoleRepositoryClass();
 // TOTP enrolments. Declared above authController, which challenges at login.
 export const adminMfaRepository = new AdminMfaRepositoryClass();
-export const authController = new AuthControllerClass(authRepository, jwtController, userRepository, userProfileRepository, roleRepository, adminMfaRepository);
+export const phoneVerificationRepository = new PhoneVerificationRepositoryClass();
+export const otpController = new OtpControllerClass(phoneVerificationRepository);
+export const authController = new AuthControllerClass(
+  authRepository,
+  jwtController,
+  userRepository,
+  userProfileRepository,
+  roleRepository,
+  adminMfaRepository,
+  phoneVerificationRepository,
+);
 export const healthController = new HealthControllerClass();
 
 export const roleController = new RoleControllerClass(roleRepository);
