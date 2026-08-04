@@ -1197,20 +1197,25 @@ export class PaymentVoucherControllerClass {
       }
       const draft = draftResult.voucher;
 
-      // One paper receipt = one log PER SHIFT. Outlets reuse order numbers
-      // across nights, so the same ORD number on a new shift is a new paper —
-      // it inserts normally and gets its own unique RCP number. Only a
-      // re-scan within the same shift is refused.
+      // ONE PAPER RECEIPT = ONE LOG PER NIGHT at that outlet — scanned or
+      // self-logged alike, since both routes arrive here and a typed order
+      // number describes the same paper an OCR'd one does.
+      //
+      // Scoped to `lineDate`, NOT to the shift stamp: a PR who checks in three
+      // times is still working one night, and the assignment scope let the same
+      // two papers be logged twice on 4 Aug (see findReceiptByOrderNo). Outlets
+      // recycle order numbers across nights, which is why the DAY — not the
+      // whole week's voucher — is the boundary.
       if (parsed.data.orderNo) {
         const dupe = await this.paymentVoucherRepository.findReceiptByOrderNo(
           draft.id,
           parsed.data.orderNo,
-          parsed.data.assignmentId ?? null,
+          { lineDate, outlet: parsed.data.outlet ?? null },
         );
         if (dupe) {
           return res.status(409).json({
             success: false,
-            message: `Receipt ${parsed.data.orderNo} is already logged on this shift (${dupe.receiptNo}) — re-scan its row (camera icon) to replace the picture, edit it, or remove the row and scan afresh.`,
+            message: `Receipt ${parsed.data.orderNo} is already logged today (${dupe.receiptNo}) — re-scan its row (camera icon) to replace the picture, edit it, or remove the row and log it afresh.`,
             data: null,
           });
         }

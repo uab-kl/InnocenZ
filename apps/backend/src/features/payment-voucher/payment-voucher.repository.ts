@@ -997,40 +997,72 @@ export class PaymentVoucherRepositoryClass {
   }
 
   /**
-   * A receipt already logged with the same order number — scoped to ONE shift.
-   * Outlets reuse order numbers across nights, so the same ORD number on a NEW
-   * shift is a new paper receipt (it still gets its own unique RCP number);
-   * only a re-scan within the same shift is a duplicate. Callers without a
-   * shift stamp keep the older voucher-wide check, which can only
-   * over-refuse — never double-log.
+   * A receipt already logged with the same order number — scoped to ONE NIGHT
+   * at ONE OUTLET, which is what makes two logs the same piece of paper.
+   *
+   * The scope was the SHIFT STAMP until 4 Aug 2026, on the reasoning that a PR
+   * who checks in again is working a new shift. A live day disproved it:
+   * Victoria checked in three times on 4 Aug and the same two papers were each
+   * logged twice —
+   *
+   *   ORD0389   RCP-000010 (assign d24c4329)   RCP-000012 (assign ac63bead)
+   *   ORD1111   RCP-000011 (assign 43f7e17e)   RCP-000013 (assign ac63bead)
+   *
+   * — every pair carrying a different shift_assignment_id, so the guard never
+   * fired and both the drink and the tips were counted twice. A check-in is not
+   * a new night: the paper does not become a second paper because the PR
+   * clocked in again.
+   *
+   * The voucher-wide scope this replaced was wrong the other way — a voucher is
+   * a WEEK, outlets recycle order numbers, and Monday's ORD0389 would have
+   * blocked Thursday's. The DAY is the unit that matches the physical fact.
+   *
+   * OUTLET is part of that identity for the same reason: two venues can each
+   * print ORD0389 on one night and they are two papers. A null outlet on either
+   * side cannot rule the match out, so it still counts as a duplicate —
+   * refusing a re-log the PR can undo beats paying it twice.
    *
    * ⚠️ The match is made in JS on the OCR-folded key, NOT with `eq()` in SQL.
    * An exact comparison is how one live voucher paid the same Lemon Drop twice:
    * OCR read one paper as `ORD0389` and the other as `ORDO389` — letter O
    * against digit zero — so the DB saw two different strings and logged both.
    * `normaliseOrderNo` folds exactly the characters OCR confuses. The candidate
-   * set is one voucher (usually one shift) of receipts, so comparing in memory
-   * is cheap; expressing the fold in SQL would also make it unindexable without
-   * buying anything.
+   * set is one day of one voucher, so comparing in memory is cheap; expressing
+   * the fold in SQL would also make it unindexable without buying anything.
    */
   async findReceiptByOrderNo(
     voucherId: string,
     orderNo: string,
-    shiftAssignmentId?: string | null,
+    scope: { lineDate: string; outlet?: string | null },
   ): Promise<PaymentVoucherReceiptType | null> {
     try {
+      // Joined through the LINES because the day a receipt belongs to lives on
+      // `line_date`, not on the receipt: `receipt_date` is the paper's OWN
+      // printed date, deliberately free to differ (a receipt printed at 01:00
+      // belongs to the shift that just ended) and nullable besides.
       const candidates = await db
-        .select()
+        .select({
+          receipt: PaymentVoucherReceiptTable,
+          lineOutlet: PaymentVoucherLineTable.outlet,
+        })
         .from(PaymentVoucherReceiptTable)
+        .innerJoin(
+          PaymentVoucherLineTable,
+          eq(PaymentVoucherLineTable.receiptId, PaymentVoucherReceiptTable.id),
+        )
         .where(
           and(
             eq(PaymentVoucherReceiptTable.voucherId, voucherId),
-            ...(shiftAssignmentId
-              ? [eq(PaymentVoucherReceiptTable.shiftAssignmentId, shiftAssignmentId)]
-              : []),
+            eq(PaymentVoucherLineTable.lineDate, scope.lineDate),
           ),
         );
-      return candidates.find((row) => isSameOrderNo(row.orderNo, orderNo)) ?? null;
+
+      const hit = candidates.find(
+        (row) =>
+          isSameOrderNo(row.receipt.orderNo, orderNo) &&
+          !(scope.outlet && row.lineOutlet && row.lineOutlet !== scope.outlet),
+      );
+      return hit?.receipt ?? null;
     } catch (error) {
       logger.error('[PaymentVoucherRepository.findReceiptByOrderNo] Error:', error);
       throw error;

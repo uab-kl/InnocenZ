@@ -696,6 +696,43 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — ONE PAPER = ONE LOG PER NIGHT (the duplicate guard was scoped to the check-in).**
+>
+> Owner: *"this shift got problem cause the user scanned the same receipt for the drink so is same order
+> no why can submit"* and *"on that single shift can't submit the scan or self-log receipt for same order
+> no"*, after asking whether **RM 7.20** of drinks for a whole day could be right.
+>
+> **The RM 7.20 was arithmetic-correct and evidence-wrong.** Victoria's 4 Aug lines, from the live DB:
+>
+> | receipt | order | source | item | qty | sales | comm | shift stamp |
+> |---|---|---|---|---|---|---|---|
+> | RCP-000010 | ORD0389 | scan | Lemon Drop | 1 | 30.00 | 3.60 | d24c4329 |
+> | RCP-000011 | ORD1111 | manual | Tips / Booking / Havoc | 1/1/2 | 2150.00 | 365.50 | 43f7e17e |
+> | RCP-000012 | **ORD0389** | scan | Lemon Drop | 1 | 30.00 | 3.60 | ac63bead |
+> | RCP-000013 | **ORD1111** | manual | Booking / Havoc / Tips | 1/3/1 | 3150.00 | 535.50 | ac63bead |
+>
+> Only **one drink was ever really sold** — a RM 30 Lemon Drop, at Emhub Testing Tier III's 12% = RM 3.60.
+> The day showed RM 7.20 because the SAME PAPER was scanned twice. Every rate reconciles at Tier III
+> (drinks 12%, tips 17%: 50→8.50, 100→17.00, 2000→340.00, 3000→510.00), so nothing was mis-bucketed —
+> the third check-in simply logged no drink at all.
+>
+> **Why the guard let it through.** `findReceiptByOrderNo` was scoped to the SHIFT STAMP, on the reasoning
+> that a new check-in is a new shift. Each duplicate pair above carries a *different* `shift_assignment_id`
+> — three check-ins on one night — so the guard never fired. A check-in is not a new night, and the paper
+> does not become a second paper because the PR clocked in again.
+>
+> **Now scoped to the NIGHT + OUTLET** (`payment_voucher_line.line_date` + `.outlet`), covering scan and
+> self-log alike since both submit through `addMyReceipt`. Not the whole voucher — that is a WEEK, and
+> outlets recycle order numbers, so Monday's ORD0389 would have blocked Thursday's. Outlet is part of the
+> identity because two venues can each print ORD0389 on one night; a null on either side still counts as a
+> match, since refusing a re-log the PR can undo beats paying it twice. The OCR fold (`ORDO389` = `ORD0389`)
+> is unchanged, and no migration was needed. Verified against the live rows — the three real duplicates
+> refuse, while a different outlet, the next night, and an unseen number all pass.
+>
+> ⚠️ **Not fixed, flagged:** the four duplicate receipts are still in the DB (drinks RM 3.60 and tips
+> RM 535.50 counted twice), and **Daily wages read RM 2,100 = 3 × RM 700**, one full day's Tier III wage
+> per check-in on a night of 1h15m + 0h36m + 0h04m. Both need an owner decision before anything is deleted.
+
 > **4 Aug 2026 — CHECK-OUT NEEDS ONE ACTION, NOT ONE OF EACH (corrects the rule shipped in `7d7bfa6`).**
 >
 > Owner: *"every shift must have either one drink or tips , or both also can to check out"*. I had read
