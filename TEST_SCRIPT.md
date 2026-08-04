@@ -866,7 +866,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
-> **4 Aug 2026 (late, housekeeping) — biome rewrap of ; §9 renewed with what d513e5c LEFT OPEN.**
+> **4 Aug 2026 (late, housekeeping) — biome rewrap of `updateAgency`; §9 renewed with what `d513e5c`
+> LEFT OPEN.**
 >
 > Formatting only on `services/agency/agency.ts` — the save-formatter rewrapped the `client.put`
 > call added minutes earlier in `d513e5c`. No behaviour change, no new export, no signature change.
