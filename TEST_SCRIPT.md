@@ -696,6 +696,27 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — THE SCAN NOW SHOWS WHAT OCR ACTUALLY READ.**
+>
+> Owner, on a scan of the same receipt that worked twenty minutes earlier: *"i self log for the tips
+> where is my tips and bookign commision ? even the date also no"* — Havoc ×5 came through, **Tips and
+> Booking commission did not, and the Time went blank** while the Date on the SAME printed line
+> (`16-06-2026   09:45PM`) was read fine.
+>
+> **Those two symptoms cannot share a cause in the matcher.** Time and Date are parsed by different
+> regexes off one line; Tips had already been fixed and re-verified. What varies between two scans of
+> one receipt is the TEXT ML Kit returns — and the screen was throwing it away. `parseReceipt` has
+> always returned `lines`; nothing rendered it, so "why didn't it find Tips?" had no answer on the
+> phone and every report was guesswork.
+>
+> **Added: "Show what OCR read (N lines)" inside the OCR EXTRACTED card**, captured BEFORE the early
+> return for a scan that matched nothing — that is precisely the scan whose text needs looking at.
+> With one line of explanation: an item is only found when its name appears in that list, so a missing
+> or mangled name there means the paper or the photo, not the parser.
+>
+> ⚠️ **No parser change on this report, deliberately.** The PC harness passes all eight fixtures
+> including this exact receipt; changing the matcher without seeing the text would be guessing twice.
+
 > **4 Aug 2026 — THE PARSER CAN NOW BE PROVED WITHOUT A PHONE.**
 >
 > Owner: *"so how ? rebuild ?"* / *"after rebuilds i can only test on my mobile devices ?"*

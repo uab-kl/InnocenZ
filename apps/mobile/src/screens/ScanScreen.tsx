@@ -145,6 +145,14 @@ export function ScanScreen({
   const [drinkQtys, setDrinkQtys] = useState<Record<string, number>>({});
   // What the LAST real OCR pass read off the receipt.
   const [detectedIds, setDetectedIds] = useState<string[]>([]);
+  /**
+   * Exactly what ML Kit read, kept so a miss can be DIAGNOSED instead of
+   * guessed at. The parser has always produced this and the screen always threw
+   * it away, so "why didn't it find Tips?" had no answer on the phone — and the
+   * answer is usually that the word never reached the parser at all.
+   */
+  const [ocrLines, setOcrLines] = useState<string[]>([]);
+  const [showOcrText, setShowOcrText] = useState(false);
   /** Items whose line printed NO quantity — shown as a guess, not as read. */
   const [assumedQtyIds, setAssumedQtyIds] = useState<Set<string>>(new Set());
   // What OCR read off the paper (ORD0389) — sent to the server as orderNo.
@@ -284,6 +292,9 @@ export function ScanScreen({
     setReceiptNo(mergedOrderNo);
     setReceiptDate(mergedDate);
     setReceiptTime(mergedTime);
+    // Captured BEFORE the early returns below: a scan that found nothing is
+    // exactly the one whose text needs looking at.
+    setOcrLines(parsed.lines);
     if (parsed.matches.length === 0 && detectedIds.length === 0) {
       // Name what the matcher was hunting for — "matched none" without the
       // list reads like a scanner fault when the paper simply doesn't print
@@ -665,6 +676,33 @@ export function ScanScreen({
                         <Text style={styles.ocrLine}>Date: {receiptDate ?? '—'}</Text>
                         <Text style={styles.ocrLine}>Time: {receiptTime ?? '—'}</Text>
                         <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
+                        {ocrLines.length > 0 && (
+                          <>
+                            <Pressable
+                              onPress={() => setShowOcrText((v) => !v)}
+                              hitSlop={8}
+                            >
+                              <Text style={styles.ocrToggle}>
+                                {showOcrText ? 'Hide' : 'Show'} what OCR read ({ocrLines.length}{' '}
+                                line{ocrLines.length === 1 ? '' : 's'})
+                              </Text>
+                            </Pressable>
+                            {showOcrText && (
+                              <View style={styles.ocrRaw}>
+                                {ocrLines.map((l, i) => (
+                                  <Text key={`${i}-${l}`} style={styles.ocrRawLine}>
+                                    {l}
+                                  </Text>
+                                ))}
+                                <Text style={styles.ocrRawHint}>
+                                  An item is only found when its name is on one of these lines. If a
+                                  name is missing or misspelt here, the paper or the photo is the
+                                  problem — scan again, flatter and closer.
+                                </Text>
+                              </View>
+                            )}
+                          </>
+                        )}
                       </View>
                     )}
 
@@ -1161,6 +1199,21 @@ const styles = StyleSheet.create({
     color: C.amber,
     marginTop: 2,
   },
+  ocrToggle: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.violetL,
+    marginTop: 6,
+    textDecorationLine: 'underline',
+  },
+  ocrRaw: {
+    marginTop: 6,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  ocrRawLine: { fontFamily: F.manrope, fontSize: 11, color: C.txt, lineHeight: 16 },
+  ocrRawHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted, marginTop: 6 },
   qtyCtrl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: {
     width: 32,
