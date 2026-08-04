@@ -12,6 +12,10 @@
 - [InnocenZ tier rate card](innocenz-tier-rate-card.md) — 7-tier payroll rate model (base/RM-HR/HH+NH drinks/tips/OT), per-outlet defaults + per-shift override, outlet/agency/PR role boundaries
 - [InnocenZ daily test tracker](innocenz-daily-test-tracker.md) — 4-role daily run-through: TEST_SCRIPT.md is source of truth (Option 2, no automation); Doc regenerated on request
 
+### Added 4 Aug 2026
+
+- [Org scope guards, member management, and what a zero result proves](innocenz-org-scope-guards.md) — 🔴 **a role guard that never checks the ORGANISATION is not a scope check**: any agency owner could rewrite any agency, any outlet owner could move another venue's **geo-fence**, and `updateMember` validated `:id` while writing `:memberId`. Both found only when a screen was finally wired — *the gate looked fine while nothing called it*. Live-proven 7/0/1 and 8/0/3; member management now shipped with a UI. Also: **a zero result is evidence about the instrument** (four of them, two published as false claims), a fix named by its symptom missing its own siblings, the demo-data leak 21 slices → 1, and pre-pilot gate 2 closed — **which had named a credential that does not exist**
+
 ### Added 30 Jul 2026
 
 - [Running the PR app](innocenz-run-the-pr-app.md) — **`node tools/scripts/dev-mobile-web.mjs`**, port 8081, backend first. Ends the era in which nothing in `apps/mobile` had ever been executed; also how to click a nav tab that has no accessible role
