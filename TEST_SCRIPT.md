@@ -300,7 +300,73 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (read this amendment, then the 2 Aug block below)
+### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (evening: full 4-role E2E sweep, spine proven, 5 defects open)
+
+> **The spine is now LIVE-VERIFIED end to end for the first time** — all six links, on four real
+> simultaneous logins (agency `Dato' Lim Wei Khoon`, outlet `Chen Wei Jie`/Velvet 23, admin
+> `InnocenZ Admin`, PR `Vicky` on mobile web). Post job → persists + routes to Atlas → agency assigns
+> (tier rates correct: Vicky tier_3 → RM700, Haziq tier_1 → RM500) → PR sees it on the timetable →
+> check-in/out seals → **PV generation produced `PV-000006`, balanced and reconciled**. Test rows were
+> created and removed; DB returned to baseline (`shift 24, shift_assignment 23, shift_pay_tier 93`).
+>
+> - [x] **🟢 `due_date` was NULL on every voucher — ✅ DONE 3 Aug (evening).** The column and the API
+>   field both existed; nothing computed a value. New `paymentDueDate(weekEnd, termDays = 7)` in
+>   `payment-voucher-week.ts`, wired into the generator's `create()` payload. **Anchored to `week_end`,
+>   NOT `issued_date`** (owner's decision): the issued date is whenever the job happened to run, so
+>   anchoring there would let one week carry two different due dates and would silently extend the term
+>   every time the job slipped. Returns `null` on a malformed week end via the same round-trip guard as
+>   `weekOfDate`, so a voucher can never be stamped with the due date of `NaN`. Both entry points get it
+>   — the Sunday cron and `scripts/generate-weekly-pvs.ts`. **First test in the repo**:
+>   `payment-voucher-week.test.ts`, 5/5 passing (rollover, non-leap Feb, malformed, explicit term, the
+>   KL-offset trap). `tsc` 0 errors across 245 files.
+>
+> **Forward-only — the three live vouchers plus `PV-000006` still have `due_date = null`:**
+> - [ ] **Backfill `due_date` on existing vouchers** (`due_date = week_end + 7`). A data repair on live
+>   money records — needs an explicit go-ahead, not a drive-by UPDATE.
+>
+> **Defects found by the sweep, ranked. #1 is the money risk:**
+> - [ ] **🔴 P0 — OVERTIME IS UNBOUNDED.** A check-in at 16:38 and check-out at 16:39 (**12 seconds**)
+>   produced **`overtime_minutes = 279`** on assignment `6574b2ee`. Overtime is measured from the
+>   shift's scheduled end to the check-out wall-clock and never looks at check-in, so a PR who forgets
+>   to check out accrues overtime for as long as they stay forgotten. This is the mechanism behind the
+>   live RM678.78 / "113.1h" line **and** the 23 Jul record whose check-out is **5 days** after its
+>   check-in. Status `pending`, so no money has moved — but the agency approve button is one click away.
+> - [ ] **🔴 Portal role guard is bypassed on direct URL entry.** A live **outlet** session
+>   (`/auth/me` → `roles:[outlet]`) rendered `/en/admin/dashboard`, `/en/admin/user-management/admin`
+>   (with a **Create Admin** button) and `/en/admin/rbac/permission` (**Create Permission**). The agency
+>   session reached `/en/admin/rbac/role` the same way. `ensurePortal()` in `lib/auth/guards.ts` opens
+>   with `if (typeof window === "undefined") return;` — that no-ops during SSR, and `beforeLoad` does
+>   not re-run on client hydration, so only client-side link navigation is actually guarded.
+> - [ ] **🔴 `GET /api/v1/agency` has NO role guard at all** (`agency.routes.ts:8`) and the controller
+>   does not scope by caller — an outlet token received all 3 agencies. `outlet.routes.ts:20` is gated
+>   `admin|agency|outlet`, so PRs are excluded there, but any outlet can enumerate every outlet.
+> - [ ] **🟠 A 403 renders as money, not as an error.** Four confirmed: agency hub shows
+>   **"Pending payout RM 0.00"** when `GET /payment-voucher` 403s; admin dashboard shows **"All clear /
+>   0"** when `admin-request/pending-count` 403s; RBAC shows "No roles found" / "No permissions found".
+>   A refusal is indistinguishable from "nothing to do".
+> - [ ] **🟠 Server silently ignores requested page size** — client asks `pageSize=500`, response says
+>   `pagination.pageSize: 100`. Harmless at 3 rows; silently truncates any list over 100.
+>
+> **Smaller, still open:**
+> - [ ] `/outlet/ratings` renders `CalendarPage` — outlets have **no Ratings screen**, though the
+>   backend `rating` routes and `outletCan(…, "ratePrs")` both exist. **Verify before building.**
+> - [ ] Agency/outlet portals list ORGS, not accounts — no screen to disable a user or revoke a role.
+> - [ ] Registration for the 3 roles (carried, deliberately deferred).
+> - [ ] Outlet subscription shows **"Renewal 15 Jul 2026"**, three weeks in the past.
+>
+> **⚠️ Standing rule earned the hard way — I over-called THREE findings in one session and had to
+> retract each: (1) "TOTAL PR 0" (read the DOM before React Query resolved); (2) "Post Job is broken"
+> (queried the DB in the same breath as the click, before the mutation landed — the owner caught this
+> one); (3) "roster grid shows 2 of 4 assignments" (the counter counts SHIFTS, and the missing rows
+> were below a 1,400-char truncation). All three were the same error. A COUNT, a TRUNCATED PAGE, or a
+> READ TAKEN SECONDS AFTER A WRITE is not evidence yet — re-read before asserting.**
+>
+> **Corrections to earlier entries:** tips are **NOT** missing (`shift_sale.tip_units` /
+> `tip_sales_rm`, `outlet_workspace.tip_pct`, PV components `tip_commission` + `tips` all exist);
+> cancellation penalties are **NOT** undefined (Velvet 23 = RM175, Emhub + JK House = RM350 each);
+> the backend `tsc` baseline is now **0 errors**, not 26.
+
+### 3 Aug 2026 (earlier) — amended (read the block above first, then this, then the 2 Aug block below)
 
 > **3 Aug (latest) — a wage-classification fault found while wiring the PR History tabs, then FIXED
 > at the owner's instruction (§10 latest).** No open item left from it.
@@ -695,6 +761,51 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **3 Aug 2026 (evening) — the spine is proven end to end, and `due_date` now exists.** Two things
+> happened: a full four-role E2E sweep on real simultaneous logins, and one feature shipped off the
+> back of it.
+>
+> **Shipped — `due_date` computed at generation.** `paymentDueDate(weekEnd, termDays = 7)` +
+> `PAYMENT_TERM_DAYS` in `payment-voucher-week.ts`; the generator now sets `dueDate` in its `create()`
+> payload. Anchored to **`week_end`, not `issued_date`** — the issued date is whenever the job ran, so
+> anchoring there lets a late or repeated run hand the same seven days two different due dates, and
+> quietly extends the term every time the job slips. `week_end` is a property of the cycle, so the
+> answer is stable however often generation runs. Malformed input returns `null` (same round-trip guard
+> as `weekOfDate`) rather than a rolled-over date. Both callers benefit — the Sunday cron and
+> `scripts/generate-weekly-pvs.ts`. Added `payment-voucher-week.test.ts`, **the first test in the
+> repo**, 5/5 green; `tsc` clean at 0 errors / 245 files. **Forward-only: the 3 live vouchers and
+> `PV-000006` still hold `due_date = null` and need a deliberate backfill.**
+>
+> **Proven live for the first time — the whole spine.** Post job (outlet) → row persists and routes to
+> Atlas (`agency_id` correct, `created_by owner@velvet23.my`) → agency assigns two PRs with tier rates
+> sealed correctly from the rate card (tier_3 → RM700, tier_1 → RM500) → the PR app shows the shift
+> with real address and the right per-outlet cancellation penalty → check-in/check-out seals the wage →
+> **the generator produced `PV-000006` (RM700, `pending_review`), balanced and reconciled, with the
+> wage line carrying `component: 'wages'` and `ref` pointing at its own assignment.** The duplicate
+> guard was also proven: re-running for 26 Jul–1 Aug skipped both PRs with `already_exists` and wrote
+> nothing, because `existsForPrWeek` is status-agnostic. That is the RM2,285.08 double-voucher
+> mechanism, genuinely closed.
+>
+> **All test data was removed**; the six tracked tables returned to baseline. `PV-000006` was left in
+> place deliberately (tagged `created_by = claude-e2e-generate`) — deleting a voucher and its lines is
+> the operation flagged as having nearly corrupted one before, so it stays the owner's call.
+>
+> **Five defects opened (see §9, ranked).** The one that matters is **unbounded overtime**: 12 seconds
+> between check-in and check-out generated **279 minutes** of pending overtime, because the calculation
+> runs from the shift's scheduled end to the check-out clock and never consults check-in. It explains
+> both the live "113.1h" line and the 23 Jul assignment whose check-out is five days after its
+> check-in. Also opened: the portal guard is bypassed by direct URL entry (SSR no-op + `beforeLoad` not
+> re-running on hydration), `GET /agency` carries no role guard at all, 403s render as **RM 0.00** and
+> "All clear", and the server silently caps `pageSize` at 100.
+>
+> **Three findings were over-called and retracted in the same session** — a DOM read before React Query
+> resolved, a DB read taken in the same breath as the click that wrote (the owner caught that one), and
+> a "missing rows" claim that was a 1,400-char truncation. The rule now sits in §9: a count, a
+> truncated page, or a read taken seconds after a write is not evidence yet.
+>
+> **Two earlier entries corrected:** tips are not missing (capture exists end to end), and cancellation
+> penalties are not undefined (Velvet 23 RM175, Emhub/JK House RM350).
 
 > **3 Aug 2026 — `main` merged into `jk` (`0f339b8`, PR #43 from SL). Two conflicts, both resolved from
 > evidence rather than by taste.**

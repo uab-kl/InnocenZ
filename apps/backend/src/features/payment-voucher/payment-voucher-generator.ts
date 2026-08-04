@@ -4,6 +4,7 @@ import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { checkVoucherBalance } from './payment-voucher-balance';
 import { auditVoucher } from './payment-voucher-audit';
+import { paymentDueDate } from './payment-voucher-week';
 
 export type GenerateWeeklyParams = {
   /** Inclusive week window, yyyy-MM-dd. Typically the just-finished Mon–Sun. */
@@ -140,6 +141,10 @@ export class PaymentVoucherGeneratorClass {
             outlet: prRows[0]?.outletName ?? undefined,
             cycle: 'Weekly',
             issuedDate,
+            // Anchored to weekEnd, not issuedDate, so a late or repeated run
+            // cannot hand the same week two different due dates. Null only for
+            // a malformed weekEnd, which leaves the column as it always was.
+            dueDate: paymentDueDate(weekEnd) ?? undefined,
             weekStart,
             weekEnd,
             subtotal: subtotal.toFixed(2),
