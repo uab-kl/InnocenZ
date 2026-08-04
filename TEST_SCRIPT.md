@@ -696,6 +696,29 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — THE PARSER CAN NOW BE PROVED WITHOUT A PHONE.**
+>
+> Owner: *"so how ? rebuild ?"* / *"after rebuilds i can only test on my mobile devices ?"*
+>
+> **No — only the camera needs the phone.** `apps/mobile/scripts/check-receipt-parser.ts` runs the whole
+> matcher on the PC (`cd apps/mobile && npx tsx scripts/check-receipt-parser.ts`) starting from the TEXT
+> ML Kit produces, which is where every 4 Aug bug lived. Eight fixtures — the owner’s real receipt,
+> spaces lost, i-read-as-1, priced lines, x-suffix, singular/plural, digit-leading names, nothing printed
+> — plus six lines that must match NOTHING. Exits non-zero on failure, so it is the regression guard
+> those three fixes never had.
+>
+> ⚠️ **`jest.config.cts` names a `jest-expo` preset that is NOT in package.json**, and there is not one
+> `*.test.ts` under `apps/mobile/src`. Rather than pretend a test runner exists, this is a plain tsx
+> script. Wiring jest-expo properly is its own job.
+>
+> **Rebuild facts, checked not guessed:** `app.json` has **no `updates` block and `expo-updates` is not
+> installed**, so there is NO over-the-air path — a JS-only change cannot reach an installed release APK.
+> But `apps/mobile/android/gradlew` EXISTS (bare workflow), so a local build works without EAS. Three
+> options, fastest first: **(1)** `npx expo run:android` — builds once, then JS edits hot-reload with no
+> rebuild at all; **(2)** `cd apps/mobile/android && ./gradlew assembleRelease` → APK at
+> `android/app/build/outputs/apk/release/`; **(3)** `npx eas build -p android --profile preview`
+> (projectId `3114a391…`, buildType apk).
+
 > **4 Aug 2026 — WHY "TIPS" WAS SOMETIMES INVISIBLE TO THE SCAN (and Havoc never was).**
 >
 > Owner: *"Why sometimes in the tips scan ocr no detected the tips it's in the outlet"*. It IS in the
