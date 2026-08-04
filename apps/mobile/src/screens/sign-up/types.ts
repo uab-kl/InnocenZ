@@ -92,7 +92,7 @@ export function validateStep(step: number, draft: Draft, localDigits: string): S
 	const fields: FieldErrors = {};
 
 	if (step === 1) {
-		if (!draft.floorNickname.trim()) fields.floorNickname = 'A floor nickname is required.';
+		if (!draft.floorNickname.trim()) fields.floorNickname = 'Nickname is required.';
 		if (!draft.firstName.trim()) fields.firstName = 'First name is required.';
 		if (!draft.lastName.trim()) fields.lastName = 'Last name is required.';
 		if (!draft.phoneCountryCode) fields.phoneCountryCode = 'Please choose a country dial code.';

@@ -52,7 +52,7 @@ export function Step1Persona({
 						clearFieldError('floorNickname');
 						patch({ floorNickname: t.slice(0, 20) });
 					}}
-					placeholder="e.g. Moon, Charlotte"
+					placeholder="E.g. Moon, Charlotte"
 				/>
 			</Field>
 			<Row>
