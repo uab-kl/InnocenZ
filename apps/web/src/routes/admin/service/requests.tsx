@@ -14,6 +14,7 @@ import {
 	MailCheck,
 	RefreshCw,
 	Search,
+	XCircle,
 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
@@ -72,6 +73,7 @@ import {
 	type AdminRequestStatus,
 	type AdminRequestsQueryParams,
 	type AdminRequestType,
+	declineRequest,
 	fetchAdminRequests,
 	fetchNegotiatedSummary,
 	markRequestContacted,
@@ -358,6 +360,27 @@ function RequestsPage() {
 		},
 	});
 
+	/**
+	 * The other half of an answer. Resolve says yes and moves the ledger; this
+	 * says no and moves nothing — the venue keeps its add-on, the agency keeps
+	 * Custom at the agreed price. Every row here had only Resolve, so a request
+	 * the admin did not agree to stayed Pending forever, and the subscriber's own
+	 * screen went on saying "waiting for admin" with nothing coming.
+	 */
+	const declineMutation = useMutation({
+		mutationFn: (id: string) => declineRequest(id, logout),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
+			toast.success(response.message || "Request cancelled");
+		},
+		onError: (error) => {
+			toast.error(
+				toMutationError(error, "Failed to cancel request")?.message ??
+					"Failed to cancel request",
+			);
+		},
+	});
+
 	// Admin can only annotate a request (remarks). Who / Role / Type are the
 	// immutable record of the originating Outlet/Agency action and are not editable.
 	const updateFieldsMutation = useMutation({
@@ -389,6 +412,7 @@ function RequestsPage() {
 	const isSaving =
 		contactedMutation.isPending ||
 		resolveMutation.isPending ||
+		declineMutation.isPending ||
 		updateFieldsMutation.isPending;
 
 	const summaryCards = [
@@ -762,6 +786,7 @@ function RequestsPage() {
 							onResolve={(id, quotedAmount) =>
 								resolveMutation.mutateAsync({ id, quotedAmount })
 							}
+							onDecline={(id) => declineMutation.mutateAsync(id)}
 							onDone={() => setEditRequest(null)}
 						/>
 					)}
@@ -783,6 +808,8 @@ interface RequestEditFormProps {
 	onSaveQuote: (id: string, quotedAmount: number | null) => Promise<unknown>;
 	onContacted: (id: string) => Promise<unknown>;
 	onResolve: (id: string, quotedAmount: number | undefined) => Promise<unknown>;
+	/** Say no: the request is cancelled and nothing in the ledger moves. */
+	onDecline: (id: string) => Promise<unknown>;
 	onDone: () => void;
 }
 
@@ -797,6 +824,7 @@ function RequestEditForm({
 	onSaveQuote,
 	onContacted,
 	onResolve,
+	onDecline,
 	onDone,
 }: RequestEditFormProps) {
 	const negotiable = isPriceNegotiable(request);
@@ -845,21 +873,30 @@ function RequestEditForm({
 	 * while dropping Custom puts the agency back on an ordinary tier's list price
 	 * — so the note says which, rather than one line covering both loosely.
 	 */
-	const negotiatedNote = isExit
-		? request.status === "resolved"
-			? isAddonRequest
-				? "Resolved — the POS add-on has ended. The venue pays its plan only."
-				: `Resolved — the Custom price has ended. The agency is on ${requestedPlan?.name ?? "its tier"} at the list price.`
-			: isAddonRequest
-				? `Cancellation requested — waiting for you. The venue keeps ${requestedPlan?.name ?? "its plan"} and the add-on charge stands until you resolve this.`
-				: `Cancellation requested — waiting for you. The agency stays on Custom at the agreed price until you resolve this, then moves to ${requestedPlan?.name ?? "the tier it named"}.`
-		: request.status === "resolved"
-			? isAddonRequest
-				? "Resolved — billed on top of the venue's plan, which is unchanged."
-				: "Resolved — this is the agency's tier price from now on."
-			: isAddonRequest
-				? "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change."
-				: "Set the price, then Resolve. It becomes the agency's tier price — Custom has no list price to fall back on.";
+	const negotiatedNote =
+		request.status === "declined"
+			? isExit
+				? isAddonRequest
+					? "Cancelled — the venue keeps the POS add-on at the price already agreed."
+					: "Cancelled — the agency stays on Custom at the price already agreed."
+				: isAddonRequest
+					? "Cancelled — no add-on was started. The venue pays its plan only."
+					: "Cancelled — no price was agreed. The agency stays on the tier it is on."
+			: isExit
+				? request.status === "resolved"
+					? isAddonRequest
+						? "Resolved — the POS add-on has ended. The venue pays its plan only."
+						: `Resolved — the Custom price has ended. The agency is on ${requestedPlan?.name ?? "its tier"} at the list price.`
+					: isAddonRequest
+						? `Cancellation requested — waiting for you. The venue keeps ${requestedPlan?.name ?? "its plan"} and the add-on charge stands until you resolve this.`
+						: `Cancellation requested — waiting for you. The agency stays on Custom at the agreed price until you resolve this, then moves to ${requestedPlan?.name ?? "the tier it named"}.`
+				: request.status === "resolved"
+					? isAddonRequest
+						? "Resolved — billed on top of the venue's plan, which is unchanged."
+						: "Resolved — this is the agency's tier price from now on."
+					: isAddonRequest
+						? "Set the price, then Resolve. It is billed on top of the venue's plan — the plan does not change."
+						: "Set the price, then Resolve. It becomes the agency's tier price — Custom has no list price to fall back on.";
 
 	const remarksChanged = remarks.trim() !== (request.remarks ?? "").trim();
 	const quoteChanged =
@@ -903,6 +940,21 @@ function RequestEditForm({
 		try {
 			await persistRemarks();
 			await onContacted(request.id);
+			onDone();
+		} catch {
+			// Error toasts are surfaced by the mutation onError handlers.
+		}
+	}
+
+	/**
+	 * Refuse the request. Remarks are saved first, because "why not" is the part
+	 * the subscriber's next conversation turns on — losing it would leave a
+	 * cancelled row with no reason on it.
+	 */
+	async function handleDecline() {
+		try {
+			await persistRemarks();
+			await onDecline(request.id);
 			onDone();
 		} catch {
 			// Error toasts are surfaced by the mutation onError handlers.
@@ -1152,7 +1204,7 @@ function RequestEditForm({
 							{request.status}
 						</Badge>
 					</div>
-					{request.status !== "resolved" && (
+					{request.status !== "resolved" && request.status !== "declined" && (
 						<div className="flex flex-wrap gap-2 pt-1">
 							{request.status === "pending" && (
 								<Button
@@ -1164,6 +1216,27 @@ function RequestEditForm({
 								>
 									<MailCheck className="mr-1 h-4 w-4" />
 									Mark contacted
+								</Button>
+							)}
+							{/*
+							 * A request needs both answers. Cancelling leaves the ledger
+							 * exactly as it is — the venue keeps its add-on, the agency keeps
+							 * Custom at the agreed price — and releases the subscriber's own
+							 * screen from "waiting for admin". A 'direct' row is refused by
+							 * the server: it was applied when it was filed, so there is
+							 * nothing left to call off.
+							 */}
+							{request.status !== "direct" && (
+								<Button
+									type="button"
+									variant="outline"
+									size="sm"
+									className="border-red-500/40 text-red-600 hover:bg-red-500/10 dark:text-red-400"
+									disabled={isSaving}
+									onClick={handleDecline}
+								>
+									<XCircle className="mr-1 h-4 w-4" />
+									Cancel request
 								</Button>
 							)}
 							<Button

@@ -409,17 +409,21 @@ export function useAgencySubscription() {
 	};
 
 	/**
-	 * Reset off Custom, back onto the banded rate card.
+	 * Ask to come off Custom, back onto the banded rate card.
 	 *
-	 * Filed as a `plan_change`, which the server applies ON THE SPOT for an
-	 * agency ('direct') — the same shape as the Custom → Growth row already in
-	 * the queue. The tier it lands on has a list price and was chosen by PV
-	 * volume rather than by anyone's judgement, so there is nothing for an admin
-	 * to approve; the row exists so they can SEE it, and Plan Request shows it
-	 * because it touches Custom.
+	 * A REQUEST, and it changes nothing until the admin answers — the agency
+	 * stays on Custom at the agreed price meanwhile. Ending a negotiated price is
+	 * not the agency's to do alone: two people agreed that figure.
 	 *
-	 * Re-pricing is the opposite case and stays a pending `custom_renegotiation`:
-	 * a figure nobody has agreed cannot bill anything.
+	 * Filed as `custom_renegotiation` NAMING THE TIER it wants, which is what
+	 * marks it an exit rather than a re-price — the exact mirror of a venue
+	 * asking to drop POS. It used to be a `plan_change`, which the server applies
+	 * on the spot for an agency ('direct'): the reset took effect the instant it
+	 * was tapped, so the admin's only option in Plan Request was to Resolve a
+	 * move that had already happened, and there was nothing left to refuse.
+	 *
+	 * The resolve handler already knows this shape (a Custom request naming a
+	 * plan → move the ledger); declining it leaves Custom exactly as it was.
 	 */
 	const requestLeaveCustom = async (
 		toPlanLabel: string,
@@ -430,10 +434,10 @@ export function useAgencySubscription() {
 			return { ok: false, reason: `${toPlanLabel} is not in the plan list` };
 		}
 		return fileRequest({
-			type: "plan_change",
+			type: "custom_renegotiation",
 			currentPlanId: current?.subscriptionId ?? undefined,
 			requestedPlanId: target.id,
-			message: `Reset off Custom to ${target.name} — ${weeklyPv} PV issued this payroll week (RM ${target.price} / ${target.billingCycle}).`,
+			message: `Requesting to leave Custom for ${target.name} — ${weeklyPv} PV issued this payroll week (RM ${target.price} / ${target.billingCycle}).`,
 		});
 	};
 

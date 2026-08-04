@@ -310,8 +310,17 @@ export async function approvePlanChange(
 	return response.data;
 }
 
-// Decline an outlet plan change — the subscriber stays on the from-plan.
-export async function declinePlanChange(
+/**
+ * Say no to a request. The ledger is untouched — the subscriber keeps exactly
+ * what it has: an outlet stays on its from-plan, and a negotiated request (POS
+ * quote, Custom renegotiation, or either one's cancellation) leaves the add-on
+ * or the Custom price standing.
+ *
+ * Not plan-change-only despite where it started: a Plan Request row could only
+ * be Resolved, so an admin who did not agree to one had nothing to click and it
+ * sat Pending forever.
+ */
+export async function declineRequest(
 	id: string,
 	onRefreshFail: () => void,
 ): Promise<{ success: boolean; message: string; data: AdminRequest }> {
