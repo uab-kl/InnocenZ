@@ -72,13 +72,29 @@ export function ShiftStatusPanel({
   // Every proof photo the PR snapped for this shift's self-logs, each carrying
   // its owning line + index so it can be removed. Shown as an editable gallery
   // under the totals so the PR can confirm / add / remove what they uploaded.
-  const proofItems = useMemo(
-    () =>
-      logs.flatMap((l) =>
-        (l.proofPhotos ?? []).map((src, idx) => ({ lineId: l.id, idx, src })),
-      ),
-    [logs],
-  );
+  const proofItems = useMemo(() => {
+    /*
+     * ONE THUMBNAIL PER PICTURE, not per line.
+     *
+     * Three items scanned off one receipt all carry that receipt's photo, so
+     * the gallery showed the same paper three times and the count read
+     * "PROOF PHOTOS · 3" for a single picture. The PR cannot tell whether they
+     * uploaded one or three, which is the only question the gallery answers.
+     *
+     * The kept entry keeps its real lineId + index, so removing it still deletes
+     * a photo that actually exists rather than a display-only copy.
+     */
+    const seen = new Set<string>();
+    const items: { lineId: string; idx: number; src: string }[] = [];
+    for (const l of logs) {
+      (l.proofPhotos ?? []).forEach((src, idx) => {
+        if (seen.has(src)) return;
+        seen.add(src);
+        items.push({ lineId: l.id, idx, src });
+      });
+    }
+    return items;
+  }, [logs]);
   // New photos append to the first self-log that already carries proof.
   const proofTargetLineId = proofItems[0]?.lineId;
   const [lightbox, setLightbox] = useState<string | null>(null);

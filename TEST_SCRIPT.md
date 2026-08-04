@@ -696,6 +696,32 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — ONE PICTURE, ONE THUMBNAIL. Plus the cause of "Internal Server Error" on a self-log edit.**
+>
+> Owner: *"if that self log for the tips have many same picture if just that action only show one of that
+> picture"* — three items scanned off ONE receipt each carry that receipt's photo (by design, since
+> `3d51a6d`), so the gallery drew the same paper three times and read **PROOF PHOTOS · 3** for a single
+> picture. Deduped by image; the kept entry keeps its real `lineId` + index so REMOVING it still deletes a
+> photo that exists rather than a display-only copy.
+>
+> **🔴 STILL OPEN — the self-log edit is structurally wrong, and that is what 500s.** Owner: *"if i remove
+> the tips all of the tips scanned or self remove it together, if i edit the tips all also can edit
+> together… internal server error solve this"*. Read `ScanScreen.submitManual`:
+>
+> ```ts
+> const [first, ...rest] = items;
+> await editLine(editId, { ...first });      // updates ONE row
+> for (const d of rest) await logLine({...}); // and re-adds the others as NEW rows
+> ```
+>
+> So editing the Tips row of a 3-item receipt UPDATES one line and INSERTS duplicates of the siblings that
+> are already saved; an item set to 0 is simply left behind, still logged. Re-adding an item that already
+> exists on that receipt is what throws. **The fix is the model the owner described: a scan is ONE
+> RECEIPT, so edit reconciles every item of that receipt in one pass (update / insert / delete-to-zero)
+> and delete removes the whole receipt.** Lines already carry `receiptNo`, so they can be grouped without
+> a backend change. NOT attempted in this slice — a half-built rewrite on the payment-line path is worse
+> than a known bug, and this one needs its own careful pass.
+
 > **4 Aug 2026 — "THIS SHIFT" MEANT "TODAY", SO A SECOND CHECK-IN INHERITED THE FIRST SHIFT’S WORK.**
 >
 > Owner: *"When pr check in , New shift new receipt data please clear it"*. Checked in at **11:29** for a
