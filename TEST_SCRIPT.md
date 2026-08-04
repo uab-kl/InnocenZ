@@ -696,6 +696,35 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — OCR READ THE ITEMS AND THREW THE QUANTITIES AWAY (PR self-log).**
+>
+> Owner: *"in the check in page pr is 2 quantity of the Havoc, why i self log still ocr shows default one?"*
+> The receipt says **`2 Havoc`**; the screen showed **×1**, and the voucher would have been **RM 1,150**
+> instead of **RM 2,150**. Under-paying a PR by a thousand ringgit, silently.
+>
+> **Cause, in one regex.** `ITEM_RE = /^(d{1,2})s+(.+?)s+(d+[.,]d{2})$/` — it REQUIRES a trailing
+> price. This receipt prints the order list with no money on those lines at all (tips and service items
+> often have none), so no pattern matched and `qtyFromLine` fell through to its `return 1`. Every item on
+> every receipt of that shape read as one.
+>
+> **Fixed with a third pattern, tried last because it is the loosest:** `LEADING_QTY_RE = /^(d{1,2})s+(?=D)/`
+> — a small leading number followed by a non-digit. The `D` lookahead keeps it off `"2 1000.00"`, and it
+> is only ever reached for a line that ALREADY matched a menu item by name, so a date or a table number
+> cannot be read as a quantity.
+>
+> **Then the owner's follow-up — *"makes always checks the quantity from the receipt"*.** Two changes:
+> **(a)** a printed quantity is now the ANSWER, not a floor. The screen took `Math.max(existing, parsed)`,
+> so a stale number survived the scan that finally read the line. **(b)** `ReceiptMatch.qtyFromReceipt`
+> records whether the number was READ or ASSUMED — a silent default of 1 is indistinguishable from a 1 the
+> receipt actually printed, which is exactly how this bug hid. Rows the parser guessed now say **"Receipt
+> printed no quantity — check this one"** in amber, and an assumed value never overwrites what is already
+> on screen.
+>
+> **Verified against the owner’s own receipt text and five other shapes:** real receipt → `Tips ×1 |
+> Booking commission ×1 | Havoc ×2 = RM 2,150`; priced lines `2 Havoc 2000.00` → ×2; nothing printed →
+> ×1 flagged *(assumed)*; `Havoc x3` → ×3; the same item on two lines → ×2, and an assumed 1 does NOT beat
+> a printed 2. `apps/mobile` tsc **0 errors** (its baseline).
+
 > **3 Aug 2026 — `main` merged into `jk` (`0f339b8`, PR #43 from SL). Two conflicts, both resolved from
 > evidence rather than by taste.**
 >

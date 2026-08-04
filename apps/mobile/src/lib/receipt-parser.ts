@@ -93,6 +93,15 @@ const ITEM_RE = /^(\d{1,2})\s+(.+?)\s+(\d+[.,]\d{2})$/;
 // Also understands "Tiger Beer x2" / "2x Tiger Beer" style quantities.
 const QTY_SUFFIX_RE = /(?:^|\s)[x×](\d{1,2})(?:\s|$)|(?:^|\s)(\d{1,2})[x×](?:\s|$)/i;
 
+// 4. A QUANTITY WITH NO PRICE ON THE LINE — "2 Havoc", "1 Booking Commision".
+//    Plenty of receipts list what was ordered and put the money elsewhere, or
+//    nowhere at all for tips and service items. ITEM_RE above REQUIRES a
+//    trailing price, so every one of those lines used to read as quantity 1
+//    however many the receipt actually said.
+//    The `\D` lookahead keeps this off "2 1000.00", where the second number is
+//    an amount rather than a name.
+const LEADING_QTY_RE = /^(\d{1,2})\s+(?=\D)/;
+
 export type ParsedReceipt = {
   /** Receipt date normalised to YYYY-MM-DD, or null when unreadable. */
   date: string | null;
@@ -115,6 +124,13 @@ export type ReceiptMatch = {
   priceRm: number;
   /** Quantity read off the receipt line, default 1. */
   qty: number;
+  /**
+   * Whether that quantity was actually READ, or assumed because the line did
+   * not print one. A silent default of 1 is indistinguishable from a real 1 on
+   * screen, which is how a receipt saying "2 Havoc" was logged as one — so the
+   * screen can mark the assumed ones and ask the PR to check.
+   */
+  qtyFromReceipt: boolean;
 };
 
 /** lowercase + strip everything but letters/digits: "Tiger Beer" → "tigerbeer". */
@@ -177,19 +193,33 @@ export function lineMentionsItem(line: string, itemName: string): boolean {
   return false;
 }
 
-/** Best quantity guess for a line: leading qty, "x2"/"2x", else 1. */
-function qtyFromLine(line: string): number {
-  const item = ITEM_RE.exec(line.trim());
+/**
+ * Best quantity guess for a line: priced item line, "x2"/"2x", a bare leading
+ * number, else 1.
+ *
+ * Only ever called on a line that already matched a menu item by name, which is
+ * what makes the bare-leading-number case safe: a date or a table number cannot
+ * reach here unless it shares a line with the item.
+ */
+function qtyFromLine(line: string): { qty: number; read: boolean } {
+  const trimmed = line.trim();
+  const item = ITEM_RE.exec(trimmed);
   if (item) {
     const q = Number(item[1]);
-    if (q >= 1 && q <= 99) return q;
+    if (q >= 1 && q <= 99) return { qty: q, read: true };
   }
   const suffix = QTY_SUFFIX_RE.exec(line);
   if (suffix) {
     const q = Number(suffix[1] ?? suffix[2]);
-    if (q >= 1 && q <= 99) return q;
+    if (q >= 1 && q <= 99) return { qty: q, read: true };
   }
-  return 1;
+  // Last, because it is the loosest: a leading number with no price after it.
+  const leading = LEADING_QTY_RE.exec(trimmed);
+  if (leading) {
+    const q = Number(leading[1]);
+    if (q >= 1 && q <= 99) return { qty: q, read: true };
+  }
+  return { qty: 1, read: false };
 }
 
 /** dd/mm/yy(yy) or yyyy-mm-dd → YYYY-MM-DD, or null when nonsense. */
@@ -223,10 +253,28 @@ export function parseReceipt(text: string, menu: MenuDrink[]): ParsedReceipt {
   for (const line of lines) {
     for (const item of menu) {
       if (!lineMentionsItem(line, item.name)) continue;
-      const qty = qtyFromLine(line);
+      const { qty, read } = qtyFromLine(line);
       const prev = byId.get(item.id);
-      if (prev) prev.qty = Math.max(prev.qty, qty);
-      else byId.set(item.id, { id: item.id, name: item.name, priceRm: item.priceRm, qty });
+      if (!prev) {
+        byId.set(item.id, {
+          id: item.id,
+          name: item.name,
+          priceRm: item.priceRm,
+          qty,
+          qtyFromReceipt: read,
+        });
+        continue;
+      }
+      // One item can appear on several lines ("2 Havoc", then "Havoc 2000.00").
+      // A PRINTED number wins outright over an assumed one; between two printed
+      // numbers take the larger, since OCR drops digits far more often than it
+      // invents them.
+      if (read && !prev.qtyFromReceipt) {
+        prev.qty = qty;
+        prev.qtyFromReceipt = true;
+      } else if (read === prev.qtyFromReceipt) {
+        prev.qty = Math.max(prev.qty, qty);
+      }
     }
   }
 

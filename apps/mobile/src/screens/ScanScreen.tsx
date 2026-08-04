@@ -145,6 +145,8 @@ export function ScanScreen({
   const [drinkQtys, setDrinkQtys] = useState<Record<string, number>>({});
   // What the LAST real OCR pass read off the receipt.
   const [detectedIds, setDetectedIds] = useState<string[]>([]);
+  /** Items whose line printed NO quantity — shown as a guess, not as read. */
+  const [assumedQtyIds, setAssumedQtyIds] = useState<Set<string>>(new Set());
   // What OCR read off the paper (ORD0389) — sent to the server as orderNo.
   const [receiptNo, setReceiptNo] = useState<string | null>(null);
   const [receiptDate, setReceiptDate] = useState<string | null>(null);
@@ -317,9 +319,28 @@ export function ScanScreen({
       return;
     }
     setDetectedIds((prev) => Array.from(new Set([...prev, ...parsed.matches.map((m) => m.id)])));
+    /*
+     * A quantity the receipt PRINTED is the answer, not a floor on it: taking
+     * the larger of old and new meant a stale value survived the scan that
+     * finally read the line. Quantities the parser only ASSUMED (the line
+     * printed none) never overwrite what is already on screen, and are recorded
+     * so the row can say it is a guess — a silent 1 is indistinguishable from a
+     * 1 the receipt actually printed, which is how "2 Havoc" got logged as one.
+     */
     setDrinkQtys((prev) => {
       const next = { ...prev };
-      for (const m of parsed.matches) next[m.id] = Math.max(next[m.id] ?? 0, m.qty);
+      for (const m of parsed.matches) {
+        if (m.qtyFromReceipt) next[m.id] = m.qty;
+        else if ((next[m.id] ?? 0) === 0) next[m.id] = m.qty;
+      }
+      return next;
+    });
+    setAssumedQtyIds((prev) => {
+      const next = new Set(prev);
+      for (const m of parsed.matches) {
+        if (m.qtyFromReceipt) next.delete(m.id);
+        else next.add(m.id);
+      }
       return next;
     });
     if (target === 'manual') keepAsProof(shot.dataUrl);
@@ -680,6 +701,11 @@ export function ScanScreen({
                               ? ` · × ${drinkQtys[d.id]} = ${formatRM(d.priceRm * (drinkQtys[d.id] ?? 0))}`
                               : ''}
                           </Text>
+                          {assumedQtyIds.has(d.id) && (
+                            <Text style={styles.qtyAssumed}>
+                              Receipt printed no quantity — check this one
+                            </Text>
+                          )}
                         </View>
                         <View style={styles.qtyCtrl}>
                           <Pressable
@@ -1128,6 +1154,13 @@ const styles = StyleSheet.create({
   },
   drinkName: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
   drinkUnit: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  /** Amber, because it asks the PR to look at the paper — it is not an error. */
+  qtyAssumed: {
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.amber,
+    marginTop: 2,
+  },
   qtyCtrl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: {
     width: 32,
