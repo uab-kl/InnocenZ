@@ -300,7 +300,47 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (evening: full 4-role E2E sweep, spine proven, 5 defects open)
+### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (duplicate-voucher guard FIXED; the "anchor bug" was a stale process)
+
+> **A PR was billed TWICE for one shift, and the guard that should have stopped it did nothing.**
+> `PV-000005` (PR self-log) and `PV-000006` (generator) both carried a RM700 wages line whose `ref`
+> named the SAME assignment `6574b2ee` — RM1,400 for a single shift. `PV-000006` has been deleted;
+> `PV-000005` survives and is now the only record of that shift.
+>
+> - [x] **🔴 Duplicate guard matched `week_start` for EQUALITY — ✅ FIXED 4 Aug.**
+>   `existsForPrWeek()` now matches on **OVERLAP** (`week_start <= newEnd AND week_end >= newStart`),
+>   with the exact-`week_start` arm kept so a legacy row with a NULL `week_end` is still caught. Takes
+>   an optional 4th arg `weekEnd` defaulting to `weekStart`; the generator passes the real week, the
+>   create-voucher endpoint passes `header.weekEnd ?? header.weekStart` (both optional on that schema),
+>   which degrades to "is this DAY inside a week the PR already has" — still stronger than equality.
+>   **Regression-tested live: the exact call that minted `PV-000006` now returns `0 created, 1 skipped
+>   (already_exists)` and writes nothing.** Equality only ever protected against a repeat from the same
+>   writer using the same anchor; one day of disagreement disabled it silently.
+>
+> - [x] **⚠️ The "Mon–Sun anchor bug" does NOT exist in the code — do not fix it.** All three helpers
+>   are Sunday-anchored on disk (`previousCompleteWeek` :34, `weekOfDate` :90, `weekBounds`
+>   controller :148), the cron logs `0 2 * * 0`, and the PR app does **not** send a week
+>   (`PrReceiptLineInput` has no `weekStart`/`weekEnd`). `PV-000005` was written at
+>   `08:39:10.735Z` by a **stale backend process still running pre-merge Monday-anchored code** — the
+>   documented `tsx watch` trap. The backend has since been restarted from current disk.
+>
+> **Still open from this slice:**
+> - [ ] **Live-verify the anchor** — one fresh self-logged line should now produce a Sun–Sat week.
+>   Not done: all dev servers were down and the PR app needs a fresh login. **The fix is inferred from
+>   code + a clean restart, NOT observed.**
+> - [ ] **Re-anchor `PV-000005`** from `2026-08-03..09` to `2026-08-02..08`
+>   (`scripts/reanchor-voucher-weeks.ts` exists for this).
+> - [ ] **Backfill `due_date`** — blocked: the bulk UPDATE on `payment_voucher` was refused by the
+>   permission classifier. Run manually:
+>   `update main.payment_voucher set due_date = week_end + 7 where due_date is null and extract(dow from week_start) = 0;`
+>   Deliberately skips `PV-000005`, whose week is wrong, so its due date would need redoing.
+>
+> **⚠️ Nearly a FOURTH over-call: I was about to write a Sunday-anchor "fix" for code that was already
+> correct. The data said Monday, the code said Sunday, and the answer was neither — the RUNNING PROCESS
+> was stale. When live data contradicts the source, check what is actually executing before changing
+> the source.**
+
+### 3 Aug 2026 (evening) — amended (read the block above first)
 
 > **The spine is now LIVE-VERIFIED end to end for the first time** — all six links, on four real
 > simultaneous logins (agency `Dato' Lim Wei Khoon`, outlet `Chen Wei Jie`/Velvet 23, admin
@@ -761,6 +801,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 — double-billing found and closed at the guard.** A PR held two vouchers for one shift:
+> `PV-000005` (self-log, Mon-anchored `08-03..08-09`) and `PV-000006` (generator, Sun-anchored
+> `08-02..08-08`), each with a RM700 wages line whose `ref` named the same assignment `6574b2ee`.
+> RM1,400 for twelve seconds of attendance. `PV-000006` deleted; `PV-000005` survives.
+>
+> **Fix — `existsForPrWeek()` now matches on OVERLAP, not `week_start` equality.** Equality only
+> protected against a repeat from the same writer using the same anchor, so one day of disagreement
+> between two write paths disabled it entirely and silently. Overlap holds whatever the anchor, so a
+> timezone slip, a manual re-anchor, or a third write path cannot reopen it. Optional 4th arg `weekEnd`
+> defaults to `weekStart`, which degrades to a day-inside-week check for the create endpoint where the
+> field is optional; the exact-`week_start` arm is retained so legacy rows with a NULL `week_end` stay
+> covered. **Regression-tested against the real defect: the same call that minted `PV-000006` now
+> reports `0 created, 1 skipped (already_exists)` and writes nothing.** `tsc` clean.
+>
+> **The anchor itself was never broken in code.** All three helpers are Sunday-anchored, the cron is
+> `0 2 * * 0`, and the PR app sends no week. `PV-000005` came from a **stale backend process** still
+> executing pre-merge Monday-anchored code — the `tsx watch` trap this file already warns about.
+> Restarting the backend from current disk is the whole remedy. **A Sunday-anchor "fix" was drafted and
+> then discarded: the source was already right.** The lesson is recorded in §9 — when live data
+> contradicts the source, check what is actually RUNNING before editing the source.
+>
+> **Left open:** the anchor is inferred, not observed (dev servers were down, PR app needs a login);
+> `PV-000005` still needs re-anchoring to `08-02..08-08`; and the `due_date` backfill is blocked on a
+> permission refusal for bulk UPDATEs against `payment_voucher` — the statement is in §9 to run by hand.
 
 > **3 Aug 2026 (evening) — the spine is proven end to end, and `due_date` now exists.** Two things
 > happened: a full four-role E2E sweep on real simultaneous logins, and one feature shipped off the

@@ -106,7 +106,9 @@ export class PaymentVoucherGeneratorClass {
       }
 
       for (const [prId, prRows] of byPr) {
-        if (await this.paymentVoucherRepository.existsForPrWeek(agencyId, prId, weekStart)) {
+        // weekEnd passed so the check is an OVERLAP, not a week_start match: a
+        // voucher this PR already has under a different anchor still counts.
+        if (await this.paymentVoucherRepository.existsForPrWeek(agencyId, prId, weekStart, weekEnd)) {
           result.skipped.push({ agencyId, prId, reason: 'already_exists' });
           continue;
         }
