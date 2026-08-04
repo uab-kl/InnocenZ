@@ -341,7 +341,9 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 >   fields into one and silently emptying the other four.** Splitting a free-text address is a
 >   parsing problem, not a wiring one — the input stays store-only until the FORM has five fields.
 >   The toast says so out loud: *"Venue name saved · address is not persisted yet"*.
->   ⚠️ **Endpoint proven live (probe 7/0), React wiring only TYPECHECKED — not yet clicked through.**
+>   ✅ **CLICKED THROUGH 4 Aug on `owner@velvet23.my`** — `PUT 200`, `name` verified in the DB,
+>   **address columns and geo pin both intact after the name-only save**, restored afterwards, zero
+>   console errors. The agency screen was proven the same way on `owner@atlas-agency.my`.
 > - [ ] ~~**Wire the outlet Settings save.**~~ `routes/outlet/settings.tsx` still persists nothing;
 >   `PUT /outlet/:id` exists and is now correctly scoped. Mirror the agency shape: a
 >   `save`/`isSaving` pair on `useOutletProfile`, save BEFORE the screen shows a saved state, and send
@@ -891,6 +893,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **4 Aug 2026 (late) — BOTH Settings screens clicked through on real logins. Edit → save → verified
+> in the database → restored. Zero console errors on either.**
+>
+> The gap named in the previous entry is closed: the React wiring was typechecked only, and on this
+> project that has repeatedly been the difference.
+>
+> - **Agency** (`owner@atlas-agency.my`): screen renders real identity matching the DB row exactly.
+>   Owner name → `Dato' Lim Wei Khoon QA`, Save → **`PUT /agency/c30fcd15… 200`**, then the two
+>   invalidation refetches fired (`GET` agency + members). **Database read back:
+>   `contactName = "Dato' Lim Wei Khoon QA"`.** Restored to `Dato' Lim Wei Khoon`.
+> - **Outlet** (`owner@velvet23.my`): venue name → `Velvet 23 QA`, Save → **`PUT /outlet/ed739c13… 200`**,
+>   refetches fired. **Database read back: `name = "Velvet 23 QA"`.** Restored to `Velvet 23`.
+>
+> ✅ **The check worth keeping — a partial save does NOT silently unfence a venue.** After a
+> `name`-ONLY `PUT`, all five address columns were still intact (`Jalan Bukit Bintang` ·
+> `Bukit Bintang` · `55100` · `Kuala Lumpur` · `Malaysia`) **and so was the geo pin**
+> (`3.14438770` / `101.70824200` / 50 m). The update schemas are `.partial()`, so omitted fields are
+> left alone. **That was an ASSUMPTION in the commit that shipped the partial payload, and it is now a
+> reading** — worth the thirty seconds, because the failure mode would have been a venue quietly
+> losing the coordinate every check-in is measured against.
+>
+> **Method:** own dev server on **3001** (`web-3001` in `launch.json`) — another chat's server is not
+> reachable from this session's browser tools. Baselines for both rows were captured over the API
+> BEFORE any UI write, so the restore values were known rather than remembered.
 
 > **4 Aug 2026 (late) — the outlet Settings save is wired to `PUT /outlet/:id`, NAME ONLY, and the
 > part left unwired is the interesting one.**

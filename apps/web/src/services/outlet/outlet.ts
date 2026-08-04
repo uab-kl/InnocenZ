@@ -67,7 +67,10 @@ export async function updateOutlet(
 	onRefreshFail: () => void,
 ): Promise<OutletApiResponse> {
 	const client = getClient(onRefreshFail);
-	const response = await client.put<OutletApiResponse>(`/outlet/${id}`, payload);
+	const response = await client.put<OutletApiResponse>(
+		`/outlet/${id}`,
+		payload,
+	);
 	return response.data;
 }
 
