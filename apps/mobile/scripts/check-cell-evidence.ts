@@ -13,6 +13,11 @@
  * VISIBLE as two rows rather than being tidied into one.
  */
 import { buildCellEvidence, evidenceMatchesCell } from '../src/lib/cell-evidence';
+import {
+  dayStatusLabel,
+  disputesForDay,
+  openDisputeKeys,
+} from '../src/lib/receipt-review';
 import type { PrCurrentWeek, PrReceiptLine, PrWeekShift } from '../src/lib/api';
 
 let failures = 0;
@@ -162,6 +167,87 @@ const noShifts: PrCurrentWeek = { ...week, shifts: undefined };
 const ns = buildCellEvidence(noShifts, '2026-08-04', 'drinks');
 check('shiftsKnown false when the backend has not shipped shifts', !ns.shiftsKnown);
 check('and the money still totals correctly', ns.total === 7.2);
+
+/*
+ * DAY STATUS LIFECYCLE — pending → approved → disputed → verified.
+ *
+ * Owner: "then after solve dispute turn from the approved to the verified or
+ * disputed to the verified". BOTH arrows must land on VERIFIED, which is why
+ * they are asserted separately: a settled claim promotes the day whatever it
+ * read beforehand.
+ */
+console.log('\nDAY STATUS LIFECYCLE');
+const DAY = '2026-08-04';
+function weekWith(disputes: PrCurrentWeek['disputes']): PrCurrentWeek {
+  return { ...week, disputes };
+}
+function claim(outcome: 'accepted' | 'rejected' | 'withdrawn' | null) {
+  return {
+    id: `d-${outcome ?? 'open'}`,
+    disputeDate: DAY,
+    component: 'drinks' as const,
+    reason: 'Unmatch commission',
+    note: null,
+    raisedAt: '2026-08-04T08:51:20.609Z',
+    disputedAmount: '7.21',
+    claimedAmount: null,
+    outcome,
+    resolvedAt: outcome ? '2026-08-04T10:00:00.000Z' : null,
+    resolutionNote: outcome ? 'Checked against the paper' : null,
+  };
+}
+
+check(
+  'no claim, agency approved -> APPROVED',
+  dayStatusLabel(weekWith([]), DAY, 'approved') === 'APPROVED',
+);
+check('no claim, nobody looked -> PENDING', dayStatusLabel(weekWith([]), DAY, 'pending') === 'PENDING');
+check('empty day stays a dash', dayStatusLabel(weekWith([]), DAY, 'empty') === '—');
+check(
+  'open claim outranks an APPROVED day -> DISPUTED',
+  dayStatusLabel(weekWith([claim(null)]), DAY, 'approved') === 'DISPUTED',
+);
+check(
+  'open claim outranks a PENDING day -> DISPUTED',
+  dayStatusLabel(weekWith([claim(null)]), DAY, 'pending') === 'DISPUTED',
+);
+check(
+  'APPROVED -> VERIFIED once the claim is accepted',
+  dayStatusLabel(weekWith([claim('accepted')]), DAY, 'approved') === 'VERIFIED',
+);
+check(
+  'DISPUTED -> VERIFIED once the claim is rejected (answered is answered)',
+  dayStatusLabel(weekWith([claim('rejected')]), DAY, 'approved') === 'VERIFIED',
+);
+check(
+  'a still-open claim beside a settled one keeps the day DISPUTED',
+  dayStatusLabel(weekWith([claim('accepted'), claim(null)]), DAY, 'approved') === 'DISPUTED',
+);
+check(
+  'WITHDRAWN is not settled — the day falls back to APPROVED',
+  dayStatusLabel(weekWith([claim('withdrawn')]), DAY, 'approved') === 'APPROVED',
+);
+check(
+  'an in-session claim (not yet refetched) still reads DISPUTED',
+  dayStatusLabel(weekWith([]), DAY, 'approved', true) === 'DISPUTED',
+);
+check(
+  "another day is unaffected by this day's claim",
+  dayStatusLabel(weekWith([claim(null)]), '2026-08-05', 'approved') === 'APPROVED',
+);
+
+const painted = openDisputeKeys(weekWith([claim(null), claim('accepted')]));
+check('only the OPEN claim paints a cell red', painted.size === 1 && painted.has(`${DAY}-drinks`));
+check(
+  'a resolved claim stops painting red',
+  openDisputeKeys(weekWith([claim('accepted')])).size === 0,
+);
+
+const split = disputesForDay(weekWith([claim(null), claim('rejected'), claim('withdrawn')]), DAY);
+check(
+  'disputesForDay splits open from settled and drops withdrawn',
+  split.open.length === 1 && split.settled.length === 1,
+);
 
 console.log(failures === 0 ? '\nAll checks passed.\n' : `\n${failures} check(s) FAILED.\n`);
 process.exit(failures === 0 ? 0 : 1);
