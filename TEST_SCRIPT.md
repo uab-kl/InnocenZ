@@ -696,6 +696,14 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **4 Aug 2026 — the same one-picture rule applied to the Scanned receipts card.**
+>
+> Owner: *"for all of the receipt also like this makes"*. `collectReceiptPhotoGroups` counted a photo per
+> LINE, so a three-item tips scan read **"Tips / Service · 3 pictures · 3 items logged"** and drew the
+> same paper three times. Deduped per group, so the count answers what it claims to — how many receipts
+> were photographed — while `lineCount` still says how many items came off them. Both surfaces that render
+> this card (Check-In and the scan screen) are fixed by the one change.
+
 > **4 Aug 2026 — ONE PICTURE, ONE THUMBNAIL. Plus the cause of "Internal Server Error" on a self-log edit.**
 >
 > Owner: *"if that self log for the tips have many same picture if just that action only show one of that

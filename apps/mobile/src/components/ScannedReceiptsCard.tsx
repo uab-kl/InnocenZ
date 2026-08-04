@@ -22,7 +22,16 @@ export function collectReceiptPhotoGroups(lines: PrReceiptLine[]): PhotoGroup[] 
       const rows = lines.filter((l) => d.match(l.kind));
       return {
         label: d.label,
-        photos: rows.flatMap((l) => l.proofPhotos ?? []),
+        /*
+         * ONE ENTRY PER PICTURE, however many items came off it.
+         *
+         * Every item scanned from a receipt carries that receipt's photo, so a
+         * three-item tips scan counted as "3 pictures" and drew the same paper
+         * three times. The count is meant to answer "how many receipts did I
+         * photograph" — with duplicates it answered nothing, and a PR checking
+         * their own proof could not tell one receipt from three.
+         */
+        photos: [...new Set(rows.flatMap((l) => l.proofPhotos ?? []))],
         lineCount: rows.length,
       };
     })
