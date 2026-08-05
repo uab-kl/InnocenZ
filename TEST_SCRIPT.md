@@ -304,6 +304,27 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ UNCOMMITTED IN THE TREE, NOT MINE — Post Job PR picker (5 Aug 2026)
+
+Appeared in the worktree DURING the Manage-PR session, after commit `3582d52`:
+
+- `apps/web/src/agency-portal/components/outlet/post-job-fields.tsx` (modified, +72/−59)
+- `apps/web/src/agency-portal/hooks/use-outlet-pr-pool.ts` (new, 99 lines)
+
+**Left deliberately uncommitted — I did not author either file**, and committing another session's
+in-progress work under a message I would be inventing is the same mistake §9 already records for the
+4 Aug batch. Its owner should finish and commit it.
+
+What it appears to be, from reading the diff only: the Post Job "Select PRs" picker moving off demo
+language/rating helpers onto a real backend read. It imports `formatStars` from
+`lib/pr-rating-summary.ts` — **the module added in `3582d52`** — and its doc comment carries the same
+rule (*"`rating` is `null` for a PR this outlet has never rated. That is not the same as zero stars"*),
+so it postdates and builds on the Manage-PR work. It also **deletes `languagesForPrIds`** from
+`post-job-fields.tsx`; anything still importing that will break until it lands.
+
+- [ ] Owner to verify and commit. If it is abandoned, revert both files rather than leaving a
+  half-migrated picker — `post-job-fields.tsx` has already had its old helpers removed.
+
 ### ▶ MANAGE-PR DETAIL — all 3 sections wired; SHIFT HISTORY deliberately has NO payout (5 Aug 2026)
 
 Shift history is now a real read (§8 A7). What remains open on it:
@@ -969,6 +990,15 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 (e) — RECORDED, NOT COMMITTED: Post Job picker work appeared in the tree mid-session.**
+>
+> `post-job-fields.tsx` (+72/−59) and a new `use-outlet-pr-pool.ts` showed up in the worktree after
+> `3582d52`. **Not authored by this session** — recorded in §9 for its owner rather than swept into a
+> Manage-PR commit. It imports `formatStars` from `lib/pr-rating-summary.ts` and repeats the
+> unrated-is-not-zero rule, so it is downstream of (d); it also removes `languagesForPrIds`, which will
+> break any remaining importer until it lands. The doc rule says renew TEST_SCRIPT on every slice — it
+> does not say adopt someone else's diff.
 
 > **5 Aug 2026 (d) — I FIXED THE FLAG AND FORGOT THE NUMBER (a partial wiring looks exactly like a working one).**
 >
