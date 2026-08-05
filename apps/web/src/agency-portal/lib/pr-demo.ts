@@ -377,11 +377,27 @@ export interface PrPaymentVoucher {
 	/** Agency Finance Head e-sign — always present before PR receives PV */
 	financeHeadName: string;
 	financeHeadSignedAt: string;
-	/** Finance Head stored e-signature (PNG/SVG data URL) */
+	/** Finance Head stored e-signature (PNG/SVG data URL) — DEMO vouchers only */
 	financeHeadSignatureDataUrl?: string;
 	prSignedAt?: string;
-	/** PR manual digital signature (PNG data URL) */
+	/** PR manual digital signature (PNG data URL) — DEMO vouchers only */
 	prSignatureDataUrl?: string;
+	/**
+	 * The REAL drawn signatures, `{w, h, strokes}` JSON straight off the backend
+	 * row. Present only on backed vouchers, and they OUTRANK the two data URLs
+	 * above wherever both exist: a `*DataUrl` is drawn from the signer's NAME by
+	 * `buildDemoESignatureDataUrl`, so it shows up for anyone on file whether or
+	 * not they ever signed. These are what the signer's finger actually drew —
+	 * the same strokes the PR's own PDF renders, which is what makes the two
+	 * documents agree.
+	 */
+	financeHeadSignatureInk?: string;
+	prSignatureInk?: string;
+	/**
+	 * The printed voucher number (`PV-000004`). Absent on demo vouchers, whose
+	 * `id` is already a human-readable slug.
+	 */
+	voucherNo?: string;
 	paidAt?: string;
 	bankRef?: string;
 	/** One PV per calendar week (Mon–Sun) — issued on Saturday */

@@ -120,6 +120,13 @@ export function useAgencyProfile() {
 		backed,
 		// Exposed for the Team panel, mirroring `useOutletProfile`'s `outletId`.
 		agencyId,
+		/**
+		 * The raw agency row, for surfaces that need the ORGANISATION rather than
+		 * the owner's editable overlay — the payment voucher's letterhead, which
+		 * must print the agency the voucher belongs to, exactly as the PR's own
+		 * copy of that voucher does. Null on a demo session.
+		 */
+		agency: agencyQuery.data?.data ?? null,
 		owner,
 		finance,
 		isLoading: agencyQuery.isLoading || membersQuery.isLoading,

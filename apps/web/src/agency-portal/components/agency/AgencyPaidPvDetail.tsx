@@ -2,6 +2,7 @@ import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
 import { formatRM, IzCard, IzPill } from "@agency-portal/components/iz/ui";
 import { AppTopbar } from "@agency-portal/components/Nav";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { usePvIssuer } from "@agency-portal/hooks/use-pv-issuer";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { agencyPvStatusLabel } from "@agency-portal/lib/agency-payroll";
 import {
@@ -47,6 +48,8 @@ export function AgencyPaidPvDetail({
 	onBack: () => void;
 }) {
 	const toast = useStore((s) => s.toast);
+	// Same letterhead the live PV screen prints — one agency, one document.
+	const pvIssuer = usePvIssuer();
 	const payee = buildAgencyPayee(pv, agencyPRs);
 	const breakdown = summarizePv(pv);
 	const breakdownRows = pvBreakdownDisplayRows(breakdown);
@@ -100,7 +103,7 @@ export function AgencyPaidPvDetail({
 					type="button"
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
-						downloadPvBreakdownPdf(pv, payee);
+						downloadPvBreakdownPdf(pv, payee, [], pvIssuer);
 						toast("Official PV opened — use Print → Save as PDF", "success");
 					}}
 				>
@@ -110,7 +113,7 @@ export function AgencyPaidPvDetail({
 					type="button"
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
-						downloadPvBreakdownCsv(pv, payee);
+						downloadPvBreakdownCsv(pv, payee, pvIssuer);
 						toast("Payment voucher Excel downloaded", "success");
 					}}
 				>

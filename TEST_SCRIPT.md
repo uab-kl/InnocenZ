@@ -204,6 +204,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A2 | Roster: read + add-shift / add-PR + **assign/unassign** | **Agency → PR** | `routes/agency/roster` + `shift-assignment` | `agency_pr` join | ⚠️ Reported (confirm assign shows on PR, §3 S2–S3) |
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
+| A8 | **The PV now carries BOTH real signatures, agency left / PR right, and the agency's copy is the PR's copy.** Four faults in one document. (1) The printed signature was `buildDemoESignatureDataUrl(prName)` — a picture of a NAME, so anyone on file "signed". Both documents now draw the stored `{w,h,strokes}` ink (`pr_signature`/0071, `finance_head_signature`/0080) through one renderer (`signature-ink.ts` for HTML, pdfkit for the PDF), so the two halves of a transaction show the SAME mark. (2) The finance head's block did not exist in any output path — signing changed nothing on the document; there is now an **Agency (Approved by)** column on the left with **PR (Received by)** moved right, in the web print view, the backend PDF, the backend Excel and the backend print HTML. (3) The web template printed a hardcoded ATMOSPHERE letterhead, the raw uuid, an ISO date and ISO line dates against the PDF's real agency / `PV-000004` / `31/07/2026` / `30 Jul`; it was rewritten cell-for-cell after the PDF and fed the signed-in agency via `usePvIssuer`. (4) The on-screen dual-sign card read the LIST row, which never carries ink — it now reads the detail (`v`) and stamps dates in KL time. **Unsigned prints blank rules — nothing is invented.** | **Agency ↔ PR** | `agency-portal/lib/pv-pdf.ts` · `pv-template.ts` · `signature-ink.ts` · `components/iz/SignatureInkMark.tsx` · `hooks/use-pv-issuer.ts` · `payment-voucher-map.ts` · `routes/agency/pv.tsx` · backend `payment-voucher-pdf.ts` + `payment-voucher-excel.ts` | `payment_voucher.pr_signature` / `finance_head_signature` / `voucher_no` (no DDL — the columns existed and nothing read them) | ⚠️ Reported — **layout machine-verified, not live-fired.** `buildPvBreakdownHtml` was bundled and rendered against a synthetic signed voucher and read back from the DOM: agency column at x 281–626 vs PR at 654–999 (left/right proven by geometry), 1 ink `<svg>` + 2 polylines per side, **0 synthesized `.esig`, 0 `<img>`**; the unsigned voucher rendered both marks EMPTY. tsc/biome at baseline on every touched file. **Not yet opened by a real agency login against a real signed voucher.** |
 | A7 | **Manage-PR Shift history is a real read — with NO payout, on purpose.** Was reading the demo store and filtering a real uuid against demo ids (`pr_tied`), so it could never match and rendered a blank card with no empty state. Now `GET /shift-assignment?prId=`; `listPaginated` joins `outlet.name` through the FK (rule 3 — never copied onto the row). Renders `date · outlet` and says **"No shifts yet"** when there are none. **The payout is deliberately omitted** — the sealed wage lives on `payment_voucher_line` and re-deriving it would create a second source of truth for money. | **Agency ← PR** | `shift-assignment.repository.ts` (`listPaginated`) · `use-agency-pr-shift-history.ts` · `routes/agency/prs.tsx` | `shift_assignment` ⋈ `shift` ⋈ `outlet` (no DDL) | ⚠️ Reported (typecheck at baseline, biome clean; **not live-fired**. Org scoping **read and confirmed**: a non-admin caller's `agencyId` is forced server-side and only admins may pass it, so another agency's `prId` returns nothing) |
 | A6 | **Manage-PR detail shows real Languages + real Ratings.** `GET /pr` now selects `user_profile.languages` (the column existed since 0055; this projection was the only reader not selecting it), and the ratings feed matches on **`rating.pr_id`** instead of the display name — the outlet writes its roster's legal name while Manage-PR shows the floor nickname, so a real rating was invisible. Average / Rating tile / warn banner all derive from the real rows; an **unrated** PR reads "not rated yet" instead of tripping the below-3.5★ warning off the `rating: 0` placeholder. **Amended 5 Aug:** the grid card was missed in the first pass — it printed `pr.rating.toFixed(1)` (`★ 0.0`) beside a correctly-earned Warn pill; it now takes `averageRating` and hides the chip when unrated. | **Agency ← Outlet** (ratings) · **Agency ← PR** (languages) | `pr.repository.ts` · `pr-personnel-map.ts` · `lib/pr-rating-summary.ts` · `use-agency-ratings.ts` · `routes/agency/prs.tsx` | `user_profile.languages` · `rating.pr_id` (no DDL) | ⚠️ Reported (typecheck clean on every touched file, biome clean; **not live-fired** — needs a backend restart + agency click-through, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
@@ -389,44 +390,38 @@ one screen. Two are fixed (§8 A6); the third is not, and is a bigger job.
   `managedPrFromBackend`: `attendancePct`, `kpiScore`, `totalPaid`, `place`, `yearsExp`. Each is a
   neutral placeholder, not a measurement — do not let any of them badge or gate a decision until it has
   a backend behind it. (`rating: 0` **was** one of these; A6 stopped it from firing the warn banner.)
-### ▶ ⚠️ THE VOUCHER'S SIGNATURES ARE NOT PROOF OF ANYTHING (found 5 Aug 2026, NOT FIXED)
+### ▶ ✅ THE VOUCHER'S SIGNATURES ARE NOT PROOF OF ANYTHING — **FIXED 5 Aug 2026** (see §8 A8)
 
-Owner asked *"where to proof the agency sign?"*. Investigating it turned up something worse than the
-missing block. **On a payment document, this is the most serious open item in §9.**
+Owner asked *"where to proof the agency sign?"*, then *"since there is a function for the Financial
+Head to Sign why is the signature not showing on the PV?"*. All four parts are now closed; the
+detail lives in §8 A8 and the §10 changelog. Remaining open items from the same review:
 
-- **The printed PR signature is SYNTHESIZED FROM A NAME.** `pv.prSignatureDataUrl` — the only
-  signature `pv-pdf.ts` renders — is produced solely by `buildDemoESignatureDataUrl(prName)`, which
-  draws the name string as a signature image. Anyone whose name is on file therefore has a
-  "signature" on the document whether or not they ever signed.
-- **The REAL strokes are rendered nowhere.** `payment_voucher.pr_signature` and
-  `finance_head_signature` hold `{w, h, strokes}` JSON (0080). No screen, PDF, Excel or print view
-  reads them. The agency portal shows only a text row: name + ISO timestamp.
-- **There is no "Approved by" block at all** in any output path. `.sig-left` CSS exists at
-  `pv-pdf.ts:311` and NO markup uses it — the column was designed and never wired.
-
-Fix, in three parts:
-- [ ] Carry `finance_head_signature` and `pr_signature` to the client on the agency detail read.
-- [ ] Render the STROKES as an inline SVG polyline, replacing `buildDemoESignatureDataUrl` on the real
-  path (keep the demo builder for demo vouchers only).
-- [ ] Add the **Approved by** column — finance head's drawn signature, name, date — mirroring the
-  official UAB layout (Approved by | Received by), using the `.sig-left` styles already present.
-- [ ] ⚠️ Decide first: a voucher signed before strokes were stored will show name-and-date over the
-  rule instead of a drawing. That is the honest rendering, but it makes some existing vouchers look
-  emptier than they do today. Owner has NOT yet confirmed.
+- [ ] ⚠️ **A voucher signed BEFORE strokes were stored now prints name-and-date over an empty rule**
+  rather than a drawing. That is the honest rendering — the row holds no ink — but it makes those
+  older vouchers look emptier than they did when a signature was being drawn from the name. Shipped
+  this way deliberately; owner may want a "signed, no drawing on file" caption instead of blank.
+- [ ] The PR's mobile PV screens (`PvDetailScreen`, `PaymentScreen`) were NOT touched — they show the
+  agency's half nowhere. Only the printed/exported documents and the agency portal carry both
+  signatures today.
 
 ### ▶ PV DOCUMENT — OTHER GAPS vs the official UAB layout (5 Aug 2026)
 
-- [ ] **Voucher No. prints the raw uuid** (`7bf3962e-591e-452f…`) instead of the stored
-  `payment_voucher.voucher_no` (`PV-000004`). The column exists precisely so vouchers stop sharing a
-  derived string — this template just never read it.
-- [ ] **Voucher Date is blank**; the example prints the issue date.
+**Canonicity decided (5 Aug 2026):** the backend PDF/Excel (`payment-voucher-pdf.ts`,
+`payment-voucher-excel.ts`) is the reference layout, and the web print template
+(`agency-portal/lib/pv-pdf.ts`) was rewritten to match it cell for cell. Neither is "the" document —
+they must render the same facts the same way, which is now what they do.
+
+- [x] ~~Voucher No. prints the raw uuid~~ — both documents print the stored `voucher_no`
+  (`PV-000004`) via `formatPvVoucherRef` / `voucherRef`; the uuid stays the id screens key on.
+- [x] ~~Voucher Date is blank~~ — prints `31/07/2026` on both (`formatPvVoucherDate` now handles the
+  ISO date a backed voucher actually carries; it only recognised the demo store's `31 Jul 2026`).
+- [x] ~~Line dates disagree~~ — the web template read `Daily Wages (2026-07-30)` against the PDF's
+  `(30 Jul)`; `formatPvLineDay` closes it.
 - [ ] **Amount in words** ("[Ringgit Malaysia One Thousand Two Hundred and Three Only]") is absent.
-- [ ] **Bank Name / Bank Account No. print `-`** though the backend exporter already reads them from
-  `user_profile` (0077). Phone likewise.
+- [ ] **Bank Name / Bank Account No. print `-`** on the WEB template though the backend exporter
+  reads them from `user_profile` (0077). Phone likewise. The web payee still comes from
+  `buildAgencyPayee`, which falls back to demo profiles rather than the FK.
 - [ ] Payment Term, ID#, SST and discount rows from the official layout are absent.
-- [ ] ⚠️ **Decide which document is canonical** — this web print template or the backend PDF/Excel
-  exporters. Both render vouchers, and only the backend one reads nickname/IC/phone/bank. Fixing the
-  wrong one leaves the gap where it is.
 
 ### ▶ THE DAY-STATUS SEQUENCE (owner, 5 Aug 2026 — the spec everything else answers to)
 
@@ -1054,6 +1049,57 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 (m) — THE SIGNATURE ON THE VOUCHER WAS A PICTURE OF A NAME.**
+>
+> *"since there is a function for the Financial Head to Sign why is the signature not showing on the
+> PV?"* … *"make it so the Signatures are the same on both PV"* … *"the Agency Sign will be on the
+> left and move the PR sign to the right"*
+>
+> The answer to the first question turned out to be the smallest of four faults, and finding it
+> required putting the agency's voucher and the PR's voucher side by side — which is what the owner
+> did.
+>
+> **The finance head's signature was not showing because no output path had ever had a place to put
+> it.** `POST /payment-voucher/:id/finance-sign` has written `finance_head_signature` since migration
+> 0080, and every document — web print view, backend PDF, backend Excel, backend print HTML — drew a
+> PR-only block. The column was full and nothing read it. *An endpoint that stores something is not a
+> feature until something renders it; the write half passing is exactly what makes the gap invisible.*
+>
+> **Worse: the signature that WAS printing had never been signed by anyone.** `pv-pdf.ts` rendered
+> `prSignatureDataUrl`, produced solely by `buildDemoESignatureDataUrl(prName)` — it draws the name
+> string in a script font. On a payment document, every PR whose name was on file carried a
+> "signature" whether or not they had ever touched the pad. The two documents therefore disagreed by
+> construction: the PR's PDF drew the real finger-drawn strokes, the agency's drew a name.
+>
+> Both now read the SAME artefact. `signature-ink.ts` parses the `{w,h,strokes}` JSON and emits
+> polylines; pdfkit draws the identical strokes in the identical blue at the identical 1.1pt weight.
+> Resolution order is ink → demo data URL → printed name, and **unsigned prints a blank rule** —
+> nothing is invented. The demo builder survives for demo vouchers only.
+>
+> The **Agency (Approved by)** column went in on the left with **PR (Received by)** moved right (the
+> label was `PR (Payee)` until the owner renamed it) across all four outputs. While the layouts were
+> being matched, three more disagreements fell out: the web
+> template printed a hardcoded ATMOSPHERE letterhead (now the signed-in agency, via `usePvIssuer`),
+> the raw uuid where `PV-000004` belonged, `2026-07-31` where `31/07/2026` belonged, and
+> `(2026-07-30)` where `(30 Jul)` belonged. `formatPvVoucherDate` had an ISO branch missing — it only
+> recognised the demo store's `31 Jul 2026`, so a real voucher's date fell straight through.
+>
+> Last one: the on-screen dual-sign card read `pv`, the LIST row. Ink rides on the DETAIL fetch, so
+> the card could never have shown a signature no matter what was stored. It reads `v` now.
+>
+> **Verified by rendering, not by reading.** `buildPvBreakdownHtml` was bundled with esbuild and run
+> against a synthetic signed voucher, then the DOM was measured: agency column x 281–626, PR column x
+> 654–999; one ink `<svg>` and two polylines per side; **zero `.esig` spans and zero `<img>`** — the
+> synthesized signature is gone from the real path. The unsigned voucher rendered both marks empty.
+> ⚠️ **Still not opened by a real agency login against a real signed voucher** — the layout is proven,
+> the round trip is not.
+>
+> Files: `agency-portal/lib/pv-pdf.ts` (HTML builder rewritten), `pv-template.ts`, `signature-ink.ts`
+> (new), `components/iz/SignatureInkMark.tsx` (new), `hooks/use-pv-issuer.ts` (new),
+> `hooks/use-agency-profile.ts`, `payment-voucher-map.ts`, `services/payment-voucher/index.ts`,
+> `pr-demo.ts`, `routes/agency/pv.tsx`, `components/agency/AgencyPaidPvDetail.tsx`, backend
+> `payment-voucher-pdf.ts` + `payment-voucher-excel.ts`. **No DDL** — every column already existed.
 
 > **5 Aug 2026 (l) — MANAGE OUTLET SHOWED 0 SHIFTS, THEN 1 OF 3. TWO FILTERS, ONE SCREEN.**
 >
