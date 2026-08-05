@@ -939,6 +939,44 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — PER-SHIFT TAGS: SETTLED → DISPUTED → VERIFIED (`e0872c9`, `d373e94`).**
+>
+> Owner: *"if i disputed this time , then after resolved dispute mark that time from settled to
+> verified , if that shift untouch dispute remain to settled"*, then *"i dispute for the below shift so
+> is below verified , make above no put verified"*.
+>
+> Each receipt in the evidence sheet now carries the SAME lifecycle the day status uses, applied to one
+> shift:
+>
+> | tag | meaning |
+> |---|---|
+> | **SETTLED** (neutral) | the agency approved it and nobody argued |
+> | **DISPUTED** (red) | a claim on THAT shift is open |
+> | **VERIFIED** (green) | a claim on that shift was raised AND answered |
+>
+> A receipt still awaiting review gets NO tag — its row already reads "waiting on your agency", and
+> calling that settled would claim a decision nobody has made. SETTLED is deliberately neutral, not
+> green, so the eye lands on the two states the PR actually acted on.
+>
+> **The second commit is the one that matters.** An answered WHOLE-DAY claim was promoting every receipt
+> in the cell to VERIFIED through `settledAll`, so disputing the 16:00 shift left the untouched 10:00
+> shift wearing the same green tag — destroying the exact contrast these tags exist to draw. VERIFIED is
+> now only for a shift a claim actually NAMED. An OPEN whole-day claim still marks everything, because
+> it genuinely blocks every shift beneath it and carries a banner saying so; a settled one is history,
+> and its detail lives in "What you disputed".
+>
+> This walked back the previous entry's DISPUTE ACCEPTED / DISPUTE REJECTED wording. That answered
+> "what was decided?" but not "which shift did I take up?", and the owner's vocabulary — settled,
+> disputed, verified — answers both while matching the day row above it.
+>
+> ⚠️ **Observed, not fixed:** RCP-000012 reads *"waiting on your agency"* AND **VERIFIED**. Not a
+> display fault — the agency edited that receipt, which re-opens it to `pending` for re-approval, while
+> the dispute against it is separately resolved. Two states of two different things. Recorded in §9 in
+> case that pairing should be spelled out on the row rather than left to the reader.
+>
+> Mobile clean above the ~11 pre-existing (`-p tsconfig.app.json`); 34 harness checks pass. No backend
+> change, no migration.
+
 > **5 Aug 2026 — SETTLED DISPUTES ARE VISIBLE, AND THE PAYEE HAS THE NAME PEOPLE USE.**
 >
 > Owner: *"yesterday got one successful dispute right show where?"*, *"dispute section need to show
