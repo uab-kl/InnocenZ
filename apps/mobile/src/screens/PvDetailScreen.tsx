@@ -22,6 +22,7 @@ import {
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { DISPUTE_PRESETS } from '../lib/receipt-review';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePaymentHistory } from '../lib/payment-history';
 import { useSession } from '../lib/session';
@@ -47,14 +48,6 @@ import {
 } from '../components/icons';
 
 type IncomeKey = 'wages' | 'drinks' | 'tips' | 'others';
-
-const DISPUTE_PRESETS = [
-  'Unmatch commission',
-  'Missing record',
-  'Unmatch wages',
-  'Repeated record',
-  'Others',
-] as const;
 
 const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
   { key: 'wages', label: 'Daily wages' },

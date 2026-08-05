@@ -38,11 +38,11 @@ import { buildWeekGridFromLines, VERIFIED_STATUSES } from '../lib/week-pay-grid'
 import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
-  cellDisputable,
   dayStatusLabel,
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
+  DISPUTE_PRESETS,
   receiptClaimState,
   receiptReviewCaption,
   thisWeekDayStatus,
@@ -118,14 +118,6 @@ function pickDisputeImages(onPicked: (urls: string[]) => void) {
   };
   input.click();
 }
-
-const DISPUTE_PRESETS = [
-  'Unmatch commission',
-  'Missing record',
-  'Unmatch wages',
-  'Repeated record',
-  'Others',
-] as const;
 
 const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
   { key: 'wages', label: 'Daily wages' },
@@ -401,22 +393,20 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // already raised. Wages and OT are refused outright by `kindDisputable`,
     // server-side too (DISPUTABLE_KINDS), so they never reach the dispute sheet.
     /*
-     * PER SHIFT, matching the button that got here.
+     * REVIEW STATE NO LONGER REFUSES — only the KIND does.
      *
-     * `cellDisputable` alone would refuse the moment ANY receipt on the day was
-     * still awaiting review — so the sheet would offer Dispute and then answer
-     * "Not reviewed yet" for a shift that was perfectly reviewable. It stays as
-     * the fallback for a cell with no receipts at all (wages, OT), where there
-     * is no per-shift answer to give.
+     * This guard used to turn the sheet away whenever the day's receipts were
+     * unreviewed. The owner reversed that on 5 Aug, and the server's precondition
+     * moved with it, so refusing here would put the old rule back in the one
+     * place nobody would think to look.
+     *
+     * A cell with no receipt at all (wages, OT) still has nothing to contest, and
+     * `kindDisputable` already refuses those with the message that fits them.
      */
-    const anyShiftDisputable = buildCellEvidence(weekData, day.dateIso, row.key)
+    const anyShiftToDispute = buildCellEvidence(weekData, day.dateIso, row.key)
       .groups.flatMap((g) => g.receipts)
-      .some((r) => r.receiptNo && receiptDisputable(r));
-    if (
-      !weekDisputed &&
-      !anyShiftDisputable &&
-      !cellDisputable(weekData, day.dateIso, row.key)
-    ) {
+      .some((r) => !!r.receiptNo);
+    if (!weekDisputed && !anyShiftToDispute) {
       // Two different refusals, and they must not share a message. "Still being
       // reviewed" tells the PR to wait — useless advice for wages, where waiting
       // changes nothing and the actual route is the attendance record.
@@ -534,18 +524,35 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
            * An ANSWERED claim does NOT block: resolving a claim ends that claim,
            * not the right to disagree again.
            */
-          disputable: receiptDisputable(r) && !openClaimOn(r),
+          /*
+           * Selectable unless a claim on it is ALREADY OPEN.
+           *
+           * Review state no longer blocks — the owner reversed that on 5 Aug
+           * ("make the already verified or dispute still can make disputed
+           * again") and the server's precondition moved with it. An open claim
+           * still blocks, because that is the DB refusing a second row (0086),
+           * not a policy: offering it would be a guaranteed 409.
+           */
+          disputable: !openClaimOn(r),
           // Order number first — it is what is printed on the paper in their
           // hand. The shift time disambiguates two logs of the same paper.
           label: `${r.orderNo ?? r.receiptNo} · ${formatRM(r.subtotal)}${
             g.shift?.slot ? ` · ${g.shift.slot}` : ''
           }`,
           /** Why it cannot be chosen — shown on the chip, never left to guess. */
+          /*
+           * The state, said in full — never truncated to "waiting on yo…".
+           *
+           * "already disputed" is the only one that BLOCKS. "waiting on your
+           * agency" is now information, not a refusal: the shift is choosable
+           * and the note explains that the agency has not looked at that paper
+           * yet, which is worth knowing before arguing about the figure on it.
+           */
           blockedNote: openClaimOn(r)
             ? 'already disputed'
             : receiptDisputable(r)
               ? null
-              : 'waiting on your agency',
+              : 'not reviewed yet',
         })),
     );
   }, [disputeTarget, lastWeek, current]);
@@ -584,8 +591,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         if (!r.receiptNo) return false;
         const openOnIt =
           (r.receiptId && claims.open.has(r.receiptId)) || claims.open.has(r.receiptNo);
-        if (openOnIt) return false;
-        return receiptDisputable(r);
+        // Review state no longer withholds it — only an open claim does.
+        return !openOnIt;
       }).length;
   }, [evidenceTarget, lastWeek, current]);
 
@@ -925,7 +932,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 */}
                               {canTap &&
                                 (kindDisputable(row.key) &&
-                                (isDisputed || cellDisputable(lastWeek, d.dateIso, row.key)) ? (
+                                weekDisputable(lastWeek) ? (
                                   <Flag
                                     size={9}
                                     color={isDisputed ? C.red : C.muted2}
@@ -1155,7 +1162,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               {canTap &&
                                 (kindDisputable(row.key) &&
                                 weekDisputable(current) &&
-                                cellDisputable(current, d.dateIso, row.key) ? (
+                                weekDisputable(current) ? (
                                   <Flag size={9} color={C.muted2} style={{ marginTop: 2 }} />
                                 ) : (
                                   <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
@@ -1586,10 +1593,13 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                             <View style={[styles.rcptBox, on && styles.rcptBoxOn]}>
                               {on && <View style={styles.rcptDot} />}
                             </View>
-                            <Text
-                              style={[styles.rcptChipText, on && styles.rcptChipTextOn]}
-                              numberOfLines={1}
-                            >
+                            {/*
+                              * NO numberOfLines — the note is the point.
+                              * Clamping to one line turned "waiting on your
+                              * agency" into "waiting on yo…", which reads as a
+                              * glitch rather than a reason. It wraps instead.
+                              */}
+                            <Text style={[styles.rcptChipText, on && styles.rcptChipTextOn]}>
                               {r.label}
                               {r.blockedNote ? ` · ${r.blockedNote}` : ''}
                             </Text>

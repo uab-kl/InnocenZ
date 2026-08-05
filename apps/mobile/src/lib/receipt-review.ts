@@ -132,6 +132,44 @@ export function disputesForDay(
   };
 }
 
+/**
+ * The reasons a PR can actually hit — and only those.
+ *
+ * Lives here, not in a screen, because TWO screens raise disputes (Payment and
+ * the voucher document) and each had its own copy. Two lists that must agree is
+ * how they drift: the PR would meet different reasons depending on where they
+ * tapped, and the agency would receive both vocabularies.
+ *
+ * The old list predated disputes narrowing to drinks and tips, and it showed —
+ * **"Unmatch wages" could never be filed at all**, because wages are not
+ * disputable (`kindDisputable`) so the sheet never opens for them. A chip that
+ * leads nowhere is worse than a missing one: the PR picks it believing they have
+ * described their problem, and they have not.
+ *
+ * The replacements are failures this app has actually produced:
+ *
+ * - COUNTED TWICE — the duplicate ORD0389, one paper scanned across two
+ *   check-ins, which is why the receipt guard exists at all.
+ * - WRONG QUANTITY — OCR reading "2 Havoc" as one, the fault the receipt parser
+ *   was rebuilt around. Previously unsayable: a PR could only call it "unmatch
+ *   commission" and leave the agency to work out why.
+ * - MISSING FROM MY PV — logged, and not on the voucher.
+ * - WRONG RATE — right per item, wrong percentage. A rate-card question, not a
+ *   receipt one, and it lands somewhere different.
+ * - NOT MY SHIFT — money attributed to the wrong person or night.
+ *
+ * Short enough to read on a chip; the note underneath carries the detail.
+ */
+export const DISPUTE_PRESETS = [
+  'Wrong commission',
+  'Wrong quantity',
+  'Counted twice',
+  'Missing from my PV',
+  'Wrong rate',
+  'Not my shift',
+  'Others',
+] as const;
+
 /** How a claim ended. `withdrawn` never reaches here — `isLive` drops it. */
 export type SettledOutcome = 'accepted' | 'rejected';
 

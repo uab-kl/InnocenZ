@@ -939,6 +939,66 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — 🔴 APPROVAL IS NO LONGER THE PRECONDITION (owner reverses decision #1).**
+>
+> Owner: *"make the already verified or dispute still can make disputed again and dont hide the words"*.
+>
+> **The rule that changed.** `raiseMyDispute` refused any claim on a day whose receipts were still
+> unreviewed — *"approval is what turns it into the agency's number"*, recorded in the code as owner's
+> decision #1. It held in theory and failed in practice: a PR looking at a wrong figure was told to wait
+> for someone else to confirm it before they were allowed to say so, and on the live data that wait had
+> no end in sight (`RCP-000012`, `reviewed_at = NULL` since 4 Aug).
+>
+> The precondition now applies ONLY to a claim that names no receipt, where it still means something —
+> contesting a whole day while part of it is unreviewed really is arguing with a number nobody stated.
+> A claim naming ONE shift stands on its own.
+>
+> ⚠️ **What still blocks, and why it is different:** one OPEN claim per shift, enforced by the index
+> from `0086`. That is the database refusing a second row, not a policy — so the app greys those chips
+> rather than letting them 409. Everything else is now selectable, including a shift already VERIFIED:
+> resolving a claim ends that claim, not the right to disagree again.
+>
+> Four client gates moved with it — the picker, the evidence-sheet button, `openDispute`'s guard, and
+> both grid flag icons — because leaving any one behind would reinstate the old rule in the place
+> nobody would think to look. `cellDisputable` is now unused in PaymentScreen and its import is gone;
+> it survives in `receipt-review.ts` for the no-receipt case.
+>
+> **"Don't hide the words."** The chip label had `numberOfLines={1}`, which clipped *"waiting on your
+> agency"* to *"waiting on yo…"* — reading as a glitch rather than a reason. It wraps now, and the note
+> is reworded to **"not reviewed yet"**: information about the shift, no longer a refusal.
+>
+> Both apps clean; 40 harness checks pass. No migration. **Backend restart required.**
+
+> **5 Aug 2026 — THE DISPUTE REASONS MATCH THE PROBLEMS A PR ACTUALLY MEETS.**
+>
+> Owner: *"this reason can make some you think that the pr will meet de problem to select"*.
+>
+> ⚠️ **One chip could never be filed at all.** The list predated disputes narrowing to drinks and tips,
+> so **"Unmatch wages"** sat there on a sheet that never opens for wages (`kindDisputable` refuses
+> them, and the server refuses them again). A chip that leads nowhere is worse than a missing one: the
+> PR picks it believing they have described their problem, and they have not.
+>
+> Replaced with the failures this app has actually produced:
+>
+> | reason | the real case |
+> |---|---|
+> | **Counted twice** | the duplicate ORD0389 — one paper scanned across two check-ins |
+> | **Wrong quantity** | OCR reading "2 Havoc" as one; previously UNSAYABLE — the PR could only call it "unmatch commission" and leave the agency to work out why |
+> | **Missing from my PV** | logged, and not on the voucher |
+> | **Wrong commission** | the figure does not match the paper |
+> | **Wrong rate** | right per item, wrong percentage — a rate-card question, which lands somewhere different |
+> | **Not my shift** | attributed to the wrong person or night |
+>
+> **Both screens now read ONE list.** `PaymentScreen` and `PvDetailScreen` each carried their own copy,
+> so a PR would have met different reasons depending on where they tapped and the agency would have
+> received two vocabularies. It lives in `lib/receipt-review.ts` beside the other dispute rules.
+>
+> Safe to reword: `payment_voucher_dispute.reason` is `varchar(1000)` free text with no enum and no
+> logic reading it — checked before changing. ⚠️ `apps/web/src/agency-portal/lib/pr-demo.ts` still holds
+> the OLD strings as demo fixtures; harmless, but they will read oddly beside real claims (§9).
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change, no migration.
+
 > **5 Aug 2026 — THE APPROVAL PRECONDITION IS PER CLAIM, AND A CORRECTION I NEARLY SHIPPED ON A FALSE PREMISE.**
 >
 > Owner: *"i still cannot choose below disputed verified shift"*.

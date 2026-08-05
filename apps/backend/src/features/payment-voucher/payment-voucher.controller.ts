@@ -2947,32 +2947,33 @@ export class PaymentVoucherControllerClass {
         });
       }
 
-      // APPROVAL IS THE PRECONDITION for contesting receipt-backed money
-      // (owner's decision #1). Until the agency has reviewed a receipt there is
-      // no stated figure to argue with — the PR would be disputing their own
-      // submission. Approval is what turns it into the agency's number.
-      //
-      // Structurally this rarely fires — a pending receipt blocks the send, so
-      // an issued voucher has none. It fires on the week still at
-      // pending_review, which a PR can also dispute.
-      {
+      /*
+       * ⚠️ APPROVAL IS NO LONGER THE PRECONDITION — owner, 5 Aug 2026,
+       * REVERSING their own decision #1: *"make the already verified or dispute
+       * still can make disputed again"*.
+       *
+       * The original reasoning: until the agency has reviewed a receipt there is
+       * no stated figure to argue with, so the PR would be disputing their own
+       * submission. That holds in theory and failed in practice — a PR who can
+       * see a wrong figure is told to wait for someone else to confirm it before
+       * they may say so, and on this data the wait had no end in sight.
+       *
+       * The rule is kept ONLY for a claim that names no receipt, where it still
+       * means something: contesting a whole day's drinks while some of that day
+       * is unreviewed really is arguing with a number nobody has stated. A claim
+       * that names ONE shift is specific enough to stand on its own.
+       *
+       * What still refuses a second claim is the DB: one OPEN claim per shift
+       * (index from 0086). That is a real constraint, not a policy, and the app
+       * greys those shifts rather than letting them 409.
+       */
+      if (!parsed.data.receiptId) {
         const receipts = await this.paymentVoucherRepository.listReceipts(voucherId);
         const statuses = receiptInfoMap(receipts);
         const waiting = existing.lines
           .filter((l) => l.lineDate === disputeDate && decodeRef(l.ref).kind === component)
-          /*
-           * Only the receipt the claim NAMES — not every receipt on the day.
-           *
-           * This was cell-wide, which was right while a claim covered the whole
-           * cell and wrong once it names one shift: a PR contesting an APPROVED
-           * 10:00 receipt was refused because a different 16:00 receipt on the
-           * same day was still awaiting review. Their shift had a stated figure;
-           * somebody else's paper being unreviewed is not their problem.
-           *
-           * With no receipt named the claim still covers the cell, so every
-           * receipt on it must be reviewed — the original rule, unchanged.
-           */
-          .filter((l) => !parsed.data.receiptId || l.receiptId === parsed.data.receiptId)
+          // Every receipt on the day — this branch only runs for a claim that
+          // named none, so the claim really does cover all of them.
           .map((l) => (l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null))
           .filter((r) => r && statuses.get(r.id)?.status === 'pending');
         if (waiting.length > 0) {
