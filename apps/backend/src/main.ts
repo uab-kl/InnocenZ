@@ -117,7 +117,16 @@ app.use(express.json({
   limit: '12mb',
   verify: (req, _res, buf) => {
     // Meta signs webhook POSTs with X-Hub-Signature-256 over the raw body.
-    if (req.originalUrl?.includes('/webhooks/whatsapp')) {
+    //
+    // `verify` hands back a bare http.IncomingMessage, not an express.Request —
+    // `originalUrl` is added by express's own router and is genuinely absent
+    // here, which is why reading it directly failed to compile. `url` carries
+    // the same path at this point in the stack (nothing has mounted or stripped
+    // a prefix yet); the cast keeps `originalUrl` as the preferred read for the
+    // day this runs behind a mount that does rewrite it.
+    const target =
+      (req as express.Request).originalUrl ?? (req as { url?: string }).url ?? '';
+    if (target.includes('/webhooks/whatsapp')) {
       (req as express.Request & { rawBody?: Buffer }).rawBody = Buffer.from(buf);
     }
   },
