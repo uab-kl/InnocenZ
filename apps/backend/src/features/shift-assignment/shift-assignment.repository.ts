@@ -370,6 +370,73 @@ export class ShiftAssignmentRepositoryClass {
   }
 
   /**
+   * The attendance stamps behind a specific set of assignments, for ONE PR.
+   *
+   * Feeds the Payment page's evidence sheet: a voucher line names the shift it
+   * came from by id, and the stamps are read back through that FK rather than
+   * copied onto the line. `slot` / `eventName` / `outletName` come off the shift
+   * and outlet FKs exactly as `listForPr` takes them — one fact, one table.
+   *
+   * ⚠️ `prId` in the WHERE is a SECURITY boundary, not an optimisation. The ids
+   * originate from `payment_voucher_receipt.shift_assignment_id`, which is
+   * written from client input at receipt-creation time and is not validated
+   * against the PR there. Filtering on the id list alone would let a stale or
+   * crafted id surface another PR's shift times; scoped like this it resolves to
+   * nothing instead. Never rewrite this as a bare `inArray(ids)`.
+   *
+   * An empty id list returns [] without touching the database — the common case
+   * for a week where nothing has been logged yet.
+   */
+  async listByIdsForPr(
+    prId: string,
+    ids: string[],
+  ): Promise<
+    Array<{
+      id: string;
+      shiftDate: string;
+      slot: string | null;
+      eventName: string | null;
+      outletName: string | null;
+      checkInAt: Date | null;
+      checkOutAt: Date | null;
+      overtimeMinutes: number | null;
+    }>
+  > {
+    if (ids.length === 0) return [];
+    try {
+      const rows = await db
+        .select({
+          id: ShiftAssignmentTable.id,
+          checkInAt: ShiftAssignmentTable.checkInAt,
+          checkOutAt: ShiftAssignmentTable.checkOutAt,
+          overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          eventName: ShiftTable.eventName,
+          outletName: OutletTable.name,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(and(inArray(ShiftAssignmentTable.id, ids), eq(ShiftAssignmentTable.prId, prId)))
+        .orderBy(ShiftAssignmentTable.checkInAt);
+      return rows.map((row) => ({
+        id: row.id,
+        shiftDate: row.shiftDate,
+        slot: row.slot,
+        eventName: row.eventName,
+        outletName: row.outletName,
+        checkInAt: row.checkInAt,
+        checkOutAt: row.checkOutAt,
+        overtimeMinutes: row.overtimeMinutes ?? null,
+      }));
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listByIdsForPr] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * The outlet map pin that fences one assignment, reached purely by FK:
    * shift_assignment -> shift.outlet_id -> outlet.lat/lng/geo_fence_radius.
    * Nothing about the outlet is copied onto the assignment — the pin can be
@@ -406,6 +473,34 @@ export class ShiftAssignmentRepositoryClass {
       };
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.getOutletGeoFenceForAssignment] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * WHICH OUTLET one assignment was worked at, by the same FK chain as the
+   * geo-fence above: shift_assignment -> shift.outlet_id -> outlet.id/name.
+   *
+   * The sibling of `getOutletGeoFenceForAssignment` for callers that must NAME
+   * the outlet rather than fence it — the PV review has to say whose price list
+   * an item was checked against, and reusing the geo-fence row for that would
+   * tie a money refusal to whether the outlet has dropped its map pin. Null when
+   * the assignment (or its shift/outlet) is gone.
+   */
+  async getOutletForAssignment(
+    assignmentId: string,
+  ): Promise<{ outletId: string; outletName: string } | null> {
+    try {
+      const [row] = await db
+        .select({ outletId: OutletTable.id, outletName: OutletTable.name })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .innerJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
+        .where(eq(ShiftAssignmentTable.id, assignmentId))
+        .limit(1);
+      return row ?? null;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.getOutletForAssignment] Error:', error);
       throw error;
     }
   }

@@ -1,0 +1,32 @@
+-- payment_voucher_receipt.review_withdrawn_at — "somebody said NO to this".
+--
+-- WHY (owner's decision, 4 Aug 2026). The voucher-level "approve all days and
+-- receipts" must approve everything EXCEPT a receipt the agency deliberately
+-- withdrew approval from. That needs the two situations to be distinguishable,
+-- and today they are not: `setReceiptStatus(id, 'pending', actor)` NULLs
+-- `reviewed_at` and `reviewed_by`, so a receipt somebody looked at and REFUSED
+-- is byte-for-byte identical to one nobody has opened yet. A bulk approve cannot
+-- tell them apart, and would re-approve the refusal under the name of the person
+-- who made it.
+--
+-- SET only by an explicit withdraw — `PATCH /receipts/:id/review {status:'pending'}`,
+-- the button in the receipts panel. NOT by the automatic drop-to-pending that
+-- follows an edit: that one means "this figure changed, look again", which is a
+-- question rather than a refusal, and answering it is exactly what a bulk
+-- approve is for.
+--
+-- CLEARED on any approval, so a withdrawal that has since been reconsidered
+-- stops shadowing the row forever. The column therefore reads as "currently
+-- refused", never as a history of every refusal — that belongs in the audit
+-- trail, not here.
+--
+-- Nullable with no default: NULL is the normal state, and a timestamp beats a
+-- boolean because "when was this refused" is the first question anybody asks
+-- when a week will not close.
+ALTER TABLE "main"."payment_voucher_receipt"
+  ADD COLUMN IF NOT EXISTS "review_withdrawn_at" timestamp;
+
+-- No backfill. Every existing pending receipt is treated as never-reviewed,
+-- which is the safe reading: inventing withdrawals for rows whose history we do
+-- not have would silently exclude them from the first bulk approve, and nobody
+-- would know why.

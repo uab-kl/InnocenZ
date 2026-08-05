@@ -325,8 +325,26 @@ function AgencyPV() {
 	 * see. So the tab shows the week and flags what has not been signed; the
 	 * "To pay" status chip still isolates the signed ones for the payment run.
 	 */
+	/**
+	 * PLUS every SIGNED voucher, whatever week it belongs to.
+	 *
+	 * OWNER RULE (4 Aug 2026): *"after the pr sign the pv, the pv should come out
+	 * at the payment week section"*. This tab is the PAYMENT QUEUE — the screen
+	 * that answers "who am I paying now" — and it was filtering by CALENDAR DATE
+	 * alone. So PV-000004, signed by the PR at 16:30 on 4 Aug, stayed in Last Week
+	 * because its week was 26 Jul–01 Aug, while PV-000002 sat here purely by being
+	 * older. Signing changed nothing on the one screen that pays it.
+	 *
+	 * A signature is what makes a voucher payable, so a signature is what puts it
+	 * in the queue. `payrollActivePvs` has already dropped PAID, so a voucher
+	 * leaves again the moment it is paid.
+	 *
+	 * It stays in its own week tab as well, deliberately. Removing it there would
+	 * mean an agency looking for last week's voucher — by the week it was worked,
+	 * which is how everyone refers to it — would not find it where they looked.
+	 */
 	const lastLastWeekPvs = useMemo(() => {
-		return payrollActivePvs.filter((p) =>
+		const inWindow = payrollActivePvs.filter((p) =>
 			pvBelongsToPayrollWeek(
 				p,
 				lastLastWeekBounds.weekStartIso,
@@ -335,6 +353,11 @@ function AgencyPV() {
 				lastLastWeekBounds.weekStartIso,
 			),
 		);
+		const seen = new Set(inWindow.map((p) => p.id));
+		const signedElsewhere = payrollActivePvs.filter(
+			(p) => p.status === "SIGNED" && !seen.has(p.id),
+		);
+		return [...inWindow, ...signedElsewhere];
 	}, [
 		payrollActivePvs,
 		lastWeekBounds.weekStartIso,
@@ -621,10 +644,13 @@ function AgencyPV() {
 					? `${thisWeekBounds.cycle} · in progress · not yet closed`
 					: payrollWeekTab === "last_week"
 						? `${lastWeekBounds.cycle} · pending PR review or dispute`
-						: `${lastLastWeekBounds.cycle} · ${
+						: // Not a single week any more: this tab now also holds every
+							// SIGNED voucher from any week, so naming one date range would
+							// describe a list it no longer matches. Say what the list IS.
+							`Signed vouchers · ${lastLastWeekBounds.cycle} and earlier · ${
 								unsignedPaymentWeekPvs.length > 0
 									? `${unsignedPaymentWeekPvs.length} not signed yet`
-									: "signed · ready to pay"
+									: "ready to pay"
 							}`}
 				{" · "}
 				{activeWeekStats.pvCount} PV{activeWeekStats.pvCount === 1 ? "" : "s"} ·{" "}

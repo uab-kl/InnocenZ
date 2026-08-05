@@ -33,11 +33,22 @@ import {
   allDaysReviewed,
   buildDayReviewView,
   dayTotalsCents,
+  type DayReviewView,
+  prVisibleDayStatuses,
+  receiptsCarriedByDays,
   voucherSendGate,
 } from './payment-voucher-day-review.js';
 import { klToday } from './payment-voucher-week.js';
-import { kindFromComponent, refPacksKind } from './payment-voucher-component.js';
-import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
+import {
+  DISPUTABLE_KINDS,
+  kindFromComponent,
+  lineDisputable,
+  refPacksKind,
+} from './payment-voucher-component.js';
+import {
+  type ResolvedDrinkItem,
+  ShiftAssignmentRepositoryClass,
+} from '@/features/shift-assignment/shift-assignment.repository';
 import { PrRepositoryClass } from '@/features/pr/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -58,7 +69,9 @@ import {
   PrSignVoucherSchema,
   ReviewVoucherDaySchema,
   ReviewReceiptSchema,
+  AgencyAddReceiptLineSchema,
   AgencyEditReceiptLineSchema,
+  AgencyEditReceiptSchema,
   PrWithdrawDisputeSchema,
   ResolveDisputeSchema,
   PrReceiptKind,
@@ -71,6 +84,8 @@ import {
   PaymentVoucherStatus,
   PaymentVoucherLineType,
   PaymentVoucherReceiptStatus,
+  PaymentVoucherReceiptType,
+  PaymentVoucherType,
 } from './payment-voucher.model';
 import type { PrType } from '@/features/pr/pr.model';
 
@@ -194,6 +209,27 @@ function decodeRef(ref: string | null): {
   };
 }
 
+/**
+ * Which of the outlet's two catalogue sections an added line of this kind must
+ * be found in — the one splitter is `outlet_drink_menu.category`.
+ *
+ * The Outlet portal's Workspace screen writes exactly two sections: "Drinks
+ * Price" (category 'drink') and "Service Entitlement" (category 'service').
+ * Tips are checked against the SERVICE section, and 'tip' is accepted beside it
+ * because the backend zod still permits that value even though the outlet's own
+ * save path collapses everything non-drink to 'service' — matching tips against
+ * 'tip' alone would refuse every legitimate tips add, which is precisely the
+ * mis-filing `scripts/refile-service-lines.ts` had to undo on 4 Aug 2026.
+ */
+function catalogueMatchesKind(category: string, kind: 'drinks' | 'tips'): boolean {
+  return kind === 'drinks' ? category === 'drink' : category === 'service' || category === 'tip';
+}
+
+/** What the outlet calls the section a line of this kind is checked against. */
+function catalogueListName(kind: 'drinks' | 'tips'): string {
+  return kind === 'drinks' ? 'drinks list' : 'Service Entitlement list';
+}
+
 type PrReceiptLineDTO = {
   id: string;
   kind: PrReceiptKind;
@@ -227,15 +263,43 @@ type PrReceiptLineDTO = {
    */
   receiptNo: string | null;
   /**
+   * The ORDER NUMBER printed on the paper (`ORD0389`) — the thing the PR can
+   * physically hold up against the figure. Null when the paper carried none.
+   *
+   * A PR could see this exactly ONCE before now: the 201 echo of `addMyReceipt`.
+   * After a reload it was gone, and the only read that carried it on every fetch
+   * was `listAgencyReceipts` — behind the agency/admin guard. So the agency could
+   * see a PR's own order numbers and the PR could not, which is precisely
+   * backwards for a number whose job is to let the PR prove their own pay.
+   */
+  orderNo: string | null;
+  /** Date/time PRINTED on the paper — deliberately free to differ from lineDate. */
+  receiptDate: string | null;
+  receiptTime: string | null;
+  /**
+   * WHICH SHIFT this money came from — the FK, never the stamps themselves.
+   *
+   * For a drink/tip line it is the parent receipt's `shift_assignment_id`. For a
+   * wage or overtime line, which has no receipt at all, it is recovered from the
+   * `ref`: the weekly generator writes the assignment id bare, and the check-out
+   * seal packs it in the dedupe slot (with a `-ot` suffix for overtime).
+   *
+   * Null when nothing links the line to a shift — a receipt logged with no
+   * active shift, or a row predating the phone sending `assignmentId`. Those are
+   * shown as "not linked", never guessed at: the caller resolves stamps through
+   * this id, so a guess here would be a fabricated alibi for real money.
+   */
+  shiftAssignmentId: string | null;
+  /**
    * May the PR contest this money yet?
    *
    * ADVISORY — it exists so the app can grey a button instead of offering an
    * action that will 409. The authoritative refusal lives in `raiseMyDispute`;
    * a client copy of a rule is never the rule.
    *
-   * Wages are always disputable: they are sealed at check-out with no receipt to
-   * approve, and making approval a precondition there would mean a wage error
-   * could never be contested (owner's decision, 30 Jul 2026).
+   * ONLY drinks and tips, and only once the agency has approved the receipt —
+   * see `lineDisputable()`, which both this DTO and the refusal call. Wages and
+   * OT are never disputable (owner's decision, 4 Aug 2026, reversing 30 Jul).
    */
   disputable: boolean;
 };
@@ -271,11 +335,34 @@ function lineKind(line: PaymentVoucherLineType, refKind: PrReceiptKind): PrRecei
     : refKind;
 }
 
+/**
+ * What a line needs to know about its parent receipt. One named type so the
+ * builder and the consumer cannot drift apart as fields are added.
+ */
+type ReceiptInfo = {
+  status: PaymentVoucherReceiptStatus;
+  receiptNo: string;
+  proofPhotos: string[];
+  orderNo: string | null;
+  receiptDate: string | null;
+  receiptTime: string | null;
+  shiftAssignmentId: string | null;
+};
+
+/** A uuid, or null. Guards ids recovered from the free-text `ref`. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+function asAssignmentId(raw: string | null | undefined): string | null {
+  if (!raw) return null;
+  // The check-out seal marks its overtime line `<assignment id>-ot`.
+  const bare = raw.replace(/-ot$/i, '');
+  return UUID_RE.test(bare) ? bare : null;
+}
+
 function toReceiptLineDTO(
   line: PaymentVoucherLineType,
-  receiptInfoById?: Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }>,
+  receiptInfoById?: Map<string, ReceiptInfo>,
 ): PrReceiptLineDTO {
-  const { kind: refKind, source, sales } = decodeRef(line.ref);
+  const { kind: refKind, source, sales, dedupe } = decodeRef(line.ref);
   const kind = lineKind(line, refKind);
   const info = line.receiptId ? (receiptInfoById?.get(line.receiptId) ?? null) : null;
   const receiptStatus = info?.status ?? null;
@@ -291,18 +378,66 @@ function toReceiptLineDTO(
     outlet: line.outlet,
     at: line.createdAt,
     pending: receiptStatus ? receiptStatus === 'pending' : source === 'manual',
-    proofPhotos: line.proofPhotos ?? [],
+    /**
+     * A line's own photos, or its RECEIPT's when it has none.
+     *
+     * The picture is proof of the RECEIPT, and one photo covers every item
+     * printed on it — that is why `submitReceipt` stores it on the receipt and
+     * not on each line. But the PR app's check-out gate asks every LINE for a
+     * picture, so the second and third item off one scan looked unproven and
+     * blocked check-out while their receipt's photo sat in the database.
+     * Inheriting it here fixes that without copying the same image onto every
+     * row: one fact, one place, read by whoever needs it.
+     */
+    proofPhotos: line.proofPhotos?.length ? line.proofPhotos : (info?.proofPhotos ?? []),
     receiptStatus,
     receiptNo: info?.receiptNo ?? null,
-    disputable: kind === 'wages' || receiptStatus === null || receiptStatus !== 'pending',
+    orderNo: info?.orderNo ?? null,
+    receiptDate: info?.receiptDate ?? null,
+    receiptTime: info?.receiptTime ?? null,
+    /*
+     * The receipt's FK first; failing that, the id hiding in the ref.
+     *
+     * Wage and overtime lines never have a receipt — `assertReceiptBacked` only
+     * demands one for drink/tip commission — so reading the receipt alone would
+     * have made Daily wages the one row on the grid that could not be traced to
+     * a shift. The generator writes `ref = <assignment id>` bare, and the
+     * check-out seal packs it into the dedupe slot; `decodeRef` already computed
+     * that and this used to throw it away.
+     */
+    shiftAssignmentId:
+      info?.shiftAssignmentId ?? asAssignmentId(dedupe) ?? asAssignmentId(line.ref),
+    disputable: lineDisputable(kind, receiptStatus),
   };
 }
 
-/** receipt id -> review state, for the DTO mapper above. */
+/** receipt id -> everything a line inherits from its receipt, for the mapper above. */
 function receiptInfoMap(
-  receipts: { id: string; status: PaymentVoucherReceiptStatus; receiptNo: string }[],
-): Map<string, { status: PaymentVoucherReceiptStatus; receiptNo: string }> {
-  return new Map(receipts.map((r) => [r.id, { status: r.status, receiptNo: r.receiptNo }]));
+  receipts: {
+    id: string;
+    status: PaymentVoucherReceiptStatus;
+    receiptNo: string;
+    proofPhotos?: string[] | null;
+    orderNo?: string | null;
+    receiptDate?: string | null;
+    receiptTime?: string | null;
+    shiftAssignmentId?: string | null;
+  }[],
+): Map<string, ReceiptInfo> {
+  return new Map(
+    receipts.map((r) => [
+      r.id,
+      {
+        status: r.status,
+        receiptNo: r.receiptNo,
+        proofPhotos: r.proofPhotos ?? [],
+        orderNo: r.orderNo ?? null,
+        receiptDate: r.receiptDate ?? null,
+        receiptTime: r.receiptTime ?? null,
+        shiftAssignmentId: r.shiftAssignmentId ?? null,
+      },
+    ]),
+  );
 }
 
 /**
@@ -463,6 +598,53 @@ export class PaymentVoucherControllerClass {
   }
 
   /**
+   * Carry a day decision through to the receipts that day is made of.
+   *
+   * Called by BOTH day-review endpoints and always from the FULL set of approved
+   * days rather than from the one day just decided — a receipt spanning Mon and
+   * Tue must approve when the second of them is approved, whichever order the
+   * agency worked in. See `receiptsCarriedByDays` for the rule.
+   *
+   * Returns the receipts as they now stand so the caller answers with one
+   * consistent picture: a response carrying pre-sweep receipt rows would tell the
+   * panel a receipt is still pending a millisecond after approving it.
+   */
+  private async carryDayApprovalToReceipts(
+    voucher: { id: string; lines: PaymentVoucherLineType[] },
+    dayReviews: DayReviewView[],
+    actor: string,
+    justApprovedDates: Set<string>,
+  ): Promise<{ receipts: PaymentVoucherReceiptType[]; approvedReceiptNos: string[] }> {
+    // Nothing was approved by this call, so there is nothing to carry — and no
+    // read to spend. An approve-all that approves zero days must be inert.
+    if (justApprovedDates.size === 0) {
+      const receipts = await this.paymentVoucherRepository.listReceipts(voucher.id);
+      return { receipts, approvedReceiptNos: [] };
+    }
+    const receipts = await this.paymentVoucherRepository.listReceipts(voucher.id);
+    const approvedDates = new Set(
+      dayReviews.filter((d) => d.status === 'approved').map((d) => d.date),
+    );
+    const carried = receiptsCarriedByDays(
+      voucher.lines,
+      receipts,
+      approvedDates,
+      justApprovedDates,
+    );
+    if (carried.length === 0) return { receipts, approvedReceiptNos: [] };
+
+    const updated = await this.paymentVoucherRepository.approvePendingReceipts(
+      carried.map((r) => r.id),
+      actor,
+    );
+    const byId = new Map(updated.map((r) => [r.id, r]));
+    return {
+      receipts: receipts.map((r) => byId.get(r.id) ?? r),
+      approvedReceiptNos: updated.map((r) => r.receiptNo),
+    };
+  }
+
+  /**
    * The agency's decision on ONE day of a voucher: approved, held, or (with no
    * status) un-reviewed again.
    *
@@ -534,10 +716,32 @@ export class PaymentVoucherControllerClass {
 
       const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
       const dayReviews = buildDayReviewView(voucher.lines, reviews);
+      // An approved day approves the receipts it is made of — the agency has
+      // just signed off the total those receipts sum to.
+      const { receipts, approvedReceiptNos } = await this.carryDayApprovalToReceipts(
+        voucher,
+        dayReviews,
+        actor,
+        // Only THIS day, and only if it was approved. A hold or a clear carries
+        // nothing, and must not re-assert an older day's sweep over a receipt
+        // the agency has since withdrawn.
+        parsed.data.status === 'approved' ? new Set([date]) : new Set(),
+      );
       return res.status(200).json({
         success: true,
-        message: 'Day review saved',
-        data: { dayReviews, allDaysReviewed: allDaysReviewed(dayReviews) },
+        message:
+          approvedReceiptNos.length > 0
+            ? `Day review saved · ${approvedReceiptNos.length} receipt(s) approved with it`
+            : 'Day review saved',
+        data: {
+          dayReviews,
+          allDaysReviewed: allDaysReviewed(dayReviews),
+          // The receipts ride back so the panel showing them re-renders from the
+          // same response that moved them, never from a second read.
+          receipts,
+          approvedReceipts: approvedReceiptNos,
+          pendingReceiptCount: receipts.filter((r) => r.status === 'pending').length,
+        },
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.reviewDay] Error:', error);
@@ -580,6 +784,10 @@ export class PaymentVoucherControllerClass {
       const actor = getActor(req);
 
       let approved = 0;
+      // The days THIS call actually flipped — not every day that happens to be
+      // approved. The receipt carry below is scoped to these, so an approve-all
+      // that approves nothing touches nothing.
+      const justApproved = new Set<string>();
       for (const day of view) {
         // Leave live approvals alone, and never overturn a held day.
         if (day.status !== null) continue;
@@ -592,19 +800,36 @@ export class PaymentVoucherControllerClass {
           bulk: true,
           actor,
         });
-        if (saved) approved += 1;
+        if (saved) {
+          approved += 1;
+          justApproved.add(day.date);
+        }
       }
 
       const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
       const dayReviews = buildDayReviewView(voucher.lines, reviews);
       const held = dayReviews.filter((d) => d.status === 'held').length;
+      const { receipts, approvedReceiptNos } = await this.carryDayApprovalToReceipts(
+        voucher,
+        dayReviews,
+        actor,
+        justApproved,
+      );
+      const parts = [`${approved} day(s) approved`];
+      if (approvedReceiptNos.length > 0) {
+        parts.push(`${approvedReceiptNos.length} receipt(s) approved with them`);
+      }
+      if (held > 0) parts.push(`${held} held day(s) left untouched`);
       return res.status(200).json({
         success: true,
-        message:
-          held > 0
-            ? `${approved} day(s) approved · ${held} held day(s) left untouched`
-            : `${approved} day(s) approved`,
-        data: { dayReviews, allDaysReviewed: allDaysReviewed(dayReviews) },
+        message: parts.join(' · '),
+        data: {
+          dayReviews,
+          allDaysReviewed: allDaysReviewed(dayReviews),
+          receipts,
+          approvedReceipts: approvedReceiptNos,
+          pendingReceiptCount: receipts.filter((r) => r.status === 'pending').length,
+        },
       });
     } catch (error) {
       logger.error('[PaymentVoucherController.approveAllDays] Error:', error);
@@ -872,6 +1097,88 @@ export class PaymentVoucherControllerClass {
   // Scoped server-side by the signed-in PR, so these sit OUTSIDE the
   // admin/agency role guard (mounted before it in the router).
 
+  /**
+   * The shifts the week's lines point at — the stamps behind the money.
+   *
+   * A SIBLING ARRAY, not a field on every line: a shift's two timestamps would
+   * otherwise be repeated on each of its item lines, and a three-item receipt
+   * would ship the same pair three times. Keyed by id, the app joins them back.
+   *
+   * Scoped by `prId` inside the repository, so an assignment id that a line
+   * carries but the PR does not own resolves to nothing rather than to somebody
+   * else's shift.
+   */
+  private async weekShifts(prId: string, lines: PrReceiptLineDTO[]) {
+    const ids = [...new Set(lines.map((l) => l.shiftAssignmentId).filter((id): id is string => !!id))];
+    return this.shiftAssignmentRepository.listByIdsForPr(prId, ids);
+  }
+
+  /**
+   * The agency's day-by-day decision, trimmed to what the PR is owed a view of.
+   *
+   * DATE AND STATUS ONLY. The note, the reviewer's name and the bulk flag are
+   * the agency's internal record of how it worked; what the PR needs is whether
+   * their Tuesday has been accepted, because until it is, the figure on that
+   * column is still only their own claim.
+   *
+   * A STALE day arrives here as `null` exactly as it does in the agency panel —
+   * `buildDayReviewView` already dropped it — so a day whose total changed after
+   * approval reads unreviewed on the phone too, rather than showing APPROVED for
+   * a number nobody approved.
+   *
+   * A day with a PENDING RECEIPT on it is dropped to null as well, by
+   * `prVisibleDayStatuses`. The day review and the receipts can disagree, and
+   * the phone must show the pessimistic answer — see that function for why.
+   *
+   * `receipts` is passed in rather than read here: both callers have already
+   * loaded them for the line statuses, and a second read is a second chance for
+   * the two halves of one response to describe different moments.
+   */
+  private async prDayReviews(
+    voucher: { id: string; lines: PaymentVoucherLineType[] } | null,
+    receipts: PaymentVoucherReceiptType[],
+  ): Promise<{ date: string; status: 'approved' | 'held' | null }[]> {
+    if (!voucher) return [];
+    const reviews = await this.paymentVoucherRepository.listDayReviews(voucher.id);
+    const view = buildDayReviewView(voucher.lines, reviews);
+    return prVisibleDayStatuses(view, voucher.lines, receipts);
+  }
+
+  /**
+   * The PR's OWN claims on this voucher, day by day and bucket by bucket.
+   *
+   * Without this the phone can only read `payment_voucher.status`, a
+   * voucher-grain summary — so after any reload the Payment grid could not say
+   * WHICH day or WHICH bucket was contested. The red cell and the DISPUTED
+   * marker lived in React state, which meant a PR's own open claim vanished
+   * from their screen the moment the app restarted, while the agency still had
+   * it in their queue. A claim only one side can see is worse than no claim:
+   * the PR stops chasing something that is still open.
+   *
+   * Resolved claims are sent too, not filtered to open ones. "Your Tuesday
+   * drinks claim was rejected, here is why" is the answer to a question the PR
+   * asked, and dropping it at the API would leave them re-raising it.
+   */
+  private async weekDisputes(voucherId: string | null) {
+    if (!voucherId) return [];
+    const rows = await this.paymentVoucherDisputeRepository.listForVoucher(voucherId);
+    return rows.map((d) => ({
+      id: d.id,
+      disputeDate: d.disputeDate,
+      component: d.component,
+      reason: d.reason,
+      note: d.note,
+      raisedAt: d.raisedAt,
+      /** Server-computed at raise time — what the voucher said, not what was claimed. */
+      disputedAmount: d.disputedAmount,
+      claimedAmount: d.claimedAmount,
+      /** null = still open. 'accepted' | 'rejected' | 'withdrawn' once decided. */
+      outcome: d.outcome,
+      resolvedAt: d.resolvedAt,
+      resolutionNote: d.resolutionNote,
+    }));
+  }
+
   /** The signed-in PR's live current-week earnings (Check-In STATUS + Payment This-week). */
   async getMyCurrentWeek(req: Request, res: Response) {
     try {
@@ -886,9 +1193,14 @@ export class PaymentVoucherControllerClass {
       );
       // This is the THIS-WEEK section, where the PR watches the agency approve
       // what they logged — so the receipt states have to come with the lines.
-      const statuses = draft
-        ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(draft.id))
-        : undefined;
+      // Held in a variable because the DAY statuses below are computed from the
+      // same rows: one read, one moment, no chance of the line statuses and the
+      // day statuses describing different states of the same voucher.
+      const receiptRows = draft
+        ? await this.paymentVoucherRepository.listReceipts(draft.id)
+        : [];
+      const statuses = draft ? receiptInfoMap(receiptRows) : undefined;
+      const lines = (draft?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses));
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -901,7 +1213,19 @@ export class PaymentVoucherControllerClass {
           weekEnd,
           net: draft?.net ?? '0.00',
           status: draft?.status ?? null,
-          lines: (draft?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses)),
+          lines,
+          // The shifts those lines came from, so the Payment grid can prove a
+          // day's figure against the check-in/check-out that earned it.
+          shifts: await this.weekShifts(pr.id, lines),
+          // Where the agency has got to, day by day. Without this the phone can
+          // only read the VOUCHER's status, which stays 'pending_review' for the
+          // whole week — so a day the agency approved on Tuesday still showed
+          // PENDING to the PR until the voucher was sent on Sunday.
+          dayReviews: await this.prDayReviews(draft ?? null, receiptRows),
+          // The PR's own claims, so a disputed day survives a reload. Held only
+          // in React state before, it disappeared from the PR's screen while
+          // still sitting in the agency's queue.
+          disputes: await this.weekDisputes(draft?.id ?? null),
         },
       });
     } catch (error) {
@@ -925,9 +1249,11 @@ export class PaymentVoucherControllerClass {
       // The LAST-WEEK section is where disputes are raised, and whether a line
       // may be disputed depends on its receipt's state — so this read carries
       // the same statuses as this-week rather than guessing from `source`.
-      const statuses = voucher
-        ? receiptInfoMap(await this.paymentVoucherRepository.listReceipts(voucher.id))
-        : undefined;
+      const receiptRows = voucher
+        ? await this.paymentVoucherRepository.listReceipts(voucher.id)
+        : [];
+      const statuses = voucher ? receiptInfoMap(receiptRows) : undefined;
+      const lines = (voucher?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses));
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -943,7 +1269,15 @@ export class PaymentVoucherControllerClass {
           disputeReason: voucher?.disputeReason ?? null,
           disputeNote: voucher?.disputeNote ?? null,
           disputedAt: voucher?.disputedAt ?? null,
-          lines: (voucher?.lines ?? []).map((l) => toReceiptLineDTO(l, statuses)),
+          lines,
+          // Same evidence trail as this-week: the PR must be able to see which
+          // shift a figure came from BEFORE deciding whether to dispute it.
+          shifts: await this.weekShifts(pr.id, lines),
+          // Carried on last week too, so the grid renders one rule rather than
+          // one per section.
+          dayReviews: await this.prDayReviews(voucher ?? null, receiptRows),
+          // Same rule both sections: the grid reads one shape, not one per week.
+          disputes: await this.weekDisputes(voucher?.id ?? null),
         },
       });
     } catch (error) {
@@ -1193,20 +1527,51 @@ export class PaymentVoucherControllerClass {
       }
       const draft = draftResult.voucher;
 
-      // One paper receipt = one log PER SHIFT. Outlets reuse order numbers
-      // across nights, so the same ORD number on a new shift is a new paper —
-      // it inserts normally and gets its own unique RCP number. Only a
-      // re-scan within the same shift is refused.
+      // ONE PAPER RECEIPT = ONE LOG PER NIGHT at that outlet — scanned or
+      // self-logged alike, since both routes arrive here and a typed order
+      // number describes the same paper an OCR'd one does.
+      //
+      // Scoped to `lineDate`, NOT to the shift stamp: a PR who checks in three
+      // times is still working one night, and the assignment scope let the same
+      // two papers be logged twice on 4 Aug (see findReceiptByOrderNo). Outlets
+      // recycle order numbers across nights, which is why the DAY — not the
+      // whole week's voucher — is the boundary.
       if (parsed.data.orderNo) {
         const dupe = await this.paymentVoucherRepository.findReceiptByOrderNo(
           draft.id,
           parsed.data.orderNo,
-          parsed.data.assignmentId ?? null,
+          { lineDate, outlet: parsed.data.outlet ?? null },
         );
         if (dupe) {
           return res.status(409).json({
             success: false,
-            message: `Receipt ${parsed.data.orderNo} is already logged on this shift (${dupe.receiptNo}) — re-scan its row (camera icon) to replace the picture, edit it, or remove the row and scan afresh.`,
+            message: `Receipt ${parsed.data.orderNo} is already logged today (${dupe.receiptNo}) — re-scan its row (camera icon) to replace the picture, edit it, or remove the row and log it afresh.`,
+            data: null,
+          });
+        }
+      }
+
+      // THE ASSIGNMENT MUST BE THIS PR'S OWN.
+      //
+      // `assignmentId` arrives from the phone and was stored unchecked, which
+      // stopped being merely untidy the moment the outlet catalogue started
+      // reading it: `catalogueForReceipt` resolves the outlet through
+      // shift_assignment -> shift.outlet_id, so an assignment belonging to
+      // somebody else's shift points the price-list check at the WRONG VENUE —
+      // and an item that outlet happens to sell then passes verification on a
+      // receipt it has nothing to do with. The check that was cosmetic is now
+      // load-bearing.
+      //
+      // `listByIdsForPr` is the same PR-scoped reader `weekShifts` uses; an id
+      // this PR does not own simply resolves to nothing.
+      if (parsed.data.assignmentId) {
+        const owned = await this.shiftAssignmentRepository.listByIdsForPr(pr.id, [
+          parsed.data.assignmentId,
+        ]);
+        if (owned.length === 0) {
+          return res.status(404).json({
+            success: false,
+            message: 'That shift is not one of yours',
             data: null,
           });
         }
@@ -1342,6 +1707,12 @@ export class PaymentVoucherControllerClass {
             quantity: l.quantity,
             amount: l.amount,
             ref: l.ref,
+            // WHICH BUCKET the line sits in. Sent so the agency editor can tell a
+            // tips receipt from a drinks one and stop a line being added to the
+            // wrong bucket (owner, 4 Aug) — the raw row it used to answer with
+            // carried only `ref`, and re-deriving the kind from that on the
+            // client would be a second copy of `componentFromRef`'s rule.
+            kind: lineKind(l, decodeRef(l.ref).kind),
           })),
         })),
       });
@@ -1508,6 +1879,482 @@ export class PaymentVoucherControllerClass {
     } catch (error) {
       if (respondIfLineDateConflict(res, error)) return;
       logger.error('[PaymentVoucherController.editReceiptLine] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The receipt a review write is allowed to touch, or the refusal that stops it.
+   *
+   * The four checks `reviewReceipt` and `editReceiptLine` each make inline, in
+   * the same order — resolvable, in-tenant, not verified, not PR-signed — shared
+   * by the two correction endpoints below rather than typed out twice more. Same
+   * status codes and same wording as `editReceiptLine`. Those two are left as
+   * they are deliberately: they are live money paths, and rewriting a working
+   * refusal to prove a helper is how one of them quietly changes.
+   *
+   * Cross-tenant answers 404 rather than 403: never confirm a record exists.
+   */
+  private async receiptOpenForCorrection(
+    req: Request,
+    res: Response,
+    receiptId: string,
+  ): Promise<{ receipt: PaymentVoucherReceiptType; voucher: PaymentVoucherType } | null> {
+    const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+    if (!owned) {
+      res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      return null;
+    }
+
+    const scope = await this.resolveScope(req);
+    if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
+      res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      return null;
+    }
+    if (owned.receipt.status === 'verified') {
+      res.status(409).json({
+        success: false,
+        message: `${owned.receipt.receiptNo} is already verified — that week is closed.`,
+        data: null,
+      });
+      return null;
+    }
+    if (owned.voucher.prSignedAt) {
+      res.status(409).json({
+        success: false,
+        message: 'This voucher is already signed by the PR — correct it before it is sent.',
+        data: null,
+      });
+      return null;
+    }
+    return owned;
+  }
+
+  /**
+   * THE OUTLET WHOSE PRICE LIST ONE RECEIPT'S MONEY MUST BE VERIFIABLE AGAINST,
+   * and that outlet's catalogue — reached by FK only.
+   *
+   * Owner's rule (4 Aug 2026): a line the agency adds must be an item the OUTLET
+   * actually sells. The outlet's list is the only record of what was for sale
+   * that night, so without it an agency can type any item and any commission
+   * onto a PR's receipt and the PR has nothing to dispute it with.
+   *
+   * WHICH outlet is not the caller's choice, and not read from the request body:
+   * a caller-supplied outlet would let the agency pick whichever catalogue
+   * happens to contain the item it wants. It is the receipt's own
+   * `shift_assignment_id`, falling back to the assignment id the receipt's OWN
+   * lines carry in their `ref` — the same two-step `toReceiptLineDTO` already
+   * uses, and the same uuid chain (assignment -> shift.outlet_id -> outlet).
+   *
+   * The free-text `payment_voucher_line.outlet` / `payment_voucher.outlet` NAMES
+   * are deliberately NOT used as a fallback: `outlet.name` carries no unique
+   * constraint and the only lookup for it is a fuzzy `ilike`, so a name could
+   * select a different venue's list — reopening the hole this check closes.
+   * Returns null when no assignment links the receipt to a shift; the caller
+   * says so rather than waving the line through.
+   */
+  private async catalogueForReceipt(
+    receipt: PaymentVoucherReceiptType,
+    receiptLines: PaymentVoucherLineType[],
+  ): Promise<{ outletId: string; outlet: string; items: ResolvedDrinkItem[] } | null> {
+    const assignmentId =
+      receipt.shiftAssignmentId ??
+      receiptLines
+        .map((l) => asAssignmentId(decodeRef(l.ref).dedupe) ?? asAssignmentId(l.ref))
+        .find((id): id is string => !!id) ??
+      null;
+    if (!assignmentId) return null;
+
+    const outlet = await this.shiftAssignmentRepository.getOutletForAssignment(assignmentId);
+    if (!outlet) return null;
+
+    // The same reader the PR's phone already gets its self-log menu from, so the
+    // list the agency is held to is the list the outlet published — an outlet
+    // with no workspace or an empty menu simply has no entry, which is the
+    // "nothing configured" signal the caller must report honestly.
+    const menus = await this.shiftAssignmentRepository.resolveDrinkMenusForOutlets([
+      outlet.outletId,
+    ]);
+    return {
+      outletId: outlet.outletId,
+      outlet: outlet.outletName,
+      items: menus.get(outlet.outletId) ?? [],
+    };
+  }
+
+  /**
+   * The outlet catalogue the agency's "add a missing line" form must choose
+   * from — the READ half of the rule the add endpoint enforces.
+   *
+   * Scoped through the RECEIPT, not through an outlet id in the path: the caller
+   * names a receipt it can already see, and the outlet is derived from that
+   * receipt's own shift FK. So an agency can only ever read the catalogue of an
+   * outlet one of its own vouchers was earned at — unlike
+   * GET /outlet-workspace/:outletId, which admits `agency` with no per-outlet
+   * scope at all. Cross-tenant answers 404, never 403, as everywhere else here.
+   *
+   * A receipt with no resolvable outlet, or an outlet with nothing configured,
+   * answers 200 with an EMPTY list and the same sentence the add endpoint
+   * refuses with — the form has to be able to say why it has nothing to offer.
+   */
+  async getReceiptCatalogue(req: Request, res: Response) {
+    try {
+      const receiptId = paramId(req.params.receiptId);
+      const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(receiptId);
+      if (!owned) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && owned.voucher.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // Same inputs as the add path takes, so the list shown is the list the
+      // write will be judged against — a read that resolved a different outlet
+      // would offer items the add then refuses.
+      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
+      const receiptLines = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
+      const catalogue = await this.catalogueForReceipt(owned.receipt, receiptLines);
+      if (!catalogue) {
+        return res.status(200).json({
+          success: true,
+          message: `${owned.receipt.receiptNo} is not linked to a shift, so the outlet that sold the item cannot be established.`,
+          data: { outletId: null, outlet: null, items: [] },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: catalogue.items.length
+          ? 'Outlet catalogue'
+          : // Neither bucket named: this read does not know whether the caller is
+            // about to add a drink or a service, and saying "no drinks list" to
+            // someone adding a tip sends them to the wrong screen in the Outlet
+            // portal. The two live in one table split by `category`, so an empty
+            // catalogue means neither is configured.
+            `${catalogue.outlet} has no drinks or services list configured, so a line cannot be verified.`,
+        data: {
+          outletId: catalogue.outletId,
+          outlet: catalogue.outlet,
+          // `kind` is the server's OWN split (see `catalogueMatchesKind`) rather
+          // than a rule the form re-derives from `category`: the two drifting is
+          // how a form offers an item the add endpoint then refuses. Null for a
+          // row in neither bucket, so such a row is never offered rather than
+          // being guessed into one. `priceRm` is the outlet's SALE price, shown
+          // so a reviewer can sanity-check the commission — never the amount.
+          items: catalogue.items.map((i) => ({
+            id: i.id,
+            name: i.name,
+            priceRm: i.priceRm,
+            category: i.category,
+            kind: catalogueMatchesKind(i.category, 'drinks')
+              ? 'drinks'
+              : catalogueMatchesKind(i.category, 'tips')
+                ? 'tips'
+                : null,
+          })),
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.getReceiptCatalogue] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency ADDING a line the paper carries and the log missed — a drink or a
+   * tip that was never scanned.
+   *
+   * Only those two buckets (see `AgencyAddReceiptLineSchema`), and the line is
+   * FK-linked to the receipt it is added to, so the money keeps the evidence
+   * behind it that `assertReceiptBacked` demands of all commission.
+   *
+   * The bucket is carried in `ref` and written through `encodeRef`, never by
+   * hand: the repository's `prepareLine` is what reads the kind back out and
+   * fills the `component` column, so a hand-built ref is how a drink ends up
+   * unclassified in "Others".
+   *
+   * Same refusals and the same two consequences as `editReceiptLine` above —
+   * money the day review never saw is exactly what its stored cents exist to
+   * catch.
+   */
+  async addReceiptLine(req: Request, res: Response) {
+    try {
+      const parsed = AgencyAddReceiptLineSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const receiptId = paramId(req.params.receiptId);
+      const owned = await this.receiptOpenForCorrection(req, res, receiptId);
+      if (!owned) return;
+
+      // The receipt's OWN lines: they carry the day this receipt's money already
+      // sits on and the outlet it was earned at, so a line added to it inherits
+      // both rather than inventing them. A receipt whose lines disagree with each
+      // other about the day is what makes a day review stop describing a receipt.
+      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
+      const siblings = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
+
+      const lineDate =
+        parsed.data.lineDate ??
+        siblings.find((l) => l.lineDate)?.lineDate ??
+        // The paper's printed date only as a last resort: it is deliberately free
+        // to differ from the day the money belongs to (a receipt printed at 01:00
+        // belongs to the shift that just ended).
+        owned.receipt.receiptDate ??
+        todayIso();
+      // The same week guard the PR's own write paths carry, judged against THIS
+      // voucher's week rather than the current one — an old draft is still
+      // correctable while it is pending_review, and judging it against today
+      // would refuse a legitimate fix to last week's own voucher.
+      const outOfWeek =
+        owned.voucher.weekStart && owned.voucher.weekEnd
+          ? checkLineAgainstWeek(lineDate, {
+              weekStart: owned.voucher.weekStart,
+              weekEnd: owned.voucher.weekEnd,
+            })
+          : null;
+      if (outOfWeek) {
+        return res.status(400).json({ success: false, message: outOfWeek, data: null });
+      }
+
+      // THE ITEM MUST BE ONE THE OUTLET ACTUALLY SELLS (owner's rule, 4 Aug
+      // 2026). Without this the description is free text: the agency could type
+      // any item and any commission onto a PR's receipt, and the PR would have
+      // no source document to dispute it against. The outlet's own published
+      // list is that document. Checked here, on the server, because a select box
+      // in the portal is a suggestion — the rule is what the endpoint refuses.
+      const listName = catalogueListName(parsed.data.kind);
+      const catalogue = await this.catalogueForReceipt(owned.receipt, siblings);
+      if (!catalogue) {
+        return res.status(400).json({
+          success: false,
+          message: `${owned.receipt.receiptNo} is not linked to a shift, so the outlet that sold the item cannot be established — no line can be verified against a price list.`,
+          data: null,
+        });
+      }
+      const offered = catalogue.items.filter((i) =>
+        catalogueMatchesKind(i.category, parsed.data.kind),
+      );
+      // Nothing configured is stated, never waved through: "we could not check"
+      // must not read the same as "we checked and it was fine".
+      if (offered.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: `${catalogue.outlet} has no ${listName} configured, so a line cannot be verified — ask the outlet to set its ${listName} up first.`,
+          data: null,
+        });
+      }
+      // Trimmed + case-insensitive: a reviewer typing "lemon drop" means the
+      // outlet's "Lemon Drop", and OCR shouts. What gets STORED is the
+      // catalogue's own spelling, so the line and the outlet's list can never
+      // drift into two names for one item.
+      const typed = parsed.data.description.trim();
+      const listed = offered.find((i) => i.name.trim().toLowerCase() === typed.toLowerCase());
+      if (!listed) {
+        return res.status(400).json({
+          success: false,
+          message: `${typed} is not on ${catalogue.outlet}'s ${listName} — ask the outlet to add it, or pick an item from the list.`,
+          data: null,
+        });
+      }
+
+      const actor = getActor(req);
+      // NEXT FREE index, not `siblings.length`. A count repeats a number the
+      // moment any sibling has been removed — three lines, delete the first, and
+      // the next add reuses `:2`, which is still on a live row. The dedupe slot
+      // is what tells two logs of one paper apart, so a repeat there is the
+      // duplicate it exists to catch, invented by the fix.
+      const usedSlots = siblings
+        .map((l) => Number(decodeRef(l.ref).dedupe.split(':').pop()))
+        .filter((n) => Number.isFinite(n));
+      const nextSlot = usedSlots.length > 0 ? Math.max(...usedSlots) + 1 : siblings.length;
+      const line = await this.paymentVoucherRepository.addLine(owned.voucher.id, {
+        receiptId,
+        lineDate,
+        outlet: siblings.find((l) => l.outlet)?.outlet ?? owned.voucher.outlet,
+        // The CATALOGUE's spelling, not the typed one — see the check above.
+        description: listed.name,
+        quantity: parsed.data.quantity,
+        amount: parsed.data.amount.toFixed(2),
+        // Gross sale 0: the agency states a COMMISSION, and the paper's own
+        // printed total is on the photo rather than in this form. The dedupe slot
+        // follows the sibling lines' `<order no>:<n>` shape and is sliced because
+        // `ref` is varchar(100) — an order number may be 100 on its own.
+        ref: encodeRef(
+          parsed.data.kind,
+          'manual',
+          0,
+          `${owned.receipt.orderNo || owned.receipt.receiptNo}:${nextSlot}`.slice(0, 40),
+          parsed.data.kind === 'tips' ? 'tip' : 'drink',
+        ),
+        createdBy: actor,
+        updatedBy: actor,
+      });
+
+      // See `editReceiptLine`: the approval described a receipt without this line
+      // on it, and nothing stored would let a reader notice that later.
+      const receipt =
+        owned.receipt.status === 'approved'
+          ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
+          : owned.receipt;
+
+      return res.status(201).json({
+        success: true,
+        message:
+          owned.receipt.status === 'approved'
+            ? 'Line added — approve the receipt again to confirm the new total'
+            : 'Line added',
+        data: {
+          receipt,
+          line: toReceiptLineDTO(line, receiptInfoMap(receipt ? [receipt] : [])),
+        },
+      });
+    } catch (error) {
+      if (respondIfLineDateConflict(res, error)) return;
+      logger.error('[PaymentVoucherController.addReceiptLine] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The agency correcting the RECEIPT ITSELF: the order number read off the
+   * paper, and the day the paper belongs to.
+   *
+   * CHANGING THE DATE MOVES THE LINES. `receipt_date` and `line_date` are
+   * deliberately separate facts everywhere else — the paper's printed date
+   * against the day the money is paid on — but a reviewer re-dating a receipt is
+   * saying "this belongs to Tuesday", and leaving the money on Monday would make
+   * both days' totals describe something other than the receipts they are made
+   * of. Both days therefore go STALE, which is correct: each has to be approved
+   * again before the voucher can be sent.
+   *
+   * Same refusals as the two endpoints above, and the same drop back to PENDING —
+   * an approval given for Monday's paper is not an approval of Tuesday's.
+   */
+  async editReceipt(req: Request, res: Response) {
+    try {
+      const parsed = AgencyEditReceiptSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const receiptId = paramId(req.params.receiptId);
+      const owned = await this.receiptOpenForCorrection(req, res, receiptId);
+      if (!owned) return;
+
+      const voucher = await this.paymentVoucherRepository.getById(owned.voucher.id);
+      const siblings = (voucher?.lines ?? []).filter((l) => l.receiptId === receiptId);
+
+      const patch: {
+        orderNo?: string | null;
+        receiptDate?: string;
+        receiptTime?: string | null;
+      } = {};
+      // Absent leaves the number alone; empty or null CLEARS it — a number OCR
+      // invented off a blurred photo has to be removable, not just replaceable.
+      if (parsed.data.orderNo !== undefined) patch.orderNo = parsed.data.orderNo?.trim() || null;
+      // The printed clock time, same absent/clear rule as the order number and
+      // for the same reason: OCR misreads it off a photograph (owner, 4 Aug).
+      // It moves NO money — a line's day is `line_date`, never this — so unlike
+      // `receiptDate` below it moves no lines and stales no day review.
+      if (parsed.data.receiptTime !== undefined) {
+        patch.receiptTime = parsed.data.receiptTime?.trim() || null;
+      }
+      if (parsed.data.receiptDate !== undefined) {
+        // The lines follow this date, so it is judged by the same week rule they
+        // are — otherwise re-dating a receipt is a second door onto the stray
+        // line dates `addMyLine` and `updateMyLine` already refuse.
+        const outOfWeek =
+          owned.voucher.weekStart && owned.voucher.weekEnd
+            ? checkLineAgainstWeek(parsed.data.receiptDate, {
+                weekStart: owned.voucher.weekStart,
+                weekEnd: owned.voucher.weekEnd,
+              })
+            : null;
+        if (outOfWeek) {
+          return res.status(400).json({ success: false, message: outOfWeek, data: null });
+        }
+        patch.receiptDate = parsed.data.receiptDate;
+      }
+
+      // The SAME one-paper-one-log rule the PR's own submit enforces, on the
+      // agency door — a corrected order number can collide with a receipt already
+      // logged for that night, and that collision IS the double payment the rule
+      // exists to stop. Scoped to the day the money will sit on after this write,
+      // and self-matches are skipped: a receipt cannot duplicate itself.
+      //
+      // ⚠️ Gated on the RESULT, not on `patch.orderNo`. Checking only when the
+      // number itself was typed missed the other half of the same collision: a
+      // date change MOVES this paper onto another day, where its existing order
+      // number may already be logged by a different receipt. The number never
+      // changed, so the old guard never ran — and the double payment it exists
+      // to stop walked straight through the date field instead.
+      const effectiveOrderNo =
+        patch.orderNo !== undefined ? patch.orderNo : owned.receipt.orderNo;
+      if (effectiveOrderNo && (patch.orderNo !== undefined || patch.receiptDate !== undefined)) {
+        const day = patch.receiptDate ?? siblings.find((l) => l.lineDate)?.lineDate ?? null;
+        const clash = day
+          ? await this.paymentVoucherRepository.findReceiptByOrderNo(
+              owned.voucher.id,
+              effectiveOrderNo,
+              {
+                lineDate: day,
+                outlet: siblings.find((l) => l.outlet)?.outlet ?? null,
+              },
+            )
+          : null;
+        if (clash && clash.id !== receiptId) {
+          return res.status(409).json({
+            success: false,
+            message: `${clash.receiptNo} already carries order number ${effectiveOrderNo} for ${day} — two logs of one paper is a double payment.`,
+            data: null,
+          });
+        }
+      }
+
+      const actor = getActor(req);
+      const updated = await this.paymentVoucherRepository.updateReceiptHeader(receiptId, patch, actor);
+      if (!updated) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Status LAST, so the row returned already carries the corrected facts.
+      const receipt =
+        owned.receipt.status === 'approved'
+          ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
+          : updated.receipt;
+
+      // The moved lines ride back for the same reason the day review returns its
+      // receipts: the card that shows them must re-render from the response that
+      // moved them, never from a second read that could describe another moment.
+      const after = await this.paymentVoucherRepository.getById(owned.voucher.id);
+      const info = receiptInfoMap(receipt ? [receipt] : []);
+      return res.status(200).json({
+        success: true,
+        message:
+          owned.receipt.status === 'approved'
+            ? 'Receipt corrected — approve it again to confirm the new figures'
+            : 'Receipt corrected',
+        data: {
+          receipt,
+          movedLines: updated.movedLines,
+          lines: (after?.lines ?? [])
+            .filter((l) => l.receiptId === receiptId)
+            .map((l) => toReceiptLineDTO(l, info)),
+        },
+      });
+    } catch (error) {
+      logger.error('[PaymentVoucherController.editReceipt] Error:', error);
       return res
         .status(500)
         .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -2054,19 +2901,31 @@ export class PaymentVoucherControllerClass {
         });
       }
 
+      // ONLY DRINKS AND TIPS (owner's decision, 4 Aug 2026 — reversing 30 Jul,
+      // when wages were the one thing always disputable). Wages and OT are not
+      // claimed, they are DERIVED from the attendance stamps and the shift rate,
+      // so the fix for a wrong one is the attendance record, not an argument
+      // about the total. Refused HERE and not merely hidden in the app: a rule
+      // the server does not enforce is a rule a replayed request walks past.
+      if (!(DISPUTABLE_KINDS as readonly string[]).includes(component)) {
+        return res.status(400).json({
+          success: false,
+          message:
+            `${component === 'wages' ? 'Daily wages' : 'Overtime and other adjustments'} cannot be disputed here — ` +
+            'they are calculated from your check-in and check-out times. Ask your agency to correct the shift record instead.',
+          data: null,
+        });
+      }
+
       // APPROVAL IS THE PRECONDITION for contesting receipt-backed money
       // (owner's decision #1). Until the agency has reviewed a receipt there is
       // no stated figure to argue with — the PR would be disputing their own
       // submission. Approval is what turns it into the agency's number.
       //
-      // WAGES ARE EXEMPT and always disputable: they are sealed at check-out
-      // with no receipt to approve, so requiring approval there would make a
-      // wage error the one thing that could never be contested.
-      //
       // Structurally this rarely fires — a pending receipt blocks the send, so
       // an issued voucher has none. It fires on the week still at
       // pending_review, which a PR can also dispute.
-      if (component !== 'wages') {
+      {
         const receipts = await this.paymentVoucherRepository.listReceipts(voucherId);
         const statuses = receiptInfoMap(receipts);
         const waiting = existing.lines

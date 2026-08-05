@@ -145,6 +145,16 @@ export function ScanScreen({
   const [drinkQtys, setDrinkQtys] = useState<Record<string, number>>({});
   // What the LAST real OCR pass read off the receipt.
   const [detectedIds, setDetectedIds] = useState<string[]>([]);
+  /**
+   * Exactly what ML Kit read, kept so a miss can be DIAGNOSED instead of
+   * guessed at. The parser has always produced this and the screen always threw
+   * it away, so "why didn't it find Tips?" had no answer on the phone — and the
+   * answer is usually that the word never reached the parser at all.
+   */
+  const [ocrLines, setOcrLines] = useState<string[]>([]);
+  const [showOcrText, setShowOcrText] = useState(false);
+  /** Items whose line printed NO quantity — shown as a guess, not as read. */
+  const [assumedQtyIds, setAssumedQtyIds] = useState<Set<string>>(new Set());
   // What OCR read off the paper (ORD0389) — sent to the server as orderNo.
   const [receiptNo, setReceiptNo] = useState<string | null>(null);
   const [receiptDate, setReceiptDate] = useState<string | null>(null);
@@ -201,7 +211,23 @@ export function ScanScreen({
   // only demanded on the no-menu amount fallback (nothing else captures one).
   const proofRequired =
     mode === 'selflog' && category === 'drinks' && !editId && !showItemMenu;
-  const missingProof = proofRequired && proofPhotos.length === 0;
+  /**
+   * EVERY line this screen saves carries the scanned receipt as its proof.
+   *
+   * The comment above has always claimed the scan photo IS the proof, but only
+   * the pure-scan submit sent it: the item-menu path sent `proofPhotos` alone,
+   * which is filled by `keepAsProof` only when a scan FAILS. So a scan that read
+   * the receipt fine and then went through the adjust-quantity list saved rows
+   * with no picture at all — and check-out refuses those: "2 logged actions have
+   * no picture", with both receipts photographed and on file.
+   *
+   * Deduped, receipt first, capped like keepAsProof does.
+   */
+  const proofForSubmit = useMemo(
+    () => [...new Set([...(receiptShot ? [receiptShot] : []), ...proofPhotos])].slice(0, 6),
+    [receiptShot, proofPhotos],
+  );
+  const missingProof = proofRequired && proofForSubmit.length === 0;
 
   // Commission at this PR's real tier rate (happy-hour aware); falls back to the
   // prototype flat rates only when the outlet has no rate card configured.
@@ -240,15 +266,48 @@ export function ScanScreen({
   // edit mode, where the whole list shows so quantities can be adjusted).
   const manualRows = editId ? categoryMenu : detected;
   const manualScanAttempted = receiptShot != null || detectedIds.length > 0;
+  /**
+   * This outlet's items that the scan did NOT find.
+   *
+   * They used to be invisible — the list showed only what OCR read, so an item
+   * it missed left the PR with one option: scan again, and hope. OCR misses a
+   * short line often enough (glare, a fold, a tilted photo) that "scan again"
+   * became a lottery. Showing them with a one-tap Add ends that: the PR is
+   * standing at the bar with the paper in hand and can say what is on it.
+   *
+   * Added this way the quantity is a GUESS, so it is flagged like any other
+   * assumed one rather than passed off as read.
+   */
+  const missingRows = useMemo(
+    () => (editId ? [] : categoryMenu.filter((d) => !detectedIds.includes(d.id))),
+    [editId, categoryMenu, detectedIds],
+  );
+
+  const addMissingItem = (id: string) => {
+    setDetectedIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+    setDrinkQtys((prev) => ({ ...prev, [id]: prev[id] ?? 1 }));
+    setAssumedQtyIds((prev) => new Set(prev).add(id));
+  };
   // The agency note is REQUIRED on a fresh self-log: what was unclear on the
   // paper, or a confirmation the items & prices match.
   const manualNoteMissing = !editId && note.trim().length === 0;
 
   // Today's logged receipt lines — feeds the "what have I scanned" gallery.
-  const todayReceiptLines = useMemo(
-    () => receiptLines.filter((l) => l.lineDate === todayKey),
-    [receiptLines, todayKey],
-  );
+  /**
+   * THIS SHIFT's lines, matching the attendance screen: a PR can work twice in
+   * one day, and filtering by date alone showed the earlier shift's receipts
+   * under a card headed "this shift". Anything logged before this check-in
+   * belongs to the session before it.
+   */
+  const todayReceiptLines = useMemo(() => {
+    const startedAt = checkedInAt ? new Date(checkedInAt).getTime() : null;
+    return receiptLines.filter((l) => {
+      if (l.lineDate !== todayKey) return false;
+      if (startedAt === null) return true;
+      const loggedAt = new Date(l.at).getTime();
+      return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
+    });
+  }, [receiptLines, todayKey, checkedInAt]);
 
   /**
    * The REAL scan: camera → ML Kit words → parser match against this page's
@@ -282,6 +341,9 @@ export function ScanScreen({
     setReceiptNo(mergedOrderNo);
     setReceiptDate(mergedDate);
     setReceiptTime(mergedTime);
+    // Captured BEFORE the early returns below: a scan that found nothing is
+    // exactly the one whose text needs looking at.
+    setOcrLines(parsed.lines);
     if (parsed.matches.length === 0 && detectedIds.length === 0) {
       // Name what the matcher was hunting for — "matched none" without the
       // list reads like a scanner fault when the paper simply doesn't print
@@ -317,9 +379,28 @@ export function ScanScreen({
       return;
     }
     setDetectedIds((prev) => Array.from(new Set([...prev, ...parsed.matches.map((m) => m.id)])));
+    /*
+     * A quantity the receipt PRINTED is the answer, not a floor on it: taking
+     * the larger of old and new meant a stale value survived the scan that
+     * finally read the line. Quantities the parser only ASSUMED (the line
+     * printed none) never overwrite what is already on screen, and are recorded
+     * so the row can say it is a guess — a silent 1 is indistinguishable from a
+     * 1 the receipt actually printed, which is how "2 Havoc" got logged as one.
+     */
     setDrinkQtys((prev) => {
       const next = { ...prev };
-      for (const m of parsed.matches) next[m.id] = Math.max(next[m.id] ?? 0, m.qty);
+      for (const m of parsed.matches) {
+        if (m.qtyFromReceipt) next[m.id] = m.qty;
+        else if ((next[m.id] ?? 0) === 0) next[m.id] = m.qty;
+      }
+      return next;
+    });
+    setAssumedQtyIds((prev) => {
+      const next = new Set(prev);
+      for (const m of parsed.matches) {
+        if (m.qtyFromReceipt) next.delete(m.id);
+        else next.add(m.id);
+      }
       return next;
     });
     if (target === 'manual') keepAsProof(shot.dataUrl);
@@ -410,7 +491,7 @@ export function ScanScreen({
             commission: commissionForItem(first, firstAmt),
             outlet: outlet,
             // A retaken snap replaces the saved picture (and its receipt copy).
-            ...(proofPhotos.length ? { proofPhotos } : {}),
+            ...(proofForSubmit.length ? { proofPhotos: proofForSubmit } : {}),
           });
           // Any extra items the user added during the edit become new rows.
           for (const d of rest) {
@@ -424,6 +505,9 @@ export function ScanScreen({
               sales: amt,
               commission: commissionForItem(d, amt),
               outlet: outlet,
+              // Every row gets the picture, including ones added mid-edit —
+              // a row without one cannot be checked out.
+              ...(proofForSubmit.length ? { proofPhotos: proofForSubmit } : {}),
             });
           }
           return;
@@ -438,17 +522,17 @@ export function ScanScreen({
           commission: commissionFor(category, amt),
           outlet: outlet,
           // A retaken snap replaces the saved picture (and its receipt copy).
-          ...(proofPhotos.length ? { proofPhotos } : {}),
+          ...(proofForSubmit.length ? { proofPhotos: proofForSubmit } : {}),
         });
         return;
       }
       // Proof photo is mandatory for a fresh drink self-log (the submit button
       // is already gated on this; this is the backstop so it can never persist
       // without it).
-      if (proofRequired && proofPhotos.length === 0) {
+      if (proofRequired && proofForSubmit.length === 0) {
         throw new Error('Snap a proof photo before you submit.');
       }
-      const proof = proofPhotos.length ? proofPhotos : undefined;
+      const proof = proofForSubmit.length ? proofForSubmit : undefined;
       if (showItemMenu) {
         const items = buildReceiptItems(categoryMenu);
         if (items.length === 0) {
@@ -644,6 +728,61 @@ export function ScanScreen({
                         <Text style={styles.ocrLine}>Date: {receiptDate ?? '—'}</Text>
                         <Text style={styles.ocrLine}>Time: {receiptTime ?? '—'}</Text>
                         <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
+                        {ocrLines.length > 0 && (
+                          <>
+                            <Pressable
+                              onPress={() => setShowOcrText((v) => !v)}
+                              hitSlop={8}
+                            >
+                              <Text style={styles.ocrToggle}>
+                                {showOcrText ? 'Hide' : 'Show'} what OCR read ({ocrLines.length}{' '}
+                                line{ocrLines.length === 1 ? '' : 's'})
+                              </Text>
+                            </Pressable>
+                            {showOcrText && (
+                              <View style={styles.ocrRaw}>
+                                {ocrLines.map((l, i) => (
+                                  <Text key={`${i}-${l}`} style={styles.ocrRawLine}>
+                                    {l}
+                                  </Text>
+                                ))}
+                                <Text style={styles.ocrRawHint}>
+                                  An item is only found when its name is on one of these lines. If a
+                                  name is missing or misspelt here, the paper or the photo is the
+                                  problem — scan again, flatter and closer.
+                                </Text>
+                              </View>
+                            )}
+                          </>
+                        )}
+                      </View>
+                    )}
+
+                    {!editId && manualScanAttempted && missingRows.length > 0 && (
+                      <View style={styles.missingBlock}>
+                        <Text style={styles.fieldLabel}>
+                          NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER
+                        </Text>
+                        {missingRows.map((d) => (
+                          <View key={d.id} style={styles.drinkRow}>
+                            <View style={{ flex: 1 }}>
+                              <Text style={styles.drinkName}>{d.name}</Text>
+                              <Text style={styles.drinkUnit}>
+                                {formatRM(d.priceRm)} each · OCR did not read this one
+                              </Text>
+                            </View>
+                            <Pressable
+                              style={styles.missingAddBtn}
+                              onPress={() => addMissingItem(d.id)}
+                            >
+                              <Text style={styles.missingAddText}>+ Add</Text>
+                            </Pressable>
+                          </View>
+                        ))}
+                        <Text style={styles.missingHint}>
+                          Only add what the receipt actually shows — the agency checks these against
+                          your photo.
+                        </Text>
                       </View>
                     )}
 
@@ -680,6 +819,11 @@ export function ScanScreen({
                               ? ` · × ${drinkQtys[d.id]} = ${formatRM(d.priceRm * (drinkQtys[d.id] ?? 0))}`
                               : ''}
                           </Text>
+                          {assumedQtyIds.has(d.id) && (
+                            <Text style={styles.qtyAssumed}>
+                              Receipt printed no quantity — check this one
+                            </Text>
+                          )}
                         </View>
                         <View style={styles.qtyCtrl}>
                           <Pressable
@@ -1128,6 +1272,45 @@ const styles = StyleSheet.create({
   },
   drinkName: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.txt },
   drinkUnit: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  /** Amber, because it asks the PR to look at the paper — it is not an error. */
+  qtyAssumed: {
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.amber,
+    marginTop: 2,
+  },
+  ocrToggle: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.violetL,
+    marginTop: 6,
+    textDecorationLine: 'underline',
+  },
+  ocrRaw: {
+    marginTop: 6,
+    padding: 8,
+    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+  },
+  ocrRawLine: { fontFamily: F.manrope, fontSize: 11, color: C.txt, lineHeight: 16 },
+  ocrRawHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted, marginTop: 6 },
+  missingBlock: {
+    marginTop: 12,
+    padding: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    backgroundColor: 'rgba(255,255,255,0.03)',
+  },
+  missingAddBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: C.goldL,
+  },
+  missingAddText: { fontFamily: F.manrope, fontSize: 12, color: C.goldL, fontWeight: '700' },
+  missingHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted, marginTop: 8 },
   qtyCtrl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   qtyBtn: {
     width: 32,

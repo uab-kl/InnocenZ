@@ -271,6 +271,15 @@ export function AgencyPvDayReviewPanel({
 							blocks the send — including the Monday payout run — until it is
 							approved or cleared.
 						</p>
+						{/* Said out loud, because it is an attestation the reviewer makes
+						    without opening the receipts panel. A day's total IS the sum of
+						    its receipts, so approving the day states those receipts are
+						    right — the PR is then told so, and may dispute them. Silent
+						    would make it a trap. */}
+						<p className="iz-tiny iz-muted mt-1">
+							Approving a day also approves the receipts on that day. A receipt
+							spanning two days waits until both are approved.
+						</p>
 
 						{sendGate.allowed ? (
 							<p className="iz-tiny mt-1.5 text-[var(--iz-green)]">

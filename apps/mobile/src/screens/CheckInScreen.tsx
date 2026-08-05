@@ -215,12 +215,58 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // (the seed dates some shifts a day ahead, which would push earnings onto
   // tomorrow) and not a UTC day that rolls over at night.
   const todayKey = ymdToIso(...todayYmd());
-  const todayReceipts = receiptLines.filter((l) => l.lineDate === todayKey);
+  /**
+   * THIS SHIFT's logged actions — not the whole calendar day.
+   *
+   * A PR can work two shifts in one day. Filtering by date alone carried the
+   * first shift's items, photos and totals into the second: check in at 11:29
+   * and the screen still showed a Havoc logged at 11:13, under a heading that
+   * says "this shift".
+   *
+   * Scoped by the check-in stamp, because that is what separates two sessions on
+   * one date — anything logged before this check-in belongs to the shift before
+   * it. Wage/check-in rows are stamped at check-in itself, so they fall on the
+   * right side. With no check-in time yet (pre-duty), the day is all there is.
+   */
+  const shiftStartedAt = active?.checkInAt ? new Date(active.checkInAt).getTime() : null;
+  const todayReceipts = receiptLines.filter((l) => {
+    if (l.lineDate !== todayKey) return false;
+    if (shiftStartedAt === null) return true;
+    const loggedAt = new Date(l.at).getTime();
+    return Number.isNaN(loggedAt) ? true : loggedAt >= shiftStartedAt;
+  });
   // Every logged action (scan or self-log) must carry its picture — a row
   // without one blocks check-out until it is re-scanned or removed.
   const linesMissingPhoto = todayReceipts.filter(
     (l) => l.source !== 'checkin' && (l.proofPhotos ?? []).length === 0,
   ).length;
+
+  /**
+   * A shift closes once AT LEAST ONE action is logged — a drink, a tip, or
+   * both. Not one of each: plenty of nights are drinks-only or tips-only, and
+   * demanding both would strand a PR who genuinely had nothing on the other
+   * side, with no honest way to satisfy it.
+   *
+   * What is still refused is an EMPTY shift: no receipt, no self-log, nothing
+   * but the clock. That is commission which cannot be claimed once the paper is
+   * gone and the week has closed.
+   *
+   * Wages (`kind: 'wages'`) and the check-in stamp are the shift itself rather
+   * than an action, so neither counts as one.
+   */
+  const loggedActions = todayReceipts.filter(
+    (l) => l.source !== 'checkin' && l.kind !== 'wages',
+  );
+
+  /** Why check-out is refused, or null when it is allowed. Photos first. */
+  const missingPlural = linesMissingPhoto === 1 ? '' : 's';
+  const missingHasHave = linesMissingPhoto === 1 ? 'has' : 'have';
+  const checkOutBlock: string | null =
+    linesMissingPhoto > 0
+      ? `${linesMissingPhoto} logged action${missingPlural} ${missingHasHave} no picture — tap the red camera on that row to scan again, or remove the row, before you can check out.`
+      : loggedActions.length === 0
+        ? 'Nothing logged yet. Scan a receipt or self-log at least one drink or tip — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.'
+        : null;
 
   const finalPayout = active
     ? (Number(active.rate?.wagePerHour) || Number(active.payAmount)) +
@@ -521,18 +567,14 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   label="Check out"
                   holding={holding}
                   progress={progress}
-                  disabled={linesMissingPhoto > 0}
+                  disabled={checkOutBlock !== null}
                   onPress={() => {
-                    if (linesMissingPhoto > 0) return;
+                    if (checkOutBlock !== null) return;
                     startHold(true);
                   }}
                 />
-                {linesMissingPhoto > 0 && (
-                  <Text style={[styles.gpsNote, { color: C.red }]}>
-                    {linesMissingPhoto} logged action{linesMissingPhoto === 1 ? '' : 's'} ha
-                    {linesMissingPhoto === 1 ? 's' : 've'} no picture — tap the red camera on
-                    that row to scan again, or remove the row, before you can check out.
-                  </Text>
+                {checkOutBlock !== null && (
+                  <Text style={[styles.gpsNote, { color: C.red }]}>{checkOutBlock}</Text>
                 )}
               </>
             )}

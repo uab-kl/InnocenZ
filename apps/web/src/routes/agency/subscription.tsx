@@ -317,7 +317,7 @@ function AgencySubscription() {
 		sub.requestLeaveCustom(banded.label, pv).then((result) => {
 			toast(
 				result.ok
-					? `Reset off Custom — you are on ${banded.label} now`
+					? `Reset requested — InnocenZ admin will move you to ${banded.label} or cancel it. You stay on Custom until then.`
 					: (result.reason ?? "Could not send the request — try again"),
 				result.ok ? "success" : "warn",
 			);
@@ -427,7 +427,11 @@ function AgencySubscription() {
 									{/* Amber, and alongside — an agency on Custom with an open
 									    request is in both states at once. */}
 									{waitingOn && (
-										<IzPill variant="amber">Price · pending admin</IzPill>
+										<IzPill variant="amber">
+											{sub.customRequestKind === "exit"
+												? "Reset · pending admin"
+												: "Price · pending admin"}
+										</IzPill>
 									)}
 								</div>
 								<p className="iz-tiny iz-muted mt-1">
@@ -445,30 +449,38 @@ function AgencySubscription() {
 							<>
 								{waitingOn && (
 									<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
-										InnocenZ admin is negotiating your Custom price — nothing
-										changes until they answer.
+										{sub.customRequestKind === "exit"
+											? "InnocenZ admin has your reset request — you stay on Custom at this price until they resolve or cancel it."
+											: "InnocenZ admin is negotiating your Custom price — nothing changes until they answer."}
 									</p>
 								)}
 								{/*
 								 * TWO ways to change a negotiated tier, and they are not the
-								 * same act. RENEGOTIATE asks the admin for a different figure
-								 * and changes nothing until they answer. RESET leaves Custom
-								 * altogether for the banded tier the agency's PV volume implies,
-								 * and applies straight away because that tier has a list price.
-								 * Neither happens on its own: nothing automatic takes an agency
-								 * off a price two people agreed.
+								 * same act. RENEGOTIATE asks for a different figure; RESET asks
+								 * to leave Custom for the banded tier the agency's PV volume
+								 * implies. NEITHER changes anything until the admin answers —
+								 * both end a price two people agreed, so both are the admin's to
+								 * resolve or cancel. Nothing automatic does either.
+								 *
+								 * Only the action already asked for is blocked: an agency that
+								 * asked for a new price must still be able to decide it would
+								 * rather leave, exactly as a venue can with POS.
 								 */}
 								<div className="mt-3 grid gap-2 border-t border-[var(--iz-line)] pt-3 sm:grid-cols-2">
 									<div>
 										<button
 											type="button"
 											className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[rgba(139,124,246,.4)] bg-[rgba(139,124,246,.1)] px-3 py-2 transition-colors hover:bg-[rgba(139,124,246,.18)] disabled:opacity-60"
-											disabled={sub.isRequesting || Boolean(waitingOn)}
+											disabled={
+												sub.isRequesting || sub.customRequestKind === "requote"
+											}
 											onClick={handleAskForCustom}
 										>
 											<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
 											<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
-												{waitingOn ? "Renegotiating…" : "Renegotiate price"}
+												{sub.customRequestKind === "requote"
+													? "Renegotiating…"
+													: "Renegotiate price"}
 											</span>
 										</button>
 										<p className="iz-tiny iz-muted2 mt-1.5">
@@ -480,17 +492,22 @@ function AgencySubscription() {
 										<button
 											type="button"
 											className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,.03)] px-3 py-2 transition-colors hover:bg-[rgba(255,255,255,.07)] disabled:opacity-60"
-											disabled={sub.isRequesting}
+											disabled={
+												sub.isRequesting || sub.customRequestKind === "exit"
+											}
 											onClick={handleResetToNormal}
 										>
 											<RotateCcw className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
 											<span className="iz-tiny font-semibold">
-												Reset to normal subscription
+												{sub.customRequestKind === "exit"
+													? "Reset requested…"
+													: "Reset to normal subscription"}
 											</span>
 										</button>
 										<p className="iz-tiny iz-muted2 mt-1.5">
-											Leaves Custom for the tier your weekly PVs fall into,
-											straight away. InnocenZ admin sees it in Plan Request.
+											Asks to leave Custom for the tier your weekly PVs fall
+											into. InnocenZ admin resolves or cancels it in Plan
+											Request — you stay on Custom until then.
 										</p>
 									</div>
 								</div>

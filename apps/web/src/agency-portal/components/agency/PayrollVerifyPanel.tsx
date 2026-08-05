@@ -1,9 +1,17 @@
+import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyPvReceiptReview } from "@agency-portal/hooks/use-agency-pv-receipt-review";
 import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
-import { Check, FileWarning, Receipt, RotateCcw, ScanLine } from "lucide-react";
+import {
+	Check,
+	FileWarning,
+	Pencil,
+	Receipt,
+	RotateCcw,
+	ScanLine,
+} from "lucide-react";
 import { useState } from "react";
 import type {
 	PaymentVoucherComponent,
@@ -56,6 +64,22 @@ const STATUS_PILL: Record<PaymentVoucherReceiptStatus, string> = {
  * never say by accident. So only render what is certainly renderable, and print
  * the rest as the reference it is.
  */
+/**
+ * A voucher line's stored `component` in the editor's vocabulary.
+ *
+ * Only the two the agency may ADD are mapped. Everything else — wages, OT,
+ * deductions, and an unclassified NULL — returns undefined, which the editor
+ * reads as "cannot tell", leaving the category open rather than guessing a
+ * bucket for a line that belongs in neither.
+ */
+const kindOfComponent = (
+	component: string | null,
+): "drinks" | "tips" | undefined => {
+	if (component === "drink_commission") return "drinks";
+	if (component === "tip_commission") return "tips";
+	return undefined;
+};
+
 const isRenderablePhoto = (photo: string) =>
 	photo.startsWith("data:image/") ||
 	photo.startsWith("https://") ||
@@ -64,71 +88,44 @@ const isRenderablePhoto = (photo: string) =>
 /**
  * One receipt, with the agency's decision on it.
  *
- * The quantity/commission inputs are the correction path from the owner's spec.
- * They are deliberately per-line and saved one at a time rather than as a form:
- * each save is a `PATCH` on that line id, which is what keeps this away from
- * `PUT /payment-voucher/:id` — the wholesale rewrite that once deleted the PR's
- * proof photos.
+ * The correction path is `AgencyReceiptEditor`, shared with the Receipts feed
+ * rather than reimplemented here: one editor means one set of rules about what
+ * may be changed, where two copies would disagree the first time either was
+ * touched. Every write it makes is a `PATCH`/`POST` on an id, which is what
+ * keeps this away from `PUT /payment-voucher/:id` — the wholesale rewrite that
+ * once deleted the PR's proof photos.
  */
 function ReceiptRow({
 	receipt,
 	lines,
 	canReview,
+	voucherSigned,
 	busy,
 	onApprove,
 	onWithdraw,
-	onEditLine,
 }: {
 	receipt: PaymentVoucherReceipt;
 	lines: PaymentVoucherLine[];
 	canReview: boolean;
+	/** The PR has counter-signed — every correction endpoint refuses from here. */
+	voucherSigned: boolean;
 	busy: boolean;
 	onApprove: () => void;
 	onWithdraw: () => void;
-	onEditLine: (
-		lineId: string,
-		patch: { quantity?: number; amount?: number },
-	) => void;
 }) {
-	const [editing, setEditing] = useState<string | null>(null);
-	const [qty, setQty] = useState("");
-	const [amount, setAmount] = useState("");
+	const [editing, setEditing] = useState(false);
 
 	const proofPhotos = receipt.proofPhotos ?? [];
 	// Verified means the week is closed. Nothing on it may be re-decided or
 	// re-priced — the server refuses both, and offering the buttons anyway would
 	// just produce a 409 the agency has to interpret.
-	const editable = canReview && receipt.status !== "verified";
-
-	const startEdit = (line: PaymentVoucherLine) => {
-		setEditing(line.id);
-		setQty(String(line.quantity));
-		setAmount(Number(line.amount || 0).toFixed(2));
-	};
-
-	const saveEdit = (line: PaymentVoucherLine) => {
-		const nextQty = Number(qty);
-		const nextAmount = Number(amount);
-		const patch: { quantity?: number; amount?: number } = {};
-		if (Number.isFinite(nextQty) && nextQty > 0 && nextQty !== line.quantity) {
-			patch.quantity = nextQty;
-		}
-		if (
-			Number.isFinite(nextAmount) &&
-			nextAmount >= 0 &&
-			nextAmount.toFixed(2) !== Number(line.amount || 0).toFixed(2)
-		) {
-			patch.amount = nextAmount;
-		}
-		// Nothing actually changed — close the row rather than sending a no-op the
-		// server would reject for having no fields.
-		if (patch.quantity === undefined && patch.amount === undefined) {
-			setEditing(null);
-			return;
-		}
-		onEditLine(line.id, patch);
-		setEditing(null);
-	};
+	//
+	// A PR-SIGNED voucher is the same situation and was missing here: every one
+	// of these paths — reviewReceipt, editReceiptLine, addReceiptLine,
+	// editReceipt — refuses on `prSignedAt`, so the buttons were offered for
+	// writes that could only 409. Re-pricing behind a signature is exactly what
+	// that refusal exists to stop.
+	const editable = canReview && receipt.status !== "verified" && !voucherSigned;
 
 	return (
 		<div className="border-b border-[var(--iz-line)] py-2.5 last:border-0">
@@ -201,85 +198,80 @@ function ReceiptRow({
 						key={line.id}
 						className="iz-tiny flex flex-wrap items-center gap-2 py-1"
 					>
-						{editing === line.id ? (
-							<>
-								<span className="iz-muted2">{line.description}</span>
-								<input
-									className="iz-field-input !h-7 !w-16 !text-[12px]"
-									inputMode="numeric"
-									value={qty}
-									onChange={(e) => setQty(e.target.value)}
-									aria-label={`Quantity for ${line.description}`}
-								/>
-								<span className="iz-muted2">×</span>
-								<input
-									className="iz-field-input !h-7 !w-24 !text-[12px]"
-									inputMode="decimal"
-									value={amount}
-									onChange={(e) => setAmount(e.target.value)}
-									aria-label={`Commission for ${line.description}`}
-								/>
-								<button
-									type="button"
-									className="iz-btn iz-btn-soft !h-7 !px-2 !text-[11px]"
-									disabled={busy}
-									onClick={() => saveEdit(line)}
-								>
-									Save
-								</button>
-								<button
-									type="button"
-									className="iz-btn iz-btn-ghost !h-7 !px-2 !text-[11px]"
-									onClick={() => setEditing(null)}
-								>
-									Cancel
-								</button>
-							</>
-						) : (
-							<>
-								<span className="iz-muted2">
-									{line.quantity} × {line.description}
-								</span>
-								<span className="font-medium">
-									{money(Number(line.amount || 0))}
-								</span>
-								{editable && (
-									<button
-										type="button"
-										className="iz-btn iz-btn-ghost !h-7 !px-2 !text-[11px]"
-										onClick={() => startEdit(line)}
-									>
-										Correct
-									</button>
-								)}
-							</>
-						)}
+						<span className="iz-muted2">
+							{line.quantity} × {line.description}
+						</span>
+						<span className="font-medium">
+							{money(Number(line.amount || 0))}
+						</span>
 					</div>
 				))}
 			</div>
 
+			{/* Say WHY the controls are gone. A row that simply loses its buttons
+			    reads as a permissions bug; the rule is the useful thing. */}
+			{canReview && voucherSigned && (
+				<p className="iz-tiny iz-muted2 mt-1.5">
+					The PR has signed this voucher — receipts on it can no longer be
+					approved or corrected.
+				</p>
+			)}
+
 			{editable && (
-				<div className="mt-1.5 flex flex-wrap gap-2">
-					{receipt.status === "pending" ? (
-						<button
-							type="button"
-							className="iz-btn iz-btn-soft !h-7 !px-2.5 !text-[11px]"
-							disabled={busy}
-							onClick={onApprove}
-						>
-							<Check className="mr-1 h-3 w-3" /> Approve
-						</button>
-					) : (
+				<>
+					<div className="mt-1.5 flex flex-wrap gap-2">
+						{receipt.status === "pending" ? (
+							<button
+								type="button"
+								className="iz-btn iz-btn-soft !h-7 !px-2.5 !text-[11px]"
+								disabled={busy}
+								onClick={onApprove}
+							>
+								<Check className="mr-1 h-3 w-3" /> Approve
+							</button>
+						) : (
+							<button
+								type="button"
+								className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
+								disabled={busy}
+								onClick={onWithdraw}
+							>
+								<RotateCcw className="mr-1 h-3 w-3" /> Withdraw approval
+							</button>
+						)}
+					</div>
+
+					{/*
+					 * Under Approve, not beside it: approving is the common move and
+					 * correcting is the exception, and a row of equal buttons would make
+					 * the two read as alternatives of the same weight.
+					 */}
+					<div className="mt-1.5">
 						<button
 							type="button"
 							className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
-							disabled={busy}
-							onClick={onWithdraw}
+							onClick={() => setEditing((v) => !v)}
+							aria-expanded={editing}
 						>
-							<RotateCcw className="mr-1 h-3 w-3" /> Withdraw approval
+							<Pencil className="mr-1 h-3 w-3" />{" "}
+							{editing ? "Close editor" : "Edit"}
 						</button>
+					</div>
+
+					{editing && (
+						<AgencyReceiptEditor
+							receipt={receipt}
+							// The voucher detail carries `component`, the editor speaks `kind`.
+							// Translated here rather than widening the editor's props to accept
+							// both spellings — the mapping is this panel's shape problem, not a
+							// second vocabulary for every caller to learn.
+							lines={lines.map((line) => ({
+								...line,
+								kind: kindOfComponent(line.component),
+							}))}
+						/>
 					)}
-				</div>
+				</>
 			)}
 		</div>
 	);
@@ -298,9 +290,9 @@ function ReceiptRow({
  *
  * The receipts card is where the owner's `PENDING → APPROVED → VERIFIED` review
  * happens: the photo and the PR's note beside the figures, with the correction
- * inputs in the same row. Writes are gated on `raisePv`, mirroring the server's
- * `agencyOwnerOrFinance` on both routes — the read stays open, because seeing a
- * decision is not the authority to make one.
+ * editor one click under Approve. Writes are gated on `raisePv`, mirroring the
+ * server's `agencyOwnerOrFinance` on every one of those routes — the read stays
+ * open, because seeing a decision is not the authority to make one.
  *
  * The component totals above it remain read-only: there is still no endpoint
  * that decides a whole week at once, and a button that only changed local state
@@ -317,7 +309,6 @@ export function PayrollVerifyPanel({
 	const {
 		pendingCount,
 		reviewReceipt,
-		editLine,
 		isSaving,
 		error: reviewError,
 	} = useAgencyPvReceiptReview(voucherId);
@@ -458,15 +449,13 @@ export function PayrollVerifyPanel({
 								receipt={receipt}
 								lines={lines.filter((line) => line.receiptId === receipt.id)}
 								canReview={canReview}
+								voucherSigned={Boolean(voucher?.prSignedAt)}
 								busy={isSaving}
 								onApprove={() =>
 									reviewReceipt({ receiptId: receipt.id, status: "approved" })
 								}
 								onWithdraw={() =>
 									reviewReceipt({ receiptId: receipt.id, status: "pending" })
-								}
-								onEditLine={(lineId, patch) =>
-									editLine({ receiptId: receipt.id, lineId, ...patch })
 								}
 							/>
 						))}

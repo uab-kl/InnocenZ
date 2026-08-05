@@ -184,6 +184,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | P4 | Check-In hides *tomorrow*; shows worked date; outlet **address** on card | PR ← **Outlet** (reads outlet address) | `CheckInScreen` + `shift-assignment.repository` | `outlet` FK (address reused, no new col) | ✅ Verified |
 | P5 | History **Shifts** tab reconciles **per-day** with **Payment** this-week (same `payment_voucher_line` source; verified vs live voucher 533.50 = Tue 270.50 + Wed 263.00); a day spanning 2 outlets now labels **both** venues (no silent mis-attribution) | PR (self) | `ShiftHistoryPanel` · `PaymentScreen` | current-week voucher lines `/mine` | ✅ Verified |
 | P6 | **F · Dispute now persists** — PR taps an amount on Payment → Last week → the PV flips to `status='disputed'` with reason+note on the **existing** `payment_voucher` columns (no new table). New PR-scoped endpoints `POST /payment-voucher/mine/:voucherId/dispute` + `…/dispute/withdraw`. Header shows a DISPUTED pill + open-dispute banner; withdraw reverts to `sent`. Agency web already reads these fields (`payment-voucher-map.ts`). | **PR → Agency** | `PaymentScreen` · backend `payment-voucher.*` | `payment_voucher` (status/disputeReason/disputeNote/disputedAt) | ⚠️ Reported (needs backend restart + agency-verify UI, §3 S10) |
+| P8 | **The PR sees APPROVED during the week** — `/mine/current-week` + `/mine/last-week` now ship `dayReviews[{date,status}]`, so a day the agency signs off on Tuesday reads **APPROVED** (green) on the phone instead of PENDING until Sunday's send. Header reads "Approved days n/7" — it used to say *Verified* over the PENDING count. A stale approval arrives as `null`, so a day whose total changed reads unreviewed on the phone too — **and so does a day carrying a PENDING receipt** (`prVisibleDayStatuses`), because APPROVED is what unlocks the dispute and must never over-claim. | **Agency → PR** | `payment-voucher.controller.ts` · `week-pay-grid.ts` · `PaymentScreen` | `payment_voucher_day_review` + `payment_voucher_receipt.status` (read-only, no DDL) | ⚠️ Reported (12/12 pure checks; needs a phone re-check after backend restart) |
 | P7 | **Self-log proof photo (P2)** — drink self-log requires ≥1 photo (camera capture + reminder above the Note; Submit gated); one-or-many photos saved on the new `payment_voucher_line.proof_photos` jsonb. | **PR → Agency** | `ScanScreen` · backend `payment-voucher.*` | `payment_voucher_line.proof_photos` (jsonb, reused table) | ⚠️ Reported (needs `pnpm migrate` + restart; agency display = SL) |
 
 ### Outlet side (SL)
@@ -202,6 +203,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A2 | Roster: read + add-shift / add-PR + **assign/unassign** | **Agency → PR** | `routes/agency/roster` + `shift-assignment` | `agency_pr` join | ⚠️ Reported (confirm assign shows on PR, §3 S2–S3) |
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
+| A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
 
 ### Admin side (jk)
 
@@ -297,6 +299,10 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X59 | **🟢 PRIVACY POLICY PAGE (web only).** Public `/privacy` with PDPA-oriented copy (account/identity, geofence location, payroll/receipts, role sharing, retention, WhatsApp contact). Landing footer **Privacy** / **隐私** → `/privacy`; login + signup footers too. Owner: **no in-app mobile copy** — PR app does not ship a Privacy Policy screen. ⚠️ **Not lawyer-reviewed** — product-accurate draft for store/compliance URL. | **Web (public)** | `routes/privacy.tsx` · `components/legal/PrivacyPolicyPage.tsx` · `lib/legal/privacy-policy.ts` · footer/login/signup links | code | ✅ Done |
 | X60 | **🟢 LANDING PAYLOAD + AUTH ICONS + PHONEFRAME SCROLL.** Follow-on to X58: (1) venue/PR landing photos **PNG ~2MB → JPG ~90–200KB** (`landing-assets.ts` + `public/img/landing/*.jpg`; old PNGs removed); logos/favicon under `/assets/`. (2) Below-fold landing sections **lazy-imported + `LazyMount` IntersectionObserver** so Challenges→Footer JS/DOM defer until near viewport. (3) Login + outlet/agency signup field icons **MaterialIcon → Lucide**. (4) PR `PhoneFrame` ScrollView: `nestedScrollEnabled`, `keyboardShouldPersistTaps="handled"`, stable keys when toggling scroll. | **Web + PR shell** | `landing-assets.ts` · `HandoffHomePage.tsx` · `login.tsx` · `signup-form.tsx` · `PhoneFrame.tsx` · landing JPGs | code | ✅ Done |
 | X61 | **🟢 DEV SCRIPTS FREE OWNED PORTS ON CTRL+C (Windows orphan fix).** Async `taskkill` raced `process.exit()`, so Vite/Expo orphans kept holding WEB_PORT (often **3001** when Cursor owns 3000). **Fix:** `killChild` uses **`spawnSync` taskkill `/t`** on Windows; new `killPortListeners` force-stops Listen owners on claimed ports; `makeShutdown(children, ports)` is re-entrant-safe and frees ports after children. `dev-web` tracks web (+ backend if owned); `dev-all` also tracks **8081/8082** for Expo. | **Dev tooling** | `tools/scripts/dev-shared.mjs` · `dev-web.mjs` · `dev-all.mjs` | code | ✅ Done |
+| X62 | **🟢 ORG OWNER GUARDS NOW CHECK THE ORGANISATION IN `:id` — and member writes check `:memberId` belongs to it.** `agencyOwnerOnly` used to ask only *"are you an active owner?"* — every agency owner satisfied it for every agency; the same hole covered outlet `PUT` + both geo-fence routes. Fixed with `agencyOwnerOfParam` / `outletOwnerOfParam`. A second hole: `updateMember`/`removeMember` validated `:id` while writing `:memberId` — now 404 if the member is not of that org. **Live-proven:** `probe-org-scope-guard.ts` **7/0/1**; member ownership probe **8/0/3**. See `docs/claude-memory/innocenz-org-scope-guards.md`. | **Agency / Outlet** | `require-sub-role.ts` · `agency.*` · `outlet.*` · `probe-org-scope-guard.ts` | live probes | ✅ Fired live |
+| X63 | **🟢 ORG OWNERS CAN MANAGE THEIR OWN MEMBERS — UI on both Settings screens.** Backend: `GET/POST/PUT/DELETE /agency\|outlet/:id/members` behind route scope → controller `:memberId` ownership → `guardMemberChange` (refuses leaving an org with no active owner; unit tests in `member-change-guard.test.ts`). UI: one `OrgMembersPanel` (`kind="agency"\|"outlet"`) on agency + outlet Settings. ⚠️ **Only refusals proven live** — add/remove leave permanent rows and were not fired on the shared DB. Person must already have an account (no invite/mailer). | **Agency / Outlet** | `OrgMembersPanel.tsx` · `member-change-guard.ts` · agency/outlet member routes | UI click-through + probes | ⚠️ Reported (writes unfired) |
+| X64 | **🟢 PRE-PILOT GATE 2 — demo login is DEV-only and absent from production builds.** `import.meta.env.DEV` gates the client demo branch so Vite drops it at build time. ⚠️ **The recorded credential was wrong for days:** it is `demo@atlas-agency.invalid` / `demo@velvet23.invalid` (RFC 2606 `.invalid`), not `owner@atlas-agency.my`; planted JWT is `alg:"none"` and the backend rejects it — blast radius was a demo shell, not real data. Proven by grepping the production `vite build` output (demo symbols **0**, real login path still present). | **Web (auth)** | `routes/login.tsx` · `lib/auth/*` | production build grep | ✅ Proven |
+| X65 | **⚠️ WHATSAPP CLOUD API OTP + PR MOBILE SIGN-UP RESTRUCTURE — CODE LANDED, TABLE + META NOT.** Public `POST /auth/otp/send` + `/auth/otp/verify` (sha256 `code_hash` only; 5 min / 60s resend / 5 attempts); Meta webhook at `GET\|POST /webhooks/whatsapp`; mobile sign-up split into `screens/sign-up/step1…6` + `safe-area.tsx`; `.env.example` documents `META_WHATSAPP_*`. 🔴 **No `phone_verification` migration ships with this code** — the model comment says "Migration 0083" but **0083 is already `pv_line_outlet_fk`** on this branch; table does not exist until a new migration is authored. Also needs Meta Business verification + filled env. Not E2E on a real phone. | **PR (mobile) ↔ Auth** | `otp.controller.ts` · `phone-verification.*` · `features/whatsapp/*` · `screens/sign-up/*` | code only | ⚠️ Reported (needs DDL + Meta) |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 | X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
@@ -304,235 +310,235 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-<<<<<<< HEAD
-### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (read this amendment, then the 3 Aug block below)
+### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
 
-> **4 Aug (latest) — Privacy Policy (web) + landing payload cut (§8 X59 / X60).** `/privacy` is
-> live; landing photos are JPG (~10× smaller) with below-fold code-split; login/signup use Lucide;
-> PhoneFrame scroll hardened. **No mobile privacy screen** (owner). Hard-refresh `/` and open
-> `/privacy` to verify. Optional later: WebP/AVIF if Lighthouse still flags image weight.
->
-> **4 Aug — public landing lag fixed (§8 X58).** Cursor-glow thrashing, aurora `filter: blur`,
-> glass backdrop cost, fixed-attachment AI BG, always-on dashboard ticks, and eager below-fold
-> images were cut. Asset size closed in X60 (JPG), not in X58.
+Left deliberately uncommitted: authored in a session running CONCURRENTLY with the PR-Payment work
+(`64fe35a`…`7b620c9`), so it is not mine to commit under a message I would be inventing. It all
+typechecks — backend past the TS2883 baseline, `apps/web` on every touched file, `apps/mobile` at 0.
+
+- [x] ✅ **APPLIED 4 Aug 2026 — and the DATABASE IS NOW AHEAD OF THE COMMITTED CODE.** `0083` and `0084`
+  are live on `innocenz-test`; `0083`'s fix is committed (`62243bc`) but `0084` and everything that
+  reads the two new columns is still in the working tree. That inverts the risk in this whole block:
+  it is no longer "unapplied DDL waiting", it is **schema without its code**, so landing the slice is
+  now more urgent, not less. A fresh clone will not match this database.
+  - ⚠️ `pnpm migrate:deploy` FAILED first with **`function min(uuid) does not exist` (SQLSTATE 42883)** —
+    `0083` backfilled with `min(o.id)` over a uuid column, and because drizzle wraps the run in one
+    transaction, NOTHING applied (the DB sat at `0082`). Fixed to `min(o.id::text)::uuid`, safe because
+    the row is only used where `m.n = 1` — one outlet in the group, so the aggregate picks the single
+    value rather than choosing between candidates. Both files were dry-run in a rolled-back transaction
+    before the real deploy.
+  - Verified after applying: `payment_voucher_line.outlet_id` uuid + FK `confdeltype = n` (SET NULL),
+    `payment_voucher_receipt.review_withdrawn_at` timestamp, and the backfill linked **18 of 18** lines
+    with **0** unmatched. Journal now records 1785800000000 and 1785900000000.
+  - `0083_pv_line_outlet_fk.sql` — `payment_voucher_line.outlet_id`, FK to outlet, ON DELETE SET NULL.
+    Closes one of the weak edges CLAUDE.md rule #3 was written about: the row's only outlet today is a
+    copied varchar NAME, so an outlet rename would start refusing catalogue checks for no visible
+    reason.
+  - `0084_receipt_review_withdrawn.sql` — `payment_voucher_receipt.review_withdrawn_at`, so a receipt
+    somebody REFUSED stops being byte-identical to one nobody has opened, and bulk approve cannot
+    re-approve a refusal under the refuser's own name.
+- [ ] ⚠️ **The §10 row "THE AGENCY CAN CORRECT A RECEIPT" says "NO MIGRATION. ZERO DDL."** That is true
+  of the receipt editor itself, but two migrations now sit in the same uncommitted tree from sibling
+  work. Correct that row (or give the migrations their own) before it reads as "this slice needed no
+  DDL" for the whole batch.
+- [ ] Untracked alongside them: `AgencyReceiptEditor.tsx`, `use-agency-receipt-edit.ts`,
+  `use-receipt-catalogue.ts`, `write-failure-message.ts`, `src/scripts/repair-day-approved-receipts.ts`.
+- [ ] **`DisputeQueuePanel.tsx` (the receipt editor inside the dispute queue) rides with this slice.**
+  It is MY change but it `import`s the untracked `AgencyReceiptEditor.tsx`, so committing it alone would
+  produce a commit that does not build. It must land in the same commit as the editor. `tsc` clean on
+  the file, biome-formatted; its §10 row is already written.
+- [ ] ⚠️ **PROCESS NOTE — `TEST_SCRIPT.md` cannot be committed cleanly while it carries rows for
+  uncommitted code, and writing "don't do that" did not stop it.** Three times today a doc row landed in
+  a commit for an unrelated slice (`927ec8a`, `afa8dd1`, `e2f5e4f` — the last one swept up this very
+  note) while the code it described stayed in the working tree. That is the doc/code split the
+  doc-roles rule exists to prevent.
+  **The cause is structural, not carelessness:** git stages whole files, so any commit that renews this
+  doc for slice A also ships slice B's pending rows. Interactive `git add -p` is unavailable in this
+  environment.
+  **The only real fix is to stop leaving code uncommitted** — i.e. land the receipt-editor slice below.
+  Until then this block is deliberately kept DIRTY after every commit, so the doc always travels with
+  the work it describes, and this checklist stays the honest record of what is outstanding.
+
+**Current pending set (refreshed 4 Aug 2026, after `e2f5e4f`):** 20 modified + 7 untracked. Beyond the
+files listed above, the slice has since grown to touch `payment-voucher.routes.ts`,
+`payment-voucher-day-review.ts`, `payment-voucher-component.ts`, `payment-voucher.schema.ts`,
+`week-pay-grid.ts`, `demo-shifts.ts`, `routes/agency/pv.tsx` and `docs/claude-memory/
+innocenz-receipt-lifecycle.md`. Everything typechecks; nothing here is half-written — it is waiting on a
+decision about ownership, not on more code.
+
+
+### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
+
+*"if add a missing line section at the agency need for example the drinks need verified is the outlet
+else cannot add so in his way can make list the the drink on that shift from what outlet"*, then
+*"need to do same thing for the tips also"*.
+
+- [x] **Drinks AND tips — SHIPPED** (see §10, 4 Aug). One table `outlet_drink_menu` split by
+  `category`: `drink` → the DRINKS PRICE list, `service`/`tip` → SERVICE ENTITLEMENT. There is no
+  second catalogue, so tips needed no second design.
+- [x] The outlet is resolved by **FK, not by name**: `receipt.shift_assignment_id → shift.outlet_id`,
+  read through the existing `resolveDrinkMenusForOutlets` — the same list the PR's phone gets.
+- [x] Price ≠ commission: the picker shows the outlet's price for matching against the paper and the
+  commission stays typed. No per-item commission rule exists anywhere to auto-fill from (the web
+  `AgencyCommissionRulesPanel` reads the client demo store, not the backend).
+- [ ] ⚠️ **DECIDE: drop or wire `0083_pv_line_outlet_fk`.** It is authored and journalled but NOT
+  run, and NOT used by any code — the shift-FK path above turned out sounder than the name-matched
+  `payment_voucher_line.outlet` backfill it was written for. Dropping it is the recommendation; an
+  unused column with a backfill is worse than no column. Wiring it would cover only the receipts that
+  have no shift link, and would also mean setting `outlet_id` on every line write.
+- [ ] `PUT /payment-voucher/:id` is a SECOND DOOR: it still writes receipt-linked lines with
+  free-text descriptions under the same `agencyOwnerOrFinance` guard, so the catalogue rule is
+  enforced on one path and not the other.
+- [ ] The added line's `amount` is the WHOLE-LINE commission (the server stores it verbatim and every
+  total sums it without multiplying by quantity), but the form's `QTY × COMMISSION` layout reads as
+  per-unit. Re-word or re-derive.
+- [ ] `AgencyAddReceiptLineSchema.lineDate` still lets the caller pick the day, contradicting the
+  endpoint's own comment that a line inherits the receipt's day.
+- [ ] Item matching is on `name`, which has no unique constraint on `outlet_drink_menu`.
+
+### ▶ DAY GOES VERIFIED (decided 4 Aug 2026, SPEC'D — after the receipt editor)
+
+Owner: *"once after the agency approve, if the pr make disputation, change the status to verified of
+that day"* → confirmed: **VERIFIED when the dispute is RESOLVED**, not when it is raised. Raising a
+dispute must NOT verify — `verified` is terminal (not settable over HTTP, and both correction paths
+refuse to leave it), so verifying contested money would lock the agency out of fixing the very thing
+being argued about. While a claim is open the day reads **DISPUTED**.
+
+⚠️ **The week is SUNDAY–SATURDAY and the payout cron is SUNDAY 02:00 Asia/Kuala_Lumpur**
+(`previousCompleteWeek()`, re-anchored 3 Aug on the owner's instruction). Any note saying "Monday"
+is stale — that error came from `docs/claude-memory/innocenz-receipt-lifecycle.md`, now corrected.
+
+- [ ] **Two paths to the same state, which is why no new mechanism is needed:** the Sunday run
+  verifies the finished week's approved receipts and **already skips vouchers with an open dispute**;
+  `resolveDispute` closes those when the last claim is decided. Extend that from RECEIPTS to the DAY
+  the PR sees.
+- [ ] **NO DDL — derive it.** `payment_voucher_day_review.status` is only `approved|held`; do not add
+  a `verified` value. A day is verified when **every receipt on that day is `verified` and no dispute
+  on that day is open**. For a wages-only day (no receipts at all) it is verified once the voucher's
+  week has rolled and no dispute on that day is open.
+- [ ] Compute it in `prVisibleDayStatuses` alongside the existing pessimistic downgrade, so one
+  function still owns everything the PR is told about a day.
+- [ ] Mobile already renders `verified` — `week-pay-grid.ts` and both Status rows handle it since the
+  audit fix. Confirm a DISPUTED day still outranks it in the label.
+- [ ] Test: (1) approve day → PR disputes → day reads DISPUTED, not VERIFIED; (2) agency resolves →
+  day reads VERIFIED; (3) a day nobody disputes → VERIFIED on the Sunday run; (4) a day with a still-
+  pending receipt never reaches VERIFIED by either path.
+
+### ▶ WAGES-ONLY DAYS AUTO-APPROVE (decided 4 Aug 2026, SPEC'D — implement after the receipt-editor build)
+
+Owner: *"so if the shift either one daily wages or the status or both no need approve"* → confirmed as
+**auto-approved, Hold still available**, and the PR sees the normal green **APPROVED**.
+
+The reasoning that makes this safe: the day review exists so somebody checks the EVIDENCE behind a
+day. A day with no receipt on it has no evidence to check — wages and OT are fixed by the outlet from
+the check-in/check-out stamps, and the PR cannot dispute them (see the dispute rule, §10 4 Aug).
+Requiring a click there is ceremony, and ceremony is what makes people click through the days that
+DO matter.
+
+- [ ] **Definition (owner, restated 4 Aug):** *"either one daily wages or the others (OT) or both no
+  need approve"* — a day auto-approves when **every line on it has `component` in {`wages`, `ot`}**.
+  Either alone, or both together.
+  ⚠️ **NOT "no receipt on the day"**, which was the first draft of this rule and is wrong: `deduction`
+  and `other` carry no receipt either, so that definition would have silently auto-approved a day
+  where money was taken OFF the PR's pay — the one day most deserving a human look. A deduction or
+  adjustment on the day means the day still needs a click. One scanned drink likewise disqualifies it.
+- [ ] **`buildDayReviewView`** (`payment-voucher-day-review.ts`): a receipt-free day with **no review
+  row** reports `status: 'approved'` plus a new `autoApproved: true`. An explicit row always wins, so
+  **Hold still blocks** — that is the whole point of choosing this over "never reviewable".
+- [ ] **Staleness does not apply** to an auto-approved day: there is no `approved_total_cents`,
+  because nobody attested to a figure. A wages-only day whose total changes stays auto-approved.
+- [ ] **Send gate needs NO change** — the day already reads `approved`, so `voucherSendGate` passes
+  it. Verify that rather than assume it.
+- [ ] **PR side:** nothing to do. `prVisibleDayStatuses` cannot downgrade a receipt-free day (no
+  pending receipt can sit on it), so the phone shows APPROVED — the chosen answer.
+- [ ] **Agency panel** (`AgencyPvDayReviewPanel`): render the row approved with a quiet caption ("no
+  receipts on this day") and offer **Hold** / **Clear** but not Approve. A button whose only effect is
+  to convert an automatic yes into a manual yes is noise.
+- [ ] ⚠️ **Do not let this hide a held day.** Test: hold a wages-only day, confirm the send still
+  refuses and the phone does not show APPROVED.
+
+### ▶ RECEIPT EDITOR SCOPE (owner, 4 Aug 2026)
+
+*"the agency only can edit the scanned or self log of the drink or the tips at the receipt section"* —
+the editor is confined to **drinks and tips lines on a receipt** (scanned or self-logged), reached
+from the **Receipts section**. Wages and OT are never editable there: they carry no receipt, they are
+fixed by the outlet, and the way to change one is the attendance record. Check the delivered editor
+against this before promoting it to §8.
+
+### ▶ DAY/RECEIPT AGREEMENT AUDIT — 12 confirmed, 2 FIXED, 10 OPEN (4 Aug 2026)
+
+Four-lens adversarial audit of the day-approval carry. Every item below survived a refutation pass.
+**Fixed already:** the full-set re-sweep erasing a withdrawal (`receiptsCarriedByDays` now takes
+`justApprovedDates`), and the mobile grid letting voucher status outrank `dayReviews` (which also
+fixed the two hardcoded `VERIFIED` Status rows). **Open:**
+
+- [ ] **HIGH · PvDetail's dispute never reaches the server** (`PvDetailScreen.tsx:345`) — the PR is
+  shown an open dispute that does not exist.
+- [ ] **HIGH · A disputed voucher turns every cell into a withdraw button** (`PaymentScreen.tsx:285`)
+  — most taps 404, and raising a second dispute is unreachable.
+- [ ] **HIGH · Scheduler issues vouchers unsigned** (`weekly-payout.job.ts:187`) and the finance
+  signature can never be added afterwards.
+- [ ] **MED · Sunday job verifies receipts on vouchers it then refuses to send**
+  (`weekly-payout.job.ts:106`) — `verifyApprovedReceipts` has no voucher-status filter and runs
+  BEFORE the send loop, so `verified` (terminal, unreachable by both correction paths) is stamped on
+  a week that stays stuck. Freezes the agency's correction path permanently.
+- [ ] **MED · Client `buildSendGate` mirrors only 2 of the server gate's 4 rules**
+  (`use-agency-pv-day-review.ts:68`) — week-not-finished and pending-overtime are missing, and the
+  resulting 409 on Send is swallowed silently.
+- [ ] **MED · Receipt review from the Verify panel never invalidates the Receipts sub-tab**
+  (`use-agency-pv-receipt-review.ts:25`) — the mirror of the bug already fixed in the day-review hook.
+- [ ] **Agency day panel shows a day APPROVED while a receipt on it is PENDING** — no agency-side
+  equivalent of `prVisibleDayStatuses`. The PR now sees the honest answer and the agency does not.
+- [ ] **Zero-dated-day branch asserts the voucher "can be sent as it stands"** without consulting
+  `sendGate`, and the Send caption is suppressed when only receipts block.
+- [ ] **Undated (week-level) lines are bucketed onto `weekStart`** — Monday money that no day review
+  covers and no dispute can name a date for.
+- [ ] **"N entries approved by your agency"** is printed for scans nobody has looked at
+  (`receipt-review.ts`), and the held-voucher notification always blames days even when the blocker
+  is a receipt or overtime.
+
+### ▶ AGENCY — EDIT / ADD RECEIPT LINES UNDER *Approve* (added 4 Aug 2026, NOT STARTED)
+
+Owner: *"makes agency can change and edit the price and the quantity of drinks and tips or add drinks
+or tips category from the receipt scanned, under the approve add a edit button"*.
+
+- [ ] **Edit** button beside *Approve* on each receipt card in `AgencyReceiptsPanel` **and**
+  `PayrollVerifyPanel` (one component, both places — two editors would drift). Editing a line's
+  quantity/commission already has its endpoint:
+  `PATCH /payment-voucher/receipts/:receiptId/lines/:lineId` (`editReceiptLine`) — it exists and is
+  UNUSED by the UI. **Never route this through `PUT /payment-voucher/:id`**: that path deletes and
+  re-inserts every line, which is how an agency price edit once severed the receipt links and deleted
+  the PR's proof photos.
+- [ ] **ADD a drinks/tips line to an existing receipt** — no endpoint exists yet. Needs
+  `POST /payment-voucher/receipts/:receiptId/lines` under `agencyOwnerOrFinance`, writing a
+  `payment_voucher_line` with the receipt's FK, the day's `line_date`, and a `ref` packing the kind so
+  `componentFromRef` buckets it as drinks/tips.
+- [ ] Both writes must keep the two existing consequences intact: the day's total changes so
+  `approved_total_cents` flips that day **stale** (re-approval required), and an APPROVED receipt drops
+  back to **PENDING** — the receipt table stores no amount, so staleness there cannot be detected
+  afterwards and must be recorded at the moment of the edit.
+- [ ] Watch the interaction with the new day-approval carry: re-approving the stale day will
+  re-approve the receipt, which is correct — but confirm it does not approve a receipt whose newly
+  added line lands on a *different*, unapproved day.
+
+### ▶ PR PAYMENT — CELL EVIDENCE (added 4 Aug 2026, awaiting owner verification → promote to §8)
+
+- [ ] **Tapping any Payment-grid amount (This week AND Last week) opens the proof behind it.** Per
+  contributing line the sheet must show: the ORDER NUMBER off the paper (`ORD0389`, or "No order
+  number" when the paper carried none) with its `RCP-…`, the shift's CHECK-IN and SHIFT END stamps and
+  duration, the QUANTITY, and the ITEM name — grouped shift → receipt → items. **The sheet total must
+  equal the cell**; when it does not, a red warning says so rather than showing a short list silently.
+- [ ] ⚠️ **This CHANGES an already-verified §8 step.** Last-week cells used to open the dispute sheet
+  directly; they now open evidence, and **Dispute this amount** is a button inside it. Re-word the §8
+  dispute step to "tap the cell, then Dispute this amount" — including the withdraw variant for a
+  voucher already under dispute — rather than leaving it stale.
+- [ ] **Phase 2 (deferred):** `getMyHistory` does not carry `shifts`, so the sheet reached from a past
+  voucher in `PvDetailScreen` would show "Shift times are unavailable". Widen it by gathering assignment
+  ids across ALL weeks into ONE `listByIdsForPr` call — a per-week fetch there is an N+1 (it already
+  calls `listReceipts` per week). Then point PvDetailScreen's grid at the same sheet and delete its
+  now-false comment at ~92 ("the /mine payloads do not join `payment_voucher_receipt`" — they do now).
 
 ### ▶ NEXT SESSION STARTS HERE — amended 3 Aug 2026 (read this amendment, then the 2 Aug block below)
-=======
-### ▶ OPENED 4 Aug 2026 (late) — the scoped owner guard is UNPROVEN, and two wiring jobs are left
-
-> Left open deliberately at the end of the session that shipped `d513e5c`. Item 1 first: it is a
-> security guard that exists only as a typecheck.
->
-> - [x] **✅ DONE — the scoped owner guard is LIVE-PROVEN 7 passed / 0 failed / 1 skipped**
->   (`probe-org-scope-guard.ts`, kept in the repo: it mutates nothing but two same-value writes, so it
->   is safe to re-run whenever the org guards are touched). Cross-tenant agency PUT **403**,
->   cross-tenant outlet PUT **403**, **cross-tenant geo-fence PATCH 403**, `status` in the body
->   **403**, both own-org saves **200**, and **admin still passes** (`isAdmin` short-circuits ahead of
->   the scope test — the check that matters most on a denial rule). ⚠️ **Two method notes worth
->   keeping.** (1) **A 403 alone would not have proven anything** — the OLD guard also 403s, just for
->   another reason — so every refusal is matched on its MESSAGE, which only the new code emits; that
->   doubles as the stale-server detector, since `/health` 200 says nothing about which code is running.
->   (2) **The first run reported `SKIP — target venue has no pin to echo back` on the geo-fence case,
->   and that was a PROBE DEFECT wearing the costume of a fact about the data.** The columns are
->   `lat`/`lng`/`geoFenceRadius`; the probe guessed `geoFenceLat`/`latitude`. Every outlet is pinned.
->   **A skip is a claim about the world and has to be verified like one** — and it landed on the single
->   most dangerous case in the set. Cross-tenant DELETE geo-fence stays skipped on purpose: it has no
->   idempotent form, so if the guard had failed it would have unfenced a live venue.
-> - [ ] ~~**🔴 Live-fire the scoped owner guard — it has NEVER hit a running server.**~~ `d513e5c` fixed
->   a cross-tenant write (`agencyOwnerOnly` asked *"are you an owner?"* without comparing the
->   membership to `req.params.id`, so any agency owner could rewrite any agency, and any outlet owner
->   could move another venue's geo-fence). **A refusal writes nothing, so every case below is free on
->   the shared DB** — see the standing method note on proving guards without writing:
->   - agency owner → `PUT /agency/<ANOTHER agency id>` ⇒ **403** "not a member of this organisation"
->   - agency owner → `PUT /agency/<own id>` with `status` in the body ⇒ **403** (refused, not dropped)
->   - agency owner → `PUT /agency/<own id>` with the CURRENT values ⇒ **200** (the only writing case;
->     it re-sends what is already stored, so nothing changes but `updated_at`/`updated_by`)
->   - the same three for `PUT /outlet/:id`, plus `PATCH` and `DELETE /outlet/:id/geo-fence`
->   - ⚠️ **admin must still pass all of them** — `isAdmin` short-circuits before the scope test, and an
->     over-applied denial fails silently until somebody cannot work
-> - [x] **✅ DONE (partly, and the partial is deliberate) — the outlet Settings save persists the
->   VENUE NAME** through `PUT /outlet/:id`, same shape as the agency screen: save first, refuse to
->   show a saved state the server rejected. ⚠️ **The address is NOT saved, and must not be wired as
->   it stands.** The screen shows ONE location line, but that line is DERIVED — `joinAddress()`
->   concatenates five columns (`addressLine1`, `addressLine2`, `postcode`, `state`, `country`).
->   Writing the edited string back would have to choose a column to put it in, **flattening five
->   fields into one and silently emptying the other four.** Splitting a free-text address is a
->   parsing problem, not a wiring one — the input stays store-only until the FORM has five fields.
->   The toast says so out loud: *"Venue name saved · address is not persisted yet"*.
->   ✅ **CLICKED THROUGH 4 Aug on `owner@velvet23.my`** — `PUT 200`, `name` verified in the DB,
->   **address columns and geo pin both intact after the name-only save**, restored afterwards, zero
->   console errors. The agency screen was proven the same way on `owner@atlas-agency.my`.
-> - [ ] ~~**Wire the outlet Settings save.**~~ `routes/outlet/settings.tsx` still persists nothing;
->   `PUT /outlet/:id` exists and is now correctly scoped. Mirror the agency shape: a
->   `save`/`isSaving` pair on `useOutletProfile`, save BEFORE the screen shows a saved state, and send
->   only fields with a column behind them.
-> - [x] **✅ BACKEND DONE + LIVE-PROVEN 8/0/3 — member management is open to org owners.** Three
->   checks stack: route scope (`:id`), controller ownership of `:memberId` (**404**), and
->   `guardMemberChange` (**409**). ⚠️ **STILL NOT DONE: the UI.** No screen calls these endpoints, and
->   the Finance Head invite still delivers nothing (no mailer). ⚠️ **Also unproven: the happy-path
->   `200`** — Atlas has exactly ONE member, so there was no second member to re-send; `POST` (add) was
->   never fired at all, because creating a member leaves a permanent row. **Only the refusals are
->   evidence.**
-> - [x] **✅ UI DONE + CLICKED THROUGH — the Team panel is live on both Settings screens.**
->   `OrgMembersPanel` (one component, `kind="agency"|"outlet"`) lists real `agency_user` /
->   `outlet_user` rows, changes a sub-role, removes with a confirm step, and adds by email.
->   **Agency: `PUT` → 409 and the toast carried the SERVER'S words** — *"Cannot change the last active
->   owner — appoint another owner first"* — with the select reverting to `owner`. **Outlet: 3 real
->   members render** (Chen Wei Jie owner · Michelle Lim finance · Ahmad Razif ops) with the correct
->   3-role select. Zero console errors on both. ⚠️ Add-member and remove were NOT fired live: both
->   leave permanent rows on the shared DB.
-> - [ ] ~~**Member management for org owners.**~~ `POST`/`PUT`/`DELETE /agency/:id/members` (and the four
->   outlet equivalents) **exist** but are `requireAdmin` **on purpose** — the route file argues that
->   *membership IS identity*, since an `agency_user` row is what every sub-role guard reads. Widening
->   needs: the same `:id` ownership scope, an **escalation guard** (an owner must not mint an owner in
->   an org they do not own), a **last-owner guard**, and a **self-demotion guard**. The Finance Head
->   *invite* additionally waits on the mailer, which does not exist — but **adding an existing user as
->   a member does not**, and that is the useful half.
-
-### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (duplicate-voucher guard FIXED; the "anchor bug" was a stale process)
-
-> **A PR was billed TWICE for one shift, and the guard that should have stopped it did nothing.**
-> `PV-000005` (PR self-log) and `PV-000006` (generator) both carried a RM700 wages line whose `ref`
-> named the SAME assignment `6574b2ee` — RM1,400 for a single shift. `PV-000006` has been deleted;
-> `PV-000005` survives and is now the only record of that shift.
->
-> - [x] **🔴 Duplicate guard matched `week_start` for EQUALITY — ✅ FIXED 4 Aug.**
->   `existsForPrWeek()` now matches on **OVERLAP** (`week_start <= newEnd AND week_end >= newStart`),
->   with the exact-`week_start` arm kept so a legacy row with a NULL `week_end` is still caught. Takes
->   an optional 4th arg `weekEnd` defaulting to `weekStart`; the generator passes the real week, the
->   create-voucher endpoint passes `header.weekEnd ?? header.weekStart` (both optional on that schema),
->   which degrades to "is this DAY inside a week the PR already has" — still stronger than equality.
->   **Regression-tested live: the exact call that minted `PV-000006` now returns `0 created, 1 skipped
->   (already_exists)` and writes nothing.** Equality only ever protected against a repeat from the same
->   writer using the same anchor; one day of disagreement disabled it silently.
->
-> - [x] **⚠️ The "Mon–Sun anchor bug" does NOT exist in the code — do not fix it.** All three helpers
->   are Sunday-anchored on disk (`previousCompleteWeek` :34, `weekOfDate` :90, `weekBounds`
->   controller :148), the cron logs `0 2 * * 0`, and the PR app does **not** send a week
->   (`PrReceiptLineInput` has no `weekStart`/`weekEnd`). `PV-000005` was written at
->   `08:39:10.735Z` by a **stale backend process still running pre-merge Monday-anchored code** — the
->   documented `tsx watch` trap. The backend has since been restarted from current disk.
->
-> **Still open from this slice — amended 4 Aug (later):**
-> - [x] **Live-verify the anchor — ✅ DONE, and it cost no data.** `GET /shift-assignment/overtime/pending`
->   returns `week` straight from `weekOfDate` **as the running process computes it**. Shift date
->   **Monday `2026-08-03`** → **`2026-08-02 .. 2026-08-08`**, Sunday to Saturday, confirmed with
->   `getUTCDay()` rather than eyeballed. **Observed, not inferred**, and the call is read-only — no
->   self-logged test line was needed after all. **Generalise this: before staging a write to verify a
->   derived value, check whether some read endpoint already returns it.**
-> - [x] **✅ CLOSED 4 Aug (night) — `PV-000005` was MERGED into `PV-000006` (net RM707.20), and
->   `PV-000005` is deleted.** Owner's decision, executed via `scripts/merge-voucher-into.ts` in one
->   transaction; `audit-live-vouchers` now reports **4 of 4 reconcile**. The history below is kept
->   because the *refusal* is the lesson, not the repair.
-> - [!] **Re-anchor `PV-000005` — RAN 4 Aug, REFUSED BY THE DATABASE. Do not retry as-is.**
->   `--apply` was authorised and executed; Postgres rejected the UPDATE outright:
->   `duplicate key value violates unique constraint "payment_voucher_one_per_pr_week"`,
->   `Key (pr_id, week_start)=(d48f38ad…, 2026-08-02) already exists`. **Nothing was written.**
->   **`PV-000005` and `PV-000006` are the SAME PR (Victoria Tan Mei Lin) and the SAME Sun–Sat week** —
->   and they are **NOT a double bill**. They are one week split across two rows by the old anchor:
->   - `PV-000005` week `08-03..09`, 1 line `2026-08-03` **wages RM700.00**, ref assignment `6574b2ee`
->   - `PV-000006` week `08-02..08` ✅, 1 line `2026-08-04` **drink_commission RM7.20**, receipt
->     `RCP-000008` (pending)
->
->   Both line dates fall inside `08-02..08-08`, so the correct end state is **ONE voucher of RM707.20**.
->   This also explains the audit's `completed_shift_without_wages` flag on `PV-000006`: the wages are
->   not missing, they are sitting on its twin.
->   **The repair is a MERGE and it is the owner's call** — fold `PV-000005`'s wages line into
->   `PV-000006`, recompute subtotal/net to `707.20`, then delete `PV-000005`. `reanchor-voucher-weeks.ts`
->   says in its own header that "re-parenting a money line is a separate, deliberate act", so it must
->   not be widened to do this silently.
->   **Script gap worth fixing:** it asserts every line still falls inside the NEW week, but **never
->   checks whether the destination `(pr_id, week_start)` is already occupied** — which is why it
->   planned a move the database could not accept.
-> - [x] **Backfill `due_date` — ✅ DONE 4 Aug for 4 of the 5 vouchers.** New
->   `apps/backend/src/scripts/backfill-voucher-due-dates.ts` — **report-only by default**, `--apply` to
->   write, mirroring the re-anchor script's shape. Wrote `PV-000002 → 2026-08-01`,
->   `PV-000003` and `PV-000004 → 2026-08-08`, `PV-000006 → 2026-08-15`; re-running now reports nothing
->   eligible, which is the verification.
->   **`PV-000005` was deliberately SKIPPED and still has a NULL due date** — it is still
->   Monday-anchored, so `week_end + 7` would land seven days after the *wrong* week end. The script
->   prints it as outstanding rather than giving it a plausible, wrong date. It stays NULL until the
->   merge above is decided.
->
-> **⚠️ Nearly a FOURTH over-call: I was about to write a Sunday-anchor "fix" for code that was already
-> correct. The data said Monday, the code said Sunday, and the answer was neither — the RUNNING PROCESS
-> was stale. When live data contradicts the source, check what is actually executing before changing
-> the source.**
-
-### 3 Aug 2026 (evening) — amended (read the block above first)
-
-> **The spine is now LIVE-VERIFIED end to end for the first time** — all six links, on four real
-> simultaneous logins (agency `Dato' Lim Wei Khoon`, outlet `Chen Wei Jie`/Velvet 23, admin
-> `InnocenZ Admin`, PR `Vicky` on mobile web). Post job → persists + routes to Atlas → agency assigns
-> (tier rates correct: Vicky tier_3 → RM700, Haziq tier_1 → RM500) → PR sees it on the timetable →
-> check-in/out seals → **PV generation produced `PV-000006`, balanced and reconciled**. Test rows were
-> created and removed; DB returned to baseline (`shift 24, shift_assignment 23, shift_pay_tier 93`).
->
-> - [x] **🟢 `due_date` was NULL on every voucher — ✅ DONE 3 Aug (evening).** The column and the API
->   field both existed; nothing computed a value. New `paymentDueDate(weekEnd, termDays = 7)` in
->   `payment-voucher-week.ts`, wired into the generator's `create()` payload. **Anchored to `week_end`,
->   NOT `issued_date`** (owner's decision): the issued date is whenever the job happened to run, so
->   anchoring there would let one week carry two different due dates and would silently extend the term
->   every time the job slipped. Returns `null` on a malformed week end via the same round-trip guard as
->   `weekOfDate`, so a voucher can never be stamped with the due date of `NaN`. Both entry points get it
->   — the Sunday cron and `scripts/generate-weekly-pvs.ts`. **First test in the repo**:
->   `payment-voucher-week.test.ts`, 5/5 passing (rollover, non-leap Feb, malformed, explicit term, the
->   KL-offset trap). `tsc` 0 errors across 245 files.
->
-> **Forward-only — superseded 4 Aug:**
-> - [x] **Backfill `due_date` on existing vouchers** (`due_date = week_end + 7`) — **✅ DONE 4 Aug**
->   with the owner's explicit go-ahead, via `scripts/backfill-voucher-due-dates.ts`. 4 of 5 written;
->   `PV-000005` skipped because it is not yet Sun-anchored. See the amended block at the top of §9.
->
-> **Defects found by the sweep, ranked. #1 is the money risk:**
-> - [x] **🔴 P0 — OVERTIME IS UNBOUNDED — ✅ FIXED 4 Aug (later).** The window now opens at the **later**
->   of the scheduled end and the check-in, so minutes claimed can never exceed minutes present.
->   `overtime.test.ts`, 7/7, written RED first (3 failed, the invariant case at *540 claimed for 480
->   present*). The live 279-minute claim was **rejected** through the agency API — `0.00`, no money
->   moved. Original finding below, kept for the mechanism:
-> - [x] ~~**🔴 P0 — OVERTIME IS UNBOUNDED.**~~ A check-in at 16:38 and check-out at 16:39 (**12 seconds**)
->   produced **`overtime_minutes = 279`** on assignment `6574b2ee`. Overtime is measured from the
->   shift's scheduled end to the check-out wall-clock and never looks at check-in, so a PR who forgets
->   to check out accrues overtime for as long as they stay forgotten. This is the mechanism behind the
->   live RM678.78 / "113.1h" line **and** the 23 Jul record whose check-out is **5 days** after its
->   check-in. Status `pending`, so no money has moved — but the agency approve button is one click away.
-> - [ ] **🔴 Portal role guard is bypassed on direct URL entry.** A live **outlet** session
->   (`/auth/me` → `roles:[outlet]`) rendered `/en/admin/dashboard`, `/en/admin/user-management/admin`
->   (with a **Create Admin** button) and `/en/admin/rbac/permission` (**Create Permission**). The agency
->   session reached `/en/admin/rbac/role` the same way. `ensurePortal()` in `lib/auth/guards.ts` opens
->   with `if (typeof window === "undefined") return;` — that no-ops during SSR, and `beforeLoad` does
->   not re-run on client hydration, so only client-side link navigation is actually guarded.
-> - [ ] **🔴 `GET /api/v1/agency` has NO role guard at all** (`agency.routes.ts:8`) and the controller
->   does not scope by caller — an outlet token received all 3 agencies. `outlet.routes.ts:20` is gated
->   `admin|agency|outlet`, so PRs are excluded there, but any outlet can enumerate every outlet.
-> - [ ] **🟠 A 403 renders as money, not as an error.** Four confirmed: agency hub shows
->   **"Pending payout RM 0.00"** when `GET /payment-voucher` 403s; admin dashboard shows **"All clear /
->   0"** when `admin-request/pending-count` 403s; RBAC shows "No roles found" / "No permissions found".
->   A refusal is indistinguishable from "nothing to do".
-> - [ ] **🟠 Server silently ignores requested page size** — client asks `pageSize=500`, response says
->   `pagination.pageSize: 100`. Harmless at 3 rows; silently truncates any list over 100.
->
-> **Smaller, still open:**
-> - [ ] `/outlet/ratings` renders `CalendarPage` — outlets have **no Ratings screen**, though the
->   backend `rating` routes and `outletCan(…, "ratePrs")` both exist. **Verify before building.**
-> - [ ] Agency/outlet portals list ORGS, not accounts — no screen to disable a user or revoke a role.
-> - [ ] Registration for the 3 roles (carried, deliberately deferred).
-> - [ ] Outlet subscription shows **"Renewal 15 Jul 2026"**, three weeks in the past.
->
-> **⚠️ Standing rule earned the hard way — I over-called THREE findings in one session and had to
-> retract each: (1) "TOTAL PR 0" (read the DOM before React Query resolved); (2) "Post Job is broken"
-> (queried the DB in the same breath as the click, before the mutation landed — the owner caught this
-> one); (3) "roster grid shows 2 of 4 assignments" (the counter counts SHIFTS, and the missing rows
-> were below a 1,400-char truncation). All three were the same error. A COUNT, a TRUNCATED PAGE, or a
-> READ TAKEN SECONDS AFTER A WRITE is not evidence yet — re-read before asserting.**
->
-> **Corrections to earlier entries:** tips are **NOT** missing (`shift_sale.tip_units` /
-> `tip_sales_rm`, `outlet_workspace.tip_pct`, PV components `tip_commission` + `tips` all exist);
-> cancellation penalties are **NOT** undefined (Velvet 23 = RM175, Emhub + JK House = RM350 each);
-> the backend `tsc` baseline is now **0 errors**, not 26.
-
-### 3 Aug 2026 (earlier) — amended (read the block above first, then this, then the 2 Aug block below)
->>>>>>> 2d515d0ca482c83f97628ce5530a358f8b32a196
 
 > **3 Aug (latest) — a wage-classification fault found while wiring the PR History tabs, then FIXED
 > at the owner's instruction (§10 latest).** No open item left from it.
@@ -859,7 +865,6 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 - [x] **🟠 An agency can mark a CURRENT-week voucher `sent`** *(SL)* — ✅ **CLOSED (31 Jul).** `sent` is now refused while `week_end >= today`, as a **third rule inside `voucherSendGate`** rather than a separate check — one refusal path cannot disagree with itself. Evaluated **first and returning alone**, because listing unreviewed days beside it is noise on a week still being worked; the 409 carries `weekEndsOn` (optional, so no consumer of `SendGateResult` breaks). **Both call sites pass it, including the Monday job that can never trip it** — `weekly-payout` runs on `previousCompleteWeek`, and passing the rule anyway is the point, since a gate the scheduler is exempt from has an unguarded way around it. The HTTP send judges `data.weekEnd ?? existing.weekEnd`, matching the line-date check's "the week it WILL have" rule. ⚠️ **The timezone was the trap:** a UTC `toISOString()` date reads *yesterday* between 00:00–08:00 KL, so the rule would have answered "week not finished" for the first eight hours of Monday — **including 02:00, when the payout job runs** — and held every voucher it was about to issue. `klToday()` now lives in `payment-voucher-week.ts` beside `previousCompleteWeek`; **an identical private copy in `weekly-payout.job.ts` was deleted** so there is one definition of "what day is it in KL". Proof: `probe-pv-audit.ts` §8, **10 new cases all passing**, backend `tsc` **0** — including the over-fire guards (Monday case NOT refused; omitting the argument preserves old behaviour; no `week_end` is not judged). ⚠️ **Not fired against the live DB.** ⚠️ **No override was built** — an agency that must genuinely pay early cannot; confirm that is wanted. *(Agency)*
 
 ### 🟡 P3 — admin + database cleanup + hardening
-- [x] **🟡 Landing assets still multi‑MB PNGs** — ✅ **CLOSED 4 Aug (§8 X60).** Venue/PR photos swapped to JPG (~90–200KB from ~2MB); dead PNGs removed; `landing-assets.ts` points at `.jpg`. Below-fold sections also lazy-mounted. Optional WebP/AVIF polish is fine later if needed — the multi‑MB hole is gone. *(Web / landing)*
 - [x] **🔴 No way to delete, deactivate or demote an account** — ✅ **fixed (30 Jul)**, §8 X29 → X30. `PATCH /user/:id/status` + `DELETE /rbac/user-role`, both admin-only, with self-lockout and last-holder guards. Login already refused a non-active account, so the disable bites immediately. **Hard delete deliberately NOT added** — four tables FK a user and the audit trail should outlive the person; soft-disable is the right default. ✅ **The admin SCREEN landed too (§8 X32)** — Actions column on the admin user table, confirms on both, server refusals shown verbatim, live-verified. ✅ **CORRECTION (same day, §8 X31): a disabled account's live token dies on the very next request.** I wrote here that it "keeps working until it expires" — that was wrong and was never checked. `authenticateJWT` re-reads the user on every request and already refuses `status !== 'active'`, so the disable is immediate. Left for a follow-up: an admin **UI** (both endpoints are API-only today).
 - [x] **Fire every never-run path** — ✅ **done (30 Jul)**, §8 X28: all six, plus collections issue→settle. Leftovers on the shared DB are listed in §10.
 - [x] **H · Admin portal surface is fully wired** — 30 Jul 6-agent audit: every `/admin` page reads/writes the live DB, zero demo screens (§8 AD3–AD18). Remaining: one real admin sign-in run-through of §4d + the hardening backlog below. *(all → Admin)* — §3 S12
@@ -929,648 +934,938 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
-<<<<<<< HEAD
-> **4 Aug 2026 — Privacy Policy (web) + landing JPG/lazy + auth Lucide + PhoneFrame (§8 X59/X60).**
-> Public `/privacy` (footer + login/signup links); **no mobile privacy screen** per owner.
-> Landing venue/PR photos PNG→JPG (~10× smaller), below-fold `lazy` + `LazyMount`, logo/favicon
-> under `/assets/`. Login/signup MaterialIcon→Lucide. `PhoneFrame` nested scroll + keyboard taps.
-> §9 P3 multi‑MB PNG item closed. Files: `routes/privacy.tsx`, `legal/*`, `landing-assets.ts`,
-> `HandoffHomePage.tsx`, `login.tsx`, `signup-form.tsx`, `PhoneFrame.tsx`, `public/img/landing/*.jpg`.
+> **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
+>
+> Owner: *"i have solve the dispute then in this week section why all missing ?"*, then *"if status
+> verified for this week section , then next week section also status verified"*.
+>
+> **I fixed this wrong the first time.** Disputing moved the voucher to `disputed`, the reader filtered
+> `pending_review`, and the week went blank — so I widened the filter to `['pending_review','disputed']`.
+> Then RESOLVING the dispute moved `PV-000006` to **`sent`**, which was not on the list either, and the
+> week blanked a second time. Chasing statuses one at a time was the wrong shape.
+>
+> **The real fault: READING and WRITING were sharing one lookup.** They want opposite answers.
+>
+> | | question | correct set |
+> |---|---|---|
+> | `getMyCurrentWeek` (read) | *what did I earn this week?* | **every** status — that is the point of the screen |
+> | `getOrCreateCurrentWeekDraft` (write) | *may I append a receipt?* | only OPEN — appending to a sent voucher rewrites a document already handed over |
+>
+> The read now calls `getWeekVoucher` (unfiltered, and already used by last-week). The write keeps
+> `OPEN_WEEK_STATUSES` and still refuses. Verified live on the now-`sent` voucher: the read returns
+> `PV-000006 · sent · 12 lines · RM 3,708.20`, a receipt write is refused with *"has already been sent to
+> you"*, and the week still holds exactly **1** voucher — no duplicate.
+>
+> **Rollover pinned too.** A day reading VERIFIED in This week must not regress when Monday moves it into
+> Last week — a status that downgrades on its own is indistinguishable from work being undone. Both call
+> sites now provably agree (Last week maps `approved → verified` first; a settled claim reads VERIFIED
+> from either). 18 cases in `check-cell-evidence.ts`, all passing.
+>
+> `tsc` clean. No migration. **Backend restart required.**
 
-> **4 Aug 2026 — landing page lag hardened (§8 X58).** Public `/` handoff was thrashing on every
-> mousemove (`useCursorGlow` × dozens of `.hz-glass` cards), plus permanent GPU cost from
-> `filter: blur(120–150px)` aurora, 18px backdrop-blur glass, SVG grain, and
-> `background-attachment: fixed` on the AI section. Dashboard `useTick` also ran off-screen.
-> Cut: rAF-only spotlight vars, opaque glass + 8px blur, gradient aurora (no filter blur), grain
-> off, fixed BG removed, lazy images, fewer flow particles, viewport-gated ticks, reduced-motion /
-> mobile kill switches. **Asset weight closed later in X60 (JPG).** Files: `handoff/primitives.tsx`,
-> `HandoffPlatform.tsx`, `HandoffChallenges.tsx`, `HandoffBenefits.tsx`, `landing-handoff.css`.
-=======
-> **4 Aug 2026 (late) — ✅ PRE-PILOT GATE 2 CLOSED AND PROVEN. The demo login is DEV-only and absent
-> from a production build. And the gate's own description of the credential was WRONG.**
+> **4 Aug 2026 — A DISPUTED DAY NOW SAYS SO, SURVIVES A RELOAD, AND OPENS.**
 >
-> 🔴 **The recorded credential was `owner@atlas-agency.my` + `password`. That is not it.**
-> `isAgencyDemoLogin` requires **`demo@atlas-agency.invalid`** exactly (outlet:
-> `demo@velvet23.invalid`), and **`.invalid` is a reserved TLD (RFC 2606) that can never be a real
-> address**. The real owner email falls straight through to the backend, which rejects the wrong
-> password. ⚠️ **The gate had been carried for days describing a credential that does not exist**, and
-> it was filed as *"an auth bypass into a real portal"* — a bigger claim than the code supports.
+> Owner: *"where is the red when i click that one is dispute and the status why still approved of the
+> disputed day?"*, *"UI of this red , when i disputed this section"*, *"for the status on that day show
+> disputed clickable show what was disputed drinks or tips"*, and *"then after solve dispute turn from
+> the approved to the verified"*.
 >
-> **What it actually was:** `routes/login.tsx` checked the demo credentials BEFORE the real login, in
-> every build, with no environment guard anywhere in `lib/auth`. A match planted a placeholder JWT —
-> `alg: "none"`, signature literally `"demo"` — purely so the route guard passes. **The backend
-> verifies signatures, so that token could never read real data.** The blast radius was a client-side
-> demo shell, not real records. Gated anyway: a login that accepts a known password for a known
-> address should not exist in a build a client can reach.
+> **One cause behind all of it: the claim only ever lived in React state.** `disputedKeys` was built up
+> as the PR raised disputes in-session, so the red cell and the DISPUTED marker were gone the moment the
+> app restarted — while the agency still had the claim open in their queue. The one party who needed to
+> keep chasing it was the only one who could no longer see it. `payment_voucher.status` was the phone's
+> only other signal, and being voucher-grain it cannot say WHICH day or WHICH bucket.
 >
-> **Fixed** by wrapping the branch in `import.meta.env.DEV`, which Vite replaces with the literal
-> `false` at build time so the branch AND its dynamic import are dropped.
+> **Backend:** `/mine/current-week` and `/mine/last-week` now carry `disputes[]` (id, disputeDate,
+> component, reason, note, raisedAt, disputedAmount, claimedAmount, outcome, resolvedAt,
+> resolutionNote) via the existing `listForVoucher`. Additive; no column, no migration. ANSWERED claims
+> ship too, not just open ones — *"your Tuesday drinks claim was rejected, here is why"* is the answer
+> to a question the PR asked, and dropping it at the API leaves them re-raising it.
 >
-> ✅ **PROVEN BY BUILDING IT, not by reading it.** `vite build`, then grepped **1,147** emitted
-> `.js`/`.mjs` files:
-> `demo@atlas-agency.invalid` **0** · `demo@velvet23.invalid` **0** · `isAgencyDemoLogin` **0** ·
-> `startAgencyDemoSession` **0** — while `auth/login` **2** and `startAgencyRealSession` **4** confirm
-> the real path survived. ⚠️ **Counts, not blank output:** an empty grep result is indistinguishable
-> from a broken grep, so every symbol was counted and two known-present controls were included.
+> **The day lifecycle, in precedence order:** `PENDING → APPROVED → DISPUTED → VERIFIED`. An open claim
+> OUTRANKS an approval, because the approval is the very thing being argued with. Once the claim is
+> answered the day reads **VERIFIED** — a stronger statement than approved: the figure was questioned
+> and settled. A `withdrawn` claim colours the day neither red nor green; the PR took it back, so the
+> day returns to whatever the agency's review says.
 >
-> **Also found:** `PortalSignInScreen.tsx` pre-fills the password box with the literal `"password"` —
-> but **no route mounts that component**; it is the orphaned island the audit already counts. Left
-> alone.
+> **Red survives now** because `disputedCells` is the UNION of the server's open claims and the
+> in-session set: red the instant it is submitted, and still red after a restart.
+>
+> **The status cell is tappable** where claims exist, opening a sheet naming each contested bucket with
+> its state (OPEN / ACCEPTED / REJECTED / WITHDRAWN), what the voucher said, the PR's reason and note,
+> and the agency's resolution note verbatim.
+>
+> Verified live against `PV-000006`: 1 dispute returned — `2026-08-04 · drinks · voucher said 7.21 ·
+> Unmatch commission · OPEN` — so key `2026-08-04-drinks` reddens and Tue 4 reads DISPUTED. `tsc` clean
+> both sides; 30 `check-cell-evidence.ts` checks pass. **Backend restart required.**
 
-> **4 Aug 2026 (late) — 🔴 CANCEL AND NO-SHOW DID NOTHING FROM THE ROSTER'S LIVE TAB, silently. Same
-> bug as the outlet-swap one recorded three lines above it in the same file.**
+> **4 Aug 2026 — 🔴 DISPUTING ONE CELL BLANKED THE WHOLE WEEK (and silently froze logging).**
 >
-> The by-id write handlers branched on **`viewMode === "planning"`**: planning hit the backend, live
-> fell through to the demo store. But `agencyRoster` is **`backendRoster.slots` in BOTH views** — the
-> file's own comment says *"Both views read live backend data"* — so a live-view slot id is a
-> **`shift_assignment` UUID**. The demo actions look that id up in a demo slice that has never held
-> backend UUIDs, find nothing, and return. **Cancelling a shift or flagging a no-show from the Live
-> tab wrote nothing at all, while the sheet closed as though it had worked.**
+> Owner: *"im just dispute for that drinks then all gone ? can mark the status to disputed and remain
+> back the missings ?"* — after raising a RM 7.21 drinks claim, This week read **RM 0.00, 0/7, every
+> cell a dash**.
 >
-> ⚠️ **This is the IDENTICAL failure already documented a few lines up for outlet swap** —
-> *"matched the slot id against `agencyRoster` … silently found nothing and the button did nothing"*.
-> It was missed because that fix got written up as being **about swaps** instead of **about ids**.
-> *When a screen changes where its rows come from, every action keyed by row id has to move with
-> them* — and a fix recorded by its symptom will not find its own siblings.
+> **NOTHING WAS LOST.** The live DB still held `PV-000006` with **12 lines totalling RM 3,708.21**, plus
+> the dispute row (4 Aug · drinks · RM 7.21 · open). The money was unreachable, not deleted.
 >
-> **Fixed:** `cancel`, `flagNoShow` and the status edit now go through `useRosterMutations` in both
-> views, and `unassign` is offered in both (hiding it in live withheld a working action rather than
-> protecting anything). The three demo store subscriptions are **deleted, not left dangling** — a demo
-> action still subscribed beside a backend one is how these got wired together by accident.
-> **Two honesty fixes alongside:** `late` has no backend field, so it now says *"Late flags are not
-> recorded yet"* instead of writing to a store that does not hold the row; and the edit sheet reports
-> `Not saved: <fields> — only status persists`, since `status` is the only key with a write behind it.
+> **Cause:** raising a dispute moves the VOUCHER to `status = 'disputed'`, and
+> `getCurrentWeekDraft` matched `eq(status, 'pending_review')` — one status, exact match. The disputed
+> voucher stopped existing as far as `getMyCurrentWeek` was concerned.
 >
-> **Verified:** web `tsc` **120** (baseline), roster clean; the Live tab renders real data unchanged
-> (2 planned PRs · RM 1,000.00 · 3/5 stamped · 3/3 within fence) with **zero console errors**, so
-> removing the subscriptions broke nothing.
-> ⚠️ **NOT fired: the rewired cancel / no-show themselves.** Both mutate real roster rows on the
-> shared database, and unlike a refusal there is no free version of a successful write. The `late`
-> toast sits behind an edit sheet the session expired before reaching (`kickToLogin` again). **The
-> rewiring is typechecked and render-verified, not exercised** — which on this project is exactly the
-> distinction that keeps mattering.
+> **The second failure was worse and would have been found later.** `getOrCreateCurrentWeekDraft` calls
+> the same reader, and when it returns null falls back to `getWeekVoucher`, finds the disputed voucher
+> and REFUSES the write: *"has already been disputed and can no longer be added to."* So a PR who
+> disputed RM 7.21 on Tuesday **could not log another receipt for the rest of the week** — the dispute
+> would have quietly cost them far more than it could ever recover.
+>
+> **Fix:** `OPEN_WEEK_STATUSES = ['pending_review', 'disputed']`. A dispute is an open question about one
+> DAY and one COMPONENT; it is not a statement that the week has closed. `sent` / `signed` / `paid` stay
+> out — those have left the PR's hands and appending would rewrite a document already handed over.
+>
+> Verified against the live disputed voucher: the reader returns `PV-000006 · 12 lines · RM 3,708.21`, a
+> receipt write still targets `PV-000006`, and the week still holds exactly **1** voucher — no duplicate,
+> which is the failure the surrounding doc-comment was written about.
+>
+> **Also, the status is now legible.** A `DISPUTED` chip sits in the This-week card header (the
+> voucher-grain fact), and the Status row marks the disputed DAY. Deliberately not last week's
+> behaviour, which paints all seven days off the voucher flag — branding a whole week the PR is still
+> working, over one contested cell, would be its own kind of wrong.
+>
+> `tsc` clean both sides; 30 `check-cell-evidence.ts` checks pass. No migration. **Backend restart
+> required.**
 
-> **4 Aug 2026 (late) — the demo-data leak into REAL sessions is down from 21 slices to 1.**
-> Web `tsc` **120** (baseline), zero console errors, roster + settings still render real data.
+> **4 Aug 2026 — THIS WEEK IS DISPUTABLE TOO (the button was hidden by the wrong test).**
 >
-> `buildBlankPortalReset()` warns in DEV about demo slices it cannot blank, and **real sessions keep
-> whatever it cannot blank**. The list was **21**: `paymentCardLast4`, `postSealRatePrompt`,
-> `prSessionByRole`, `shiftAccepted`, `pendingApproval`, `acceptedShiftIndex`, `checkedIn`,
-> `checkedOut`, `prActiveShift`, `prComcard`, `prDisplayName`, `prIcName`, `prMobile`, `prEmail`,
-> `prAvatarPhoto`, `prPayrollAgencyId`, `prMarketplaceApplication`, `prAgencyTiedAt`, `prCheckInMeta`,
-> `prLeaveRequest`, `notificationPrefs`. **Now 1.**
+> Owner: *"where is the dispute button for the pr at the drinks and the tips"* — asked while looking at
+> the THIS-WEEK evidence sheet, where there wasn't one.
 >
-> **Twelve went to a generic rule** — strings → `""`, booleans → `false`, and **`null` → `null`**,
-> that last one because `typeof null === "object"` so a slice ALREADY null was reported as unblankable
-> when null is precisely its blank. Eight more got explicit entries (nullable session objects → null,
-> a dictionary and an all-optional bag → `{}`, `notificationPrefs` → its real default).
+> **My gate was wrong, and it was the second wrong version of the same gate.** I had written
+> `week === 'last'`, reasoning "nothing is issued yet to contest". The server disagrees:
+> `DISPUTABLE_STATUSES = ['pending_review', 'sent', 'disputed']`, and the current week's voucher
+> (`PV-000006`) is **`pending_review`** — disputable all along. Only `signed` and `paid` are locked,
+> because the PR has put their name to it or the money has moved.
 >
-> 🔴 **The generic number rule is WRONG for one field, and reading the types is what caught it.**
-> `acceptedShiftIndex` is `number | null`, and the pre-existing rule blanks every number to `0` — but
-> **`0` is a valid index meaning "the first shift was accepted"**, not "none". It is now explicit, with
-> the reason recorded beside it. *The empty value of an index is null, and a rule that maps every
-> number to 0 cannot know that.*
+> The tab was never the rule. Both halves now mirror the server: `kindDisputable` (drinks/tips) and the
+> new `weekDisputable(week)`, which reads the VOUCHER's own status — the same two-mistake pattern the
+> earlier wages fix had, so the comment names both so a third version does not appear.
 >
-> ⚠️ **`prComcard` is deliberately left unblanked and still named in the warning.** The obvious
-> candidate, `DEFAULT_COMCARD` in `comcard-demo.ts`, is typed **`ComcardDemoStyle`** — a comcard's
-> STYLING, not a comcard. Importing it typechecked as a plan and would have written the wrong shape
-> into the slice **on the strength of the constant's name reading correctly**. Backed out; blanking it
-> needs a real empty `PrComcard`, which does not exist. *One remaining honest warning beats twenty-one
-> silenced ones.*
+> **The flow was hardwired to last week and had to be threaded.** `submitDispute` posted to
+> `lastWeek.voucherId` and wrote the response into last week's state, so a This-week claim would have
+> landed on the WRONG VOUCHER (or been refused when no last-week voucher existed). `DisputeTarget` now
+> carries its `week`; the post goes to that week's voucher; and because This week lives in the shared
+> earnings CONTEXT rather than local state, it is re-read via `refreshEarnings()` instead of patched —
+> Check-In renders off the same object and would otherwise show a voucher the server no longer holds.
+> `openDispute` likewise resolves `cellDisputable` and the withdraw check against the right week.
 >
-> **Why it hid so long:** every one of the 21 is a PR-portal slice, and **no agency or outlet screen
-> reads them** — the leak was invisible from the screens anyone was looking at. That is also why it
-> stays worth fixing: the web PR portal is where a real PR session would pick them up.
+> This-week cells now show the **flag** where a dispute is possible and the inspect glyph where tapping
+> only opens the evidence — the same honesty rule as Last week.
+>
+> Why it matters beyond the button: a PR who spots a wrong figure on Tuesday can now say so on Tuesday,
+> while the paper is still in their pocket, instead of waiting for Sunday's voucher.
+>
+> `tsc` clean; 30 `check-cell-evidence.ts` checks still pass. No backend change — the server already
+> allowed this.
 
-> **4 Aug 2026 (late) — the member-management UI is BUILT and CLICKED THROUGH on both portals. The
-> capability finally moves from *unwired* to *done*.** Web `tsc` **120** (baseline), 0 in touched
-> files, biome clean.
+> **4 Aug 2026 — THE DISPUTE QUEUE CAN CORRECT THE RECEIPT IT IS ARGUING ABOUT.**
 >
-> **One component for both orgs.** `OrgMembersPanel` takes `kind="agency" | "outlet"` and mounts on
-> the agency and outlet Settings screens: lists the real `agency_user` / `outlet_user` rows, changes a
-> sub-role, removes behind a Confirm/Cancel step, and adds by email.
+> Owner: *"after agency approved the pr can make disput eon the drinks and the tips , then in the agency
+> also the same , can edit the approval receipt like in the receipt section in the agency payroll page ,
+> just the status different in the disputes page , same edit receipt function"*.
 >
-> ✅ **Proven in a browser on real logins.** Agency: changing the only owner's role fired
-> **`PUT` → 409**, the toast carried **the server's exact words** — *"Cannot change the last active
-> owner — appoint another owner first"* — and the select reverted to `owner`. Outlet: **3 real members
-> render** (Chen Wei Jie owner · Michelle Lim finance · Ahmad Razif ops) with the correct 3-role
-> select. **Zero console errors on either.**
+> **The PR half already worked** and needed no change: `lineDisputable` returns true for drinks/tips as
+> soon as the receipt leaves `pending`, so an APPROVED receipt is contestable — which is the whole
+> point, since until the agency states a figure there is nothing to argue with.
 >
-> **The panel deliberately re-implements NO rule.** Ownership and last-owner checks live only on the
-> server; the UI shows what the server said. *A client-side copy of a permission rule drifts, and the
-> copy that drifts is the one the user believes.* `serverMessage()` exists for exactly this: the 409
-> text is the ONLY explanation of why a change was refused, so collapsing it into "Something went
-> wrong" would leave an owner unable to tell a rule from an outage.
+> **The agency half was a deliberate refusal that had outlived its reason.** `DisputeQueuePanel`'s own
+> doc-comment said accepting *"does not change the voucher amounts — edit the voucher itself for that"*,
+> because the only edit path was `PUT /payment-voucher/:id`, which deletes and re-inserts every line.
+> Upholding a PR's claim through it would have destroyed the self-logged receipts the claim rested on.
+> The targeted receipt endpoints removed that trap, so the correction now happens in the queue.
 >
-> ⚠️ **"Add member" takes an EMAIL but the API takes a `userId`,** so the hook resolves one to the
-> other via `GET /user?email=` — **exact match only, and the result is never rendered as a list.**
-> That endpoint is already open to agency and outlet callers, so this adds no new read; but rendering
-> what it returns would turn a lookup into a people-browser for every org owner, which is the open
-> privacy question this project already records. **The person must already have an account — no
-> invite is sent, because there is no mailer — and the panel says so on its face** rather than letting
-> it be discovered as a failure.
+> The **same `AgencyReceiptEditor` component** the Receipts sub-tab uses — not a copy, so a correction
+> made while settling a dispute obeys exactly the rules a correction made anywhere else obeys.
 >
-> ⚠️ **NOT fired live: add and remove.** Both leave permanent rows on the shared database. The
-> refusals are evidence; the successes are not.
+> **A dispute names a DAY and a COMPONENT, never a receipt** (the PR tapped a grid cell, and a cell is a
+> sum), so `receiptsForDispute` finds the paper the same way the cell was built: lines matching
+> `lineDate` + `kind`, scoped by `voucherId` as well — `lineDate` alone would pull in another PR working
+> the same night. Each row shows what THAT receipt contributed to the disputed cell, not its whole
+> total. A line whose `kind` is missing (backend not restarted) is NOT matched: showing an unrelated
+> receipt as "the evidence" is worse than showing none and saying so.
 >
-> **Method note:** the session was kicked to the marketing landing page mid-run — the access token
-> expired during a long session, and `kickToLogin()` hard-redirects. Diagnosed from the network and
-> console buffers being EMPTY (a full reload clears them) rather than guessed at. Also: **a toast is
-> hard to catch by polling** — it had auto-dismissed by the next tool call twice. Captured properly
-> with a `MutationObserver` armed BEFORE dispatching the change. *If a thing is transient, observe it
-> from before it happens rather than looking for it afterwards.*
+> **Two statuses, deliberately both on screen** — the amber *Open* pill is the DISPUTE; the pill beside
+> each receipt is that RECEIPT's own review state. A reviewer settling a claim needs both facts.
+> `verified` withholds the editor (week closed, server answers 409), matching the Receipts sub-tab.
+> Wages/OT disputes say plainly that there is no receipt behind them and the fix is the shift record.
+>
+> ⚠️ **NOT COMMITTED, and must land WITH the receipt-editor slice.** `DisputeQueuePanel.tsx` imports
+> `AgencyReceiptEditor.tsx`, which is still untracked (see §9) — committing the panel alone would
+> produce a commit that does not build. `tsc` clean on the file and biome-formatted.
+>
+> ⚠️ **Not visually verified:** the queue reads **Disputes (0)**, so there is nothing on screen to check.
+> Raise one from the PR app (Payment → Last week → tap an approved Drinks or Tips amount → Dispute this
+> amount) and the editor should appear under that row.
 
-> **4 Aug 2026 (late) — member management widened from admin-only to ORG OWNERS. Backend done and
-> live-proven 8/0/3; the UI is NOT built. Backend `tsc` 0 · unit tests 21/21 across 3 files.**
+> **4 Aug 2026 — A SIGNED VOUCHER NOW REACHES THE PAYMENT QUEUE.**
 >
-> 🔴 **The find: a scope check on the wrong parameter is not a scope check.** `updateMember` and
-> `removeMember` take `:memberId` and **never checked it belongs to the org in `:id`.** The route
-> scope guard could not catch this — it validates `:id` while the write targets `:memberId` — so an
-> owner passing their OWN agency id and a FOREIGN member id would have sailed through every gate.
-> Closed in the controller with a **404** (not 403: a foreign member id must not be confirmed as
-> existing). **Live-proven both ways, and the foreign member was re-read afterwards to confirm it
-> still exists** — a refusal that is not checked for side effects is only half a test.
+> Owner: *"after the pr sign the pv, the pv should come out at the payment week section at the payroll
+> page agency"*.
 >
-> **`guardMemberChange` (`util/member-change-guard.ts`, 9 unit tests) refuses anything that would
-> leave an org with no ACTIVE owner** — removal, demotion or deactivation alike. No separate
-> self-demotion rule: *"you are the last owner"* already covers an owner locking themselves out **and**
-> covers one owner locking out the last OTHER owner, which a self-check alone would miss. An inactive
-> owner does not count as cover. Deliberately allowed: an owner may appoint another owner in their own
-> org, including handing ownership away — that is tenancy, not escalation.
+> The **Payment Week** tab filtered by CALENDAR DATE alone (`last_last_week`), so it showed the week
+> before last and nothing else. PV-000002 sat there purely by being old enough; PV-000004 — signed by
+> the PR at 16:30 on 4 Aug — stayed in **Last Week**, because its week was 26 Jul–01 Aug. The
+> signature changed nothing on the one screen that pays it, and the agency's own PR History was
+> already reporting `2 signed · RM 1,575.00` while the payment screen showed one voucher at RM 875.
 >
-> 🔴 **THE PROBE CAUGHT A REAL DEFECT — an over-applied denial, exactly the failure this file keeps
-> warning about.** The scoped guard refused ANY body containing `status`, because on `PUT /agency/:id`
-> that is the admin approve/suspend lane. Reusing that guard on the MEMBER routes carried the rule
-> with it, where `status` means the MEMBER'S status — a field an owner is entitled to set. It refused
-> a legal change **and cited admin approval while doing it**. *The rule was right; its blast radius
-> was not.* Split into its own middleware `refuseOrgStatusChange()`, applied only to the two
-> org-record PUTs. **One middleware, one job.** ⚠️ **`probe-org-scope-guard` was re-run afterwards and
-> still passes 7/0/1** — refactoring a guard voids its old proof.
+> **A signature is what makes a voucher payable, so a signature is what puts it in the queue.**
+> `lastLastWeekPvs` now returns its existing window PLUS every `SIGNED` voucher from any week, deduped
+> by id. `payrollActivePvs` already drops `PAID`, so a voucher leaves the queue the moment the
+> transfer is recorded — no second rule needed for that.
 >
-> ⚠️ **What is NOT proven, stated plainly.** The happy-path **200 is SKIPPED**: Atlas has exactly one
-> member, so there was no second member whose own value could be re-sent idempotently. **`POST` (add
-> member) was never fired**, because creating a member leaves a permanent row on the shared DB. The
-> outlet cross-venue case skipped too — Onyx KL has no members. **Only the refusals are evidence.**
+> Two deliberate choices: a signed voucher **stays in its own week tab as well** (an agency looks for
+> "last week's voucher" by the week it was worked, and removing it from there would hide it where
+> they actually look), and the tab caption changed — `19 Jul – 25 Jul 2026 · signed · ready to pay`
+> became `Signed vouchers · … and earlier · ready to pay`, because naming one week describes a list
+> this tab no longer is.
 >
-> **Vitest was only looking at `src/features/**`.** The first shared rule to get a test lives in
-> `src/util`, and the narrower glob found nothing and **exited 0** — with `passWithNoTests: true`, a
-> test outside the glob reports success having executed nothing. Widened to `src/**/*.test.ts`.
-> *A green suite that ran zero of your tests is the worst possible signal for a security rule.*
+> Web typecheck clean on the route. **Check after a refresh:** Payment Week should read 2 PV ·
+> RM 1,575.00, matching the PR's History total. If those two disagree, the agency↔PR mapping is the
+> next thing to look at, not this filter.
 
-> **4 Aug 2026 (late) — running the dev server rewrites `routeTree.gen.ts` into a DIFFERENT ORDER.
-> Reverted, not committed. And the reordered form boots clean, which is the useful part.**
+> **4 Aug 2026 — AN ADDED LINE MUST BE SOMETHING THE OUTLET ACTUALLY SELLS.**
 >
-> Starting `web-3001` regenerated `apps/web/src/routeTree.gen.ts`: **1,121 lines changed, 565/556** —
-> and **every one of them is reordering.** Verified rather than eyeballed: the route-import sets were
-> extracted from both versions and sorted — **58 routes before, 58 after, zero set difference.**
-> Nothing added, removed or repathed; the generator simply emits a different order than the committed
-> file has.
+> Owner: *"the drinks need verified is the outlet else cannot add so in his way can make list the the
+> drink on that shift from what outlet"*, then *"need to do same thing for the tips also"*.
 >
-> **Reverting was ATTEMPTED and does not hold — the line above claiming "reverted" was wrong within a
-> minute of being written.** `git checkout --` restored the file and it was rewritten immediately:
-> mtime landed *after* the checkout, and `netstat` shows **a dev server still LISTENING on port
-> 3000** — another session's, not this one's (this session's was 3001 and was stopped). Its `tsr`
-> watcher regenerates the file the instant git restores it.
-> ⚠️ **So the working tree could not be made clean by reverting.** The other session's process was not
-> killed, because it is not this session's to kill.
-> *A revert is not done when the command exits 0 — it is done when the file is still reverted
-> afterwards.* Nothing here checked that until the second look.
+> **NO MIGRATION USED.** The catalogue is `outlet_drink_menu` (child of `outlet_workspace`, 1:1 with
+> an outlet), one table split by `category` — `drink` renders as DRINKS PRICE, `service` as SERVICE
+> ENTITLEMENT. **Tips therefore needed no second design**, which is the whole reason the discovery
+> pass ran before any code: the "two lists" on the Outlet screen are one table.
 >
-> ✅ **RESOLVED on the owner's decision (4 Aug): regenerated and committed ONCE, and the churn is
-> over.** Checked before trusting it:
-> - **Deterministic.** `npx tsr generate` run explicitly produced **byte-identical** output
->   (`sha1 f5f1fb9f…` before and after), so the watcher and the CLI agree — the committed bytes are
->   what any machine will regenerate, not one process's opinion.
-> - **Compiles.** Web `tsc` **120**, exactly the baseline, **0 errors in `routeTree.gen.ts`**.
-> - **Boots.** Already established above — both portals loaded on real logins, zero console errors,
->   with this exact file on disk.
-> - **Stays clean.** `git status` verified clean for the file after committing, with the other dev
->   server still running — which is the only proof that the churn is actually ended rather than paused.
+> **The outlet is resolved by FK, never by name.** `payment_voucher.outlet` and
+> `payment_voucher_line.outlet` are free-text varchars with no FK and no unique constraint on
+> `outlet.name`, so a name cannot be resolved to one outlet safely. The sound path already existed:
+> `payment_voucher_receipt.shift_assignment_id → shift.outlet_id → outlet.id`, read through
+> `resolveDrinkMenusForOutlets` — the SAME reader that feeds the PR's phone its self-log menu, already
+> injected into the PV controller. No new repository, no new wiring, no DDL.
 >
-> ⚠️ **Expect a conflict when `jk`'s lane merges.** It is a generated file: resolve it by running
-> `npx tsr generate` on the merged route set and committing the result — **never by hand-picking
-> import lines**, since the order carries no meaning and hand-merging it is how a route silently goes
-> missing.
+> ⚠️ **This makes migration `0083_pv_line_outlet_fk` dead DDL.** It was authored earlier the same day
+> on the assumption that name-matching was the only option. It is journalled but NOT run and NOT
+> referenced by any code — decide in §9 whether to drop it (recommended) or wire it as the fallback
+> for receipts with no shift link.
 >
-> ✅ **The genuinely useful finding: the reordered tree BOOTS.** Both portals were loaded on real
-> logins with **zero console errors while this exact regenerated file was on disk.** That matters
-> because **re-ordering these imports is what detonated the import cycle** that once took the whole
-> agency portal down with `Cannot access 'DEFAULT_PER_TABLE_RM' before initialization` — the cycle
-> "worked" only while it was lucky about entry order. **The leaf-module fix holds under the very
-> reordering that originally triggered the crash**, which is the strongest evidence that fix has had.
-> *A generated file changing by 1,121 lines is not automatically noise — but it is not automatically
-> danger either; the way to tell is to check whether the SET changed, then boot it.*
+> **Three refusals, each naming the outlet:** no shift link (the outlet cannot be established), no
+> list configured (worded for BOTH buckets — telling someone adding a tip that there is "no drinks
+> list" sends them to the wrong screen), and item not on the list. Matching is trimmed and
+> case-insensitive; the CATALOGUE's spelling is what gets stored, so a line can never drift from the
+> list it was checked against.
+>
+> **The review found 10 defects; the high one was mine to worry about.** `shift_assignment_id` is
+> supplied by the phone and was stored **unvalidated**. Cosmetic until now — but the catalogue check
+> resolves the outlet through it, so an assignment belonging to somebody else's shift would point the
+> price-list check at the WRONG VENUE, and an item that outlet happens to sell would then pass
+> verification on a receipt it has nothing to do with. `addMyReceipt` now refuses an assignment the
+> signed-in PR does not own, via the same `listByIdsForPr` reader `weekShifts` uses. Also fixed: the
+> empty-catalogue message no longer names only drinks, and the catalogue query no longer retries a
+> 404 three times before admitting it has nothing.
+>
+> Backend, web and mobile all typecheck clean. **Not exercised live** — the in-app browser is signed
+> in as a vendor account (every agency call 403s) and Claude in Chrome is not connected.
 
-> **4 Aug 2026 (late) — BOTH Settings screens clicked through on real logins. Edit → save → verified
-> in the database → restored. Zero console errors on either.**
+> **4 Aug 2026 — NO DISPUTE BUTTON ON WAGES/OT, AND "VERIFIED" MEANT TWO THINGS ON ONE SCREEN.**
 >
-> The gap named in the previous entry is closed: the React wiring was typechecked only, and on this
-> project that has repeatedly been the difference.
+> Owner: *"make sure the daily wages and the other(OT) cannot make dispute , remove it if have the
+> dispute button shown to pr"* and *"the status in the last week section should be verified"*.
 >
-> - **Agency** (`owner@atlas-agency.my`): screen renders real identity matching the DB row exactly.
->   Owner name → `Dato' Lim Wei Khoon QA`, Save → **`PUT /agency/c30fcd15… 200`**, then the two
->   invalidation refetches fired (`GET` agency + members). **Database read back:
->   `contactName = "Dato' Lim Wei Khoon QA"`.** Restored to `Dato' Lim Wei Khoon`.
-> - **Outlet** (`owner@velvet23.my`): venue name → `Velvet 23 QA`, Save → **`PUT /outlet/ed739c13… 200`**,
->   refetches fired. **Database read back: `name = "Velvet 23 QA"`.** Restored to `Velvet 23`.
+> **(1) The dispute button was MY regression, shipped in `927ec8a`.** The rule itself was already right
+> everywhere it mattered — `lineDisputable` (payment-voucher-component.ts) drives both the `disputable`
+> flag and `raiseMyDispute`, which answers 400 for wages/OT, and `cellDisputable` mirrors it on the
+> phone. But the new evidence sheet gated its Dispute button on `week === 'last'` **only**, ignoring the
+> kind, so *Daily wages · Thu 30 Jul* offered a button the server would have refused.
 >
-> ✅ **The check worth keeping — a partial save does NOT silently unfence a venue.** After a
-> `name`-ONLY `PUT`, all five address columns were still intact (`Jalan Bukit Bintang` ·
-> `Bukit Bintang` · `55100` · `Kuala Lumpur` · `Malaysia`) **and so was the geo pin**
-> (`3.14438770` / `101.70824200` / 50 m). The update schemas are `.partial()`, so omitted fields are
-> left alone. **That was an ASSUMPTION in the commit that shipped the partial payload, and it is now a
-> reading** — worth the thirty seconds, because the failure mode would have been a venue quietly
-> losing the coordinate every check-in is measured against.
+> Added `kindDisputable(kind)` to `receipt-review.ts` as the ONE client mirror, used in three places:
+> the sheet's button, the cell's icon (a **flag promises a dispute** — wages/OT now get the same inspect
+> glyph as This-week, since tapping still opens the evidence), and `openDispute`'s guard, which held a
+> fourth inline copy of the kind list. Wages and OT are derived from the attendance stamps, so the route
+> for a wrong one is the shift record, and the alert says exactly that rather than "your agency is still
+> checking the receipt" — advice to wait for something that will never come.
 >
-> **Method:** own dev server on **3001** (`web-3001` in `launch.json`) — another chat's server is not
-> reachable from this session's browser tools. Baselines for both rows were captured over the API
-> BEFORE any UI write, so the restore values were known rather than remembered.
+> **(2) The two halves of the Payment screen used one word for two things.** Last week showed
+> **APPROVED** on Thu 30 above a header reading **"Verified days 0/7"** and a footer reading
+> **"0 verified"**. Both were "correct": the agency HAD approved that day (`payment_voucher_day_review`
+> 2026-07-30 = approved), but voucher `PV-000004` is still `pending_review`, so it never entered
+> `VERIFIED_STATUSES`. This week already counted `approved || verified`; last week counted `verified`
+> alone. That asymmetry was the whole bug.
+>
+> An agency-approved day now reads **VERIFIED** and counts — in Payment's Last-week row and in
+> PvDetailScreen, both of which are CLOSED weeks where a day sign-off is final. This week deliberately
+> keeps APPROVED distinct: a mid-week approval is a checkpoint, since more receipts can still land on
+> that day.
+>
+> ⚠️ **The trap in that change:** the LAST WEEK pill read `verifiedDays > 0 ? 'SENT' : 'PENDING'`, safe
+> only while the counter meant "voucher processed". Left alone it would now have printed **SENT** over a
+> `pending_review` voucher — telling a PR their week had gone out when nobody had issued it. The pill is
+> now driven by the voucher's own status (`weekIssued`): days are verified by day review, the WEEK is
+> issued by the agency — two facts, two sources.
+>
+> `tsc` clean; the 30 `check-cell-evidence.ts` checks still pass. No migration.
 
-> **4 Aug 2026 (late) — the outlet Settings save is wired to `PUT /outlet/:id`, NAME ONLY, and the
-> part left unwired is the interesting one.**
+> **4 Aug 2026 — THE AGENCY CAN CORRECT A RECEIPT (Edit under Approve).**
 >
-> Same shape as the agency screen (`d513e5c`): persist first, bail out with a warning if the server
-> refuses, so the screen never shows a saved state the database rejected. Web `tsc` **120**
-> (baseline), **0 errors in the touched files**.
+> Owner: *"under the approve button add edit button that really can makes changes"*, then four
+> refinements — the time must be editable too (*"the ocr sometimes will be wrong"*), the add-line
+> category must follow the receipt (*"id edit tips then is edit tips thats all"*), the add form should
+> not stand there when nothing is missing, and the whole editor is confined to *"the scanned or self
+> log of the drink or the tips at the receipt section"*.
 >
-> 🔴 **The address is deliberately NOT saved, and wiring it as the form stands would have destroyed
-> data.** The screen shows one location line — but that line is DERIVED: `joinAddress()` concatenates
-> **five** columns (`addressLine1`, `addressLine2`, `postcode`, `state`, `country`). Writing the
-> edited string back means picking one column to hold it, which **flattens five fields into one and
-> silently empties the other four.** *A read that joins is not a write that splits.* Splitting a
-> free-text address is a parsing problem, not a wiring one, so the input stays store-only until the
-> form itself has five fields — and the toast now says so out loud rather than implying a full save:
-> *"Venue name saved · address is not persisted yet"*.
+> **NO MIGRATION. ZERO DDL.** `order_no`, `receipt_date`, `receipt_time`, `quantity`, `amount` all
+> existed. Three targeted endpoints, none of them `PUT /payment-voucher/:id` — that path deletes and
+> re-inserts every line and once severed the receipt links and destroyed a PR's proof photos:
+> `PATCH /receipts/:id/lines/:lineId` (existed, no UI had ever called it), `POST /receipts/:id/lines`
+> (new), `PATCH /receipts/:id` (new — order no, date, **and time**).
 >
-> `lat`/`lng` are excluded for a different reason: moving a pin is `PATCH /outlet/:id/geo-fence`, its
-> own endpoint precisely because saving a pin is what switches hard geofencing ON for a venue.
+> Two consequences survive every write, and the editor says so on screen rather than letting them be
+> discovered afterwards: an **approved receipt drops to pending**, and any change to the MONEY makes
+> that day's approval **stale**. A time correction moves no money — a line's day is `line_date`, never
+> the printed clock — so it re-opens the receipt and stales nothing.
 >
-> ⚠️ **What is proven and what is not.** The ENDPOINT is live-proven (`probe-org-scope-guard`, own
-> outlet PUT → 200). The REACT WIRING is typechecked only — **the screen has not been clicked
-> through**, which on this project is the difference that has repeatedly mattered.
+> **The add-line category is derived, not chosen.** A tips receipt adds tips, a drinks receipt adds
+> drinks; the kind comes from the receipt's own lines (`kind` now rides on the agency feed rather than
+> being re-parsed from `ref` on the client). Only a receipt with no lines, or mixed kinds, still
+> offers the choice. And the form is **collapsed** behind one link — the OCR usually reads the paper
+> correctly, and a permanent row of empty fields reads as work still to do.
+>
+> **Its own review found 7 defects; all 7 are fixed.** Two were serious. (1) The one-paper-one-log
+> duplicate guard only ran when the ORDER NUMBER was typed — but changing the DATE moves the paper
+> onto another day where its existing number may already be logged, so the double payment the rule
+> exists to stop walked through the date field instead; it is now gated on the RESULT. (2) The save
+> invalidated `["agency","payment-voucher","evidence"]` but not `["agency","payment-voucher", id]` —
+> two different keys, neither a prefix of the other, both on screen at once, so the voucher document
+> beside the editor kept quoting pre-edit figures. Also fixed: the receipt-review hook had the same
+> invalidation gap; a write that never reached the server produced NO message at all (which reads as
+> "it saved" — now a shared `writeFailureMessage` always says something); the Edit/Approve controls
+> were offered on a **PR-signed** voucher every endpoint refuses, and now explain their absence; the
+> added line's dedupe slot used `siblings.length` as an index, repeating a number still in use after
+> any deletion; and `invalidate()` now RETURNS its promises, so a saved row no longer flashes its old
+> figure while the refetch is in flight.
+>
+> **Design pass on the editor:** `.iz-btn` is `width:100%`, so the first cut rendered a full-width Save
+> slab per line — three items, three slabs, each as loud as Approve. Now one shared grid with aligned
+> Qty/RM columns, Save appearing only on a row actually changed (with Undo and a gold edge marker), a
+> running `3 items · RM 535.50` to check against the paper, column headers instead of a caption
+> explaining commission after the fact, and labelled order-no / date / time fields.
+>
+> Backend typecheck clean; web clean on every touched file.
 
-> **4 Aug 2026 (late) — the scoped owner guard is LIVE-PROVEN, 7/0/1. The percentage table moves to
-> features ~93% · wired ~87% · proven ~86% spine / ~50% branches · production-ready ~20%.**
+> **4 Aug 2026 — ONLY DRINKS AND TIPS CAN BE DISPUTED (reverses a 30 Jul rule).**
 >
-> `probe-org-scope-guard.ts` fires the whole surface over HTTP on real logins: cross-tenant agency
-> PUT **403**, cross-tenant outlet PUT **403**, **cross-tenant geo-fence PATCH 403**, `status` in the
-> body **403**, both own-org saves **200**, admin **200**. Kept in the repo — it writes nothing but
-> two same-value saves, so it is safe to re-run whenever the org guards are touched.
+> Owner: *"makes the pr only can dispute for the drinks and the tips … Other (OT), Daily wages cannot
+> disputed"*.
 >
-> **Safe on the shared DB by construction: every cross-tenant case sends the TARGET'S OWN CURRENT
-> VALUES**, read back immediately before. If the guard works, the request is refused and nothing is
-> written; if the guard were absent or stale, the write is idempotent and corrupts nothing.
-> ⚠️ **A probe for a guard has to be harmless when the guard is the thing that is broken** — otherwise
-> the first honest run of it is the one that does the damage.
+> This **reverses** the 30 Jul decision that wages were the one thing always disputable (the reasoning
+> then: wages are sealed at check-out with no receipt to approve, so gating them on approval would make
+> a wage error uncontestable). The cost is recorded rather than hidden — **a wrong wage or OT figure now
+> has no in-app route to contest at all**. The new reasoning: wages and OT are not CLAIMED, they are
+> DERIVED from the check-in/check-out stamps and the shift rate, so the fix is the attendance record,
+> not an argument about the total. ⚠️ `others` covers OT **and deductions**, so a deduction is not
+> disputable either — if that ever needs contesting it gets its own bucket, never a re-opened OT.
 >
-> ⚠️ **A 403 alone would have proven nothing:** the OLD guard also 403s, just for a different reason.
-> Every refusal is therefore matched on its MESSAGE, which only the new code can emit — and that
-> doubles as the stale-server detector, since `/health` answering 200 says nothing about which code
-> the process is running.
+> **One rule, two callers:** `lineDisputable(kind, receiptStatus)` in `payment-voucher-component.ts`
+> feeds BOTH the `disputable` flag the app reads and the refusal in `raiseMyDispute` — a client copy of
+> a rule is never the rule, and the two disagreeing is exactly how a PR gets offered a button that
+> 409s. Wages/OT are refused server-side with a 400 that says where to go instead, not merely hidden:
+> a rule the server does not enforce is one a replayed request walks past.
 >
-> 🔴 **The first run reported `SKIP — target venue has no pin to echo back`, and that was a PROBE
-> DEFECT wearing the costume of a fact about the data.** The columns are `lat`/`lng`/`geoFenceRadius`;
-> the probe guessed `geoFenceLat`/`latitude`. All seven outlets are pinned. It landed on the single
-> most dangerous case in the set — a venue's fence centre is what every check-in is measured against —
-> and a skip reads as *"nothing to test here"* rather than as *"I did not test this"*. **A SKIP is a
-> claim about the world and has to be verified like one.** Cross-tenant DELETE geo-fence remains
-> skipped deliberately: no idempotent form, so a failed guard would unfence a live venue.
+> Mobile mirrors it in `cellDisputable`, checking the kind **before** the line lookup so a day with no
+> lines still refuses instead of falling through to the permissive default. The two refusals get
+> different wording — telling a PR to "wait for review" on a wage figure is advice that never comes
+> true.
 >
-> **Audit page republished** to the same URL with the four-dimension table updated. Production-ready
-> moves 19 → 20 for a closed-and-proven cross-tenant write, not for new features. The hole was found
-> only because a screen was finally being wired to the endpoint: **the gate looked fine for exactly as
-> long as nothing called it.**
-> **4 Aug 2026 (late, housekeeping) — biome rewrap of `updateAgency`; §9 renewed with what `d513e5c`
-> LEFT OPEN.**
->
-> Formatting only on `services/agency/agency.ts` — the save-formatter rewrapped the `client.put`
-> call added minutes earlier in `d513e5c`. No behaviour change, no new export, no signature change.
->
-> **The substantive part is §9, which had no entry for the three things that session deliberately did
-> NOT finish.** Chief among them: **the scoped owner guard shipped in `d513e5c` has never been fired
-> at a running server.** It closed a real cross-tenant write — any agency owner could rewrite any
-> agency, any outlet owner could move another venue's geo-fence — and it is backed by nothing but a
-> typecheck. ⚠️ **A security fix proven only by `tsc` is exactly the shape of green signal this
-> project has already recorded being lied to by**, and refusals write nothing, so there is no cost
-> argument for the delay. The six free refusal cases and the one same-values 200 are written out in
-> §9, along with the reminder that **admin must still pass every one of them** (`isAdmin`
-> short-circuits ahead of the scope test, and an over-applied denial fails silently until somebody
-> cannot work).
->
-> Also open: the outlet Settings save (still store-only) and member management for org owners (the
-> endpoints exist and are `requireAdmin` by design; widening needs ownership scope + escalation,
-> last-owner and self-demotion guards).
->
-> ⚠️ **Method note — this entry was written twice.** The first attempt built the Markdown inside a
-> JS template literal passed through `bash -c`, and **the shell consumed every escaped backtick
-> before node ever saw it**, so each code span silently became an empty string: *"biome rewrap of ;"*,
-> *"proven only by  is"*. It committed clean and read as gibberish. **Nesting three quoting layers
-> (bash → node → Markdown) has no safe escape for a backtick** — write the file with an editor tool,
-> or pass it via a heredoc, and never assemble Markdown containing code spans in a shell string.
+> Verified: backend typecheck clean, mobile clean (bar the pre-existing `scripts/` rootDir baseline).
 
-> **4 Aug 2026 (late) — the agency Settings save is WIRED, and wiring it exposed a cross-tenant
-> write hole in the endpoint it was wired to.**
+> **4 Aug 2026 — APPROVING A DAY APPROVES ITS RECEIPTS, AND THE PR IS TOLD.**
 >
-> 🔴 **`PUT /agency/:id` let any agency owner edit ANY agency.** `agencyOwnerOnly` resolves to
-> `guard('agency', ['owner'])`, which asks *"are you an active owner?"* and **never compares the
-> membership against `req.params.id`**. Every agency owner satisfied it for every agency — name, SSM
-> number and contacts rewritable across tenants. Worse on the outlet side: the same unscoped
-> `outletOwnerOnly` guarded `PUT /outlet/:id` **and both geo-fence routes**, so one operator could
-> move another venue's fence centre — the point every check-in is measured against.
-> `UpdateAgencySchema` also accepts `status`, so an owner could self-approve a `pending_review` org.
+> Owner: *"in the agency role i have approved the at the pv section this week then the receipt section
+> should be automatically approve it also"*, then *"the pr should need to see the status was approved
+> for this week"*.
 >
-> **Fixed** with a scoped variant — `requireAgencySubRoleScoped` / `requireOutletSubRoleScoped`, used
-> as `agencyOwnerOfParam` / `outletOwnerOfParam` — which additionally **refuses a body carrying
-> `status` (403) rather than dropping it**: a save that silently discards a field teaches the caller
-> the wrong thing about what persisted. Applied to 4 routes. The existing 7 exports are untouched, so
-> the unscoped guard still covers routes whose target comes from the session, not from `:id`.
-> ⚠️ **NOT yet live-fired.** Backend `tsc` 0, web `tsc` 120 (baseline), 0 errors in touched files —
-> but no refusal has been fired at a running server. A refusal writes nothing, so this is cheap and
-> is the next thing to do.
+> **NO MIGRATION. ZERO DDL.** Both halves already existed as columns; what was missing was that they
+> never spoke. A day's `approved_total_cents` IS the sum of its lines, and those lines are the
+> receipts' lines — so an agency approving **RM 3008.20 for Tue 4 Aug** had already stated the receipt
+> behind it was right, yet `voucherSendGate()` still blocked the week on *"2 receipt(s) not yet
+> reviewed"*: evidence the same person had signed off one panel above.
 >
-> **The wiring itself.** `agency/profile.tsx` now persists through `PUT /agency/:id` on a real
-> session — save first, bail out and warn if the server refuses, so the screen never shows a saved
-> state the database rejected. Only `name` and `contactName` go up: **`ic` has no column and stays
-> local**, since a field with nothing behind it is this project's most repeated defect. The Finance
-> Head invite toast no longer claims *"Invite queued"*; it says the invite is **not sent**.
+> **Backend** — new pure `receiptsCarriedByDays(lines, receipts, approvedDates)`. A receipt is carried
+> only when **every** day it touches is approved (a Mon+Tue receipt waits for both — approving Mon
+> alone leaves half its money in a day nobody looked at), and a receipt with **no dated lines is never
+> carried**, because `dayTotalsCents` skips undated lines so no day's total ever contained it. New
+> `approvePendingReceipts(ids, actor)` does it in ONE statement re-asserting `status='pending'` in the
+> WHERE, so a receipt approved between the read and the write keeps its real reviewer. Both
+> `reviewDay` and `approveAllDays` sweep from the **full** set of approved days, not the one just
+> decided — the spanning receipt has to clear whichever order the agency worked in — and both now
+> answer with the post-sweep `receipts`, `approvedReceipts[]` and `pendingReceiptCount`.
 >
-> ⚠️ **Two claims published on the audit page last night were FALSE, and both were mine.**
-> (1) *"No invite or member-management endpoint exists"* — `POST/PUT/DELETE /agency/:id/members` and
-> the four outlet equivalents all exist. **The grep searched for `invite`; the capability is called
-> `members`.** Searching for the feature's name instead of the capability's name, one night after
-> writing down "a filename is not a feature". **An absent grep hit is evidence about the grep.**
-> (2) *"Neither file makes a single API call"* — true of the files, false of the screens: both call
-> `useAgencyProfile` / `useOutletProfile`, which do fetch. **One indirection defeats that test.**
-> Both corrected on the audit page, which now also carries the 4-dimension scoring table
-> (features ~93% · wired ~85% · proven ~85%/~45% · **production-ready ~19%**) in place of the single
-> 60/78/85/97 strip.
+> **The PR half** — `/mine/current-week` and `/mine/last-week` ship `dayReviews[{date,status}]`,
+> **date and status only**: the note and the reviewer's name are the agency's internal record. Without
+> it the phone could only read the VOUCHER's status, which sits at `pending_review` all week — which
+> is why a day approved on Tuesday still showed **PENDING** to the PR until Sunday. A **stale** day
+> arrives as `null` exactly as it does in the agency panel, so an approval of a figure that has since
+> changed never reads APPROVED on the phone.
+>
+> **Two bugs fell out of the same screen.** The This-week header read *"Verified days 2/7"* off the
+> **pending** count — a week with nothing approved still showed 2 as though it were — and
+> `hasThisWeekRows` was `thisPendingDays > 0`, so the section would have emptied itself the moment
+> every day got approved.
+>
+> **The gap the owner caught the same afternoon** — *"not all is approved by agency in the receipt
+> section … then the pr is showed approved?"*. The PR's APPROVED was driven by the day review ALONE,
+> so Tue 4 Aug read APPROVED on the phone while RCP-000011 and RCP-000013 sat *Waiting on you*. Two
+> states can legitimately disagree — a receipt straddling an unapproved day is held back by design,
+> and a day approved BEFORE the carry existed (13:03 / 13:11 on 4 Aug) never swept at all — so the
+> phone now takes the pessimistic one: `prVisibleDayStatuses()` drops a day back to `null` when any
+> PENDING receipt has a line on it. That matters beyond cosmetics, because APPROVED is what tells the
+> PR the figure has become the agency's statement and may be **disputed**; showing it early points
+> them at a dispute the server refuses, naming a receipt they cannot see.
+>
+> **Legacy days self-heal via a script, not a re-click:** `repair-day-approved-receipts.ts` runs the
+> SAME pure rule over every unsigned voucher — **dry run by default**, `--write` to apply — so days
+> approved before 4 Aug carry their receipts without the agency re-approving each one by hand.
+>
+> **Not done, deliberately:** withdrawing a day approval does **not** un-approve its receipts.
+> Dropping a receipt back to pending stays a deliberate act in the receipts panel, where the photo is.
+> The day panel now says out loud that approving a day approves its receipts — silent would be a trap.
+>
+> Verified: 7/7 pure checks on the carry rule (spanning / undated / already-approved / nothing-
+> approved), backend + mobile + web typecheck clean on every touched file. The live agency→PR
+> round-trip still needs a click-through.
 
+> **4 Aug 2026 — TAP AN AMOUNT, SEE THE PAPER BEHIND IT (PR Payment cell evidence).**
+>
+> Owner: *"makes the pr can see the how come the amount of the drinks from what order No what shift
+> check in, check out time , what quantity , what drinks item to proof them is from which today's
+> shift"*, then *"so where can i open one by one where can i check proof ?"* — the honest answer being
+> **nowhere**: no screen broke a day's total back into the receipts behind it.
+>
+> **NO MIGRATION. ZERO DDL.** Every fact was already a live column — `payment_voucher_receipt.order_no`
+> / `receipt_date` / `receipt_time` / `shift_assignment_id`, `shift_assignment.check_in_at` /
+> `check_out_at` / `overtime_minutes`, `payment_voucher_line.quantity` / `description`. The gap was the
+> WIRE: a PR could see their own order number exactly once, in the 201 echo of `addMyReceipt`, gone
+> after a reload — while `listAgencyReceipts` carried it on every read behind the agency guard. The
+> agency could see a PR's order numbers and the PR could not.
+>
+> **Backend** — `PrReceiptLineDTO` gains `orderNo`, `receiptDate`, `receiptTime`, `shiftAssignmentId`;
+> `receiptInfoMap` widened into a named `ReceiptInfo`. Wage/OT lines have no receipt, so their shift is
+> recovered from the `ref` (`decodeRef` already computed `dedupe` and the mapper threw it away),
+> uuid-guarded and `-ot`-stripped — that is what makes **Daily wages** drillable too, not just drinks.
+> New `ShiftAssignmentRepository.listByIdsForPr(prId, ids)` reads the stamps through the FK; both
+> `/mine/current-week` and `/mine/last-week` now ship a sibling `shifts[]` array (not fields repeated on
+> every line — a three-item receipt would otherwise carry the same two timestamps three times).
+>
+> ⚠️ **`prId` in that WHERE is a security boundary, not an optimisation.** `shift_assignment_id` is
+> written from client input at receipt creation and is not validated against the PR there, so a bare
+> `inArray(ids)` would surface someone else's shift times. Verified live: a different PR asking for
+> Victoria's two assignment ids gets **0 rows**.
+>
+> **Mobile** — new pure `lib/cell-evidence.ts` (`buildCellEvidence`, `evidenceMatchesCell`) using the
+> IDENTICAL filter as `week-pay-grid.ts`, so the sheet total is the same arithmetic as the cell rather
+> than a drifting re-derivation; new `components/CellEvidenceSheet.tsx` reusing PvDetailScreen's sheet
+> chrome, ShiftStatusPanel's fixed-width table and `shift-session`'s stamp helpers. `PaymentScreen`
+> cells on BOTH weeks are now tappable → evidence, and **Dispute** moved inside the sheet, calling the
+> untouched `openDispute` so the withdraw path is unchanged. This-week has no dispute button — nothing
+> is issued yet to contest.
+>
+> **Two deliberate refusals of a convenient lie:** the check-out stamp is labelled **SHIFT END**, never
+> "you tapped out at", because `check_out_at` is CLAMPED to the scheduled end when a PR taps out late
+> (the overrun survives only in `overtime_minutes`, printed beside it). And a line with no shift link
+> shows as **"Not linked to a shift"** — never attributed by the `loggedAt >= checkInAt` heuristic
+> Check-In uses for display, which misfiles a receipt logged between two shifts.
+>
+> New harness `apps/mobile/scripts/check-cell-evidence.ts` — 30 checks over Victoria's real 4 Aug
+> voucher, all passing, including that the duplicated ORD0389 stays visible as TWO receipts instead of
+> being tidied into one. `tsc` clean both sides (mobile 0-error baseline held). **Backend restart
+> required** — tsx watch serves stale routes.
 
-> **4 Aug 2026 (night) — audit page brought current; one entry CORRECTED; registration DEFERRED.**
+> **4 Aug 2026 — THE AGENCY'S RESET OFF CUSTOM APPLIED ITSELF; THE ADMIN COULD ONLY AGREE.**
 >
-> Republished to the same URL (`0c66cb02-…`) by patching the previous session's source, not
-> rebuilding — 278.5 KB → 290.9 KB. Provenance now reads **HEAD `7e3d275` · 8 unpushed**, web `tsc`
-> **120**, **12 tests across 2 files**, live vouchers **4/4 reconcile**. Added a lead section for
-> this pass (overtime bounded, the Ratings screen, the `PV-000005` merge, the import cycle) since
-> the page had still been sitting at `bb416bc` / 2 Aug.
+> Owner: *"makes the agency reset back need wait admin to resolve or cancel in status"*, and
+> *"the admin can cancel status also in the plan request page"*.
 >
-> **🔴 CORRECTED — "agency and outlet accounts have no screen at all" was being read too broadly.**
-> That clause is true of the ADMIN portal. But the **agency and outlet portals do carry their own
-> member surfaces**: `routes/agency/profile.tsx` has a Finance Head *"sub-role invite · requires IC +
-> e-signature for dual-sign PV"*, and `routes/outlet/settings.tsx` holds the owner profile with
-> `accountActivated`. **Neither manages an account** — neither file makes a single API call, the
-> agency save lands in the zustand action `saveAgencyProfileSettings` (`store.ts:3370`), and the
-> invite is a **toast** saying *"Invite queued for …"* when nothing is queued. **There is also no
-> endpoint to call:** `grep -rnE "invite" apps/backend/src/features/*/*.routes.ts` returns nothing.
-> So it re-files from **"feature missing" to "not wired"** — a built screen with no capability behind
-> it — which makes the feature count slightly better and the wiring count slightly worse. Fixing it
-> needs a member-management API first; a working invite additionally waits on the mailer.
-> ⚠️ **It was filed wrongly because it was judged from route FILENAMES instead of by opening the
-> files** — the owner caught it. **A filename is not a feature.**
+> `requestLeaveCustom` filed the reset as a `plan_change`, and the server applies an AGENCY plan change
+> on the spot (`status: 'direct'`). So the tier moved the instant the agency tapped Reset, and the row
+> that reached Plan Request was a decision already taken — `Custom → Reset · Starter`, **Direct**, no
+> price, one button. The agency ended a price two people had negotiated, by itself. The hook's own
+> doc-comment already said the opposite (*"the admin resolving it is what moves the ledger"*); the code
+> had drifted from it.
 >
-> **⏸️ Registration for the three roles — DEFERRED by the owner, 4 Aug.** Not a gap; out of scope
-> this cycle. For the record of what exists: `signupAccountTypes` covers **outlet and agency only**,
-> and PR registration lives in the mobile wizard — so it is 2-on-web + 1-on-mobile, not one unified
-> flow. Marked `Deferred` on the audit page so it stops reading as open work.
+> Now filed as `custom_renegotiation` **naming the tier it wants** — the shape that already means *exit*
+> and the exact mirror of a venue dropping POS. It lands Pending, the ledger does not move, and
+> `applyResolvedPriceToLedger` already knew how to finish it (a Custom request naming a plan → move).
 >
-> **Still not represented on the audit page:** the 3 Aug slice (PV day-review screens, the receipt
-> lifecycle) has no section of its own — only what this session touched was written up. Worth a
-> dedicated pass.
+> The other half was missing everywhere in that inbox: **Resolve was the only answer**. A POS quote, a
+> Custom re-price or either cancellation could not be refused, so a request the admin disagreed with sat
+> Pending forever while the subscriber's screen kept saying "waiting for admin".
+>
+> | surface | change |
+> |---|---|
+> | `decline()` | widened past `plan_change` to the two negotiated types; refuses `resolved`/`approved`/`direct` — a `direct` row was applied when filed, so cancelling it would move the badge and not the ledger |
+> | Plan Request drawer | **Cancel request** beside Resolve (hidden on Direct/resolved/declined); saves remarks first, so the reason survives |
+> | `declinePlanChange` → `declineRequest` | the name was wrong the moment a POS quote could use it |
+> | Agency Subscription | Reset now says it waits — pill `Reset · pending admin`, button `Reset requested…`, and the toast no longer claims the tier already moved. Renegotiate/Reset now block only THEMSELVES (`customRequestKind`), not each other |
+>
+> Backend + web, no schema change, no migration. Declining writes `status` only — the ledger is never
+> touched, which is the point: the venue keeps its add-on, the agency keeps Custom at the agreed price.
+> **Not yet clicked through** — needs an agency and an admin session on a running app.
+> Rows already filed as **Direct** (e.g. Atlas's `Custom → Reset · Starter`) stay uncancellable by design:
+> that move already happened, so the honest fix is a new request, not a retro-cancel.
 
-> **4 Aug 2026 (night) — `biome check --write` applied across ALL of `apps/web`. 330 files,
-> +52,972 / −52,576. No behaviour change; typecheck IMPROVED by one.**
+> **4 Aug 2026 — A PLAN SWITCH SILENTLY CANCELLED THE VENUE'S POS ADD-ON.**
 >
-> Done so the save-formatter stops rewriting whole pre-existing files every time one is touched —
-> which had already forced two separate cosmetic commits this session and buried a ~15-line bugfix
-> in ~900 lines of churn.
+> Owner: *"i have integrate with POS so leave it remain, then i switch the normal plan why does it also
+> change the integrate with POS in the outlet"*.
 >
-> **⚠️ `check --write` is NOT just formatting — it applies safe LINT fixes too.** Two real code
-> changes landed alongside the quotes/tabs/semicolons/rewrapping:
-> 1. **`import * as React` → `import type * as React`** (biome's `useImportType`). This is only
->    valid where React is used purely in type positions — a file calling `React.useState` would
->    break. Legal here because the modern JSX transform means React need not be in scope.
-> 2. **Import member reordering** (`{ clsx, type ClassValue }` → `{ type ClassValue, clsx }`).
+> The whole point of an add-on is that it is held ALONGSIDE a plan (migration `0081`), but
+> `applyPlanChangeToLedger` closed **every** active `member_subscription` row for the venue before opening
+> the new plan row — no `kind` filter at all. So approving a switch stamped the POS line `expired` too,
+> and the venue's Subscription page fell back to "Request admin quote" as if the integration had never
+> been priced. The negotiated figure went with it. It now closes `kind: 'plan'` only; the add-on line is
+> untouched by a tier move and can still only be ended by the venue's own removal request
+> (`applyResolvedPriceToLedger`, the POS-request-naming-a-plan branch).
 >
-> **Verified, not assumed.** `tsc` went **121 → 120 errors** with an identical per-code
-> distribution (63 TS6133, 30 TS2322, 9 TS2353, …), so **no new error appeared** and one
-> pre-existing one was fixed. Then live-checked the three surfaces with the most reformatted
-> components — **agency portal, outlet Ratings, and the landing page — all render with zero console
-> errors.** The typecheck alone was not treated as sufficient: a wrong `import type` conversion can
-> pass `tsc` and still fail at runtime.
+> Two sibling reads had the same blind spot, both because a venue holding POS has **two** active lines and
+> the add-on is the NEWER one, so a `pageSize: 1` read returned "POS Integration, RM 0" instead of the plan:
 >
-> **Method note worth keeping — "is this diff formatting-only?" needs THREE normalisations.**
-> Stripping whitespace and quotes is not enough because biome also **adds semicolons and trailing
-> commas**; and neither comparison alone is sufficient — **a sorted line-by-line diff catches
-> re-ordering but not re-wrapping, while a concatenated hash catches re-wrapping but not
-> re-ordering.** Using both, plus stripping `; ,`, cut the "suspicious" set from 191 files to 125,
-> and sampling those showed the remainder was the two lint fixes above.
+> | read | was | now |
+> |---|---|---|
+> | `create()` duplicate-switch guard | compared the requested plan against the add-on, so "Already on X — no switch needed" never fired for a POS venue | `kind: 'plan'` |
+> | `withLiveFromPlan()` | admin drawer showed a pending request's "BEFORE · FROM PLAN" as POS Integration | `kind: 'plan'` |
+>
+> Backend-only, no schema change, no migration. `apps/web` already reads the add-on independently
+> (`useOutletSubscription.activeAddon` / `addonAmountRm`) — it was telling the truth about a ledger that
+> had been wrongly closed. A venue whose add-on was already expired by a past switch must be re-quoted
+> through the normal POS flow; this fix does not resurrect those rows.
 
-> **4 Aug 2026 (night, housekeeping) — biome formatting only, no behaviour change.**
+> **4 Aug 2026 — "UPCOMING 3" ON A DAY WITH NO UPCOMING SHIFT.**
 >
-> The save-formatter rewrote three pre-existing files that this session touched
-> (`lucide-label-icons.ts`, `nav-back.ts`, `outlet-rbac.ts`) from 2-space/single-quote to the
-> project's biome style (tabs, double quotes, sorted imports). **They were deliberately kept OUT of
-> `c0b732f` and `b536233`** so ~900 lines of cosmetic churn would not bury a ~15-line bugfix, and
-> are committed separately here.
+> Owner: *"in today page pr why still have 3 upcoming , but the agency schedule is already no shift"*.
 >
-> **Proven formatting-only before committing**, not assumed: for each file, the HEAD and working
-> copies were stripped of whitespace and quote characters and compared. Two matched outright;
-> `outlet-rbac.ts` appeared to differ, and the difference turned out to be **import ORDER** (the
-> formatter sorted `iconForNav` above the `LucideIcon` type import) — a sorted line-by-line diff was
-> empty. ⚠️ **A concatenated-hash comparison is order-sensitive and will call a re-sorted import
-> block "semantic"; diff the sorted lines before believing it.**
+> Today's hub strip read **UPCOMING 3** directly above an Agency Schedule saying *"No shifts this week"* —
+> the same three shifts called both pending and gone on one screen. The DB settles it: every 4 Aug
+> assignment is `completed` with both stamps —
+>
+> | assignment | shift_date | status | check_in_at | check_out_at |
+> |---|---|---|---|---|
+> | d24c4329 | 2026-08-04 | completed | 01:54:27Z | 03:08:59Z |
+> | 43f7e17e | 2026-08-04 | completed | 03:09:47Z | 03:14:13Z |
+> | ac63bead | 2026-08-04 | completed | 03:29:36Z | 04:05:08Z |
+>
+> `upcomingCount` tested the DATE only (`ymdToIso(...s.date) >= todayIso`), so a shift already worked still
+> counted as upcoming. The timetable was the honest one — it drops a shift the moment it is checked in or
+> out (`AgencySchedulePanel` ~263), because one being worked belongs to Today and a worked one belongs to
+> Payment. The count now applies that same predicate on the mapped shape (`status !== 'complete' &&
+> status !== 'on-duty'`), giving **0** for 4 Aug. Future days and today's not-yet-started shifts still
+> count. Client-side only — no endpoint, no schema, no migration; `apps/mobile` stays 0-error.
+>
+> Note the 3 Aug row (`assigned`, no stamps) is the RED missed-check-in day on the calendar; being dated
+> before today it was never in the count and still isn't.
 
-> **4 Aug 2026 (night) — `PV-000005` MERGED into `PV-000006`; the agency portal's fatal import
-> cycle broken. All 4 live vouchers now reconcile.**
+> **4 Aug 2026 — ONE PAPER = ONE LOG PER NIGHT (the duplicate guard was scoped to the check-in).**
 >
-> **🟢 The split week is closed. `PV-000006` = RM707.20**, 2 lines, 1 receipt. New
-> `scripts/merge-voucher-into.ts --from PV-000005 --into PV-000006`, report-only by default, all
-> writes in **one transaction**. It refuses unless the two vouchers are the **same PR, same agency,
-> both still editable** (`pending_review`/`draft` — a `sent`/`signed`/`paid` voucher is a record, not
-> a draft), and **every line being moved already falls inside the destination's week**. Totals are
-> **recomputed from the lines**, never by adding the two stored nets, so a wrong stored subtotal
-> cannot survive the merge. The `delete` runs last inside the transaction, so any child row left
-> behind trips its FK and rolls the whole thing back.
-> **Verified three independent ways:** the script's own re-read (2 lines, net 707.20, `PV-000005`
-> deleted); `audit-live-vouchers` → **4 of 4 reconcile** with `PV-000006`'s
-> `completed_shift_without_wages` flag now GONE (the wages were never missing — they were on its
-> twin); and the due-date script → "every voucher already has a due date".
+> Owner: *"this shift got problem cause the user scanned the same receipt for the drink so is same order
+> no why can submit"* and *"on that single shift can't submit the scan or self-log receipt for same order
+> no"*, after asking whether **RM 7.20** of drinks for a whole day could be right.
 >
-> **🔴 The agency portal was dead on arrival — `Cannot access 'DEFAULT_PER_TABLE_RM' before
-> initialization`.** A genuine circular import: `outlet-demo.ts` imported that **value** from
-> `outlet-financial-sync.ts`, which imports back from `outlet-demo.ts`. `outlet-demo` reads it at
-> **module-evaluation time** (its `priceRm`/`perTableRm` literals), so whichever module the bundler
-> entered first decided whether the app booted. **The cycle pre-dates this work; regenerating the
-> route tree with `npx tsr generate` re-ordered the route imports and changed that entry order,
-> which turned a latent cycle into a fatal one.**
-> Fix: the four defaults now live in **`outlet-financial-defaults.ts`, a LEAF module with no
-> imports** — a module that imports nothing can never be half-initialised. `outlet-financial-sync`
-> imports them for its own use and **re-exports all four**, so every existing import site is
-> unchanged. `outlet-demo` no longer imports `outlet-financial-sync` at all, so the edge is gone
-> rather than merely reordered. Agency dashboard renders (Atlas Agency, 3 PRs / 4 outlets) and the
-> outlet Ratings screen still loads, both with **zero console errors**.
+> **The RM 7.20 was arithmetic-correct and evidence-wrong.** Victoria's 4 Aug lines, from the live DB:
 >
-> **⚠️ Trap worth remembering: a stale Vite HMR graph reported the fix as still broken.** After the
-> edit the console kept throwing `DEFAULT_DRINK_UNITS is not defined` from a module URL carrying an
-> **older `?t=` timestamp** than the one Vite was serving; fetching the transformed source showed the
-> import present and correct. A **fresh tab** was clean. Check the `?t=` stamp in the stack trace
-> before believing a post-edit error, and reach for a new tab rather than a reload.
+> | receipt | order | source | item | qty | sales | comm | shift stamp |
+> |---|---|---|---|---|---|---|---|
+> | RCP-000010 | ORD0389 | scan | Lemon Drop | 1 | 30.00 | 3.60 | d24c4329 |
+> | RCP-000011 | ORD1111 | manual | Tips / Booking / Havoc | 1/1/2 | 2150.00 | 365.50 | 43f7e17e |
+> | RCP-000012 | **ORD0389** | scan | Lemon Drop | 1 | 30.00 | 3.60 | ac63bead |
+> | RCP-000013 | **ORD1111** | manual | Booking / Havoc / Tips | 1/3/1 | 3150.00 | 535.50 | ac63bead |
+>
+> Only **one drink was ever really sold** — a RM 30 Lemon Drop, at Emhub Testing Tier III's 12% = RM 3.60.
+> The day showed RM 7.20 because the SAME PAPER was scanned twice. Every rate reconciles at Tier III
+> (drinks 12%, tips 17%: 50→8.50, 100→17.00, 2000→340.00, 3000→510.00), so nothing was mis-bucketed —
+> the third check-in simply logged no drink at all.
+>
+> **Why the guard let it through.** `findReceiptByOrderNo` was scoped to the SHIFT STAMP, on the reasoning
+> that a new check-in is a new shift. Each duplicate pair above carries a *different* `shift_assignment_id`
+> — three check-ins on one night — so the guard never fired. A check-in is not a new night, and the paper
+> does not become a second paper because the PR clocked in again.
+>
+> **Now scoped to the NIGHT + OUTLET** (`payment_voucher_line.line_date` + `.outlet`), covering scan and
+> self-log alike since both submit through `addMyReceipt`. Not the whole voucher — that is a WEEK, and
+> outlets recycle order numbers, so Monday's ORD0389 would have blocked Thursday's. Outlet is part of the
+> identity because two venues can each print ORD0389 on one night; a null on either side still counts as a
+> match, since refusing a re-log the PR can undo beats paying it twice. The OCR fold (`ORDO389` = `ORD0389`)
+> is unchanged, and no migration was needed. Verified against the live rows — the three real duplicates
+> refuse, while a different outlet, the next night, and an unseen number all pass.
+>
+> ⚠️ **Not fixed, flagged:** the four duplicate receipts are still in the DB (drinks RM 3.60 and tips
+> RM 535.50 counted twice), and **Daily wages read RM 2,100 = 3 × RM 700**, one full day's Tier III wage
+> per check-in on a night of 1h15m + 0h36m + 0h04m. Both need an owner decision before anything is deleted.
 
-> **4 Aug 2026 (evening) — OUTLET RATINGS SCREEN BUILT; `due_date` BACKFILLED; the re-anchor was
-> REFUSED BY THE DATABASE and that refusal was the finding.**
+> **4 Aug 2026 — CHECK-OUT NEEDS ONE ACTION, NOT ONE OF EACH (corrects the rule shipped in `7d7bfa6`).**
 >
-> **🟢 The outlet Ratings screen exists — and `/outlet/ratings` never held ratings.** That path
-> rendered the **Calendar** (nav label "Calendar page", `outlet-rbac.ts`), so building on top of it
-> would have deleted the outlet's calendar. The Calendar moved to **`/outlet/calendar`** keeping its
-> label, and `/outlet/ratings` is now the real screen. `nav-back.ts`, `canAccessOutletPath` and the
-> nav array were all updated together; `npx tsr generate` re-emitted the route tree (it also
-> re-ordered its import list — generated-file churn, not a hand edit).
+> Owner: *"every shift must have either one drink or tips , or both also can to check out"*. I had read
+> the earlier *"scan or self log the drink and the tips"* as **AND** and enforced both halves — so a
+> drinks-only night was held with *"Nothing logged for tips yet"* and **no honest way to satisfy it**: the
+> only escape would be inventing a tip that never happened, which is the opposite of what these gates are
+> for.
 >
-> **The service layer was already complete; only the screen was missing.** `fetchRatings` /
-> `submitRating` have existed in `@/services/rating` all along, and the agency could already read
-> ratings back (`use-agency-ratings`). The **outlet side was write-only**: the post-seal prompt on
-> Today posted a rating and the venue could never see what it had said. New
-> `use-outlet-ratings.ts` closes that; no backend change, no new endpoint, no gate moved.
->
-> **Gating matches the backend exactly.** Viewing is `viewLiveDashboard` (all three sub-roles), because
-> `GET /rating` carries no sub-role guard; rating stays `ratePrs` (owner + ops, **not** Finance),
-> matching `outletOwnerOrOps` on `POST /rating`. The header line tells the reader which they hold.
->
-> **Live-verified on two real outlet sessions, and the second one was the proof.** Emhub Testing
-> rendered the empty state — and `GET /rating` returned **200 with zero rows**, so the emptiness was
-> truthful rather than a swallowed failure. Signing in as **Velvet 23** (`owner@velvet23.my`) rendered
-> its real row end to end: **2.0 average, "1 rating"**, Alice Yee Mei Me 2/5, the `audit-test` tag and
-> the note, with the star filter and the no-match state both exercised. `tsc` clean, biome clean,
-> zero console errors.
->
-> **⚠️ A cross-tenant leak was SUSPECTED and disproved — check before asserting.** A raw fetch with the
-> `access_token` localStorage key returned another outlet's rating while the session said "Emhub".
-> The cause was neither a leak nor a bug: **auth tokens are per-TAB (sessionStorage) with localStorage
-> as a seed only** (`auth-storage.ts`), so `access_token` in localStorage was a *stale leftover* from
-> an agency login in the same browser. The app uses `getAccessToken()` and was correctly on
-> `emhub@emhub.test` throughout; the agency token legitimately saw that row because the PR is Atlas's.
-> **Two "bugs" that were not bugs, caught by reading the storage layer instead of trusting the symptom.**
->
-> **`due_date` backfilled — 4 of 5.** New `scripts/backfill-voucher-due-dates.ts`, report-only by
-> default. `PV-000005` skipped on purpose (not Sun-anchored); re-running reports nothing eligible.
->
-> **🔴 The re-anchor of `PV-000005` was REFUSED by `payment_voucher_one_per_pr_week`, and nothing was
-> written.** `PV-000005` and `PV-000006` are the same PR and the same Sun–Sat week — **not a double
-> bill**, but one week split across two rows (`RM700.00` wages on one, `RM7.20` drink commission on the
-> other; correct total **RM707.20**). That also explains `PV-000006`'s `completed_shift_without_wages`
-> flag: the wages are on its twin. **The repair is a merge and is the owner's call** — see §9. The
-> re-anchor script guards money lines crossing weeks but does not check whether the destination
-> `(pr_id, week_start)` is already taken, which is why it planned an impossible move.
+> **Now: at least ONE action — a drink, a tip, or both.** What is still refused is an EMPTY shift, nothing
+> but the clock, plus the unchanged rule that every logged row carries its picture. Wages and the check-in
+> stamp remain the shift itself rather than an action, so neither satisfies it.
 
-> **4 Aug 2026 (later) — OVERTIME BOUNDED, and the Sun–Sat anchor VERIFIED IN THE RUNNING PROCESS.**
+> **4 Aug 2026 — REMOVE THE RECEIPT, NOT ONE ITEM OFF IT (and the uncaught `RCP-…` toast).**
 >
-> **🔴 P0 closed — overtime could be claimed for hours the PR was absent for.** `overtimeFromStamps`
-> measured the overrun from the shift's scheduled end to the check-out clock and **never consulted
-> `checkInAt`**. Assignment `6574b2ee` therefore claimed **279 minutes (RM813.75)** for **11.6 seconds**
-> of attendance: slot `10:00 – 12:00`, check-in `08:38:58.504Z`, check-out `08:39:10.090Z` — and
-> `12:00 + 279 min = 16:39`, the check-out stamp to the minute. Every minute since noon was billed to a
-> shift nobody was standing in. **The existing plausibility guard could not catch this** — 11.6 seconds
-> elapsed is entirely believable — because the fault was never an unbelievable stamp; it was counting
-> absence. Fix: the overtime window now opens at the **later** of the scheduled end and the check-in,
-> restoring the invariant **minutes claimed ≤ minutes present**.
+> Owner: *"Makes the scan I also can remove and scan again"* and *"if user need remove that picture that
+> related scanned receipt also will be remove it together"*.
 >
-> **`overtime.test.ts` — second test file in the repo, 7/7 green** (12 total with the due-date spec).
-> Written RED first: 3 of 7 failed against the old code, the invariant case reporting *540 minutes
-> claimed for 480 minutes present*. It sweeps every late check-in hour from 08:00 to 20:00, so the
-> invariant is enforced across the range rather than at one example. `tsc` clean, 0 errors.
+> **The backend was already right:** `deleteMyLine` deletes the RECEIPT once its last line goes
+> (controller ~1653), which is exactly what frees the order number to be scanned again. The phone was
+> deleting ONE line per tap — so a three-item tips receipt needed three deletes, and any re-scan in the
+> gap was refused with *"ORD1111 is already logged on this shift (RCP-…)"*. That refusal escaped as
+> **"Uncaught (in promise, id: 1)"** in a red system toast, because nothing caught it.
 >
-> **Live claim disposed through the app's own path.** `PATCH /shift-assignment/6574b2ee/overtime`
-> `{"decision":"reject"}` on the agency owner session → `overtimeStatus: rejected`,
-> `overtimeAmount: 0.00`, pending list now empty. **Reject, not approve — no money moved**, and 0.00
-> records "decided, worth nothing" rather than "never decided". Owner's call, asked and given.
+> **Now the paper is the unit.** The row’s trash removes every line sharing that `receiptNo`, letting the
+> backend’s cleanup fire on the last one; a bare self-log with no receipt still deletes alone. The refusal
+> is caught and shown in the gallery — an agency-reviewed receipt genuinely cannot be pulled, and that is
+> worth reading rather than crashing past.
 >
-> **🟢 The Sun–Sat anchor is now OBSERVED, not inferred — the last doubt from the stale-process episode
-> is closed.** `GET /shift-assignment/overtime/pending` returns `week` straight from `weekOfDate` **in
-> the running process**; for shift date **Monday `2026-08-03`** it returned
-> **`2026-08-02 .. 2026-08-08`** — Sunday to Saturday, verified by `getUTCDay()` rather than asserted.
-> **The check is READ-ONLY and wrote nothing** — a live verification that costs no data, the cheapest
-> technique found so far for this class of question.
->
-> **Still needing the owner's hand — both refused by the permission classifier, not by the code:**
-> `reanchor-voucher-weeks.ts --apply` (report mode pre-verified: exactly one voucher moves,
-> `PV-000005` `08-03..09` → `08-02..08`, its single line inside the new window, money guard passed) and
-> the `due_date` backfill. **Run the re-anchor FIRST**, or the backfill computes `PV-000005`'s due date
-> from a week that is still wrong.
->
-> ⚠️ **One thing NOT verified: whether the running dev backend reloaded the overtime fix.** The unit
-> test proves the source; `tsx watch` should have picked the file up, but that is exactly the
-> assumption that produced the phantom anchor bug. Confirm at the next real check-out, or restart.
+> **Removing the PICTURE now removes its receipt too.** The photo IS the receipt’s proof: stripping it
+> would leave the items standing with nothing behind them, and check-out refuses picture-less rows anyway
+> — the PR would be stuck holding money they cannot prove. The gallery caption says so outright: *"✕
+> removes the receipt and everything logged from it"*.
 
-> **4 Aug 2026 — double-billing found and closed at the guard.** A PR held two vouchers for one shift:
-> `PV-000005` (self-log, Mon-anchored `08-03..08-09`) and `PV-000006` (generator, Sun-anchored
-> `08-02..08-08`), each with a RM700 wages line whose `ref` named the same assignment `6574b2ee`.
-> RM1,400 for twelve seconds of attendance. `PV-000006` deleted; `PV-000005` survives.
+> **4 Aug 2026 — the same one-picture rule applied to the Scanned receipts card.**
 >
-> **Fix — `existsForPrWeek()` now matches on OVERLAP, not `week_start` equality.** Equality only
-> protected against a repeat from the same writer using the same anchor, so one day of disagreement
-> between two write paths disabled it entirely and silently. Overlap holds whatever the anchor, so a
-> timezone slip, a manual re-anchor, or a third write path cannot reopen it. Optional 4th arg `weekEnd`
-> defaults to `weekStart`, which degrades to a day-inside-week check for the create endpoint where the
-> field is optional; the exact-`week_start` arm is retained so legacy rows with a NULL `week_end` stay
-> covered. **Regression-tested against the real defect: the same call that minted `PV-000006` now
-> reports `0 created, 1 skipped (already_exists)` and writes nothing.** `tsc` clean.
->
-> **The anchor itself was never broken in code.** All three helpers are Sunday-anchored, the cron is
-> `0 2 * * 0`, and the PR app sends no week. `PV-000005` came from a **stale backend process** still
-> executing pre-merge Monday-anchored code — the `tsx watch` trap this file already warns about.
-> Restarting the backend from current disk is the whole remedy. **A Sunday-anchor "fix" was drafted and
-> then discarded: the source was already right.** The lesson is recorded in §9 — when live data
-> contradicts the source, check what is actually RUNNING before editing the source.
->
-> **Left open:** the anchor is inferred, not observed (dev servers were down, PR app needs a login);
-> `PV-000005` still needs re-anchoring to `08-02..08-08`; and the `due_date` backfill is blocked on a
-> permission refusal for bulk UPDATEs against `payment_voucher` — the statement is in §9 to run by hand.
+> Owner: *"for all of the receipt also like this makes"*. `collectReceiptPhotoGroups` counted a photo per
+> LINE, so a three-item tips scan read **"Tips / Service · 3 pictures · 3 items logged"** and drew the
+> same paper three times. Deduped per group, so the count answers what it claims to — how many receipts
+> were photographed — while `lineCount` still says how many items came off them. Both surfaces that render
+> this card (Check-In and the scan screen) are fixed by the one change.
 
-> **3 Aug 2026 (evening) — the spine is proven end to end, and `due_date` now exists.** Two things
-> happened: a full four-role E2E sweep on real simultaneous logins, and one feature shipped off the
-> back of it.
+> **4 Aug 2026 — ONE PICTURE, ONE THUMBNAIL. Plus the cause of "Internal Server Error" on a self-log edit.**
 >
-> **Shipped — `due_date` computed at generation.** `paymentDueDate(weekEnd, termDays = 7)` +
-> `PAYMENT_TERM_DAYS` in `payment-voucher-week.ts`; the generator now sets `dueDate` in its `create()`
-> payload. Anchored to **`week_end`, not `issued_date`** — the issued date is whenever the job ran, so
-> anchoring there lets a late or repeated run hand the same seven days two different due dates, and
-> quietly extends the term every time the job slips. `week_end` is a property of the cycle, so the
-> answer is stable however often generation runs. Malformed input returns `null` (same round-trip guard
-> as `weekOfDate`) rather than a rolled-over date. Both callers benefit — the Sunday cron and
-> `scripts/generate-weekly-pvs.ts`. Added `payment-voucher-week.test.ts`, **the first test in the
-> repo**, 5/5 green; `tsc` clean at 0 errors / 245 files. **Forward-only: the 3 live vouchers and
-> `PV-000006` still hold `due_date = null` and need a deliberate backfill.**
+> Owner: *"if that self log for the tips have many same picture if just that action only show one of that
+> picture"* — three items scanned off ONE receipt each carry that receipt's photo (by design, since
+> `3d51a6d`), so the gallery drew the same paper three times and read **PROOF PHOTOS · 3** for a single
+> picture. Deduped by image; the kept entry keeps its real `lineId` + index so REMOVING it still deletes a
+> photo that exists rather than a display-only copy.
 >
-> **Proven live for the first time — the whole spine.** Post job (outlet) → row persists and routes to
-> Atlas (`agency_id` correct, `created_by owner@velvet23.my`) → agency assigns two PRs with tier rates
-> sealed correctly from the rate card (tier_3 → RM700, tier_1 → RM500) → the PR app shows the shift
-> with real address and the right per-outlet cancellation penalty → check-in/check-out seals the wage →
-> **the generator produced `PV-000006` (RM700, `pending_review`), balanced and reconciled, with the
-> wage line carrying `component: 'wages'` and `ref` pointing at its own assignment.** The duplicate
-> guard was also proven: re-running for 26 Jul–1 Aug skipped both PRs with `already_exists` and wrote
-> nothing, because `existsForPrWeek` is status-agnostic. That is the RM2,285.08 double-voucher
-> mechanism, genuinely closed.
+> **🔴 STILL OPEN — the self-log edit is structurally wrong, and that is what 500s.** Owner: *"if i remove
+> the tips all of the tips scanned or self remove it together, if i edit the tips all also can edit
+> together… internal server error solve this"*. Read `ScanScreen.submitManual`:
 >
-> **All test data was removed**; the six tracked tables returned to baseline. `PV-000006` was left in
-> place deliberately (tagged `created_by = claude-e2e-generate`) — deleting a voucher and its lines is
-> the operation flagged as having nearly corrupted one before, so it stays the owner's call.
+> ```ts
+> const [first, ...rest] = items;
+> await editLine(editId, { ...first });      // updates ONE row
+> for (const d of rest) await logLine({...}); // and re-adds the others as NEW rows
+> ```
 >
-> **Five defects opened (see §9, ranked).** The one that matters is **unbounded overtime**: 12 seconds
-> between check-in and check-out generated **279 minutes** of pending overtime, because the calculation
-> runs from the shift's scheduled end to the check-out clock and never consults check-in. It explains
-> both the live "113.1h" line and the 23 Jul assignment whose check-out is five days after its
-> check-in. Also opened: the portal guard is bypassed by direct URL entry (SSR no-op + `beforeLoad` not
-> re-running on hydration), `GET /agency` carries no role guard at all, 403s render as **RM 0.00** and
-> "All clear", and the server silently caps `pageSize` at 100.
+> So editing the Tips row of a 3-item receipt UPDATES one line and INSERTS duplicates of the siblings that
+> are already saved; an item set to 0 is simply left behind, still logged. Re-adding an item that already
+> exists on that receipt is what throws. **The fix is the model the owner described: a scan is ONE
+> RECEIPT, so edit reconciles every item of that receipt in one pass (update / insert / delete-to-zero)
+> and delete removes the whole receipt.** Lines already carry `receiptNo`, so they can be grouped without
+> a backend change. NOT attempted in this slice — a half-built rewrite on the payment-line path is worse
+> than a known bug, and this one needs its own careful pass.
+
+> **4 Aug 2026 — "THIS SHIFT" MEANT "TODAY", SO A SECOND CHECK-IN INHERITED THE FIRST SHIFT’S WORK.**
 >
-> **Three findings were over-called and retracted in the same session** — a DOM read before React Query
-> resolved, a DB read taken in the same breath as the click that wrote (the owner caught that one), and
-> a "missing rows" claim that was a 1,400-char truncation. The rule now sits in §9: a count, a
-> truncated page, or a read taken seconds after a write is not evidence yet.
+> Owner: *"When pr check in , New shift new receipt data please clear it"*. Checked in at **11:29** for a
+> new shift and the screen still showed a Havoc logged at **11:13**, four proof photos and three scanned
+> receipts from the session before — every one of those headings says *"this shift"*.
 >
-> **Two earlier entries corrected:** tips are not missing (capture exists end to end), and cancellation
-> penalties are not undefined (Velvet 23 RM175, Emhub/JK House RM350).
->>>>>>> 2d515d0ca482c83f97628ce5530a358f8b32a196
+> **Three places filtered by DATE and called it a shift:** `CheckInScreen.todayReceipts`,
+> `ScanScreen.todayReceiptLines`, and `ShiftStatusPanel`’s own `logs` memo (which is what feeds the STATUS
+> table, TOTALS and the PROOF PHOTOS gallery). A PR working two shifts on one date got the first one’s
+> items, money and pictures carried into the second.
+>
+> **Now scoped by the check-in stamp** — the thing that actually separates two sessions on one date.
+> Anything logged before this check-in belongs to the shift before it. The wage/check-in row is stamped at
+> check-in itself so it lands on the right side, and with no stamp yet (pre-duty) the day is all there is
+> to go on.
+>
+> This also repairs the gates built earlier today: the missing-photo count and the drinks+tips
+> requirement now judge THIS shift instead of dragging a previous one’s rows in as satisfied.
+>
+> ⚠️ Time-based, not assignment-based. Correct for sequential shifts, which is what the day looks like;
+> the structural version would expose `shift_assignment_id` on the line DTO (receipts already carry it).
+
+> **4 Aug 2026 — THE MIS-FILED HAVOC LINE RE-FILED, USING THE ROW’S OWN EVIDENCE.**
+>
+> Owner: *"then how u can change this ?"* — the code fix (`1a3a243`) only governs NEW logs; the row
+> already saved still read **OT · RM 2,000.00**, and RM 340.00 sat under *others* on the Payment week.
+>
+> **Two fields had to move, not one.** `lineKind()` lets a PACKED REF outrank the `component` column, so
+> changing `component` alone would have displayed nothing different:
+>
+> ```
+> ref = "others|manual|2000.00|ORD1111:2|service"
+>        ^ kind says overtime            ^ the row’s OWN category says service
+> ```
+>
+> **That self-contradiction is the match rule** — `refile-service-lines.ts` touches only rows whose packed
+> kind is `others` while their own category segment reads `service`/`tip`. A genuine overtime line carries
+> no category there and can never be caught. Far safer than matching descriptions against the menu, which
+> was the first idea.
+>
+> ⚠️ **MONEY UNTOUCHED:** `quantity`, `amount` and the sales figure inside the ref are never written —
+> only the bucket. Dry-run first (1 row), then applied. Verified after: Havoc now
+> `component=tip_commission ref=tips|manual|2000.00|ORD1111:2|service`, commission still **RM 340.00**,
+> and the four other lines of that day are byte-identical.
+>
+> It also restores the check-out gate: a Havoc-only tips scan now counts as a tips action.
+
+> **4 Aug 2026 — A BAR SERVICE WAS BEING LOGGED AS AN OVERTIME CLAIM.**
+>
+> Owner: *"why put the havoc under the other? In the outlet workspace I no put like this"* / *"seperate
+> the OT with the Havoc"*. Havoc is configured under **Service Entitlement (RM 1,000)**, and the PR app
+> logged it as **"OT · RM 2,000.00"**.
+>
+> **Two rules disagreed about the same item.** `menuForScanCategory` puts `service` AND `tip` on the Tips
+> page together; `receiptKindForItem` only counted `tip` — plus **one hardcoded id, `booking-com`**, which
+> happened to be the seeded Booking commission. So Booking commission passed by accident of its id and
+> Havoc did not. Everything else fell to `others`, which the app labels **OT** (`ShiftStatusPanel:411`)
+> and the backend files as component `other` (`payment-voucher-component.ts:24`) — **the same bucket as
+> genuine overtime.** Any service an outlet adds itself with "+ Add More" hit this.
+>
+> The money was never wrong (commission already used the TIP rate), but the CLASSIFICATION was, and it
+> also broke the check-out gate landed minutes earlier: a Havoc-only tips scan counted as no tips action.
+>
+> **Now `service` classifies as `tips` and `others` is left to what really is other** — overtime and
+> unclassified. Verified: Lemon Drop→Drink, Tips→Tip, Booking commission→Tip, Havoc→Tip, and a made-up
+> "Anything the outlet adds"→Tip.
+>
+> ⚠️ **One row already saved carries the wrong bucket:** `Havoc, 4 Aug, qty 2, commission RM 340.00`,
+> component `other`. Query written and run; NOT changed — re-filing a line on a payment voucher is the
+> owner’s call. One statement fixes it when they say so.
+
+> **4 Aug 2026 — "2 LOGGED ACTIONS HAVE NO PICTURE" WAS THE APP LYING TO ITSELF.**
+>
+> Owner: *"why have this ??"* — and the database answered it. The three tips items came off ONE scan and
+> share **one receipt (`98977499`, ORD1111), which holds the photo**:
+>
+> | line | own photos | receipt photos |
+> | --- | --- | --- |
+> | Tips | 1 | 1 |
+> | Booking commission | **0** | 1 |
+> | Havoc | **0** | 1 |
+>
+> **The picture is proof of the RECEIPT, and one photo covers every item printed on it** — which is why
+> `submitReceipt` stores it on `payment_voucher_receipt` and not on each line. But the check-out gate asks
+> every LINE for a picture, so the 2nd and 3rd item off one scan looked unproven while their receipt’s
+> photo sat in the database three feet away.
+>
+> **Fixed in the DTO, not by copying the image onto every row:** `toReceiptLineDTO` now reports the
+> line’s own photos, or its receipt’s when it has none. That honours the standing rule — one fact lives
+> in one table — and it needed **no data migration**: the existing rows unblock on the next read.
+> Verified against the live DB: all four of 4 Aug’s lines now resolve to a photo, `0 still blocking`.
+>
+> ⚠️ Keep both the mobile fix (`3d51a6d`, every submit path sends the scan photo) and this one: the
+> mobile change covers a line with NO receipt behind it (a bare self-log), this covers the 2nd+ item of a
+> receipt. Neither makes the other redundant.
+
+> **4 Aug 2026 — CHECK-OUT NOW REQUIRES BOTH HALVES OF THE NIGHT, EACH WITH ITS PICTURE.**
+>
+> Owner: *"before check out need upload the receipt picture , need to do the action of scan or self log
+> the drink and the tips , else cannot check out"*.
+>
+> The gate only counted PICTURES — a shift with no drinks action and no tips action at all checked out
+> clean, because zero rows means zero rows missing a photo. Now both must exist: **≥1 drinks action AND
+> ≥1 tips action**, and every logged row must carry its photo. `kind: wages` and the check-in stamp are
+> the shift itself, not an action, so neither satisfies either half.
+>
+> **Refusals are stated in one place** (`checkOutBlock`), photos first, then the missing half — with the
+> reason it matters: *"Once the shift closes, that commission cannot be claimed"*. A PR who forgets the
+> tips receipt does not lose a tick-box, they lose money, after the paper is gone and the week has shut.
+
+> **4 Aug 2026 — 🔴 CHECK-OUT WAS BLOCKED BY ROWS WHOSE PROOF PHOTO WAS NEVER SENT.**
+>
+> Owner: *"just make sure every action submitted that picture as the ocr proof of the drink and the tips
+> can check out already"* — *"2 logged actions have no picture"* on a shift where **both receipts were
+> photographed and both appear under Scanned receipts**.
+>
+> **The screen’s own comment was wrong.** It said *"The scanned receipt photo IS the proof —
+> runScanDetect auto-attaches it"*, but only the pure-scan submit sent `receiptShot`. The item-menu
+> submit sent `proofPhotos`, which `keepAsProof` fills **only when a scan FAILS**. So the successful
+> path — read the receipt, adjust quantities, confirm — saved every row with NO picture, and check-out
+> refuses those. The Tips page always goes through that path, which is why its rows were the picture-less
+> ones while the Drinks scan was fine.
+>
+> **Two more paths sent nothing at all:** rows added mid-edit (`for (const d of rest)`) had no
+> `proofPhotos` key whatsoever, and the amount-fallback edit sent only the manual photos.
+>
+> **Now one list feeds all five submits** — `proofForSubmit`: the receipt shot first, then any manually
+> added photos, deduped and capped at 6 like `keepAsProof`. The submit gate uses the same list, so it can
+> no longer demand a photo that is already on file.
+>
+> ⚠️ **The two rows already saved stay broken** — Tip RM 50.00 and Booking commission RM 100.00, 10:50.
+> The fix stops new ones; it cannot retro-fit a picture. Either re-log them after the rebuild, or say the
+> word and their shift’s receipt photo can be attached server-side.
+
+> **4 Aug 2026 — AN ITEM OCR MISSES IS NO LONGER INVISIBLE.**
+>
+> Owner, third report of the same shape: *"again where is the tips i scan sometimes missing tips
+> sometimes missing booking commision in the tips self log and scan"*.
+>
+> **The parser was the wrong thing to keep tuning.** `manualRows = editId ? categoryMenu : detected` —
+> a scan listed ONLY what OCR read, so an item it missed did not exist on screen and the single remedy
+> offered was *"Scan again to catch a tip / service item OCR missed"*. OCR misses a short line often
+> enough — glare, a fold, a tilted photo — that scanning again is a lottery, and the owner has now
+> played it four times: Havoc alone, then Booking commission alone, then Booking + Havoc.
+>
+> **Added: NOT FOUND ON THE SCAN · ADD IF IT IS ON THE PAPER** — the outlet’s configured items the scan
+> did not find, each with a one-tap **+ Add**. The PR is standing at the bar holding the receipt; they
+> can say what is on it. An item added this way carries an ASSUMED quantity, so it shows the same
+> *"Receipt printed no quantity — check this one"* flag as any other guess rather than posing as read,
+> and the block says plainly that the agency checks these against the photo.
+>
+> ⚠️ **The parser was NOT touched again.** Its harness (11 fixtures) passes on the exact text of this
+> receipt, so a fifth blind tweak would be guesswork. If the reveal ever shows `1 Tips` present in the
+> lines while Tips is still not detected, THAT is a parser bug and there is now a fixture slot for it.
+
+> **4 Aug 2026 — ONE SCAN FOUND HAVOC, THE NEXT FOUND ONLY BOOKING COMMISSION. THE OCR WRAPPER WAS
+> THROWING HALF THE READ AWAY.**
+>
+> Owner: *"tips section self log inaccurate"* — three scans of one receipt, three different subsets.
+>
+> **`recognizeReceiptText` returned `result.text` and ignored `result.blocks[].lines[]`.** The flat
+> blob is ML Kit’s blocks joined in ITS reading order, which on a tilted or glared photo interleaves a
+> receipt’s columns and tears "1 Tips" off its own line. `blocks[].lines[]` is the engine’s own line
+> segmentation and survives that far better. **Both are now fed, deduped** — the parser keys matches by
+> menu id, so a line present in both forms is still matched once, while a name mangled in one form can
+> be found in the other. It also gives the date/order/time regexes a second reading of the line they
+> need, which is why the Time went blank while the Date on the SAME printed line came through.
+>
+> **That raised a new risk, so it was closed in the same pass:** the flat blob can WELD item lines
+> together — `1 Tips 1 Booking Commision 5 Havoc` — and every quantity rule read the LEADING number,
+> which would bill five Havoc as one. Quantity is now taken from the digits immediately before **that
+> item’s own name**, using the index the matcher returns (`findItemInLine`, replacing the boolean
+> `lineMentionsItem`).
+>
+> **Two bugs found only because the fixtures were written to disagree with the code:**
+> **(1)** a fuzzy window can start one character EARLY — `3bookingcommision` is within two edits of
+> `bookingcommission` — so the index pointed at the quantity and swallowed it; the matcher now steps
+> past leading digits *unless the name itself starts with digits* (`1664 Blanc`). **(2)** `qtyFromLine`
+> was still re-deriving the index with an exact `indexOf`, which finds nothing for a misspelt name, so
+> the receipt’s own typo silently took the line’s first number. **`1 Tips 3 Booking Commision 5 Havoc`
+> read Booking as ×1 — RM 5,150 instead of RM 5,350 — and passed the earlier fixture only by luck,
+> because that one happened to use ×1.**
+>
+> Harness now **11 fixtures + 6 must-not-match**, all green, `apps/mobile` tsc 0.
+
+> **4 Aug 2026 — THE SCAN NOW SHOWS WHAT OCR ACTUALLY READ.**
+>
+> Owner, on a scan of the same receipt that worked twenty minutes earlier: *"i self log for the tips
+> where is my tips and bookign commision ? even the date also no"* — Havoc ×5 came through, **Tips and
+> Booking commission did not, and the Time went blank** while the Date on the SAME printed line
+> (`16-06-2026   09:45PM`) was read fine.
+>
+> **Those two symptoms cannot share a cause in the matcher.** Time and Date are parsed by different
+> regexes off one line; Tips had already been fixed and re-verified. What varies between two scans of
+> one receipt is the TEXT ML Kit returns — and the screen was throwing it away. `parseReceipt` has
+> always returned `lines`; nothing rendered it, so "why didn't it find Tips?" had no answer on the
+> phone and every report was guesswork.
+>
+> **Added: "Show what OCR read (N lines)" inside the OCR EXTRACTED card**, captured BEFORE the early
+> return for a scan that matched nothing — that is precisely the scan whose text needs looking at.
+> With one line of explanation: an item is only found when its name appears in that list, so a missing
+> or mangled name there means the paper or the photo, not the parser.
+>
+> ⚠️ **No parser change on this report, deliberately.** The PC harness passes all eight fixtures
+> including this exact receipt; changing the matcher without seeing the text would be guessing twice.
+
+> **4 Aug 2026 — THE PARSER CAN NOW BE PROVED WITHOUT A PHONE.**
+>
+> Owner: *"so how ? rebuild ?"* / *"after rebuilds i can only test on my mobile devices ?"*
+>
+> **No — only the camera needs the phone.** `apps/mobile/scripts/check-receipt-parser.ts` runs the whole
+> matcher on the PC (`cd apps/mobile && npx tsx scripts/check-receipt-parser.ts`) starting from the TEXT
+> ML Kit produces, which is where every 4 Aug bug lived. Eight fixtures — the owner’s real receipt,
+> spaces lost, i-read-as-1, priced lines, x-suffix, singular/plural, digit-leading names, nothing printed
+> — plus six lines that must match NOTHING. Exits non-zero on failure, so it is the regression guard
+> those three fixes never had.
+>
+> ⚠️ **`jest.config.cts` names a `jest-expo` preset that is NOT in package.json**, and there is not one
+> `*.test.ts` under `apps/mobile/src`. Rather than pretend a test runner exists, this is a plain tsx
+> script. Wiring jest-expo properly is its own job.
+>
+> **Rebuild facts, checked not guessed:** `app.json` has **no `updates` block and `expo-updates` is not
+> installed**, so there is NO over-the-air path — a JS-only change cannot reach an installed release APK.
+> But `apps/mobile/android/gradlew` EXISTS (bare workflow), so a local build works without EAS. Three
+> options, fastest first: **(1)** `npx expo run:android` — builds once, then JS edits hot-reload with no
+> rebuild at all; **(2)** `cd apps/mobile/android && ./gradlew assembleRelease` → APK at
+> `android/app/build/outputs/apk/release/`; **(3)** `npx eas build -p android --profile preview`
+> (projectId `3114a391…`, buildType apk).
+
+> **4 Aug 2026 — WHY "TIPS" WAS SOMETIMES INVISIBLE TO THE SCAN (and Havoc never was).**
+>
+> Owner: *"Why sometimes in the tips scan ocr no detected the tips it's in the outlet"*. It IS in the
+> outlet menu — the matcher was the problem, and the **"sometimes" was the clue**: same receipt, same
+> item, different scan.
+>
+> **The asymmetry is by design and it backfired.** `lineMentionsItem` scales its forgiveness with name
+> length: **< 5 letters must appear as an EXACT standalone word** (so "Tip" can never be faked by
+> "this"), 5–8 letters allow a typo, 9+ allow two. **Havoc is 5 letters and matches as a substring;
+> "Tips" is 4 and does not.** So the two items on one receipt line fail differently — exactly what the
+> owner saw.
+>
+> **Two OCR realities break the exact-word test, both reproduced before fixing:**
+> **(a) the lost space** — thermal receipts kern tight and ML Kit returns `"1Tips"`, ONE token, so the
+> word test finds nothing; **(b) the digit-for-letter read** — `"1 T1ps"`, i read as 1. Both returned
+> **false** for Tips and **true** for Havoc.
+>
+> **Fixed narrowly, not by loosening the short-name rule** (which exists for a good reason):
+> tokens are now also split at digit/letter boundaries — `"1Tips"` → `['1','tips']`, with the plain
+> tokens KEPT so a name containing digits still matches whole — and `foldOcrDigits` maps only the four
+> confusables OCR actually produces (**0→o, 1→i, 5→s, 8→b**) on both sides before comparing. Digits
+> become letters, never the reverse: `"t1ps"` reaches `"tips"`, while `"this"` folds to `"this"` and
+> still does not match.
+>
+> **The same lost space hides the QUANTITY**, so `"2Havoc"` read as one. Added a glued-quantity pattern
+> guarded by the item name, plus a name-aware rule for the digit-leading names this bar trade is full of
+> — **1664, 100 Plus, 7Up** — where `"2 1664"` is a quantity and a name that no general rule can
+> separate from a number and an amount.
+>
+> **Verified across seven receipt shapes:** the owner’s real text, spaces lost, i-as-1, priced lines,
+> digit-leading names with and without a quantity, and nothing printed at all — every one now reads
+> `Tips ×1 | Havoc ×2 = RM 2,050`, and the genuinely unreadable cases stay flagged *(assumed)* rather
+> than pretending. False-positive guards re-checked: `this round`, `Shots`, `TIGER`, `5 Tops`,
+> `Table No. S4`, `CASHIER 1` all still refuse to match Tips. `apps/mobile` tsc **0**.
+>
+> ⚠️ **Known and left alone:** `"tip top beer"` matches Tips through the pre-existing singular/plural
+> rule. Not introduced here, and not worth tightening blind — no such line exists on a real receipt.
+
+> **4 Aug 2026 — OCR READ THE ITEMS AND THREW THE QUANTITIES AWAY (PR self-log).**
+>
+> Owner: *"in the check in page pr is 2 quantity of the Havoc, why i self log still ocr shows default one?"*
+> The receipt says **`2 Havoc`**; the screen showed **×1**, and the voucher would have been **RM 1,150**
+> instead of **RM 2,150**. Under-paying a PR by a thousand ringgit, silently.
+>
+> **Cause, in one regex.** `ITEM_RE = /^(d{1,2})s+(.+?)s+(d+[.,]d{2})$/` — it REQUIRES a trailing
+> price. This receipt prints the order list with no money on those lines at all (tips and service items
+> often have none), so no pattern matched and `qtyFromLine` fell through to its `return 1`. Every item on
+> every receipt of that shape read as one.
+>
+> **Fixed with a third pattern, tried last because it is the loosest:** `LEADING_QTY_RE = /^(d{1,2})s+(?=D)/`
+> — a small leading number followed by a non-digit. The `D` lookahead keeps it off `"2 1000.00"`, and it
+> is only ever reached for a line that ALREADY matched a menu item by name, so a date or a table number
+> cannot be read as a quantity.
+>
+> **Then the owner's follow-up — *"makes always checks the quantity from the receipt"*.** Two changes:
+> **(a)** a printed quantity is now the ANSWER, not a floor. The screen took `Math.max(existing, parsed)`,
+> so a stale number survived the scan that finally read the line. **(b)** `ReceiptMatch.qtyFromReceipt`
+> records whether the number was READ or ASSUMED — a silent default of 1 is indistinguishable from a 1 the
+> receipt actually printed, which is exactly how this bug hid. Rows the parser guessed now say **"Receipt
+> printed no quantity — check this one"** in amber, and an assumed value never overwrites what is already
+> on screen.
+>
+> **Verified against the owner’s own receipt text and five other shapes:** real receipt → `Tips ×1 |
+> Booking commission ×1 | Havoc ×2 = RM 2,150`; priced lines `2 Havoc 2000.00` → ×2; nothing printed →
+> ×1 flagged *(assumed)*; `Havoc x3` → ×3; the same item on two lines → ×2, and an assumed 1 does NOT beat
+> a printed 2. `apps/mobile` tsc **0 errors** (its baseline).
 
 > **3 Aug 2026 — `main` merged into `jk` (`0f339b8`, PR #43 from SL). Two conflicts, both resolved from
 > evidence rather than by taste.**

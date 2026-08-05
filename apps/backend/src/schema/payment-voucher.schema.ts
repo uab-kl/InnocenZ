@@ -262,6 +262,83 @@ export const AgencyEditReceiptLineSchema = z
 
 export type AgencyEditReceiptLineInput = z.infer<typeof AgencyEditReceiptLineSchema>;
 
+/**
+ * The agency ADDING a line the paper carries and the log missed.
+ *
+ * ONLY drinks and tips, and it is the same rule that limits `DISPUTABLE_KINDS`
+ * to those two: wages and overtime are not CLAIMED, they are DERIVED from the
+ * check-in/check-out stamps and the shift's rate. Typing one here would invent
+ * money the clock never recorded, and the way to fix a wrong wage stays fixing
+ * the attendance record it was computed from.
+ *
+ * `amount` is the commission — the number the voucher net is built from —
+ * matching `AgencyEditReceiptLineSchema` above. The paper's GROSS sale is not
+ * accepted for the same reason it is not editable there: it is the paper's own
+ * figure and the photo is the record of it.
+ */
+export const AgencyAddReceiptLineSchema = z.object({
+  kind: z.enum(['drinks', 'tips']),
+  /**
+   * Must NAME AN ITEM THE OUTLET SELLS — checked against that outlet's own
+   * `outlet_drink_menu` in the controller, and stored in the catalogue's
+   * spelling (owner's rule, 4 Aug 2026). It stays a plain string here because
+   * the allowed set is a per-outlet runtime fact resolved from the receipt's
+   * shift, which zod cannot enumerate; the refusal lives where the outlet is
+   * known. Matching is trimmed and case-insensitive.
+   */
+  description: z.string().min(1, 'Description is required').max(500, 'Description is too long'),
+  quantity: z.number().int().positive().max(999),
+  amount: z.number().nonnegative(),
+  /** Defaults to the day this receipt's money already sits on — see the controller. */
+  lineDate: isoDate.optional(),
+});
+
+export type AgencyAddReceiptLineInput = z.infer<typeof AgencyAddReceiptLineSchema>;
+
+/**
+ * The agency correcting the RECEIPT ITSELF — the order number typed off the
+ * paper, or the day it belongs to.
+ *
+ * `orderNo` is NULLABLE as well as optional, and the two mean different things:
+ * absent leaves the stored number alone, null clears it. A number OCR read off a
+ * blurred photo has to be removable, not just replaceable.
+ *
+ * `receiptDate` is not a cosmetic field here. Changing it MOVES the receipt's
+ * lines onto that day (see the controller), because a receipt sitting on one
+ * date while its money sits on another is two days that no single day review
+ * describes.
+ */
+export const AgencyEditReceiptSchema = z
+  .object({
+    orderNo: z.string().max(100, 'Order no is too long').nullable().optional(),
+    receiptDate: isoDate.optional(),
+    /**
+     * The time PRINTED on the paper. Editable for the same reason `orderNo` is:
+     * OCR reads it off a photographed receipt and gets it wrong (owner, 4 Aug
+     * 2026). Nullable like `orderNo` — a misread time has to be removable, not
+     * only replaceable.
+     *
+     * Unlike `receiptDate` this moves NO money: the day a line belongs to is
+     * `line_date`, never the printed clock time, so correcting it re-opens the
+     * receipt without making any day's approval stale.
+     *
+     * Loose `string` rather than a strict HH:MM regex, matching
+     * `CreatePrReceiptSchema.receiptTime` which writes the column in the first
+     * place — the paper prints what it prints, and a validator stricter than the
+     * source of the data refuses to record reality.
+     */
+    receiptTime: z.string().max(10, 'Time is too long').nullable().optional(),
+  })
+  .refine(
+    (d) =>
+      d.orderNo !== undefined ||
+      d.receiptDate !== undefined ||
+      d.receiptTime !== undefined,
+    { message: 'Send an order number, a receipt date, a time, or any of them' },
+  );
+
+export type AgencyEditReceiptInput = z.infer<typeof AgencyEditReceiptSchema>;
+
 export const PrSignVoucherSchema = z.object({
   signature: z
     .object({

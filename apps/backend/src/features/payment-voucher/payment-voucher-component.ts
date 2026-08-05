@@ -76,6 +76,45 @@ export function kindFromComponent(
 }
 
 /**
+ * The only two buckets a PR may contest.
+ *
+ * OWNER DECISION (4 Aug 2026): *"the pr only can dispute for the drinks and the
+ * tips … Other (OT), Daily wages cannot disputed"*. This REVERSES the 30 Jul
+ * rule that wages were always disputable, and the reversal has a cost worth
+ * recording: a wrong wage or overtime figure now has no in-app route to contest
+ * at all. The reasoning behind the new rule is that wages and OT are not
+ * CLAIMED, they are DERIVED — from the check-in/check-out stamps and the shift's
+ * rate — so the way to fix one is to fix the attendance record it was computed
+ * from, not to argue with the total afterwards.
+ *
+ * `others` covers OT **and** deductions (see KIND_BY_COMPONENT), so a deduction
+ * is not disputable either. That follows the instruction as given; if a
+ * deduction ever needs contesting it should get its own bucket rather than
+ * quietly re-opening OT.
+ */
+export const DISPUTABLE_KINDS = ['drinks', 'tips'] as const;
+
+/**
+ * May this line be contested?
+ *
+ * ONE function, called by the DTO the app reads AND by the endpoint that
+ * refuses — a client copy of a rule is never the rule, and the two disagreeing
+ * is exactly how a PR gets offered a button that 409s.
+ *
+ * For drinks and tips, approval remains the precondition: until the agency has
+ * reviewed the receipt there is no stated figure to argue with, only the PR's
+ * own submission. A drinks/tips line with NO receipt (`null`) stays disputable —
+ * nothing is pending, and the figure is the agency's own, typed by them.
+ */
+export function lineDisputable(
+  kind: string | undefined,
+  receiptStatus: 'pending' | 'approved' | 'verified' | null | undefined,
+): boolean {
+  if (!kind || !(DISPUTABLE_KINDS as readonly string[]).includes(kind)) return false;
+  return receiptStatus !== 'pending';
+}
+
+/**
  * Does this ref carry a packed `kind|source|sales|dedupe|category`?
  *
  * The one test that separates a PR self-log or receipt line (packed, so the ref

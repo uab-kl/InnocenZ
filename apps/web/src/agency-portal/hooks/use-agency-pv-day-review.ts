@@ -9,6 +9,7 @@ import {
 	reviewPaymentVoucherDay,
 } from "@/services/payment-voucher";
 import { pvEvidenceKey, useAgencyPvEvidence } from "./use-agency-pvs";
+import { agencyReceiptsKey } from "./use-agency-receipts";
 
 /**
  * Why this voucher may not go to the PR yet — the client-side mirror of the
@@ -114,8 +115,15 @@ export function useAgencyPvDayReview(voucherId: string | null) {
 	const queryClient = useQueryClient();
 	const { voucher, isBacked, isLoading } = useAgencyPvEvidence(voucherId);
 
-	const invalidate = () =>
+	// Both reads, because a day decision now moves two things: the day itself and
+	// the receipts that day is made of. Refreshing only the evidence detail left
+	// the Receipts sub-tab showing "Waiting on you" for receipts the server had
+	// already approved.
+	const invalidate = () => {
 		queryClient.invalidateQueries({ queryKey: pvEvidenceKey(voucherId) });
+		queryClient.invalidateQueries({ queryKey: agencyReceiptsKey });
+		queryClient.invalidateQueries({ queryKey: ["agency", "payment-vouchers"] });
+	};
 
 	const reviewMut = useMutation({
 		mutationFn: (vars: {

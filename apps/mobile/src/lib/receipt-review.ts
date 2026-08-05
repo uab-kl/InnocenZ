@@ -10,7 +10,7 @@
  * naming the receipt; this only decides whether to offer the control, so that
  * the PR is told why instead of being handed an action that fails.
  */
-import type { PrCurrentWeek, PrReceiptLine } from './api';
+import type { PrCurrentWeek, PrReceiptLine, PrWeekDispute } from './api';
 
 /** Lines with a receipt behind them, split by where that receipt sits. */
 export type ReceiptReviewCounts = {
@@ -49,19 +49,141 @@ export function receiptReviewCaption(week: PrCurrentWeek | null): string | null 
 /**
  * May the PR contest this day + income row yet?
  *
- * A line with no receipt behind it (`receiptStatus` null — a wages seal, a bare
- * self-log) is disputable: there is nothing for anybody to approve, and blocking
- * it would mean a wage error could never be raised.
+ * ONLY DRINKS AND TIPS (owner's decision, 4 Aug 2026). Daily wages and Others
+ * (overtime, deductions) are never disputable — they are derived from the
+ * check-in/check-out stamps and the shift rate, so the route to fixing one is
+ * the attendance record, not a claim against the total. Checked FIRST, before
+ * the line lookup, so a day with no lines still refuses rather than falling
+ * through to the permissive default below.
  *
- * `disputable` is preferred over reading `receiptStatus` here because the server
- * computes it, including the wages exemption. The status check is the fallback
+ * For drinks and tips, approval stays the precondition: a receipt the agency has
+ * not reviewed is still the PR's own claim, with no stated figure to argue with.
+ *
+ * `disputable` is preferred over reading `receiptStatus` because the server
+ * computes it from the same rule it enforces. The status check is the fallback
  * for a response from an older build that predates the field.
  */
+const DISPUTABLE_KINDS: PrReceiptLine['kind'][] = ['drinks', 'tips'];
+
+/**
+ * Can this KIND of money ever be contested, whatever the day or the receipt?
+ *
+ * Wages and OT never can: they are DERIVED from the attendance stamps and the
+ * shift rate, so the fix for a wrong one is the shift record, not an argument
+ * about the total. The server refuses them outright (`DISPUTABLE_KINDS` in
+ * payment-voucher-component.ts), so any control offering it is a button that
+ * cannot work.
+ *
+ * Split out from `cellDisputable` because a UI often needs the answer BEFORE it
+ * has a day or a week — deciding whether to render a dispute action at all.
+ * Do not re-inline the array at a call site; one client-side copy of a
+ * server-enforced rule is already one more than ideal.
+ */
+export function kindDisputable(kind: PrReceiptLine['kind']): boolean {
+  return DISPUTABLE_KINDS.includes(kind);
+}
+
+/**
+ * Voucher states a PR may still contest — the exact mirror of the server's
+ * `DISPUTABLE_STATUSES` (payment-voucher.controller.ts).
+ *
+ * NOTE `pending_review`: the CURRENT week qualifies. Disputes are not a
+ * last-week-only affair, and gating the button on "which tab am I on" was wrong
+ * — a PR whose approved drinks are already wrong today should say so today,
+ * while the paper is still in their pocket, not wait for Sunday.
+ *
+ * `signed` and `paid` are absent on purpose: the PR has put their name to it, or
+ * the money has moved.
+ */
+const DISPUTABLE_VOUCHER_STATUSES = ['pending_review', 'sent', 'disputed'];
+
+/**
+ * Is there an issued-enough voucher here to argue with at all?
+ *
+ * False with no voucher id: nothing exists to attach a claim to, and the server
+ * would 404. The kind and the receipt's review state are separate tests —
+ * `kindDisputable` and `cellDisputable` — and all three have to pass.
+ */
+export function weekDisputable(week: PrCurrentWeek | null): boolean {
+  if (!week?.voucherId || !week.status) return false;
+  return DISPUTABLE_VOUCHER_STATUSES.includes(week.status);
+}
+
+/**
+ * A `withdrawn` claim is one the PR took back — it never reached a decision, so
+ * it must not colour the day either red (still arguing) or green (settled). It
+ * is simply gone, and the day goes back to whatever the agency's review says.
+ */
+function isLive(d: PrWeekDispute): boolean {
+  return d.outcome !== 'withdrawn';
+}
+
+/** The PR's claims on one day, split by whether anybody has answered them. */
+export function disputesForDay(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+): { open: PrWeekDispute[]; settled: PrWeekDispute[] } {
+  const all = (week?.disputes ?? []).filter(
+    (d) => d.disputeDate === dateIso && isLive(d),
+  );
+  return {
+    open: all.filter((d) => d.outcome === null),
+    settled: all.filter((d) => d.outcome !== null),
+  };
+}
+
+/**
+ * `${date}-${component}` for every OPEN claim — the keys the grid paints RED.
+ *
+ * Derived from the server rather than accumulated in React state, which is why
+ * a disputed cell now survives a reload. The in-session set is still merged on
+ * top so the cell reddens the instant the PR submits, without waiting for a
+ * refetch.
+ */
+export function openDisputeKeys(week: PrCurrentWeek | null): Set<string> {
+  return new Set(
+    (week?.disputes ?? [])
+      .filter((d) => d.outcome === null)
+      .map((d) => `${d.disputeDate}-${d.component}`),
+  );
+}
+
+/**
+ * What the Status cell should read for one day.
+ *
+ * The lifecycle the owner described, in order of precedence:
+ *
+ *   PENDING  → nobody has looked
+ *   APPROVED → the agency signed the day off
+ *   DISPUTED → the PR contested it, and it is still open
+ *   VERIFIED → that claim was ANSWERED — the figure was questioned and settled,
+ *              which is a stronger statement than merely approved
+ *
+ * An open claim outranks everything: a day the agency approved on Tuesday and
+ * the PR contested on Wednesday is DISPUTED, not APPROVED, because the approval
+ * is exactly what is being argued with.
+ */
+export type DayStatusLabel = 'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | '—';
+
+export function dayStatusLabel(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+  gridStatus: 'verified' | 'approved' | 'pending' | 'empty',
+  extraOpen = false,
+): DayStatusLabel {
+  if (gridStatus === 'empty') return '—';
+  const { open, settled } = disputesForDay(week, dateIso);
+  if (open.length > 0 || extraOpen) return 'DISPUTED';
+  if (settled.length > 0) return 'VERIFIED';
+  return gridStatus === 'pending' ? 'PENDING' : gridStatus === 'approved' ? 'APPROVED' : 'VERIFIED';
+}
+
 export function cellDisputable(
   week: PrCurrentWeek | null,
   dateIso: string,
   kind: PrReceiptLine['kind'],
 ): boolean {
+  if (!DISPUTABLE_KINDS.includes(kind)) return false;
   const lines = (week?.lines ?? []).filter(
     (line) => line.lineDate === dateIso && line.kind === kind,
   );

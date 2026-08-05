@@ -1,3 +1,4 @@
+import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
 import {
 	formatRM,
 	IzCard,
@@ -13,6 +14,7 @@ import {
 	ChevronDown,
 	FileText,
 	ImageOff,
+	Pencil,
 	Receipt,
 	RotateCcw,
 	ScanLine,
@@ -152,6 +154,10 @@ function ReceiptRow({
 	// and a decision behind a click is one the reviewer can walk past.
 	const [open, setOpen] = useState(receipt.status === "pending");
 	const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
+	// Closed by default. The editor states what a correction costs and carries
+	// three live write buttons, so it is opened deliberately rather than sitting
+	// under the reviewer's cursor while they are only reading.
+	const [editing, setEditing] = useState(false);
 
 	// Escape closes the enlarged photo. Without this the overlay is mouse-only —
 	// it covers the screen, so a keyboard user would have nothing to tab to.
@@ -340,6 +346,29 @@ function ReceiptRow({
 							</button>
 						)}
 					</div>
+
+					{/*
+					 * Under Approve, not beside it: approving is the common move and
+					 * correcting is the exception, and a row of equal buttons would
+					 * make the two read as alternatives of the same weight.
+					 */}
+					{decidable && (
+						<div className="mt-1.5">
+							<button
+								type="button"
+								className="iz-btn iz-btn-ghost !h-7 !px-2.5 !text-[11px]"
+								onClick={() => setEditing((v) => !v)}
+								aria-expanded={editing}
+							>
+								<Pencil className="mr-1 h-3 w-3" />{" "}
+								{editing ? "Close editor" : "Edit"}
+							</button>
+						</div>
+					)}
+
+					{decidable && editing && (
+						<AgencyReceiptEditor receipt={receipt} lines={receipt.lines} />
+					)}
 				</div>
 			)}
 

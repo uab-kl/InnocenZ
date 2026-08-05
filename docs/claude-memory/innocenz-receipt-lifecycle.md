@@ -14,13 +14,53 @@ was written. Now `payment_voucher_receipt` carries `status` (`pending|approved|v
 - **A PENDING receipt blocks the send**, through the *existing* `voucherSendGate()` rather than a
   second check — one refusal path cannot disagree with itself. Consequence: by the time a PR reads a
   *sent* voucher, every receipt on it is approved.
-- **Approval is the precondition for disputing receipt-backed money.** **Wages are exempt and always
-  disputable** — they are sealed at check-out with no receipt to approve, so requiring approval there
-  would make a wage error the one thing that could never be contested.
-- **APPROVED → VERIFIED** on the Monday rollover, which runs **before** the gate (after it, every
-  week's receipts would sit an extra seven days at approved — a whole cadence skipped, invisibly). It
-  **skips vouchers with an open dispute**; `resolveDispute` closes those instead, when the last claim
-  is decided.
+- **Approval is the precondition for disputing receipt-backed money.** ⚠️ **SUPERSEDED 4 Aug 2026 —
+  the wages exemption is GONE.** Only **drinks and tips** are disputable, and only once the agency
+  has **approved** the receipt. **Daily wages and Others (OT, deductions) cannot be disputed at all** —
+  the owner's reason: they are *fixed by the outlet*, derived from the check-in/check-out stamps and
+  the shift rate, so the route to fixing one is the attendance record, not a claim. The PR can still
+  **view the proof** on those rows; they just cannot contest the figure. One rule, two callers:
+  `lineDisputable(kind, receiptStatus)` in `payment-voucher-component.ts` feeds both the `disputable`
+  flag the app reads and the 400 in `raiseMyDispute`.
+  *(The old rule, for the record: wages were sealed at check-out with no receipt to approve, so
+  gating them on approval would have made a wage error uncontestable. Cost of the reversal: in-app,
+  it now is.)*
+- **APPROVED → VERIFIED** on the **SUNDAY 02:00 Asia/Kuala_Lumpur** rollover — ⚠️ this file said
+  *Monday* until 4 Aug 2026 and that was stale: the payroll week was re-anchored to **Sunday–Saturday**
+  on 3 Aug (owner's instruction), and the cron moved with it, because the week anchor and the cron day
+  are one decision. `previousCompleteWeek()` is the authority. It runs **before** the send gate (after
+  it, every week's receipts would sit an extra seven days at approved — a whole cadence skipped,
+  invisibly). It **skips vouchers with an open dispute**; `resolveDispute` closes those instead, when
+  the last claim is decided.
+
+### Approving a DAY approves its receipts (4 Aug 2026, no DDL)
+
+The two reviews were never independent: a day's `approved_total_cents` IS the sum of its lines, and
+those lines are the receipts' lines. An agency approving RM 3008.20 for Tue has already stated the
+receipt behind it is right — yet the gate still blocked the week on *"2 receipt(s) not yet reviewed"*.
+
+- `receiptsCarriedByDays(lines, receipts, approvedDates)` in `payment-voucher-day-review.ts` is the
+  rule. A receipt is carried only when **every** day it touches is approved (a Mon+Tue receipt waits
+  for both), and a receipt with **no dated lines is never carried** — `dayTotalsCents` skips undated
+  lines, so no day's total ever contained its money.
+- `approvePendingReceipts(ids, actor)` writes it in ONE statement that re-asserts `status='pending'`
+  in the WHERE, so a receipt approved between the read and the write keeps its real reviewer.
+- Both `reviewDay` and `approveAllDays` sweep from the FULL set of approved days, never just the day
+  decided — otherwise the spanning receipt clears in one working order and not the other.
+- **Withdrawal is NOT symmetric.** Holding or clearing a day does not un-approve its receipts;
+  dropping a receipt back to pending stays a deliberate act in the receipts panel, where the photo is.
+- The day-review panel says this out loud. An attestation made without opening the receipts panel has
+  to be visible, or it is a trap.
+- PR side: `/mine/current-week` + `/mine/last-week` ship `dayReviews[{date,status}]` — date and status
+  ONLY — so an approved day reads **APPROVED** on the phone mid-week. Before this the app could only
+  see the voucher's own status, which sits at `pending_review` until Sunday.
+- **`prVisibleDayStatuses()` is the pessimistic half of the same rule**: a day drops back to `null`
+  for the PR when any PENDING receipt has a line on it. The two states CAN disagree — a receipt
+  straddling an unapproved day is held back by design, and a day approved before the carry existed
+  never swept — and the phone must never claim settled money it cannot back. APPROVED is what unlocks
+  the **dispute**, so over-claiming points the PR at a 409 naming a receipt they cannot see.
+- Legacy days do not self-heal on read (a GET must not write). `repair-day-approved-receipts.ts`
+  replays the same pure rule over every unsigned voucher — **dry run by default**, `--write` applies.
 
 ### Rules not to re-litigate
 

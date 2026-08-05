@@ -53,12 +53,17 @@ export class AdminRequestControllerClass {
         return;
       }
 
-      // Close whatever this subscriber is on today.
+      // Close whatever PLAN this subscriber is on today — the plan, and only the
+      // plan. An add-on is held ALONGSIDE a plan and outlives a switch: closing
+      // every active line ended a venue's POS integration the moment it moved
+      // between tiers, cancelling an arrangement an admin had priced and the
+      // venue had not asked to drop.
       const { records: current } = await this.memberSubscriptionRepository.listPaginated({
         filter: {
           subscriberType: record.subscriberType,
           subscriberId: record.subscriberId,
           status: 'active',
+          kind: 'plan',
         },
         page: 1,
         pageSize: 50,
@@ -214,6 +219,11 @@ export class AdminRequestControllerClass {
             subscriberType: parsed.data.subscriberType,
             subscriberId: parsed.data.subscriberId,
             status: 'active',
+            // The plan, for the same reason as above: a venue holding POS has
+            // two active lines and the add-on is the newer one, so this read
+            // compared the requested plan against "POS Integration" and let a
+            // switch to the venue's own current plan through.
+            kind: 'plan',
           },
           page: 1,
           pageSize: 1,
@@ -501,6 +511,10 @@ export class AdminRequestControllerClass {
             subscriberType: row.subscriberType,
             subscriberId: row.subscriberId,
             status: 'active',
+            // "From plan" means the PLAN. A venue holding POS has an add-on line
+            // newer than its plan, so without this the admin drawer showed a
+            // pending request as coming from "POS Integration, RM 0".
+            kind: 'plan',
           },
           page: 1,
           pageSize: 1,
@@ -684,20 +698,68 @@ export class AdminRequestControllerClass {
     }
   }
 
-  // Decline an outlet plan change — the subscriber stays on the from-plan.
+  /**
+   * Say NO to a request, without touching the ledger — the subscriber keeps
+   * exactly what it has today.
+   *
+   * Two things are refused here and they read the same to the admin:
+   * - an outlet plan change → the venue stays on its from-plan;
+   * - a negotiated request (POS quote, Custom renegotiation, or either one's
+   *   cancellation) → the add-on / Custom price stands, unchanged.
+   *
+   * The second case had no answer at all: a POS or Custom request could only be
+   * RESOLVED, so an admin who did not agree to it had nothing to click and the
+   * row sat Pending forever — while the subscriber's own screen kept saying
+   * "waiting for admin". Declining clears that on both sides, because the
+   * subscriber's "waiting" state reads pending rows only.
+   *
+   * A contact/other request is not a decision, so it stays out.
+   */
+  private static readonly DECLINABLE: readonly AdminRequestType[] = [
+    'plan_change',
+    'pos_integration_quote',
+    'custom_renegotiation',
+  ];
+
   async decline(req: Request, res: Response) {
     try {
       const existing = await this.repository.getById(paramId(req.params.id));
       if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      if (existing.type !== 'plan_change') {
-        return res.status(400).json({ success: false, message: 'Only plan changes can be declined', data: null });
+      if (!AdminRequestControllerClass.DECLINABLE.includes(existing.type)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Only plan changes and negotiated requests can be declined',
+          data: null,
+        });
+      }
+      // Declining an answered request would rewrite a decision already acted on:
+      // a resolved quote is billing, an approved switch has moved the ledger, and
+      // a 'direct' row was applied the moment it was filed. Cancelling any of
+      // them would change the badge and nothing else — the ledger would still say
+      // otherwise, which is worse than refusing.
+      if (existing.status === 'resolved' || existing.status === 'approved' || existing.status === 'direct') {
+        return res.status(400).json({
+          success: false,
+          message:
+            existing.status === 'direct'
+              ? 'This was applied on the spot — file the reverse change instead of cancelling it'
+              : `This request is already ${existing.status} — it cannot be cancelled`,
+          data: null,
+        });
       }
       const record = await this.repository.update(existing.id, {
         status: 'declined',
         updatedBy: getActor(req),
       });
       if (!record) return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
-      res.status(200).json({ success: true, message: 'Plan change declined', data: record });
+      res.status(200).json({
+        success: true,
+        message:
+          existing.type === 'plan_change'
+            ? 'Plan change declined'
+            : 'Request cancelled — nothing was changed',
+        data: record,
+      });
     } catch (error) {
       logger.error('[AdminRequestController.decline] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

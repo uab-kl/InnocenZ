@@ -71,7 +71,7 @@ import {
 	type AdminRequest,
 	type AdminRequestsQueryParams,
 	approvePlanChange,
-	declinePlanChange,
+	declineRequest,
 	fetchAdminRequests,
 	type SubscriberType,
 	updateAdminRequest,
@@ -339,7 +339,7 @@ function PlanChangesPage() {
 	});
 
 	const declineMutation = useMutation({
-		mutationFn: (id: string) => declinePlanChange(id, logout),
+		mutationFn: (id: string) => declineRequest(id, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-requests"] });
 			toast.success(response.message || "Plan change declined");

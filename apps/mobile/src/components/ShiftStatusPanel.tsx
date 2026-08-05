@@ -51,23 +51,55 @@ export function ShiftStatusPanel({
   // Receipt rows come from the backend current-week draft voucher, scoped to
   // this shift's day so Check-In and Payment never disagree on the amount.
   const { receiptLines: allLogs, deleteLine, updateLine } = usePrEarnings();
-  const logs = useMemo(
-    () => (dayKey ? allLogs.filter((l) => l.lineDate === dayKey) : allLogs),
-    [allLogs, dayKey],
-  );
+  /**
+   * THIS SHIFT's rows. The day filter alone was not enough: a PR can work twice
+   * in one date, and the second check-in inherited the first shift's items,
+   * totals and proof photos — under headings that say "this shift".
+   *
+   * `checkInAt` is what separates two sessions on one day, so anything logged
+   * before it belongs to the shift before it. With no check-in stamp, the day is
+   * all there is to go on.
+   */
+  const logs = useMemo(() => {
+    const byDay = dayKey ? allLogs.filter((l) => l.lineDate === dayKey) : allLogs;
+    const startedAt = checkInAt ? new Date(checkInAt).getTime() : null;
+    if (startedAt === null || Number.isNaN(startedAt)) return byDay;
+    return byDay.filter((l) => {
+      const loggedAt = new Date(l.at).getTime();
+      return Number.isNaN(loggedAt) ? true : loggedAt >= startedAt;
+    });
+  }, [allLogs, dayKey, checkInAt]);
   // Every proof photo the PR snapped for this shift's self-logs, each carrying
   // its owning line + index so it can be removed. Shown as an editable gallery
   // under the totals so the PR can confirm / add / remove what they uploaded.
-  const proofItems = useMemo(
-    () =>
-      logs.flatMap((l) =>
-        (l.proofPhotos ?? []).map((src, idx) => ({ lineId: l.id, idx, src })),
-      ),
-    [logs],
-  );
+  const proofItems = useMemo(() => {
+    /*
+     * ONE THUMBNAIL PER PICTURE, not per line.
+     *
+     * Three items scanned off one receipt all carry that receipt's photo, so
+     * the gallery showed the same paper three times and the count read
+     * "PROOF PHOTOS · 3" for a single picture. The PR cannot tell whether they
+     * uploaded one or three, which is the only question the gallery answers.
+     *
+     * The kept entry keeps its real lineId + index, so removing it still deletes
+     * a photo that actually exists rather than a display-only copy.
+     */
+    const seen = new Set<string>();
+    const items: { lineId: string; idx: number; src: string }[] = [];
+    for (const l of logs) {
+      (l.proofPhotos ?? []).forEach((src, idx) => {
+        if (seen.has(src)) return;
+        seen.add(src);
+        items.push({ lineId: l.id, idx, src });
+      });
+    }
+    return items;
+  }, [logs]);
   // New photos append to the first self-log that already carries proof.
   const proofTargetLineId = proofItems[0]?.lineId;
   const [lightbox, setLightbox] = useState<string | null>(null);
+  /** Why a removal was refused (an agency-reviewed receipt cannot be pulled). */
+  const [removeError, setRemoveError] = useState<string | null>(null);
   const [photoBusy, setPhotoBusy] = useState(false);
   // Photos are editable only while on duty (same rule as row edit/delete).
   const canEditPhotos = !checkedOut;
@@ -82,9 +114,57 @@ export function ShiftStatusPanel({
     }
   };
 
+  /**
+   * Remove a whole receipt, not one item off it.
+   *
+   * A three-item tips scan produced three rows, and the trash removed ONE — so
+   * "remove and scan again" needed three taps, and any re-scan in between was
+   * refused with `RCP-… is already logged on this shift`, which surfaced as an
+   * uncaught red toast. The paper is the unit the PR is holding: removing it
+   * should remove what came off it.
+   *
+   * The backend deletes the receipt itself once its LAST line goes
+   * (`deleteMyLine`), which is what frees the order number to be scanned again —
+   * so this deletes every line of the receipt and lets that cleanup fire.
+   *
+   * Rows with no receipt behind them (a bare self-log) delete alone, as before.
+   */
+  const removeWholeReceipt = async (row: PrReceiptLine) => {
+    const siblings = row.receiptNo
+      ? logs.filter((l) => l.receiptNo === row.receiptNo)
+      : [row];
+    try {
+      for (const line of siblings) {
+        await deleteLine(line.id);
+      }
+    } catch (error) {
+      // A refusal here is meaningful — an agency-reviewed receipt cannot be
+      // removed — and it used to escape as "Uncaught (in promise)".
+      const message =
+        (error as { response?: { data?: { message?: string } } })?.response?.data?.message ??
+        (error instanceof Error ? error.message : 'Could not remove this receipt');
+      setRemoveError(message);
+    }
+  };
+
+  /**
+   * Removing the PICTURE removes what was logged from it.
+   *
+   * The photo is the receipt's proof, so stripping it off a scanned receipt
+   * would leave its items standing with nothing behind them — and check-out
+   * refuses rows with no picture anyway, so the PR would be stuck holding
+   * unprovable money. Taking the receipt with it is the honest reading of
+   * "remove this picture", and it frees the order number to be scanned again.
+   *
+   * A bare self-log — no receipt behind it — just loses the photo, as before.
+   */
   const removePhoto = (lineId: string, idx: number) => {
     const line = logs.find((l) => l.id === lineId);
     if (!line) return;
+    if (line.receiptNo) {
+      void removeWholeReceipt(line);
+      return;
+    }
     void applyPhotos(
       lineId,
       (line.proofPhotos ?? []).filter((_, i) => i !== idx),
@@ -249,7 +329,7 @@ export function ShiftStatusPanel({
                         ? openScan(cat, 'scan', log.id)
                         : rescanPhoto(log.id)
                     }
-                    onDelete={() => void deleteLine(log.id)}
+                    onDelete={() => void removeWholeReceipt(log)}
                   />
                 );
               })}
@@ -278,9 +358,12 @@ export function ShiftStatusPanel({
               </View>
               <Text style={styles.gallerySub}>
                 {canEditPhotos
-                  ? 'Tap to view · ✕ to remove · add another below'
+                  ? 'Tap to view · ✕ removes the receipt and everything logged from it'
                   : 'Pictures you uploaded for this shift'}
               </Text>
+              {removeError && (
+                <Text style={[styles.gallerySub, { color: C.red }]}>{removeError}</Text>
+              )}
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}

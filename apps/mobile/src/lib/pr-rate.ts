@@ -58,7 +58,21 @@ export function menuForScanCategory(
  */
 export function receiptKindForItem(item: MenuDrink): 'drinks' | 'tips' | 'others' {
   if (item.category === 'drink') return 'drinks';
-  if (item.category === 'tip' || item.id === 'booking-com') return 'tips';
+  /*
+   * EVERY service entitlement is a tips-side item, never an "other".
+   *
+   * `menuForScanCategory` already puts 'service' and 'tip' on the Tips page
+   * together, and both are commissioned at the TIP rate — but this tested only
+   * 'tip', plus one hardcoded id (`booking-com`) that happened to be the seeded
+   * Booking commission. So every service an outlet configures itself fell to
+   * 'others', which the app labels **OT** and the backend files as component
+   * 'other' — the same bucket as genuine overtime.
+   *
+   * Havoc, set up under Service Entitlement at RM 1,000, was logged as
+   * "OT · RM 2,000.00": two units of a bar service reading as an overtime claim.
+   * 'others' is left to what really is other — overtime and unclassified.
+   */
+  if (item.category === 'tip' || item.category === 'service') return 'tips';
   return 'others';
 }
 

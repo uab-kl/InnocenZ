@@ -100,6 +100,38 @@ router.patch(
   paymentVoucherController.editReceiptLine.bind(paymentVoucherController),
 );
 
+// The other two halves of "edit", same gate and same reasoning as the line
+// correction above: ADDING a drink or tip line the paper carries and the log
+// missed, and correcting the RECEIPT's own facts (order number, date). Both are
+// money attestations — the date write moves the lines with it — so both carry
+// `agencyOwnerOrFinance`, and both are targeted by id rather than routed through
+// PUT '/:id', which rewrites a voucher's whole line set.
+router.post(
+  '/receipts/:receiptId/lines',
+  agencyOwnerOrFinance,
+  paymentVoucherController.addReceiptLine.bind(paymentVoucherController),
+);
+
+// The OUTLET'S OWN price list for the receipt above — what the add form must
+// choose from, and what the add endpoint refuses anything outside of.
+//
+// Scoped through the RECEIPT rather than taking an outlet id, so an agency can
+// only read the catalogue of an outlet one of its own vouchers was earned at;
+// the controller 404s cross-tenant before it ever resolves the outlet.
+//
+// UNGATED at sub-role, exactly like the '/receipts' feed above and for the same
+// reason the router already states: seeing what an outlet sells is not the
+// authority to add a line with it — that write keeps `agencyOwnerOrFinance`.
+router.get(
+  '/receipts/:receiptId/catalogue',
+  paymentVoucherController.getReceiptCatalogue.bind(paymentVoucherController),
+);
+router.patch(
+  '/receipts/:receiptId',
+  agencyOwnerOrFinance,
+  paymentVoucherController.editReceipt.bind(paymentVoucherController),
+);
+
 // The agency's dispute queue and its decisions. '/disputes' MUST precede the
 // '/:id' route below — both are one segment, so registered the other way round
 // the queue would be read as a voucher whose id is the word "disputes".
