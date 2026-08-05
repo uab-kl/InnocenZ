@@ -4,7 +4,6 @@ import { AgencyTable } from '@/features/agency/agency.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import {
   AgencyPrTable,
-  PrTable,
   type AgencyPrApproveStatus,
   type AgencyPrType,
   type PrStatus,
@@ -14,12 +13,14 @@ import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
 
 /**
- * PR-account ↔ agency membership (`agency_pr`), keyed by `user_id` (migration 0085).
+ * PR-account ↔ agency membership (`agency_pr`), keyed by `user_id` (migration
+ * 0085). `main.pr` is gone (0089): identity is read straight off `user` /
+ * `user_profile` here — never through a `pr` row, which no longer exists.
  */
 
 /** One agency a PR account belongs to. */
 export type PrAgencyLink = {
-  /** Operational pr row when one exists for this user; null if account-only. */
+  /** Always equal to `userId` post-cutover — kept on the shape for callers. */
   prId: string | null;
   userId: string;
   agencyId: string;
@@ -30,10 +31,14 @@ export type PrAgencyLink = {
 
 /** A PR on an agency's membership list, with account fields folded in. */
 export type AgencyPrEnriched = {
-  /** Membership row id — use for approve/reject (not deprecated pr.id). */
+  /** Membership row id — use for approve/reject (not the retired pr.id). */
   id: string;
+  /** Always equal to `userId` post-cutover — so `rosterRowFromMembership` can
+   * still key off it (kept name for callers, but there is no more `pr` row
+   * behind it). */
   prId: string | null;
-  /** Ops-bridge status when a pr row exists. */
+  /** No backing state anymore — `main.pr.status` (incl. `suspended`) is gone
+   * with the table. Always `null`; kept on the shape for callers. */
   prStatus: PrStatus | null;
   agencyId: string;
   userId: string;
@@ -65,8 +70,6 @@ export type AgencyPrEnriched = {
   comcardHipCm: number | null;
 };
 
-const APPROVE_RANK: Record<string, number> = { approved: 3, pending: 2, rejected: 1 };
-
 export class AgencyPrRepository {
   /** Every agency each of these user accounts is under. */
   async listLinksByUserIds(userIds: string[]): Promise<PrAgencyLink[]> {
@@ -75,7 +78,6 @@ export class AgencyPrRepository {
     try {
       const rows = await db
         .select({
-          prId: PrTable.id,
           userId: AgencyPrTable.userId,
           agencyId: AgencyPrTable.agencyId,
           agencyName: AgencyTable.name,
@@ -84,23 +86,12 @@ export class AgencyPrRepository {
         })
         .from(AgencyPrTable)
         .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyPrTable.agencyId))
-        .leftJoin(PrTable, eq(PrTable.userId, AgencyPrTable.userId))
         .where(inArray(AgencyPrTable.userId, userIds))
         .orderBy(AgencyTable.name);
 
-      // One user can still have multiple pr rows — collapse per (user, agency).
-      const best = new Map<string, PrAgencyLink>();
-      for (const row of rows) {
-        const key = `${row.userId}:${row.agencyId}`;
-        const seen = best.get(key);
-        if (
-          !seen ||
-          (APPROVE_RANK[row.approveStatus] ?? 0) > (APPROVE_RANK[seen.approveStatus] ?? 0)
-        ) {
-          best.set(key, row);
-        }
-      }
-      return [...best.values()];
+      // `agency_pr` is unique on (agencyId, userId) — one row per link
+      // already, no drifted-duplicate `pr` rows to collapse anymore.
+      return rows.map((row) => ({ ...row, prId: row.userId }));
     } catch (error) {
       logger.error('[AgencyPrRepository.listLinksByUserIds] Error:', error);
       return [];
@@ -125,8 +116,6 @@ export class AgencyPrRepository {
             ilike(UserTable.email, term),
             ilike(UserTable.phoneNum, term),
             ilike(UserProfileTable.fullName, term),
-            ilike(PrTable.name, term),
-            ilike(PrTable.nickname, term),
           )!,
         );
       }
@@ -134,12 +123,10 @@ export class AgencyPrRepository {
       const rows = await db
         .select({
           id: AgencyPrTable.id,
-          prId: PrTable.id,
-          prStatus: PrTable.status,
           agencyId: AgencyPrTable.agencyId,
           userId: AgencyPrTable.userId,
-          name: sql<string>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), ${PrTable.name}, ${UserTable.username}, 'PR')`,
-          nickname: sql<string | null>`coalesce(nullif(trim(${UserTable.username}), ''), ${PrTable.nickname})`,
+          name: sql<string>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), ${UserTable.username}, 'PR')`,
+          nickname: sql<string | null>`nullif(trim(${UserTable.username}), '')`,
           approveStatus: AgencyPrTable.approveStatus,
           tier: AgencyPrTable.tier,
           rejectReason: AgencyPrTable.rejectReason,
@@ -167,23 +154,13 @@ export class AgencyPrRepository {
         .from(AgencyPrTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
-        .leftJoin(PrTable, eq(PrTable.userId, AgencyPrTable.userId))
         .where(and(...conditions))
         .orderBy(UserTable.username);
 
-      // Collapse multi-pr users to one membership row.
-      const best = new Map<string, AgencyPrEnriched>();
-      for (const row of rows) {
-        const key = row.userId;
-        const seen = best.get(key);
-        if (
-          !seen ||
-          (APPROVE_RANK[row.approveStatus] ?? 0) > (APPROVE_RANK[seen.approveStatus] ?? 0)
-        ) {
-          best.set(key, row);
-        }
-      }
-      return [...best.values()];
+      // `agency_pr` is unique on (agencyId, userId) — one row per user
+      // already, no drifted-duplicate `pr` rows to collapse anymore. `prId`
+      // is `userId` restated; `prStatus` has no backing state (see the type).
+      return rows.map((row) => ({ ...row, prId: row.userId, prStatus: null }));
     } catch (error) {
       logger.error('[AgencyPrRepository.listByAgency] Error:', error);
       return [];
@@ -215,20 +192,9 @@ export class AgencyPrRepository {
     }
   }
 
-  /** @deprecated Use listByUser — kept as alias while callers migrate. */
+  /** @deprecated Use listByUser — `prId` is `userId` post-cutover, kept as an alias while callers migrate. */
   async listByPr(prId: string): Promise<AgencyPrType[]> {
-    try {
-      const [pr] = await db
-        .select({ userId: PrTable.userId })
-        .from(PrTable)
-        .where(eq(PrTable.id, prId))
-        .limit(1);
-      if (!pr?.userId) return [];
-      return this.listByUser(pr.userId);
-    } catch (error) {
-      logger.error('[AgencyPrRepository.listByPr] Error:', error);
-      return [];
-    }
+    return this.listByUser(prId);
   }
 
   /**
@@ -271,17 +237,9 @@ export class AgencyPrRepository {
     }
   }
 
-  /** @deprecated Use syncLinksForUser. */
+  /** @deprecated Use syncLinksForUser — `prId` is `userId` post-cutover. */
   async syncLinksForPr(prId: string, agencyIds: string[], actor: string): Promise<void> {
-    const [pr] = await db
-      .select({ userId: PrTable.userId })
-      .from(PrTable)
-      .where(eq(PrTable.id, prId))
-      .limit(1);
-    if (!pr?.userId) {
-      throw new Error('PR has no linked user account — cannot sync agency_pr');
-    }
-    return this.syncLinksForUser(pr.userId, agencyIds, actor);
+    return this.syncLinksForUser(prId, agencyIds, actor);
   }
 
   /** Insert one pending (or approved) membership if missing. */

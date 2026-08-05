@@ -2,7 +2,8 @@ import 'dotenv/config';
 
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { PrTable } from '@/features/pr/pr.model';
+import { AgencyPrTable } from '@/features/pr/pr.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import {
   ShiftAssignmentTable,
@@ -65,13 +66,18 @@ export async function seedSampleShiftAssignments(): Promise<void> {
   }
 
   const prs = await db
-    .select({ id: PrTable.id, agencyId: PrTable.agencyId, name: PrTable.name })
-    .from(PrTable)
-    .where(eq(PrTable.status, 'active'));
+    .select({
+      id: AgencyPrTable.userId,
+      agencyId: AgencyPrTable.agencyId,
+      name: UserProfileTable.fullName,
+    })
+    .from(AgencyPrTable)
+    .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
+    .where(eq(AgencyPrTable.approveStatus, 'approved'));
 
   if (prs.length === 0) {
     logger.warn(
-      '[seed-sample-shift-assignments] No active PRs — run seed-sample-pr-personnel first',
+      '[seed-sample-shift-assignments] No approved agency_pr members — seed roster first',
     );
     return;
   }
@@ -115,6 +121,7 @@ export async function seedSampleShiftAssignments(): Promise<void> {
         agencyId: shift.agencyId,
         shiftId: shift.id,
         prId: pr.id,
+        userId: pr.id,
         status,
         payAmount,
         // Only worked nights carry real stamps; upcoming ones stay unstamped.

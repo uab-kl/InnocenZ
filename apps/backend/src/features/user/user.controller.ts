@@ -7,19 +7,20 @@ import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import {
   deleteProfileImageFile,
-  profileImagePublicPath,
+  saveProfileImageFile,
 } from '@/util/profile-image';
 import {
   deletePortfolioImageFile,
   normalizePortfolioSlots,
   PORTFOLIO_SLOT_COUNT,
   portfolioSlotsToJson,
+  savePortfolioImageFile,
 } from '@/util/portfolio-image';
-import { portfolioImagePathFromFile } from '@/middlewares/upload-portfolio-image';
-import { comcardImagePathFromFile } from '@/middlewares/upload-comcard-image';
-import { deleteComcardImageFile } from '@/util/comcard-image';
+import { deleteComcardImageFile, saveComcardImageFile } from '@/util/comcard-image';
+import { generateAndStoreComcard } from '@/util/comcard-generate';
 import { saveUserIdDocFile, withUserProfile, withUserProfiles } from '@/util/user-profile-image';
 import { logger } from '@/util/logger';
+import { r2Configured } from '@/util/r2';
 
 const SORT_FIELDS: UserSortField[] = ['CREATED_AT', 'UPDATED_AT', 'USERNAME', 'EMAIL', 'STATUS'];
 
@@ -299,10 +300,18 @@ export class UserControllerClass {
         if (portfolioPhotos !== undefined) {
           const previous = normalizePortfolioSlots(existingProfile.portfolioPhotos);
           const next = normalizePortfolioSlots(portfolioPhotos);
-          for (let i = 0; i < PORTFOLIO_SLOT_COUNT; i++) {
-            if (previous[i] && previous[i] !== next[i]) {
-              deletePortfolioImageFile(previous[i]);
-            }
+          // Compare by SET, never slot by slot: a reorder moves the same file to a
+          // different index, and a per-index diff reads that as "replaced" and
+          // deletes both sides of a swap — the stored paths then point at objects
+          // that no longer exist. Only a path that has left the gallery entirely
+          // is a real removal.
+          const stillReferenced = new Set(next.filter((p): p is string => Boolean(p)));
+          const alreadyDeleted = new Set<string>();
+          for (const previousPath of previous) {
+            if (!previousPath || stillReferenced.has(previousPath)) continue;
+            if (alreadyDeleted.has(previousPath)) continue;
+            alreadyDeleted.add(previousPath);
+            await deletePortfolioImageFile(previousPath);
           }
         }
 
@@ -356,13 +365,30 @@ export class UserControllerClass {
         });
       }
 
+      if (!r2Configured()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Image storage (R2) is not configured on this server',
+          data: null,
+        });
+      }
+
       const existingUser = await this.userRepository.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
-      const profileImage = profileImagePublicPath(req.file.filename);
-      deleteProfileImageFile(existingUser.profileImage);
+      const profile = await this.userProfileRepository.getByUserId(id);
+      const previousImage = existingUser.profileImage;
+      const profileImage = await saveProfileImageFile(
+        { id: existingUser.id, fullName: profile?.fullName },
+        req.file,
+      );
+      // Only remove the previous object when the key changed (e.g. .jpg → .png).
+      // Same key is overwritten by PutObject — deleting after would wipe the new file.
+      if (previousImage && previousImage !== profileImage) {
+        await deleteProfileImageFile(previousImage);
+      }
 
       const updatedUser = await this.userRepository.updateUser(
         { profileImage, updatedBy: getActor(req) },
@@ -372,8 +398,6 @@ export class UserControllerClass {
       if (!updatedUser) {
         return res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       }
-
-      const profile = await this.userProfileRepository.getByUserId(id);
 
       res.status(200).json({
         success: true,
@@ -416,6 +440,14 @@ export class UserControllerClass {
         });
       }
 
+      if (!r2Configured()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Image storage (R2) is not configured on this server',
+          data: null,
+        });
+      }
+
       const existingUser = await this.userRepository.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
@@ -428,13 +460,15 @@ export class UserControllerClass {
       }
 
       const slots = normalizePortfolioSlots(profile.portfolioPhotos);
-
-      // Multer has already written the upload to `{userId}-{slot}.{ext}`, which
-      // is exactly the old path when the extension is unchanged — deleting the
-      // previous file first would delete the new one and blank the slot.
-      const publicPath = portfolioImagePathFromFile(id, slot, req.file);
-      if (slots[slot] && slots[slot] !== publicPath) {
-        deletePortfolioImageFile(slots[slot]);
+      const previousPath = slots[slot];
+      const publicPath = await savePortfolioImageFile(
+        { id, fullName: profile.fullName },
+        slot,
+        req.file,
+      );
+      // Only delete when the key/URL changed (e.g. .jpg → .png). Same key is overwritten.
+      if (previousPath && previousPath !== publicPath) {
+        await deletePortfolioImageFile(previousPath);
       }
       slots[slot] = publicPath;
 
@@ -477,6 +511,14 @@ export class UserControllerClass {
         });
       }
 
+      if (!r2Configured()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Image storage (R2) is not configured on this server',
+          data: null,
+        });
+      }
+
       const existingUser = await this.userRepository.getUserById(id);
       if (!existingUser) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
@@ -488,9 +530,13 @@ export class UserControllerClass {
         profile = await this.userProfileRepository.createEmpty(id, actor);
       }
 
-      const publicPath = comcardImagePathFromFile(id, req.file);
-      if (profile.comcardImage && profile.comcardImage !== publicPath) {
-        deleteComcardImageFile(profile.comcardImage);
+      const previousImage = profile.comcardImage;
+      const publicPath = await saveComcardImageFile(
+        { id, fullName: profile.fullName },
+        req.file,
+      );
+      if (previousImage && previousImage !== publicPath) {
+        await deleteComcardImageFile(previousImage);
       }
 
       await this.userProfileRepository.update(id, {
@@ -508,6 +554,86 @@ export class UserControllerClass {
     } catch (error) {
       logger.error('[UserController.uploadComcardImage] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Build comcard from portfolio slots + overlay; store object key on profile. */
+  async generateComcard(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const actorId = req.user?.id;
+
+      if (!actorId || actorId !== id) {
+        return res.status(403).json({
+          success: false,
+          message: Error.UNAUTHORIZED,
+          data: null,
+        });
+      }
+
+      if (!r2Configured()) {
+        return res.status(503).json({
+          success: false,
+          message: 'Image storage (R2) is not configured on this server',
+          data: null,
+        });
+      }
+
+      const existingUser = await this.userRepository.getUserById(id);
+      if (!existingUser) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const actor = getActor(req);
+      let profile = await this.userProfileRepository.getByUserId(id);
+      if (!profile) {
+        profile = await this.userProfileRepository.createEmpty(id, actor);
+      }
+
+      const slots = normalizePortfolioSlots(profile.portfolioPhotos);
+      if (!slots.some(Boolean)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Add portfolio photos before generating a comcard',
+          data: null,
+        });
+      }
+
+      const previousImage = profile.comcardImage;
+      const storedKey = await generateAndStoreComcard({
+        userId: id,
+        fullName: profile.fullName,
+        displayName: existingUser.username || profile.fullName || 'PR',
+        dob: profile.dob,
+        heightCm: profile.comcardHeightCm,
+        weightKg: profile.comcardWeightKg,
+        portfolioPhotos: slots,
+      });
+      if (previousImage && previousImage !== storedKey) {
+        await deleteComcardImageFile(previousImage);
+      }
+
+      await this.userProfileRepository.update(id, {
+        comcardImage: storedKey,
+        updatedBy: actor,
+      });
+
+      profile = await this.userProfileRepository.getByUserId(id);
+
+      res.status(200).json({
+        success: true,
+        message: 'Comcard generated',
+        data: withUserProfile(existingUser, profile),
+      });
+    } catch (error) {
+      logger.error('[UserController.generateComcard] Error:', error);
+      const detail = error instanceof globalThis.Error ? error.message : '';
+      const status = /sharp|R2|not configured/i.test(detail) ? 503 : 500;
+      res.status(status).json({
+        success: false,
+        message: status === 503 && detail ? detail : Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
     }
   }
 
@@ -641,7 +767,12 @@ function parsePortfolioPhotosBody(
     }
     if (typeof item !== 'string') return undefined;
     const trimmed = item.trim();
-    if (!trimmed.startsWith('/img/')) return undefined;
+    // Local `/img/…`, R2 object keys `user/…`, or legacy full public URLs.
+    const ok =
+      trimmed.startsWith('/img/') ||
+      trimmed.startsWith('user/') ||
+      /^https?:\/\//.test(trimmed);
+    if (!ok) return undefined;
     slots[i] = trimmed;
   }
   return slots;

@@ -3,7 +3,8 @@ import { alias } from 'drizzle-orm/pg-core';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { OutletTable } from '@/features/outlet/outlet.model';
-import { PrTable } from '@/features/pr/pr.model';
+import { UserTable } from '@/features/user/user.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { NON_STAFFING_STATUSES } from '@/features/shift-assignment/shift-assignment.repository';
@@ -50,8 +51,20 @@ export type OutletSwapApprovalResult =
   | { ok: true; request: OutletSwapRequestType }
   | { ok: false; reason: OutletSwapApprovalRejection };
 
-/** Same display rule as the roster: nickname when set, else legal name. */
-const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${PrTable.nickname}), ''), ${PrTable.name})`;
+/**
+ * Same display rule as the roster: nickname when set, else legal name.
+ * `main.pr` is gone — nickname is `user.username`, legal name is
+ * `user_profile.full_name`.
+ */
+const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${UserTable.username}), ''), nullif(trim(${UserProfileTable.fullName}), ''), 'PR')`;
+
+/**
+ * `pr_id` equals `user_id` for every `shift_assignment` row post-cutover
+ * (0089) — the old FK to `main.pr` is gone along with the table. `user_id`
+ * is preferred when present; `pr_id` is the fallback for rows that predate
+ * the dual-write backfill.
+ */
+const assigneeUserId = sql`coalesce(${ShiftAssignmentTable.userId}, ${ShiftAssignmentTable.prId})`;
 
 // A swap has two shifts and two outlets in one row, so each side needs its own
 // alias to join twice without the second clobbering the first.
@@ -126,7 +139,8 @@ export class OutletSwapRepositoryClass {
         )
         .innerJoin(FromShift, eq(OutletSwapRequestTable.fromShiftId, FromShift.id))
         .innerJoin(ToShift, eq(OutletSwapRequestTable.toShiftId, ToShift.id))
-        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .leftJoin(FromOutlet, eq(FromShift.outletId, FromOutlet.id))
         .leftJoin(ToOutlet, eq(ToShift.outletId, ToOutlet.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)

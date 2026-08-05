@@ -1,4 +1,4 @@
-import { and, eq, inArray, SQL } from 'drizzle-orm';
+import { and, eq, inArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { DbTransaction } from '@/types/db-transaction';
 import { logger } from '@/util/logger';
@@ -70,6 +70,28 @@ export class UserProfileRepositoryClass {
     } catch (error) {
       logger.error('[UserProfileRepository.getByUserIds] Error:', error);
       return [];
+    }
+  }
+
+  /**
+   * Match IC / passport / work-permit numbers ignoring dashes, spaces and case.
+   * Used to refuse duplicate PR registration on the same identity document.
+   */
+  async findByNormalizedIdNo(idNo: string): Promise<UserProfileType | null> {
+    const normalized = idNo.replace(/[^a-zA-Z0-9]/g, '').toUpperCase();
+    if (normalized.length < 4) return null;
+    try {
+      const [profile] = await db
+        .select()
+        .from(UserProfileTable)
+        .where(
+          sql`upper(regexp_replace(coalesce(${UserProfileTable.idNo}, ''), '[^a-zA-Z0-9]', '', 'g')) = ${normalized}`,
+        )
+        .limit(1);
+      return profile ?? null;
+    } catch (error) {
+      logger.error('[UserProfileRepository.findByNormalizedIdNo] Error:', error);
+      return null;
     }
   }
 

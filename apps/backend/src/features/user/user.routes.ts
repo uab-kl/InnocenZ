@@ -65,6 +65,8 @@ router.post('/:id/comcard-image', (req, res, next) => {
     next();
   });
 }, userController.uploadComcardImage.bind(userController));
+/** Auto-build 2×2 portfolio comcard (same layout as Profile preview) → R2 + DB key. */
+router.post('/:id/comcard/generate', userController.generateComcard.bind(userController));
 router.post('/:id/id-photo/:side', (req, res, next) => {
   uploadIdDoc.single('idPhoto')(req, res, (err) => {
     if (err) {

@@ -15,7 +15,6 @@ import {
 } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { PrTable } from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';
@@ -477,6 +476,21 @@ export class PaymentVoucherRepositoryClass {
       : eq(PaymentVoucherTable.prId, prId);
   }
 
+  /**
+   * Statuses that mean "this week is still OPEN" — the PR is working it and it
+   * has not left their hands.
+   *
+   * `disputed` belongs here: raising a dispute moves the voucher to `disputed`,
+   * so a lookup that only matched `pending_review` made the week vanish on the
+   * phone and blocked further self-logs for the rest of the week.
+   *
+   * `sent`, `signed` and `paid` stay OUT — those have left the PR's hands.
+   */
+  private static readonly OPEN_WEEK_STATUSES: PaymentVoucherStatus[] = [
+    'pending_review',
+    'disputed',
+  ];
+
   /** The PR's current-week draft voucher (pending_review) with its lines, or null. */
   async getCurrentWeekDraft(
     prId: string,
@@ -642,28 +656,37 @@ export class PaymentVoucherRepositoryClass {
           agencyEmail: AgencyTable.contactEmail,
           agencyAddress1: AgencyTable.addressLine1,
           agencyAddress2: AgencyTable.addressLine2,
-          prName: PrTable.name,
-          prNickname: PrTable.nickname,
-          prIcNo: PrTable.icNo,
-          prPhone: PrTable.phone,
-          // The account's number wins over the roster's — same rule as
-          // PrRepository.withAccountPhone. A printed voucher is the document a
-          // PR is paid against, so the phone on it must be the one the person
-          // actually uses, not a copy that drifted.
-          prAccountPhone: UserTable.phoneNum,
+          // `main.pr` is gone — `prId` IS the `userId` now, so identity comes
+          // straight off the account: name/nickname off `user`/`user_profile`,
+          // IC off `user_profile.id_no`, phone off the account (one fact, one
+          // table — no more roster copy of any of these).
+          prName: sql<string | null>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+          prNickname: UserTable.username,
+          prIcNo: UserProfileTable.idNo,
+          prPhone: UserTable.phoneNum,
           // Where this person is actually paid. Reached by FK through the
-          // ACCOUNT (pr.user_id -> user_profile), never copied onto `pr`: a bank
-          // account is a fact about the person, and the same hop is what keeps it
-          // blanked for outlet callers. A PR with no account has no bank details,
+          // ACCOUNT (payment_voucher.pr_id -> user_id -> user_profile), never
+          // copied onto the voucher. A PR with no account has no bank details,
           // which is correct — you cannot pay someone who has not said where.
           prBankName: UserProfileTable.bankName,
           prBankAccountNo: UserProfileTable.bankAccountNo,
         })
         .from(PaymentVoucherTable)
         .leftJoin(AgencyTable, eq(PaymentVoucherTable.agencyId, AgencyTable.id))
-        .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
-        .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
-        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, PrTable.userId))
+        .leftJoin(
+          UserTable,
+          eq(
+            UserTable.id,
+            sql`coalesce(${PaymentVoucherTable.userId}, ${PaymentVoucherTable.prId})`,
+          ),
+        )
+        .leftJoin(
+          UserProfileTable,
+          eq(
+            UserProfileTable.userId,
+            sql`coalesce(${PaymentVoucherTable.userId}, ${PaymentVoucherTable.prId})`,
+          ),
+        )
         .where(eq(PaymentVoucherTable.id, voucherId))
         .limit(1);
       if (!row) return null;
@@ -685,7 +708,7 @@ export class PaymentVoucherRepositoryClass {
               name: row.prName,
               nickname: row.prNickname,
               icNo: row.prIcNo,
-              phone: row.prAccountPhone ?? row.prPhone,
+              phone: row.prPhone,
               bankName: row.prBankName,
               bankAccountNo: row.prBankAccountNo,
             }
@@ -856,15 +879,28 @@ export class PaymentVoucherRepositoryClass {
           weekStart: PaymentVoucherTable.weekStart,
           weekEnd: PaymentVoucherTable.weekEnd,
           prId: PaymentVoucherTable.prId,
-          prName: PrTable.name,
-          prNickname: PrTable.nickname,
+          prName: sql<string | null>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
+          prNickname: UserTable.username,
         })
         .from(PaymentVoucherReceiptTable)
         .innerJoin(
           PaymentVoucherTable,
           eq(PaymentVoucherTable.id, PaymentVoucherReceiptTable.voucherId),
         )
-        .leftJoin(PrTable, eq(PrTable.id, PaymentVoucherTable.prId))
+        .leftJoin(
+          UserTable,
+          eq(
+            UserTable.id,
+            sql`coalesce(${PaymentVoucherTable.userId}, ${PaymentVoucherTable.prId})`,
+          ),
+        )
+        .leftJoin(
+          UserProfileTable,
+          eq(
+            UserProfileTable.userId,
+            sql`coalesce(${PaymentVoucherTable.userId}, ${PaymentVoucherTable.prId})`,
+          ),
+        )
         .where(and(...conditions))
         .orderBy(desc(PaymentVoucherReceiptTable.createdAt))
         .limit(Math.min(opts.limit ?? 200, 500));

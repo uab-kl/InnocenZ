@@ -3,6 +3,7 @@ import type { User } from "@/lib/auth";
 import { getAccessToken, hasValidTokens } from "@/lib/auth/auth-storage";
 import { kickToLogin } from "@/lib/auth/guards";
 import { getClient } from "@/lib/axios-v1";
+import { noteR2PublicUrl } from "@/components/organization/details-sheet-parts";
 
 interface ApiResponse<T> {
 	success: boolean;
@@ -17,6 +18,7 @@ interface MeResponse {
 	username: string;
 	status: string;
 	profileImage?: string | null;
+	r2PublicUrl?: string | null;
 	roles: { id: string; roleName: string }[];
 	permissions: {
 		moduleId: string;
@@ -42,6 +44,7 @@ export async function fetchProfile(): Promise<User> {
 	}
 
 	const profile = response.data.data;
+	noteR2PublicUrl(profile.r2PublicUrl);
 
 	return {
 		id: profile.id,

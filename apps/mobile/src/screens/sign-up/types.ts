@@ -64,10 +64,7 @@ export type Draft = {
 	/** Step 5 — required → `user.profile_image`. */
 	profileImageUri: string;
 	profileImageFile: Blob | null;
-	/** Step 5 — optional single → `user_profile.comcard_image`. */
-	comcardImageUri: string;
-	comcardImageFile: Blob | null;
-	/** Step 5 — optional many → `user_profile.portfolio_photos`. */
+	/** Step 5 — optional many → `user_profile.portfolio_photos` (comcard preview is auto from these). */
 	portfolioPhotos: DraftPhoto[];
 	/** Step 5 — must acknowledge before Create account (same pattern as web). */
 	ackPersonalInfo: boolean;
@@ -112,8 +109,6 @@ export function emptyDraft(): Draft {
 		idBackOcrOk: false,
 		profileImageUri: '',
 		profileImageFile: null,
-		comcardImageUri: '',
-		comcardImageFile: null,
 		portfolioPhotos: [],
 		ackPersonalInfo: false,
 		ackDeclarationOfTruth: false,
@@ -230,7 +225,7 @@ export function validateStep(step: number, draft: Draft, localDigits: string): S
 		} else if (!draft.idFrontOcrOk) {
 			fields.idPhotoFrontUri = passportOnly
 				? 'Passport number on the photo must match what you entered. Retake.'
-				: 'ID number on the front photo must match what you entered. Retake.';
+				: 'Front photo must be the front of your ID and show the correct ID number. Retake.';
 		}
 		// Passport is one page only — no back. NRIC / work permit still need both sides.
 		if (!passportOnly) {
@@ -238,7 +233,7 @@ export function validateStep(step: number, draft: Draft, localDigits: string): S
 				fields.idPhotoBackUri = 'Capture the back of your ID.';
 			} else if (!draft.idBackOcrOk) {
 				fields.idPhotoBackUri =
-					'ID number on the back photo must match what you entered. Retake.';
+					'Back photo must be the back of your ID and show the correct ID number. Retake.';
 			}
 		}
 	} else if (step === 5) {

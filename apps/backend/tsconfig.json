@@ -4,6 +4,7 @@
     "module": "ESNext",
     "rootDir": "./src",
     "moduleResolution": "bundler",
+    "typeRoots": ["../../node_modules/@types"],
     "paths": {
       "@/*": ["./src/*"]
     },

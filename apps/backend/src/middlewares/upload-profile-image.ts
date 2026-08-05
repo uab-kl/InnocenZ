@@ -1,12 +1,6 @@
 import multer from 'multer';
 import path from 'node:path';
-import { Request } from 'express';
-import {
-  ALLOWED_PROFILE_IMAGE_EXTENSIONS,
-  ensureProfileImageDir,
-  PROFILE_IMAGE_UPLOAD_DIR,
-} from '@/util/profile-image';
-import { paramId } from '@/util/params';
+import { ALLOWED_PROFILE_IMAGE_EXTENSIONS } from '@/util/profile-image';
 
 const limits = { fileSize: 5 * 1024 * 1024 };
 
@@ -19,20 +13,9 @@ const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   cb(null, true);
 };
 
-const profileImageStorage = multer.diskStorage({
-  destination: (_req, _file, cb) => {
-    ensureProfileImageDir();
-    cb(null, PROFILE_IMAGE_UPLOAD_DIR);
-  },
-  filename: (req: Request, file, cb) => {
-    const ext = path.extname(file.originalname).toLowerCase();
-    const userId = paramId(req.params.id);
-    cb(null, `${userId}${ext}`);
-  },
-});
-
+/** Memory storage — buffer is uploaded to Cloudflare R2 in the controller. */
 export const uploadProfileImage = multer({
-  storage: profileImageStorage,
+  storage: multer.memoryStorage(),
   limits,
   fileFilter,
 });

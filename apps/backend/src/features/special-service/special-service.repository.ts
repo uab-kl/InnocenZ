@@ -1,7 +1,8 @@
 import { and, asc, desc, eq, or, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
-import { PrTable } from '@/features/pr/pr.model.js';
+import { UserTable } from '@/features/user/user.model.js';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
 import { buildMultiDayWhere } from '@/util/filter-date-format.js';
@@ -40,7 +41,8 @@ const selectWithOutlet = {
   postingAgencyName: SpecialServiceTable.postingAgencyName,
   postingPrId: SpecialServiceTable.postingPrId,
   postingUserId: SpecialServiceTable.postingUserId,
-  postingPrName: PrTable.name,
+  // `main.pr` is gone — the poster's name comes off the account directly.
+  postingPrName: sql<string | null>`coalesce(nullif(trim(${UserProfileTable.fullName}), ''), nullif(trim(${UserTable.username}), ''))`,
   vendorName: SpecialServiceTable.vendorName,
   scheduledFor: SpecialServiceTable.scheduledFor,
   createdAt: SpecialServiceTable.createdAt,
@@ -48,6 +50,13 @@ const selectWithOutlet = {
   createdBy: SpecialServiceTable.createdBy,
   updatedBy: SpecialServiceTable.updatedBy,
 };
+
+/**
+ * `posting_pr_id` equals `posting_user_id` post-cutover (0089) — `user_id` is
+ * preferred when present, `pr_id` the fallback for rows that predate the
+ * dual-write backfill.
+ */
+const postingUserId = sql`coalesce(${SpecialServiceTable.postingUserId}, ${SpecialServiceTable.postingPrId})`;
 
 export class SpecialServiceRepositoryClass {
   private buildConditions(filter?: SpecialServiceFilter): SQL | undefined {
@@ -107,7 +116,8 @@ export class SpecialServiceRepositoryClass {
         .select(selectWithOutlet)
         .from(SpecialServiceTable)
         .leftJoin(OutletTable, eq(OutletTable.id, SpecialServiceTable.outletId))
-        .leftJoin(PrTable, eq(PrTable.id, SpecialServiceTable.postingPrId))
+        .leftJoin(UserTable, eq(UserTable.id, postingUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, postingUserId))
         .where(whereClause)
         .orderBy(
           order === 'asc'
@@ -130,7 +140,8 @@ export class SpecialServiceRepositoryClass {
         .select(selectWithOutlet)
         .from(SpecialServiceTable)
         .leftJoin(OutletTable, eq(OutletTable.id, SpecialServiceTable.outletId))
-        .leftJoin(PrTable, eq(PrTable.id, SpecialServiceTable.postingPrId))
+        .leftJoin(UserTable, eq(UserTable.id, postingUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, postingUserId))
         .where(eq(SpecialServiceTable.id, id))
         .limit(1);
       return row ?? null;

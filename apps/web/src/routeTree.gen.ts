@@ -16,6 +16,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoAccessRouteImport } from './routes/no-access'
 import { Route as NotFoundRouteImport } from './routes/not-found'
 import { Route as OutletRouteRouteImport } from './routes/outlet/route'
+import { Route as PolicyRouteImport } from './routes/policy'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log/route'
@@ -101,6 +102,11 @@ const NotFoundRoute = NotFoundRouteImport.update({
 const OutletRouteRoute = OutletRouteRouteImport.update({
   id: '/outlet',
   path: '/outlet',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const PolicyRoute = PolicyRouteImport.update({
+  id: '/policy',
+  path: '/policy',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -374,6 +380,7 @@ export interface FileRoutesByFullPath {
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
+  '/policy': typeof PolicyRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
@@ -432,6 +439,7 @@ export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
+  '/policy': typeof PolicyRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
@@ -492,6 +500,7 @@ export interface FileRoutesById {
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
+  '/policy': typeof PolicyRoute
   '/privacy': typeof PrivacyRoute
   '/signup': typeof SignupRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
@@ -554,6 +563,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/no-access'
     | '/not-found'
+    | '/policy'
     | '/privacy'
     | '/signup'
     | '/admin/audit-log'
@@ -612,6 +622,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/no-access'
     | '/not-found'
+    | '/policy'
     | '/privacy'
     | '/signup'
     | '/admin/business'
@@ -671,6 +682,7 @@ export interface FileRouteTypes {
     | '/login'
     | '/no-access'
     | '/not-found'
+    | '/policy'
     | '/privacy'
     | '/signup'
     | '/admin/audit-log'
@@ -732,6 +744,7 @@ export interface RootRouteChildren {
   LoginRoute: typeof LoginRoute
   NoAccessRoute: typeof NoAccessRoute
   NotFoundRoute: typeof NotFoundRoute
+  PolicyRoute: typeof PolicyRoute
   PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
 }
@@ -785,6 +798,13 @@ declare module '@tanstack/react-router' {
       path: '/outlet'
       fullPath: '/outlet'
       preLoaderRoute: typeof OutletRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/policy': {
+      id: '/policy'
+      path: '/policy'
+      fullPath: '/policy'
+      preLoaderRoute: typeof PolicyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -1323,6 +1343,7 @@ const rootRouteChildren: RootRouteChildren = {
   LoginRoute: LoginRoute,
   NoAccessRoute: NoAccessRoute,
   NotFoundRoute: NotFoundRoute,
+  PolicyRoute: PolicyRoute,
   PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
 }

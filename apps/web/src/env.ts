@@ -13,6 +13,8 @@ export const env = createEnv({
 		VITE_OUTLET_ROLE_ID: z.string().min(1).optional(),
 		/** Agency role UUID for public signup (no /rbac/role lookup). */
 		VITE_AGENCY_ROLE_ID: z.string().min(1).optional(),
+		/** Cloudflare R2 public base (no trailing slash). Join with stored object keys. */
+		VITE_R2_PUBLIC_URL: z.url().optional(),
 	},
 
 	runtimeEnv: import.meta.env,

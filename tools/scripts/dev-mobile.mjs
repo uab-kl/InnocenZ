@@ -20,6 +20,8 @@ const backendPort = rootEnv.BACKEND_PORT?.trim() || '7777';
 // EXPO_PUBLIC_API_URL unset lets apps/mobile/src/lib/api.ts autodetect the dev
 // machine's LAN IP from Expo's hostUri, which is what physical devices need.
 const apiUrl = rootEnv.EXPO_PUBLIC_API_URL?.trim() || rootEnv.MOBILE_API_URL?.trim();
+const r2PublicUrl =
+  rootEnv.EXPO_PUBLIC_R2_PUBLIC_URL?.trim() || rootEnv.R2_PUBLIC_URL?.trim() || '';
 
 process.on('SIGINT', () => shutdown(0));
 process.on('SIGTERM', () => shutdown(0));
@@ -69,7 +71,11 @@ const expo = spawnProc(children, process.execPath, [expoCli, 'start'], {
   stdio: 'inherit',
   // Only set EXPO_PUBLIC_API_URL when explicitly overridden; otherwise leave it
   // unset so apps/mobile/src/lib/api.ts autodetects the dev machine's LAN IP.
-  env: apiUrl ? { EXPO_PUBLIC_API_URL: apiUrl } : {},
+  // Always forward R2 public base so `user/…` keys resolve to CDN URLs.
+  env: {
+    ...(apiUrl ? { EXPO_PUBLIC_API_URL: apiUrl } : {}),
+    ...(r2PublicUrl ? { EXPO_PUBLIC_R2_PUBLIC_URL: r2PublicUrl } : {}),
+  },
 });
 
 expo.on('exit', (code) => shutdown(code ?? 0));

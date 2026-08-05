@@ -11,5 +11,5 @@ COMMENT ON COLUMN "main"."phone_verification"."purpose" IS
 DROP INDEX IF EXISTS "main"."phone_verification_phone_status_expires_idx";
 --> statement-breakpoint
 
-CREATE INDEX "phone_verification_phone_purpose_status_expires_idx"
+CREATE INDEX IF NOT EXISTS "phone_verification_phone_purpose_status_expires_idx"
   ON "main"."phone_verification" ("phone_num", "purpose", "status", "expires_at");

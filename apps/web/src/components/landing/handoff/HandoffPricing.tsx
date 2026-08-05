@@ -13,7 +13,7 @@ const AGENCY_POPULAR_INDEX = 2;
 
 /** Map footer link labels (EN + ZH) to real routes when available. */
 function footerHref(label: string): string {
-	if (label === "Privacy" || label === "隐私") return "/privacy";
+	if (label === "Privacy" || label === "隐私") return "/policy";
 	return "#top";
 }
 

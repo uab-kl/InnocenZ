@@ -15,6 +15,7 @@ import { captureFromCamera } from '../../lib/photo-file';
 import {
 	isValidNricFormat,
 	nricMatchesDob,
+	ocrLooksSamePhoto,
 	verifyIdPhotoMatches,
 	type IdOcrMatch,
 } from '../../lib/id-ocr';
@@ -48,15 +49,25 @@ function ocrMessage(
 	result: IdOcrMatch | null,
 	busy: boolean,
 ): { text: string; tone: 'ok' | 'bad' | 'muted' } {
-	if (busy) return { text: `Reading ${side} ID number…`, tone: 'muted' };
+	if (busy) return { text: `Reading ${side} ID…`, tone: 'muted' };
 	if (!result) {
 		return {
-			text: `${side === 'front' ? 'Front' : 'Back'} photo will be checked against your ID number.`,
+			text: `${side === 'front' ? 'Front' : 'Back'} must show that face of your ID — number checked too.`,
 			tone: 'muted',
 		};
 	}
 	if (result.status === 'matched') {
-		return { text: `ID number matched: ${result.seen}`, tone: 'ok' };
+		return { text: `ID matched on ${side}: ${result.seen}`, tone: 'ok' };
+	}
+	if (result.status === 'wrong_side') {
+		const got =
+			result.detected === 'unknown'
+				? 'could not confirm the side'
+				: `looks like the ${result.detected}`;
+		return {
+			text: `Wrong side — this photo ${got}. Capture the ${result.expectedSide}.`,
+			tone: 'bad',
+		};
 	}
 	if (result.status === 'mismatch') {
 		return {
@@ -197,8 +208,13 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 
 	const runOcr = useCallback(
 		async (slot: Slot, uri: string) => {
+			const expectedSide = slot === 'idPhotoFrontUri' ? 'front' : 'back';
 			const okKey = slot === 'idPhotoFrontUri' ? 'idFrontOcrOk' : 'idBackOcrOk';
 			const setResult = slot === 'idPhotoFrontUri' ? setFrontOcr : setBackOcr;
+			const otherResult = slot === 'idPhotoFrontUri' ? backOcr : frontOcr;
+			const otherOkKey = slot === 'idPhotoFrontUri' ? 'idBackOcrOk' : 'idFrontOcrOk';
+			const setOtherResult = slot === 'idPhotoFrontUri' ? setBackOcr : setFrontOcr;
+
 			setOcrBusySlot(slot);
 			try {
 				if (draft.idType === 'NRIC') {
@@ -207,6 +223,7 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 							status: 'mismatch',
 							seen: null,
 							expected: draft.idNo || '(empty)',
+							rawText: '',
 						});
 						patch({ [okKey]: false });
 						return;
@@ -216,18 +233,49 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 							status: 'mismatch',
 							seen: null,
 							expected: `${draft.idNo} (must match DOB)`,
+							rawText: '',
 						});
 						patch({ [okKey]: false });
 						return;
 					}
 				}
 
-				const result = await verifyIdPhotoMatches(uri, draft.idNo, draft.idType || 'NRIC');
+				const result = await verifyIdPhotoMatches(
+					uri,
+					draft.idNo,
+					draft.idType || 'NRIC',
+					draft.idType === 'Passport' ? 'any' : expectedSide,
+				);
+
+				// Same photo (or same side) used for front and back — refuse both.
+				if (
+					result.status === 'matched' &&
+					otherResult?.status === 'matched' &&
+					draft.idType !== 'Passport' &&
+					(ocrLooksSamePhoto(result.rawText, otherResult.rawText) ||
+						(result.side !== 'unknown' &&
+							otherResult.side !== 'unknown' &&
+							result.side === otherResult.side))
+				) {
+					const dup: IdOcrMatch = {
+						status: 'wrong_side',
+						seen: result.seen,
+						expectedSide,
+						detected: result.side === 'unknown' ? otherResult.side : result.side,
+						rawText: result.rawText,
+					};
+					setResult(dup);
+					setOtherResult({
+						...dup,
+						expectedSide: expectedSide === 'front' ? 'back' : 'front',
+					});
+					patch({ [okKey]: false, [otherOkKey]: false });
+					return;
+				}
+
 				setResult(result);
-				// Only a real match counts — never treat "OCR unavailable" as a skip/pass.
 				const ok = result.status === 'matched';
 				if (draft.idType === 'Passport' && slot === 'idPhotoFrontUri') {
-					// Passport is one page — no back capture; keep back flags clear/satisfied.
 					patch({
 						idFrontOcrOk: ok,
 						idPhotoBackUri: '',
@@ -242,7 +290,7 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 				setOcrBusySlot(null);
 			}
 		},
-		[clearFieldError, draft.dob, draft.idNo, draft.idType, patch],
+		[backOcr, clearFieldError, draft.dob, draft.idNo, draft.idType, frontOcr, patch],
 	);
 
 	const shoot = useCallback(
@@ -323,7 +371,7 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 				<Text style={styles.introBody}>
 					{passportOnly
 						? 'Photograph the passport photo page only (one side). We OCR it and check the passport number matches what you entered.'
-						: `Photograph the front and back of your ${doc}. We OCR both sides and check the ID number matches what you entered.`}
+						: `Photograph the front and back of your ${doc}. We check the ID number AND that each photo is the correct side — swapping front/back will not pass.`}
 				</Text>
 			</View>
 
@@ -380,7 +428,7 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 					<Text style={styles.okBannerText}>
 						{passportOnly
 							? 'Passport number verified on the photo page'
-							: 'ID number verified on front and back'}
+							: 'Front and back verified (correct sides + matching ID)'}
 					</Text>
 				</View>
 			) : null}
@@ -398,7 +446,7 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 						<Text style={styles.promptBody}>
 							{passportOnly
 								? 'InnocenZ needs your camera to photograph the passport photo page. One photo is enough — we check the passport number with on-phone OCR.'
-								: 'InnocenZ needs your camera to photograph your ID card. Front and back photos are recorded for validation, and we check the ID number on both sides with on-phone OCR.'}
+								: 'InnocenZ needs your camera to photograph your ID card. Capture the correct front and back — swapping sides or using the same photo twice will not pass. We also check the ID number on both sides with on-phone OCR.'}
 						</Text>
 						<Pressable
 							style={[styles.promptEnableBtn, grad(GRADIENTS.accent, C.accent)]}

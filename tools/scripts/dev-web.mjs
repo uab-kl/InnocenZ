@@ -26,6 +26,10 @@ const BACKEND_PORT_START = envPort('BACKEND_PORT', 7780);
 const API_URL =
   process.env.VITE_API_URL?.trim() ||
   `http://localhost:${BACKEND_PORT_START}/api`;
+const R2_PUBLIC_URL =
+  process.env.VITE_R2_PUBLIC_URL?.trim() ||
+  process.env.R2_PUBLIC_URL?.trim() ||
+  '';
 
 const colors = {
   web: '\x1b[36m', // cyan
@@ -96,6 +100,7 @@ const web = spawnProc(
       PORT: String(webPort),
       WEB_PORT: String(webPort),
       VITE_API_URL: publicApiUrl,
+      ...(R2_PUBLIC_URL ? { VITE_R2_PUBLIC_URL: R2_PUBLIC_URL } : {}),
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: isWin,

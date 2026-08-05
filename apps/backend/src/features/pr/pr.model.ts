@@ -20,38 +20,40 @@ export type PrStatus = (typeof prStatusValues)[number];
 export const prStatusEnum = MainSchema.enum('pr_status', prStatusValues);
 
 /**
- * @deprecated Retiring in favour of `user` + `user_profile` + `agency_pr`
- * (migration 0087 foundation). Do not add new columns or features here.
- * Ops tables are gaining `user_id`; drop this table once dual-write is cut over.
+ * `main.pr` is GONE (migration 0089 dropped it after remapping every ops
+ * `pr_id` column to equal `user_id`). There is no more `pr` row and no more
+ * standalone PR identity: a PR **is** a `user` account, so `id === userId`
+ * on every value shaped like this, always. Nothing below is a drizzle table —
+ * it is a plain type describing the SYNTHETIC row `PrRepository` builds on the
+ * fly from `user` + `user_profile` + `agency_pr` (name/nickname from the
+ * account, tier/status from the membership — one fact, one table, per the
+ * database rule). Keep the field list identical to the old table so every
+ * existing caller of `PrType` keeps compiling untouched.
  */
-export const PrTable = MainSchema.table('pr', {
-  id: uuid('id').defaultRandom().notNull().primaryKey(),
-  agencyId: uuid('agency_id')
-    .notNull()
-    .references(() => AgencyTable.id, { onDelete: 'cascade' }),
-  userId: uuid('user_id').references(() => UserTable.id, { onDelete: 'set null' }),
-  name: varchar('name', { length: 255 }).notNull(),
-  nickname: varchar('nickname', { length: 100 }),
-  tier: prTierEnum('tier').notNull().default('tier_1'),
-  status: prStatusEnum('status').notNull().default('active'),
-  /**
-   * Why the agency declined this sign-up. The Approvals screen has always
-   * collected a reason and had nowhere to put it, so a declined PR was told
-   * they were declined and nothing else. Cleared on acceptance, so a stale
-   * reason cannot hang off an active roster member.
-   */
-  rejectReason: varchar('reject_reason', { length: 500 }),
-  phone: varchar('phone', { length: 50 }),
-  email: varchar('email', { length: 255 }),
-  icNo: varchar('ic_no', { length: 100 }),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdBy: varchar('created_by').notNull(),
-  updatedBy: varchar('updated_by').notNull(),
-});
+export type PrType = {
+  /** Always equal to `userId` post-cutover. */
+  id: string;
+  agencyId: string;
+  userId: string;
+  name: string;
+  nickname: string | null;
+  tier: PrTier;
+  status: PrStatus;
+  rejectReason: string | null;
+  phone: string | null;
+  email: string | null;
+  icNo: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  createdBy: string;
+  updatedBy: string;
+};
 
-export type PrType = typeof PrTable.$inferSelect;
-export type PrInsertType = typeof PrTable.$inferInsert;
+/** Synthetic rows are built, not inserted — kept only for callers that still reference the shape. */
+export type PrInsertType = Omit<PrType, 'createdAt' | 'updatedAt'> & {
+  createdAt?: Date;
+  updatedAt?: Date;
+};
 
 export const agencyPrApproveStatusValues = ['pending', 'approved', 'rejected'] as const;
 export type AgencyPrApproveStatus = (typeof agencyPrApproveStatusValues)[number];

@@ -176,7 +176,7 @@ function RouteComponent() {
 						. All rights reserved.
 						{" · "}
 						<a
-							href="/privacy"
+							href="/policy"
 							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
 						>
 							Privacy Policy
@@ -411,7 +411,7 @@ function RouteComponent() {
 						. All rights reserved.
 						{" · "}
 						<a
-							href="/privacy"
+							href="/policy"
 							className="text-foreground/70 underline-offset-4 hover:text-gold-bright hover:underline"
 						>
 							Privacy Policy

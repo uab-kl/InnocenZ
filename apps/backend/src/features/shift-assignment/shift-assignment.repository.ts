@@ -4,7 +4,9 @@ import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
-import { PrTable } from '@/features/pr/pr.model';
+import { AgencyPrTable } from '@/features/pr/pr.model';
+import { UserTable } from '@/features/user/user.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { DEFAULT_GEOFENCE_RADIUS_M } from './check-in-geofence';
 import {
   OutletDrinkMenuTable,
@@ -34,8 +36,21 @@ export const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] 
  * A PR's display name: preferred nickname when set, otherwise legal name.
  * Shared by the assignment-list and cost queries so both show the same label.
  * (Restored after a merge dropped the definition while keeping its usages.)
+ *
+ * `main.pr` is gone — nickname is `user.username`, legal name is
+ * `user_profile.full_name`. Works regardless of HOW `user`/`user_profile` got
+ * joined into the query (see `assigneeUserId` below), since it only reaches
+ * for those two tables' columns.
  */
-const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${PrTable.nickname}), ''), ${PrTable.name})`;
+const prDisplayNameSql = sql<string>`coalesce(nullif(trim(${UserTable.username}), ''), nullif(trim(${UserProfileTable.fullName}), ''), 'PR')`;
+
+/**
+ * `pr_id` equals `user_id` for every row post-cutover (0089) — the old FK to
+ * `main.pr` is gone along with the table. `user_id` is still preferred when
+ * present (it is the newer, intentionally-set column); `pr_id` is the
+ * fallback for any row that predates the dual-write backfill.
+ */
+const assigneeUserId = sql`coalesce(${ShiftAssignmentTable.userId}, ${ShiftAssignmentTable.prId})`;
 
 /**
  * The rate card resolved for one PR tier at one outlet. Numeric columns stay as
@@ -219,7 +234,8 @@ export class ShiftAssignmentRepositoryClass {
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
-        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .where(whereClause)
         .orderBy(ShiftAssignmentTable.createdAt)
         .limit(pageSize)
@@ -303,10 +319,12 @@ export class ShiftAssignmentRepositoryClass {
     >
   > {
     try {
+      // `pr_id` equals `user_id` for every row post-cutover (0089) — matching
+      // it directly replaces the old join through `main.pr.user_id`.
       const ownership = filter.userId
         ? or(
             eq(ShiftAssignmentTable.userId, filter.userId),
-            eq(PrTable.userId, filter.userId),
+            eq(ShiftAssignmentTable.prId, filter.userId),
           )
         : filter.prId
           ? eq(ShiftAssignmentTable.prId, filter.prId)
@@ -335,7 +353,6 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
-        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
         .where(ownership)
         .orderBy(ShiftTable.shiftDate);
       return rows.map((row) => {
@@ -540,7 +557,10 @@ export class ShiftAssignmentRepositoryClass {
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
-        .innerJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        // No more FK to `main.pr` guaranteeing a match — left join and let
+        // prDisplayNameSql's own 'PR' fallback cover a miss.
+        .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
         .where(and(...conditions))
         .orderBy(asc(ShiftTable.shiftDate));
@@ -601,16 +621,20 @@ export class ShiftAssignmentRepositoryClass {
         ...params.excludePrIds,
       ]);
 
+      // `main.pr` is gone — an agency's active PRs are its approved
+      // `agency_pr` members now, with identity joined off `user`/`user_profile`.
       const prs = await db
         .select({
-          prId: PrTable.id,
-          userId: PrTable.userId,
+          prId: AgencyPrTable.userId,
+          userId: AgencyPrTable.userId,
           prName: prDisplayNameSql,
-          tier: PrTable.tier,
+          tier: AgencyPrTable.tier,
         })
-        .from(PrTable)
-        .where(and(eq(PrTable.agencyId, params.agencyId), eq(PrTable.status, 'active')))
-        .orderBy(asc(PrTable.name));
+        .from(AgencyPrTable)
+        .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, AgencyPrTable.userId))
+        .where(and(eq(AgencyPrTable.agencyId, params.agencyId), eq(AgencyPrTable.approveStatus, 'approved')))
+        .orderBy(asc(prDisplayNameSql));
       const free = prs.filter((p) => !unavailable.has(p.prId));
       if (free.length === 0) return [];
 
@@ -1064,7 +1088,8 @@ export class ShiftAssignmentRepositoryClass {
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
-        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .where(
           and(
             eq(ShiftAssignmentTable.agencyId, agencyId),
@@ -1154,7 +1179,9 @@ export class ShiftAssignmentRepositoryClass {
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
-        .innerJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        // No more FK to `main.pr` guaranteeing a match — left join.
+        .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
         .where(
           and(
@@ -1227,12 +1254,13 @@ export class ShiftAssignmentRepositoryClass {
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
-        .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .where(this.buildCostConditions(filter))
         .groupBy(
           ShiftAssignmentTable.prId,
-          PrTable.nickname,
-          PrTable.name,
+          UserTable.username,
+          UserProfileTable.fullName,
           ShiftTable.shiftDate,
         )
         .orderBy(asc(ShiftTable.shiftDate));

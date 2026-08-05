@@ -5,6 +5,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Platform,
   Pressable,
@@ -31,6 +32,9 @@ import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { pickImageFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
 import { Avatar, IzButton } from '../components/ui';
+import { PortfolioSlotGrid } from '../components/PortfolioSlotGrid';
+import { AppToast, useToast } from '../components/Toast';
+import { LanguageMultiPicker } from './sign-up/fields';
 import {
   Camera,
   Check,
@@ -38,7 +42,6 @@ import {
   Lock,
   Pencil,
   Star,
-  XIcon,
 } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
 import { usePrNav } from '../lib/pr-nav';
@@ -57,12 +60,11 @@ type Draft = {
   languages: string[];
   agencyIds: string[];
   portfolio: (string | null)[];
-  otherLang: string;
 };
 
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
-  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, uploadComcardImage, token } =
+  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, uploadComcardImage, generateComcard, token } =
     useSession();
 
   const [editing, setEditing] = useState(false);
@@ -70,7 +72,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [savingComcard, setSavingComcard] = useState(false);
   const [comcardSavedHint, setComcardSavedHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const { message: toast, variant: toastVariant, showToast } = useToast();
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
+  /** Portfolio gallery accordion — closed by default; count + chevron still show. */
+  const [portfolioOpen, setPortfolioOpen] = useState(false);
   /** Real agencies from the backend — the checkbox list the PR picks from. */
   const [agencyOptions, setAgencyOptions] = useState<{ id: string; name: string }[]>([]);
   /** This PR's own agency_pr links, pending ones included. */
@@ -80,6 +85,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [slotPreviewUri, setSlotPreviewUri] = useState<(string | null)[]>(() =>
     Array.from({ length: PORTFOLIO_SLOTS }, () => null),
   );
+  /**
+   * Slot order to paint while a drag-swap round-trip is in flight. Outside edit
+   * mode the grid reads `me`, so a draft-only optimistic update never showed —
+   * the tiles sat in the old order until the save (plus comcard rebuild) landed.
+   */
+  const [pendingOrder, setPendingOrder] = useState<(string | null)[] | null>(null);
+  /** Inline status under Portfolio while rearrange / comcard rebuild is in flight. */
+  const [portfolioBusy, setPortfolioBusy] = useState<string | null>(null);
 
   const displayName = editing ? draft.displayName : me?.username ?? 'PR';
   const reloadMyLinks = React.useCallback(async () => {
@@ -141,7 +154,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const portfolio = editing ? draft.portfolio : profilePortfolio;
 
   // Only the account's own uploaded photos — no demo seed leaks into a fresh PR.
-  const displayPortfolio = portfolio;
+  const displayPortfolio = pendingOrder ?? portfolio;
 
   const avatarPath = me?.profileImage ?? null;
 
@@ -162,7 +175,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // Gallery picking works on BOTH web (file dialog) and the phone (real photo
   // gallery via expo-image-picker) — see lib/photo-file.ts.
   const canPickImages = Boolean(token);
-  const canSaveComcard = Boolean(token) && Platform.OS === 'web' && !editing;
+  // Server generates the PNG (same layout as the on-screen preview).
+  const canSaveComcard = Boolean(token) && !editing;
 
   const saveComcardToDatabase = async () => {
     if (!canSaveComcard || comcardTiles.mode === 'empty') return;
@@ -170,19 +184,26 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setError(null);
     setComcardSavedHint(null);
     try {
-      let blob: Blob;
-      if (comcardTiles.mode === 'single') {
-        blob = await fetchImageBlob(comcardTiles.src);
-      } else {
-        blob = await renderComcardPng({
-          paths: comcardTiles.paths,
-          name: displayName,
-          age,
-          heightCm: height,
-          weightKg: weight,
-        });
+      // Prefer server generate (works on phone + web). Web can still fall back
+      // to canvas encode if the generate route is unavailable.
+      try {
+        await generateComcard();
+      } catch (genErr) {
+        if (Platform.OS !== 'web') throw genErr;
+        let blob: Blob;
+        if (comcardTiles.mode === 'single') {
+          blob = await fetchImageBlob(comcardTiles.src);
+        } else {
+          blob = await renderComcardPng({
+            paths: comcardTiles.paths,
+            name: displayName,
+            age,
+            heightCm: height,
+            weightKg: weight,
+          });
+        }
+        await uploadComcardImage(blob, 'comcard.png');
       }
-      await uploadComcardImage(blob, 'comcard.png');
       setComcardSavedHint('Comcard saved');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save comcard');
@@ -211,7 +232,6 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       languages: me?.profile.languages ?? [],
       agencyIds,
       portfolio: portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS),
-      otherLang: '',
     });
     setError(null);
     setAgencyMenuOpen(false);
@@ -272,6 +292,16 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         await reloadMyLinks();
       }
       setEditing(false);
+      showToast('Profile saved');
+      // Height / weight / name feed the comcard overlay — refresh saved PNG.
+      if (portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS).some(Boolean)) {
+        try {
+          await generateComcard();
+          setComcardSavedHint('Comcard updated');
+        } catch {
+          /* Non-fatal */
+        }
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save profile');
     } finally {
@@ -302,7 +332,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setSaving(true);
     setError(null);
     try {
-      await uploadAvatar(picked.file);
+      await uploadAvatar(picked.file, picked.filename);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not upload photo');
     } finally {
@@ -325,12 +355,19 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setSaving(true);
     setError(null);
     try {
-      const updated = await uploadPortfolioPhoto(slot, picked.file);
-      if (editing) {
-        setDraft((d) => ({
-          ...d,
-          portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
-        }));
+      const updated = await uploadPortfolioPhoto(slot, picked.file, picked.filename);
+      // Always sync draft + clear preview so the gallery shows the new R2 URL
+      // (same-slot overwrite used to keep an identical URL → Image cache stuck).
+      setDraft((d) => ({
+        ...d,
+        portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
+      }));
+      // Keep the saved comcard in sync with the gallery (first 4 slots).
+      try {
+        await generateComcard();
+        setComcardSavedHint('Comcard updated');
+      } catch {
+        /* Non-fatal — user can tap Save comcard. */
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
@@ -349,23 +386,124 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
   };
 
-  const toggleLang = (lang: string) => {
-    setDraft((d) => ({
-      ...d,
-      languages: d.languages.includes(lang)
-        ? d.languages.filter((l) => l !== lang)
-        : [...d.languages, lang],
-    }));
+  const onRemovePortfolio = (slot: number) => {
+    if (!canPickImages || saving) return;
+    const label = String(slot + 1).padStart(2, '0');
+    Alert.alert(
+      'Remove photo?',
+      `Remove portfolio photo ${label}? This deletes it from your profile.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove',
+          style: 'destructive',
+          onPress: () => {
+            void confirmRemovePortfolio(slot);
+          },
+        },
+      ],
+    );
   };
 
-  const addOtherLang = () => {
-    const v = draft.otherLang.trim();
-    if (!v) return;
-    setDraft((d) => ({
-      ...d,
-      languages: d.languages.includes(v) ? d.languages : [...d.languages, v],
-      otherLang: '',
-    }));
+  const confirmRemovePortfolio = async (slot: number) => {
+    const next = [...displayPortfolio];
+    next[slot] = null;
+    setSaving(true);
+    setError(null);
+    try {
+      await updateProfile({
+        username: me?.username?.trim() || draft.displayName.trim() || 'PR',
+        portfolioPhotos: portfolioSlotsFromProfile(next, PORTFOLIO_SLOTS),
+      });
+      setDraft((d) => ({ ...d, portfolio: next }));
+      setSlotPreviewUri((prev) => {
+        const copy = [...prev];
+        copy[slot] = null;
+        return copy;
+      });
+      if (next.some(Boolean)) {
+        try {
+          await generateComcard();
+          setComcardSavedHint('Comcard updated');
+        } catch {
+          /* Non-fatal */
+        }
+      } else {
+        setComcardSavedHint(null);
+      }
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not remove portfolio photo');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const onReorderPortfolio = async (next: (string | null)[]) => {
+    if (!canPickImages || saving) return;
+    const normalized = portfolioSlotsFromProfile(next, PORTFOLIO_SLOTS);
+    const prev = portfolioSlotsFromProfile(displayPortfolio, PORTFOLIO_SLOTS);
+    if (prev.every((p, i) => p === normalized[i])) return;
+
+    setSlotPreviewUri((previews) => {
+      const nextPrev = Array.from({ length: PORTFOLIO_SLOTS }, () => null as string | null);
+      const used = new Set<number>();
+      for (let to = 0; to < PORTFOLIO_SLOTS; to++) {
+        if (!normalized[to]) continue;
+        for (let from = 0; from < PORTFOLIO_SLOTS; from++) {
+          if (used.has(from)) continue;
+          if (prev[from] === normalized[to]) {
+            nextPrev[to] = previews[from];
+            used.add(from);
+            break;
+          }
+        }
+      }
+      return nextPrev;
+    });
+
+    setDraft((d) => ({ ...d, portfolio: normalized }));
+    setPendingOrder(normalized);
+    setPortfolioBusy('Saving arrangement…');
+    showToast('Saving arrangement…', 'info');
+    setSaving(true);
+    setError(null);
+    let saved = false;
+    try {
+      await updateProfile({
+        username: me?.username?.trim() || draft.displayName.trim() || 'PR',
+        portfolioPhotos: normalized,
+      });
+      saved = true;
+    } catch (e) {
+      setDraft((d) => ({ ...d, portfolio: prev }));
+      setError(e instanceof ApiError ? e.message : 'Could not rearrange portfolio');
+      showToast('Could not rearrange portfolio', 'error');
+    } finally {
+      // Unlock the grid as soon as the order is persisted — comcard rebuild
+      // can take seconds and must not block the next drag.
+      setSaving(false);
+    }
+    if (!saved) {
+      setPendingOrder(null);
+      setPortfolioBusy(null);
+      return;
+    }
+
+    const cardChanged = [0, 1, 2, 3].some((i) => prev[i] !== normalized[i]);
+    if (cardChanged && normalized.some(Boolean)) {
+      setPortfolioBusy('Updating comcard…');
+      showToast('Updating comcard…', 'info');
+      try {
+        await generateComcard();
+        setComcardSavedHint('Comcard updated');
+      } catch {
+        /* Non-fatal — user can tap Save comcard. */
+      }
+    }
+
+    setPendingOrder(null);
+    setPortfolioBusy(null);
+    showToast('Portfolio rearranged');
   };
 
   const agencyLabel =
@@ -376,6 +514,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   return (
     <View style={styles.screen}>
+      <AppToast message={toast} variant={toastVariant} />
 
       <View style={styles.hero}>
         <View style={styles.heroHead}>
@@ -387,7 +526,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               </View>
             )}
             <View style={styles.badge}>
-              <Text style={styles.badgeText}>Photo Comcard · IC · v3</Text>
+              <Text style={styles.badgeText}>Photo Comcard · IC</Text>
             </View>
           </View>
         </View>
@@ -530,7 +669,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <View style={styles.collage}>
                 {assetUrl(comcardTiles.src) ? (
                   <Image
-                    source={{ uri: assetUrl(comcardTiles.src)! }}
+                    key={comcardTiles.src}
+                    source={{ uri: assetUrl(comcardTiles.src)!, cache: 'reload' }}
                     style={StyleSheet.absoluteFillObject}
                     resizeMode="cover"
                   />
@@ -587,7 +727,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               ) : me?.profile.comcardImage ? (
                 <Text style={styles.comcardSavedHint}>Saved to profile</Text>
               ) : (
-                <Text style={styles.comcardHint}>Save the auto-generated comcard to your profile</Text>
+                <Text style={styles.comcardHint}>
+                  Comcard auto-saves when you change portfolio photos
+                </Text>
               )}
             </View>
           )}
@@ -701,83 +843,81 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           )}
         </View>
 
-        {/* Portfolio */}
-        <View style={styles.section}>
-          <View style={styles.sectionTitleRow}>
-            <Text style={styles.sectionTitle}>Portfolio gallery · v3</Text>
-            {canPickImages && (
-              <Text style={styles.sectionHint}>
-                {editing
-                  ? 'Tap a slot to upload · save to apply removals'
-                  : 'Tap a slot to upload'}
+        {/* Portfolio — accordion gallery */}
+        <View style={[styles.section, styles.portfolioAccord]}>
+          <Pressable
+            style={styles.portfolioAccordHead}
+            onPress={() => setPortfolioOpen((o) => !o)}
+            accessibilityRole="button"
+            accessibilityState={{ expanded: portfolioOpen }}
+          >
+            <View style={styles.galleryHeadText}>
+              <Text style={styles.sectionTitle}>Portfolio</Text>
+              <Text style={styles.gallerySub} numberOfLines={1}>
+                {portfolioBusy
+                  ? portfolioBusy
+                  : portfolioOpen
+                    ? canPickImages
+                      ? 'Hold to drag · drop to swap'
+                      : 'Showcase photos'
+                    : `${displayPortfolio.filter(Boolean).length} of ${PORTFOLIO_SLOTS} photos`}
               </Text>
-            )}
-          </View>
-          <View style={styles.pgrid}>
-            {Array.from({ length: PORTFOLIO_SLOTS }, (_, i) => {
-              const path = displayPortfolio[i];
-              const uri = slotPreviewUri[i] ?? (path ? assetUrl(path) : null);
-              return (
-                <Pressable
-                  key={i}
-                  style={styles.pcell}
-                  onPress={canPickImages ? () => onPickPortfolio(i) : undefined}
-                  disabled={!canPickImages || saving}
-                >
-                  {uri ? (
-                    <Image source={{ uri }} style={styles.pcellImg} resizeMode="cover" />
-                  ) : (
-                    <Camera size={18} color={C.muted2} />
-                  )}
-                  {editing && uri && (
-                    <Pressable
-                      style={styles.pcellRemove}
-                      onPress={() =>
-                        setDraft((d) => {
-                          const next = [...d.portfolio];
-                          next[i] = null;
-                          return { ...d, portfolio: next };
-                        })
-                      }
-                    >
-                      <XIcon size={10} color="#fff" />
-                    </Pressable>
-                  )}
-                </Pressable>
-              );
-            })}
-          </View>
+            </View>
+            <View style={styles.portfolioAccordRight}>
+              {portfolioBusy ? (
+                <ActivityIndicator size="small" color={C.violetL} style={{ marginRight: 8 }} />
+              ) : null}
+              <View style={styles.galleryCount}>
+                <Text style={styles.galleryCountNum}>
+                  {displayPortfolio.filter(Boolean).length}
+                </Text>
+                <Text style={styles.galleryCountDen}>/{PORTFOLIO_SLOTS}</Text>
+              </View>
+              <ChevronDown
+                size={18}
+                color={C.violetL}
+                style={{
+                  transform: [{ rotate: portfolioOpen ? '180deg' : '0deg' }],
+                }}
+              />
+            </View>
+          </Pressable>
+
+          {portfolioOpen ? (
+            <>
+              {portfolioBusy ? (
+                <View style={styles.portfolioBusyRow}>
+                  <ActivityIndicator size="small" color={C.violetL} />
+                  <Text style={styles.portfolioBusyText}>{portfolioBusy}</Text>
+                </View>
+              ) : null}
+              <PortfolioSlotGrid
+              slots={displayPortfolio}
+              previewUris={slotPreviewUri}
+              slotCount={PORTFOLIO_SLOTS}
+              canEdit={canPickImages}
+              saving={saving}
+              resolveUri={assetUrl}
+              onPick={onPickPortfolio}
+              onRemove={onRemovePortfolio}
+              onReorder={(next) => {
+                void onReorderPortfolio(next);
+              }}
+            />
+            </>
+          ) : null}
         </View>
 
         {/* Languages */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Languages</Text>
           {editing ? (
-            <View style={styles.langEdit}>
-              <View style={styles.langChips}>
-                {PR_LANGUAGE_OPTIONS.map((lang) => {
-                  const on = draft.languages.includes(lang);
-                  return (
-                    <Pressable
-                      key={lang}
-                      style={[styles.langPick, on && styles.langPickOn]}
-                      onPress={() => toggleLang(lang)}
-                    >
-                      <Text style={[styles.langPickText, on && { color: C.violetL }]}>{lang}</Text>
-                    </Pressable>
-                  );
-                })}
-              </View>
-              <TextInput
-                value={draft.otherLang}
-                onChangeText={(v) => setDraft((d) => ({ ...d, otherLang: v }))}
-                placeholder="Other language"
-                placeholderTextColor={C.muted2}
-                style={styles.otherLang}
+            <View style={styles.langPickerWrap}>
+              <LanguageMultiPicker
+                value={draft.languages}
+                options={PR_LANGUAGE_OPTIONS}
+                onChange={(next) => setDraft((d) => ({ ...d, languages: next }))}
               />
-              <Pressable style={styles.addLang} onPress={addOtherLang}>
-                <Text style={styles.addLangText}>+ Add</Text>
-              </Pressable>
             </View>
           ) : languages.length === 0 ? (
             <Text style={styles.langEmptyText}>
@@ -845,7 +985,6 @@ function emptyDraft(): Draft {
     languages: [],
     agencyIds: [],
     portfolio: [],
-    otherLang: '',
   };
 }
 
@@ -1172,35 +1311,77 @@ const styles = StyleSheet.create({
     color: C.violetL,
   },
   sectionHint: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
-  pgrid: {
-    marginTop: 10,
+  galleryHead: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
+    alignItems: 'flex-end',
+    justifyContent: 'space-between',
+    gap: 12,
   },
-  pcell: {
-    width: '23%',
-    aspectRatio: 1,
-    borderRadius: 10,
+  portfolioAccord: {
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(255,255,255,0.02)',
     overflow: 'hidden',
-    position: 'relative',
+    paddingBottom: 0,
   },
-  pcellImg: { width: '100%', height: '100%' },
-  pcellRemove: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    width: 18,
-    height: 18,
-    borderRadius: 999,
-    backgroundColor: C.red,
+  portfolioAccordHead: {
+    flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  portfolioAccordRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  galleryHeadText: { flex: 1, minWidth: 0, gap: 2 },
+  gallerySub: {
+    fontFamily: F.manrope,
+    fontSize: 11,
+    lineHeight: 15,
+    color: C.prMuted,
+  },
+  galleryCount: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 8,
+    backgroundColor: 'rgba(183,156,232,0.1)',
+  },
+  galleryCountNum: {
+    fontFamily: F.sora,
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.violetL,
+  },
+  galleryCountDen: {
+    fontFamily: F.manrope,
+    fontSize: 11,
+    color: C.prMuted,
+  },
+  portfolioBusyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: 'rgba(183,156,232,0.1)',
+    borderWidth: 1,
+    borderColor: 'rgba(183,156,232,0.22)',
+  },
+  portfolioBusyText: {
+    flex: 1,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.violetL,
   },
   langChips: { marginTop: 10, flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   langPill: {
@@ -1214,49 +1395,7 @@ const styles = StyleSheet.create({
   langPillText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.violetL },
   langEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
   metaPending: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.amber },
-  langEdit: {
-    marginTop: 8,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: C.line,
-    padding: 12,
-    backgroundColor: 'rgba(0,0,0,0.12)',
-  },
-  langPick: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: C.line,
-    backgroundColor: 'rgba(255,255,255,0.03)',
-  },
-  langPickOn: {
-    borderColor: 'rgba(183,156,232,0.5)',
-    backgroundColor: 'rgba(183,156,232,0.12)',
-  },
-  langPickText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.muted },
-  otherLang: {
-    marginTop: 10,
-    fontFamily: F.sora,
-    fontSize: 14,
-    color: C.txt,
-    borderWidth: 1,
-    borderColor: C.line2,
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: 'rgba(0,0,0,0.22)',
-  },
-  addLang: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 999,
-    borderWidth: 1,
-    borderColor: C.line2,
-  },
-  addLangText: { fontFamily: F.sora, fontSize: 13, fontWeight: '600', color: C.txt },
+  langPickerWrap: { marginTop: 8 },
   error: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.red },
   actions: { marginTop: 16 },
   securityBtn: {

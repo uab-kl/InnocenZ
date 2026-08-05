@@ -45,6 +45,14 @@ export const env = createEnv({
     // message and the operator drops the pin by hand. NOT the same key as the
     // one in apps/mobile/app.json — that one is restricted to the app bundle.
     GOOGLE_MAPS_API_KEY: z.string().optional(),
+    // Cloudflare R2 (S3-compatible). Optional at boot — profile-image upload
+    // requires them and returns a clear 503 when missing.
+    R2_ACCOUNT_ID: z.string().min(1).optional(),
+    R2_BUCKET_NAME: z.string().min(1).optional(),
+    R2_ENDPOINT: z.string().url().optional(),
+    R2_ACCESS_KEY_ID: z.string().min(1).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
+    R2_PUBLIC_URL: z.string().url().optional(),
   },
   runtimeEnv: process.env,
   emptyStringAsUndefined: true,

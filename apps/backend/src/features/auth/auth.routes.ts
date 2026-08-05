@@ -71,6 +71,10 @@ router.post('/mfa/confirm', authenticateJWT, authController.confirmMfa.bind(auth
  * there without rejecting when it is not — the controller then decides what the
  * caller is allowed to create. It is not a guard; do not treat it as one.
  */
+router.post(
+  '/register/check',
+  authController.checkRegisterAvailability.bind(authController),
+);
 router.post('/register', optionalAuthenticateJWT, (req, res, next) => {
   uploadRegisterProfileImage.single('profileImage')(req, res, (err) => {
     if (err) {

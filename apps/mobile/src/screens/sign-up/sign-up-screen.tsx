@@ -8,11 +8,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../../theme/theme';
 import {
 	ApiError,
+	checkPrRegisterAvailability,
 	fetchPublicAgencies,
 	registerPr,
 	sendPrOtp,
 	verifyPrOtp,
 	type PublicAgency,
+	type RegisterCheckConflict,
 } from '../../lib/api';
 import { useSession } from '../../lib/session';
 import { IzButton } from '../../components/ui';
@@ -43,7 +45,7 @@ function SignUpScreenInner({
 	onBackToSignIn: () => void;
 	scroller: React.RefObject<ScrollView | null>;
 }) {
-	const { signIn, uploadAvatar, uploadComcardImage, uploadIdDoc, uploadPortfolioPhoto } =
+	const { signIn, uploadAvatar, generateComcard, uploadIdDoc, uploadPortfolioPhoto } =
 		useSession();
 	const insets = useSafeAreaInsets();
 	const keyboardScroll = useKeyboardScroll();
@@ -131,12 +133,46 @@ function SignUpScreenInner({
 	const describe = (e: unknown, fallback: string) =>
 		e instanceof ApiError ? e.message : fallback;
 
-	const goNext = () => {
+	const goNext = async () => {
 		const { fields, toast: toastMsg } = validateStep(step, draft, localDigits);
 		if (toastMsg) {
 			setFieldErrors(fields);
 			showToast(toastMsg);
 			return;
+		}
+		if (step === 1) {
+			setBusy(true);
+			setError(null);
+			try {
+				await checkPrRegisterAvailability(phoneNum, draft.idNo.trim());
+			} catch (e) {
+				if (e instanceof ApiError && e.status === 409) {
+					const conflicts =
+						e.data &&
+						typeof e.data === 'object' &&
+						Array.isArray((e.data as { conflicts?: RegisterCheckConflict[] }).conflicts)
+							? (e.data as { conflicts: RegisterCheckConflict[] }).conflicts
+							: [];
+					const nextFields: FieldErrors = {};
+					for (const c of conflicts) {
+						if (c.field === 'phone') nextFields.phone = c.message;
+						if (c.field === 'idNo') nextFields.idNo = c.message;
+					}
+					if (!nextFields.phone && !nextFields.idNo) {
+						nextFields.phone = e.message;
+					}
+					setFieldErrors(nextFields);
+					showToast(e.message);
+					setBusy(false);
+					return;
+				}
+				const msg = describe(e, 'Could not verify phone / ID — try again.');
+				setError(msg);
+				showToast(msg);
+				setBusy(false);
+				return;
+			}
+			setBusy(false);
 		}
 		setFieldErrors({});
 		setStep((s) => Math.min(s + 1, STEPS.length));
@@ -259,15 +295,16 @@ function SignUpScreenInner({
 				if (draft.idPhotoBackFile) {
 					await uploadIdDoc('back', draft.idPhotoBackFile, 'id-back.jpg');
 				}
-				if (draft.comcardImageFile) {
-					await uploadComcardImage(draft.comcardImageFile, 'comcard.jpg');
-				}
 				for (let i = 0; i < draft.portfolioPhotos.length; i++) {
 					await uploadPortfolioPhoto(
 						i,
 						draft.portfolioPhotos[i].file,
 						`portfolio-${i + 1}.jpg`,
 					);
+				}
+				// Same auto comcard as Profile — built from the first 4 portfolio slots.
+				if (draft.portfolioPhotos.length > 0) {
+					await generateComcard();
 				}
 			} catch {
 				// Account exists — photos can be finished from Profile.

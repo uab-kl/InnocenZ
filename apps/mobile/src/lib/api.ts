@@ -29,10 +29,44 @@ const API_URL = detectApiUrl(); // e.g. http://localhost:7777/api
 const API_BASE = `${API_URL}/v1`;
 const API_ORIGIN = API_URL.replace(/\/api$/, '');
 
-/** Absolute URL for backend-served assets like /img/pr/profile/vicky.png */
+/** Cached from `/auth/me` / user responses so the phone does not need Expo env. */
+let cachedR2PublicBase: string | null = null;
+
+/** Remember R2 public base from any API payload that includes `r2PublicUrl`. */
+export function noteR2PublicUrl(payload: { r2PublicUrl?: string | null } | null | undefined): void {
+  const raw = payload?.r2PublicUrl?.trim();
+  if (raw) cachedR2PublicBase = raw.replace(/\/$/, '');
+}
+
+/** Public R2 base — env first, then value learned from the backend. */
+function r2PublicBase(): string | null {
+  const fromEnv = process.env.EXPO_PUBLIC_R2_PUBLIC_URL?.trim();
+  if (fromEnv) return fromEnv.replace(/\/$/, '');
+  if (cachedR2PublicBase) return cachedR2PublicBase;
+  const fromExtra = Constants.expoConfig?.extra?.r2PublicUrl;
+  if (typeof fromExtra === 'string' && fromExtra.trim()) {
+    return fromExtra.trim().replace(/\/$/, '');
+  }
+  return null;
+}
+
+/**
+ * Absolute URL for a stored image path.
+ * - `user/…` (R2 object key) → public base + key
+ * - `https://…` (legacy full R2 URL) → returned as-is
+ * - `/img/…` (legacy local backend path) → prefixed with API origin
+ */
 export function assetUrl(pathname: string | null | undefined): string | null {
   if (!pathname) return null;
-  if (/^https?:\/\//.test(pathname)) return pathname;
+  if (/^https?:\/\//.test(pathname) || pathname.startsWith('data:')) return pathname;
+  if (pathname.startsWith('user/')) {
+    const base = r2PublicBase();
+    if (!base) {
+      console.warn('[assetUrl] R2 public URL unknown; cannot resolve key', pathname);
+      return null;
+    }
+    return `${base}/${pathname}`;
+  }
   return `${API_ORIGIN}${pathname.startsWith('/') ? '' : '/'}${pathname}`;
 }
 
@@ -80,12 +114,15 @@ export type Me = {
   status: string;
   profile: MeProfile;
   roles: { id: string; roleName: string }[];
+  /** From backend `R2_PUBLIC_URL` — join with `user/…` keys for Image URIs. */
+  r2PublicUrl?: string | null;
 };
 
 export class ApiError extends Error {
   constructor(
     message: string,
     public status: number,
+    public data: unknown = null,
   ) {
     super(message);
   }
@@ -103,7 +140,10 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
   if (!res.ok || !body?.success) {
-    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
+    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status, body?.data ?? null);
+  }
+  if (body.data && typeof body.data === 'object') {
+    noteR2PublicUrl(body.data as { r2PublicUrl?: string | null });
   }
   return body.data;
 }
@@ -140,6 +180,19 @@ export type PublicAgency = { id: string; name: string };
  */
 export function fetchPublicAgencies(): Promise<PublicAgency[]> {
   return request<PublicAgency[]>('/auth/agencies');
+}
+
+/** Step-1 gate: phone + ID must not already belong to an account. */
+export type RegisterCheckConflict = { field: 'phone' | 'idNo'; message: string };
+
+export function checkPrRegisterAvailability(
+  phoneNum: string,
+  idNo: string,
+): Promise<{ available: true }> {
+  return request<{ available: true }>('/auth/register/check', {
+    method: 'POST',
+    body: JSON.stringify({ phoneNum, idNo }),
+  });
 }
 
 /** Seconds the code stays valid, and how long before Resend is allowed. */
@@ -398,6 +451,83 @@ export function updateUserProfile(
   });
 }
 
+function meFromUpload(res: Response, body: ApiEnvelope<Me> | null): Me {
+  if (!res.ok || !body?.success || !body.data) {
+    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
+  }
+  noteR2PublicUrl(body.data);
+  return body.data;
+}
+
+/** RN file descriptor from expo-image-picker — not a real Blob. */
+type NativeUploadFile = { uri: string; name?: string; type?: string };
+
+/**
+ * Append a photo for multipart upload.
+ * - Native: FormData MUST receive `{ uri, name, type }` with only 2 args.
+ *   Passing a 3rd filename (web Blob style) makes okhttp abort → "Network request failed"
+ *   which we previously mislabeled as "Cannot reach backend".
+ * - Web: File/Blob + optional filename as the 3rd argument.
+ */
+function appendMultipartFile(
+  form: FormData,
+  field: string,
+  file: Blob | NativeUploadFile,
+  filename: string,
+): void {
+  const native =
+    file &&
+    typeof file === 'object' &&
+    'uri' in file &&
+    typeof (file as NativeUploadFile).uri === 'string'
+      ? (file as NativeUploadFile)
+      : null;
+
+  if (native) {
+    const safeName = sanitizeUploadFilename(native.name || filename);
+    form.append(field, {
+      uri: native.uri,
+      name: safeName,
+      type: native.type || guessMime(safeName),
+    } as unknown as Blob);
+    return;
+  }
+
+  (
+    form as unknown as {
+      append: (name: string, value: Blob, fileName?: string) => void;
+    }
+  ).append(field, file as Blob, sanitizeUploadFilename(filename));
+}
+
+function sanitizeUploadFilename(name: string): string {
+  const base = name.trim() || 'photo.jpg';
+  // Multer only allows jpg/png/webp — iPhone HEIC names must be remapped.
+  if (/\.(heic|heif)$/i.test(base)) return base.replace(/\.(heic|heif)$/i, '.jpg');
+  if (!/\.(jpe?g|png|webp)$/i.test(base)) return `${base.replace(/\.[^.]+$/, '') || 'photo'}.jpg`;
+  return base;
+}
+
+function guessMime(filename: string): string {
+  const lower = filename.toLowerCase();
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  return 'image/jpeg';
+}
+
+function unreachableBackend(cause: unknown): ApiError {
+  const detail =
+    cause instanceof Error && cause.message
+      ? cause.message
+      : typeof cause === 'string'
+        ? cause
+        : 'network error';
+  return new ApiError(
+    `Upload failed — could not finish talking to ${API_BASE} (${detail}). Check Wi‑Fi / that the backend is running.`,
+    0,
+  );
+}
+
 /** Upload profile image (multipart) — same endpoint the admin portal uses. */
 export async function uploadUserProfileImage(
   accessToken: string,
@@ -406,12 +536,7 @@ export async function uploadUserProfileImage(
   filename = 'avatar.jpg',
 ): Promise<Me> {
   const form = new FormData();
-  // React Native FormData typings only allow 2 args; web multer needs the filename.
-  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
-    'profileImage',
-    file,
-    filename,
-  );
+  appendMultipartFile(form, 'profileImage', file, filename);
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/user/${userId}/profile-image`, {
@@ -419,14 +544,11 @@ export async function uploadUserProfileImage(
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
     });
-  } catch {
-    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  } catch (e) {
+    throw unreachableBackend(e);
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
-  if (!res.ok || !body?.success) {
-    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
-  }
-  return body.data;
+  return meFromUpload(res, body);
 }
 
 /** Upload one portfolio gallery slot (0–7). Persists path in user_profile.portfolio_photos. */
@@ -438,11 +560,7 @@ export async function uploadUserPortfolioPhoto(
   filename = 'portfolio.jpg',
 ): Promise<Me> {
   const form = new FormData();
-  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
-    'portfolioPhoto',
-    file,
-    filename,
-  );
+  appendMultipartFile(form, 'portfolioPhoto', file, filename);
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/user/${userId}/portfolio/${slot}`, {
@@ -450,14 +568,11 @@ export async function uploadUserPortfolioPhoto(
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
     });
-  } catch {
-    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  } catch (e) {
+    throw unreachableBackend(e);
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
-  if (!res.ok || !body?.success) {
-    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
-  }
-  return body.data;
+  return meFromUpload(res, body);
 }
 
 /** Upload the auto-generated photo comcard — stored on user_profile.comcard_image. */
@@ -468,11 +583,7 @@ export async function uploadUserComcardImage(
   filename = 'comcard.png',
 ): Promise<Me> {
   const form = new FormData();
-  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
-    'comcardImage',
-    file,
-    filename,
-  );
+  appendMultipartFile(form, 'comcardImage', file, filename);
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/user/${userId}/comcard-image`, {
@@ -480,14 +591,29 @@ export async function uploadUserComcardImage(
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
     });
-  } catch {
-    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  } catch (e) {
+    throw unreachableBackend(e);
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
-  if (!res.ok || !body?.success) {
-    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
+  return meFromUpload(res, body);
+}
+
+/** Server-side 2×2 portfolio comcard (same layout as Profile preview) → R2 key. */
+export async function generateUserComcard(
+  accessToken: string,
+  userId: string,
+): Promise<Me> {
+  let res: Response;
+  try {
+    res = await fetch(`${API_BASE}/user/${userId}/comcard/generate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+  } catch (e) {
+    throw unreachableBackend(e);
   }
-  return body.data;
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
+  return meFromUpload(res, body);
 }
 
 /** Upload NRIC/passport side — stored on user_profile.id_photo_front / id_photo_back. */
@@ -499,11 +625,7 @@ export async function uploadUserIdDoc(
   filename = 'id.jpg',
 ): Promise<Me> {
   const form = new FormData();
-  (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
-    'idPhoto',
-    file,
-    filename,
-  );
+  appendMultipartFile(form, 'idPhoto', file, filename);
   let res: Response;
   try {
     res = await fetch(`${API_BASE}/user/${userId}/id-photo/${side}`, {
@@ -511,14 +633,11 @@ export async function uploadUserIdDoc(
       headers: { Authorization: `Bearer ${accessToken}` },
       body: form,
     });
-  } catch {
-    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  } catch (e) {
+    throw unreachableBackend(e);
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;
-  if (!res.ok || !body?.success) {
-    throw new ApiError(body?.message ?? `Upload failed (${res.status})`, res.status);
-  }
-  return body.data;
+  return meFromUpload(res, body);
 }
 
 /**

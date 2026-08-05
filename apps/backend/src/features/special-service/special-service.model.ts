@@ -2,7 +2,6 @@ import { MainSchema } from '@/db/db.schema';
 import { numeric, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
 import { AgencyTable } from '@/features/agency/agency.model.js';
-import { PrTable } from '@/features/pr/pr.model.js';
 import { UserTable } from '@/features/user/user.model.js';
 
 export const specialServiceCategoryValues = [
@@ -72,14 +71,10 @@ export const SpecialServiceTable = MainSchema.table('special_service', {
   }),
   postingAgencyName: varchar('posting_agency_name', { length: 255 }),
   /**
-   * The PR who raised a PR-initiated posting (initiated_by = 'pr'). FK to
-   * main.pr; the PR's display name is joined from pr.name on read, never copied
-   * here. Null for outlet/agency postings.
+   * The PR who raised a PR-initiated posting (initiated_by = 'pr').
    */
-  postingPrId: uuid('posting_pr_id').references(() => PrTable.id, {
-    onDelete: 'set null',
-  }),
-  /** Preferred poster key (0087) — replacing `posting_pr_id` once cut over. */
+  postingPrId: uuid('posting_pr_id'),
+  /** Preferred poster key (0087/0089) — equals posting_pr_id after remap. */
   postingUserId: uuid('posting_user_id').references(() => UserTable.id, {
     onDelete: 'set null',
   }),

@@ -28,6 +28,8 @@ const rootEnv = readRootEnv();
 const apiUrl =
   rootEnv.EXPO_PUBLIC_API_URL?.trim() ||
   `http://localhost:${rootEnv.BACKEND_PORT?.trim() || '7777'}/api`;
+const r2PublicUrl =
+  rootEnv.EXPO_PUBLIC_R2_PUBLIC_URL?.trim() || rootEnv.R2_PUBLIC_URL?.trim() || '';
 
 console.log(`Starting Expo web against ${apiUrl} (backend must already be running).`);
 
@@ -35,7 +37,11 @@ const expoCli = resolveBin('expo', ['bin', 'cli'], [mobileRoot]);
 const expo = spawnProc(children, process.execPath, [expoCli, 'start', '--web'], {
   cwd: mobileRoot,
   stdio: 'inherit',
-  env: { EXPO_PUBLIC_API_URL: apiUrl, BROWSER: 'none' },
+  env: {
+    EXPO_PUBLIC_API_URL: apiUrl,
+    BROWSER: 'none',
+    ...(r2PublicUrl ? { EXPO_PUBLIC_R2_PUBLIC_URL: r2PublicUrl } : {}),
+  },
 });
 
 expo.on('exit', (code) => shutdown(code ?? 0));

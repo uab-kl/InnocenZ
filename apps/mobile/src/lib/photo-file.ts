@@ -41,8 +41,15 @@ type ImagePickerModule = {
 };
 
 function toPicked(a: NativeAsset, fallbackName: string): PickedImage {
-  const filename = a.fileName || fallbackName;
-  const type = a.mimeType || 'image/jpeg';
+  let filename = a.fileName || fallbackName;
+  // Expo often returns HEIC names; picker quality output is JPEG — keep multer happy.
+  if (/\.(heic|heif)$/i.test(filename)) {
+    filename = filename.replace(/\.(heic|heif)$/i, '.jpg');
+  } else if (!/\.(jpe?g|png|webp)$/i.test(filename)) {
+    filename = fallbackName.endsWith('.jpg') ? fallbackName : 'photo.jpg';
+  }
+  const type =
+    a.mimeType && !/heic|heif/i.test(a.mimeType) ? a.mimeType : 'image/jpeg';
   const file = { uri: a.uri, name: filename, type } as unknown as Blob;
   return { file, filename, previewUri: a.uri, size: a.fileSize ?? null };
 }
@@ -115,7 +122,7 @@ export async function pickImageFromGallery(opts?: {
       if (!ImagePicker) return null;
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
-        quality: 0.8,
+        quality: 0.7,
         exif: false,
       });
       if (res.canceled || !res.assets?.length) return null;

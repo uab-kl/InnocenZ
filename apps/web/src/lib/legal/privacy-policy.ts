@@ -1,5 +1,5 @@
 /**
- * Privacy Policy copy for the public web page at /privacy.
+ * Privacy Policy copy for the public web page at /policy.
  */
 
 export type PrivacySection = {

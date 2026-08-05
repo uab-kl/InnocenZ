@@ -2,7 +2,8 @@ import { and, asc, eq, gte, inArray, lte, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
-import { PrTable } from '@/features/pr/pr.model';
+import { UserTable } from '@/features/user/user.model';
+import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import {
   ShiftSaleTable,
   ShiftSaleInsertType,
@@ -121,17 +122,21 @@ export class ShiftSaleRepositoryClass {
     try {
       if (filter?.outletIds && filter.outletIds.length === 0) return [];
       const whereClause = this.buildConditions(filter);
+      // `main.pr` is gone — `pr_id` equals `user_id` post-cutover (0089), with
+      // `user_id` preferred and `pr_id` the fallback for pre-backfill rows.
+      const saleUserId = sql`coalesce(${ShiftSaleTable.userId}, ${ShiftSaleTable.prId})`;
       const rows = await db
         .select({
           prId: ShiftSaleTable.prId,
           // Nickname (floor name) when set — same rule as shift-assignment history.
-          prName: sql<string>`coalesce(nullif(trim(${PrTable.nickname}), ''), ${PrTable.name})`,
+          prName: sql<string>`coalesce(nullif(trim(${UserTable.username}), ''), nullif(trim(${UserProfileTable.fullName}), ''), 'PR')`,
           totalSalesRm: sql<number>`coalesce(sum(${ShiftSaleTable.totalSalesRm}), 0)::float8`,
         })
         .from(ShiftSaleTable)
-        .leftJoin(PrTable, eq(PrTable.id, ShiftSaleTable.prId))
+        .leftJoin(UserTable, eq(UserTable.id, saleUserId))
+        .leftJoin(UserProfileTable, eq(UserProfileTable.userId, saleUserId))
         .where(whereClause)
-        .groupBy(ShiftSaleTable.prId, PrTable.nickname, PrTable.name)
+        .groupBy(ShiftSaleTable.prId, UserTable.username, UserProfileTable.fullName)
         .orderBy(sql`3 desc`);
       return rows.map((r) => ({
         prId: r.prId,

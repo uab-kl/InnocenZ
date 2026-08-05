@@ -34,6 +34,7 @@ import {
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
+import { SYSTEM_ACTOR } from '@/util/actor';
 
 export class AuthControllerClass {
   constructor(
@@ -169,7 +170,7 @@ export class AuthControllerClass {
       // accumulate into a lockout weeks later.
       if (user.failedLoginAttempts > 0 || user.lockedUntil) {
         await this.userRepository.updateUser(
-          { failedLoginAttempts: 0, lockedUntil: null, updatedBy: user.username },
+          { failedLoginAttempts: 0, lockedUntil: null, updatedBy: user.id },
           user.id,
         );
       }
@@ -227,7 +228,7 @@ export class AuthControllerClass {
           lockedUntil: lock
             ? new Date(Date.now() + AuthControllerClass.LOCKOUT_MINUTES * 60_000)
             : null,
-          updatedBy: user.username,
+          updatedBy: user.id,
         },
         user.id,
       );
@@ -393,6 +394,70 @@ export class AuthControllerClass {
     return { roleId: role.id };
   }
 
+  /**
+   * Public PR sign-up gate for step 1: refuse phones / ID numbers that already
+   * belong to an account so the wizard does not burn five steps on a duplicate.
+   */
+  async checkRegisterAvailability(req: Request, res: Response) {
+    try {
+      const parsed = z
+        .object({
+          phoneNum: z.string().min(8, 'Phone number is required'),
+          idNo: z.string().trim().min(4, 'ID number is required'),
+        })
+        .safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message ?? 'Invalid request',
+          data: null,
+        });
+      }
+
+      const phoneNum = normalizePhoneDigits(parsed.data.phoneNum);
+      const conflicts: { field: 'phone' | 'idNo'; message: string }[] = [];
+
+      if (phoneNum.length >= 8) {
+        const existingPhone = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
+        if (existingPhone) {
+          conflicts.push({
+            field: 'phone',
+            message: 'That phone number already has an account. Sign in, or use another number.',
+          });
+        }
+      }
+
+      const existingId = await this.userProfileRepository.findByNormalizedIdNo(parsed.data.idNo);
+      if (existingId) {
+        conflicts.push({
+          field: 'idNo',
+          message: 'That ID number already has an account. Sign in, or check the number.',
+        });
+      }
+
+      if (conflicts.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: conflicts.map((c) => c.message).join(' '),
+          data: { conflicts },
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: { available: true },
+      });
+    } catch (error) {
+      logger.error('[AuthController.checkRegisterAvailability] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: 'Could not check registration details',
+        data: null,
+      });
+    }
+  }
+
   async registerUser(req: Request, res: Response) {
     try {
       logger.info('[AuthController.register] Register request received');
@@ -471,6 +536,17 @@ export class AuthControllerClass {
         });
       }
 
+      if (parsedBody.idNo) {
+        const existingId = await this.userProfileRepository.findByNormalizedIdNo(parsedBody.idNo);
+        if (existingId) {
+          return res.status(409).json({
+            success: false,
+            message: 'An account with this ID number already exists',
+            data: null,
+          });
+        }
+      }
+
       const resolved = await this.resolveRegistrationRoleId(req, parsedBody);
       if ('error' in resolved) {
         return res.status(resolved.error.status).json({
@@ -481,7 +557,8 @@ export class AuthControllerClass {
       }
 
       const passwordHash = parsedBody.password ? await hashPassword(parsedBody.password) : null;
-      const actor = parsedBody.email ?? parsedBody.phoneNum;
+      // Prefer the caller's user id (admin creating an account). Public self-register → system.
+      const actor = req.user?.id ?? SYSTEM_ACTOR;
 
       let user = await this.authRepository.createUserWithRole(
         {
@@ -496,15 +573,6 @@ export class AuthControllerClass {
         },
         resolved.roleId,
       );
-
-      if (req.file) {
-        const profileImage = saveProfileImageFile(user.id, req.file);
-        const updatedUser = await this.userRepository.updateUser(
-          { profileImage, updatedBy: actor },
-          user.id,
-        );
-        if (updatedUser) user = updatedUser;
-      }
 
       if (isPublicPr && parsedBody.verificationId) {
         await this.phoneVerificationRepository.update(parsedBody.verificationId, {
@@ -580,6 +648,19 @@ export class AuthControllerClass {
           verificationStatus: 'pending',
           updatedBy: actor,
         });
+      }
+
+      // After profile exists so R2 path can use user_profile.full_name.
+      if (req.file) {
+        const profileImage = await saveProfileImageFile(
+          { id: user.id, fullName: parsedBody.fullName },
+          req.file,
+        );
+        const updatedUser = await this.userRepository.updateUser(
+          { profileImage, updatedBy: actor },
+          user.id,
+        );
+        if (updatedUser) user = updatedUser;
       }
 
       logger.info('[AuthController.register] User registered:', user.username);

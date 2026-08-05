@@ -15,6 +15,7 @@ import {
   uploadUserProfileImage,
   uploadUserPortfolioPhoto,
   uploadUserComcardImage,
+  generateUserComcard,
   uploadUserIdDoc,
   type AgencyMembership,
   type Me,
@@ -86,6 +87,8 @@ type SessionState = {
   uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
   uploadPortfolioPhoto: (slot: number, file: Blob, filename?: string) => Promise<Me>;
   uploadComcardImage: (file: Blob, filename?: string) => Promise<Me>;
+  /** Auto-build comcard from saved portfolio (server-side). */
+  generateComcard: () => Promise<Me>;
   uploadIdDoc: (side: 'front' | 'back', file: Blob, filename?: string) => Promise<Me>;
   refreshMe: () => Promise<void>;
 };
@@ -204,6 +207,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     [token, me],
   );
 
+  const generateComcard = useCallback(async () => {
+    if (!token || !me) throw new ApiError('Not signed in', 401);
+    const updated = await generateUserComcard(token, me.id);
+    setMe(updated);
+    return updated;
+  }, [token, me]);
+
   const uploadIdDoc = useCallback(
     async (side: 'front' | 'back', file: Blob, filename = 'id.jpg') => {
       if (!token || !me) throw new ApiError('Not signed in', 401);
@@ -226,6 +236,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       uploadAvatar,
       uploadPortfolioPhoto,
       uploadComcardImage,
+      generateComcard,
       uploadIdDoc,
       refreshMe,
     }),
@@ -240,6 +251,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       uploadAvatar,
       uploadPortfolioPhoto,
       uploadComcardImage,
+      generateComcard,
       uploadIdDoc,
       refreshMe,
     ],

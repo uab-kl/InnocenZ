@@ -14,7 +14,6 @@ import {
 } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { PrTable } from '@/features/pr/pr.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { UserTable } from '@/features/user/user.model';
 
@@ -42,9 +41,12 @@ export const PaymentVoucherTable = MainSchema.table('payment_voucher', {
   agencyId: uuid('agency_id')
     .notNull()
     .references(() => AgencyTable.id, { onDelete: 'cascade' }),
-  // Nullable: a voucher can be issued to a payee not (yet) registered as a PR.
-  prId: uuid('pr_id').references(() => PrTable.id, { onDelete: 'set null' }),
-  /** Preferred payee key (0087) — replacing `pr_id` once cut over. */
+  /**
+   * Legacy payee key. After 0089 this equals `user_id` when set (no FK — `main.pr` dropped).
+   * Prefer `userId` in new code.
+   */
+  prId: uuid('pr_id'),
+  /** Preferred payee key (0087/0089) — equals pr_id after remap. */
   userId: uuid('user_id').references(() => UserTable.id, { onDelete: 'set null' }),
   /**
    * The voucher's own number — `PV-000001`, allocated once on insert (0075).

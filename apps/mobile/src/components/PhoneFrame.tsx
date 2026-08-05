@@ -3,11 +3,19 @@
  * desktop web gets the bezel (like the deployed proto), narrow web / native
  * fills the screen edge-to-edge. Fake iOS status bar / notch removed.
  */
-import React, { type ReactNode } from 'react';
-import { Platform, ScrollView, StyleSheet, View } from 'react-native';
+import React, { useEffect, useRef, type ReactNode } from 'react';
+import {
+  Platform,
+  ScrollView,
+  StyleSheet,
+  View,
+  type NativeScrollEvent,
+  type NativeSyntheticEvent,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, GRADIENTS, grad } from '../theme/theme';
 import { useViewportSize } from '../lib/viewport';
+import { notePhoneScrollMetrics, registerPhoneScrollView, refreshPhoneScrollWindow } from '../lib/phone-scroll';
 
 /**
  * DOM id of the phone screen container on web — PhoneSheet portals bottom
@@ -37,6 +45,26 @@ export function PhoneFrame({
   // Real device notch/status-bar and nav-button heights — all zero on web, so
   // the desktop bezel preview is unaffected.
   const insets = useSafeAreaInsets();
+  const scrollRef = useRef<ScrollView>(null);
+
+  const setScrollRef = (node: ScrollView | null) => {
+    scrollRef.current = node;
+    registerPhoneScrollView(node);
+  };
+
+  useEffect(() => {
+    if (!scroll) {
+      registerPhoneScrollView(null);
+      return;
+    }
+    registerPhoneScrollView(scrollRef.current);
+    return () => registerPhoneScrollView(null);
+  }, [scroll]);
+
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    const { contentOffset, layoutMeasurement, contentSize } = e.nativeEvent;
+    notePhoneScrollMetrics(contentOffset.y, layoutMeasurement.height, contentSize.height);
+  };
 
   const body = (
     <View
@@ -56,6 +84,7 @@ export function PhoneFrame({
       )}
       {scroll ? (
         <ScrollView
+          ref={setScrollRef}
           key="phone-scroll"
           style={styles.viewport}
           contentContainerStyle={
@@ -64,6 +93,16 @@ export function PhoneFrame({
           showsVerticalScrollIndicator={false}
           nestedScrollEnabled
           keyboardShouldPersistTaps="handled"
+          scrollEventThrottle={16}
+          onScroll={onScroll}
+          onContentSizeChange={(_w, h) => {
+            notePhoneScrollMetrics(undefined, undefined, h);
+          }}
+          onLayout={(e) => {
+            const h = e.nativeEvent.layout.height;
+            if (h > 0) notePhoneScrollMetrics(undefined, h, undefined);
+            refreshPhoneScrollWindow();
+          }}
         >
           {children}
         </ScrollView>

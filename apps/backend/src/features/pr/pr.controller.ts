@@ -29,7 +29,10 @@ const MAX_PAGE_SIZE = 100;
 
 /** Map agency_pr (+ optional pr bridge) into the personnel list shape the web already uses. */
 function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | null {
-  if (!row.prId) return null;
+  // `main.pr` is gone — `id` is the account's `userId`, which is always
+  // present on a membership row. `prId` is only a same-value alias kept for
+  // callers, so it must never be the thing gating whether a row renders.
+  if (!row.userId) return null;
   const status: PrStatus =
     row.prStatus === 'suspended'
       ? 'suspended'
@@ -50,7 +53,7 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
     row.comcardWeightKg,
   ].some((v) => v !== null && v !== undefined);
   return {
-    id: row.prId,
+    id: row.userId,
     agencyId: row.agencyId,
     userId: row.userId,
     name: row.name,

@@ -7,7 +7,7 @@ import { UserProfileTable } from '@/features/user/user-profile/user-profile.mode
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { AgencyPrTable, PrTable } from '@/features/pr/pr.model';
+import { AgencyPrTable } from '@/features/pr/pr.model';
 import { hashPassword } from '@/util/password';
 import { DEFAULT_PROFILE_IMAGE } from '@/util/profile-image';
 import { logger } from '@/util/logger';
@@ -281,30 +281,12 @@ export async function seedSamplePrs(): Promise<void> {
       });
     }
 
-    // agency_pr is keyed by user_id (migration 0085). Still ensure a pr row per
-    // originating agency for roster/shifts; membership is the join table.
+    // agency_pr is the membership table (keyed by user_id). main.pr is gone (0089).
     for (const code of pr.agencyCodes) {
       const agencyId = agencyIdByCode.get(code);
       if (!agencyId) {
         logger.warn(`[seed-sample-prs] Agency ${code} missing — skip link for ${pr.email}`);
         continue;
-      }
-
-      const [existingPr] = await db
-        .select({ id: PrTable.id })
-        .from(PrTable)
-        .where(and(eq(PrTable.agencyId, agencyId), eq(PrTable.userId, userId)))
-        .limit(1);
-
-      if (!existingPr) {
-        await db.insert(PrTable).values({
-          agencyId,
-          userId,
-          name: pr.fullName,
-          nickname: pr.username,
-          createdBy: ACTOR,
-          updatedBy: ACTOR,
-        });
       }
 
       await db

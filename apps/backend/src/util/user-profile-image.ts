@@ -1,5 +1,6 @@
 import path from 'node:path';
 import fs from 'node:fs';
+import { env } from '@/env';
 import {
   ALLOWED_PROFILE_IMAGE_EXTENSIONS,
   ensureProfileImageDir,
@@ -133,6 +134,8 @@ export function withUserProfile<T extends { id: string; profileImage: string | n
   return {
     ...stripPrivateUserFields(withProfileImage(user)),
     profile: visibility.redactIdentityDocs ? redactIdentityDocs(response) : response,
+    /** Clients join this with stored object keys (`user/…`) to build image URLs. */
+    r2PublicUrl: env.R2_PUBLIC_URL?.replace(/\/$/, '') ?? null,
   };
 }
 

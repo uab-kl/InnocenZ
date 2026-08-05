@@ -2,6 +2,7 @@ import crypto from 'node:crypto';
 import { Request, Response } from 'express';
 import { z } from 'zod';
 import { logger } from '@/util/logger.js';
+import { SYSTEM_ACTOR } from '@/util/actor';
 import {
   codesMatch,
   hashOtpCode,
@@ -98,6 +99,17 @@ export class OtpControllerClass {
         }
       }
 
+      if (purpose === 'signup') {
+        const taken = await this.userRepository.getUserByLoginMethod('phone', phoneNum);
+        if (taken) {
+          return res.status(409).json({
+            success: false,
+            message: 'That phone number already has an account',
+            data: null,
+          });
+        }
+      }
+
       const existing = await this.phoneVerificationRepository.findActivePending(
         phoneNum,
         purpose,
@@ -115,7 +127,7 @@ export class OtpControllerClass {
       }
 
       const code = String(crypto.randomInt(0, 1_000_000)).padStart(6, '0');
-      const actor = req.user?.id ?? phoneNum;
+      const actor = req.user?.id ?? SYSTEM_ACTOR;
       await this.phoneVerificationRepository.expirePendingForPhone(phoneNum, purpose, actor);
 
       const row = await this.phoneVerificationRepository.create({
@@ -218,7 +230,7 @@ export class OtpControllerClass {
       if (row.attempts >= MAX_VERIFY_ATTEMPTS) {
         await this.phoneVerificationRepository.update(row.id, {
           status: 'expired',
-          updatedBy: phoneNum,
+          updatedBy: SYSTEM_ACTOR,
         });
         return res.status(429).json({
           success: false,
@@ -230,7 +242,7 @@ export class OtpControllerClass {
       if (!codesMatch(parsed.data.code, row.codeHash)) {
         await this.phoneVerificationRepository.update(row.id, {
           attempts: row.attempts + 1,
-          updatedBy: phoneNum,
+          updatedBy: SYSTEM_ACTOR,
         });
         return res.status(401).json({
           success: false,
@@ -242,7 +254,7 @@ export class OtpControllerClass {
       const verified = await this.phoneVerificationRepository.update(row.id, {
         status: 'verified',
         verifiedAt: new Date(),
-        updatedBy: phoneNum,
+        updatedBy: SYSTEM_ACTOR,
       });
 
       if (!verified) {

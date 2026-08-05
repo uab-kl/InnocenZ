@@ -1,22 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { PrivacyPolicyPage } from "@/components/legal/PrivacyPolicyPage"
+import { createFileRoute, redirect } from "@tanstack/react-router"
 
+/** Old public URL — keep so /en/privacy bookmarks still land on the policy. */
 export const Route = createFileRoute("/privacy")({
-	head: () => ({
-		meta: [
-			{ title: "Privacy Policy — InnocenZ" },
-			{
-				name: "description",
-				content:
-					"How InnocenZ collects, uses, and protects personal data across the web portals and PR mobile app.",
-			},
-			{ property: "og:title", content: "Privacy Policy — InnocenZ" },
-			{
-				property: "og:description",
-				content:
-					"How InnocenZ collects, uses, and protects personal data across the web portals and PR mobile app.",
-			},
-		],
-	}),
-	component: PrivacyPolicyPage,
+	beforeLoad: () => {
+		throw redirect({ to: "/policy" })
+	},
 })

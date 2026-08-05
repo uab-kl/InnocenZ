@@ -32,7 +32,7 @@ type Props = {
 };
 
 type PhotoSource = 'camera' | 'gallery';
-type SingleSlot = 'profile' | 'comcard';
+type SingleSlot = 'profile';
 
 function Fact({ label, value }: { label: string; value: string }) {
 	return (
@@ -41,6 +41,13 @@ function Fact({ label, value }: { label: string; value: string }) {
 			<Text style={styles.factValue}>{value || '—'}</Text>
 		</View>
 	);
+}
+
+function ageFromDob(dob: string): number {
+	if (!dob) return 0;
+	const d = new Date(dob);
+	if (Number.isNaN(d.getTime())) return 0;
+	return Math.max(0, new Date().getFullYear() - d.getFullYear());
 }
 
 function SinglePhotoCard({
@@ -201,6 +208,11 @@ export function Step5Summary({
 	const insets = useSafeAreaInsets();
 	const [busySlot, setBusySlot] = useState<SingleSlot | 'portfolio' | null>(null);
 	const [openDisclaimer, setOpenDisclaimer] = useState<PrDisclaimerId | null>(null);
+	const [portfolioGridW, setPortfolioGridW] = useState(0);
+	const portfolioGap = 10;
+	const portfolioTileW =
+		portfolioGridW > 0 ? (portfolioGridW - portfolioGap) / 2 : 0;
+	const portfolioTileH = portfolioTileW > 0 ? portfolioTileW * (4 / 3) : 0;
 	const legalName = `${draft.firstName} ${draft.lastName}`.trim();
 	const agencyName = agencies.find((a) => a.id === draft.agencyId)?.name || '—';
 	const address = [
@@ -225,29 +237,20 @@ export function Step5Summary({
 			if (busySlot) return;
 			setBusySlot(slot);
 			try {
-				const isProfile = slot === 'profile';
 				const picked =
 					source === 'gallery'
 						? await pickImageFromGallery()
 						: await captureFromCamera({
-								facing: isProfile ? 'front' : 'back',
-								aspect: isProfile ? [1, 1] : [3, 4],
-								filename: isProfile ? 'avatar.jpg' : 'comcard.jpg',
+								facing: 'front',
+								aspect: [1, 1],
+								filename: 'avatar.jpg',
 							});
 				if (!picked?.previewUri) return;
-				if (isProfile) {
-					clearFieldError('profileImageUri');
-					patch({
-						profileImageUri: picked.previewUri,
-						profileImageFile: picked.file,
-					});
-				} else {
-					clearFieldError('comcardImageUri');
-					patch({
-						comcardImageUri: picked.previewUri,
-						comcardImageFile: picked.file,
-					});
-				}
+				clearFieldError('profileImageUri');
+				patch({
+					profileImageUri: picked.previewUri,
+					profileImageFile: picked.file,
+				});
 			} finally {
 				setBusySlot(null);
 			}
@@ -292,6 +295,15 @@ export function Step5Summary({
 
 	const initial = (draft.floorNickname.trim()[0] || legalName[0] || '?').toUpperCase();
 	const canAddPortfolio = draft.portfolioPhotos.length < PORTFOLIO_PHOTO_MAX;
+	const displayName = draft.floorNickname.trim() || legalName || 'PR';
+	const age = ageFromDob(draft.dob);
+	const height = draft.heightCm.replace(/\D/g, '') || '—';
+	const weight = draft.weightKg.replace(/\D/g, '') || '—';
+	const comcardPaths = Array.from(
+		{ length: 4 },
+		(_, i) => draft.portfolioPhotos[i]?.uri ?? null,
+	);
+	const hasComcardPhotos = comcardPaths.some(Boolean);
 
 	return (
 		<>
@@ -334,31 +346,14 @@ export function Step5Summary({
 				}}
 			/>
 
-			{/* 2. Comcard → user_profile.comcard_image (one, optional) */}
-			<SinglePhotoCard
-				title="Comcard"
-				optional
-				hint="One saved card image · venues see this first"
-				uri={draft.comcardImageUri}
-				error={fieldErrors.comcardImageUri}
-				busy={busySlot === 'comcard'}
-				aspect="portrait"
-				onCamera={() => void pickSingle('comcard', 'camera')}
-				onGallery={() => void pickSingle('comcard', 'gallery')}
-				onClear={() => {
-					clearFieldError('comcardImageUri');
-					patch({ comcardImageUri: '', comcardImageFile: null });
-				}}
-			/>
-
-			{/* 3. Portfolio → user_profile.portfolio_photos (many, optional) */}
+			{/* 2. Portfolio → user_profile.portfolio_photos */}
 			<View style={styles.block}>
 				<View style={styles.blockHead}>
 					<Text style={styles.photoTitle}>Portfolio</Text>
 					<Text style={styles.optionalPill}>Optional</Text>
 				</View>
 				<Text style={styles.photoHint}>
-					Up to {PORTFOLIO_PHOTO_MAX} gallery photos
+					Up to {PORTFOLIO_PHOTO_MAX} gallery photos — first 4 build your comcard
 					{draft.portfolioPhotos.length
 						? ` · ${draft.portfolioPhotos.length}/${PORTFOLIO_PHOTO_MAX}`
 						: ''}
@@ -367,43 +362,132 @@ export function Step5Summary({
 					<Text style={styles.photoError}>{fieldErrors.portfolioPhotos}</Text>
 				) : null}
 
-				<View style={styles.grid}>
-					{draft.portfolioPhotos.map((photo, index) => (
-						<View key={`${photo.uri}-${index}`} style={styles.cell}>
-							<Image source={{ uri: photo.uri }} style={styles.thumb} />
-							<Pressable
-								style={styles.removeBtn}
-								onPress={() => removePortfolio(index)}
-								hitSlop={8}
+				<View
+					style={styles.grid}
+					onLayout={(e) => {
+						const w = e.nativeEvent.layout.width;
+						if (w > 0 && Math.abs(w - portfolioGridW) > 0.5) setPortfolioGridW(w);
+					}}
+				>
+					{draft.portfolioPhotos.map((photo, index) => {
+						const label = String(index + 1).padStart(2, '0');
+						const tileSize =
+							portfolioTileW > 0
+								? { width: portfolioTileW, height: portfolioTileH }
+								: null;
+						return (
+							<View
+								key={`${photo.uri}-${index}`}
+								style={[styles.cell, styles.cellFilled, tileSize]}
 							>
-								<XIcon size={12} color={C.txt} strokeWidth={2.6} />
-							</Pressable>
-						</View>
-					))}
+								<Image
+									source={{ uri: photo.uri }}
+									style={styles.thumb}
+									resizeMode="cover"
+								/>
+								<View style={styles.cellShade} pointerEvents="none" />
+								<View style={styles.cellBadge}>
+									<Text style={styles.cellBadgeText}>{label}</Text>
+									{index < 4 ? <Text style={styles.cellBadgeTag}>card</Text> : null}
+								</View>
+								<Pressable
+									style={styles.removeBtn}
+									onPress={() => removePortfolio(index)}
+									hitSlop={8}
+								>
+									<XIcon size={12} color="#fff" strokeWidth={2.6} />
+								</Pressable>
+							</View>
+						);
+					})}
 					{canAddPortfolio ? (
-						<View style={[styles.cell, styles.addCell]}>
+						<View
+							style={[
+								styles.cell,
+								styles.addCell,
+								portfolioTileW > 0
+									? { width: portfolioTileW, height: portfolioTileH }
+									: null,
+							]}
+						>
 							{busySlot === 'portfolio' ? (
 								<ActivityIndicator color={C.accent} />
 							) : (
 								<>
-									<Pressable
-										style={styles.addBtn}
-										onPress={() => void addPortfolio('camera')}
-									>
-										<Camera size={16} color={C.accent} strokeWidth={2.2} />
-										<Text style={styles.addText}>Camera</Text>
-									</Pressable>
-									<Pressable
-										style={styles.addBtn}
-										onPress={() => void addPortfolio('gallery')}
-									>
-										<ImagePlus size={16} color={C.prMuted} strokeWidth={2.2} />
-										<Text style={styles.addTextMuted}>Gallery</Text>
-									</Pressable>
+									<View style={styles.addIconWrap}>
+										<ImagePlus size={18} color={C.violetL} strokeWidth={1.8} />
+									</View>
+									<Text style={styles.addTitle}>Add photo</Text>
+									<View style={styles.addActions}>
+										<Pressable
+											style={styles.addBtn}
+											onPress={() => void addPortfolio('camera')}
+										>
+											<Camera size={14} color={C.accent} strokeWidth={2.2} />
+											<Text style={styles.addText}>Camera</Text>
+										</Pressable>
+										<Pressable
+											style={styles.addBtn}
+											onPress={() => void addPortfolio('gallery')}
+										>
+											<ImagePlus size={14} color={C.prMuted} strokeWidth={2.2} />
+											<Text style={styles.addTextMuted}>Gallery</Text>
+										</Pressable>
+									</View>
 								</>
 							)}
 						</View>
 					) : null}
+				</View>
+			</View>
+
+			{/* 3. Comcard preview — same 2×2 + overlay as Profile (auto, not uploaded by hand) */}
+			<View style={styles.block}>
+				<View style={styles.blockHead}>
+					<Text style={styles.photoTitle}>Comcard preview</Text>
+					<Text style={styles.optionalPill}>Auto</Text>
+				</View>
+				<Text style={styles.photoHint}>
+					Built from your portfolio (same layout as Profile). Saved after you create the
+					account.
+				</Text>
+				<View style={styles.comcardWrap}>
+					<View style={styles.comcard}>
+						{hasComcardPhotos ? (
+							<View style={styles.collage}>
+								{comcardPaths.map((uri, idx) =>
+									uri ? (
+										<Image
+											key={`${uri}-${idx}`}
+											source={{ uri }}
+											style={styles.collageTile}
+											resizeMode="cover"
+										/>
+									) : (
+										<View
+											key={`empty-${idx}`}
+											style={[styles.collageTile, styles.collageTileEmpty]}
+										/>
+									),
+								)}
+								<View style={styles.comcardOverlay}>
+									<Text style={styles.comcardOverlayName} numberOfLines={1}>
+										{displayName.slice(0, 20)}
+									</Text>
+									<Text style={styles.comcardOverlayStats}>Age {age || '—'}</Text>
+									<Text style={styles.comcardOverlayStats}>
+										{height}cm {weight}kg
+									</Text>
+								</View>
+							</View>
+						) : (
+							<View style={[styles.collage, styles.collageEmpty]}>
+								<Text style={styles.collageEmptyText}>
+									Add portfolio photos above to preview your comcard.
+								</Text>
+							</View>
+						)}
+					</View>
 				</View>
 			</View>
 
@@ -653,6 +737,63 @@ const styles = StyleSheet.create({
 		width: 96,
 		height: 128,
 	},
+	comcardWrap: {
+		alignItems: 'center',
+		marginTop: 4,
+	},
+	comcard: {
+		width: '100%',
+		maxWidth: 280,
+		aspectRatio: 3 / 4,
+		borderRadius: 16,
+		overflow: 'hidden',
+		borderWidth: 1,
+		borderColor: C.line2,
+		backgroundColor: C.bg2,
+	},
+	collage: {
+		flex: 1,
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		position: 'relative',
+		backgroundColor: C.panel,
+	},
+	collageTile: { width: '50%', height: '50%' },
+	collageTileEmpty: { backgroundColor: C.panel },
+	collageEmpty: {
+		alignItems: 'center',
+		justifyContent: 'center',
+		padding: 20,
+	},
+	collageEmptyText: {
+		fontFamily: F.manrope,
+		fontSize: 13,
+		lineHeight: 18,
+		color: C.prMuted,
+		textAlign: 'center',
+	},
+	comcardOverlay: {
+		position: 'absolute',
+		left: '50%',
+		top: '50%',
+		transform: [{ translateX: -56 }, { translateY: -36 }],
+		width: 112,
+		backgroundColor: '#fff',
+		paddingVertical: 8,
+		paddingHorizontal: 10,
+		alignItems: 'center',
+	},
+	comcardOverlayName: {
+		fontFamily: F.sora,
+		fontSize: 14,
+		fontWeight: '800',
+		color: '#111',
+	},
+	comcardOverlayStats: {
+		fontFamily: F.manrope,
+		fontSize: 11,
+		color: '#333',
+	},
 	singleSide: { flex: 1, minWidth: 0, justifyContent: 'center' },
 	photoTitle: {
 		fontFamily: F.sora,
@@ -733,36 +874,104 @@ const styles = StyleSheet.create({
 	grid: {
 		flexDirection: 'row',
 		flexWrap: 'wrap',
-		gap: 8,
+		justifyContent: 'space-between',
+		rowGap: 10,
 		marginTop: 4,
 	},
 	cell: {
-		width: '31%',
+		width: '48.5%',
 		aspectRatio: 3 / 4,
-		borderRadius: 12,
+		borderRadius: 16,
 		overflow: 'hidden',
+		position: 'relative',
 		backgroundColor: C.bg2,
-		borderWidth: 1,
-		borderColor: C.line,
 	},
-	thumb: { width: '100%', height: '100%' },
+	cellFilled: {
+		borderWidth: 1,
+		borderColor: 'rgba(227,184,119,0.28)',
+	},
+	thumb: {
+		...StyleSheet.absoluteFillObject,
+	},
+	cellShade: {
+		position: 'absolute',
+		left: 0,
+		right: 0,
+		bottom: 0,
+		height: 48,
+		backgroundColor: 'rgba(20,17,32,0.58)',
+	},
+	cellBadge: {
+		position: 'absolute',
+		left: 8,
+		bottom: 8,
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 5,
+	},
+	cellBadgeText: {
+		fontFamily: F.sora,
+		fontSize: 12,
+		fontWeight: '800',
+		color: C.txt,
+		letterSpacing: 0.6,
+	},
+	cellBadgeTag: {
+		fontFamily: F.sora,
+		fontSize: 9,
+		fontWeight: '700',
+		letterSpacing: 0.5,
+		color: '#241a08',
+		backgroundColor: C.accent,
+		paddingHorizontal: 5,
+		paddingVertical: 2,
+		borderRadius: 5,
+		overflow: 'hidden',
+		textTransform: 'uppercase',
+	},
 	removeBtn: {
 		position: 'absolute',
-		top: 6,
-		right: 6,
-		width: 22,
-		height: 22,
-		borderRadius: 11,
-		backgroundColor: 'rgba(0,0,0,0.55)',
+		top: 8,
+		right: 8,
+		width: 26,
+		height: 26,
+		borderRadius: 13,
+		backgroundColor: 'rgba(240,138,138,0.92)',
+		borderWidth: 1,
+		borderColor: 'rgba(255,255,255,0.2)',
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
 	addCell: {
+		borderWidth: 1.5,
 		borderStyle: 'dashed',
+		borderColor: 'rgba(183,156,232,0.4)',
+		backgroundColor: 'rgba(183,156,232,0.06)',
 		alignItems: 'center',
 		justifyContent: 'center',
-		gap: 6,
-		padding: 6,
+		gap: 8,
+		padding: 10,
+	},
+	addIconWrap: {
+		width: 40,
+		height: 40,
+		borderRadius: 20,
+		backgroundColor: 'rgba(183,156,232,0.14)',
+		borderWidth: 1,
+		borderColor: 'rgba(183,156,232,0.28)',
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	addTitle: {
+		fontFamily: F.sora,
+		fontSize: 12,
+		fontWeight: '700',
+		color: C.violetL,
+	},
+	addActions: {
+		flexDirection: 'row',
+		gap: 8,
+		marginTop: 2,
 	},
 	addBtn: {
 		alignItems: 'center',

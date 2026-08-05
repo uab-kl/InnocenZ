@@ -11,7 +11,6 @@ import {
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { ShiftTable } from '@/features/shift/shift.model';
-import { PrTable } from '@/features/pr/pr.model';
 import { UserTable } from '@/features/user/user.model';
 
 // Roster lifecycle for a PR on a shift. Mirrors the frontend live-workforce
@@ -60,10 +59,12 @@ export const ShiftAssignmentTable = MainSchema.table(
     shiftId: uuid('shift_id')
       .notNull()
       .references(() => ShiftTable.id, { onDelete: 'cascade' }),
-    prId: uuid('pr_id')
-      .notNull()
-      .references(() => PrTable.id, { onDelete: 'cascade' }),
-    /** Preferred ops key (0087) — replacing `pr_id` once cut over. */
+    /**
+     * Legacy payee key. After 0089 this equals `user_id` (no FK — `main.pr` dropped).
+     * Prefer `userId` in new code.
+     */
+    prId: uuid('pr_id').notNull(),
+    /** Preferred ops key (0087/0089) — equals pr_id after remap. */
     userId: uuid('user_id').references(() => UserTable.id, { onDelete: 'set null' }),
     status: shiftAssignmentStatusEnum('status').notNull().default('assigned'),
     payAmount: numeric('pay_amount', { precision: 12, scale: 2 }).notNull().default('0'),
