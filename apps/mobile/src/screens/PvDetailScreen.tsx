@@ -22,7 +22,9 @@ import {
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { buildWeekGridFromLines } from '../lib/week-pay-grid';
-import { kindDisputable, openDisputeKeys } from '../lib/receipt-review';
+import { kindDisputable, openDisputeKeys, receiptClaimState, weekDisputable } from '../lib/receipt-review';
+import { buildCellEvidence } from '../lib/cell-evidence';
+import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePaymentHistory } from '../lib/payment-history';
 import { useSession } from '../lib/session';
@@ -274,6 +276,12 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    * agency would never hear of it. The sheet is gone; the marks are real now.
    */
   const disputedKeys = useMemo(() => openDisputeKeys(weekForGrid), [weekForGrid]);
+  /** Which cell's evidence is open — the same sheet the Payment page uses. */
+  const [evidenceTarget, setEvidenceTarget] = useState<{
+    day: WeeklyDayPay;
+    row: (typeof INCOME_ROWS)[number];
+    amount: number;
+  } | null>(null);
   const [receiptsOpen, setReceiptsOpen] = useState(true);
   const [receiptDetail, setReceiptDetail] = useState<LinkedReceipt | null>(null);
 
@@ -341,11 +349,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    * and server call live. The PR reviews here, disputes there, comes back to
    * sign — and the red marks on this grid are the server's own open claims.
    */
-  const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
+  /** Any non-empty cell opens its evidence — wages included. */
+  const openEvidence = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
     const amount = cellAmount(day, row.key);
     if (amount <= 0 || day.status === 'empty') return;
-    if (!kindDisputable(row.key)) return;
-    setTab('payment', { paymentWeek: 'last' });
+    setEvidenceTarget({ day, row, amount });
   };
 
   const anyDisputed = disputedKeys.size > 0;
@@ -444,11 +452,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                     const amount = cellAmount(d, row.key);
                     const key = `${d.dateIso}-${row.key}`;
                     const isDisputed = disputedKeys.has(key);
-                    // Drinks and tips only — wages/OT are derived from the
-                    // attendance stamps and are never disputable, so a flag
-                    // there advertised an action the server refuses.
-                    const canTap =
-                      amount > 0 && d.status !== 'empty' && kindDisputable(row.key);
+                    // EVERY non-empty cell opens its details, wages included —
+                    // the owner asked to inspect a figure, not only to argue
+                    // with one. Whether it can be DISPUTED is decided inside the
+                    // sheet, by the same rules the Payment page applies.
+                    const canTap = amount > 0 && d.status !== 'empty';
                     return (
                       <Pressable
                         key={key}
@@ -457,7 +465,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                           canTap && styles.gridColTap,
                           isDisputed && styles.gridColDisputed,
                         ]}
-                        onPress={() => canTap && openDispute(d, row)}
+                        onPress={() => canTap && openEvidence(d, row)}
                         disabled={!canTap}
                       >
                         <Text
@@ -621,6 +629,57 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         </Pressable>
       )}
       </ScrollView>
+
+      {/*
+        * THE SAME evidence sheet as Payment — one component, one format.
+        *
+        * Every row opens it, wages included: the PR asked to inspect a figure,
+        * not only to argue with one, and wages have a shift and stamps behind
+        * them worth reading. The DISPUTE button appears only under the rules
+        * Payment applies (drinks/tips, a voucher the server still accepts, at
+        * least one shift not already claimed) and hands off to Payment → Last
+        * week, where the pickers and the server call live.
+        */}
+      {evidenceTarget && (
+        <CellEvidenceSheet
+          evidence={buildCellEvidence(
+            weekForGrid,
+            evidenceTarget.day.dateIso,
+            evidenceTarget.row.key,
+          )}
+          cellAmount={evidenceTarget.amount}
+          claims={receiptClaimState(
+            weekForGrid,
+            evidenceTarget.day.dateIso,
+            evidenceTarget.row.key,
+          )}
+          onClose={() => setEvidenceTarget(null)}
+          onDispute={
+            kindDisputable(evidenceTarget.row.key) &&
+            weekDisputable(weekForGrid) &&
+            buildCellEvidence(weekForGrid, evidenceTarget.day.dateIso, evidenceTarget.row.key)
+              .groups.flatMap((g) => g.receipts)
+              .some((r) => {
+                if (!r.receiptNo) return false;
+                const claims = receiptClaimState(
+                  weekForGrid,
+                  evidenceTarget.day.dateIso,
+                  evidenceTarget.row.key,
+                );
+                const openOnIt =
+                  claims.openAll ||
+                  (!!r.receiptId && claims.open.has(r.receiptId)) ||
+                  claims.open.has(r.receiptNo);
+                return !openOnIt;
+              })
+              ? () => {
+                  setEvidenceTarget(null);
+                  setTab('payment', { paymentWeek: 'last' });
+                }
+              : undefined
+          }
+        />
+      )}
 
       {/* Receipt details sheet */}
       <Modal

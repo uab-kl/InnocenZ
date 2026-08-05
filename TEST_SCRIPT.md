@@ -978,6 +978,28 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE SIGNING SCREEN GETS THE SAME EVIDENCE SHEET (every row, wages included).**
+>
+> Owner: *"i cannot click the daily wages and the drinks tips other verified details , can make dispute
+> also like in the pr payment page"*.
+>
+> Deleting the fake sheet left the cells inert, which over-corrected: the PR asked to INSPECT a figure,
+> not only to argue with one, and wages have a shift and attendance stamps behind them worth reading —
+> that is exactly what the evidence sheet was built to show.
+>
+> `PvDetailScreen` now renders **the same `CellEvidenceSheet`** as Payment — one component, one format,
+> so the two screens cannot drift again. Every non-empty cell opens it, wages and OT included; whether a
+> figure can be DISPUTED is decided inside, by the rules Payment already applies (drinks/tips, a voucher
+> the server still accepts, at least one shift not already claimed). Where those pass, **Dispute this
+> amount** hands off to Payment → Last week, where the pickers and the server call live.
+>
+> ⚠️ A history (signed/paid) voucher shows evidence but never a Dispute button — `weekDisputable`
+> refuses those states, matching the server. And `histVoucher` carries no `shifts`/`disputes`, so an
+> archived week's sheet says "Shift times are unavailable" rather than inventing them; the live
+> last-week voucher has both. Widening history is the §9 phase-2 item.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
 > **5 Aug 2026 — 🔴 THE SIGNING SCREEN'S DISPUTE SHEET WAS A FAKE (it never called the server).**
 >
 > Owner: *"why the daily wages still can make dispute ? and the format is different in the payment page
