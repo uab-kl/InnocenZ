@@ -12,7 +12,11 @@
  * pin both the arithmetic AND the requirement that a duplicated paper stays
  * VISIBLE as two rows rather than being tidied into one.
  */
-import { buildCellEvidence, evidenceMatchesCell } from '../src/lib/cell-evidence';
+import {
+  buildCellEvidence,
+  evidenceMatchesCell,
+  receiptDisputable,
+} from '../src/lib/cell-evidence';
 import {
   cellDisputable,
   dayStatusLabel,
@@ -330,8 +334,44 @@ check(
   cellDisputable({ ...week, lines: [approvedLine] }, DAY, 'drinks'),
 );
 check(
-  'one pending line poisons the cell — every line must be reviewed',
+  'one pending line poisons the CELL — cellDisputable is all-or-nothing',
   !cellDisputable({ ...week, lines: [approvedLine, pendingLine] }, DAY, 'drinks'),
+);
+
+/*
+ * ...WHICH IS WHY DISPUTABILITY MOVED PER SHIFT.
+ *
+ * The cell rule was right when a claim covered the whole day. Once a claim names
+ * ONE shift it became wrong: a PR could not contest an approved 10:00 receipt
+ * because a different 16:00 receipt was still awaiting review. Both rules are
+ * pinned so the distinction cannot quietly collapse back into one.
+ */
+const mixedWeek: PrCurrentWeek = {
+  ...week,
+  lines: [
+    line({ kind: 'drinks', item: 'Lemon Drop', commission: 3.6, receiptNo: 'RCP-OK', receiptStatus: 'approved', disputable: true, shiftAssignmentId: SHIFT_A }),
+    line({ kind: 'drinks', item: 'Lemon Drop', commission: 3.6, receiptNo: 'RCP-PEND', receiptStatus: 'pending', disputable: false, shiftAssignmentId: SHIFT_C }),
+  ],
+};
+const mixed = buildCellEvidence(mixedWeek, DAY, 'drinks')
+  .groups.flatMap((g) => g.receipts);
+check(
+  'the approved shift IS disputable even beside a pending one',
+  mixed.filter(receiptDisputable).length === 1,
+);
+check(
+  'and the pending shift is not offered',
+  mixed.filter(receiptDisputable).every((r) => r.receiptNo === 'RCP-OK'),
+);
+check(
+  'a shift whose earlier claim was answered can be disputed again',
+  receiptDisputable(
+    buildCellEvidence(
+      { ...mixedWeek, disputes: [{ ...claim('accepted'), receiptRefs: ['RCP-OK'] }] },
+      DAY,
+      'drinks',
+    ).groups.flatMap((g) => g.receipts).find((r) => r.receiptNo === 'RCP-OK')!,
+  ),
 );
 check('wages are never disputable', !kindDisputable('wages'));
 check('OT / others are never disputable', !kindDisputable('others'));

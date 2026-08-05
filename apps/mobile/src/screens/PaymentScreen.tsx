@@ -35,7 +35,7 @@ import {
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { buildWeekGridFromLines, VERIFIED_STATUSES } from '../lib/week-pay-grid';
-import { buildCellEvidence } from '../lib/cell-evidence';
+import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
   cellDisputable,
@@ -400,7 +400,23 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // Withdrawing an existing dispute is never blocked: that would trap a claim
     // already raised. Wages and OT are refused outright by `kindDisputable`,
     // server-side too (DISPUTABLE_KINDS), so they never reach the dispute sheet.
-    if (!weekDisputed && !cellDisputable(weekData, day.dateIso, row.key)) {
+    /*
+     * PER SHIFT, matching the button that got here.
+     *
+     * `cellDisputable` alone would refuse the moment ANY receipt on the day was
+     * still awaiting review — so the sheet would offer Dispute and then answer
+     * "Not reviewed yet" for a shift that was perfectly reviewable. It stays as
+     * the fallback for a cell with no receipts at all (wages, OT), where there
+     * is no per-shift answer to give.
+     */
+    const anyShiftDisputable = buildCellEvidence(weekData, day.dateIso, row.key)
+      .groups.flatMap((g) => g.receipts)
+      .some((r) => r.receiptNo && receiptDisputable(r));
+    if (
+      !weekDisputed &&
+      !anyShiftDisputable &&
+      !cellDisputable(weekData, day.dateIso, row.key)
+    ) {
       // Two different refusals, and they must not share a message. "Still being
       // reviewed" tells the PR to wait — useless advice for wages, where waiting
       // changes nothing and the actual route is the attendance record.
@@ -462,6 +478,13 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     return evidence.groups.flatMap((g) =>
       g.receipts
         .filter((r): r is typeof r & { receiptNo: string } => !!r.receiptNo)
+        /*
+         * Only shifts that CAN be contested. A receipt still awaiting review is
+         * the PR's own claim, with no stated figure to argue with — offering it
+         * here would end in the server's refusal. Filtering rather than
+         * disabling keeps the choice honest: everything shown is choosable.
+         */
+        .filter(receiptDisputable)
         .map((r) => ({
           receiptNo: r.receiptNo,
           // The FK the claim is actually filed against. `receiptNo` stays as the
@@ -488,6 +511,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // say WHICH, and pre-selecting would put words in their mouth about money.
     setDisputePickedReceipt(disputeReceipts.length === 1 ? disputeReceipts[0].receiptNo : null);
   }, [disputeReceipts]);
+
+  /**
+   * How many shifts in the OPEN evidence sheet could be contested.
+   *
+   * Derived from `evidenceTarget`, not `disputeTarget`: the Dispute button has
+   * to decide whether to appear BEFORE the dispute sheet exists, so it cannot
+   * read the picker's own list.
+   */
+  const evidenceDisputableCount = useMemo(() => {
+    if (!evidenceTarget) return 0;
+    const week = evidenceTarget.week === 'last' ? lastWeek : current;
+    return buildCellEvidence(week, evidenceTarget.dateIso, evidenceTarget.incomeKey)
+      .groups.flatMap((g) => g.receipts)
+      .filter((r) => r.receiptNo && receiptDisputable(r)).length;
+  }, [evidenceTarget, lastWeek, current]);
 
   /** The item lines on the chosen shift's receipt — what "which item?" offers. */
   const disputeItems = useMemo(() => {
@@ -1364,13 +1402,20 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
              * also decides WHICH refusal message to show — but it should now
              * never be reached through this button.
              */
+            /*
+             * - The third test is now PER SHIFT, not per cell. `cellDisputable`
+             *   demanded every line in the day+bucket be reviewed, so ONE
+             *   pending receipt silenced an argument about an approved shift
+             *   beside it. A shift that can be contested is enough to offer the
+             *   button; the picker then lists only those shifts.
+             *
+             * A shift already VERIFIED (its earlier claim answered) still counts:
+             * resolving a claim ends that claim, not the right to disagree
+             * again, and 0086's partial index is what permits the second one.
+             */
             kindDisputable(evidenceTarget.incomeKey) &&
             weekDisputable(evidenceTarget.week === 'last' ? lastWeek : current) &&
-            cellDisputable(
-              evidenceTarget.week === 'last' ? lastWeek : current,
-              evidenceTarget.dateIso,
-              evidenceTarget.incomeKey,
-            )
+            evidenceDisputableCount > 0
               ? () => {
                   const { day, row, week } = evidenceTarget;
                   setEvidenceTarget(null);

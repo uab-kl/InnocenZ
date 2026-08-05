@@ -939,6 +939,36 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — DISPUTABILITY IS PER SHIFT, AND A SETTLED SHIFT CAN STILL BE ARGUED.**
+>
+> Owner: *"after verified or solve dispute still can dispute again , and the 'SETTLED' need can choose
+> dispute or not"*.
+>
+> The Dispute button had vanished from a cell holding an approved shift AND a pending one, because
+> `cellDisputable` demands EVERY line in the day+bucket be reviewed. That rule was right when a claim
+> covered the whole cell. It became wrong the moment a claim names ONE shift: a PR could not contest an
+> approved 10:00 receipt because a different 16:00 receipt was still awaiting review. One shift's
+> pending paper is not a reason to silence an argument about another.
+>
+> New `receiptDisputable(receipt)` decides per receipt, preferring the server's own `disputable` flag
+> over the `pending` fallback. The button appears when ANY shift qualifies; the picker lists only those
+> shifts (filtered, not disabled — everything shown is choosable); and `openDispute`'s guard matches, so
+> the sheet can no longer offer Dispute and then answer "Not reviewed yet".
+>
+> **A SETTLED or VERIFIED shift stays disputable.** Resolving a claim ends THAT claim, not the PR's
+> right to disagree again — and `0086`'s partial index is what actually permits the second one. That is
+> the whole reason the index became partial.
+>
+> Both rules are pinned so the distinction cannot quietly collapse back into one: *"one pending line
+> poisons the CELL — cellDisputable is all-or-nothing"* still passes, beside *"the approved shift IS
+> disputable even beside a pending one"* and *"a shift whose earlier claim was answered can be disputed
+> again"*. 37 harness checks, all passing.
+>
+> ⚠️ `cellDisputable` is deliberately kept as the fallback for a cell with NO receipts (wages, OT),
+> where there is no per-shift answer to give. Do not delete it as dead code.
+>
+> Mobile clean above the ~11 pre-existing. No backend change, no migration.
+
 > **5 Aug 2026 — THE PR CAN CANCEL A DISPUTE, AND CANCEL THE RIGHT ONE.**
 >
 > Owner: *"how can the pr cancel the dispute"*.
