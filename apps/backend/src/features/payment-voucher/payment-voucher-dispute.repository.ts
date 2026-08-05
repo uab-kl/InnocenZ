@@ -146,6 +146,8 @@ export class PaymentVoucherDisputeRepositoryClass {
      * duplicate is exactly the case this selection exists to separate.
      */
     receiptNos?: string[],
+    /** The receipt's uuid — the FK path, which supersedes the numbers above. */
+    receiptId?: string | null,
   ): Promise<string> {
     try {
       const wanted = LINE_COMPONENTS_FOR[component];
@@ -155,6 +157,7 @@ export class PaymentVoucherDisputeRepositoryClass {
           amount: PaymentVoucherLineTable.amount,
           component: PaymentVoucherLineTable.component,
           receiptNo: PaymentVoucherReceiptTable.receiptNo,
+          receiptId: PaymentVoucherLineTable.receiptId,
         })
         .from(PaymentVoucherLineTable)
         .leftJoin(
@@ -170,9 +173,17 @@ export class PaymentVoucherDisputeRepositoryClass {
 
       const total = rows
         .filter((r) => (r.component === null ? component === 'others' : wanted.includes(r.component)))
-        // A line with no receipt (a wage seal) can never match a receipt
-        // selection, so it drops out here rather than inflating a narrowed sum.
-        .filter((r) => picked.length === 0 || (r.receiptNo !== null && picked.includes(r.receiptNo)))
+        /*
+         * The FK wins when given; the receipt NUMBERS are the pre-0088 path.
+         *
+         * A line with no receipt (a wage seal) can never match either kind of
+         * selection, so it drops out rather than inflating a narrowed sum.
+         */
+        .filter((r) => {
+          if (receiptId) return r.receiptId === receiptId;
+          if (picked.length === 0) return true;
+          return r.receiptNo !== null && picked.includes(r.receiptNo);
+        })
         .reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
 
       return total.toFixed(2);

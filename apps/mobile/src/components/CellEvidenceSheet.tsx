@@ -137,10 +137,28 @@ export function CellEvidenceSheet({
    * is still being argued about, and saying "settled" there would tell the PR to
    * stop chasing something nobody has finished.
    */
-  const claimOf = (receiptNo: string | null): 'open' | 'settled' | null => {
+  /*
+   * A whole-day claim TAGS EVERY RECEIPT, because it covered every one of them.
+   *
+   * I removed this once, when tagging both shifts looked like two separate
+   * per-shift claims. That fixed the wrong half: the confusion was the missing
+   * EXPLANATION, not the tags. Dropping them left the PR asking which shift was
+   * disputed and finding nothing marked at all — the answer is "both", and
+   * showing neither is a worse lie than showing both without context.
+   *
+   * The banner above supplies that context, so the tags can be honest again.
+   */
+  const claimOf = (r: {
+    receiptId: string | null;
+    receiptNo: string | null;
+  }): 'open' | 'settled' | null => {
     if (!claims) return null;
-    if (receiptNo && claims.open.has(receiptNo)) return 'open';
-    if (receiptNo && claims.settled.has(receiptNo)) return 'settled';
+    // Matched on the receipt ID (the FK a claim stores since 0088) OR its number
+    // (what pre-0088 claims recorded as text). Either identifies the same paper.
+    const hit = (set: Set<string>) =>
+      (!!r.receiptId && set.has(r.receiptId)) || (!!r.receiptNo && set.has(r.receiptNo));
+    if (claims.openAll || hit(claims.open)) return 'open';
+    if (claims.settledAll || hit(claims.settled)) return 'settled';
     return null;
   };
 
@@ -218,9 +236,9 @@ export function CellEvidenceSheet({
                 style={[s.cellClaimText, cellWide === 'open' ? s.claimTagOpen : s.claimTagSettled]}
               >
                 {cellWide === 'open'
-                  ? 'You have an open dispute on this whole day — filed against the day, so it does not name a shift.'
+                  ? 'You have an open dispute covering this WHOLE day — every shift below is part of it.'
                   : cellWide === 'settled'
-                    ? 'You disputed this whole day before and it was settled — that claim was filed against the day, so it does not name a shift.'
+                    ? 'You disputed this whole day before and it was settled — every shift tagged below was part of that one claim, not separate ones.'
                     : `You disputed ${claimCount === 1 ? 'a shift' : `${claimCount} shifts`} here before — see the tag${claimCount === 1 ? '' : 's'} below.`}
               </Text>
             </View>
@@ -249,10 +267,10 @@ export function CellEvidenceSheet({
                         * selection exists to remove, reappearing at the point they
                         * go looking for the answer.
                         */}
-                      {claimOf(receipt.receiptNo) === 'open' && (
+                      {claimOf(receipt) === 'open' && (
                         <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTED</Text>
                       )}
-                      {claimOf(receipt.receiptNo) === 'settled' && (
+                      {claimOf(receipt) === 'settled' && (
                         <Text style={[s.claimTag, s.claimTagSettled]}>SETTLED</Text>
                       )}
                     </View>

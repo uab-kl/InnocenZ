@@ -831,6 +831,8 @@ export type PrReceiptLine = {
    * something the PR cannot see anywhere in their own app.
    */
   receiptNo?: string | null;
+  /** The parent receipt's uuid — what a dispute points at as a foreign key. */
+  receiptId?: string | null;
   /**
    * The ORDER NUMBER printed on the paper (`ORD0389`) — what the PR can hold up
    * against the figure. Null when the paper carried none.
@@ -892,6 +894,9 @@ export type PrWeekDispute = {
    * under argument — every receipt in that bucket. A non-null list names the
    * shift(s) they picked.
    */
+  /** The FK to the shift's paper — match receipts on this, not on the number. */
+  receiptId: string | null;
+  /** @deprecated pre-0088 claims only; receipt NUMBERS as text. */
   receiptRefs: string[] | null;
   /**
    * WHICH ITEMS the claim names — "Lemon Drop", not just "drinks".
@@ -1179,7 +1184,11 @@ export function raiseMyDispute(
      * `receiptNo`, not the order number: the same paper logged twice carries the
      * SAME order number, and telling those two apart is the whole point.
      */
-    receiptRefs?: string[];
+    /**
+     * WHICH SHIFT — the receipt's uuid, stored server-side as a foreign key.
+     * Omit to dispute the whole day+bucket.
+     */
+    receiptId?: string;
     /**
      * WHICH ITEMS on that receipt are wrong. Only the id is sent — the server
      * reads the description, quantity and amount from the database, so the

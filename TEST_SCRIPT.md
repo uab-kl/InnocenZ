@@ -977,6 +977,42 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — WHICH SHIFT, AS A FOREIGN KEY (migration 0088). My rule-3 violation.**
+>
+> Owner, looking at the table: *"foreign key which shift ?"*. Correct, and it was my mistake.
+>
+> I stored the shift as `receipt_refs` — the receipt NUMBER (`"RCP-000012"`) as jsonb text. That breaks
+> the standing DB rule outright: read other tables through a FOREIGN KEY, reference rows by their uuid
+> primary id, never keep a second copy of a value that lives elsewhere. A number in a jsonb array cannot
+> be joined, cannot be constrained, and goes stale in silence if the row it names disappears.
+>
+> **0088** adds `payment_voucher_dispute.receipt_id uuid` → `payment_voucher_receipt(id)`
+> `ON DELETE SET NULL`, with an index, backfilled from `receipt_refs` (matched on `receipt_no` within
+> the same voucher, so a bad value could never attach a claim to another PR's paper). **Applied.**
+>
+> **The SHIFT is not duplicated onto the dispute.** It is reached through the receipt:
+> `dispute.receipt_id → payment_voucher_receipt.shift_assignment_id → shift_assignment → shift`.
+> Verified that join runs end-to-end. Copying `shift_assignment_id` onto the claim as well would be two
+> columns holding one fact, which is how they drift apart.
+>
+> `ON DELETE SET NULL` is deliberate: deleting a receipt's last line deletes the receipt, and losing the
+> paper must not delete the argument about it. The claim survives pointing at nothing, which is the
+> truth of that situation.
+>
+> The `0086` unique index moved onto the FK: `(voucher_id, dispute_date, component,
+> coalesce(receipt_id::text, '')) WHERE outcome IS NULL` — same rule, expressed against a real column
+> instead of text dug out of jsonb.
+>
+> `PrReceiptLineDTO` now carries `receiptId` beside `receiptNo` (the number is for the PR to READ, the
+> id is what the app REFERENCES), threaded through `cell-evidence` and the picker. Matching accepts
+> either, so pre-0088 claims still resolve. `receiptRefs` stays declared but is no longer written.
+>
+> ⚠️ Both live claims carry `receipt_id = NULL` — they were raised before any of this and named no
+> receipt, so the backfill had nothing to match. Nothing can recover it.
+>
+> Backend clean past its baseline; mobile clean above the ~11 pre-existing; 34 harness checks pass.
+> **Backend restart required.**
+
 > **5 Aug 2026 — A DISPUTE NOW RECORDS WHICH ITEM (migration 0087).**
 >
 > Owner, reading the table: *"i saw before that the dispute is on that day , from now onward is the

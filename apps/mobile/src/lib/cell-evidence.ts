@@ -21,6 +21,14 @@ import type { PrCurrentWeek, PrReceiptKind, PrReceiptLine, PrWeekShift } from '.
 export type EvidenceReceipt = {
   /** `RCP-000010`, or null for a line with no receipt behind it (a wage seal). */
   receiptNo: string | null;
+  /**
+   * The receipt's uuid — what a dispute stores as a FOREIGN KEY.
+   *
+   * `receiptNo` is what the PR reads off the paper; this is what the claim
+   * points at. Both are kept so a claim matches whether it was filed before
+   * 0088 (which recorded the number as text) or after it.
+   */
+  receiptId: string | null;
   /** `ORD0389` off the paper, or null when it carried none. */
   orderNo: string | null;
   receiptDate: string | null;
@@ -102,6 +110,7 @@ export function buildCellEvidence(
       const head = lines[0];
       return {
         receiptNo: head.receiptNo ?? null,
+        receiptId: head.receiptId ?? null,
         orderNo: head.orderNo ?? null,
         receiptDate: head.receiptDate ?? null,
         receiptTime: head.receiptTime ?? null,

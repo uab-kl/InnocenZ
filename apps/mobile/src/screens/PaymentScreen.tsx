@@ -156,14 +156,23 @@ function formatCell(value: number): string {
  */
 function claimShifts(
   week: PrCurrentWeek | null,
-  d: { disputeDate: string; component: IncomeKey; receiptRefs: string[] | null },
+  d: { disputeDate: string; component: IncomeKey; receiptId: string | null; receiptRefs: string[] | null },
 ) {
   const refs = d.receiptRefs ?? [];
-  if (refs.length === 0) return [];
   const evidence = buildCellEvidence(week, d.disputeDate, d.component);
   return evidence.groups.flatMap((g) =>
     g.receipts
-      .filter((r) => r.receiptNo && refs.includes(r.receiptNo))
+      /*
+       * The FK first, the old receipt NUMBERS second, and neither = the claim
+       * covered the WHOLE cell, so every shift in it was part of that one
+       * argument. Listing them answers "which shift?" with the truth — "all of
+       * them" — instead of a dead end saying nothing was recorded.
+       */
+      .filter((r) =>
+        d.receiptId
+          ? r.receiptId === d.receiptId
+          : r.receiptNo && (refs.length === 0 || refs.includes(r.receiptNo)),
+      )
       .map((r) => ({
         receiptNo: r.receiptNo as string,
         orderNo: r.orderNo,
@@ -455,6 +464,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         .filter((r): r is typeof r & { receiptNo: string } => !!r.receiptNo)
         .map((r) => ({
           receiptNo: r.receiptNo,
+          // The FK the claim is actually filed against. `receiptNo` stays as the
+          // key the chips render and compare on, because it is what the PR reads
+          // off the paper — but it is never what gets stored.
+          receiptId: r.receiptId,
           subtotal: r.subtotal,
           // Order number first — it is what is printed on the paper in their
           // hand. The shift time disambiguates two logs of the same paper.
@@ -557,7 +570,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                * means only "raised before the picker existed" — a legacy row,
                * not a deliberate claim against the whole day.
                */
-              receiptRefs: disputePickedReceipt ? [disputePickedReceipt] : undefined,
+              receiptId:
+                disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.receiptId ??
+                undefined,
               /*
                * Sent only when the PR NARROWED to some of the receipt's items.
                * Ticking them all means "this whole receipt", which the row
@@ -1148,6 +1163,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           * yet", which would have the PR waiting for something
                           * that is never coming.
                           */}
+                        {/*
+                          * A claim with no `receiptRefs` covered the whole cell,
+                          * so `claimShifts` returns EVERY shift on it. Saying so
+                          * above the list is what stops the PR reading two rows
+                          * as two separate claims.
+                          */}
+                        {!d.receiptRefs?.length && claimShifts(week, d).length > 1 && (
+                          <Text style={styles.claimNote}>
+                            Filed against the whole day — it covered both shifts below.
+                          </Text>
+                        )}
                         {claimShifts(week, d).length > 0 ? (
                           claimShifts(week, d).map((s) => (
                             <View key={s.receiptNo} style={styles.claimShift}>
@@ -1183,8 +1209,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                             </View>
                           ))
                         ) : (
+                          // Only when the day has no receipts at all to point at
+                          // — a wages/OT claim, which is derived from the
+                          // attendance stamps and has no paper behind it.
                           <Text style={styles.claimNote}>
-                            Filed against the whole day — this claim does not record which shift.
+                            No receipt behind this — it is calculated from your check-in and
+                            check-out times.
                           </Text>
                         )}
 

@@ -262,6 +262,8 @@ type PrReceiptLineDTO = {
    * by the agency" named something the PR had no way to see.
    */
   receiptNo: string | null;
+  /** The parent receipt's uuid — what a dispute's `receiptId` FK points at. */
+  receiptId: string | null;
   /**
    * The ORDER NUMBER printed on the paper (`ORD0389`) — the thing the PR can
    * physically hold up against the figure. Null when the paper carried none.
@@ -392,6 +394,14 @@ function toReceiptLineDTO(
     proofPhotos: line.proofPhotos?.length ? line.proofPhotos : (info?.proofPhotos ?? []),
     receiptStatus,
     receiptNo: info?.receiptNo ?? null,
+    /**
+     * The receipt's PRIMARY ID — what a dispute points at.
+     *
+     * `receiptNo` is for the PR to read; this is for the app to reference. A
+     * claim naming the number would be a copied string, unjoinable and free to
+     * go stale; naming the id is a foreign key.
+     */
+    receiptId: line.receiptId ?? null,
     orderNo: info?.orderNo ?? null,
     receiptDate: info?.receiptDate ?? null,
     receiptTime: info?.receiptTime ?? null,
@@ -1173,6 +1183,9 @@ export class PaymentVoucherControllerClass {
        * to tell WHICH of them the claim is about — which is the same ambiguity
        * the selection was added to remove.
        */
+      /** The FK to the shift's paper — what the app matches receipts on. */
+      receiptId: d.receiptId ?? null,
+      /** @deprecated pre-0088 rows only; superseded by `receiptId`. */
       receiptRefs: d.receiptRefs ?? null,
       /**
        * WHICH ITEMS — "Lemon Drop", not just "drinks". A snapshot taken when the
@@ -2986,6 +2999,7 @@ export class PaymentVoucherControllerClass {
             disputeDate,
             component,
             parsed.data.receiptRefs,
+            parsed.data.receiptId ?? null,
           );
 
       let dispute;
@@ -2999,7 +3013,9 @@ export class PaymentVoucherControllerClass {
           disputedAmount,
           claimedAmount: parsed.data.claimedAmount?.toFixed(2) ?? null,
           proofPhotos: parsed.data.proofPhotos,
-          receiptRefs: parsed.data.receiptRefs ?? null,
+          // The FK — which shift's paper. `receiptRefs` is no longer written:
+          // it held the receipt NUMBER as text, which could not be joined.
+          receiptId: parsed.data.receiptId ?? null,
           // Null, not [], when nothing was named — "the whole receipt" and "an
           // empty list of items" would otherwise be indistinguishable in the row.
           disputedItems: disputedItems.length ? disputedItems : null,

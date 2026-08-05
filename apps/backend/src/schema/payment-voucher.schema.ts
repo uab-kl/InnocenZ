@@ -165,7 +165,17 @@ export const PrRaiseDisputeSchema = z.object({
   proofPhotos: z.array(z.string().min(1)).optional(),
   /** What the PR says the figure should be. Optional — some claims are "this is missing". */
   claimedAmount: z.number().nonnegative().optional(),
-  /** Receipts pointed at, by their packed ref — never a voucher line id. */
+  /**
+   * WHICH SHIFT — the RECEIPT's uuid, stored as a foreign key.
+   *
+   * Supersedes `receiptRefs`, which carried the receipt NUMBER as text: a copied
+   * value that could not be joined or constrained. The shift is read through the
+   * receipt (`shift_assignment_id`), so it is never duplicated onto the claim.
+   *
+   * Omit to dispute the whole day+bucket.
+   */
+  receiptId: z.string().uuid('receiptId must be a receipt id').optional(),
+  /** @deprecated pre-0088 clients only — receipt NUMBERS as text. */
   receiptRefs: z.array(z.string().min(1)).optional(),
   /**
    * WHICH ITEMS on that receipt are wrong — "Lemon Drop", not just "drinks".

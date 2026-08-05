@@ -164,7 +164,8 @@ export function receiptClaimState(
   };
   for (const d of rows) {
     const isOpen = d.outcome === null;
-    const refs = d.receiptRefs ?? [];
+    // FK first; the receipt NUMBERS are the pre-0088 path.
+    const refs = d.receiptId ? [d.receiptId] : (d.receiptRefs ?? []);
     if (refs.length === 0) {
       if (isOpen) state.openAll = true;
       else state.settledAll = true;

@@ -306,7 +306,25 @@ export const PaymentVoucherDisputeTable = MainSchema.table('payment_voucher_disp
    * they actually saw.
    */
   proofPhotos: jsonb('proof_photos').$type<string[]>(),
-  /** Receipts pointed at, by the reference packed in line.ref — not line id. */
+  /**
+   * WHICH SHIFT this claim is about — the FK to the paper (migration 0088).
+   *
+   * The shift itself is read THROUGH it (receipt.shift_assignment_id), never
+   * copied here: the receipt already knows its shift, and two columns holding
+   * one fact is how they drift apart.
+   *
+   * Null for a claim about the whole day+bucket, and for every row raised before
+   * the shift picker existed. ON DELETE SET NULL — deleting a receipt's last
+   * line deletes the receipt, and losing the paper must not delete the argument.
+   */
+  receiptId: uuid('receipt_id').references(() => PaymentVoucherReceiptTable.id, {
+    onDelete: 'set null',
+  }),
+  /**
+   * SUPERSEDED by `receiptId` — receipt NUMBERS as jsonb text, which could not
+   * be joined or constrained. Kept only so the pre-0088 rows still read; nothing
+   * writes it now.
+   */
   receiptRefs: jsonb('receipt_refs').$type<string[]>(),
   /**
    * WHICH ITEMS the claim names (migration 0087) — a SNAPSHOT, in the same
