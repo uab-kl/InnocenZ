@@ -1189,34 +1189,37 @@ function AgencyPrDetail({
 						}
 					>
 						<IzCard flat>
-							{shiftRows.slice(0, SHIFT_HISTORY_ROWS).map((h) => {
-								const outcome = shiftOutcomeLabel(h.status);
-								return (
-									<div
-										key={h.id}
-										className="flex items-baseline gap-2 border-t border-[var(--iz-line)] py-1.5 first:border-0 first:pt-0"
-									>
-										{/* Venue and date sit together: pushed to opposite edges of a
-										    wide card, the eye has to cross the gap to pair them. */}
-										<span className="iz-sm min-w-0 truncate text-[var(--iz-txt)]">
-											{h.outlet}
-										</span>
-										<span className="iz-tiny iz-muted2 shrink-0 tabular-nums">
-											{h.dateDisplay}
-										</span>
-										{/* The free right edge is the exception column — empty on a
-										    normal shift, so a flagged one is scannable down the list. */}
-										{outcome && (
-											<IzPill
-												variant={outcome.tone}
-												className="ml-auto shrink-0 !py-0.5 !text-[9px]"
-											>
-												{outcome.label}
-											</IzPill>
-										)}
-									</div>
-								);
-							})}
+							{/* Cells, not rows: three shifts laid across the card use its full
+							    width, where stacked rows left the right half empty. Same grid
+							    the Penalties block above uses. */}
+							<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+								{shiftRows.slice(0, SHIFT_HISTORY_ROWS).map((h) => {
+									const outcome = shiftOutcomeLabel(h.status);
+									return (
+										<div
+											key={h.id}
+											className="rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2.5"
+										>
+											<div className="flex items-start justify-between gap-2">
+												<span className="iz-sm truncate font-semibold text-[var(--iz-txt)]">
+													{h.outlet}
+												</span>
+												{outcome && (
+													<IzPill
+														variant={outcome.tone}
+														className="shrink-0 !py-0.5 !text-[9px]"
+													>
+														{outcome.label}
+													</IzPill>
+												)}
+											</div>
+											<p className="iz-tiny iz-muted2 mt-0.5 tabular-nums">
+												{h.dateDisplay}
+											</p>
+										</div>
+									);
+								})}
+							</div>
 							{/* An empty card reads as "broken"; say which it is. Payout is
 							    omitted on purpose — see useAgencyPrShiftHistory. */}
 							{shiftRows.length === 0 && (

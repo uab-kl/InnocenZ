@@ -310,6 +310,12 @@ Appeared in the worktree DURING the Manage-PR session, after commit `3582d52`:
 
 - `apps/web/src/agency-portal/components/outlet/post-job-fields.tsx` (modified, +72/−59)
 - `apps/web/src/agency-portal/hooks/use-outlet-pr-pool.ts` (new, 99 lines)
+- `apps/web/src/routes/outlet/bookings.tsx` (modified — appeared LATER, while the entry above was
+  being committed, which is how the concurrent writer was noticed at all)
+
+⚠️ **Two writers were in this worktree at once on 5 Aug.** `git status` changed underneath a staging
+step. If work here looks half-finished or a file reverts unexpectedly, check what else is running
+before assuming a bug.
 
 **Left deliberately uncommitted — I did not author either file**, and committing another session's
 in-progress work under a message I would be inventing is the same mistake §9 already records for the
@@ -990,6 +996,22 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 (g) — SHIFT HISTORY AS CELLS (the owner's fix, and the better one).**
+>
+> Owner: *"maybe it would look like more space is used if u make it cells instead of rows?"* — and that
+> is the right answer. Three stacked rows on a wide card leave the entire right half empty no matter how
+> the row itself is arranged; my two previous attempts were both rearranging **within** a row. Three
+> **cells across** use the width by construction.
+>
+> Now `grid grid-cols-1 gap-2 sm:grid-cols-3` with bordered cells — **the same grid the Penalties block
+> on this very screen already uses**, so it is house style rather than a new invention. Venue is the
+> cell title (semibold, truncating), date sits beneath in muted `tabular-nums`, outcome pill top-right.
+> Collapses to one column on narrow screens.
+>
+> The lesson worth keeping: **I twice optimised the row when the row was the problem.** Asked for more
+> space, I adjusted alignment, then padding — never the axis. The owner changed the layout primitive in
+> one sentence.
 
 > **5 Aug 2026 (f) — A DESIGN REQUEST IS NOT A CONTENT REQUEST.**
 >
