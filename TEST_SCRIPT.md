@@ -939,6 +939,19 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE SHEET FOOTER GETS SPACING AND THE COLOUR CODE (Close is red).**
+>
+> Owner: *"see the button design why stick together"* and *"remember that what green yellow red , close
+> is red ?"*.
+>
+> `IzButton` carries no outer margin, so the evidence sheet's two stacked buttons fused into one
+> double-height grey slab — two actions reading as a single control, with Dispute a mis-tap from Close.
+> Now a footer with an 8px gap, and the owner's colour code applied: **Dispute = gold** (the same accent
+> the dispute modal's Submit wears), **Close = red** (mirroring `dangerBtn` exactly — same palette, same
+> meaning, one screen apart). The claim sheet's Close follows the same rule.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
 > **5 Aug 2026 — "CANNOT SCROLL SOMETIMES" — the sheet's own tap-guard was stealing the drag.**
 >
 > Owner, on the device: *"i click that drink for that day want to check but cannot scroll sometimes ,

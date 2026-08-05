@@ -1439,7 +1439,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       );
                     })}
                     </ScrollView>
-                    <IzButton label="Close" variant="soft" onPress={() => setClaimDay(null)} />
+                    {/* Close is RED, app-wide (owner's colour code) — same as
+                      * dangerBtn and the evidence sheet's Close. */}
+                    <Pressable style={styles.sheetCloseBtn} onPress={() => setClaimDay(null)}>
+                      <Text style={styles.sheetCloseText}>Close</Text>
+                    </Pressable>
                   </>
                 );
               })()}
@@ -2024,6 +2028,17 @@ const styles = StyleSheet.create({
   claimScroll: { marginTop: 4, flexShrink: 1 },
   /** The dismiss area above a sheet — a sibling, never a Pressable parent. */
   backdropTap: { flex: 1 },
+  /** Close is red app-wide — mirrors dangerBtn. */
+  sheetCloseBtn: {
+    marginTop: 12,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.45)',
+    backgroundColor: 'rgba(240,138,138,0.12)',
+  },
+  sheetCloseText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
   claimTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   claimDay: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   claimRow: {

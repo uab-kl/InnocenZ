@@ -15,7 +15,6 @@
 import React, { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
-import { IzButton } from './ui';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
 import type { ReceiptClaimState } from '../lib/receipt-review';
@@ -365,10 +364,26 @@ export function CellEvidenceSheet({
             ))}
           </ScrollView>
 
-          {onDispute && (
-            <IzButton label="Dispute this amount" variant="soft" onPress={onDispute} />
-          )}
-          <IzButton label="Close" variant="soft" onPress={onClose} />
+          {/*
+            * A footer with real spacing and the app's colour code — the two
+            * identical grey slabs sat flush, reading as one double-height
+            * control with "Dispute" a mis-tap from "Close".
+            *
+            * Colours follow the owner's convention (gold = act, red = dismiss),
+            * copied from the dispute modal's own buttons: Dispute wears the
+            * accent the Submit button wears there, Close wears `dangerBtn`'s
+            * red. Same palette, same meaning, one screen apart.
+            */}
+          <View style={s.footer}>
+            {onDispute && (
+              <Pressable style={s.actBtn} onPress={onDispute}>
+                <Text style={s.actBtnText}>Dispute this amount</Text>
+              </Pressable>
+            )}
+            <Pressable style={s.closeBtn} onPress={onClose}>
+              <Text style={s.closeBtnText}>Close</Text>
+            </Pressable>
+          </View>
 
           {/*
             * Full-size proof, over the sheet rather than replacing it — the PR
@@ -574,6 +589,27 @@ const s = StyleSheet.create({
     fontSize: 12,
     color: C.muted2,
   },
+  footer: { marginTop: 12, gap: 8 },
+  /** Gold = act — the same accent the dispute modal's Submit wears. */
+  actBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(227,184,119,0.45)',
+    backgroundColor: 'rgba(227,184,119,0.14)',
+  },
+  actBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.accentL },
+  /** Red = dismiss — mirrors PaymentScreen's dangerBtn exactly. */
+  closeBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.45)',
+    backgroundColor: 'rgba(240,138,138,0.12)',
+  },
+  closeBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
   groupTotal: {
     marginTop: 8,
     textAlign: 'right',
