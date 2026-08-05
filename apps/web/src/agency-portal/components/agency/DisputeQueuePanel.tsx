@@ -221,9 +221,16 @@ function DisputeRow({
 		<div className="rounded-xl border border-[var(--iz-line)] p-3">
 			<div className="flex flex-wrap items-start justify-between gap-2">
 				<div>
+					{/* Nickname first, legal name behind it — the same label the Payment
+					    Vouchers card uses. The floor knows her as Vicky; the money is in
+					    the legal name, and a reviewer has to see the two are one person. */}
 					<div className="text-sm font-semibold">
-						{dispute.voucher.prName ?? "Unknown PR"} ·{" "}
-						{COMPONENT_LABEL[dispute.component]}
+						{dispute.voucher.prNickname && dispute.voucher.prName
+							? `${dispute.voucher.prNickname} (${dispute.voucher.prName})`
+							: (dispute.voucher.prNickname ??
+								dispute.voucher.prName ??
+								"Unknown PR")}{" "}
+						· {COMPONENT_LABEL[dispute.component]}
 					</div>
 					<p className="iz-tiny iz-muted mt-0.5">
 						{formatDay(dispute.disputeDate)}

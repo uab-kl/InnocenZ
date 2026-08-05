@@ -939,6 +939,40 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — SETTLED DISPUTES ARE VISIBLE, AND THE PAYEE HAS THE NAME PEOPLE USE.**
+>
+> Owner: *"yesterday got one successful dispute right show where?"*, *"dispute section need to show
+> which already disputed and which still pending, also need a filter"*, and *"at payment voucher the
+> nickname need show in front of the real IC name"*.
+>
+> **The dispute answer was: nowhere.** `useAgencyDisputes` defaulted to `openOnly = true`, so every
+> agency screen requested `?open=1` — a resolved dispute was fetched by nothing and existed in the
+> database with no surface anywhere in the product. Worse, the panel printed "No open disputes"
+> whether none had ever been raised or one had been accepted an hour earlier: two very different
+> facts, one sentence. It now fetches all and filters client-side (Open / Resolved / All with live
+> counts, plus search over PR, day, component, reason, resolution note and outcome), with three
+> distinct empty states.
+>
+> Two defects fell out of listing settled rows at all: the status pill was **hardcoded to "Open"**
+> (only ever accidentally correct), and a settled row still offered live **Accept/Reject** — which the
+> server refuses, so they were buttons that could only fail while implying the outcome was still
+> changeable. Settled rows are read-only now and show what was told to the PR.
+>
+> **The nickname** reads `Vicky (Victoria Tan Mei Lin)` on BOTH the voucher card and the dispute row.
+> Joined from `pr.nickname` through `pr_id` in `listPaginated` and `listForScope` — never copied onto
+> the voucher beside `pr_name`, which is the duplication rule 3 exists to stop. The dispute list
+> needed its own join: it had `payment_voucher` but not `pr`, which is why the nickname appeared on
+> one screen and not the other. No nickname, or one repeating the legal name, prints the legal name
+> alone.
+>
+> Also fixed: `main.ts` did not compile — `express.json({verify})` hands back a bare
+> `IncomingMessage`, and `originalUrl` is added later by the router. That broke the whole backend
+> build and was unrelated to this work.
+>
+> Backend + web typecheck clean. ⚠️ The Disputes SUB-TAB COUNTER still counts open only, so it reads
+> `(0)` above a panel showing `Resolved (3)` — defensible as a "needs you" badge, but the two now
+> disagree on screen. Decide which it should be.
+
 > **5 Aug 2026 — WHICH SHIFT, AS A FOREIGN KEY (migration 0088). My rule-3 violation.**
 >
 > Owner, looking at the table: *"foreign key which shift ?"*. Correct, and it was my mistake.

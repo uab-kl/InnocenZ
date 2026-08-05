@@ -729,6 +729,8 @@ export interface PaymentVoucherDispute {
 		id: string;
 		prId: string | null;
 		prName: string | null;
+		/** Joined from `pr.nickname` through `pr_id`, like the voucher list. */
+		prNickname: string | null;
 		weekStart: string | null;
 		weekEnd: string | null;
 		status: string;

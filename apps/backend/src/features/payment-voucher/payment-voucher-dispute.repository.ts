@@ -1,5 +1,6 @@
 import { and, desc, eq, inArray, isNull, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
+import { PrTable } from '@/features/pr/pr.model.js';
 import { logger } from '@/util/logger.js';
 import {
   PaymentVoucherComponent,
@@ -324,22 +325,41 @@ export class PaymentVoucherDisputeRepositoryClass {
   async listForScope(
     agencyId: string | null,
     options?: { openOnly?: boolean; limit?: number },
-  ): Promise<Array<{ dispute: PaymentVoucherDispute; voucher: PaymentVoucherType }>> {
+  ): Promise<
+    Array<{
+      dispute: PaymentVoucherDispute;
+      voucher: PaymentVoucherType & { prNickname: string | null };
+    }>
+  > {
     try {
       const conditions: SQL[] = [];
       if (agencyId) conditions.push(eq(PaymentVoucherTable.agencyId, agencyId));
       if (options?.openOnly) conditions.push(isNull(PaymentVoucherDisputeTable.outcome));
 
-      return await db
-        .select({ dispute: PaymentVoucherDisputeTable, voucher: PaymentVoucherTable })
+      // The nickname rides along through the PR FK, exactly as the voucher list
+      // reads it — a dispute row names the person it is about, and "Victoria Tan
+      // Mei Lin" is not what anyone on the floor calls her. LEFT join: a voucher
+      // with no pr_id must still return its dispute, just without a nickname.
+      const rows = await db
+        .select({
+          dispute: PaymentVoucherDisputeTable,
+          voucher: PaymentVoucherTable,
+          prNickname: PrTable.nickname,
+        })
         .from(PaymentVoucherDisputeTable)
         .innerJoin(
           PaymentVoucherTable,
           eq(PaymentVoucherDisputeTable.voucherId, PaymentVoucherTable.id),
         )
+        .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
         .where(conditions.length ? and(...conditions) : undefined)
         .orderBy(desc(PaymentVoucherDisputeTable.raisedAt))
         .limit(options?.limit ?? 200);
+
+      return rows.map((row) => ({
+        dispute: row.dispute,
+        voucher: { ...row.voucher, prNickname: row.prNickname ?? null },
+      }));
     } catch (error) {
       logger.error('[PaymentVoucherDisputeRepository.listForScope] Error:', error);
       return [];
