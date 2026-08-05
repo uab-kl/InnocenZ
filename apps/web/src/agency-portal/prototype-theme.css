@@ -11970,7 +11970,7 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-card__name {
 	min-width: 0;
 	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 16px;
+	font-size: 18px;
 	font-weight: 700;
 	color: var(--iz-txt);
 	white-space: nowrap;
@@ -11980,16 +11980,16 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-card__rating {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
+	gap: 4px;
 	flex-shrink: 0;
-	font-size: 15px;
+	font-size: 17px;
 	font-weight: 700;
 	font-variant-numeric: tabular-nums;
 	color: var(--iz-gold-l, var(--iz-gold));
 }
 .iz-pr-manage-card__rating-star {
-	width: 14px;
-	height: 14px;
+	width: 16px;
+	height: 16px;
 	fill: currentColor;
 	stroke: none;
 }
@@ -12001,12 +12001,12 @@ button.iz-pr-offer-row:hover {
 }
 .iz-pr-manage-card__tier {
 	flex-shrink: 0;
-	font-size: 11px !important;
-	padding: 3px 8px !important;
+	font-size: 12px !important;
+	padding: 4px 9px !important;
 }
 .iz-pr-manage-card__meta {
 	min-width: 0;
-	font-size: 13px;
+	font-size: 14px;
 	color: var(--iz-muted);
 	white-space: nowrap;
 	overflow: hidden;
@@ -12030,13 +12030,13 @@ button.iz-pr-offer-row:hover {
 	min-width: 0;
 }
 .iz-pr-manage-card__metric-label {
-	font-size: 12px;
+	font-size: 13px;
 	/* Was muted2 — at this size the labels were dim as well as small, and the
 	   ask was legibility, not just scale. */
 	color: var(--iz-muted);
 }
 .iz-pr-manage-card__metric-value {
-	font-size: 14px;
+	font-size: 16px;
 	font-weight: 600;
 	font-variant-numeric: tabular-nums;
 	color: var(--iz-txt);
