@@ -939,6 +939,37 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE APPROVAL PRECONDITION IS PER CLAIM, AND A CORRECTION I NEARLY SHIPPED ON A FALSE PREMISE.**
+>
+> Owner: *"i still cannot choose below disputed verified shift"*.
+>
+> **What I nearly did, and why it was wrong.** I read the blocked 16:00 shift as a receipt the agency
+> had APPROVED, then EDITED — which flips it back to `pending` and would make the figure on it the
+> agency's own, so contesting it again would be fair. I wrote the bypass. Then I checked the row:
+>
+> | receipt | status | reviewed_at |
+> |---|---|---|
+> | RCP-000010 | verified | 2026-08-04 06:52Z |
+> | **RCP-000012** | **pending** | **NULL** |
+>
+> `reviewed_at` is NULL — that receipt has **never been approved at all**. "Waiting on your agency" is
+> the truth, and blocking it is correct. The bypass was reverted before commit. The VERIFIED tag the
+> owner saw on it came from the old whole-day-claim behaviour that `d373e94` had already removed — a
+> stale build, not the current rule. If a genuinely re-opened receipt ever needs to be disputable, the
+> signal is `reviewed_at` being non-null, NOT the presence of a settled claim.
+>
+> **The real bug it exposed.** The server's approval precondition was CELL-WIDE: it 409s if any receipt
+> on that day+component is pending. Same over-broad shape I had just fixed on the client — so the app
+> now offered the approved 10:00 shift and the server would have refused it because a DIFFERENT 16:00
+> receipt was unreviewed. Their shift had a stated figure; somebody else's paper is not their problem.
+>
+> The check now narrows to the receipt the claim NAMES (`parsed.data.receiptId`). With no receipt named
+> the claim still covers the cell, so every receipt on it must be reviewed — the original rule,
+> untouched, for the shape it was written for.
+>
+> ⚠️ Worth keeping: **checking the row is what stopped this**, and the wrong version was already written
+> and typechecking cleanly. Both apps clean; 40 harness checks pass. **Backend restart required.**
+
 > **5 Aug 2026 — A SHIFT WITH AN OPEN CLAIM IS NO LONGER OFFERED AGAIN.**
 >
 > Owner: *"this already disputed can dispute again"*.

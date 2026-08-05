@@ -485,6 +485,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       claims.openAll ||
       (!!r.receiptId && claims.open.has(r.receiptId)) ||
       (!!r.receiptNo && claims.open.has(r.receiptNo));
+    /*
+     * ⚠️ A SETTLED CLAIM DOES NOT MAKE AN UNREVIEWED RECEIPT DISPUTABLE.
+     *
+     * I briefly let one through, on the theory that a receipt reading `pending`
+     * had been APPROVED and then edited back by the agency — in which case the
+     * figure would be the agency's and fair to contest. The database says
+     * otherwise for the case that prompted it: RCP-000012 carries
+     * `reviewed_at = NULL`, so it was never approved at all. It is a receipt the
+     * agency has not looked at yet, and "waiting on your agency" is the truth.
+     *
+     * The old whole-day claim tagged it VERIFIED only because a claim covering
+     * the entire cell marked every receipt in it — behaviour `d373e94` removed.
+     * If a genuinely re-opened receipt ever needs to be disputable, the signal
+     * is `reviewed_at` being non-null, not the presence of a settled claim.
+     */
     return evidence.groups.flatMap((g) =>
       g.receipts
         .filter((r): r is typeof r & { receiptNo: string } => !!r.receiptNo)
@@ -565,13 +580,13 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     if (claims.openAll) return 0;
     return buildCellEvidence(week, evidenceTarget.dateIso, evidenceTarget.incomeKey)
       .groups.flatMap((g) => g.receipts)
-      .filter(
-        (r) =>
-          r.receiptNo &&
-          receiptDisputable(r) &&
-          !(r.receiptId && claims.open.has(r.receiptId)) &&
-          !claims.open.has(r.receiptNo),
-      ).length;
+      .filter((r) => {
+        if (!r.receiptNo) return false;
+        const openOnIt =
+          (r.receiptId && claims.open.has(r.receiptId)) || claims.open.has(r.receiptNo);
+        if (openOnIt) return false;
+        return receiptDisputable(r);
+      }).length;
   }, [evidenceTarget, lastWeek, current]);
 
   /** The item lines on the chosen shift's receipt — what "which item?" offers. */

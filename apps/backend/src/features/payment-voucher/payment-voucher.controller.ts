@@ -2960,6 +2960,19 @@ export class PaymentVoucherControllerClass {
         const statuses = receiptInfoMap(receipts);
         const waiting = existing.lines
           .filter((l) => l.lineDate === disputeDate && decodeRef(l.ref).kind === component)
+          /*
+           * Only the receipt the claim NAMES — not every receipt on the day.
+           *
+           * This was cell-wide, which was right while a claim covered the whole
+           * cell and wrong once it names one shift: a PR contesting an APPROVED
+           * 10:00 receipt was refused because a different 16:00 receipt on the
+           * same day was still awaiting review. Their shift had a stated figure;
+           * somebody else's paper being unreviewed is not their problem.
+           *
+           * With no receipt named the claim still covers the cell, so every
+           * receipt on it must be reviewed — the original rule, unchanged.
+           */
+          .filter((l) => !parsed.data.receiptId || l.receiptId === parsed.data.receiptId)
           .map((l) => (l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null))
           .filter((r) => r && statuses.get(r.id)?.status === 'pending');
         if (waiting.length > 0) {
