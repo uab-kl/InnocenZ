@@ -154,11 +154,17 @@ export function CellEvidenceSheet({
    * got the answer "both", when the truth is "nobody said; it was filed against
    * the day". Those are different statements and only one of them is true.
    */
-  const cellWide: 'open' | 'settled' | null = claims?.openAll
-    ? 'open'
-    : claims?.settledAll
-      ? 'settled'
-      : null;
+  /*
+   * Only while it is OPEN.
+   *
+   * A whole-day claim that has been ANSWERED is history: the day already reads
+   * VERIFIED on the grid, tapping that status lists the claim and its outcome,
+   * and the cell can be disputed afresh. Repeating it here told the PR their
+   * shifts were "settled" while giving them no way to learn which shift — the
+   * question they were actually asking — so it read as an answer and was not
+   * one. An OPEN claim stays, because it is the reason they cannot file another.
+   */
+  const cellWide: 'open' | null = claims?.openAll ? 'open' : null;
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -187,12 +193,11 @@ export function CellEvidenceSheet({
             </View>
           )}
 
-          {cellWide && (
-            <View style={[s.cellClaim, cellWide === 'open' ? s.cellClaimOpen : s.cellClaimSettled]}>
-              <Text style={[s.cellClaimText, cellWide === 'open' ? s.claimTagOpen : s.claimTagSettled]}>
-                {cellWide === 'open'
-                  ? 'This whole day is under dispute — the claim was filed against the day, not a single shift.'
-                  : 'This whole day was disputed and settled — the claim covered every shift below, not one of them.'}
+          {cellWide === 'open' && (
+            <View style={[s.cellClaim, s.cellClaimOpen]}>
+              <Text style={[s.cellClaimText, s.claimTagOpen]}>
+                This whole day is under dispute — that claim was filed against the day, so it does
+                not name a shift.
               </Text>
             </View>
           )}

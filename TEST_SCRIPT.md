@@ -977,6 +977,40 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — 🔴 BLANK PAGE ON DISPUTE, AND THE MOBILE TYPECHECK WAS CHECKING NOTHING.**
+>
+> Owner: *"in the dispute button i click either one shift blank page"* and *"why have this 'This whole
+> day was disputed and settled…' — how can i know which shift drink is already disputed ?"*.
+>
+> **(1) The crash.** The receipt picker rendered `<Check />`, an icon that is exported from
+> `components/icons.tsx` but was **never imported** into `PaymentScreen.tsx`. So the first render of the
+> picker threw a ReferenceError and the screen went white. Shipped in `c9443d6`. Replaced with a filled
+> dot drawn as a `<View>` — also the correct mark for an exclusive choice, so nothing is lost.
+>
+> **(2) Why my typecheck did not catch it — and this is the important half.**
+> `apps/mobile/tsconfig.json` is SOLUTION-STYLE: `"files": []`, `"include": []`, project references
+> only. So `npx tsc --noEmit -p tsconfig.json` compiles **ZERO FILES** and reports clean no matter what
+> is in `src`. Every "mobile tsc clean / 0-error baseline" in this session's earlier entries was
+> **vacuous** — it verified nothing.
+>
+> The real command is `-p tsconfig.app.json` (73 files). `tsconfig.app.json` also globbed `**/*.ts`,
+> pulling the hand-run `scripts/*.ts` harnesses outside its `rootDir: "src"` and drowning the output in
+> TS6059; `"scripts/**"` is now excluded so the real check is usable.
+>
+> **The true mobile baseline is ~11 errors**, all pre-existing and none from this session's work: DOM
+> globals (`document`, `FileList`, `Blob`) in `PhoneSheet.tsx`, `proof-photo.ts` and PaymentScreen's own
+> image picker, plus a `demo-shifts.ts:317` narrowing error. CLAUDE.md's "apps/mobile is 0-error" rule
+> was wrong and is corrected there, with the command spelled out.
+>
+> **(3) The banner is gone for SETTLED claims.** A whole-day claim that has been answered is history:
+> the grid already reads VERIFIED, tapping that status lists the claim and its outcome, and the cell can
+> be disputed afresh. Repeating it in the evidence sheet told the PR their shifts were "settled" while
+> giving them no way to learn WHICH — it read as an answer and was not one. It now shows only while a
+> whole-day claim is still OPEN, which is actionable: it is the reason another cannot be filed.
+>
+> An old claim with `receipt_refs = NULL` genuinely does not record which shift; nothing can recover
+> that. Every claim raised from now on names its shift.
+
 > **5 Aug 2026 — A DISPUTE NAMES ONE SHIFT (the picker was multi-select).**
 >
 > Owner: *"noo bro the dispute make is possible will be only one of the shift"*.

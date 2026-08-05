@@ -1207,8 +1207,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               * it survives a dim screen and does not depend on
                               * colour perception alone.
                               */}
+                            {/*
+                              * A filled DOT, drawn with a View — not an icon.
+                              *
+                              * This held `<Check />`, which was never imported,
+                              * so the first render of the picker threw a
+                              * ReferenceError and the whole screen went blank on
+                              * tapping Dispute. A dot is also the right mark for
+                              * an exclusive choice, so nothing is lost by it.
+                              */}
                             <View style={[styles.rcptBox, on && styles.rcptBoxOn]}>
-                              {on && <Check size={11} color={C.bg} />}
+                              {on && <View style={styles.rcptDot} />}
                             </View>
                             <Text
                               style={[styles.rcptChipText, on && styles.rcptChipTextOn]}
@@ -1524,6 +1533,12 @@ const styles = StyleSheet.create({
   },
   rcptBoxOn: {
     borderColor: C.accent,
+    backgroundColor: 'transparent',
+  },
+  rcptDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 999,
     backgroundColor: C.accent,
   },
   rcptChipText: {
