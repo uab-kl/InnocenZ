@@ -977,6 +977,32 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — A DISPUTE NAMES ONE SHIFT (the picker was multi-select).**
+>
+> Owner: *"noo bro the dispute make is possible will be only one of the shift"*.
+>
+> I built the picker as checkboxes, so a PR could tick several receipts and file one claim across them.
+> Wrong shape: a claim answers *"this shift's drinks are wrong"*, and the agency settles it against that
+> shift's receipt. One claim spanning two shifts carries one amount and one outcome for two questions
+> that may each need a different answer.
+>
+> Now single-select — round radio, exclusive, and tapping the chosen one again does NOT clear it, since
+> a dispute needs a shift and an empty selection is not a useful state to leave the PR in. A day with
+> ONE receipt auto-selects it; a day with several starts unselected and Submit stays disabled until they
+> answer, because pre-picking would put words in their mouth about money.
+>
+> `receiptRefs` is now sent on EVERY claim that has a receipt, single-receipt days included. So a null
+> `receipt_refs` from here on means only "raised before the picker existed" — a legacy row, not a
+> deliberate claim against the whole day. The whole-cell banner in the evidence sheet is therefore a
+> statement about history, and new claims will always name their shift.
+>
+> ⚠️ **Open question, not decided:** `0085`'s partial index still allows one OPEN claim per
+> (voucher, day, component). So a PR disputing shift A's drinks cannot ALSO have an open claim on shift
+> B's drinks the same night — the second is refused until the first is answered. If both should be open
+> at once, the index needs to include the receipt. Flagged in §9 rather than guessed at.
+>
+> `tsc` clean. No migration in this change.
+
 > **5 Aug 2026 — 🔴 A SETTLED CELL COULD NEVER BE DISPUTED AGAIN (migration 0085).**
 >
 > Owner: *"the dispute button no works"* and *"why both is setttled i just want to know which shift's

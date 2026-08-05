@@ -242,8 +242,16 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     row: (typeof INCOME_ROWS)[number];
   } | null>(null);
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
-  /** receiptNos the PR is contesting — all of the cell's, until they narrow it. */
-  const [disputePickedReceipts, setDisputePickedReceipts] = useState<string[]>([]);
+  /**
+   * The ONE receipt being contested — a dispute is about a single shift.
+   *
+   * Was a multi-select. Owner: *"the dispute make is possible will be only one
+   * of the shift"*. A claim answers "this shift's drinks are wrong", and the
+   * agency settles it against that shift's receipt; letting a PR tick several
+   * would produce one claim, one amount and one outcome spanning shifts that
+   * may each need a different answer.
+   */
+  const [disputePickedReceipt, setDisputePickedReceipt] = useState<string | null>(null);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
   /** Optional proof kept with submitted disputes (image upload is still local). */
@@ -408,18 +416,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    * extra taps to say what it already meant.
    */
   useEffect(() => {
-    setDisputePickedReceipts(disputeReceipts.map((r) => r.receiptNo));
+    // One receipt = nothing to choose, so choose it. More than one = the PR must
+    // say WHICH, and pre-selecting would put words in their mouth about money.
+    setDisputePickedReceipt(disputeReceipts.length === 1 ? disputeReceipts[0].receiptNo : null);
   }, [disputeReceipts]);
 
-  /** A chooser was shown and the PR emptied it — nothing to file. */
-  const noReceiptPicked = disputeReceipts.length > 0 && disputePickedReceipts.length === 0;
+  /** A chooser was shown and the PR has not answered it yet. */
+  const noReceiptPicked = disputeReceipts.length > 0 && disputePickedReceipt === null;
 
   const disputePickedSubtotal = useMemo(
-    () =>
-      disputeReceipts
-        .filter((r) => disputePickedReceipts.includes(r.receiptNo))
-        .reduce((s, r) => s + r.subtotal, 0),
-    [disputeReceipts, disputePickedReceipts],
+    () => disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.subtotal ?? 0,
+    [disputeReceipts, disputePickedReceipt],
   );
 
   const closeDispute = () => {
@@ -463,16 +470,14 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               note: disputeNote.trim() || undefined,
               proofPhotos: disputePhotos.length ? disputePhotos : undefined,
               /*
-               * Sent only when the PR NARROWED the claim. Listing every receipt
-               * is the same statement as listing none — "the whole cell" — and
-               * omitting it keeps that meaning explicit in the stored row rather
-               * than recording a selection nobody made.
+               * ALWAYS the one shift, when the cell has a receipt at all.
+               *
+               * Sent even on a single-receipt day, so every claim from here on
+               * records WHICH shift it was about. A null `receipt_refs` now
+               * means only "raised before the picker existed" — a legacy row,
+               * not a deliberate claim against the whole day.
                */
-              receiptRefs:
-                disputePickedReceipts.length > 0 &&
-                disputePickedReceipts.length < disputeReceipts.length
-                  ? disputePickedReceipts
-                  : undefined,
+              receiptRefs: disputePickedReceipt ? [disputePickedReceipt] : undefined,
             });
       const next = result.voucher;
       // Reflect the persisted state so the grid + header pill update immediately
@@ -1174,21 +1179,18 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     <Text style={styles.fieldLabel}>Which one is wrong?</Text>
                     <View style={styles.presetWrap}>
                       {disputeReceipts.map((r) => {
-                        const on = disputePickedReceipts.includes(r.receiptNo);
+                        const on = disputePickedReceipt === r.receiptNo;
                         return (
                           <Pressable
                             key={r.receiptNo}
                             style={[styles.rcptChip, on ? styles.rcptChipOn : styles.rcptChipOff]}
-                            onPress={() =>
-                              setDisputePickedReceipts((prev) =>
-                                prev.includes(r.receiptNo)
-                                  ? prev.filter((x) => x !== r.receiptNo)
-                                  : [...prev, r.receiptNo],
-                              )
-                            }
-                            accessibilityRole="checkbox"
-                            accessibilityState={{ checked: on }}
-                            accessibilityLabel={`${r.label}${on ? ', selected' : ', not selected'}`}
+                            // Tapping the chosen one again does NOT clear it: a
+                            // dispute needs a shift, and an empty selection is
+                            // not a state the PR can usefully be left in.
+                            onPress={() => setDisputePickedReceipt(r.receiptNo)}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: on }}
+                            accessibilityLabel={`${r.label}${on ? ', selected' : ''}`}
                           >
                             {/*
                               * A TICKED BOX, not a tinted outline.
@@ -1219,9 +1221,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       })}
                     </View>
                     <Text style={styles.pickedHint}>
-                      {disputePickedReceipts.length === 0
-                        ? 'Pick at least one receipt to dispute.'
-                        : `Disputing ${formatRM(disputePickedSubtotal)} of ${formatRM(disputeTarget?.amount ?? 0)}.`}
+                      {disputePickedReceipt === null
+                        ? 'Pick the shift you are disputing.'
+                        : `Disputing ${formatRM(disputePickedSubtotal)} of this day's ${formatRM(disputeTarget?.amount ?? 0)}.`}
                     </Text>
                   </>
                 )}
@@ -1510,10 +1512,11 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
+  /* Round, because the choice is exclusive — a square reads as "tick many". */
   rcptBox: {
     width: 17,
     height: 17,
-    borderRadius: 5,
+    borderRadius: 999,
     borderWidth: 1.5,
     borderColor: C.muted2,
     alignItems: 'center',
