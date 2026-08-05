@@ -203,6 +203,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A2 | Roster: read + add-shift / add-PR + **assign/unassign** | **Agency → PR** | `routes/agency/roster` + `shift-assignment` | `agency_pr` join | ⚠️ Reported (confirm assign shows on PR, §3 S2–S3) |
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
+| A7 | **Manage-PR Shift history is a real read — with NO payout, on purpose.** Was reading the demo store and filtering a real uuid against demo ids (`pr_tied`), so it could never match and rendered a blank card with no empty state. Now `GET /shift-assignment?prId=`; `listPaginated` joins `outlet.name` through the FK (rule 3 — never copied onto the row). Renders `date · outlet` and says **"No shifts yet"** when there are none. **The payout is deliberately omitted** — the sealed wage lives on `payment_voucher_line` and re-deriving it would create a second source of truth for money. | **Agency ← PR** | `shift-assignment.repository.ts` (`listPaginated`) · `use-agency-pr-shift-history.ts` · `routes/agency/prs.tsx` | `shift_assignment` ⋈ `shift` ⋈ `outlet` (no DDL) | ⚠️ Reported (typecheck at baseline, biome clean; **not live-fired**. Org scoping **read and confirmed**: a non-admin caller's `agencyId` is forced server-side and only admins may pass it, so another agency's `prId` returns nothing) |
 | A6 | **Manage-PR detail shows real Languages + real Ratings.** `GET /pr` now selects `user_profile.languages` (the column existed since 0055; this projection was the only reader not selecting it), and the ratings feed matches on **`rating.pr_id`** instead of the display name — the outlet writes its roster's legal name while Manage-PR shows the floor nickname, so a real rating was invisible. Average / Rating tile / warn banner all derive from the real rows; an **unrated** PR reads "not rated yet" instead of tripping the below-3.5★ warning off the `rating: 0` placeholder. | **Agency ← Outlet** (ratings) · **Agency ← PR** (languages) | `pr.repository.ts` · `pr-personnel-map.ts` · `lib/pr-rating-summary.ts` · `use-agency-ratings.ts` · `routes/agency/prs.tsx` | `user_profile.languages` · `rating.pr_id` (no DDL) | ⚠️ Reported (typecheck clean on every touched file, biome clean; **not live-fired** — needs a backend restart + agency click-through, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
 
@@ -302,6 +303,17 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
+
+### ▶ MANAGE-PR DETAIL — all 3 sections wired; SHIFT HISTORY deliberately has NO payout (5 Aug 2026)
+
+Shift history is now a real read (§8 A7). What remains open on it:
+
+- [ ] **The payout column is intentionally absent — do not "finish" it by computing one.** Owner's
+  call: *"yes just show the shift and leave the payout empty"*. The sealed wage lives on
+  `payment_voucher_line`; deriving an amount from the rate card would create a SECOND source of truth
+  for money that can disagree with the voucher actually paid. If a payout is ever added, it must READ
+  the sealed line. This is the same shape as the RM703.60-billed-as-RM2,285.08 fault.
+- [ ] **Live-fire A7** together with A6 — needs a backend restart and an agency login.
 
 ### ▶ MANAGE-PR DETAIL — 2 of 3 empty sections wired, SHIFT HISTORY still demo-bound (5 Aug 2026)
 
@@ -957,6 +969,37 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 (b) — SHIFT HISTORY WIRED, AND THE PAYOUT LEFT EMPTY ON PURPOSE.**
+>
+> Owner: *"so the shift history display is it a read function or are you going end up editing the
+> database?"*, then *"yes just show the shift and leave the payout empty"*.
+>
+> Worth recording that the owner asked the scoping question BEFORE approving the work — and the answer
+> decided the size of it. It is a **read**: no table, no column, no migration. Everything needed already
+> existed — `listForPr` already joined the outlet, `GET /shift-assignment` already filtered by `prId`.
+> The card was blank because it read the **demo store** and compared a real uuid against demo ids.
+>
+> **The payout is absent by decision, not omission.** The sealed wage lives on `payment_voucher_line`.
+> Deriving an amount from the rate card would have given wages a second source of truth that can
+> disagree with the voucher the agency actually pays — the exact shape of the fault that once billed
+> RM703.60 of work as RM2,285.08. Showing the shift without the amount is the honest half. Anyone
+> "finishing" this column later must READ the sealed line, and `useAgencyPrShiftHistory`'s doc comment
+> says so at the point of temptation.
+>
+> **The security question I flagged before building came back clean, and it was worth asking.** Wiring a
+> screen is the moment an endpoint's scoping gets tested for real — this codebase has shipped two
+> org-scope holes that were invisible precisely because nothing called the gate. Here `list` forces
+> `agencyId: scope.agencyId` for any non-admin and only lets an admin pass one, so an agency querying
+> another agency's `prId` gets zero rows. A real scope check, not a role gate. **No client-side filter
+> was added** — one would look like protection while protecting nothing.
+>
+> Also: the card now says **"No shifts yet"**. It previously rendered nothing at all, which reads as
+> broken rather than empty — the ratings feed had an empty state and this did not.
+>
+> `outlet.name` is joined through the FK in `listPaginated`, never copied onto the row (DB rule 3).
+> Backend typecheck unchanged (1 pre-existing `main.ts` error); `apps/web` back to its 120 baseline
+> after dropping the now-unused `formatRM` import. **Not live-fired** — same two gates as A6.
 
 > **5 Aug 2026 — THREE EMPTY BOXES ON ONE SCREEN, THREE UNRELATED CAUSES (a shared symptom is not a shared bug).**
 >

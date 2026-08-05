@@ -214,11 +214,14 @@ export class ShiftAssignmentRepositoryClass {
           assignment: ShiftAssignmentTable,
           prName: prDisplayNameSql,
           outletId: ShiftTable.outletId,
+          // Read through the FK — the venue's name is never copied onto a row.
+          outletName: OutletTable.name,
           shiftDate: ShiftTable.shiftDate,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(PrTable, eq(ShiftAssignmentTable.prId, PrTable.id))
+        .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
         .where(whereClause)
         .orderBy(ShiftAssignmentTable.createdAt)
         .limit(pageSize)
@@ -228,6 +231,7 @@ export class ShiftAssignmentRepositoryClass {
         ...row.assignment,
         prName: row.prName,
         outletId: row.outletId,
+        outletName: row.outletName,
         shiftDate: row.shiftDate,
       }));
 

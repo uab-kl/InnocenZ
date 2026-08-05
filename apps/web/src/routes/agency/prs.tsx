@@ -5,7 +5,6 @@ import { toComcardPreview } from "@agency-portal/components/agency/PrComcardIden
 import { ProfileLanguagePicker } from "@agency-portal/components/iz/ProfileLanguagePicker";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import {
-	formatRM,
 	IzCard,
 	IzCardTitle,
 	IzKpiLabel,
@@ -20,6 +19,7 @@ import {
 	canGeneratePortfolioComcard,
 	PortfolioGalleryTile,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
+import { useAgencyPrShiftHistory } from "@agency-portal/hooks/use-agency-pr-shift-history";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
 import {
 	type AgencyRating,
@@ -617,6 +617,27 @@ function AgencyPrDetail({
 		conflicts: number;
 	} | null>(null);
 
+	// Real worked shifts. Demo sessions have no backend identity, so they keep
+	// reading the demo store — which is the only place their history exists.
+	const backendShiftHistory = useAgencyPrShiftHistory(detail.id);
+	const shiftRows = useMemo(
+		() =>
+			backendShiftHistory.backed
+				? backendShiftHistory.rows
+				: shiftHistoryForPr(shiftHistory, detail.id).map((h) => ({
+						id: h.id,
+						dateDisplay: h.dateDisplay,
+						outlet: h.outlet,
+					})),
+		[
+			backendShiftHistory.backed,
+			backendShiftHistory.rows,
+			shiftHistory,
+			detail.id,
+		],
+	);
+	const shiftHistoryLoading =
+		backendShiftHistory.backed && backendShiftHistory.isLoading;
 	const ratingSummary = useMemo(
 		() => summarizePrRatings(ratings, detail),
 		[ratings, detail],
@@ -1148,18 +1169,30 @@ function AgencyPrDetail({
 						</IzCard>
 					)}
 
-					<OutletSection title="Shift history" hint="Last 3 shifts">
+					<OutletSection
+						title="Shift history"
+						hint={
+							shiftRows.length > 0
+								? `Last ${Math.min(3, shiftRows.length)} of ${shiftRows.length}`
+								: undefined
+						}
+					>
 						<IzCard flat>
-							{shiftHistoryForPr(shiftHistory, detail.id)
-								.slice(0, 3)
-								.map((h) => (
-									<p
-										key={h.id}
-										className="iz-tiny iz-muted border-t border-[var(--iz-line)] py-2 first:border-0 first:pt-0"
-									>
-										{h.dateDisplay} · {h.outlet} · {formatRM(h.totalPayout)}
-									</p>
-								))}
+							{shiftRows.slice(0, 3).map((h) => (
+								<p
+									key={h.id}
+									className="iz-tiny iz-muted border-t border-[var(--iz-line)] py-2 first:border-0 first:pt-0"
+								>
+									{h.dateDisplay} · {h.outlet}
+								</p>
+							))}
+							{/* An empty card reads as "broken"; say which it is. Payout is
+							    omitted on purpose — see useAgencyPrShiftHistory. */}
+							{shiftRows.length === 0 && (
+								<p className="iz-tiny iz-muted">
+									{shiftHistoryLoading ? "Loading…" : "No shifts yet"}
+								</p>
+							)}
 						</IzCard>
 					</OutletSection>
 
