@@ -1174,6 +1174,12 @@ export class PaymentVoucherControllerClass {
        * the selection was added to remove.
        */
       receiptRefs: d.receiptRefs ?? null,
+      /**
+       * WHICH ITEMS — "Lemon Drop", not just "drinks". A snapshot taken when the
+       * claim was raised, so it still reads correctly after the agency edits or
+       * the voucher is rewritten. Null = the whole receipt was claimed.
+       */
+      disputedItems: d.disputedItems ?? null,
       /** null = still open. 'accepted' | 'rejected' | 'withdrawn' once decided. */
       outcome: d.outcome,
       resolvedAt: d.resolvedAt,
@@ -2959,12 +2965,28 @@ export class PaymentVoucherControllerClass {
       // with two shifts on one night can contest the second alone, and the
       // figure the claim is measured against has to be THAT shift's, not the
       // day's — otherwise accepting the claim settles money nobody contested.
-      const disputedAmount = await this.paymentVoucherDisputeRepository.sumLinesFor(
+      const disputedItems = await this.paymentVoucherDisputeRepository.resolveDisputeItems(
         voucherId,
         disputeDate,
         component,
-        parsed.data.receiptRefs,
+        (parsed.data.items ?? []).map((i) => i.lineId),
       );
+
+      /*
+       * Narrowest thing the PR named wins: ITEMS, else the RECEIPT, else the
+       * whole cell. Each step down is the PR being more specific, and the figure
+       * their claim is measured against has to follow — a claim about one
+       * RM 3.60 Lemon Drop recorded against the day's RM 7.20 would settle money
+       * nobody contested when it was accepted.
+       */
+      const disputedAmount = disputedItems.length
+        ? disputedItems.reduce((sum, i) => sum + Number(i.amount ?? 0), 0).toFixed(2)
+        : await this.paymentVoucherDisputeRepository.sumLinesFor(
+            voucherId,
+            disputeDate,
+            component,
+            parsed.data.receiptRefs,
+          );
 
       let dispute;
       try {
@@ -2978,6 +3000,9 @@ export class PaymentVoucherControllerClass {
           claimedAmount: parsed.data.claimedAmount?.toFixed(2) ?? null,
           proofPhotos: parsed.data.proofPhotos,
           receiptRefs: parsed.data.receiptRefs ?? null,
+          // Null, not [], when nothing was named — "the whole receipt" and "an
+          // empty list of items" would otherwise be indistinguishable in the row.
+          disputedItems: disputedItems.length ? disputedItems : null,
           createdBy: actor,
           updatedBy: actor,
         });

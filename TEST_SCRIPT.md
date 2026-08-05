@@ -977,6 +977,43 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — A DISPUTE NOW RECORDS WHICH ITEM (migration 0087).**
+>
+> Owner, reading the table: *"i saw before that the dispute is on that day , from now onward is the
+> date and needed the shift what item dispute also need to show ya , and database need have"*.
+>
+> The row carried the DAY (`dispute_date`), the BUCKET (`component`) and, since the picker went
+> single-select, the SHIFT (`receipt_refs`). It still could not say WHAT was wrong. A tips receipt holds
+> Tips, Booking commission and Havoc together, so *"tips on Tue 4 is wrong"* left the agency guessing
+> which of the three and the PR with no way to say.
+>
+> **0087** adds `payment_voucher_dispute.disputed_items` (jsonb, nullable):
+> `[{lineId, description, quantity, amount}]`. **Applied.** The table already had all four audit
+> columns, so none were added.
+>
+> ⚠️ **Not an FK, deliberately.** `PUT /payment-voucher/:id` deletes and re-inserts every line, so a
+> line id does not survive a voucher rewrite — an FK would go null and the record of what was disputed
+> would evaporate. Same reasoning that made `receipt_refs` store receipt NUMBERS. `lineId` is a
+> best-effort pointer; the description/quantity/amount keep the claim legible afterwards. It is a
+> SNAPSHOT, exactly as `disputed_amount` already is.
+>
+> ⚠️ **The client sends only `lineId`.** Description, quantity and amount are read from the DATABASE in
+> `resolveDisputeItems`, scoped by voucher + date + bucket. A claimant who could post their own
+> `"amount": "999.00"` would be writing the very figure their claim is measured against. Verified: tips
+> line ids requested under `drinks` resolve to **0 rows**.
+>
+> **The narrowest thing named wins** — items, else the receipt, else the whole cell. Verified live:
+> naming the three tips lines gives `disputedAmount` **RM 365.50** against a RM 901.00 cell.
+>
+> The sheet asks **"Which item?"** after the shift, only when the receipt holds more than one — square
+> multi-select (one paper can have two wrong lines) against the round single-select shift radio above.
+> All start ticked, so "this whole receipt" costs no taps, and ticking them all sends nothing: that is
+> the same statement as naming none, stored as NULL rather than pretending a selection was made.
+> "What you disputed" lists the items, or says **"The whole receipt"**.
+>
+> Backend clean past its baseline; mobile clean above the ~11 pre-existing (checked with
+> `-p tsconfig.app.json`); 34 harness checks pass. **Backend restart required.**
+
 > **5 Aug 2026 — THE OPEN-CLAIM KEY IS THE SHIFT, NOT THE DAY (migration 0086).**
 >
 > Owner: *"remember the dispute make is make that shift drinks or tips dispute"*. This closes the gap I

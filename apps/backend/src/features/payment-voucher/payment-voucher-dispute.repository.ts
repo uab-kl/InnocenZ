@@ -1,4 +1,4 @@
-import { and, desc, eq, isNull, SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { logger } from '@/util/logger.js';
 import {
@@ -74,6 +74,58 @@ export class PaymentVoucherDisputeRepositoryClass {
    * accepted from the caller. Returns a fixed-2 string to match the numeric
    * column rather than carrying float error into a ledger.
    */
+  /**
+   * Resolve the line ids a claim names into the snapshot stored on it.
+   *
+   * Every field but the id comes from the DATABASE. The request supplies only
+   * `lineId`, so a claimant cannot write the description or the amount their own
+   * claim is measured against — the same reason `disputedAmount` is computed
+   * server-side rather than accepted.
+   *
+   * Scoped by voucher, date and the bucket's components, so an id belonging to
+   * another day, another bucket or another PR's voucher resolves to nothing
+   * instead of being recorded as though it were part of this claim.
+   */
+  async resolveDisputeItems(
+    voucherId: string,
+    disputeDate: string,
+    component: PaymentVoucherDisputeComponent,
+    lineIds: string[],
+  ): Promise<{ lineId: string; description: string; quantity: number; amount: string }[]> {
+    const ids = [...new Set(lineIds.filter((id) => id.trim().length > 0))];
+    if (ids.length === 0) return [];
+    try {
+      const wanted = LINE_COMPONENTS_FOR[component];
+      const rows = await db
+        .select({
+          id: PaymentVoucherLineTable.id,
+          description: PaymentVoucherLineTable.description,
+          quantity: PaymentVoucherLineTable.quantity,
+          amount: PaymentVoucherLineTable.amount,
+          component: PaymentVoucherLineTable.component,
+        })
+        .from(PaymentVoucherLineTable)
+        .where(
+          and(
+            eq(PaymentVoucherLineTable.voucherId, voucherId),
+            eq(PaymentVoucherLineTable.lineDate, disputeDate),
+            inArray(PaymentVoucherLineTable.id, ids),
+          ),
+        );
+      return rows
+        .filter((r) => (r.component === null ? component === 'others' : wanted.includes(r.component)))
+        .map((r) => ({
+          lineId: r.id,
+          description: r.description,
+          quantity: r.quantity,
+          amount: r.amount,
+        }));
+    } catch (error) {
+      logger.error('[PaymentVoucherDisputeRepository.resolveDisputeItems] Error:', error);
+      return [];
+    }
+  }
+
   async sumLinesFor(
     voucherId: string,
     disputeDate: string,

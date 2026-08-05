@@ -308,6 +308,18 @@ export const PaymentVoucherDisputeTable = MainSchema.table('payment_voucher_disp
   proofPhotos: jsonb('proof_photos').$type<string[]>(),
   /** Receipts pointed at, by the reference packed in line.ref — not line id. */
   receiptRefs: jsonb('receipt_refs').$type<string[]>(),
+  /**
+   * WHICH ITEMS the claim names (migration 0087) — a SNAPSHOT, in the same
+   * spirit as `disputedAmount`: what the PR pointed at when they pointed at it.
+   *
+   * Not an FK to payment_voucher_line: `update()` deletes and re-inserts every
+   * line on a voucher, so a line id does not survive a rewrite. `lineId` is a
+   * best-effort pointer; description/quantity/amount are what keep the claim
+   * legible afterwards. NULL = the whole receipt, or a row predating the column.
+   */
+  disputedItems: jsonb('disputed_items').$type<
+    { lineId: string; description: string; quantity: number; amount: string }[]
+  >(),
   outcome: paymentVoucherDisputeOutcomeEnum('outcome'),
   resolvedAt: timestamp('resolved_at', { withTimezone: true }),
   resolvedBy: varchar('resolved_by'),

@@ -610,6 +610,13 @@
       "when": 1786100000000,
       "tag": "0086_one_open_dispute_per_shift",
       "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1786200000000,
+      "tag": "0087_dispute_items",
+      "breakpoints": true
     }
   ]
 }

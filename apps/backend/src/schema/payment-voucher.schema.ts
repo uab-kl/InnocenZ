@@ -167,6 +167,19 @@ export const PrRaiseDisputeSchema = z.object({
   claimedAmount: z.number().nonnegative().optional(),
   /** Receipts pointed at, by their packed ref — never a voucher line id. */
   receiptRefs: z.array(z.string().min(1)).optional(),
+  /**
+   * WHICH ITEMS on that receipt are wrong — "Lemon Drop", not just "drinks".
+   *
+   * Only the id is accepted. The description, quantity and amount stored in
+   * `disputed_items` are read from the DATABASE, never from this payload: a
+   * claimant who could type their own `"amount": "999.00"` into the record would
+   * be writing the very figure their claim is measured against.
+   *
+   * Omit to dispute the whole receipt.
+   */
+  items: z
+    .array(z.object({ lineId: z.string().uuid('lineId must be a voucher line id') }))
+    .optional(),
 });
 
 export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;

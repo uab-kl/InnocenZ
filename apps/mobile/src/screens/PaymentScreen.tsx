@@ -476,8 +476,33 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setDisputePickedReceipt(disputeReceipts.length === 1 ? disputeReceipts[0].receiptNo : null);
   }, [disputeReceipts]);
 
+  /** The item lines on the chosen shift's receipt — what "which item?" offers. */
+  const disputeItems = useMemo(() => {
+    if (!disputeTarget || !disputePickedReceipt) return [];
+    const week = disputeTarget.week === 'last' ? lastWeek : current;
+    const evidence = buildCellEvidence(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    const receipt = evidence.groups
+      .flatMap((g) => g.receipts)
+      .find((r) => r.receiptNo === disputePickedReceipt);
+    return (receipt?.lines ?? []).map((l) => ({
+      id: l.id,
+      label: `${l.item} × ${l.quantity} · ${formatRM(l.commission)}`,
+    }));
+  }, [disputeTarget, disputePickedReceipt, lastWeek, current]);
+
+  const [disputePickedItems, setDisputePickedItems] = useState<string[]>([]);
+  /*
+   * Every item ticked when the shift changes. Disputing a whole receipt is the
+   * common case and should cost nothing; narrowing to one line is the exception.
+   */
+  useEffect(() => {
+    setDisputePickedItems(disputeItems.map((i) => i.id));
+  }, [disputeItems]);
+
   /** A chooser was shown and the PR has not answered it yet. */
-  const noReceiptPicked = disputeReceipts.length > 0 && disputePickedReceipt === null;
+  const noReceiptPicked =
+    (disputeReceipts.length > 0 && disputePickedReceipt === null) ||
+    (disputeItems.length > 1 && disputePickedItems.length === 0);
 
   const disputePickedSubtotal = useMemo(
     () => disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.subtotal ?? 0,
@@ -533,6 +558,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                * not a deliberate claim against the whole day.
                */
               receiptRefs: disputePickedReceipt ? [disputePickedReceipt] : undefined,
+              /*
+               * Sent only when the PR NARROWED to some of the receipt's items.
+               * Ticking them all means "this whole receipt", which the row
+               * records as a null `disputed_items` — the same statement, stored
+               * without pretending a selection was made.
+               */
+              items:
+                disputePickedItems.length > 0 &&
+                disputePickedItems.length < disputeItems.length
+                  ? disputePickedItems.map((lineId) => ({ lineId }))
+                  : undefined,
             });
       const next = result.voucher;
       // Reflect the persisted state so the grid + header pill update immediately
@@ -1125,6 +1161,25 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               <Text style={styles.claimShiftMeta}>
                                 In {shortStamp(s.checkInAt)} · Out {shortStamp(s.checkOutAt)}
                               </Text>
+                              {/*
+                                * WHAT was claimed, from the snapshot taken when
+                                * it was raised — so it still reads correctly
+                                * after the agency corrects the receipt. Absent
+                                * means the whole receipt, which is said out loud
+                                * rather than left to be inferred from silence.
+                                */}
+                              {d.disputedItems?.length ? (
+                                d.disputedItems.map((it) => (
+                                  <Text key={it.lineId} style={styles.claimItem}>
+                                    {it.description} × {it.quantity} ·{' '}
+                                    {formatRM(Number(it.amount ?? 0))}
+                                  </Text>
+                                ))
+                              ) : (
+                                <Text style={styles.claimShiftMeta}>
+                                  The whole receipt
+                                </Text>
+                              )}
                             </View>
                           ))
                         ) : (
@@ -1323,6 +1378,56 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         ? 'Pick the shift you are disputing.'
                         : `Disputing ${formatRM(disputePickedSubtotal)} of this day's ${formatRM(disputeTarget?.amount ?? 0)}.`}
                     </Text>
+                  </>
+                )}
+
+                {/*
+                  * WHICH ITEM on that shift's receipt.
+                  *
+                  * Shown once a shift is chosen and it carries more than one
+                  * item. A tips receipt holds Tips, Booking commission and Havoc
+                  * together, so "tips on Tue 4 is wrong" left the agency to guess
+                  * which of the three — and the PR with no way to say.
+                  *
+                  * MULTI-select here, unlike the shift above: one paper can
+                  * genuinely have two wrong lines, and they are one argument
+                  * about one receipt. All start ticked, so the common "this whole
+                  * receipt is wrong" needs no extra taps.
+                  */}
+                {disputeItems.length > 1 && (
+                  <>
+                    <Text style={styles.fieldLabel}>Which item?</Text>
+                    <View style={styles.presetWrap}>
+                      {disputeItems.map((it) => {
+                        const on = disputePickedItems.includes(it.id);
+                        return (
+                          <Pressable
+                            key={it.id}
+                            style={[styles.rcptChip, on ? styles.rcptChipOn : styles.rcptChipOff]}
+                            onPress={() =>
+                              setDisputePickedItems((prev) =>
+                                prev.includes(it.id)
+                                  ? prev.filter((x) => x !== it.id)
+                                  : [...prev, it.id],
+                              )
+                            }
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: on }}
+                          >
+                            <View style={[styles.rcptSquare, on && styles.rcptSquareOn]} />
+                            <Text
+                              style={[styles.rcptChipText, on && styles.rcptChipTextOn]}
+                              numberOfLines={1}
+                            >
+                              {it.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {disputePickedItems.length === 0 && (
+                      <Text style={styles.pickedHint}>Pick at least one item.</Text>
+                    )}
                   </>
                 )}
 
@@ -1630,6 +1735,15 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     backgroundColor: C.accent,
   },
+  /* SQUARE for items — they are multi-select, unlike the round shift radio. */
+  rcptSquare: {
+    width: 15,
+    height: 15,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: C.muted2,
+  },
+  rcptSquareOn: { borderColor: C.accent, backgroundColor: C.accent },
   rcptChipText: {
     flex: 1,
     fontFamily: F.sora,
@@ -1669,6 +1783,7 @@ const styles = StyleSheet.create({
   },
   claimShiftHead: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.accentL },
   claimShiftMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
+  claimItem: { marginTop: 3, fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
   claimNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
   claimAnswer: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.goldL },
   /** Voucher-level DISPUTED chip in the This-week card header. */

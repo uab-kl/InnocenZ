@@ -893,6 +893,14 @@ export type PrWeekDispute = {
    * shift(s) they picked.
    */
   receiptRefs: string[] | null;
+  /**
+   * WHICH ITEMS the claim names — "Lemon Drop", not just "drinks".
+   *
+   * A snapshot taken when the claim was raised, so it still reads correctly
+   * after the agency edits the receipt or the voucher is rewritten. Null means
+   * the whole receipt was claimed, or the row predates the column.
+   */
+  disputedItems: { lineId: string; description: string; quantity: number; amount: string }[] | null;
   /** null = STILL OPEN. Otherwise the agency has answered. */
   outcome: 'accepted' | 'rejected' | 'withdrawn' | null;
   resolvedAt: string | null;
@@ -1172,6 +1180,14 @@ export function raiseMyDispute(
      * SAME order number, and telling those two apart is the whole point.
      */
     receiptRefs?: string[];
+    /**
+     * WHICH ITEMS on that receipt are wrong. Only the id is sent — the server
+     * reads the description, quantity and amount from the database, so the
+     * figure a claim is measured against is never client-supplied.
+     *
+     * Omit to dispute the whole receipt.
+     */
+    items?: { lineId: string }[];
   },
 ): Promise<PrDisputeResult> {
   return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute`, {
