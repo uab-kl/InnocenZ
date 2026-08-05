@@ -939,6 +939,29 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — EVERY SHIFT IS LISTED IN THE PICKER, INCLUDING THE ONES NOT YET CHOOSABLE (`c88e319`).**
+>
+> Owner: *"this is correct 2 different shift , different dispute , but why in the drink no seperate
+> shift ?"*
+>
+> Drinks has two shifts as well. One of its receipts was `pending` after an agency edit, and the
+> previous commit **filtered non-disputable shifts out of the picker** — so with one left the picker
+> collapsed and DISAPPEARED, sending Drinks straight to Quick reason while Tips showed two shifts. The
+> PR could not tell whether the second shift was missing, merged, or simply not offered.
+>
+> ⚠️ **Same mistake as the vanished Dispute button earlier today**, and I had written the reasoning down
+> as though it were a virtue: *"filtered rather than disabled, so everything shown is choosable"*.
+> Shown-but-unavailable states why. Hidden states nothing.
+>
+> Every shift in the cell is listed now; the ones that cannot be chosen are dimmed (opacity 0.45),
+> `disabled`, and carry the reason ON the chip — *"· waiting on your agency"* — with the same text in
+> `accessibilityLabel`. Auto-select counts only the CHOOSABLE ones, so a single available shift is still
+> picked for the PR and two or more still require them to say which; Submit stays blocked when none can
+> be chosen.
+>
+> Mobile clean above the ~11 pre-existing (`-p tsconfig.app.json`); 37 harness checks pass. No backend
+> change, no migration.
+
 > **5 Aug 2026 — DISPUTABILITY IS PER SHIFT, AND A SETTLED SHIFT CAN STILL BE ARGUED.**
 >
 > Owner: *"after verified or solve dispute still can dispute again , and the 'SETTLED' need can choose
