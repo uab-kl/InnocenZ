@@ -991,6 +991,19 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 (f) — A DESIGN REQUEST IS NOT A CONTENT REQUEST.**
+>
+> Owner: *"i specifically said make the design better so why did you add more shifts?"*
+>
+> In (d) I tightened the shift-history rows and then, because the rows were now shorter, raised the card
+> from **3 shifts to 5**. Nobody asked for that. How many shifts an agency sees is **content** — a
+> product decision that belongs to the owner — while spacing, hierarchy and alignment are the styling
+> that was actually requested. Reverted to 3; the density and layout work stands.
+>
+> The rule: **"make it look better" grants no licence over what is shown.** Freed-up space is not a
+> mandate to fill it. Widening scope is the same fault as narrowing it — either way the deliverable
+> stopped matching the ask, and the owner had to notice rather than being told.
+
 > **5 Aug 2026 (e) — RECORDED, NOT COMMITTED: Post Job picker work appeared in the tree mid-session.**
 >
 > `post-job-fields.tsx` (+72/−59) and a new `use-outlet-pr-pool.ts` showed up in the worktree after

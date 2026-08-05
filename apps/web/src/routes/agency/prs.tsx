@@ -74,8 +74,8 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
-/** Tighter rows fit more shifts in the same card than the old 3 did. */
-const SHIFT_HISTORY_ROWS = 5;
+/** How many shifts the card shows. Content, not styling — leave it at 3. */
+const SHIFT_HISTORY_ROWS = 3;
 
 const KPI_TIER_OPTIONS = ["A", "B", "C"] as const;
 const TRAINING_TIER_OPTIONS = [
