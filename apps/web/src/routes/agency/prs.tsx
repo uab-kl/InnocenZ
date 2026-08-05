@@ -19,7 +19,10 @@ import {
 	canGeneratePortfolioComcard,
 	PortfolioGalleryTile,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
-import { useAgencyPrShiftHistory } from "@agency-portal/hooks/use-agency-pr-shift-history";
+import {
+	shiftOutcomeLabel,
+	useAgencyPrShiftHistory,
+} from "@agency-portal/hooks/use-agency-pr-shift-history";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
 import {
 	type AgencyRating,
@@ -626,8 +629,11 @@ function AgencyPrDetail({
 				? backendShiftHistory.rows
 				: shiftHistoryForPr(shiftHistory, detail.id).map((h) => ({
 						id: h.id,
+						dateIso: h.dateIso ?? "",
 						dateDisplay: h.dateDisplay,
 						outlet: h.outlet,
+						// Demo rows are a sealed log — every one of them was worked.
+						status: "completed" as const,
 					})),
 		[
 			backendShiftHistory.backed,
@@ -1178,14 +1184,32 @@ function AgencyPrDetail({
 						}
 					>
 						<IzCard flat>
-							{shiftRows.slice(0, 3).map((h) => (
-								<p
-									key={h.id}
-									className="iz-tiny iz-muted border-t border-[var(--iz-line)] py-2 first:border-0 first:pt-0"
-								>
-									{h.dateDisplay} · {h.outlet}
-								</p>
-							))}
+							{shiftRows.slice(0, 3).map((h) => {
+								const outcome = shiftOutcomeLabel(h.status);
+								return (
+									<div
+										key={h.id}
+										className="flex items-baseline justify-between gap-3 border-t border-[var(--iz-line)] py-2 first:border-0 first:pt-0"
+									>
+										<span className="flex min-w-0 items-baseline gap-1.5">
+											<span className="iz-sm truncate text-pretty text-[var(--iz-txt)]">
+												{h.outlet}
+											</span>
+											{outcome && (
+												<IzPill
+													variant={outcome.tone}
+													className="shrink-0 !py-0.5 !text-[9px]"
+												>
+													{outcome.label}
+												</IzPill>
+											)}
+										</span>
+										<span className="iz-tiny iz-muted2 shrink-0 tabular-nums">
+											{h.dateDisplay}
+										</span>
+									</div>
+								);
+							})}
 							{/* An empty card reads as "broken"; say which it is. Payout is
 							    omitted on purpose — see useAgencyPrShiftHistory. */}
 							{shiftRows.length === 0 && (

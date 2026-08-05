@@ -970,6 +970,35 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 (c) — A DESIGN PASS THAT FOUND TWO THINGS THE LIST WAS SAYING WRONG.**
+>
+> Owner asked to *"help me make the design better"* on the now-working Shift history card. The screenshot
+> showed three flat rows, two of them reading **identically** (`Aug 5, 2026 · Emhub Testing` twice).
+>
+> Polish applied: outlet promoted to the primary text and the date demoted to muted **`tabular-nums`** so
+> dates align down the column; `text-pretty` + `truncate` on venue names; row switched from a `<p>` to a
+> baseline-aligned flex row.
+>
+> **But two of the fixes are not cosmetic, and they only surfaced because the design was looked at:**
+>
+> 1. **A no-show rendered identically to a worked shift.** The **Suspend** and **Detach** buttons sit
+>    directly below this list — an unmarked absence reads as attendance to whoever is deciding. Rows now
+>    carry an outcome pill (No-show / Cancelled / Leave / Leave pending). Clean shifts stay **unlabelled
+>    on purpose**: marking everything is the same as marking nothing. This is also what distinguishes the
+>    two identical-looking rows — and two shifts in one day at one venue is legitimate (a PR may work
+>    several), so the duplicate look was never a rendering bug, it was missing information.
+> 2. **"Shift history" was listing shifts nobody had worked yet.** `GET /shift-assignment` returns every
+>    assignment including next week's roster, so future `assigned`/`confirmed` rows appeared under a
+>    heading that claims the past. Now cut at today. **This was mine, introduced in (b)** — the read was
+>    correct and the framing was not.
+>
+> The rule: *a list titled History that contains the future is a correctness bug wearing a design
+> complaint's clothes.* Both faults were invisible while the card was blank, and neither showed up in a
+> typecheck.
+>
+> `apps/web` at its 120 baseline, biome clean. **Still not live-fired** — the screenshot is the owner's,
+> so the READ is confirmed working end to end; the pills and the today-cut are not yet seen running.
+
 > **5 Aug 2026 (b) — SHIFT HISTORY WIRED, AND THE PAYOUT LEFT EMPTY ON PURPOSE.**
 >
 > Owner: *"so the shift history display is it a read function or are you going end up editing the

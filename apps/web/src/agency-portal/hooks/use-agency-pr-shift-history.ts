@@ -2,7 +2,10 @@ import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchShiftAssignments } from "@/services/shift-assignment";
+import {
+	fetchShiftAssignments,
+	type ShiftAssignmentStatus,
+} from "@/services/shift-assignment";
 
 /**
  * One worked shift as the Manage-PR detail card renders it.
@@ -19,6 +22,32 @@ export interface PrShiftHistoryRow {
 	outlet: string;
 	/** Sort key; the display string is not sortable. */
 	dateIso: string;
+	status: ShiftAssignmentStatus;
+}
+
+/**
+ * How a shift ENDED, for the rows where that is not "worked normally".
+ *
+ * A no-show rendered identically to a completed shift is not a cosmetic
+ * problem: the Suspend and Detach buttons sit directly below this list, so an
+ * unmarked absence reads as attendance to whoever is deciding. Clean shifts stay
+ * unlabelled — marking everything is the same as marking nothing.
+ */
+export function shiftOutcomeLabel(
+	status: ShiftAssignmentStatus,
+): { label: string; tone: "red" | "amber" } | null {
+	switch (status) {
+		case "no_show":
+			return { label: "No-show", tone: "red" };
+		case "cancelled":
+			return { label: "Cancelled", tone: "red" };
+		case "leave_approved":
+			return { label: "Leave", tone: "amber" };
+		case "leave_pending":
+			return { label: "Leave pending", tone: "amber" };
+		default:
+			return null;
+	}
 }
 
 function displayDate(iso: string): string {
@@ -67,8 +96,14 @@ export function useAgencyPrShiftHistory(
 
 	const rows = useMemo<PrShiftHistoryRow[]>(() => {
 		const assignments = query.data?.data ?? [];
+		// `GET /shift-assignment` returns every assignment, including ones rostered
+		// for NEXT week. A section titled "Shift history" that lists shifts nobody
+		// has worked yet is lying about what it is, so cut at today.
+		const todayIso = new Date().toLocaleDateString("en-CA");
 		return assignments
-			.filter((a) => Boolean(a.shiftDate))
+			.filter(
+				(a) => Boolean(a.shiftDate) && (a.shiftDate as string) <= todayIso,
+			)
 			.map((a) => ({
 				id: a.id,
 				dateIso: a.shiftDate as string,
@@ -76,6 +111,7 @@ export function useAgencyPrShiftHistory(
 				// A shift whose outlet row is missing still happened — name it rather
 				// than dropping the row and under-reporting what the PR worked.
 				outlet: a.outletName?.trim() || "Unknown outlet",
+				status: a.status,
 			}))
 			.sort((a, b) => (a.dateIso < b.dateIso ? 1 : -1));
 	}, [query.data]);
