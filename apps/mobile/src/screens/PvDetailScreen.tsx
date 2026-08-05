@@ -366,6 +366,20 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         </Pressable>
       </View>
 
+      {/*
+        * The BODY scrolls; only the back row above stays fixed.
+        *
+        * The root was a plain View, so this screen had NO vertical scroll at
+        * all — everything past one screen height (net payable, records,
+        * signature, the Sign button itself) was simply clipped, on the web
+        * frame and on device alike. It survived because the content used to be
+        * shorter than a phone. Bottom padding is the device inset, per the
+        * flexible-UI rule.
+        */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}
+      >
       <View style={styles.statusRow}>
         <Pill variant={anyDisputed ? 'red' : isSealed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
           {anyDisputed ? 'Dispute open' : isSealed ? pv.statusLabel : 'Pending your review'}
@@ -606,6 +620,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
           <Text style={styles.softText}>View in History · Payment history</Text>
         </Pressable>
       )}
+      </ScrollView>
 
       {/* Receipt details sheet */}
       <Modal

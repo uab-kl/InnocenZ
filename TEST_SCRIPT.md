@@ -939,6 +939,23 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE PV DOCUMENT SCREEN HAD NO VERTICAL SCROLL AT ALL.**
+>
+> Owner: *"see the web view and the mobile device view also cannot scroll ?"* — on PvDetailScreen, both
+> surfaces.
+>
+> Not the responder trap this time: the screen's root was a plain `View` with **no vertical ScrollView
+> anywhere** — the only ScrollView in the file was the HORIZONTAL week grid. Everything past one screen
+> height (net payable, records, signature, the **Sign payment voucher** button itself) was simply
+> clipped. It survived this long because the content used to be shorter than a phone; the moment the
+> voucher grew, the sign button became unreachable — a screen whose whole purpose is signing.
+>
+> The body now scrolls (back row stays fixed), with bottom padding `24 + insets.bottom` per the
+> flexible-UI rule. ⚠️ PvDetailScreen's three SHEETS still carry the Pressable-over-ScrollView trap —
+> that stays in the §9 sweep; this change is the page body only.
+>
+> Mobile clean above the ~11 pre-existing. No backend change.
+
 > **5 Aug 2026 — SHEETS PAD FOR THE PHONE'S OWN NAV BAR (safe-area insets, and a standing rule).**
 >
 > Owner, on the device: *"now my close button touch or my phone original 3 , home or return button
