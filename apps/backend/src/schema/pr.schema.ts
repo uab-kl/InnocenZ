@@ -15,6 +15,18 @@ export const CreatePrSchema = z.object({
   icNo: z.string().max(100, 'IC number is too long').optional(),
 });
 
+/**
+ * The agency Manage-PR editor's fields that do NOT live on the `pr` row.
+ *
+ * Two different homes, and the split is not cosmetic:
+ *   - identity (race, languages, dob, height, weight) is the PERSON, stored on
+ *     `user_profile` and shared with the PR's own portal;
+ *   - roster grading (place, yearsExp, kpiTier, payClass) is the PR *under this
+ *     agency*, stored on `agency_pr` (0089).
+ * Before this existed the editor collected all of them and the update route
+ * silently stripped every one — zod drops unknown keys and still returns 200,
+ * so the screen reported a save that never happened.
+ */
 export const UpdatePrSchema = CreatePrSchema.partial().extend({
   status: z.enum(prStatusValues).optional(),
   /**
@@ -22,6 +34,23 @@ export const UpdatePrSchema = CreatePrSchema.partial().extend({
    * controller clears it when the PR is accepted, so callers never have to.
    */
   rejectReason: z.string().max(500, 'Reason is too long').optional(),
+
+  // --- user_profile (requires the PR to have a linked user account) ---
+  race: z.string().max(100, 'Race is too long').optional(),
+  languages: z.array(z.string().min(1).max(50)).max(20, 'Too many languages').optional(),
+  /** ISO `YYYY-MM-DD`. The UI edits whole years of age; it sends the resolved DOB. */
+  dob: z
+    .string()
+    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD')
+    .optional(),
+  comcardHeightCm: z.number().int().min(140).max(220).optional(),
+  comcardWeightKg: z.number().int().min(35).max(120).optional(),
+
+  // --- agency_pr (this agency's own grading of the PR) ---
+  place: z.string().max(120, 'Place is too long').optional(),
+  yearsExp: z.number().int().min(0).max(40).optional(),
+  kpiTier: z.enum(['A', 'B', 'C']).optional(),
+  payClass: z.enum(['basic', 'commission_only']).optional(),
 });
 
 export type CreatePrInput = z.infer<typeof CreatePrSchema>;

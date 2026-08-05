@@ -182,6 +182,9 @@ export function ComcardGridVisual({
 					"iz-comcard-grid-visual iz-comcard-grid-visual--portfolio",
 					className,
 				)}
+				// Grid cards own the top-right corner for their Active/Inactive pill.
+				// The badge sat on top of it and hid the PR's status.
+				showBadge={false}
 			/>
 		);
 	}

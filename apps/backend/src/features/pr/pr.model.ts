@@ -1,4 +1,4 @@
-import { timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { integer, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { UserTable } from '@/features/user/user.model';
@@ -72,6 +72,16 @@ export const AgencyPrTable = MainSchema.table(
       .notNull()
       .references(() => PrTable.id, { onDelete: 'cascade' }),
     approveStatus: agencyPrApproveStatusEnum('approve_status').notNull().default('pending'),
+    // Roster-profile columns (0089). These describe the PR *under this agency* —
+    // where they work, how long they have done it, and how this agency grades and
+    // pays them — so a PR on two rosters can hold two different values. They do
+    // not belong on `pr`, which holds the person.
+    place: varchar('place', { length: 120 }),
+    yearsExp: integer('years_exp'),
+    /** 'A' | 'B' | 'C' — validated in UpdatePrSchema, not by a pg enum. */
+    kpiTier: varchar('kpi_tier', { length: 8 }),
+    /** 'basic' | 'commission_only' — validated in UpdatePrSchema. */
+    payClass: varchar('pay_class', { length: 32 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),
@@ -107,8 +117,22 @@ export type PrProfile = {
   comcardWeightKg: number | null;
 };
 
-/** A `pr` row with the linked user's comcard profile folded in. */
-export type PrWithProfileType = PrType & { profile: PrProfile | null };
+/**
+ * How the PR's own agency grades them — the `agency_pr` half of the roster
+ * profile (0089). Null when the PR has no link row for that agency yet.
+ */
+export type PrRoster = {
+  place: string | null;
+  yearsExp: number | null;
+  kpiTier: string | null;
+  payClass: string | null;
+};
+
+/** A `pr` row with the linked user's comcard profile and roster grading folded in. */
+export type PrWithProfileType = PrType & {
+  profile: PrProfile | null;
+  roster: PrRoster | null;
+};
 
 export type PrFilter = {
   id?: string;

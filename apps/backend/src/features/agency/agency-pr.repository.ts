@@ -181,6 +181,45 @@ export class AgencyPrRepository {
     }
   }
 
+  /** The roster-profile columns an agency grades its own PR on (0089). */
+  async upsertRosterProfile(
+    agencyId: string,
+    prId: string,
+    patch: {
+      place?: string;
+      yearsExp?: number;
+      kpiTier?: string;
+      payClass?: string;
+    },
+    actor: string,
+  ): Promise<void> {
+    if (Object.keys(patch).length === 0) return;
+    try {
+      // A PR can exist on `pr` without an `agency_pr` row (rows created before
+      // the link table, or by a direct seed), so an UPDATE alone would write
+      // nothing and still report success. Insert-on-conflict covers both.
+      await db
+        .insert(AgencyPrTable)
+        .values({
+          agencyId,
+          prId,
+          ...patch,
+          createdBy: actor,
+          updatedBy: actor,
+        })
+        .onConflictDoUpdate({
+          target: [AgencyPrTable.agencyId, AgencyPrTable.prId],
+          // Only the supplied keys — never spread the whole row, or an omitted
+          // field would be nulled out. approve_status is deliberately absent:
+          // grading a PR must not silently approve or unapprove their join.
+          set: { ...patch, updatedAt: new Date(), updatedBy: actor },
+        });
+    } catch (error) {
+      logger.error('[AgencyPrRepository.upsertRosterProfile] Error:', error);
+      throw error;
+    }
+  }
+
   /** Every agency_pr row for one PR, whatever its approval state. */
   async listByPr(prId: string): Promise<AgencyPrType[]> {
     try {

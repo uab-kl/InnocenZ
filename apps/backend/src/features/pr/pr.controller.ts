@@ -3,6 +3,7 @@ import { PrRepositoryClass } from './pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
+import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { notify } from '@/features/notification/notify.js';
 import { Error } from '@/error/index';
@@ -26,6 +27,17 @@ const MAX_PAGE_SIZE = 100;
  */
 type Scope = { isAdmin: boolean; agencyId: string | null; outletIds: string[] };
 
+/**
+ * Drop the keys the caller did not send. `undefined` in a drizzle `.set()` is
+ * not "leave alone" everywhere, and an all-undefined object would still count
+ * as a patch and fire a pointless write.
+ */
+function pickDefined<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
+
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
   const pageSize = Math.min(MAX_PAGE_SIZE, Math.max(1, Number(req.query.pageSize) || DEFAULT_PAGE_SIZE));
@@ -41,6 +53,7 @@ export class PrControllerClass {
     private agencyPrRepository: AgencyPrRepository,
     private outletWorkspaceRepository: OutletWorkspaceRepositoryClass,
     private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
+    private userProfileRepository: UserProfileRepositoryClass,
   ) {}
 
   /**
@@ -242,9 +255,16 @@ export class PrControllerClass {
       // Agency users cannot move a PR to a different agency.
       if (!scope.isAdmin) delete data.agencyId;
 
+      // The editor's fields live in three tables. Peel the two non-`pr` groups
+      // off before the `pr` update — passing them through would throw on columns
+      // that do not exist there.
+      const { race, languages, dob, comcardHeightCm, comcardWeightKg, ...rest } = data;
+      const { place, yearsExp, kpiTier, payClass, ...prColumns } = rest;
+      const profilePatch = pickDefined({ race, languages, dob, comcardHeightCm, comcardWeightKg });
+      const rosterPatch = pickDefined({ place, yearsExp, kpiTier, payClass });
 
       const pr = await this.prRepository.update(id, {
-        ...data,
+        ...prColumns,
         // Acceptance clears any earlier decline reason — the writer's job, not
         // every caller's, so re-accepting someone previously declined cannot
         // leave a stale reason hanging off an active roster member.
@@ -252,6 +272,34 @@ export class PrControllerClass {
         updatedBy: getActor(req),
       });
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Identity lives on the person's own profile, shared with the PR portal.
+      // A PR with no linked account has nowhere to put it — say so rather than
+      // silently dropping it, which is the bug this whole change exists to fix.
+      if (Object.keys(profilePatch).length > 0) {
+        if (!pr.userId) {
+          return res.status(409).json({
+            success: false,
+            message: 'This PR has no linked user account, so profile details cannot be saved',
+            data: null,
+          });
+        }
+        const actor = getActor(req);
+        const existingProfile = await this.userProfileRepository.getByUserId(pr.userId);
+        if (!existingProfile) await this.userProfileRepository.createEmpty(pr.userId, actor);
+        await this.userProfileRepository.update(pr.userId, { ...profilePatch, updatedBy: actor });
+      }
+
+      // Roster grading belongs to the agency that owns the PR — never the
+      // caller's own agency id off the request, which an admin would not have.
+      if (Object.keys(rosterPatch).length > 0) {
+        await this.agencyPrRepository.upsertRosterProfile(
+          pr.agencyId,
+          pr.id,
+          rosterPatch,
+          getActor(req),
+        );
+      }
 
       // The agency's Approvals screen decides a sign-up by writing this status
       // ('active' = accepted, 'inactive' = rejected), so this transition IS the

@@ -19,5 +19,6 @@
 
 export const DEFAULT_PER_DRINK_RM = 120;
 export const DEFAULT_PER_TABLE_RM = 100;
+export const DEFAULT_PER_TIP_RM = 50;
 export const DEFAULT_DRINK_UNITS = 4;
 export const DEFAULT_TABLE_UNITS = 0.9;
