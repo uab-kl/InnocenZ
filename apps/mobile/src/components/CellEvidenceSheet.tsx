@@ -361,6 +361,16 @@ const s = StyleSheet.create({
     maxWidth: 392,
     width: '100%',
     alignSelf: 'center',
+    /*
+     * BOUNDED TO THE SCREEN, so the buttons stay reachable.
+     *
+     * Unbounded, a day with several shifts grew the sheet past the viewport and
+     * the last group ran underneath "Dispute this amount" / "Close" — content
+     * hidden behind the very controls meant to act on it. The list inside
+     * shrinks instead (see `scroll`), which is what makes the sheet scroll
+     * rather than overflow.
+     */
+    maxHeight: '90%',
   },
   title: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   total: {
@@ -380,7 +390,16 @@ const s = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.35)',
   },
   warnText: { fontFamily: F.manrope, fontSize: 12, color: C.red },
-  scroll: { marginTop: 12, maxHeight: 420 },
+  /*
+   * SHRINKS to whatever the sheet has left, rather than a fixed 420.
+   *
+   * A hard cap is wrong in both directions: on a tall phone it wasted half the
+   * screen, and on a short one the sheet still overflowed because the cap took
+   * no account of the header and buttons above and below it. `flexShrink` lets
+   * the list give way to them, so the scroll area is exactly the space that
+   * remains — on any screen.
+   */
+  scroll: { marginTop: 12, flexShrink: 1 },
   empty: {
     fontFamily: F.manrope,
     fontSize: 13,

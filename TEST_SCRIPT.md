@@ -939,6 +939,33 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE SHEETS SCROLL AND STOP HIDING THEIR OWN BUTTONS (first real-device pass).**
+>
+> Owner, on a physical phone: *"make sure no lag , can scroll , design the UI"*.
+>
+> **The sheets could grow past the screen.** Neither the evidence sheet nor the claim sheet was bounded,
+> so a day with two shifts pushed "Dispute this amount" and "Close" off the bottom — content hidden
+> behind the very controls meant to act on it, with no way to reach them. Both are now `maxHeight: '90%'`
+> with their list `flexShrink: 1`, so the list gives way to the header and buttons and the scroll area is
+> exactly the space that remains, on any screen.
+>
+> ⚠️ The evidence list had `maxHeight: 420`, wrong in BOTH directions: it wasted half a tall phone, and
+> on a short one the sheet still overflowed, because a fixed cap takes no account of the header and
+> buttons above and below it. A proportion of the sheet, not a number of pixels.
+>
+> **The claim sheet had no ScrollView at all** — two claims, each listing shift, items and a Cancel
+> button, simply ran off the end.
+>
+> **Lag:** `claimShifts` walks the whole week to rebuild a day's evidence, and it was being called THREE
+> times per claim row — once for the heading, once to test emptiness, once to map. Hoisted to one call
+> per claim.
+>
+> ⚠️ Still open (§9): proof photos render straight from their data-URIs at 64×64, so the decode cost is
+> the full captured image every time a sheet opens. That is the remaining device-side lag, and the fix
+> belongs at CAPTURE — resize before storing — not in the sheet.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
 > **5 Aug 2026 — 🔴 APPROVAL IS NO LONGER THE PRECONDITION (owner reverses decision #1).**
 >
 > Owner: *"make the already verified or dispute still can make disputed again and dont hide the words"*.

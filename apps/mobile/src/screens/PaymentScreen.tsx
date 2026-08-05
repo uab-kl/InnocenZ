@@ -1287,7 +1287,20 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <>
                     <Text style={styles.claimTitle}>What you disputed</Text>
                     <Text style={styles.claimDay}>{longDay(claimDay.dateIso)}</Text>
-                    {rows.map((d) => (
+                    {/*
+                      * SCROLLS, and shrinks so Close stays reachable — a day
+                      * with two claims, each listing its shift and items, ran
+                      * off the bottom of the sheet with no way down.
+                      *
+                      * `claimShifts` walks the WHOLE week to rebuild the day's
+                      * evidence, and it was called three times per row — once
+                      * for the heading, once to test emptiness, once to map.
+                      * Hoisted to one call per claim.
+                      */}
+                    <ScrollView style={styles.claimScroll} showsVerticalScrollIndicator={false}>
+                    {rows.map((d) => {
+                      const shifts = claimShifts(week, d);
+                      return (
                       <View key={d.id} style={styles.claimRow}>
                         <View style={styles.claimHead}>
                           <Text style={styles.claimComponent}>{labelOf(d.component)}</Text>
@@ -1330,13 +1343,13 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           * above the list is what stops the PR reading two rows
                           * as two separate claims.
                           */}
-                        {!d.receiptRefs?.length && claimShifts(week, d).length > 1 && (
+                        {!d.receiptRefs?.length && shifts.length > 1 && (
                           <Text style={styles.claimNote}>
                             Filed against the whole day — it covered both shifts below.
                           </Text>
                         )}
-                        {claimShifts(week, d).length > 0 ? (
-                          claimShifts(week, d).map((s) => (
+                        {shifts.length > 0 ? (
+                          shifts.map((s) => (
                             <View key={s.receiptNo} style={styles.claimShift}>
                               <Text style={styles.claimShiftHead}>
                                 {s.orderNo ?? 'No order no'} · {s.receiptNo}
@@ -1416,7 +1429,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           </Pressable>
                         )}
                       </View>
-                    ))}
+                      );
+                    })}
+                    </ScrollView>
                     <IzButton label="Close" variant="soft" onPress={() => setClaimDay(null)} />
                   </>
                 );
@@ -1997,6 +2012,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: C.prMuted,
   },
+  /** Gives way to the header and Close button, so the sheet never overflows. */
+  claimScroll: { marginTop: 4, flexShrink: 1 },
   claimTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   claimDay: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   claimRow: {
@@ -2116,6 +2133,14 @@ const styles = StyleSheet.create({
     maxWidth: 392,
     width: '100%',
     alignSelf: 'center',
+    /*
+     * Never taller than the screen. Shared by the dispute sheet and the claim
+     * sheet, both of which grow with the data — two shifts, seven reasons, a
+     * note box and a keyboard — and both of which put their primary button at
+     * the BOTTOM. Unbounded, that button leaves the viewport and the sheet
+     * becomes a dead end.
+     */
+    maxHeight: '90%',
   },
   sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
   sheetSub: {
