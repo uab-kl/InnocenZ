@@ -475,6 +475,16 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     if (!disputeTarget) return [];
     const week = disputeTarget.week === 'last' ? lastWeek : current;
     const evidence = buildCellEvidence(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    /*
+     * Which shifts already carry a LIVE claim. Matched on the receipt id (the FK
+     * a claim stores) or its number (pre-0088 claims), same as the evidence tags.
+     * A whole-day open claim blocks every shift beneath it.
+     */
+    const claims = receiptClaimState(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    const openClaimOn = (r: { receiptId: string | null; receiptNo: string | null }) =>
+      claims.openAll ||
+      (!!r.receiptId && claims.open.has(r.receiptId)) ||
+      (!!r.receiptNo && claims.open.has(r.receiptNo));
     return evidence.groups.flatMap((g) =>
       g.receipts
         .filter((r): r is typeof r & { receiptNo: string } => !!r.receiptNo)
@@ -497,15 +507,30 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           // off the paper — but it is never what gets stored.
           receiptId: r.receiptId,
           subtotal: r.subtotal,
-          /** Choosable? A receipt still awaiting review has no stated figure. */
-          disputable: receiptDisputable(r),
+          /**
+           * Choosable?
+           *
+           * TWO reasons it may not be, and they are different states:
+           * - the receipt is still awaiting review — no stated figure to argue
+           *   with yet;
+           * - a claim on it is ALREADY OPEN — the server allows one open claim
+           *   per shift (0086), so a second would come straight back a 409.
+           *
+           * An ANSWERED claim does NOT block: resolving a claim ends that claim,
+           * not the right to disagree again.
+           */
+          disputable: receiptDisputable(r) && !openClaimOn(r),
           // Order number first — it is what is printed on the paper in their
           // hand. The shift time disambiguates two logs of the same paper.
           label: `${r.orderNo ?? r.receiptNo} · ${formatRM(r.subtotal)}${
             g.shift?.slot ? ` · ${g.shift.slot}` : ''
           }`,
           /** Why it cannot be chosen — shown on the chip, never left to guess. */
-          blockedNote: receiptDisputable(r) ? null : 'waiting on your agency',
+          blockedNote: openClaimOn(r)
+            ? 'already disputed'
+            : receiptDisputable(r)
+              ? null
+              : 'waiting on your agency',
         })),
     );
   }, [disputeTarget, lastWeek, current]);
@@ -534,9 +559,19 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const evidenceDisputableCount = useMemo(() => {
     if (!evidenceTarget) return 0;
     const week = evidenceTarget.week === 'last' ? lastWeek : current;
+    // Excludes shifts already carrying an OPEN claim, exactly as the picker
+    // does — otherwise the button opens a sheet where nothing can be selected.
+    const claims = receiptClaimState(week, evidenceTarget.dateIso, evidenceTarget.incomeKey);
+    if (claims.openAll) return 0;
     return buildCellEvidence(week, evidenceTarget.dateIso, evidenceTarget.incomeKey)
       .groups.flatMap((g) => g.receipts)
-      .filter((r) => r.receiptNo && receiptDisputable(r)).length;
+      .filter(
+        (r) =>
+          r.receiptNo &&
+          receiptDisputable(r) &&
+          !(r.receiptId && claims.open.has(r.receiptId)) &&
+          !claims.open.has(r.receiptNo),
+      ).length;
   }, [evidenceTarget, lastWeek, current]);
 
   /** The item lines on the chosen shift's receipt — what "which item?" offers. */

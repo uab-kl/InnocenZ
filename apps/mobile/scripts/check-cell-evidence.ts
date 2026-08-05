@@ -363,6 +363,31 @@ check(
   'and the pending shift is not offered',
   mixed.filter(receiptDisputable).every((r) => r.receiptNo === 'RCP-OK'),
 );
+/*
+ * AN OPEN CLAIM BLOCKS ITS OWN SHIFT; AN ANSWERED ONE DOES NOT.
+ *
+ * The server allows one OPEN claim per shift (0086), so offering a shift that
+ * already has one produces a guaranteed 409. Answered is the opposite case and
+ * must stay open to a fresh claim — inverting these two is the easy mistake, so
+ * both directions are pinned.
+ */
+const openOnOk = receiptClaimState(
+  { ...mixedWeek, disputes: [{ ...claim(null), receiptRefs: ['RCP-OK'] }] },
+  DAY,
+  'drinks',
+);
+check('an OPEN claim marks its shift, blocking a second one', openOnOk.open.has('RCP-OK'));
+check('and does not mark the other shift', !openOnOk.open.has('RCP-PEND'));
+const answeredOnOk = receiptClaimState(
+  { ...mixedWeek, disputes: [{ ...claim('accepted'), receiptRefs: ['RCP-OK'] }] },
+  DAY,
+  'drinks',
+);
+check(
+  'an ANSWERED claim leaves its shift un-blocked (open set empty)',
+  answeredOnOk.open.size === 0 && answeredOnOk.settled.has('RCP-OK'),
+);
+
 check(
   'a shift whose earlier claim was answered can be disputed again',
   receiptDisputable(

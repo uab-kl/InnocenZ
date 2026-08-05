@@ -939,6 +939,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — A SHIFT WITH AN OPEN CLAIM IS NO LONGER OFFERED AGAIN.**
+>
+> Owner: *"this already disputed can dispute again"*.
+>
+> The picker knew whether a receipt had been REVIEWED but nothing about whether it was already being
+> ARGUED about. So a shift carrying an open claim sat there fully selectable, and submitting would have
+> come straight back a **409** from `0086`'s partial index — one open claim per shift.
+>
+> `receiptClaimState` now feeds the picker: a shift with a LIVE claim is dimmed and reads **"already
+> disputed"**; one still awaiting review reads **"waiting on your agency"**. Two different reasons, two
+> different notes — collapsing them into one "unavailable" would tell a PR to wait for the agency when
+> the real answer is that they have already asked. A whole-day open claim blocks every shift beneath it.
+>
+> **An ANSWERED claim does not block.** Resolving a claim ends that claim, not the right to disagree
+> again — which is what `0086` being partial exists for. Inverting those two is the easy mistake, so
+> both directions are pinned: *"an OPEN claim marks its shift, blocking a second one"* beside *"an
+> ANSWERED claim leaves its shift un-blocked"* and *"a shift whose earlier claim was answered can be
+> disputed again"*.
+>
+> `evidenceDisputableCount` got the same rule, so the **Dispute** button no longer opens a sheet in
+> which nothing can be selected.
+>
+> 40 harness checks pass; mobile clean above the ~11 pre-existing. No backend change — the server
+> already refused this; the app simply stops offering it.
+
 > **5 Aug 2026 — EVERY SHIFT IS LISTED IN THE PICKER, INCLUDING THE ONES NOT YET CHOOSABLE (`c88e319`).**
 >
 > Owner: *"this is correct 2 different shift , different dispute , but why in the drink no seperate
