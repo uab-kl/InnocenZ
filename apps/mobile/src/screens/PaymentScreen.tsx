@@ -479,12 +479,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       g.receipts
         .filter((r): r is typeof r & { receiptNo: string } => !!r.receiptNo)
         /*
-         * Only shifts that CAN be contested. A receipt still awaiting review is
-         * the PR's own claim, with no stated figure to argue with — offering it
-         * here would end in the server's refusal. Filtering rather than
-         * disabling keeps the choice honest: everything shown is choosable.
+         * EVERY shift in the cell is listed — including ones that cannot be
+         * chosen yet.
+         *
+         * Filtering them out was wrong: on a day where one drinks receipt was
+         * approved and the other still awaiting review, the picker collapsed to
+         * a single option and DISAPPEARED, so Drinks jumped straight to Quick
+         * reason while Tips showed two shifts. The PR could not tell whether the
+         * second shift was missing, merged, or simply not offered.
+         *
+         * Shown-but-unavailable states why. Hidden states nothing.
          */
-        .filter(receiptDisputable)
         .map((r) => ({
           receiptNo: r.receiptNo,
           // The FK the claim is actually filed against. `receiptNo` stays as the
@@ -492,11 +497,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           // off the paper — but it is never what gets stored.
           receiptId: r.receiptId,
           subtotal: r.subtotal,
+          /** Choosable? A receipt still awaiting review has no stated figure. */
+          disputable: receiptDisputable(r),
           // Order number first — it is what is printed on the paper in their
           // hand. The shift time disambiguates two logs of the same paper.
           label: `${r.orderNo ?? r.receiptNo} · ${formatRM(r.subtotal)}${
             g.shift?.slot ? ` · ${g.shift.slot}` : ''
           }`,
+          /** Why it cannot be chosen — shown on the chip, never left to guess. */
+          blockedNote: receiptDisputable(r) ? null : 'waiting on your agency',
         })),
     );
   }, [disputeTarget, lastWeek, current]);
@@ -507,9 +516,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    * extra taps to say what it already meant.
    */
   useEffect(() => {
-    // One receipt = nothing to choose, so choose it. More than one = the PR must
-    // say WHICH, and pre-selecting would put words in their mouth about money.
-    setDisputePickedReceipt(disputeReceipts.length === 1 ? disputeReceipts[0].receiptNo : null);
+    // ONE choosable shift = nothing to decide, so choose it. Two or more and the
+    // PR must say which — pre-selecting would put words in their mouth about
+    // money. Counted over the CHOOSABLE ones: a shift that cannot be picked is
+    // listed for explanation, not as an option.
+    const usable = disputeReceipts.filter((r) => r.disputable);
+    setDisputePickedReceipt(usable.length === 1 ? usable[0].receiptNo : null);
   }, [disputeReceipts]);
 
   /**
@@ -1481,14 +1493,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         return (
                           <Pressable
                             key={r.receiptNo}
-                            style={[styles.rcptChip, on ? styles.rcptChipOn : styles.rcptChipOff]}
+                            style={[
+                              styles.rcptChip,
+                              on ? styles.rcptChipOn : styles.rcptChipOff,
+                              !r.disputable && styles.rcptChipBlocked,
+                            ]}
                             // Tapping the chosen one again does NOT clear it: a
                             // dispute needs a shift, and an empty selection is
                             // not a state the PR can usefully be left in.
-                            onPress={() => setDisputePickedReceipt(r.receiptNo)}
+                            onPress={() => r.disputable && setDisputePickedReceipt(r.receiptNo)}
+                            disabled={!r.disputable}
                             accessibilityRole="radio"
-                            accessibilityState={{ selected: on }}
-                            accessibilityLabel={`${r.label}${on ? ', selected' : ''}`}
+                            accessibilityState={{ selected: on, disabled: !r.disputable }}
+                            accessibilityLabel={`${r.label}${on ? ', selected' : ''}${
+                              r.blockedNote ? `, ${r.blockedNote}` : ''
+                            }`}
                           >
                             {/*
                               * A TICKED BOX, not a tinted outline.
@@ -1522,6 +1541,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               numberOfLines={1}
                             >
                               {r.label}
+                              {r.blockedNote ? ` · ${r.blockedNote}` : ''}
                             </Text>
                           </Pressable>
                         );
@@ -1869,6 +1889,8 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     backgroundColor: 'rgba(255,255,255,0.02)',
   },
+  /* Listed but not choosable: visibly inert, and the chip says why. */
+  rcptChipBlocked: { opacity: 0.45 },
   /* Round, because the choice is exclusive — a square reads as "tick many". */
   rcptBox: {
     width: 17,
