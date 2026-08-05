@@ -144,7 +144,8 @@ export function CellEvidenceSheet({
   const claimOf = (r: {
     receiptId: string | null;
     receiptNo: string | null;
-  }): 'open' | 'accepted' | 'rejected' | null => {
+    pending: boolean;
+  }): 'open' | 'verified' | 'settled' | null => {
     if (!claims) return null;
     // Matched on the receipt ID (the FK a claim stores since 0088) OR its number
     // (what pre-0088 claims recorded as text). Either identifies the same paper.
@@ -152,19 +153,27 @@ export function CellEvidenceSheet({
       (!!r.receiptId && keys.has(r.receiptId)) || (!!r.receiptNo && keys.has(r.receiptNo));
     if (claims.openAll || hit(claims.open)) return 'open';
     /*
-     * The OUTCOME, not merely "settled".
+     * SETTLED → DISPUTED → VERIFIED, per shift — the same lifecycle the day
+     * status uses, applied to one receipt.
      *
-     * One green SETTLED tag answered "has this been dealt with?" and left "and
-     * what was decided?" unanswered — which is most of what a PR wants to know
-     * when they open this. ACCEPTED and REJECTED are different futures: one
-     * means the money is being corrected, the other means it stands and the
-     * argument is over.
+     *   SETTLED   the agency approved it and nobody argued
+     *   DISPUTED  a claim on THIS shift is open
+     *   VERIFIED  a claim on THIS shift was raised and answered
+     *
+     * The point is the contrast: after one shift's claim is resolved it reads
+     * VERIFIED while the untouched shift beside it still reads SETTLED, so the
+     * PR can see at a glance which one they took up and how it ended.
+     *
+     * A receipt still awaiting review is neither — its row already says
+     * "waiting on your agency", and calling that settled would claim a decision
+     * nobody has made.
      */
-    const settled =
+    const answered =
       (r.receiptId && claims.settled.get(r.receiptId)) ||
       (r.receiptNo && claims.settled.get(r.receiptNo)) ||
       claims.settledAll;
-    return settled ?? null;
+    if (answered) return 'verified';
+    return r.pending ? null : 'settled';
   };
 
   /*
@@ -254,13 +263,13 @@ export function CellEvidenceSheet({
                         * go looking for the answer.
                         */}
                       {claimOf(receipt) === 'open' && (
-                        <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTE OPEN</Text>
+                        <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTED</Text>
                       )}
-                      {claimOf(receipt) === 'accepted' && (
-                        <Text style={[s.claimTag, s.claimTagSettled]}>DISPUTE ACCEPTED</Text>
+                      {claimOf(receipt) === 'verified' && (
+                        <Text style={[s.claimTag, s.claimTagSettled]}>VERIFIED</Text>
                       )}
-                      {claimOf(receipt) === 'rejected' && (
-                        <Text style={[s.claimTag, s.claimTagRejected]}>DISPUTE REJECTED</Text>
+                      {claimOf(receipt) === 'settled' && (
+                        <Text style={[s.claimTag, s.claimTagPlain]}>SETTLED</Text>
                       )}
                     </View>
                     <Text style={s.receiptMeta}>
@@ -412,10 +421,15 @@ const s = StyleSheet.create({
     backgroundColor: C.redBg,
     borderColor: 'rgba(240,138,138,0.35)',
   },
-  claimTagRejected: {
-    color: C.amber,
-    backgroundColor: C.amberBg,
-    borderColor: 'rgba(232,198,106,0.35)',
+  /*
+   * SETTLED is the QUIET state — approved, unargued, nothing to do. It is
+   * neutral rather than green so the eye lands on VERIFIED and DISPUTED, which
+   * are the two the PR actually acted on.
+   */
+  claimTagPlain: {
+    color: C.muted2,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: C.line,
   },
   claimTagSettled: {
     color: C.green,
