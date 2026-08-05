@@ -304,32 +304,21 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ UNCOMMITTED IN THE TREE, NOT MINE — Post Job PR picker (5 Aug 2026)
+### ▶ RESOLVED — the "NOT MINE" Post Job picker was a concurrent session's IN-FLIGHT work (5 Aug 2026)
 
-Appeared in the worktree DURING the Manage-PR session, after commit `3582d52`:
+This entry used to read *"uncommitted in the tree, not mine"* and asked its owner to finish it. It was
+being written **as that entry was authored** — same worktree, same afternoon. It is now complete and
+live-verified; see §10 (h).
 
-- `apps/web/src/agency-portal/components/outlet/post-job-fields.tsx` (modified, +72/−59)
-- `apps/web/src/agency-portal/hooks/use-outlet-pr-pool.ts` (new, 99 lines)
-- `apps/web/src/routes/outlet/bookings.tsx` (modified — appeared LATER, while the entry above was
-  being committed, which is how the concurrent writer was noticed at all)
+The caution it recorded still stands and is the reason to keep this entry: ⚠️ **two writers were in
+this worktree at once on 5 Aug**, and `git status` changed underneath a staging step. What the entry
+got *wrong* is worth more than what it got right — it read a half-written diff and inferred a finished
+intent from it, then filed a to-do against a phantom owner. **A file that appears mid-session is not
+abandoned work; it may simply be work in progress.** Check for a live writer before filing, reverting,
+or "finishing" someone else's diff.
 
-⚠️ **Two writers were in this worktree at once on 5 Aug.** `git status` changed underneath a staging
-step. If work here looks half-finished or a file reverts unexpectedly, check what else is running
-before assuming a bug.
-
-**Left deliberately uncommitted — I did not author either file**, and committing another session's
-in-progress work under a message I would be inventing is the same mistake §9 already records for the
-4 Aug batch. Its owner should finish and commit it.
-
-What it appears to be, from reading the diff only: the Post Job "Select PRs" picker moving off demo
-language/rating helpers onto a real backend read. It imports `formatStars` from
-`lib/pr-rating-summary.ts` — **the module added in `3582d52`** — and its doc comment carries the same
-rule (*"`rating` is `null` for a PR this outlet has never rated. That is not the same as zero stars"*),
-so it postdates and builds on the Manage-PR work. It also **deletes `languagesForPrIds`** from
-`post-job-fields.tsx`; anything still importing that will break until it lands.
-
-- [ ] Owner to verify and commit. If it is abandoned, revert both files rather than leaving a
-  half-migrated picker — `post-job-fields.tsx` has already had its old helpers removed.
+- [x] Landed: `use-outlet-pr-pool.ts` (new) · `post-job-fields.tsx` · `routes/outlet/bookings.tsx`.
+  `languagesForPrIds` is deleted and its only two callers were updated in the same change.
 
 ### ▶ MANAGE-PR DETAIL — all 3 sections wired; SHIFT HISTORY deliberately has NO payout (5 Aug 2026)
 
@@ -996,6 +985,67 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 (h) — POST JOB: LANGUAGES BECOME AN ASK, AND THE PR PICKER FINALLY ASKS THE BACKEND.**
+>
+> Two complaints on one screen, and they turned out to share half a cause.
+>
+> **1. "Languages" was a read-out, not a request.** The field's options were
+> `collectAgencyPrLanguages(agencyPRs)` and its selection auto-filled from whoever was picked below —
+> so an outlet that wanted Mandarin on the floor could only say so by *first finding a PR who already
+> spoke it*. Backwards: the outlet is stating a preference for a shift that has not been staffed yet.
+> Now labelled **Preferred languages**, options are the full `PR_LANGUAGE_OPTIONS` list, selection is
+> `shift.langs` alone, and the hint says it outright — *"A plus, not a requirement — PRs who don't
+> speak these can still be assigned to the shift."*
+>
+> Worth recording that **nothing was ever restricting**: `shift.languages` is a `varchar(255)` that no
+> backend query and no auto-assign path reads. The restriction lived entirely in how the field
+> behaved. Also dropped the fallback in `bookings.tsx` that posted the *selected PRs'* languages when
+> the outlet had picked none — that shipped a request nobody had made.
+>
+> **2. "No PRs available to select" was a screen that had never been wired.** `DraftPrPicker` read the
+> demo store's `prs` slice, which a real login **blanks on purpose** (`buildBlankPortalReset`). So
+> every backed outlet saw an empty list that read as a rule about availability. New
+> `use-outlet-pr-pool.ts` fetches `GET /pr` (sharing `useOutletToday`'s query key) and the picker takes
+> them as `candidates`. **Live-proven:** `owner@velvet23.my` had **3 PRs the whole time** — Haziq
+> Iskandar, Nurul Aina, Vicky — returned by the API before any UI change, and now rendering.
+>
+> Two details the wiring forced: a backend PR carries **no rating**, so the card prints **"Not rated
+> yet"** rather than the `0★` a numeric default would have invented (real stars come from this
+> outlet's own `GET /rating` rows), and unrated PRs sort last by name instead of being ranked as if
+> they had scored zero. And where the pool is genuinely empty, `emptyHint` now says **why** — the
+> server pins an outlet to PRs who have worked at its own venues, so a new venue has nobody to name
+> yet and should just post the shift unnamed.
+>
+> **The shape of both bugs is the same:** a field that looked broken was a field reading the wrong
+> source, and in both cases the wrong source was the demo store that a real session deliberately
+> empties. Anything on a ported portal screen still reading `useStore` for *data* is a candidate.
+>
+> Files: `use-outlet-pr-pool.ts` (new) · `post-job-fields.tsx` · `routes/outlet/bookings.tsx`.
+> `tsc` 120 = baseline 120; biome 34 errors on the two touched files vs **36** at baseline.
+
+> **5 Aug 2026 (i) — MANAGE-PR CARD TEXT WAS TOO SMALL TO READ.**
+>
+> *(Relabelled from (h): a concurrent session claimed (h) for the Post Job entry while this was being
+> written. Two sessions appending to one changelog will collide — check the last letter before adding.)*
+>
+> Owner: *"increase the font size of these words as they are way too small right now and its hard to
+> read"*. `prototype-theme.css`, `.iz-pr-manage-card__*` only — those classes have exactly one consumer
+> (`ManagePrGridCard.tsx`), so the outlet portal imports the same sheet and is untouched.
+>
+> | | before | after |
+> |---|---|---|
+> | name | 14px | **16px** |
+> | rating (+ star) | 13px (12px) | **15px (14px)** |
+> | tier pill | 9px | **11px** |
+> | meta (languages) | 11px | **13px** |
+> | metric label | 10px | **12px** |
+> | metric value | 11px | **14px** |
+>
+> Two changes beyond scale, because the ask was *legibility*: the metric labels and the language line
+> moved `--iz-muted2` → `--iz-muted` (they were dim as well as small, and size alone would not have
+> fixed the contrast), and the rating + metric values got `tabular-nums` so `RM 0` / `0%` / `2.0` stop
+> shifting width between cards in a grid.
 
 > **5 Aug 2026 (g) — SHIFT HISTORY AS CELLS (the owner's fix, and the better one).**
 >
