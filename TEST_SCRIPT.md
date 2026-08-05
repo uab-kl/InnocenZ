@@ -939,6 +939,30 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — 🔴 THE SIGNING SCREEN'S DISPUTE SHEET WAS A FAKE (it never called the server).**
+>
+> Owner: *"why the daily wages still can make dispute ? and the format is different in the payment page
+> dispute ?"* — on PvDetailScreen, the screen where the PR prepares to sign.
+>
+> Both symptoms had one root: this screen's dispute flow predated everything built this week, and it was
+> worse than stale — **`submitDispute` toggled a local Set and never called the server.** A PR could
+> "dispute" while reviewing, watch the cell turn red, sign believing the claim was lodged, and the
+> agency would never hear of it. A fake claim on the very screen that asks for a signature.
+>
+> Wages were tappable because the sheet predated `kindDisputable`; the format differed because it WAS a
+> different (demo-era) sheet — no shift picker, no item picker, no reasons list shared with Payment.
+>
+> **Fix — one dispute flow for the whole app:** the fake sheet is DELETED. Cells are tappable only for
+> drinks/tips (`kindDisputable`), and a tap routes to **Payment → Last week**, where the real evidence
+> sheet, shift/item pickers and server call live. Review here, dispute there, come back and sign. Red
+> marks on this grid now derive from `openDisputeKeys(weekForGrid)` — the server's own open claims —
+> instead of the local toggle, and the "Dispute open" banner no longer prints a preset nobody chose.
+>
+> History (signed/paid) vouchers get no dispute affordance at all — the server refuses those states
+> anyway, so the old sheet was offering an action that could never land.
+>
+> Mobile clean above the ~11 pre-existing. No backend change.
+
 > **5 Aug 2026 — THE PV DOCUMENT SCREEN HAD NO VERTICAL SCROLL AT ALL.**
 >
 > Owner: *"see the web view and the mobile device view also cannot scroll ?"* — on PvDetailScreen, both
