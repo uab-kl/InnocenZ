@@ -49,6 +49,7 @@ import {
   weekDisputable,
 } from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
 import { ChevronDown, Flag, ImagePlus, Search, Wallet, XIcon } from '../components/icons';
@@ -209,6 +210,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const { openPv, route } = usePrNav();
   const { token } = useSession();
   const keyboardInset = useKeyboardInset();
+  // Device safe-area — pads every sheet past the 3-button / gesture nav bar.
+  const insets = useSafeAreaInsets();
   const { current, refresh: refreshEarnings } = usePrEarnings();
   const { isSigned } = useSignedPvs();
   const { width } = useViewportSize();
@@ -1283,7 +1286,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             */}
           <View style={styles.backdrop}>
             <Pressable style={styles.backdropTap} onPress={() => setClaimDay(null)} />
-            <View style={styles.sheet}>
+            <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
               {(() => {
                 const week = claimDay.week === 'last' ? lastWeek : current;
                 const { open, settled } = disputesForDay(week, claimDay.dateIso);
@@ -1531,7 +1534,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         <View style={styles.backdrop}>
           <Pressable style={styles.backdropTap} onPress={closeDispute} />
           <View
-            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
+            style={[
+              styles.sheet,
+              // Keyboard open: it already clears the nav bar, so its inset wins.
+              { paddingBottom: keyboardInset > 0 ? keyboardInset + 16 : 16 + insets.bottom },
+            ]}
           >
             <ScrollView
               keyboardShouldPersistTaps="handled"

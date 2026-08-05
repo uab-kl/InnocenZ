@@ -14,6 +14,7 @@
  */
 import React, { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
@@ -126,6 +127,13 @@ export function CellEvidenceSheet({
 }) {
   /** The receipt photo being viewed full-size, or null. */
   const [zoom, setZoom] = useState<string | null>(null);
+  /*
+   * The DEVICE's bottom inset, not a guessed constant. A fixed 28px happened to
+   * clear some phones and jammed Close straight against the 3-button / gesture
+   * bar on others — a mis-tap there leaves the app entirely. Insets make the
+   * same sheet fit every phone.
+   */
+  const insets = useSafeAreaInsets();
 
   if (!evidence) return null;
   const balanced = evidenceMatchesCell(evidence, cellAmount);
@@ -214,7 +222,7 @@ export function CellEvidenceSheet({
         */}
       <View style={s.backdrop}>
         <Pressable style={s.backdropTap} onPress={onClose} />
-        <View style={s.sheet}>
+        <View style={[s.sheet, { paddingBottom: 16 + insets.bottom }]}>
           <Text style={s.title}>
             {KIND_LABEL[evidence.kind]} · {dayLabel(evidence.dateIso)}
           </Text>

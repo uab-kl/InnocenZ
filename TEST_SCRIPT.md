@@ -939,6 +939,23 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — SHEETS PAD FOR THE PHONE'S OWN NAV BAR (safe-area insets, and a standing rule).**
+>
+> Owner, on the device: *"now my close button touch or my phone original 3 , home or return button
+> please rememeber makes all flexible"*.
+>
+> The sheets padded a fixed 28px bottom, which happened to clear some phones and jammed the red Close
+> straight against the 3-button / gesture bar on this one — where a mis-tap leaves the app entirely.
+> All three Payment-flow sheets now pad `16 + useSafeAreaInsets().bottom`; when the keyboard is open its
+> inset wins, since it already clears the nav bar.
+>
+> **"Makes all flexible" is now a STANDING RULE**, saved to memory (`innocenz-mobile-flexible-ui`): no
+> fixed pixels for safe areas, sheet heights (proportions + flexShrink), or widths (cap ~520 for
+> tablets, never the web frame's 392); no Pressable ancestor over a ScrollView; gold = act, red = close.
+> Every real-device bug today traced to a constant that fit one screen.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
 > **5 Aug 2026 — THE SHEET FOOTER GETS SPACING AND THE COLOUR CODE (Close is red).**
 >
 > Owner: *"see the button design why stick together"* and *"remember that what green yellow red , close
