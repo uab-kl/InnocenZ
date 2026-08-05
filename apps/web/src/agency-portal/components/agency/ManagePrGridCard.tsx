@@ -8,6 +8,9 @@ import type { getAgencyPrFlags } from "@agency-portal/lib/agency-pr-flags";
 import { cn } from "@agency-portal/lib/utils";
 import { Check, Star } from "lucide-react";
 
+/** Languages shown on the card before collapsing the rest into "+N more". */
+const MAX_CARD_LANGUAGES = 2;
+
 type ManagePrGridCardProps = {
 	pr: AgencyManagedPR;
 	active: boolean;
@@ -33,7 +36,12 @@ export function ManagePrGridCard({
 	onActivate,
 }: ManagePrGridCardProps) {
 	const preview = toComcardPreview(pr);
-	const langs = languagesFromPr(pr).filter(Boolean).slice(0, 2).join(" · ");
+	// Two languages fit; the rest were silently dropped, so a PR who speaks five
+	// looked identical to one who speaks two. Say how many are hidden — the full
+	// list is on their profile.
+	const allLangs = languagesFromPr(pr).filter(Boolean);
+	const hiddenLangCount = Math.max(0, allLangs.length - MAX_CARD_LANGUAGES);
+	const langs = allLangs.slice(0, MAX_CARD_LANGUAGES).join(" · ");
 	const metaLine = [langs, pr.place].filter(Boolean).join(" · ");
 	const paid = formatOutletHistRm(pr.totalPaid ?? 0);
 
@@ -97,6 +105,14 @@ export function ManagePrGridCard({
 						</IzPill>
 					)}
 					{metaLine && <p className="iz-pr-manage-card__meta">{metaLine}</p>}
+					{hiddenLangCount > 0 && (
+						<span
+							className="iz-pr-manage-card__more-langs"
+							title={allLangs.join(" · ")}
+						>
+							+{hiddenLangCount}
+						</span>
+					)}
 				</div>
 
 				{(flags.warnLowAvg ||
@@ -105,22 +121,22 @@ export function ManagePrGridCard({
 					!active) && (
 					<div className="iz-pr-manage-card__flags">
 						{!active && (
-							<IzPill variant="ink" className="!py-0 !text-[8px]">
+							<IzPill variant="ink" className="iz-pr-manage-card__flag">
 								Suspended
 							</IzPill>
 						)}
 						{flags.warnLowAvg && active && (
-							<IzPill variant="amber" className="!py-0 !text-[8px]">
+							<IzPill variant="amber" className="iz-pr-manage-card__flag">
 								Warn
 							</IzPill>
 						)}
 						{flags.suspendStreak && active && (
-							<IzPill variant="red" className="!py-0 !text-[8px]">
+							<IzPill variant="red" className="iz-pr-manage-card__flag">
 								Suspend
 							</IzPill>
 						)}
 						{flags.tiedUnderOneYear && (
-							<IzPill variant="violet" className="!py-0 !text-[8px]">
+							<IzPill variant="violet" className="iz-pr-manage-card__flag">
 								Tied
 							</IzPill>
 						)}

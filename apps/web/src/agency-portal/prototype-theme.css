@@ -12012,10 +12012,26 @@ button.iz-pr-offer-row:hover {
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+/* "+3" — how many languages the card could not fit. Muted and non-interactive:
+   it reports that more exist, the profile is where you read them. */
+.iz-pr-manage-card__more-langs {
+	flex-shrink: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--iz-muted2);
+	cursor: default;
+}
 .iz-pr-manage-card__flags {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 4px;
+	gap: 5px;
+}
+/* Warn / Suspend / Tied. These carried an inline `!text-[8px]` on each pill, so
+   they were the one thing the card's type scale could not reach — and they are
+   the labels that most need reading. Sized here with the rest. */
+.iz-pr-manage-card__flag {
+	font-size: 12px !important;
+	padding: 3px 9px !important;
 }
 .iz-pr-manage-card__metrics {
 	display: grid;
