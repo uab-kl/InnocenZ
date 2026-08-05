@@ -215,64 +215,115 @@ export function buildVoucherPdf(params: {
         { width: XEND - XC, align: 'center' },
       );
 
-    // ── PR (Payee) signature block. The REAL finger-drawn ink when the
-    // voucher stores it — re-drawn as vector strokes, sized small and fitted
-    // neatly on the line. Nothing is invented: unsigned prints blank lines,
-    // signed-without-ink (older app build) falls back to a small script name.
-    const signed = voucher.prSignedAt ? klStamp(new Date(voucher.prSignedAt)) : '';
+    // ── The DUAL signature block: agency (approved by) on the left, PR (payee)
+    // on the right, the order the voucher is actually signed in.
+    //
+    // Both halves draw the REAL finger-drawn ink the row stores — `pr_signature`
+    // (0071) and `finance_head_signature` (0080) hold the same {w,h,strokes}
+    // shape — re-drawn here as vector strokes. Nothing is invented: unsigned
+    // prints blank rules, and signed-without-ink (a voucher signed before the
+    // column existed) falls back to a small script name.
+    //
+    // The agency's half used to be absent entirely, which is why signing as
+    // finance head changed nothing on the printed document.
     type SignatureInk = { w: number; h: number; strokes: [number, number][][] };
-    let ink: SignatureInk | null = null;
-    if (voucher.prSignature) {
+    const parseInk = (raw: string | null | undefined): SignatureInk | null => {
+      if (!raw) return null;
       try {
-        const raw = JSON.parse(voucher.prSignature) as SignatureInk | null;
-        if (raw && raw.w > 0 && raw.h > 0 && Array.isArray(raw.strokes)) ink = raw;
+        const parsed = JSON.parse(raw) as SignatureInk | null;
+        if (parsed && parsed.w > 0 && parsed.h > 0 && Array.isArray(parsed.strokes)) return parsed;
       } catch {
-        // Corrupt ink JSON — the printed-name fallback below still signs.
+        // Corrupt ink JSON — the printed-name fallback still signs.
       }
-    }
-    y += 14;
-    doc.fillColor('#111').font('Helvetica-Bold').fontSize(8).text('PR (Payee)', XA, y);
-    y = doc.y + 4;
-
-    doc.font('Helvetica').fontSize(8).fillColor('#111').text('Signature:', XA, y + 6);
-    if (signed && ink) {
-      const boxW = 110;
-      const boxH = 26;
-      const s = Math.min(boxW / ink.w, boxH / ink.h);
-      const ox = XB;
-      const oy = y + (boxH - ink.h * s) / 2;
-      doc.save().lineWidth(1.1).lineJoin('round').lineCap('round').strokeColor('#22345f');
-      for (const stroke of ink.strokes) {
-        if (!Array.isArray(stroke) || stroke.length < 2) continue;
-        doc.moveTo(ox + stroke[0][0] * s, oy + stroke[0][1] * s);
-        for (let i = 1; i < stroke.length; i++) {
-          doc.lineTo(ox + stroke[i][0] * s, oy + stroke[i][1] * s);
-        }
-        doc.stroke();
-      }
-      doc.restore();
-      y += boxH + 4;
-    } else {
-      if (signed) {
-        doc.font('Times-Italic').fontSize(11).fillColor('#2b3a67').text(prName, XB, y + 2);
-      }
-      y += ROW_H;
-    }
-    doc.moveTo(XA, y).lineTo(XEND, y).strokeColor('#bbb').stroke();
-    y += 2;
-    const sigRow = (label: string, value: string) => {
-      doc.font('Helvetica').fontSize(8).fillColor('#111').text(label, XA, y + 3);
-      if (value) {
-        doc.font('Helvetica').fontSize(8).fillColor('#111').text(value, XB, y + 3, {
-          width: XEND - XB - 4,
-        });
-      }
-      y += ROW_H;
-      doc.moveTo(XA, y).lineTo(XEND, y).strokeColor('#bbb').stroke();
-      y += 2;
+      return null;
     };
-    sigRow('Name:', prName);
-    sigRow('Date:', signed);
+
+    const COL_GAP = 22;
+    const COL_W = (CONTENT_W - COL_GAP) / 2;
+    const SIG_LABEL_W = 40;
+    const SIG_BOX_H = 26;
+
+    const signatories: {
+      role: string;
+      name: string;
+      stamp: string;
+      ink: SignatureInk | null;
+    }[] = [
+      {
+        role: 'Agency (Approved by)',
+        name: voucher.financeHeadName ?? DASH,
+        stamp: voucher.financeHeadSignedAt ? klStamp(new Date(voucher.financeHeadSignedAt)) : '',
+        ink: parseInk(voucher.financeHeadSignature),
+      },
+      {
+        role: 'PR (Received by)',
+        name: prName,
+        stamp: voucher.prSignedAt ? klStamp(new Date(voucher.prSignedAt)) : '',
+        ink: parseInk(voucher.prSignature),
+      },
+    ];
+
+    y += 14;
+    if (y + SIG_BOX_H + ROW_H * 2 + 40 > 790) {
+      doc.addPage();
+      y = MARGIN;
+    }
+    const sigTop = y;
+
+    signatories.forEach((sig, col) => {
+      const x = XA + col * (COL_W + COL_GAP);
+      const valueX = x + SIG_LABEL_W;
+      const valueW = COL_W - SIG_LABEL_W;
+      let cy = sigTop;
+
+      doc.fillColor('#111').font('Helvetica-Bold').fontSize(8).text(sig.role, x, cy);
+      cy = doc.y + 4;
+
+      doc.font('Helvetica').fontSize(8).fillColor('#111').text('Signature:', x, cy + 8);
+      if (sig.stamp && sig.ink) {
+        const s = Math.min(valueW / sig.ink.w, SIG_BOX_H / sig.ink.h);
+        const oy = cy + (SIG_BOX_H - sig.ink.h * s);
+        doc.save().lineWidth(1.1).lineJoin('round').lineCap('round').strokeColor('#22345f');
+        for (const stroke of sig.ink.strokes) {
+          if (!Array.isArray(stroke) || stroke.length < 2) continue;
+          doc.moveTo(valueX + stroke[0][0] * s, oy + stroke[0][1] * s);
+          for (let i = 1; i < stroke.length; i++) {
+            doc.lineTo(valueX + stroke[i][0] * s, oy + stroke[i][1] * s);
+          }
+          doc.stroke();
+        }
+        doc.restore();
+      } else if (sig.stamp) {
+        doc
+          .font('Times-Italic')
+          .fontSize(11)
+          .fillColor('#2b3a67')
+          .text(sig.name, valueX, cy + 6, { width: valueW });
+      }
+      cy += SIG_BOX_H + 4;
+      doc.moveTo(x, cy).lineTo(x + COL_W, cy).strokeColor('#bbb').stroke();
+      cy += 2;
+
+      for (const [label, value] of [
+        ['Name:', sig.name],
+        ['Date:', sig.stamp],
+      ] as [string, string][]) {
+        doc.font('Helvetica').fontSize(8).fillColor('#111').text(label, x, cy + 3);
+        if (value) {
+          doc
+            .font('Helvetica')
+            .fontSize(8)
+            .fillColor('#111')
+            .text(value, valueX, cy + 3, { width: valueW - 4 });
+        }
+        cy += ROW_H;
+        doc.moveTo(x, cy).lineTo(x + COL_W, cy).strokeColor('#bbb').stroke();
+        cy += 2;
+      }
+      // Both columns are the same height, so either one leaves `y` in the right
+      // place — taking the max keeps that true if one ever wraps taller.
+      y = Math.max(y, cy);
+    });
 
     y += 16;
     doc
