@@ -204,6 +204,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
+| A6 | **Agency receipt editor (Approve + dispute queue)** — correct scanned/self-log drinks/tips in place via targeted `PATCH/POST /receipts/:id` (+ lines); never `PUT /payment-voucher/:id`. Same `AgencyReceiptEditor` in Receipts sub-tab and DisputeQueuePanel. Migrations **0083** (`payment_voucher_line.outlet_id`) + **0084** (`review_withdrawn_at`) applied on `innocenz-test`. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `payment-voucher.*` · `0083`/`0084` | receipt + line tables | ⚠️ Reported (landed `57bd165`; live click-through still owed — §9 audit items remain) |
 
 ### Admin side (jk)
 
@@ -303,6 +304,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X63 | **🟢 ORG OWNERS CAN MANAGE THEIR OWN MEMBERS — UI on both Settings screens.** Backend: `GET/POST/PUT/DELETE /agency\|outlet/:id/members` behind route scope → controller `:memberId` ownership → `guardMemberChange` (refuses leaving an org with no active owner; unit tests in `member-change-guard.test.ts`). UI: one `OrgMembersPanel` (`kind="agency"\|"outlet"`) on agency + outlet Settings. ⚠️ **Only refusals proven live** — add/remove leave permanent rows and were not fired on the shared DB. Person must already have an account (no invite/mailer). | **Agency / Outlet** | `OrgMembersPanel.tsx` · `member-change-guard.ts` · agency/outlet member routes | UI click-through + probes | ⚠️ Reported (writes unfired) |
 | X64 | **🟢 PRE-PILOT GATE 2 — demo login is DEV-only and absent from production builds.** `import.meta.env.DEV` gates the client demo branch so Vite drops it at build time. ⚠️ **The recorded credential was wrong for days:** it is `demo@atlas-agency.invalid` / `demo@velvet23.invalid` (RFC 2606 `.invalid`), not `owner@atlas-agency.my`; planted JWT is `alg:"none"` and the backend rejects it — blast radius was a demo shell, not real data. Proven by grepping the production `vite build` output (demo symbols **0**, real login path still present). | **Web (auth)** | `routes/login.tsx` · `lib/auth/*` | production build grep | ✅ Proven |
 | X65 | **⚠️ WHATSAPP CLOUD API OTP + PR MOBILE SIGN-UP RESTRUCTURE — CODE LANDED, TABLE + META NOT.** Public `POST /auth/otp/send` + `/auth/otp/verify` (sha256 `code_hash` only; 5 min / 60s resend / 5 attempts); Meta webhook at `GET\|POST /webhooks/whatsapp`; mobile sign-up split into `screens/sign-up/step1…6` + `safe-area.tsx`; `.env.example` documents `META_WHATSAPP_*`. 🔴 **No `phone_verification` migration ships with this code** — the model comment says "Migration 0083" but **0083 is already `pv_line_outlet_fk`** on this branch; table does not exist until a new migration is authored. Also needs Meta Business verification + filled env. Not E2E on a real phone. | **PR (mobile) ↔ Auth** | `otp.controller.ts` · `phone-verification.*` · `features/whatsapp/*` · `screens/sign-up/*` | code only | ⚠️ Reported (needs DDL + Meta) |
+| X66 | **🟢 AGENCY RECEIPT EDITOR LANDED (`57bd165`) — the slice that left the DB ahead of the repo.** Agency can correct drinks/tips on a scanned or self-logged receipt in place (order no, printed date/time, qty/commission, add missed line) through **targeted** receipt endpoints — never the destructive `PUT /payment-voucher/:id` line wipe. Same editor opens from the Receipts sub-tab **and** inside the dispute queue. Migrations **0083** (`outlet_id` FK on lines, 18/18 backfilled) and **0084** (`review_withdrawn_at`) were already live on `innocenz-test`; this commit ships the code that reads them. ⚠️ **Not a live agency click-through yet** — §9 day/receipt agreement audit items (PvDetail dispute, disputed-cell withdraw UX, etc.) stay open. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `0083`/`0084` | live schema + committed code | ⚠️ Reported |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 | X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
@@ -354,61 +356,21 @@ approval of a figure that no longer exists.
   re-approves or re-stales a day.
 
 ### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
+### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (jk — receipt editor committed)
 
-Left deliberately uncommitted: authored in a session running CONCURRENTLY with the PR-Payment work
-(`64fe35a`…`7b620c9`), so it is not mine to commit under a message I would be inventing. It all
-typechecks — backend past the TS2883 baseline, `apps/web` on every touched file, `apps/mobile` at 0.
+> **`57bd165` closed the "uncommitted receipt-editor tree" block.** Code + migrations are in the
+> repo; DB already had `0083`/`0084`. **Next:** live agency click-through of Approve + dispute-queue
+> edit paths, then work the §9 DAY/RECEIPT AGREEMENT AUDIT highs (PvDetail dispute never hits server,
+> disputed voucher turns every cell into withdraw). Do **not** treat §8 A6/X58 as verified until a
+> real agency login drives the editor.
 
-- [x] ✅ **APPLIED 4 Aug 2026 — and the DATABASE IS NOW AHEAD OF THE COMMITTED CODE.** `0083` and `0084`
-  are live on `innocenz-test`; `0083`'s fix is committed (`62243bc`) but `0084` and everything that
-  reads the two new columns is still in the working tree. That inverts the risk in this whole block:
-  it is no longer "unapplied DDL waiting", it is **schema without its code**, so landing the slice is
-  now more urgent, not less. A fresh clone will not match this database.
-  - ⚠️ `pnpm migrate:deploy` FAILED first with **`function min(uuid) does not exist` (SQLSTATE 42883)** —
-    `0083` backfilled with `min(o.id)` over a uuid column, and because drizzle wraps the run in one
-    transaction, NOTHING applied (the DB sat at `0082`). Fixed to `min(o.id::text)::uuid`, safe because
-    the row is only used where `m.n = 1` — one outlet in the group, so the aggregate picks the single
-    value rather than choosing between candidates. Both files were dry-run in a rolled-back transaction
-    before the real deploy.
-  - Verified after applying: `payment_voucher_line.outlet_id` uuid + FK `confdeltype = n` (SET NULL),
-    `payment_voucher_receipt.review_withdrawn_at` timestamp, and the backfill linked **18 of 18** lines
-    with **0** unmatched. Journal now records 1785800000000 and 1785900000000.
-  - `0083_pv_line_outlet_fk.sql` — `payment_voucher_line.outlet_id`, FK to outlet, ON DELETE SET NULL.
-    Closes one of the weak edges CLAUDE.md rule #3 was written about: the row's only outlet today is a
-    copied varchar NAME, so an outlet rename would start refusing catalogue checks for no visible
-    reason.
-  - `0084_receipt_review_withdrawn.sql` — `payment_voucher_receipt.review_withdrawn_at`, so a receipt
-    somebody REFUSED stops being byte-identical to one nobody has opened, and bulk approve cannot
-    re-approve a refusal under the refuser's own name.
-- [ ] ⚠️ **The §10 row "THE AGENCY CAN CORRECT A RECEIPT" says "NO MIGRATION. ZERO DDL."** That is true
-  of the receipt editor itself, but two migrations now sit in the same uncommitted tree from sibling
-  work. Correct that row (or give the migrations their own) before it reads as "this slice needed no
-  DDL" for the whole batch.
-- [ ] Untracked alongside them: `AgencyReceiptEditor.tsx`, `use-agency-receipt-edit.ts`,
-  `use-receipt-catalogue.ts`, `write-failure-message.ts`, `src/scripts/repair-day-approved-receipts.ts`.
-- [ ] **`DisputeQueuePanel.tsx` (the receipt editor inside the dispute queue) rides with this slice.**
-  It is MY change but it `import`s the untracked `AgencyReceiptEditor.tsx`, so committing it alone would
-  produce a commit that does not build. It must land in the same commit as the editor. `tsc` clean on
-  the file, biome-formatted; its §10 row is already written.
-- [ ] ⚠️ **PROCESS NOTE — `TEST_SCRIPT.md` cannot be committed cleanly while it carries rows for
-  uncommitted code, and writing "don't do that" did not stop it.** Three times today a doc row landed in
-  a commit for an unrelated slice (`927ec8a`, `afa8dd1`, `e2f5e4f` — the last one swept up this very
-  note) while the code it described stayed in the working tree. That is the doc/code split the
-  doc-roles rule exists to prevent.
-  **The cause is structural, not carelessness:** git stages whole files, so any commit that renews this
-  doc for slice A also ships slice B's pending rows. Interactive `git add -p` is unavailable in this
-  environment.
-  **The only real fix is to stop leaving code uncommitted** — i.e. land the receipt-editor slice below.
-  Until then this block is deliberately kept DIRTY after every commit, so the doc always travels with
-  the work it describes, and this checklist stays the honest record of what is outstanding.
+### ▶ ~~UNCOMMITTED WORK IN THE TREE~~ — ✅ CLOSED 4 Aug 2026 (`57bd165`)
 
-**Current pending set (refreshed 4 Aug 2026, after `e2f5e4f`):** 20 modified + 7 untracked. Beyond the
-files listed above, the slice has since grown to touch `payment-voucher.routes.ts`,
-`payment-voucher-day-review.ts`, `payment-voucher-component.ts`, `payment-voucher.schema.ts`,
-`week-pay-grid.ts`, `demo-shifts.ts`, `routes/agency/pv.tsx` and `docs/claude-memory/
-innocenz-receipt-lifecycle.md`. Everything typechecks; nothing here is half-written — it is waiting on a
-decision about ownership, not on more code.
-
+> Was: receipt editor + `0083`/`0084` readers sitting untracked while the DB already had the columns.
+> **Landed** as `feat(agency): correct a receipt under Approve, and inside the dispute queue`.
+> Checklist that used to live here (untracked editor files, DisputeQueuePanel blocked on them,
+> "doc rows without code") is **done**. Remaining product gaps are in RECEIPT EDITOR SCOPE verify +
+> DAY/RECEIPT AGREEMENT AUDIT below — not "commit the tree".
 
 ### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
 
@@ -424,11 +386,8 @@ else cannot add so in his way can make list the the drink on that shift from wha
 - [x] Price ≠ commission: the picker shows the outlet's price for matching against the paper and the
   commission stays typed. No per-item commission rule exists anywhere to auto-fill from (the web
   `AgencyCommissionRulesPanel` reads the client demo store, not the backend).
-- [ ] ⚠️ **DECIDE: drop or wire `0083_pv_line_outlet_fk`.** It is authored and journalled but NOT
-  run, and NOT used by any code — the shift-FK path above turned out sounder than the name-matched
-  `payment_voucher_line.outlet` backfill it was written for. Dropping it is the recommendation; an
-  unused column with a backfill is worse than no column. Wiring it would cover only the receipts that
-  have no shift link, and would also mean setting `outlet_id` on every line write.
+- [x] ⚠️ ~~**DECIDE: drop or wire `0083_pv_line_outlet_fk`.**~~ **APPLIED + shipped with `57bd165`.**
+  Column + FK live on `innocenz-test` (18/18 lines backfilled). Keep — do not drop.
 - [ ] `PUT /payment-voucher/:id` is a SECOND DOOR: it still writes receipt-linked lines with
   free-text descriptions under the same `agencyOwnerOrFinance` guard, so the catalogue rule is
   enforced on one path and not the other.
@@ -505,8 +464,11 @@ DO matter.
 *"the agency only can edit the scanned or self log of the drink or the tips at the receipt section"* —
 the editor is confined to **drinks and tips lines on a receipt** (scanned or self-logged), reached
 from the **Receipts section**. Wages and OT are never editable there: they carry no receipt, they are
-fixed by the outlet, and the way to change one is the attendance record. Check the delivered editor
-against this before promoting it to §8.
+fixed by the outlet, and the way to change one is the attendance record.
+
+- [x] **Editor shipped** (`57bd165` / §8 A6 · X58) — also opens inside the dispute queue.
+- [ ] **Verify against this scope on a live agency login** before promoting A6/X58 to ✅ Verified
+  (no wages/OT editable; drinks+tips only; catalogue match for add-line).
 
 ### ▶ DAY/RECEIPT AGREEMENT AUDIT — 12 confirmed, 2 FIXED, 10 OPEN (4 Aug 2026)
 
@@ -1347,6 +1309,11 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > 29 checks in `check-cell-evidence.ts`, all passing, including *"one pending line poisons the cell"* —
 > a mixed day is not disputable until every line on it has been reviewed. `tsc` clean. No backend
 > change, no migration.
+> **4 Aug 2026 — Agency receipt editor + migrations 0083/0084 committed on `jk` (`57bd165`; §8 A6/X58).**
+> Closes the "DB ahead of repo" gap: editor code, dispute-queue wiring, and readers for
+> `payment_voucher_line.outlet_id` + `review_withdrawn_at` are in git. §9 uncommitted-tree block
+> marked closed; next is live agency click-through + day/receipt agreement audit highs.
+> Doc renew only in this commit (code already at `57bd165`).
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >

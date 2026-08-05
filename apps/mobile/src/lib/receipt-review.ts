@@ -132,6 +132,27 @@ export function disputesForDay(
   };
 }
 
+/** How a claim ended. `withdrawn` never reaches here — `isLive` drops it. */
+export type SettledOutcome = 'accepted' | 'rejected';
+
+/**
+ * Per-receipt claim state for one day+bucket.
+ *
+ * `settled` is a MAP, not a set, because "resolved" is not one state: a PR needs
+ * to know whether their claim was ACCEPTED or REJECTED. A single "settled" tag
+ * answered "has this been dealt with?" while leaving "and what was decided?"
+ * unanswered — which is most of what they wanted to know.
+ *
+ * `settledAll` carries the outcome for the same reason, and is null when no
+ * whole-day claim has been answered.
+ */
+export type ReceiptClaimState = {
+  openAll: boolean;
+  settledAll: SettledOutcome | null;
+  open: Set<string>;
+  settled: Map<string, SettledOutcome>;
+};
+
 /**
  * Which RECEIPT on this day+bucket is under argument, and how.
  *
@@ -147,20 +168,15 @@ export function receiptClaimState(
   week: PrCurrentWeek | null,
   dateIso: string,
   component: PrReceiptLine['kind'],
-): {
-  openAll: boolean;
-  settledAll: boolean;
-  open: Set<string>;
-  settled: Set<string>;
-} {
+): ReceiptClaimState {
   const rows = (week?.disputes ?? []).filter(
     (d) => d.disputeDate === dateIso && d.component === component && isLive(d),
   );
-  const state = {
+  const state: ReceiptClaimState = {
     openAll: false,
-    settledAll: false,
+    settledAll: null,
     open: new Set<string>(),
-    settled: new Set<string>(),
+    settled: new Map<string, SettledOutcome>(),
   };
   for (const d of rows) {
     const isOpen = d.outcome === null;
@@ -168,10 +184,13 @@ export function receiptClaimState(
     const refs = d.receiptId ? [d.receiptId] : (d.receiptRefs ?? []);
     if (refs.length === 0) {
       if (isOpen) state.openAll = true;
-      else state.settledAll = true;
+      else state.settledAll = (d.outcome as SettledOutcome) ?? 'accepted';
       continue;
     }
-    for (const ref of refs) (isOpen ? state.open : state.settled).add(ref);
+    for (const ref of refs) {
+      if (isOpen) state.open.add(ref);
+      else state.settled.set(ref, (d.outcome as SettledOutcome) ?? 'accepted');
+    }
   }
   return state;
 }

@@ -18,6 +18,7 @@ import { C, F } from '../theme/theme';
 import { IzButton } from './ui';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
+import type { ReceiptClaimState } from '../lib/receipt-review';
 
 const KIND_LABEL: Record<CellEvidence['kind'], string> = {
   wages: 'Daily wages',
@@ -119,12 +120,7 @@ export function CellEvidenceSheet({
    * Which receipts in this cell are already claimed, from `receiptClaimState`.
    * Omitted (or absent `disputes`) simply means nothing is marked.
    */
-  claims?: {
-    openAll: boolean;
-    settledAll: boolean;
-    open: Set<string>;
-    settled: Set<string>;
-  };
+  claims?: ReceiptClaimState;
   onClose: () => void;
   /** Omitted on This-week, where there is no issued voucher to contest yet. */
   onDispute?: () => void;
@@ -132,64 +128,51 @@ export function CellEvidenceSheet({
   if (!evidence) return null;
   const balanced = evidenceMatchesCell(evidence, cellAmount);
 
-  /**
-   * Open beats settled: a receipt named by BOTH an answered claim and a live one
-   * is still being argued about, and saying "settled" there would tell the PR to
-   * stop chasing something nobody has finished.
-   */
   /*
+   * What has been claimed against this receipt, and how it ended.
+   *
    * A whole-day claim TAGS EVERY RECEIPT, because it covered every one of them.
+   * I removed that once, when two shifts both reading SETTLED looked like two
+   * separate claims — but that fixed the wrong half. The confusion was the
+   * missing OUTCOME, not the tags: dropping them left the PR asking which shift
+   * was disputed and finding nothing marked at all.
    *
-   * I removed this once, when tagging both shifts looked like two separate
-   * per-shift claims. That fixed the wrong half: the confusion was the missing
-   * EXPLANATION, not the tags. Dropping them left the PR asking which shift was
-   * disputed and finding nothing marked at all — the answer is "both", and
-   * showing neither is a worse lie than showing both without context.
-   *
-   * The banner above supplies that context, so the tags can be honest again.
+   * OPEN beats settled where both touch one receipt: it is still being argued
+   * about, and saying "accepted" there would tell the PR to stop chasing
+   * something nobody has finished.
    */
   const claimOf = (r: {
     receiptId: string | null;
     receiptNo: string | null;
-  }): 'open' | 'settled' | null => {
+  }): 'open' | 'accepted' | 'rejected' | null => {
     if (!claims) return null;
     // Matched on the receipt ID (the FK a claim stores since 0088) OR its number
     // (what pre-0088 claims recorded as text). Either identifies the same paper.
-    const hit = (set: Set<string>) =>
-      (!!r.receiptId && set.has(r.receiptId)) || (!!r.receiptNo && set.has(r.receiptNo));
+    const hit = (keys: { has(k: string): boolean }) =>
+      (!!r.receiptId && keys.has(r.receiptId)) || (!!r.receiptNo && keys.has(r.receiptNo));
     if (claims.openAll || hit(claims.open)) return 'open';
-    if (claims.settledAll || hit(claims.settled)) return 'settled';
-    return null;
+    /*
+     * The OUTCOME, not merely "settled".
+     *
+     * One green SETTLED tag answered "has this been dealt with?" and left "and
+     * what was decided?" unanswered — which is most of what a PR wants to know
+     * when they open this. ACCEPTED and REJECTED are different futures: one
+     * means the money is being corrected, the other means it stands and the
+     * argument is over.
+     */
+    const settled =
+      (r.receiptId && claims.settled.get(r.receiptId)) ||
+      (r.receiptNo && claims.settled.get(r.receiptNo)) ||
+      claims.settledAll;
+    return settled ?? null;
   };
 
   /*
-   * A WHOLE-CELL claim is stated once, at the top — not stamped on every row.
-   *
-   * A claim that named no receipts covers the entire day+bucket, which is what
-   * every claim raised before the receipt picker existed looks like. Tagging
-   * each receipt from it made two shifts both read SETTLED, exactly as if they
-   * had been claimed individually — so a PR asking "which shift was disputed?"
-   * got the answer "both", when the truth is "nobody said; it was filed against
-   * the day". Those are different statements and only one of them is true.
+   * A whole-day claim is announced ONCE, above the list — but only while it is
+   * still OPEN. Once answered, each receipt carries its own outcome tag, which
+   * says strictly more than a banner could, so repeating it would be noise.
    */
-  /*
-   * Only while it is OPEN.
-   *
-   * A whole-day claim that has been ANSWERED is history: the day already reads
-   * VERIFIED on the grid, tapping that status lists the claim and its outcome,
-   * and the cell can be disputed afresh. Repeating it here told the PR their
-   * shifts were "settled" while giving them no way to learn which shift — the
-   * question they were actually asking — so it read as an answer and was not
-   * one. An OPEN claim stays, because it is the reason they cannot file another.
-   */
-  const cellWide: 'open' | 'settled' | null = claims?.openAll
-    ? 'open'
-    : claims?.settledAll
-      ? 'settled'
-      : null;
-
-  /** How many receipts here a claim has actually NAMED — the tagged ones. */
-  const claimCount = claims ? claims.open.size + claims.settled.size : 0;
+  const cellWide: 'open' | null = claims?.openAll ? 'open' : null;
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -228,18 +211,21 @@ export function CellEvidenceSheet({
             * at the tagged receipt below; one that did not says so, because that
             * information was never recorded and no amount of UI can invent it.
             */}
-          {(cellWide || claimCount > 0) && (
-            <View
-              style={[s.cellClaim, cellWide === 'open' ? s.cellClaimOpen : s.cellClaimSettled]}
-            >
-              <Text
-                style={[s.cellClaimText, cellWide === 'open' ? s.claimTagOpen : s.claimTagSettled]}
-              >
-                {cellWide === 'open'
-                  ? 'You have an open dispute covering this WHOLE day — every shift below is part of it.'
-                  : cellWide === 'settled'
-                    ? 'You disputed this whole day before and it was settled — every shift tagged below was part of that one claim, not separate ones.'
-                    : `You disputed ${claimCount === 1 ? 'a shift' : `${claimCount} shifts`} here before — see the tag${claimCount === 1 ? '' : 's'} below.`}
+          {/*
+            * ONLY while a claim is still open.
+            *
+            * The settled variant is gone: each receipt now carries its own
+            * DISPUTE ACCEPTED / DISPUTE REJECTED tag, which says more than a
+            * banner ever did — the tags name the outcome per shift, so a
+            * sentence repeating "this was settled" above them was noise.
+            *
+            * An OPEN whole-day claim keeps its banner, because that one is not
+            * describing history: it is the reason another claim cannot be filed.
+            */}
+          {cellWide === 'open' && (
+            <View style={[s.cellClaim, s.cellClaimOpen]}>
+              <Text style={[s.cellClaimText, s.claimTagOpen]}>
+                You have an open dispute covering this WHOLE day — every shift below is part of it.
               </Text>
             </View>
           )}
@@ -268,10 +254,13 @@ export function CellEvidenceSheet({
                         * go looking for the answer.
                         */}
                       {claimOf(receipt) === 'open' && (
-                        <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTED</Text>
+                        <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTE OPEN</Text>
                       )}
-                      {claimOf(receipt) === 'settled' && (
-                        <Text style={[s.claimTag, s.claimTagSettled]}>SETTLED</Text>
+                      {claimOf(receipt) === 'accepted' && (
+                        <Text style={[s.claimTag, s.claimTagSettled]}>DISPUTE ACCEPTED</Text>
+                      )}
+                      {claimOf(receipt) === 'rejected' && (
+                        <Text style={[s.claimTag, s.claimTagRejected]}>DISPUTE REJECTED</Text>
                       )}
                     </View>
                     <Text style={s.receiptMeta}>
@@ -422,6 +411,11 @@ const s = StyleSheet.create({
     color: C.red,
     backgroundColor: C.redBg,
     borderColor: 'rgba(240,138,138,0.35)',
+  },
+  claimTagRejected: {
+    color: C.amber,
+    backgroundColor: C.amberBg,
+    borderColor: 'rgba(232,198,106,0.35)',
   },
   claimTagSettled: {
     color: C.green,
