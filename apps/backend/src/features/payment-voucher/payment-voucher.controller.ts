@@ -2944,10 +2944,15 @@ export class PaymentVoucherControllerClass {
 
       // Server-computed, never from the request: this is the figure the claim is
       // measured against, so the claimant must not be able to set it.
+      // Narrowed to the receipts the PR selected, when they picked some. A PR
+      // with two shifts on one night can contest the second alone, and the
+      // figure the claim is measured against has to be THAT shift's, not the
+      // day's — otherwise accepting the claim settles money nobody contested.
       const disputedAmount = await this.paymentVoucherDisputeRepository.sumLinesFor(
         voucherId,
         disputeDate,
         component,
+        parsed.data.receiptRefs,
       );
 
       let dispute;

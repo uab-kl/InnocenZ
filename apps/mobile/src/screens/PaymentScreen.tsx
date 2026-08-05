@@ -241,6 +241,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     row: (typeof INCOME_ROWS)[number];
   } | null>(null);
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
+  /** receiptNos the PR is contesting — all of the cell's, until they narrow it. */
+  const [disputePickedReceipts, setDisputePickedReceipts] = useState<string[]>([]);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
   /** Optional proof kept with submitted disputes (image upload is still local). */
@@ -370,6 +372,55 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setDisputeOpen(true);
   };
 
+  /**
+   * The receipts behind the cell being disputed, one chip each.
+   *
+   * Built from the SAME `buildCellEvidence` the proof sheet renders, so the
+   * chips are the very rows the PR just looked at — a different derivation here
+   * could offer a receipt the evidence sheet never showed them.
+   *
+   * Wage seals have no receipt and are excluded by construction: they group
+   * under a null receiptNo, and wages are not disputable anyway.
+   */
+  const disputeReceipts = useMemo(() => {
+    if (!disputeTarget) return [];
+    const week = disputeTarget.week === 'last' ? lastWeek : current;
+    const evidence = buildCellEvidence(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    return evidence.groups.flatMap((g) =>
+      g.receipts
+        .filter((r): r is typeof r & { receiptNo: string } => !!r.receiptNo)
+        .map((r) => ({
+          receiptNo: r.receiptNo,
+          subtotal: r.subtotal,
+          // Order number first — it is what is printed on the paper in their
+          // hand. The shift time disambiguates two logs of the same paper.
+          label: `${r.orderNo ?? r.receiptNo} · ${formatRM(r.subtotal)}${
+            g.shift?.slot ? ` · ${g.shift.slot}` : ''
+          }`,
+        })),
+    );
+  }, [disputeTarget, lastWeek, current]);
+
+  /*
+   * Default to ALL of them — narrowing is the exception, and a chooser that
+   * starts empty would make the common "this whole day is wrong" claim need
+   * extra taps to say what it already meant.
+   */
+  useEffect(() => {
+    setDisputePickedReceipts(disputeReceipts.map((r) => r.receiptNo));
+  }, [disputeReceipts]);
+
+  /** A chooser was shown and the PR emptied it — nothing to file. */
+  const noReceiptPicked = disputeReceipts.length > 0 && disputePickedReceipts.length === 0;
+
+  const disputePickedSubtotal = useMemo(
+    () =>
+      disputeReceipts
+        .filter((r) => disputePickedReceipts.includes(r.receiptNo))
+        .reduce((s, r) => s + r.subtotal, 0),
+    [disputeReceipts, disputePickedReceipts],
+  );
+
   const closeDispute = () => {
     setDisputeOpen(false);
     setDisputeTarget(null);
@@ -410,6 +461,17 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               reason: disputePreset,
               note: disputeNote.trim() || undefined,
               proofPhotos: disputePhotos.length ? disputePhotos : undefined,
+              /*
+               * Sent only when the PR NARROWED the claim. Listing every receipt
+               * is the same statement as listing none — "the whole cell" — and
+               * omitting it keeps that meaning explicit in the stored row rather
+               * than recording a selection nobody made.
+               */
+              receiptRefs:
+                disputePickedReceipts.length > 0 &&
+                disputePickedReceipts.length < disputeReceipts.length
+                  ? disputePickedReceipts
+                  : undefined,
             });
       const next = result.voucher;
       // Reflect the persisted state so the grid + header pill update immediately
@@ -1085,6 +1147,55 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
             {disputeMode === 'dispute' ? (
               <>
+                {/*
+                  * WHICH SHIFT? Only asked when the day holds more than one
+                  * receipt in this bucket — a single-receipt day has nothing to
+                  * choose and a chooser there would be noise.
+                  *
+                  * A dispute is filed per day + component, so a PR working two
+                  * shifts on one night could previously only contest BOTH at
+                  * once: the claim was recorded against the day's full total,
+                  * and accepting it settled money nobody had questioned. The
+                  * selection rides in `receiptRefs` and narrows the server's
+                  * `disputedAmount` to exactly what was picked.
+                  *
+                  * Keyed by receiptNo because the order number is NOT unique —
+                  * the same paper logged twice on one night reads ORD0389 on
+                  * both, which is precisely the pair a PR needs to separate.
+                  */}
+                {disputeReceipts.length > 1 && (
+                  <>
+                    <Text style={styles.fieldLabel}>Which one is wrong?</Text>
+                    <View style={styles.presetWrap}>
+                      {disputeReceipts.map((r) => {
+                        const on = disputePickedReceipts.includes(r.receiptNo);
+                        return (
+                          <Pressable
+                            key={r.receiptNo}
+                            style={[styles.presetChip, on && styles.presetChipOn]}
+                            onPress={() =>
+                              setDisputePickedReceipts((prev) =>
+                                prev.includes(r.receiptNo)
+                                  ? prev.filter((x) => x !== r.receiptNo)
+                                  : [...prev, r.receiptNo],
+                              )
+                            }
+                          >
+                            <Text style={[styles.presetText, on && styles.presetTextOn]}>
+                              {r.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.pickedHint}>
+                      {disputePickedReceipts.length === 0
+                        ? 'Pick at least one receipt to dispute.'
+                        : `Disputing ${formatRM(disputePickedSubtotal)} of ${formatRM(disputeTarget?.amount ?? 0)}.`}
+                    </Text>
+                  </>
+                )}
+
                 <Text style={styles.fieldLabel}>Quick reason</Text>
                 <View style={styles.presetWrap}>
                   {DISPUTE_PRESETS.map((p) => (
@@ -1161,9 +1272,19 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     <Text style={styles.backBtnText}>Back</Text>
                   </Pressable>
                   <Pressable
-                    style={[styles.submitBtn, grad(GRADIENTS.accent, C.accent), disputeBusy && { opacity: 0.6 }]}
+                    style={[
+                      styles.submitBtn,
+                      grad(GRADIENTS.accent, C.accent),
+                      (disputeBusy || noReceiptPicked) && { opacity: 0.6 },
+                    ]}
                     onPress={submitDispute}
-                    disabled={disputeBusy}
+                    /*
+                     * Deselecting every receipt is not "dispute the whole day" —
+                     * it is an unfinished sentence. Blocked rather than silently
+                     * widened back to the full cell, which would file a claim
+                     * about money the PR had just deselected.
+                     */
+                    disabled={disputeBusy || noReceiptPicked}
                   >
                     <Text style={styles.primaryText}>
                       {disputeBusy ? 'Submitting…' : 'Submit dispute'}
@@ -1339,6 +1460,12 @@ const styles = StyleSheet.create({
   statusPillDisputed: { color: C.red },
   /** A day whose claim has been ANSWERED — settled, not merely approved. */
   statusPillVerified: { color: C.green },
+  pickedHint: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
   claimTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   claimDay: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   claimRow: {

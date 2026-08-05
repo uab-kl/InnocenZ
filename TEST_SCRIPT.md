@@ -953,6 +953,85 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — DISPUTE ONE SHIFT, NOT THE WHOLE DAY.**
+>
+> Owner: *"make the pr can select dispute which one ,because it have 2 shifts on that day"*.
+>
+> A dispute is filed per DAY + COMPONENT, so a PR working two shifts on one night could only contest
+> both at once: tapping *Drinks · Tue 4* claimed the full **RM 7.20** even when just one RM 3.60 receipt
+> was wrong. The claim was recorded against the day's whole total, and accepting it would have settled
+> money nobody had questioned.
+>
+> **The column was already there.** `payment_voucher_dispute.receipt_refs` exists and
+> `PrRaiseDisputeSchema` already accepted `receiptRefs` — the phone simply never sent them and
+> `sumLinesFor` never read them. No migration, no new column.
+>
+> The dispute sheet now asks **"Which one is wrong?"**, but only when the cell holds more than one
+> receipt — a single-receipt day has nothing to choose. Chips are built from the SAME
+> `buildCellEvidence` the proof sheet renders, so the PR picks from exactly the rows they just looked
+> at. All selected by default: narrowing is the exception, and "this whole day is wrong" should not cost
+> extra taps.
+>
+> ⚠️ **Keyed on `receiptNo`, NOT the order number.** The schema comment says "by their packed ref", but
+> the packed ref carries the ORDER number, and that is not unique — the same paper logged twice on one
+> night yields two receipts both reading `ORD0389:0`, which is precisely the pair this feature exists to
+> separate. `RCP-000010` vs `RCP-000012` is the only key that tells them apart.
+>
+> `sumLinesFor` narrows `disputedAmount` to the picked receipts, so the agency argues about the figure
+> the PR pointed at. Verified live on the real two-shift day:
+>
+> | selection | recorded disputedAmount |
+> |---|---|
+> | none (whole cell) | RM 7.20 |
+> | only the first shift | RM 3.60 |
+> | only the second (the duplicate) | RM 3.60 |
+> | both, explicitly | RM 7.20 |
+> | a receipt not on that day | RM 0.00 |
+> | a WAGE seal narrowed by a receipt | RM 0.00 — not the day's wages |
+>
+> `receiptRefs` is sent ONLY when the PR narrowed: listing every receipt means the same as listing none,
+> and omitting it keeps "the whole cell" explicit in the stored row. Deselecting everything blocks
+> Submit rather than silently widening back to the full cell — an empty chooser is an unfinished
+> sentence, not a claim about the day.
+>
+> `tsc` clean both sides. ⚠️ The AGENCY queue still lists every receipt for the day + component and does
+> not yet narrow to `receipt_refs` — recorded in §9; `DisputeQueuePanel.tsx` is being edited concurrently
+> and was left alone.
+
+> **5 Aug 2026 — A SETTLED DISPUTE HAS A SCREEN; THE PAYEE HAS A NICKNAME.**
+>
+> **1. Disputes: resolved claims were invisible.** Owner: *"yesterday got one successful dispute right
+> show where?"* — the answer was **nowhere**. `useAgencyDisputes(openOnly = true)` sent `?open=1`, so
+> no agency screen ever fetched a settled dispute; it sat in the database with no surface. Worse, the
+> panel printed *"No open disputes"* whether none had ever been raised or one had been accepted an
+> hour earlier — two very different facts, one sentence.
+> Now fetches ALL and filters client-side: **Open / Resolved / All** chips with live counts (same
+> `iz-filter-chip` idiom as the PV filter, not a lookalike), search across PR name, day, component,
+> reason, resolution note and outcome, and three distinct empty states. The status pill was
+> **hardcoded to "Open"** — only ever accidentally right — and now reads Accepted / Rejected /
+> Withdrawn / Open. ⚠️ A settled row is now READ-ONLY and shows what was told to the PR: it used to
+> offer live Accept/Reject on an already-decided claim, which the server refuses, so those were
+> buttons that could only fail while implying the outcome was still changeable.
+>
+> **2. Payee shows the nickname:** `Vicky (Victoria Tan Mei Lin)` (`resolvePvPrLabel`). Joined from
+> `pr.nickname` through the voucher's `pr_id` FK — NOT copied onto the voucher row beside `pr_name`,
+> which is the duplication rule 3 exists to stop. No nickname, or one that merely repeats the legal
+> name, prints the legal name alone.
+>
+> **3. Fixed a build-blocking error that predates this work:** `main.ts` read `req.originalUrl` inside
+> `express.json({verify})`, where the argument is a bare `IncomingMessage` — `originalUrl` is added
+> later by express's router, so the backend did not compile at all. Prefers `originalUrl`, falls back
+> to `url`; behaviour unchanged.
+>
+> **Answered without a change:** *"if i already dispute how come need approve again?"* — that was the
+> EDIT, not the dispute. RCP-000010 is the same RM 3.60 drink on the same day and stayed Verified;
+> only the receipt whose figure was changed re-opened. Owner confirmed the rule stands. ⚠️ Known gap:
+> `setReceiptStatus(...,'pending')` clears `reviewed_at`/`reviewed_by`, so afterwards
+> approved-then-edited is indistinguishable from never-reviewed — showing the reason after the fact
+> would need a marker column like 0084's.
+>
+> Backend typecheck clean; web clean on every touched file.
+
 > **5 Aug 2026 — VERIFIED IS EARNED, AND A PENDING DAY CANNOT BE DISPUTED.**
 >
 > Owner: *"i got no make dispute on that day why the status is verified ?"*, then the rule —

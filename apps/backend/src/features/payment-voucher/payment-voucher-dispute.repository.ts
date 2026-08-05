@@ -6,6 +6,7 @@ import {
   PaymentVoucherDisputeComponent,
   PaymentVoucherDisputeTable,
   PaymentVoucherLineTable,
+  PaymentVoucherReceiptTable,
   PaymentVoucherTable,
   PaymentVoucherType,
 } from './payment-voucher.model.js';
@@ -77,15 +78,37 @@ export class PaymentVoucherDisputeRepositoryClass {
     voucherId: string,
     disputeDate: string,
     component: PaymentVoucherDisputeComponent,
+    /**
+     * Receipt NUMBERS (`RCP-000012`) the PR pointed at, when they contested one
+     * shift out of several on the day. Absent or empty = the whole cell.
+     *
+     * Narrowing matters because this figure is what the claim is measured
+     * against. A PR who works two shifts on one night and disputes only the
+     * second would otherwise have their claim recorded against the day's FULL
+     * total — the agency opening a queue row arguing about RM 7.20 when the PR
+     * said RM 3.60 — and accepting it would settle money nobody contested.
+     *
+     * Keyed on `receipt_no`, NOT on the packed `ref`, deliberately. The packed
+     * ref carries the ORDER number, which is not unique: the same paper logged
+     * twice on one night yields two receipts both reading `ORD0389:0`, and that
+     * duplicate is exactly the case this selection exists to separate.
+     */
+    receiptNos?: string[],
   ): Promise<string> {
     try {
       const wanted = LINE_COMPONENTS_FOR[component];
+      const picked = (receiptNos ?? []).filter((n) => n.trim().length > 0);
       const rows = await db
         .select({
           amount: PaymentVoucherLineTable.amount,
           component: PaymentVoucherLineTable.component,
+          receiptNo: PaymentVoucherReceiptTable.receiptNo,
         })
         .from(PaymentVoucherLineTable)
+        .leftJoin(
+          PaymentVoucherReceiptTable,
+          eq(PaymentVoucherLineTable.receiptId, PaymentVoucherReceiptTable.id),
+        )
         .where(
           and(
             eq(PaymentVoucherLineTable.voucherId, voucherId),
@@ -95,6 +118,9 @@ export class PaymentVoucherDisputeRepositoryClass {
 
       const total = rows
         .filter((r) => (r.component === null ? component === 'others' : wanted.includes(r.component)))
+        // A line with no receipt (a wage seal) can never match a receipt
+        // selection, so it drops out here rather than inflating a narrowed sum.
+        .filter((r) => picked.length === 0 || (r.receiptNo !== null && picked.includes(r.receiptNo)))
         .reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
 
       return total.toFixed(2);

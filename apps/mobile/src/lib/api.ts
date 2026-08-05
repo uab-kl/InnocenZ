@@ -1152,6 +1152,18 @@ export function raiseMyDispute(
     note?: string;
     /** Optional — the sheet says so, and the server agrees since 0064. */
     proofPhotos?: string[];
+    /**
+     * WHICH receipts this claim is about, by `receiptNo` (`RCP-000012`).
+     *
+     * Omit to contest the whole cell. Send a subset when the day holds more than
+     * one shift and only one of them is wrong — the server narrows the recorded
+     * `disputedAmount` to exactly these, so the agency argues about the figure
+     * the PR actually pointed at.
+     *
+     * `receiptNo`, not the order number: the same paper logged twice carries the
+     * SAME order number, and telling those two apart is the whole point.
+     */
+    receiptRefs?: string[];
   },
 ): Promise<PrDisputeResult> {
   return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute`, {
