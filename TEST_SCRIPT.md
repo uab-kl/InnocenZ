@@ -195,6 +195,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | O3 | Ratings page | Outlet ← PR | `routes/outlet/ratings` + `rating` | rating table | ✅ Verified |
 | O4 | History (real shift / shift-assignment / venue-scoped PR) | Outlet ← Agency/PR | `routes/outlet/history` | shift + shift-assignment | ✅ Verified |
 | O5 | **Post Job** → shift write + "Confirm staffing" (caps) | **Outlet → Agency** (feeds roster) | `routes/outlet/bookings` + `shift` | shift + subscription caps | ⚠️ Reported (confirm E2E, §3 S1) |
+| O6 | **Special-event prices show as the Workspace's two lists, off the REAL menu** — Post Job's `Prices` field renders **DRINKS PRICE** + **SERVICE ENTITLEMENT** (counts, RM range, ↔ move, per-list Add More) via the extracted `ShiftEventPriceEditor`, and now reads the outlet's **backend** `outlet_drink_menu` (passed down as `workspaceMenu`, like `prCandidates`) instead of the demo store. Edits stay on that event's `eventDrinkMenu`; the workspace list is cloned on switch and **never written**, so later events keep Workspace prices. Seed corrected: **Havoc is a service, Tips added as a service** (`DEFAULT_PER_TIP_RM`). | Outlet (self) | `ShiftEventPriceEditor.tsx` · `post-job-fields.tsx` · `routes/outlet/bookings.tsx` · `outlet-demo.ts` | backend `outlet_drink_menu` (read-only) → draft `eventDrinkMenu` | ✅ Verified (live: Post Job now shows the same 6 drinks RM 30–200 / 3 services RM 50–1000 as Workspace; editing Tips→999 fired **no PUT**, only the GET) |
 
 ### Agency side (SL)
 | # | Item | Role link | Where | Data source | Status |
@@ -203,6 +204,8 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A2 | Roster: read + add-shift / add-PR + **assign/unassign** | **Agency → PR** | `routes/agency/roster` + `shift-assignment` | `agency_pr` join | ⚠️ Reported (confirm assign shows on PR, §3 S2–S3) |
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
+| A7 | **Manage-PR Shift history is a real read — with NO payout, on purpose.** Was reading the demo store and filtering a real uuid against demo ids (`pr_tied`), so it could never match and rendered a blank card with no empty state. Now `GET /shift-assignment?prId=`; `listPaginated` joins `outlet.name` through the FK (rule 3 — never copied onto the row). Renders `date · outlet` and says **"No shifts yet"** when there are none. **The payout is deliberately omitted** — the sealed wage lives on `payment_voucher_line` and re-deriving it would create a second source of truth for money. | **Agency ← PR** | `shift-assignment.repository.ts` (`listPaginated`) · `use-agency-pr-shift-history.ts` · `routes/agency/prs.tsx` | `shift_assignment` ⋈ `shift` ⋈ `outlet` (no DDL) | ⚠️ Reported (typecheck at baseline, biome clean; **not live-fired**. Org scoping **read and confirmed**: a non-admin caller's `agencyId` is forced server-side and only admins may pass it, so another agency's `prId` returns nothing) |
+| A6 | **Manage-PR detail shows real Languages + real Ratings.** `GET /pr` now selects `user_profile.languages` (the column existed since 0055; this projection was the only reader not selecting it), and the ratings feed matches on **`rating.pr_id`** instead of the display name — the outlet writes its roster's legal name while Manage-PR shows the floor nickname, so a real rating was invisible. Average / Rating tile / warn banner all derive from the real rows; an **unrated** PR reads "not rated yet" instead of tripping the below-3.5★ warning off the `rating: 0` placeholder. **Amended 5 Aug:** the grid card was missed in the first pass — it printed `pr.rating.toFixed(1)` (`★ 0.0`) beside a correctly-earned Warn pill; it now takes `averageRating` and hides the chip when unrated. | **Agency ← Outlet** (ratings) · **Agency ← PR** (languages) | `pr.repository.ts` · `pr-personnel-map.ts` · `lib/pr-rating-summary.ts` · `use-agency-ratings.ts` · `routes/agency/prs.tsx` | `user_profile.languages` · `rating.pr_id` (no DDL) | ⚠️ Reported (typecheck clean on every touched file, biome clean; **not live-fired** — needs a backend restart + agency click-through, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
 | A6 | **Agency receipt editor (Approve + dispute queue)** — correct scanned/self-log drinks/tips in place via targeted `PATCH/POST /receipts/:id` (+ lines); never `PUT /payment-voucher/:id`. Same `AgencyReceiptEditor` in Receipts sub-tab and DisputeQueuePanel. Migrations **0083** (`payment_voucher_line.outlet_id`) + **0084** (`review_withdrawn_at`) applied on `innocenz-test`. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `payment-voucher.*` · `0083`/`0084` | receipt + line tables | ⚠️ Reported (landed `57bd165`; live click-through still owed — §9 audit items remain) |
 
@@ -312,6 +315,80 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ THE SHIFT DETAIL PANEL STILL SHOWS EVENT PRICES AS ONE RUN-ON LINE (5 Aug 2026)
+
+Post Job now edits a special event's prices as the Workspace's two lists (§8 O6), but
+`OutletShiftDetailPanel` still prints them as a single `·`-joined sentence from
+`shiftDrinkMenuDetailLines()` — no Drinks / Services grouping, so the same menu reads two ways again
+depending on which screen you are on.
+
+- [ ] Group the detail lines by `outletDrinkCategory` (the helper already returns the raw rows; add
+  the split at render, or return grouped lines). Keep the gold "differs from workspace" marker.
+- [ ] `formatShiftDrinkPricingSummary()` still says **"Event-specific · RM min–max"** across *both*
+  lists at once, so a RM 100 booking commission and a RM 1,000 bottle collapse into one range that
+  describes neither list. Decide whether the summary should quote the drinks range only, or both.
+- [ ] ⚠️ Deleting every row of an event menu silently falls back to the **workspace** prices
+  (`effectiveShiftDrinkMenu` treats empty as "not set"). Pre-existing, but the two-list editor makes
+  emptying one list easy — decide whether an empty event menu means "free" or "follow workspace", and
+  say so in the UI either way.
+
+### ▶ RESOLVED — the "NOT MINE" Post Job picker was a concurrent session's IN-FLIGHT work (5 Aug 2026)
+
+This entry used to read *"uncommitted in the tree, not mine"* and asked its owner to finish it. It was
+being written **as that entry was authored** — same worktree, same afternoon. It is now complete and
+live-verified; see §10 (h).
+
+The caution it recorded still stands and is the reason to keep this entry: ⚠️ **two writers were in
+this worktree at once on 5 Aug**, and `git status` changed underneath a staging step. What the entry
+got *wrong* is worth more than what it got right — it read a half-written diff and inferred a finished
+intent from it, then filed a to-do against a phantom owner. **A file that appears mid-session is not
+abandoned work; it may simply be work in progress.** Check for a live writer before filing, reverting,
+or "finishing" someone else's diff.
+
+- [x] Landed: `use-outlet-pr-pool.ts` (new) · `post-job-fields.tsx` · `routes/outlet/bookings.tsx`.
+  `languagesForPrIds` is deleted and its only two callers were updated in the same change.
+
+### ▶ MANAGE-PR DETAIL — all 3 sections wired; SHIFT HISTORY deliberately has NO payout (5 Aug 2026)
+
+Shift history is now a real read (§8 A7). What remains open on it:
+
+- [ ] **The payout column is intentionally absent — do not "finish" it by computing one.** Owner's
+  call: *"yes just show the shift and leave the payout empty"*. The sealed wage lives on
+  `payment_voucher_line`; deriving an amount from the rate card would create a SECOND source of truth
+  for money that can disagree with the voucher actually paid. If a payout is ever added, it must READ
+  the sealed line. This is the same shape as the RM703.60-billed-as-RM2,285.08 fault.
+- [ ] **Live-fire A7** together with A6 — needs a backend restart and an agency login.
+
+### ▶ MANAGE-PR DETAIL — 2 of 3 empty sections wired, SHIFT HISTORY still demo-bound (5 Aug 2026)
+
+Owner: *"why is this part of the 'Manage PR' under agency not showing the details? Such as its not
+showing their shift history, their languages and their rating."*
+
+Three empty sections, three **different** causes — they only looked like one bug because they stack on
+one screen. Two are fixed (§8 A6); the third is not, and is a bigger job.
+
+- [ ] **Shift history is still empty and still wrong — NOT fixed.** `routes/agency/prs.tsx` reads
+  `useStore(s => s.shiftHistory)` (the demo zustand store) and filters `r.prId === detail.id`. But
+  `detail.id` is a real backend PR **uuid** from `GET /pr`, while demo rows carry demo ids like
+  `pr_tied`, so the filter **can never match**. There is no backend shift-history read wired to this
+  section at all. It also has **no empty state**, unlike the ratings feed — which is why it renders a
+  blank card instead of saying "no shifts". Needs a real read (likely `shift-assignment` scoped to the
+  PR) before the card can mean anything. Adding an empty state without the read would only make the
+  emptiness look intentional.
+- [ ] **Live-fire A6.** Not run in the authoring session. Two gates: the **backend must be restarted**
+  (`tsx watch` serves stale routes, so `GET /pr` keeps returning the old 8-column profile), and the PR
+  under test must actually have `user_profile.languages` set — if that column is null the wiring is
+  correct and the box is still empty. Test with a PR known to have languages.
+- [ ] **`splitPortfolioComcard` is dead code** (`pr-personnel-map.ts` ~line 111). Its result is
+  destructured and thrown away; the return object uses `profile?.comcardImage` / `profile?.portfolioPhotos`
+  directly. So neither the comcard-extraction nor `repairDemoGalleryUploads` ever runs for agency PR
+  records. **Pre-existing — confirmed on HEAD via `git show`**, surfaces as `tsc` TS6198 + 2 biome
+  errors. Decide: use the split result (what the doc comment describes) or delete both helpers. Check
+  the admin PR screen first.
+- [ ] **Other placeholders still showing 0 on this screen**, untouched by A6 and still fed by
+  `managedPrFromBackend`: `attendancePct`, `kpiScore`, `totalPaid`, `place`, `yearsExp`. Each is a
+  neutral placeholder, not a measurement — do not let any of them badge or gate a decision until it has
+  a backend behind it. (`rating: 0` **was** one of these; A6 stopped it from firing the warn banner.)
 ### ▶ ⚠️ THE VOUCHER'S SIGNATURES ARE NOT PROOF OF ANYTHING (found 5 Aug 2026, NOT FIXED)
 
 Owner asked *"where to proof the agency sign?"*. Investigating it turned up something worse than the
@@ -978,6 +1055,457 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 (l) — MANAGE OUTLET SHOWED 0 SHIFTS, THEN 1 OF 3. TWO FILTERS, ONE SCREEN.**
+>
+> *"why is it not displaying the available shifts?"* … *"supposed to have 3 shifts today but right
+> now i only see 1"*
+>
+> Emhub Testing read **"0 listings · No open shifts match your filters"** while the same page's Today
+> card read **17/0**. Both come from the same backend array, split into two builders with different
+> rules. `shiftsFromPosted` demanded `status === "open"`; **no real post is ever `open`** — the
+> backend stamps every outlet-posted job `confirmed` on create (`shift.controller` createShift:
+> posting *is* the outlet committing to run it), and the client cannot set status. The day-demand
+> builder and the roster week grid both already accepted `confirmed`, which is why the KPI and the
+> calendar showed the events the list denied.
+>
+> Fixing that exposed a second collapse underneath: `dedupeOutletShiftsOnePerDay` keyed its `Map` on
+> the **calendar day alone**, so an outlet's three distinct shifts (10a-12p, 10p-4a, 12p-2p) became
+> one row — `preferOutletShift` kept the richest. **6 + 6 + 5 = 17**, which is exactly why the KPI
+> said 17 and the group header said 6: the header re-sums the survivors. Now keyed on day **+
+> normalized time** (`dedupeOutletShiftsOnePerSlot`); a tied offer mirroring a post still collapses,
+> because `findMatchingOutletShift` pairs those two on that same normalized time.
+>
+> **Both edits are frontend-only** — one file, no migration, no writes, no status rewritten.
+> `apps/web`'s **first ever test file** ships with them (`agency-outlet-shifts.test.ts`, 5 cases).
+> Each fix was proven by reverting it: `expected [] to have a length of 1` and `expected … length of
+> 3 but got 1` — the two reported symptoms, reproduced. Not verified in the agency UI itself (no
+> agency session in the automated browser).
+>
+> Third round, same screen: with all 3 listing, **2 had already finished**. `isUpcomingOutletShift`
+> compared the **date only**, so anything dated today survived until midnight. Now it compares the
+> shift's **end** against the clock — a running shift still counts as upcoming, and an overnight
+> window (22:00-04:00) is measured on a continuous timeline so it never reads as "over" on the night
+> it starts. `nowMinutes` is injected (read **once** per pass in `buildAgencyOutletSummaries`) rather
+> than sampled inside, so the tests need no frozen clock. An unparseable label keeps the old
+> date-only answer — a window we cannot read must not silently delete a shift.
+>
+> ⚠️ **Known mismatch, deliberate:** the Today KPI still counts the whole day's demand (**17**) while
+> the list now sums only what has yet to end (**6**). The KPI is fed by `buildOutletDayDemandSummaries`,
+> which has no time filter. Decide whether the card means "today's demand" or "still to staff".
+>
+> **The shared rule now lives in 3 places.** `shiftsFromPostedForWeek` and
+> `buildOutletDayDemandSummaries` still spell out `open || confirmed` inline. Correct today; that
+> duplication is precisely what let this diverge. See §9.
+
+> **5 Aug 2026 (k) — THE MANAGE-PR EDITOR SAVED 4 OF ITS 14 FIELDS AND SAID NOTHING.**
+>
+> *"why is it that when i try to edit the profile i cannot?"*
+>
+> Race, Place, Years exp, Age, Height, Weight, Languages, KPI tier, Training tier and Pay class were
+> **never sent**. `use-agency-prs.ts` forwarded four keys; the rest died in the browser. The request
+> still returned **200** — `UpdatePrSchema` is a plain `z.object().partial()`, so unknown keys are
+> stripped silently — then the refetch overwrote what you typed. Same family as the signup that
+> collects a company and keeps 7 of 19 fields.
+>
+> **The columns mostly already existed; the write path did not.** `user_profile` has held `race`,
+> `languages`, `dob`, `comcard_height_cm`, `comcard_weight_kg` all along, and `PUT /pr/:id` has
+> always accepted `tier` — the client just never sent it. The only route that writes `user_profile`
+> is `PATCH /user/:id`, which is **self-only** and 403s any other actor, so an agency had no way in.
+>
+> Migration **0089** adds `place` / `years_exp` / `kpi_tier` / `pay_class` to **`agency_pr`**, not
+> `pr` — the owner's call, since `pr` is slated for removal. It is also the more correct home: these
+> grade a PR *under one agency*, and a PR on two rosters can hold two different values, which a
+> column on `pr` could not represent. `PUT /pr/:id` now fans one payload out to three tables, scoped
+> by the agency that owns the PR; the reads left-join `agency_pr` on **both** ids, because matching
+> `pr_id` alone would hand one agency another's grading.
+>
+> **Live-proven 10/0/0** over real HTTP (`probe-pr-profile-save.ts`): every field written and read
+> back, then restored. The probe asserts on **read-back, never on the 200** — the old code returned
+> 200 too, which is the whole bug.
+>
+> ⚠️ **The migration ledger's max is NOT the journal's max.** `0085` was skipped in silence with
+> "migrations applied successfully" because its `when` (1786000000000) beat the journal's newest
+> entry but lost to `drizzle.__drizzle_migrations`, which was already at **1786300000000** from a
+> teammate's branch. Read the LEDGER before choosing `when`. Renumbered to 0089 (85–88 are taken).
+>
+> Age is edited as a number but stored as a DOB: only the **year** moves, month and day are kept,
+> so an agency editing an age cannot silently rewrite a PR's birthday. Backend `tsc` clean; the four
+> orphan fields no longer need the read-only treatment that was the alternative.
+
+> **5 Aug 2026 (j) — THE COMCARD BADGE WAS HIDING THE PR'S STATUS ON THE MANAGE-PR GRID.**
+>
+> *"On the agency Manage-PR grid card, Vicky's 'Active' badge is covered by the 'Photo Comcard' badge
+> from PortfolioComcardVisual — both sit top-right. Suppress the comcard badge in the grid-card
+> context."*
+>
+> Two absolutely-positioned pills claimed the same corner: `.iz-pr-manage-card__status` at `top/right
+> 8px, z-index 2` and `.iz-portfolio-comcard__badge` at `top/right 10px, **z-index 3**`. The badge won,
+> so **any PR whose comcard is a generated 4-photo collage read as having no status at all** — while a
+> PR on the 3D stage showed Active normally. The grid looked inconsistent; the data never was.
+>
+> `PortfolioComcardVisual` now takes `showBadge` (default `true`); `ComcardGridVisual` passes `false`.
+> The label is redundant there anyway — a grid card is not where you choose between comcard kinds.
+> Detail and preview sheets (`Comcard3dPreviewVisual`, `agency/pending`) keep the badge.
+>
+> **Live-checked on `/en/agency/prs`:** 0 `__badge` nodes in the grid, and for all three cards
+> `document.elementFromPoint()` at the status pill's own centre now returns the pill itself — including
+> Vicky, the one card rendering a portfolio collage. The detail panel could **not** be exercised: the
+> browser session is an outlet login and clicking a card bounces to `/en/outlet`, so that path is
+> argued from the code (prop defaults to `true`, call sites unchanged), not proven.
+>
+> `tsc` clean for both files (14 pre-existing errors elsewhere, unchanged). Biome's two
+> `noArrayIndexKey` hits on `PortfolioComcardVisual.tsx` are **not from this change** — one is at HEAD,
+> one arrived with the picker thumb earlier today.
+
+> **5 Aug 2026 (j) — "HAVOC IS A SERVICE AND TIPS ALSO": POST JOB WAS READING THE DEMO MENU.**
+>
+> Splitting the event editor into two lists (i, below) immediately exposed a **second** bug, because a
+> wrong grouping is visible in a way a wrong flat list is not: Post Job put **Havoc under DRINKS** and
+> showed **no Tips at all**, while the Workspace page had Havoc under Service Entitlement and Tips at
+> RM 50. Two screens, one menu, two answers.
+>
+> **This is [[the PR-picker bug]] again, same file, same week.** `routes/outlet/bookings.tsx` read
+> `useStore(s => s.outletWorkspace)` — the **demo** slice — while the Workspace page reads the real
+> `outlet_drink_menu` through `useOutletWorkspace()`. This session is `sessionKind: "real"` with a live
+> `iz-outlet-identity`, so the two screens were reading two different databases. Fixed the way the
+> picker was: the **route** fetches and passes `workspaceMenu` down as a prop (no new import edge in
+> the 1,975-line component — see [[import-cycle-killed-agency-portal]]), and `DraftShiftEditor` /
+> `DraftShiftSummary` fall back to the store only when the prop is absent (demo sessions). All four
+> menu reads now go through one `workspaceDrinkMenu` — the event clone on switching to Special, the
+> Reset button, the "Follow Workspace · RM x–y" locked value, and the category backfill.
+>
+> **The demo seed was ALSO wrong, and would have kept lying on demo logins.**
+> `DEFAULT_OUTLET_DRINK_MENU` had `havoc` as `category: "drink"` and **no Tips row at all** — so the
+> flat editor's "everything says SERVICE" label had been hiding a mis-categorised seed the whole time.
+> Havoc → `service`, new `tips` row at `DEFAULT_PER_TIP_RM` (50). Saved demo workspaces are corrected
+> in `normalizeOutletWorkspace`, but **only for rows still identical to the bad seed** — a row the
+> outlet re-priced or moved itself is their choice and is left alone, so the correction can't snap
+> back a deliberate edit.
+>
+> **Live-proven, both halves.** Post Job now renders the same **6 drinks · RM 30–200** and **3
+> services · RM 50–1000** as the Workspace page, Lemon Drop and Tips included. Isolation still holds
+> against the real source: setting the event's Tips to RM 999 produced **no PUT** — the only
+> `outlet-workspace` traffic was the GET.
+>
+> **What the two bugs share:** the split didn't cause the second one, it *revealed* it. A flat list of
+> nine rows all labelled SERVICE is unfalsifiable — nothing about it can look wrong. Give the same
+> data a shape the user already knows and a mismatch announces itself in one glance. **Grouping is a
+> test, not just a layout.**
+>
+> **5 Aug 2026 (i) — SPECIAL EVENT PRICES SPLIT INTO THE WORKSPACE'S TWO LISTS.**
+>
+> *"help me separate the 'Special event' prices to how it is displayed in the workspace. but remember
+> the logic where the drinks/tips price that is changed in the 'Special Event' shift is only for that
+> event."*
+>
+> Post Job's special-event price editor rendered **one flat list, every row labelled SERVICE** — so
+> Cosmo and Booking commission sat in the same column while the Workspace page had already split the
+> same menu into **DRINKS PRICE** and **SERVICE ENTITLEMENT**. Same data, two different pictures of
+> it. New `ShiftEventPriceEditor.tsx` renders the workspace's two groups (header + `n drinks · RM
+> min–max` hint, the ↔ move control, per-list Add More) over the event's own menu. The field is now
+> labelled **Prices**, not "Drink prices" — it was never only drinks.
+>
+> **The split already existed; it just wasn't reused.** `outletDrinkCategory` /
+> `sortOutletDrinkMenuByPrice` / the `category`-aware `OutletDrinkMenuEditor` were all shipped for the
+> Workspace page — but the two-list layout was written *inline inside `routes/outlet/workspace.tsx`*,
+> so the only other screen editing the same menu could not have it without re-typing it. Extracting it
+> was the whole fix; `post-job-fields.tsx` (1,975 lines, already past the 800 ceiling) got a delete,
+> not an addition.
+>
+> **Isolation was already correct and is now proven, not assumed.** Nothing on this path writes
+> `outletWorkspace.drinkMenu`: switching to Special clones it (`cloneDrinkMenu`), edits land on the
+> draft's `eventDrinkMenu`, and `store.ts` copies the rows again (`.map(d => ({...d}))`) when the
+> shift is posted. Normal events never read it — `effectiveShiftDrinkMenu` returns the workspace menu
+> unless `eventKind === "special"`. **Live-checked in the browser:** set the event's Cosmo to RM 999
+> and moved Booking commission across both lists and back; `localStorage.innocenz-store →
+> outletWorkspace.drinkMenu` re-read **byte-identical afterwards** (Cosmo still 150, still
+> `category: "drink"`), and a Normal event still shows *Follow Workspace · RM 100–1000*.
+>
+> One backfill: `withDrinkCategoriesFromWorkspace()` borrows a category **by id** for event menus
+> saved before the split (they carry none, and `outletDrinkCategory` defaults those to `service` —
+> which would have dumped every drink of an existing VIP shift into Service Entitlement). Display
+> only; the workspace list is read, never written.
+>
+> Verified: `tsc` adds **0 new errors** (the 3 on touched files are pre-existing unused-symbol
+> warnings — `PostJobPayTierId`, `FormRow`, `resolveShiftPayTierRows` — none of them mine); biome
+> clean on the new file; no console errors.
+>
+> **5 Aug 2026 (h) — POST JOB: LANGUAGES BECOME AN ASK, AND THE PR PICKER FINALLY ASKS THE BACKEND.**
+>
+> Two complaints on one screen, and they turned out to share half a cause.
+>
+> **1. "Languages" was a read-out, not a request.** The field's options were
+> `collectAgencyPrLanguages(agencyPRs)` and its selection auto-filled from whoever was picked below —
+> so an outlet that wanted Mandarin on the floor could only say so by *first finding a PR who already
+> spoke it*. Backwards: the outlet is stating a preference for a shift that has not been staffed yet.
+> Now labelled **Preferred languages**, options are the full `PR_LANGUAGE_OPTIONS` list, selection is
+> `shift.langs` alone, and the hint says it outright — *"A plus, not a requirement — PRs who don't
+> speak these can still be assigned to the shift."*
+>
+> Worth recording that **nothing was ever restricting**: `shift.languages` is a `varchar(255)` that no
+> backend query and no auto-assign path reads. The restriction lived entirely in how the field
+> behaved. Also dropped the fallback in `bookings.tsx` that posted the *selected PRs'* languages when
+> the outlet had picked none — that shipped a request nobody had made.
+>
+> **2. "No PRs available to select" was a screen that had never been wired.** `DraftPrPicker` read the
+> demo store's `prs` slice, which a real login **blanks on purpose** (`buildBlankPortalReset`). So
+> every backed outlet saw an empty list that read as a rule about availability. New
+> `use-outlet-pr-pool.ts` fetches `GET /pr` (sharing `useOutletToday`'s query key) and the picker takes
+> them as `candidates`. **Live-proven:** `owner@velvet23.my` had **3 PRs the whole time** — Haziq
+> Iskandar, Nurul Aina, Vicky — returned by the API before any UI change, and now rendering.
+>
+> Two details the wiring forced: a backend PR carries **no rating**, so the card prints **"Not rated
+> yet"** rather than the `0★` a numeric default would have invented (real stars come from this
+> outlet's own `GET /rating` rows), and unrated PRs sort last by name instead of being ranked as if
+> they had scored zero. And where the pool is genuinely empty, `emptyHint` now says **why** — the
+> server pins an outlet to PRs who have worked at its own venues, so a new venue has nobody to name
+> yet and should just post the shift unnamed.
+>
+> **The shape of both bugs is the same:** a field that looked broken was a field reading the wrong
+> source, and in both cases the wrong source was the demo store that a real session deliberately
+> empties. Anything on a ported portal screen still reading `useStore` for *data* is a candidate.
+>
+> **Third pass — the thumbs are supposed to be COMCARDS, and only one kind was handled.**
+> `PrComcardPickerThumb` rendered a **saved** comcard (`user_profile.comcard_image`) or nothing. The
+> agency comcard screens have always used a three-step chain — saved comcard → **one generated from
+> four portfolio photos** → fallback — and the picker only ever implemented step one. So a PR who had
+> uploaded photos but never exported a comcard looked identical to a PR with no photos at all.
+>
+> The picker now runs the same chain (`canGeneratePortfolioComcard` / `PortfolioComcardVisual` were
+> already in that very file — no new import edge, which matters here given [[import-cycle-killed-agency-portal]]),
+> and the pool builds its records through `managedPrFromBackend`, the mapper Today/History already use,
+> so one PR's comcard is built one way across the portal. Where there is genuinely nothing, the frame
+> says **"No comcard yet"** rather than substituting a profile portrait — a stand-in there would read
+> as *"this is their comcard"*.
+>
+> **Live-checked against the API first, which is what made the fix correct rather than plausible:**
+> Vicky had **4 portfolio photos and no saved comcard** (so a comcard was buildable and simply wasn't
+> being built); Haziq and Nurul had **no comcard, no photos, no dob, no height** (so nothing was
+> buildable and the honest answer is a caption). Verified in the DOM: Vicky renders
+> `.iz-portfolio-comcard` with 4/4 images loaded and the overlay *"Vicky · Age 31 · 153cm · 40kg"*;
+> the other two render the placeholder. Had I not queried first, "show their comcard" would most
+> naturally have been read as "put their photo there" — which is the bug I had just made.
+>
+> **Fourth pass — two owner corrections, both narrowing what I had widened.**
+>
+> *"Make it display like the Alice one."* Alice's is a **saved** comcard — a pre-rendered image with
+> its label baked in small. The generated one reused `PortfolioComcardVisual` wholesale, whose overlay
+> and **"Photo Comcard"** badge are sized for a full-width card and at picker size swallowed the
+> photos. The thumb now renders the same 2×2 grid with a compact centred label and no badge, so a
+> generated comcard sits beside a saved one without shouting louder. Reused
+> `iz-portfolio-comcard__grid` + `PortfolioComcardCell` rather than adding CSS — **deliberate**, since
+> `prototype-theme.css` was being edited by the concurrent session at that moment.
+>
+> *"Only show the languages the PRs have, plus an Others."* I had swung from *"languages of the
+> SELECTED PRs"* (a read-out) all the way to *"every language there is"* (a wish list, most of it
+> unreachable at this venue). The owner's line is the middle one that neither extreme found: key it to
+> the **whole pool** — one tap for the realistic case — and keep the unreachable case *possible*
+> rather than merely absent via **+ Others**. Still a preference; nothing filters assignment.
+>
+> Verified live: pills are Vicky's five (Cantonese/English/Hokkien/Mandarin/Vietnamese) + Others;
+> typing `tamil` title-cases to **Tamil**, adds it as a selected pill and closes the input; comcard
+> badge gone; Vicky 4/4 photos. `tsc` **119** — one *below* the 120 baseline, because the Others input
+> put the file's previously-unused `useState` import to work.
+>
+> ⚠️ **The concurrent session stashed my three files mid-session** (`stash@{0}`, with its own work).
+> Recovered them with `git show stash@{0}:<path>` per file, stash left intact. **Restoring from a
+> shared stash beats re-typing the edit** — but check `git status` before assuming your tree is yours.
+>
+> Files: `use-outlet-pr-pool.ts` (new) · `post-job-fields.tsx` · `routes/outlet/bookings.tsx` ·
+> `PortfolioComcardVisual.tsx`. `tsc` 119 ≤ baseline 120; biome 34 vs **36** at baseline on the
+> Post Job pair, and the single finding on `PortfolioComcardVisual.tsx` is pre-existing
+> (`noArrayIndexKey`, line 125, untouched code).
+
+> **5 Aug 2026 (i) — MANAGE-PR CARD TEXT WAS TOO SMALL TO READ.**
+>
+> *(Relabelled from (h): a concurrent session claimed (h) for the Post Job entry while this was being
+> written. Two sessions appending to one changelog will collide — check the last letter before adding.)*
+>
+> Owner: *"increase the font size of these words as they are way too small right now and its hard to
+> read"*. `prototype-theme.css`, `.iz-pr-manage-card__*` only — those classes have exactly one consumer
+> (`ManagePrGridCard.tsx`), so the outlet portal imports the same sheet and is untouched.
+>
+> | | before | after |
+> |---|---|---|
+> | name | 14px | **16px** |
+> | rating (+ star) | 13px (12px) | **15px (14px)** |
+> | tier pill | 9px | **11px** |
+> | meta (languages) | 11px | **13px** |
+> | metric label | 10px | **12px** |
+> | metric value | 11px | **14px** |
+>
+> Two changes beyond scale, because the ask was *legibility*: the metric labels and the language line
+> moved `--iz-muted2` → `--iz-muted` (they were dim as well as small, and size alone would not have
+> fixed the contrast), and the rating + metric values got `tabular-nums` so `RM 0` / `0%` / `2.0` stop
+> shifting width between cards in a grid.
+
+> **5 Aug 2026 (g) — SHIFT HISTORY AS CELLS (the owner's fix, and the better one).**
+>
+> Owner: *"maybe it would look like more space is used if u make it cells instead of rows?"* — and that
+> is the right answer. Three stacked rows on a wide card leave the entire right half empty no matter how
+> the row itself is arranged; my two previous attempts were both rearranging **within** a row. Three
+> **cells across** use the width by construction.
+>
+> Now `grid grid-cols-1 gap-2 sm:grid-cols-3` with bordered cells — **the same grid the Penalties block
+> on this very screen already uses**, so it is house style rather than a new invention. Venue is the
+> cell title (semibold, truncating), date sits beneath in muted `tabular-nums`, outcome pill top-right.
+> Collapses to one column on narrow screens.
+>
+> The lesson worth keeping: **I twice optimised the row when the row was the problem.** Asked for more
+> space, I adjusted alignment, then padding — never the axis. The owner changed the layout primitive in
+> one sentence.
+
+> **5 Aug 2026 (f) — A DESIGN REQUEST IS NOT A CONTENT REQUEST.**
+>
+> Owner: *"i specifically said make the design better so why did you add more shifts?"*
+>
+> In (d) I tightened the shift-history rows and then, because the rows were now shorter, raised the card
+> from **3 shifts to 5**. Nobody asked for that. How many shifts an agency sees is **content** — a
+> product decision that belongs to the owner — while spacing, hierarchy and alignment are the styling
+> that was actually requested. Reverted to 3; the density and layout work stands.
+>
+> The rule: **"make it look better" grants no licence over what is shown.** Freed-up space is not a
+> mandate to fill it. Widening scope is the same fault as narrowing it — either way the deliverable
+> stopped matching the ask, and the owner had to notice rather than being told.
+
+> **5 Aug 2026 (e) — RECORDED, NOT COMMITTED: Post Job picker work appeared in the tree mid-session.**
+>
+> `post-job-fields.tsx` (+72/−59) and a new `use-outlet-pr-pool.ts` showed up in the worktree after
+> `3582d52`. **Not authored by this session** — recorded in §9 for its owner rather than swept into a
+> Manage-PR commit. It imports `formatStars` from `lib/pr-rating-summary.ts` and repeats the
+> unrated-is-not-zero rule, so it is downstream of (d); it also removes `languagesForPrIds`, which will
+> break any remaining importer until it lands. The doc rule says renew TEST_SCRIPT on every slice — it
+> does not say adopt someone else's diff.
+
+> **5 Aug 2026 (d) — I FIXED THE FLAG AND FORGOT THE NUMBER (a partial wiring looks exactly like a working one).**
+>
+> Owner: *"the design still looks like it waste a lot of space"*, then *"also why is the rating not
+> showing how many stars they got here in the second image?"*
+>
+> **Density.** The row used `justify-between` across a full-width card, so venue and date sat at opposite
+> edges with a gulf between them — the eye had to cross the card to pair them. Venue and date now sit
+> together on the left, row padding `py-2`→`py-1.5`, and **the free right edge became the exception
+> column**: empty on a normal shift, so a No-show pill is scannable straight down the list. Tighter rows
+> pay for more content, so the card shows **5** shifts instead of 3 (`SHIFT_HISTORY_ROWS`).
+>
+> **The rating miss — worth reading before trusting any "wired it up" claim.** The detail screen's
+> ratings feed was correct (the owner's screenshot shows the real `2★ · Jul 30, 2026` row). But the
+> **grid card** printed `★ 0.0` on that same PR, because `ManagePrGridCard` renders `pr.rating.toFixed(1)`
+> directly — and I had only passed the real average into `getAgencyPrFlags`, not into the card's own
+> number. So the **Warn pill was right for the right reason** (2.0 < 3.5) while the number beside it was
+> the placeholder. Two readings of "the rating" in one component, and I wired one.
+>
+> The rule: **when a value has more than one renderer, fixing the one you were looking at leaves the
+> others lying — and the fixed one makes the screen look fixed.** A card that says `0.0` next to a
+> correctly-earned Warn is more misleading than one that is wrong throughout, because the flag lends the
+> number credibility.
+>
+> The card now takes `averageRating` and **hides the rating chip entirely when the PR has never been
+> rated**, rather than printing `0.0` — matching the detail screen's "not rated yet". Still-placeholder
+> on that card and untouched: `Paid RM 0`, `Att. 0%`, `KPI 0` (§9).
+>
+> `apps/web` at its 120 baseline; the 2 biome findings on `ManagePrGridCard` are the pre-existing
+> `<article role="button">`, confirmed on HEAD.
+
+> **5 Aug 2026 (c) — A DESIGN PASS THAT FOUND TWO THINGS THE LIST WAS SAYING WRONG.**
+>
+> Owner asked to *"help me make the design better"* on the now-working Shift history card. The screenshot
+> showed three flat rows, two of them reading **identically** (`Aug 5, 2026 · Emhub Testing` twice).
+>
+> Polish applied: outlet promoted to the primary text and the date demoted to muted **`tabular-nums`** so
+> dates align down the column; `text-pretty` + `truncate` on venue names; row switched from a `<p>` to a
+> baseline-aligned flex row.
+>
+> **But two of the fixes are not cosmetic, and they only surfaced because the design was looked at:**
+>
+> 1. **A no-show rendered identically to a worked shift.** The **Suspend** and **Detach** buttons sit
+>    directly below this list — an unmarked absence reads as attendance to whoever is deciding. Rows now
+>    carry an outcome pill (No-show / Cancelled / Leave / Leave pending). Clean shifts stay **unlabelled
+>    on purpose**: marking everything is the same as marking nothing. This is also what distinguishes the
+>    two identical-looking rows — and two shifts in one day at one venue is legitimate (a PR may work
+>    several), so the duplicate look was never a rendering bug, it was missing information.
+> 2. **"Shift history" was listing shifts nobody had worked yet.** `GET /shift-assignment` returns every
+>    assignment including next week's roster, so future `assigned`/`confirmed` rows appeared under a
+>    heading that claims the past. Now cut at today. **This was mine, introduced in (b)** — the read was
+>    correct and the framing was not.
+>
+> The rule: *a list titled History that contains the future is a correctness bug wearing a design
+> complaint's clothes.* Both faults were invisible while the card was blank, and neither showed up in a
+> typecheck.
+>
+> `apps/web` at its 120 baseline, biome clean. **Still not live-fired** — the screenshot is the owner's,
+> so the READ is confirmed working end to end; the pills and the today-cut are not yet seen running.
+
+> **5 Aug 2026 (b) — SHIFT HISTORY WIRED, AND THE PAYOUT LEFT EMPTY ON PURPOSE.**
+>
+> Owner: *"so the shift history display is it a read function or are you going end up editing the
+> database?"*, then *"yes just show the shift and leave the payout empty"*.
+>
+> Worth recording that the owner asked the scoping question BEFORE approving the work — and the answer
+> decided the size of it. It is a **read**: no table, no column, no migration. Everything needed already
+> existed — `listForPr` already joined the outlet, `GET /shift-assignment` already filtered by `prId`.
+> The card was blank because it read the **demo store** and compared a real uuid against demo ids.
+>
+> **The payout is absent by decision, not omission.** The sealed wage lives on `payment_voucher_line`.
+> Deriving an amount from the rate card would have given wages a second source of truth that can
+> disagree with the voucher the agency actually pays — the exact shape of the fault that once billed
+> RM703.60 of work as RM2,285.08. Showing the shift without the amount is the honest half. Anyone
+> "finishing" this column later must READ the sealed line, and `useAgencyPrShiftHistory`'s doc comment
+> says so at the point of temptation.
+>
+> **The security question I flagged before building came back clean, and it was worth asking.** Wiring a
+> screen is the moment an endpoint's scoping gets tested for real — this codebase has shipped two
+> org-scope holes that were invisible precisely because nothing called the gate. Here `list` forces
+> `agencyId: scope.agencyId` for any non-admin and only lets an admin pass one, so an agency querying
+> another agency's `prId` gets zero rows. A real scope check, not a role gate. **No client-side filter
+> was added** — one would look like protection while protecting nothing.
+>
+> Also: the card now says **"No shifts yet"**. It previously rendered nothing at all, which reads as
+> broken rather than empty — the ratings feed had an empty state and this did not.
+>
+> `outlet.name` is joined through the FK in `listPaginated`, never copied onto the row (DB rule 3).
+> Backend typecheck unchanged (1 pre-existing `main.ts` error); `apps/web` back to its 120 baseline
+> after dropping the now-unused `formatRM` import. **Not live-fired** — same two gates as A6.
+
+> **5 Aug 2026 — THREE EMPTY BOXES ON ONE SCREEN, THREE UNRELATED CAUSES (a shared symptom is not a shared bug).**
+>
+> Owner: *"why is this part of the 'Manage PR' under agency not showing the details? Such as its not
+> showing their shift history, their languages and their rating. All of them aren't showing"*, then
+> *"so what you are saying now is language is not an existing column in the database?"* — no, the
+> opposite, and that question is worth recording because the answer inverts the obvious diagnosis.
+>
+> Languages, Shift history and Ratings were all blank in Manage-PR → PR detail. The tempting read is
+> one broken fetch. It was **three separate faults**, and only one of them was missing data.
+>
+> | section | cause | fixed? |
+> |---|---|---|
+> | Languages | column **exists** (`user_profile.languages`, migration 0055) and the PR portal writes it — but `GET /pr`'s profile projection selected 8 columns and this was not one of them, so the mapper hardcoded `languages: []` | ✅ |
+> | Ratings | joined on the **display name** — the outlet writes its roster's legal name into `rating.pr_name`, Manage-PR shows the floor nickname. The row carried a real `pr_id` that matches exactly, and `ratingFromBackend` was **dropping it** | ✅ |
+> | Shift history | reads the **demo store** and filters `r.prId === detail.id` — a real uuid against demo ids like `pr_tied`. No backend read exists for it at all | ❌ §9 |
+>
+> **The rule this leaves behind: the same PR row was reachable by two endpoints and only one of them
+> looked.** `GET /user` returned languages the whole time — which is exactly why the PR's own portal
+> showed five of them while the agency showed an empty box. Same table, same row, two readers, one
+> blind. When a field is blank on one screen and populated on another, compare the two *projections*
+> before you suspect the data.
+>
+> **Second rule: `0` is not a score.** `managedPrFromBackend` fills `rating: 0` as a neutral placeholder
+> because `GET /pr` returns no rating — and `getAgencyPrFlags` read it as a measurement, so **every**
+> backend PR tripped "average 0★ is below 3.5★ — monitor performance". A placeholder that flows into a
+> judgement becomes a false accusation about a real person. `getAgencyPrFlags` now takes an optional
+> real average where `null` = never rated, and **null never warns**. The same placeholder was silently
+> breaking the Min-rating filter (any value emptied the grid); that is fixed for the same reason.
+>
+> New shared module `lib/pr-rating-summary.ts` holds the one matching rule — `prId` when present, name
+> only as the demo-row fallback — so the grid and the detail cannot drift apart.
+>
+> **NOT live-fired.** Typecheck clean on every touched file (backend: 1 pre-existing error in
+> `main.ts`; `apps/web`: 120, all baseline — the single finding in a touched file is TS6198 in
+> `pr-personnel-map.ts`, **proven pre-existing on HEAD** by `git show`). Biome clean for the change;
+> `organizeImports` applied because imports were added and this repo has lost the whole agency portal
+> to a route-import cycle before — the new module is imported **type-only**, so it adds no runtime edge.
+> Before believing any of it: **restart the backend** (`tsx watch` serves stale routes) and test against
+> a PR whose `languages` column is actually populated.
 > **5 Aug 2026 — THE SIGNING SCREEN GETS THE SAME EVIDENCE SHEET (every row, wages included).**
 >
 > Owner: *"i cannot click the daily wages and the drinks tips other verified details , can make dispute

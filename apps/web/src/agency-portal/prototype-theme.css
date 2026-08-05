@@ -11970,7 +11970,7 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-card__name {
 	min-width: 0;
 	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 14px;
+	font-size: 18px;
 	font-weight: 700;
 	color: var(--iz-txt);
 	white-space: nowrap;
@@ -11980,15 +11980,16 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-card__rating {
 	display: inline-flex;
 	align-items: center;
-	gap: 3px;
+	gap: 4px;
 	flex-shrink: 0;
-	font-size: 13px;
+	font-size: 17px;
 	font-weight: 700;
+	font-variant-numeric: tabular-nums;
 	color: var(--iz-gold-l, var(--iz-gold));
 }
 .iz-pr-manage-card__rating-star {
-	width: 12px;
-	height: 12px;
+	width: 16px;
+	height: 16px;
 	fill: currentColor;
 	stroke: none;
 }
@@ -12000,21 +12001,37 @@ button.iz-pr-offer-row:hover {
 }
 .iz-pr-manage-card__tier {
 	flex-shrink: 0;
-	font-size: 9px !important;
-	padding: 2px 7px !important;
+	font-size: 12px !important;
+	padding: 4px 9px !important;
 }
 .iz-pr-manage-card__meta {
 	min-width: 0;
-	font-size: 11px;
-	color: var(--iz-muted2);
+	font-size: 14px;
+	color: var(--iz-muted);
 	white-space: nowrap;
 	overflow: hidden;
 	text-overflow: ellipsis;
 }
+/* "+3" — how many languages the card could not fit. Muted and non-interactive:
+   it reports that more exist, the profile is where you read them. */
+.iz-pr-manage-card__more-langs {
+	flex-shrink: 0;
+	font-size: 13px;
+	font-weight: 600;
+	color: var(--iz-muted2);
+	cursor: default;
+}
 .iz-pr-manage-card__flags {
 	display: flex;
 	flex-wrap: wrap;
-	gap: 4px;
+	gap: 5px;
+}
+/* Warn / Suspend / Tied. These carried an inline `!text-[8px]` on each pill, so
+   they were the one thing the card's type scale could not reach — and they are
+   the labels that most need reading. Sized here with the rest. */
+.iz-pr-manage-card__flag {
+	font-size: 12px !important;
+	padding: 3px 9px !important;
 }
 .iz-pr-manage-card__metrics {
 	display: grid;
@@ -12025,16 +12042,19 @@ button.iz-pr-offer-row:hover {
 .iz-pr-manage-card__metric {
 	display: flex;
 	flex-direction: column;
-	gap: 1px;
+	gap: 2px;
 	min-width: 0;
 }
 .iz-pr-manage-card__metric-label {
-	font-size: 10px;
-	color: var(--iz-muted2);
+	font-size: 13px;
+	/* Was muted2 — at this size the labels were dim as well as small, and the
+	   ask was legibility, not just scale. */
+	color: var(--iz-muted);
 }
 .iz-pr-manage-card__metric-value {
-	font-size: 11px;
+	font-size: 16px;
 	font-weight: 600;
+	font-variant-numeric: tabular-nums;
 	color: var(--iz-txt);
 	white-space: nowrap;
 	overflow: hidden;

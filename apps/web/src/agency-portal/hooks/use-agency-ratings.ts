@@ -7,12 +7,16 @@ import { fetchRatings, type RatingRecord } from "@/services/rating";
 const RATINGS_KEY = ["agency", "ratings"] as const;
 
 /**
- * The shape both readers already render. `pr` is the display NAME, not an id,
- * because Manage PR and the shift history log both match on
- * `r.pr === detail.name`.
+ * The shape both readers already render. `pr` is the display NAME, kept because
+ * the shift history log still renders by name and demo rows have nothing else.
+ *
+ * `prId` is the real `rating.pr_id` and is the field to match on: the outlet
+ * writes its roster's legal name into `prName`, while Manage PR shows the floor
+ * nickname, so the two never had to agree. Absent on demo rows.
  */
 export interface AgencyRating {
 	id: string;
+	prId?: string;
 	pr: string;
 	stars: number;
 	note: string;
@@ -34,6 +38,7 @@ function displayDate(iso: string): string {
 export function ratingFromBackend(record: RatingRecord): AgencyRating {
 	return {
 		id: record.id,
+		prId: record.prId,
 		pr: record.prName,
 		stars: record.stars,
 		note: record.note ?? "",

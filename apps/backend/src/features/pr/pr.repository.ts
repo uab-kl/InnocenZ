@@ -6,7 +6,16 @@ import { ShiftTable } from '@/features/shift/shift.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
-import { PrTable, PrInsertType, PrType, PrFilter, PrProfile, PrWithProfileType } from './pr.model';
+import {
+  AgencyPrTable,
+  PrTable,
+  PrInsertType,
+  PrType,
+  PrFilter,
+  PrProfile,
+  PrRoster,
+  PrWithProfileType,
+} from './pr.model';
 
 // Comcard / identity columns exposed alongside each `pr` row. They live on the
 // linked user account, so the read paths left-join it — that is the same source
@@ -17,14 +26,36 @@ const profileColumns = {
   race: UserProfileTable.race,
   dob: UserProfileTable.dob,
   nationality: UserProfileTable.nationality,
+  languages: UserProfileTable.languages,
   portfolioPhotos: UserProfileTable.portfolioPhotos,
   comcardImage: UserProfileTable.comcardImage,
   comcardHeightCm: UserProfileTable.comcardHeightCm,
   comcardWeightKg: UserProfileTable.comcardWeightKg,
 };
 
+// The agency's own grading of this PR, from the `agency_pr` link row (0089).
+// Joined on BOTH ids: a PR on two rosters has two rows, and matching on pr_id
+// alone would hand one agency the other's grading.
+const rosterColumns = {
+  place: AgencyPrTable.place,
+  yearsExp: AgencyPrTable.yearsExp,
+  kpiTier: AgencyPrTable.kpiTier,
+  payClass: AgencyPrTable.payClass,
+};
+
 /** Collapses an all-null left-join result (no user, or no profile) to `null`. */
 function toProfile(row: PrProfile): PrProfile | null {
+  const hasValue = Object.values(row).some((value) => value !== null && value !== undefined);
+  return hasValue ? row : null;
+}
+
+/**
+ * Same collapse for the roster half. The argument is nullable because the join
+ * itself can miss entirely — a PR with no `agency_pr` row at all — which is a
+ * different miss from a row that exists with every column still unset.
+ */
+function toRoster(row: PrRoster | null): PrRoster | null {
+  if (!row) return null;
   const hasValue = Object.values(row).some((value) => value !== null && value !== undefined);
   return hasValue ? row : null;
 }
@@ -150,14 +181,27 @@ export class PrRepositoryClass {
   async getById(id: string): Promise<PrWithProfileType | null> {
     try {
       const [row] = await db
-        .select({ pr: PrTable, profile: profileColumns, accountPhone: UserTable.phoneNum })
+        .select({
+          pr: PrTable,
+          profile: profileColumns,
+          roster: rosterColumns,
+          accountPhone: UserTable.phoneNum,
+        })
         .from(PrTable)
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
+        .leftJoin(
+          AgencyPrTable,
+          and(eq(AgencyPrTable.prId, PrTable.id), eq(AgencyPrTable.agencyId, PrTable.agencyId)),
+        )
         .where(eq(PrTable.id, id))
         .limit(1);
       return row
-        ? { ...withAccountPhone(row.pr, row.accountPhone), profile: toProfile(row.profile) }
+        ? {
+            ...withAccountPhone(row.pr, row.accountPhone),
+            profile: toProfile(row.profile),
+            roster: toRoster(row.roster),
+          }
         : null;
     } catch (error) {
       logger.error('[PrRepository.getById] Error:', error);
@@ -207,10 +251,19 @@ export class PrRepositoryClass {
       const totalCount = Number(countRow?.value ?? 0);
 
       const rows = await db
-        .select({ pr: PrTable, profile: profileColumns, accountPhone: UserTable.phoneNum })
+        .select({
+          pr: PrTable,
+          profile: profileColumns,
+          roster: rosterColumns,
+          accountPhone: UserTable.phoneNum,
+        })
         .from(PrTable)
         .leftJoin(UserTable, eq(UserTable.id, PrTable.userId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
+        .leftJoin(
+          AgencyPrTable,
+          and(eq(AgencyPrTable.prId, PrTable.id), eq(AgencyPrTable.agencyId, PrTable.agencyId)),
+        )
         .where(whereClause)
         .orderBy(PrTable.createdAt)
         .limit(pageSize)
@@ -219,6 +272,7 @@ export class PrRepositoryClass {
       const prs = rows.map((row) => ({
         ...withAccountPhone(row.pr, row.accountPhone),
         profile: toProfile(row.profile),
+        roster: toRoster(row.roster),
       }));
       return { prs, totalCount };
     } catch (error) {

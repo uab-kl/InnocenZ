@@ -22,6 +22,7 @@ import {
 import {
 	DEFAULT_PER_DRINK_RM,
 	DEFAULT_PER_TABLE_RM,
+	DEFAULT_PER_TIP_RM,
 } from "@agency-portal/lib/outlet-financial-defaults";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import {
@@ -415,6 +416,7 @@ export function outletDrinkCategory(d: OutletDrinkPrice): OutletDrinkCategory {
 }
 
 export const DEFAULT_OUTLET_DRINK_MENU: OutletDrinkPrice[] = [
+	{ id: "tips", name: "Tips", priceRm: DEFAULT_PER_TIP_RM, category: "service" },
 	{
 		id: "booking-com",
 		name: "Booking commission",
@@ -436,10 +438,11 @@ export const DEFAULT_OUTLET_DRINK_MENU: OutletDrinkPrice[] = [
 	},
 	{ id: "dom-perignon", name: "Dom perignon", priceRm: 200, category: "drink" },
 	{ id: "donjulio", name: "Donjulio", priceRm: 200, category: "drink" },
-	{ id: "havoc", name: "Havoc", priceRm: 1000, category: "drink" },
+	{ id: "havoc", name: "Havoc", priceRm: 1000, category: "service" },
 ];
 
-const BOOKING_COMMISSION_MENU_ID = "booking-com";
+/** Seeded rows that belong to Service Entitlement and must always be present. */
+const SEEDED_SERVICE_MENU_IDS = ["booking-com", "tips"] as const;
 
 /** Workspace page anchor — Service Entitlement section */
 export const OUTLET_SERVICE_ENTITLEMENT_SECTION_ID = "service-entitlement";
@@ -531,6 +534,25 @@ export function sortOutletDrinkMenuByPrice(
 	);
 }
 
+/** Categories split a menu into the Drinks / Services lists. Event menus saved
+ *  before that split carry none, so borrow the workspace row's category by id. */
+export function withDrinkCategoriesFromWorkspace(
+	menu: OutletDrinkPrice[],
+	workspaceMenu: OutletDrinkPrice[],
+): OutletDrinkPrice[] {
+	if (menu.every((d) => d.category != null)) return menu;
+	const categoryById = new Map(
+		(workspaceMenu.length > 0 ? workspaceMenu : DEFAULT_OUTLET_DRINK_MENU).map(
+			(d) => [d.id, outletDrinkCategory(d)] as const,
+		),
+	);
+	return menu.map((d) =>
+		d.category != null
+			? d
+			: { ...d, category: categoryById.get(d.id) ?? "service" },
+	);
+}
+
 /** Special events may override workspace drink prices; normal events always use workspace menu. */
 export function effectiveShiftDrinkMenu(
 	shift: { eventKind?: ShiftEventKind; eventDrinkMenu?: OutletDrinkPrice[] },
@@ -573,14 +595,23 @@ export function normalizeOutletWorkspace(
 		if (isLegacyDefaultDrinkMenu(menu)) {
 			menu = DEFAULT_OUTLET_DRINK_MENU.map((d) => ({ ...d }));
 		}
-		if (!menu.some((d) => d.id === BOOKING_COMMISSION_MENU_ID)) {
-			const bookingDefault = DEFAULT_OUTLET_DRINK_MENU.find(
-				(d) => d.id === BOOKING_COMMISSION_MENU_ID,
-			);
-			if (bookingDefault) {
-				menu = [...menu, { ...bookingDefault }];
-			}
+		for (const id of SEEDED_SERVICE_MENU_IDS) {
+			if (menu.some((d) => d.id === id)) continue;
+			const seeded = DEFAULT_OUTLET_DRINK_MENU.find((d) => d.id === id);
+			if (seeded) menu = [...menu, { ...seeded }];
 		}
+		// `havoc` was seeded as a drink; it is a service. Correct only rows still
+		// identical to that bad seed — a moved or re-priced row is the outlet's
+		// own choice and stays put.
+		menu = menu.map((d) => {
+			const seeded = DEFAULT_OUTLET_DRINK_MENU.find((s) => s.id === d.id);
+			return seeded &&
+				seeded.category === "service" &&
+				d.category === "drink" &&
+				d.priceRm === seeded.priceRm
+				? { ...d, category: "service" as const }
+				: d;
+		});
 		if (menu.length === 0) {
 			menu = DEFAULT_OUTLET_DRINK_MENU.map((d) => ({ ...d }));
 		}

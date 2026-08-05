@@ -134,6 +134,8 @@ export type ShiftAssignmentInsertType = typeof ShiftAssignmentTable.$inferInsert
 export type ShiftAssignmentWithContextType = ShiftAssignmentType & {
   prName: string | null;
   outletId: string;
+  /** Joined from the outlet FK — null only if the shift's outlet row is gone. */
+  outletName: string | null;
   shiftDate: string;
 };
 

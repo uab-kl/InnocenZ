@@ -8,10 +8,19 @@ import type { getAgencyPrFlags } from "@agency-portal/lib/agency-pr-flags";
 import { cn } from "@agency-portal/lib/utils";
 import { Check, Star } from "lucide-react";
 
+/** Languages shown on the card before collapsing the rest into "+N more". */
+const MAX_CARD_LANGUAGES = 2;
+
 type ManagePrGridCardProps = {
 	pr: AgencyManagedPR;
 	active: boolean;
 	flags: ReturnType<typeof getAgencyPrFlags>;
+	/**
+	 * The PR's real mean rating, or null when they have never been rated.
+	 * NOT `pr.rating` — that is a 0 placeholder on every backend PR, and printing
+	 * it showed "0.0" on a card whose owner had real stars.
+	 */
+	averageRating: number | null;
 	selectMode: boolean;
 	picked: boolean;
 	onActivate: () => void;
@@ -21,12 +30,18 @@ export function ManagePrGridCard({
 	pr,
 	active,
 	flags,
+	averageRating,
 	selectMode,
 	picked,
 	onActivate,
 }: ManagePrGridCardProps) {
 	const preview = toComcardPreview(pr);
-	const langs = languagesFromPr(pr).filter(Boolean).slice(0, 2).join(" · ");
+	// Two languages fit; the rest were silently dropped, so a PR who speaks five
+	// looked identical to one who speaks two. Say how many are hidden — the full
+	// list is on their profile.
+	const allLangs = languagesFromPr(pr).filter(Boolean);
+	const hiddenLangCount = Math.max(0, allLangs.length - MAX_CARD_LANGUAGES);
+	const langs = allLangs.slice(0, MAX_CARD_LANGUAGES).join(" · ");
 	const metaLine = [langs, pr.place].filter(Boolean).join(" · ");
 	const paid = formatOutletHistRm(pr.totalPaid ?? 0);
 
@@ -75,10 +90,10 @@ export function ManagePrGridCard({
 			<div className="iz-pr-manage-card__body">
 				<div className="iz-pr-manage-card__name-row">
 					<p className="iz-pr-manage-card__name">{pr.name}</p>
-					{pr.rating != null && (
+					{averageRating !== null && (
 						<span className="iz-pr-manage-card__rating">
 							<Star className="iz-pr-manage-card__rating-star" aria-hidden />
-							{pr.rating.toFixed(1)}
+							{averageRating.toFixed(1)}
 						</span>
 					)}
 				</div>
@@ -90,6 +105,14 @@ export function ManagePrGridCard({
 						</IzPill>
 					)}
 					{metaLine && <p className="iz-pr-manage-card__meta">{metaLine}</p>}
+					{hiddenLangCount > 0 && (
+						<span
+							className="iz-pr-manage-card__more-langs"
+							title={allLangs.join(" · ")}
+						>
+							+{hiddenLangCount}
+						</span>
+					)}
 				</div>
 
 				{(flags.warnLowAvg ||
@@ -98,22 +121,22 @@ export function ManagePrGridCard({
 					!active) && (
 					<div className="iz-pr-manage-card__flags">
 						{!active && (
-							<IzPill variant="ink" className="!py-0 !text-[8px]">
+							<IzPill variant="ink" className="iz-pr-manage-card__flag">
 								Suspended
 							</IzPill>
 						)}
 						{flags.warnLowAvg && active && (
-							<IzPill variant="amber" className="!py-0 !text-[8px]">
+							<IzPill variant="amber" className="iz-pr-manage-card__flag">
 								Warn
 							</IzPill>
 						)}
 						{flags.suspendStreak && active && (
-							<IzPill variant="red" className="!py-0 !text-[8px]">
+							<IzPill variant="red" className="iz-pr-manage-card__flag">
 								Suspend
 							</IzPill>
 						)}
 						{flags.tiedUnderOneYear && (
-							<IzPill variant="violet" className="!py-0 !text-[8px]">
+							<IzPill variant="violet" className="iz-pr-manage-card__flag">
 								Tied
 							</IzPill>
 						)}

@@ -1,14 +1,45 @@
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
+import type { PrPayClass } from "@agency-portal/lib/pr-penalties";
 import type { PrPersonnel } from "@/services/pr-personnel";
 
+// Every value of the backend's `pr_tier` enum. It carried only the first three
+// while the enum has seven, so a PR on tier_4 or above rendered as the raw
+// `tier_4` and could never be matched back to the label the editor shows.
 const TIER_LABEL: Record<string, string> = {
 	tier_1: "Tier I",
 	tier_2: "Tier II",
 	tier_3: "Tier III",
+	tier_4: "Tier IV",
+	tier_5: "Tier V",
+	servant: "Servant",
+	commission_only: "Commission only",
 };
 
+const TIER_VALUE: Record<string, string> = Object.fromEntries(
+	Object.entries(TIER_LABEL).map(([value, label]) => [label, value]),
+);
+
+/** The `pr_tier` enum value behind a displayed label, or null if unknown. */
+export function tierFromLabel(label: string): string | null {
+	return TIER_VALUE[label] ?? null;
+}
+
+/**
+ * The demo shape spells pay class in camelCase; `agency_pr.pay_class` stores the
+ * snake_case the rest of the schema uses (`pr_tier` has `commission_only` too).
+ */
+export function payClassToBackend(payClass: string): string {
+	return payClass === "commissionOnly" ? "commission_only" : "basic";
+}
+
+export function payClassFromBackend(
+	payClass: string | null | undefined,
+): PrPayClass {
+	return payClass === "commission_only" ? "commissionOnly" : "basic";
+}
+
 /** Whole years elapsed since an ISO `YYYY-MM-DD` date of birth. */
-function ageFromDob(dob: string | null | undefined): number {
+export function ageFromDob(dob: string | null | undefined): number {
 	if (!dob) return 0;
 	const born = new Date(dob);
 	if (Number.isNaN(born.getTime())) return 0;
@@ -99,13 +130,16 @@ function repairDemoGalleryUploads(
  *     reads, so both screens show one PR the same way
  *   - `comcardImageUrl` ← portfolio slot whose path contains "comcard" (backend
  *     has no separate comcard field)
- * The remaining demo-only fields (rating, KPI, penalties, attendance,
- * languages, pay class, …) have no backend yet, so they get neutral
- * placeholders. This is the accepted hybrid tradeoff: real where the backend
+ *   - `languages` ← the same user_profile row the PR edits in their own portal
+ * The remaining demo-only fields (rating, KPI, penalties, attendance, pay
+ * class, …) have no backend yet, so they get neutral placeholders. `rating: 0`
+ * is one of those placeholders, NOT a score — see lib/pr-rating-summary.ts,
+ * which derives the real average from the `rating` table instead. This is the accepted hybrid tradeoff: real where the backend
  * is real, cosmetic placeholders elsewhere.
  */
 export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 	const profile = pr.profile ?? null;
+	const roster = pr.roster ?? null;
 	const { comcardImageUrl, portfolioPhotos } = splitPortfolioComcard(
 		profile?.portfolioPhotos,
 	);
@@ -123,9 +157,14 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		avatarPhoto: profile?.profileImage ?? null,
 		comcardImageUrl: profile?.comcardImage ?? null,
 		portfolioPhotos: profile?.portfolioPhotos ?? undefined,
-		languages: [],
-		place: "",
-		yearsExp: 0,
+		languages: profile?.languages ?? [],
+		// Roster grading, from `agency_pr` (0089). These were hardcoded to ""/0
+		// before the columns existed, so the Manage-PR editor could never show
+		// what an agency typed even after it was "saved".
+		place: roster?.place ?? "",
+		yearsExp: roster?.yearsExp ?? 0,
+		kpiTier: roster?.kpiTier ?? undefined,
+		payClass: payClassFromBackend(roster?.payClass),
 		rating: 0,
 		trainingLevel: pr.tier ? (TIER_LABEL[pr.tier] ?? pr.tier) : "—",
 		totalPaid: 0,

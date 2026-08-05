@@ -153,9 +153,59 @@ function normalizeShiftTime(time: string) {
 	return time.replace(/\s+/g, " ").trim();
 }
 
+const MINUTES_PER_DAY = 24 * 60;
+
+/** Minutes past midnight for "22:00" / "10:00 PM"; null when unreadable. */
+function minutesOfDay(label: string): number | null {
+	const m = label.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
+	if (!m) return null;
+	let hours = Number(m[1]);
+	const minutes = Number(m[2] ?? 0);
+	const meridiem = m[3]?.toLowerCase();
+	if (meridiem === "pm" && hours < 12) hours += 12;
+	if (meridiem === "am" && hours === 12) hours = 0;
+	if (hours > 23 || minutes > 59) return null;
+	return hours * 60 + minutes;
+}
+
+/**
+ * When the shift ends, as minutes from the START of its own calendar day, so an
+ * overnight window keeps counting past midnight: 22:00-04:00 ends at 1680, not
+ * 240, and therefore never reads as "already over" on the night it begins.
+ *
+ * Deliberately local rather than imported from `portal-sync`'s
+ * `parseShiftWindow` — portal-sync already imports this module, so reaching
+ * back would close an import cycle.
+ */
+function shiftEndMinutes(label?: string): number | null {
+	if (!label) return null;
+	const [rawStart, rawEnd] = normalizeShiftTime(label)
+		.split(/[—–-]/)
+		.map((part) => part.trim());
+	if (!rawEnd) return null;
+	const start = minutesOfDay(rawStart ?? "");
+	const end = minutesOfDay(rawEnd);
+	if (end === null) return null;
+	// end <= start means the window crosses midnight.
+	return start !== null && end <= start ? end + MINUTES_PER_DAY : end;
+}
+
+/** Wall-clock minutes past midnight, right now. */
+function liveMinutesOfDay(): number {
+	const now = new Date();
+	return now.getHours() * 60 + now.getMinutes();
+}
+
+/**
+ * An outlet job post the agency should see. `confirmed` counts: the backend
+ * stamps every outlet-posted job `confirmed` on create — posting IS the outlet
+ * committing to run it (see shift.controller createShift) — so `open` alone
+ * never matches a real post, only legacy demo rows. Whether the post still
+ * NEEDS people is a separate question, gated by `openSlots` at each call site.
+ */
 function isAgencyVisiblePostedShift(shift: ShiftRequest): boolean {
 	return (
-		shift.status === "open" &&
+		(shift.status === "open" || shift.status === "confirmed") &&
 		(shift.destination === "agency" || shift.destination === "both")
 	);
 }
@@ -219,21 +269,40 @@ function preferOutletShift(
 	return a.id.localeCompare(b.id) <= 0 ? a : b;
 }
 
-/** One agency-visible event per outlet calendar day — prefer outlet job-board posts. */
-function dedupeOutletShiftsOnePerDay(
+/**
+ * Dedupe identity for an agency-visible event: the calendar day AND the time
+ * window. The day alone is NOT enough — an outlet runs several distinct shifts
+ * a night (10a-12p, 10p-4a, …) and keying on the date would collapse them into
+ * a single row. A legacy tied offer mirroring a posted shift still collapses,
+ * because `findMatchingOutletShift` pairs those two on exactly this normalized
+ * time.
+ */
+function outletShiftSlotKey(
+	shift: AgencyOutletAvailableShift,
+	todayIso: string,
+): string {
+	return `${outletShiftDayKey(shift, todayIso)}|${normalizeShiftTime(shift.shift)}`;
+}
+
+/** One agency-visible event per outlet time slot — prefer outlet job-board posts. */
+function dedupeOutletShiftsOnePerSlot(
 	shifts: AgencyOutletAvailableShift[],
 	todayIso: string,
 ): AgencyOutletAvailableShift[] {
-	const byDay = new Map<string, AgencyOutletAvailableShift>();
+	const bySlot = new Map<string, AgencyOutletAvailableShift>();
 	for (const shift of shifts) {
-		const key = outletShiftDayKey(shift, todayIso);
-		const existing = byDay.get(key);
-		byDay.set(key, existing ? preferOutletShift(existing, shift) : shift);
+		const key = outletShiftSlotKey(shift, todayIso);
+		const existing = bySlot.get(key);
+		bySlot.set(key, existing ? preferOutletShift(existing, shift) : shift);
 	}
-	return [...byDay.values()].sort((a, b) =>
-		outletShiftDayKey(a, todayIso).localeCompare(
-			outletShiftDayKey(b, todayIso),
-		),
+	// Chronological by day, then a stable tiebreak so same-day shifts keep a
+	// fixed order across renders.
+	return [...bySlot.values()].sort(
+		(a, b) =>
+			outletShiftDayKey(a, todayIso).localeCompare(
+				outletShiftDayKey(b, todayIso),
+			) ||
+			normalizeShiftTime(a.shift).localeCompare(normalizeShiftTime(b.shift)),
 	);
 }
 
@@ -313,44 +382,43 @@ function shiftsFromPosted(
 	ctx: TierRatesContext,
 	todayIso: string,
 ): AgencyOutletAvailableShift[] {
-	return posted
-		.filter(
-			(s) =>
-				s.outletName === outlet &&
-				s.status === "open" &&
-				(s.destination === "agency" || s.destination === "both"),
-		)
-		.map((s) => {
-			const { demand, supplied, openSlots } = outletShiftDemandSupplied(s);
-			const tierRates = s.tierRates ?? outletDefaultTierRates(outlet, ctx);
-			return {
-				id: `posted-${s.id}`,
-				source: "posted" as const,
-				outlet,
-				date: s.date,
-				dateIso:
-					s.dateIso ?? resolveOutletShiftDateIso(s.date, s.date, todayIso),
-				shift: s.shift,
-				event: s.event,
-				demandSlots: demand,
-				suppliedSlots: supplied,
-				openSlots,
-				payEstimate: s.estimatedCost,
-				languages: s.languages,
-				destination: s.destination,
-				tierRates,
-				quantity: s.quantity,
-				payTierRows: resolveAgencyPayTierRows(
+	return (
+		posted
+			.filter((s) => s.outletName === outlet && isAgencyVisiblePostedShift(s))
+			.map((s) => {
+				const { demand, supplied, openSlots } = outletShiftDemandSupplied(s);
+				const tierRates = s.tierRates ?? outletDefaultTierRates(outlet, ctx);
+				return {
+					id: `posted-${s.id}`,
+					source: "posted" as const,
+					outlet,
+					date: s.date,
+					dateIso:
+						s.dateIso ?? resolveOutletShiftDateIso(s.date, s.date, todayIso),
+					shift: s.shift,
+					event: s.event,
+					demandSlots: demand,
+					suppliedSlots: supplied,
+					openSlots,
+					payEstimate: s.estimatedCost,
+					languages: s.languages,
+					destination: s.destination,
 					tierRates,
-					s.quantity,
-					s.payTierRows,
-					s.id,
-				),
-				briefing: postedShiftBriefing(s),
-				...postedShiftEventFields(s),
-			};
-		})
-		.filter((s) => s.openSlots > 0 && isUpcomingOutletShift(s, todayIso));
+					quantity: s.quantity,
+					payTierRows: resolveAgencyPayTierRows(
+						tierRates,
+						s.quantity,
+						s.payTierRows,
+						s.id,
+					),
+					briefing: postedShiftBriefing(s),
+					...postedShiftEventFields(s),
+				};
+			})
+			// The upcoming/ended check is applied once, over all three sources, in
+			// buildAgencyOutletSummaries — so it reads the clock a single time.
+			.filter((s) => s.openSlots > 0)
+	);
 }
 
 function shiftsFromTied(
@@ -410,15 +478,13 @@ function shiftsFromTied(
 				),
 				linkedShiftId: match?.id,
 			};
-		})
-		.filter((shift) => isUpcomingOutletShift(shift, todayIso));
+		});
 }
 
 function shiftsFromRoster(
 	outlet: string,
 	roster: AgencyRosterSlot[],
 	ctx: TierRatesContext,
-	todayIso: string,
 ): AgencyOutletAvailableShift[] {
 	return roster
 		.filter((s) => s.outlet === outlet && s.status === "assignment-pending")
@@ -448,8 +514,7 @@ function shiftsFromRoster(
 					`roster-${s.id}`,
 				),
 			};
-		})
-		.filter((shift) => isUpcomingOutletShift(shift, todayIso));
+		});
 }
 
 export function buildAgencyOutletSummaries(input: {
@@ -458,12 +523,16 @@ export function buildAgencyOutletSummaries(input: {
 	roster: AgencyRosterSlot[];
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
+	/** Wall-clock minutes past midnight; injected so tests need no frozen clock. */
+	nowMinutes?: number;
 	commissionRules?: OutletCommissionRule[];
 	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
 }): AgencyOutletSummary[] {
 	const outlets = input.outlets ?? OUTLET_NAMES;
 	const tied = input.tiedOffers ?? PR_AGENCY_TIED_OFFERS;
 	const todayIso = input.todayIso ?? DEFAULT_ROSTER_DATE_ISO;
+	// Read once, so every outlet in this pass is judged against the same instant.
+	const nowMinutes = input.nowMinutes ?? liveMinutesOfDay();
 	const commissionRules = input.commissionRules ?? [];
 	const tierCtx: TierRatesContext = {
 		commissionRules,
@@ -475,12 +544,12 @@ export function buildAgencyOutletSummaries(input: {
 			outlet,
 			commissionRules.length ? commissionRules : undefined,
 		);
-		const shifts = dedupeOutletShiftsOnePerDay(
+		const shifts = dedupeOutletShiftsOnePerSlot(
 			[
 				...shiftsFromPosted(outlet, input.shifts, tierCtx, todayIso),
 				...shiftsFromTied(outlet, tied, tierCtx, todayIso, input.shifts),
-				...shiftsFromRoster(outlet, input.roster, tierCtx, todayIso),
-			].filter((shift) => isUpcomingOutletShift(shift, todayIso)),
+				...shiftsFromRoster(outlet, input.roster, tierCtx),
+			].filter((shift) => isUpcomingOutletShift(shift, todayIso, nowMinutes)),
 			todayIso,
 		);
 		const scheduledTonight = input.roster.filter(
@@ -581,16 +650,35 @@ function resolveShiftDateIso(shift: AgencyOutletAvailableShift): string {
 	return resolveOutletShiftDateIso(shift.date, shift.dateIso);
 }
 
+/**
+ * A shift is upcoming while its END is still ahead — a shift already running
+ * has not passed. Today's date alone is not enough: a 10:00-12:00 slot is over
+ * by mid-afternoon and must drop off the board.
+ *
+ * `nowMinutes` is injected rather than read inside, so the rule is testable
+ * without freezing a clock. Pass a time label only when one is known — callers
+ * holding just a date keep the date-only behaviour rather than guessing.
+ */
 export function isUpcomingOutletShift(
-	shift: Pick<AgencyOutletAvailableShift, "date" | "dateIso">,
+	shift: Pick<AgencyOutletAvailableShift, "date" | "dateIso"> & {
+		shift?: string;
+	},
 	todayIso: string = DEFAULT_ROSTER_DATE_ISO,
+	nowMinutes: number = liveMinutesOfDay(),
 ): boolean {
 	const dateIso = resolveOutletShiftDateIso(
 		shift.date,
 		shift.dateIso,
 		todayIso,
 	);
-	return /^\d{4}-\d{2}-\d{2}$/.test(dateIso) && dateIso >= todayIso;
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso) || dateIso < todayIso) return false;
+	// A later date is upcoming whatever the clock says.
+	if (dateIso > todayIso) return true;
+	const endMinutes = shiftEndMinutes(shift.shift);
+	// Unparseable or absent window — fall back to the date-only answer rather
+	// than hiding a shift we simply could not read.
+	if (endMinutes === null) return true;
+	return endMinutes > nowMinutes;
 }
 
 /**

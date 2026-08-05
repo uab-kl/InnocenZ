@@ -178,7 +178,7 @@ export const ratingController = new RatingControllerClass(ratingRepository, prRe
 // Takes no constructor args, so the move up is free.
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
 
-export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository, agencyPrRepository, outletWorkspaceRepository, shiftAssignmentRepository);
+export const prController = new PrControllerClass(prRepository, agencyMemberRepository, authRepository, outletMemberRepository, agencyPrRepository, outletWorkspaceRepository, shiftAssignmentRepository, userProfileRepository);
 
 export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository, shiftAssignmentRepository);
