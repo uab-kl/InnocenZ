@@ -205,6 +205,16 @@ export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;
 export const PrWithdrawDisputeSchema = z.object({
   disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
   component: z.enum(['wages', 'drinks', 'tips', 'others']),
+  /**
+   * WHICH claim, when the day+bucket holds more than one.
+   *
+   * A PR can hold one open claim PER SHIFT since 0086, so day+component alone
+   * stopped identifying a single row — and the withdraw would take whichever
+   * came back first, cancelling an argument they had not asked to drop.
+   *
+   * Omit to target the whole-day claim (the pre-picker shape).
+   */
+  receiptId: z.string().uuid('receiptId must be a receipt id').optional(),
 });
 
 export type PrWithdrawDisputeInput = z.infer<typeof PrWithdrawDisputeSchema>;

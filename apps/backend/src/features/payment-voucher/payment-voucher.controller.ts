@@ -3086,6 +3086,9 @@ export class PaymentVoucherControllerClass {
         voucherId,
         parsed.data.disputeDate,
         parsed.data.component,
+        // The exact claim when the app names one. Omitted = the whole-day claim,
+        // which is the only shape a pre-picker client can have raised.
+        parsed.data.receiptId ?? (parsed.data.receiptId === undefined ? undefined : null),
       );
       if (!target) {
         return res.status(404).json({

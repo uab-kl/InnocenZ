@@ -1215,7 +1215,15 @@ export function raiseMyDispute(
 export function withdrawMyDispute(
   accessToken: string,
   voucherId: string,
-  input: { disputeDate: string; component: PrDisputeComponent },
+  input: {
+    disputeDate: string;
+    component: PrDisputeComponent;
+    /**
+     * WHICH claim — a PR can hold one open claim per SHIFT, so day+component
+     * alone no longer names a single row. Omit for a whole-day claim.
+     */
+    receiptId?: string;
+  },
 ): Promise<PrDisputeResult> {
   return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute/withdraw`, {
     method: 'POST',

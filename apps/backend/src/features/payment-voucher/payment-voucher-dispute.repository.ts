@@ -251,6 +251,16 @@ export class PaymentVoucherDisputeRepositoryClass {
     voucherId: string,
     disputeDate: string,
     component: PaymentVoucherDisputeComponent,
+    /**
+     * WHICH claim, when a day+bucket holds more than one.
+     *
+     * Since 0086 a PR can have one open claim PER SHIFT, so "the open drinks
+     * claim on Tuesday" stopped being a single row. Without this the withdraw
+     * took whichever came back first — cancelling an argument the PR had not
+     * asked to drop. `null` explicitly targets the whole-day claim (the legacy
+     * shape), which is why it is distinguished from `undefined`.
+     */
+    receiptId?: string | null,
   ): Promise<PaymentVoucherDispute | null> {
     try {
       const [row] = await db
@@ -262,6 +272,11 @@ export class PaymentVoucherDisputeRepositoryClass {
             eq(PaymentVoucherDisputeTable.disputeDate, disputeDate),
             eq(PaymentVoucherDisputeTable.component, component),
             isNull(PaymentVoucherDisputeTable.outcome),
+            ...(receiptId === undefined
+              ? []
+              : receiptId === null
+                ? [isNull(PaymentVoucherDisputeTable.receiptId)]
+                : [eq(PaymentVoucherDisputeTable.receiptId, receiptId)]),
           ),
         );
       return row ?? null;

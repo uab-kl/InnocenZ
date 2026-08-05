@@ -939,6 +939,42 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE PR CAN CANCEL A DISPUTE, AND CANCEL THE RIGHT ONE.**
+>
+> Owner: *"how can the pr cancel the dispute"*.
+>
+> Withdrawing existed but was effectively unreachable: the only route was tapping a RED grid cell, where
+> the button still read **"Dispute this amount"** and silently became a withdraw. The one action that
+> takes a claim back was both hidden and mislabelled.
+>
+> **Cancel now lives under the claim itself**, in "What you disputed" (tap a DISPUTED/VERIFIED status
+> cell) — where the PR can see the shift, the items and the reason they are cancelling. Only on an OPEN
+> claim: an answered one is a decision the agency has made, and retracting it afterwards would rewrite
+> the outcome of a money decision. Confirmed before it fires, because a withdrawn claim cannot be
+> un-withdrawn — only raised again from scratch.
+>
+> **⚠️ It had to become claim-specific, and this was a live bug.** `findOpen` matched on
+> voucher + day + component, which stopped naming a single row when `0086` allowed one open claim PER
+> SHIFT. Cancelling would have taken whichever row came back first — dropping an argument the PR had not
+> asked to drop. `findOpen` and `PrWithdrawDisputeSchema` now take `receiptId`; `undefined` keeps the
+> old behaviour for pre-picker clients, and `null` explicitly targets the whole-day claim.
+>
+> Verified on two open claims (one per shift) in a rolled-back transaction:
+>
+> | asked for | rows |
+> |---|---|
+> | `RCP-000010` | **exactly 1, the right one** |
+> | `RCP-000011` | **exactly 1, the right one** |
+> | no receipt (old path) | 2 — ambiguous, which is the bug |
+> | the whole-day claim | 0 — correct, none exists |
+>
+> ⚠️ **My first probe reported WRONG on all of these and the code was fine.** `findOpen` uses the
+> module-level `db`, so it cannot see rows inserted inside an uncommitted transaction — the probe was
+> testing visibility, not logic. Re-run against the same `tx` it passed. Worth remembering before
+> reporting a repository method broken.
+>
+> Both apps clean; 34 harness checks pass. No migration. **Backend restart required.**
+
 > **5 Aug 2026 — PER-SHIFT TAGS: SETTLED → DISPUTED → VERIFIED (`e0872c9`, `d373e94`).**
 >
 > Owner: *"if i disputed this time , then after resolved dispute mark that time from settled to

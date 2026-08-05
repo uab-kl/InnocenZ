@@ -522,6 +522,60 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     [disputeReceipts, disputePickedReceipt],
   );
 
+  /**
+   * Take back ONE open claim, named exactly.
+   *
+   * `receiptId` is sent so the server withdraws the claim the PR is looking at:
+   * since one open claim per SHIFT is allowed, day+component alone would let it
+   * cancel the wrong argument. Confirmed first — a withdrawn claim cannot be
+   * un-withdrawn, only raised again from scratch.
+   */
+  const cancelClaim = async (d: {
+    disputeDate: string;
+    component: IncomeKey;
+    receiptId: string | null;
+  }) => {
+    if (!token || !claimDay || disputeBusy) return;
+    const voucherId = claimDay.week === 'last' ? lastWeek?.voucherId : current?.voucherId;
+    if (!voucherId) return;
+    const go = async () => {
+      setDisputeBusy(true);
+      try {
+        await withdrawMyDispute(token, voucherId, {
+          disputeDate: d.disputeDate,
+          component: d.component,
+          ...(d.receiptId ? { receiptId: d.receiptId } : {}),
+        });
+        // Re-read rather than patch: the voucher may have left 'disputed' if
+        // that was the last open claim, and the grid reads off both.
+        if (claimDay.week === 'last') {
+          const fresh = await fetchMyLastWeek(token);
+          setLastWeek(fresh);
+        } else {
+          await refreshEarnings();
+        }
+        setDisputedKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(`${d.disputeDate}-${d.component}`);
+          return next;
+        });
+        setClaimDay(null);
+      } catch (e) {
+        Alert.alert('Could not cancel', e instanceof Error ? e.message : 'Please try again.');
+      } finally {
+        setDisputeBusy(false);
+      }
+    };
+    Alert.alert(
+      'Cancel this dispute?',
+      'Your agency will stop reviewing it. You can raise it again later if you still disagree.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        { text: 'Cancel dispute', style: 'destructive', onPress: () => void go() },
+      ],
+    );
+  };
+
   const closeDispute = () => {
     setDisputeOpen(false);
     setDisputeTarget(null);
@@ -1229,6 +1283,31 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                             Agency: {d.resolutionNote}
                           </Text>
                         )}
+
+                        {/*
+                          * CANCEL, where the PR can see WHAT they are cancelling.
+                          *
+                          * Withdrawing was only reachable by tapping a red grid
+                          * cell, where the button still read "Dispute this
+                          * amount" and silently became a withdraw — so the one
+                          * action that takes a claim back was both hidden and
+                          * mislabelled. Here it sits under the claim itself.
+                          *
+                          * Only on an OPEN claim: an answered one is a decision
+                          * the agency has made, and retracting it afterwards
+                          * would rewrite the outcome of a money decision.
+                          */}
+                        {d.outcome === null && (
+                          <Pressable
+                            style={styles.claimCancel}
+                            disabled={disputeBusy}
+                            onPress={() => void cancelClaim(d)}
+                          >
+                            <Text style={styles.claimCancelText}>
+                              {disputeBusy ? 'Cancelling…' : 'Cancel this dispute'}
+                            </Text>
+                          </Pressable>
+                        )}
                       </View>
                     ))}
                     <IzButton label="Close" variant="soft" onPress={() => setClaimDay(null)} />
@@ -1814,6 +1893,17 @@ const styles = StyleSheet.create({
   claimShiftHead: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.accentL },
   claimShiftMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
   claimItem: { marginTop: 3, fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
+  claimCancel: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.35)',
+    backgroundColor: C.redBg,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  claimCancelText: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.red },
   claimNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
   claimAnswer: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.goldL },
   /** Voucher-level DISPUTED chip in the This-week card header. */
