@@ -53,7 +53,15 @@ native memory. After meaningful sessions, update both `docs/claude-memory/` and 
   add new requirements to §9, promote to §8 when verified, append a §10 changelog row.
 - Typecheck baselines — judge ONLY files you touched: backend has 26 pre-existing TS2883
   router errors (one per `*.routes.ts`) + 2 known `pr.repository.ts` lines; `apps/web` has its
-  own pre-existing baseline; `apps/mobile` is 0-error.
+  own pre-existing baseline.
+- ⚠️ **`apps/mobile` MUST be checked with `npx tsc --noEmit -p tsconfig.app.json`.** Its
+  `tsconfig.json` is SOLUTION-STYLE (`"files": []`, `"include": []`, references only), so
+  `-p tsconfig.json` compiles **zero files** and always reports clean. That is where the old
+  "`apps/mobile` is 0-error" claim came from, and it hid a real crash: `Check` used in
+  PaymentScreen without being imported, which blanked the screen on opening the dispute sheet
+  (5 Aug 2026). The REAL baseline is ~11 errors — DOM globals (`document`, `FileList`, `Blob`)
+  in `PhoneSheet.tsx`, `proof-photo.ts` and `PaymentScreen.tsx`, plus one `demo-shifts.ts:317`
+  narrowing error. Judge only files you touched, against that.
 - `apps/web`: biome (tabs, double quotes); new routes need `npx tsr generate`.
 - PR-scoped backend endpoints use the `/mine` pattern (derive `pr.id` server-side via
   `prRepository.getByUserId`, placed BEFORE `/:id` and OUTSIDE role guards).

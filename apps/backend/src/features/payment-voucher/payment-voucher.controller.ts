@@ -262,6 +262,8 @@ type PrReceiptLineDTO = {
    * by the agency" named something the PR had no way to see.
    */
   receiptNo: string | null;
+  /** The parent receipt's uuid — what a dispute's `receiptId` FK points at. */
+  receiptId: string | null;
   /**
    * The ORDER NUMBER printed on the paper (`ORD0389`) — the thing the PR can
    * physically hold up against the figure. Null when the paper carried none.
@@ -392,6 +394,14 @@ function toReceiptLineDTO(
     proofPhotos: line.proofPhotos?.length ? line.proofPhotos : (info?.proofPhotos ?? []),
     receiptStatus,
     receiptNo: info?.receiptNo ?? null,
+    /**
+     * The receipt's PRIMARY ID — what a dispute points at.
+     *
+     * `receiptNo` is for the PR to read; this is for the app to reference. A
+     * claim naming the number would be a copied string, unjoinable and free to
+     * go stale; naming the id is a foreign key.
+     */
+    receiptId: line.receiptId ?? null,
     orderNo: info?.orderNo ?? null,
     receiptDate: info?.receiptDate ?? null,
     receiptTime: info?.receiptTime ?? null,
@@ -1172,6 +1182,26 @@ export class PaymentVoucherControllerClass {
       /** Server-computed at raise time — what the voucher said, not what was claimed. */
       disputedAmount: d.disputedAmount,
       claimedAmount: d.claimedAmount,
+      /**
+       * WHICH receipts this claim names, by `receiptNo`. NULL means the whole
+       * day+component cell — the PR did not narrow it, so every receipt in that
+       * bucket is under argument.
+       *
+       * Sent so the PR app can mark the contested shift in its evidence sheet.
+       * Without it a day with two shifts shows one "DISPUTED" status and no way
+       * to tell WHICH of them the claim is about — which is the same ambiguity
+       * the selection was added to remove.
+       */
+      /** The FK to the shift's paper — what the app matches receipts on. */
+      receiptId: d.receiptId ?? null,
+      /** @deprecated pre-0088 rows only; superseded by `receiptId`. */
+      receiptRefs: d.receiptRefs ?? null,
+      /**
+       * WHICH ITEMS — "Lemon Drop", not just "drinks". A snapshot taken when the
+       * claim was raised, so it still reads correctly after the agency edits or
+       * the voucher is rewritten. Null = the whole receipt was claimed.
+       */
+      disputedItems: d.disputedItems ?? null,
       /** null = still open. 'accepted' | 'rejected' | 'withdrawn' once decided. */
       outcome: d.outcome,
       resolvedAt: d.resolvedAt,
@@ -2917,19 +2947,33 @@ export class PaymentVoucherControllerClass {
         });
       }
 
-      // APPROVAL IS THE PRECONDITION for contesting receipt-backed money
-      // (owner's decision #1). Until the agency has reviewed a receipt there is
-      // no stated figure to argue with — the PR would be disputing their own
-      // submission. Approval is what turns it into the agency's number.
-      //
-      // Structurally this rarely fires — a pending receipt blocks the send, so
-      // an issued voucher has none. It fires on the week still at
-      // pending_review, which a PR can also dispute.
-      {
+      /*
+       * ⚠️ APPROVAL IS NO LONGER THE PRECONDITION — owner, 5 Aug 2026,
+       * REVERSING their own decision #1: *"make the already verified or dispute
+       * still can make disputed again"*.
+       *
+       * The original reasoning: until the agency has reviewed a receipt there is
+       * no stated figure to argue with, so the PR would be disputing their own
+       * submission. That holds in theory and failed in practice — a PR who can
+       * see a wrong figure is told to wait for someone else to confirm it before
+       * they may say so, and on this data the wait had no end in sight.
+       *
+       * The rule is kept ONLY for a claim that names no receipt, where it still
+       * means something: contesting a whole day's drinks while some of that day
+       * is unreviewed really is arguing with a number nobody has stated. A claim
+       * that names ONE shift is specific enough to stand on its own.
+       *
+       * What still refuses a second claim is the DB: one OPEN claim per shift
+       * (index from 0086). That is a real constraint, not a policy, and the app
+       * greys those shifts rather than letting them 409.
+       */
+      if (!parsed.data.receiptId) {
         const receipts = await this.paymentVoucherRepository.listReceipts(voucherId);
         const statuses = receiptInfoMap(receipts);
         const waiting = existing.lines
           .filter((l) => l.lineDate === disputeDate && decodeRef(l.ref).kind === component)
+          // Every receipt on the day — this branch only runs for a claim that
+          // named none, so the claim really does cover all of them.
           .map((l) => (l.receiptId ? receipts.find((r) => r.id === l.receiptId) : null))
           .filter((r) => r && statuses.get(r.id)?.status === 'pending');
         if (waiting.length > 0) {
@@ -2944,11 +2988,33 @@ export class PaymentVoucherControllerClass {
 
       // Server-computed, never from the request: this is the figure the claim is
       // measured against, so the claimant must not be able to set it.
-      const disputedAmount = await this.paymentVoucherDisputeRepository.sumLinesFor(
+      // Narrowed to the receipts the PR selected, when they picked some. A PR
+      // with two shifts on one night can contest the second alone, and the
+      // figure the claim is measured against has to be THAT shift's, not the
+      // day's — otherwise accepting the claim settles money nobody contested.
+      const disputedItems = await this.paymentVoucherDisputeRepository.resolveDisputeItems(
         voucherId,
         disputeDate,
         component,
+        (parsed.data.items ?? []).map((i) => i.lineId),
       );
+
+      /*
+       * Narrowest thing the PR named wins: ITEMS, else the RECEIPT, else the
+       * whole cell. Each step down is the PR being more specific, and the figure
+       * their claim is measured against has to follow — a claim about one
+       * RM 3.60 Lemon Drop recorded against the day's RM 7.20 would settle money
+       * nobody contested when it was accepted.
+       */
+      const disputedAmount = disputedItems.length
+        ? disputedItems.reduce((sum, i) => sum + Number(i.amount ?? 0), 0).toFixed(2)
+        : await this.paymentVoucherDisputeRepository.sumLinesFor(
+            voucherId,
+            disputeDate,
+            component,
+            parsed.data.receiptRefs,
+            parsed.data.receiptId ?? null,
+          );
 
       let dispute;
       try {
@@ -2961,7 +3027,12 @@ export class PaymentVoucherControllerClass {
           disputedAmount,
           claimedAmount: parsed.data.claimedAmount?.toFixed(2) ?? null,
           proofPhotos: parsed.data.proofPhotos,
-          receiptRefs: parsed.data.receiptRefs ?? null,
+          // The FK — which shift's paper. `receiptRefs` is no longer written:
+          // it held the receipt NUMBER as text, which could not be joined.
+          receiptId: parsed.data.receiptId ?? null,
+          // Null, not [], when nothing was named — "the whole receipt" and "an
+          // empty list of items" would otherwise be indistinguishable in the row.
+          disputedItems: disputedItems.length ? disputedItems : null,
           createdBy: actor,
           updatedBy: actor,
         });
@@ -3029,6 +3100,9 @@ export class PaymentVoucherControllerClass {
         voucherId,
         parsed.data.disputeDate,
         parsed.data.component,
+        // The exact claim when the app names one. Omitted = the whole-day claim,
+        // which is the only shape a pre-picker client can have raised.
+        parsed.data.receiptId ?? (parsed.data.receiptId === undefined ? undefined : null),
       );
       if (!target) {
         return res.status(404).json({

@@ -5,7 +5,6 @@ import { toComcardPreview } from "@agency-portal/components/agency/PrComcardIden
 import { ProfileLanguagePicker } from "@agency-portal/components/iz/ProfileLanguagePicker";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import {
-	formatRM,
 	IzCard,
 	IzCardTitle,
 	IzKpiLabel,
@@ -20,8 +19,15 @@ import {
 	canGeneratePortfolioComcard,
 	PortfolioGalleryTile,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
+import {
+	shiftOutcomeLabel,
+	useAgencyPrShiftHistory,
+} from "@agency-portal/hooks/use-agency-pr-shift-history";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
-import { useAgencyRatings } from "@agency-portal/hooks/use-agency-ratings";
+import {
+	type AgencyRating,
+	useAgencyRatings,
+} from "@agency-portal/hooks/use-agency-ratings";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	collectAgencyPrLanguages,
@@ -47,6 +53,11 @@ import {
 	prPayClass,
 	totalPenaltyFineRm,
 } from "@agency-portal/lib/pr-penalties";
+import {
+	displayAverage,
+	formatStars,
+	summarizePrRatings,
+} from "@agency-portal/lib/pr-rating-summary";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
@@ -62,6 +73,9 @@ import {
 	UserMinus,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+
+/** How many shifts the card shows. Content, not styling — leave it at 3. */
+const SHIFT_HISTORY_ROWS = 3;
 
 const KPI_TIER_OPTIONS = ["A", "B", "C"] as const;
 const TRAINING_TIER_OPTIONS = [
@@ -164,7 +178,12 @@ function AgencyManagePRs() {
 				agencyPRs.filter((p) => {
 					if (p.detached) return false;
 					if (ageMin && (p.age ?? 0) < Number(ageMin)) return false;
-					if (ratingMin && (p.rating ?? 0) < Number(ratingMin)) return false;
+					// Judge the real average, not the `rating: 0` placeholder every
+					// backend PR carries — that made any Min-rating filter empty the grid.
+					if (ratingMin) {
+						const avg = displayAverage(p, summarizePrRatings(ratings, p));
+						if (avg === null || avg < Number(ratingMin)) return false;
+					}
 					const langs = languagesFromPr(p);
 					if (
 						lang &&
@@ -177,7 +196,7 @@ function AgencyManagePRs() {
 					return true;
 				}),
 			),
-		[agencyPRs, ageMin, ratingMin, lang, race, place, expMin],
+		[agencyPRs, ratings, ageMin, ratingMin, lang, race, place, expMin],
 	);
 
 	const detail = agencyPRs.find((p) => p.id === detailId);
@@ -469,7 +488,11 @@ function AgencyManagePRs() {
 				)}
 				<div className="iz-pr-manage-grid">
 					{filtered.map((p) => {
-						const flags = getAgencyPrFlags(p);
+						const averageRating = displayAverage(
+							p,
+							summarizePrRatings(ratings, p),
+						);
+						const flags = getAgencyPrFlags(p, averageRating);
 						const active = isAgencyPrActive(p);
 						const picked = selectMode && selected.has(p.id);
 						return (
@@ -478,6 +501,7 @@ function AgencyManagePRs() {
 								pr={p}
 								active={active}
 								flags={flags}
+								averageRating={averageRating}
 								selectMode={selectMode}
 								picked={picked}
 								onActivate={() => {
@@ -548,7 +572,9 @@ function AgencyPrDetail({
 }: {
 	detail: AgencyManagedPR;
 	shiftHistory: ReturnType<typeof useStore.getState>["shiftHistory"];
-	ratings: ReturnType<typeof useStore.getState>["ratings"];
+	// Backend rows when the session is real, demo rows otherwise — demo rows just
+	// carry no `prId`, which is exactly what summarizePrRatings falls back on.
+	ratings: AgencyRating[];
 	onBack: () => void;
 	onSaveProfile: (
 		prId: string,
@@ -599,7 +625,36 @@ function AgencyPrDetail({
 		conflicts: number;
 	} | null>(null);
 
-	const flags = getAgencyPrFlags(detail);
+	// Real worked shifts. Demo sessions have no backend identity, so they keep
+	// reading the demo store — which is the only place their history exists.
+	const backendShiftHistory = useAgencyPrShiftHistory(detail.id);
+	const shiftRows = useMemo(
+		() =>
+			backendShiftHistory.backed
+				? backendShiftHistory.rows
+				: shiftHistoryForPr(shiftHistory, detail.id).map((h) => ({
+						id: h.id,
+						dateIso: h.dateIso ?? "",
+						dateDisplay: h.dateDisplay,
+						outlet: h.outlet,
+						// Demo rows are a sealed log — every one of them was worked.
+						status: "completed" as const,
+					})),
+		[
+			backendShiftHistory.backed,
+			backendShiftHistory.rows,
+			shiftHistory,
+			detail.id,
+		],
+	);
+	const shiftHistoryLoading =
+		backendShiftHistory.backed && backendShiftHistory.isLoading;
+	const ratingSummary = useMemo(
+		() => summarizePrRatings(ratings, detail),
+		[ratings, detail],
+	);
+	const averageRating = displayAverage(detail, ratingSummary);
+	const flags = getAgencyPrFlags(detail, averageRating);
 	const tiedUnderOneYear = flags.tiedUnderOneYear;
 
 	// Future booked shifts incompatible with a switch to commission-only
@@ -725,7 +780,10 @@ function AgencyPrDetail({
 						{isAgencyPrActive(detail) ? "Active" : "Inactive"}
 					</IzPill>
 					<p className="iz-tiny iz-muted">
-						IC {detail.ic} · {detail.rating} ★ avg
+						IC {detail.ic} ·{" "}
+						{averageRating === null
+							? "not rated yet"
+							: `${formatStars(averageRating)} ★ avg`}
 					</p>
 				</div>
 			</header>
@@ -780,7 +838,10 @@ function AgencyPrDetail({
 			<div className="iz-outlet-stat-strip mt-3">
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>Rating</IzKpiLabel>
-					<div className="n text-[var(--iz-gold)]">{detail.rating}★</div>
+					<div className="n text-[var(--iz-gold)]">
+						{formatStars(averageRating)}
+						{averageRating === null ? "" : "★"}
+					</div>
 				</div>
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>Attendance</IzKpiLabel>
@@ -1098,8 +1159,8 @@ function AgencyPrDetail({
 						<IzCard flat className="mt-2.5 border-[var(--iz-amber)]">
 							<p className="iz-tiny flex items-center gap-1 text-[var(--iz-amber)]">
 								<AlertTriangle className="h-3 w-3" />
-								Warn · average {detail.rating}★ is below {RATING_WARN_THRESHOLD}
-								★ — monitor performance
+								Warn · average {formatStars(averageRating)}★ is below{" "}
+								{RATING_WARN_THRESHOLD}★ — monitor performance
 							</p>
 						</IzCard>
 					)}
@@ -1119,18 +1180,53 @@ function AgencyPrDetail({
 						</IzCard>
 					)}
 
-					<OutletSection title="Shift history" hint="Last 3 shifts">
+					<OutletSection
+						title="Shift history"
+						hint={
+							shiftRows.length > SHIFT_HISTORY_ROWS
+								? `Last ${SHIFT_HISTORY_ROWS} of ${shiftRows.length}`
+								: undefined
+						}
+					>
 						<IzCard flat>
-							{shiftHistoryForPr(shiftHistory, detail.id)
-								.slice(0, 3)
-								.map((h) => (
-									<p
-										key={h.id}
-										className="iz-tiny iz-muted border-t border-[var(--iz-line)] py-2 first:border-0 first:pt-0"
-									>
-										{h.dateDisplay} · {h.outlet} · {formatRM(h.totalPayout)}
-									</p>
-								))}
+							{/* Cells, not rows: three shifts laid across the card use its full
+							    width, where stacked rows left the right half empty. Same grid
+							    the Penalties block above uses. */}
+							<div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+								{shiftRows.slice(0, SHIFT_HISTORY_ROWS).map((h) => {
+									const outcome = shiftOutcomeLabel(h.status);
+									return (
+										<div
+											key={h.id}
+											className="rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2.5"
+										>
+											<div className="flex items-start justify-between gap-2">
+												<span className="iz-sm truncate font-semibold text-[var(--iz-txt)]">
+													{h.outlet}
+												</span>
+												{outcome && (
+													<IzPill
+														variant={outcome.tone}
+														className="shrink-0 !py-0.5 !text-[9px]"
+													>
+														{outcome.label}
+													</IzPill>
+												)}
+											</div>
+											<p className="iz-tiny iz-muted2 mt-0.5 tabular-nums">
+												{h.dateDisplay}
+											</p>
+										</div>
+									);
+								})}
+							</div>
+							{/* An empty card reads as "broken"; say which it is. Payout is
+							    omitted on purpose — see useAgencyPrShiftHistory. */}
+							{shiftRows.length === 0 && (
+								<p className="iz-tiny iz-muted">
+									{shiftHistoryLoading ? "Loading…" : "No shifts yet"}
+								</p>
+							)}
 						</IzCard>
 					</OutletSection>
 
@@ -1152,17 +1248,22 @@ function AgencyPrDetail({
 						</OutletSection>
 					)}
 
-					<OutletSection title="Ratings feed">
+					<OutletSection
+						title="Ratings feed"
+						hint={
+							ratingSummary.count > 0
+								? `${ratingSummary.count} rating${ratingSummary.count > 1 ? "s" : ""}`
+								: undefined
+						}
+					>
 						<IzCard flat>
-							{ratings
-								.filter((r) => r.pr === detail.name)
-								.slice(0, 3)
-								.map((r) => (
-									<p key={r.id} className="iz-tiny iz-muted py-1">
-										{r.stars}★ · {r.note}
-									</p>
-								))}
-							{ratings.filter((r) => r.pr === detail.name).length === 0 && (
+							{ratingSummary.rows.slice(0, 3).map((r) => (
+								<p key={r.id} className="iz-tiny iz-muted py-1">
+									{r.stars}★ · {r.note || "No note"}
+									{r.date ? ` · ${r.date}` : ""}
+								</p>
+							))}
+							{ratingSummary.count === 0 && (
 								<p className="iz-tiny iz-muted">No ratings yet</p>
 							)}
 						</IzCard>

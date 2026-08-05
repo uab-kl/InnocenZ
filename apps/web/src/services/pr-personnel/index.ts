@@ -25,11 +25,27 @@ export interface PrPersonnelProfile {
 	/** ISO date, `YYYY-MM-DD`. */
 	dob: string | null;
 	nationality: string | null;
+	/** Spoken languages the PR set on their own profile, e.g. ['English','Hokkien']. */
+	languages: string[] | null;
 	portfolioPhotos: string[] | null;
 	/** Saved auto-generated photo comcard path (`user_profile.comcard_image`). */
 	comcardImage: string | null;
 	comcardHeightCm: number | null;
 	comcardWeightKg: number | null;
+}
+
+/**
+ * How the PR's OWN agency grades them, from the `agency_pr` link row (0089).
+ * Distinct from `PrPersonnelProfile`, which is the person: a PR on two rosters
+ * can be graded differently by each agency. Null when no link row exists yet.
+ */
+export interface PrPersonnelRoster {
+	place: string | null;
+	yearsExp: number | null;
+	/** 'A' | 'B' | 'C'. */
+	kpiTier: string | null;
+	/** 'basic' | 'commission_only'. */
+	payClass: string | null;
 }
 
 export interface PrPersonnel {
@@ -48,6 +64,8 @@ export interface PrPersonnel {
 	// Present on the read paths (list / get-by-id); absent on create/update
 	// responses, which return the bare `pr` row.
 	profile?: PrPersonnelProfile | null;
+	/** Present on the read paths only, same as `profile`. */
+	roster?: PrPersonnelRoster | null;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;
@@ -97,6 +115,23 @@ export interface UpdatePrPersonnelInput {
 	 * The backend clears it on acceptance, so callers never send it back.
 	 */
 	rejectReason?: string;
+
+	// Written to the linked account's `user_profile` — the same row the PR edits
+	// in their own portal. 409s if the PR has no linked user account.
+	race?: string;
+	languages?: string[];
+	/** ISO `YYYY-MM-DD`. */
+	dob?: string;
+	comcardHeightCm?: number;
+	comcardWeightKg?: number;
+
+	// Written to `agency_pr` — this agency's own grading of the PR.
+	place?: string;
+	yearsExp?: number;
+	/** 'A' | 'B' | 'C'. */
+	kpiTier?: string;
+	/** 'basic' | 'commission_only'. */
+	payClass?: string;
 }
 
 export async function fetchPrPersonnel(

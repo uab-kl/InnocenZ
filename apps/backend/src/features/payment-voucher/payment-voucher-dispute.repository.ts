@@ -1,11 +1,13 @@
-import { and, desc, eq, isNull, SQL } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNull, SQL } from 'drizzle-orm';
 import { db } from '@/db/index.js';
+import { UserTable } from '@/features/user/user.model.js';
 import { logger } from '@/util/logger.js';
 import {
   PaymentVoucherComponent,
   PaymentVoucherDisputeComponent,
   PaymentVoucherDisputeTable,
   PaymentVoucherLineTable,
+  PaymentVoucherReceiptTable,
   PaymentVoucherTable,
   PaymentVoucherType,
 } from './payment-voucher.model.js';
@@ -73,19 +75,96 @@ export class PaymentVoucherDisputeRepositoryClass {
    * accepted from the caller. Returns a fixed-2 string to match the numeric
    * column rather than carrying float error into a ledger.
    */
-  async sumLinesFor(
+  /**
+   * Resolve the line ids a claim names into the snapshot stored on it.
+   *
+   * Every field but the id comes from the DATABASE. The request supplies only
+   * `lineId`, so a claimant cannot write the description or the amount their own
+   * claim is measured against — the same reason `disputedAmount` is computed
+   * server-side rather than accepted.
+   *
+   * Scoped by voucher, date and the bucket's components, so an id belonging to
+   * another day, another bucket or another PR's voucher resolves to nothing
+   * instead of being recorded as though it were part of this claim.
+   */
+  async resolveDisputeItems(
     voucherId: string,
     disputeDate: string,
     component: PaymentVoucherDisputeComponent,
-  ): Promise<string> {
+    lineIds: string[],
+  ): Promise<{ lineId: string; description: string; quantity: number; amount: string }[]> {
+    const ids = [...new Set(lineIds.filter((id) => id.trim().length > 0))];
+    if (ids.length === 0) return [];
     try {
       const wanted = LINE_COMPONENTS_FOR[component];
       const rows = await db
         .select({
+          id: PaymentVoucherLineTable.id,
+          description: PaymentVoucherLineTable.description,
+          quantity: PaymentVoucherLineTable.quantity,
           amount: PaymentVoucherLineTable.amount,
           component: PaymentVoucherLineTable.component,
         })
         .from(PaymentVoucherLineTable)
+        .where(
+          and(
+            eq(PaymentVoucherLineTable.voucherId, voucherId),
+            eq(PaymentVoucherLineTable.lineDate, disputeDate),
+            inArray(PaymentVoucherLineTable.id, ids),
+          ),
+        );
+      return rows
+        .filter((r) => (r.component === null ? component === 'others' : wanted.includes(r.component)))
+        .map((r) => ({
+          lineId: r.id,
+          description: r.description,
+          quantity: r.quantity,
+          amount: r.amount,
+        }));
+    } catch (error) {
+      logger.error('[PaymentVoucherDisputeRepository.resolveDisputeItems] Error:', error);
+      return [];
+    }
+  }
+
+  async sumLinesFor(
+    voucherId: string,
+    disputeDate: string,
+    component: PaymentVoucherDisputeComponent,
+    /**
+     * Receipt NUMBERS (`RCP-000012`) the PR pointed at, when they contested one
+     * shift out of several on the day. Absent or empty = the whole cell.
+     *
+     * Narrowing matters because this figure is what the claim is measured
+     * against. A PR who works two shifts on one night and disputes only the
+     * second would otherwise have their claim recorded against the day's FULL
+     * total — the agency opening a queue row arguing about RM 7.20 when the PR
+     * said RM 3.60 — and accepting it would settle money nobody contested.
+     *
+     * Keyed on `receipt_no`, NOT on the packed `ref`, deliberately. The packed
+     * ref carries the ORDER number, which is not unique: the same paper logged
+     * twice on one night yields two receipts both reading `ORD0389:0`, and that
+     * duplicate is exactly the case this selection exists to separate.
+     */
+    receiptNos?: string[],
+    /** The receipt's uuid — the FK path, which supersedes the numbers above. */
+    receiptId?: string | null,
+  ): Promise<string> {
+    try {
+      const wanted = LINE_COMPONENTS_FOR[component];
+      const picked = (receiptNos ?? []).filter((n) => n.trim().length > 0);
+      const rows = await db
+        .select({
+          amount: PaymentVoucherLineTable.amount,
+          component: PaymentVoucherLineTable.component,
+          receiptNo: PaymentVoucherReceiptTable.receiptNo,
+          receiptId: PaymentVoucherLineTable.receiptId,
+        })
+        .from(PaymentVoucherLineTable)
+        .leftJoin(
+          PaymentVoucherReceiptTable,
+          eq(PaymentVoucherLineTable.receiptId, PaymentVoucherReceiptTable.id),
+        )
         .where(
           and(
             eq(PaymentVoucherLineTable.voucherId, voucherId),
@@ -95,6 +174,17 @@ export class PaymentVoucherDisputeRepositoryClass {
 
       const total = rows
         .filter((r) => (r.component === null ? component === 'others' : wanted.includes(r.component)))
+        /*
+         * The FK wins when given; the receipt NUMBERS are the pre-0088 path.
+         *
+         * A line with no receipt (a wage seal) can never match either kind of
+         * selection, so it drops out rather than inflating a narrowed sum.
+         */
+        .filter((r) => {
+          if (receiptId) return r.receiptId === receiptId;
+          if (picked.length === 0) return true;
+          return r.receiptNo !== null && picked.includes(r.receiptNo);
+        })
         .reduce((sum, r) => sum + Number(r.amount ?? 0), 0);
 
       return total.toFixed(2);
@@ -161,6 +251,16 @@ export class PaymentVoucherDisputeRepositoryClass {
     voucherId: string,
     disputeDate: string,
     component: PaymentVoucherDisputeComponent,
+    /**
+     * WHICH claim, when a day+bucket holds more than one.
+     *
+     * Since 0086 a PR can have one open claim PER SHIFT, so "the open drinks
+     * claim on Tuesday" stopped being a single row. Without this the withdraw
+     * took whichever came back first — cancelling an argument the PR had not
+     * asked to drop. `null` explicitly targets the whole-day claim (the legacy
+     * shape), which is why it is distinguished from `undefined`.
+     */
+    receiptId?: string | null,
   ): Promise<PaymentVoucherDispute | null> {
     try {
       const [row] = await db
@@ -172,6 +272,11 @@ export class PaymentVoucherDisputeRepositoryClass {
             eq(PaymentVoucherDisputeTable.disputeDate, disputeDate),
             eq(PaymentVoucherDisputeTable.component, component),
             isNull(PaymentVoucherDisputeTable.outcome),
+            ...(receiptId === undefined
+              ? []
+              : receiptId === null
+                ? [isNull(PaymentVoucherDisputeTable.receiptId)]
+                : [eq(PaymentVoucherDisputeTable.receiptId, receiptId)]),
           ),
         );
       return row ?? null;
@@ -235,22 +340,40 @@ export class PaymentVoucherDisputeRepositoryClass {
   async listForScope(
     agencyId: string | null,
     options?: { openOnly?: boolean; limit?: number },
-  ): Promise<Array<{ dispute: PaymentVoucherDispute; voucher: PaymentVoucherType }>> {
+  ): Promise<
+    Array<{
+      dispute: PaymentVoucherDispute;
+      voucher: PaymentVoucherType & { prNickname: string | null };
+    }>
+  > {
     try {
       const conditions: SQL[] = [];
       if (agencyId) conditions.push(eq(PaymentVoucherTable.agencyId, agencyId));
       if (options?.openOnly) conditions.push(isNull(PaymentVoucherDisputeTable.outcome));
 
-      return await db
-        .select({ dispute: PaymentVoucherDisputeTable, voucher: PaymentVoucherTable })
+      // Nickname rides off the PR account (`user.username`). Post-cutover
+      // `payment_voucher.pr_id` equals `user_id` — there is no `pr` table.
+      // LEFT join: a voucher with no pr_id must still return its dispute.
+      const rows = await db
+        .select({
+          dispute: PaymentVoucherDisputeTable,
+          voucher: PaymentVoucherTable,
+          prNickname: UserTable.username,
+        })
         .from(PaymentVoucherDisputeTable)
         .innerJoin(
           PaymentVoucherTable,
           eq(PaymentVoucherDisputeTable.voucherId, PaymentVoucherTable.id),
         )
+        .leftJoin(UserTable, eq(PaymentVoucherTable.prId, UserTable.id))
         .where(conditions.length ? and(...conditions) : undefined)
         .orderBy(desc(PaymentVoucherDisputeTable.raisedAt))
         .limit(options?.limit ?? 200);
+
+      return rows.map((row) => ({
+        dispute: row.dispute,
+        voucher: { ...row.voucher, prNickname: row.prNickname ?? null },
+      }));
     } catch (error) {
       logger.error('[PaymentVoucherDisputeRepository.listForScope] Error:', error);
       return [];

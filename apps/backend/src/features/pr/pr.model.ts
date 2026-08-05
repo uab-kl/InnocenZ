@@ -1,4 +1,4 @@
-import { timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
+import { integer, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { UserTable } from '@/features/user/user.model';
@@ -20,15 +20,16 @@ export type PrStatus = (typeof prStatusValues)[number];
 export const prStatusEnum = MainSchema.enum('pr_status', prStatusValues);
 
 /**
- * `main.pr` is GONE (migration 0089 dropped it after remapping every ops
+ * `main.pr` is GONE (migration 0095 dropped it after remapping every ops
  * `pr_id` column to equal `user_id`). There is no more `pr` row and no more
- * standalone PR identity: a PR **is** a `user` account, so `id === userId`
- * on every value shaped like this, always. Nothing below is a drizzle table —
- * it is a plain type describing the SYNTHETIC row `PrRepository` builds on the
- * fly from `user` + `user_profile` + `agency_pr` (name/nickname from the
- * account, tier/status from the membership — one fact, one table, per the
- * database rule). Keep the field list identical to the old table so every
- * existing caller of `PrType` keeps compiling untouched.
+ * standalone PR identity: a PR **is** a `user` account that holds the `pr`
+ * role (`user_role` ⋈ `role`), so `id === userId` on every value shaped like
+ * this, always. Nothing below is a drizzle table — it is a plain type
+ * describing the SYNTHETIC row `PrRepository` builds on the fly from `user` +
+ * `user_profile` + `agency_pr` (name/nickname from the account, tier/status
+ * from the membership — one fact, one table, per the database rule). Keep the
+ * field list identical to the old table so every existing caller of `PrType`
+ * keeps compiling untouched.
  */
 export type PrType = {
   /** Always equal to `userId` post-cutover. */
@@ -79,6 +80,14 @@ export const AgencyPrTable = MainSchema.table(
     tier: prTierEnum('tier').notNull().default('tier_1'),
     /** Why the agency declined this membership request. */
     rejectReason: varchar('reject_reason', { length: 500 }),
+    // Roster-profile columns (0089). Grade the PR *under this agency* — a PR on
+    // two rosters can hold two different values. Never on a person table.
+    place: varchar('place', { length: 120 }),
+    yearsExp: integer('years_exp'),
+    /** 'A' | 'B' | 'C' — validated in UpdatePrSchema, not by a pg enum. */
+    kpiTier: varchar('kpi_tier', { length: 8 }),
+    /** 'basic' | 'commission_only' — validated in UpdatePrSchema. */
+    payClass: varchar('pay_class', { length: 32 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),
@@ -103,6 +112,8 @@ export type PrProfile = {
   /** ISO date, `YYYY-MM-DD`. */
   dob: string | null;
   nationality: string | null;
+  /** Spoken languages the PR set on their own profile, e.g. ['English','Hokkien']. */
+  languages: string[] | null;
   // Matches the user_profile.portfolio_photos jsonb column, which infers as a
   // nullable array of nullable strings (drizzle's conservative jsonb typing).
   portfolioPhotos: (string | null)[] | null;
@@ -115,8 +126,22 @@ export type PrProfile = {
   comcardHipCm: number | null;
 };
 
-/** A `pr` row with the linked user's comcard profile folded in. */
-export type PrWithProfileType = PrType & { profile: PrProfile | null };
+/**
+ * How the PR's own agency grades them — the `agency_pr` half of the roster
+ * profile (0089). Null when the PR has no link row for that agency yet.
+ */
+export type PrRoster = {
+  place: string | null;
+  yearsExp: number | null;
+  kpiTier: string | null;
+  payClass: string | null;
+};
+
+/** A `pr` row with the linked user's comcard profile and roster grading folded in. */
+export type PrWithProfileType = PrType & {
+  profile: PrProfile | null;
+  roster: PrRoster | null;
+};
 
 export type PrFilter = {
   id?: string;

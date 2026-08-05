@@ -27,11 +27,10 @@ import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
 
-/** Map agency_pr (+ optional pr bridge) into the personnel list shape the web already uses. */
+/** Map agency_pr (+ user/user_profile) into the personnel list shape the web already uses. */
 function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | null {
   // `main.pr` is gone — `id` is the account's `userId`, which is always
-  // present on a membership row. `prId` is only a same-value alias kept for
-  // callers, so it must never be the thing gating whether a row renders.
+  // present on a membership row.
   if (!row.userId) return null;
   const status: PrStatus =
     row.prStatus === 'suspended'
@@ -52,6 +51,9 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
     row.comcardHeightCm,
     row.comcardWeightKg,
   ].some((v) => v !== null && v !== undefined);
+  const rosterHasValue = [row.place, row.yearsExp, row.kpiTier, row.payClass].some(
+    (v) => v !== null && v !== undefined,
+  );
   return {
     id: row.userId,
     agencyId: row.agencyId,
@@ -75,6 +77,7 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
           race: row.race,
           dob: row.dob != null ? String(row.dob).slice(0, 10) : null,
           nationality: row.nationality,
+          languages: null,
           portfolioPhotos: row.portfolioPhotos,
           comcardImage: row.comcardImage,
           comcardHeightCm: row.comcardHeightCm,
@@ -82,6 +85,14 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
           comcardBustCm: row.comcardBustCm,
           comcardWaistCm: row.comcardWaistCm,
           comcardHipCm: row.comcardHipCm,
+        }
+      : null,
+    roster: rosterHasValue
+      ? {
+          place: row.place,
+          yearsExp: row.yearsExp,
+          kpiTier: row.kpiTier,
+          payClass: row.payClass,
         }
       : null,
   };
@@ -103,6 +114,17 @@ function inviteUsername(name: string): string {
  * only). `outletIds` is empty for non-outlet callers.
  */
 type Scope = { isAdmin: boolean; agencyId: string | null; outletIds: string[] };
+
+/**
+ * Drop the keys the caller did not send. `undefined` in a drizzle `.set()` is
+ * not "leave alone" everywhere, and an all-undefined object would still count
+ * as a patch and fire a pointless write.
+ */
+function pickDefined<T extends object>(obj: T): Partial<T> {
+  return Object.fromEntries(
+    Object.entries(obj).filter(([, value]) => value !== undefined),
+  ) as Partial<T>;
+}
 
 function parsePaging(req: Request): { page: number; pageSize: number } {
   const page = Math.max(1, Number(req.query.page) || 1);
@@ -224,32 +246,15 @@ export class PrControllerClass {
 
       const { page, pageSize } = parsePaging(req);
 
-      // Agency roster reads membership (agency_pr) + user/user_profile. The
-      // temporary pr.id is kept on each row so assign / sales / PV keep working.
+      // Agency roster: agency_pr ⋈ user ⋈ user_profile. No `pr` table — id === userId.
       if (scope.agencyId && !scope.isAdmin) {
-        const actor = getActor(req);
         const members = await this.agencyPrRepository.listByAgency(scope.agencyId, {
           search: req.query.name as string | undefined,
         });
 
         const prs: PrWithProfileType[] = [];
         for (const member of members) {
-          let row = member;
-          if (member.approveStatus === 'approved' && !member.prId) {
-            const bridge = await this.prRepository.ensureOpsBridge({
-              userId: member.userId,
-              agencyId: member.agencyId,
-              actor,
-              tier: member.tier,
-              name: member.name,
-              nickname: member.nickname,
-              phone: member.phoneNum,
-              email: member.email,
-              icNo: member.idNo,
-            });
-            row = { ...member, prId: bridge.id, prStatus: bridge.status };
-          }
-          const mapped = rosterRowFromMembership(row);
+          const mapped = rosterRowFromMembership(member);
           if (mapped) prs.push(mapped);
         }
 
@@ -345,8 +350,8 @@ export class PrControllerClass {
       const phone = parsed.data.phone?.trim() || null;
       const email = parsed.data.email?.trim() || null;
 
-      // Owner invite: stub user + agency_pr (approved) + ops bridge. Person facts
-      // live on user / user_profile — never invent a membership-less pr row.
+      // Owner invite: stub user + assign `pr` role + agency_pr (approved).
+      // Person facts live on user / user_profile — there is no `pr` table.
       let userId = parsed.data.userId;
       let createdStub = false;
       if (!userId && phone) {
@@ -446,6 +451,14 @@ export class PrControllerClass {
       if (!scope.isAdmin) delete data.agencyId;
       const actor = getActor(req);
 
+      // Editor fields live in three tables. Peel non-identity / non-membership
+      // keys off before `prRepository.update` — those columns are not on the
+      // synthetic PrInsertType.
+      const { race, languages, dob, comcardHeightCm, comcardWeightKg, ...rest } = data;
+      const { place, yearsExp, kpiTier, payClass, ...prColumns } = rest;
+      const profilePatch = pickDefined({ race, languages, dob, comcardHeightCm, comcardWeightKg });
+      const rosterPatch = pickDefined({ place, yearsExp, kpiTier, payClass });
+
       // Person facts → user / user_profile; membership tier/approval → agency_pr.
       if (existing.userId) {
         if (data.name !== undefined || data.icNo !== undefined) {
@@ -493,11 +506,34 @@ export class PrControllerClass {
       }
 
       const pr = await this.prRepository.update(id, {
-        ...data,
+        ...prColumns,
         ...(data.status === 'active' ? { rejectReason: null } : {}),
         updatedBy: actor,
       });
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      if (Object.keys(profilePatch).length > 0) {
+        if (!pr.userId) {
+          return res.status(409).json({
+            success: false,
+            message: 'This PR has no linked user account, so profile details cannot be saved',
+            data: null,
+          });
+        }
+        const existingProfile = await this.userProfileRepository.getByUserId(pr.userId);
+        if (!existingProfile) await this.userProfileRepository.createEmpty(pr.userId, actor);
+        await this.userProfileRepository.update(pr.userId, { ...profilePatch, updatedBy: actor });
+      }
+
+      // Roster grading on agency_pr (0089) — keyed by userId (pr table is gone).
+      if (Object.keys(rosterPatch).length > 0 && pr.agencyId) {
+        await this.agencyPrRepository.upsertRosterProfile(
+          pr.agencyId,
+          pr.userId,
+          rosterPatch,
+          actor,
+        );
+      }
 
       const JOIN_DECISION: Record<string, boolean> = { active: true, inactive: false };
       const accepted = data.status ? JOIN_DECISION[data.status] : undefined;

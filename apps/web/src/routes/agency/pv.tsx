@@ -8,6 +8,7 @@ import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQue
 import { PayrollVerifyPanel } from "@agency-portal/components/agency/PayrollVerifyPanel";
 import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
+import { SignatureInkMark } from "@agency-portal/components/iz/SignatureInkMark";
 import {
 	formatRM,
 	IzCard,
@@ -27,6 +28,7 @@ import {
 	useAgencyPvs,
 } from "@agency-portal/hooks/use-agency-pvs";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
+import { usePvIssuer } from "@agency-portal/hooks/use-pv-issuer";
 import {
 	agencySubscriptionBillingForWeeklyPv,
 	nowAgencyDateTime,
@@ -37,6 +39,7 @@ import {
 	agencyPvStatusLabel,
 	getAgencyManagedReceiptScans,
 	receiptsForPv,
+	resolvePvPrLabel,
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
 import {
@@ -77,7 +80,10 @@ import {
 	downloadPvBreakdownCsv,
 	downloadPvBreakdownPdf,
 } from "@agency-portal/lib/pv-pdf";
-import { buildAgencyPayee } from "@agency-portal/lib/pv-template";
+import {
+	buildAgencyPayee,
+	formatPvSignStamp,
+} from "@agency-portal/lib/pv-template";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
@@ -863,7 +869,7 @@ function AgencyPV() {
 											{pv.id}
 										</div>
 										<p className="iz-tiny iz-muted mt-0.5">
-											{resolvePvPrName(pv, agencyPRs)} · {pv.outlet}
+											{resolvePvPrLabel(pv, agencyPRs)} · {pv.outlet}
 										</p>
 										{pv.prIc && (
 											<p className="iz-tiny iz-muted2">IC {pv.prIc}</p>
@@ -1140,6 +1146,10 @@ function PvDetail({
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const toast = useStore((s) => s.toast);
+	// The letterhead the printed voucher carries — the signed-in agency, so this
+	// document names the same company the PR's copy of it does. Undefined on a
+	// demo session, which falls the template back to its own issuer.
+	const pvIssuer = usePvIssuer();
 	// The list omits line items — pull the full voucher (falls back to the list
 	// row until it resolves).
 	const detailPv = useAgencyPvDetail(pv.id, pv);
@@ -1224,17 +1234,29 @@ function PvDetail({
 				<p className="iz-tiny iz-muted2">Dual-sign PV</p>
 				<p className="iz-tiny mt-1">
 					1st · {FINANCE_HEAD_LABEL}:{" "}
-					<b className="text-[var(--iz-txt)]">{pv.financeHeadName}</b>
-					{pv.financeHeadSignedAt
-						? ` · ${pv.financeHeadSignedAt}`
+					<b className="text-[var(--iz-txt)]">{v.financeHeadName}</b>
+					{v.financeHeadSignedAt
+						? ` · ${formatPvSignStamp(v.financeHeadSignedAt)}`
 						: " · pending"}
 				</p>
-				{pv.financeHeadSignatureDataUrl && (
+				{/* The drawn mark, read from the voucher's own `finance_head_signature`.
+				    Reads `v`, not `pv` — the ink rides on the DETAIL fetch, and the list
+				    row has never carried it. The demo data URL is the fallback, not the
+				    source: it is drawn from the signer's NAME, so preferring it showed a
+				    signature for anyone on file. */}
+				{financeSigned && (
 					<div className="iz-pv-sig-preview mt-1.5">
-						<img
-							src={pv.financeHeadSignatureDataUrl}
-							alt={`${pv.financeHeadName} signature`}
-						/>
+						{v.financeHeadSignatureInk ? (
+							<SignatureInkMark
+								ink={v.financeHeadSignatureInk}
+								label={`${v.financeHeadName} signature`}
+							/>
+						) : v.financeHeadSignatureDataUrl ? (
+							<img
+								src={v.financeHeadSignatureDataUrl}
+								alt={`${v.financeHeadName} signature`}
+							/>
+						) : null}
 					</div>
 				)}
 				<p className="iz-tiny iz-muted mt-2">
@@ -1243,7 +1265,7 @@ function PvDetail({
 						<>
 							{" "}
 							<b className="text-[var(--iz-txt)]">{pv.prName}</b>
-							{pv.prSignedAt ? ` · ${pv.prSignedAt}` : ""}
+							{v.prSignedAt ? ` · ${formatPvSignStamp(v.prSignedAt)}` : ""}
 							{" · "}
 							<span className="text-[var(--iz-green)]">e-sign on file ✓</span>
 						</>
@@ -1253,9 +1275,16 @@ function PvDetail({
 						" —"
 					)}
 				</p>
-				{prHasSigned && prSigPreview && (
+				{prHasSigned && (v.prSignatureInk || prSigPreview) && (
 					<div className="iz-pv-sig-preview mt-1.5">
-						<img src={prSigPreview} alt={`${pv.prName} signature`} />
+						{v.prSignatureInk ? (
+							<SignatureInkMark
+								ink={v.prSignatureInk}
+								label={`${pv.prName} signature`}
+							/>
+						) : (
+							<img src={prSigPreview} alt={`${pv.prName} signature`} />
+						)}
 					</div>
 				)}
 			</IzCard>
@@ -1393,7 +1422,7 @@ function PvDetail({
 					type="button"
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
-						downloadPvBreakdownPdf(displayPv, payee);
+						downloadPvBreakdownPdf(displayPv, payee, [], pvIssuer);
 						toast("Official PV opened — use Print → Save as PDF", "success");
 					}}
 				>
@@ -1403,7 +1432,7 @@ function PvDetail({
 					type="button"
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
-						downloadPvBreakdownCsv(displayPv, payee);
+						downloadPvBreakdownCsv(displayPv, payee, pvIssuer);
 						toast("Payment voucher Excel downloaded", "success");
 					}}
 				>

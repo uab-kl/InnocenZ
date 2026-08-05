@@ -1,11 +1,11 @@
-﻿import { IzHScroll } from "@agency-portal/components/iz/HScroll";
+﻿import type { ComcardPreviewData } from "@agency-portal/components/agency/Comcard3dPreview";
+import { IzHScroll } from "@agency-portal/components/iz/HScroll";
 import {
 	IzCard,
 	IzSelect,
 	IzTimeInput,
 	normalizeTimeValue,
 } from "@agency-portal/components/iz/ui";
-import { OutletDrinkMenuEditor } from "@agency-portal/components/outlet/OutletDrinkMenuEditor";
 import {
 	OutletDatePopoverChip,
 	OutletDatePopoverField,
@@ -20,15 +20,14 @@ import {
 	PostJobShiftField,
 	PostJobTierSectionHeader,
 } from "@agency-portal/components/outlet/post-job-shift-ui";
+import { ShiftEventPriceEditor } from "@agency-portal/components/outlet/ShiftEventPriceEditor";
 import { PrComcardPickerThumb } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { JobPostingMicroLabel } from "@agency-portal/components/special-service/job-posting-ui";
 import {
-	type AgencyManagedPR,
 	buildDefaultTierRates,
 	cloneTierRates,
 	collectAgencyPrLanguages,
 	estimateShiftLaborCost,
-	languagesFromPr,
 	OUTLET_BASE_TIER,
 	OUTLET_PR_TIERS,
 	type OutletPrTier,
@@ -58,6 +57,7 @@ import {
 	type ShiftDestination,
 	type ShiftEventKind,
 	type ShiftSpecialEventType,
+	withDrinkCategoriesFromWorkspace,
 } from "@agency-portal/lib/outlet-demo";
 import {
 	ALL_POST_JOB_PAY_TIER_IDS,
@@ -80,6 +80,7 @@ import {
 	totalPrCountFromPayTierRows,
 	workspaceTierRatesSignature,
 } from "@agency-portal/lib/post-job-pay-tiers";
+import { formatStars } from "@agency-portal/lib/pr-rating-summary";
 import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { addDays, format, startOfToday } from "date-fns";
@@ -186,18 +187,6 @@ export function applyWorkspaceRatesToDraftShift(
 }
 
 export { workspaceTierRatesSignature };
-
-export function languagesForPrIds(
-	prIds: string[],
-	agencyPRs: AgencyManagedPR[],
-): string[] {
-	const set = new Set<string>();
-	for (const id of prIds) {
-		const pr = agencyPRs.find((p) => p.id === id);
-		if (pr) languagesFromPr(pr).forEach((lang) => set.add(lang));
-	}
-	return [...set].sort((a, b) => a.localeCompare(b));
-}
 
 export type DraftShift = {
 	id: string;
@@ -776,16 +765,124 @@ export function JobMultiDatePicker({
 	);
 }
 
+/** Title-case a typed language so "mandarin" and "Mandarin" don't both appear. */
+function formatLanguageInput(raw: string): string {
+	const trimmed = raw.trim().replace(/\s+/g, " ");
+	if (!trimmed) return "";
+	return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
+}
+
+/**
+ * Post Job's language field: the languages the outlet's own PRs actually speak,
+ * plus **Others** for anything they don't.
+ *
+ * Listing every language in the world made the field a wish list — most of it
+ * unreachable at this venue. Listing only what the pool speaks makes the common
+ * case one tap, and `Others` keeps the uncommon one possible instead of merely
+ * absent. It stays a preference either way: nothing here filters assignment.
+ */
+function PostJobLanguagePicker({
+	hint,
+	options,
+	selected,
+	onToggle,
+	onAdd,
+}: {
+	hint?: string;
+	options: string[];
+	selected: string[];
+	onToggle: (lang: string) => void;
+	onAdd: (lang: string) => void;
+}) {
+	const [showOther, setShowOther] = useState(false);
+	const [otherInput, setOtherInput] = useState("");
+
+	const addOther = () => {
+		const label = formatLanguageInput(otherInput);
+		if (!label) return;
+		onAdd(label);
+		setOtherInput("");
+		setShowOther(false);
+	};
+
+	return (
+		<div className="flex w-full flex-col gap-2">
+			{hint && (
+				<p className="text-[10px] leading-snug text-[var(--iz-muted)]">
+					{hint}
+				</p>
+			)}
+			<div className="flex w-full flex-wrap gap-1.5">
+				{options.length === 0 && !showOther && (
+					<span className="self-center text-[10px] text-[var(--iz-muted)]">
+						No languages on your PRs' profiles yet — add one with Others.
+					</span>
+				)}
+				{options.map((l) => (
+					<button
+						key={l}
+						type="button"
+						onClick={() => onToggle(l)}
+						className={cn(
+							"iz-job-posting-type-pill",
+							selected.includes(l) && "is-active",
+						)}
+					>
+						{l}
+					</button>
+				))}
+				<button
+					type="button"
+					onClick={() => setShowOther((v) => !v)}
+					className={cn("iz-job-posting-type-pill", showOther && "is-active")}
+				>
+					+ Others
+				</button>
+			</div>
+			{showOther && (
+				<div className="flex w-full items-center gap-1.5">
+					<input
+						type="text"
+						value={otherInput}
+						maxLength={32}
+						autoFocus
+						placeholder="Name a language"
+						aria-label="Other preferred language"
+						className="iz-job-posting-control iz-job-posting-input min-w-0 flex-1 text-sm"
+						onChange={(e) => setOtherInput(e.target.value)}
+						onKeyDown={(e) => {
+							if (e.key === "Enter") {
+								e.preventDefault();
+								addOther();
+							}
+						}}
+					/>
+					<button
+						type="button"
+						onClick={addOther}
+						className="iz-chip shrink-0 px-2.5 py-1.5 text-[11px] font-semibold text-[var(--iz-gold)]"
+					>
+						Add
+					</button>
+				</div>
+			)}
+		</div>
+	);
+}
+
 export function JobLanguagePicker({
 	options,
 	selected,
 	onSelectedChange,
 	variant = "default",
+	hint,
 }: {
 	options: string[];
 	selected: string[];
 	onSelectedChange: (langs: string[]) => void;
 	variant?: "default" | "postJob";
+	/** Shown above the pills — say what picking a language does, and does not do. */
+	hint?: string;
 }) {
 	const toggle = (lang: string) => {
 		onSelectedChange(
@@ -795,31 +892,29 @@ export function JobLanguagePicker({
 		);
 	};
 
-	if (options.length === 0) {
+	if (variant === "postJob") {
 		return (
-			<p className="text-[11px] text-[var(--iz-muted)]">
-				Select PRs below to pull languages from their profiles.
-			</p>
+			<PostJobLanguagePicker
+				hint={hint}
+				options={options}
+				selected={selected}
+				onToggle={toggle}
+				onAdd={(lang) =>
+					onSelectedChange(
+						selected.some((l) => l.toLowerCase() === lang.toLowerCase())
+							? selected
+							: [...selected, lang],
+					)
+				}
+			/>
 		);
 	}
 
-	if (variant === "postJob") {
+	if (options.length === 0) {
 		return (
-			<div className="flex w-full flex-wrap gap-1.5">
-				{options.map((l) => (
-					<button
-						key={l}
-						type="button"
-						onClick={() => toggle(l)}
-						className={cn(
-							"iz-job-posting-type-pill",
-							selected.includes(l) && "is-active",
-						)}
-					>
-						{l}
-					</button>
-				))}
-			</div>
+			<p className="text-[11px] text-[var(--iz-muted)]">
+				No languages to choose from.
+			</p>
 		);
 	}
 
@@ -992,7 +1087,23 @@ export function ShiftTimePicker({
 	);
 }
 
+/** The fields a PR card draws — a demo store `PR` and a backend PR both fit. */
+export type DraftPrCandidate = {
+	id: string;
+	name: string;
+	avatar: string;
+	comcardImageUrl?: string | null;
+	/** Identity + portfolio, so the card can build a comcard when none is saved. */
+	comcard?: ComcardPreviewData;
+	/** Spoken languages from the PR's own profile — the pool the ask draws on. */
+	languages?: string[];
+	/** null when this outlet has never rated the PR — printed as "New", not 0★. */
+	rating: number | null;
+};
+
 export function DraftPrPicker({
+	candidates: candidatesProp,
+	emptyHint,
 	selected,
 	onSelectedChange,
 	quantity,
@@ -1002,6 +1113,10 @@ export function DraftPrPicker({
 	dailyRemaining,
 	poolHint,
 }: {
+	/** Real signed-in outlets pass their backend PR pool; demo sessions omit it. */
+	candidates?: DraftPrCandidate[];
+	/** Replaces the bare "No PRs available" line with why the pool is empty. */
+	emptyHint?: string;
 	selected: string[];
 	onSelectedChange: (prIds: string[]) => void;
 	quantity: number;
@@ -1027,11 +1142,13 @@ export function DraftPrPicker({
 	}, [maxSelect, quantity, dailyRemaining]);
 
 	const candidates = useMemo(() => {
-		const sorted = [...prs]
-			.filter((p) => !blocked.has(p.id))
-			.sort((a, b) => b.rating - a.rating);
-		return poolSize !== undefined ? sorted.slice(0, poolSize) : sorted;
-	}, [prs, blocked, poolSize]);
+		// A backed outlet's pool arrives pre-sorted from the server read; the demo
+		// store's own list is still ranked here by its seeded rating.
+		const source: DraftPrCandidate[] =
+			candidatesProp ?? [...prs].sort((a, b) => b.rating - a.rating);
+		const visible = source.filter((p) => !blocked.has(p.id));
+		return poolSize !== undefined ? visible.slice(0, poolSize) : visible;
+	}, [candidatesProp, prs, blocked, poolSize]);
 
 	const toggle = (prId: string) => {
 		const has = selected.includes(prId);
@@ -1071,8 +1188,8 @@ export function DraftPrPicker({
 			</div>
 			{poolHint && <p className="iz-post-job-pr-hint mb-2">{poolHint}</p>}
 			{candidates.length === 0 ? (
-				<p className="text-[11px] text-[var(--iz-muted)]">
-					No PRs available to select.
+				<p className="text-[11px] leading-snug text-[var(--iz-muted)]">
+					{emptyHint ?? "No PRs available to select."}
 				</p>
 			) : (
 				<div className="iz-post-job-pr-scroll">
@@ -1097,12 +1214,15 @@ export function DraftPrPicker({
 										comcardImageUrl={p.comcardImageUrl}
 										avatar={p.avatar}
 										name={p.name}
+										pr={"comcard" in p ? p.comcard : undefined}
 									/>
 									<div className="mt-1.5 truncate text-xs font-semibold text-[var(--iz-txt)]">
 										{p.name}
 									</div>
 									<div className="text-[10px] text-[var(--iz-violet-l)]">
-										{p.rating}★
+										{p.rating === null
+											? "Not rated yet"
+											: `${formatStars(p.rating)}★`}
 									</div>
 									<div
 										className={cn(
@@ -1192,12 +1312,18 @@ function SummaryLine({
 	);
 }
 
-function DraftDrinkPricingSummary({ shift }: { shift: DraftShift }) {
-	const workspaceMenu = useStore((s) => s.outletWorkspace.drinkMenu ?? []);
+function DraftDrinkPricingSummary({
+	shift,
+	workspaceMenu,
+}: {
+	shift: DraftShift;
+	workspaceMenu?: OutletDrinkPrice[];
+}) {
+	const storeMenu = useStore((s) => s.outletWorkspace.drinkMenu ?? []);
 	return (
 		<SummaryLine
-			label="Drink prices"
-			value={formatShiftDrinkPricingSummary(shift, workspaceMenu)}
+			label="Prices"
+			value={formatShiftDrinkPricingSummary(shift, workspaceMenu ?? storeMenu)}
 		/>
 	);
 }
@@ -1208,12 +1334,15 @@ export function DraftShiftSummary({
 	onEdit,
 	onRemove,
 	showRemove,
+	workspaceMenu,
 }: {
 	shift: DraftShift;
 	title: string;
 	onEdit: () => void;
 	onRemove?: () => void;
 	showRemove?: boolean;
+	/** The outlet's real price list on a backed session; omitted on demo ones. */
+	workspaceMenu?: OutletDrinkPrice[];
 }) {
 	const prs = useStore((s) => s.prs);
 
@@ -1255,7 +1384,7 @@ export function DraftShiftSummary({
 					shift.customSpecialEventName,
 				)}
 			/>
-			<DraftDrinkPricingSummary shift={shift} />
+			<DraftDrinkPricingSummary shift={shift} workspaceMenu={workspaceMenu} />
 			<SummaryLine label="Event" value={shift.event} stacked />
 			<SummaryLine label="Time" value={shift.shiftTime} />
 			<SummaryLine label="People needed" value={String(shift.quantity)} />
@@ -1300,6 +1429,9 @@ export function DraftShiftEditor({
 	shiftTotal,
 	namedPrsOnDate = 0,
 	peopleRemaining,
+	prCandidates,
+	prEmptyHint,
+	workspaceMenu,
 }: {
 	shift: DraftShift;
 	onChange: (patch: Partial<DraftShift>) => void;
@@ -1313,12 +1445,35 @@ export function DraftShiftEditor({
 	namedPrsOnDate?: number;
 	/** Max people needed allowed for this shift (subscription daily cap minus booked headcount) */
 	peopleRemaining?: number;
+	/** Backend PR pool on a real outlet session; omitted on demo sessions. */
+	prCandidates?: DraftPrCandidate[];
+	/** Why the pool is empty, when it is. */
+	prEmptyHint?: string;
+	/** The outlet's real price list on a backed session; omitted on demo ones. */
+	workspaceMenu?: OutletDrinkPrice[];
 }) {
+	// Demo sessions have no backend pool, so the language options come from the
+	// demo roster instead. A real session passes `prCandidates` and ignores this.
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const outletOwner = useStore((s) => s.outletOwner);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const workspaceRatesKey = workspaceTierRatesSignature(
 		outletWorkspace.tierRates,
+	);
+	// A real outlet session's price list lives in the backend and arrives as a
+	// prop; the demo store's copy is the fallback. Reading only the store is why
+	// Post Job showed a menu the Workspace page did not have.
+	const workspaceDrinkMenu = workspaceMenu ?? outletWorkspace.drinkMenu ?? [];
+	// This event's own price list. Menus saved before the Drinks/Services split
+	// carry no category, so borrow the workspace's — display only, the workspace
+	// list itself is never written from here.
+	const eventPriceMenu = useMemo(
+		() =>
+			withDrinkCategoriesFromWorkspace(
+				shift.eventDrinkMenu ?? [],
+				workspaceDrinkMenu,
+			),
+		[shift.eventDrinkMenu, workspaceDrinkMenu],
 	);
 	const prevWorkspaceRatesKey = useRef(workspaceRatesKey);
 	const didExpandTierColumns = useRef(false);
@@ -1437,22 +1592,26 @@ export function DraftShiftEditor({
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- sync when workspace tier rates are saved
 	}, [workspaceRatesKey]);
 
-	const languageOptions = useMemo(
-		() => collectAgencyPrLanguages(agencyPRs),
-		[agencyPRs],
-	);
-	const pickerOptions = useMemo(
-		() =>
-			shift.prIds.length > 0
-				? languagesForPrIds(shift.prIds, agencyPRs)
-				: languageOptions,
-		[shift.prIds, agencyPRs, languageOptions],
-	);
-	const pickerSelected = useMemo(() => {
-		const valid = shift.langs.filter((l) => pickerOptions.includes(l));
-		if (valid.length > 0) return valid;
-		return shift.prIds.length > 0 ? pickerOptions : [];
-	}, [shift.langs, pickerOptions, shift.prIds.length]);
+	// Preferred languages are the outlet's ASK for this shift, so this is NOT keyed
+	// to whoever is selected below — that made the field a read-out of the roster.
+	// It is keyed to the whole POOL: the languages this venue's PRs actually speak,
+	// which is what "a plus if we get it" can realistically mean here. Anything
+	// else goes in via Others, so an unlisted language is still askable.
+	const poolLanguages = useMemo(() => {
+		const source =
+			prCandidates?.flatMap((p) => p.languages ?? []) ??
+			collectAgencyPrLanguages(agencyPRs);
+		return [...new Set(source.filter(Boolean))].sort((a, b) =>
+			a.localeCompare(b),
+		);
+	}, [prCandidates, agencyPRs]);
+
+	const pickerOptions = useMemo(() => {
+		// A language typed via Others still has to render as a pill, or it would
+		// vanish from the field the moment it was added.
+		const custom = shift.langs.filter((lang) => !poolLanguages.includes(lang));
+		return [...poolLanguages, ...custom];
+	}, [poolLanguages, shift.langs]);
 
 	const updatePayTierRows = (rows: PostJobPayTierRow[]) => {
 		const payTierRows = clampPayTierRowsToMax(
@@ -1567,7 +1726,7 @@ export function DraftShiftEditor({
 											eventDrinkMenu:
 												nextKind === "special"
 													? (shift.eventDrinkMenu ??
-														cloneDrinkMenu(outletWorkspace.drinkMenu ?? []))
+														cloneDrinkMenu(workspaceDrinkMenu))
 													: undefined,
 											event: resolveDraftEventOnPresetChange(
 												shift.event,
@@ -1631,15 +1790,15 @@ export function DraftShiftEditor({
 					)}
 				</PostJobShiftField>
 
-				<PostJobShiftField label="Drink prices">
+				<PostJobShiftField label="Prices">
 					{shift.eventKind === "special" ? (
 						<div className="w-full min-w-0">
 							<p className="mb-2 text-[10px] text-[var(--iz-muted)]">
-								Set drink prices for this special event. Normal events always
-								use Workspace prices.
+								Set prices for this special event only. Later events keep using
+								the Workspace prices.
 							</p>
-							<OutletDrinkMenuEditor
-								drinks={shift.eventDrinkMenu ?? []}
+							<ShiftEventPriceEditor
+								menu={eventPriceMenu}
 								onChange={(eventDrinkMenu) => onChange({ eventDrinkMenu })}
 							/>
 							<button
@@ -1647,9 +1806,7 @@ export function DraftShiftEditor({
 								className="iz-chip mt-2 w-full text-[11px]"
 								onClick={() =>
 									onChange({
-										eventDrinkMenu: cloneDrinkMenu(
-											outletWorkspace.drinkMenu ?? [],
-										),
+										eventDrinkMenu: cloneDrinkMenu(workspaceDrinkMenu),
 									})
 								}
 							>
@@ -1661,9 +1818,7 @@ export function DraftShiftEditor({
 							<PostJobLockedValue>
 								Follow Workspace
 								{(() => {
-									const range = drinkMenuPriceRange(
-										outletWorkspace.drinkMenu ?? [],
-									);
+									const range = drinkMenuPriceRange(workspaceDrinkMenu);
 									return ` · RM ${range.min}–${range.max}`;
 								})()}
 							</PostJobLockedValue>
@@ -1707,12 +1862,13 @@ export function DraftShiftEditor({
 					</div>
 				</PostJobShiftField>
 
-				<PostJobShiftField label="Languages">
+				<PostJobShiftField label="Preferred languages">
 					<JobLanguagePicker
 						variant="postJob"
+						hint="Spoken by your PRs — a plus, not a requirement. PRs who don't speak these can still be assigned. Use Others for anything not listed."
 						options={pickerOptions}
-						selected={pickerSelected}
-						onSelectedChange={(langs) => onChange({ langs, otherLang: "" })}
+						selected={shift.langs}
+						onSelectedChange={(langs) => onChange({ langs })}
 					/>
 				</PostJobShiftField>
 
@@ -1820,13 +1976,13 @@ export function DraftShiftEditor({
 						<p className="text-[11px] text-[var(--iz-muted)]">{prPickerHint}</p>
 					) : (
 						<DraftPrPicker
+							candidates={prCandidates}
+							emptyHint={prEmptyHint}
 							selected={shift.prIds}
 							onSelectedChange={(prIds) =>
 								onChange({
 									prIds,
 									quantity: Math.max(shift.quantity, prIds.length),
-									langs: languagesForPrIds(prIds, agencyPRs),
-									otherLang: "",
 								})
 							}
 							quantity={shift.quantity}

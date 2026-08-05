@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, ilike, inArray, or, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, exists, ilike, inArray, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -6,6 +6,8 @@ import { ShiftTable } from '@/features/shift/shift.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
+import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
+import { RoleTable } from '@/features/rbac/role/role.model';
 import {
   AgencyPrTable,
   type AgencyPrApproveStatus,
@@ -14,14 +16,16 @@ import {
   PrType,
   PrFilter,
   PrProfile,
+  PrRoster,
   PrStatus,
   PrWithProfileType,
   type PrTier,
 } from './pr.model';
 
 // `main.pr` is gone. Everything below builds the SYNTHETIC row from `user` +
-// `user_profile` (identity) + `agency_pr` (agency, tier, approval) — never
-// duplicated, always joined by `userId`. `id === userId` on every result.
+// `user_profile` (identity) + `user_role`/`role` (must be a PR) + `agency_pr`
+// (agency, tier, approval, roster grading) — never duplicated, always joined
+// by `userId`. `id === userId` on every result.
 
 // Comcard / identity columns exposed alongside each synthetic PR row. They
 // live on the linked user account — the same source the admin PR screen
@@ -32,6 +36,7 @@ const profileColumns = {
   race: UserProfileTable.race,
   dob: UserProfileTable.dob,
   nationality: UserProfileTable.nationality,
+  languages: UserProfileTable.languages,
   portfolioPhotos: UserProfileTable.portfolioPhotos,
   comcardImage: UserProfileTable.comcardImage,
   comcardHeightCm: UserProfileTable.comcardHeightCm,
@@ -47,6 +52,30 @@ function toProfile(row: PrProfile): PrProfile | null {
   return hasValue ? row : null;
 }
 
+/** Same collapse for agency_pr roster grading (0089). */
+function toRoster(membership: AgencyPrType | null): PrRoster | null {
+  if (!membership) return null;
+  const row: PrRoster = {
+    place: membership.place ?? null,
+    yearsExp: membership.yearsExp ?? null,
+    kpiTier: membership.kpiTier ?? null,
+    payClass: membership.payClass ?? null,
+  };
+  const hasValue = Object.values(row).some((value) => value !== null && value !== undefined);
+  return hasValue ? row : null;
+}
+
+/** True when this account holds the `pr` role (user_role ⋈ role). */
+function hasPrRoleSql(userIdColumn: SQLWrapper) {
+  return exists(
+    db
+      .select({ one: sql`1` })
+      .from(UserRoleTable)
+      .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
+      .where(and(eq(UserRoleTable.userId, userIdColumn), eq(RoleTable.roleName, 'pr'))),
+  );
+}
+
 /** `agency_pr.approve_status` → the old `pr.status` vocabulary. There is no
  * more `suspended` state to map to — nothing ever wrote it to a bridge row
  * that lived independently of a membership, so a caller filtering on it now
@@ -58,11 +87,11 @@ function statusFromApproval(approveStatus?: AgencyPrApproveStatus): PrStatus {
 }
 
 /**
- * Assembles one synthetic `PrType` (+ profile) from the pieces FK-joined off
- * `userId`. `membership` is the account's PRIMARY `agency_pr` row (or `null`
- * for an account with none yet) — name/nickname always come from the
- * account, tier/status/rejectReason always come from the membership, per the
- * one-fact-one-table rule. `id` is always `userId`.
+ * Assembles one synthetic `PrType` (+ profile + roster) from the pieces
+ * FK-joined off `userId`. `membership` is the account's PRIMARY `agency_pr`
+ * row (or `null` for an account with none yet) — name/nickname always come
+ * from the account, tier/status/rejectReason/roster always come from the
+ * membership, per the one-fact-one-table rule. `id` is always `userId`.
  */
 function composePr(params: {
   userId: string;
@@ -97,14 +126,15 @@ function composePr(params: {
     createdBy: membership?.createdBy ?? params.accountCreatedBy,
     updatedBy: membership?.updatedBy ?? params.accountUpdatedBy,
     profile: params.profile,
+    roster: toRoster(membership),
   };
 }
 
 /**
- * Builds the synthetic PR for one user account. `null` ONLY when the user
- * itself does not exist — an account with zero `agency_pr` rows still
- * resolves (agencyId `''`, status `pending`), because `id === userId` holds
- * for every account, not just ones already on a roster.
+ * Builds the synthetic PR for one user account. `null` when the user does not
+ * exist OR does not hold the `pr` role — a PR is a `user` with that role, not
+ * a row in a dropped `pr` table. An account with zero `agency_pr` rows still
+ * resolves (agencyId `''`, status `pending`) once the role check passes.
  *
  * When an account holds more than one `agency_pr` row (multiple agencies),
  * the OLDEST wins — same "originating agency" tie-break the old `pr` bridge
@@ -126,6 +156,8 @@ async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | nul
       ...profileColumns,
     })
     .from(UserTable)
+    .innerJoin(UserRoleTable, eq(UserRoleTable.userId, UserTable.id))
+    .innerJoin(RoleTable, and(eq(RoleTable.id, UserRoleTable.roleId), eq(RoleTable.roleName, 'pr')))
     .leftJoin(UserProfileTable, eq(UserProfileTable.userId, UserTable.id))
     .where(eq(UserTable.id, userId))
     .limit(1);
@@ -144,6 +176,7 @@ async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | nul
     race: account.race,
     dob: account.dob,
     nationality: account.nationality,
+    languages: account.languages,
     portfolioPhotos: account.portfolioPhotos,
     comcardImage: account.comcardImage,
     comcardHeightCm: account.comcardHeightCm,
@@ -390,7 +423,7 @@ export class PrRepositoryClass {
   }): Promise<{ prs: PrWithProfileType[]; totalCount: number }> {
     try {
       const { filter, page, pageSize } = params;
-      const conditions: SQL[] = [];
+      const conditions: SQL[] = [hasPrRoleSql(AgencyPrTable.userId)];
       // `id` is `userId` post-cutover.
       if (filter?.id) conditions.push(eq(AgencyPrTable.userId, filter.id));
       if (filter?.agencyId) conditions.push(eq(AgencyPrTable.agencyId, filter.agencyId));
@@ -484,6 +517,7 @@ export class PrRepositoryClass {
             race: row.race,
             dob: row.dob,
             nationality: row.nationality,
+            languages: row.languages,
             portfolioPhotos: row.portfolioPhotos,
             comcardImage: row.comcardImage,
             comcardHeightCm: row.comcardHeightCm,

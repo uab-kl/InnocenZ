@@ -230,10 +230,12 @@ export class ShiftAssignmentRepositoryClass {
           assignment: ShiftAssignmentTable,
           prName: prDisplayNameSql,
           outletId: ShiftTable.outletId,
+          outletName: OutletTable.name,
           shiftDate: ShiftTable.shiftDate,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .leftJoin(OutletTable, eq(OutletTable.id, ShiftTable.outletId))
         .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .where(whereClause)
@@ -245,6 +247,7 @@ export class ShiftAssignmentRepositoryClass {
         ...row.assignment,
         prName: row.prName,
         outletId: row.outletId,
+        outletName: row.outletName,
         shiftDate: row.shiftDate,
       }));
 

@@ -1093,6 +1093,8 @@ export type PrReceiptLine = {
    * something the PR cannot see anywhere in their own app.
    */
   receiptNo?: string | null;
+  /** The parent receipt's uuid — what a dispute points at as a foreign key. */
+  receiptId?: string | null;
   /**
    * The ORDER NUMBER printed on the paper (`ORD0389`) — what the PR can hold up
    * against the figure. Null when the paper carried none.
@@ -1147,6 +1149,25 @@ export type PrWeekDispute = {
   /** What the voucher said when raised — computed server-side, not claimed. */
   disputedAmount: string | null;
   claimedAmount: string | null;
+  /**
+   * WHICH receipts this claim names, by `receiptNo`.
+   *
+   * NULL means the PR did not narrow it, so the WHOLE day+component cell is
+   * under argument — every receipt in that bucket. A non-null list names the
+   * shift(s) they picked.
+   */
+  /** The FK to the shift's paper — match receipts on this, not on the number. */
+  receiptId: string | null;
+  /** @deprecated pre-0088 claims only; receipt NUMBERS as text. */
+  receiptRefs: string[] | null;
+  /**
+   * WHICH ITEMS the claim names — "Lemon Drop", not just "drinks".
+   *
+   * A snapshot taken when the claim was raised, so it still reads correctly
+   * after the agency edits the receipt or the voucher is rewritten. Null means
+   * the whole receipt was claimed, or the row predates the column.
+   */
+  disputedItems: { lineId: string; description: string; quantity: number; amount: string }[] | null;
   /** null = STILL OPEN. Otherwise the agency has answered. */
   outcome: 'accepted' | 'rejected' | 'withdrawn' | null;
   resolvedAt: string | null;
@@ -1414,6 +1435,30 @@ export function raiseMyDispute(
     note?: string;
     /** Optional — the sheet says so, and the server agrees since 0064. */
     proofPhotos?: string[];
+    /**
+     * WHICH receipts this claim is about, by `receiptNo` (`RCP-000012`).
+     *
+     * Omit to contest the whole cell. Send a subset when the day holds more than
+     * one shift and only one of them is wrong — the server narrows the recorded
+     * `disputedAmount` to exactly these, so the agency argues about the figure
+     * the PR actually pointed at.
+     *
+     * `receiptNo`, not the order number: the same paper logged twice carries the
+     * SAME order number, and telling those two apart is the whole point.
+     */
+    /**
+     * WHICH SHIFT — the receipt's uuid, stored server-side as a foreign key.
+     * Omit to dispute the whole day+bucket.
+     */
+    receiptId?: string;
+    /**
+     * WHICH ITEMS on that receipt are wrong. Only the id is sent — the server
+     * reads the description, quantity and amount from the database, so the
+     * figure a claim is measured against is never client-supplied.
+     *
+     * Omit to dispute the whole receipt.
+     */
+    items?: { lineId: string }[];
   },
 ): Promise<PrDisputeResult> {
   return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute`, {
@@ -1432,7 +1477,15 @@ export function raiseMyDispute(
 export function withdrawMyDispute(
   accessToken: string,
   voucherId: string,
-  input: { disputeDate: string; component: PrDisputeComponent },
+  input: {
+    disputeDate: string;
+    component: PrDisputeComponent;
+    /**
+     * WHICH claim — a PR can hold one open claim per SHIFT, so day+component
+     * alone no longer names a single row. Omit for a whole-day claim.
+     */
+    receiptId?: string;
+  },
 ): Promise<PrDisputeResult> {
   return request<PrDisputeResult>(`/payment-voucher/mine/${voucherId}/dispute/withdraw`, {
     method: 'POST',

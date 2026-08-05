@@ -80,7 +80,13 @@ function summaryRow(pv: PaymentVoucher): PrPvRow[] {
 function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 	return {
 		id: pv.id,
+		// The number the document prints. The uuid stays the id every screen and
+		// request keys on — the two are not interchangeable, which is why the PDF
+		// was printing the wrong one.
+		voucherNo: pv.voucherNo ?? undefined,
 		prName: pv.prName,
+		// Through the FK, not off the voucher row — see PrPaymentVoucher.prNickname.
+		prNickname: pv.prNickname ?? undefined,
 		prIc: pv.prIc ?? undefined,
 		outlet: pv.outlet ?? "",
 		cycle: pv.cycle ?? "",
@@ -91,11 +97,16 @@ function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 		deduct: num(pv.deduction),
 		net: num(pv.net),
 		status: STATUS_TO_DEMO[pv.status] ?? "PENDING_REVIEW",
-		// Backend tracks the finance-head name + sign timestamp but not the
-		// stored e-signature image; that stays a demo-only cosmetic field.
 		financeHeadName: pv.financeHeadName ?? "",
 		financeHeadSignedAt: pv.financeHeadSignedAt ?? "",
 		prSignedAt: pv.prSignedAt ?? undefined,
+		// The drawn ink. The comment that used to sit here — "backend tracks the
+		// name + timestamp but not the stored e-signature image" — was STALE from
+		// migration 0080 onward, and it is why the printed voucher kept drawing a
+		// signature synthesized from a name while the real strokes sat in the row
+		// the screen had already fetched.
+		financeHeadSignatureInk: pv.financeHeadSignature ?? undefined,
+		prSignatureInk: pv.prSignature ?? undefined,
 		paidAt: pv.paidAt ?? undefined,
 		bankRef: pv.bankRef ?? undefined,
 		weekStartIso: pv.weekStart ?? undefined,

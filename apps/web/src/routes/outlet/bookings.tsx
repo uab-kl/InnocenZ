@@ -18,13 +18,14 @@ import {
 	formatJobDate,
 	formatJobDates,
 	isoFromJobDate,
-	languagesForPrIds,
 	newDraftShift,
 	starTierToMinRating,
 	workspaceTierRatesSignature,
 } from "@agency-portal/components/outlet/post-job-fields";
 import { PostJobActionPanel } from "@agency-portal/components/outlet/post-job-shift-ui";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
+import { useOutletPrPool } from "@agency-portal/hooks/use-outlet-pr-pool";
+import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import {
 	getOutletSubscriptionPlan,
 	isOtherDressCode,
@@ -110,6 +111,19 @@ function PostJobPage() {
 	// `shifts` store is empty, so count the real backend bookings instead —
 	// otherwise every cap silently reads zero and never triggers.
 	const capShifts = backed ? bookedShifts : shifts;
+
+	// Same story for the "Select PRs" list: the demo `prs` slice is blanked for a
+	// real login, so the picker needs the backend pool or it shows nobody.
+	const prPool = useOutletPrPool();
+	// Same again for the price list: the Workspace page reads the outlet's real
+	// `outlet_drink_menu`, so Post Job must too or the two screens disagree.
+	const backedWorkspace = useOutletWorkspace();
+	const workspaceMenu = backedWorkspace.workspace?.drinkMenu;
+	const prPoolEmptyHint = !prPool.backed
+		? undefined
+		: prPool.isLoading
+			? "Loading your PRs…"
+			: "No PRs to name yet — you can only request PRs who have worked a shift at your venue. Post the shift without naming anyone and the agency will staff it.";
 
 	const subscriptionPlan = getOutletSubscriptionPlan(
 		outletOwner.subscriptionPlanId,
@@ -432,10 +446,10 @@ function PostJobPage() {
 
 			quantity: s.quantity,
 
-			languages: buildLanguagesLabel(
-				s.langs.length > 0 ? s.langs : languagesForPrIds(s.prIds, agencyPRs),
-				s.otherLang,
-			),
+			// Exactly what the outlet asked for — a preference, not a filter. It used
+			// to fall back to the languages of the named PRs, which posted a request
+			// nobody had made and made the field read as a restriction.
+			languages: buildLanguagesLabel(s.langs, s.otherLang),
 
 			event: s.event,
 
@@ -593,6 +607,9 @@ function PostJobPage() {
 								shiftTotal={Math.max(1, draftShifts.length + 1)}
 								namedPrsOnDate={composerNamedPrsOnDate}
 								peopleRemaining={composerPeopleRemaining}
+								prCandidates={prPool.backed ? prPool.prs : undefined}
+								prEmptyHint={prPoolEmptyHint}
+								workspaceMenu={workspaceMenu}
 							/>
 
 							{draftShifts.length > 0 && (
@@ -622,6 +639,9 @@ function PostJobPage() {
 													onDone={() => setEditingShiftId(null)}
 													namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
 													peopleRemaining={peopleRemainingForShift(s, s.id)}
+													prCandidates={prPool.backed ? prPool.prs : undefined}
+													prEmptyHint={prPoolEmptyHint}
+													workspaceMenu={workspaceMenu}
 												/>
 											) : (
 												<DraftShiftSummary
@@ -631,6 +651,7 @@ function PostJobPage() {
 													onEdit={() => setEditingShiftId(s.id)}
 													onRemove={() => removeDraftShift(s.id)}
 													showRemove
+													workspaceMenu={workspaceMenu}
 												/>
 											),
 										)}

@@ -87,9 +87,21 @@ export type PaymentVoucherReceiptStatus = "pending" | "approved" | "verified";
 
 export interface PaymentVoucher {
 	id: string;
+	/**
+	 * The printed voucher number (`PV-000004`, migration 0075) — what every
+	 * document must show instead of the uuid. Null only on a row that predates
+	 * the column or whose allocation failed.
+	 */
+	voucherNo: string | null;
 	agencyId: string;
 	prId: string | null;
 	prName: string;
+	/**
+	 * The PR's working name, joined from `pr.nickname` through `pr_id` — never a
+	 * column on the voucher itself. Null when no PR is attached yet, or the PR
+	 * has no nickname set.
+	 */
+	prNickname: string | null;
 	prIc: string | null;
 	outlet: string | null;
 	cycle: string | null;
@@ -103,7 +115,17 @@ export interface PaymentVoucher {
 	status: PaymentVoucherStatus;
 	financeHeadName: string | null;
 	financeHeadSignedAt: string | null;
+	/**
+	 * The two REAL finger-drawn signatures, as the `{w, h, strokes}` JSON the
+	 * signature pad captured (`pr_signature`/0071, `finance_head_signature`/0080).
+	 *
+	 * These are the only signatures on this system that mean anything: a printed
+	 * document must draw THESE strokes, never a picture synthesized from the
+	 * signer's name — a name is on file whether or not anyone ever signed.
+	 */
+	financeHeadSignature: string | null;
 	prSignedAt: string | null;
+	prSignature: string | null;
 	paidAt: string | null;
 	bankRef: string | null;
 	disputeReason: string | null;
@@ -723,6 +745,8 @@ export interface PaymentVoucherDispute {
 		id: string;
 		prId: string | null;
 		prName: string | null;
+		/** Joined from `pr.nickname` through `pr_id`, like the voucher list. */
+		prNickname: string | null;
 		weekStart: string | null;
 		weekEnd: string | null;
 		status: string;

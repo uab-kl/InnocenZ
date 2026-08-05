@@ -68,6 +68,11 @@ export type AgencyPrEnriched = {
   comcardBustCm: number | null;
   comcardWaistCm: number | null;
   comcardHipCm: number | null;
+  /** Agency-side roster grading (0089) — null when unset. */
+  place: string | null;
+  yearsExp: number | null;
+  kpiTier: string | null;
+  payClass: string | null;
 };
 
 export class AgencyPrRepository {
@@ -150,6 +155,10 @@ export class AgencyPrRepository {
           comcardBustCm: UserProfileTable.comcardBustCm,
           comcardWaistCm: UserProfileTable.comcardWaistCm,
           comcardHipCm: UserProfileTable.comcardHipCm,
+          place: AgencyPrTable.place,
+          yearsExp: AgencyPrTable.yearsExp,
+          kpiTier: AgencyPrTable.kpiTier,
+          payClass: AgencyPrTable.payClass,
         })
         .from(AgencyPrTable)
         .innerJoin(UserTable, eq(UserTable.id, AgencyPrTable.userId))
@@ -179,6 +188,45 @@ export class AgencyPrRepository {
     } catch (error) {
       logger.error('[AgencyPrRepository.filterExistingAgencyIds] Error:', error);
       return [];
+    }
+  }
+
+  /** The roster-profile columns an agency grades its own PR on (0089).
+   * `userId` is the PR account id (`id === userId` post-cutover — there is no
+   * `pr` row / `pr_id` column on agency_pr anymore). */
+  async upsertRosterProfile(
+    agencyId: string,
+    userId: string,
+    patch: {
+      place?: string;
+      yearsExp?: number;
+      kpiTier?: string;
+      payClass?: string;
+    },
+    actor: string,
+  ): Promise<void> {
+    if (Object.keys(patch).length === 0) return;
+    try {
+      await db
+        .insert(AgencyPrTable)
+        .values({
+          agencyId,
+          userId,
+          approveStatus: 'pending',
+          ...patch,
+          createdBy: actor,
+          updatedBy: actor,
+        })
+        .onConflictDoUpdate({
+          target: [AgencyPrTable.agencyId, AgencyPrTable.userId],
+          // Only the supplied keys — never spread the whole row, or an omitted
+          // field would be nulled out. approve_status is deliberately absent:
+          // grading a PR must not silently approve or unapprove their join.
+          set: { ...patch, updatedAt: new Date(), updatedBy: actor },
+        });
+    } catch (error) {
+      logger.error('[AgencyPrRepository.upsertRosterProfile] Error:', error);
+      throw error;
     }
   }
 

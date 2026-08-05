@@ -60,6 +60,8 @@ export interface ShiftAssignment {
 	// returns the bare row, so treat them as optional.
 	prName?: string | null;
 	outletId?: string;
+	/** Venue name, joined from the outlet FK on the LIST endpoint only. */
+	outletName?: string | null;
 	shiftDate?: string;
 }
 

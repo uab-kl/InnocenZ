@@ -160,6 +160,10 @@ export function buildVoucherPrintHtml(params: {
   const net = Number(voucher.net ?? '0');
   const prName = esc(pr?.name ?? voucher.prName ?? DASH);
   const signed = voucher.prSignedAt ? klStamp(new Date(voucher.prSignedAt)) : '';
+  const financeName = esc(voucher.financeHeadName ?? DASH);
+  const financeSigned = voucher.financeHeadSignedAt
+    ? klStamp(new Date(voucher.financeHeadSignedAt))
+    : '';
   return `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>${voucherRef(voucher)} · Payment Voucher</title>
 <style>body{font-family:Arial,sans-serif;margin:20px;color:#111;font-size:13px}h1{font-size:19px;margin:0 0 2px}
@@ -177,10 +181,16 @@ th{background:#f2f2f2;text-align:left}.tot{font-weight:bold;font-size:14px}.sig{
 <table><thead><tr><th>#</th><th>Description</th><th>Unit</th><th>Unit Price (RM)</th><th>Amount (RM)</th></tr></thead>
 <tbody>${rows}</tbody>
 <tfoot><tr class="tot"><td colspan="4">Total</td><td style="text-align:right">RM ${net.toLocaleString('en-MY', { minimumFractionDigits: 2 })}</td></tr></tfoot></table>
-<div class="sig"><p><strong>PR (Payee)</strong></p>
+<table class="sig"><tr>
+<td style="border:none;width:50%;vertical-align:top;padding-left:0"><p><strong>Agency (Approved by)</strong></p>
+<p>Signature: ${financeSigned ? financeName : '____________________'}</p>
+<p>Name: ${financeName}</p>
+<p>Date: ${financeSigned || '____________________'}</p></td>
+<td style="border:none;width:50%;vertical-align:top"><p><strong>PR (Received by)</strong></p>
 <p>Signature: ${signed ? prName : '____________________'}</p>
 <p>Name: ${prName}</p>
-<p>Date: ${signed || '____________________'}</p></div>
+<p>Date: ${signed || '____________________'}</p></td>
+</tr></table>
 <p class="note">Please verify the payment details. If there are no discrepancies, kindly sign and acknowledge to proceed with the payment. For any concerns, please contact our finance department.</p>
 </body></html>`;
 }
@@ -305,23 +315,35 @@ export async function buildVoucherWorkbook(params: {
   totalCell.font = { bold: true, size: 12 };
   totalCell.alignment = { vertical: 'middle', horizontal: 'center', wrapText: true };
 
-  // PR signature block. Empty until pr_signed_at exists — the export never
-  // shows a signature the database does not hold.
+  // Dual signature block, in the same left/right order as the PDF: agency
+  // (approved by) in columns A/B, PR (payee) in D/E. Each half stays empty until
+  // its own signed-at exists — the export never shows a signature the database
+  // does not hold, and the agency's half used to be missing altogether.
   const signed = voucher.prSignedAt ? klStamp(new Date(voucher.prSignedAt)) : '';
+  const financeSigned = voucher.financeHeadSignedAt
+    ? klStamp(new Date(voucher.financeHeadSignedAt))
+    : '';
+  const financeName = voucher.financeHeadName ?? DASH;
+  const prDisplayName = pr?.name ?? voucher.prName ?? DASH;
   const sigTitle = payEnd + 2;
-  ws.getCell(`A${sigTitle}`).value = 'PR (Payee)';
+  ws.getCell(`A${sigTitle}`).value = 'Agency (Approved by)';
   ws.getCell(`A${sigTitle}`).font = { bold: true };
-  ws.mergeCells(`A${sigTitle}:E${sigTitle}`);
-  const sigRows: [string, string][] = [
-    ['Signature:', signed ? pr?.name ?? voucher.prName ?? '' : ''],
-    ['Name:', pr?.name ?? voucher.prName ?? DASH],
-    ['Date:', signed],
+  ws.mergeCells(`A${sigTitle}:B${sigTitle}`);
+  ws.getCell(`D${sigTitle}`).value = 'PR (Received by)';
+  ws.getCell(`D${sigTitle}`).font = { bold: true };
+  ws.mergeCells(`D${sigTitle}:E${sigTitle}`);
+  const sigRows: [string, string, string][] = [
+    ['Signature:', financeSigned ? financeName : '', signed ? prDisplayName : ''],
+    ['Name:', financeName, prDisplayName],
+    ['Date:', financeSigned, signed],
   ];
-  sigRows.forEach(([label, value], i) => {
+  sigRows.forEach(([label, agencyValue, prValue], i) => {
     const r = sigTitle + 1 + i;
     ws.getCell(`A${r}`).value = label;
-    ws.getCell(`B${r}`).value = value;
-    ws.mergeCells(`B${r}:E${r}`);
+    ws.getCell(`B${r}`).value = agencyValue;
+    ws.mergeCells(`B${r}:C${r}`);
+    ws.getCell(`D${r}`).value = label;
+    ws.getCell(`E${r}`).value = prValue;
   });
 
   const noteRow = sigTitle + sigRows.length + 2;
