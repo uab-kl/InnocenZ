@@ -14,9 +14,12 @@
  */
 import { buildCellEvidence, evidenceMatchesCell } from '../src/lib/cell-evidence';
 import {
+  cellDisputable,
   dayStatusLabel,
   disputesForDay,
+  kindDisputable,
   openDisputeKeys,
+  thisWeekDayStatus,
 } from '../src/lib/receipt-review';
 import type { PrCurrentWeek, PrReceiptLine, PrWeekShift } from '../src/lib/api';
 
@@ -263,6 +266,74 @@ check(
   'an open claim still outranks a closed week',
   dayStatusLabel(weekWith([claim(null)]), DAY, 'verified') === 'DISPUTED',
 );
+
+/*
+ * THIS WEEK TOPS OUT AT APPROVED — owner: "in this week section all approved,
+ * after dispute make then only verified".
+ *
+ * Resolving one dispute SENDS the voucher, which made buildWeekGridFromLines
+ * call every non-downgraded day 'verified' — so a settled claim about Tuesday
+ * flipped MONDAY to VERIFIED, a day nobody had disputed or said anything new
+ * about. `thisWeekDayStatus` stops the voucher's own status promoting a day on
+ * the live week.
+ */
+check(
+  'this week: a sent voucher does NOT verify an undisputed day',
+  dayStatusLabel(weekWith([]), DAY, thisWeekDayStatus('verified')) === 'APPROVED',
+);
+check(
+  'this week: VERIFIED still comes from a settled claim',
+  dayStatusLabel(weekWith([claim('accepted')]), DAY, thisWeekDayStatus('verified')) === 'VERIFIED',
+);
+check(
+  'this week: an unreviewed day is still PENDING',
+  dayStatusLabel(weekWith([]), DAY, thisWeekDayStatus('pending')) === 'PENDING',
+);
+check(
+  'last week is unaffected — a closed week still reads VERIFIED',
+  dayStatusLabel(weekWith([]), DAY, 'verified') === 'VERIFIED',
+);
+
+/*
+ * A PENDING DAY CANNOT BE DISPUTED — owner: "pending is the agency havent
+ * approved, then how can dispute".
+ *
+ * `cellDisputable` always enforced it and `openDispute` refused with an alert,
+ * but the flag icon and the sheet's Dispute button were gated only on the KIND
+ * and the WEEK — so the control was offered on money nobody had stated yet.
+ */
+console.log('\nDISPUTABILITY');
+const pendingLine = line({
+  kind: 'drinks',
+  item: 'Lemon Drop',
+  commission: 3.6,
+  receiptNo: 'RCP-PEND',
+  receiptStatus: 'pending',
+  disputable: false,
+});
+const approvedLine = line({
+  kind: 'drinks',
+  item: 'Lemon Drop',
+  commission: 3.6,
+  receiptNo: 'RCP-OK',
+  receiptStatus: 'approved',
+  disputable: true,
+});
+check(
+  'a day whose receipt is still PENDING is not disputable',
+  !cellDisputable({ ...week, lines: [pendingLine] }, DAY, 'drinks'),
+);
+check(
+  'once the agency approves it, it is',
+  cellDisputable({ ...week, lines: [approvedLine] }, DAY, 'drinks'),
+);
+check(
+  'one pending line poisons the cell — every line must be reviewed',
+  !cellDisputable({ ...week, lines: [approvedLine, pendingLine] }, DAY, 'drinks'),
+);
+check('wages are never disputable', !kindDisputable('wages'));
+check('OT / others are never disputable', !kindDisputable('others'));
+check('drinks and tips are', kindDisputable('drinks') && kindDisputable('tips'));
 
 const painted = openDisputeKeys(weekWith([claim(null), claim('accepted')]));
 check('only the OPEN claim paints a cell red', painted.size === 1 && painted.has(`${DAY}-drinks`));

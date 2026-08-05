@@ -165,6 +165,27 @@ export function openDisputeKeys(week: PrCurrentWeek | null): Set<string> {
  */
 export type DayStatusLabel = 'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | '—';
 
+/**
+ * THIS WEEK tops out at APPROVED — VERIFIED is earned, not granted.
+ *
+ * `buildWeekGridFromLines` calls a day `verified` as soon as the VOUCHER reaches
+ * a processed status (`sent`, `awaiting_pr`, `signed`, `paid`). Fine for a closed
+ * week; wrong for a live one. Resolving a single dispute SENDS the voucher, so on
+ * 5 Aug one settled claim about Tuesday's drinks flipped **Monday** to VERIFIED
+ * too — a day the PR had never disputed and nobody had said anything new about.
+ *
+ * Owner's rule: *"in this week section all approved, after dispute make then only
+ * verified"*. On the live week the voucher's own status cannot promote a day: the
+ * agency's day sign-off gives APPROVED, and only a claim raised AND answered
+ * gives VERIFIED. The Last-week card keeps the opposite mapping
+ * (`approved → verified`), because a closed week's sign-off is final.
+ */
+export function thisWeekDayStatus(
+  gridStatus: 'verified' | 'approved' | 'pending' | 'empty',
+): 'verified' | 'approved' | 'pending' | 'empty' {
+  return gridStatus === 'verified' ? 'approved' : gridStatus;
+}
+
 export function dayStatusLabel(
   week: PrCurrentWeek | null,
   dateIso: string,

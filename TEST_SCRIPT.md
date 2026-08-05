@@ -310,6 +310,25 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ AGENCY PAYROLL UI — 3 OWNER REQUESTS, NOT STARTED (5 Aug 2026)
+
+- [ ] **Search the PV list by PR name or outlet.** *"pv section make need to search the pr name or
+  the outlet name"*. The Payment Vouchers panel has STATUS chips and no text search. Add one input
+  filtering on the payee label and `pv.outlet`. Match the payee the way the card now DISPLAYS it
+  (`resolvePvPrLabel` — nickname + legal name), or searching "Vicky" will not find a voucher whose
+  `pr_name` is "Victoria Tan Mei Lin".
+- [ ] **Disputes: separate open from settled, and make it searchable.** *"dispute section here need
+  to show out which already disputed and which still pending, also need to make a filter easy to
+  search"*. `useAgencyDisputes()` currently feeds one flat list captioned "No open disputes". A
+  dispute row already carries `outcome` (`accepted|rejected|withdrawn|null`) — null IS the open one —
+  so the split needs no new data. Add status chips (Open / Resolved / All) plus the same text search.
+- [ ] **Confirm EVERY agency action on screen** — standing rule, mirrored in memory as
+  `innocenz-confirm-every-action`. The receipt editor already prints the server's sentence; day
+  Approve/Hold/Clear, receipt Approve/Withdraw, voucher Send and To-pay do NOT. Use the server's own
+  wording verbatim, never "Saved" — it already names the consequence. ⚠️ This is what stops a reviewer
+  clicking Approve twice because nothing appeared to happen, and on these paths a second click
+  re-approves or re-stales a day.
+
 ### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
 
 Left deliberately uncommitted: authored in a session running CONCURRENTLY with the PR-Payment work
@@ -933,6 +952,37 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 — VERIFIED IS EARNED, AND A PENDING DAY CANNOT BE DISPUTED.**
+>
+> Owner: *"i got no make dispute on that day why the status is verified ?"*, then the rule —
+> *"in this week section all approved , after dispute make then only verified"* — and *"pending is the
+> agency havent approved , then how can dispute"*.
+>
+> **(1) One settled claim verified the whole week.** Resolving a dispute SENDS the voucher, and
+> `buildWeekGridFromLines` calls a day `verified` the moment the voucher reaches a processed status
+> (`sent`/`awaiting_pr`/`signed`/`paid`). So an accepted claim about TUESDAY's drinks flipped **MONDAY**
+> to VERIFIED as well — a day the PR never disputed and nobody had said anything new about.
+>
+> New `thisWeekDayStatus()` maps `verified → approved` on the LIVE week, so the voucher's own status can
+> no longer promote a day there: the agency's day sign-off gives APPROVED, and only a claim raised AND
+> answered gives VERIFIED. Last week keeps the opposite mapping (`approved → verified`), because a
+> closed week's sign-off is final — that distinction is now pinned in both directions.
+>
+> **(2) The dispute control was offered on money nobody had stated yet.** `cellDisputable` has always
+> required the receipt to be past `pending` — until the agency approves it the figure is still the PR's
+> own claim, so there is nothing to contest — and `openDispute` refused with an alert. But the FLAG icon
+> and the sheet's **Dispute this amount** button were gated only on the KIND and the WEEK, so a PENDING
+> cell advertised an action that ended in "Not reviewed yet".
+>
+> That is the **fourth** instance of this exact shape in two days (wages offered a 400; This-week hidden
+> though the server allowed it; now pending offered though the client itself refused it). All three
+> gates — kind, week, cell — are now applied wherever the control is drawn, and the comment at the sheet
+> names every version so a fifth does not appear.
+>
+> 29 checks in `check-cell-evidence.ts`, all passing, including *"one pending line poisons the cell"* —
+> a mixed day is not disputable until every line on it has been reviewed. `tsc` clean. No backend
+> change, no migration.
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >

@@ -44,6 +44,7 @@ import {
   kindDisputable,
   openDisputeKeys,
   receiptReviewCaption,
+  thisWeekDayStatus,
   weekDisputable,
 } from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
@@ -595,7 +596,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 * still opens the evidence.
                                 */}
                               {canTap &&
-                                (kindDisputable(row.key) ? (
+                                (kindDisputable(row.key) &&
+                                (isDisputed || cellDisputable(lastWeek, d.dateIso, row.key)) ? (
                                   <Flag
                                     size={9}
                                     color={isDisputed ? C.red : C.muted2}
@@ -823,7 +825,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 * where tapping only opens the evidence.
                                 */}
                               {canTap &&
-                                (kindDisputable(row.key) && weekDisputable(current) ? (
+                                (kindDisputable(row.key) &&
+                                weekDisputable(current) &&
+                                cellDisputable(current, d.dateIso, row.key) ? (
                                   <Flag size={9} color={C.muted2} style={{ marginTop: 2 }} />
                                 ) : (
                                   <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
@@ -865,7 +869,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                        * a stronger statement than approved: the figure was
                        * questioned and settled (owner, 4 Aug 2026).
                        */
-                      const label = dayStatusLabel(current, d.dateIso, d.status, dayDisputed);
+                      const label = dayStatusLabel(
+                        current,
+                        d.dateIso,
+                        thisWeekDayStatus(d.status),
+                        dayDisputed,
+                      );
                       const claims = disputesForDay(current, d.dateIso);
                       const openable = claims.open.length + claims.settled.length > 0;
                       return (
@@ -1018,12 +1027,24 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
              *   test was hiding a button the PR was entitled to. Hence
              *   `weekDisputable`, which reads the voucher's own status.
              *
-             * The third test, whether the RECEIPT has been reviewed yet, stays
-             * inside `openDispute` (`cellDisputable`) because it also decides
-             * which refusal message to show.
+             * - Then the third test was missing here too. A PENDING day is one
+             *   the agency has NOT approved, so there is no stated figure to
+             *   argue with — `cellDisputable` says so, `openDispute` enforced it,
+             *   but the button was still offered and answered with an alert.
+             *   Owner: *"pending is the agency havent approved, then how can
+             *   dispute"*. Quite so.
+             *
+             * `openDispute` keeps its own copy of that last check, because it
+             * also decides WHICH refusal message to show — but it should now
+             * never be reached through this button.
              */
             kindDisputable(evidenceTarget.incomeKey) &&
-            weekDisputable(evidenceTarget.week === 'last' ? lastWeek : current)
+            weekDisputable(evidenceTarget.week === 'last' ? lastWeek : current) &&
+            cellDisputable(
+              evidenceTarget.week === 'last' ? lastWeek : current,
+              evidenceTarget.dateIso,
+              evidenceTarget.incomeKey,
+            )
               ? () => {
                   const { day, row, week } = evidenceTarget;
                   setEvidenceTarget(null);
