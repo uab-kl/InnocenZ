@@ -22,6 +22,9 @@ import {
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { kindDisputable, openDisputeKeys, receiptClaimState, weekDisputable } from '../lib/receipt-review';
+import { buildCellEvidence } from '../lib/cell-evidence';
+import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import { useAwaitingLastWeekPv } from '../lib/awaiting-pv';
 import { usePaymentHistory } from '../lib/payment-history';
 import { useSession } from '../lib/session';
@@ -47,14 +50,6 @@ import {
 } from '../components/icons';
 
 type IncomeKey = 'wages' | 'drinks' | 'tips' | 'others';
-
-const DISPUTE_PRESETS = [
-  'Unmatch commission',
-  'Missing record',
-  'Unmatch wages',
-  'Repeated record',
-  'Others',
-] as const;
 
 const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
   { key: 'wages', label: 'Daily wages' },
@@ -272,11 +267,21 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   // The signer IS the signed-in account, so this is derived, not typed.
   const sigName = me?.username?.trim() ?? '';
   const [signOpen, setSignOpen] = useState(false);
-  const [disputeOpen, setDisputeOpen] = useState(false);
-  const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
-  const [disputeNote, setDisputeNote] = useState('');
-  const [disputedKeys, setDisputedKeys] = useState<Set<string>>(() => new Set());
-  const [disputeTargetLabel, setDisputeTargetLabel] = useState('');
+  /*
+   * Red cells come from the SERVER's open claims, not local state.
+   *
+   * This screen used to keep its own `disputedKeys` set, toggled by its own
+   * dispute sheet — which never called the server at all. A PR could "dispute"
+   * here, watch the cell turn red, sign believing the claim was lodged, and the
+   * agency would never hear of it. The sheet is gone; the marks are real now.
+   */
+  const disputedKeys = useMemo(() => openDisputeKeys(weekForGrid), [weekForGrid]);
+  /** Which cell's evidence is open — the same sheet the Payment page uses. */
+  const [evidenceTarget, setEvidenceTarget] = useState<{
+    day: WeeklyDayPay;
+    row: (typeof INCOME_ROWS)[number];
+    amount: number;
+  } | null>(null);
   const [receiptsOpen, setReceiptsOpen] = useState(true);
   const [receiptDetail, setReceiptDetail] = useState<LinkedReceipt | null>(null);
 
@@ -331,35 +336,27 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
     }
   };
 
-  const openDispute = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
+  /*
+   * ONE dispute flow for the whole app — the Payment page's.
+   *
+   * This screen had its own sheet, and it was a fake: `submitDispute` toggled a
+   * local Set and never called the server, so a claim "raised" while preparing
+   * to sign was never lodged anywhere. It also predated every rule the real
+   * flow now enforces — wages were tappable, no shift picker, no item picker.
+   *
+   * Rather than rebuild all of that here (a second copy that would drift), a
+   * tap routes to Payment → Last week, where the real evidence sheet, pickers
+   * and server call live. The PR reviews here, disputes there, comes back to
+   * sign — and the red marks on this grid are the server's own open claims.
+   */
+  /** Any non-empty cell opens its evidence — wages included. */
+  const openEvidence = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
     const amount = cellAmount(day, row.key);
     if (amount <= 0 || day.status === 'empty') return;
-    const key = `${day.dateIso}-${row.key}`;
-    const label = `${day.day} ${day.date} · ${row.label} · ${formatRM(amount)}`;
-    setDisputeTargetLabel(`${key}|${label}`);
-    setDisputeNote(`${row.label} · ${day.day} ${day.date} · ${formatRM(amount)} — please verify`);
-    setDisputePreset(DISPUTE_PRESETS[0]);
-    setDisputeOpen(true);
-  };
-
-  const submitDispute = () => {
-    const key = disputeTargetLabel.split('|')[0];
-    if (key) {
-      setDisputedKeys((prev) => {
-        const next = new Set(prev);
-        if (next.has(key)) next.delete(key);
-        else next.add(key);
-        return next;
-      });
-    }
-    setDisputeOpen(false);
+    setEvidenceTarget({ day, row, amount });
   };
 
   const anyDisputed = disputedKeys.size > 0;
-  const disputeModeWithdraw = (() => {
-    const key = disputeTargetLabel.split('|')[0];
-    return key ? disputedKeys.has(key) : false;
-  })();
 
   return (
     <View style={[styles.screen, { paddingTop: insets.top + 8 }]}>
@@ -373,6 +370,20 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         </Pressable>
       </View>
 
+      {/*
+        * The BODY scrolls; only the back row above stays fixed.
+        *
+        * The root was a plain View, so this screen had NO vertical scroll at
+        * all — everything past one screen height (net payable, records,
+        * signature, the Sign button itself) was simply clipped, on the web
+        * frame and on device alike. It survived because the content used to be
+        * shorter than a phone. Bottom padding is the device inset, per the
+        * flexible-UI rule.
+        */}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={{ paddingBottom: 24 + insets.bottom }}
+      >
       <View style={styles.statusRow}>
         <Pill variant={anyDisputed ? 'red' : isSealed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
           {anyDisputed ? 'Dispute open' : isSealed ? pv.statusLabel : 'Pending your review'}
@@ -403,7 +414,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         <View style={[styles.banner, styles.bannerDispute]}>
           <Text style={styles.bannerTitle}>Dispute open</Text>
           <Text style={styles.bannerBody}>
-            {disputePreset} — agency will review flagged amounts
+            Your agency is reviewing the flagged amounts — see Payment for the details.
           </Text>
         </View>
       )}
@@ -441,6 +452,10 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                     const amount = cellAmount(d, row.key);
                     const key = `${d.dateIso}-${row.key}`;
                     const isDisputed = disputedKeys.has(key);
+                    // EVERY non-empty cell opens its details, wages included —
+                    // the owner asked to inspect a figure, not only to argue
+                    // with one. Whether it can be DISPUTED is decided inside the
+                    // sheet, by the same rules the Payment page applies.
                     const canTap = amount > 0 && d.status !== 'empty';
                     return (
                       <Pressable
@@ -450,7 +465,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                           canTap && styles.gridColTap,
                           isDisputed && styles.gridColDisputed,
                         ]}
-                        onPress={() => canTap && openDispute(d, row)}
+                        onPress={() => canTap && openEvidence(d, row)}
                         disabled={!canTap}
                       >
                         <Text
@@ -524,8 +539,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         </ScrollView>
 
         <Text style={styles.tapHint}>
-          Tap any amount to dispute · tap a{' '}
-          <Text style={{ color: C.red }}>red</Text> amount to withdraw a mistaken dispute.
+          Tap a drinks or tips amount to dispute it on the Payment page — a{' '}
+          <Text style={{ color: C.red }}>red</Text> amount already has an open dispute.
         </Text>
       </View>
 
@@ -612,6 +627,58 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         <Pressable style={styles.soft} onPress={() => setTab('history')}>
           <Text style={styles.softText}>View in History · Payment history</Text>
         </Pressable>
+      )}
+      </ScrollView>
+
+      {/*
+        * THE SAME evidence sheet as Payment — one component, one format.
+        *
+        * Every row opens it, wages included: the PR asked to inspect a figure,
+        * not only to argue with one, and wages have a shift and stamps behind
+        * them worth reading. The DISPUTE button appears only under the rules
+        * Payment applies (drinks/tips, a voucher the server still accepts, at
+        * least one shift not already claimed) and hands off to Payment → Last
+        * week, where the pickers and the server call live.
+        */}
+      {evidenceTarget && (
+        <CellEvidenceSheet
+          evidence={buildCellEvidence(
+            weekForGrid,
+            evidenceTarget.day.dateIso,
+            evidenceTarget.row.key,
+          )}
+          cellAmount={evidenceTarget.amount}
+          claims={receiptClaimState(
+            weekForGrid,
+            evidenceTarget.day.dateIso,
+            evidenceTarget.row.key,
+          )}
+          onClose={() => setEvidenceTarget(null)}
+          onDispute={
+            kindDisputable(evidenceTarget.row.key) &&
+            weekDisputable(weekForGrid) &&
+            buildCellEvidence(weekForGrid, evidenceTarget.day.dateIso, evidenceTarget.row.key)
+              .groups.flatMap((g) => g.receipts)
+              .some((r) => {
+                if (!r.receiptNo) return false;
+                const claims = receiptClaimState(
+                  weekForGrid,
+                  evidenceTarget.day.dateIso,
+                  evidenceTarget.row.key,
+                );
+                const openOnIt =
+                  claims.openAll ||
+                  (!!r.receiptId && claims.open.has(r.receiptId)) ||
+                  claims.open.has(r.receiptNo);
+                return !openOnIt;
+              })
+              ? () => {
+                  setEvidenceTarget(null);
+                  setTab('payment', { paymentWeek: 'last' });
+                }
+              : undefined
+          }
+        />
       )}
 
       {/* Receipt details sheet */}
@@ -711,75 +778,6 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         </Pressable>
       </Modal>
 
-      {/* Dispute sheet */}
-      <Modal
-        visible={disputeOpen}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setDisputeOpen(false)}
-      >
-        <Pressable style={styles.backdrop} onPress={() => setDisputeOpen(false)}>
-          <Pressable
-            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
-            onPress={(e) => e.stopPropagation()}
-          >
-            <Text style={styles.sheetTitle}>
-              {disputeModeWithdraw ? 'Withdraw dispute?' : 'Dispute this amount'}
-            </Text>
-            {!!disputeTargetLabel.includes('|') && (
-              <View style={styles.targetPill}>
-                <Text style={styles.targetPillText}>
-                  {disputeTargetLabel.split('|')[1]}
-                </Text>
-              </View>
-            )}
-            {!disputeModeWithdraw ? (
-              <>
-                <Text style={styles.fieldLabel}>Quick reason</Text>
-                <View style={styles.presetWrap}>
-                  {DISPUTE_PRESETS.map((p) => (
-                    <Pressable
-                      key={p}
-                      style={[styles.presetChip, disputePreset === p && styles.presetChipOn]}
-                      onPress={() => setDisputePreset(p)}
-                    >
-                      <Text
-                        style={[
-                          styles.presetChipText,
-                          disputePreset === p && { color: C.violetL },
-                        ]}
-                      >
-                        {p}
-                      </Text>
-                    </Pressable>
-                  ))}
-                </View>
-                <Text style={styles.fieldLabel}>Note</Text>
-                <TextInput
-                  value={disputeNote}
-                  onChangeText={setDisputeNote}
-                  style={[styles.input, { minHeight: 72, textAlignVertical: 'top' }]}
-                  multiline
-                  placeholderTextColor={C.muted2}
-                />
-                <Pressable
-                  style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
-                  onPress={submitDispute}
-                >
-                  <Text style={styles.primaryText}>Submit dispute</Text>
-                </Pressable>
-              </>
-            ) : (
-              <Pressable style={styles.dangerBtn} onPress={submitDispute}>
-                <Text style={styles.dangerBtnText}>Withdraw dispute</Text>
-              </Pressable>
-            )}
-            <Pressable style={styles.sheetCancel} onPress={() => setDisputeOpen(false)}>
-              <Text style={styles.sheetCancelText}>Back</Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
     </View>
   );
 }

@@ -165,8 +165,31 @@ export const PrRaiseDisputeSchema = z.object({
   proofPhotos: z.array(z.string().min(1)).optional(),
   /** What the PR says the figure should be. Optional — some claims are "this is missing". */
   claimedAmount: z.number().nonnegative().optional(),
-  /** Receipts pointed at, by their packed ref — never a voucher line id. */
+  /**
+   * WHICH SHIFT — the RECEIPT's uuid, stored as a foreign key.
+   *
+   * Supersedes `receiptRefs`, which carried the receipt NUMBER as text: a copied
+   * value that could not be joined or constrained. The shift is read through the
+   * receipt (`shift_assignment_id`), so it is never duplicated onto the claim.
+   *
+   * Omit to dispute the whole day+bucket.
+   */
+  receiptId: z.string().uuid('receiptId must be a receipt id').optional(),
+  /** @deprecated pre-0088 clients only — receipt NUMBERS as text. */
   receiptRefs: z.array(z.string().min(1)).optional(),
+  /**
+   * WHICH ITEMS on that receipt are wrong — "Lemon Drop", not just "drinks".
+   *
+   * Only the id is accepted. The description, quantity and amount stored in
+   * `disputed_items` are read from the DATABASE, never from this payload: a
+   * claimant who could type their own `"amount": "999.00"` into the record would
+   * be writing the very figure their claim is measured against.
+   *
+   * Omit to dispute the whole receipt.
+   */
+  items: z
+    .array(z.object({ lineId: z.string().uuid('lineId must be a voucher line id') }))
+    .optional(),
 });
 
 export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;
@@ -182,6 +205,16 @@ export type PrRaiseDisputeInput = z.infer<typeof PrRaiseDisputeSchema>;
 export const PrWithdrawDisputeSchema = z.object({
   disputeDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'disputeDate must be yyyy-MM-dd'),
   component: z.enum(['wages', 'drinks', 'tips', 'others']),
+  /**
+   * WHICH claim, when the day+bucket holds more than one.
+   *
+   * A PR can hold one open claim PER SHIFT since 0086, so day+component alone
+   * stopped identifying a single row — and the withdraw would take whichever
+   * came back first, cancelling an argument they had not asked to drop.
+   *
+   * Omit to target the whole-day claim (the pre-picker shape).
+   */
+  receiptId: z.string().uuid('receiptId must be a receipt id').optional(),
 });
 
 export type PrWithdrawDisputeInput = z.infer<typeof PrWithdrawDisputeSchema>;

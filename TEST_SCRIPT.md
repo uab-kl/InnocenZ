@@ -207,6 +207,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A7 | **Manage-PR Shift history is a real read — with NO payout, on purpose.** Was reading the demo store and filtering a real uuid against demo ids (`pr_tied`), so it could never match and rendered a blank card with no empty state. Now `GET /shift-assignment?prId=`; `listPaginated` joins `outlet.name` through the FK (rule 3 — never copied onto the row). Renders `date · outlet` and says **"No shifts yet"** when there are none. **The payout is deliberately omitted** — the sealed wage lives on `payment_voucher_line` and re-deriving it would create a second source of truth for money. | **Agency ← PR** | `shift-assignment.repository.ts` (`listPaginated`) · `use-agency-pr-shift-history.ts` · `routes/agency/prs.tsx` | `shift_assignment` ⋈ `shift` ⋈ `outlet` (no DDL) | ⚠️ Reported (typecheck at baseline, biome clean; **not live-fired**. Org scoping **read and confirmed**: a non-admin caller's `agencyId` is forced server-side and only admins may pass it, so another agency's `prId` returns nothing) |
 | A6 | **Manage-PR detail shows real Languages + real Ratings.** `GET /pr` now selects `user_profile.languages` (the column existed since 0055; this projection was the only reader not selecting it), and the ratings feed matches on **`rating.pr_id`** instead of the display name — the outlet writes its roster's legal name while Manage-PR shows the floor nickname, so a real rating was invisible. Average / Rating tile / warn banner all derive from the real rows; an **unrated** PR reads "not rated yet" instead of tripping the below-3.5★ warning off the `rating: 0` placeholder. **Amended 5 Aug:** the grid card was missed in the first pass — it printed `pr.rating.toFixed(1)` (`★ 0.0`) beside a correctly-earned Warn pill; it now takes `averageRating` and hides the chip when unrated. | **Agency ← Outlet** (ratings) · **Agency ← PR** (languages) | `pr.repository.ts` · `pr-personnel-map.ts` · `lib/pr-rating-summary.ts` · `use-agency-ratings.ts` · `routes/agency/prs.tsx` | `user_profile.languages` · `rating.pr_id` (no DDL) | ⚠️ Reported (typecheck clean on every touched file, biome clean; **not live-fired** — needs a backend restart + agency click-through, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
+| A6 | **Agency receipt editor (Approve + dispute queue)** — correct scanned/self-log drinks/tips in place via targeted `PATCH/POST /receipts/:id` (+ lines); never `PUT /payment-voucher/:id`. Same `AgencyReceiptEditor` in Receipts sub-tab and DisputeQueuePanel. Migrations **0083** (`payment_voucher_line.outlet_id`) + **0084** (`review_withdrawn_at`) applied on `innocenz-test`. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `payment-voucher.*` · `0083`/`0084` | receipt + line tables | ⚠️ Reported (landed `57bd165`; live click-through still owed — §9 audit items remain) |
 
 ### Admin side (jk)
 
@@ -298,6 +299,15 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X55 | **🟢 SUSPENDING AN ORGANISATION NOW ACTUALLY STOPS ITS PEOPLE — refused at login AND live sessions killed.** New `features/auth/org-status.ts` → `suspendedOrgBlock(userId)`, called from **`auth.controller` login** and from **`authenticateJWT`**. Two call sites on purpose: refusing the next login alone would leave anyone holding a token at the moment of suspension working until it expired — **which for an agency finance user means they could still raise payment vouchers.** The middleware already re-reads the account every request (§8 X31), so that cost was being paid and this rides along with it. **The login check sits BEFORE the password compare**, mirroring the lockout: a refusal that only fires once the password is right confirms the password to anyone who tries it. **🔴 THE DESIGN IS ALL IN WHAT IT DOES *NOT* BLOCK, and each carve-out is a lockout that nearly happened. (1) `pending_review` is ALLOWED** — only `suspended` and `inactive` deny. `pending_review` is the column **DEFAULT** for both `agency` and `outlet`, so a rule reading "not active" would have shut out **every organisation nobody has reviewed yet**, and no review screen exists. **(2) No membership means no opinion** — a platform admin and a PR hold no `agency_user`/`outlet_user` row at all, so an "is your org active?" test would have refused everyone who has no organisation, **locking every admin out of their own platform**. Absence of a membership is not a suspended membership. **(3) One live organisation is enough** — a user in a suspended agency AND an active one keeps access, rather than being punished for the other org's status. **(4) The membership row's own `status` is filtered first**, since `agency_user.status` is independent of `agency.status`. The refusal **names the organisation and its state** rather than saying "invalid credentials", which would send someone to reset a password that was never the problem — and it is their own org, so it discloses nothing. **LIVE PROOF, `probe-org-suspension.ts`, 5/5:** an active agency does not block → suspend → **blocked with the right message** → restore → access returns → and **admin is never blocked**. ✅ **Nothing was newly locked out: all 3 agencies and all 7 outlets are `active`** (asserted by the probe, not assumed). The suspension is restored in a `finally`. HTTP login re-verified after the change: admin logs in and all 6 authenticated requests pass the middleware. Backend tsc **0**. | **all** | `features/auth/org-status.ts` (new) · `auth.controller` (login) · `middlewares/authenticate-jwt.ts` · `probe-org-suspension.ts` (new) | live probe 5/5 + HTTP login re-verified | ✅ Fired live |
 | X56 | **🟢 `/agency/pv` IS RENDERED IN A BROWSER AT LAST — on a REAL agency login, and it immediately produced a bug.** X43 and X45 shipped this screen proven only by `tsc`/biome/`vite build`; this is the first time a browser has loaded it. Signed in as `owner@atlas-agency.my` against the live backend: the page renders **real DB rows** (Alice `RM 1,203.30`, Victoria `RM 700.00`, both `Pending Agency Review`), the **dispute panel and `OvertimeQueuePanel` both mount**, console **clean — zero errors**. ⚠️ **The OT panel rendered its EMPTY state** ("No overtime awaiting a decision"), because the only live claim is already approved (X50). **Its POPULATED state is still unproven, and populating it means writing to the shared DB** — do not report this screen as fully exercised. **🔴 THE BUG IT FOUND: `pv_day_review_pending` was never mapped in `apps/web` at all.** The kind has existed since migration 0073 and is produced by `weekly-payout.job.ts`; the web app's hand-written `NotificationKind` union never received it. jk's `unknown` fallback stopped it white-screening, so it degraded quietly to a generic **"Update"** row — and `hrefFor` fell to `default: return undefined`, so **a notification whose own body reads "Approve each day on Payroll & PV, then send" navigated NOWHERE when tapped.** ⚠️ **Same class as jk's crash, one kind later, and the fallback is exactly why nobody noticed: it turned a loud failure into a silent one.** Fixed across 5 files (union → `KIND_MAP` → `PR_KIND_MAP` → `OPS_KIND_LABEL` → `hrefFor` case). **Verified in the browser, not by compiler:** the row now reads **"Day review"** and clicking it lands on `/en/agency/pv`. ✅ **Bonus — closes jk's §9 item 2:** his crash fix had never been seen rendering; `shift_cover_needed` and `pr_rating_low` both display correctly, no crash. `tsc` **121, unchanged from baseline**; biome clean (format only — pre-existing `prType` warning left alone). | **Agency** | `services/notification/index.ts` · `agency-portal/lib/ops-notifications.ts` · `agency-portal/hooks/use-notifications.ts` · `agency-portal/lib/push-notifications.ts` · `agency-portal/components/pr/PrNotificationBell.tsx` | real browser login + click-through | ✅ Rendered live, bug fixed |
 | X57 | **🟢 THE WAGE ARITHMETIC IS PROVEN AGAINST THE RATE CARD — §9 P1's "Verify Payment Voucher ↔ PR wage calc" is answerable YES for the first time.** ⚠️ **First the correction that matters: `audit-live-vouchers.ts` reporting "3/3 reconcile" DOES NOT mean the wages are right.** `wages_amount_mismatch` matches a line against **`shift_assignment.pay_amount` — the amount check-out SEALED** — and never asks whether that sealed amount was itself derived correctly from the outlet's rate card. **A wrong rate card therefore yields a voucher that reconciles perfectly and still pays the wrong money.** The audit's green is *voucher ↔ assignment*, one link short of *the money is correct*. New read-only **`check-wage-vs-ratecard.ts`** closes that link and prints both sides. **Result: 4 completed assignments since 2026-07-20, agree 4 · disagree 0 · no-card 0** — `700.00 = 700.00` (Victoria, tier_3) and `600.00 = 600.00` (Alice, tier_2), each resolved from the **per-shift override** (`shift_pay_tier`), the precedence the app itself uses. The full chain **rate card → sealed pay → voucher line** is now machine-verified on live data. **🔴 TWO TRAPS WORTH KEEPING:** (1) the first run reported **SKIP — 4 rows, 0 comparable**, because `pr.tier` is the enum `tier_3` while `outlet_tier_rate.tier` holds the DISPLAY label `"Tier III"`; **they never join raw**, and the app bridges them with `PR_TIER_TO_OUTLET_LABEL` in `shift-assignment.controller.ts`. The fault was the probe's, not the app's — **re-derive before reporting a money bug.** (2) The table is **`outlet_tier_rate`, not `tier_rate`**, and `shift_date` lives on **`shift`, not `shift_assignment`** — the same column-guessing tax as every prior probe. ✅ **The script reports SKIP, never a pass, over zero comparable rows** — that is what stopped a false green here, and it must stay. | **Agency ← PR** | `apps/backend/src/scripts/check-wage-vs-ratecard.ts` (new, read-only) | live: agree 4 · disagree 0 | ✅ Verified live |
+| X58 | **🟢 LANDING PAGE LAG HARDENED — the public `/` handoff was burning frame budget on mouse move and permanent GPU blur.** Owner: landing felt laggy. Root cause was not one animation but a stack: **`useCursorGlow` did `querySelectorAll('.hz-glass')` + `getBoundingClientRect()` on every `mousemove` across dozens of cards** (forced layout thrashing), aurora layers used **`filter: blur(120–150px)`**, glass used **18px backdrop-blur** plus per-card radial glow CSS vars, a fullscreen SVG grain overlay blended every frame, AI section used **`background-attachment: fixed`** (Windows scroll jank), and dashboard `useTick` intervals ran even when `#dashboards` was off-screen. **Fixes:** cursor glow now only updates `--mx/--my` via `rAF` (fine-pointer + reduced-motion gated); glass fill made more opaque and blur cut to 8px, per-card `::before` glow removed; aurora uses soft radial gradients with no `filter: blur`; grain disabled; AI BG no longer fixed; below-fold images `loading="lazy"`; flow particles 12→5 without SVG softblur; `useTick` IntersectionObserver + visibility gated; CountUp writes DOM text instead of React setState per frame; `prefers-reduced-motion` + mobile kill switches for aurora/spotlight/backdrop. Files: `handoff/primitives.tsx`, `HandoffPlatform.tsx`, `HandoffChallenges.tsx`, `HandoffBenefits.tsx`, `landing-handoff.css`. ⚠️ **Asset weight left open in X58; closed in X60** (JPG swap). | **Web (landing)** | `apps/web/src/components/landing/handoff/*` · `landing-handoff.css` | code + hard-refresh expected | ✅ Done |
+| X59 | **🟢 PRIVACY POLICY PAGE (web only).** Public `/privacy` with PDPA-oriented copy (account/identity, geofence location, payroll/receipts, role sharing, retention, WhatsApp contact). Landing footer **Privacy** / **隐私** → `/privacy`; login + signup footers too. Owner: **no in-app mobile copy** — PR app does not ship a Privacy Policy screen. ⚠️ **Not lawyer-reviewed** — product-accurate draft for store/compliance URL. | **Web (public)** | `routes/privacy.tsx` · `components/legal/PrivacyPolicyPage.tsx` · `lib/legal/privacy-policy.ts` · footer/login/signup links | code | ✅ Done |
+| X60 | **🟢 LANDING PAYLOAD + AUTH ICONS + PHONEFRAME SCROLL.** Follow-on to X58: (1) venue/PR landing photos **PNG ~2MB → JPG ~90–200KB** (`landing-assets.ts` + `public/img/landing/*.jpg`; old PNGs removed); logos/favicon under `/assets/`. (2) Below-fold landing sections **lazy-imported + `LazyMount` IntersectionObserver** so Challenges→Footer JS/DOM defer until near viewport. (3) Login + outlet/agency signup field icons **MaterialIcon → Lucide**. (4) PR `PhoneFrame` ScrollView: `nestedScrollEnabled`, `keyboardShouldPersistTaps="handled"`, stable keys when toggling scroll. | **Web + PR shell** | `landing-assets.ts` · `HandoffHomePage.tsx` · `login.tsx` · `signup-form.tsx` · `PhoneFrame.tsx` · landing JPGs | code | ✅ Done |
+| X61 | **🟢 DEV SCRIPTS FREE OWNED PORTS ON CTRL+C (Windows orphan fix).** Async `taskkill` raced `process.exit()`, so Vite/Expo orphans kept holding WEB_PORT (often **3001** when Cursor owns 3000). **Fix:** `killChild` uses **`spawnSync` taskkill `/t`** on Windows; new `killPortListeners` force-stops Listen owners on claimed ports; `makeShutdown(children, ports)` is re-entrant-safe and frees ports after children. `dev-web` tracks web (+ backend if owned); `dev-all` also tracks **8081/8082** for Expo. | **Dev tooling** | `tools/scripts/dev-shared.mjs` · `dev-web.mjs` · `dev-all.mjs` | code | ✅ Done |
+| X62 | **🟢 ORG OWNER GUARDS NOW CHECK THE ORGANISATION IN `:id` — and member writes check `:memberId` belongs to it.** `agencyOwnerOnly` used to ask only *"are you an active owner?"* — every agency owner satisfied it for every agency; the same hole covered outlet `PUT` + both geo-fence routes. Fixed with `agencyOwnerOfParam` / `outletOwnerOfParam`. A second hole: `updateMember`/`removeMember` validated `:id` while writing `:memberId` — now 404 if the member is not of that org. **Live-proven:** `probe-org-scope-guard.ts` **7/0/1**; member ownership probe **8/0/3**. See `docs/claude-memory/innocenz-org-scope-guards.md`. | **Agency / Outlet** | `require-sub-role.ts` · `agency.*` · `outlet.*` · `probe-org-scope-guard.ts` | live probes | ✅ Fired live |
+| X63 | **🟢 ORG OWNERS CAN MANAGE THEIR OWN MEMBERS — UI on both Settings screens.** Backend: `GET/POST/PUT/DELETE /agency\|outlet/:id/members` behind route scope → controller `:memberId` ownership → `guardMemberChange` (refuses leaving an org with no active owner; unit tests in `member-change-guard.test.ts`). UI: one `OrgMembersPanel` (`kind="agency"\|"outlet"`) on agency + outlet Settings. ⚠️ **Only refusals proven live** — add/remove leave permanent rows and were not fired on the shared DB. Person must already have an account (no invite/mailer). | **Agency / Outlet** | `OrgMembersPanel.tsx` · `member-change-guard.ts` · agency/outlet member routes | UI click-through + probes | ⚠️ Reported (writes unfired) |
+| X64 | **🟢 PRE-PILOT GATE 2 — demo login is DEV-only and absent from production builds.** `import.meta.env.DEV` gates the client demo branch so Vite drops it at build time. ⚠️ **The recorded credential was wrong for days:** it is `demo@atlas-agency.invalid` / `demo@velvet23.invalid` (RFC 2606 `.invalid`), not `owner@atlas-agency.my`; planted JWT is `alg:"none"` and the backend rejects it — blast radius was a demo shell, not real data. Proven by grepping the production `vite build` output (demo symbols **0**, real login path still present). | **Web (auth)** | `routes/login.tsx` · `lib/auth/*` | production build grep | ✅ Proven |
+| X65 | **⚠️ WHATSAPP CLOUD API OTP + PR MOBILE SIGN-UP RESTRUCTURE — CODE LANDED, TABLE + META NOT.** Public `POST /auth/otp/send` + `/auth/otp/verify` (sha256 `code_hash` only; 5 min / 60s resend / 5 attempts); Meta webhook at `GET\|POST /webhooks/whatsapp`; mobile sign-up split into `screens/sign-up/step1…6` + `safe-area.tsx`; `.env.example` documents `META_WHATSAPP_*`. 🔴 **No `phone_verification` migration ships with this code** — the model comment says "Migration 0083" but **0083 is already `pv_line_outlet_fk`** on this branch; table does not exist until a new migration is authored. Also needs Meta Business verification + filled env. Not E2E on a real phone. | **PR (mobile) ↔ Auth** | `otp.controller.ts` · `phone-verification.*` · `features/whatsapp/*` · `screens/sign-up/*` | code only | ⚠️ Reported (needs DDL + Meta) |
+| X66 | **🟢 AGENCY RECEIPT EDITOR LANDED (`57bd165`) — the slice that left the DB ahead of the repo.** Agency can correct drinks/tips on a scanned or self-logged receipt in place (order no, printed date/time, qty/commission, add missed line) through **targeted** receipt endpoints — never the destructive `PUT /payment-voucher/:id` line wipe. Same editor opens from the Receipts sub-tab **and** inside the dispute queue. Migrations **0083** (`outlet_id` FK on lines, 18/18 backfilled) and **0084** (`review_withdrawn_at`) were already live on `innocenz-test`; this commit ships the code that reads them. ⚠️ **Not a live agency click-through yet** — §9 day/receipt agreement audit items (PvDetail dispute, disputed-cell withdraw UX, etc.) stay open. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `0083`/`0084` | live schema + committed code | ⚠️ Reported |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 | X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
@@ -379,63 +389,104 @@ one screen. Two are fixed (§8 A6); the third is not, and is a bigger job.
   `managedPrFromBackend`: `attendancePct`, `kpiScore`, `totalPaid`, `place`, `yearsExp`. Each is a
   neutral placeholder, not a measurement — do not let any of them badge or gate a decision until it has
   a backend behind it. (`rating: 0` **was** one of these; A6 stopped it from firing the warn banner.)
+### ▶ ⚠️ THE VOUCHER'S SIGNATURES ARE NOT PROOF OF ANYTHING (found 5 Aug 2026, NOT FIXED)
+
+Owner asked *"where to proof the agency sign?"*. Investigating it turned up something worse than the
+missing block. **On a payment document, this is the most serious open item in §9.**
+
+- **The printed PR signature is SYNTHESIZED FROM A NAME.** `pv.prSignatureDataUrl` — the only
+  signature `pv-pdf.ts` renders — is produced solely by `buildDemoESignatureDataUrl(prName)`, which
+  draws the name string as a signature image. Anyone whose name is on file therefore has a
+  "signature" on the document whether or not they ever signed.
+- **The REAL strokes are rendered nowhere.** `payment_voucher.pr_signature` and
+  `finance_head_signature` hold `{w, h, strokes}` JSON (0080). No screen, PDF, Excel or print view
+  reads them. The agency portal shows only a text row: name + ISO timestamp.
+- **There is no "Approved by" block at all** in any output path. `.sig-left` CSS exists at
+  `pv-pdf.ts:311` and NO markup uses it — the column was designed and never wired.
+
+Fix, in three parts:
+- [ ] Carry `finance_head_signature` and `pr_signature` to the client on the agency detail read.
+- [ ] Render the STROKES as an inline SVG polyline, replacing `buildDemoESignatureDataUrl` on the real
+  path (keep the demo builder for demo vouchers only).
+- [ ] Add the **Approved by** column — finance head's drawn signature, name, date — mirroring the
+  official UAB layout (Approved by | Received by), using the `.sig-left` styles already present.
+- [ ] ⚠️ Decide first: a voucher signed before strokes were stored will show name-and-date over the
+  rule instead of a drawing. That is the honest rendering, but it makes some existing vouchers look
+  emptier than they do today. Owner has NOT yet confirmed.
+
+### ▶ PV DOCUMENT — OTHER GAPS vs the official UAB layout (5 Aug 2026)
+
+- [ ] **Voucher No. prints the raw uuid** (`7bf3962e-591e-452f…`) instead of the stored
+  `payment_voucher.voucher_no` (`PV-000004`). The column exists precisely so vouchers stop sharing a
+  derived string — this template just never read it.
+- [ ] **Voucher Date is blank**; the example prints the issue date.
+- [ ] **Amount in words** ("[Ringgit Malaysia One Thousand Two Hundred and Three Only]") is absent.
+- [ ] **Bank Name / Bank Account No. print `-`** though the backend exporter already reads them from
+  `user_profile` (0077). Phone likewise.
+- [ ] Payment Term, ID#, SST and discount rows from the official layout are absent.
+- [ ] ⚠️ **Decide which document is canonical** — this web print template or the backend PDF/Excel
+  exporters. Both render vouchers, and only the backend one reads nickname/IC/phone/bank. Fixing the
+  wrong one leaves the gap where it is.
+
+### ▶ THE DAY-STATUS SEQUENCE (owner, 5 Aug 2026 — the spec everything else answers to)
+
+*"first is pending, status pending in the pr payment page after the pr check out, after the agency
+approved then only the pr payment page status approved, then only can show dispute button to make
+dispute, then after the agency resolved the dispute the status on the payment page is verified"*
+
+1. **PENDING** — PR checks out, the day's money is sealed, nobody has checked it.
+2. **APPROVED** — the agency approves the day. **Only now does the Dispute button appear.**
+3. **DISPUTED** — a raised claim outranks APPROVED while open; the approval is what is being argued.
+4. **VERIFIED** — the agency RESOLVES the claim. Stronger than approved: questioned AND answered.
+
+Mirrored in memory as `innocenz-day-status-lifecycle`. Already enforced by `prVisibleDayStatuses`
+(backend) and `dayStatusLabel` (mobile). A STALE day drops back to PENDING rather than claiming an
+approval of a figure that no longer exists.
+
+- [ ] ⚠️ **UNDECIDED — a day nobody disputes.** The sequence above makes VERIFIED the post-dispute
+  state, but most days are never disputed and the Sunday 02:00 rollover verifies undisputed approved
+  receipts today. Both routes are ASSUMED to stay (resolution → verified immediately; no dispute →
+  verified at the Sunday run). If VERIFIED is meant strictly as post-dispute, the rollover has to
+  change instead — and that governs when a week CLOSES, so decide it deliberately.
+- [ ] **Not written by this session:** `dayStatusLabel`, `disputesForDay`, `openDisputeKeys`,
+  `weekDisputable` in `apps/mobile/src/lib/receipt-review.ts` appeared mid-session from another
+  source. They implement this sequence but have NOT been reviewed here — read them before trusting.
+
+### ▶ AGENCY PAYROLL UI — 3 OWNER REQUESTS, NOT STARTED (5 Aug 2026)
+
+- [ ] **Search the PV list by PR name or outlet.** *"pv section make need to search the pr name or
+  the outlet name"*. The Payment Vouchers panel has STATUS chips and no text search. Add one input
+  filtering on the payee label and `pv.outlet`. Match the payee the way the card now DISPLAYS it
+  (`resolvePvPrLabel` — nickname + legal name), or searching "Vicky" will not find a voucher whose
+  `pr_name` is "Victoria Tan Mei Lin".
+- [ ] **Disputes: separate open from settled, and make it searchable.** *"dispute section here need
+  to show out which already disputed and which still pending, also need to make a filter easy to
+  search"*. `useAgencyDisputes()` currently feeds one flat list captioned "No open disputes". A
+  dispute row already carries `outcome` (`accepted|rejected|withdrawn|null`) — null IS the open one —
+  so the split needs no new data. Add status chips (Open / Resolved / All) plus the same text search.
+- [ ] **Confirm EVERY agency action on screen** — standing rule, mirrored in memory as
+  `innocenz-confirm-every-action`. The receipt editor already prints the server's sentence; day
+  Approve/Hold/Clear, receipt Approve/Withdraw, voucher Send and To-pay do NOT. Use the server's own
+  wording verbatim, never "Saved" — it already names the consequence. ⚠️ This is what stops a reviewer
+  clicking Approve twice because nothing appeared to happen, and on these paths a second click
+  re-approves or re-stales a day.
 
 ### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
+### ▶ NEXT SESSION STARTS HERE — amended 4 Aug 2026 (jk — receipt editor committed)
 
-Left deliberately uncommitted: authored in a session running CONCURRENTLY with the PR-Payment work
-(`64fe35a`…`7b620c9`), so it is not mine to commit under a message I would be inventing. It all
-typechecks — backend past the TS2883 baseline, `apps/web` on every touched file, `apps/mobile` at 0.
+> **`57bd165` closed the "uncommitted receipt-editor tree" block.** Code + migrations are in the
+> repo; DB already had `0083`/`0084`. **Next:** live agency click-through of Approve + dispute-queue
+> edit paths, then work the §9 DAY/RECEIPT AGREEMENT AUDIT highs (PvDetail dispute never hits server,
+> disputed voucher turns every cell into withdraw). Do **not** treat §8 A6/X58 as verified until a
+> real agency login drives the editor.
 
-- [x] ✅ **APPLIED 4 Aug 2026 — and the DATABASE IS NOW AHEAD OF THE COMMITTED CODE.** `0083` and `0084`
-  are live on `innocenz-test`; `0083`'s fix is committed (`62243bc`) but `0084` and everything that
-  reads the two new columns is still in the working tree. That inverts the risk in this whole block:
-  it is no longer "unapplied DDL waiting", it is **schema without its code**, so landing the slice is
-  now more urgent, not less. A fresh clone will not match this database.
-  - ⚠️ `pnpm migrate:deploy` FAILED first with **`function min(uuid) does not exist` (SQLSTATE 42883)** —
-    `0083` backfilled with `min(o.id)` over a uuid column, and because drizzle wraps the run in one
-    transaction, NOTHING applied (the DB sat at `0082`). Fixed to `min(o.id::text)::uuid`, safe because
-    the row is only used where `m.n = 1` — one outlet in the group, so the aggregate picks the single
-    value rather than choosing between candidates. Both files were dry-run in a rolled-back transaction
-    before the real deploy.
-  - Verified after applying: `payment_voucher_line.outlet_id` uuid + FK `confdeltype = n` (SET NULL),
-    `payment_voucher_receipt.review_withdrawn_at` timestamp, and the backfill linked **18 of 18** lines
-    with **0** unmatched. Journal now records 1785800000000 and 1785900000000.
-  - `0083_pv_line_outlet_fk.sql` — `payment_voucher_line.outlet_id`, FK to outlet, ON DELETE SET NULL.
-    Closes one of the weak edges CLAUDE.md rule #3 was written about: the row's only outlet today is a
-    copied varchar NAME, so an outlet rename would start refusing catalogue checks for no visible
-    reason.
-  - `0084_receipt_review_withdrawn.sql` — `payment_voucher_receipt.review_withdrawn_at`, so a receipt
-    somebody REFUSED stops being byte-identical to one nobody has opened, and bulk approve cannot
-    re-approve a refusal under the refuser's own name.
-- [ ] ⚠️ **The §10 row "THE AGENCY CAN CORRECT A RECEIPT" says "NO MIGRATION. ZERO DDL."** That is true
-  of the receipt editor itself, but two migrations now sit in the same uncommitted tree from sibling
-  work. Correct that row (or give the migrations their own) before it reads as "this slice needed no
-  DDL" for the whole batch.
-- [ ] Untracked alongside them: `AgencyReceiptEditor.tsx`, `use-agency-receipt-edit.ts`,
-  `use-receipt-catalogue.ts`, `write-failure-message.ts`, `src/scripts/repair-day-approved-receipts.ts`.
-- [ ] **`DisputeQueuePanel.tsx` (the receipt editor inside the dispute queue) rides with this slice.**
-  It is MY change but it `import`s the untracked `AgencyReceiptEditor.tsx`, so committing it alone would
-  produce a commit that does not build. It must land in the same commit as the editor. `tsc` clean on
-  the file, biome-formatted; its §10 row is already written.
-- [ ] ⚠️ **PROCESS NOTE — `TEST_SCRIPT.md` cannot be committed cleanly while it carries rows for
-  uncommitted code, and writing "don't do that" did not stop it.** Three times today a doc row landed in
-  a commit for an unrelated slice (`927ec8a`, `afa8dd1`, `e2f5e4f` — the last one swept up this very
-  note) while the code it described stayed in the working tree. That is the doc/code split the
-  doc-roles rule exists to prevent.
-  **The cause is structural, not carelessness:** git stages whole files, so any commit that renews this
-  doc for slice A also ships slice B's pending rows. Interactive `git add -p` is unavailable in this
-  environment.
-  **The only real fix is to stop leaving code uncommitted** — i.e. land the receipt-editor slice below.
-  Until then this block is deliberately kept DIRTY after every commit, so the doc always travels with
-  the work it describes, and this checklist stays the honest record of what is outstanding.
+### ▶ ~~UNCOMMITTED WORK IN THE TREE~~ — ✅ CLOSED 4 Aug 2026 (`57bd165`)
 
-**Current pending set (refreshed 4 Aug 2026, after `e2f5e4f`):** 20 modified + 7 untracked. Beyond the
-files listed above, the slice has since grown to touch `payment-voucher.routes.ts`,
-`payment-voucher-day-review.ts`, `payment-voucher-component.ts`, `payment-voucher.schema.ts`,
-`week-pay-grid.ts`, `demo-shifts.ts`, `routes/agency/pv.tsx` and `docs/claude-memory/
-innocenz-receipt-lifecycle.md`. Everything typechecks; nothing here is half-written — it is waiting on a
-decision about ownership, not on more code.
-
+> Was: receipt editor + `0083`/`0084` readers sitting untracked while the DB already had the columns.
+> **Landed** as `feat(agency): correct a receipt under Approve, and inside the dispute queue`.
+> Checklist that used to live here (untracked editor files, DisputeQueuePanel blocked on them,
+> "doc rows without code") is **done**. Remaining product gaps are in RECEIPT EDITOR SCOPE verify +
+> DAY/RECEIPT AGREEMENT AUDIT below — not "commit the tree".
 
 ### ▶ ADDED LINES MUST MATCH THE OUTLET'S LIST — DRINKS **AND TIPS** (owner, 4 Aug 2026)
 
@@ -451,11 +502,8 @@ else cannot add so in his way can make list the the drink on that shift from wha
 - [x] Price ≠ commission: the picker shows the outlet's price for matching against the paper and the
   commission stays typed. No per-item commission rule exists anywhere to auto-fill from (the web
   `AgencyCommissionRulesPanel` reads the client demo store, not the backend).
-- [ ] ⚠️ **DECIDE: drop or wire `0083_pv_line_outlet_fk`.** It is authored and journalled but NOT
-  run, and NOT used by any code — the shift-FK path above turned out sounder than the name-matched
-  `payment_voucher_line.outlet` backfill it was written for. Dropping it is the recommendation; an
-  unused column with a backfill is worse than no column. Wiring it would cover only the receipts that
-  have no shift link, and would also mean setting `outlet_id` on every line write.
+- [x] ⚠️ ~~**DECIDE: drop or wire `0083_pv_line_outlet_fk`.**~~ **APPLIED + shipped with `57bd165`.**
+  Column + FK live on `innocenz-test` (18/18 lines backfilled). Keep — do not drop.
 - [ ] `PUT /payment-voucher/:id` is a SECOND DOOR: it still writes receipt-linked lines with
   free-text descriptions under the same `agencyOwnerOrFinance` guard, so the catalogue rule is
   enforced on one path and not the other.
@@ -532,8 +580,11 @@ DO matter.
 *"the agency only can edit the scanned or self log of the drink or the tips at the receipt section"* —
 the editor is confined to **drinks and tips lines on a receipt** (scanned or self-logged), reached
 from the **Receipts section**. Wages and OT are never editable there: they carry no receipt, they are
-fixed by the outlet, and the way to change one is the attendance record. Check the delivered editor
-against this before promoting it to §8.
+fixed by the outlet, and the way to change one is the attendance record.
+
+- [x] **Editor shipped** (`57bd165` / §8 A6 · X58) — also opens inside the dispute queue.
+- [ ] **Verify against this scope on a live agency login** before promoting A6/X58 to ✅ Verified
+  (no wages/OT editable; drinks+tips only; catalogue match for add-line).
 
 ### ▶ DAY/RECEIPT AGREEMENT AUDIT — 12 confirmed, 2 FIXED, 10 OPEN (4 Aug 2026)
 
@@ -1455,6 +1506,826 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > to a route-import cycle before — the new module is imported **type-only**, so it adds no runtime edge.
 > Before believing any of it: **restart the backend** (`tsx watch` serves stale routes) and test against
 > a PR whose `languages` column is actually populated.
+> **5 Aug 2026 — THE SIGNING SCREEN GETS THE SAME EVIDENCE SHEET (every row, wages included).**
+>
+> Owner: *"i cannot click the daily wages and the drinks tips other verified details , can make dispute
+> also like in the pr payment page"*.
+>
+> Deleting the fake sheet left the cells inert, which over-corrected: the PR asked to INSPECT a figure,
+> not only to argue with one, and wages have a shift and attendance stamps behind them worth reading —
+> that is exactly what the evidence sheet was built to show.
+>
+> `PvDetailScreen` now renders **the same `CellEvidenceSheet`** as Payment — one component, one format,
+> so the two screens cannot drift again. Every non-empty cell opens it, wages and OT included; whether a
+> figure can be DISPUTED is decided inside, by the rules Payment already applies (drinks/tips, a voucher
+> the server still accepts, at least one shift not already claimed). Where those pass, **Dispute this
+> amount** hands off to Payment → Last week, where the pickers and the server call live.
+>
+> ⚠️ A history (signed/paid) voucher shows evidence but never a Dispute button — `weekDisputable`
+> refuses those states, matching the server. And `histVoucher` carries no `shifts`/`disputes`, so an
+> archived week's sheet says "Shift times are unavailable" rather than inventing them; the live
+> last-week voucher has both. Widening history is the §9 phase-2 item.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
+> **5 Aug 2026 — 🔴 THE SIGNING SCREEN'S DISPUTE SHEET WAS A FAKE (it never called the server).**
+>
+> Owner: *"why the daily wages still can make dispute ? and the format is different in the payment page
+> dispute ?"* — on PvDetailScreen, the screen where the PR prepares to sign.
+>
+> Both symptoms had one root: this screen's dispute flow predated everything built this week, and it was
+> worse than stale — **`submitDispute` toggled a local Set and never called the server.** A PR could
+> "dispute" while reviewing, watch the cell turn red, sign believing the claim was lodged, and the
+> agency would never hear of it. A fake claim on the very screen that asks for a signature.
+>
+> Wages were tappable because the sheet predated `kindDisputable`; the format differed because it WAS a
+> different (demo-era) sheet — no shift picker, no item picker, no reasons list shared with Payment.
+>
+> **Fix — one dispute flow for the whole app:** the fake sheet is DELETED. Cells are tappable only for
+> drinks/tips (`kindDisputable`), and a tap routes to **Payment → Last week**, where the real evidence
+> sheet, shift/item pickers and server call live. Review here, dispute there, come back and sign. Red
+> marks on this grid now derive from `openDisputeKeys(weekForGrid)` — the server's own open claims —
+> instead of the local toggle, and the "Dispute open" banner no longer prints a preset nobody chose.
+>
+> History (signed/paid) vouchers get no dispute affordance at all — the server refuses those states
+> anyway, so the old sheet was offering an action that could never land.
+>
+> Mobile clean above the ~11 pre-existing. No backend change.
+
+> **5 Aug 2026 — THE PV DOCUMENT SCREEN HAD NO VERTICAL SCROLL AT ALL.**
+>
+> Owner: *"see the web view and the mobile device view also cannot scroll ?"* — on PvDetailScreen, both
+> surfaces.
+>
+> Not the responder trap this time: the screen's root was a plain `View` with **no vertical ScrollView
+> anywhere** — the only ScrollView in the file was the HORIZONTAL week grid. Everything past one screen
+> height (net payable, records, signature, the **Sign payment voucher** button itself) was simply
+> clipped. It survived this long because the content used to be shorter than a phone; the moment the
+> voucher grew, the sign button became unreachable — a screen whose whole purpose is signing.
+>
+> The body now scrolls (back row stays fixed), with bottom padding `24 + insets.bottom` per the
+> flexible-UI rule. ⚠️ PvDetailScreen's three SHEETS still carry the Pressable-over-ScrollView trap —
+> that stays in the §9 sweep; this change is the page body only.
+>
+> Mobile clean above the ~11 pre-existing. No backend change.
+
+> **5 Aug 2026 — SHEETS PAD FOR THE PHONE'S OWN NAV BAR (safe-area insets, and a standing rule).**
+>
+> Owner, on the device: *"now my close button touch or my phone original 3 , home or return button
+> please rememeber makes all flexible"*.
+>
+> The sheets padded a fixed 28px bottom, which happened to clear some phones and jammed the red Close
+> straight against the 3-button / gesture bar on this one — where a mis-tap leaves the app entirely.
+> All three Payment-flow sheets now pad `16 + useSafeAreaInsets().bottom`; when the keyboard is open its
+> inset wins, since it already clears the nav bar.
+>
+> **"Makes all flexible" is now a STANDING RULE**, saved to memory (`innocenz-mobile-flexible-ui`): no
+> fixed pixels for safe areas, sheet heights (proportions + flexShrink), or widths (cap ~520 for
+> tablets, never the web frame's 392); no Pressable ancestor over a ScrollView; gold = act, red = close.
+> Every real-device bug today traced to a constant that fit one screen.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
+> **5 Aug 2026 — THE SHEET FOOTER GETS SPACING AND THE COLOUR CODE (Close is red).**
+>
+> Owner: *"see the button design why stick together"* and *"remember that what green yellow red , close
+> is red ?"*.
+>
+> `IzButton` carries no outer margin, so the evidence sheet's two stacked buttons fused into one
+> double-height grey slab — two actions reading as a single control, with Dispute a mis-tap from Close.
+> Now a footer with an 8px gap, and the owner's colour code applied: **Dispute = gold** (the same accent
+> the dispute modal's Submit wears), **Close = red** (mirroring `dangerBtn` exactly — same palette, same
+> meaning, one screen apart). The claim sheet's Close follows the same rule.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
+> **5 Aug 2026 — "CANNOT SCROLL SOMETIMES" — the sheet's own tap-guard was stealing the drag.**
+>
+> Owner, on the device: *"i click that drink for that day want to check but cannot scroll sometimes ,
+> make scrollable"*.
+>
+> **Why it was intermittent, not broken:** every sheet was wrapped in a `Pressable` whose only job was
+> `stopPropagation` so a tap inside would not dismiss. On Android a Pressable ANCESTOR competes with the
+> ScrollView beneath it for the touch responder, so a drag was sometimes claimed as a press — and the
+> list simply did not move. Sometimes the ScrollView won, sometimes the Pressable did; hence
+> "sometimes".
+>
+> **Fix:** the dismiss target is now a SIBLING (`backdropTap`, filling the space above the sheet), and
+> the sheet itself is a plain `View` — no Pressable parent, so the ScrollView owns its gestures
+> outright. Applied to all three Payment-flow sheets: evidence, claim ("What you disputed"), and the
+> dispute form.
+>
+> ⚠️ **The same trap is live in six more files** — `PvDetailScreen` (3 sheets), `AgencySchedulePanel`
+> (3), `HistDateTimeFilter` (2), `JobPostingsPanel`, and others matching
+> `Pressable … stopPropagation` over a ScrollView. Recorded in §9 as one sweep; their sheets scroll
+> less content, so the bite is smaller, but it is the identical bug.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
+> **5 Aug 2026 — THE RECEIPT PHOTO OPENS, AND THE SHEETS FIT A REAL PHONE.**
+>
+> Owner, on the device: *"for example this picture i cannot scroll to see in phone"* and *"the screen
+> flexible to any phone devices view"*.
+>
+> **The photo was a dead end.** 64px, no tap handler — big enough to prove a photo EXISTS and far too
+> small to read a line off, on a sheet whose entire purpose is holding the paper against the figure.
+> Thumbnails are 96px now and open FULL SCREEN on tap, layered over the sheet rather than replacing it
+> so the figure stays visible to compare against. Tap anywhere to dismiss.
+>
+> **`maxWidth: 392` was the WEB phone-frame width**, not a device width. On a 411dp handset it left dead
+> margins down both sides. Now 520: fills a real phone edge to edge, still caps on a tablet, and the web
+> frame is narrower than either so nothing changes there. With the previous commit the sheets are now
+> bounded to 90% height, scroll internally, and keep their buttons reachable at any size.
+>
+> ⚠️ **Two things left, both recorded rather than papered over:**
+> - Photos still render from full-size data-URIs, so opening a sheet decodes the whole captured image.
+>   That is the remaining lag; the fix belongs at CAPTURE, since the same oversized string also travels
+>   in every week payload.
+> - `RCP-000012` shows **VERIFIED** beside *"waiting on your agency"*. Both are true — the claim against
+>   it was answered, the receipt itself is still unreviewed — but side by side they read as a
+>   contradiction. Worth wording apart if it bites in use; do NOT fix it by dropping either fact.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
+> **5 Aug 2026 — THE SHEETS SCROLL AND STOP HIDING THEIR OWN BUTTONS (first real-device pass).**
+>
+> Owner, on a physical phone: *"make sure no lag , can scroll , design the UI"*.
+>
+> **The sheets could grow past the screen.** Neither the evidence sheet nor the claim sheet was bounded,
+> so a day with two shifts pushed "Dispute this amount" and "Close" off the bottom — content hidden
+> behind the very controls meant to act on it, with no way to reach them. Both are now `maxHeight: '90%'`
+> with their list `flexShrink: 1`, so the list gives way to the header and buttons and the scroll area is
+> exactly the space that remains, on any screen.
+>
+> ⚠️ The evidence list had `maxHeight: 420`, wrong in BOTH directions: it wasted half a tall phone, and
+> on a short one the sheet still overflowed, because a fixed cap takes no account of the header and
+> buttons above and below it. A proportion of the sheet, not a number of pixels.
+>
+> **The claim sheet had no ScrollView at all** — two claims, each listing shift, items and a Cancel
+> button, simply ran off the end.
+>
+> **Lag:** `claimShifts` walks the whole week to rebuild a day's evidence, and it was being called THREE
+> times per claim row — once for the heading, once to test emptiness, once to map. Hoisted to one call
+> per claim.
+>
+> ⚠️ Still open (§9): proof photos render straight from their data-URIs at 64×64, so the decode cost is
+> the full captured image every time a sheet opens. That is the remaining device-side lag, and the fix
+> belongs at CAPTURE — resize before storing — not in the sheet.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
+> **5 Aug 2026 — 🔴 APPROVAL IS NO LONGER THE PRECONDITION (owner reverses decision #1).**
+>
+> Owner: *"make the already verified or dispute still can make disputed again and dont hide the words"*.
+>
+> **The rule that changed.** `raiseMyDispute` refused any claim on a day whose receipts were still
+> unreviewed — *"approval is what turns it into the agency's number"*, recorded in the code as owner's
+> decision #1. It held in theory and failed in practice: a PR looking at a wrong figure was told to wait
+> for someone else to confirm it before they were allowed to say so, and on the live data that wait had
+> no end in sight (`RCP-000012`, `reviewed_at = NULL` since 4 Aug).
+>
+> The precondition now applies ONLY to a claim that names no receipt, where it still means something —
+> contesting a whole day while part of it is unreviewed really is arguing with a number nobody stated.
+> A claim naming ONE shift stands on its own.
+>
+> ⚠️ **What still blocks, and why it is different:** one OPEN claim per shift, enforced by the index
+> from `0086`. That is the database refusing a second row, not a policy — so the app greys those chips
+> rather than letting them 409. Everything else is now selectable, including a shift already VERIFIED:
+> resolving a claim ends that claim, not the right to disagree again.
+>
+> Four client gates moved with it — the picker, the evidence-sheet button, `openDispute`'s guard, and
+> both grid flag icons — because leaving any one behind would reinstate the old rule in the place
+> nobody would think to look. `cellDisputable` is now unused in PaymentScreen and its import is gone;
+> it survives in `receipt-review.ts` for the no-receipt case.
+>
+> **"Don't hide the words."** The chip label had `numberOfLines={1}`, which clipped *"waiting on your
+> agency"* to *"waiting on yo…"* — reading as a glitch rather than a reason. It wraps now, and the note
+> is reworded to **"not reviewed yet"**: information about the shift, no longer a refusal.
+>
+> Both apps clean; 40 harness checks pass. No migration. **Backend restart required.**
+
+> **5 Aug 2026 — THE DISPUTE REASONS MATCH THE PROBLEMS A PR ACTUALLY MEETS.**
+>
+> Owner: *"this reason can make some you think that the pr will meet de problem to select"*.
+>
+> ⚠️ **One chip could never be filed at all.** The list predated disputes narrowing to drinks and tips,
+> so **"Unmatch wages"** sat there on a sheet that never opens for wages (`kindDisputable` refuses
+> them, and the server refuses them again). A chip that leads nowhere is worse than a missing one: the
+> PR picks it believing they have described their problem, and they have not.
+>
+> Replaced with the failures this app has actually produced:
+>
+> | reason | the real case |
+> |---|---|
+> | **Counted twice** | the duplicate ORD0389 — one paper scanned across two check-ins |
+> | **Wrong quantity** | OCR reading "2 Havoc" as one; previously UNSAYABLE — the PR could only call it "unmatch commission" and leave the agency to work out why |
+> | **Missing from my PV** | logged, and not on the voucher |
+> | **Wrong commission** | the figure does not match the paper |
+> | **Wrong rate** | right per item, wrong percentage — a rate-card question, which lands somewhere different |
+> | **Not my shift** | attributed to the wrong person or night |
+>
+> **Both screens now read ONE list.** `PaymentScreen` and `PvDetailScreen` each carried their own copy,
+> so a PR would have met different reasons depending on where they tapped and the agency would have
+> received two vocabularies. It lives in `lib/receipt-review.ts` beside the other dispute rules.
+>
+> Safe to reword: `payment_voucher_dispute.reason` is `varchar(1000)` free text with no enum and no
+> logic reading it — checked before changing. ⚠️ `apps/web/src/agency-portal/lib/pr-demo.ts` still holds
+> the OLD strings as demo fixtures; harmless, but they will read oddly beside real claims (§9).
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change, no migration.
+
+> **5 Aug 2026 — THE APPROVAL PRECONDITION IS PER CLAIM, AND A CORRECTION I NEARLY SHIPPED ON A FALSE PREMISE.**
+>
+> Owner: *"i still cannot choose below disputed verified shift"*.
+>
+> **What I nearly did, and why it was wrong.** I read the blocked 16:00 shift as a receipt the agency
+> had APPROVED, then EDITED — which flips it back to `pending` and would make the figure on it the
+> agency's own, so contesting it again would be fair. I wrote the bypass. Then I checked the row:
+>
+> | receipt | status | reviewed_at |
+> |---|---|---|
+> | RCP-000010 | verified | 2026-08-04 06:52Z |
+> | **RCP-000012** | **pending** | **NULL** |
+>
+> `reviewed_at` is NULL — that receipt has **never been approved at all**. "Waiting on your agency" is
+> the truth, and blocking it is correct. The bypass was reverted before commit. The VERIFIED tag the
+> owner saw on it came from the old whole-day-claim behaviour that `d373e94` had already removed — a
+> stale build, not the current rule. If a genuinely re-opened receipt ever needs to be disputable, the
+> signal is `reviewed_at` being non-null, NOT the presence of a settled claim.
+>
+> **The real bug it exposed.** The server's approval precondition was CELL-WIDE: it 409s if any receipt
+> on that day+component is pending. Same over-broad shape I had just fixed on the client — so the app
+> now offered the approved 10:00 shift and the server would have refused it because a DIFFERENT 16:00
+> receipt was unreviewed. Their shift had a stated figure; somebody else's paper is not their problem.
+>
+> The check now narrows to the receipt the claim NAMES (`parsed.data.receiptId`). With no receipt named
+> the claim still covers the cell, so every receipt on it must be reviewed — the original rule,
+> untouched, for the shape it was written for.
+>
+> ⚠️ Worth keeping: **checking the row is what stopped this**, and the wrong version was already written
+> and typechecking cleanly. Both apps clean; 40 harness checks pass. **Backend restart required.**
+
+> **5 Aug 2026 — A SHIFT WITH AN OPEN CLAIM IS NO LONGER OFFERED AGAIN.**
+>
+> Owner: *"this already disputed can dispute again"*.
+>
+> The picker knew whether a receipt had been REVIEWED but nothing about whether it was already being
+> ARGUED about. So a shift carrying an open claim sat there fully selectable, and submitting would have
+> come straight back a **409** from `0086`'s partial index — one open claim per shift.
+>
+> `receiptClaimState` now feeds the picker: a shift with a LIVE claim is dimmed and reads **"already
+> disputed"**; one still awaiting review reads **"waiting on your agency"**. Two different reasons, two
+> different notes — collapsing them into one "unavailable" would tell a PR to wait for the agency when
+> the real answer is that they have already asked. A whole-day open claim blocks every shift beneath it.
+>
+> **An ANSWERED claim does not block.** Resolving a claim ends that claim, not the right to disagree
+> again — which is what `0086` being partial exists for. Inverting those two is the easy mistake, so
+> both directions are pinned: *"an OPEN claim marks its shift, blocking a second one"* beside *"an
+> ANSWERED claim leaves its shift un-blocked"* and *"a shift whose earlier claim was answered can be
+> disputed again"*.
+>
+> `evidenceDisputableCount` got the same rule, so the **Dispute** button no longer opens a sheet in
+> which nothing can be selected.
+>
+> 40 harness checks pass; mobile clean above the ~11 pre-existing. No backend change — the server
+> already refused this; the app simply stops offering it.
+
+> **5 Aug 2026 — EVERY SHIFT IS LISTED IN THE PICKER, INCLUDING THE ONES NOT YET CHOOSABLE (`c88e319`).**
+>
+> Owner: *"this is correct 2 different shift , different dispute , but why in the drink no seperate
+> shift ?"*
+>
+> Drinks has two shifts as well. One of its receipts was `pending` after an agency edit, and the
+> previous commit **filtered non-disputable shifts out of the picker** — so with one left the picker
+> collapsed and DISAPPEARED, sending Drinks straight to Quick reason while Tips showed two shifts. The
+> PR could not tell whether the second shift was missing, merged, or simply not offered.
+>
+> ⚠️ **Same mistake as the vanished Dispute button earlier today**, and I had written the reasoning down
+> as though it were a virtue: *"filtered rather than disabled, so everything shown is choosable"*.
+> Shown-but-unavailable states why. Hidden states nothing.
+>
+> Every shift in the cell is listed now; the ones that cannot be chosen are dimmed (opacity 0.45),
+> `disabled`, and carry the reason ON the chip — *"· waiting on your agency"* — with the same text in
+> `accessibilityLabel`. Auto-select counts only the CHOOSABLE ones, so a single available shift is still
+> picked for the PR and two or more still require them to say which; Submit stays blocked when none can
+> be chosen.
+>
+> Mobile clean above the ~11 pre-existing (`-p tsconfig.app.json`); 37 harness checks pass. No backend
+> change, no migration.
+
+> **5 Aug 2026 — DISPUTABILITY IS PER SHIFT, AND A SETTLED SHIFT CAN STILL BE ARGUED.**
+>
+> Owner: *"after verified or solve dispute still can dispute again , and the 'SETTLED' need can choose
+> dispute or not"*.
+>
+> The Dispute button had vanished from a cell holding an approved shift AND a pending one, because
+> `cellDisputable` demands EVERY line in the day+bucket be reviewed. That rule was right when a claim
+> covered the whole cell. It became wrong the moment a claim names ONE shift: a PR could not contest an
+> approved 10:00 receipt because a different 16:00 receipt was still awaiting review. One shift's
+> pending paper is not a reason to silence an argument about another.
+>
+> New `receiptDisputable(receipt)` decides per receipt, preferring the server's own `disputable` flag
+> over the `pending` fallback. The button appears when ANY shift qualifies; the picker lists only those
+> shifts (filtered, not disabled — everything shown is choosable); and `openDispute`'s guard matches, so
+> the sheet can no longer offer Dispute and then answer "Not reviewed yet".
+>
+> **A SETTLED or VERIFIED shift stays disputable.** Resolving a claim ends THAT claim, not the PR's
+> right to disagree again — and `0086`'s partial index is what actually permits the second one. That is
+> the whole reason the index became partial.
+>
+> Both rules are pinned so the distinction cannot quietly collapse back into one: *"one pending line
+> poisons the CELL — cellDisputable is all-or-nothing"* still passes, beside *"the approved shift IS
+> disputable even beside a pending one"* and *"a shift whose earlier claim was answered can be disputed
+> again"*. 37 harness checks, all passing.
+>
+> ⚠️ `cellDisputable` is deliberately kept as the fallback for a cell with NO receipts (wages, OT),
+> where there is no per-shift answer to give. Do not delete it as dead code.
+>
+> Mobile clean above the ~11 pre-existing. No backend change, no migration.
+
+> **5 Aug 2026 — THE PR CAN CANCEL A DISPUTE, AND CANCEL THE RIGHT ONE.**
+>
+> Owner: *"how can the pr cancel the dispute"*.
+>
+> Withdrawing existed but was effectively unreachable: the only route was tapping a RED grid cell, where
+> the button still read **"Dispute this amount"** and silently became a withdraw. The one action that
+> takes a claim back was both hidden and mislabelled.
+>
+> **Cancel now lives under the claim itself**, in "What you disputed" (tap a DISPUTED/VERIFIED status
+> cell) — where the PR can see the shift, the items and the reason they are cancelling. Only on an OPEN
+> claim: an answered one is a decision the agency has made, and retracting it afterwards would rewrite
+> the outcome of a money decision. Confirmed before it fires, because a withdrawn claim cannot be
+> un-withdrawn — only raised again from scratch.
+>
+> **⚠️ It had to become claim-specific, and this was a live bug.** `findOpen` matched on
+> voucher + day + component, which stopped naming a single row when `0086` allowed one open claim PER
+> SHIFT. Cancelling would have taken whichever row came back first — dropping an argument the PR had not
+> asked to drop. `findOpen` and `PrWithdrawDisputeSchema` now take `receiptId`; `undefined` keeps the
+> old behaviour for pre-picker clients, and `null` explicitly targets the whole-day claim.
+>
+> Verified on two open claims (one per shift) in a rolled-back transaction:
+>
+> | asked for | rows |
+> |---|---|
+> | `RCP-000010` | **exactly 1, the right one** |
+> | `RCP-000011` | **exactly 1, the right one** |
+> | no receipt (old path) | 2 — ambiguous, which is the bug |
+> | the whole-day claim | 0 — correct, none exists |
+>
+> ⚠️ **My first probe reported WRONG on all of these and the code was fine.** `findOpen` uses the
+> module-level `db`, so it cannot see rows inserted inside an uncommitted transaction — the probe was
+> testing visibility, not logic. Re-run against the same `tx` it passed. Worth remembering before
+> reporting a repository method broken.
+>
+> Both apps clean; 34 harness checks pass. No migration. **Backend restart required.**
+
+> **5 Aug 2026 — PER-SHIFT TAGS: SETTLED → DISPUTED → VERIFIED (`e0872c9`, `d373e94`).**
+>
+> Owner: *"if i disputed this time , then after resolved dispute mark that time from settled to
+> verified , if that shift untouch dispute remain to settled"*, then *"i dispute for the below shift so
+> is below verified , make above no put verified"*.
+>
+> Each receipt in the evidence sheet now carries the SAME lifecycle the day status uses, applied to one
+> shift:
+>
+> | tag | meaning |
+> |---|---|
+> | **SETTLED** (neutral) | the agency approved it and nobody argued |
+> | **DISPUTED** (red) | a claim on THAT shift is open |
+> | **VERIFIED** (green) | a claim on that shift was raised AND answered |
+>
+> A receipt still awaiting review gets NO tag — its row already reads "waiting on your agency", and
+> calling that settled would claim a decision nobody has made. SETTLED is deliberately neutral, not
+> green, so the eye lands on the two states the PR actually acted on.
+>
+> **The second commit is the one that matters.** An answered WHOLE-DAY claim was promoting every receipt
+> in the cell to VERIFIED through `settledAll`, so disputing the 16:00 shift left the untouched 10:00
+> shift wearing the same green tag — destroying the exact contrast these tags exist to draw. VERIFIED is
+> now only for a shift a claim actually NAMED. An OPEN whole-day claim still marks everything, because
+> it genuinely blocks every shift beneath it and carries a banner saying so; a settled one is history,
+> and its detail lives in "What you disputed".
+>
+> This walked back the previous entry's DISPUTE ACCEPTED / DISPUTE REJECTED wording. That answered
+> "what was decided?" but not "which shift did I take up?", and the owner's vocabulary — settled,
+> disputed, verified — answers both while matching the day row above it.
+>
+> ⚠️ **Observed, not fixed:** RCP-000012 reads *"waiting on your agency"* AND **VERIFIED**. Not a
+> display fault — the agency edited that receipt, which re-opens it to `pending` for re-approval, while
+> the dispute against it is separately resolved. Two states of two different things. Recorded in §9 in
+> case that pairing should be spelled out on the row rather than left to the reader.
+>
+> Mobile clean above the ~11 pre-existing (`-p tsconfig.app.json`); 34 harness checks pass. No backend
+> change, no migration.
+
+> **5 Aug 2026 — SETTLED DISPUTES ARE VISIBLE, AND THE PAYEE HAS THE NAME PEOPLE USE.**
+>
+> Owner: *"yesterday got one successful dispute right show where?"*, *"dispute section need to show
+> which already disputed and which still pending, also need a filter"*, and *"at payment voucher the
+> nickname need show in front of the real IC name"*.
+>
+> **The dispute answer was: nowhere.** `useAgencyDisputes` defaulted to `openOnly = true`, so every
+> agency screen requested `?open=1` — a resolved dispute was fetched by nothing and existed in the
+> database with no surface anywhere in the product. Worse, the panel printed "No open disputes"
+> whether none had ever been raised or one had been accepted an hour earlier: two very different
+> facts, one sentence. It now fetches all and filters client-side (Open / Resolved / All with live
+> counts, plus search over PR, day, component, reason, resolution note and outcome), with three
+> distinct empty states.
+>
+> Two defects fell out of listing settled rows at all: the status pill was **hardcoded to "Open"**
+> (only ever accidentally correct), and a settled row still offered live **Accept/Reject** — which the
+> server refuses, so they were buttons that could only fail while implying the outcome was still
+> changeable. Settled rows are read-only now and show what was told to the PR.
+>
+> **The nickname** reads `Vicky (Victoria Tan Mei Lin)` on BOTH the voucher card and the dispute row.
+> Joined from `pr.nickname` through `pr_id` in `listPaginated` and `listForScope` — never copied onto
+> the voucher beside `pr_name`, which is the duplication rule 3 exists to stop. The dispute list
+> needed its own join: it had `payment_voucher` but not `pr`, which is why the nickname appeared on
+> one screen and not the other. No nickname, or one repeating the legal name, prints the legal name
+> alone.
+>
+> Also fixed: `main.ts` did not compile — `express.json({verify})` hands back a bare
+> `IncomingMessage`, and `originalUrl` is added later by the router. That broke the whole backend
+> build and was unrelated to this work.
+>
+> Backend + web typecheck clean. ⚠️ The Disputes SUB-TAB COUNTER still counts open only, so it reads
+> `(0)` above a panel showing `Resolved (3)` — defensible as a "needs you" badge, but the two now
+> disagree on screen. Decide which it should be.
+
+> **5 Aug 2026 — WHICH SHIFT, AS A FOREIGN KEY (migration 0088). My rule-3 violation.**
+>
+> Owner, looking at the table: *"foreign key which shift ?"*. Correct, and it was my mistake.
+>
+> I stored the shift as `receipt_refs` — the receipt NUMBER (`"RCP-000012"`) as jsonb text. That breaks
+> the standing DB rule outright: read other tables through a FOREIGN KEY, reference rows by their uuid
+> primary id, never keep a second copy of a value that lives elsewhere. A number in a jsonb array cannot
+> be joined, cannot be constrained, and goes stale in silence if the row it names disappears.
+>
+> **0088** adds `payment_voucher_dispute.receipt_id uuid` → `payment_voucher_receipt(id)`
+> `ON DELETE SET NULL`, with an index, backfilled from `receipt_refs` (matched on `receipt_no` within
+> the same voucher, so a bad value could never attach a claim to another PR's paper). **Applied.**
+>
+> **The SHIFT is not duplicated onto the dispute.** It is reached through the receipt:
+> `dispute.receipt_id → payment_voucher_receipt.shift_assignment_id → shift_assignment → shift`.
+> Verified that join runs end-to-end. Copying `shift_assignment_id` onto the claim as well would be two
+> columns holding one fact, which is how they drift apart.
+>
+> `ON DELETE SET NULL` is deliberate: deleting a receipt's last line deletes the receipt, and losing the
+> paper must not delete the argument about it. The claim survives pointing at nothing, which is the
+> truth of that situation.
+>
+> The `0086` unique index moved onto the FK: `(voucher_id, dispute_date, component,
+> coalesce(receipt_id::text, '')) WHERE outcome IS NULL` — same rule, expressed against a real column
+> instead of text dug out of jsonb.
+>
+> `PrReceiptLineDTO` now carries `receiptId` beside `receiptNo` (the number is for the PR to READ, the
+> id is what the app REFERENCES), threaded through `cell-evidence` and the picker. Matching accepts
+> either, so pre-0088 claims still resolve. `receiptRefs` stays declared but is no longer written.
+>
+> ⚠️ Both live claims carry `receipt_id = NULL` — they were raised before any of this and named no
+> receipt, so the backfill had nothing to match. Nothing can recover it.
+>
+> Backend clean past its baseline; mobile clean above the ~11 pre-existing; 34 harness checks pass.
+> **Backend restart required.**
+
+> **5 Aug 2026 — A DISPUTE NOW RECORDS WHICH ITEM (migration 0087).**
+>
+> Owner, reading the table: *"i saw before that the dispute is on that day , from now onward is the
+> date and needed the shift what item dispute also need to show ya , and database need have"*.
+>
+> The row carried the DAY (`dispute_date`), the BUCKET (`component`) and, since the picker went
+> single-select, the SHIFT (`receipt_refs`). It still could not say WHAT was wrong. A tips receipt holds
+> Tips, Booking commission and Havoc together, so *"tips on Tue 4 is wrong"* left the agency guessing
+> which of the three and the PR with no way to say.
+>
+> **0087** adds `payment_voucher_dispute.disputed_items` (jsonb, nullable):
+> `[{lineId, description, quantity, amount}]`. **Applied.** The table already had all four audit
+> columns, so none were added.
+>
+> ⚠️ **Not an FK, deliberately.** `PUT /payment-voucher/:id` deletes and re-inserts every line, so a
+> line id does not survive a voucher rewrite — an FK would go null and the record of what was disputed
+> would evaporate. Same reasoning that made `receipt_refs` store receipt NUMBERS. `lineId` is a
+> best-effort pointer; the description/quantity/amount keep the claim legible afterwards. It is a
+> SNAPSHOT, exactly as `disputed_amount` already is.
+>
+> ⚠️ **The client sends only `lineId`.** Description, quantity and amount are read from the DATABASE in
+> `resolveDisputeItems`, scoped by voucher + date + bucket. A claimant who could post their own
+> `"amount": "999.00"` would be writing the very figure their claim is measured against. Verified: tips
+> line ids requested under `drinks` resolve to **0 rows**.
+>
+> **The narrowest thing named wins** — items, else the receipt, else the whole cell. Verified live:
+> naming the three tips lines gives `disputedAmount` **RM 365.50** against a RM 901.00 cell.
+>
+> The sheet asks **"Which item?"** after the shift, only when the receipt holds more than one — square
+> multi-select (one paper can have two wrong lines) against the round single-select shift radio above.
+> All start ticked, so "this whole receipt" costs no taps, and ticking them all sends nothing: that is
+> the same statement as naming none, stored as NULL rather than pretending a selection was made.
+> "What you disputed" lists the items, or says **"The whole receipt"**.
+>
+> Backend clean past its baseline; mobile clean above the ~11 pre-existing (checked with
+> `-p tsconfig.app.json`); 34 harness checks pass. **Backend restart required.**
+
+> **5 Aug 2026 — THE OPEN-CLAIM KEY IS THE SHIFT, NOT THE DAY (migration 0086).**
+>
+> Owner: *"remember the dispute make is make that shift drinks or tips dispute"*. This closes the gap I
+> flagged as undecided when the picker went single-select.
+>
+> `0085` made the uniqueness partial — one OPEN claim per voucher+day+component — which fixed "a settled
+> cell can never be disputed again". It still assumed a claim addressed a DAY. It does not: a dispute is
+> made against **that shift's** drinks, or that shift's tips.
+>
+> So a PR working two shifts on one night could contest the first shift's drinks and then be REFUSED on
+> the second with *"drinks on 2026-08-04 has already been disputed"* — two different papers, two
+> different figures, one argument slot between them. The second shift's money had no route to being
+> questioned until the first claim was answered.
+>
+> **0086** adds the named receipt to the key: `(voucher_id, dispute_date, component,
+> coalesce(receipt_refs->>0, '')) WHERE outcome IS NULL`. The picker is single-select, so `receipt_refs`
+> holds exactly one receipt and `->>0` IS that shift. A claim naming nothing keys on `''`, so at most one
+> whole-day claim stays open — the old behaviour, preserved for the legacy rows that depend on it.
+> Strictly weaker than 0085's index, so no existing row could violate it. **Applied.**
+>
+> No controller change was needed: `raiseMyDispute` detects duplicates purely from this index, and the
+> withdraw path was already safe — it only hands the voucher back once `listOpenForVoucher` is empty, so
+> two open claims coexist without one clearing the other.
+>
+> Verified live on one day + drinks:
+>
+> | attempt | result |
+> |---|---|
+> | shift A only | allowed |
+> | shift A, then shift B — the rule | **allowed** |
+> | shift A twice | refused |
+> | two whole-day claims | refused |
+> | whole-day + one shift | allowed |
+>
+> ⚠️ **Known rough edge, not a fault:** withdraw is addressed by day+component (`findOpen` returns the
+> first match), so with two open claims on one cell a withdraw closes ONE and the cell stays red until
+> tapped again. Self-correcting and the voucher status stays right; recorded in §9 in case the PR should
+> instead choose which claim to withdraw.
+
+> **5 Aug 2026 — A CLAIM NOW NAMES ITS SHIFT, IN BOTH SHEETS.**
+>
+> Owner: *"the status show verified that means some dispute make , need to put what shift details time
+> date , and this 3th pic i need to see that the dispute which shift is make dispute before to remind
+> the pr"*.
+>
+> **"What you disputed" (tap a VERIFIED/DISPUTED status cell)** now resolves each claim's `receiptRefs`
+> back through `buildCellEvidence` to the shift behind that receipt — order number, `RCP-…`, outlet,
+> slot, and the check-in / shift-end stamps — so the PR reads the same shift the proof sheet shows. The
+> day heading is a real date now (`Tue 4 Aug 2026`) instead of `2026-08-04`.
+>
+> **The evidence sheet carries a reminder**, for ANSWERED claims as well as open ones. Not to flag an
+> action — a settled claim needs none — but to stop a PR re-raising something they already raised and
+> forgot. Three honest variants: an open whole-day claim, a settled whole-day claim, and *"you disputed
+> N shift(s) here before — see the tags below"* when the claim actually named receipts.
+>
+> A claim with no `receipt_refs` says **"Filed against the whole day — this claim does not record which
+> shift."** Stated rather than left blank: an empty space reads as "not loaded yet", which would leave
+> the PR waiting for something that is never coming. That information was never captured and no UI can
+> invent it; every claim raised from now on names its shift.
+>
+> Verified against the REAL mobile typecheck (`-p tsconfig.app.json`): no new errors above the ~11
+> pre-existing, and the only three `TS2304`s are the known `FileList` DOM-lib ones — no unimported
+> component remains, which is the class of fault that blanked the screen earlier today. 34 harness
+> checks pass.
+
+> **5 Aug 2026 — 🔴 BLANK PAGE ON DISPUTE, AND THE MOBILE TYPECHECK WAS CHECKING NOTHING.**
+>
+> Owner: *"in the dispute button i click either one shift blank page"* and *"why have this 'This whole
+> day was disputed and settled…' — how can i know which shift drink is already disputed ?"*.
+>
+> **(1) The crash.** The receipt picker rendered `<Check />`, an icon that is exported from
+> `components/icons.tsx` but was **never imported** into `PaymentScreen.tsx`. So the first render of the
+> picker threw a ReferenceError and the screen went white. Shipped in `c9443d6`. Replaced with a filled
+> dot drawn as a `<View>` — also the correct mark for an exclusive choice, so nothing is lost.
+>
+> **(2) Why my typecheck did not catch it — and this is the important half.**
+> `apps/mobile/tsconfig.json` is SOLUTION-STYLE: `"files": []`, `"include": []`, project references
+> only. So `npx tsc --noEmit -p tsconfig.json` compiles **ZERO FILES** and reports clean no matter what
+> is in `src`. Every "mobile tsc clean / 0-error baseline" in this session's earlier entries was
+> **vacuous** — it verified nothing.
+>
+> The real command is `-p tsconfig.app.json` (73 files). `tsconfig.app.json` also globbed `**/*.ts`,
+> pulling the hand-run `scripts/*.ts` harnesses outside its `rootDir: "src"` and drowning the output in
+> TS6059; `"scripts/**"` is now excluded so the real check is usable.
+>
+> **The true mobile baseline is ~11 errors**, all pre-existing and none from this session's work: DOM
+> globals (`document`, `FileList`, `Blob`) in `PhoneSheet.tsx`, `proof-photo.ts` and PaymentScreen's own
+> image picker, plus a `demo-shifts.ts:317` narrowing error. CLAUDE.md's "apps/mobile is 0-error" rule
+> was wrong and is corrected there, with the command spelled out.
+>
+> **(3) The banner is gone for SETTLED claims.** A whole-day claim that has been answered is history:
+> the grid already reads VERIFIED, tapping that status lists the claim and its outcome, and the cell can
+> be disputed afresh. Repeating it in the evidence sheet told the PR their shifts were "settled" while
+> giving them no way to learn WHICH — it read as an answer and was not one. It now shows only while a
+> whole-day claim is still OPEN, which is actionable: it is the reason another cannot be filed.
+>
+> An old claim with `receipt_refs = NULL` genuinely does not record which shift; nothing can recover
+> that. Every claim raised from now on names its shift.
+
+> **5 Aug 2026 — A DISPUTE NAMES ONE SHIFT (the picker was multi-select).**
+>
+> Owner: *"noo bro the dispute make is possible will be only one of the shift"*.
+>
+> I built the picker as checkboxes, so a PR could tick several receipts and file one claim across them.
+> Wrong shape: a claim answers *"this shift's drinks are wrong"*, and the agency settles it against that
+> shift's receipt. One claim spanning two shifts carries one amount and one outcome for two questions
+> that may each need a different answer.
+>
+> Now single-select — round radio, exclusive, and tapping the chosen one again does NOT clear it, since
+> a dispute needs a shift and an empty selection is not a useful state to leave the PR in. A day with
+> ONE receipt auto-selects it; a day with several starts unselected and Submit stays disabled until they
+> answer, because pre-picking would put words in their mouth about money.
+>
+> `receiptRefs` is now sent on EVERY claim that has a receipt, single-receipt days included. So a null
+> `receipt_refs` from here on means only "raised before the picker existed" — a legacy row, not a
+> deliberate claim against the whole day. The whole-cell banner in the evidence sheet is therefore a
+> statement about history, and new claims will always name their shift.
+>
+> ⚠️ **Open question, not decided:** `0085`'s partial index still allows one OPEN claim per
+> (voucher, day, component). So a PR disputing shift A's drinks cannot ALSO have an open claim on shift
+> B's drinks the same night — the second is refused until the first is answered. If both should be open
+> at once, the index needs to include the receipt. Flagged in §9 rather than guessed at.
+>
+> `tsc` clean. No migration in this change.
+
+> **5 Aug 2026 — 🔴 A SETTLED CELL COULD NEVER BE DISPUTED AGAIN (migration 0085).**
+>
+> Owner: *"the dispute button no works"* and *"why both is setttled i just want to know which shift's
+> drinks is already disputed and verified"*. Same root, two symptoms.
+>
+> **(1) The unique index was not partial.**
+> `payment_voucher_dispute_one_per_day_component` was `UNIQUE (voucher_id, dispute_date, component)`
+> with **no WHERE clause**, so the FIRST claim on a cell locked it permanently. Victoria's Tue 4 drinks
+> claim was already `accepted`, so the sheet opened, the form filled in, and Submit came back **409
+> "drinks on 2026-08-04 has already been disputed"**. The button was not broken — the cell was spent.
+>
+> That made a settled claim final by accident rather than by rule. If the agency's correction is itself
+> wrong — wrong shift fixed, or accepted and nothing changed — the PR had no route back and the money
+> stayed wrong, because the argument slot was used up.
+>
+> **0085** makes it partial: `… WHERE outcome IS NULL`. One OPEN claim per cell, so a double tap still
+> cannot create two rows; an answered claim blocks nothing. Strictly weaker than what it replaced, so no
+> existing row could violate it. **Applied.** Verified live: a new claim on the settled cell is now
+> ALLOWED, and two open claims on one cell are still REFUSED.
+>
+> **(2) Both receipts read SETTLED because the claim named neither.** That row's `receipt_refs` is NULL
+> — it predates the picker — which means the whole day+bucket. Tagging each receipt from it said "both
+> shifts were claimed individually", when the truth is "nobody said which; it was filed against the
+> day". Different statements, and only one is true.
+>
+> A whole-cell claim is now stated ONCE, in a banner at the top of the evidence sheet; per-receipt tags
+> appear only when the claim actually named that receipt. So going forward a narrowed claim answers
+> *"which shift?"* precisely, and an old un-narrowed one says plainly that it never recorded the answer.
+>
+> `tsc` clean both sides; 34 harness checks pass. **Backend restart required.**
+
+> **5 Aug 2026 — THE PICKER LOOKED LIKE A RADIO GROUP, AND NOTHING SAID WHICH SHIFT WAS CLAIMED.**
+>
+> Owner: *"enhence the UI , pr dont know which one is selected"* and *"need to show which shift drink or
+> tips is already disputed"*.
+>
+> **(1) The chips were unreadable, and partly unstyled.** They reused `presetChip`, the SINGLE-select
+> style from Quick reason — so a multi-select read as a radio group, and on/off differed only by a faint
+> border tint. Worse, the label referenced `styles.presetText` / `presetTextOn`, **neither of which
+> exists in the stylesheet**, so the text rendered with no style at all. React Native ignores an
+> undefined style silently and `tsc` did not object, which is why it shipped looking almost identical
+> either way.
+>
+> Now a proper ticked box: filled accent square with a check, accent border and tint, bright bold label;
+> unselected is deliberately recessive. THREE independent signals (box, fill, text weight) so it holds
+> up on a dim phone and does not rely on colour perception alone. `accessibilityRole="checkbox"` with
+> `checked` state, so it announces correctly too.
+>
+> **(2) Nothing said WHICH shift was already disputed.** The grid can only mark a DAY, so on a
+> two-shift night the PR could see "DISPUTED" and still not know which shift the claim was about — the
+> very ambiguity the per-receipt selection exists to remove, reappearing where they go looking for the
+> answer.
+>
+> `receiptRefs` now rides on the week payload's `disputes[]` (it was stored but never sent), and
+> `receiptClaimState()` resolves it: a claim naming NO receipts covers the whole cell, one naming
+> receipts covers only those. The evidence sheet tags each receipt **DISPUTED** (red) or **SETTLED**
+> (green). Open beats settled where both touch one receipt — telling a PR "settled" about something
+> still being argued would stop them chasing it.
+>
+> 34 checks in `check-cell-evidence.ts`, all passing, including that a drinks claim does not mark the
+> tips cell and a Tuesday claim does not mark Wednesday. `tsc` clean both sides. No migration.
+> **Backend restart required** (`receiptRefs` is new on the wire).
+
+> **5 Aug 2026 — DISPUTE ONE SHIFT, NOT THE WHOLE DAY.**
+>
+> Owner: *"make the pr can select dispute which one ,because it have 2 shifts on that day"*.
+>
+> A dispute is filed per DAY + COMPONENT, so a PR working two shifts on one night could only contest
+> both at once: tapping *Drinks · Tue 4* claimed the full **RM 7.20** even when just one RM 3.60 receipt
+> was wrong. The claim was recorded against the day's whole total, and accepting it would have settled
+> money nobody had questioned.
+>
+> **The column was already there.** `payment_voucher_dispute.receipt_refs` exists and
+> `PrRaiseDisputeSchema` already accepted `receiptRefs` — the phone simply never sent them and
+> `sumLinesFor` never read them. No migration, no new column.
+>
+> The dispute sheet now asks **"Which one is wrong?"**, but only when the cell holds more than one
+> receipt — a single-receipt day has nothing to choose. Chips are built from the SAME
+> `buildCellEvidence` the proof sheet renders, so the PR picks from exactly the rows they just looked
+> at. All selected by default: narrowing is the exception, and "this whole day is wrong" should not cost
+> extra taps.
+>
+> ⚠️ **Keyed on `receiptNo`, NOT the order number.** The schema comment says "by their packed ref", but
+> the packed ref carries the ORDER number, and that is not unique — the same paper logged twice on one
+> night yields two receipts both reading `ORD0389:0`, which is precisely the pair this feature exists to
+> separate. `RCP-000010` vs `RCP-000012` is the only key that tells them apart.
+>
+> `sumLinesFor` narrows `disputedAmount` to the picked receipts, so the agency argues about the figure
+> the PR pointed at. Verified live on the real two-shift day:
+>
+> | selection | recorded disputedAmount |
+> |---|---|
+> | none (whole cell) | RM 7.20 |
+> | only the first shift | RM 3.60 |
+> | only the second (the duplicate) | RM 3.60 |
+> | both, explicitly | RM 7.20 |
+> | a receipt not on that day | RM 0.00 |
+> | a WAGE seal narrowed by a receipt | RM 0.00 — not the day's wages |
+>
+> `receiptRefs` is sent ONLY when the PR narrowed: listing every receipt means the same as listing none,
+> and omitting it keeps "the whole cell" explicit in the stored row. Deselecting everything blocks
+> Submit rather than silently widening back to the full cell — an empty chooser is an unfinished
+> sentence, not a claim about the day.
+>
+> `tsc` clean both sides. ⚠️ The AGENCY queue still lists every receipt for the day + component and does
+> not yet narrow to `receipt_refs` — recorded in §9; `DisputeQueuePanel.tsx` is being edited concurrently
+> and was left alone.
+
+> **5 Aug 2026 — A SETTLED DISPUTE HAS A SCREEN; THE PAYEE HAS A NICKNAME.**
+>
+> **1. Disputes: resolved claims were invisible.** Owner: *"yesterday got one successful dispute right
+> show where?"* — the answer was **nowhere**. `useAgencyDisputes(openOnly = true)` sent `?open=1`, so
+> no agency screen ever fetched a settled dispute; it sat in the database with no surface. Worse, the
+> panel printed *"No open disputes"* whether none had ever been raised or one had been accepted an
+> hour earlier — two very different facts, one sentence.
+> Now fetches ALL and filters client-side: **Open / Resolved / All** chips with live counts (same
+> `iz-filter-chip` idiom as the PV filter, not a lookalike), search across PR name, day, component,
+> reason, resolution note and outcome, and three distinct empty states. The status pill was
+> **hardcoded to "Open"** — only ever accidentally right — and now reads Accepted / Rejected /
+> Withdrawn / Open. ⚠️ A settled row is now READ-ONLY and shows what was told to the PR: it used to
+> offer live Accept/Reject on an already-decided claim, which the server refuses, so those were
+> buttons that could only fail while implying the outcome was still changeable.
+>
+> **2. Payee shows the nickname:** `Vicky (Victoria Tan Mei Lin)` (`resolvePvPrLabel`). Joined from
+> `pr.nickname` through the voucher's `pr_id` FK — NOT copied onto the voucher row beside `pr_name`,
+> which is the duplication rule 3 exists to stop. No nickname, or one that merely repeats the legal
+> name, prints the legal name alone.
+>
+> **3. Fixed a build-blocking error that predates this work:** `main.ts` read `req.originalUrl` inside
+> `express.json({verify})`, where the argument is a bare `IncomingMessage` — `originalUrl` is added
+> later by express's router, so the backend did not compile at all. Prefers `originalUrl`, falls back
+> to `url`; behaviour unchanged.
+>
+> **Answered without a change:** *"if i already dispute how come need approve again?"* — that was the
+> EDIT, not the dispute. RCP-000010 is the same RM 3.60 drink on the same day and stayed Verified;
+> only the receipt whose figure was changed re-opened. Owner confirmed the rule stands. ⚠️ Known gap:
+> `setReceiptStatus(...,'pending')` clears `reviewed_at`/`reviewed_by`, so afterwards
+> approved-then-edited is indistinguishable from never-reviewed — showing the reason after the fact
+> would need a marker column like 0084's.
+>
+> Backend typecheck clean; web clean on every touched file.
+
+> **5 Aug 2026 — VERIFIED IS EARNED, AND A PENDING DAY CANNOT BE DISPUTED.**
+>
+> Owner: *"i got no make dispute on that day why the status is verified ?"*, then the rule —
+> *"in this week section all approved , after dispute make then only verified"* — and *"pending is the
+> agency havent approved , then how can dispute"*.
+>
+> **(1) One settled claim verified the whole week.** Resolving a dispute SENDS the voucher, and
+> `buildWeekGridFromLines` calls a day `verified` the moment the voucher reaches a processed status
+> (`sent`/`awaiting_pr`/`signed`/`paid`). So an accepted claim about TUESDAY's drinks flipped **MONDAY**
+> to VERIFIED as well — a day the PR never disputed and nobody had said anything new about.
+>
+> New `thisWeekDayStatus()` maps `verified → approved` on the LIVE week, so the voucher's own status can
+> no longer promote a day there: the agency's day sign-off gives APPROVED, and only a claim raised AND
+> answered gives VERIFIED. Last week keeps the opposite mapping (`approved → verified`), because a
+> closed week's sign-off is final — that distinction is now pinned in both directions.
+>
+> **(2) The dispute control was offered on money nobody had stated yet.** `cellDisputable` has always
+> required the receipt to be past `pending` — until the agency approves it the figure is still the PR's
+> own claim, so there is nothing to contest — and `openDispute` refused with an alert. But the FLAG icon
+> and the sheet's **Dispute this amount** button were gated only on the KIND and the WEEK, so a PENDING
+> cell advertised an action that ended in "Not reviewed yet".
+>
+> That is the **fourth** instance of this exact shape in two days (wages offered a 400; This-week hidden
+> though the server allowed it; now pending offered though the client itself refused it). All three
+> gates — kind, week, cell — are now applied wherever the control is drawn, and the comment at the sheet
+> names every version so a fifth does not appear.
+>
+> 29 checks in `check-cell-evidence.ts`, all passing, including *"one pending line poisons the cell"* —
+> a mixed day is not disputable until every line on it has been reviewed. `tsc` clean. No backend
+> change, no migration.
+> **4 Aug 2026 — Agency receipt editor + migrations 0083/0084 committed on `jk` (`57bd165`; §8 A6/X58).**
+> Closes the "DB ahead of repo" gap: editor code, dispute-queue wiring, and readers for
+> `payment_voucher_line.outlet_id` + `review_withdrawn_at` are in git. §9 uncommitted-tree block
+> marked closed; next is live agency click-through + day/receipt agreement audit highs.
+> Doc renew only in this commit (code already at `57bd165`).
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >

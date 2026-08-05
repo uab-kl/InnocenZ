@@ -37,6 +37,7 @@ import {
 	agencyPvStatusLabel,
 	getAgencyManagedReceiptScans,
 	receiptsForPv,
+	resolvePvPrLabel,
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
 import {
@@ -863,7 +864,7 @@ function AgencyPV() {
 											{pv.id}
 										</div>
 										<p className="iz-tiny iz-muted mt-0.5">
-											{resolvePvPrName(pv, agencyPRs)} · {pv.outlet}
+											{resolvePvPrLabel(pv, agencyPRs)} · {pv.outlet}
 										</p>
 										{pv.prIc && (
 											<p className="iz-tiny iz-muted2">IC {pv.prIc}</p>

@@ -35,18 +35,21 @@ import {
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
 import { buildWeekGridFromLines, VERIFIED_STATUSES } from '../lib/week-pay-grid';
-import { buildCellEvidence } from '../lib/cell-evidence';
+import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
-  cellDisputable,
   dayStatusLabel,
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
+  DISPUTE_PRESETS,
+  receiptClaimState,
   receiptReviewCaption,
+  thisWeekDayStatus,
   weekDisputable,
 } from '../lib/receipt-review';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useViewportSize } from '../lib/viewport';
 import { IzButton, Pill } from '../components/ui';
 import { ChevronDown, Flag, ImagePlus, Search, Wallet, XIcon } from '../components/icons';
@@ -117,14 +120,6 @@ function pickDisputeImages(onPicked: (urls: string[]) => void) {
   input.click();
 }
 
-const DISPUTE_PRESETS = [
-  'Unmatch commission',
-  'Missing record',
-  'Unmatch wages',
-  'Repeated record',
-  'Others',
-] as const;
-
 const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
   { key: 'wages', label: 'Daily wages' },
   { key: 'drinks', label: 'Drinks' },
@@ -144,6 +139,70 @@ function formatCell(value: number): string {
   return value.toFixed(2);
 }
 
+/**
+ * The shift(s) a claim actually names — receiptRefs resolved back through the
+ * day's evidence to the outlet, slot and attendance stamps behind each receipt.
+ *
+ * Returns [] when the claim named nothing, which is every claim raised before
+ * the shift picker existed. The caller says so out loud rather than rendering
+ * an empty space that reads as "still loading".
+ */
+function claimShifts(
+  week: PrCurrentWeek | null,
+  d: { disputeDate: string; component: IncomeKey; receiptId: string | null; receiptRefs: string[] | null },
+) {
+  const refs = d.receiptRefs ?? [];
+  const evidence = buildCellEvidence(week, d.disputeDate, d.component);
+  return evidence.groups.flatMap((g) =>
+    g.receipts
+      /*
+       * The FK first, the old receipt NUMBERS second, and neither = the claim
+       * covered the WHOLE cell, so every shift in it was part of that one
+       * argument. Listing them answers "which shift?" with the truth — "all of
+       * them" — instead of a dead end saying nothing was recorded.
+       */
+      .filter((r) =>
+        d.receiptId
+          ? r.receiptId === d.receiptId
+          : r.receiptNo && (refs.length === 0 || refs.includes(r.receiptNo)),
+      )
+      .map((r) => ({
+        receiptNo: r.receiptNo as string,
+        orderNo: r.orderNo,
+        outletName: g.shift?.outletName ?? null,
+        slot: g.shift?.slot ?? null,
+        checkInAt: g.shift?.checkInAt ?? null,
+        checkOutAt: g.shift?.checkOutAt ?? null,
+      })),
+  );
+}
+
+/** "Tue 4 Aug 2026" — UTC-parsed to match how the grid buckets its days. */
+function longDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
+  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
+    d.getUTCMonth()
+  ];
+  return `${wd} ${d.getUTCDate()} ${mo} ${d.getUTCFullYear()}`;
+}
+
+/** "4 Aug, 11:29 am" — the stamp, short enough to sit on a claim row. */
+function shortStamp(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
+    d.getMonth()
+  ];
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return `${d.getDate()} ${mo}, ${h}:${m} ${ampm}`;
+}
+
 // buildWeekGridFromLines moved to lib/week-pay-grid so PvDetailScreen renders
 // the identical grid for the same voucher.
 
@@ -151,6 +210,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const { openPv, route } = usePrNav();
   const { token } = useSession();
   const keyboardInset = useKeyboardInset();
+  // Device safe-area — pads every sheet past the 3-button / gesture nav bar.
+  const insets = useSafeAreaInsets();
   const { current, refresh: refreshEarnings } = usePrEarnings();
   const { isSigned } = useSignedPvs();
   const { width } = useViewportSize();
@@ -240,6 +301,16 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     row: (typeof INCOME_ROWS)[number];
   } | null>(null);
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
+  /**
+   * The ONE receipt being contested — a dispute is about a single shift.
+   *
+   * Was a multi-select. Owner: *"the dispute make is possible will be only one
+   * of the shift"*. A claim answers "this shift's drinks are wrong", and the
+   * agency settles it against that shift's receipt; letting a PR tick several
+   * would produce one claim, one amount and one outcome spanning shifts that
+   * may each need a different answer.
+   */
+  const [disputePickedReceipt, setDisputePickedReceipt] = useState<string | null>(null);
   const [disputeNote, setDisputeNote] = useState('');
   const [disputePhotos, setDisputePhotos] = useState<string[]>([]);
   /** Optional proof kept with submitted disputes (image upload is still local). */
@@ -324,7 +395,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     // Withdrawing an existing dispute is never blocked: that would trap a claim
     // already raised. Wages and OT are refused outright by `kindDisputable`,
     // server-side too (DISPUTABLE_KINDS), so they never reach the dispute sheet.
-    if (!weekDisputed && !cellDisputable(weekData, day.dateIso, row.key)) {
+    /*
+     * REVIEW STATE NO LONGER REFUSES — only the KIND does.
+     *
+     * This guard used to turn the sheet away whenever the day's receipts were
+     * unreviewed. The owner reversed that on 5 Aug, and the server's precondition
+     * moved with it, so refusing here would put the old rule back in the one
+     * place nobody would think to look.
+     *
+     * A cell with no receipt at all (wages, OT) still has nothing to contest, and
+     * `kindDisputable` already refuses those with the message that fits them.
+     */
+    const anyShiftToDispute = buildCellEvidence(weekData, day.dateIso, row.key)
+      .groups.flatMap((g) => g.receipts)
+      .some((r) => !!r.receiptNo);
+    if (!weekDisputed && !anyShiftToDispute) {
       // Two different refusals, and they must not share a message. "Still being
       // reviewed" tells the PR to wait — useless advice for wages, where waiting
       // changes nothing and the actual route is the attendance record.
@@ -369,6 +454,238 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setDisputeOpen(true);
   };
 
+  /**
+   * The receipts behind the cell being disputed, one chip each.
+   *
+   * Built from the SAME `buildCellEvidence` the proof sheet renders, so the
+   * chips are the very rows the PR just looked at — a different derivation here
+   * could offer a receipt the evidence sheet never showed them.
+   *
+   * Wage seals have no receipt and are excluded by construction: they group
+   * under a null receiptNo, and wages are not disputable anyway.
+   */
+  const disputeReceipts = useMemo(() => {
+    if (!disputeTarget) return [];
+    const week = disputeTarget.week === 'last' ? lastWeek : current;
+    const evidence = buildCellEvidence(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    /*
+     * Which shifts already carry a LIVE claim. Matched on the receipt id (the FK
+     * a claim stores) or its number (pre-0088 claims), same as the evidence tags.
+     * A whole-day open claim blocks every shift beneath it.
+     */
+    const claims = receiptClaimState(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    const openClaimOn = (r: { receiptId: string | null; receiptNo: string | null }) =>
+      claims.openAll ||
+      (!!r.receiptId && claims.open.has(r.receiptId)) ||
+      (!!r.receiptNo && claims.open.has(r.receiptNo));
+    /*
+     * ⚠️ A SETTLED CLAIM DOES NOT MAKE AN UNREVIEWED RECEIPT DISPUTABLE.
+     *
+     * I briefly let one through, on the theory that a receipt reading `pending`
+     * had been APPROVED and then edited back by the agency — in which case the
+     * figure would be the agency's and fair to contest. The database says
+     * otherwise for the case that prompted it: RCP-000012 carries
+     * `reviewed_at = NULL`, so it was never approved at all. It is a receipt the
+     * agency has not looked at yet, and "waiting on your agency" is the truth.
+     *
+     * The old whole-day claim tagged it VERIFIED only because a claim covering
+     * the entire cell marked every receipt in it — behaviour `d373e94` removed.
+     * If a genuinely re-opened receipt ever needs to be disputable, the signal
+     * is `reviewed_at` being non-null, not the presence of a settled claim.
+     */
+    return evidence.groups.flatMap((g) =>
+      g.receipts
+        .filter((r): r is typeof r & { receiptNo: string } => !!r.receiptNo)
+        /*
+         * EVERY shift in the cell is listed — including ones that cannot be
+         * chosen yet.
+         *
+         * Filtering them out was wrong: on a day where one drinks receipt was
+         * approved and the other still awaiting review, the picker collapsed to
+         * a single option and DISAPPEARED, so Drinks jumped straight to Quick
+         * reason while Tips showed two shifts. The PR could not tell whether the
+         * second shift was missing, merged, or simply not offered.
+         *
+         * Shown-but-unavailable states why. Hidden states nothing.
+         */
+        .map((r) => ({
+          receiptNo: r.receiptNo,
+          // The FK the claim is actually filed against. `receiptNo` stays as the
+          // key the chips render and compare on, because it is what the PR reads
+          // off the paper — but it is never what gets stored.
+          receiptId: r.receiptId,
+          subtotal: r.subtotal,
+          /**
+           * Choosable?
+           *
+           * TWO reasons it may not be, and they are different states:
+           * - the receipt is still awaiting review — no stated figure to argue
+           *   with yet;
+           * - a claim on it is ALREADY OPEN — the server allows one open claim
+           *   per shift (0086), so a second would come straight back a 409.
+           *
+           * An ANSWERED claim does NOT block: resolving a claim ends that claim,
+           * not the right to disagree again.
+           */
+          /*
+           * Selectable unless a claim on it is ALREADY OPEN.
+           *
+           * Review state no longer blocks — the owner reversed that on 5 Aug
+           * ("make the already verified or dispute still can make disputed
+           * again") and the server's precondition moved with it. An open claim
+           * still blocks, because that is the DB refusing a second row (0086),
+           * not a policy: offering it would be a guaranteed 409.
+           */
+          disputable: !openClaimOn(r),
+          // Order number first — it is what is printed on the paper in their
+          // hand. The shift time disambiguates two logs of the same paper.
+          label: `${r.orderNo ?? r.receiptNo} · ${formatRM(r.subtotal)}${
+            g.shift?.slot ? ` · ${g.shift.slot}` : ''
+          }`,
+          /** Why it cannot be chosen — shown on the chip, never left to guess. */
+          /*
+           * The state, said in full — never truncated to "waiting on yo…".
+           *
+           * "already disputed" is the only one that BLOCKS. "waiting on your
+           * agency" is now information, not a refusal: the shift is choosable
+           * and the note explains that the agency has not looked at that paper
+           * yet, which is worth knowing before arguing about the figure on it.
+           */
+          blockedNote: openClaimOn(r)
+            ? 'already disputed'
+            : receiptDisputable(r)
+              ? null
+              : 'not reviewed yet',
+        })),
+    );
+  }, [disputeTarget, lastWeek, current]);
+
+  /*
+   * Default to ALL of them — narrowing is the exception, and a chooser that
+   * starts empty would make the common "this whole day is wrong" claim need
+   * extra taps to say what it already meant.
+   */
+  useEffect(() => {
+    // ONE choosable shift = nothing to decide, so choose it. Two or more and the
+    // PR must say which — pre-selecting would put words in their mouth about
+    // money. Counted over the CHOOSABLE ones: a shift that cannot be picked is
+    // listed for explanation, not as an option.
+    const usable = disputeReceipts.filter((r) => r.disputable);
+    setDisputePickedReceipt(usable.length === 1 ? usable[0].receiptNo : null);
+  }, [disputeReceipts]);
+
+  /**
+   * How many shifts in the OPEN evidence sheet could be contested.
+   *
+   * Derived from `evidenceTarget`, not `disputeTarget`: the Dispute button has
+   * to decide whether to appear BEFORE the dispute sheet exists, so it cannot
+   * read the picker's own list.
+   */
+  const evidenceDisputableCount = useMemo(() => {
+    if (!evidenceTarget) return 0;
+    const week = evidenceTarget.week === 'last' ? lastWeek : current;
+    // Excludes shifts already carrying an OPEN claim, exactly as the picker
+    // does — otherwise the button opens a sheet where nothing can be selected.
+    const claims = receiptClaimState(week, evidenceTarget.dateIso, evidenceTarget.incomeKey);
+    if (claims.openAll) return 0;
+    return buildCellEvidence(week, evidenceTarget.dateIso, evidenceTarget.incomeKey)
+      .groups.flatMap((g) => g.receipts)
+      .filter((r) => {
+        if (!r.receiptNo) return false;
+        const openOnIt =
+          (r.receiptId && claims.open.has(r.receiptId)) || claims.open.has(r.receiptNo);
+        // Review state no longer withholds it — only an open claim does.
+        return !openOnIt;
+      }).length;
+  }, [evidenceTarget, lastWeek, current]);
+
+  /** The item lines on the chosen shift's receipt — what "which item?" offers. */
+  const disputeItems = useMemo(() => {
+    if (!disputeTarget || !disputePickedReceipt) return [];
+    const week = disputeTarget.week === 'last' ? lastWeek : current;
+    const evidence = buildCellEvidence(week, disputeTarget.dateIso, disputeTarget.incomeKey);
+    const receipt = evidence.groups
+      .flatMap((g) => g.receipts)
+      .find((r) => r.receiptNo === disputePickedReceipt);
+    return (receipt?.lines ?? []).map((l) => ({
+      id: l.id,
+      label: `${l.item} × ${l.quantity} · ${formatRM(l.commission)}`,
+    }));
+  }, [disputeTarget, disputePickedReceipt, lastWeek, current]);
+
+  const [disputePickedItems, setDisputePickedItems] = useState<string[]>([]);
+  /*
+   * Every item ticked when the shift changes. Disputing a whole receipt is the
+   * common case and should cost nothing; narrowing to one line is the exception.
+   */
+  useEffect(() => {
+    setDisputePickedItems(disputeItems.map((i) => i.id));
+  }, [disputeItems]);
+
+  /** A chooser was shown and the PR has not answered it yet. */
+  const noReceiptPicked =
+    (disputeReceipts.length > 0 && disputePickedReceipt === null) ||
+    (disputeItems.length > 1 && disputePickedItems.length === 0);
+
+  const disputePickedSubtotal = useMemo(
+    () => disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.subtotal ?? 0,
+    [disputeReceipts, disputePickedReceipt],
+  );
+
+  /**
+   * Take back ONE open claim, named exactly.
+   *
+   * `receiptId` is sent so the server withdraws the claim the PR is looking at:
+   * since one open claim per SHIFT is allowed, day+component alone would let it
+   * cancel the wrong argument. Confirmed first — a withdrawn claim cannot be
+   * un-withdrawn, only raised again from scratch.
+   */
+  const cancelClaim = async (d: {
+    disputeDate: string;
+    component: IncomeKey;
+    receiptId: string | null;
+  }) => {
+    if (!token || !claimDay || disputeBusy) return;
+    const voucherId = claimDay.week === 'last' ? lastWeek?.voucherId : current?.voucherId;
+    if (!voucherId) return;
+    const go = async () => {
+      setDisputeBusy(true);
+      try {
+        await withdrawMyDispute(token, voucherId, {
+          disputeDate: d.disputeDate,
+          component: d.component,
+          ...(d.receiptId ? { receiptId: d.receiptId } : {}),
+        });
+        // Re-read rather than patch: the voucher may have left 'disputed' if
+        // that was the last open claim, and the grid reads off both.
+        if (claimDay.week === 'last') {
+          const fresh = await fetchMyLastWeek(token);
+          setLastWeek(fresh);
+        } else {
+          await refreshEarnings();
+        }
+        setDisputedKeys((prev) => {
+          const next = new Set(prev);
+          next.delete(`${d.disputeDate}-${d.component}`);
+          return next;
+        });
+        setClaimDay(null);
+      } catch (e) {
+        Alert.alert('Could not cancel', e instanceof Error ? e.message : 'Please try again.');
+      } finally {
+        setDisputeBusy(false);
+      }
+    };
+    Alert.alert(
+      'Cancel this dispute?',
+      'Your agency will stop reviewing it. You can raise it again later if you still disagree.',
+      [
+        { text: 'Keep it', style: 'cancel' },
+        { text: 'Cancel dispute', style: 'destructive', onPress: () => void go() },
+      ],
+    );
+  };
+
   const closeDispute = () => {
     setDisputeOpen(false);
     setDisputeTarget(null);
@@ -409,6 +726,28 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               reason: disputePreset,
               note: disputeNote.trim() || undefined,
               proofPhotos: disputePhotos.length ? disputePhotos : undefined,
+              /*
+               * ALWAYS the one shift, when the cell has a receipt at all.
+               *
+               * Sent even on a single-receipt day, so every claim from here on
+               * records WHICH shift it was about. A null `receipt_refs` now
+               * means only "raised before the picker existed" — a legacy row,
+               * not a deliberate claim against the whole day.
+               */
+              receiptId:
+                disputeReceipts.find((r) => r.receiptNo === disputePickedReceipt)?.receiptId ??
+                undefined,
+              /*
+               * Sent only when the PR NARROWED to some of the receipt's items.
+               * Ticking them all means "this whole receipt", which the row
+               * records as a null `disputed_items` — the same statement, stored
+               * without pretending a selection was made.
+               */
+              items:
+                disputePickedItems.length > 0 &&
+                disputePickedItems.length < disputeItems.length
+                  ? disputePickedItems.map((lineId) => ({ lineId }))
+                  : undefined,
             });
       const next = result.voucher;
       // Reflect the persisted state so the grid + header pill update immediately
@@ -595,7 +934,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 * still opens the evidence.
                                 */}
                               {canTap &&
-                                (kindDisputable(row.key) ? (
+                                (kindDisputable(row.key) &&
+                                weekDisputable(lastWeek) ? (
                                   <Flag
                                     size={9}
                                     color={isDisputed ? C.red : C.muted2}
@@ -823,7 +1163,9 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 * where tapping only opens the evidence.
                                 */}
                               {canTap &&
-                                (kindDisputable(row.key) && weekDisputable(current) ? (
+                                (kindDisputable(row.key) &&
+                                weekDisputable(current) &&
+                                weekDisputable(current) ? (
                                   <Flag size={9} color={C.muted2} style={{ marginTop: 2 }} />
                                 ) : (
                                   <Search size={9} color={C.muted2} style={{ marginTop: 2 }} />
@@ -865,7 +1207,12 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                        * a stronger statement than approved: the figure was
                        * questioned and settled (owner, 4 Aug 2026).
                        */
-                      const label = dayStatusLabel(current, d.dateIso, d.status, dayDisputed);
+                      const label = dayStatusLabel(
+                        current,
+                        d.dateIso,
+                        thisWeekDayStatus(d.status),
+                        dayDisputed,
+                      );
                       const claims = disputesForDay(current, d.dateIso);
                       const openable = claims.open.length + claims.settled.length > 0;
                       return (
@@ -931,8 +1278,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         */}
       {claimDay && (
         <Modal visible transparent animationType="slide" onRequestClose={() => setClaimDay(null)}>
-          <Pressable style={styles.backdrop} onPress={() => setClaimDay(null)}>
-            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          {/*
+            * Dismiss target is a SIBLING above the sheet, not a Pressable
+            * parent — a Pressable ancestor competes with the ScrollView for the
+            * touch responder on Android, which is why scrolling sometimes
+            * failed. Same fix as CellEvidenceSheet.
+            */}
+          <View style={styles.backdrop}>
+            <Pressable style={styles.backdropTap} onPress={() => setClaimDay(null)} />
+            <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
               {(() => {
                 const week = claimDay.week === 'last' ? lastWeek : current;
                 const { open, settled } = disputesForDay(week, claimDay.dateIso);
@@ -942,8 +1296,21 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 return (
                   <>
                     <Text style={styles.claimTitle}>What you disputed</Text>
-                    <Text style={styles.claimDay}>{claimDay.dateIso}</Text>
-                    {rows.map((d) => (
+                    <Text style={styles.claimDay}>{longDay(claimDay.dateIso)}</Text>
+                    {/*
+                      * SCROLLS, and shrinks so Close stays reachable — a day
+                      * with two claims, each listing its shift and items, ran
+                      * off the bottom of the sheet with no way down.
+                      *
+                      * `claimShifts` walks the WHOLE week to rebuild the day's
+                      * evidence, and it was called three times per row — once
+                      * for the heading, once to test emptiness, once to map.
+                      * Hoisted to one call per claim.
+                      */}
+                    <ScrollView style={styles.claimScroll} showsVerticalScrollIndicator={false}>
+                    {rows.map((d) => {
+                      const shifts = claimShifts(week, d);
+                      return (
                       <View key={d.id} style={styles.claimRow}>
                         <View style={styles.claimHead}>
                           <Text style={styles.claimComponent}>{labelOf(d.component)}</Text>
@@ -967,6 +1334,74 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           Voucher said {formatRM(Number(d.disputedAmount ?? 0))}
                           {d.reason ? ` · ${d.reason}` : ''}
                         </Text>
+
+                        {/*
+                          * WHICH SHIFT — resolved from the claim's own
+                          * `receiptRefs` back through the day's evidence, so the
+                          * PR reads the same outlet, slot and stamps the proof
+                          * sheet shows for that receipt.
+                          *
+                          * A claim with no refs predates the shift picker and
+                          * genuinely records no shift. That is stated rather
+                          * than left blank: an empty space reads as "not loaded
+                          * yet", which would have the PR waiting for something
+                          * that is never coming.
+                          */}
+                        {/*
+                          * A claim with no `receiptRefs` covered the whole cell,
+                          * so `claimShifts` returns EVERY shift on it. Saying so
+                          * above the list is what stops the PR reading two rows
+                          * as two separate claims.
+                          */}
+                        {!d.receiptRefs?.length && shifts.length > 1 && (
+                          <Text style={styles.claimNote}>
+                            Filed against the whole day — it covered both shifts below.
+                          </Text>
+                        )}
+                        {shifts.length > 0 ? (
+                          shifts.map((s) => (
+                            <View key={s.receiptNo} style={styles.claimShift}>
+                              <Text style={styles.claimShiftHead}>
+                                {s.orderNo ?? 'No order no'} · {s.receiptNo}
+                              </Text>
+                              <Text style={styles.claimShiftMeta}>
+                                {s.outletName ? `${s.outletName} · ` : ''}
+                                {s.slot ?? 'shift time unknown'}
+                              </Text>
+                              <Text style={styles.claimShiftMeta}>
+                                In {shortStamp(s.checkInAt)} · Out {shortStamp(s.checkOutAt)}
+                              </Text>
+                              {/*
+                                * WHAT was claimed, from the snapshot taken when
+                                * it was raised — so it still reads correctly
+                                * after the agency corrects the receipt. Absent
+                                * means the whole receipt, which is said out loud
+                                * rather than left to be inferred from silence.
+                                */}
+                              {d.disputedItems?.length ? (
+                                d.disputedItems.map((it) => (
+                                  <Text key={it.lineId} style={styles.claimItem}>
+                                    {it.description} × {it.quantity} ·{' '}
+                                    {formatRM(Number(it.amount ?? 0))}
+                                  </Text>
+                                ))
+                              ) : (
+                                <Text style={styles.claimShiftMeta}>
+                                  The whole receipt
+                                </Text>
+                              )}
+                            </View>
+                          ))
+                        ) : (
+                          // Only when the day has no receipts at all to point at
+                          // — a wages/OT claim, which is derived from the
+                          // attendance stamps and has no paper behind it.
+                          <Text style={styles.claimNote}>
+                            No receipt behind this — it is calculated from your check-in and
+                            check-out times.
+                          </Text>
+                        )}
+
                         {!!d.note && <Text style={styles.claimNote}>{d.note}</Text>}
                         {/*
                           * The agency's answer, verbatim. A rejected claim
@@ -978,14 +1413,45 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                             Agency: {d.resolutionNote}
                           </Text>
                         )}
+
+                        {/*
+                          * CANCEL, where the PR can see WHAT they are cancelling.
+                          *
+                          * Withdrawing was only reachable by tapping a red grid
+                          * cell, where the button still read "Dispute this
+                          * amount" and silently became a withdraw — so the one
+                          * action that takes a claim back was both hidden and
+                          * mislabelled. Here it sits under the claim itself.
+                          *
+                          * Only on an OPEN claim: an answered one is a decision
+                          * the agency has made, and retracting it afterwards
+                          * would rewrite the outcome of a money decision.
+                          */}
+                        {d.outcome === null && (
+                          <Pressable
+                            style={styles.claimCancel}
+                            disabled={disputeBusy}
+                            onPress={() => void cancelClaim(d)}
+                          >
+                            <Text style={styles.claimCancelText}>
+                              {disputeBusy ? 'Cancelling…' : 'Cancel this dispute'}
+                            </Text>
+                          </Pressable>
+                        )}
                       </View>
-                    ))}
-                    <IzButton label="Close" variant="soft" onPress={() => setClaimDay(null)} />
+                      );
+                    })}
+                    </ScrollView>
+                    {/* Close is RED, app-wide (owner's colour code) — same as
+                      * dangerBtn and the evidence sheet's Close. */}
+                    <Pressable style={styles.sheetCloseBtn} onPress={() => setClaimDay(null)}>
+                      <Text style={styles.sheetCloseText}>Close</Text>
+                    </Pressable>
                   </>
                 );
               })()}
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </Modal>
       )}
 
@@ -997,6 +1463,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             evidenceTarget.incomeKey,
           )}
           cellAmount={evidenceTarget.amount}
+          claims={receiptClaimState(
+            evidenceTarget.week === 'last' ? lastWeek : current,
+            evidenceTarget.dateIso,
+            evidenceTarget.incomeKey,
+          )}
           onClose={() => setEvidenceTarget(null)}
           /*
            * Dispute only exists for an ISSUED voucher. On This-week there is no
@@ -1018,12 +1489,31 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
              *   test was hiding a button the PR was entitled to. Hence
              *   `weekDisputable`, which reads the voucher's own status.
              *
-             * The third test, whether the RECEIPT has been reviewed yet, stays
-             * inside `openDispute` (`cellDisputable`) because it also decides
-             * which refusal message to show.
+             * - Then the third test was missing here too. A PENDING day is one
+             *   the agency has NOT approved, so there is no stated figure to
+             *   argue with — `cellDisputable` says so, `openDispute` enforced it,
+             *   but the button was still offered and answered with an alert.
+             *   Owner: *"pending is the agency havent approved, then how can
+             *   dispute"*. Quite so.
+             *
+             * `openDispute` keeps its own copy of that last check, because it
+             * also decides WHICH refusal message to show — but it should now
+             * never be reached through this button.
+             */
+            /*
+             * - The third test is now PER SHIFT, not per cell. `cellDisputable`
+             *   demanded every line in the day+bucket be reviewed, so ONE
+             *   pending receipt silenced an argument about an approved shift
+             *   beside it. A shift that can be contested is enough to offer the
+             *   button; the picker then lists only those shifts.
+             *
+             * A shift already VERIFIED (its earlier claim answered) still counts:
+             * resolving a claim ends that claim, not the right to disagree
+             * again, and 0086's partial index is what permits the second one.
              */
             kindDisputable(evidenceTarget.incomeKey) &&
-            weekDisputable(evidenceTarget.week === 'last' ? lastWeek : current)
+            weekDisputable(evidenceTarget.week === 'last' ? lastWeek : current) &&
+            evidenceDisputableCount > 0
               ? () => {
                   const { day, row, week } = evidenceTarget;
                   setEvidenceTarget(null);
@@ -1040,10 +1530,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         animationType="slide"
         onRequestClose={closeDispute}
       >
-        <Pressable style={styles.backdrop} onPress={closeDispute}>
-          <Pressable
-            style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
-            onPress={(e) => e.stopPropagation()}
+        {/* Same responder fix as the other sheets: dismiss is a sibling. */}
+        <View style={styles.backdrop}>
+          <Pressable style={styles.backdropTap} onPress={closeDispute} />
+          <View
+            style={[
+              styles.sheet,
+              // Keyboard open: it already clears the nav bar, so its inset wins.
+              { paddingBottom: keyboardInset > 0 ? keyboardInset + 16 : 16 + insets.bottom },
+            ]}
           >
             <ScrollView
               keyboardShouldPersistTaps="handled"
@@ -1064,6 +1559,146 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
             {disputeMode === 'dispute' ? (
               <>
+                {/*
+                  * WHICH SHIFT? Only asked when the day holds more than one
+                  * receipt in this bucket — a single-receipt day has nothing to
+                  * choose and a chooser there would be noise.
+                  *
+                  * A dispute is filed per day + component, so a PR working two
+                  * shifts on one night could previously only contest BOTH at
+                  * once: the claim was recorded against the day's full total,
+                  * and accepting it settled money nobody had questioned. The
+                  * selection rides in `receiptRefs` and narrows the server's
+                  * `disputedAmount` to exactly what was picked.
+                  *
+                  * Keyed by receiptNo because the order number is NOT unique —
+                  * the same paper logged twice on one night reads ORD0389 on
+                  * both, which is precisely the pair a PR needs to separate.
+                  */}
+                {disputeReceipts.length > 1 && (
+                  <>
+                    <Text style={styles.fieldLabel}>Which one is wrong?</Text>
+                    <View style={styles.presetWrap}>
+                      {disputeReceipts.map((r) => {
+                        const on = disputePickedReceipt === r.receiptNo;
+                        return (
+                          <Pressable
+                            key={r.receiptNo}
+                            style={[
+                              styles.rcptChip,
+                              on ? styles.rcptChipOn : styles.rcptChipOff,
+                              !r.disputable && styles.rcptChipBlocked,
+                            ]}
+                            // Tapping the chosen one again does NOT clear it: a
+                            // dispute needs a shift, and an empty selection is
+                            // not a state the PR can usefully be left in.
+                            onPress={() => r.disputable && setDisputePickedReceipt(r.receiptNo)}
+                            disabled={!r.disputable}
+                            accessibilityRole="radio"
+                            accessibilityState={{ selected: on, disabled: !r.disputable }}
+                            accessibilityLabel={`${r.label}${on ? ', selected' : ''}${
+                              r.blockedNote ? `, ${r.blockedNote}` : ''
+                            }`}
+                          >
+                            {/*
+                              * A TICKED BOX, not a tinted outline.
+                              *
+                              * These chips reused the "quick reason" style, which
+                              * is a single-select — so multi-select read as a
+                              * radio group, and the only difference between on
+                              * and off was a faint border tint. Worse, the label
+                              * referenced `styles.presetText`, which does not
+                              * exist, so it rendered with NO style at all.
+                              *
+                              * Selection now carries three independent signals —
+                              * the box, the fill, and the text weight/colour — so
+                              * it survives a dim screen and does not depend on
+                              * colour perception alone.
+                              */}
+                            {/*
+                              * A filled DOT, drawn with a View — not an icon.
+                              *
+                              * This held `<Check />`, which was never imported,
+                              * so the first render of the picker threw a
+                              * ReferenceError and the whole screen went blank on
+                              * tapping Dispute. A dot is also the right mark for
+                              * an exclusive choice, so nothing is lost by it.
+                              */}
+                            <View style={[styles.rcptBox, on && styles.rcptBoxOn]}>
+                              {on && <View style={styles.rcptDot} />}
+                            </View>
+                            {/*
+                              * NO numberOfLines — the note is the point.
+                              * Clamping to one line turned "waiting on your
+                              * agency" into "waiting on yo…", which reads as a
+                              * glitch rather than a reason. It wraps instead.
+                              */}
+                            <Text style={[styles.rcptChipText, on && styles.rcptChipTextOn]}>
+                              {r.label}
+                              {r.blockedNote ? ` · ${r.blockedNote}` : ''}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    <Text style={styles.pickedHint}>
+                      {disputePickedReceipt === null
+                        ? 'Pick the shift you are disputing.'
+                        : `Disputing ${formatRM(disputePickedSubtotal)} of this day's ${formatRM(disputeTarget?.amount ?? 0)}.`}
+                    </Text>
+                  </>
+                )}
+
+                {/*
+                  * WHICH ITEM on that shift's receipt.
+                  *
+                  * Shown once a shift is chosen and it carries more than one
+                  * item. A tips receipt holds Tips, Booking commission and Havoc
+                  * together, so "tips on Tue 4 is wrong" left the agency to guess
+                  * which of the three — and the PR with no way to say.
+                  *
+                  * MULTI-select here, unlike the shift above: one paper can
+                  * genuinely have two wrong lines, and they are one argument
+                  * about one receipt. All start ticked, so the common "this whole
+                  * receipt is wrong" needs no extra taps.
+                  */}
+                {disputeItems.length > 1 && (
+                  <>
+                    <Text style={styles.fieldLabel}>Which item?</Text>
+                    <View style={styles.presetWrap}>
+                      {disputeItems.map((it) => {
+                        const on = disputePickedItems.includes(it.id);
+                        return (
+                          <Pressable
+                            key={it.id}
+                            style={[styles.rcptChip, on ? styles.rcptChipOn : styles.rcptChipOff]}
+                            onPress={() =>
+                              setDisputePickedItems((prev) =>
+                                prev.includes(it.id)
+                                  ? prev.filter((x) => x !== it.id)
+                                  : [...prev, it.id],
+                              )
+                            }
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: on }}
+                          >
+                            <View style={[styles.rcptSquare, on && styles.rcptSquareOn]} />
+                            <Text
+                              style={[styles.rcptChipText, on && styles.rcptChipTextOn]}
+                              numberOfLines={1}
+                            >
+                              {it.label}
+                            </Text>
+                          </Pressable>
+                        );
+                      })}
+                    </View>
+                    {disputePickedItems.length === 0 && (
+                      <Text style={styles.pickedHint}>Pick at least one item.</Text>
+                    )}
+                  </>
+                )}
+
                 <Text style={styles.fieldLabel}>Quick reason</Text>
                 <View style={styles.presetWrap}>
                   {DISPUTE_PRESETS.map((p) => (
@@ -1140,9 +1775,19 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     <Text style={styles.backBtnText}>Back</Text>
                   </Pressable>
                   <Pressable
-                    style={[styles.submitBtn, grad(GRADIENTS.accent, C.accent), disputeBusy && { opacity: 0.6 }]}
+                    style={[
+                      styles.submitBtn,
+                      grad(GRADIENTS.accent, C.accent),
+                      (disputeBusy || noReceiptPicked) && { opacity: 0.6 },
+                    ]}
                     onPress={submitDispute}
-                    disabled={disputeBusy}
+                    /*
+                     * Deselecting every receipt is not "dispute the whole day" —
+                     * it is an unfinished sentence. Blocked rather than silently
+                     * widened back to the full cell, which would file a claim
+                     * about money the PR had just deselected.
+                     */
+                    disabled={disputeBusy || noReceiptPicked}
                   >
                     <Text style={styles.primaryText}>
                       {disputeBusy ? 'Submitting…' : 'Submit dispute'}
@@ -1173,8 +1818,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               </>
             )}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -1318,6 +1963,89 @@ const styles = StyleSheet.create({
   statusPillDisputed: { color: C.red },
   /** A day whose claim has been ANSWERED — settled, not merely approved. */
   statusPillVerified: { color: C.green },
+  /* Receipt picker — MULTI-select, so it reads as ticked boxes, not chips. */
+  rcptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    width: '100%',
+  },
+  rcptChipOn: {
+    borderColor: C.accent,
+    backgroundColor: 'rgba(227,184,119,0.14)',
+  },
+  /* Unselected is deliberately RECESSIVE — the eye should land on what is in. */
+  rcptChipOff: {
+    borderColor: C.line,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  /* Listed but not choosable: visibly inert, and the chip says why. */
+  rcptChipBlocked: { opacity: 0.45 },
+  /* Round, because the choice is exclusive — a square reads as "tick many". */
+  rcptBox: {
+    width: 17,
+    height: 17,
+    borderRadius: 999,
+    borderWidth: 1.5,
+    borderColor: C.muted2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rcptBoxOn: {
+    borderColor: C.accent,
+    backgroundColor: 'transparent',
+  },
+  rcptDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 999,
+    backgroundColor: C.accent,
+  },
+  /* SQUARE for items — they are multi-select, unlike the round shift radio. */
+  rcptSquare: {
+    width: 15,
+    height: 15,
+    borderRadius: 4,
+    borderWidth: 1.5,
+    borderColor: C.muted2,
+  },
+  rcptSquareOn: { borderColor: C.accent, backgroundColor: C.accent },
+  rcptChipText: {
+    flex: 1,
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.muted2,
+  },
+  rcptChipTextOn: {
+    color: C.accentL,
+    fontWeight: '800',
+  },
+  pickedHint: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.prMuted,
+  },
+  /** Gives way to the header and Close button, so the sheet never overflows. */
+  claimScroll: { marginTop: 4, flexShrink: 1 },
+  /** The dismiss area above a sheet — a sibling, never a Pressable parent. */
+  backdropTap: { flex: 1 },
+  /** Close is red app-wide — mirrors dangerBtn. */
+  sheetCloseBtn: {
+    marginTop: 12,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.45)',
+    backgroundColor: 'rgba(240,138,138,0.12)',
+  },
+  sheetCloseText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
   claimTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   claimDay: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   claimRow: {
@@ -1332,6 +2060,26 @@ const styles = StyleSheet.create({
   claimComponent: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.txt },
   claimState: { fontFamily: F.sora, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   claimMeta: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  claimShift: {
+    marginTop: 8,
+    paddingLeft: 9,
+    borderLeftWidth: 2,
+    borderLeftColor: C.line2,
+  },
+  claimShiftHead: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.accentL },
+  claimShiftMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
+  claimItem: { marginTop: 3, fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
+  claimCancel: {
+    marginTop: 10,
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.35)',
+    backgroundColor: C.redBg,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  claimCancelText: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.red },
   claimNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
   claimAnswer: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.goldL },
   /** Voucher-level DISPUTED chip in the This-week card header. */
@@ -1414,9 +2162,20 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
     padding: 18,
     paddingBottom: 28,
-    maxWidth: 392,
+    // Fills a real phone edge to edge and only caps on a tablet. 392 was the
+    // WEB phone-frame width, so on a 411dp handset it left dead margins either
+    // side; the frame itself is narrower than this, so web is unaffected.
+    maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
+    /*
+     * Never taller than the screen. Shared by the dispute sheet and the claim
+     * sheet, both of which grow with the data — two shifts, seven reasons, a
+     * note box and a keyboard — and both of which put their primary button at
+     * the BOTTOM. Unbounded, that button leaves the viewport and the sheet
+     * becomes a dead end.
+     */
+    maxHeight: '90%',
   },
   sheetTitle: { fontFamily: F.sora, fontSize: 20, fontWeight: '800', color: C.txt },
   sheetSub: {

@@ -602,6 +602,31 @@
       "version": "7",
       "when": 1786400000000,
       "tag": "0089_agency_pr_roster_profile",
+      "idx": 85,
+      "version": "7",
+      "when": 1786000000000,
+      "tag": "0085_one_open_dispute_per_cell",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1786100000000,
+      "tag": "0086_one_open_dispute_per_shift",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1786200000000,
+      "tag": "0087_dispute_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1786300000000,
+      "tag": "0088_dispute_receipt_fk",
       "breakpoints": true
     }
   ]

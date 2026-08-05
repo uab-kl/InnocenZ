@@ -358,7 +358,10 @@ export class PaymentVoucherRepositoryClass {
     filter?: PaymentVoucherFilter;
     page: number;
     pageSize: number;
-  }): Promise<{ vouchers: PaymentVoucherType[]; totalCount: number }> {
+  }): Promise<{
+    vouchers: (PaymentVoucherType & { prNickname: string | null })[];
+    totalCount: number;
+  }> {
     try {
       const { filter, page, pageSize } = params;
       const conditions: SQL[] = [];
@@ -378,13 +381,25 @@ export class PaymentVoucherRepositoryClass {
         .where(whereClause);
       const totalCount = Number(countRow?.value ?? 0);
 
-      const vouchers = await db
-        .select()
+      // The nickname comes through the FK, never off the voucher row.
+      // `payment_voucher.pr_name` is a copy taken at write time — the very thing
+      // CLAUDE.md rule 3 exists to stop — so adding a `pr_nickname` beside it
+      // would have been a second stale copy. LEFT join, because a voucher may
+      // legitimately have no `pr_id` yet (raised before it is attached), and
+      // that must yield a voucher with no nickname rather than no voucher.
+      const rows = await db
+        .select({ voucher: PaymentVoucherTable, prNickname: PrTable.nickname })
         .from(PaymentVoucherTable)
+        .leftJoin(PrTable, eq(PaymentVoucherTable.prId, PrTable.id))
         .where(whereClause)
         .orderBy(PaymentVoucherTable.createdAt)
         .limit(pageSize)
         .offset((page - 1) * pageSize);
+
+      const vouchers = rows.map((row) => ({
+        ...row.voucher,
+        prNickname: row.prNickname ?? null,
+      }));
 
       return { vouchers, totalCount };
     } catch (error) {

@@ -81,6 +81,8 @@ function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 	return {
 		id: pv.id,
 		prName: pv.prName,
+		// Through the FK, not off the voucher row — see PrPaymentVoucher.prNickname.
+		prNickname: pv.prNickname ?? undefined,
 		prIc: pv.prIc ?? undefined,
 		outlet: pv.outlet ?? "",
 		cycle: pv.cycle ?? "",

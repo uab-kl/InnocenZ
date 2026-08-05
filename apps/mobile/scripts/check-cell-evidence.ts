@@ -12,11 +12,19 @@
  * pin both the arithmetic AND the requirement that a duplicated paper stays
  * VISIBLE as two rows rather than being tidied into one.
  */
-import { buildCellEvidence, evidenceMatchesCell } from '../src/lib/cell-evidence';
 import {
+  buildCellEvidence,
+  evidenceMatchesCell,
+  receiptDisputable,
+} from '../src/lib/cell-evidence';
+import {
+  cellDisputable,
   dayStatusLabel,
   disputesForDay,
+  kindDisputable,
   openDisputeKeys,
+  receiptClaimState,
+  thisWeekDayStatus,
 } from '../src/lib/receipt-review';
 import type { PrCurrentWeek, PrReceiptLine, PrWeekShift } from '../src/lib/api';
 
@@ -194,6 +202,7 @@ function claim(outcome: 'accepted' | 'rejected' | 'withdrawn' | null) {
     outcome,
     resolvedAt: outcome ? '2026-08-04T10:00:00.000Z' : null,
     resolutionNote: outcome ? 'Checked against the paper' : null,
+    receiptRefs: null as string[] | null,
   };
 }
 
@@ -263,6 +272,164 @@ check(
   'an open claim still outranks a closed week',
   dayStatusLabel(weekWith([claim(null)]), DAY, 'verified') === 'DISPUTED',
 );
+
+/*
+ * THIS WEEK TOPS OUT AT APPROVED — owner: "in this week section all approved,
+ * after dispute make then only verified".
+ *
+ * Resolving one dispute SENDS the voucher, which made buildWeekGridFromLines
+ * call every non-downgraded day 'verified' — so a settled claim about Tuesday
+ * flipped MONDAY to VERIFIED, a day nobody had disputed or said anything new
+ * about. `thisWeekDayStatus` stops the voucher's own status promoting a day on
+ * the live week.
+ */
+check(
+  'this week: a sent voucher does NOT verify an undisputed day',
+  dayStatusLabel(weekWith([]), DAY, thisWeekDayStatus('verified')) === 'APPROVED',
+);
+check(
+  'this week: VERIFIED still comes from a settled claim',
+  dayStatusLabel(weekWith([claim('accepted')]), DAY, thisWeekDayStatus('verified')) === 'VERIFIED',
+);
+check(
+  'this week: an unreviewed day is still PENDING',
+  dayStatusLabel(weekWith([]), DAY, thisWeekDayStatus('pending')) === 'PENDING',
+);
+check(
+  'last week is unaffected — a closed week still reads VERIFIED',
+  dayStatusLabel(weekWith([]), DAY, 'verified') === 'VERIFIED',
+);
+
+/*
+ * A PENDING DAY CANNOT BE DISPUTED — owner: "pending is the agency havent
+ * approved, then how can dispute".
+ *
+ * `cellDisputable` always enforced it and `openDispute` refused with an alert,
+ * but the flag icon and the sheet's Dispute button were gated only on the KIND
+ * and the WEEK — so the control was offered on money nobody had stated yet.
+ */
+console.log('\nDISPUTABILITY');
+const pendingLine = line({
+  kind: 'drinks',
+  item: 'Lemon Drop',
+  commission: 3.6,
+  receiptNo: 'RCP-PEND',
+  receiptStatus: 'pending',
+  disputable: false,
+});
+const approvedLine = line({
+  kind: 'drinks',
+  item: 'Lemon Drop',
+  commission: 3.6,
+  receiptNo: 'RCP-OK',
+  receiptStatus: 'approved',
+  disputable: true,
+});
+check(
+  'a day whose receipt is still PENDING is not disputable',
+  !cellDisputable({ ...week, lines: [pendingLine] }, DAY, 'drinks'),
+);
+check(
+  'once the agency approves it, it is',
+  cellDisputable({ ...week, lines: [approvedLine] }, DAY, 'drinks'),
+);
+check(
+  'one pending line poisons the CELL — cellDisputable is all-or-nothing',
+  !cellDisputable({ ...week, lines: [approvedLine, pendingLine] }, DAY, 'drinks'),
+);
+
+/*
+ * ...WHICH IS WHY DISPUTABILITY MOVED PER SHIFT.
+ *
+ * The cell rule was right when a claim covered the whole day. Once a claim names
+ * ONE shift it became wrong: a PR could not contest an approved 10:00 receipt
+ * because a different 16:00 receipt was still awaiting review. Both rules are
+ * pinned so the distinction cannot quietly collapse back into one.
+ */
+const mixedWeek: PrCurrentWeek = {
+  ...week,
+  lines: [
+    line({ kind: 'drinks', item: 'Lemon Drop', commission: 3.6, receiptNo: 'RCP-OK', receiptStatus: 'approved', disputable: true, shiftAssignmentId: SHIFT_A }),
+    line({ kind: 'drinks', item: 'Lemon Drop', commission: 3.6, receiptNo: 'RCP-PEND', receiptStatus: 'pending', disputable: false, shiftAssignmentId: SHIFT_C }),
+  ],
+};
+const mixed = buildCellEvidence(mixedWeek, DAY, 'drinks')
+  .groups.flatMap((g) => g.receipts);
+check(
+  'the approved shift IS disputable even beside a pending one',
+  mixed.filter(receiptDisputable).length === 1,
+);
+check(
+  'and the pending shift is not offered',
+  mixed.filter(receiptDisputable).every((r) => r.receiptNo === 'RCP-OK'),
+);
+/*
+ * AN OPEN CLAIM BLOCKS ITS OWN SHIFT; AN ANSWERED ONE DOES NOT.
+ *
+ * The server allows one OPEN claim per shift (0086), so offering a shift that
+ * already has one produces a guaranteed 409. Answered is the opposite case and
+ * must stay open to a fresh claim — inverting these two is the easy mistake, so
+ * both directions are pinned.
+ */
+const openOnOk = receiptClaimState(
+  { ...mixedWeek, disputes: [{ ...claim(null), receiptRefs: ['RCP-OK'] }] },
+  DAY,
+  'drinks',
+);
+check('an OPEN claim marks its shift, blocking a second one', openOnOk.open.has('RCP-OK'));
+check('and does not mark the other shift', !openOnOk.open.has('RCP-PEND'));
+const answeredOnOk = receiptClaimState(
+  { ...mixedWeek, disputes: [{ ...claim('accepted'), receiptRefs: ['RCP-OK'] }] },
+  DAY,
+  'drinks',
+);
+check(
+  'an ANSWERED claim leaves its shift un-blocked (open set empty)',
+  answeredOnOk.open.size === 0 && answeredOnOk.settled.has('RCP-OK'),
+);
+
+check(
+  'a shift whose earlier claim was answered can be disputed again',
+  receiptDisputable(
+    buildCellEvidence(
+      { ...mixedWeek, disputes: [{ ...claim('accepted'), receiptRefs: ['RCP-OK'] }] },
+      DAY,
+      'drinks',
+    ).groups.flatMap((g) => g.receipts).find((r) => r.receiptNo === 'RCP-OK')!,
+  ),
+);
+check('wages are never disputable', !kindDisputable('wages'));
+check('OT / others are never disputable', !kindDisputable('others'));
+check('drinks and tips are', kindDisputable('drinks') && kindDisputable('tips'));
+
+/*
+ * WHICH SHIFT IS ALREADY DISPUTED — owner: "need to show which shift drink or
+ * tips is already disputed".
+ *
+ * A claim naming no receipts covers the WHOLE cell; one naming receipts covers
+ * only those. Getting this backwards would either mark an innocent shift as
+ * contested or leave a contested one looking clean.
+ */
+console.log('\nWHICH RECEIPT IS CLAIMED');
+function claimOn(refs: string[] | null, outcome: 'accepted' | null) {
+  return { ...claim(outcome), receiptRefs: refs };
+}
+const wholeCell = receiptClaimState(weekWith([claimOn(null, null)]), DAY, 'drinks');
+check('a claim naming no receipts covers the whole cell', wholeCell.openAll);
+const narrowed = receiptClaimState(weekWith([claimOn(['RCP-000012'], null)]), DAY, 'drinks');
+check(
+  'a narrowed claim marks only the receipt it names',
+  !narrowed.openAll && narrowed.open.has('RCP-000012') && !narrowed.open.has('RCP-000010'),
+);
+const settledOnly = receiptClaimState(weekWith([claimOn(['RCP-000010'], 'accepted')]), DAY, 'drinks');
+check(
+  'an answered claim marks its receipt SETTLED, not open',
+  settledOnly.settled.has('RCP-000010') && settledOnly.open.size === 0,
+);
+const otherBucket = receiptClaimState(weekWith([claimOn(['RCP-000012'], null)]), DAY, 'tips');
+check('a drinks claim does not mark the tips cell', otherBucket.open.size === 0);
+const otherDay = receiptClaimState(weekWith([claimOn(['RCP-000012'], null)]), '2026-08-05', 'drinks');
+check('a Tuesday claim does not mark Wednesday', otherDay.open.size === 0);
 
 const painted = openDisputeKeys(weekWith([claim(null), claim('accepted')]));
 check('only the OPEN claim paints a cell red', painted.size === 1 && painted.has(`${DAY}-drinks`));
