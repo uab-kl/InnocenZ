@@ -977,6 +977,45 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE OPEN-CLAIM KEY IS THE SHIFT, NOT THE DAY (migration 0086).**
+>
+> Owner: *"remember the dispute make is make that shift drinks or tips dispute"*. This closes the gap I
+> flagged as undecided when the picker went single-select.
+>
+> `0085` made the uniqueness partial — one OPEN claim per voucher+day+component — which fixed "a settled
+> cell can never be disputed again". It still assumed a claim addressed a DAY. It does not: a dispute is
+> made against **that shift's** drinks, or that shift's tips.
+>
+> So a PR working two shifts on one night could contest the first shift's drinks and then be REFUSED on
+> the second with *"drinks on 2026-08-04 has already been disputed"* — two different papers, two
+> different figures, one argument slot between them. The second shift's money had no route to being
+> questioned until the first claim was answered.
+>
+> **0086** adds the named receipt to the key: `(voucher_id, dispute_date, component,
+> coalesce(receipt_refs->>0, '')) WHERE outcome IS NULL`. The picker is single-select, so `receipt_refs`
+> holds exactly one receipt and `->>0` IS that shift. A claim naming nothing keys on `''`, so at most one
+> whole-day claim stays open — the old behaviour, preserved for the legacy rows that depend on it.
+> Strictly weaker than 0085's index, so no existing row could violate it. **Applied.**
+>
+> No controller change was needed: `raiseMyDispute` detects duplicates purely from this index, and the
+> withdraw path was already safe — it only hands the voucher back once `listOpenForVoucher` is empty, so
+> two open claims coexist without one clearing the other.
+>
+> Verified live on one day + drinks:
+>
+> | attempt | result |
+> |---|---|
+> | shift A only | allowed |
+> | shift A, then shift B — the rule | **allowed** |
+> | shift A twice | refused |
+> | two whole-day claims | refused |
+> | whole-day + one shift | allowed |
+>
+> ⚠️ **Known rough edge, not a fault:** withdraw is addressed by day+component (`findOpen` returns the
+> first match), so with two open claims on one cell a withdraw closes ONE and the cell stays red until
+> tapped again. Self-correcting and the voucher status stays right; recorded in §9 in case the PR should
+> instead choose which claim to withdraw.
+
 > **5 Aug 2026 — A CLAIM NOW NAMES ITS SHIFT, IN BOTH SHEETS.**
 >
 > Owner: *"the status show verified that means some dispute make , need to put what shift details time
