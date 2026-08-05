@@ -596,6 +596,34 @@
       "when": 1785900000000,
       "tag": "0084_receipt_review_withdrawn",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1786000000000,
+      "tag": "0085_one_open_dispute_per_cell",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1786100000000,
+      "tag": "0086_one_open_dispute_per_shift",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1786200000000,
+      "tag": "0087_dispute_items",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1786300000000,
+      "tag": "0088_dispute_receipt_fk",
+      "breakpoints": true
     }
   ]
 }

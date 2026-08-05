@@ -12,12 +12,13 @@
  * already use them (PvDetailScreen's sheet, ShiftStatusPanel's table,
  * shift-session's stamps) so the same fact is never formatted two ways.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
-import { IzButton } from './ui';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
+import type { ReceiptClaimState } from '../lib/receipt-review';
 
 const KIND_LABEL: Record<CellEvidence['kind'], string> = {
   wages: 'Daily wages',
@@ -108,23 +109,120 @@ function ShiftHead({ group, shiftsKnown }: { group: EvidenceGroup; shiftsKnown: 
 export function CellEvidenceSheet({
   evidence,
   cellAmount,
+  claims,
   onClose,
   onDispute,
 }: {
   evidence: CellEvidence | null;
   /** The figure printed on the grid, so the sheet can assert it adds up. */
   cellAmount: number;
+  /**
+   * Which receipts in this cell are already claimed, from `receiptClaimState`.
+   * Omitted (or absent `disputes`) simply means nothing is marked.
+   */
+  claims?: ReceiptClaimState;
   onClose: () => void;
   /** Omitted on This-week, where there is no issued voucher to contest yet. */
   onDispute?: () => void;
 }) {
+  /** The receipt photo being viewed full-size, or null. */
+  const [zoom, setZoom] = useState<string | null>(null);
+  /*
+   * The DEVICE's bottom inset, not a guessed constant. A fixed 28px happened to
+   * clear some phones and jammed Close straight against the 3-button / gesture
+   * bar on others — a mis-tap there leaves the app entirely. Insets make the
+   * same sheet fit every phone.
+   */
+  const insets = useSafeAreaInsets();
+
   if (!evidence) return null;
   const balanced = evidenceMatchesCell(evidence, cellAmount);
 
+  /*
+   * What has been claimed against this receipt, and how it ended.
+   *
+   * A whole-day claim TAGS EVERY RECEIPT, because it covered every one of them.
+   * I removed that once, when two shifts both reading SETTLED looked like two
+   * separate claims — but that fixed the wrong half. The confusion was the
+   * missing OUTCOME, not the tags: dropping them left the PR asking which shift
+   * was disputed and finding nothing marked at all.
+   *
+   * OPEN beats settled where both touch one receipt: it is still being argued
+   * about, and saying "accepted" there would tell the PR to stop chasing
+   * something nobody has finished.
+   */
+  const claimOf = (r: {
+    receiptId: string | null;
+    receiptNo: string | null;
+    pending: boolean;
+  }): 'open' | 'verified' | 'settled' | null => {
+    if (!claims) return null;
+    // Matched on the receipt ID (the FK a claim stores since 0088) OR its number
+    // (what pre-0088 claims recorded as text). Either identifies the same paper.
+    const hit = (keys: { has(k: string): boolean }) =>
+      (!!r.receiptId && keys.has(r.receiptId)) || (!!r.receiptNo && keys.has(r.receiptNo));
+    if (claims.openAll || hit(claims.open)) return 'open';
+    /*
+     * SETTLED → DISPUTED → VERIFIED, per shift — the same lifecycle the day
+     * status uses, applied to one receipt.
+     *
+     *   SETTLED   the agency approved it and nobody argued
+     *   DISPUTED  a claim on THIS shift is open
+     *   VERIFIED  a claim on THIS shift was raised and answered
+     *
+     * The point is the contrast: after one shift's claim is resolved it reads
+     * VERIFIED while the untouched shift beside it still reads SETTLED, so the
+     * PR can see at a glance which one they took up and how it ended.
+     *
+     * A receipt still awaiting review is neither — its row already says
+     * "waiting on your agency", and calling that settled would claim a decision
+     * nobody has made.
+     */
+    /*
+     * VERIFIED only for a shift the claim actually NAMED.
+     *
+     * `settledAll` is deliberately NOT consulted here. An answered whole-day
+     * claim covered every shift, but promoting them all to VERIFIED told the PR
+     * that a shift they never took up had been through a dispute — so disputing
+     * the 16:00 shift left the untouched 10:00 shift wearing the same green tag,
+     * and the contrast the tag exists to draw disappeared.
+     *
+     * An OPEN whole-day claim still marks everything (above), because it really
+     * does block every shift beneath it and it carries a banner saying so. A
+     * SETTLED one is history: its detail lives in "What you disputed".
+     */
+    const answered =
+      (r.receiptId && claims.settled.get(r.receiptId)) ||
+      (r.receiptNo && claims.settled.get(r.receiptNo));
+    if (answered) return 'verified';
+    return r.pending ? null : 'settled';
+  };
+
+  /*
+   * A whole-day claim is announced ONCE, above the list — but only while it is
+   * still OPEN. Once answered, each receipt carries its own outcome tag, which
+   * says strictly more than a banner could, so repeating it would be noise.
+   */
+  const cellWide: 'open' | null = claims?.openAll ? 'open' : null;
+
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.backdrop} onPress={onClose}>
-        <Pressable style={s.sheet} onPress={(e) => e.stopPropagation()}>
+      {/*
+        * The sheet is NOT inside a Pressable, and that is the whole fix.
+        *
+        * It used to be wrapped in one whose only job was `stopPropagation` so a
+        * tap inside would not close the sheet. On Android a Pressable ancestor
+        * competes for the touch responder with the ScrollView beneath it, so a
+        * drag was sometimes claimed as a press and the list simply would not
+        * move — "cannot scroll sometimes", exactly as reported.
+        *
+        * Now the dismiss target is a sibling that fills the space ABOVE the
+        * sheet. Tapping there closes; the sheet itself never sees a Pressable
+        * parent, so the ScrollView owns its gestures outright.
+        */}
+      <View style={s.backdrop}>
+        <Pressable style={s.backdropTap} onPress={onClose} />
+        <View style={[s.sheet, { paddingBottom: 16 + insets.bottom }]}>
           <Text style={s.title}>
             {KIND_LABEL[evidence.kind]} · {dayLabel(evidence.dateIso)}
           </Text>
@@ -148,6 +246,35 @@ export function CellEvidenceSheet({
             </View>
           )}
 
+          {/*
+            * A REMINDER that this cell has been argued about before.
+            *
+            * Shown for answered claims too, not just open ones. The point is not
+            * to flag an action — a settled claim needs none — it is to stop a PR
+            * re-raising something they already raised and forgot. The wording
+            * separates the two cases honestly: a claim that named a shift points
+            * at the tagged receipt below; one that did not says so, because that
+            * information was never recorded and no amount of UI can invent it.
+            */}
+          {/*
+            * ONLY while a claim is still open.
+            *
+            * The settled variant is gone: each receipt now carries its own
+            * DISPUTE ACCEPTED / DISPUTE REJECTED tag, which says more than a
+            * banner ever did — the tags name the outcome per shift, so a
+            * sentence repeating "this was settled" above them was noise.
+            *
+            * An OPEN whole-day claim keeps its banner, because that one is not
+            * describing history: it is the reason another claim cannot be filed.
+            */}
+          {cellWide === 'open' && (
+            <View style={[s.cellClaim, s.cellClaimOpen]}>
+              <Text style={[s.cellClaimText, s.claimTagOpen]}>
+                You have an open dispute covering this WHOLE day — every shift below is part of it.
+              </Text>
+            </View>
+          )}
+
           <ScrollView style={s.scroll} showsVerticalScrollIndicator={false}>
             {evidence.groups.length === 0 && (
               <Text style={s.empty}>Nothing was logged for this day.</Text>
@@ -162,6 +289,24 @@ export function CellEvidenceSheet({
                     <View style={s.receiptHead}>
                       <Text style={s.orderNo}>{receipt.orderNo ?? 'No order number'}</Text>
                       <Text style={s.receiptNo}>{receipt.receiptNo ?? '—'}</Text>
+                      {/*
+                        * WHICH shift is under argument.
+                        *
+                        * The grid can only say a DAY is disputed. On a night with
+                        * two shifts that left the PR unable to tell which of them
+                        * the claim was about — the same ambiguity the per-receipt
+                        * selection exists to remove, reappearing at the point they
+                        * go looking for the answer.
+                        */}
+                      {claimOf(receipt) === 'open' && (
+                        <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTED</Text>
+                      )}
+                      {claimOf(receipt) === 'verified' && (
+                        <Text style={[s.claimTag, s.claimTagSettled]}>VERIFIED</Text>
+                      )}
+                      {claimOf(receipt) === 'settled' && (
+                        <Text style={[s.claimTag, s.claimTagPlain]}>SETTLED</Text>
+                      )}
                     </View>
                     <Text style={s.receiptMeta}>
                       {SOURCE_LABEL[receipt.source] ?? receipt.source}
@@ -200,11 +345,21 @@ export function CellEvidenceSheet({
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         <View style={s.thumbs}>
                           {receipt.photos.map((src, i) => (
-                            <Image
+                            /*
+                             * TAP TO ENLARGE. The whole point of this sheet is
+                             * holding the paper against the figure, and a 64px
+                             * thumbnail of a printed receipt is unreadable — the
+                             * PR could see that a photo existed and not what was
+                             * on it. Full-screen, pinch-free, tap anywhere out.
+                             */
+                            <Pressable
                               key={`${i}-${src.slice(0, 24)}`}
-                              source={{ uri: src }}
-                              style={s.thumb}
-                            />
+                              onPress={() => setZoom(src)}
+                              accessibilityRole="imagebutton"
+                              accessibilityLabel="Open the receipt photo full size"
+                            >
+                              <Image source={{ uri: src }} style={s.thumb} />
+                            </Pressable>
                           ))}
                         </View>
                       </ScrollView>
@@ -217,18 +372,50 @@ export function CellEvidenceSheet({
             ))}
           </ScrollView>
 
-          {onDispute && (
-            <IzButton label="Dispute this amount" variant="soft" onPress={onDispute} />
+          {/*
+            * A footer with real spacing and the app's colour code — the two
+            * identical grey slabs sat flush, reading as one double-height
+            * control with "Dispute" a mis-tap from "Close".
+            *
+            * Colours follow the owner's convention (gold = act, red = dismiss),
+            * copied from the dispute modal's own buttons: Dispute wears the
+            * accent the Submit button wears there, Close wears `dangerBtn`'s
+            * red. Same palette, same meaning, one screen apart.
+            */}
+          <View style={s.footer}>
+            {onDispute && (
+              <Pressable style={s.actBtn} onPress={onDispute}>
+                <Text style={s.actBtnText}>Dispute this amount</Text>
+              </Pressable>
+            )}
+            <Pressable style={s.closeBtn} onPress={onClose}>
+              <Text style={s.closeBtnText}>Close</Text>
+            </Pressable>
+          </View>
+
+          {/*
+            * Full-size proof, over the sheet rather than replacing it — the PR
+            * is comparing paper to figure, and losing the figure to look at the
+            * photo would defeat the comparison. Tap anywhere to dismiss.
+            */}
+          {zoom && (
+            <Modal visible transparent animationType="fade" onRequestClose={() => setZoom(null)}>
+              <Pressable style={s.zoomBackdrop} onPress={() => setZoom(null)}>
+                <Image source={{ uri: zoom }} style={s.zoomImage} resizeMode="contain" />
+                <Text style={s.zoomHint}>Tap anywhere to close</Text>
+              </Pressable>
+            </Modal>
           )}
-          <IzButton label="Close" variant="soft" onPress={onClose} />
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(6,3,12,0.65)', justifyContent: 'flex-end' },
+  /** The dismiss area — everything above the sheet. A sibling, never a parent. */
+  backdropTap: { flex: 1 },
   sheet: {
     backgroundColor: C.panel,
     borderTopLeftRadius: 22,
@@ -237,9 +424,22 @@ const s = StyleSheet.create({
     borderColor: C.line2,
     padding: 18,
     paddingBottom: 28,
-    maxWidth: 392,
+    // Fills a real phone edge to edge and only caps on a tablet. 392 was the
+    // WEB phone-frame width, so on a 411dp handset it left dead margins either
+    // side; the frame itself is narrower than this, so web is unaffected.
+    maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
+    /*
+     * BOUNDED TO THE SCREEN, so the buttons stay reachable.
+     *
+     * Unbounded, a day with several shifts grew the sheet past the viewport and
+     * the last group ran underneath "Dispute this amount" / "Close" — content
+     * hidden behind the very controls meant to act on it. The list inside
+     * shrinks instead (see `scroll`), which is what makes the sheet scroll
+     * rather than overflow.
+     */
+    maxHeight: '90%',
   },
   title: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   total: {
@@ -259,7 +459,16 @@ const s = StyleSheet.create({
     borderColor: 'rgba(240,138,138,0.35)',
   },
   warnText: { fontFamily: F.manrope, fontSize: 12, color: C.red },
-  scroll: { marginTop: 12, maxHeight: 420 },
+  /*
+   * SHRINKS to whatever the sheet has left, rather than a fixed 420.
+   *
+   * A hard cap is wrong in both directions: on a tall phone it wasted half the
+   * screen, and on a short one the sheet still overflowed because the cap took
+   * no account of the header and buttons above and below it. `flexShrink` lets
+   * the list give way to them, so the scroll area is exactly the space that
+   * remains — on any screen.
+   */
+  scroll: { marginTop: 12, flexShrink: 1 },
   empty: {
     fontFamily: F.manrope,
     fontSize: 13,
@@ -295,7 +504,52 @@ const s = StyleSheet.create({
     borderLeftWidth: 2,
     borderLeftColor: C.line2,
   },
-  receiptHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  receiptHead: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  claimTag: {
+    fontFamily: F.sora,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
+  claimTagOpen: {
+    color: C.red,
+    backgroundColor: C.redBg,
+    borderColor: 'rgba(240,138,138,0.35)',
+  },
+  /*
+   * SETTLED is the QUIET state — approved, unargued, nothing to do. It is
+   * neutral rather than green so the eye lands on VERIFIED and DISPUTED, which
+   * are the two the PR actually acted on.
+   */
+  claimTagPlain: {
+    color: C.muted2,
+    backgroundColor: 'rgba(255,255,255,0.04)',
+    borderColor: C.line,
+  },
+  claimTagSettled: {
+    color: C.green,
+    backgroundColor: C.greenBg,
+    borderColor: 'rgba(93,217,160,0.35)',
+  },
+  cellClaim: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  cellClaimOpen: { backgroundColor: C.redBg, borderColor: 'rgba(240,138,138,0.35)' },
+  cellClaimSettled: { backgroundColor: C.greenBg, borderColor: 'rgba(93,217,160,0.35)' },
+  cellClaimText: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
+  },
   orderNo: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.accentL },
   receiptNo: { fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
   receiptMeta: {
@@ -316,14 +570,54 @@ const s = StyleSheet.create({
   td: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   tdMoney: { fontFamily: F.sora, fontWeight: '700', color: C.accentL },
   thumbs: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  /*
+   * 96, not 64. A printed receipt at 64px is a grey smudge — big enough to
+   * prove a photo EXISTS and too small to read a line off, which is the one
+   * thing it is here for. It is still only a handle: tapping opens it full size.
+   */
   thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
+    width: 96,
+    height: 96,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: C.line2,
     backgroundColor: 'rgba(0,0,0,0.3)',
   },
+  zoomBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(6,3,12,0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  zoomImage: { width: '100%', height: '82%' },
+  zoomHint: {
+    marginTop: 14,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.muted2,
+  },
+  footer: { marginTop: 12, gap: 8 },
+  /** Gold = act — the same accent the dispute modal's Submit wears. */
+  actBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(227,184,119,0.45)',
+    backgroundColor: 'rgba(227,184,119,0.14)',
+  },
+  actBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.accentL },
+  /** Red = dismiss — mirrors PaymentScreen's dangerBtn exactly. */
+  closeBtn: {
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.45)',
+    backgroundColor: 'rgba(240,138,138,0.12)',
+  },
+  closeBtnText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
   groupTotal: {
     marginTop: 8,
     textAlign: 'right',

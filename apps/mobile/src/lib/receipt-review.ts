@@ -133,6 +133,107 @@ export function disputesForDay(
 }
 
 /**
+ * The reasons a PR can actually hit — and only those.
+ *
+ * Lives here, not in a screen, because TWO screens raise disputes (Payment and
+ * the voucher document) and each had its own copy. Two lists that must agree is
+ * how they drift: the PR would meet different reasons depending on where they
+ * tapped, and the agency would receive both vocabularies.
+ *
+ * The old list predated disputes narrowing to drinks and tips, and it showed —
+ * **"Unmatch wages" could never be filed at all**, because wages are not
+ * disputable (`kindDisputable`) so the sheet never opens for them. A chip that
+ * leads nowhere is worse than a missing one: the PR picks it believing they have
+ * described their problem, and they have not.
+ *
+ * The replacements are failures this app has actually produced:
+ *
+ * - COUNTED TWICE — the duplicate ORD0389, one paper scanned across two
+ *   check-ins, which is why the receipt guard exists at all.
+ * - WRONG QUANTITY — OCR reading "2 Havoc" as one, the fault the receipt parser
+ *   was rebuilt around. Previously unsayable: a PR could only call it "unmatch
+ *   commission" and leave the agency to work out why.
+ * - MISSING FROM MY PV — logged, and not on the voucher.
+ * - WRONG RATE — right per item, wrong percentage. A rate-card question, not a
+ *   receipt one, and it lands somewhere different.
+ * - NOT MY SHIFT — money attributed to the wrong person or night.
+ *
+ * Short enough to read on a chip; the note underneath carries the detail.
+ */
+export const DISPUTE_PRESETS = [
+  'Wrong commission',
+  'Wrong quantity',
+  'Counted twice',
+  'Missing from my PV',
+  'Wrong rate',
+  'Not my shift',
+  'Others',
+] as const;
+
+/** How a claim ended. `withdrawn` never reaches here — `isLive` drops it. */
+export type SettledOutcome = 'accepted' | 'rejected';
+
+/**
+ * Per-receipt claim state for one day+bucket.
+ *
+ * `settled` is a MAP, not a set, because "resolved" is not one state: a PR needs
+ * to know whether their claim was ACCEPTED or REJECTED. A single "settled" tag
+ * answered "has this been dealt with?" while leaving "and what was decided?"
+ * unanswered — which is most of what they wanted to know.
+ *
+ * `settledAll` carries the outcome for the same reason, and is null when no
+ * whole-day claim has been answered.
+ */
+export type ReceiptClaimState = {
+  openAll: boolean;
+  settledAll: SettledOutcome | null;
+  open: Set<string>;
+  settled: Map<string, SettledOutcome>;
+};
+
+/**
+ * Which RECEIPT on this day+bucket is under argument, and how.
+ *
+ * A claim that named no receipts covers the whole cell — the PR did not narrow
+ * it — so `coversAll` is true and every receipt in the bucket is contested.
+ * Otherwise only the named `receiptNo`s are.
+ *
+ * `open` is what the sheet marks red; `settled` still gets a mark, because "this
+ * one was already argued and answered" is exactly what stops a PR raising the
+ * same claim twice and wondering why nothing happens.
+ */
+export function receiptClaimState(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+  component: PrReceiptLine['kind'],
+): ReceiptClaimState {
+  const rows = (week?.disputes ?? []).filter(
+    (d) => d.disputeDate === dateIso && d.component === component && isLive(d),
+  );
+  const state: ReceiptClaimState = {
+    openAll: false,
+    settledAll: null,
+    open: new Set<string>(),
+    settled: new Map<string, SettledOutcome>(),
+  };
+  for (const d of rows) {
+    const isOpen = d.outcome === null;
+    // FK first; the receipt NUMBERS are the pre-0088 path.
+    const refs = d.receiptId ? [d.receiptId] : (d.receiptRefs ?? []);
+    if (refs.length === 0) {
+      if (isOpen) state.openAll = true;
+      else state.settledAll = (d.outcome as SettledOutcome) ?? 'accepted';
+      continue;
+    }
+    for (const ref of refs) {
+      if (isOpen) state.open.add(ref);
+      else state.settled.set(ref, (d.outcome as SettledOutcome) ?? 'accepted');
+    }
+  }
+  return state;
+}
+
+/**
  * `${date}-${component}` for every OPEN claim — the keys the grid paints RED.
  *
  * Derived from the server rather than accumulated in React state, which is why
@@ -164,6 +265,27 @@ export function openDisputeKeys(week: PrCurrentWeek | null): Set<string> {
  * is exactly what is being argued with.
  */
 export type DayStatusLabel = 'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | '—';
+
+/**
+ * THIS WEEK tops out at APPROVED — VERIFIED is earned, not granted.
+ *
+ * `buildWeekGridFromLines` calls a day `verified` as soon as the VOUCHER reaches
+ * a processed status (`sent`, `awaiting_pr`, `signed`, `paid`). Fine for a closed
+ * week; wrong for a live one. Resolving a single dispute SENDS the voucher, so on
+ * 5 Aug one settled claim about Tuesday's drinks flipped **Monday** to VERIFIED
+ * too — a day the PR had never disputed and nobody had said anything new about.
+ *
+ * Owner's rule: *"in this week section all approved, after dispute make then only
+ * verified"*. On the live week the voucher's own status cannot promote a day: the
+ * agency's day sign-off gives APPROVED, and only a claim raised AND answered
+ * gives VERIFIED. The Last-week card keeps the opposite mapping
+ * (`approved → verified`), because a closed week's sign-off is final.
+ */
+export function thisWeekDayStatus(
+  gridStatus: 'verified' | 'approved' | 'pending' | 'empty',
+): 'verified' | 'approved' | 'pending' | 'empty' {
+  return gridStatus === 'verified' ? 'approved' : gridStatus;
+}
 
 export function dayStatusLabel(
   week: PrCurrentWeek | null,

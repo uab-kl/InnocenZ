@@ -21,6 +21,14 @@ import type { PrCurrentWeek, PrReceiptKind, PrReceiptLine, PrWeekShift } from '.
 export type EvidenceReceipt = {
   /** `RCP-000010`, or null for a line with no receipt behind it (a wage seal). */
   receiptNo: string | null;
+  /**
+   * The receipt's uuid — what a dispute stores as a FOREIGN KEY.
+   *
+   * `receiptNo` is what the PR reads off the paper; this is what the claim
+   * points at. Both are kept so a claim matches whether it was filed before
+   * 0088 (which recorded the number as text) or after it.
+   */
+  receiptId: string | null;
   /** `ORD0389` off the paper, or null when it carried none. */
   orderNo: string | null;
   receiptDate: string | null;
@@ -102,6 +110,7 @@ export function buildCellEvidence(
       const head = lines[0];
       return {
         receiptNo: head.receiptNo ?? null,
+        receiptId: head.receiptId ?? null,
         orderNo: head.orderNo ?? null,
         receiptDate: head.receiptDate ?? null,
         receiptTime: head.receiptTime ?? null,
@@ -139,4 +148,26 @@ export function buildCellEvidence(
  */
 export function evidenceMatchesCell(evidence: CellEvidence, cellAmount: number): boolean {
   return Math.round(evidence.total * 100) === Math.round(cellAmount * 100);
+}
+
+/**
+ * May THIS SHIFT's receipt be contested?
+ *
+ * Per receipt, not per cell. `cellDisputable` requires every line in the whole
+ * day+bucket to have been reviewed — right when a claim covered the whole cell,
+ * and wrong now that a claim names one shift: a PR could not dispute an approved
+ * 10:00 shift because a different 16:00 receipt was still awaiting review. One
+ * shift's pending paper is not a reason to silence an argument about another.
+ *
+ * A settled or already-verified receipt stays disputable. Resolving a claim ends
+ * that claim, not the PR's right to disagree again — and the partial unique
+ * index (0086) is what actually allows the second one.
+ *
+ * Prefers the server's own `disputable` flag, which is computed from the rule
+ * the endpoint enforces; the `pending` fallback is for a response that predates
+ * the field.
+ */
+export function receiptDisputable(receipt: EvidenceReceipt): boolean {
+  if (receipt.lines.length === 0) return false;
+  return receipt.lines.every((l) => (l.disputable !== undefined ? l.disputable : !l.pending));
 }

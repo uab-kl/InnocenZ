@@ -356,6 +356,14 @@ export interface PrPvRow {
 export interface PrPaymentVoucher {
 	id: string;
 	prName: string;
+	/**
+	 * The PR's working name — "Vicky" — read through the voucher's `pr_id` FK,
+	 * NOT copied onto the voucher row beside `pr_name`.
+	 *
+	 * Optional because a voucher may have no `pr_id` yet, and because demo rows
+	 * carry none. Absent means "show the legal name alone", never "invent one".
+	 */
+	prNickname?: string;
 	prIc?: string;
 	outlet: string;
 	cycle: string;
