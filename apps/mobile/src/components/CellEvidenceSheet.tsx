@@ -200,8 +200,22 @@ export function CellEvidenceSheet({
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
-      <Pressable style={s.backdrop} onPress={onClose}>
-        <Pressable style={s.sheet} onPress={(e) => e.stopPropagation()}>
+      {/*
+        * The sheet is NOT inside a Pressable, and that is the whole fix.
+        *
+        * It used to be wrapped in one whose only job was `stopPropagation` so a
+        * tap inside would not close the sheet. On Android a Pressable ancestor
+        * competes for the touch responder with the ScrollView beneath it, so a
+        * drag was sometimes claimed as a press and the list simply would not
+        * move — "cannot scroll sometimes", exactly as reported.
+        *
+        * Now the dismiss target is a sibling that fills the space ABOVE the
+        * sheet. Tapping there closes; the sheet itself never sees a Pressable
+        * parent, so the ScrollView owns its gestures outright.
+        */}
+      <View style={s.backdrop}>
+        <Pressable style={s.backdropTap} onPress={onClose} />
+        <View style={s.sheet}>
           <Text style={s.title}>
             {KIND_LABEL[evidence.kind]} · {dayLabel(evidence.dateIso)}
           </Text>
@@ -369,14 +383,16 @@ export function CellEvidenceSheet({
               </Pressable>
             </Modal>
           )}
-        </Pressable>
-      </Pressable>
+        </View>
+      </View>
     </Modal>
   );
 }
 
 const s = StyleSheet.create({
   backdrop: { flex: 1, backgroundColor: 'rgba(6,3,12,0.65)', justifyContent: 'flex-end' },
+  /** The dismiss area — everything above the sheet. A sibling, never a parent. */
+  backdropTap: { flex: 1 },
   sheet: {
     backgroundColor: C.panel,
     borderTopLeftRadius: 22,

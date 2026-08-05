@@ -939,6 +939,29 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — "CANNOT SCROLL SOMETIMES" — the sheet's own tap-guard was stealing the drag.**
+>
+> Owner, on the device: *"i click that drink for that day want to check but cannot scroll sometimes ,
+> make scrollable"*.
+>
+> **Why it was intermittent, not broken:** every sheet was wrapped in a `Pressable` whose only job was
+> `stopPropagation` so a tap inside would not dismiss. On Android a Pressable ANCESTOR competes with the
+> ScrollView beneath it for the touch responder, so a drag was sometimes claimed as a press — and the
+> list simply did not move. Sometimes the ScrollView won, sometimes the Pressable did; hence
+> "sometimes".
+>
+> **Fix:** the dismiss target is now a SIBLING (`backdropTap`, filling the space above the sheet), and
+> the sheet itself is a plain `View` — no Pressable parent, so the ScrollView owns its gestures
+> outright. Applied to all three Payment-flow sheets: evidence, claim ("What you disputed"), and the
+> dispute form.
+>
+> ⚠️ **The same trap is live in six more files** — `PvDetailScreen` (3 sheets), `AgencySchedulePanel`
+> (3), `HistDateTimeFilter` (2), `JobPostingsPanel`, and others matching
+> `Pressable … stopPropagation` over a ScrollView. Recorded in §9 as one sweep; their sheets scroll
+> less content, so the bite is smaller, but it is the identical bug.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
 > **5 Aug 2026 — THE RECEIPT PHOTO OPENS, AND THE SHEETS FIT A REAL PHONE.**
 >
 > Owner, on the device: *"for example this picture i cannot scroll to see in phone"* and *"the screen

@@ -1275,8 +1275,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         */}
       {claimDay && (
         <Modal visible transparent animationType="slide" onRequestClose={() => setClaimDay(null)}>
-          <Pressable style={styles.backdrop} onPress={() => setClaimDay(null)}>
-            <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+          {/*
+            * Dismiss target is a SIBLING above the sheet, not a Pressable
+            * parent — a Pressable ancestor competes with the ScrollView for the
+            * touch responder on Android, which is why scrolling sometimes
+            * failed. Same fix as CellEvidenceSheet.
+            */}
+          <View style={styles.backdrop}>
+            <Pressable style={styles.backdropTap} onPress={() => setClaimDay(null)} />
+            <View style={styles.sheet}>
               {(() => {
                 const week = claimDay.week === 'last' ? lastWeek : current;
                 const { open, settled } = disputesForDay(week, claimDay.dateIso);
@@ -1436,8 +1443,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   </>
                 );
               })()}
-            </Pressable>
-          </Pressable>
+            </View>
+          </View>
         </Modal>
       )}
 
@@ -1516,10 +1523,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         animationType="slide"
         onRequestClose={closeDispute}
       >
-        <Pressable style={styles.backdrop} onPress={closeDispute}>
-          <Pressable
+        {/* Same responder fix as the other sheets: dismiss is a sibling. */}
+        <View style={styles.backdrop}>
+          <Pressable style={styles.backdropTap} onPress={closeDispute} />
+          <View
             style={[styles.sheet, keyboardInset > 0 && { paddingBottom: keyboardInset + 16 }]}
-            onPress={(e) => e.stopPropagation()}
           >
             <ScrollView
               keyboardShouldPersistTaps="handled"
@@ -1799,8 +1807,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               </>
             )}
             </ScrollView>
-          </Pressable>
-        </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -2014,6 +2022,8 @@ const styles = StyleSheet.create({
   },
   /** Gives way to the header and Close button, so the sheet never overflows. */
   claimScroll: { marginTop: 4, flexShrink: 1 },
+  /** The dismiss area above a sheet — a sibling, never a Pressable parent. */
+  backdropTap: { flex: 1 },
   claimTitle: { fontFamily: F.sora, fontSize: 18, fontWeight: '800', color: C.txt },
   claimDay: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   claimRow: {
