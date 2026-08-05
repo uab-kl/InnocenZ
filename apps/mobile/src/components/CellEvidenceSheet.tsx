@@ -12,7 +12,7 @@
  * already use them (PvDetailScreen's sheet, ShiftStatusPanel's table,
  * shift-session's stamps) so the same fact is never formatted two ways.
  */
-import React from 'react';
+import React, { useState } from 'react';
 import { Image, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import { IzButton } from './ui';
@@ -125,6 +125,9 @@ export function CellEvidenceSheet({
   /** Omitted on This-week, where there is no issued voucher to contest yet. */
   onDispute?: () => void;
 }) {
+  /** The receipt photo being viewed full-size, or null. */
+  const [zoom, setZoom] = useState<string | null>(null);
+
   if (!evidence) return null;
   const balanced = evidenceMatchesCell(evidence, cellAmount);
 
@@ -321,11 +324,21 @@ export function CellEvidenceSheet({
                       <ScrollView horizontal showsHorizontalScrollIndicator={false}>
                         <View style={s.thumbs}>
                           {receipt.photos.map((src, i) => (
-                            <Image
+                            /*
+                             * TAP TO ENLARGE. The whole point of this sheet is
+                             * holding the paper against the figure, and a 64px
+                             * thumbnail of a printed receipt is unreadable — the
+                             * PR could see that a photo existed and not what was
+                             * on it. Full-screen, pinch-free, tap anywhere out.
+                             */
+                            <Pressable
                               key={`${i}-${src.slice(0, 24)}`}
-                              source={{ uri: src }}
-                              style={s.thumb}
-                            />
+                              onPress={() => setZoom(src)}
+                              accessibilityRole="imagebutton"
+                              accessibilityLabel="Open the receipt photo full size"
+                            >
+                              <Image source={{ uri: src }} style={s.thumb} />
+                            </Pressable>
                           ))}
                         </View>
                       </ScrollView>
@@ -342,6 +355,20 @@ export function CellEvidenceSheet({
             <IzButton label="Dispute this amount" variant="soft" onPress={onDispute} />
           )}
           <IzButton label="Close" variant="soft" onPress={onClose} />
+
+          {/*
+            * Full-size proof, over the sheet rather than replacing it — the PR
+            * is comparing paper to figure, and losing the figure to look at the
+            * photo would defeat the comparison. Tap anywhere to dismiss.
+            */}
+          {zoom && (
+            <Modal visible transparent animationType="fade" onRequestClose={() => setZoom(null)}>
+              <Pressable style={s.zoomBackdrop} onPress={() => setZoom(null)}>
+                <Image source={{ uri: zoom }} style={s.zoomImage} resizeMode="contain" />
+                <Text style={s.zoomHint}>Tap anywhere to close</Text>
+              </Pressable>
+            </Modal>
+          )}
         </Pressable>
       </Pressable>
     </Modal>
@@ -358,7 +385,10 @@ const s = StyleSheet.create({
     borderColor: C.line2,
     padding: 18,
     paddingBottom: 28,
-    maxWidth: 392,
+    // Fills a real phone edge to edge and only caps on a tablet. 392 was the
+    // WEB phone-frame width, so on a 411dp handset it left dead margins either
+    // side; the frame itself is narrower than this, so web is unaffected.
+    maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
     /*
@@ -501,13 +531,32 @@ const s = StyleSheet.create({
   td: { fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   tdMoney: { fontFamily: F.sora, fontWeight: '700', color: C.accentL },
   thumbs: { flexDirection: 'row', gap: 8, marginTop: 8 },
+  /*
+   * 96, not 64. A printed receipt at 64px is a grey smudge — big enough to
+   * prove a photo EXISTS and too small to read a line off, which is the one
+   * thing it is here for. It is still only a handle: tapping opens it full size.
+   */
   thumb: {
-    width: 64,
-    height: 64,
-    borderRadius: 8,
+    width: 96,
+    height: 96,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: C.line2,
     backgroundColor: 'rgba(0,0,0,0.3)',
+  },
+  zoomBackdrop: {
+    flex: 1,
+    backgroundColor: 'rgba(6,3,12,0.94)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 16,
+  },
+  zoomImage: { width: '100%', height: '82%' },
+  zoomHint: {
+    marginTop: 14,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    color: C.muted2,
   },
   groupTotal: {
     marginTop: 8,

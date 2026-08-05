@@ -2130,7 +2130,10 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
     padding: 18,
     paddingBottom: 28,
-    maxWidth: 392,
+    // Fills a real phone edge to edge and only caps on a tablet. 392 was the
+    // WEB phone-frame width, so on a 411dp handset it left dead margins either
+    // side; the frame itself is narrower than this, so web is unaffected.
+    maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
     /*
