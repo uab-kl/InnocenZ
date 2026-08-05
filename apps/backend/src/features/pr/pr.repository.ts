@@ -17,6 +17,7 @@ const profileColumns = {
   race: UserProfileTable.race,
   dob: UserProfileTable.dob,
   nationality: UserProfileTable.nationality,
+  languages: UserProfileTable.languages,
   portfolioPhotos: UserProfileTable.portfolioPhotos,
   comcardImage: UserProfileTable.comcardImage,
   comcardHeightCm: UserProfileTable.comcardHeightCm,

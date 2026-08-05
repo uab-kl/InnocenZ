@@ -96,6 +96,8 @@ export type PrProfile = {
   /** ISO date, `YYYY-MM-DD`. */
   dob: string | null;
   nationality: string | null;
+  /** Spoken languages the PR set on their own profile, e.g. ['English','Hokkien']. */
+  languages: string[] | null;
   // Matches the user_profile.portfolio_photos jsonb column, which infers as a
   // nullable array of nullable strings (drizzle's conservative jsonb typing).
   portfolioPhotos: (string | null)[] | null;

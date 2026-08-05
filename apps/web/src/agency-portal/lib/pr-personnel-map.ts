@@ -99,9 +99,11 @@ function repairDemoGalleryUploads(
  *     reads, so both screens show one PR the same way
  *   - `comcardImageUrl` ← portfolio slot whose path contains "comcard" (backend
  *     has no separate comcard field)
- * The remaining demo-only fields (rating, KPI, penalties, attendance,
- * languages, pay class, …) have no backend yet, so they get neutral
- * placeholders. This is the accepted hybrid tradeoff: real where the backend
+ *   - `languages` ← the same user_profile row the PR edits in their own portal
+ * The remaining demo-only fields (rating, KPI, penalties, attendance, pay
+ * class, …) have no backend yet, so they get neutral placeholders. `rating: 0`
+ * is one of those placeholders, NOT a score — see lib/pr-rating-summary.ts,
+ * which derives the real average from the `rating` table instead. This is the accepted hybrid tradeoff: real where the backend
  * is real, cosmetic placeholders elsewhere.
  */
 export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
@@ -123,7 +125,7 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		avatarPhoto: profile?.profileImage ?? null,
 		comcardImageUrl: profile?.comcardImage ?? null,
 		portfolioPhotos: profile?.portfolioPhotos ?? undefined,
-		languages: [],
+		languages: profile?.languages ?? [],
 		place: "",
 		yearsExp: 0,
 		rating: 0,

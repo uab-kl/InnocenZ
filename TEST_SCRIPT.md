@@ -203,6 +203,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A2 | Roster: read + add-shift / add-PR + **assign/unassign** | **Agency → PR** | `routes/agency/roster` + `shift-assignment` | `agency_pr` join | ⚠️ Reported (confirm assign shows on PR, §3 S2–S3) |
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
+| A6 | **Manage-PR detail shows real Languages + real Ratings.** `GET /pr` now selects `user_profile.languages` (the column existed since 0055; this projection was the only reader not selecting it), and the ratings feed matches on **`rating.pr_id`** instead of the display name — the outlet writes its roster's legal name while Manage-PR shows the floor nickname, so a real rating was invisible. Average / Rating tile / warn banner all derive from the real rows; an **unrated** PR reads "not rated yet" instead of tripping the below-3.5★ warning off the `rating: 0` placeholder. | **Agency ← Outlet** (ratings) · **Agency ← PR** (languages) | `pr.repository.ts` · `pr-personnel-map.ts` · `lib/pr-rating-summary.ts` · `use-agency-ratings.ts` · `routes/agency/prs.tsx` | `user_profile.languages` · `rating.pr_id` (no DDL) | ⚠️ Reported (typecheck clean on every touched file, biome clean; **not live-fired** — needs a backend restart + agency click-through, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
 
 ### Admin side (jk)
@@ -301,6 +302,37 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
+
+### ▶ MANAGE-PR DETAIL — 2 of 3 empty sections wired, SHIFT HISTORY still demo-bound (5 Aug 2026)
+
+Owner: *"why is this part of the 'Manage PR' under agency not showing the details? Such as its not
+showing their shift history, their languages and their rating."*
+
+Three empty sections, three **different** causes — they only looked like one bug because they stack on
+one screen. Two are fixed (§8 A6); the third is not, and is a bigger job.
+
+- [ ] **Shift history is still empty and still wrong — NOT fixed.** `routes/agency/prs.tsx` reads
+  `useStore(s => s.shiftHistory)` (the demo zustand store) and filters `r.prId === detail.id`. But
+  `detail.id` is a real backend PR **uuid** from `GET /pr`, while demo rows carry demo ids like
+  `pr_tied`, so the filter **can never match**. There is no backend shift-history read wired to this
+  section at all. It also has **no empty state**, unlike the ratings feed — which is why it renders a
+  blank card instead of saying "no shifts". Needs a real read (likely `shift-assignment` scoped to the
+  PR) before the card can mean anything. Adding an empty state without the read would only make the
+  emptiness look intentional.
+- [ ] **Live-fire A6.** Not run in the authoring session. Two gates: the **backend must be restarted**
+  (`tsx watch` serves stale routes, so `GET /pr` keeps returning the old 8-column profile), and the PR
+  under test must actually have `user_profile.languages` set — if that column is null the wiring is
+  correct and the box is still empty. Test with a PR known to have languages.
+- [ ] **`splitPortfolioComcard` is dead code** (`pr-personnel-map.ts` ~line 111). Its result is
+  destructured and thrown away; the return object uses `profile?.comcardImage` / `profile?.portfolioPhotos`
+  directly. So neither the comcard-extraction nor `repairDemoGalleryUploads` ever runs for agency PR
+  records. **Pre-existing — confirmed on HEAD via `git show`**, surfaces as `tsc` TS6198 + 2 biome
+  errors. Decide: use the split result (what the doc comment describes) or delete both helpers. Check
+  the admin PR screen first.
+- [ ] **Other placeholders still showing 0 on this screen**, untouched by A6 and still fed by
+  `managedPrFromBackend`: `attendancePct`, `kpiScore`, `totalPaid`, `place`, `yearsExp`. Each is a
+  neutral placeholder, not a measurement — do not let any of them badge or gate a decision until it has
+  a backend behind it. (`rating: 0` **was** one of these; A6 stopped it from firing the warn banner.)
 
 ### ▶ UNCOMMITTED WORK IN THE TREE — recorded 4 Aug 2026, needs its owner to finish
 
@@ -925,6 +957,46 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 — THREE EMPTY BOXES ON ONE SCREEN, THREE UNRELATED CAUSES (a shared symptom is not a shared bug).**
+>
+> Owner: *"why is this part of the 'Manage PR' under agency not showing the details? Such as its not
+> showing their shift history, their languages and their rating. All of them aren't showing"*, then
+> *"so what you are saying now is language is not an existing column in the database?"* — no, the
+> opposite, and that question is worth recording because the answer inverts the obvious diagnosis.
+>
+> Languages, Shift history and Ratings were all blank in Manage-PR → PR detail. The tempting read is
+> one broken fetch. It was **three separate faults**, and only one of them was missing data.
+>
+> | section | cause | fixed? |
+> |---|---|---|
+> | Languages | column **exists** (`user_profile.languages`, migration 0055) and the PR portal writes it — but `GET /pr`'s profile projection selected 8 columns and this was not one of them, so the mapper hardcoded `languages: []` | ✅ |
+> | Ratings | joined on the **display name** — the outlet writes its roster's legal name into `rating.pr_name`, Manage-PR shows the floor nickname. The row carried a real `pr_id` that matches exactly, and `ratingFromBackend` was **dropping it** | ✅ |
+> | Shift history | reads the **demo store** and filters `r.prId === detail.id` — a real uuid against demo ids like `pr_tied`. No backend read exists for it at all | ❌ §9 |
+>
+> **The rule this leaves behind: the same PR row was reachable by two endpoints and only one of them
+> looked.** `GET /user` returned languages the whole time — which is exactly why the PR's own portal
+> showed five of them while the agency showed an empty box. Same table, same row, two readers, one
+> blind. When a field is blank on one screen and populated on another, compare the two *projections*
+> before you suspect the data.
+>
+> **Second rule: `0` is not a score.** `managedPrFromBackend` fills `rating: 0` as a neutral placeholder
+> because `GET /pr` returns no rating — and `getAgencyPrFlags` read it as a measurement, so **every**
+> backend PR tripped "average 0★ is below 3.5★ — monitor performance". A placeholder that flows into a
+> judgement becomes a false accusation about a real person. `getAgencyPrFlags` now takes an optional
+> real average where `null` = never rated, and **null never warns**. The same placeholder was silently
+> breaking the Min-rating filter (any value emptied the grid); that is fixed for the same reason.
+>
+> New shared module `lib/pr-rating-summary.ts` holds the one matching rule — `prId` when present, name
+> only as the demo-row fallback — so the grid and the detail cannot drift apart.
+>
+> **NOT live-fired.** Typecheck clean on every touched file (backend: 1 pre-existing error in
+> `main.ts`; `apps/web`: 120, all baseline — the single finding in a touched file is TS6198 in
+> `pr-personnel-map.ts`, **proven pre-existing on HEAD** by `git show`). Biome clean for the change;
+> `organizeImports` applied because imports were added and this repo has lost the whole agency portal
+> to a route-import cycle before — the new module is imported **type-only**, so it adds no runtime edge.
+> Before believing any of it: **restart the backend** (`tsx watch` serves stale routes) and test against
+> a PR whose `languages` column is actually populated.
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >

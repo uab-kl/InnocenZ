@@ -21,7 +21,10 @@ import {
 	PortfolioGalleryTile,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
-import { useAgencyRatings } from "@agency-portal/hooks/use-agency-ratings";
+import {
+	type AgencyRating,
+	useAgencyRatings,
+} from "@agency-portal/hooks/use-agency-ratings";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
 	collectAgencyPrLanguages,
@@ -47,6 +50,11 @@ import {
 	prPayClass,
 	totalPenaltyFineRm,
 } from "@agency-portal/lib/pr-penalties";
+import {
+	displayAverage,
+	formatStars,
+	summarizePrRatings,
+} from "@agency-portal/lib/pr-rating-summary";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
@@ -164,7 +172,12 @@ function AgencyManagePRs() {
 				agencyPRs.filter((p) => {
 					if (p.detached) return false;
 					if (ageMin && (p.age ?? 0) < Number(ageMin)) return false;
-					if (ratingMin && (p.rating ?? 0) < Number(ratingMin)) return false;
+					// Judge the real average, not the `rating: 0` placeholder every
+					// backend PR carries — that made any Min-rating filter empty the grid.
+					if (ratingMin) {
+						const avg = displayAverage(p, summarizePrRatings(ratings, p));
+						if (avg === null || avg < Number(ratingMin)) return false;
+					}
 					const langs = languagesFromPr(p);
 					if (
 						lang &&
@@ -177,7 +190,7 @@ function AgencyManagePRs() {
 					return true;
 				}),
 			),
-		[agencyPRs, ageMin, ratingMin, lang, race, place, expMin],
+		[agencyPRs, ratings, ageMin, ratingMin, lang, race, place, expMin],
 	);
 
 	const detail = agencyPRs.find((p) => p.id === detailId);
@@ -469,7 +482,10 @@ function AgencyManagePRs() {
 				)}
 				<div className="iz-pr-manage-grid">
 					{filtered.map((p) => {
-						const flags = getAgencyPrFlags(p);
+						const flags = getAgencyPrFlags(
+							p,
+							displayAverage(p, summarizePrRatings(ratings, p)),
+						);
 						const active = isAgencyPrActive(p);
 						const picked = selectMode && selected.has(p.id);
 						return (
@@ -548,7 +564,9 @@ function AgencyPrDetail({
 }: {
 	detail: AgencyManagedPR;
 	shiftHistory: ReturnType<typeof useStore.getState>["shiftHistory"];
-	ratings: ReturnType<typeof useStore.getState>["ratings"];
+	// Backend rows when the session is real, demo rows otherwise — demo rows just
+	// carry no `prId`, which is exactly what summarizePrRatings falls back on.
+	ratings: AgencyRating[];
 	onBack: () => void;
 	onSaveProfile: (
 		prId: string,
@@ -599,7 +617,12 @@ function AgencyPrDetail({
 		conflicts: number;
 	} | null>(null);
 
-	const flags = getAgencyPrFlags(detail);
+	const ratingSummary = useMemo(
+		() => summarizePrRatings(ratings, detail),
+		[ratings, detail],
+	);
+	const averageRating = displayAverage(detail, ratingSummary);
+	const flags = getAgencyPrFlags(detail, averageRating);
 	const tiedUnderOneYear = flags.tiedUnderOneYear;
 
 	// Future booked shifts incompatible with a switch to commission-only
@@ -725,7 +748,10 @@ function AgencyPrDetail({
 						{isAgencyPrActive(detail) ? "Active" : "Inactive"}
 					</IzPill>
 					<p className="iz-tiny iz-muted">
-						IC {detail.ic} · {detail.rating} ★ avg
+						IC {detail.ic} ·{" "}
+						{averageRating === null
+							? "not rated yet"
+							: `${formatStars(averageRating)} ★ avg`}
 					</p>
 				</div>
 			</header>
@@ -780,7 +806,10 @@ function AgencyPrDetail({
 			<div className="iz-outlet-stat-strip mt-3">
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>Rating</IzKpiLabel>
-					<div className="n text-[var(--iz-gold)]">{detail.rating}★</div>
+					<div className="n text-[var(--iz-gold)]">
+						{formatStars(averageRating)}
+						{averageRating === null ? "" : "★"}
+					</div>
 				</div>
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>Attendance</IzKpiLabel>
@@ -1098,8 +1127,8 @@ function AgencyPrDetail({
 						<IzCard flat className="mt-2.5 border-[var(--iz-amber)]">
 							<p className="iz-tiny flex items-center gap-1 text-[var(--iz-amber)]">
 								<AlertTriangle className="h-3 w-3" />
-								Warn · average {detail.rating}★ is below {RATING_WARN_THRESHOLD}
-								★ — monitor performance
+								Warn · average {formatStars(averageRating)}★ is below{" "}
+								{RATING_WARN_THRESHOLD}★ — monitor performance
 							</p>
 						</IzCard>
 					)}
@@ -1152,17 +1181,22 @@ function AgencyPrDetail({
 						</OutletSection>
 					)}
 
-					<OutletSection title="Ratings feed">
+					<OutletSection
+						title="Ratings feed"
+						hint={
+							ratingSummary.count > 0
+								? `${ratingSummary.count} rating${ratingSummary.count > 1 ? "s" : ""}`
+								: undefined
+						}
+					>
 						<IzCard flat>
-							{ratings
-								.filter((r) => r.pr === detail.name)
-								.slice(0, 3)
-								.map((r) => (
-									<p key={r.id} className="iz-tiny iz-muted py-1">
-										{r.stars}★ · {r.note}
-									</p>
-								))}
-							{ratings.filter((r) => r.pr === detail.name).length === 0 && (
+							{ratingSummary.rows.slice(0, 3).map((r) => (
+								<p key={r.id} className="iz-tiny iz-muted py-1">
+									{r.stars}★ · {r.note || "No note"}
+									{r.date ? ` · ${r.date}` : ""}
+								</p>
+							))}
+							{ratingSummary.count === 0 && (
 								<p className="iz-tiny iz-muted">No ratings yet</p>
 							)}
 						</IzCard>

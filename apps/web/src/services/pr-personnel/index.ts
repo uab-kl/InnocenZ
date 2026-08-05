@@ -25,6 +25,8 @@ export interface PrPersonnelProfile {
 	/** ISO date, `YYYY-MM-DD`. */
 	dob: string | null;
 	nationality: string | null;
+	/** Spoken languages the PR set on their own profile, e.g. ['English','Hokkien']. */
+	languages: string[] | null;
 	portfolioPhotos: string[] | null;
 	/** Saved auto-generated photo comcard path (`user_profile.comcard_image`). */
 	comcardImage: string | null;

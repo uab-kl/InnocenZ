@@ -33,9 +33,21 @@ export function isAgencyPrActive(pr: AgencyManagedPR): boolean {
 	return !pr.suspended && !pr.detached;
 }
 
-export function getAgencyPrFlags(pr: AgencyManagedPR) {
+/**
+ * `average` is the PR's real mean rating, or null when they have never been
+ * rated. It defaults to the record's own `rating` so existing callers are
+ * unaffected; pass it explicitly wherever the true average is known.
+ *
+ * An unrated PR is not a poor performer, so a null average never warns. That
+ * matters now that backend PRs arrive with `rating: 0` as a placeholder — every
+ * one of them used to trip the "below 3.5★" warning on sight.
+ */
+export function getAgencyPrFlags(
+	pr: AgencyManagedPR,
+	average: number | null = pr.rating,
+) {
 	const consecutiveLow = pr.consecutiveLowRatings ?? 0;
-	const warnLowAvg = pr.rating < RATING_WARN_THRESHOLD;
+	const warnLowAvg = average !== null && average < RATING_WARN_THRESHOLD;
 	const suspendStreak = consecutiveLow >= CONSECUTIVE_LOW_SUSPEND_COUNT;
 	const tiedUnderOneYear = isPrTiedUnderOneYear(pr);
 
@@ -50,7 +62,7 @@ export function getAgencyPrFlags(pr: AgencyManagedPR) {
 		tiedUnderOneYear,
 		level,
 		warnLabel: warnLowAvg
-			? `Avg ${pr.rating}★ · below ${RATING_WARN_THRESHOLD}★`
+			? `Avg ${(average ?? 0).toFixed(1)}★ · below ${RATING_WARN_THRESHOLD}★`
 			: null,
 		suspendLabel: suspendStreak
 			? `${CONSECUTIVE_LOW_SUSPEND_COUNT} consecutive shifts below ${RATING_SUSPEND_SHIFT_THRESHOLD}★`
