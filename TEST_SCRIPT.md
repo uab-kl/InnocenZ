@@ -977,6 +977,32 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — A CLAIM NOW NAMES ITS SHIFT, IN BOTH SHEETS.**
+>
+> Owner: *"the status show verified that means some dispute make , need to put what shift details time
+> date , and this 3th pic i need to see that the dispute which shift is make dispute before to remind
+> the pr"*.
+>
+> **"What you disputed" (tap a VERIFIED/DISPUTED status cell)** now resolves each claim's `receiptRefs`
+> back through `buildCellEvidence` to the shift behind that receipt — order number, `RCP-…`, outlet,
+> slot, and the check-in / shift-end stamps — so the PR reads the same shift the proof sheet shows. The
+> day heading is a real date now (`Tue 4 Aug 2026`) instead of `2026-08-04`.
+>
+> **The evidence sheet carries a reminder**, for ANSWERED claims as well as open ones. Not to flag an
+> action — a settled claim needs none — but to stop a PR re-raising something they already raised and
+> forgot. Three honest variants: an open whole-day claim, a settled whole-day claim, and *"you disputed
+> N shift(s) here before — see the tags below"* when the claim actually named receipts.
+>
+> A claim with no `receipt_refs` says **"Filed against the whole day — this claim does not record which
+> shift."** Stated rather than left blank: an empty space reads as "not loaded yet", which would leave
+> the PR waiting for something that is never coming. That information was never captured and no UI can
+> invent it; every claim raised from now on names its shift.
+>
+> Verified against the REAL mobile typecheck (`-p tsconfig.app.json`): no new errors above the ~11
+> pre-existing, and the only three `TS2304`s are the known `FileList` DOM-lib ones — no unimported
+> component remains, which is the class of fault that blanked the screen earlier today. 34 harness
+> checks pass.
+
 > **5 Aug 2026 — 🔴 BLANK PAGE ON DISPUTE, AND THE MOBILE TYPECHECK WAS CHECKING NOTHING.**
 >
 > Owner: *"in the dispute button i click either one shift blank page"* and *"why have this 'This whole

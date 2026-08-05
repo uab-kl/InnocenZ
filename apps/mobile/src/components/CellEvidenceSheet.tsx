@@ -164,7 +164,14 @@ export function CellEvidenceSheet({
    * question they were actually asking — so it read as an answer and was not
    * one. An OPEN claim stays, because it is the reason they cannot file another.
    */
-  const cellWide: 'open' | null = claims?.openAll ? 'open' : null;
+  const cellWide: 'open' | 'settled' | null = claims?.openAll
+    ? 'open'
+    : claims?.settledAll
+      ? 'settled'
+      : null;
+
+  /** How many receipts here a claim has actually NAMED — the tagged ones. */
+  const claimCount = claims ? claims.open.size + claims.settled.size : 0;
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -193,11 +200,28 @@ export function CellEvidenceSheet({
             </View>
           )}
 
-          {cellWide === 'open' && (
-            <View style={[s.cellClaim, s.cellClaimOpen]}>
-              <Text style={[s.cellClaimText, s.claimTagOpen]}>
-                This whole day is under dispute — that claim was filed against the day, so it does
-                not name a shift.
+          {/*
+            * A REMINDER that this cell has been argued about before.
+            *
+            * Shown for answered claims too, not just open ones. The point is not
+            * to flag an action — a settled claim needs none — it is to stop a PR
+            * re-raising something they already raised and forgot. The wording
+            * separates the two cases honestly: a claim that named a shift points
+            * at the tagged receipt below; one that did not says so, because that
+            * information was never recorded and no amount of UI can invent it.
+            */}
+          {(cellWide || claimCount > 0) && (
+            <View
+              style={[s.cellClaim, cellWide === 'open' ? s.cellClaimOpen : s.cellClaimSettled]}
+            >
+              <Text
+                style={[s.cellClaimText, cellWide === 'open' ? s.claimTagOpen : s.claimTagSettled]}
+              >
+                {cellWide === 'open'
+                  ? 'You have an open dispute on this whole day — filed against the day, so it does not name a shift.'
+                  : cellWide === 'settled'
+                    ? 'You disputed this whole day before and it was settled — that claim was filed against the day, so it does not name a shift.'
+                    : `You disputed ${claimCount === 1 ? 'a shift' : `${claimCount} shifts`} here before — see the tag${claimCount === 1 ? '' : 's'} below.`}
               </Text>
             </View>
           )}

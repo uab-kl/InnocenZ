@@ -146,6 +146,61 @@ function formatCell(value: number): string {
   return value.toFixed(2);
 }
 
+/**
+ * The shift(s) a claim actually names — receiptRefs resolved back through the
+ * day's evidence to the outlet, slot and attendance stamps behind each receipt.
+ *
+ * Returns [] when the claim named nothing, which is every claim raised before
+ * the shift picker existed. The caller says so out loud rather than rendering
+ * an empty space that reads as "still loading".
+ */
+function claimShifts(
+  week: PrCurrentWeek | null,
+  d: { disputeDate: string; component: IncomeKey; receiptRefs: string[] | null },
+) {
+  const refs = d.receiptRefs ?? [];
+  if (refs.length === 0) return [];
+  const evidence = buildCellEvidence(week, d.disputeDate, d.component);
+  return evidence.groups.flatMap((g) =>
+    g.receipts
+      .filter((r) => r.receiptNo && refs.includes(r.receiptNo))
+      .map((r) => ({
+        receiptNo: r.receiptNo as string,
+        orderNo: r.orderNo,
+        outletName: g.shift?.outletName ?? null,
+        slot: g.shift?.slot ?? null,
+        checkInAt: g.shift?.checkInAt ?? null,
+        checkOutAt: g.shift?.checkOutAt ?? null,
+      })),
+  );
+}
+
+/** "Tue 4 Aug 2026" — UTC-parsed to match how the grid buckets its days. */
+function longDay(iso: string): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) return iso;
+  const wd = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'][d.getUTCDay()];
+  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
+    d.getUTCMonth()
+  ];
+  return `${wd} ${d.getUTCDate()} ${mo} ${d.getUTCFullYear()}`;
+}
+
+/** "4 Aug, 11:29 am" — the stamp, short enough to sit on a claim row. */
+function shortStamp(iso: string | null): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  const mo = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][
+    d.getMonth()
+  ];
+  let h = d.getHours();
+  const m = String(d.getMinutes()).padStart(2, '0');
+  const ampm = h >= 12 ? 'pm' : 'am';
+  h = h % 12 || 12;
+  return `${d.getDate()} ${mo}, ${h}:${m} ${ampm}`;
+}
+
 // buildWeekGridFromLines moved to lib/week-pay-grid so PvDetailScreen renders
 // the identical grid for the same voucher.
 
@@ -1019,7 +1074,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 return (
                   <>
                     <Text style={styles.claimTitle}>What you disputed</Text>
-                    <Text style={styles.claimDay}>{claimDay.dateIso}</Text>
+                    <Text style={styles.claimDay}>{longDay(claimDay.dateIso)}</Text>
                     {rows.map((d) => (
                       <View key={d.id} style={styles.claimRow}>
                         <View style={styles.claimHead}>
@@ -1044,6 +1099,40 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           Voucher said {formatRM(Number(d.disputedAmount ?? 0))}
                           {d.reason ? ` · ${d.reason}` : ''}
                         </Text>
+
+                        {/*
+                          * WHICH SHIFT — resolved from the claim's own
+                          * `receiptRefs` back through the day's evidence, so the
+                          * PR reads the same outlet, slot and stamps the proof
+                          * sheet shows for that receipt.
+                          *
+                          * A claim with no refs predates the shift picker and
+                          * genuinely records no shift. That is stated rather
+                          * than left blank: an empty space reads as "not loaded
+                          * yet", which would have the PR waiting for something
+                          * that is never coming.
+                          */}
+                        {claimShifts(week, d).length > 0 ? (
+                          claimShifts(week, d).map((s) => (
+                            <View key={s.receiptNo} style={styles.claimShift}>
+                              <Text style={styles.claimShiftHead}>
+                                {s.orderNo ?? 'No order no'} · {s.receiptNo}
+                              </Text>
+                              <Text style={styles.claimShiftMeta}>
+                                {s.outletName ? `${s.outletName} · ` : ''}
+                                {s.slot ?? 'shift time unknown'}
+                              </Text>
+                              <Text style={styles.claimShiftMeta}>
+                                In {shortStamp(s.checkInAt)} · Out {shortStamp(s.checkOutAt)}
+                              </Text>
+                            </View>
+                          ))
+                        ) : (
+                          <Text style={styles.claimNote}>
+                            Filed against the whole day — this claim does not record which shift.
+                          </Text>
+                        )}
+
                         {!!d.note && <Text style={styles.claimNote}>{d.note}</Text>}
                         {/*
                           * The agency's answer, verbatim. A rejected claim
@@ -1572,6 +1661,14 @@ const styles = StyleSheet.create({
   claimComponent: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.txt },
   claimState: { fontFamily: F.sora, fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
   claimMeta: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
+  claimShift: {
+    marginTop: 8,
+    paddingLeft: 9,
+    borderLeftWidth: 2,
+    borderLeftColor: C.line2,
+  },
+  claimShiftHead: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.accentL },
+  claimShiftMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
   claimNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
   claimAnswer: { marginTop: 6, fontFamily: F.manrope, fontSize: 12, color: C.goldL },
   /** Voucher-level DISPUTED chip in the This-week card header. */
