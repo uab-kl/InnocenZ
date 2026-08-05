@@ -977,6 +977,37 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — 🔴 A SETTLED CELL COULD NEVER BE DISPUTED AGAIN (migration 0085).**
+>
+> Owner: *"the dispute button no works"* and *"why both is setttled i just want to know which shift's
+> drinks is already disputed and verified"*. Same root, two symptoms.
+>
+> **(1) The unique index was not partial.**
+> `payment_voucher_dispute_one_per_day_component` was `UNIQUE (voucher_id, dispute_date, component)`
+> with **no WHERE clause**, so the FIRST claim on a cell locked it permanently. Victoria's Tue 4 drinks
+> claim was already `accepted`, so the sheet opened, the form filled in, and Submit came back **409
+> "drinks on 2026-08-04 has already been disputed"**. The button was not broken — the cell was spent.
+>
+> That made a settled claim final by accident rather than by rule. If the agency's correction is itself
+> wrong — wrong shift fixed, or accepted and nothing changed — the PR had no route back and the money
+> stayed wrong, because the argument slot was used up.
+>
+> **0085** makes it partial: `… WHERE outcome IS NULL`. One OPEN claim per cell, so a double tap still
+> cannot create two rows; an answered claim blocks nothing. Strictly weaker than what it replaced, so no
+> existing row could violate it. **Applied.** Verified live: a new claim on the settled cell is now
+> ALLOWED, and two open claims on one cell are still REFUSED.
+>
+> **(2) Both receipts read SETTLED because the claim named neither.** That row's `receipt_refs` is NULL
+> — it predates the picker — which means the whole day+bucket. Tagging each receipt from it said "both
+> shifts were claimed individually", when the truth is "nobody said which; it was filed against the
+> day". Different statements, and only one is true.
+>
+> A whole-cell claim is now stated ONCE, in a banner at the top of the evidence sheet; per-receipt tags
+> appear only when the claim actually named that receipt. So going forward a narrowed claim answers
+> *"which shift?"* precisely, and an old un-narrowed one says plainly that it never recorded the answer.
+>
+> `tsc` clean both sides; 34 harness checks pass. **Backend restart required.**
+
 > **5 Aug 2026 — THE PICKER LOOKED LIKE A RADIO GROUP, AND NOTHING SAID WHICH SHIFT WAS CLAIMED.**
 >
 > Owner: *"enhence the UI , pr dont know which one is selected"* and *"need to show which shift drink or

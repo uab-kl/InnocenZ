@@ -139,10 +139,26 @@ export function CellEvidenceSheet({
    */
   const claimOf = (receiptNo: string | null): 'open' | 'settled' | null => {
     if (!claims) return null;
-    if (claims.openAll || (receiptNo && claims.open.has(receiptNo))) return 'open';
-    if (claims.settledAll || (receiptNo && claims.settled.has(receiptNo))) return 'settled';
+    if (receiptNo && claims.open.has(receiptNo)) return 'open';
+    if (receiptNo && claims.settled.has(receiptNo)) return 'settled';
     return null;
   };
+
+  /*
+   * A WHOLE-CELL claim is stated once, at the top — not stamped on every row.
+   *
+   * A claim that named no receipts covers the entire day+bucket, which is what
+   * every claim raised before the receipt picker existed looks like. Tagging
+   * each receipt from it made two shifts both read SETTLED, exactly as if they
+   * had been claimed individually — so a PR asking "which shift was disputed?"
+   * got the answer "both", when the truth is "nobody said; it was filed against
+   * the day". Those are different statements and only one of them is true.
+   */
+  const cellWide: 'open' | 'settled' | null = claims?.openAll
+    ? 'open'
+    : claims?.settledAll
+      ? 'settled'
+      : null;
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -167,6 +183,16 @@ export function CellEvidenceSheet({
               <Text style={s.warnText}>
                 This list adds up to {money(evidence.total)} but the grid shows{' '}
                 {money(cellAmount)}. Report this — do not sign it off.
+              </Text>
+            </View>
+          )}
+
+          {cellWide && (
+            <View style={[s.cellClaim, cellWide === 'open' ? s.cellClaimOpen : s.cellClaimSettled]}>
+              <Text style={[s.cellClaimText, cellWide === 'open' ? s.claimTagOpen : s.claimTagSettled]}>
+                {cellWide === 'open'
+                  ? 'This whole day is under dispute — the claim was filed against the day, not a single shift.'
+                  : 'This whole day was disputed and settled — the claim covered every shift below, not one of them.'}
               </Text>
             </View>
           )}
@@ -354,6 +380,20 @@ const s = StyleSheet.create({
     color: C.green,
     backgroundColor: C.greenBg,
     borderColor: 'rgba(93,217,160,0.35)',
+  },
+  cellClaim: {
+    marginTop: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+  },
+  cellClaimOpen: { backgroundColor: C.redBg, borderColor: 'rgba(240,138,138,0.35)' },
+  cellClaimSettled: { backgroundColor: C.greenBg, borderColor: 'rgba(93,217,160,0.35)' },
+  cellClaimText: {
+    fontFamily: F.manrope,
+    fontSize: 12,
+    backgroundColor: 'transparent',
+    borderWidth: 0,
   },
   orderNo: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.accentL },
   receiptNo: { fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
