@@ -168,10 +168,22 @@ export function CellEvidenceSheet({
      * "waiting on your agency", and calling that settled would claim a decision
      * nobody has made.
      */
+    /*
+     * VERIFIED only for a shift the claim actually NAMED.
+     *
+     * `settledAll` is deliberately NOT consulted here. An answered whole-day
+     * claim covered every shift, but promoting them all to VERIFIED told the PR
+     * that a shift they never took up had been through a dispute — so disputing
+     * the 16:00 shift left the untouched 10:00 shift wearing the same green tag,
+     * and the contrast the tag exists to draw disappeared.
+     *
+     * An OPEN whole-day claim still marks everything (above), because it really
+     * does block every shift beneath it and it carries a banner saying so. A
+     * SETTLED one is history: its detail lives in "What you disputed".
+     */
     const answered =
       (r.receiptId && claims.settled.get(r.receiptId)) ||
-      (r.receiptNo && claims.settled.get(r.receiptNo)) ||
-      claims.settledAll;
+      (r.receiptNo && claims.settled.get(r.receiptNo));
     if (answered) return 'verified';
     return r.pending ? null : 'settled';
   };
