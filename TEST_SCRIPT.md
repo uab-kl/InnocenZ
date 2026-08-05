@@ -939,6 +939,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE RECEIPT PHOTO OPENS, AND THE SHEETS FIT A REAL PHONE.**
+>
+> Owner, on the device: *"for example this picture i cannot scroll to see in phone"* and *"the screen
+> flexible to any phone devices view"*.
+>
+> **The photo was a dead end.** 64px, no tap handler — big enough to prove a photo EXISTS and far too
+> small to read a line off, on a sheet whose entire purpose is holding the paper against the figure.
+> Thumbnails are 96px now and open FULL SCREEN on tap, layered over the sheet rather than replacing it
+> so the figure stays visible to compare against. Tap anywhere to dismiss.
+>
+> **`maxWidth: 392` was the WEB phone-frame width**, not a device width. On a 411dp handset it left dead
+> margins down both sides. Now 520: fills a real phone edge to edge, still caps on a tablet, and the web
+> frame is narrower than either so nothing changes there. With the previous commit the sheets are now
+> bounded to 90% height, scroll internally, and keep their buttons reachable at any size.
+>
+> ⚠️ **Two things left, both recorded rather than papered over:**
+> - Photos still render from full-size data-URIs, so opening a sheet decodes the whole captured image.
+>   That is the remaining lag; the fix belongs at CAPTURE, since the same oversized string also travels
+>   in every week payload.
+> - `RCP-000012` shows **VERIFIED** beside *"waiting on your agency"*. Both are true — the claim against
+>   it was answered, the receipt itself is still unreviewed — but side by side they read as a
+>   contradiction. Worth wording apart if it bites in use; do NOT fix it by dropping either fact.
+>
+> Mobile clean above the ~11 pre-existing; 40 harness checks pass. No backend change.
+
 > **5 Aug 2026 — THE SHEETS SCROLL AND STOP HIDING THEIR OWN BUTTONS (first real-device pass).**
 >
 > Owner, on a physical phone: *"make sure no lag , can scroll , design the UI"*.
