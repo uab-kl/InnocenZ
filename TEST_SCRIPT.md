@@ -312,6 +312,45 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ ⚠️ THE VOUCHER'S SIGNATURES ARE NOT PROOF OF ANYTHING (found 5 Aug 2026, NOT FIXED)
+
+Owner asked *"where to proof the agency sign?"*. Investigating it turned up something worse than the
+missing block. **On a payment document, this is the most serious open item in §9.**
+
+- **The printed PR signature is SYNTHESIZED FROM A NAME.** `pv.prSignatureDataUrl` — the only
+  signature `pv-pdf.ts` renders — is produced solely by `buildDemoESignatureDataUrl(prName)`, which
+  draws the name string as a signature image. Anyone whose name is on file therefore has a
+  "signature" on the document whether or not they ever signed.
+- **The REAL strokes are rendered nowhere.** `payment_voucher.pr_signature` and
+  `finance_head_signature` hold `{w, h, strokes}` JSON (0080). No screen, PDF, Excel or print view
+  reads them. The agency portal shows only a text row: name + ISO timestamp.
+- **There is no "Approved by" block at all** in any output path. `.sig-left` CSS exists at
+  `pv-pdf.ts:311` and NO markup uses it — the column was designed and never wired.
+
+Fix, in three parts:
+- [ ] Carry `finance_head_signature` and `pr_signature` to the client on the agency detail read.
+- [ ] Render the STROKES as an inline SVG polyline, replacing `buildDemoESignatureDataUrl` on the real
+  path (keep the demo builder for demo vouchers only).
+- [ ] Add the **Approved by** column — finance head's drawn signature, name, date — mirroring the
+  official UAB layout (Approved by | Received by), using the `.sig-left` styles already present.
+- [ ] ⚠️ Decide first: a voucher signed before strokes were stored will show name-and-date over the
+  rule instead of a drawing. That is the honest rendering, but it makes some existing vouchers look
+  emptier than they do today. Owner has NOT yet confirmed.
+
+### ▶ PV DOCUMENT — OTHER GAPS vs the official UAB layout (5 Aug 2026)
+
+- [ ] **Voucher No. prints the raw uuid** (`7bf3962e-591e-452f…`) instead of the stored
+  `payment_voucher.voucher_no` (`PV-000004`). The column exists precisely so vouchers stop sharing a
+  derived string — this template just never read it.
+- [ ] **Voucher Date is blank**; the example prints the issue date.
+- [ ] **Amount in words** ("[Ringgit Malaysia One Thousand Two Hundred and Three Only]") is absent.
+- [ ] **Bank Name / Bank Account No. print `-`** though the backend exporter already reads them from
+  `user_profile` (0077). Phone likewise.
+- [ ] Payment Term, ID#, SST and discount rows from the official layout are absent.
+- [ ] ⚠️ **Decide which document is canonical** — this web print template or the backend PDF/Excel
+  exporters. Both render vouchers, and only the backend one reads nickname/IC/phone/bank. Fixing the
+  wrong one leaves the gap where it is.
+
 ### ▶ THE DAY-STATUS SEQUENCE (owner, 5 Aug 2026 — the spec everything else answers to)
 
 *"first is pending, status pending in the pr payment page after the pr check out, after the agency
