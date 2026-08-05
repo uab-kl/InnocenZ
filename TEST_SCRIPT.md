@@ -310,6 +310,30 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ THE DAY-STATUS SEQUENCE (owner, 5 Aug 2026 — the spec everything else answers to)
+
+*"first is pending, status pending in the pr payment page after the pr check out, after the agency
+approved then only the pr payment page status approved, then only can show dispute button to make
+dispute, then after the agency resolved the dispute the status on the payment page is verified"*
+
+1. **PENDING** — PR checks out, the day's money is sealed, nobody has checked it.
+2. **APPROVED** — the agency approves the day. **Only now does the Dispute button appear.**
+3. **DISPUTED** — a raised claim outranks APPROVED while open; the approval is what is being argued.
+4. **VERIFIED** — the agency RESOLVES the claim. Stronger than approved: questioned AND answered.
+
+Mirrored in memory as `innocenz-day-status-lifecycle`. Already enforced by `prVisibleDayStatuses`
+(backend) and `dayStatusLabel` (mobile). A STALE day drops back to PENDING rather than claiming an
+approval of a figure that no longer exists.
+
+- [ ] ⚠️ **UNDECIDED — a day nobody disputes.** The sequence above makes VERIFIED the post-dispute
+  state, but most days are never disputed and the Sunday 02:00 rollover verifies undisputed approved
+  receipts today. Both routes are ASSUMED to stay (resolution → verified immediately; no dispute →
+  verified at the Sunday run). If VERIFIED is meant strictly as post-dispute, the rollover has to
+  change instead — and that governs when a week CLOSES, so decide it deliberately.
+- [ ] **Not written by this session:** `dayStatusLabel`, `disputesForDay`, `openDisputeKeys`,
+  `weekDisputable` in `apps/mobile/src/lib/receipt-review.ts` appeared mid-session from another
+  source. They implement this sequence but have NOT been reviewed here — read them before trusting.
+
 ### ▶ AGENCY PAYROLL UI — 3 OWNER REQUESTS, NOT STARTED (5 Aug 2026)
 
 - [ ] **Search the PV list by PR name or outlet.** *"pv section make need to search the pr name or

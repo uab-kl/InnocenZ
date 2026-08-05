@@ -90,6 +90,32 @@ export function resolvePvPrName(
 	return pv.prName;
 }
 
+/**
+ * How a payee is NAMED on screen: `Vicky (Victoria Tan Mei Lin)`.
+ *
+ * Owner's rule (4 Aug 2026) — the nickname goes in FRONT, the legal name stays
+ * in brackets behind it. Both are needed and neither replaces the other: the
+ * floor knows this person as Vicky, while the money, the IC and the bank
+ * transfer are all in the legal name, and an agency reconciling a payment has to
+ * see that the two belong together.
+ *
+ * The nickname comes off the voucher's own FK join (`prNickname`) first, since
+ * that is read from `pr.nickname` at request time. `resolvePvPrName` supplies the
+ * legal half and the demo-row fallback. With no nickname — or one that merely
+ * repeats the legal name — this returns the legal name alone rather than
+ * printing "Victoria Tan Mei Lin (Victoria Tan Mei Lin)".
+ */
+export function resolvePvPrLabel(
+	pv: Pick<PrPaymentVoucher, "prName" | "prIc"> & { prNickname?: string },
+	agencyPRs: AgencyManagedPR[] = [],
+): string {
+	const legal = resolvePvPrName(pv, agencyPRs);
+	const nickname = pv.prNickname?.trim();
+	if (!nickname) return legal;
+	if (nickname.toLowerCase() === legal.trim().toLowerCase()) return legal;
+	return `${nickname} (${legal})`;
+}
+
 export function pvBelongsToAgencyPr(
 	pv: Pick<PrPaymentVoucher, "prName" | "prIc">,
 	agencyPRs: AgencyManagedPR[] = [],

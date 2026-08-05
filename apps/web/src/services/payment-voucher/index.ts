@@ -90,6 +90,12 @@ export interface PaymentVoucher {
 	agencyId: string;
 	prId: string | null;
 	prName: string;
+	/**
+	 * The PR's working name, joined from `pr.nickname` through `pr_id` — never a
+	 * column on the voucher itself. Null when no PR is attached yet, or the PR
+	 * has no nickname set.
+	 */
+	prNickname: string | null;
 	prIc: string | null;
 	outlet: string | null;
 	cycle: string | null;
