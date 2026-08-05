@@ -204,7 +204,7 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | A3 | Home KPIs · Outlet demand · History | Agency (self) | `routes/agency/dashboard` · `history` | shift + outlet | ✅ Verified |
 | A4 | Payment Voucher: history endpoint + weekly wage calc | **Agency ← PR** (wages from shifts) | `payment-voucher` | shift-derived weekly | ⚠️ Reported (**verify PR-linking**, §9) |
 | A7 | **Manage-PR Shift history is a real read — with NO payout, on purpose.** Was reading the demo store and filtering a real uuid against demo ids (`pr_tied`), so it could never match and rendered a blank card with no empty state. Now `GET /shift-assignment?prId=`; `listPaginated` joins `outlet.name` through the FK (rule 3 — never copied onto the row). Renders `date · outlet` and says **"No shifts yet"** when there are none. **The payout is deliberately omitted** — the sealed wage lives on `payment_voucher_line` and re-deriving it would create a second source of truth for money. | **Agency ← PR** | `shift-assignment.repository.ts` (`listPaginated`) · `use-agency-pr-shift-history.ts` · `routes/agency/prs.tsx` | `shift_assignment` ⋈ `shift` ⋈ `outlet` (no DDL) | ⚠️ Reported (typecheck at baseline, biome clean; **not live-fired**. Org scoping **read and confirmed**: a non-admin caller's `agencyId` is forced server-side and only admins may pass it, so another agency's `prId` returns nothing) |
-| A6 | **Manage-PR detail shows real Languages + real Ratings.** `GET /pr` now selects `user_profile.languages` (the column existed since 0055; this projection was the only reader not selecting it), and the ratings feed matches on **`rating.pr_id`** instead of the display name — the outlet writes its roster's legal name while Manage-PR shows the floor nickname, so a real rating was invisible. Average / Rating tile / warn banner all derive from the real rows; an **unrated** PR reads "not rated yet" instead of tripping the below-3.5★ warning off the `rating: 0` placeholder. | **Agency ← Outlet** (ratings) · **Agency ← PR** (languages) | `pr.repository.ts` · `pr-personnel-map.ts` · `lib/pr-rating-summary.ts` · `use-agency-ratings.ts` · `routes/agency/prs.tsx` | `user_profile.languages` · `rating.pr_id` (no DDL) | ⚠️ Reported (typecheck clean on every touched file, biome clean; **not live-fired** — needs a backend restart + agency click-through, §9) |
+| A6 | **Manage-PR detail shows real Languages + real Ratings.** `GET /pr` now selects `user_profile.languages` (the column existed since 0055; this projection was the only reader not selecting it), and the ratings feed matches on **`rating.pr_id`** instead of the display name — the outlet writes its roster's legal name while Manage-PR shows the floor nickname, so a real rating was invisible. Average / Rating tile / warn banner all derive from the real rows; an **unrated** PR reads "not rated yet" instead of tripping the below-3.5★ warning off the `rating: 0` placeholder. **Amended 5 Aug:** the grid card was missed in the first pass — it printed `pr.rating.toFixed(1)` (`★ 0.0`) beside a correctly-earned Warn pill; it now takes `averageRating` and hides the chip when unrated. | **Agency ← Outlet** (ratings) · **Agency ← PR** (languages) | `pr.repository.ts` · `pr-personnel-map.ts` · `lib/pr-rating-summary.ts` · `use-agency-ratings.ts` · `routes/agency/prs.tsx` | `user_profile.languages` · `rating.pr_id` (no DDL) | ⚠️ Reported (typecheck clean on every touched file, biome clean; **not live-fired** — needs a backend restart + agency click-through, §9) |
 | A5 | **Approving a DAY approves the receipts on that day** — `receiptsCarriedByDays` carries every PENDING receipt whose lines all fall on approved days (a Mon+Tue receipt waits for both; an undated receipt is never carried — its money is in no day's total). Both day-review endpoints return the post-sweep `receipts` + `pendingReceiptCount`, and the Receipts sub-tab is invalidated alongside the evidence detail. | **Agency → PR** | `payment-voucher-day-review.ts` · `payment-voucher.controller.ts` · `use-agency-pv-day-review.ts` · `AgencyPvDayReviewPanel` | `payment_voucher_receipt.status` (no DDL) | ⚠️ Reported (7/7 pure checks + typecheck clean; needs a live agency click-through) |
 
 ### Admin side (jk)
@@ -969,6 +969,36 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+> **5 Aug 2026 (d) — I FIXED THE FLAG AND FORGOT THE NUMBER (a partial wiring looks exactly like a working one).**
+>
+> Owner: *"the design still looks like it waste a lot of space"*, then *"also why is the rating not
+> showing how many stars they got here in the second image?"*
+>
+> **Density.** The row used `justify-between` across a full-width card, so venue and date sat at opposite
+> edges with a gulf between them — the eye had to cross the card to pair them. Venue and date now sit
+> together on the left, row padding `py-2`→`py-1.5`, and **the free right edge became the exception
+> column**: empty on a normal shift, so a No-show pill is scannable straight down the list. Tighter rows
+> pay for more content, so the card shows **5** shifts instead of 3 (`SHIFT_HISTORY_ROWS`).
+>
+> **The rating miss — worth reading before trusting any "wired it up" claim.** The detail screen's
+> ratings feed was correct (the owner's screenshot shows the real `2★ · Jul 30, 2026` row). But the
+> **grid card** printed `★ 0.0` on that same PR, because `ManagePrGridCard` renders `pr.rating.toFixed(1)`
+> directly — and I had only passed the real average into `getAgencyPrFlags`, not into the card's own
+> number. So the **Warn pill was right for the right reason** (2.0 < 3.5) while the number beside it was
+> the placeholder. Two readings of "the rating" in one component, and I wired one.
+>
+> The rule: **when a value has more than one renderer, fixing the one you were looking at leaves the
+> others lying — and the fixed one makes the screen look fixed.** A card that says `0.0` next to a
+> correctly-earned Warn is more misleading than one that is wrong throughout, because the flag lends the
+> number credibility.
+>
+> The card now takes `averageRating` and **hides the rating chip entirely when the PR has never been
+> rated**, rather than printing `0.0` — matching the detail screen's "not rated yet". Still-placeholder
+> on that card and untouched: `Paid RM 0`, `Att. 0%`, `KPI 0` (§9).
+>
+> `apps/web` at its 120 baseline; the 2 biome findings on `ManagePrGridCard` are the pre-existing
+> `<article role="button">`, confirmed on HEAD.
 
 > **5 Aug 2026 (c) — A DESIGN PASS THAT FOUND TWO THINGS THE LIST WAS SAYING WRONG.**
 >

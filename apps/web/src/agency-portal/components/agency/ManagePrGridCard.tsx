@@ -12,6 +12,12 @@ type ManagePrGridCardProps = {
 	pr: AgencyManagedPR;
 	active: boolean;
 	flags: ReturnType<typeof getAgencyPrFlags>;
+	/**
+	 * The PR's real mean rating, or null when they have never been rated.
+	 * NOT `pr.rating` — that is a 0 placeholder on every backend PR, and printing
+	 * it showed "0.0" on a card whose owner had real stars.
+	 */
+	averageRating: number | null;
 	selectMode: boolean;
 	picked: boolean;
 	onActivate: () => void;
@@ -21,6 +27,7 @@ export function ManagePrGridCard({
 	pr,
 	active,
 	flags,
+	averageRating,
 	selectMode,
 	picked,
 	onActivate,
@@ -75,10 +82,10 @@ export function ManagePrGridCard({
 			<div className="iz-pr-manage-card__body">
 				<div className="iz-pr-manage-card__name-row">
 					<p className="iz-pr-manage-card__name">{pr.name}</p>
-					{pr.rating != null && (
+					{averageRating !== null && (
 						<span className="iz-pr-manage-card__rating">
 							<Star className="iz-pr-manage-card__rating-star" aria-hidden />
-							{pr.rating.toFixed(1)}
+							{averageRating.toFixed(1)}
 						</span>
 					)}
 				</div>

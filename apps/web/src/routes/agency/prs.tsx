@@ -74,6 +74,9 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 
+/** Tighter rows fit more shifts in the same card than the old 3 did. */
+const SHIFT_HISTORY_ROWS = 5;
+
 const KPI_TIER_OPTIONS = ["A", "B", "C"] as const;
 const TRAINING_TIER_OPTIONS = [
 	"Tier I",
@@ -485,10 +488,11 @@ function AgencyManagePRs() {
 				)}
 				<div className="iz-pr-manage-grid">
 					{filtered.map((p) => {
-						const flags = getAgencyPrFlags(
+						const averageRating = displayAverage(
 							p,
-							displayAverage(p, summarizePrRatings(ratings, p)),
+							summarizePrRatings(ratings, p),
 						);
+						const flags = getAgencyPrFlags(p, averageRating);
 						const active = isAgencyPrActive(p);
 						const picked = selectMode && selected.has(p.id);
 						return (
@@ -497,6 +501,7 @@ function AgencyManagePRs() {
 								pr={p}
 								active={active}
 								flags={flags}
+								averageRating={averageRating}
 								selectMode={selectMode}
 								picked={picked}
 								onActivate={() => {
@@ -1178,35 +1183,37 @@ function AgencyPrDetail({
 					<OutletSection
 						title="Shift history"
 						hint={
-							shiftRows.length > 0
-								? `Last ${Math.min(3, shiftRows.length)} of ${shiftRows.length}`
+							shiftRows.length > SHIFT_HISTORY_ROWS
+								? `Last ${SHIFT_HISTORY_ROWS} of ${shiftRows.length}`
 								: undefined
 						}
 					>
 						<IzCard flat>
-							{shiftRows.slice(0, 3).map((h) => {
+							{shiftRows.slice(0, SHIFT_HISTORY_ROWS).map((h) => {
 								const outcome = shiftOutcomeLabel(h.status);
 								return (
 									<div
 										key={h.id}
-										className="flex items-baseline justify-between gap-3 border-t border-[var(--iz-line)] py-2 first:border-0 first:pt-0"
+										className="flex items-baseline gap-2 border-t border-[var(--iz-line)] py-1.5 first:border-0 first:pt-0"
 									>
-										<span className="flex min-w-0 items-baseline gap-1.5">
-											<span className="iz-sm truncate text-pretty text-[var(--iz-txt)]">
-												{h.outlet}
-											</span>
-											{outcome && (
-												<IzPill
-													variant={outcome.tone}
-													className="shrink-0 !py-0.5 !text-[9px]"
-												>
-													{outcome.label}
-												</IzPill>
-											)}
+										{/* Venue and date sit together: pushed to opposite edges of a
+										    wide card, the eye has to cross the gap to pair them. */}
+										<span className="iz-sm min-w-0 truncate text-[var(--iz-txt)]">
+											{h.outlet}
 										</span>
 										<span className="iz-tiny iz-muted2 shrink-0 tabular-nums">
 											{h.dateDisplay}
 										</span>
+										{/* The free right edge is the exception column — empty on a
+										    normal shift, so a flagged one is scannable down the list. */}
+										{outcome && (
+											<IzPill
+												variant={outcome.tone}
+												className="ml-auto shrink-0 !py-0.5 !text-[9px]"
+											>
+												{outcome.label}
+											</IzPill>
+										)}
 									</div>
 								);
 							})}
