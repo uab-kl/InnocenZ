@@ -4,7 +4,7 @@ import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { useStore } from "@agency-portal/lib/store";
 import { Check, ImageOff, Paperclip, Pencil, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type {
 	AgencyReceipt,
 	PaymentVoucherDispute,
@@ -232,7 +232,28 @@ function DisputeRow({
 							: ""}
 					</p>
 				</div>
-				<span className="iz-pill iz-pill-amber !text-[10px]">Open</span>
+				{/* The row used to hardcode "Open" — true only because the panel could
+				    not fetch anything else. Now that settled claims are listed, the
+				    pill has to say which one this is. */}
+				{dispute.outcome ? (
+					<span
+						className={`iz-pill !text-[10px] ${
+							dispute.outcome === "accepted"
+								? "iz-pill-green"
+								: dispute.outcome === "rejected"
+									? "iz-pill-red"
+									: "iz-pill-ink"
+						}`}
+					>
+						{dispute.outcome === "accepted"
+							? "Accepted"
+							: dispute.outcome === "rejected"
+								? "Rejected"
+								: "Withdrawn"}
+					</span>
+				) : (
+					<span className="iz-pill iz-pill-amber !text-[10px]">Open</span>
+				)}
 			</div>
 
 			<div className="mt-2 flex flex-wrap gap-4 text-sm">
@@ -275,40 +296,56 @@ function DisputeRow({
 
 			<DisputeEvidence dispute={dispute} receipts={receipts} />
 
-			<textarea
-				className="iz-field-input mt-3 w-full"
-				rows={2}
-				placeholder="Note to the PR (required when rejecting)"
-				value={note}
-				onChange={(e) => {
-					setNote(e.target.value);
-					if (e.target.value.trim()) setRejecting(false);
-				}}
-			/>
-			{rejecting && (
-				<p className="iz-tiny mt-1 text-[var(--iz-amber,#d9b97a)]">
-					Tell the PR why this was rejected.
-				</p>
-			)}
+			{/* A DECIDED claim is read-only. The server refuses a second decision, so
+			    offering Accept/Reject on one already settled is a button that can
+			    only fail — and worse, it invites the reviewer to think the outcome is
+			    still theirs to change. What they need instead is the record: what was
+			    decided, and what was said to the PR. */}
+			{dispute.outcome ? (
+				dispute.resolutionNote && (
+					<p className="iz-tiny iz-muted mt-3">
+						<span className="iz-muted2">Told the PR: </span>
+						{dispute.resolutionNote}
+					</p>
+				)
+			) : (
+				<>
+					<textarea
+						className="iz-field-input mt-3 w-full"
+						rows={2}
+						placeholder="Note to the PR (required when rejecting)"
+						value={note}
+						onChange={(e) => {
+							setNote(e.target.value);
+							if (e.target.value.trim()) setRejecting(false);
+						}}
+					/>
+					{rejecting && (
+						<p className="iz-tiny mt-1 text-[var(--iz-amber,#d9b97a)]">
+							Tell the PR why this was rejected.
+						</p>
+					)}
 
-			<div className="mt-2 flex gap-2">
-				<button
-					type="button"
-					className="iz-btn iz-btn-primary flex items-center gap-1.5"
-					disabled={busy}
-					onClick={() => submit("accepted")}
-				>
-					<Check className="h-4 w-4" /> Accept
-				</button>
-				<button
-					type="button"
-					className="iz-btn iz-btn-soft flex items-center gap-1.5"
-					disabled={busy}
-					onClick={() => submit("rejected")}
-				>
-					<X className="h-4 w-4" /> Reject
-				</button>
-			</div>
+					<div className="mt-2 flex gap-2">
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary flex items-center gap-1.5"
+							disabled={busy}
+							onClick={() => submit("accepted")}
+						>
+							<Check className="h-4 w-4" /> Accept
+						</button>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft flex items-center gap-1.5"
+							disabled={busy}
+							onClick={() => submit("rejected")}
+						>
+							<X className="h-4 w-4" /> Reject
+						</button>
+					</div>
+				</>
+			)}
 		</div>
 	);
 }
@@ -329,9 +366,63 @@ function DisputeRow({
  * self-logged receipts that the claim rested on. The targeted receipt endpoints
  * removed that trap.
  */
+/** Open = nobody has decided it yet. `outcome` stays null until somebody does. */
+const isOpenDispute = (d: PaymentVoucherDispute) => !d.outcome;
+
+type DisputeScope = "open" | "resolved" | "all";
+
 export function DisputeQueuePanel() {
 	const toast = useStore((s) => s.toast);
-	const { disputes, isLoading, resolve, isResolving } = useAgencyDisputes(true);
+	/**
+	 * EVERY dispute, not only the open ones.
+	 *
+	 * This asked the server for `?open=1`, so a settled dispute was never fetched
+	 * by any agency screen — it existed in the database and appeared nowhere, and
+	 * the panel read "No open disputes" whether none had ever been raised or one
+	 * had been accepted an hour earlier. The owner caught exactly that: *"yesterday
+	 * got one successful dispute right show where?"*. A decision the agency made
+	 * about somebody's pay has to stay visible after it is made.
+	 */
+	const {
+		disputes: allDisputes,
+		isLoading,
+		resolve,
+		isResolving,
+	} = useAgencyDisputes(false);
+	const [scope, setScope] = useState<DisputeScope>("open");
+	const [search, setSearch] = useState("");
+
+	const openCount = allDisputes.filter(isOpenDispute).length;
+	const resolvedCount = allDisputes.length - openCount;
+
+	const disputes = useMemo(() => {
+		const byScope = allDisputes.filter((d) =>
+			scope === "all"
+				? true
+				: scope === "open"
+					? isOpenDispute(d)
+					: !isOpenDispute(d),
+		);
+		const q = search.trim().toLowerCase();
+		if (!q) return byScope;
+		// Everything a reviewer might have in their head when they come looking:
+		// whose it is, which day, which bucket, why it was raised, how it ended.
+		// Everything the row shows, so anything a reviewer can read they can also
+		// search for — the PR (through the voucher join), the day, the bucket, why
+		// it was raised, how it ended, and what was said back.
+		return byScope.filter((d) =>
+			[
+				d.voucher?.prName,
+				d.disputeDate,
+				d.component,
+				d.reason,
+				d.resolutionNote,
+				d.outcome,
+			]
+				.filter(Boolean)
+				.some((field) => String(field).toLowerCase().includes(q)),
+		);
+	}, [allDisputes, scope, search]);
 	// One query for the whole queue, not one per row — react-query dedupes on the
 	// shared key, and the rows only ever read from it.
 	const { receipts } = useAgencyReceipts();
@@ -359,15 +450,58 @@ export function DisputeQueuePanel() {
 	return (
 		<>
 			<IzSectionLabel>
-				Disputes{disputes.length > 0 ? ` (${disputes.length})` : ""}
+				Disputes{openCount > 0 ? ` (${openCount} open)` : ""}
 			</IzSectionLabel>
 			<IzCard>
 				{isLoading && <p className="iz-tiny iz-muted">Loading disputes…</p>}
 
-				{!isLoading && disputes.length === 0 && (
+				{!isLoading && allDisputes.length > 0 && (
+					<div className="mb-2.5 flex flex-wrap items-center gap-1.5">
+						{(
+							[
+								["open", "Open", openCount],
+								["resolved", "Resolved", resolvedCount],
+								["all", "All", allDisputes.length],
+							] as [DisputeScope, string, number][]
+						).map(([value, label, count]) => (
+							// Same chip as the Payment Vouchers filter above — one filter
+							// idiom on one screen, not two that merely look alike.
+							<button
+								key={value}
+								type="button"
+								className={`iz-filter-chip${scope === value ? " on" : ""}`}
+								onClick={() => setScope(value)}
+							>
+								{label}
+								<span className="iz-filter-chip__count">({count})</span>
+							</button>
+						))}
+						<input
+							className="iz-field-input ml-auto !h-8 !w-48 !text-[12px]"
+							value={search}
+							onChange={(e) => setSearch(e.target.value)}
+							placeholder="PR, day, reason…"
+							aria-label="Search disputes"
+						/>
+					</div>
+				)}
+
+				{/* Three different silences, three different sentences. "No open
+				    disputes" was printed for all of them, so a settled claim and a
+				    week nobody has ever disputed looked identical. */}
+				{!isLoading && allDisputes.length === 0 && (
 					<p className="iz-tiny iz-muted">
-						No open disputes. PRs raise these per day and per component from
+						No disputes raised. PRs raise these per day and per component from
 						their Payment screen.
+					</p>
+				)}
+				{!isLoading && allDisputes.length > 0 && disputes.length === 0 && (
+					<p className="iz-tiny iz-muted">
+						{search.trim()
+							? `Nothing matches "${search.trim()}" in ${scope === "all" ? "any dispute" : `${scope} disputes`}.`
+							: scope === "open"
+								? `Nothing waiting on you — ${resolvedCount} already settled. Switch to Resolved to see ${resolvedCount === 1 ? "it" : "them"}.`
+								: "None settled yet."}
 					</p>
 				)}
 
