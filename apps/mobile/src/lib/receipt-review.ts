@@ -133,6 +133,49 @@ export function disputesForDay(
 }
 
 /**
+ * Which RECEIPT on this day+bucket is under argument, and how.
+ *
+ * A claim that named no receipts covers the whole cell — the PR did not narrow
+ * it — so `coversAll` is true and every receipt in the bucket is contested.
+ * Otherwise only the named `receiptNo`s are.
+ *
+ * `open` is what the sheet marks red; `settled` still gets a mark, because "this
+ * one was already argued and answered" is exactly what stops a PR raising the
+ * same claim twice and wondering why nothing happens.
+ */
+export function receiptClaimState(
+  week: PrCurrentWeek | null,
+  dateIso: string,
+  component: PrReceiptLine['kind'],
+): {
+  openAll: boolean;
+  settledAll: boolean;
+  open: Set<string>;
+  settled: Set<string>;
+} {
+  const rows = (week?.disputes ?? []).filter(
+    (d) => d.disputeDate === dateIso && d.component === component && isLive(d),
+  );
+  const state = {
+    openAll: false,
+    settledAll: false,
+    open: new Set<string>(),
+    settled: new Set<string>(),
+  };
+  for (const d of rows) {
+    const isOpen = d.outcome === null;
+    const refs = d.receiptRefs ?? [];
+    if (refs.length === 0) {
+      if (isOpen) state.openAll = true;
+      else state.settledAll = true;
+      continue;
+    }
+    for (const ref of refs) (isOpen ? state.open : state.settled).add(ref);
+  }
+  return state;
+}
+
+/**
  * `${date}-${component}` for every OPEN claim — the keys the grid paints RED.
  *
  * Derived from the server rather than accumulated in React state, which is why

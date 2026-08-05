@@ -19,6 +19,7 @@ import {
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
+  receiptClaimState,
   thisWeekDayStatus,
 } from '../src/lib/receipt-review';
 import type { PrCurrentWeek, PrReceiptLine, PrWeekShift } from '../src/lib/api';
@@ -197,6 +198,7 @@ function claim(outcome: 'accepted' | 'rejected' | 'withdrawn' | null) {
     outcome,
     resolvedAt: outcome ? '2026-08-04T10:00:00.000Z' : null,
     resolutionNote: outcome ? 'Checked against the paper' : null,
+    receiptRefs: null as string[] | null,
   };
 }
 
@@ -334,6 +336,35 @@ check(
 check('wages are never disputable', !kindDisputable('wages'));
 check('OT / others are never disputable', !kindDisputable('others'));
 check('drinks and tips are', kindDisputable('drinks') && kindDisputable('tips'));
+
+/*
+ * WHICH SHIFT IS ALREADY DISPUTED — owner: "need to show which shift drink or
+ * tips is already disputed".
+ *
+ * A claim naming no receipts covers the WHOLE cell; one naming receipts covers
+ * only those. Getting this backwards would either mark an innocent shift as
+ * contested or leave a contested one looking clean.
+ */
+console.log('\nWHICH RECEIPT IS CLAIMED');
+function claimOn(refs: string[] | null, outcome: 'accepted' | null) {
+  return { ...claim(outcome), receiptRefs: refs };
+}
+const wholeCell = receiptClaimState(weekWith([claimOn(null, null)]), DAY, 'drinks');
+check('a claim naming no receipts covers the whole cell', wholeCell.openAll);
+const narrowed = receiptClaimState(weekWith([claimOn(['RCP-000012'], null)]), DAY, 'drinks');
+check(
+  'a narrowed claim marks only the receipt it names',
+  !narrowed.openAll && narrowed.open.has('RCP-000012') && !narrowed.open.has('RCP-000010'),
+);
+const settledOnly = receiptClaimState(weekWith([claimOn(['RCP-000010'], 'accepted')]), DAY, 'drinks');
+check(
+  'an answered claim marks its receipt SETTLED, not open',
+  settledOnly.settled.has('RCP-000010') && settledOnly.open.size === 0,
+);
+const otherBucket = receiptClaimState(weekWith([claimOn(['RCP-000012'], null)]), DAY, 'tips');
+check('a drinks claim does not mark the tips cell', otherBucket.open.size === 0);
+const otherDay = receiptClaimState(weekWith([claimOn(['RCP-000012'], null)]), '2026-08-05', 'drinks');
+check('a Tuesday claim does not mark Wednesday', otherDay.open.size === 0);
 
 const painted = openDisputeKeys(weekWith([claim(null), claim('accepted')]));
 check('only the OPEN claim paints a cell red', painted.size === 1 && painted.has(`${DAY}-drinks`));

@@ -977,6 +977,38 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **5 Aug 2026 — THE PICKER LOOKED LIKE A RADIO GROUP, AND NOTHING SAID WHICH SHIFT WAS CLAIMED.**
+>
+> Owner: *"enhence the UI , pr dont know which one is selected"* and *"need to show which shift drink or
+> tips is already disputed"*.
+>
+> **(1) The chips were unreadable, and partly unstyled.** They reused `presetChip`, the SINGLE-select
+> style from Quick reason — so a multi-select read as a radio group, and on/off differed only by a faint
+> border tint. Worse, the label referenced `styles.presetText` / `presetTextOn`, **neither of which
+> exists in the stylesheet**, so the text rendered with no style at all. React Native ignores an
+> undefined style silently and `tsc` did not object, which is why it shipped looking almost identical
+> either way.
+>
+> Now a proper ticked box: filled accent square with a check, accent border and tint, bright bold label;
+> unselected is deliberately recessive. THREE independent signals (box, fill, text weight) so it holds
+> up on a dim phone and does not rely on colour perception alone. `accessibilityRole="checkbox"` with
+> `checked` state, so it announces correctly too.
+>
+> **(2) Nothing said WHICH shift was already disputed.** The grid can only mark a DAY, so on a
+> two-shift night the PR could see "DISPUTED" and still not know which shift the claim was about — the
+> very ambiguity the per-receipt selection exists to remove, reappearing where they go looking for the
+> answer.
+>
+> `receiptRefs` now rides on the week payload's `disputes[]` (it was stored but never sent), and
+> `receiptClaimState()` resolves it: a claim naming NO receipts covers the whole cell, one naming
+> receipts covers only those. The evidence sheet tags each receipt **DISPUTED** (red) or **SETTLED**
+> (green). Open beats settled where both touch one receipt — telling a PR "settled" about something
+> still being argued would stop them chasing it.
+>
+> 34 checks in `check-cell-evidence.ts`, all passing, including that a drinks claim does not mark the
+> tips cell and a Tuesday claim does not mark Wednesday. `tsc` clean both sides. No migration.
+> **Backend restart required** (`receiptRefs` is new on the wire).
+
 > **5 Aug 2026 — DISPUTE ONE SHIFT, NOT THE WHOLE DAY.**
 >
 > Owner: *"make the pr can select dispute which one ,because it have 2 shifts on that day"*.

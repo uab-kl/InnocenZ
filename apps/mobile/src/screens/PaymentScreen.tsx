@@ -43,6 +43,7 @@ import {
   disputesForDay,
   kindDisputable,
   openDisputeKeys,
+  receiptClaimState,
   receiptReviewCaption,
   thisWeekDayStatus,
   weekDisputable,
@@ -1068,6 +1069,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             evidenceTarget.incomeKey,
           )}
           cellAmount={evidenceTarget.amount}
+          claims={receiptClaimState(
+            evidenceTarget.week === 'last' ? lastWeek : current,
+            evidenceTarget.dateIso,
+            evidenceTarget.incomeKey,
+          )}
           onClose={() => setEvidenceTarget(null)}
           /*
            * Dispute only exists for an ISSUED voucher. On This-week there is no
@@ -1172,7 +1178,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         return (
                           <Pressable
                             key={r.receiptNo}
-                            style={[styles.presetChip, on && styles.presetChipOn]}
+                            style={[styles.rcptChip, on ? styles.rcptChipOn : styles.rcptChipOff]}
                             onPress={() =>
                               setDisputePickedReceipts((prev) =>
                                 prev.includes(r.receiptNo)
@@ -1180,8 +1186,32 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                   : [...prev, r.receiptNo],
                               )
                             }
+                            accessibilityRole="checkbox"
+                            accessibilityState={{ checked: on }}
+                            accessibilityLabel={`${r.label}${on ? ', selected' : ', not selected'}`}
                           >
-                            <Text style={[styles.presetText, on && styles.presetTextOn]}>
+                            {/*
+                              * A TICKED BOX, not a tinted outline.
+                              *
+                              * These chips reused the "quick reason" style, which
+                              * is a single-select — so multi-select read as a
+                              * radio group, and the only difference between on
+                              * and off was a faint border tint. Worse, the label
+                              * referenced `styles.presetText`, which does not
+                              * exist, so it rendered with NO style at all.
+                              *
+                              * Selection now carries three independent signals —
+                              * the box, the fill, and the text weight/colour — so
+                              * it survives a dim screen and does not depend on
+                              * colour perception alone.
+                              */}
+                            <View style={[styles.rcptBox, on && styles.rcptBoxOn]}>
+                              {on && <Check size={11} color={C.bg} />}
+                            </View>
+                            <Text
+                              style={[styles.rcptChipText, on && styles.rcptChipTextOn]}
+                              numberOfLines={1}
+                            >
                               {r.label}
                             </Text>
                           </Pressable>
@@ -1460,6 +1490,50 @@ const styles = StyleSheet.create({
   statusPillDisputed: { color: C.red },
   /** A day whose claim has been ANSWERED — settled, not merely approved. */
   statusPillVerified: { color: C.green },
+  /* Receipt picker — MULTI-select, so it reads as ticked boxes, not chips. */
+  rcptChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 9,
+    width: '100%',
+  },
+  rcptChipOn: {
+    borderColor: C.accent,
+    backgroundColor: 'rgba(227,184,119,0.14)',
+  },
+  /* Unselected is deliberately RECESSIVE — the eye should land on what is in. */
+  rcptChipOff: {
+    borderColor: C.line,
+    backgroundColor: 'rgba(255,255,255,0.02)',
+  },
+  rcptBox: {
+    width: 17,
+    height: 17,
+    borderRadius: 5,
+    borderWidth: 1.5,
+    borderColor: C.muted2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  rcptBoxOn: {
+    borderColor: C.accent,
+    backgroundColor: C.accent,
+  },
+  rcptChipText: {
+    flex: 1,
+    fontFamily: F.sora,
+    fontSize: 12,
+    fontWeight: '600',
+    color: C.muted2,
+  },
+  rcptChipTextOn: {
+    color: C.accentL,
+    fontWeight: '800',
+  },
   pickedHint: {
     marginTop: 6,
     fontFamily: F.manrope,

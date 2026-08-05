@@ -885,6 +885,14 @@ export type PrWeekDispute = {
   /** What the voucher said when raised — computed server-side, not claimed. */
   disputedAmount: string | null;
   claimedAmount: string | null;
+  /**
+   * WHICH receipts this claim names, by `receiptNo`.
+   *
+   * NULL means the PR did not narrow it, so the WHOLE day+component cell is
+   * under argument — every receipt in that bucket. A non-null list names the
+   * shift(s) they picked.
+   */
+  receiptRefs: string[] | null;
   /** null = STILL OPEN. Otherwise the agency has answered. */
   outcome: 'accepted' | 'rejected' | 'withdrawn' | null;
   resolvedAt: string | null;

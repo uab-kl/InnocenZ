@@ -1163,6 +1163,17 @@ export class PaymentVoucherControllerClass {
       /** Server-computed at raise time — what the voucher said, not what was claimed. */
       disputedAmount: d.disputedAmount,
       claimedAmount: d.claimedAmount,
+      /**
+       * WHICH receipts this claim names, by `receiptNo`. NULL means the whole
+       * day+component cell — the PR did not narrow it, so every receipt in that
+       * bucket is under argument.
+       *
+       * Sent so the PR app can mark the contested shift in its evidence sheet.
+       * Without it a day with two shifts shows one "DISPUTED" status and no way
+       * to tell WHICH of them the claim is about — which is the same ambiguity
+       * the selection was added to remove.
+       */
+      receiptRefs: d.receiptRefs ?? null,
       /** null = still open. 'accepted' | 'rejected' | 'withdrawn' once decided. */
       outcome: d.outcome,
       resolvedAt: d.resolvedAt,

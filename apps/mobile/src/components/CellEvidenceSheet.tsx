@@ -108,18 +108,41 @@ function ShiftHead({ group, shiftsKnown }: { group: EvidenceGroup; shiftsKnown: 
 export function CellEvidenceSheet({
   evidence,
   cellAmount,
+  claims,
   onClose,
   onDispute,
 }: {
   evidence: CellEvidence | null;
   /** The figure printed on the grid, so the sheet can assert it adds up. */
   cellAmount: number;
+  /**
+   * Which receipts in this cell are already claimed, from `receiptClaimState`.
+   * Omitted (or absent `disputes`) simply means nothing is marked.
+   */
+  claims?: {
+    openAll: boolean;
+    settledAll: boolean;
+    open: Set<string>;
+    settled: Set<string>;
+  };
   onClose: () => void;
   /** Omitted on This-week, where there is no issued voucher to contest yet. */
   onDispute?: () => void;
 }) {
   if (!evidence) return null;
   const balanced = evidenceMatchesCell(evidence, cellAmount);
+
+  /**
+   * Open beats settled: a receipt named by BOTH an answered claim and a live one
+   * is still being argued about, and saying "settled" there would tell the PR to
+   * stop chasing something nobody has finished.
+   */
+  const claimOf = (receiptNo: string | null): 'open' | 'settled' | null => {
+    if (!claims) return null;
+    if (claims.openAll || (receiptNo && claims.open.has(receiptNo))) return 'open';
+    if (claims.settledAll || (receiptNo && claims.settled.has(receiptNo))) return 'settled';
+    return null;
+  };
 
   return (
     <Modal visible transparent animationType="slide" onRequestClose={onClose}>
@@ -162,6 +185,21 @@ export function CellEvidenceSheet({
                     <View style={s.receiptHead}>
                       <Text style={s.orderNo}>{receipt.orderNo ?? 'No order number'}</Text>
                       <Text style={s.receiptNo}>{receipt.receiptNo ?? '—'}</Text>
+                      {/*
+                        * WHICH shift is under argument.
+                        *
+                        * The grid can only say a DAY is disputed. On a night with
+                        * two shifts that left the PR unable to tell which of them
+                        * the claim was about — the same ambiguity the per-receipt
+                        * selection exists to remove, reappearing at the point they
+                        * go looking for the answer.
+                        */}
+                      {claimOf(receipt.receiptNo) === 'open' && (
+                        <Text style={[s.claimTag, s.claimTagOpen]}>DISPUTED</Text>
+                      )}
+                      {claimOf(receipt.receiptNo) === 'settled' && (
+                        <Text style={[s.claimTag, s.claimTagSettled]}>SETTLED</Text>
+                      )}
                     </View>
                     <Text style={s.receiptMeta}>
                       {SOURCE_LABEL[receipt.source] ?? receipt.source}
@@ -295,7 +333,28 @@ const s = StyleSheet.create({
     borderLeftWidth: 2,
     borderLeftColor: C.line2,
   },
-  receiptHead: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
+  receiptHead: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  claimTag: {
+    fontFamily: F.sora,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.6,
+    borderRadius: 999,
+    borderWidth: 1,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
+  claimTagOpen: {
+    color: C.red,
+    backgroundColor: C.redBg,
+    borderColor: 'rgba(240,138,138,0.35)',
+  },
+  claimTagSettled: {
+    color: C.green,
+    backgroundColor: C.greenBg,
+    borderColor: 'rgba(93,217,160,0.35)',
+  },
   orderNo: { fontFamily: F.sora, fontSize: 15, fontWeight: '800', color: C.accentL },
   receiptNo: { fontFamily: F.manrope, fontSize: 12, color: C.muted2 },
   receiptMeta: {
