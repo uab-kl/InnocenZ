@@ -108,7 +108,9 @@ export function buildShiftStaffRows(input: {
 			id: prId,
 			name: pr?.name ?? prId,
 			tier: pr?.trainingLevel,
-			rating: pr?.rating,
+			// `rating: 0` is the mapper's "no rating on file" placeholder; the row
+			// renderer tests `!= null`, so passing the 0 through printed "0★".
+			rating: pr?.rating ? pr.rating : undefined,
 			statusLabel: "Booked",
 			agencyLabel: agencyFor(prId),
 			shiftTime,
@@ -130,7 +132,7 @@ export function buildShiftStaffRows(input: {
 			return {
 				id: a.prId,
 				name: a.prName,
-				rating: a.rating,
+				rating: a.rating > 0 ? a.rating : undefined,
 				statusLabel,
 				agencyLabel: agencyFor(a.prId),
 				shiftTime,

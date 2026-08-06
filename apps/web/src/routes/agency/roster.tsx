@@ -37,11 +37,11 @@ import {
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
-import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
 	type AgencyOutletAvailableShift,
 	listAvailableShiftsForEarlyReleaseReassign,
 } from "@agency-portal/lib/agency-outlet-shifts";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
@@ -1178,8 +1178,8 @@ function EditRosterModal({
 							Cancel shift
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							Remove this assignment — {prLabel} will be notified and freed
-							for {slot.date}.
+							Remove this assignment — {prLabel} will be notified and freed for{" "}
+							{slot.date}.
 						</p>
 						<button
 							type="button"
@@ -1199,9 +1199,9 @@ function EditRosterModal({
 							Remove assignment
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							Unassign {prLabel} from this shift. The assignment is deleted
-							and the slot reopens — use this to undo an assignment, not to
-							cancel a confirmed shift.
+							Unassign {prLabel} from this shift. The assignment is deleted and
+							the slot reopens — use this to undo an assignment, not to cancel a
+							confirmed shift.
 						</p>
 						<button
 							type="button"

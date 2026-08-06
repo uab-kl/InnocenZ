@@ -27,28 +27,38 @@ export function publicAssetPathOrNull(
 }
 
 /**
- * The ONE resolver for a stored PR photo reference.
+ * The ONE resolver for a PR photo reference, whatever shape it arrives in.
  *
- * A PR photo arrives as one of three things and each needs a different helper:
- *   - an R2 OBJECT KEY (`user/<id>/comcard/<uuid>.jpg`) — the shape the backend
- *     stores. Only `apiAssetUrl` can turn that into a URL.
- *   - a `/public` demo asset — needs the Vite deploy base, i.e. this file's
- *     `publicAssetPath`.
- *   - an absolute http(s) or data URL — passes through either way.
+ * There are two owners and they are not interchangeable:
+ *   - `apiAssetUrl` owns anything the SERVER stores — R2 object keys
+ *     (`user/<id>/comcard/<uuid>.jpg`), backend `/img/…` paths, and absolute
+ *     http(s) / data URLs.
+ *   - `publicAssetPath` owns `/public` assets, which need the Vite deploy base
+ *     (`/InnocenZ-proto` on Pages) and must NOT be sent to the API host.
  *
- * Calling only `publicAssetPath` on the first kind leaves `user/<id>/…`
- * untouched and prepends the Vite base, so the browser requests a path that
- * does not exist and the card renders a broken image. That is the whole bug —
- * `managedPrFromBackend` resolves its own photos correctly, but every caller
- * that builds a comcard preview by hand (Approvals) skipped the resolver.
+ * Handing an R2 key to `publicAssetPath` leaves `user/<id>/…` untouched and
+ * prefixes the Vite base — a URL nothing serves, which is the broken comcard
+ * the agency saw. Handing a `/public` demo path to `apiAssetUrl` is the mirror
+ * mistake: it would rewrite it onto the API origin. So the kind is decided
+ * FIRST, by prefix, and only then routed. Never try one and fall back to the
+ * other — the fallback is what makes a wrong URL look plausible.
  *
- * Returns null rather than a guess: an R2 key with no public base configured is
- * "we cannot show this photo", not "try it as a local file".
+ * Null means "there is no photo we can show", not "guess".
  */
 export function prPhotoSrc(ref: string | null | undefined): string | null {
 	if (!ref) return null;
-	const resolved = apiAssetUrl(ref);
-	if (resolved) return resolved;
-	if (ref.startsWith("user/")) return null;
+	// A local object URL for a file the user just picked — already a URL.
+	if (ref.startsWith("blob:")) return ref;
+	if (
+		/^https?:\/\//i.test(ref) ||
+		ref.startsWith("data:") ||
+		ref.startsWith("user/") ||
+		ref.startsWith("/img/") ||
+		ref.startsWith("img/")
+	) {
+		// undefined here is apiAssetUrl saying it cannot resolve the key (no R2
+		// public base configured) or that this is the blank-profile placeholder.
+		return apiAssetUrl(ref) ?? null;
+	}
 	return publicAssetPath(ref);
 }

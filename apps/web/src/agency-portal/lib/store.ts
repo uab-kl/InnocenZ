@@ -5872,7 +5872,10 @@ export const useStore = create<StoreState>()(
 						shiftId,
 						prId,
 						prName: pr?.name ?? prId,
-						rating: pr?.rating ?? 4,
+						// 0 = "no rating on file", the same spelling the comcard
+						// measurements use. It was `?? 4`, which handed an unrated PR a
+						// four-star record on the outlet's applicant list.
+						rating: pr?.rating ?? 0,
 						status: "pending" as const,
 						source: "outlet_request" as const,
 					};

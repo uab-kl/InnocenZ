@@ -59,7 +59,7 @@ import {
 	formatStars,
 	summarizePrRatings,
 } from "@agency-portal/lib/pr-rating-summary";
-import { publicAssetPath } from "@agency-portal/lib/public-asset";
+import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
@@ -559,7 +559,13 @@ function buildAgencyPrDraft(pr: AgencyManagedPR): AgencyPrDraft {
 		place: pr.place ?? "",
 		yearsExp: pr.yearsExp ?? 0,
 		languages: [...(pr.languages ?? [])],
-		kpiTier: pr.kpiTier ?? "B",
+		// "" = nobody has graded this PR. It was `?? "B"`, and `display` is this
+		// same draft — so the read-only card PRINTED a KPI tier the agency never
+		// assigned, and `saveEdit` sent it on the next save of any unrelated
+		// field, writing "B" into agency_pr.kpi_tier for good. Same bug class as
+		// the deleted `?? 22 / ?? 165 / ?? 52`. Renders as an em-dash below and is
+		// omitted from the save payload while it is blank.
+		kpiTier: pr.kpiTier ?? "",
 		trainingLevel: pr.trainingLevel,
 		payClass: prPayClass(pr),
 	};
@@ -731,7 +737,10 @@ function AgencyPrDetail({
 			place: draft.place.trim(),
 			yearsExp: Math.max(0, Math.min(40, Math.round(draft.yearsExp))),
 			languages: draft.languages,
-			kpiTier: draft.kpiTier,
+			// Left out while blank, exactly like the measurements above: saveProfile
+			// skips undefined keys, so an ungraded PR stays ungraded instead of
+			// acquiring a tier from a save that was about their phone number.
+			...(draft.kpiTier ? { kpiTier: draft.kpiTier } : {}),
 			trainingLevel: draft.trainingLevel,
 			payClass: draft.payClass,
 		};
@@ -818,8 +827,12 @@ function AgencyPrDetail({
 					<div
 						className={`iz-avatar iz-avatar--lg shrink-0${profilePhoto ? " iz-avatar-photo" : ""}`}
 					>
+						{/* `prPhotoSrc`, not `publicAssetPath`: a PR photo is an R2 object
+						    key, and the /public helper cannot resolve one — it only worked
+						    here because the mapper had already resolved it, and would have
+						    broken the moment anything handed this a raw key. */}
 						{profilePhoto ? (
-							<img src={publicAssetPath(profilePhoto)} alt="" />
+							<img src={prPhotoSrc(profilePhoto) ?? undefined} alt="" />
 						) : (
 							avatarLetter
 						)}
@@ -848,7 +861,7 @@ function AgencyPrDetail({
 							</span>
 						</div>
 						<p className="iz-tiny iz-muted mt-0.5">
-							KPI {display.kpiTier} ·{" "}
+							KPI {display.kpiTier || "—"} ·{" "}
 							{display.languages.join(", ") || "No languages"}
 						</p>
 					</div>
@@ -1075,6 +1088,10 @@ function AgencyPrDetail({
 											setDraft((p) => ({ ...p, kpiTier: e.target.value }))
 										}
 									>
+										{/* An ungraded PR must be able to STAY ungraded — without
+										    this option the select would silently settle on the
+										    first tier and save it. */}
+										<option value="">Not graded</option>
 										{KPI_TIER_OPTIONS.map((tier) => (
 											<option key={tier} value={tier}>
 												Tier {tier}
@@ -1132,7 +1149,7 @@ function AgencyPrDetail({
 								</div>
 								<div className="iz-v-sum">
 									<span className="iz-muted">KPI tier</span>
-									<b>{display.kpiTier}</b>
+									<b>{display.kpiTier || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
 									<span className="iz-muted">Training tier</span>

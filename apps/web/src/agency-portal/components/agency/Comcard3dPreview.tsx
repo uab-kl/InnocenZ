@@ -288,10 +288,7 @@ export function Comcard3dPreviewCard({
 						className="mt-0.5 line-clamp-1 text-[9px] text-[var(--iz-muted)]"
 						title={allLangs.length > 0 ? allLangs.join(" · ") : undefined}
 					>
-						{[
-							hiddenLangs > 0 ? `${langLine} +${hiddenLangs}` : langLine,
-							place,
-						]
+						{[hiddenLangs > 0 ? `${langLine} +${hiddenLangs}` : langLine, place]
 							.filter(Boolean)
 							.join(" · ")}
 					</p>

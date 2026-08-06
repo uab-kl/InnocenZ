@@ -29,7 +29,6 @@ import {
 	rosterSlotAgencyName,
 	splitCardLanguages,
 } from "@agency-portal/lib/agency-demo";
-import { recordRating } from "@agency-portal/lib/pr-rating-summary";
 import {
 	OUTLET_LIVE_SALES_SECTION_ID,
 	OUTLET_OPEN_LIVE_SALES_EVENT,
@@ -51,6 +50,7 @@ import {
 	getPrAgencyById,
 	TIED_DEMO_ROSTER_PR_ID,
 } from "@agency-portal/lib/pr-demo";
+import { recordRating } from "@agency-portal/lib/pr-rating-summary";
 import type { PrShiftSessionState } from "@agency-portal/lib/pr-session";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import type { PR, ShiftRequest } from "@agency-portal/lib/store";

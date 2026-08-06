@@ -2,12 +2,19 @@ import {
 	type ComcardPreviewData,
 	comcardMeasure,
 } from "@agency-portal/components/agency/Comcard3dPreview";
-import { publicAssetPath } from "@agency-portal/lib/public-asset";
+import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
 import { useState } from "react";
 
+/**
+ * A comcard photo is a stored R2 OBJECT KEY, a demo /public path, or a data
+ * URL. This used to call `publicAssetPath` for anything that was not a data
+ * URL, which leaves `user/<id>/comcard/<uuid>.jpg` untouched and prefixes the
+ * Vite base — a broken image for every real PR whose caller had not already
+ * resolved the key. `prPhotoSrc` handles all three kinds.
+ */
 function portfolioImageSrc(src: string) {
-	return src.startsWith("data:") ? src : publicAssetPath(src);
+	return prPhotoSrc(src) ?? undefined;
 }
 
 /** First four filled portfolio slots — used for the photo comcard grid */
