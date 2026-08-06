@@ -1084,6 +1084,42 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+
+> **6 Aug 2026 — CHECK-IN SHOWED A SHIFT FROM SEVEN DAYS EARLIER (`4dac4d9`).**
+> Alice's Check-In tab rendered a **30 Jul** shift — already `Complete`, already
+> paid RM 600 — as the current attendance state, while Today one tab away
+> correctly said "No shift scheduled for today". Cause: `pickActive`
+> (`active-shift.tsx`) ended in an unbounded fallback, *"the latest completed
+> one, so the page is never blank"*, whose only test was "has a check-out stamp".
+> It reached **past** the 3 + 4 Aug bookings that rule 4 deliberately skips as
+> missed shifts. Fallback **deleted**; rule 3 (checked out today, or < 12 h ago)
+> is now the only route for a finished shift — the same window `ShiftsScreen`
+> already used, which is why Today was right and Check-In was not. A PR on duty
+> past midnight is unaffected (rule 1 matches an open check-in regardless of
+> date, so she can still tap out). Owner's rule: *"check in page only show today,
+> after today left empty unless there's got shift for today."* Same commit: the
+> shared **evidence sheet collapses finished shifts** to one row (outlet · slot ·
+> duration · subtotal), tap to expand; a lone group or an on-duty shift starts
+> open; overrides keyed per cell.
+>
+> 🔴 **STILL OPEN — the overtime on that card is FABRICATED, and it is a separate
+> defect that this fix does NOT touch.** DB row `35eb674b` has `overtime_minutes`,
+> `overtime_status`, `overtime_amount` **all NULL — correctly**: the 22:00–04:00
+> slot ends 04:00 next day and she checked out 23:58, i.e. four hours EARLY, so
+> `overtimeFromStamps` returns `within_schedule`. Yet the phone printed
+> **"Overtime 8.1h (RM 1,213.68) — pending agency approval"**. That figure is
+> invented client-side from a **hardcoded `STANDARD_SHIFT_HOURS = 6`**
+> (`pr-rate.ts:148`, the slot is never consulted): 14.09 h − 6 = 8.09 h;
+> RM600 ÷ 6 × 1.5 = RM150/h × 8.09 = RM 1,213.68 to the sen. *"pending agency
+> approval"* is **hardcoded literal text** (`CheckInScreen.tsx:603-604`) that
+> never reads `overtimeStatus` — **no claim exists in any agency queue.** A second
+> independent copy of the bug prints "+485m OT" from `shiftDurationLabel`
+> (`shift-session.tsx:155`, same hardcoded 6 h default, no plausibility guard) —
+> fixing only the banner leaves it on screen. The backend **does** ship the real
+> columns (`repository.ts:373`) but `ShiftAssignmentRecord` (`api.ts:734-768`)
+> never declares them, so nothing can read them. Fix = declare the columns and
+> render the server's values; delete both client-side derivations.
+
 > **6 Aug 2026 — LAST WEEK LOST ITS VOUCHER THE MOMENT IT WAS SIGNED.**
 >
 > Owner: *"where is the last week pv? show in agency last week tab payroll page"*.
