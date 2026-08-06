@@ -269,6 +269,13 @@ export class ShiftAssignmentRepositoryClass {
         shiftDate: string;
         slot: string | null;
         eventName: string | null;
+        /**
+         * `shift.event_kind` — 'normal' | 'special'. Carried alongside the name
+         * because the PR's Today list can hold three shifts at the SAME outlet
+         * on the same day, and the venue alone cannot tell them apart. Not null
+         * in the database (defaults to 'normal').
+         */
+        eventKind: string;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -292,6 +299,13 @@ export class ShiftAssignmentRepositoryClass {
         shiftDate: string;
         slot: string | null;
         eventName: string | null;
+        /**
+         * `shift.event_kind` — 'normal' | 'special'. Carried alongside the name
+         * because the PR's Today list can hold three shifts at the SAME outlet
+         * on the same day, and the venue alone cannot tell them apart. Not null
+         * in the database (defaults to 'normal').
+         */
+        eventKind: string;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -311,6 +325,13 @@ export class ShiftAssignmentRepositoryClass {
         shiftDate: string;
         slot: string | null;
         eventName: string | null;
+        /**
+         * `shift.event_kind` — 'normal' | 'special'. Carried alongside the name
+         * because the PR's Today list can hold three shifts at the SAME outlet
+         * on the same day, and the venue alone cannot tell them apart. Not null
+         * in the database (defaults to 'normal').
+         */
+        eventKind: string;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -339,6 +360,7 @@ export class ShiftAssignmentRepositoryClass {
           shiftDate: ShiftTable.shiftDate,
           slot: ShiftTable.slot,
           eventName: ShiftTable.eventName,
+          eventKind: ShiftTable.eventKind,
           payPerHour: ShiftTable.payPerHour,
           outletId: ShiftTable.outletId,
           outletName: OutletTable.name,
@@ -374,6 +396,7 @@ export class ShiftAssignmentRepositoryClass {
           shiftDate: row.shiftDate,
           slot: row.slot,
           eventName: row.eventName,
+          eventKind: row.eventKind,
           payPerHour: row.payPerHour,
           outletId: row.outletId,
           outletName: row.outletName,

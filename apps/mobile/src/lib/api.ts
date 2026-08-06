@@ -758,6 +758,8 @@ export type ShiftAssignmentRecord = {
   shiftDate: string;
   slot: string | null;
   eventName: string | null;
+  /** `shift.event_kind` — 'normal' | 'special'. Never null (DB default). */
+  eventKind: string;
   payPerHour: string;
   outletName: string | null;
   /** The shift outlet's address (composed from its address columns via FK). */

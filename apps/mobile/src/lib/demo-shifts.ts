@@ -80,9 +80,15 @@ export type DemoShift = {
   /** Full outlet address (from the shift's outlet FK) — where the PR works. */
   address?: string | null;
   event: string;
+  /**
+   * Already-labelled event type — 'Special event' | 'Normal shift' — mapped
+   * from `shift.event_kind`. Optional because the demo fixtures below predate
+   * it; callers fall back to 'Normal shift', which is also the column default.
+   */
+  eventKind?: string;
   date: Ymd;
   time: string;
-  /** RM — displayed as `${event} · ${formatRM(payout)}` */
+  /** RM — shown on its own strip; the event moved to the card header. */
   payout: number;
   /** Served by the backend static /img route */
   logoPath: string | null;

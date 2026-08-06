@@ -503,6 +503,21 @@ function AssignBackendCellSheet({
 													{shiftLabel(shift)}
 												</span>
 											</div>
+											{/*
+												What the shift IS, not just where and when. Four cards
+												all reading "Emhub Testing" differ only by a time the
+												agency has to squint at; the event is what tells them
+												apart. Both facts are already on the row — `event_name`
+												and `event_kind` — they were simply never rendered.
+												`event_name` is nullable, so an unnamed shift says so
+												rather than leaving a gap that reads as a load failure.
+											*/}
+											<p className="iz-tiny iz-muted2 mt-0.5 truncate">
+												{shift.eventName?.trim() || "No event name"} ·{" "}
+												{shift.eventKind === "special"
+													? "Special event"
+													: "Normal shift"}
+											</p>
 											<p className="iz-tiny mt-1 text-[var(--iz-gold-l)]">
 												{shift.quantity - shift.filled} open ·{" "}
 												{/* payPerHour holds a DAILY wage: it is set from

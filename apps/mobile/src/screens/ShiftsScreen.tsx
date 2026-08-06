@@ -63,7 +63,10 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
     id: a.id,
     outlet: a.outletName ?? 'Outlet',
     address: a.outletAddress,
-    event: a.eventName ?? 'Shift',
+    // `event_name` is nullable; an unnamed shift says so rather than borrowing
+    // the generic word "Shift", which read as a real event name on the card.
+    event: a.eventName?.trim() || 'No event name',
+    eventKind: a.eventKind === 'special' ? 'Special event' : 'Normal shift',
     date: ymdFromIso(a.shiftDate),
     time: a.slot ?? '—',
     payout: Number(a.payAmount) || 0,
@@ -543,6 +546,9 @@ function TonightCard({
           <View style={{ flex: 1, minWidth: 0 }}>
             <LabelWithIcon icon={Store} label="Outlet name" />
             <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
+            <Text style={styles.shiftEventLine} numberOfLines={1}>
+              {shift.event} · {shift.eventKind ?? 'Normal shift'}
+            </Text>
             {open && shift.address ? (
               <View style={styles.shiftAddrRow}>
                 <MapPin size={12} color={C.prMuted2} strokeWidth={2} />
@@ -565,8 +571,11 @@ function TonightCard({
             </View>
           </View>
           <View style={styles.shiftEvent}>
+            {/* The event moved up into the header, where it is readable
+                without expanding. Repeating it here said the same thing twice
+                on one card, so this strip is now just the money. */}
             <Text style={styles.shiftEventText}>
-              {shift.event} · {formatRM(shift.payout)}
+              {formatRM(shift.payout)}
             </Text>
           </View>
           <IzButton label={cta} icon={MapPin} small onPress={onCheckIn} style={{ marginTop: 12 }} />
@@ -726,6 +735,19 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     lineHeight: 22,
     color: C.txt,
+  },
+  /**
+   * Event line, in the card HEADER so it survives collapse. Three shifts at
+   * one outlet on one day are indistinguishable by venue alone — the event is
+   * the only thing that tells them apart, and it used to appear only after
+   * expanding, unlabelled, beside the payout.
+   */
+  shiftEventLine: {
+    marginTop: 3,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 16,
+    color: C.prMuted2,
   },
   shiftAddrRow: {
     marginTop: 5,
