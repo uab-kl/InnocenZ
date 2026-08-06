@@ -316,6 +316,40 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ THE NICKNAME LIVES ON `user.username` — THERE IS NO `pr` TABLE (6 Aug 2026)
+
+**Root cause of the nickname never appearing**, after three wrong guesses. `main.pr` was DROPPED;
+`PrType` is a synthetic row `composePr` assembles from `user` + `user_profile` + `agency_pr`:
+
+- legal name  = `user_profile.full_name`  → "Victoria Tan Mei Lin"
+- **nickname  = `user.username`**         → "Vicky"
+- `payment_voucher.pr_id` IS the user id.
+
+Joining a `pr` table for the nickname **typechecks, runs, and returns NULL for every row** — silent,
+no error, nothing on screen. `voucherExportBundle` and `listReceiptsForAgency` already read
+`UserTable.username` correctly; `listPaginated` now matches (FIXED), and `listForScope` was already
+right. **Follow those three; never join a `pr` table.**
+
+- [ ] **Sweep every agency AND outlet surface that names a PR** (owner, 6 Aug: *"the agency and the
+  outlet role pages related to the pr need put the nickname infront of every realname"*). Done so
+  far: PV card, dispute row, receipt row, receipts PR filter. NOT done: Roster, Approvals, Manage PR,
+  Today, and the whole outlet portal. Each has its own read path and most will not be carrying
+  `username` yet — exactly how `listPaginated` was broken. Use `formatPayeeLabel`; the format is
+  `(Vicky) Victoria Tan Mei Lin`.
+
+### ▶ MANAGE PR SHOWS DEMO DATA BESIDE REAL DATA (found 6 Aug 2026)
+
+Owner: *"you think this got link properly? make sure database no duplicated data"*. The same PR reads
+**170 cm / age 18** on her own profile and **153 cm / age 24** on the agency's Manage PR card.
+
+- **The DATABASE is fine** — `user_profile.comcard_height_cm` / `comcard_weight_kg` are the only
+  height/weight columns; one fact, one table, rule 3 satisfied. **There is NO age column at all**, so
+  the "Age 24" on the agency card is not from the database.
+- **The SCREEN is the problem.** `routes/agency/prs.tsx` reads `useAgencyPrs()` (real backend) AND
+  `useStore(...)` (the client-side demo seed) on the same page, so part of the card is leftover seed.
+- [ ] Make Manage PR read the comcard through the FK (`pr_id → user_id → user_profile`), the same
+  correction the nickname needed. Then audit the rest of that page for other demo-store reads.
+
 ### ▶ THE SHIFT DETAIL PANEL STILL SHOWS EVENT PRICES AS ONE RUN-ON LINE (5 Aug 2026)
 
 Post Job now edits a special event's prices as the Workspace's two lists (§8 O6), but
