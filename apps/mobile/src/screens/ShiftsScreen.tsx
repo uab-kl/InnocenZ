@@ -225,9 +225,11 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   // .iz-pr-page-header__title: clamp(1.4rem, 5.2vw, 1.75rem)
   const titleSize = Math.min(28, Math.max(22.4, width * 0.052));
 
-  // Scoped to TODAY's shifts only — Check-In's never-blank fallback can be
-  // showing YESTERDAY's completed summary, and its phase must not label today
-  // "Complete" while the Today section truthfully says "no shift today".
+  // Scoped to TODAY's shifts only. This screen never borrowed Check-In's
+  // phase, which is why it stayed right while Check-In showed a week-old
+  // summary; that fallback is now gone (active-shift.tsx, pickActive), but the
+  // scoping stays — this header must describe today, not whatever card another
+  // screen happens to be holding.
   const todayStatus = tonightShift
     ? tonightShift.status === 'on-duty'
       ? 'On duty'
