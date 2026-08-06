@@ -965,6 +965,31 @@ export class PaymentVoucherControllerClass {
       // paths also write 'sent', but that is a voucher coming BACK from a
       // dispute, and re-gating it would strand a PR's own complaint.
       if (data.status === 'sent' && existing.status === 'pending_review') {
+        /*
+         * A WEEK STILL RUNNING CANNOT BE SENT.
+         *
+         * Sending seals the week: createOrGetWeekDraft refuses to append to
+         * anything that is not pending_review/disputed, so from that moment no
+         * further receipt can be logged against it. Doing that mid-week strands
+         * every shift left in the week — on 6 Aug 2026 the 2–8 Aug voucher was
+         * sent, and Vicky's 6 Aug scan then had nowhere to go: the app told her
+         * to "ask your agency to reopen it", an action that does not exist.
+         *
+         * Signing and sending is NEXT week's work, on a week that has finished
+         * earning. Refused up to and including week_end, because the last night
+         * of the week is still a working night.
+         */
+        const today = klToday();
+        if (existing.weekEnd && today <= existing.weekEnd) {
+          return res.status(409).json({
+            success: false,
+            message:
+              `This voucher covers ${existing.weekStart} to ${existing.weekEnd}, which is still ` +
+              'running. Sending it now closes the week and blocks every receipt the PR has yet ' +
+              `to log. Send it once the week has ended — from the day after ${existing.weekEnd}.`,
+            data: null,
+          });
+        }
         // Rewriting the lines in the same call would have the gate judge the OLD
         // day totals and then send the NEW ones — the exact substitution
         // `approved_total_cents` exists to catch. Split the two steps so the
@@ -1216,7 +1241,21 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const { weekStart, weekEnd } = weekBounds();
-      const draft = await this.paymentVoucherRepository.getCurrentWeekDraft(
+      // READ the week; do not look for a DRAFT of it.
+      //
+      // getCurrentWeekDraft() filters to OPEN_WEEK_STATUSES (pending_review,
+      // disputed) because the WRITE path needs the one voucher it may still
+      // append lines to. Using it here meant that the moment the agency ISSUED
+      // the voucher — status `sent` — this read returned null and the PR's
+      // whole week blanked: every cell a dash, total RM 0.00, while the agency
+      // screen showed that same week at RM 3,708.21 (PV-000006, seen 6 Aug
+      // 2026). The PR is never less entitled to see the money than at the
+      // moment it is issued to them.
+      //
+      // Reading and writing want different lookups. This is the read, so it
+      // takes the week's voucher whatever its status — the same call
+      // getMyLastWeek() already makes.
+      const draft = await this.paymentVoucherRepository.getWeekVoucher(
         pr.id,
         weekStart,
         pr.userId,
@@ -1702,6 +1741,39 @@ export class PaymentVoucherControllerClass {
         toDate: typeof req.query.toDate === 'string' ? req.query.toDate : undefined,
       });
 
+      // One batched lookup for the whole feed, not one per receipt. Scoped to
+      // the PRs on these rows — `listByIdsForPrs` keeps the security boundary,
+      // so an assignment id that does not belong to the receipt's PR resolves
+      // to nothing rather than surfacing someone else's shift times.
+      const receiptShiftById = new Map(
+        (
+          await this.shiftAssignmentRepository.listByIdsForPrs(
+            [...new Set(rows.map((r) => r.prId).filter((id): id is string => !!id))],
+            [
+              ...new Set(
+                rows
+                  .map((r) => r.receipt.shiftAssignmentId)
+                  .filter((id): id is string => !!id),
+              ),
+            ],
+          )
+        ).map((f) => [
+          f.id,
+          {
+            assignmentId: f.id,
+            outletName: f.outletName,
+            eventName: f.eventName,
+            eventKind: f.eventKind,
+            shiftDate: f.shiftDate,
+            slot: f.slot,
+            checkInAt: f.checkInAt ? f.checkInAt.toISOString() : null,
+            // Shift END — clamped to the scheduled end, not when the PR left.
+            checkOutAt: f.checkOutAt ? f.checkOutAt.toISOString() : null,
+            overtimeMinutes: f.overtimeMinutes,
+          },
+        ]),
+      );
+
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -1729,6 +1801,14 @@ export class PaymentVoucherControllerClass {
           prName: r.prName,
           prNickname: r.prNickname,
           shiftAssignmentId: r.receipt.shiftAssignmentId,
+          // THE SHIFT THE OUTLET POSTED, resolved through the assignment FK the
+          // row already carries: what the outlet named the night, whether it
+          // marked it special, its window, and when this PR actually worked it.
+          // Singular here — unlike a dispute, a receipt names exactly ONE
+          // assignment, so there is nothing to disambiguate. Null when the
+          // receipt has no assignment (self-logged before the shift was known)
+          // or when the id does not resolve to THIS PR, which fails closed.
+          shift: receiptShiftById.get(r.receipt.shiftAssignmentId ?? '') ?? null,
           lines: r.lines.map((l) => ({
             id: l.id,
             lineDate: l.lineDate,
@@ -3167,15 +3247,64 @@ export class PaymentVoucherControllerClass {
         openOnly: req.query.open === '1' || req.query.open === 'true',
       });
 
+      // WHICH SHIFT each claim is about. Two batched steps: dispute -> receipt
+      // -> assignment ids, then those ids -> the shift facts. Both fail closed —
+      // an unresolvable dispute gets `shifts: []` and the card says "not
+      // linked", which is the honest answer for a wages/OT claim (no receipt
+      // exists by design) and far better than a confident wrong outlet.
+      const assignmentIdsByDispute =
+        await this.paymentVoucherDisputeRepository.resolveAssignmentIdsForDisputes(rows);
+      const everyAssignmentId = [
+        ...new Set([...assignmentIdsByDispute.values()].flat()),
+      ];
+      const prIds = [...new Set(rows.map((r) => r.voucher.prId).filter((id): id is string => !!id))];
+      const factsById = new Map(
+        (await this.shiftAssignmentRepository.listByIdsForPrs(prIds, everyAssignmentId)).map(
+          (f) => [f.id, f],
+        ),
+      );
+
       res.status(200).json({
         success: true,
         message: 'Disputes fetched',
         data: rows.map(({ dispute, voucher }) => ({
           ...dispute,
+          // ALWAYS an array — `[]`, never null and never omitted, so the panel
+          // has one shape to branch on. A singular field here would be the
+          // silent pick this whole path exists to prevent.
+          shifts: (assignmentIdsByDispute.get(dispute.id) ?? [])
+            .map((id) => factsById.get(id))
+            .filter((f): f is NonNullable<typeof f> => !!f)
+            // The PR boundary, re-checked per row: `listByIdsForPrs` scopes to
+            // the set of PRs in this queue, so pairing each shift back to THIS
+            // dispute's own PR is what stops one PR's stamps landing on
+            // another's card.
+            .filter((f) => f.prId === voucher.prId)
+            .map((f) => ({
+              assignmentId: f.id,
+              outletName: f.outletName,
+              eventName: f.eventName,
+              eventKind: f.eventKind,
+              shiftDate: f.shiftDate,
+              slot: f.slot,
+              checkInAt: f.checkInAt ? f.checkInAt.toISOString() : null,
+              // Shift END — clamped server-side to the scheduled end, NOT the
+              // moment the PR left. `overtimeMinutes` carries the real overrun.
+              checkOutAt: f.checkOutAt ? f.checkOutAt.toISOString() : null,
+              overtimeMinutes: f.overtimeMinutes,
+            })),
           voucher: {
             id: voucher.id,
             prId: voucher.prId,
             prName: voucher.prName,
+            // The repository selects this and the browser's DTO declares it —
+            // this hand-listed projection was the only thing dropping it, so
+            // `formatPayeeLabel(undefined, legal)` hit its `if (!nick) return
+            // legal` guard and every dispute card read "Alice Yee Mei Me" with
+            // no "(Alice)". TypeScript could not catch it: the interface
+            // declared a field the wire omitted. The sibling receipts endpoint
+            // in this same controller already projects it.
+            prNickname: voucher.prNickname,
             weekStart: voucher.weekStart,
             weekEnd: voucher.weekEnd,
             status: voucher.status,

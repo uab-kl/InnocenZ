@@ -62,6 +62,21 @@ type Draft = {
   portfolio: (string | null)[];
 };
 
+/**
+ * Every value of the backend `pr_tier` enum, spelled the way the agency portal
+ * spells it. The two screens must read a tier the same way, or the PR and her
+ * agency end up looking at different words for one database row.
+ */
+const TIER_LABEL: Record<string, string> = {
+  tier_1: 'TIER I',
+  tier_2: 'TIER II',
+  tier_3: 'TIER III',
+  tier_4: 'TIER IV',
+  tier_5: 'TIER V',
+  servant: 'SERVANT',
+  commission_only: 'COMMISSION ONLY',
+};
+
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
   const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, uploadComcardImage, generateComcard, token } =
@@ -133,6 +148,28 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       .join(', ') ||
     memberships.map((m) => m.agencyName).join(', ') ||
     '—';
+  /**
+   * Our grading, from `agency_pr.tier` — the SAME row the agency's Manage-PR
+   * card reads. This badge used to be the literal string "TIER V", a tier that
+   * exists nowhere in the database, so the phone and the portal disagreed about
+   * the same PR forever.
+   *
+   * Tier is per-membership: Atlas may grade us tier_3 while Delta grades us
+   * tier_1, and both are correct. So when our approved agencies agree we show
+   * one badge, and when they differ we name each one instead of silently
+   * picking a winner.
+   */
+  const tierBadges = (() => {
+    const graded = myLinks.filter((l) => l.approveStatus === 'approved' && l.tier);
+    const labels = graded.map((l) => ({
+      agencyName: l.agencyName,
+      label: TIER_LABEL[l.tier as string] ?? (l.tier as string),
+    }));
+    const distinct = [...new Set(labels.map((t) => t.label))];
+    if (distinct.length === 0) return [];
+    if (distinct.length === 1) return [{ agencyName: null, label: distinct[0] }];
+    return labels;
+  })();
   const pendingAgencyNames = myLinks
     .filter((l) => l.approveStatus === 'pending')
     .map((l) => l.agencyName);
@@ -588,10 +625,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             )}
 
             <View style={styles.metaRow}>
-              <View style={styles.tier}>
-                <Star size={12} color={C.goldL} />
-                <Text style={styles.tierText}>TIER V</Text>
-              </View>
+              {tierBadges.map((t) => (
+                <View key={`${t.agencyName ?? ''}-${t.label}`} style={styles.tier}>
+                  <Star size={12} color={C.goldL} />
+                  <Text style={styles.tierText}>
+                    {t.agencyName ? `${t.agencyName} · ${t.label}` : t.label}
+                  </Text>
+                </View>
+              ))}
               {!editing && (
                 <Text style={styles.metaText}>Agency-Tied · {agencyNames}</Text>
               )}

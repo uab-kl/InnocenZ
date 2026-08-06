@@ -1,7 +1,10 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
+import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
+import { ShiftFactsBlock } from "@agency-portal/components/agency/ShiftFactsBlock";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { useStore } from "@agency-portal/lib/store";
 import { Check, ImageOff, Paperclip, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -37,8 +40,13 @@ function formatDay(iso: string): string {
 /**
  * The receipts a dispute is actually ABOUT.
  *
- * A dispute names a DAY and a COMPONENT, never a receipt — the PR tapped a grid
- * cell, and that cell is a sum. So the paper behind it is found the same way the
+ * A dispute MAY name one receipt (`receiptId`, migration 0088) and when it does
+ * that is the answer — exactly one paper, no derivation. The old docstring here
+ * said "never a receipt", which stopped being true at 0088; deriving anyway is
+ * how a two-shift night showed BOTH shifts' receipts as the evidence for a
+ * claim about one of them, directly contradicting the shift block above.
+ *
+ * With no `receiptId` the claim covers the whole day, so fall back to how the
  * cell was built: lines on that date, in that bucket. A receipt qualifies if it
  * carries even one such line.
  *
@@ -54,6 +62,9 @@ function receiptsForDispute(
 	dispute: PaymentVoucherDispute,
 	receipts: AgencyReceipt[],
 ): AgencyReceipt[] {
+	if (dispute.receiptId) {
+		return receipts.filter((r) => r.id === dispute.receiptId);
+	}
 	return receipts.filter(
 		(r) =>
 			r.voucherId === dispute.voucherId &&
@@ -74,6 +85,45 @@ function disputedSubtotal(
 			(l) => l.lineDate === dispute.disputeDate && l.kind === dispute.component,
 		)
 		.reduce((sum, l) => sum + Number(l.amount || 0), 0);
+}
+
+/**
+ * Which shift a claim is about — one, several, or none, and it says which.
+ *
+ * A dispute names a receipt only when the contested cell had one. With no
+ * receipt the claim covers the WHOLE day, so every shift the PR worked that day
+ * is in scope. Rendering `shifts[0]` would be a silent pick: two shifts in one
+ * night are usually at different outlets, so the card would show the wrong
+ * venue AND the wrong check-in while looking authoritative.
+ */
+function DisputeShiftFacts({ dispute }: { dispute: PaymentVoucherDispute }) {
+	const shifts = dispute.shifts ?? [];
+
+	if (shifts.length === 0) {
+		return (
+			<p className="iz-tiny iz-muted2 mt-2">
+				Which shift · not linked — this claim names no receipt, or the receipt
+				has no shift record.
+			</p>
+		);
+	}
+
+	return (
+		<div className="mt-2">
+			<p className="iz-tiny iz-muted mb-1">
+				{shifts.length > 1
+					? `This claim covers the whole day — ${shifts.length} shifts worked`
+					: dispute.receiptId
+						? "The shift behind this figure"
+						: "This claim covers the whole day — 1 shift worked"}
+			</p>
+			<div className="flex flex-col gap-1.5">
+				{shifts.map((shift) => (
+					<ShiftFactsBlock key={shift.assignmentId} shift={shift} />
+				))}
+			</div>
+		</div>
+	);
 }
 
 /**
@@ -159,6 +209,30 @@ function DisputeEvidence({
 							</span>
 						</div>
 
+						{/* THE PAPER ITSELF — the scan the OCR read these figures off.
+						    Distinct from the PR's dispute attachment above: that is what
+						    they photographed to argue, this is the original record being
+						    argued about. Settling a "wrong commission" claim means holding
+						    the two side by side, and neither was on screen. */}
+						{(receipt.proofPhotos ?? []).length > 0 ? (
+							<>
+								<p className="iz-tiny iz-muted2 mt-2">
+									The scanned receipt
+									{receipt.receiptTime
+										? ` · printed ${receipt.receiptTime}`
+										: ""}
+								</p>
+								<ProofPhotos
+									photos={receipt.proofPhotos ?? []}
+									label={`${receipt.receiptNo} scan`}
+								/>
+							</>
+						) : (
+							<p className="iz-tiny iz-muted2 mt-2">
+								No photo on this receipt — it was self-logged without one.
+							</p>
+						)}
+
 						{editable && (
 							<button
 								type="button"
@@ -221,15 +295,14 @@ function DisputeRow({
 		<div className="rounded-xl border border-[var(--iz-line)] p-3">
 			<div className="flex flex-wrap items-start justify-between gap-2">
 				<div>
-					{/* Nickname first, legal name behind it — the same label the Payment
-					    Vouchers card uses. The floor knows her as Vicky; the money is in
-					    the legal name, and a reviewer has to see the two are one person. */}
+					{/* The SHARED formatter, not a second copy — formatting the label here
+					    by hand is exactly how this row ended up without a nickname while
+					    the voucher card had one. */}
 					<div className="text-sm font-semibold">
-						{dispute.voucher.prNickname && dispute.voucher.prName
-							? `${dispute.voucher.prNickname} (${dispute.voucher.prName})`
-							: (dispute.voucher.prNickname ??
-								dispute.voucher.prName ??
-								"Unknown PR")}{" "}
+						{formatPayeeLabel(
+							dispute.voucher.prNickname,
+							dispute.voucher.prName,
+						) || "Unknown PR"}{" "}
 						· {COMPONENT_LABEL[dispute.component]}
 					</div>
 					<p className="iz-tiny iz-muted mt-0.5">
@@ -263,6 +336,10 @@ function DisputeRow({
 				)}
 			</div>
 
+			{/* WHICH SHIFT this money is about — above the figures, because the
+			    answer to "is this claim right" starts with which night it was. */}
+			<DisputeShiftFacts dispute={dispute} />
+
 			<div className="mt-2 flex flex-wrap gap-4 text-sm">
 				<span>
 					<span className="iz-tiny iz-muted block">Voucher says</span>
@@ -289,7 +366,8 @@ function DisputeRow({
 					<>
 						<Paperclip className="h-3.5 w-3.5" />
 						<span className="iz-tiny">
-							{proof.length} proof image{proof.length > 1 ? "s" : ""}
+							What the PR attached · {proof.length} image
+							{proof.length > 1 ? "s" : ""}
 						</span>
 					</>
 				) : (
@@ -300,6 +378,7 @@ function DisputeRow({
 					</>
 				)}
 			</div>
+			<ProofPhotos photos={proof} label="PR proof" />
 
 			<DisputeEvidence dispute={dispute} receipts={receipts} />
 

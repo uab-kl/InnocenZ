@@ -63,7 +63,10 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
     id: a.id,
     outlet: a.outletName ?? 'Outlet',
     address: a.outletAddress,
-    event: a.eventName ?? 'Shift',
+    // `event_name` is nullable; an unnamed shift says so rather than borrowing
+    // the generic word "Shift", which read as a real event name on the card.
+    event: a.eventName?.trim() || 'No event name',
+    eventKind: a.eventKind === 'special' ? 'Special event' : 'Normal shift',
     date: ymdFromIso(a.shiftDate),
     time: a.slot ?? '—',
     payout: Number(a.payAmount) || 0,
@@ -212,6 +215,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   // A forgotten check-out is a caution the PR must SEE — pop To-do open once
   // when it appears (same one-shot pattern as swap requests).
   const [overdueAlerted, setOverdueAlerted] = useState(false);
+  /** Open by default — a forgotten check-out costs the shift, so it announces itself. */
+  const [overdueOpen, setOverdueOpen] = useState(true);
   useEffect(() => {
     if (overdueCheckout && !overdueAlerted) {
       setOverdueAlerted(true);
@@ -223,9 +228,11 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   // .iz-pr-page-header__title: clamp(1.4rem, 5.2vw, 1.75rem)
   const titleSize = Math.min(28, Math.max(22.4, width * 0.052));
 
-  // Scoped to TODAY's shifts only — Check-In's never-blank fallback can be
-  // showing YESTERDAY's completed summary, and its phase must not label today
-  // "Complete" while the Today section truthfully says "no shift today".
+  // Scoped to TODAY's shifts only. This screen never borrowed Check-In's
+  // phase, which is why it stayed right while Check-In showed a week-old
+  // summary; that fallback is now gone (active-shift.tsx, pickActive), but the
+  // scoping stays — this header must describe today, not whatever card another
+  // screen happens to be holding.
   const todayStatus = tonightShift
     ? tonightShift.status === 'on-duty'
       ? 'On duty'
@@ -355,31 +362,82 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                   style={[
                     styles.todoCard,
                     {
+                      flexDirection: 'column',
+                      alignItems: 'stretch',
                       borderColor: 'rgba(232,198,106,0.4)',
                       backgroundColor: 'rgba(232,198,106,0.06)',
                       marginBottom: 10,
                     },
                   ]}
                 >
-                  <View style={styles.todoIcon}>
-                    <Clock size={16} color={C.amber} />
-                  </View>
-                  <View style={styles.todoBody}>
-                    <Text style={styles.todoTitle}>Forgot to check out?</Text>
-                    <Text style={styles.todoSubtitle}>
-                      {overdueCheckout.assignment.outletName ?? 'Outlet'} · shift ended{' '}
-                      {overdueEndHm} · pay locks to the shift window
-                    </Text>
-                  </View>
-                  <IzButton
-                    label="Check out"
-                    small
-                    fullWidth={false}
-                    onPress={() => {
-                      focus(null);
-                      onNavigate('checkin');
-                    }}
-                  />
+                  {/*
+                    * A COLUMN, and collapsible.
+                    *
+                    * It was one fixed row — icon | text | button — so on a real
+                    * phone the button held its width and crushed the message
+                    * into a four-line ribbon ("Emhub Testing · / shift ended
+                    * 12:00 · / pay locks to the / shift window"). Stacking lets
+                    * the text use the full width at any screen size.
+                    *
+                    * Collapsing matters because this card CANNOT be dismissed —
+                    * it stays until the PR checks out, deliberately, since
+                    * forgetting costs them the shift's pay. Folding it to its
+                    * title lets them park it without losing the warning.
+                    */}
+                  <Pressable
+                    style={styles.overdueHead}
+                    onPress={() => setOverdueOpen((o) => !o)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: overdueOpen }}
+                  >
+                    <View style={styles.todoIcon}>
+                      <Clock size={16} color={C.amber} />
+                    </View>
+                    <Text style={[styles.todoTitle, { flex: 1 }]}>Forgot to check out?</Text>
+                    <ChevronDown
+                      size={16}
+                      color={C.amber}
+                      style={overdueOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+                    />
+                  </Pressable>
+                  {overdueOpen && (
+                    <>
+                      {/*
+                        * THREE facts, three lines — not one dot-separated run.
+                        *
+                        * "Emhub Testing · shift ended 12:00 · pay locks to the
+                        * shift window" wrapped mid-clause on a phone, so the
+                        * outlet, the time and the CONSEQUENCE ran together as one
+                        * grey ribbon. The consequence is the reason the card
+                        * exists — it is money — so it gets its own amber line
+                        * rather than being the tail of a sentence.
+                        */}
+                      <View style={styles.overdueFacts}>
+                        <View style={styles.overdueRow}>
+                          <Text style={styles.overdueKey}>WHERE</Text>
+                          <Text style={styles.overdueVal}>
+                            {overdueCheckout.assignment.outletName ?? 'Outlet'}
+                          </Text>
+                        </View>
+                        <View style={styles.overdueRow}>
+                          <Text style={styles.overdueKey}>SHIFT ENDED</Text>
+                          <Text style={styles.overdueVal}>{overdueEndHm}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.overdueWarn}>
+                        Your pay stops at {overdueEndHm} whenever you tap out — check out now to
+                        close the shift.
+                      </Text>
+                      <IzButton
+                        label="Check out"
+                        onPress={() => {
+                          focus(null);
+                          onNavigate('checkin');
+                        }}
+                        style={{ marginTop: 10 }}
+                      />
+                    </>
+                  )}
                 </View>
               )}
               <OutletSwapRequests swaps={outletSwaps} />
@@ -488,6 +546,9 @@ function TonightCard({
           <View style={{ flex: 1, minWidth: 0 }}>
             <LabelWithIcon icon={Store} label="Outlet name" />
             <Text style={styles.shiftVenueName}>{shift.outlet}</Text>
+            <Text style={styles.shiftEventLine} numberOfLines={1}>
+              {shift.event} · {shift.eventKind ?? 'Normal shift'}
+            </Text>
             {open && shift.address ? (
               <View style={styles.shiftAddrRow}>
                 <MapPin size={12} color={C.prMuted2} strokeWidth={2} />
@@ -510,8 +571,11 @@ function TonightCard({
             </View>
           </View>
           <View style={styles.shiftEvent}>
+            {/* The event moved up into the header, where it is readable
+                without expanding. Repeating it here said the same thing twice
+                on one card, so this strip is now just the money. */}
             <Text style={styles.shiftEventText}>
-              {shift.event} · {formatRM(shift.payout)}
+              {formatRM(shift.payout)}
             </Text>
           </View>
           <IzButton label={cta} icon={MapPin} small onPress={onCheckIn} style={{ marginTop: 12 }} />
@@ -672,6 +736,19 @@ const styles = StyleSheet.create({
     lineHeight: 22,
     color: C.txt,
   },
+  /**
+   * Event line, in the card HEADER so it survives collapse. Three shifts at
+   * one outlet on one day are indistinguishable by venue alone — the event is
+   * the only thing that tells them apart, and it used to appear only after
+   * expanding, unlabelled, beside the payout.
+   */
+  shiftEventLine: {
+    marginTop: 3,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    lineHeight: 16,
+    color: C.prMuted2,
+  },
   shiftAddrRow: {
     marginTop: 5,
     flexDirection: 'row',
@@ -731,6 +808,51 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255,255,255,0.02)',
     borderWidth: 1,
     borderColor: C.line,
+  },
+  overdueHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  overdueFacts: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  overdueRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    // No fixed widths: the label column sizes to its own text and the value
+    // takes the rest, so a long outlet name wraps instead of being clipped on
+    // a narrow phone.
+    gap: 10,
+    paddingVertical: 6,
+  },
+  overdueKey: {
+    fontFamily: F.manrope,
+    fontSize: C.fsTiny - 1,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: C.prMuted,
+    paddingTop: 1,
+  },
+  overdueVal: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: F.sora,
+    fontSize: C.fsTiny + 1,
+    fontWeight: '700',
+    color: C.txt,
+    textAlign: 'right',
+  },
+  overdueWarn: {
+    fontFamily: F.manrope,
+    fontSize: C.fsTiny,
+    lineHeight: C.fsTiny * 1.45,
+    // The champagne this card is already built from (todoIcon's chip and the
+    // Check-out gradient) — NOT C.gold, which is violet in this palette.
+    color: '#e8c27a',
+    marginTop: 10,
   },
   todoIcon: {
     width: 36,

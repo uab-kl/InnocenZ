@@ -409,9 +409,13 @@ export function OutletShiftDetailPanel({
 										key={a.id}
 										name={a.prName}
 										meta={
-											<IzPill variant="gold" className="!py-0.5 !text-[9px]">
-												{a.rating}★
-											</IzPill>
+											// A score only when there is one — `rating: 0` is "never
+											// rated", not one star.
+											a.rating > 0 ? (
+												<IzPill variant="gold" className="!py-0.5 !text-[9px]">
+													{a.rating}★
+												</IzPill>
+											) : undefined
 										}
 										onAccept={() => respondToApplicant(a.id, true)}
 										onDecline={() => respondToApplicant(a.id, false)}
@@ -422,7 +426,8 @@ export function OutletShiftDetailPanel({
 										className="flex items-center justify-between gap-2 rounded-xl border border-[var(--iz-line2)] bg-white/[0.02] px-3 py-2"
 									>
 										<span className="text-xs">
-											{a.prName} · {a.rating}★
+											{a.prName}
+											{a.rating > 0 ? ` · ${a.rating}★` : ""}
 										</span>
 										<IzPill variant="amber" className="!py-0.5 !text-[9px]">
 											Pending agency

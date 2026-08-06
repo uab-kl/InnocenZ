@@ -366,6 +366,13 @@ export type PrAgencyLink = {
   agencyName: string;
   agencyCode: string;
   approveStatus: string;
+  /**
+   * This agency's grading of us (`agency_pr.tier`), e.g. 'tier_3'. Null until
+   * they grade us. Per-membership — two agencies may grade the same PR
+   * differently and both are correct, so the profile shows whose tier is whose
+   * rather than picking one and calling it "the" tier.
+   */
+  tier: string | null;
 };
 
 /**
@@ -766,6 +773,8 @@ export type ShiftAssignmentRecord = {
   shiftDate: string;
   slot: string | null;
   eventName: string | null;
+  /** `shift.event_kind` — 'normal' | 'special'. Never null (DB default). */
+  eventKind: string;
   payPerHour: string;
   outletName: string | null;
   /** The shift outlet's address (composed from its address columns via FK). */
@@ -1194,6 +1203,15 @@ export type PrWeekShift = {
   shiftDate: string;
   slot: string | null;
   eventName: string | null;
+  /**
+   * shift.event_kind — the outlet's Normal / Special event toggle.
+   *
+   * NOT NULL with a 'normal' default in the database, so it always has a value
+   * once the shift row is reached. Optional HERE only because a backend that
+   * has not been restarted yet omits it, and a week is better shown without
+   * the tag than not shown at all.
+   */
+  eventKind?: string | null;
   outletName: string | null;
   /** ISO timestamp, or null when the shift was never started. */
   checkInAt: string | null;

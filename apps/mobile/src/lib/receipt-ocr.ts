@@ -99,6 +99,48 @@ export async function captureReceiptPhoto(): Promise<ReceiptShot | null> {
 }
 
 /**
+ * Pick EXISTING photos from the library — no camera, no OCR.
+ *
+ * captureReceiptPhoto() opens the camera first and only falls back to the
+ * library, which is right when the PR is standing at the till with a paper
+ * receipt in hand. It is wrong for a control labelled "Attach files (images)",
+ * where the photo they want was taken hours ago.
+ *
+ * Returns downscaled data URLs, already bounded by MAX_PROOF_CHARS. An empty
+ * array means cancelled, denied, or a build without expo-image-picker — the
+ * caller decides what to say about that, because saying nothing is what made
+ * this button look broken in the first place.
+ */
+export async function pickPhotosFromLibrary(multiple = true): Promise<string[]> {
+  type PickResult = { canceled: boolean; assets?: { uri: string }[] };
+  type ImagePickerModule = {
+    launchImageLibraryAsync: (opts: object) => Promise<PickResult>;
+  };
+  let ImagePicker: ImagePickerModule;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-var-requires
+    ImagePicker = require('expo-image-picker') as ImagePickerModule;
+  } catch {
+    return [];
+  }
+  let result: PickResult | null = null;
+  try {
+    result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: multiple,
+      quality: 1,
+      exif: false,
+    });
+  } catch {
+    return [];
+  }
+  if (!result || result.canceled || !result.assets?.length) return [];
+  const shots = await Promise.all(result.assets.map((a) => downscale(a.uri)));
+  // A photo too large to store is dropped here rather than sent to fail server-side.
+  return shots.map((s) => s.dataUrl).filter((u): u is string => !!u);
+}
+
+/**
  * Photo → words (build step 2A-2). Every word the camera saw comes back as one
  * text blob, line by line. Null = OCR engine not available in this build
  * (web preview / Expo Go / package not installed) — NOT "unreadable receipt".

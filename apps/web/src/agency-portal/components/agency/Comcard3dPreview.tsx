@@ -6,9 +6,12 @@ import {
 	StaticComcardVisual,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { getComcardDemoStyle } from "@agency-portal/lib/comcard-demo";
-import { publicAssetPath } from "@agency-portal/lib/public-asset";
+import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
 import type { ReactNode } from "react";
+
+/** Languages the compact grid comcard shows before collapsing into "+N". */
+const MAX_CARD_LANGUAGES = 2;
 
 export type ComcardPreviewData = {
 	id?: string;
@@ -21,10 +24,21 @@ export type ComcardPreviewData = {
 	portfolioPhotos?: (string | null)[];
 };
 
-const DEFAULT_WEIGHT = 52;
-
-export function comcardWeight(weight?: number) {
-	return weight ?? DEFAULT_WEIGHT;
+/**
+ * One comcard measurement, or an em-dash when the account does not carry it.
+ *
+ * This replaces `comcardWeight()`, which substituted a hardcoded 52 kg. That
+ * default is how the agency's card came to show a body the PR never entered —
+ * her own profile read blank while Manage PR read "52kg", and nobody could tell
+ * which screen was lying. A measurement is either on the account or it is not.
+ * `0` is the mapper's spelling of "not set" (see pr-personnel-map.ts), so a
+ * falsy value renders as the dash rather than as a number.
+ */
+export function comcardMeasure(
+	value: number | null | undefined,
+	unit = "",
+): string {
+	return value ? `${value}${unit}` : "—";
 }
 
 function ComcardFigure({
@@ -61,7 +75,6 @@ function ComcardStage({
 	variant?: "thumb" | "card" | "full";
 }) {
 	const style = getComcardDemoStyle(pr.id, pr.name);
-	const weight = comcardWeight(pr.weight);
 	const compact = variant === "thumb";
 	const showPlate = variant !== "thumb";
 
@@ -83,7 +96,8 @@ function ComcardStage({
 			<ComcardFigure style={style} compact={compact} />
 			{showPlate && (
 				<div className="iz-comcard-3d-preview-measures">
-					{pr.height}cm · {weight}kg · {pr.age}y
+					{comcardMeasure(pr.height, "cm")} · {comcardMeasure(pr.weight, "kg")}{" "}
+					· {comcardMeasure(pr.age, "y")}
 				</div>
 			)}
 			{variant === "full" && (
@@ -105,7 +119,9 @@ export function Comcard3dPreviewThumb({
 	pr?: ComcardPreviewData;
 	className?: string;
 }) {
-	const fallback: ComcardPreviewData = { name: "PR", height: 165, age: 24 };
+	// No PR passed at all — we know nothing, so we claim nothing. 0 renders as an
+	// em-dash; the old { height: 165, age: 24 } literal drew a plausible stranger.
+	const fallback: ComcardPreviewData = { name: "PR", height: 0, age: 0 };
 	const data = pr ?? fallback;
 	// Tiny thumbs must stay a single <img> — never mount PortfolioComcardVisual
 	// here (its text overlay fills the crop and looks like a broken comcard).
@@ -115,7 +131,13 @@ export function Comcard3dPreviewThumb({
 		data.portfolioPhotos?.find((src): src is string => Boolean(src)) ||
 		null;
 
-	if (thumbPhoto) {
+	// `prPhotoSrc`, not `publicAssetPath`: a stored photo is an R2 OBJECT KEY
+	// (`user/<id>/comcard/<uuid>.jpg`), and prefixing that with the Vite base
+	// produces a URL nothing serves. The mapper already resolves the keys it
+	// returns, but a caller that builds ComcardPreviewData by hand does not — so
+	// the resolver belongs at the <img>, where it can never be skipped.
+	const thumbSrc = prPhotoSrc(thumbPhoto);
+	if (thumbSrc) {
 		return (
 			<div
 				className={cn(
@@ -124,7 +146,7 @@ export function Comcard3dPreviewThumb({
 				)}
 			>
 				<img
-					src={publicAssetPath(thumbPhoto)}
+					src={thumbSrc}
 					alt=""
 					className="iz-comcard-3d-preview--thumb-photo__img"
 				/>
@@ -217,7 +239,12 @@ export function Comcard3dPreviewCard({
 	place?: string;
 	className?: string;
 }) {
-	const langLine = languages.filter(Boolean).slice(0, 2).join(" · ");
+	// Two fit; the rest are counted, not dropped. This was a bare `slice(0, 2)`
+	// with nothing to say a third existed, so the same PR listed two languages
+	// here and four on Manage PR.
+	const allLangs = languages.filter(Boolean);
+	const langLine = allLangs.slice(0, MAX_CARD_LANGUAGES).join(" · ");
+	const hiddenLangs = Math.max(0, allLangs.length - MAX_CARD_LANGUAGES);
 
 	return (
 		<div
@@ -242,7 +269,10 @@ export function Comcard3dPreviewCard({
 					<p className="min-w-0 truncate font-sora text-[11px] font-bold leading-tight text-[var(--iz-txt)]">
 						{pr.name}
 					</p>
-					{rating != null && (
+					{/* `> 0`, not `!= null`: every backend PR carries `rating: 0` as a
+					    placeholder for "GET /pr returns no rating", and the old null-check
+					    printed it as a gold "0★" — a score the outlet never gave. */}
+					{rating != null && rating > 0 && (
 						<IzPill variant="gold" className="shrink-0 !px-1 !py-0 !text-[8px]">
 							{rating}★
 						</IzPill>
@@ -254,8 +284,13 @@ export function Comcard3dPreviewCard({
 					</p>
 				)}
 				{(langLine || place) && (
-					<p className="mt-0.5 line-clamp-1 text-[9px] text-[var(--iz-muted)]">
-						{[langLine, place].filter(Boolean).join(" · ")}
+					<p
+						className="mt-0.5 line-clamp-1 text-[9px] text-[var(--iz-muted)]"
+						title={allLangs.length > 0 ? allLangs.join(" · ") : undefined}
+					>
+						{[hiddenLangs > 0 ? `${langLine} +${hiddenLangs}` : langLine, place]
+							.filter(Boolean)
+							.join(" · ")}
 					</p>
 				)}
 			</div>
@@ -288,7 +323,6 @@ export function Comcard3dPreviewVisual({
 	/** Tighter layout for outlet preview sheets — fits one screen without scrolling. */
 	compact?: boolean;
 }) {
-	const weight = comcardWeight(pr.weight);
 	const portfolio = pr.portfolioPhotos ?? [];
 	// Compact sheets fill their frame; the Manage PR detail keeps a modest card size.
 	const visualClass = compact
@@ -325,9 +359,15 @@ export function Comcard3dPreviewVisual({
 			</div>
 			{showStats && (
 				<div className="iz-comcard-3d-preview-stats">
-					<ComcardStat label="HEIGHT" value={`${pr.height} cm`} />
-					<ComcardStat label="WEIGHT" value={`${weight} kg`} />
-					<ComcardStat label="AGE" value={String(pr.age)} />
+					<ComcardStat
+						label="HEIGHT"
+						value={comcardMeasure(pr.height, " cm")}
+					/>
+					<ComcardStat
+						label="WEIGHT"
+						value={comcardMeasure(pr.weight, " kg")}
+					/>
+					<ComcardStat label="AGE" value={comcardMeasure(pr.age)} />
 				</div>
 			)}
 			{showName && (

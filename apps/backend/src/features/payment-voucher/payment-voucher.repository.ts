@@ -357,7 +357,10 @@ export class PaymentVoucherRepositoryClass {
     filter?: PaymentVoucherFilter;
     page: number;
     pageSize: number;
-  }): Promise<{ vouchers: PaymentVoucherType[]; totalCount: number }> {
+  }): Promise<{
+    vouchers: (PaymentVoucherType & { prNickname: string | null })[];
+    totalCount: number;
+  }> {
     try {
       const { filter, page, pageSize } = params;
       const conditions: SQL[] = [];
@@ -377,13 +380,32 @@ export class PaymentVoucherRepositoryClass {
         .where(whereClause);
       const totalCount = Number(countRow?.value ?? 0);
 
-      const vouchers = await db
-        .select()
+      // The nickname is `user.username` — there is NO `pr` table to join.
+      //
+      // `main.pr` is gone; `PrType` is a synthetic row `composePr` assembles from
+      // user + user_profile + agency_pr, where the legal name is
+      // `user_profile.full_name` ("Victoria Tan Mei Lin") and the nickname is
+      // `user.username` ("Vicky"). An earlier attempt joined a `pr` table for it,
+      // which typechecked, ran, and returned NULL for every voucher — so the
+      // nickname never appeared on any screen and nothing said why.
+      //
+      // `payment_voucher.pr_id` IS the user id, so the join is direct. Same
+      // source `voucherExportBundle` and `listReceiptsForAgency` already read,
+      // so all three name a payee from one place. LEFT, because a voucher may
+      // legitimately have no `pr_id` yet.
+      const rows = await db
+        .select({ voucher: PaymentVoucherTable, prNickname: UserTable.username })
         .from(PaymentVoucherTable)
+        .leftJoin(UserTable, eq(PaymentVoucherTable.prId, UserTable.id))
         .where(whereClause)
         .orderBy(PaymentVoucherTable.createdAt)
         .limit(pageSize)
         .offset((page - 1) * pageSize);
+
+      const vouchers = rows.map((row) => ({
+        ...row.voucher,
+        prNickname: row.prNickname ?? null,
+      }));
 
       return { vouchers, totalCount };
     } catch (error) {

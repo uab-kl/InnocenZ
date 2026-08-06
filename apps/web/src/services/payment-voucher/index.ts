@@ -521,6 +521,17 @@ export interface AgencyReceipt {
 	prName: string | null;
 	prNickname: string | null;
 	shiftAssignmentId: string | null;
+	/**
+	 * The shift the OUTLET posted, behind this paper — what they named the
+	 * night, whether they marked it special, its window, and this PR's stamps.
+	 *
+	 * Singular, unlike a dispute's `shifts`: a receipt names exactly ONE
+	 * assignment, so there is nothing to disambiguate. Null when the receipt
+	 * carries no assignment (self-logged before the shift was known) or when
+	 * the id does not resolve to this PR — both mean "we cannot say", never
+	 * "no shift happened".
+	 */
+	shift: DisputeShift | null;
 	lines: AgencyReceiptLine[];
 }
 
@@ -724,9 +735,50 @@ export type DisputeOutcome = "accepted" | "rejected" | "withdrawn";
  * One dispute, with just enough of its voucher to render a queue row without a
  * second request per dispute.
  */
+/**
+ * The shift one disputed figure came from — venue, what the night was called,
+ * whether it was a special event, its window, and the two stamps.
+ *
+ * ⚠️ `checkOutAt` is SHIFT END, clamped server-side to the scheduled end when
+ * the PR taps out. It is NOT the moment they left; the real overrun lives in
+ * `overtimeMinutes`. Label it "Shift end" and print the OT beside it, or the
+ * card asserts a time that never happened on every overtime shift.
+ *
+ * `slot` is free text and nullable — print it VERBATIM. Never feed it to
+ * `parseShiftWindow`, whose `?? "22:00"` / `?? "04:00"` defaults turn a null
+ * slot into a confident, entirely fabricated "10pm – 4am".
+ */
+export interface DisputeShift {
+	assignmentId: string;
+	outletName: string | null;
+	eventName: string | null;
+	eventKind: "normal" | "special";
+	shiftDate: string;
+	slot: string | null;
+	checkInAt: string | null;
+	/** Shift END, clamped — see the warning above. */
+	checkOutAt: string | null;
+	overtimeMinutes: number | null;
+}
+
 export interface PaymentVoucherDispute {
 	id: string;
 	voucherId: string;
+	/**
+	 * The receipt this claim names — the ONLY thing that narrows a dispute to
+	 * one shift (migration 0088). Null means the claim covers the whole day and
+	 * bucket, which is why `shifts` below is a list.
+	 */
+	receiptId: string | null;
+	/**
+	 * Every shift this claim could be about. ALWAYS an array — one entry when a
+	 * receipt pins it, several when the claim spans a day the PR worked twice,
+	 * empty when nothing links it (wages/OT claims carry no receipt by design).
+	 * Never render `shifts[0]`: two shifts in one night are usually at different
+	 * outlets, so picking one shows the wrong venue AND the wrong check-in while
+	 * looking authoritative.
+	 */
+	shifts: DisputeShift[];
 	/** The contested shift day, yyyy-MM-dd. */
 	disputeDate: string;
 	component: DisputeComponent;

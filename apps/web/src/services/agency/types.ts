@@ -41,6 +41,25 @@ export interface AgencyPr {
 	idNo?: string | null;
 	createdAt?: string;
 	updatedAt?: string;
+	/**
+	 * The PR's own `user_profile`, folded in by the same join that supplies
+	 * `name` and `idNo` (see AgencyPrEnriched in agency-pr.repository.ts).
+	 *
+	 * These were served all along and simply not declared here, which is why the
+	 * Approvals screen showed a PR with no languages, no photos and an invented
+	 * 165cm/52kg/24y body while Manage PR — reading the SAME user_profile row
+	 * through GET /pr — showed the real one. Photos are R2 OBJECT KEYS; resolve
+	 * every one through `prPhotoSrc` / `apiAssetUrl`.
+	 */
+	profileImage?: string | null;
+	race?: string | null;
+	languages?: string[] | null;
+	/** ISO `YYYY-MM-DD`. Age is DERIVED from this — there is no age column. */
+	dob?: string | null;
+	portfolioPhotos?: (string | null)[] | null;
+	comcardImage?: string | null;
+	comcardHeightCm?: number | null;
+	comcardWeightKg?: number | null;
 }
 
 export interface Agency {

@@ -20,7 +20,7 @@ import {
 	rosterPageDisplayStatus,
 	rosterSlotAgencyName,
 } from "@agency-portal/lib/agency-demo";
-import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
 	findOutletShiftForRosterSlot,
 	type OutletDrinkPrice,
@@ -41,6 +41,8 @@ import {
 	type PrSwapRequest,
 } from "@agency-portal/lib/pr-features";
 import { formatRosterShiftTime } from "@agency-portal/lib/pr-session";
+import { cn } from "@agency-portal/lib/utils";
+import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, Pencil } from "lucide-react";
 import { useMemo, useState } from "react";
 
@@ -127,6 +129,27 @@ export function rosterSlotDisplayPayout(
 	});
 }
 
+/**
+ * How the roster names a PR: "(Vicky) Victoria Tan Mei Lin".
+ *
+ * The canonical record wins, through the ONE payee formatter — the roster used
+ * to print `resolveRosterPrName(...)`, which returns `AgencyManagedPR.name`,
+ * and that field holds the NICKNAME. So the same person read "Vicky" here and
+ * "(Vicky) Victoria Tan Mei Lin" on her voucher and her dispute row.
+ *
+ * `resolveRosterPrName` stays as the fallback: it carries a demo-fixture quirk
+ * and is the only answer for a slot with no PR record behind it.
+ */
+function rosterPrLabel(
+	slot: AgencyRosterSlot,
+	profile: AgencyManagedPR | undefined,
+	agencyPRs: AgencyManagedPR[] | undefined,
+): string {
+	const canonical = profile ?? agencyPRs?.find((p) => p.id === slot.prId);
+	if (canonical) return formatPayeeLabel(canonical.name, canonical.icName);
+	return resolveRosterPrName(slot.prId, slot.prName, agencyPRs ?? []);
+}
+
 function RosterPrNameCell({
 	slot,
 	profile,
@@ -140,24 +163,23 @@ function RosterPrNameCell({
 	agencyPRs?: AgencyManagedPR[];
 	viewingAgencyId?: string;
 }) {
-	const displayName = resolveRosterPrName(
-		slot.prId,
-		slot.prName,
-		agencyPRs ?? (profile ? [profile] : []),
-	);
+	const displayName = rosterPrLabel(slot, profile, agencyPRs);
 	const agencyLabel = viewingAgencyId
 		? agencyPortalLabel(viewingAgencyId)
 		: rosterSlotAgencyName(slot);
 	return (
 		<>
 			<div className="iz-portal-table-pr">
+				{/* The comcard preview keeps the slot's own floor name: it is what the
+				    artwork's name plate prints, and a plate reading "(VICKY) VICT" is
+				    not a comcard. The person is identified by the label beside it. */}
 				<PrComcardIdentity
-					pr={comcardPreviewFromSlot({ ...slot, prName: displayName }, profile)}
+					pr={comcardPreviewFromSlot(slot, profile)}
 					profile={profile}
 					agencyName={agencyLabel}
 				/>
 				<div className="iz-portal-table-pr-meta">
-					<span className="iz-portal-table-name">{displayName}</span>
+					<RosterPrNameLink prId={slot.prId} label={displayName} />
 					{profile?.trainingLevel && (
 						<span className="iz-roster-tier-tag">{profile.trainingLevel}</span>
 					)}
@@ -167,6 +189,41 @@ function RosterPrNameCell({
 				<p className="iz-roster-swap-note mt-1">Swap → {prSwap.targetOutlet}</p>
 			)}
 		</>
+	);
+}
+
+/**
+ * The PR's name on the roster opens THAT PR on Manage PR.
+ *
+ * `/agency/prs` already parses `?pr=<id>` and opens the matching record, and
+ * `slot.prId` is that record's id (agency_pr.user_id), so this needs no new
+ * lookup — it was simply never linked, and the roster's only route to a PR was
+ * the "Manage PR" button at the top of the page, which lands on the full list.
+ */
+function RosterPrNameLink({
+	prId,
+	label,
+	className,
+}: {
+	prId: string;
+	label: string;
+	className?: string;
+}) {
+	return (
+		<Link
+			to="/agency/prs"
+			search={{ pr: prId }}
+			className={cn(
+				"iz-portal-table-name iz-portal-table-name--link",
+				className,
+			)}
+			// The row itself has no click action, but the comcard thumb beside this
+			// does — keep a tap on the name from reaching anything else.
+			onClick={(e) => e.stopPropagation()}
+			title={`Open ${label} in Manage PR`}
+		>
+			{label}
+		</Link>
 	);
 }
 
@@ -624,7 +681,7 @@ function RosterShiftCard({
 		slot: AgencyRosterSlot,
 	) => void;
 }) {
-	const displayName = resolveRosterPrName(slot.prId, slot.prName, agencyPRs);
+	const displayName = rosterPrLabel(slot, profile, agencyPRs);
 	const agencyLabel = viewingAgencyId
 		? agencyPortalLabel(viewingAgencyId)
 		: rosterSlotAgencyName(slot);
@@ -633,15 +690,16 @@ function RosterShiftCard({
 			<div className="iz-between gap-2">
 				<div className="flex min-w-0 items-start gap-2.5">
 					<PrComcardIdentity
-						pr={comcardPreviewFromSlot(
-							{ ...slot, prName: displayName },
-							profile,
-						)}
+						pr={comcardPreviewFromSlot(slot, profile)}
 						profile={profile}
 						agencyName={agencyLabel}
 					/>
 					<div className="min-w-0">
-						<div className="font-sora text-[15px] font-bold">{displayName}</div>
+						<RosterPrNameLink
+							prId={slot.prId}
+							label={displayName}
+							className="block truncate"
+						/>
 						{profile?.trainingLevel && (
 							<span className="iz-roster-tier-tag">
 								{profile.trainingLevel}

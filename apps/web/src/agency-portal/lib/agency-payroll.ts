@@ -109,11 +109,99 @@ export function resolvePvPrLabel(
 	pv: Pick<PrPaymentVoucher, "prName" | "prIc"> & { prNickname?: string },
 	agencyPRs: AgencyManagedPR[] = [],
 ): string {
-	const legal = resolvePvPrName(pv, agencyPRs);
-	const nickname = pv.prNickname?.trim();
-	if (!nickname) return legal;
-	if (nickname.toLowerCase() === legal.trim().toLowerCase()) return legal;
-	return `${nickname} (${legal})`;
+	return formatPayeeLabel(pv.prNickname, resolvePvPrName(pv, agencyPRs));
+}
+
+/**
+ * `(Vicky) Victoria Tan Mei Lin` — the owner's exact format, 5 Aug 2026.
+ *
+ * THE BRACKETS GO ROUND THE NICKNAME, and the nickname comes first. An earlier
+ * pass read the instruction the other way and shipped `Vicky (Victoria Tan Mei
+ * Lin)`; this is the corrected order and the one to keep.
+ *
+ * ONE formatter, called by every screen that names a payee — the voucher card
+ * and the dispute row already drifted apart once because each formatted its own
+ * label, which is how the nickname ended up on one screen and not the other.
+ *
+ * Falls back to whichever half exists. A nickname that merely repeats the legal
+ * name prints once, not as "(Victoria Tan Mei Lin) Victoria Tan Mei Lin".
+ */
+/**
+ * An attendance stamp as a clock time, or an explicit word when there isn't one.
+ *
+ * ONE spelling. Every check-in/check-out clock in this portal is currently its
+ * own inline `toLocaleTimeString("en-MY", …)` copy — nine of them at last
+ * count — which is exactly how two screens come to disagree about one stamp.
+ *
+ * `absent` is REQUIRED rather than defaulted: "not checked in" and "still on
+ * duty" are different facts, and a shared default would let a caller print the
+ * wrong one by omission. A null stamp never renders as a bare dash here — the
+ * agency is ruling on money and needs to know which of the two it is.
+ */
+export function formatStampClock(iso: string | null, absent: string): string {
+	if (!iso) return absent;
+	const at = new Date(iso);
+	if (Number.isNaN(at.getTime())) return absent;
+	return at.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
+}
+
+/**
+ * A shift's own day, spelled in full: "Thu 6 Aug 2026".
+ *
+ * The YEAR is deliberate. A payroll queue holds disputes months apart and
+ * "Thu 6 Aug" alone reads as this year to anyone skimming it.
+ *
+ * Parsed with an explicit `T00:00:00` so the string is read as a LOCAL date.
+ * `new Date("2026-08-06")` is parsed as UTC midnight, which in UTC+8 renders as
+ * the 6th but in any negative offset renders as the 5th.
+ */
+export function formatShiftDayDate(iso: string | null): string {
+	if (!iso) return "—";
+	const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+	if (Number.isNaN(d.getTime())) return iso;
+	return d.toLocaleDateString("en-GB", {
+		weekday: "short",
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	});
+}
+
+/**
+ * How long the PR was actually on the floor: check-in to shift end.
+ *
+ * Derived from the two stamps and NOTHING else. The phone's `shiftDurationLabel`
+ * must not be ported here — it carries a hardcoded `scheduledHours = 6` default
+ * and appends OT guessed from it, while the caller ALSO prints the server's
+ * `overtime_minutes`, so the same shift shows OT twice from two disagreeing
+ * sources. `overtime_minutes` is the only OT truth; this function never touches
+ * it.
+ *
+ * Returns "—" unless both stamps exist — a running shift has no duration yet,
+ * and a zero would read as one.
+ */
+export function formatShiftDuration(
+	checkInAt: string | null,
+	checkOutAt: string | null,
+): string {
+	if (!checkInAt || !checkOutAt) return "—";
+	const start = new Date(checkInAt).getTime();
+	const end = new Date(checkOutAt).getTime();
+	if (Number.isNaN(start) || Number.isNaN(end) || end < start) return "—";
+	const minutes = Math.round((end - start) / 60000);
+	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
+export function formatPayeeLabel(
+	nickname: string | null | undefined,
+	legalName: string | null | undefined,
+): string {
+	const nick = nickname?.trim();
+	const legal = legalName?.trim();
+	if (!nick) return legal ?? "";
+	if (!legal) return nick;
+	if (nick.toLowerCase() === legal.toLowerCase()) return legal;
+	return `(${nick}) ${legal}`;
 }
 
 export function pvBelongsToAgencyPr(

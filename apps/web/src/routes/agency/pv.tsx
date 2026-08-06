@@ -137,10 +137,26 @@ type PayrollWeekTab = "this_week" | "last_week" | "last_last_week";
 
 type PvSubTab = "vouchers" | "receipts" | "disputes" | "overtime";
 
+/**
+ * What last week's tab shows — every state a voucher for that week can be in,
+ * INCLUDING signed.
+ *
+ * SIGNED was missing, and the effect was that a voucher vanished from the tab at
+ * the exact moment it became real: PV-000004 for 26 Jul–01 Aug sat in the PR's
+ * History as "Signed 4 Aug 2026 · RM 700.00" while the agency's Last Week tab
+ * for that same week read "0 PVs · No vouchers match these filters". The one
+ * screen an agency uses to look back at a week could not show the week's only
+ * voucher.
+ *
+ * PAID is still absent and stays absent: `payrollActivePvs` drops it, because a
+ * paid voucher belongs to History. Signed-but-unpaid is the state this tab most
+ * needs to show — it is the money still owed.
+ */
 const LAST_WEEK_REVIEW_STATUSES = new Set<PrPvStatus>([
 	"SENT",
 	"PENDING_REVIEW",
 	"DISPUTED",
+	"SIGNED",
 ]);
 
 /**
@@ -793,7 +809,11 @@ function AgencyPV() {
 								<ul className="mt-1.5 space-y-0.5">
 									{unsignedPaymentWeekPvs.map((p) => (
 										<li key={p.id} className="iz-tiny iz-muted2">
-											{resolvePvPrName(p, agencyPRs)} ·{" "}
+											{/* `resolvePvPrLabel`, not `resolvePvPrName` — the sibling
+										    list below already used the label, so one screen printed
+										    "Victoria Tan Mei Lin" here and "(Vicky) Victoria Tan Mei
+										    Lin" there, for the same PR. */}
+											{resolvePvPrLabel(p, agencyPRs)} ·{" "}
 											{formatRM(getPvNetTotal(p))} ·{" "}
 											{agencyPvStatusLabel(p.status)}
 										</li>

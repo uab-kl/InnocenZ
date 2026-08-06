@@ -54,8 +54,59 @@ function dayLabel(iso: string): string {
   return `${wd} ${d.getUTCDate()} ${mo}`;
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * "Thu 6 Aug 2026" from a YYYY-MM-DD shift date — the same line the agency
+ * card prints (617f5d4), so one shift reads identically in both portals.
+ *
+ * Built from the parts rather than `toLocaleDateString`: the date is a CALENDAR
+ * day, and handing 'YYYY-MM-DD' to `new Date()` parses it as UTC midnight,
+ * which in Asia/KL renders the previous day. Formatted by hand it cannot drift.
+ */
+function longShiftDay(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${weekday} ${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/** A finished shift — tapped out and sealed. These are the ones that collapse. */
+function isDone(group: EvidenceGroup): boolean {
+  return !!group.shift?.checkOutAt;
+}
+
+/**
+ * Collapsed by default only when there is something to scroll PAST.
+ *
+ * A night with three shifts stacked nine blocks of stamps, receipts and item
+ * tables between the PR and the figure they came to check. But a single group
+ * collapsed by default would make them tap to reach the only thing on the
+ * sheet, and a shift still ON DUTY is the one they most likely opened it for —
+ * so neither of those starts closed.
+ */
+function startsExpanded(group: EvidenceGroup, groupCount: number): boolean {
+  return groupCount < 2 || !isDone(group);
+}
+
 /** The shift header for one group — or an honest note when there is no link. */
-function ShiftHead({ group, shiftsKnown }: { group: EvidenceGroup; shiftsKnown: boolean }) {
+function ShiftHead({
+  group,
+  shiftsKnown,
+  expanded,
+  onToggle,
+}: {
+  group: EvidenceGroup;
+  shiftsKnown: boolean;
+  /** Undefined for a group that never collapses (no shift to summarise). */
+  expanded?: boolean;
+  onToggle?: () => void;
+}) {
   const shift = group.shift;
   if (!shift) {
     return (
@@ -69,6 +120,72 @@ function ShiftHead({ group, shiftsKnown }: { group: EvidenceGroup; shiftsKnown: 
       </View>
     );
   }
+
+  /*
+   * NAME THE EVENT, not the venue.
+   *
+   * `eventName` has been arriving in this payload all along
+   * (shift-assignment.repository.ts selects it off the joined shift row) but
+   * every heading here printed `outletName`, so four shifts at one venue read
+   * as four identical cards — the same collision 020ed68 fixed on the shift
+   * cards. The outlet moves to the line beneath: a PR checking a figure still
+   * needs to know where they were, just not as the only thing they are told.
+   */
+  const shiftTitle = shift.eventName ?? shift.outletName ?? 'Shift';
+  const shiftVenue = shift.eventName ? shift.outletName : null;
+  /*
+   * SPECIAL only. `event_kind` defaults to 'normal', so tagging every card
+   * would put the same word on every shift the PR ever opens — a badge that
+   * appears everywhere is one they stop reading, and then it cannot do its job
+   * on the night it matters.
+   */
+  /*
+   * ALWAYS shown, matching the agency card (617f5d4) which prints
+   * "[Normal shift]" as readily as "[Special event]".
+   *
+   * I first tagged only the special ones, on the reasoning that a badge on
+   * every card is one nobody reads. The owner's screenshot settles it the
+   * other way, and rightly: the two portals describe the SAME shift, and a PR
+   * ringing the agency about it must not be reading a card that omits what
+   * theirs shows. Silence is not the same statement as "Normal".
+   */
+  const eventKindLabel = shift.eventKind === 'special' ? 'Special event' : 'Normal shift';
+  const collapsible = typeof expanded === 'boolean' && !!onToggle;
+  if (collapsible && !expanded) {
+    /*
+     * The COLLAPSED row still has to be enough to choose by — outlet, slot,
+     * duration and the MONEY. Hiding the subtotal would force the PR to open
+     * all three shifts to find the one they came for, which is the scrolling
+     * this collapse exists to remove.
+     */
+    return (
+      <Pressable
+        style={[s.shiftCard, s.shiftCardRow]}
+        onPress={onToggle}
+        accessibilityRole="button"
+        accessibilityState={{ expanded: false }}
+        accessibilityLabel={`${shiftTitle} — tap to see check-in, receipts and items`}
+      >
+        <View style={s.shiftHeadText}>
+          <View style={s.shiftTitleRow}>
+            <Text style={s.shiftTitle}>{shiftTitle}</Text>
+            <Text style={s.eventTag}>{eventKindLabel}</Text>
+          </View>
+          <Text style={s.shiftSlot}>
+            {shiftVenue ? `${shiftVenue} · ` : ''}
+            {shift.slot ? `${shift.slot} · ` : ''}
+            {shiftDurationLabel(shift.checkInAt, shift.checkOutAt)}
+          </Text>
+          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
+          <Text style={s.shiftMore}>Tap to see details</Text>
+        </View>
+        <View style={s.shiftHeadRight}>
+          <Text style={s.shiftSubtotal}>{money(group.subtotal)}</Text>
+          <Text style={s.chevron}>⌄</Text>
+        </View>
+      </Pressable>
+    );
+  }
   /*
    * "Shift end", NOT "you tapped out at".
    *
@@ -79,8 +196,42 @@ function ShiftHead({ group, shiftsKnown }: { group: EvidenceGroup; shiftsKnown: 
    */
   return (
     <View style={s.shiftCard}>
-      <Text style={s.shiftTitle}>{shift.outletName ?? 'Shift'}</Text>
-      {!!shift.slot && <Text style={s.shiftSlot}>{shift.slot}</Text>}
+      {collapsible ? (
+        <Pressable
+          style={s.shiftCardRow}
+          onPress={onToggle}
+          accessibilityRole="button"
+          accessibilityState={{ expanded: true }}
+        >
+          <View style={s.shiftHeadText}>
+            <View style={s.shiftTitleRow}>
+              <Text style={s.shiftTitle}>{shiftTitle}</Text>
+              <Text style={s.eventTag}>{eventKindLabel}</Text>
+            </View>
+            {(shiftVenue || shift.slot) && (
+              <Text style={s.shiftSlot}>
+                {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
+              </Text>
+            )}
+            <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
+            <Text style={s.shiftMore}>Tap to collapse</Text>
+          </View>
+          <Text style={[s.chevron, s.chevronOpen]}>⌄</Text>
+        </Pressable>
+      ) : (
+        <>
+          <View style={s.shiftTitleRow}>
+            <Text style={s.shiftTitle}>{shiftTitle}</Text>
+            <Text style={s.eventTag}>{eventKindLabel}</Text>
+          </View>
+          {(shiftVenue || shift.slot) && (
+            <Text style={s.shiftSlot}>
+              {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
+            </Text>
+          )}
+          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
+        </>
+      )}
       <View style={s.stampRow}>
         <View style={s.stampCol}>
           <Text style={s.stampK}>CHECK-IN</Text>
@@ -127,6 +278,27 @@ export function CellEvidenceSheet({
 }) {
   /** The receipt photo being viewed full-size, or null. */
   const [zoom, setZoom] = useState<string | null>(null);
+  /*
+   * Which shifts the PR has opened, and for WHICH cell.
+   *
+   * The key is carried in state beside the overrides so that opening a
+   * different cell drops them without a reset effect — the sheet is reused for
+   * every cell in the grid, and stale overrides would have silently applied
+   * one day's choices to the next.
+   */
+  const cellKey = evidence ? `${evidence.kind}|${evidence.dateIso}` : '';
+  const [opened, setOpened] = useState<{ key: string; ids: Record<string, boolean> }>({
+    key: '',
+    ids: {},
+  });
+  const overrides = opened.key === cellKey ? opened.ids : {};
+  const toggleGroup = (id: string, current: boolean) =>
+    setOpened((prev) => {
+      const ids = prev.key === cellKey ? prev.ids : {};
+      // Stores the resulting EXPANDED state, not a "was touched" flag — an
+      // absent entry has to keep meaning "use the default".
+      return { key: cellKey, ids: { ...ids, [id]: !current } };
+    });
   /*
    * The DEVICE's bottom inset, not a guessed constant. A fixed 28px happened to
    * clear some phones and jammed Close straight against the 3-button / gesture
@@ -280,11 +452,24 @@ export function CellEvidenceSheet({
               <Text style={s.empty}>Nothing was logged for this day.</Text>
             )}
 
-            {evidence.groups.map((group, gi) => (
-              <View key={group.shift?.id ?? `unlinked-${gi}`} style={s.group}>
-                <ShiftHead group={group} shiftsKnown={evidence.shiftsKnown} />
+            {evidence.groups.map((group, gi) => {
+              const gid = group.shift?.id ?? `unlinked-${gi}`;
+              // A group with no shift has no summary to collapse INTO — its
+              // note is already one line — so it stays open and untappable.
+              const collapsible = !!group.shift;
+              const expanded = collapsible
+                ? (overrides[gid] ?? startsExpanded(group, evidence.groups.length))
+                : true;
+              return (
+              <View key={gid} style={s.group}>
+                <ShiftHead
+                  group={group}
+                  shiftsKnown={evidence.shiftsKnown}
+                  expanded={collapsible ? expanded : undefined}
+                  onToggle={collapsible ? () => toggleGroup(gid, expanded) : undefined}
+                />
 
-                {group.receipts.map((receipt, ri) => (
+                {expanded && group.receipts.map((receipt, ri) => (
                   <View key={receipt.receiptNo ?? `r-${ri}`} style={s.receipt}>
                     <View style={s.receiptHead}>
                       <Text style={s.orderNo}>{receipt.orderNo ?? 'No order number'}</Text>
@@ -367,9 +552,14 @@ export function CellEvidenceSheet({
                   </View>
                 ))}
 
-                <Text style={s.groupTotal}>Shift subtotal · {money(group.subtotal)}</Text>
+                {/* Collapsed, the subtotal has already moved up into the header
+                    row, so printing it again here would read as a second figure. */}
+                {expanded && (
+                  <Text style={s.groupTotal}>Shift subtotal · {money(group.subtotal)}</Text>
+                )}
               </View>
-            ))}
+              );
+            })}
           </ScrollView>
 
           {/*
@@ -484,6 +674,44 @@ const s = StyleSheet.create({
     backgroundColor: C.glass,
     padding: 12,
   },
+  shiftCardRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    // No fixed widths: the text column takes what is left after the money and
+    // chevron, so a long outlet name wraps instead of pushing them off a
+    // narrow phone.
+    gap: 12,
+  },
+  shiftHeadText: { flex: 1, minWidth: 0 },
+  // The tag sits beside the name and wraps under it on a narrow phone rather
+  // than squeezing the name — the name is the thing being identified.
+  shiftTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  shiftDay: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.txt,
+  },
+  eventTag: {
+    fontFamily: F.sora,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    color: '#e8c27a',
+    borderWidth: 1,
+    borderColor: 'rgba(232,194,122,0.45)',
+    backgroundColor: 'rgba(232,194,122,0.1)',
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
+  shiftHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  shiftSubtotal: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.txt },
+  shiftMore: { marginTop: 4, fontFamily: F.manrope, fontSize: 11, color: C.violetL },
+  chevron: { fontFamily: F.sora, fontSize: 16, lineHeight: 18, color: C.prMuted },
+  chevronOpen: { transform: [{ rotate: '180deg' }] },
   shiftTitle: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.violetL },
   shiftSlot: { marginTop: 2, fontFamily: F.manrope, fontSize: 12, color: C.prMuted },
   shiftNote: { marginTop: 4, fontFamily: F.manrope, fontSize: 12, color: C.muted2 },

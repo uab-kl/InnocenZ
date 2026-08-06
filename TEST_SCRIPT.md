@@ -195,8 +195,6 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | O3 | Ratings page | Outlet ← PR | `routes/outlet/ratings` + `rating` | rating table | ✅ Verified |
 | O4 | History (real shift / shift-assignment / venue-scoped PR) | Outlet ← Agency/PR | `routes/outlet/history` | shift + shift-assignment | ✅ Verified |
 | O5 | **Post Job** → shift write + "Confirm staffing" (caps) | **Outlet → Agency** (feeds roster) | `routes/outlet/bookings` + `shift` | shift + subscription caps | ⚠️ Reported (confirm E2E, §3 S1) |
-| O7 | **Today panel: "Shift history" sheet hydrated from the backend + PR tier no longer read from a foreign agency.** The sheet read only `store.shiftHistory`, so after the demo seed was retired it said *"No shift history yet"* while the DB held sealed nights (Vicky: 8 at Emhub Testing) — it now reads `useOutletHistory()` when the session is backed, and says *Loading…* instead of an empty verdict while in flight. Separately, `GET /pr` for an **outlet** caller emitted one row per `agency_pr` **membership**, so a PR with two memberships came back twice under the same `id` and the web's id-keyed map kept the last one: Vicky rendered **Tier I** (Delta) on an Atlas-supplied night. The outlet filter now also matches `shift_assignment.agency_id`, i.e. the agency that actually supplied the PR to that venue. | Outlet ← Agency/PR | `ShiftHistoryLog.tsx` (`OutletPrShiftHistorySheet`) · `pr.repository.ts` (`listPaginated`) | `shift_assignment` (status=completed) + `agency_pr.tier` | ✅ Verified over HTTP as both outlet owners (`probe-outlet-pr-list-tier.ts`: 4/4 PRs one row each, Vicky `tier_3`, 10/10 completed rows usable). Sheet **rendering** not yet clicked in a browser |
-| O8 | **Every check-in / check-out stamp renders LOCAL time.** `Out 2026-08-06T06:17:45.947Z` → `Out 2:17 pm`. The formatter already existed but was **private to `RosterShiftTable`**, so the fix had reached one roster cell and none of the other four sites printing the same field. Extracted to the leaf module `lib/attendance-stamp.ts` (zero imports, so no cycle risk) and wired at all five: the outlet Today card's ops line, the roster table cell, the roster card's `In …`, the Live-workforce check-in column, and the roster sheet's "Released early ·". The date is prefixed **only** when the stamp did not land on the shift's own date — the overnight / checked-in-a-day-early case. Demo `"21:45"` strings pass through untouched. | Outlet + Agency ← PR | `lib/attendance-stamp.ts` · `OutletTodayOperationPanel` · `RosterShiftTable` · `LiveWorkforceTable` · `routes/agency/roster` | `shift_assignment.check_in_at` / `check_out_at` (display only) | ✅ Verified — formatter exercised against the real live stamps in `Asia/Kuala_Lumpur`: `06:17:45.947Z`→`2:17 pm`, the old `04:01Z`→`12:01 pm`, `"21:45"`→`"21:45"`, unparseable → unchanged |
 | O6 | **Special-event prices show as the Workspace's two lists, off the REAL menu** — Post Job's `Prices` field renders **DRINKS PRICE** + **SERVICE ENTITLEMENT** (counts, RM range, ↔ move, per-list Add More) via the extracted `ShiftEventPriceEditor`, and now reads the outlet's **backend** `outlet_drink_menu` (passed down as `workspaceMenu`, like `prCandidates`) instead of the demo store. Edits stay on that event's `eventDrinkMenu`; the workspace list is cloned on switch and **never written**, so later events keep Workspace prices. Seed corrected: **Havoc is a service, Tips added as a service** (`DEFAULT_PER_TIP_RM`). | Outlet (self) | `ShiftEventPriceEditor.tsx` · `post-job-fields.tsx` · `routes/outlet/bookings.tsx` · `outlet-demo.ts` | backend `outlet_drink_menu` (read-only) → draft `eventDrinkMenu` | ✅ Verified (live: Post Job now shows the same 6 drinks RM 30–200 / 3 services RM 50–1000 as Workspace; editing Tips→999 fired **no PUT**, only the GET) |
 
 ### Agency side (SL)
@@ -311,9 +309,6 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X64 | **🟢 PRE-PILOT GATE 2 — demo login is DEV-only and absent from production builds.** `import.meta.env.DEV` gates the client demo branch so Vite drops it at build time. ⚠️ **The recorded credential was wrong for days:** it is `demo@atlas-agency.invalid` / `demo@velvet23.invalid` (RFC 2606 `.invalid`), not `owner@atlas-agency.my`; planted JWT is `alg:"none"` and the backend rejects it — blast radius was a demo shell, not real data. Proven by grepping the production `vite build` output (demo symbols **0**, real login path still present). | **Web (auth)** | `routes/login.tsx` · `lib/auth/*` | production build grep | ✅ Proven |
 | X65 | **⚠️ WHATSAPP CLOUD API OTP + PR MOBILE SIGN-UP RESTRUCTURE — CODE LANDED, TABLE + META NOT.** Public `POST /auth/otp/send` + `/auth/otp/verify` (sha256 `code_hash` only; 5 min / 60s resend / 5 attempts); Meta webhook at `GET\|POST /webhooks/whatsapp`; mobile sign-up split into `screens/sign-up/step1…6` + `safe-area.tsx`; `.env.example` documents `META_WHATSAPP_*`. 🔴 **No `phone_verification` migration ships with this code** — the model comment says "Migration 0083" but **0083 is already `pv_line_outlet_fk`** on this branch; table does not exist until a new migration is authored. Also needs Meta Business verification + filled env. Not E2E on a real phone. | **PR (mobile) ↔ Auth** | `otp.controller.ts` · `phone-verification.*` · `features/whatsapp/*` · `screens/sign-up/*` | code only | ⚠️ Reported (needs DDL + Meta) |
 | X66 | **🟢 AGENCY RECEIPT EDITOR LANDED (`57bd165`) — the slice that left the DB ahead of the repo.** Agency can correct drinks/tips on a scanned or self-logged receipt in place (order no, printed date/time, qty/commission, add missed line) through **targeted** receipt endpoints — never the destructive `PUT /payment-voucher/:id` line wipe. Same editor opens from the Receipts sub-tab **and** inside the dispute queue. Migrations **0083** (`outlet_id` FK on lines, 18/18 backfilled) and **0084** (`review_withdrawn_at`) were already live on `innocenz-test`; this commit ships the code that reads them. ⚠️ **Not a live agency click-through yet** — §9 day/receipt agreement audit items (PvDetail dispute, disputed-cell withdraw UX, etc.) stay open. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `0083`/`0084` | live schema + committed code | ⚠️ Reported |
-| X67 | **🟢 ORG SIGNUP ADDRESS → `agency`/`outlet`, NOT `user_profile`.** Migration **0098**: agency gains `city`/`postcode`/`state`/`country`; outlet gains `city`. Register accepts structured address fields and writes them on the org row; portal owner profile keeps PIC name only. PR home address unchanged on `user_profile`. | **Agency / Outlet** | `0098_org_address_*` · `auth.controller` · `agency.model` · `outlet.model` | migrate:deploy applied | ✅ Schema live |
-| X68 | **🟢 PENDING ORG MAY SIGN IN — PROFILE ONLY.** Membership APIs now return `outletStatus` / `agencyStatus`. Portal identity stores it; while `pending_review`, login lands on Settings/Profile, operational nav is hidden, and route guards bounce other paths. Signup copy updated. Login still allowed (X55 carve-out). ⚠️ Client-side gate only — API write lockdown for pending orgs is a follow-up. | **Outlet / Agency** | membership repos · `*-identity` · `*-rbac` · `login.tsx` · portal routes | code | ⚠️ Reported (needs live pending signup click-through) |
-| X69 | **🟢 SUSPENDED ORG = RED + PROFILE ONLY (same gate as pending).** Product change from X55: `suspended` no longer refuses login / kills JWT. Backend `suspendedOrgBlock` now denies **`inactive` only**. Portal treats `suspended` like `pending_review` via `isOrgProfileOnly` (nav empty, route guard, login → Settings/Profile). Status badge + banner use **red** (`--iz-red` / red banner); pending stays amber. Probe `probe-org-suspension.ts` updated: suspend → allow; inactive → block. ⚠️ Client-side gate only for writes — same follow-up as X68. | **Outlet / Agency** | `org-status.ts` (BE+FE) · `*-rbac` · `PendingReviewBanner` · settings/profile · `login.tsx` · probe | code | ⚠️ Reported |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 | X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
@@ -321,12 +316,161 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ ~~OUTLET TODAY CARD PRINTS A RAW UTC TIMESTAMP~~ — ✅ CLOSED 6 Aug 2026 (§8 O8)
+### ▶ STILL OPEN after the one-source sweep (verified 6 Aug 2026, NOT fixed)
 
-The PR card's ops line read **`Out 2026-08-06T06:17:45.947Z · Atlas Agency`**; it now reads
-**`Out 2:17 pm`**. The formatter existed — it was **private to one file**, which is why the fix had
-reached one roster cell and none of the other four places that print the same field. Extracted to
-`lib/attendance-stamp.ts` and wired at all five. See §10.
+The `pr-data-one-source` sweep shipped in `98ee4a0`; its remaining findings were re-checked
+against the tree, and these three are still true:
+
+1. **Two cache keys for one endpoint.** `["roster","prs"]` and `["outlet","today","prs"]` both
+   hold the same `GET /pr`. Every agency-side write invalidates only the first, so an outlet tab
+   open in the same browser keeps stale PR facts for up to 60s. This is the **ONE MOMENT** half
+   below — one source with two caches still shows two answers.
+2. **Admin cannot show languages at all.** `services/pr/prs.ts` reads `GET /user`, not `GET /pr`,
+   and that response has no `languages` / `comcardImage`. Not a mapper bug — the endpoint shape
+   is missing the fields, so the admin PR sheet structurally cannot agree with the other screens.
+3. **~40 raw name prints** still bypass `formatPayeeLabel` — concentrated in outlet history, GPS /
+   attendance panels, special-service cards, and the name drawn ON the comcard artwork
+   (`Comcard3dPreview`, `PortfolioComcardVisual`). Also `routes/outlet/ratings.tsx`, which prints
+   the backend's `prName` (legal name) so a rating card and the roster name the same person
+   differently.
+
+Fixed on the way past: `pv.tsx` printed `resolvePvPrName` in one list and `resolvePvPrLabel` in
+its sibling — same screen, same PR, two names (`932678e`).
+
+### ▶ SETTLED — an agency sees only ITS OWN tier (owner decision, 6 Aug 2026)
+
+Owner asked *"agency poster page and manage pr page where is the others outlet tier ?"* after the
+PR phone started showing one badge per agency (Alice: Atlas · TIER II, Starline · TIER I).
+
+**Decision: each agency's tier stays private. No code change — this is already the behaviour.**
+`pr.repository.ts:429` scopes the list to `agency_pr.agencyId = <acting agency>`, so every PR row
+carries that agency's own grading and no one else's. The asymmetry is deliberate:
+
+- **The PR sees every tier** — they are all gradings *of her*, so she is entitled to them.
+- **An agency sees only its own** — `agency_pr.tier` is that agency's competitive judgement of a
+  freelancer. Publishing it to a rival leaks their rate card and poaching value.
+
+⚠️ Do **not** "sync" tier to one value across agencies to make screens match. Two agencies grading
+the same PR differently is two true facts. See §10, 6 Aug.
+
+### ▶ `composePr` invents a tier, and breaks ties arbitrarily (found 6 Aug 2026, NOT fixed)
+
+`pr/pr.repository.ts:118` — `tier: membership?.tier ?? 'tier_1'`. A PR with no `agency_pr` row is
+reported as **Tier I**, a grading nobody gave them: the same class of bug as the hardcoded
+`TIER V` just removed from the phone. Tier should be nullable and render as "not graded yet".
+
+`buildSyntheticPr` also documents *"the OLDEST wins … tie-broken by id"* for multi-agency accounts.
+Vicky's two memberships share an **identical `created_at`**, so that tie is decided by uuid sort —
+i.e. arbitrarily. `listPaginated` does not use this path, so the portal screens are correct today;
+**anything reading one PR by id is not.** Fixing it means threading the acting agency into the
+single-PR read, not picking a better tie-break.
+
+### ▶ ONE SOURCE **AND** ONE MOMENT — PR data must update everywhere at once (owner, 6 Aug 2026)
+
+*"make sure all links any changes also changes simultaneously … no any different data, just take from
+the same database"*.
+
+These are TWO requirements and only the first is covered by the consolidation sweep:
+
+1. **ONE SOURCE** — every surface reads PR facts through `managedPrFromBackend`. In flight.
+2. **ONE MOMENT** — when a PR is edited ANYWHERE, every surface showing that PR refetches. **Not
+   covered.** One source with a stale cache still shows two different answers, which is
+   indistinguishable to the owner from the bug just fixed.
+
+- [ ] **Audit every PR write for cache invalidation.** The Manage PR editor (`PUT /pr/:id`), the
+  roster's assign/unassign, approvals, and the PR's own profile save all change facts the agency
+  screens display. Each write must invalidate the PR query key — the discipline
+  `useAgencyReceiptEdit` already applies to receipts, where it invalidates the feed, the evidence
+  detail AND the voucher list because a receipt appears in all three.
+- [ ] **Watch `staleTime`.** `useAgencyReceipts` uses 60s and `useReceiptCatalogue` 5min; a PR query
+  with a long staleTime will look "not linked" for that whole window even when it is.
+- [ ] **The PR's own app is a SEPARATE CLIENT.** She edits her profile on the phone; the agency's
+  browser cannot know. Either shorten the PR query's staleTime, refetch on window focus, or accept a
+  documented lag — but decide deliberately rather than leaving it to chance.
+- [ ] ⚠️ **TIER IS PER-AGENCY AND MUST NOT BE UNIFIED.** `agency_pr.tier` is a membership fact: Atlas
+  grading a PR Tier III while another agency grades her Tier V is CORRECT. The bug is that
+  `composePr` picks the OLDEST membership and prints that tier on the PR's own profile as if it were
+  global. Do NOT "fix" this by making the two screens agree — fix it by resolving the membership from
+  the caller's scope, and decide what her own profile shows when she is on two rosters. Languages,
+  height, weight, age, name and photos ARE account-level and must always agree.
+
+### ▶ THE AGENCY'S "WHAT DO I HAVE TO DO" SURFACE (owner, 6 Aug 2026 — SPEC, not started)
+
+*"need to make a shift pending approve to remind the agency that before raise pv … notification
+redirect to the page, redirect to here the day review … think any else to put that need the agency
+todo"*.
+
+**The idea:** every notification names an ACTION and tapping it lands on the exact control that
+performs it. Today they name a fact and land nowhere.
+
+**Build on what exists — do NOT invent a second rule.** `voucherSendGate()` already computes exactly
+why a week cannot go out (held days, unreviewed days, pending receipts, pending overtime, week not
+finished). That function IS the to-do list; it has simply never been rendered as one. And `pv.tsx`
+already parses `search.pv` and `search.status`, so deep-linking is half-built.
+
+- [ ] **A shift pending approval must block/warn BEFORE a PV is raised** — the owner's specific ask.
+  An unapproved check-in/out means the wage line is not final, so raising a voucher on it produces a
+  figure that can still move. Surface it through the same gate, worded like the others.
+- [ ] **Every notification carries a destination.** Add a route + params to the notification row and
+  land the reviewer on the panel, scrolled to the row: `1 voucher awaiting day review` →
+  `/agency/pv?pv=<voucherId>` with Day Review open and the undecided day highlighted; `Overtime needs
+  approval` → the Overtime sub-tab filtered to that claim; `Cover needed` → the roster row; `Rating
+  dropped` → that PR in Manage PR.
+- [ ] **One "Needs you" list on Today**, counted FROM the gate rather than hand-maintained. The four
+  tiles there (PR ON DUTY / PENDING APPROVALS / PENDING AGENCY REVIEW / DISPUTES) hint at this but
+  are not actionable.
+
+**Everything that should appear as an agency to-do** — each has a real source, none needs DDL:
+1. **Shifts pending approval** — wage lines not final yet. *(the new one)*
+2. **Overtime claims undecided** — already in `voucherSendGate`.
+3. **Days not reviewed, or HELD** — `dayReviews[].status`.
+4. **Days gone STALE** — approved, then the total moved; needs re-approval. Only visible inside the
+   panel today.
+5. **Receipts waiting on you** — `pendingReceiptCount`.
+6. **Open disputes** — visible via the new Open/Resolved filter, but not counted as work.
+7. **Voucher not finance-signed** — blocks the send.
+8. **Signed but unpaid** — the To-pay queue; money owed.
+9. **PR missing bank details** — cannot be paid even once signed (`user_profile.bank_*`).
+10. **Outlet with no drinks/service list** — blocks receipt-line verification for that outlet.
+11. **Receipt with no photo or no shift link** — cannot be verified against a catalogue.
+
+⚠️ **Ordering rule:** sort by what BLOCKS MONEY first (send gate, then payment), never by recency. A
+rating drop and a held day are not the same kind of urgent, and a list that mixes them by timestamp
+trains the agency to ignore it.
+
+### ▶ THE NICKNAME LIVES ON `user.username` — THERE IS NO `pr` TABLE (6 Aug 2026)
+
+**Root cause of the nickname never appearing**, after three wrong guesses. `main.pr` was DROPPED;
+`PrType` is a synthetic row `composePr` assembles from `user` + `user_profile` + `agency_pr`:
+
+- legal name  = `user_profile.full_name`  → "Victoria Tan Mei Lin"
+- **nickname  = `user.username`**         → "Vicky"
+- `payment_voucher.pr_id` IS the user id.
+
+Joining a `pr` table for the nickname **typechecks, runs, and returns NULL for every row** — silent,
+no error, nothing on screen. `voucherExportBundle` and `listReceiptsForAgency` already read
+`UserTable.username` correctly; `listPaginated` now matches (FIXED), and `listForScope` was already
+right. **Follow those three; never join a `pr` table.**
+
+- [ ] **Sweep every agency AND outlet surface that names a PR** (owner, 6 Aug: *"the agency and the
+  outlet role pages related to the pr need put the nickname infront of every realname"*). Done so
+  far: PV card, dispute row, receipt row, receipts PR filter. NOT done: Roster, Approvals, Manage PR,
+  Today, and the whole outlet portal. Each has its own read path and most will not be carrying
+  `username` yet — exactly how `listPaginated` was broken. Use `formatPayeeLabel`; the format is
+  `(Vicky) Victoria Tan Mei Lin`.
+
+### ▶ MANAGE PR SHOWS DEMO DATA BESIDE REAL DATA (found 6 Aug 2026)
+
+Owner: *"you think this got link properly? make sure database no duplicated data"*. The same PR reads
+**170 cm / age 18** on her own profile and **153 cm / age 24** on the agency's Manage PR card.
+
+- **The DATABASE is fine** — `user_profile.comcard_height_cm` / `comcard_weight_kg` are the only
+  height/weight columns; one fact, one table, rule 3 satisfied. **There is NO age column at all**, so
+  the "Age 24" on the agency card is not from the database.
+- **The SCREEN is the problem.** `routes/agency/prs.tsx` reads `useAgencyPrs()` (real backend) AND
+  `useStore(...)` (the client-side demo seed) on the same page, so part of the card is leftover seed.
+- [ ] Make Manage PR read the comcard through the FK (`pr_id → user_id → user_profile`), the same
+  correction the nickname needed. Then audit the rest of that page for other demo-store reads.
 
 ### ▶ THE SHIFT DETAIL PANEL STILL SHOWS EVENT PRICES AS ONE RUN-ON LINE (5 Aug 2026)
 
@@ -1063,121 +1207,208 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ## 10. Changelog (what changed / what's done — append newest at top)
 
 
-> **6 Aug 2026 — THE OUTLET WAS READING A PR'S GRADE FROM AN AGENCY THAT HAD NOTHING TO DO WITH
-> THE SHIFT.**
+> ## 🔒 STANDING RULE — BRANCH `jk` IS THE OWNER'S. DO NOT BREAK IT.
 >
-> *"continue with the shift history fix, also why is "Vicky" in the outlet shift showing up as
-> "Tier 1" when she is supposed to be "Tier 3"?"*
+> `jk` is **jinkai's** branch; `SL` is the teammate's (outlet + agency web).
+> When working on `jk`:
 >
-> Two faults, one screenshot. The second one is the interesting one.
+> 1. **Do not change or remove the owner's existing functions.** Add beside
+>    them; never rewrite or delete working behaviour to make a new feature fit.
+> 2. **Never leave `jk` broken.** Typecheck the files you touched before every
+>    commit — `apps/mobile` with `-p tsconfig.app.json` (NOT `tsconfig.json`,
+>    which compiles zero files), `apps/web` with biome + `tsc`, backend against
+>    its known TS2742 router baseline.
+> 3. **Avoid conflict with the other session.** More than one agent works this
+>    repo at once. Before editing, check `git status` — if a file is already
+>    modified by someone else (it has happened to `payment-voucher.controller.ts`,
+>    `apps/web/src/routes/agency/pv.tsx` and the whole `agency-portal/` tree),
+>    leave it alone and hand the task over rather than racing it.
+> 4. **`TEST_SCRIPT.md` is append-at-top.** Resolve its conflicts by KEEPING
+>    BOTH SIDES and renumbering, never by taking one branch wholesale — both
+>    sessions' entries are real history.
+
+
+> **6 Aug 2026 (pm) — PR + ADMIN SLICE (`33b1d0d`, `2bd50b4`, `d0984f9`,
+> `7147bd8`, admin `d6d9a5f` → `f3be3bd`).**
+> • **Attach files did nothing on a phone** — `PaymentScreen`'s own picker began
+> `if (Platform.OS !== 'web') return;`, so the button took the tap and returned.
+> Replaced by the shared `pickProofPhotos` with a new `source: 'library'` option
+> (a dispute photo was taken hours ago; the camera-first flow stays for
+> at-the-till scanning). Also clears PaymentScreen's DOM-global tsc baseline.
+> • **Evidence sheet names the EVENT** (`shift.event_name`) with the outlet
+> beneath — four shifts at one venue read as four identical cards. Event TYPE
+> (`shift.event_kind`) now tags **SPECIAL only**; `normal` is the default, and a
+> badge on every card is one nobody reads.
+> • **A running week can no longer be sent** — `pending_review → sent` refused
+> while `klToday() <= week_end`. Sending seals the week, so sending mid-week
+> stranded every remaining shift: PV-000006 was sent on 6 Aug and Vicky's 6 Aug
+> scan had nowhere to go. Signing is next week's work.
+> • **Admin Plan Request quoted price** — framed and tagged while a price is
+> owed, RM 0 counts as unset, anchor line naming the tier being replaced; exits
+> are exempt (a reset is not a quote), and a reset's two rows read red ends →
+> green begins, with green withheld from the POS exit whose plan *continues*.
 >
-> **1. The Shift-history sheet was fed by a slice its own card doesn't use.** `OutletPrShiftHistorySheet`
-> read `store.shiftHistory` and nothing else. The demo seed was retired the day before, so the slice
-> is empty on every session — and the sheet answered *"No shift history yet for Vicky at Emhub
-> Testing"* while the database held **8 completed assignments** for her at that venue. It now reads
-> `useOutletHistory()` when the session is backed, exactly like the outlet History screen, and
-> distinguishes *Loading…* from *nothing here* — an in-flight request must not read as a verdict.
-> Same bug family as the three dead buttons fixed the day before: **the card rendered from backend
-> props while the thing behind it read a demo slice.**
+> 🔴 **STILL OPEN:** PV-000006 is still `sent` (revert blocked by the permission
+> classifier); **restart the backend** for `7147bd8`; the This-Week tab still
+> offers Finance sign / Sent to PR that the server now refuses; the "Reopen
+> voucher" action the PR's error message promises does not exist; the
+> **fabricated overtime** (RM 1,213.68 from a hardcoded 6 h shift) is untouched;
+> `PaymentScreen`'s "What you disputed" card still maps only `outletName`
+> (~line 146) and needs event name, event kind and duration off the
+> `disputed_items` snapshot; **rotate `POSTGRES_PASSWORD`** — probe subagents
+> wrote it to disk in plaintext.
+
+> **6 Aug 2026 — ONE PR, ONE ROW, ONE ANSWER.** (commit `98ee4a0`)
 >
-> **2. `GET /pr` returned the same PR twice, with two different tiers, and the web kept the wrong
-> one.** The outlet branch of `listPaginated` iterates `agency_pr` **memberships** while every row it
-> emits claims `id === userId`. The agency branch is pinned to one `agencyId` so it can only ever see
-> one membership per account; an outlet caller is pinned to none. Vicky is `tier_3` at Atlas and
-> `tier_1` at Delta, so she came back twice, and `new Map(prs.map(p => [p.id, p]))` kept whichever row
-> landed last — **Tier I**, from an agency that did not supply that night. Alice (`tier_2` Atlas,
-> `tier_1` ×2 elsewhere) was wrong on the same screen for the same reason. The outlet's `EXISTS` now
-> also matches `shift_assignment.agency_id`, so an outlet sees the membership of the agency that
-> actually **supplied** the PR to its venue — which also makes `pagination.totalCount` a count of PRs
-> again instead of of memberships.
+> Owner: *"this sill showing the wrong data"*, then *"if the manage pr is tier 3 follow the
+> database then in the pr profile need show to exactly same tier"*.
 >
-> *The lesson: a scope filter that narrows the ROWS but not the FACT lets a row through carrying
-> someone else's answer.* The tier was never "defaulting" to 1 — it was a real, correct `tier_1` from
-> the wrong membership, which is why it looked believable.
+> Queried the live DB for Vicky rather than reasoning from the screens:
 >
-> **3. And the stamp beside them was eight hours wrong.** The same card printed
-> `Out 2026-08-06T06:17:45.947Z`. A formatter for exactly this already existed — `formatCheckInStamp`,
-> **private to `RosterShiftTable`** — so the rule "a stamp renders LOCAL time" had reached one roster
-> cell and none of the other four sites that print the same field. It is now the leaf module
-> `lib/attendance-stamp.ts` and all five call it. *A fix kept private to the file that found the bug
-> is a fix that cannot reach the bug's siblings* — the same shape as the roster-cancel/no-show lesson.
-> Exercised against the real live stamps in `Asia/Kuala_Lumpur`: `06:17:45.947Z` → **2:17 pm**, the old
-> `04:01Z` → **12:01 pm**, demo `"21:45"` → `"21:45"`, unparseable → unchanged.
+> | fact | database | what a screen showed |
+> |---|---|---|
+> | `user_profile.languages` | English, Mandarin, Hokkien, **Cantonese** | roster popover: 3 |
+> | `rating` rows | **none** | gold `0★` on every backend PR |
+> | `agency_pr.tier` | Atlas `tier_3` · Delta `tier_1` | phone profile: hardcoded `TIER V` |
 >
-> Verified over HTTP as both outlet owners before and independently of any browser: `probe-outlet-pr-list-tier.ts`
-> → 4/4 PRs one row each (Alice II, Haziq I, Nurul II, Vicky III — matching the agency portal exactly),
-> 10/10 completed assignments usable by the sheet. Data facts first established read-only in
-> `probe-outlet-pr-tier-and-history.ts`, which also proved the narrowing drops nothing (**zero**
-> assignments whose `agency_id` has no matching membership). Backend `tsc` 0 errors; `apps/web` 120,
-> its baseline, none in the touched region.
+> Causes, all display-layer — the reads were already correct:
+> `slice(0, 3)` on languages; a `rating != null` guard that let the `rating: 0`
+> placeholder through as a score; and the literal string `TIER V` in
+> `ProfileScreen.tsx`. `GET /agency/pr-links` already joined `agency_pr` and
+> simply never selected `tier` — added (no migration).
+>
+> **Tier is per-membership, and that is not a bug.** Atlas grading her `tier_3`
+> while Delta grades her `tier_1` is two true facts. The profile shows one badge
+> when her approved agencies agree and names each agency when they don't, instead
+> of picking one and calling it "the" tier. Nothing may "sync" these to one value.
+>
+> **`tier_5` exists nowhere in the database for her** — so the earlier read that
+> the roster's Tier III was the wrong one was backwards: Manage PR was right and
+> the phone was inventing the badge.
+>
+> Also: the roster row printed `Victoria Tan Mei Lin (Vicky)`, inside out versus
+> every voucher. Both now go through `formatPayeeLabel`.
+>
+> ⚠️ Needs a **phone-app reload** (the profile caches `myLinks` on mount). Backend
+> is a repository-only change, so `tsx watch` picks it up without a restart.
+
+> **6 Aug 2026 — THE DISPUTE QUEUE SHOWS THE EVIDENCE, AND SAYS WHICH IS WHICH.**
+>
+> Owner: *"where is the proof attach photo to see? and the original that the ocr out photo?"*, then
+> *"in the dispute need differentiate the original ocr and the proof that the pr new attach"*.
+>
+> The panel printed **"1 proof image"** beside a paperclip and rendered nothing — no `<img>` existed
+> anywhere in the file. So the one thing a reviewer needs in order to judge a claim, the picture of
+> the paper, was the one thing the dispute queue would not show. The receipt's own scan was not shown
+> either, in any form.
+>
+> Both now render as thumbnails opening full size in a new tab, and they are deliberately SEPARATED,
+> because they are different facts:
+> - **"What the PR attached · N images"** — on the dispute row, with the claim. What they
+>   photographed in order to argue.
+> - **"The scanned receipt · printed 21:43"** — inside each matched receipt, with the record. The
+>   original the OCR read the figures off.
+>
+> Settling a "wrong commission" claim means holding those two against each other; neither was on
+> screen. A receipt with no photo now says "self-logged without one" rather than leaving a gap that
+> reads as a load failure.
+>
+> ⚠️ `isRenderablePhoto` is now in THREE files (PayrollVerifyPanel, AgencyReceiptsPanel and here).
+> Duplicated knowingly at 86% context — showing the evidence today beat refactoring three components
+> — but it belongs in one place. See §9.
 
 
-> **6 Aug 2026 — Real Settings: hide demo Finance/Ops/IC/Notifications cards.**
-> On a backend login, outlet/agency Settings no longer shows the prototype
-> Finance Head / Ops Head / IC / notification toggles (those were store-only).
-> Team is `OrgMembersPanel` from DB; owner fields from `user` + org row.
+> **6 Aug 2026 — CHECK-IN SHOWED A SHIFT FROM SEVEN DAYS EARLIER (`4dac4d9`).**
+> Alice's Check-In tab rendered a **30 Jul** shift — already `Complete`, already
+> paid RM 600 — as the current attendance state, while Today one tab away
+> correctly said "No shift scheduled for today". Cause: `pickActive`
+> (`active-shift.tsx`) ended in an unbounded fallback, *"the latest completed
+> one, so the page is never blank"*, whose only test was "has a check-out stamp".
+> It reached **past** the 3 + 4 Aug bookings that rule 4 deliberately skips as
+> missed shifts. Fallback **deleted**; rule 3 (checked out today, or < 12 h ago)
+> is now the only route for a finished shift — the same window `ShiftsScreen`
+> already used, which is why Today was right and Check-In was not. A PR on duty
+> past midnight is unaffected (rule 1 matches an open check-in regardless of
+> date, so she can still tap out). Owner's rule: *"check in page only show today,
+> after today left empty unless there's got shift for today."* Same commit: the
+> shared **evidence sheet collapses finished shifts** to one row (outlet · slot ·
+> duration · subtotal), tap to expand; a lone group or an on-duty shift starts
+> open; overrides keyed per cell.
+>
+> 🔴 **STILL OPEN — the overtime on that card is FABRICATED, and it is a separate
+> defect that this fix does NOT touch.** DB row `35eb674b` has `overtime_minutes`,
+> `overtime_status`, `overtime_amount` **all NULL — correctly**: the 22:00–04:00
+> slot ends 04:00 next day and she checked out 23:58, i.e. four hours EARLY, so
+> `overtimeFromStamps` returns `within_schedule`. Yet the phone printed
+> **"Overtime 8.1h (RM 1,213.68) — pending agency approval"**. That figure is
+> invented client-side from a **hardcoded `STANDARD_SHIFT_HOURS = 6`**
+> (`pr-rate.ts:148`, the slot is never consulted): 14.09 h − 6 = 8.09 h;
+> RM600 ÷ 6 × 1.5 = RM150/h × 8.09 = RM 1,213.68 to the sen. *"pending agency
+> approval"* is **hardcoded literal text** (`CheckInScreen.tsx:603-604`) that
+> never reads `overtimeStatus` — **no claim exists in any agency queue.** A second
+> independent copy of the bug prints "+485m OT" from `shiftDurationLabel`
+> (`shift-session.tsx:155`, same hardcoded 6 h default, no plausibility guard) —
+> fixing only the banner leaves it on screen. The backend **does** ship the real
+> columns (`repository.ts:373`) but `ShiftAssignmentRecord` (`api.ts:734-768`)
+> never declares them, so nothing can read them. Fix = declare the columns and
+> render the server's values; delete both client-side derivations.
+
+> **6 Aug 2026 — LAST WEEK LOST ITS VOUCHER THE MOMENT IT WAS SIGNED.**
+>
+> Owner: *"where is the last week pv? show in agency last week tab payroll page"*.
+>
+> `LAST_WEEK_REVIEW_STATUSES` held `{SENT, PENDING_REVIEW, DISPUTED}` — **not SIGNED**. So a voucher
+> disappeared from the tab at the exact moment it became real: PV-000004 for 26 Jul–01 Aug sat in the
+> PR's History as *"Signed 4 Aug 2026 · RM 700.00"* while the agency's Last Week tab for that same
+> week read *"0 PVs · No vouchers match these filters"*. The one screen an agency uses to look back at
+> a week could not show that week's only voucher. Adding SIGNED restores it (now 2 PVs, both "To
+> pay"). PAID stays out — `payrollActivePvs` drops it, because a paid voucher belongs to History.
+>
+> **Payee naming corrected and unified.** The format is `(Vicky) Victoria Tan Mei Lin` — brackets
+> round the NICKNAME, nickname first. An earlier pass read the instruction the other way and shipped
+> `Vicky (Victoria Tan Mei Lin)`. One shared `formatPayeeLabel(nickname, legalName)` now serves all
+> four payee surfaces (PV card, dispute row, receipt row, receipts PR filter); each had formatted its
+> own label, which is exactly why the nickname appeared on one screen and not another. A nickname
+> equal to the legal name prints once — Alice Yee Mei Me's `pr.nickname` IS her legal name, so her row
+> correctly shows one name rather than it twice.
+>
+> ⚠️ **Still not showing `(Vicky)` for Victoria, and the UI is no longer the suspect.** The repository
+> joins `pr.nickname` through `pr_id` and the controller returns the whole row, so the field reaches
+> the client. Either `pr.nickname` is unset or equal to her legal name in the DB — check **Manage PR**
+> — or the backend has not reloaded the new join. Do not add more UI for this until the column is
+> confirmed.
 
 
-> **6 Aug 2026 — Outlet Settings owner fields from DB (`user.username`).**
-> Profile reads owner name / phone / email from `user` (members join +
-> `/auth/me`), and company/address/logo from `outlet`/`agency`. Owner name is
-> explicitly `user.username` (PIC from signup), not demo or profile.full_name.
+> **6 Aug 2026 — THIS-WEEK WENT BLANK THE MOMENT THE VOUCHER WAS ISSUED
+> (`7087a93`).** The PR's Payment → This week showed every cell as a dash and
+> **RM 0.00** while the agency screen showed the same week at **RM 3,708.21**.
+> `getMyCurrentWeek` read the week through `getCurrentWeekDraft`, which filters to
+> `OPEN_WEEK_STATUSES` (`pending_review`, `disputed`) — that filter belongs to the
+> **write** path, which needs the one voucher a new self-log may still append to.
+> As a **read** it returned `null` the instant the agency issued the voucher
+> (`sent`). Now reads `getWeekVoucher` whatever the status, the same call
+> `getMyLastWeek` already made. **This is the third instance of the same
+> read/write conflation** — first `disputed`, then `sent` on Last week, now `sent`
+> on This week. Live-proven on PV-000006 (week `2026-08-02`, Victoria):
+> `getCurrentWeekDraft = null` vs `getWeekVoucher = PV-000006 sent net=3708.21
+> lines=12`, via the new `_probe-week-read.ts` (runs both lookups side by side).
+> ⚠️ **Restart the backend after pull** — tsx watch serves stale routes.
 
 
-> **6 Aug 2026 — Real sessions: strip ALL Velvet/Atlas demo fixtures.**
-> `buildBlankPortalReset` now uses `BLANK_OUTLET_*` / `BLANK_AGENCY_*` (empty
-> names, no logos, empty drink menu) instead of DEFAULT Velvet/Atlas shapes.
-> Settings/Profile merge onto blanks too. Cursor rule
-> `.cursor/rules/no-demo-data-on-real-sessions.mdc` records the standing rule.
-> Sign out + back in after pull.
-
-
-> **6 Aug 2026 — Outlet/agency Settings no longer paint Velvet/Atlas demo.**
-> Real sessions merged sparse API overlays onto demo defaults, so empty
-> finance/ops / IC / avatar left Chen Wei Jie / Velvet 23 / Atlas on screen.
-> Now: blank base + real outlet/agency + members (+ logo, city in address).
-> Sign out and back in (or hard refresh) after pull.
-
-
-> **6 Aug 2026 — Pending outlet/agency can sign in, profile only (X68).**
-> Membership list APIs now include org `outletStatus` / `agencyStatus`. While
-> `pending_review`, login still works (X55) but the portal is limited to
-> Settings/Profile: empty operational nav, route guard bounce, login redirect,
-> and a pending banner. Signup success copy no longer says “wait before sign-in”.
-> Restart backend so membership responses include the new fields.
-
-
-> **6 Aug 2026 — Suspended org = red + profile only (X69).**
-> `suspended` may sign in (no longer full X55 deny). Portal limited like pending
-> via `isOrgProfileOnly`. Status + banner are **red**; pending stays amber.
-> Full login deny remains for `inactive` only. Restart backend after pull.
-
-
-> **6 Aug 2026 — Org signup logo → R2 (migration 0099).**
-> Outlet/agency register now uploads `logoBase64` to Cloudflare R2 and stores
-> the object key on `outlet.logo_image` / `agency.logo_image` (agency column
-> added in **0099**). Paths: `user/agency/logo/{id}_{name}/…` and
-> `user/outlet/{id}_{name}/logo/…`. Not written to `user.profileImage`.
-> Needs `R2_*` env. Run `pnpm migrate:deploy` + restart backend.
-> Follow-up **0100**: re-ensures `outlet.city` after live register hit 42703.
-
-
-> **6 Aug 2026 — Migration 0098: org address is structured + stays on the org.**
-> Web signup already collected line1/line2/city/postcode/state/country, but
-> register only had `companyAddress` and dumped it onto `user_profile` /
-> `address_line_1`. Now: **agency** gains `city`/`postcode`/`state`/`country`;
-> **outlet** gains `city` (already had the rest). Register writes those columns
-> on `agency`/`outlet` only; portal `user_profile` keeps PIC name, **no home
-> address**. PR home address remains on `user_profile`. Run
-> `pnpm migrate:deploy` + restart backend.
-
-
-> **6 Aug 2026 — Web outlet/agency register now creates org rows.**
-> `POST /auth/register` for `accountType` agency|outlet used to write only
-> `user` + `user_role` + empty `user_profile` (Zod stripped company fields). It
-> now accepts org signup fields, fills PIC on `user_profile`, and creates
-> `agency`/`outlet` (`pending_review`) plus owner row on `agency_user` /
-> `outlet_user`. Restart backend after pull.
+> **6 Aug 2026 — NOTIFICATIONS: SCROLL, MARK-ALL-READ; NO CLEAR (`9049cd6`,
+> `da1a008`).** The bell sheet could not be scrolled on a real phone (a `Pressable`
+> backdrop wrapping the `ScrollView` steals the drag on Android) — the backdrop is
+> now a sibling, the list a real `ScrollView`, Close is red, padding uses safe-area
+> insets. **Mark all N as read** fans out one `POST /notification/:id/read` per
+> unread row (there is no bulk endpoint), clears the badge optimistically, then
+> re-reads — a row whose POST failed comes back **unread** rather than looking
+> cleared. Derived rows (`backed: false`) clear locally, which is all they ever
+> were. 🔴 **CLEAR is NOT shipped:** `/notification` exposes only `list`,
+> `unread-count` and `POST /:id/read` — hiding rows locally would look cleared and
+> reappear on the next 60s poll. Needs a real delete/dismiss endpoint (§9). Also:
+> the "Forgot to check out?" to-do card is collapsible, and its three facts are
+> three labelled lines instead of one wrapping ribbon; the Payment grid's `TOT`
+> column now reads **TOTAL / week** (`2d0c5e2`).
 
 
 > **5 Aug 2026 — `main.pr` DROPPED (migration 0089).** Ops `pr_id` values remapped to
@@ -2509,7 +2740,6 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > `payment_voucher_line.outlet_id` + `review_withdrawn_at` are in git. §9 uncommitted-tree block
 > marked closed; next is live agency click-through + day/receipt agreement audit highs.
 > Doc renew only in this commit (code already at `57bd165`).
-
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >
@@ -4684,13 +4914,6 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 | Date | What changed / done | Area (role link) | Status |
 |------|---------------------|------------------|--------|
-| 2026-08-06 | **Outlet/agency register writes org + membership.** Backend now creates `agency`/`outlet` (`pending_review`) + owner on `agency_user`/`outlet_user`, and fills PIC on `user_profile` (was user+role+empty profile only; company fields were Zod-stripped). | Web (signup) + API | ✅ done |
-| 2026-08-06 | **Outlet/agency logo editable after signup.** `PUT` accepts `logoBase64`/`clearLogo`; Settings Change photo + Save uploads to R2. | Web + API | ⚠️ reported |
-| 2026-08-06 | **Outlet owner can edit name + owner name + location.** Owner-only (`editSettings`). Save writes outlet `name` + address, and `PATCH /user/:id` username. Finance/ops stay read-only. | Web (outlet settings) | ⚠️ reported |
-| 2026-08-06 | **Fix: Settings Save never hit the API.** Client required mobile/owner before save even though those fields are locked (often empty) — toast blocked PUT. Real sessions now only validate + persist org name. | Web (outlet/agency settings) | ⚠️ reported |
-| 2026-08-06 | **Profile edit UI redesign.** Edit CTA in hero; amber editing banner; clear field boxes vs locked rows; sticky Save/Cancel dock; photo Change/Remove actions. Shared `profile-settings-ui`. | Web (outlet/agency settings) | ⚠️ reported |
-| 2026-08-06 | **Suspended org = red + profile only (X69).** Login allowed; portal limited like pending. Status/banner red. `inactive` still full deny. | Web (outlet/agency) + API | ⚠️ reported |
-| 2026-08-06 | **Pending outlet/agency can sign in, profile only (X68).** Membership APIs return org status; portal limits pending orgs to Settings/Profile until admin approves. | Web (outlet/agency) | ⚠️ reported |
 | 2026-08-05 | **Register ID OCR checks front vs back side.** Matching the typed ID alone is not enough — MyKad/work-permit OCR also guesses face (keywords). Wrong face → fail. Same photo / same face used for both slots → both fail. Passport stays one-page. | PR (register) | ✅ done |
 | 2026-08-05 | **Register step 1 blocks duplicate phone + IC.** New public `POST /auth/register/check` — refuses if phone or `user_profile.id_no` (normalized) already exists. Wizard Continue on step 1 calls it and marks the field(s). Also: signup OTP send → 409 if phone taken; `POST /auth/register` refuses duplicate ID. | PR (register) | ✅ done |
 | 2026-08-05 | **Portfolio drag-to-swap fixed.** Long-press + drag onto another slot (filled or empty) swaps photos. Hit-test uses local coords; web uses pointer listeners so ScrollView can’t kill the gesture. If drag is interrupted, photo stays picked — tap another slot to finish the swap. | PR (Profile) | ✅ done |

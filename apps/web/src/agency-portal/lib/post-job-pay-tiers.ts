@@ -562,7 +562,10 @@ function countPrIdsByPayTier(
 	}
 	const counts: Partial<Record<PostJobPayTierId, number>> = {};
 	for (const prId of prIds) {
-		const outletTier = (prTierById?.[prId] ?? "Tier I") as OutletPrTier;
+		// Same rule as countBookedPrsByPayTier above: no tier on file means the
+		// PR is not counted into one. `?? "Tier I"` priced them silently.
+		const outletTier = prTierById?.[prId] as OutletPrTier | undefined;
+		if (!outletTier) continue;
 		const payTierId = postJobPayTierIdForOutletTier(outletTier);
 		counts[payTierId] = (counts[payTierId] ?? 0) + 1;
 	}
@@ -657,7 +660,16 @@ export function basePayFromPayTierRows(rows?: PostJobPayTierRow[]): number {
 	return firstPaid?.wagePerHour ?? rows[0]?.wagePerHour ?? 0;
 }
 
-/** Count booked PRs by pay tier from agency training levels. */
+/**
+ * Count booked PRs by pay tier from agency training levels.
+ *
+ * A PR whose tier nobody has set is NOT counted. This used to read
+ * `pr?.trainingLevel ?? "Tier I"` with a second `?? "tier_1"` behind it, so an
+ * ungraded PR — or one simply missing from the roster passed in — was priced at
+ * Tier I rates. That is not a cosmetic default like a blank age: these counts
+ * drive the posted pay-tier rows, so it put real ringgit against a tier nobody
+ * ever assigned. An unknown tier is unknown; the tier rows stay as posted.
+ */
 export function countBookedPrsByPayTier(
 	prIds: string[],
 	agencyPRs: { id: string; trainingLevel?: string }[],
@@ -665,11 +677,10 @@ export function countBookedPrsByPayTier(
 	const counts = {} as Partial<Record<PostJobPayTierId, number>>;
 	for (const prId of prIds) {
 		const pr = agencyPRs.find((p) => p.id === prId);
-		const outletTier = pr?.trainingLevel ?? "Tier I";
-		const payTierId =
-			POST_JOB_PAY_TIER_OPTIONS.find(
-				(option) => option.outletTier === outletTier,
-			)?.id ?? "tier_1";
+		const payTierId = POST_JOB_PAY_TIER_OPTIONS.find(
+			(option) => option.outletTier === pr?.trainingLevel,
+		)?.id;
+		if (!payTierId) continue;
 		counts[payTierId] = (counts[payTierId] ?? 0) + 1;
 	}
 	return counts;

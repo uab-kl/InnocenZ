@@ -1,6 +1,7 @@
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzSelect } from "@agency-portal/components/iz/ui";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { useQuery } from "@tanstack/react-query";
 import { UserPlus, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
@@ -159,9 +160,13 @@ export function RosterAssignDialog({
 						<option value="">
 							{prsQuery.isLoading ? "Loading PRs…" : "Select PR…"}
 						</option>
+						{/* "(Vicky) Victoria Tan Mei Lin" — the one payee formatter. This
+						    option built `${p.name} (${p.nickname})` by hand: brackets on
+						    the wrong half, halves in the wrong order, and a third spelling
+						    of the same person inside one screen. */}
 						{prs.map((p) => (
 							<option key={p.id} value={p.id}>
-								{p.nickname ? `${p.name} (${p.nickname})` : p.name}
+								{formatPayeeLabel(p.nickname, p.name)}
 							</option>
 						))}
 					</IzSelect>

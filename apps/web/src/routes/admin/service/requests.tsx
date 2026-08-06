@@ -867,6 +867,47 @@ function RequestEditForm({
 						? "Set before resolve"
 						: "—";
 
+	/*
+	 * Is a price actually OWED here, and has one been given?
+	 *
+	 * A Custom tier has no list price to fall back on — resolve it blank and the
+	 * agency lands on a negotiated tier priced at nothing. A POS quote is the one
+	 * case with a real fallback (the current plan's price), so it is not nagged.
+	 * RM 0 counts as unset: nobody negotiates a Custom plan down to free, and a
+	 * silent zero is exactly the outcome this warning exists to prevent.
+	 */
+	const quoteGiven =
+		rawQuote !== "" && !Number.isNaN(parsedQuote) && parsedQuote > 0;
+	const quoteHasFallback = request.type === "pos_integration_quote" && !!plan;
+	/*
+	 * An EXIT is never quoted. The agency is LEAVING the negotiated price for an
+	 * ordinary tier, so the rate card supplies the number — there is nothing to
+	 * negotiate and nothing that can be dangerously left blank.
+	 *
+	 * Without this the warning fired on a cancellation and said the opposite of
+	 * the card directly above it: "resolving now would put the agency on a
+	 * negotiated tier costing nothing", on a request whose whole purpose is to
+	 * move them OFF the negotiated tier and onto Starter's list price.
+	 */
+	const quoteMissing =
+		editableQuote && negotiable && !isExit && !quoteHasFallback && !quoteGiven;
+	/*
+	 * A price to anchor against — only where one exists. On an exit the CURRENT
+	 * plan is Custom itself, which by definition has no list price, so this
+	 * printed the nonsense "Custom is RM 0.00 weekly — Custom replaces it".
+	 */
+	const quoteAnchor =
+		plan && Number(plan.price) > 0 && plan.name !== "Custom" ? plan : null;
+	/*
+	 * Does the exit actually LAND the subscriber somewhere new?
+	 *
+	 * Only the agency's does: coming off Custom hands them to an ordinary tier.
+	 * The venue's POS exit drops an add-on billed BESIDE the plan, so the plan
+	 * continues untouched — nothing begins, and the row says so itself
+	 * ("Plan (continues)").
+	 */
+	const exitLandsSomewhere = isExit && !isAddonRequest;
+
 	/**
 	 * What resolving actually does, in the subscriber's own terms. The two
 	 * arrangements end differently — dropping POS leaves the venue's plan alone,
@@ -1027,20 +1068,54 @@ function RequestEditForm({
 						<dt className="text-muted-foreground">Type</dt>
 						<dd className="text-right">{requestTypeLabels[request.type]}</dd>
 					</div>
-					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
+					{/*
+						On an exit these two rows ARE the decision — what stops, and
+						what the subscriber lands on — but they sat in the same grey as
+						Role and Type, so the price that is about to end read as one
+						more record field. Coloured as a pair: red ends, green begins.
+						Left plain everywhere else, because on an ordinary request they
+						are just the two sides of a switch and nothing is being lost.
+					*/}
+					<div
+						className={`flex items-center justify-between gap-2${
+							isExit ? " rounded-md bg-red-500/5 px-2 py-1" : ""
+						}`}
+					>
+						<dt
+							className={isExit ? "text-red-500/90" : "text-muted-foreground"}
+						>
 							{isExit
 								? `${arrangementName} (ends)`
 								: isAddonRequest
 									? "Plan (stays)"
 									: "From plan"}
 						</dt>
-						<dd className="text-right">
+						<dd
+							className={`text-right${isExit ? " font-semibold text-red-500" : ""}`}
+						>
 							{isExit && fromPlan === "—" ? arrangementName : fromPlan}
 						</dd>
 					</div>
-					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
+					{/*
+						Green means something BEGINS, so it belongs only to the agency
+						exit, where the tier genuinely changes hands ("Tier (returns
+						to) · Starter"). The venue's POS exit says "Plan (continues)" —
+						the plan is untouched and carries on exactly as before. Marking
+						that green announced a change on the one row whose whole point
+						is that nothing happens to it.
+					*/}
+					<div
+						className={`flex items-center justify-between gap-2${
+							exitLandsSomewhere ? " rounded-md bg-emerald-500/5 px-2 py-1" : ""
+						}`}
+					>
+						<dt
+							className={
+								exitLandsSomewhere
+									? "text-emerald-500/90"
+									: "text-muted-foreground"
+							}
+						>
 							{isExit
 								? isAddonRequest
 									? "Plan (continues)"
@@ -1051,7 +1126,13 @@ function RequestEditForm({
 										? "Tier"
 										: "To plan"}
 						</dt>
-						<dd className="text-right">{toPlan}</dd>
+						<dd
+							className={`text-right${
+								exitLandsSomewhere ? " font-semibold text-emerald-500" : ""
+							}`}
+						>
+							{toPlan}
+						</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">Requested</dt>
@@ -1138,26 +1219,115 @@ function RequestEditForm({
 					/>
 				</div>
 
-				<div className="space-y-1.5">
-					<Label htmlFor="request-quote">Quoted (RM)</Label>
+				{/*
+					A price with no fallback is the one field on this sheet that
+					CANNOT be left alone, yet it looked exactly like Remarks — a
+					plain input under a plain label, its "0.00" placeholder reading
+					as a filled-in zero. Resolve sat two inches below, enabled.
+					While it is unset the field is framed and labelled as owed; once
+					a real number is in, the frame drops and the line below states
+					what that number is about to become.
+				*/}
+				<div
+					className={
+						quoteMissing
+							? "space-y-1.5 rounded-lg border border-amber-500/60 bg-amber-500/5 p-3 ring-1 ring-amber-500/25"
+							: "space-y-1.5"
+					}
+				>
+					<div className="flex flex-wrap items-center justify-between gap-2">
+						<Label
+							htmlFor="request-quote"
+							className={
+								quoteMissing ? "flex items-center gap-1.5 text-amber-500" : ""
+							}
+						>
+							{quoteMissing && <AlertCircle className="size-4 shrink-0" />}
+							Quoted (RM)
+						</Label>
+						{quoteMissing && (
+							<span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-500">
+								Needed to resolve
+							</span>
+						)}
+					</div>
 					{editableQuote ? (
 						<>
-							<Input
-								id="request-quote"
-								type="number"
-								min={0}
-								step="0.01"
-								inputMode="decimal"
-								placeholder="0.00"
-								value={quote}
-								onChange={(e) => setQuote(e.target.value)}
-							/>
-							<p className="text-sm text-muted-foreground">
-								Estimate — negotiate or change it before Resolve.
-								{request.type === "pos_integration_quote" && plan
-									? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
-									: ""}
-							</p>
+							{/* The RM sits INSIDE the field: the label says "(RM)" but
+								the value is what the eye lands on, and a bare 1200
+								reads as a quantity rather than money. The placeholder is
+								dimmed hard — at normal muted weight "0.00" reads as a
+								price already entered, which is the whole misreading. */}
+							<div className="relative">
+								<span
+									className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold ${
+										quoteMissing ? "text-amber-500/80" : "text-muted-foreground"
+									}`}
+								>
+									RM
+								</span>
+								<Input
+									id="request-quote"
+									type="number"
+									min={0}
+									step="0.01"
+									inputMode="decimal"
+									placeholder="0.00"
+									value={quote}
+									onChange={(e) => setQuote(e.target.value)}
+									className={`h-12 pl-11 text-xl font-semibold tabular-nums placeholder:font-normal placeholder:text-muted-foreground/35${
+										quoteMissing
+											? " border-amber-500/70 bg-amber-500/[0.03] focus-visible:ring-amber-500"
+											: ""
+									}`}
+								/>
+							</div>
+							{quoteMissing ? (
+								<>
+									{/* One short sentence carries the consequence. The
+										earlier three-line amber paragraph was the kind of
+										warning people learn to scroll past. */}
+									<p className="text-sm font-medium text-amber-500">
+										Resolve with this empty and the agency lands on a negotiated
+										tier costing nothing.
+									</p>
+									{/* An anchor to price AGAINST. Custom replaces the tier
+										price, so the tier it replaces is the one number the
+										admin would otherwise go hunting for. */}
+									{quoteAnchor && (
+										<p className="text-xs text-muted-foreground">
+											{quoteAnchor.name} is RM {formatPrice(quoteAnchor.price)}{" "}
+											{quoteAnchor.billingCycle} — Custom replaces it.
+										</p>
+									)}
+								</>
+							) : (
+								<>
+									{/*
+										A RESET is not a quote. The agency is going back to the
+										rate card, so the tier they land on already has a price
+										and this field has nothing to set. Saying so beats an
+										empty box that looks like unfinished work.
+									*/}
+									<p className="text-sm text-muted-foreground">
+										{isExit
+											? "No quote needed — the negotiated price ends on Resolve and the rate card takes over."
+											: "Estimate — negotiate or change it before Resolve."}
+										{!isExit && request.type === "pos_integration_quote" && plan
+											? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
+											: ""}
+									</p>
+									{quoteGiven && (
+										<p className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
+											<CheckCircle2 className="size-4 shrink-0" />
+											<span>
+												RM {formatPrice(parsedQuote)} becomes the agency's tier
+												price when you Resolve.
+											</span>
+										</p>
+									)}
+								</>
+							)}
 						</>
 					) : negotiable ? (
 						<>

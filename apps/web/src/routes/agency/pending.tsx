@@ -22,7 +22,7 @@ import {
 	cutlostRequestTitle,
 	toPendingCutlostRequest,
 } from "@agency-portal/lib/outlet-cutlost-requests";
-import { publicAssetPath } from "@agency-portal/lib/public-asset";
+import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
@@ -51,17 +51,30 @@ import {
 	type ShiftAssignment,
 } from "@/services/shift-assignment";
 
+/**
+ * Every image on this screen goes through the PR photo resolver.
+ *
+ * This used to call `publicAssetPath`, which is the /public deploy-base helper
+ * — it leaves an R2 object key (`user/<id>/…`) untouched and prepends the Vite
+ * base, producing a URL nothing serves. It only looked fine because the hook
+ * feeding it hardcoded empty photo lists; the moment those were wired to the
+ * real profile it would have rendered raw keys.
+ */
 function docImageSrc(src: string) {
-	return src.startsWith("data:") ? src : publicAssetPath(src);
+	return prPhotoSrc(src) ?? undefined;
 }
 
 function pendingPRToComcardPreview(signup: PendingPR): ComcardPreviewData {
 	return {
 		id: signup.id,
 		name: signup.name,
-		height: signup.height ?? 165,
-		weight: signup.weight ?? 52,
-		age: signup.age ?? 24,
+		// The exact COMCARD_FALLBACK triple {165, 52, 24} that was deleted from
+		// the comcard components — still alive here, describing a body no
+		// applicant had entered on the one screen where an agency decides whether
+		// to take them on. 0 is "not on file" and renders as an em-dash.
+		height: signup.height ?? 0,
+		weight: signup.weight ?? 0,
+		age: signup.age ?? 0,
 		portfolioPhotos: signup.portfolioPhotos,
 		comcardImageUrl: signup.comcardImageUrl,
 	};
@@ -85,9 +98,9 @@ function PendingComcardVisual({
 	compact?: boolean;
 }) {
 	const pr = pendingPRToComcardPreview(signup);
-	const photos = portfolioPhotosForComcard(signup.portfolioPhotos ?? []).map(
-		docImageSrc,
-	);
+	// Not pre-resolved here: the comcard visuals resolve their own photos now
+	// (portfolioImageSrc), so mapping them first would double-resolve.
+	const photos = portfolioPhotosForComcard(signup.portfolioPhotos ?? []);
 
 	if (signup.comcardImageUrl) {
 		return (

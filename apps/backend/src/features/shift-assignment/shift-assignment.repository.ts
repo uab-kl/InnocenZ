@@ -129,6 +129,38 @@ export type ReplacementCandidate = {
   timesAtOutlet: number;
 };
 
+/**
+ * The shift behind one attendance row — what a caller needs to say WHICH shift
+ * a figure came from: the venue, what the night was called, whether it was a
+ * special event, its window, and the two stamps.
+ *
+ * ⚠️ `checkOutAt` is CLAMPED to the shift's scheduled end when the PR taps out
+ * (see the check-out path in this file). It is therefore "shift end", NOT the
+ * moment the PR actually left — printing it as "checked out at" states a time
+ * that never happened on every overtime shift. The real overrun survives only
+ * in `overtimeMinutes`, which is why it travels beside it.
+ *
+ * `shiftDate` is a DATE column: the driver hands it back as local midnight, so
+ * a 6 Aug shift serialises as `2026-08-05T16:00:00Z` in UTC+8. Anything
+ * comparing it as an instant lands a day early.
+ */
+export type AssignmentShiftFacts = {
+  id: string;
+  /** The owning PR — callers MUST re-check this against the PR they asked for. */
+  prId: string;
+  shiftDate: string;
+  /** Free text, nullable, e.g. "18:00 - 19:00". Print verbatim; never parse. */
+  slot: string | null;
+  eventName: string | null;
+  /** 'normal' | 'special' — never null (DB default). */
+  eventKind: string;
+  outletName: string | null;
+  checkInAt: Date | null;
+  /** Shift END, clamped — see the warning above. */
+  checkOutAt: Date | null;
+  overtimeMinutes: number | null;
+};
+
 export class ShiftAssignmentRepositoryClass {
   async create(
     data: Omit<ShiftAssignmentInsertType, 'id' | 'createdAt' | 'updatedAt'>,
@@ -269,6 +301,13 @@ export class ShiftAssignmentRepositoryClass {
         shiftDate: string;
         slot: string | null;
         eventName: string | null;
+        /**
+         * `shift.event_kind` — 'normal' | 'special'. Carried alongside the name
+         * because the PR's Today list can hold three shifts at the SAME outlet
+         * on the same day, and the venue alone cannot tell them apart. Not null
+         * in the database (defaults to 'normal').
+         */
+        eventKind: string;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -292,6 +331,13 @@ export class ShiftAssignmentRepositoryClass {
         shiftDate: string;
         slot: string | null;
         eventName: string | null;
+        /**
+         * `shift.event_kind` — 'normal' | 'special'. Carried alongside the name
+         * because the PR's Today list can hold three shifts at the SAME outlet
+         * on the same day, and the venue alone cannot tell them apart. Not null
+         * in the database (defaults to 'normal').
+         */
+        eventKind: string;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -311,6 +357,13 @@ export class ShiftAssignmentRepositoryClass {
         shiftDate: string;
         slot: string | null;
         eventName: string | null;
+        /**
+         * `shift.event_kind` — 'normal' | 'special'. Carried alongside the name
+         * because the PR's Today list can hold three shifts at the SAME outlet
+         * on the same day, and the venue alone cannot tell them apart. Not null
+         * in the database (defaults to 'normal').
+         */
+        eventKind: string;
         payPerHour: string;
         outletId: string;
         outletName: string | null;
@@ -339,6 +392,7 @@ export class ShiftAssignmentRepositoryClass {
           shiftDate: ShiftTable.shiftDate,
           slot: ShiftTable.slot,
           eventName: ShiftTable.eventName,
+          eventKind: ShiftTable.eventKind,
           payPerHour: ShiftTable.payPerHour,
           outletId: ShiftTable.outletId,
           outletName: OutletTable.name,
@@ -375,6 +429,7 @@ export class ShiftAssignmentRepositoryClass {
           shiftDate: row.shiftDate,
           slot: row.slot,
           eventName: row.eventName,
+          eventKind: row.eventKind,
           payPerHour: row.payPerHour,
           outletId: row.outletId,
           outletName: row.outletName,
@@ -408,51 +463,62 @@ export class ShiftAssignmentRepositoryClass {
    * An empty id list returns [] without touching the database — the common case
    * for a week where nothing has been logged yet.
    */
-  async listByIdsForPr(
-    prId: string,
-    ids: string[],
-  ): Promise<
-    Array<{
-      id: string;
-      shiftDate: string;
-      slot: string | null;
-      eventName: string | null;
-      outletName: string | null;
-      checkInAt: Date | null;
-      checkOutAt: Date | null;
-      overtimeMinutes: number | null;
-    }>
-  > {
-    if (ids.length === 0) return [];
+  // (type declared at module scope — see AssignmentShiftFacts below the class)
+  async listByIdsForPr(prId: string, ids: string[]): Promise<AssignmentShiftFacts[]> {
+    return this.listByIdsForPrs([prId], ids);
+  }
+
+  /**
+   * The same lookup for SEVERAL PRs at once — the agency's dispute queue spans
+   * up to 200 disputes belonging to many different PRs, and one query beats one
+   * per PR.
+   *
+   * ⚠️ The security boundary documented above is UNCHANGED and must stay so.
+   * This is `inArray(prId, prIds)`, never the forbidden bare `inArray(ids)`: an
+   * id the caller did not earn still resolves to nothing. Callers must ALSO
+   * pair each returned row back to the PR they asked it for — `prId` is on the
+   * row for exactly that, so an assignment can never be attached to a dispute
+   * belonging to someone else. It fails closed: a mismatch yields no shift and
+   * the card says "not linked", rather than showing another PR's stamps.
+   */
+  async listByIdsForPrs(prIds: string[], ids: string[]): Promise<AssignmentShiftFacts[]> {
+    if (ids.length === 0 || prIds.length === 0) return [];
     try {
       const rows = await db
         .select({
           id: ShiftAssignmentTable.id,
+          prId: ShiftAssignmentTable.prId,
           checkInAt: ShiftAssignmentTable.checkInAt,
           checkOutAt: ShiftAssignmentTable.checkOutAt,
           overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
           shiftDate: ShiftTable.shiftDate,
           slot: ShiftTable.slot,
           eventName: ShiftTable.eventName,
+          // The one column this query lacked. `listForPr` in this same file
+          // already selects it. NOT NULL, defaults to 'normal', so once the
+          // shift row is reached the event TYPE always has a value.
+          eventKind: ShiftTable.eventKind,
           outletName: OutletTable.name,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
-        .where(and(inArray(ShiftAssignmentTable.id, ids), eq(ShiftAssignmentTable.prId, prId)))
+        .where(and(inArray(ShiftAssignmentTable.id, ids), inArray(ShiftAssignmentTable.prId, prIds)))
         .orderBy(ShiftAssignmentTable.checkInAt);
       return rows.map((row) => ({
         id: row.id,
+        prId: row.prId,
         shiftDate: row.shiftDate,
         slot: row.slot,
         eventName: row.eventName,
+        eventKind: row.eventKind,
         outletName: row.outletName,
         checkInAt: row.checkInAt,
         checkOutAt: row.checkOutAt,
         overtimeMinutes: row.overtimeMinutes ?? null,
       }));
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.listByIdsForPr] Error:', error);
+      logger.error('[ShiftAssignmentRepository.listByIdsForPrs] Error:', error);
       throw error;
     }
   }
