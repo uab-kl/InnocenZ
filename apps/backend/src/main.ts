@@ -35,22 +35,37 @@ const app = express();
 
 const frontendOrigin = env.FRONTEND_URL.replace(/\/en\/?$/, '').replace(/\/$/, '');
 
+function buildAllowedOrigins(): Set<string> {
+  const origins = new Set<string>([
+    frontendOrigin,
+    'http://localhost:3000',
+    'http://localhost:3001',
+    'http://127.0.0.1:3000',
+    'http://127.0.0.1:3001',
+    'https://studio.apollographql.com',
+  ]);
+
+  // Staging (DuckDNS) + live (.net) — apex and www
+  for (const host of ['innocenz.duckdns.org', 'innocenz.net']) {
+    origins.add(`https://${host}`);
+    origins.add(`https://www.${host}`);
+  }
+
+  for (const raw of (env.CORS_ALLOWED_ORIGINS ?? '').split(',')) {
+    const o = raw.trim().replace(/\/$/, '');
+    if (o) origins.add(o);
+  }
+  return origins;
+}
+
+const allowedOrigins = buildAllowedOrigins();
+
 const corsOptions: cors.CorsOptions = {
   origin: (origin, callback) => {
     if (!origin) {
       callback(null, true);
       return;
     }
-
-    const allowedOrigins = new Set([
-      frontendOrigin,
-      'http://localhost:3000',
-      'http://localhost:3001',
-      'http://127.0.0.1:3000',
-      'http://127.0.0.1:3001',
-      'https://innocenz.duckdns.org',
-      'https://studio.apollographql.com',
-    ]);
 
     if (allowedOrigins.has(origin)) {
       callback(null, true);
@@ -65,7 +80,8 @@ const corsOptions: cors.CorsOptions = {
       return;
     }
 
-    callback(new Error(`CORS blocked for origin: ${origin}`));
+    logger.warn(`[cors] blocked origin: ${origin}`);
+    callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],

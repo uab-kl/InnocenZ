@@ -40,6 +40,12 @@ export const env = createEnv({
     DATABASE_URL: z.string(),
     LOGGING_LEVEL: z.enum(['debug', 'info', 'warn', 'error']).default('info'),
     FRONTEND_URL: z.string().url().default('http://localhost:3000'),
+    /**
+     * Extra browser origins allowed to call the API (comma-separated).
+     * Always includes FRONTEND_URL + localhost + known staging/live hosts.
+     * Example: https://preview.example.com
+     */
+    CORS_ALLOWED_ORIGINS: z.string().optional(),
     // SERVER key for the Geocoding API (address -> pin on the outlet form).
     // Optional: without it the lookup endpoint returns a plain "not configured"
     // message and the operator drops the pin by hand. NOT the same key as the
