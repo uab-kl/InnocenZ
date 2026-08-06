@@ -99,6 +99,18 @@ function ShiftHead({
     );
   }
 
+  /*
+   * NAME THE EVENT, not the venue.
+   *
+   * `eventName` has been arriving in this payload all along
+   * (shift-assignment.repository.ts selects it off the joined shift row) but
+   * every heading here printed `outletName`, so four shifts at one venue read
+   * as four identical cards — the same collision 020ed68 fixed on the shift
+   * cards. The outlet moves to the line beneath: a PR checking a figure still
+   * needs to know where they were, just not as the only thing they are told.
+   */
+  const shiftTitle = shift.eventName ?? shift.outletName ?? 'Shift';
+  const shiftVenue = shift.eventName ? shift.outletName : null;
   const collapsible = typeof expanded === 'boolean' && !!onToggle;
   if (collapsible && !expanded) {
     /*
@@ -113,11 +125,12 @@ function ShiftHead({
         onPress={onToggle}
         accessibilityRole="button"
         accessibilityState={{ expanded: false }}
-        accessibilityLabel={`${shift.outletName ?? 'Shift'} — tap to see check-in, receipts and items`}
+        accessibilityLabel={`${shiftTitle} — tap to see check-in, receipts and items`}
       >
         <View style={s.shiftHeadText}>
-          <Text style={s.shiftTitle}>{shift.outletName ?? 'Shift'}</Text>
+          <Text style={s.shiftTitle}>{shiftTitle}</Text>
           <Text style={s.shiftSlot}>
+            {shiftVenue ? `${shiftVenue} · ` : ''}
             {shift.slot ? `${shift.slot} · ` : ''}
             {shiftDurationLabel(shift.checkInAt, shift.checkOutAt)}
           </Text>
@@ -148,16 +161,24 @@ function ShiftHead({
           accessibilityState={{ expanded: true }}
         >
           <View style={s.shiftHeadText}>
-            <Text style={s.shiftTitle}>{shift.outletName ?? 'Shift'}</Text>
-            {!!shift.slot && <Text style={s.shiftSlot}>{shift.slot}</Text>}
+            <Text style={s.shiftTitle}>{shiftTitle}</Text>
+            {(shiftVenue || shift.slot) && (
+              <Text style={s.shiftSlot}>
+                {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
+              </Text>
+            )}
             <Text style={s.shiftMore}>Tap to collapse</Text>
           </View>
           <Text style={[s.chevron, s.chevronOpen]}>⌄</Text>
         </Pressable>
       ) : (
         <>
-          <Text style={s.shiftTitle}>{shift.outletName ?? 'Shift'}</Text>
-          {!!shift.slot && <Text style={s.shiftSlot}>{shift.slot}</Text>}
+          <Text style={s.shiftTitle}>{shiftTitle}</Text>
+          {(shiftVenue || shift.slot) && (
+            <Text style={s.shiftSlot}>
+              {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
+            </Text>
+          )}
         </>
       )}
       <View style={s.stampRow}>
