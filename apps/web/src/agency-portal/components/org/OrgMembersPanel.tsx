@@ -186,7 +186,7 @@ export function OrgMembersPanel({
 					: undefined;
 			toast(
 				result.message?.trim() ||
-					`Invitation sent to ${trimmed} — they must accept the email to join`,
+				`Invitation sent to ${trimmed} — they must accept the email to join`,
 				"success",
 			);
 			if (acceptUrl && typeof window !== "undefined") {
