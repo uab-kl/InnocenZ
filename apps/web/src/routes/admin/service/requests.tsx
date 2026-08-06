@@ -1059,20 +1059,44 @@ function RequestEditForm({
 						<dt className="text-muted-foreground">Type</dt>
 						<dd className="text-right">{requestTypeLabels[request.type]}</dd>
 					</div>
-					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
+					{/*
+						On an exit these two rows ARE the decision — what stops, and
+						what the subscriber lands on — but they sat in the same grey as
+						Role and Type, so the price that is about to end read as one
+						more record field. Coloured as a pair: red ends, green begins.
+						Left plain everywhere else, because on an ordinary request they
+						are just the two sides of a switch and nothing is being lost.
+					*/}
+					<div
+						className={`flex items-center justify-between gap-2${
+							isExit ? " rounded-md bg-red-500/5 px-2 py-1" : ""
+						}`}
+					>
+						<dt
+							className={isExit ? "text-red-500/90" : "text-muted-foreground"}
+						>
 							{isExit
 								? `${arrangementName} (ends)`
 								: isAddonRequest
 									? "Plan (stays)"
 									: "From plan"}
 						</dt>
-						<dd className="text-right">
+						<dd
+							className={`text-right${isExit ? " font-semibold text-red-500" : ""}`}
+						>
 							{isExit && fromPlan === "—" ? arrangementName : fromPlan}
 						</dd>
 					</div>
-					<div className="flex items-center justify-between gap-2">
-						<dt className="text-muted-foreground">
+					<div
+						className={`flex items-center justify-between gap-2${
+							isExit ? " rounded-md bg-emerald-500/5 px-2 py-1" : ""
+						}`}
+					>
+						<dt
+							className={
+								isExit ? "text-emerald-500/90" : "text-muted-foreground"
+							}
+						>
 							{isExit
 								? isAddonRequest
 									? "Plan (continues)"
@@ -1083,7 +1107,11 @@ function RequestEditForm({
 										? "Tier"
 										: "To plan"}
 						</dt>
-						<dd className="text-right">{toPlan}</dd>
+						<dd
+							className={`text-right${isExit ? " font-semibold text-emerald-500" : ""}`}
+						>
+							{toPlan}
+						</dd>
 					</div>
 					<div className="flex items-center justify-between gap-2">
 						<dt className="text-muted-foreground">Requested</dt>
