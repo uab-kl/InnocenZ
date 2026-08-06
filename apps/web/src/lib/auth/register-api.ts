@@ -1,4 +1,9 @@
 import { getPublicClient } from "@/lib/axios-v1";
+import {
+	countryName,
+	DEFAULT_COUNTRY_CODE,
+	stateName,
+} from "@/lib/geo/country-state-city";
 import type { ApiResponse } from "./auth-api";
 import type { SignupInput } from "./register-schemas";
 
@@ -14,6 +19,11 @@ function normalizePhoneNumber(phoneNum: string): string {
 	const trimmed = phoneNum.trim();
 	if (trimmed.startsWith("+")) return trimmed;
 	return `+${trimmed.replace(/\D/g, "")}`;
+}
+
+function optionalField(value: string | undefined): string | undefined {
+	const trimmed = value?.trim();
+	return trimmed ? trimmed : undefined;
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -33,6 +43,11 @@ export async function registerUser(
 	// caller naming its own role was the escalation hole, and the two VITE_*
 	// role ids this used to read were shipped in the bundle anyway.
 	const client = getPublicClient();
+	const resolvedCountry = countryName(DEFAULT_COUNTRY_CODE);
+	const resolvedState = optionalField(
+		stateName(DEFAULT_COUNTRY_CODE, input.stateCode),
+	);
+
 	const payload: Record<string, unknown> = {
 		email: input.loginEmail,
 		phoneNum: normalizePhoneNumber(input.phoneNum),
@@ -41,7 +56,6 @@ export async function registerUser(
 		companyName: input.companyName,
 		companyRegistrationOld: input.companyRegistrationOld,
 		companyRegistrationNew: input.companyRegistrationNew,
-		companyAddress: input.companyAddress,
 		personInCharge: input.personInCharge,
 		contactEmail: input.email,
 		packageId: input.packageId,
@@ -50,6 +64,12 @@ export async function registerUser(
 		ackDeclarationOfTruth: input.ackDeclarationOfTruth,
 		ackInformationSharing: input.ackInformationSharing,
 		acceptTerms: input.acceptTerms,
+		addressLine1: optionalField(input.addressLine1),
+		addressLine2: optionalField(input.addressLine2),
+		city: optionalField(input.city),
+		postcode: optionalField(input.postcode),
+		state: resolvedState,
+		country: resolvedCountry,
 	};
 
 	payload.logoFileName = input.logoFile.name;

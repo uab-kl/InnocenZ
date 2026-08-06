@@ -1051,6 +1051,14 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ## 10. Changelog (what changed / what's done — append newest at top)
 
 
+> **6 Aug 2026 — Web outlet/agency register now creates org rows.**
+> `POST /auth/register` for `accountType` agency|outlet used to write only
+> `user` + `user_role` + empty `user_profile` (Zod stripped company fields). It
+> now accepts org signup fields, fills PIC on `user_profile`, and creates
+> `agency`/`outlet` (`pending_review`) plus owner row on `agency_user` /
+> `outlet_user`. Restart backend after pull.
+
+
 > **5 Aug 2026 — `main.pr` DROPPED (migration 0089).** Ops `pr_id` values remapped to
 > equal `user_id`; FKs to `pr` removed; table gone. Runtime identity is synthetic
 > `id === userId` from `user` + `user_profile` + `agency_pr`. Prefer `user_id` in new
@@ -2379,7 +2387,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > Closes the "DB ahead of repo" gap: editor code, dispute-queue wiring, and readers for
 > `payment_voucher_line.outlet_id` + `review_withdrawn_at` are in git. §9 uncommitted-tree block
 > marked closed; next is live agency click-through + day/receipt agreement audit highs.
-> Doc renew only in this commit (code already at `57bd165`).
+> Doc renew only in this commit (code already at `57bd165`).
+
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >
@@ -4554,6 +4563,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 | Date | What changed / done | Area (role link) | Status |
 |------|---------------------|------------------|--------|
+| 2026-08-06 | **Outlet/agency register writes org + membership.** Backend now creates `agency`/`outlet` (`pending_review`) + owner on `agency_user`/`outlet_user`, and fills PIC on `user_profile` (was user+role+empty profile only; company fields were Zod-stripped). | Web (signup) + API | ✅ done |
+| 2026-08-06 | **Outlet/agency signup shows pending-approval dialog.** After a successful `POST /auth/register`, a dialog says registration succeeded, ask them to wait for admin approval, and that they will get an email when approved — then Continue goes to `/login`. | Web (signup) | ✅ done |
 | 2026-08-05 | **Register ID OCR checks front vs back side.** Matching the typed ID alone is not enough — MyKad/work-permit OCR also guesses face (keywords). Wrong face → fail. Same photo / same face used for both slots → both fail. Passport stays one-page. | PR (register) | ✅ done |
 | 2026-08-05 | **Register step 1 blocks duplicate phone + IC.** New public `POST /auth/register/check` — refuses if phone or `user_profile.id_no` (normalized) already exists. Wizard Continue on step 1 calls it and marks the field(s). Also: signup OTP send → 409 if phone taken; `POST /auth/register` refuses duplicate ID. | PR (register) | ✅ done |
 | 2026-08-05 | **Portfolio drag-to-swap fixed.** Long-press + drag onto another slot (filled or empty) swaps photos. Hit-test uses local coords; web uses pointer listeners so ScrollView can’t kill the gesture. If drag is interrupted, photo stays picked — tap another slot to finish the swap. | PR (Profile) | ✅ done |

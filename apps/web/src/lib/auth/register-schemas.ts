@@ -10,6 +10,11 @@ function imageFileSchema(messages: SignupTranslations["validation"]) {
 		.refine((file) => file.type.startsWith("image/"), messages.logoImageType);
 }
 
+/** Optional free-text: empty string stays valid and is fine to submit as "". */
+function optionalText(max: number) {
+	return z.string().max(max);
+}
+
 export function createSignupSchema(messages: SignupTranslations["validation"]) {
 	return z
 		.object({
@@ -26,10 +31,14 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.string()
 				.min(1, messages.companyRegistrationNewRequired)
 				.max(50, messages.registrationNumberMax),
-			companyAddress: z
-				.string()
-				.min(1, messages.companyAddressRequired)
-				.max(500, messages.companyAddressMax),
+			addressLine1: optionalText(255),
+			addressLine2: optionalText(255),
+			city: optionalText(100),
+			postcode: optionalText(20),
+			/** ISO state code for cascading select; empty = unset. */
+			stateCode: optionalText(10),
+			/** ISO country code for cascading select; empty = unset. */
+			countryCode: optionalText(10),
 			personInCharge: z
 				.string()
 				.min(1, messages.personInChargeRequired)
@@ -81,8 +90,6 @@ export const SignupSchema = createSignupSchema({
 	companyRegistrationOldRequired: "Old company registration number is required",
 	companyRegistrationNewRequired: "New company registration number is required",
 	registrationNumberMax: "Registration number is too long",
-	companyAddressRequired: "Company address is required",
-	companyAddressMax: "Company address must be 500 characters or fewer",
 	personInChargeRequired: "Person in charge is required",
 	personInChargeMax: "Name must be 100 characters or fewer",
 	phoneRequired: "Please enter a valid contact number",

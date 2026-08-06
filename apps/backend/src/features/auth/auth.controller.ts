@@ -34,6 +34,10 @@ import {
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
+import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
+import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
+import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
+import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
 
 export class AuthControllerClass {
@@ -46,6 +50,10 @@ export class AuthControllerClass {
     private adminMfaRepository: AdminMfaRepositoryClass,
     private phoneVerificationRepository: PhoneVerificationRepositoryClass,
     private agencyPrRepository: AgencyPrRepository,
+    private agencyRepository: AgencyRepositoryClass,
+    private agencyMemberRepository: AgencyMemberRepositoryClass,
+    private outletRepository: OutletRepositoryClass,
+    private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
 
   /** Wrong attempts before the account locks. */
@@ -395,6 +403,90 @@ export class AuthControllerClass {
   }
 
   /**
+   * Web outlet/agency self-register: create the organisation as `pending_review`
+   * and link the new user as `owner`. Package selection is not written yet —
+   * admin assigns a plan on approval.
+   */
+  private async createOrgForSignup(
+    userId: string,
+    body: {
+      accountType?: SignupAccountType;
+      companyName?: string;
+      companyRegistrationOld?: string;
+      companyRegistrationNew?: string;
+      companyAddress?: string;
+      personInCharge?: string;
+      contactEmail?: string;
+      email?: string;
+      phoneNum: string;
+      packageId?: string;
+    },
+    actor: string,
+  ): Promise<void> {
+    const name = body.companyName!;
+    const ssmNo = body.companyRegistrationNew!;
+    const address = body.companyAddress ?? null;
+    const contactName = body.personInCharge ?? null;
+    const contactEmail = body.contactEmail ?? body.email ?? null;
+    const contactPhone = body.phoneNum;
+
+    if (body.accountType === 'agency') {
+      const agencyCode = await this.agencyRepository.generateUniqueCode();
+      const agency = await this.agencyRepository.create({
+        name,
+        agencyCode,
+        ssmNo,
+        contactName,
+        contactEmail,
+        contactPhone,
+        addressLine1: address,
+        addressLine2: null,
+        status: 'pending_review',
+        createdBy: actor,
+        updatedBy: actor,
+      });
+      await this.agencyMemberRepository.add({
+        agencyId: agency.id,
+        userId,
+        subRole: 'owner',
+        status: 'active',
+        createdBy: actor,
+        updatedBy: actor,
+      });
+      logger.info('[AuthController.register] Agency created for signup', {
+        agencyId: agency.id,
+        userId,
+        packageId: body.packageId ?? null,
+      });
+      return;
+    }
+
+    const outlet = await this.outletRepository.create({
+      name,
+      addressLine1: address,
+      addressLine2: null,
+      businessLicense: body.companyRegistrationOld ?? null,
+      ssmNo,
+      status: 'pending_review',
+      createdBy: actor,
+      updatedBy: actor,
+    });
+    await this.outletMemberRepository.add({
+      outletId: outlet.id,
+      userId,
+      subRole: 'owner',
+      status: 'active',
+      createdBy: actor,
+      updatedBy: actor,
+    });
+    logger.info('[AuthController.register] Outlet created for signup', {
+      outletId: outlet.id,
+      userId,
+      packageId: body.packageId ?? null,
+    });
+  }
+
+  /**
    * Public PR sign-up gate for step 1: refuse phones / ID numbers that already
    * belong to an account so the wizard does not burn five steps on a duplicate.
    */
@@ -648,12 +740,31 @@ export class AuthControllerClass {
           verificationStatus: 'pending',
           updatedBy: actor,
         });
+      } else if (
+        (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') &&
+        parsedBody.personInCharge
+      ) {
+        // Web org signup: PIC name on the empty profile; company lives on agency/outlet.
+        await this.userProfileRepository.update(user.id, {
+          fullName: parsedBody.personInCharge,
+          addressLine1: parsedBody.companyAddress ?? null,
+          updatedBy: actor,
+        });
+      }
+
+      // Outlet / agency web signup — create the organisation + owner membership.
+      // Previously register only wrote user + user_role + empty user_profile.
+      if (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') {
+        await this.createOrgForSignup(user.id, parsedBody, actor);
       }
 
       // After profile exists so R2 path can use user_profile.full_name.
       if (req.file) {
         const profileImage = await saveProfileImageFile(
-          { id: user.id, fullName: parsedBody.fullName },
+          {
+            id: user.id,
+            fullName: parsedBody.fullName ?? parsedBody.personInCharge,
+          },
           req.file,
         );
         const updatedUser = await this.userRepository.updateUser(

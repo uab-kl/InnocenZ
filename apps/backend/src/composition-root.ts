@@ -75,8 +75,13 @@ export const roleRepository = new RoleRepositoryClass();
 export const adminMfaRepository = new AdminMfaRepositoryClass();
 export const phoneVerificationRepository = new PhoneVerificationRepositoryClass();
 export const otpController = new OtpControllerClass(phoneVerificationRepository, userRepository);
-// Declared before authController — PR register writes agency_pr by user_id.
+// Declared before authController — PR register writes agency_pr by user_id;
+// outlet/agency web register creates the org + owner membership.
 export const agencyPrRepository = new AgencyPrRepository();
+export const agencyRepository = new AgencyRepositoryClass();
+export const agencyMemberRepository = new AgencyMemberRepositoryClass();
+export const outletRepository = new OutletRepositoryClass();
+export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -86,6 +91,10 @@ export const authController = new AuthControllerClass(
   adminMfaRepository,
   phoneVerificationRepository,
   agencyPrRepository,
+  agencyRepository,
+  agencyMemberRepository,
+  outletRepository,
+  outletMemberRepository,
 );
 export const healthController = new HealthControllerClass();
 
@@ -113,11 +122,6 @@ export const notificationController = new NotificationControllerClass(notificati
 export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
 
-export const agencyRepository = new AgencyRepositoryClass();
-export const agencyMemberRepository = new AgencyMemberRepositoryClass();
-
-export const outletRepository = new OutletRepositoryClass();
-export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const outletController = new OutletControllerClass(outletRepository, outletMemberRepository);
 
 

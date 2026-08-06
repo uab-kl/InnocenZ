@@ -36,7 +36,12 @@ export interface SignupTranslations {
 		companyName: { label: string; placeholder: string };
 		companyRegistrationOld: { label: string; placeholder: string };
 		companyRegistrationNew: { label: string; placeholder: string };
-		companyAddress: { label: string; placeholder: string };
+		addressLine1: { label: string; placeholder: string };
+		addressLine2: { label: string; placeholder: string };
+		city: { label: string; placeholder: string };
+		postcode: { label: string; placeholder: string };
+		state: { label: string; placeholder: string };
+		country: { label: string; value: string; notice: string };
 		personInCharge: { label: string; placeholder: string };
 		phoneNum: { label: string; placeholder: string };
 		email: { label: string; placeholder: string; description: string };
@@ -46,6 +51,9 @@ export interface SignupTranslations {
 		package: { label: string; placeholder: string };
 		logo: { label: string; uploadTitle: string; uploadHint: string };
 	};
+	optionalHint: string;
+	searchPlaceholder: string;
+	noResults: string;
 	acknowledgements: {
 		personalInfo: SignupDisclaimerCopy;
 		declarationOfTruth: SignupDisclaimerCopy;
@@ -63,6 +71,12 @@ export interface SignupTranslations {
 		alreadyHaveAccount: string;
 		signIn: string;
 	};
+	success: {
+		title: string;
+		bodyOutlet: string;
+		bodyAgency: string;
+		continueToLogin: string;
+	};
 	errors: {
 		registrationFailed: string;
 		internalServerError: string;
@@ -74,8 +88,6 @@ export interface SignupTranslations {
 		companyRegistrationOldRequired: string;
 		companyRegistrationNewRequired: string;
 		registrationNumberMax: string;
-		companyAddressRequired: string;
-		companyAddressMax: string;
 		personInChargeRequired: string;
 		personInChargeMax: string;
 		phoneRequired: string;
@@ -151,9 +163,30 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				label: "New company registration number",
 				placeholder: "e.g. 202401012345",
 			},
-			companyAddress: {
-				label: "Company address",
-				placeholder: "Full registered business address",
+			addressLine1: {
+				label: "Address line 1",
+				placeholder: "Street address, building, unit",
+			},
+			addressLine2: {
+				label: "Address line 2",
+				placeholder: "Floor, suite, landmark (optional)",
+			},
+			city: {
+				label: "City",
+				placeholder: "Select city",
+			},
+			postcode: {
+				label: "Postcode",
+				placeholder: "e.g. 50450",
+			},
+			state: {
+				label: "State",
+				placeholder: "Select state",
+			},
+			country: {
+				label: "Country",
+				value: "Malaysia",
+				notice: "We currently support Malaysia only.",
 			},
 			personInCharge: {
 				label: "Person in charge",
@@ -191,6 +224,9 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				uploadHint: "PNG, JPG, or WEBP up to 2 MB · Required",
 			},
 		},
+		optionalHint: "optional",
+		searchPlaceholder: "Search…",
+		noResults: "No results found.",
 		acknowledgements: {
 			personalInfo: {
 				title: "Personal Information Disclaimer",
@@ -220,6 +256,14 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			alreadyHaveAccount: "Already have an account?",
 			signIn: "Sign in",
 		},
+		success: {
+			title: "Registration successful",
+			bodyOutlet:
+				"Your outlet account has been submitted. Please wait for InnocenZ admin approval before you can sign in. You will receive an email once your account is approved.",
+			bodyAgency:
+				"Your PR agency account has been submitted. Please wait for InnocenZ admin approval before you can sign in. You will receive an email once your account is approved.",
+			continueToLogin: "Back to sign in",
+		},
 		errors: {
 			registrationFailed: "Registration failed. Please try again.",
 			internalServerError: "Internal server error.",
@@ -233,8 +277,6 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			companyRegistrationNewRequired:
 				"New company registration number is required",
 			registrationNumberMax: "Registration number is too long",
-			companyAddressRequired: "Company address is required",
-			companyAddressMax: "Company address must be 500 characters or fewer",
 			personInChargeRequired: "Person in charge is required",
 			personInChargeMax: "Name must be 100 characters or fewer",
 			phoneRequired: "Please enter a valid contact number",
@@ -307,9 +349,30 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				label: "新公司注册号",
 				placeholder: "例如 202401012345",
 			},
-			companyAddress: {
-				label: "公司地址",
-				placeholder: "完整注册营业地址",
+			addressLine1: {
+				label: "地址第一行",
+				placeholder: "街道、楼宇、单位",
+			},
+			addressLine2: {
+				label: "地址第二行",
+				placeholder: "楼层、套房、地标（可选）",
+			},
+			city: {
+				label: "城市",
+				placeholder: "选择城市",
+			},
+			postcode: {
+				label: "邮编",
+				placeholder: "例如 50450",
+			},
+			state: {
+				label: "州属",
+				placeholder: "选择州属",
+			},
+			country: {
+				label: "国家",
+				value: "马来西亚",
+				notice: "目前仅支持马来西亚。",
 			},
 			personInCharge: {
 				label: "负责人",
@@ -347,6 +410,9 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				uploadHint: "PNG、JPG 或 WEBP，最大 2 MB · 必填",
 			},
 		},
+		optionalHint: "可选",
+		searchPlaceholder: "搜索…",
+		noResults: "未找到结果。",
 		acknowledgements: {
 			personalInfo: {
 				title: "个人信息免责声明",
@@ -376,6 +442,14 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			alreadyHaveAccount: "已有账户？",
 			signIn: "登录",
 		},
+		success: {
+			title: "注册成功",
+			bodyOutlet:
+				"您的门店账户已提交。请等待 InnocenZ 管理员审批后再登录。账户获批后，您将收到电子邮件通知。",
+			bodyAgency:
+				"您的 PR 代理账户已提交。请等待 InnocenZ 管理员审批后再登录。账户获批后，您将收到电子邮件通知。",
+			continueToLogin: "返回登录",
+		},
 		errors: {
 			registrationFailed: "注册失败，请重试。",
 			internalServerError: "服务器内部错误。",
@@ -387,8 +461,6 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			companyRegistrationOldRequired: "旧公司注册号为必填项",
 			companyRegistrationNewRequired: "新公司注册号为必填项",
 			registrationNumberMax: "注册号过长",
-			companyAddressRequired: "公司地址为必填项",
-			companyAddressMax: "公司地址不能超过 500 个字符",
 			personInChargeRequired: "负责人为必填项",
 			personInChargeMax: "姓名不能超过 100 个字符",
 			phoneRequired: "请输入有效的联系电话",

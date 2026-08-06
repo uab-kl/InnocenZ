@@ -176,14 +176,32 @@ function FieldSeparator({
 	);
 }
 
-function FieldError({
-	className,
-	children,
-	errors,
-	...props
-}: React.ComponentProps<"div"> & {
-	errors?: Array<{ message?: string } | undefined>;
-}) {
+/** TanStack Form validators may return strings or `{ message }` — normalize both. */
+export type FieldErrorItem = { message?: string } | undefined;
+
+export function toFieldErrors(
+	errors: unknown[] | undefined,
+): FieldErrorItem[] {
+	if (!errors?.length) return [];
+	return errors.map((error) => {
+		if (typeof error === "string") return { message: error };
+		if (error && typeof error === "object" && "message" in error) {
+			const message = (error as { message?: unknown }).message;
+			return {
+				message: typeof message === "string" ? message : undefined,
+			};
+		}
+		return undefined;
+	});
+}
+
+type FieldErrorProps = Omit<React.ComponentProps<"div">, "children"> & {
+	children?: React.ReactNode;
+	/** Prefer `toFieldErrors(meta.errors)` when passing TanStack Form errors. */
+	errors?: FieldErrorItem[];
+};
+
+function FieldError({ className, children, errors, ...props }: FieldErrorProps) {
 	const content = useMemo(() => {
 		if (children) return children;
 		if (!errors?.length) return null;
@@ -192,7 +210,7 @@ function FieldError({
 			...new Map(errors.map((error) => [error?.message, error])).values(),
 		];
 
-		if (uniqueErrors?.length === 1) {
+		if (uniqueErrors.length === 1) {
 			return uniqueErrors[0]?.message;
 		}
 

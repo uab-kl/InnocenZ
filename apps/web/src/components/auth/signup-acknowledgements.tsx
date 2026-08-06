@@ -8,7 +8,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldError } from "@/components/ui/field";
+import { Field, FieldError, toFieldErrors } from "@/components/ui/field";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { cn } from "@/lib/utils";
 
@@ -91,12 +91,17 @@ export function SignupAcknowledgements({
 
 	return (
 		<>
-			<section className="space-y-5">
-				<h2 className="signup-section-title login-field-label uppercase text-foreground/90">
+			<header className="signup-section-header">
+				<span className="signup-step" aria-hidden>
+					06
+				</span>
+				<h2 className="signup-section-title">
 					{t.signup.sections.acknowledgements}
 				</h2>
+			</header>
 
-				<div className="overflow-hidden rounded-xl border border-royal-gold/25 bg-background/35">
+			<div className="signup-section-body">
+				<div className="overflow-hidden rounded-xl border border-royal-gold/20 bg-background/30">
 					{acknowledgementRows.map((row, index) => {
 						const isInvalid =
 							row.field.state.meta.isDirty && !row.field.state.meta.isValid;
@@ -106,9 +111,9 @@ export function SignupAcknowledgements({
 							<div
 								key={row.name}
 								className={cn(
-									"px-4 py-4",
+									"px-3.5 py-3.5",
 									index < acknowledgementRows.length - 1 &&
-										"border-b border-royal-gold/15",
+										"border-b border-royal-gold/12",
 								)}
 							>
 								<AcknowledgementRow
@@ -123,57 +128,60 @@ export function SignupAcknowledgements({
 								{isInvalid && (
 									<FieldError
 										id={errorId}
-										errors={row.field.state.meta.errors}
-										className="mt-2 text-lg"
+										errors={toFieldErrors(row.field.state.meta.errors)}
+										className="signup-field-error mt-2"
 									/>
 								)}
 							</div>
 						);
 					})}
 				</div>
-			</section>
 
-			<section className="space-y-4">
-				<h2 className="signup-section-title login-field-label uppercase text-foreground/90">
-					{t.signup.sections.terms}
-				</h2>
+				<div className="border-t border-royal-gold/16 pt-5">
+					<header className="mb-3 flex items-baseline gap-3">
+						<span className="signup-step" aria-hidden>
+							07
+						</span>
+						<h3 className="signup-section-title">{t.signup.sections.terms}</h3>
+					</header>
 
-				<Field
-					data-invalid={
-						fields.acceptTerms.state.meta.isDirty &&
-						!fields.acceptTerms.state.meta.isValid
-					}
-				>
-					<AcknowledgementRow
-						id="acceptTerms"
-						checked={fields.acceptTerms.state.value}
-						disabled={isSubmitting}
-						onCheckedChange={fields.acceptTerms.handleChange}
-						onBlur={fields.acceptTerms.handleBlur}
-						onOpen={() => setOpenDisclaimer("terms")}
-						label={
-							<>
-								{copy.termsCheckboxPrefix}{" "}
-								<button
-									type="button"
-									className="signup-ack-link font-medium text-gold-bright underline underline-offset-4 hover:text-gold"
-									onClick={() => setOpenDisclaimer("terms")}
-								>
-									{copy.termsCheckboxLink}
-								</button>
-							</>
+					<Field
+						data-invalid={
+							fields.acceptTerms.state.meta.isDirty &&
+							!fields.acceptTerms.state.meta.isValid
 						}
-					/>
-					{fields.acceptTerms.state.meta.isDirty &&
-						!fields.acceptTerms.state.meta.isValid && (
-							<FieldError
-								id="acceptTerms-error"
-								errors={fields.acceptTerms.state.meta.errors}
-								className="mt-2 text-lg"
-							/>
-						)}
-				</Field>
-			</section>
+					>
+						<AcknowledgementRow
+							id="acceptTerms"
+							checked={fields.acceptTerms.state.value}
+							disabled={isSubmitting}
+							onCheckedChange={fields.acceptTerms.handleChange}
+							onBlur={fields.acceptTerms.handleBlur}
+							onOpen={() => setOpenDisclaimer("terms")}
+							label={
+								<>
+									{copy.termsCheckboxPrefix}{" "}
+									<button
+										type="button"
+										className="signup-ack-link font-medium text-gold-bright underline underline-offset-4 hover:text-gold"
+										onClick={() => setOpenDisclaimer("terms")}
+									>
+										{copy.termsCheckboxLink}
+									</button>
+								</>
+							}
+						/>
+						{fields.acceptTerms.state.meta.isDirty &&
+							!fields.acceptTerms.state.meta.isValid && (
+								<FieldError
+									id="acceptTerms-error"
+									errors={toFieldErrors(fields.acceptTerms.state.meta.errors)}
+									className="signup-field-error mt-2"
+								/>
+							)}
+					</Field>
+				</div>
+			</div>
 
 			<Dialog
 				open={openDisclaimer !== null}
@@ -181,19 +189,19 @@ export function SignupAcknowledgements({
 					if (!open) setOpenDisclaimer(null);
 				}}
 			>
-				<DialogContent className="signup-disclaimer-dialog w-full max-w-[calc(100%-2rem)] border-royal-gold/25 bg-card p-8 sm:max-w-3xl sm:p-10 lg:max-w-4xl">
+				<DialogContent className="signup-disclaimer-dialog w-full max-w-[calc(100%-2rem)] border-royal-gold/25 bg-card p-6 sm:max-w-2xl sm:p-8">
 					<DialogHeader>
-						<DialogTitle className="signup-disclaimer-title text-[2.25rem] leading-tight font-bold text-foreground">
+						<DialogTitle className="signup-disclaimer-title font-bold text-foreground">
 							{activeDisclaimer?.title}
 						</DialogTitle>
-						<DialogDescription className="signup-disclaimer-body pt-2 text-left text-[1.5rem] leading-relaxed text-muted-foreground">
+						<DialogDescription className="signup-disclaimer-body pt-2 text-left text-muted-foreground">
 							{activeDisclaimer?.body}
 						</DialogDescription>
 					</DialogHeader>
 					<DialogFooter showCloseButton={false}>
 						<Button
 							type="button"
-							className="signup-disclaimer-done login-btn w-full bg-[image:var(--gradient-royal)] text-[1.5rem] font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95 sm:w-auto"
+							className="signup-disclaimer-done login-btn w-full bg-[image:var(--gradient-royal)] font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95 sm:w-auto"
 							onClick={() => setOpenDisclaimer(null)}
 						>
 							{copy.done}
