@@ -1206,6 +1206,58 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+
+> ## 🔒 STANDING RULE — BRANCH `jk` IS THE OWNER'S. DO NOT BREAK IT.
+>
+> `jk` is **jinkai's** branch; `SL` is the teammate's (outlet + agency web).
+> When working on `jk`:
+>
+> 1. **Do not change or remove the owner's existing functions.** Add beside
+>    them; never rewrite or delete working behaviour to make a new feature fit.
+> 2. **Never leave `jk` broken.** Typecheck the files you touched before every
+>    commit — `apps/mobile` with `-p tsconfig.app.json` (NOT `tsconfig.json`,
+>    which compiles zero files), `apps/web` with biome + `tsc`, backend against
+>    its known TS2742 router baseline.
+> 3. **Avoid conflict with the other session.** More than one agent works this
+>    repo at once. Before editing, check `git status` — if a file is already
+>    modified by someone else (it has happened to `payment-voucher.controller.ts`,
+>    `apps/web/src/routes/agency/pv.tsx` and the whole `agency-portal/` tree),
+>    leave it alone and hand the task over rather than racing it.
+> 4. **`TEST_SCRIPT.md` is append-at-top.** Resolve its conflicts by KEEPING
+>    BOTH SIDES and renumbering, never by taking one branch wholesale — both
+>    sessions' entries are real history.
+
+
+> **6 Aug 2026 (pm) — PR + ADMIN SLICE (`33b1d0d`, `2bd50b4`, `d0984f9`,
+> `7147bd8`, admin `d6d9a5f` → `f3be3bd`).**
+> • **Attach files did nothing on a phone** — `PaymentScreen`'s own picker began
+> `if (Platform.OS !== 'web') return;`, so the button took the tap and returned.
+> Replaced by the shared `pickProofPhotos` with a new `source: 'library'` option
+> (a dispute photo was taken hours ago; the camera-first flow stays for
+> at-the-till scanning). Also clears PaymentScreen's DOM-global tsc baseline.
+> • **Evidence sheet names the EVENT** (`shift.event_name`) with the outlet
+> beneath — four shifts at one venue read as four identical cards. Event TYPE
+> (`shift.event_kind`) now tags **SPECIAL only**; `normal` is the default, and a
+> badge on every card is one nobody reads.
+> • **A running week can no longer be sent** — `pending_review → sent` refused
+> while `klToday() <= week_end`. Sending seals the week, so sending mid-week
+> stranded every remaining shift: PV-000006 was sent on 6 Aug and Vicky's 6 Aug
+> scan had nowhere to go. Signing is next week's work.
+> • **Admin Plan Request quoted price** — framed and tagged while a price is
+> owed, RM 0 counts as unset, anchor line naming the tier being replaced; exits
+> are exempt (a reset is not a quote), and a reset's two rows read red ends →
+> green begins, with green withheld from the POS exit whose plan *continues*.
+>
+> 🔴 **STILL OPEN:** PV-000006 is still `sent` (revert blocked by the permission
+> classifier); **restart the backend** for `7147bd8`; the This-Week tab still
+> offers Finance sign / Sent to PR that the server now refuses; the "Reopen
+> voucher" action the PR's error message promises does not exist; the
+> **fabricated overtime** (RM 1,213.68 from a hardcoded 6 h shift) is untouched;
+> `PaymentScreen`'s "What you disputed" card still maps only `outletName`
+> (~line 146) and needs event name, event kind and duration off the
+> `disputed_items` snapshot; **rotate `POSTGRES_PASSWORD`** — probe subagents
+> wrote it to disk in plaintext.
+
 > **6 Aug 2026 — ONE PR, ONE ROW, ONE ANSWER.** (commit `98ee4a0`)
 >
 > Owner: *"this sill showing the wrong data"*, then *"if the manage pr is tier 3 follow the
