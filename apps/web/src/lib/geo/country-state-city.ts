@@ -47,3 +47,14 @@ export function stateName(
 	if (!countryCode || !stateCode) return undefined;
 	return State.getStateByCodeAndCountry(stateCode, countryCode)?.name;
 }
+
+/** Reverse-lookup ISO state code from a stored display name (signup writes names). */
+export function stateCodeFromName(
+	countryCode: string,
+	name: string,
+): string | undefined {
+	const needle = name.trim().toLowerCase();
+	if (!countryCode || !needle) return undefined;
+	return listStates(countryCode).find((s) => s.name.toLowerCase() === needle)
+		?.isoCode;
+}

@@ -52,7 +52,10 @@ export function sanitizePathSegment(value: string): string {
   return cleaned || 'user';
 }
 
-/** R2 key: user/pr/{userId}_{fullName}/profile_images/{filename} */
+/**
+ * R2 key for any account's avatar (admin / agency / outlet / PR):
+ *   user/{userId}_{name}/profile/{filename}
+ */
 export function profileImageObjectKey(
   userId: string,
   fullName: string,
@@ -61,7 +64,7 @@ export function profileImageObjectKey(
   const folder = `${userId}_${sanitizePathSegment(fullName)}`;
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'avatar';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/pr/${folder}/profile_images/${safeName}${ext}`;
+  return `user/${folder}/profile/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -71,9 +74,9 @@ function fileBuffer(file: Express.Multer.File): Buffer {
 }
 
 /**
- * Upload a profile image to Cloudflare R2 and return the **object key**
- * (e.g. `user/pr/{id}_{name}/profile_images/avatar-….jpg`). Clients prepend
- * `R2_PUBLIC_URL`. Falls back to local `/img/…` when R2 is not configured.
+ * Upload a profile image to Cloudflare R2 and return the **object key**.
+ * Same path for every role. Clients prepend `R2_PUBLIC_URL`.
+ * Falls back to local `/img/…` when R2 is not configured.
  */
 export async function saveProfileImageFile(
   user: { id: string; fullName: string | null | undefined },

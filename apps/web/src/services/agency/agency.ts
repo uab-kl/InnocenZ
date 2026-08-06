@@ -124,15 +124,13 @@ export async function fetchAgencyMembers(
 }
 
 /**
- * Add an EXISTING user account to this agency (`POST /agency/:id/members`).
- *
- * Takes a `userId`, not an email — there is no invite endpoint and no mailer, so
- * the person must already have an account. The caller resolves the email to a
- * user first; see `useOrgMembers`.
+ * Invite an EXISTING user by email (`POST /agency/:id/members`).
+ * Creates an `agency_user` row as `pending` and emails an accept link.
+ * Membership becomes `active` only after they accept.
  */
 export async function addAgencyMember(
 	agencyId: string,
-	payload: { userId: string; subRole: string },
+	payload: { email: string; subRole: string } | { userId: string; subRole: string },
 	onRefreshFail: () => void,
 ): Promise<AgencyMemberApiResponse> {
 	const client = getClient(onRefreshFail);

@@ -1,9 +1,9 @@
 /**
- * Organisation logo upload (outlet / agency signup).
+ * Organisation logo upload (outlet / agency signup + Settings).
  *
- * R2 key shapes (deliberately asymmetric — matches the product path convention):
- *   agency → user/agency/logo/{id}_{name}/{logo}
- *   outlet → user/outlet/{id}_{name}/logo/{logo}
+ * R2 key shapes:
+ *   agency → agency/{id}_{name}/logo/{logo}
+ *   outlet → outlet/{id}_{name}/logo/{logo}
  *
  * Stores the **object key** in `agency.logo_image` / `outlet.logo_image`.
  * Clients resolve display as `R2_PUBLIC_URL + '/' + key`.
@@ -37,10 +37,8 @@ export function orgLogoObjectKey(
   const safeBase = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'logo';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
   const file = `${safeBase}${ext}`;
-  if (kind === 'agency') {
-    return `user/agency/logo/${folder}/${file}`;
-  }
-  return `user/outlet/${folder}/logo/${file}`;
+  // agency/{id_name}/logo/… and outlet/{id_name}/logo/… — not under user/.
+  return `${kind}/${folder}/logo/${file}`;
 }
 
 function extFromFileName(fileName: string): string {

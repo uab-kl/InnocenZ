@@ -21,6 +21,14 @@ import { AgencyFilter, AgencyUserSubRole, AgencyStatus, agencyUserSubRoleValues 
 import { AgencyPrApproveStatus, agencyPrApproveStatusValues } from '@/features/pr-personnel/pr.model';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
 import { r2DeleteStoredRef } from '@/util/r2';
+import { RoleRepositoryClass } from '@/features/rbac/role/role.repository';
+import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository';
+import {
+  createOrgMemberInviteSecret,
+  normalizeInviteEmail,
+  sendOrgMemberInviteEmail,
+} from '@/util/org-member-invite';
+import { sendOrgApprovedNotificationEmail } from '@/features/mailing/mailing.repository';
 
 function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;
@@ -44,6 +52,8 @@ export class AgencyControllerClass {
     private prRepository: PrRepositoryClass,
     private userRepository: UserRepositoryClass,
     private userProfileRepository: UserProfileRepositoryClass,
+    private roleRepository: RoleRepositoryClass,
+    private inviteRepository: OrgMemberInviteRepositoryClass,
   ) {}
 
   /**
@@ -312,8 +322,11 @@ export class AgencyControllerClass {
             await r2DeleteStoredRef(previousLogo);
           }
         } catch (logoError) {
+          // `Error` import is API message constants — use globalThis.Error here.
           const msg =
-            logoError instanceof Error ? logoError.message : 'Logo upload failed';
+            logoError instanceof globalThis.Error
+              ? logoError.message
+              : 'Logo upload failed';
           return res.status(400).json({ success: false, message: msg, data: null });
         }
       }
@@ -330,6 +343,27 @@ export class AgencyControllerClass {
       const id = paramId(req.params.id);
       const agency = await this.agencyRepository.update(id, { status: 'active', updatedBy: getActor(req) });
       if (!agency) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Notify the agency owner — approval already persisted; email failure must not roll it back.
+      try {
+        const owners = await this.agencyMemberRepository.listByAgency(id, {
+          subRole: 'owner',
+        });
+        const owner = owners.find((m) => m.email);
+        if (owner?.email) {
+          await sendOrgApprovedNotificationEmail({
+            recipientEmail: owner.email,
+            name: owner.username,
+            orgName: agency.name,
+            orgKind: 'agency',
+          });
+        } else {
+          logger.warn('[AgencyController.approve] No owner email to notify', { agencyId: id });
+        }
+      } catch (mailError) {
+        logger.error('[AgencyController.approve] Approval email failed:', mailError);
+      }
+
       res.status(200).json({ success: true, message: 'Agency approved', data: agency });
     } catch (error) {
       logger.error('[AgencyController.approve] Error:', error);
@@ -377,20 +411,118 @@ export class AgencyControllerClass {
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
-      const existing = await this.agencyMemberRepository.getByAgencyAndUser(agencyId, parsed.data.userId);
-      if (existing) {
-        return res.status(409).json({ success: false, message: 'User is already a member of this agency', data: null });
+
+      const agency = await this.agencyRepository.getById(agencyId);
+      if (!agency) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
+
+      const inviteEmail = parsed.data.email?.trim()
+        ? normalizeInviteEmail(parsed.data.email)
+        : null;
+      let userId = parsed.data.userId;
+      if (inviteEmail) {
+        const user = await this.userRepository.getUserByLoginMethod('email', inviteEmail);
+        if (user) userId = user.id;
+      } else if (userId) {
+        const user = await this.userRepository.getUserById(userId);
+        if (!user?.email) {
+          return res.status(400).json({
+            success: false,
+            message: 'That account has no email — cannot send an invitation',
+            data: null,
+          });
+        }
+      }
+
+      const email =
+        inviteEmail ??
+        (userId
+          ? normalizeInviteEmail(
+              (await this.userRepository.getUserById(userId))?.email ?? '',
+            )
+          : '');
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: 'email or userId is required',
+          data: null,
+        });
+      }
+
+      if (userId) {
+        const existing = await this.agencyMemberRepository.getByAgencyAndUser(
+          agencyId,
+          userId,
+        );
+        if (existing && existing.status === 'active') {
+          return res.status(409).json({
+            success: false,
+            message: 'User is already a member of this agency',
+            data: null,
+          });
+        }
+      }
+
+      const role = await this.roleRepository.getRoleByName('agency');
+      if (!role) {
+        return res.status(500).json({
+          success: false,
+          message: "Role 'agency' is not seeded",
+          data: null,
+        });
+      }
+
       const actor = getActor(req);
-      const member = await this.agencyMemberRepository.add({
+      const secret = createOrgMemberInviteSecret();
+      const pending = await this.inviteRepository.findPendingByOrgEmail({
+        email,
         agencyId,
-        userId: parsed.data.userId,
-        subRole: parsed.data.subRole,
-        status: 'active',
-        createdBy: actor,
-        updatedBy: actor,
       });
-      res.status(201).json({ success: true, message: 'Member added', data: member });
+      let invite;
+      if (pending) {
+        invite = await this.inviteRepository.update(pending.id, {
+          token: secret.tokenHash,
+          expiresAt: secret.expiresAt,
+          roleId: role.id,
+          subRole: parsed.data.subRole,
+          updatedBy: actor,
+        });
+      } else {
+        invite = await this.inviteRepository.create({
+          email,
+          token: secret.tokenHash,
+          expiresAt: secret.expiresAt,
+          outletId: null,
+          agencyId,
+          roleId: role.id,
+          subRole: parsed.data.subRole,
+          status: 'pending',
+          acceptedUserId: null,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+      }
+
+      const mail = await sendOrgMemberInviteEmail({
+        to: email,
+        orgKind: 'agency',
+        orgName: agency.name,
+        subRole: parsed.data.subRole,
+        rawToken: secret.rawToken,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: mail.emailed
+          ? 'Invitation sent — they must accept the email to join'
+          : 'Invitation created (email not configured) — share the accept link',
+        data: {
+          invite,
+          emailed: mail.emailed,
+          ...(mail.emailed ? {} : { acceptUrl: mail.acceptUrl }),
+        },
+      });
     } catch (error) {
       logger.error('[AgencyController.addMember] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -441,6 +573,15 @@ export class AgencyControllerClass {
       const target = await this.agencyMemberRepository.getById(memberId);
       if (!target || target.agencyId !== agencyId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // Same rule as outlet: never let an operator delete their own membership.
+      if (req.user?.id && target.userId === req.user.id) {
+        return res.status(409).json({
+          success: false,
+          message: 'You cannot remove yourself from the team',
+          data: null,
+        });
       }
 
       const members = await this.agencyMemberRepository.listByAgency(agencyId);

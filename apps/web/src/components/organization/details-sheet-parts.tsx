@@ -37,7 +37,11 @@ export function apiAssetUrl(
 	if (!path || path === DEFAULT_PROFILE_IMAGE) return undefined;
 	if (/^https?:\/\//.test(path) || path.startsWith("data:")) return path;
 	// R2 object key stored in DB — prepend public base from env or /auth/me.
-	if (path.startsWith("user/")) {
+	if (
+		path.startsWith("user/") ||
+		path.startsWith("agency/") ||
+		path.startsWith("outlet/")
+	) {
 		const r2 =
 			env.VITE_R2_PUBLIC_URL?.replace(/\/$/, "") || cachedR2PublicBase;
 		return r2 ? `${r2}/${path}` : undefined;

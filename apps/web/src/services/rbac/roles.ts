@@ -54,6 +54,10 @@ export async function fetchRoleById(
 	};
 }
 
+function normalizeRoleInput<T extends { roleName: string }>(input: T): T {
+	return { ...input, roleName: input.roleName.trim().toLowerCase() };
+}
+
 export async function createRole(
 	input: CreateRoleInput,
 	onRefreshFail: () => void,
@@ -63,7 +67,7 @@ export async function createRole(
 		success: boolean;
 		message: string;
 		data: BackendRole;
-	}>("/rbac/role", input);
+	}>("/rbac/role", normalizeRoleInput(input));
 
 	return {
 		success: response.data.success,
@@ -82,7 +86,7 @@ export async function updateRole(
 		success: boolean;
 		message: string;
 		data: BackendRole;
-	}>(`/rbac/role/${roleId}`, input);
+	}>(`/rbac/role/${roleId}`, normalizeRoleInput(input));
 
 	return {
 		success: response.data.success,

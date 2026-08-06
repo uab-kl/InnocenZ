@@ -381,7 +381,10 @@ export class UserControllerClass {
       const profile = await this.userProfileRepository.getByUserId(id);
       const previousImage = existingUser.profileImage;
       const profileImage = await saveProfileImageFile(
-        { id: existingUser.id, fullName: profile?.fullName },
+        {
+          id: existingUser.id,
+          fullName: profile?.fullName ?? existingUser.username,
+        },
         req.file,
       );
       // Only remove the previous object when the key changed (e.g. .jpg → .png).

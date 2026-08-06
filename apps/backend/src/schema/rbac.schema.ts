@@ -2,7 +2,13 @@ import { z } from 'zod';
 import { permissionTypeValues } from '@/types/rbac-constant';
 
 export const RoleSchema = z.object({
-  roleName: z.string().min(1).max(100),
+  // Seeded roles and guards match lowercase names (`admin`, `agency`, …).
+  roleName: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .transform((name) => name.toLowerCase()),
   status: z.string().default('active'),
 });
 

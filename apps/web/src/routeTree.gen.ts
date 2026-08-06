@@ -38,6 +38,7 @@ import { Route as AgencyPvRouteImport } from './routes/agency/pv'
 import { Route as AgencyRosterRouteImport } from './routes/agency/roster'
 import { Route as AgencySpecialServiceRouteImport } from './routes/agency/special-service'
 import { Route as AgencySubscriptionRouteImport } from './routes/agency/subscription'
+import { Route as InviteOrgMemberRouteImport } from './routes/invite/org-member'
 import { Route as OutletIndexRouteImport } from './routes/outlet/index'
 import { Route as OutletBillingRouteImport } from './routes/outlet/billing'
 import { Route as OutletBookingsRouteImport } from './routes/outlet/bookings'
@@ -214,6 +215,11 @@ const AgencySubscriptionRoute = AgencySubscriptionRouteImport.update({
   id: '/subscription',
   path: '/subscription',
   getParentRoute: () => AgencyRouteRoute,
+} as any)
+const InviteOrgMemberRoute = InviteOrgMemberRouteImport.update({
+  id: '/invite/org-member',
+  path: '/invite/org-member',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const OutletIndexRoute = OutletIndexRouteImport.update({
   id: '/',
@@ -401,6 +407,7 @@ export interface FileRoutesByFullPath {
   '/agency/roster': typeof AgencyRosterRoute
   '/agency/special-service': typeof AgencySpecialServiceRoute
   '/agency/subscription': typeof AgencySubscriptionRoute
+  '/invite/org-member': typeof InviteOrgMemberRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/calendar': typeof OutletCalendarRoute
@@ -459,6 +466,7 @@ export interface FileRoutesByTo {
   '/agency/roster': typeof AgencyRosterRoute
   '/agency/special-service': typeof AgencySpecialServiceRoute
   '/agency/subscription': typeof AgencySubscriptionRoute
+  '/invite/org-member': typeof InviteOrgMemberRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/calendar': typeof OutletCalendarRoute
@@ -521,6 +529,7 @@ export interface FileRoutesById {
   '/agency/roster': typeof AgencyRosterRoute
   '/agency/special-service': typeof AgencySpecialServiceRoute
   '/agency/subscription': typeof AgencySubscriptionRoute
+  '/invite/org-member': typeof InviteOrgMemberRoute
   '/outlet/billing': typeof OutletBillingRoute
   '/outlet/bookings': typeof OutletBookingsRoute
   '/outlet/calendar': typeof OutletCalendarRoute
@@ -584,6 +593,7 @@ export interface FileRouteTypes {
     | '/agency/roster'
     | '/agency/special-service'
     | '/agency/subscription'
+    | '/invite/org-member'
     | '/outlet/billing'
     | '/outlet/bookings'
     | '/outlet/calendar'
@@ -642,6 +652,7 @@ export interface FileRouteTypes {
     | '/agency/roster'
     | '/agency/special-service'
     | '/agency/subscription'
+    | '/invite/org-member'
     | '/outlet/billing'
     | '/outlet/bookings'
     | '/outlet/calendar'
@@ -703,6 +714,7 @@ export interface FileRouteTypes {
     | '/agency/roster'
     | '/agency/special-service'
     | '/agency/subscription'
+    | '/invite/org-member'
     | '/outlet/billing'
     | '/outlet/bookings'
     | '/outlet/calendar'
@@ -747,6 +759,7 @@ export interface RootRouteChildren {
   PolicyRoute: typeof PolicyRoute
   PrivacyRoute: typeof PrivacyRoute
   SignupRoute: typeof SignupRoute
+  InviteOrgMemberRoute: typeof InviteOrgMemberRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -953,6 +966,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/agency/subscription'
       preLoaderRoute: typeof AgencySubscriptionRouteImport
       parentRoute: typeof AgencyRouteRoute
+    }
+    '/invite/org-member': {
+      id: '/invite/org-member'
+      path: '/invite/org-member'
+      fullPath: '/invite/org-member'
+      preLoaderRoute: typeof InviteOrgMemberRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/outlet/': {
       id: '/outlet/'
@@ -1346,6 +1366,7 @@ const rootRouteChildren: RootRouteChildren = {
   PolicyRoute: PolicyRoute,
   PrivacyRoute: PrivacyRoute,
   SignupRoute: SignupRoute,
+  InviteOrgMemberRoute: InviteOrgMemberRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

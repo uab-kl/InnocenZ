@@ -1,6 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "@/lib/auth-context";
-import { getClient } from "@/lib/axios-v1";
 import {
 	addAgencyMember,
 	fetchAgencyMembers,
@@ -28,42 +27,10 @@ export interface OrgMember {
 }
 
 /**
- * Resolves an email to a user id for the "add member" flow.
- *
- * ⚠️ EXACT match only, and the result is never rendered as a list. `GET /user`
- * takes an `email` filter and is already open to agency and outlet callers, so
- * this introduces no new read — but showing whatever it returns would turn a
- * lookup into a people-browser for every org owner, which is the open privacy
- * question this project has recorded ("what may a venue read about a person?").
- * A lookup answers "does this address have an account?" and nothing else.
- */
-async function resolveUserIdByEmail(
-	email: string,
-	onRefreshFail: () => void,
-): Promise<{ userId: string; username?: string } | null> {
-	const client = getClient(onRefreshFail);
-	const response = await client.get<{
-		data: Array<{
-			id: string;
-			email?: string | null;
-			username?: string;
-		}> | null;
-	}>(`/user?email=${encodeURIComponent(email)}&pageSize=10`);
-	const wanted = email.trim().toLowerCase();
-	const hit = (response.data.data ?? []).find(
-		(u) => (u.email ?? "").trim().toLowerCase() === wanted,
-	);
-	return hit ? { userId: hit.id, username: hit.username } : null;
-}
-
-/**
  * Member management for one organisation, agency or outlet.
  *
- * The server owns every rule — a member id from another org 404s, and anything
- * that would leave the org with no active owner 409s. This hook deliberately
- * does NOT re-implement those checks client-side: a duplicated rule drifts, and
- * the copy that drifts is always the one the user sees. It surfaces the
- * server's message instead.
+ * Invite creates a `pending` membership + email; the invitee must accept before
+ * status becomes `active`. The server owns every other rule (scope, last owner).
  */
 export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 	const { logout } = useAuth();
@@ -87,7 +54,6 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 
 	const invalidate = () => {
 		void queryClient.invalidateQueries({ queryKey: key });
-		// The profile overlay reads the same rows for the owner/finance names.
 		void queryClient.invalidateQueries({ queryKey: [kind, "profile"] });
 	};
 
@@ -95,27 +61,18 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 		mutationFn: async (input: {
 			email: string;
 			subRole: string;
-		}): Promise<void> => {
+		}): Promise<{ message?: string }> => {
 			const id = orgId as string;
-			const found = await resolveUserIdByEmail(input.email, logout);
-			if (!found) {
-				throw new Error(
-					"No account with that email — they must sign up before they can be added",
-				);
-			}
-			const payload = { userId: found.userId, subRole: input.subRole };
-			if (kind === "agency") {
-				await addAgencyMember(id, payload, logout);
-				return;
-			}
-			await addOutletMember(id, payload, logout);
+			const payload = { email: input.email.trim(), subRole: input.subRole };
+			const res =
+				kind === "agency"
+					? await addAgencyMember(id, payload, logout)
+					: await addOutletMember(id, payload, logout);
+			return { message: res.message };
 		},
 		onSuccess: invalidate,
 	});
 
-	// Returns void rather than the response: the two services answer with
-	// different (structurally identical) types, and a union return buys nothing
-	// here because every caller discards it and re-reads the invalidated query.
 	const changeMember = useMutation({
 		mutationFn: async (input: {
 			memberId: string;
@@ -154,10 +111,6 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 
 /**
  * Pulls the server's refusal out of an axios error.
- *
- * The 409s carry the ONLY explanation of why a change was refused ("Cannot
- * remove the last active owner…"). Swallowing it for a generic "Something went
- * wrong" would leave the owner unable to tell a rule from an outage.
  */
 export function serverMessage(error: unknown, fallback: string): string {
 	if (error && typeof error === "object") {

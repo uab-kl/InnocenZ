@@ -3,7 +3,13 @@ import { z } from "zod";
 const permissionTypes = ["read", "create", "update", "delete"] as const;
 
 export const RoleSchema = z.object({
-	roleName: z.string().min(1).max(100),
+	// Persist lowercase to match seeded roles / requireRole checks.
+	roleName: z
+		.string()
+		.trim()
+		.min(1)
+		.max(100)
+		.transform((name) => name.toLowerCase()),
 	status: z.enum(["active", "inactive"]).default("active"),
 });
 

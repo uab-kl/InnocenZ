@@ -309,6 +309,10 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | X64 | **🟢 PRE-PILOT GATE 2 — demo login is DEV-only and absent from production builds.** `import.meta.env.DEV` gates the client demo branch so Vite drops it at build time. ⚠️ **The recorded credential was wrong for days:** it is `demo@atlas-agency.invalid` / `demo@velvet23.invalid` (RFC 2606 `.invalid`), not `owner@atlas-agency.my`; planted JWT is `alg:"none"` and the backend rejects it — blast radius was a demo shell, not real data. Proven by grepping the production `vite build` output (demo symbols **0**, real login path still present). | **Web (auth)** | `routes/login.tsx` · `lib/auth/*` | production build grep | ✅ Proven |
 | X65 | **⚠️ WHATSAPP CLOUD API OTP + PR MOBILE SIGN-UP RESTRUCTURE — CODE LANDED, TABLE + META NOT.** Public `POST /auth/otp/send` + `/auth/otp/verify` (sha256 `code_hash` only; 5 min / 60s resend / 5 attempts); Meta webhook at `GET\|POST /webhooks/whatsapp`; mobile sign-up split into `screens/sign-up/step1…6` + `safe-area.tsx`; `.env.example` documents `META_WHATSAPP_*`. 🔴 **No `phone_verification` migration ships with this code** — the model comment says "Migration 0083" but **0083 is already `pv_line_outlet_fk`** on this branch; table does not exist until a new migration is authored. Also needs Meta Business verification + filled env. Not E2E on a real phone. | **PR (mobile) ↔ Auth** | `otp.controller.ts` · `phone-verification.*` · `features/whatsapp/*` · `screens/sign-up/*` | code only | ⚠️ Reported (needs DDL + Meta) |
 | X66 | **🟢 AGENCY RECEIPT EDITOR LANDED (`57bd165`) — the slice that left the DB ahead of the repo.** Agency can correct drinks/tips on a scanned or self-logged receipt in place (order no, printed date/time, qty/commission, add missed line) through **targeted** receipt endpoints — never the destructive `PUT /payment-voucher/:id` line wipe. Same editor opens from the Receipts sub-tab **and** inside the dispute queue. Migrations **0083** (`outlet_id` FK on lines, 18/18 backfilled) and **0084** (`review_withdrawn_at`) were already live on `innocenz-test`; this commit ships the code that reads them. ⚠️ **Not a live agency click-through yet** — §9 day/receipt agreement audit items (PvDetail dispute, disputed-cell withdraw UX, etc.) stay open. | **Agency → PR** | `AgencyReceiptEditor` · `use-agency-receipt-edit` · `DisputeQueuePanel` · `0083`/`0084` | live schema + committed code | ⚠️ Reported |
+| X67 | **🟢 ORG SIGNUP ADDRESS → `agency`/`outlet`, NOT `user_profile`.** Migration **0098**: agency gains `city`/`postcode`/`state`/`country`; outlet gains `city`. Register accepts structured address fields and writes them on the org row; portal owner profile keeps PIC name only. PR home address unchanged on `user_profile`. | **Agency / Outlet** | `0098_org_address_*` · `auth.controller` · `agency.model` · `outlet.model` | migrate:deploy applied | ✅ Schema live |
+| X68 | **🟢 PENDING ORG MAY SIGN IN — PROFILE ONLY.** Membership APIs now return `outletStatus` / `agencyStatus`. Portal identity stores it; while `pending_review`, login lands on Settings/Profile, operational nav is hidden, and route guards bounce other paths. Signup copy updated. Login still allowed (X55 carve-out). ⚠️ Client-side gate only — API write lockdown for pending orgs is a follow-up. | **Outlet / Agency** | membership repos · `*-identity` · `*-rbac` · `login.tsx` · portal routes | code | ⚠️ Reported (needs live pending signup click-through) |
+| X69 | **🟢 SUSPENDED ORG = RED + PROFILE ONLY (same gate as pending).** Product change from X55: `suspended` no longer refuses login / kills JWT. Backend `suspendedOrgBlock` now denies **`inactive` only**. Portal treats `suspended` like `pending_review` via `isOrgProfileOnly` (nav empty, route guard, login → Settings/Profile). Status badge + banner use **red** (`--iz-red` / red banner); pending stays amber. Probe `probe-org-suspension.ts` updated: suspend → allow; inactive → block. ⚠️ Client-side gate only for writes — same follow-up as X68. | **Outlet / Agency** | `org-status.ts` (BE+FE) · `*-rbac` · `PendingReviewBanner` · settings/profile · `login.tsx` · probe | code | ⚠️ Reported |
+| X70 | **🟢 TEAM: YOU CANNOT REMOVE YOURSELF.** `DELETE …/members/:memberId` returns 409 when `target.userId === req.user.id` (agency + outlet). UI hides trash on your own row and labels it `(you)`. Last-active-owner guard (X63) still applies for removing others. | **Outlet / Agency** | `outlet.controller` · `agency.controller` · `OrgMembersPanel` | code | ⚠️ Reported |
 | X5 | `GET /user` no longer leaks credentials — `passwordHash` occurrences **0** for admin/agency/outlet; PR 403 on the list and on others' records, **200 on its own** (mobile profile call); all 4 logins still succeed | all | `user.routes.ts` · `withUserProfile()` | user / user_profile | ✅ Verified (fix `9a6eecc`) |
 | X56 | **🟢 THE AGENCY NOW HAS THE SAME NEGOTIATED-PRICE HANDSHAKE AS THE OUTLET — Custom is to an agency what the POS add-on is to a venue.** Until now every part of that pipeline was outlet-only: the agency Subscription screen was READ-ONLY (no switch, no re-quote, no exit, no waiting state), its Custom rows carried no previous price, and the admin drawer framed Custom as a plain plan swap. **Backend:** `withPreviousAddonPrice` → `withPreviousNegotiatedPrice` (field `previousNegotiatedAmount`) covering BOTH types — POS reads the active `kind:addon` line, Custom reads the active `kind:plan` line and only when that plan IS Custom, since a list price is not a negotiated one; **a zero counts as no price** (the catalog placeholder). `applyResolvedPriceToLedger` for `custom_renegotiation` now routes a request that NAMES a plan through `applyPlanChangeToLedger` — joining Custom, re-agreeing it, or leaving it all write a new ledger row so the old price survives as history; re-pricing in place had left an agency that asked for Custom still recorded on Growth while billed the Custom figure. New `GET /admin-request/mine/custom-quote` (session-scoped, before `/:id`). **Agency screen:** rate-card Switch buttons, a *Negotiated tier* card with `Ask for a new price`, a waiting banner, and the hero tier/price now read from the LEDGER not the demo PV curve — it used to tell an agency on Custom that it was on Starter. Ordinary tier→tier stays `plan_change`/`direct` (list price, nothing to decide); anything touching Custom is `custom_renegotiation` and WAITS, which is what stops an agency setting or ending its own price — that is how Atlas ended up on Custom at RM 0. **Verified live:** `previousNegotiatedAmount` = 99999.00 on all 5 Emhub POS rows, **null** for Delta (moved off Custom to Growth 500.00 — correct) and **null** for Atlas (Custom 0.00 placeholder — correct); `/mine/custom-quote` returns 200; web+backend `tsc` clean on every touched file | **Agency ↔ Admin** | `admin-request.controller.ts` · `admin-request.routes.ts` · `use-agency-subscription.ts` · `routes/agency/subscription.tsx` · `routes/admin/service/requests.tsx` | live API (reads) + tsc | ✅ Verified (write path needs one click — §9) |
 
@@ -1208,6 +1212,11 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 
 > ## 🔒 STANDING RULE — BRANCH `jk` IS THE OWNER'S. DO NOT BREAK IT.
+> **6 Aug 2026 — Admin approve emails (Brevo HTML templates).**
+> semutz-style `features/mailing/templates/*.html` with `{{var:…}}`.
+> Approving outlet/agency emails the owner (`org_approved_notification.html`).
+> Team invite uses `org_member_invite.html`. Build copies templates to dist.
+
 >
 > `jk` is **jinkai's** branch; `SL` is the teammate's (outlet + agency web).
 > When working on `jk`:
@@ -1377,6 +1386,50 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > the client. Either `pr.nickname` is unset or equal to her legal name in the DB — check **Manage PR**
 > — or the backend has not reloaded the new join. Do not add more UI for this until the column is
 > confirmed.
+> **6 Aug 2026 — Team invite table (`org_member_invite`).**
+> Invite stores email, token hash, expires_at, role_id (FK → role), and
+> membership sub_role. outlet_user/agency_user written only on accept.
+> Migration **0102**. Run `pnpm migrate:deploy` + restart backend.
+
+
+> **6 Aug 2026 — Admin RBAC: role names saved lowercase.**
+> Create/update role trims + lowercases `roleName` (Zod + client) so DB
+> matches seeded `admin`/`agency`/`outlet`/`pr` and role guards.
+
+
+> **6 Aug 2026 — Settings address UI matches signup.**
+> Malaysia-locked country, searchable state/city cascading selects, same
+> field order/labels as signup. Saves resolved state/country names.
+
+
+> **6 Aug 2026 — Outlet + agency Settings: structured address fields.**
+> Location no longer dumps into address_line_1 only. Edit line1 / line2 /
+> city / postcode / state / country; each column saves separately.
+
+
+> **6 Aug 2026 — Outlet Location saves address_line_1 only.**
+> No longer clears address_line_2 / city / postcode / state on Settings save.
+> Location field reads/writes street line only.
+
+
+> **6 Aug 2026 — Portal header avatar = personal photo.**
+> Top-right chip used org `avatarPhoto` (logo). Now `/auth/me` `profileImage`.
+
+
+> **6 Aug 2026 — Login & security avatar row layout.**
+> Upload used `.iz-btn` (width 100%), which crushed “Your photo” into one
+> word per line. Now `iz-btn-sm` + `!w-auto`.
+
+
+> **6 Aug 2026 — Team: owner cannot delete self (X70).**
+> DELETE member returns 409 if the target is the signed-in user. OrgMembersPanel
+> hides the trash on your row and shows "(you)". Soft-refresh Settings/Profile.
+
+
+> **6 Aug 2026 — Real Settings: hide demo Finance/Ops/IC/Notifications cards.**
+> On a backend login, outlet/agency Settings no longer shows the prototype
+> Finance Head / Ops Head / IC / notification toggles (those were store-only).
+> Team is `OrgMembersPanel` from DB; owner fields from `user` + org row.
 
 
 > **6 Aug 2026 — THIS-WEEK WENT BLANK THE MOMENT THE VOUCHER WAS ISSUED
@@ -1409,6 +1462,61 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > the "Forgot to check out?" to-do card is collapsible, and its three facts are
 > three labelled lines instead of one wrapping ribbon; the Payment grid's `TOT`
 > column now reads **TOTAL / week** (`2d0c5e2`).
+> **6 Aug 2026 — Real sessions: strip ALL Velvet/Atlas demo fixtures.**
+> `buildBlankPortalReset` now uses `BLANK_OUTLET_*` / `BLANK_AGENCY_*` (empty
+> names, no logos, empty drink menu) instead of DEFAULT Velvet/Atlas shapes.
+> Settings/Profile merge onto blanks too. Cursor rule
+> `.cursor/rules/no-demo-data-on-real-sessions.mdc` records the standing rule.
+> Sign out + back in after pull.
+
+
+> **6 Aug 2026 — Outlet/agency Settings no longer paint Velvet/Atlas demo.**
+> Real sessions merged sparse API overlays onto demo defaults, so empty
+> finance/ops / IC / avatar left Chen Wei Jie / Velvet 23 / Atlas on screen.
+> Now: blank base + real outlet/agency + members (+ logo, city in address).
+> Sign out and back in (or hard refresh) after pull.
+
+
+> **6 Aug 2026 — Pending outlet/agency can sign in, profile only (X68).**
+> Membership list APIs now include org `outletStatus` / `agencyStatus`. While
+> `pending_review`, login still works (X55) but the portal is limited to
+> Settings/Profile: empty operational nav, route guard bounce, login redirect,
+> and a pending banner. Signup success copy no longer says “wait before sign-in”.
+> Restart backend so membership responses include the new fields.
+
+
+> **6 Aug 2026 — Suspended org = red + profile only (X69).**
+> `suspended` may sign in (no longer full X55 deny). Portal limited like pending
+> via `isOrgProfileOnly`. Status + banner are **red**; pending stays amber.
+> Full login deny remains for `inactive` only. Restart backend after pull.
+
+
+> **6 Aug 2026 — Org signup logo → R2 (migration 0099).**
+> Outlet/agency register now uploads `logoBase64` to Cloudflare R2 and stores
+> the object key on `outlet.logo_image` / `agency.logo_image` (agency column
+> added in **0099**). Paths: `agency/{id}_{name}/logo/…` and
+> `outlet/{id}_{name}/logo/…`. Not written to `user.profileImage`.
+> User avatars (any role): `user/{id}_{name}/profile/…`.
+> Needs `R2_*` env. Run `pnpm migrate:deploy` + restart backend.
+> Follow-up **0100**: re-ensures `outlet.city` after live register hit 42703.
+
+
+> **6 Aug 2026 — Migration 0098: org address is structured + stays on the org.**
+> Web signup already collected line1/line2/city/postcode/state/country, but
+> register only had `companyAddress` and dumped it onto `user_profile` /
+> `address_line_1`. Now: **agency** gains `city`/`postcode`/`state`/`country`;
+> **outlet** gains `city` (already had the rest). Register writes those columns
+> on `agency`/`outlet` only; portal `user_profile` keeps PIC name, **no home
+> address**. PR home address remains on `user_profile`. Run
+> `pnpm migrate:deploy` + restart backend.
+
+
+> **6 Aug 2026 — Web outlet/agency register now creates org rows.**
+> `POST /auth/register` for `accountType` agency|outlet used to write only
+> `user` + `user_role` + empty `user_profile` (Zod stripped company fields). It
+> now accepts org signup fields, fills PIC on `user_profile`, and creates
+> `agency`/`outlet` (`pending_review`) plus owner row on `agency_user` /
+> `outlet_user`. Restart backend after pull.
 
 
 > **5 Aug 2026 — `main.pr` DROPPED (migration 0089).** Ops `pr_id` values remapped to
@@ -4914,6 +5022,15 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 | Date | What changed / done | Area (role link) | Status |
 |------|---------------------|------------------|--------|
+| 2026-08-06 | **Outlet/agency register writes org + membership.** Backend now creates `agency`/`outlet` (`pending_review`) + owner on `agency_user`/`outlet_user`, and fills PIC on `user_profile` (was user+role+empty profile only; company fields were Zod-stripped). | Web (signup) + API | ✅ done |
+| 2026-08-06 | **Agency/outlet personal avatar upload.** Shared `AccountAvatarCard` on Login & security — uploads `user.profile_image` (not org logo). | Web (outlet/agency) | ⚠️ reported |
+| 2026-08-06 | **R2 path redo.** Logos: `agency\|outlet/{id_name}/logo/…`. All role avatars: `user/{id_name}/profile/…`. `isR2ObjectKey` + web `apiAssetUrl` accept `agency/`/`outlet/`. | API + Web | ⚠️ reported |
+| 2026-08-06 | **Outlet/agency logo editable after signup.** `PUT` accepts `logoBase64`/`clearLogo`; Settings Change photo + Save uploads to R2. | Web + API | ⚠️ reported |
+| 2026-08-06 | **Outlet owner can edit name + owner name + location.** Owner-only (`editSettings`). Save writes outlet `name` + address, and `PATCH /user/:id` username. Finance/ops stay read-only. | Web (outlet settings) | ⚠️ reported |
+| 2026-08-06 | **Fix: Settings Save never hit the API.** Client required mobile/owner before save even though those fields are locked (often empty) — toast blocked PUT. Real sessions now only validate + persist org name. | Web (outlet/agency settings) | ⚠️ reported |
+| 2026-08-06 | **Profile edit UI redesign.** Edit CTA in hero; amber editing banner; clear field boxes vs locked rows; sticky Save/Cancel dock; photo Change/Remove actions. Shared `profile-settings-ui`. | Web (outlet/agency settings) | ⚠️ reported |
+| 2026-08-06 | **Suspended org = red + profile only (X69).** Login allowed; portal limited like pending. Status/banner red. `inactive` still full deny. | Web (outlet/agency) + API | ⚠️ reported |
+| 2026-08-06 | **Pending outlet/agency can sign in, profile only (X68).** Membership APIs return org status; portal limits pending orgs to Settings/Profile until admin approves. | Web (outlet/agency) | ⚠️ reported |
 | 2026-08-05 | **Register ID OCR checks front vs back side.** Matching the typed ID alone is not enough — MyKad/work-permit OCR also guesses face (keywords). Wrong face → fail. Same photo / same face used for both slots → both fail. Passport stays one-page. | PR (register) | ✅ done |
 | 2026-08-05 | **Register step 1 blocks duplicate phone + IC.** New public `POST /auth/register/check` — refuses if phone or `user_profile.id_no` (normalized) already exists. Wizard Continue on step 1 calls it and marks the field(s). Also: signup OTP send → 409 if phone taken; `POST /auth/register` refuses duplicate ID. | PR (register) | ✅ done |
 | 2026-08-05 | **Portfolio drag-to-swap fixed.** Long-press + drag onto another slot (filled or empty) swaps photos. Hit-test uses local coords; web uses pointer listeners so ScrollView can’t kill the gesture. If drag is interrupted, photo stays picked — tap another slot to finish the swap. | PR (Profile) | ✅ done |

@@ -43,13 +43,21 @@ export const GeocodeQuerySchema = z.object({
 });
 
 export const AddOutletMemberSchema = z.object({
-  userId: z.string().uuid('Invalid user ID'),
+  /** Preferred — invite by email; user must already have an InnocenZ account. */
+  email: z.string().email('Invalid email').optional(),
+  userId: z.string().uuid('Invalid user ID').optional(),
   subRole: z.enum(outletUserSubRoleValues),
+}).refine((d) => Boolean(d.email?.trim() || d.userId), {
+  message: 'email or userId is required',
 });
 
 export const UpdateOutletMemberSchema = z.object({
   subRole: z.enum(outletUserSubRoleValues).optional(),
   status: z.string().optional(),
+});
+
+export const AcceptOrgMemberInviteSchema = z.object({
+  token: z.string().trim().min(16).max(128),
 });
 
 export type CreateOutletInput = z.infer<typeof CreateOutletSchema>;

@@ -6,6 +6,7 @@ import {
 	useOrgMembers,
 } from "@agency-portal/hooks/use-org-members";
 import { useStore } from "@agency-portal/lib/store";
+import { useProfile } from "@/lib/auth/use-profile";
 import { Mail, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 
@@ -45,6 +46,7 @@ export function OrgMembersPanel({
 	canManage: boolean;
 }) {
 	const toast = useStore((s) => s.toast);
+	const { data: me } = useProfile();
 	const { members, isLoading, addMember, changeMember, removeMember } =
 		useOrgMembers(kind, orgId);
 	const [email, setEmail] = useState("");
@@ -64,11 +66,18 @@ export function OrgMembersPanel({
 			return;
 		}
 		try {
-			await addMember.mutateAsync({ email: trimmed, subRole: newRole });
+			const result = await addMember.mutateAsync({
+				email: trimmed,
+				subRole: newRole,
+			});
 			setEmail("");
-			toast(`${trimmed} added as ${labelFor(kind, newRole)}`, "success");
+			toast(
+				result.message?.trim() ||
+					`Invitation sent to ${trimmed} — they must accept the email to join`,
+				"success",
+			);
 		} catch (error) {
-			toast(serverMessage(error, "Could not add that person"), "warn");
+			toast(serverMessage(error, "Could not invite that person"), "warn");
 		}
 	};
 
@@ -110,7 +119,9 @@ export function OrgMembersPanel({
 					<p className="iz-tiny iz-muted2">No team members yet.</p>
 				)}
 
-				{members.map((member) => (
+				{members.map((member) => {
+					const isSelf = Boolean(me?.id && member.userId === me.id);
+					return (
 					<div
 						key={member.id}
 						className="flex flex-wrap items-center gap-2 border-b border-[var(--iz-line)] py-2.5 last:border-0"
@@ -118,6 +129,11 @@ export function OrgMembersPanel({
 						<div className="min-w-0 flex-1">
 							<div className="truncate text-sm font-semibold text-[var(--iz-txt)]">
 								{member.username || member.email || "—"}
+								{isSelf && (
+									<span className="iz-tiny iz-muted ml-1.5 font-medium">
+										(you)
+									</span>
+								)}
 							</div>
 							<div className="iz-tiny iz-muted truncate">
 								{member.email ?? "no email"}
@@ -150,6 +166,7 @@ export function OrgMembersPanel({
 						)}
 
 						{canManage &&
+							!isSelf &&
 							(confirmingId === member.id ? (
 								<span className="flex items-center gap-1">
 									<button
@@ -178,20 +195,14 @@ export function OrgMembersPanel({
 								</button>
 							))}
 					</div>
-				))}
+					);
+				})}
 			</IzCard>
 
 			{canManage && (
 				<>
-					<IzSectionLabel>Add a team member</IzSectionLabel>
+					<IzSectionLabel>Invite a team member</IzSectionLabel>
 					<IzCard>
-						{/* No invite is sent: there is no mailer. The person must already
-						    have an account, and this attaches it to the organisation. Said
-						    plainly here rather than discovered as a failure. */}
-						<p className="iz-tiny iz-muted mb-2">
-							They must already have an InnocenZ account — no invite email is
-							sent.
-						</p>
 						<div className="flex flex-wrap items-center gap-2">
 							<span className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-[var(--iz-line)] px-2.5">
 								<Mail className="h-3.5 w-3.5 shrink-0 iz-muted" />
@@ -200,7 +211,7 @@ export function OrgMembersPanel({
 									placeholder="person@example.com"
 									value={email}
 									onChange={(e) => setEmail(e.target.value)}
-									aria-label="Email of the person to add"
+									aria-label="Email of the person to invite"
 								/>
 							</span>
 							<select
@@ -222,7 +233,7 @@ export function OrgMembersPanel({
 								onClick={() => void onAdd()}
 							>
 								<UserPlus className="h-3.5 w-3.5" />
-								{addMember.isPending ? "Adding…" : "Add"}
+								{addMember.isPending ? "Sending…" : "Invite"}
 							</button>
 						</div>
 					</IzCard>

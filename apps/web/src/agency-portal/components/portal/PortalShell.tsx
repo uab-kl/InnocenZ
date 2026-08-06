@@ -25,7 +25,9 @@ import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
+import { useProfile } from "@/lib/auth/use-profile";
 
 export type PortalKind = "agency" | "outlet";
 
@@ -146,7 +148,7 @@ function PortalAvatar({
 
 	return (
 		<div
-			className={`iz-avatar${className ? ` ${className}` : ""}${avatarPhoto ? " iz-avatar-photo iz-avatar-photo--logo" : ""}`}
+			className={`iz-avatar${className ? ` ${className}` : ""}${avatarPhoto ? " iz-avatar-photo" : ""}`}
 			style={
 				avatarPhoto ? undefined : { background: portalAvatarGradient(portal) }
 			}
@@ -267,7 +269,9 @@ function PortalHeader({
 			<div className="min-w-0">
 				<h1 className="font-sora text-xl font-extrabold tracking-tight text-[var(--iz-txt)] md:text-2xl">
 					{portalGreeting()},{" "}
-					<span className="text-[var(--iz-gold-l)]">{orgName}</span>
+					<span className="text-[var(--iz-gold-l)]">
+						{ownerName.trim() || orgName}
+					</span>
 				</h1>
 				{showDatetime &&
 					(onAgencyRoster ? (
@@ -331,6 +335,10 @@ export function PortalShell({
 	const outletOwner = useStore((s) => s.outletOwner);
 	const owner = portal === "agency" ? agencyOwner : outletOwner;
 	const orgName = owner.orgName;
+	const { data: me } = useProfile();
+	// Header chip is the signed-in person's photo (`user.profile_image`), not
+	// the organisation logo kept on outletOwner/agencyOwner.avatarPhoto.
+	const personalPhoto = apiAssetUrl(me?.profileImage) ?? null;
 
 	const subLabel =
 		portal === "agency"
@@ -405,8 +413,13 @@ export function PortalShell({
 				<PortalHeader
 					portal={portal}
 					orgName={orgName}
-					ownerName={owner.ownerName}
-					avatarPhoto={owner.avatarPhoto}
+					ownerName={
+						me?.username?.trim() ||
+						me?.displayName?.trim() ||
+						owner.ownerName.trim() ||
+						""
+					}
+					avatarPhoto={personalPhoto}
 					subLabel={subLabel}
 					demoData={demoData}
 				/>

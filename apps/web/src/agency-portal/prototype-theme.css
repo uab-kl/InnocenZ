@@ -5866,6 +5866,16 @@
 [data-portal="outlet"] .iz-portal-main .iz-sect-label {
 	font-size: 16px;
 }
+[data-portal="outlet"] .iz-portal-main .iz-profile-field__label {
+	font-size: 16px;
+}
+[data-portal="outlet"] .iz-portal-main .iz-profile-field__value,
+[data-portal="outlet"] .iz-portal-main .iz-profile-field__input {
+	font-size: 19px;
+}
+[data-portal="outlet"] .iz-portal-main .iz-profile-field__hint {
+	font-size: 18px;
+}
 [data-portal="outlet"] .iz-portal-main .text-xs {
 	font-size: 0.9375rem !important;
 	line-height: 1.35rem !important;
@@ -7323,7 +7333,9 @@
 	padding: 12px 0;
 	border-bottom: 1px solid var(--iz-line);
 }
-.iz-profile-field:last-child {
+/* Drop the line only on the last field in a vertical stack — not the
+   right cell of a 2-col grid (postcode/state were losing their underline). */
+.iz-profile-section > .iz-profile-field:last-child {
 	border-bottom: 0;
 	padding-bottom: 2px;
 }
@@ -7331,7 +7343,7 @@
 	display: flex;
 	align-items: center;
 	gap: 6px;
-	font-size: 11px;
+	font-size: var(--iz-fs-label);
 	font-weight: 700;
 	letter-spacing: 0.04em;
 	text-transform: uppercase;
@@ -7347,7 +7359,7 @@
 .iz-profile-field__value {
 	margin: 0;
 	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 15px;
+	font-size: var(--iz-fs-sm);
 	font-weight: 650;
 	line-height: 1.35;
 	color: var(--iz-txt);
@@ -7355,7 +7367,7 @@
 }
 .iz-profile-field__hint {
 	margin: 4px 0 0;
-	font-size: 11px;
+	font-size: var(--iz-fs-tiny);
 	line-height: 1.35;
 	color: var(--iz-muted2);
 }
@@ -7367,7 +7379,7 @@
 	background: rgba(8, 5, 15, 0.45);
 	color: var(--iz-txt);
 	font-family: var(--font-sora, "Sora", sans-serif);
-	font-size: 15px;
+	font-size: var(--iz-fs-sm);
 	font-weight: 650;
 	outline: none;
 	transition:
@@ -17031,6 +17043,24 @@ html:has(.iz-pr-app) {
 .iz-portal > main .iz-sect-label {
 	font-size: 16px;
 	letter-spacing: 1.5px;
+}
+.iz-portal-main .iz-profile-field__label,
+.iz-portal-auth .iz-profile-field__label,
+.iz-portal > main .iz-profile-field__label {
+	font-size: 16px;
+}
+.iz-portal-main .iz-profile-field__value,
+.iz-portal-main .iz-profile-field__input,
+.iz-portal-auth .iz-profile-field__value,
+.iz-portal-auth .iz-profile-field__input,
+.iz-portal > main .iz-profile-field__value,
+.iz-portal > main .iz-profile-field__input {
+	font-size: 19px;
+}
+.iz-portal-main .iz-profile-field__hint,
+.iz-portal-auth .iz-profile-field__hint,
+.iz-portal > main .iz-profile-field__hint {
+	font-size: 17px;
 }
 .iz-portal-main .iz-btn,
 .iz-portal-auth .iz-btn,

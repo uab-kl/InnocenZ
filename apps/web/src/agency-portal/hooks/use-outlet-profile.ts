@@ -6,6 +6,13 @@ import {
 	BLANK_OUTLET_SETTINGS,
 	type OutletSettings,
 } from "@agency-portal/lib/outlet-demo";
+import {
+	EMPTY_ORG_ADDRESS,
+	joinOrgAddress,
+	orgAddressFromRow,
+	resolveOrgAddressForSave,
+	type OrgAddress,
+} from "@agency-portal/lib/org-address";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
@@ -15,7 +22,6 @@ import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import {
 	fetchOutletById,
 	fetchOutletMembers,
-	type Outlet,
 	type OutletMember,
 	updateOutlet,
 } from "@/services/outlet";
@@ -36,9 +42,10 @@ export interface OutletProfileMemberOverlay {
 	email?: string;
 }
 
-/** Backend-backed subset of the demo outlet settings (venue + location). */
-export interface OutletProfileSettingsOverlay {
+/** Backend-backed venue + address (each column, not a single Location blob). */
+export interface OutletProfileSettingsOverlay extends Partial<OrgAddress> {
 	venueName?: string;
+	/** Joined display for read-only surfaces (outlet profile card). */
 	location?: string;
 }
 
@@ -69,21 +76,6 @@ function memberOverlay(
 	if (member.username) overlay.name = member.username;
 	if (member.email) overlay.email = member.email;
 	return overlay;
-}
-
-/** Join the outlet's address parts into one display line, skipping blanks. */
-function joinAddress(outlet: Outlet): string {
-	return [
-		outlet.addressLine1,
-		outlet.addressLine2,
-		outlet.city,
-		outlet.postcode,
-		outlet.state,
-		outlet.country,
-	]
-		.map((p) => p?.trim())
-		.filter((p): p is string => !!p)
-		.join(", ");
 }
 
 /**
@@ -193,7 +185,9 @@ export function useOutletProfile() {
 		const venueName = outlet?.name?.trim() || identity?.outletName?.trim();
 		if (venueName) overlay.venueName = venueName;
 		if (outlet) {
-			overlay.location = joinAddress(outlet);
+			const address = orgAddressFromRow(outlet);
+			Object.assign(overlay, address);
+			overlay.location = joinOrgAddress(address);
 		}
 		return overlay;
 	}, [backed, outletQuery.data, identity]);
@@ -203,6 +197,8 @@ export function useOutletProfile() {
 		mutationFn: async (payload: {
 			venueName?: string;
 			ownerName?: string;
+			address?: OrgAddress;
+			/** @deprecated Prefer `address` — maps only to address_line_1. */
 			location?: string;
 			/** New logo as a data URL (`data:image/…;base64,…`). */
 			logoDataUrl?: string | null;
@@ -217,16 +213,16 @@ export function useOutletProfile() {
 			if (payload.venueName?.trim()) {
 				outletPatch.name = payload.venueName.trim();
 			}
-			if (payload.location !== undefined) {
-				// Settings shows one "Location" line (joined address). Persist it as
-				// address_line_1 and clear the other address parts so the joined
-				// display round-trips instead of appending stale city/postcode.
-				const line = payload.location.trim();
-				outletPatch.addressLine1 = line || undefined;
-				outletPatch.addressLine2 = "";
-				outletPatch.city = "";
-				outletPatch.postcode = "";
-				outletPatch.state = "";
+			if (payload.address) {
+				const resolved = resolveOrgAddressForSave(payload.address);
+				outletPatch.addressLine1 = resolved.addressLine1;
+				outletPatch.addressLine2 = resolved.addressLine2;
+				outletPatch.city = resolved.city;
+				outletPatch.postcode = resolved.postcode;
+				outletPatch.state = resolved.state;
+				outletPatch.country = resolved.country;
+			} else if (payload.location !== undefined) {
+				outletPatch.addressLine1 = payload.location.trim();
 			}
 			if (payload.clearLogo) {
 				outletPatch.clearLogo = true;
@@ -268,6 +264,9 @@ export function useOutletProfile() {
 		finance,
 		ops,
 		settings,
+		address: settings
+			? orgAddressFromRow(settings)
+			: { ...EMPTY_ORG_ADDRESS },
 		isLoading:
 			outletQuery.isLoading ||
 			membersQuery.isLoading ||

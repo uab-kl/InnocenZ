@@ -26,6 +26,8 @@ import { SubscriptionControllerClass } from '@/features/subscription/subscriptio
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
 import { OutletControllerClass } from '@/features/outlet/outlet.controller.js';
+import { OrgMemberInviteControllerClass } from '@/features/auth/org-member-invite.controller.js';
+import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository.js';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
@@ -84,6 +86,7 @@ export const agencyRepository = new AgencyRepositoryClass();
 export const agencyMemberRepository = new AgencyMemberRepositoryClass();
 export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();
+export const orgMemberInviteRepository = new OrgMemberInviteRepositoryClass();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -111,7 +114,10 @@ export const permissionController = new PermissionControllerClass(permissionRepo
 export const rolePermissionRepository = new RolePermissionRepositoryClass();
 export const rolePermissionController = new RolePermissionControllerClass(rolePermissionRepository);
 
-export const userController = new UserControllerClass(userRepository, userProfileRepository);
+export const userController = new UserControllerClass(
+  userRepository,
+  userProfileRepository,
+);
 export const userRoleController = new UserRoleControllerClass(userRoleRepository);
 export const auditLogRepository = new AuditLogRepositoryClass();
 
@@ -124,8 +130,24 @@ export const notificationController = new NotificationControllerClass(notificati
 export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
 
-export const outletController = new OutletControllerClass(outletRepository, outletMemberRepository);
+export const outletController = new OutletControllerClass(
+  outletRepository,
+  outletMemberRepository,
+  userRepository,
+  roleRepository,
+  orgMemberInviteRepository,
+);
 
+export const orgMemberInviteController = new OrgMemberInviteControllerClass(
+  orgMemberInviteRepository,
+  outletMemberRepository,
+  agencyMemberRepository,
+  outletRepository,
+  agencyRepository,
+  userRepository,
+  roleRepository,
+  userRoleRepository,
+);
 
 export const platformConfigRepository = new PlatformConfigRepositoryClass();
 export const platformConfigController = new PlatformConfigControllerClass(platformConfigRepository);
@@ -174,6 +196,8 @@ export const agencyController = new AgencyControllerClass(
   prRepository,
   userRepository,
   userProfileRepository,
+  roleRepository,
+  orgMemberInviteRepository,
 );
 
 export const specialServiceRepository = new SpecialServiceRepositoryClass();

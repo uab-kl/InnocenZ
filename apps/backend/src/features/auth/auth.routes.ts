@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authController, agencyRepository, otpController } from '@/composition-root.js';
+import { authController, agencyRepository, otpController, orgMemberInviteController } from '@/composition-root.js';
 import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
@@ -7,6 +7,16 @@ import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js'
 const router = Router();
 
 router.post('/login', authController.login.bind(authController));
+
+router.get(
+  '/org-member-invite',
+  orgMemberInviteController.preview.bind(orgMemberInviteController),
+);
+router.post(
+  '/org-member-invite/accept',
+  optionalAuthenticateJWT,
+  orgMemberInviteController.accept.bind(orgMemberInviteController),
+);
 
 /**
  * Agency names for the PR sign-up wizard. Public by necessity: a PR choosing

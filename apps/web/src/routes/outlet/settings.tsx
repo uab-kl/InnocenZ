@@ -1,3 +1,4 @@
+import { AccountAvatarCard } from "@agency-portal/components/auth/AccountAvatarCard";
 import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
@@ -14,16 +15,23 @@ import {
 	ProfileSectionCard,
 	ProfileSettingsField,
 } from "@agency-portal/components/portal/profile-settings-ui";
+import { ProfileAddressFields } from "@agency-portal/components/portal/profile-address-fields";
 import { useOutletProfile } from "@agency-portal/hooks/use-outlet-profile";
 import {
 	BLANK_OUTLET_FINANCE_HEAD,
 	BLANK_OUTLET_OPS_HEAD,
 	BLANK_OUTLET_OWNER,
-	BLANK_OUTLET_SETTINGS,
 	type OutletFinanceHead,
 	type OutletOpsHead,
 	type OutletOwnerSettings,
 } from "@agency-portal/lib/outlet-demo";
+import {
+	EMPTY_ORG_ADDRESS,
+	joinOrgAddress,
+	orgAddressFromRow,
+	resolveOrgAddressForSave,
+	type OrgAddress,
+} from "@agency-portal/lib/org-address";
 import { getOutletIdentity, saveOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
@@ -36,7 +44,6 @@ import {
 import {
 	Building2,
 	Mail,
-	MapPin,
 	Phone,
 	Shield,
 	User,
@@ -101,7 +108,10 @@ function OutletSettingsPage() {
 	const [draft, setDraft] = useState(outletOwner);
 	const [financeDraft, setFinanceDraft] = useState(outletFinanceHead);
 	const [opsDraft, setOpsDraft] = useState(outletOpsHead);
-	const [locationDraft, setLocationDraft] = useState(outletSettings.location);
+	const [addressDraft, setAddressDraft] = useState<OrgAddress>({
+		...EMPTY_ORG_ADDRESS,
+		addressLine1: outletSettings.location,
+	});
 	const [logoMeta, setLogoMeta] = useState<{
 		fileName: string;
 		contentType: string;
@@ -131,12 +141,12 @@ function OutletSettingsPage() {
 			: editing
 				? opsDraft
 				: outletOpsHead;
-	const location =
+	const address: OrgAddress =
 		!editing && profile.backed
-			? (profile.settings?.location ?? BLANK_OUTLET_SETTINGS.location)
+			? orgAddressFromRow(profile.settings)
 			: editing
-				? locationDraft
-				: outletSettings.location;
+				? addressDraft
+				: { ...EMPTY_ORG_ADDRESS, addressLine1: outletSettings.location };
 	const avatarLetter =
 		owner.ownerName.trim()[0]?.toUpperCase() ??
 		owner.orgName.trim()[0]?.toUpperCase() ??
@@ -149,6 +159,8 @@ function OutletSettingsPage() {
 		setFinanceDraft((d) => ({ ...d, ...patch }));
 	const updateOps = (patch: Partial<OutletOpsHead>) =>
 		setOpsDraft((d) => ({ ...d, ...patch }));
+	const updateAddress = (patch: Partial<OrgAddress>) =>
+		setAddressDraft((d) => ({ ...d, ...patch }));
 
 	const startEdit = () => {
 		// Seed from real overlays on a blank base — never from Velvet demo.
@@ -159,14 +171,15 @@ function OutletSettingsPage() {
 				...(profile.finance ?? {}),
 			});
 			setOpsDraft({ ...BLANK_OUTLET_OPS_HEAD, ...(profile.ops ?? {}) });
-			setLocationDraft(
-				profile.settings?.location ?? BLANK_OUTLET_SETTINGS.location,
-			);
+			setAddressDraft(orgAddressFromRow(profile.settings));
 		} else {
 			setDraft({ ...outletOwner });
 			setFinanceDraft({ ...outletFinanceHead });
 			setOpsDraft({ ...outletOpsHead });
-			setLocationDraft(outletSettings.location);
+			setAddressDraft({
+				...EMPTY_ORG_ADDRESS,
+				addressLine1: outletSettings.location,
+			});
 		}
 		setLogoMeta(null);
 		setLogoCleared(false);
@@ -181,14 +194,15 @@ function OutletSettingsPage() {
 				...(profile.finance ?? {}),
 			});
 			setOpsDraft({ ...BLANK_OUTLET_OPS_HEAD, ...(profile.ops ?? {}) });
-			setLocationDraft(
-				profile.settings?.location ?? BLANK_OUTLET_SETTINGS.location,
-			);
+			setAddressDraft(orgAddressFromRow(profile.settings));
 		} else {
 			setDraft({ ...outletOwner });
 			setFinanceDraft({ ...outletFinanceHead });
 			setOpsDraft({ ...outletOpsHead });
-			setLocationDraft(outletSettings.location);
+			setAddressDraft({
+				...EMPTY_ORG_ADDRESS,
+				addressLine1: outletSettings.location,
+			});
 		}
 		setLogoMeta(null);
 		setLogoCleared(false);
@@ -234,12 +248,12 @@ function OutletSettingsPage() {
 			toast("Enter owner name (at least 2 characters)", "warn");
 			return;
 		}
-		if (!locationDraft.trim()) {
-			toast("Enter location", "warn");
+		if (!addressDraft.addressLine1.trim()) {
+			toast("Enter address line 1", "warn");
 			return;
 		}
 		// Real session: outlet owner may change outlet name, owner display name
-		// (`user.username`), and location (outlet address). Mobile/email stay in
+		// (`user.username`), and address columns. Mobile/email stay in
 		// Login & security.
 		if (profile.backed) {
 			if (!canEdit) {
@@ -254,7 +268,11 @@ function OutletSettingsPage() {
 				await profile.save({
 					venueName: draft.orgName.trim(),
 					ownerName: draft.ownerName.trim(),
-					location: locationDraft.trim(),
+					address: {
+						...addressDraft,
+						...resolveOrgAddressForSave(addressDraft),
+						stateCode: addressDraft.stateCode,
+					},
 					...(logoIsNew
 						? {
 								logoDataUrl: nextLogo,
@@ -309,7 +327,7 @@ function OutletSettingsPage() {
 			},
 			financeHead: { ...financeDraft },
 			opsHead: { ...opsDraft },
-			location: locationDraft.trim(),
+			location: joinOrgAddress(addressDraft),
 		});
 		setEditing(false);
 		toast("Settings saved", "success");
@@ -457,15 +475,20 @@ function OutletSettingsPage() {
 						mode={fieldMode}
 					/>
 				)}
-				<ProfileSettingsField
-					icon={MapPin}
-					label="Location"
-					value={location}
-					onChange={setLocationDraft}
+				<ProfileAddressFields
+					value={address}
+					onChange={updateAddress}
 					mode={fieldMode}
-					placeholder="Address, city, postcode"
 				/>
 			</ProfileSectionCard>
+
+			{canEdit && editing && (
+				<ProfileEditDock
+					onSave={saveEdit}
+					onCancel={cancelEdit}
+					saving={saving}
+				/>
+			)}
 
 			{/* Renders its own section label, and nothing at all on a demo session. */}
 			<GeoFenceCard canEdit={canEdit} />
@@ -554,6 +577,7 @@ function OutletSettingsPage() {
 				<>
 					<IzSectionLabel>Login &amp; security</IzSectionLabel>
 					<IzCard>
+						<AccountAvatarCard />
 						<p className="iz-tiny iz-muted mb-3">
 							Update password anytime. Email and mobile changes require OTP
 							verification.
@@ -583,14 +607,6 @@ function OutletSettingsPage() {
 					if (!profile.backed) saveOutletOwner({ mobile });
 				}}
 			/>
-
-			{canEdit && editing && (
-				<ProfileEditDock
-					onSave={saveEdit}
-					onCancel={cancelEdit}
-					saving={saving}
-				/>
-			)}
 		</OutletPage>
 	);
 }

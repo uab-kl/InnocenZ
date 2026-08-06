@@ -33,3 +33,25 @@ export type MailingEmail = {
   subject?: string;
   variables?: Record<string, string | number | boolean | null | undefined>;
 };
+
+/** Shared footer vars for every HTML template (semutz pattern). */
+export type MailBrandVariables = {
+  companyAddress: string;
+  companyName: string;
+  currentYear: string;
+  recipientEmail: string;
+};
+
+export type OrgApprovedNotificationVariables = MailBrandVariables & {
+  name: string;
+  orgName: string;
+  orgKindLabel: string;
+  loginLink: string;
+};
+
+export type OrgMemberInviteEmailVariables = MailBrandVariables & {
+  orgName: string;
+  orgKindLabel: string;
+  subRoleLabel: string;
+  acceptLink: string;
+};

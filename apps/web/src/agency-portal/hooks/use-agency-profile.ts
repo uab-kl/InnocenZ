@@ -3,6 +3,13 @@ import {
 	BLANK_AGENCY_FINANCE_HEAD,
 	BLANK_AGENCY_OWNER,
 } from "@agency-portal/lib/agency-demo";
+import {
+	EMPTY_ORG_ADDRESS,
+	joinOrgAddress,
+	orgAddressFromRow,
+	resolveOrgAddressForSave,
+	type OrgAddress,
+} from "@agency-portal/lib/org-address";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
@@ -40,7 +47,7 @@ export const REAL_AGENCY_FINANCE_BLANK = BLANK_AGENCY_FINANCE_HEAD;
  *
  * - Owner name / mobile / email → `user.username` / phone / email via members
  *   join, with `/auth/me` fallback (same columns).
- * - Org name / logo / status → `agency` row.
+ * - Org name / logo / status / address → `agency` row.
  */
 export function useAgencyProfile() {
 	const { logout } = useAuth();
@@ -116,6 +123,11 @@ export function useAgencyProfile() {
 		return overlay;
 	}, [backed, agencyQuery.data, membersQuery.data, identity, me]);
 
+	const address = useMemo<OrgAddress>(() => {
+		if (!backed) return { ...EMPTY_ORG_ADDRESS };
+		return orgAddressFromRow(agencyQuery.data?.data);
+	}, [backed, agencyQuery.data]);
+
 	const finance = useMemo<AgencyProfileFinanceOverlay | null>(() => {
 		if (!backed) return null;
 		if (!membersQuery.data) return null;
@@ -135,6 +147,7 @@ export function useAgencyProfile() {
 			orgName?: string;
 			ownerName?: string;
 			ic?: string;
+			address?: OrgAddress;
 			logoDataUrl?: string | null;
 			logoFileName?: string;
 			logoContentType?: string;
@@ -146,6 +159,9 @@ export function useAgencyProfile() {
 				{
 					...(payload.orgName ? { name: payload.orgName } : {}),
 					...(payload.ownerName ? { contactName: payload.ownerName } : {}),
+					...(payload.address
+						? resolveOrgAddressForSave(payload.address)
+						: {}),
 					...(payload.clearLogo ? { clearLogo: true } : {}),
 					...(payload.logoDataUrl?.startsWith("data:")
 						? {
@@ -169,6 +185,8 @@ export function useAgencyProfile() {
 		agencyId,
 		agency: agencyQuery.data?.data ?? null,
 		owner,
+		address,
+		location: joinOrgAddress(address),
 		finance,
 		isLoading:
 			agencyQuery.isLoading || membersQuery.isLoading || (backed && !me),

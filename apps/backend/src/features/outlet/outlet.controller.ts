@@ -1,6 +1,9 @@
 import { Request, Response } from 'express';
 import { OutletRepositoryClass } from './outlet.repository';
 import { OutletMemberRepositoryClass } from './outlet-member.repository';
+import { UserRepositoryClass } from '@/features/user/user.repository';
+import { RoleRepositoryClass } from '@/features/rbac/role/role.repository';
+import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -18,11 +21,20 @@ import { addressQueryFromOutlet, geocodeAddress } from './geocode';
 import { OutletFilter, OutletStatus } from './outlet.model';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
 import { r2DeleteStoredRef } from '@/util/r2';
+import {
+  createOrgMemberInviteSecret,
+  normalizeInviteEmail,
+  sendOrgMemberInviteEmail,
+} from '@/util/org-member-invite';
+import { sendOrgApprovedNotificationEmail } from '@/features/mailing/mailing.repository';
 
 export class OutletControllerClass {
   constructor(
     private outletRepository: OutletRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
+    private userRepository: UserRepositoryClass,
+    private roleRepository: RoleRepositoryClass,
+    private inviteRepository: OrgMemberInviteRepositoryClass,
   ) {}
 
   async list(req: Request, res: Response) {
@@ -174,7 +186,9 @@ export class OutletControllerClass {
           }
         } catch (logoError) {
           const msg =
-            logoError instanceof Error ? logoError.message : 'Logo upload failed';
+            logoError instanceof globalThis.Error
+              ? logoError.message
+              : 'Logo upload failed';
           return res.status(400).json({ success: false, message: msg, data: null });
         }
       }
@@ -319,6 +333,25 @@ export class OutletControllerClass {
       const id = paramId(req.params.id);
       const outlet = await this.outletRepository.update(id, { status: 'active', updatedBy: getActor(req) });
       if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Notify the outlet owner — approval already persisted; email failure must not roll it back.
+      try {
+        const members = await this.outletMemberRepository.listByOutletWithUser(id);
+        const owner = members.find((m) => m.subRole === 'owner' && m.email);
+        if (owner?.email) {
+          await sendOrgApprovedNotificationEmail({
+            recipientEmail: owner.email,
+            name: owner.username,
+            orgName: outlet.name,
+            orgKind: 'outlet',
+          });
+        } else {
+          logger.warn('[OutletController.approve] No owner email to notify', { outletId: id });
+        }
+      } catch (mailError) {
+        logger.error('[OutletController.approve] Approval email failed:', mailError);
+      }
+
       res.status(200).json({ success: true, message: 'Outlet approved', data: outlet });
     } catch (error) {
       logger.error('[OutletController.approve] Error:', error);
@@ -360,20 +393,119 @@ export class OutletControllerClass {
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
-      const existing = await this.outletMemberRepository.getByOutletAndUser(outletId, parsed.data.userId);
-      if (existing) {
-        return res.status(409).json({ success: false, message: 'User is already a member of this outlet', data: null });
+
+      const outlet = await this.outletRepository.getById(outletId);
+      if (!outlet) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
+
+      const inviteEmail = parsed.data.email?.trim()
+        ? normalizeInviteEmail(parsed.data.email)
+        : null;
+      let userId = parsed.data.userId;
+      if (inviteEmail) {
+        const user = await this.userRepository.getUserByLoginMethod('email', inviteEmail);
+        // Account may not exist yet — invite is by email; they must sign up before accept.
+        if (user) userId = user.id;
+      } else if (userId) {
+        const user = await this.userRepository.getUserById(userId);
+        if (!user?.email) {
+          return res.status(400).json({
+            success: false,
+            message: 'That account has no email — cannot send an invitation',
+            data: null,
+          });
+        }
+      }
+
+      const email =
+        inviteEmail ??
+        (userId
+          ? normalizeInviteEmail(
+              (await this.userRepository.getUserById(userId))?.email ?? '',
+            )
+          : '');
+      if (!email) {
+        return res.status(400).json({
+          success: false,
+          message: 'email or userId is required',
+          data: null,
+        });
+      }
+
+      if (userId) {
+        const existing = await this.outletMemberRepository.getByOutletAndUser(
+          outletId,
+          userId,
+        );
+        if (existing && existing.status === 'active') {
+          return res.status(409).json({
+            success: false,
+            message: 'User is already a member of this outlet',
+            data: null,
+          });
+        }
+      }
+
+      const role = await this.roleRepository.getRoleByName('outlet');
+      if (!role) {
+        return res.status(500).json({
+          success: false,
+          message: "Role 'outlet' is not seeded",
+          data: null,
+        });
+      }
+
       const actor = getActor(req);
-      const member = await this.outletMemberRepository.add({
+      const secret = createOrgMemberInviteSecret();
+      const pending = await this.inviteRepository.findPendingByOrgEmail({
+        email,
         outletId,
-        userId: parsed.data.userId,
-        subRole: parsed.data.subRole,
-        status: 'active',
-        createdBy: actor,
-        updatedBy: actor,
       });
-      res.status(201).json({ success: true, message: 'Member added', data: member });
+      let invite;
+      if (pending) {
+        invite = await this.inviteRepository.update(pending.id, {
+          token: secret.tokenHash,
+          expiresAt: secret.expiresAt,
+          roleId: role.id,
+          subRole: parsed.data.subRole,
+          updatedBy: actor,
+        });
+      } else {
+        invite = await this.inviteRepository.create({
+          email,
+          token: secret.tokenHash,
+          expiresAt: secret.expiresAt,
+          outletId,
+          agencyId: null,
+          roleId: role.id,
+          subRole: parsed.data.subRole,
+          status: 'pending',
+          acceptedUserId: null,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+      }
+
+      const mail = await sendOrgMemberInviteEmail({
+        to: email,
+        orgKind: 'outlet',
+        orgName: outlet.name,
+        subRole: parsed.data.subRole,
+        rawToken: secret.rawToken,
+      });
+
+      res.status(201).json({
+        success: true,
+        message: mail.emailed
+          ? 'Invitation sent — they must accept the email to join'
+          : 'Invitation created (email not configured) — share the accept link',
+        data: {
+          invite,
+          emailed: mail.emailed,
+          ...(mail.emailed ? {} : { acceptUrl: mail.acceptUrl }),
+        },
+      });
     } catch (error) {
       logger.error('[OutletController.addMember] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -422,6 +554,17 @@ export class OutletControllerClass {
       const target = await this.outletMemberRepository.getById(memberId);
       if (!target || target.outletId !== outletId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // An owner must not delete their own membership row — that would lock them
+      // out of the portal they are managing. Appoint another owner and leave, or
+      // ask them to remove you — never self-delete.
+      if (req.user?.id && target.userId === req.user.id) {
+        return res.status(409).json({
+          success: false,
+          message: 'You cannot remove yourself from the team',
+          data: null,
+        });
       }
 
       const members = await this.outletMemberRepository.listByOutlet(outletId);

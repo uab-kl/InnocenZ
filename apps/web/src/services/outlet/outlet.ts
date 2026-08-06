@@ -196,13 +196,13 @@ export async function fetchOutletMembershipsForUser(
 }
 
 /**
- * Add an EXISTING user account to this venue (`POST /outlet/:id/members`).
- * Takes a `userId`, not an email: there is no invite endpoint and no mailer, so
- * the person must already have an account. See `useOrgMembers`.
+ * Invite an EXISTING user by email (`POST /outlet/:id/members`).
+ * Creates an `outlet_user` row as `pending` and emails an accept link.
+ * Membership becomes `active` only after they accept.
  */
 export async function addOutletMember(
 	outletId: string,
-	payload: { userId: string; subRole: string },
+	payload: { email: string; subRole: string } | { userId: string; subRole: string },
 	onRefreshFail: () => void,
 ): Promise<OutletMemberApiResponse> {
 	const client = getClient(onRefreshFail);

@@ -45,7 +45,13 @@ export function r2PublicUrl(key: string): string {
 
 /** True when the DB value is an R2 object key (not a full URL or /img path). */
 export function isR2ObjectKey(ref: string | null | undefined): boolean {
-  return Boolean(ref?.startsWith('user/'));
+  if (!ref) return false;
+  // Org logos: agency/… outlet/… · User assets: user/…
+  return (
+    ref.startsWith('user/') ||
+    ref.startsWith('agency/') ||
+    ref.startsWith('outlet/')
+  );
 }
 
 /** Object key from a stored ref: key itself, or stripped from our public URL. */

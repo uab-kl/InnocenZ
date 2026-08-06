@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch --clear-screen=false src/main.ts src/**/*.ts",
     "start": "node dist/main.js",
-    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --minify --format=esm --outfile=dist/main.js --packages=external --alias:@=./src --alias:graphql/error=graphql/error/index.js",
+    "build": "esbuild src/main.ts --bundle --platform=node --target=node22 --minify --format=esm --outfile=dist/main.js --packages=external --alias:@=./src --alias:graphql/error=graphql/error/index.js && node scripts/copy-mail-templates.mjs",
     "migrate": "drizzle-kit generate && drizzle-kit migrate --config=drizzle.migrate.config.ts && tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
     "migrate:deploy": "drizzle-kit migrate --config=drizzle.migrate.config.ts && tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",
     "db:reset": "node scripts/reset-migrations.mjs && drizzle-kit migrate --config=drizzle.migrate.config.ts && tsx --tsconfig tsconfig.json src/scripts/init-roles.ts && tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts && tsx --tsconfig tsconfig.json src/scripts/init-admin.ts",

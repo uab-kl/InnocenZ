@@ -1,3 +1,4 @@
+import { AccountAvatarCard } from "@agency-portal/components/auth/AccountAvatarCard";
 import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";
 import {
 	IzCard,
@@ -13,6 +14,7 @@ import {
 	ProfileSectionCard,
 	ProfileSettingsField,
 } from "@agency-portal/components/portal/profile-settings-ui";
+import { ProfileAddressFields } from "@agency-portal/components/portal/profile-address-fields";
 import { useAgencyProfile } from "@agency-portal/hooks/use-agency-profile";
 import {
 	BLANK_AGENCY_FINANCE_HEAD,
@@ -27,6 +29,11 @@ import {
 	getAgencyIdentity,
 	saveAgencyIdentity,
 } from "@agency-portal/lib/agency-identity";
+import {
+	EMPTY_ORG_ADDRESS,
+	resolveOrgAddressForSave,
+	type OrgAddress,
+} from "@agency-portal/lib/org-address";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { getPreviousWeekSundayIso } from "@agency-portal/lib/demo-clock";
@@ -69,6 +76,9 @@ function AgencyProfile() {
 	const [draft, setDraft] = useState(agencyOwner);
 	const [financeDraft, setFinanceDraft] = useState(agencyFinanceHead);
 	const [inviteEmail, setInviteEmail] = useState(agencyFinanceHead.email);
+	const [addressDraft, setAddressDraft] = useState<OrgAddress>({
+		...EMPTY_ORG_ADDRESS,
+	});
 	const [logoMeta, setLogoMeta] = useState<{
 		fileName: string;
 		contentType: string;
@@ -109,11 +119,19 @@ function AgencyProfile() {
 		owner.orgName.trim()[0]?.toUpperCase() ??
 		"?";
 	const fieldMode = editing && canEdit ? "edit" : "view";
+	const address =
+		!editing && profile.backed
+			? profile.address
+			: editing
+				? addressDraft
+				: { ...EMPTY_ORG_ADDRESS };
 
 	const update = (patch: Partial<AgencyOwnerSettings>) =>
 		setDraft((d) => ({ ...d, ...patch }));
 	const updateFinance = (patch: Partial<AgencyFinanceHead>) =>
 		setFinanceDraft((d) => ({ ...d, ...patch }));
+	const updateAddress = (patch: Partial<OrgAddress>) =>
+		setAddressDraft((d) => ({ ...d, ...patch }));
 
 	const startEdit = () => {
 		if (profile.backed) {
@@ -123,10 +141,12 @@ function AgencyProfile() {
 				...(profile.finance ?? {}),
 			});
 			setInviteEmail(profile.finance?.email ?? "");
+			setAddressDraft({ ...profile.address });
 		} else {
 			setDraft({ ...agencyOwner, ...(profile.owner ?? {}) });
 			setFinanceDraft({ ...agencyFinanceHead, ...(profile.finance ?? {}) });
 			setInviteEmail(profile.finance?.email ?? agencyFinanceHead.email);
+			setAddressDraft({ ...EMPTY_ORG_ADDRESS });
 		}
 		setLogoMeta(null);
 		setLogoCleared(false);
@@ -141,10 +161,12 @@ function AgencyProfile() {
 				...(profile.finance ?? {}),
 			});
 			setInviteEmail(profile.finance?.email ?? "");
+			setAddressDraft({ ...profile.address });
 		} else {
 			setDraft({ ...agencyOwner });
 			setFinanceDraft({ ...agencyFinanceHead });
 			setInviteEmail(agencyFinanceHead.email);
+			setAddressDraft({ ...EMPTY_ORG_ADDRESS });
 		}
 		setLogoMeta(null);
 		setLogoCleared(false);
@@ -186,6 +208,10 @@ function AgencyProfile() {
 			toast("Enter organization name", "warn");
 			return;
 		}
+		if (profile.backed && !addressDraft.addressLine1.trim()) {
+			toast("Enter address line 1", "warn");
+			return;
+		}
 		if (profile.backed) {
 			if (!canEdit) {
 				toast("Only the agency owner can edit this profile", "warn");
@@ -198,6 +224,11 @@ function AgencyProfile() {
 					typeof nextLogo === "string" && nextLogo.startsWith("data:");
 				await profile.save({
 					orgName: draft.orgName.trim(),
+					address: {
+						...addressDraft,
+						...resolveOrgAddressForSave(addressDraft),
+						stateCode: addressDraft.stateCode,
+					},
 					...(logoIsNew
 						? {
 								logoDataUrl: nextLogo,
@@ -414,7 +445,22 @@ function AgencyProfile() {
 						mode={fieldMode}
 					/>
 				)}
+				{profile.backed && (
+					<ProfileAddressFields
+						value={address}
+						onChange={updateAddress}
+						mode={fieldMode}
+					/>
+				)}
 			</ProfileSectionCard>
+
+			{canEdit && editing && (
+				<ProfileEditDock
+					onSave={saveEdit}
+					onCancel={cancelEdit}
+					saving={saving}
+				/>
+			)}
 
 			{/* Demo-only Finance Head form — real staff live in OrgMembersPanel. */}
 			{!profile.backed && (
@@ -484,6 +530,7 @@ function AgencyProfile() {
 				<>
 					<IzSectionLabel>Login &amp; security</IzSectionLabel>
 					<IzCard>
+						<AccountAvatarCard />
 						<p className="iz-tiny iz-muted mb-3">
 							Update password anytime. Email and mobile changes require OTP
 							verification.
@@ -513,14 +560,6 @@ function AgencyProfile() {
 					if (!profile.backed) saveAgencyOwner({ mobile });
 				}}
 			/>
-
-			{canEdit && editing && (
-				<ProfileEditDock
-					onSave={saveEdit}
-					onCancel={cancelEdit}
-					saving={saving}
-				/>
-			)}
 		</div>
 	);
 }
