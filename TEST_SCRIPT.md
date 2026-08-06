@@ -195,6 +195,8 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 | O3 | Ratings page | Outlet ← PR | `routes/outlet/ratings` + `rating` | rating table | ✅ Verified |
 | O4 | History (real shift / shift-assignment / venue-scoped PR) | Outlet ← Agency/PR | `routes/outlet/history` | shift + shift-assignment | ✅ Verified |
 | O5 | **Post Job** → shift write + "Confirm staffing" (caps) | **Outlet → Agency** (feeds roster) | `routes/outlet/bookings` + `shift` | shift + subscription caps | ⚠️ Reported (confirm E2E, §3 S1) |
+| O7 | **Today panel: "Shift history" sheet hydrated from the backend + PR tier no longer read from a foreign agency.** The sheet read only `store.shiftHistory`, so after the demo seed was retired it said *"No shift history yet"* while the DB held sealed nights (Vicky: 8 at Emhub Testing) — it now reads `useOutletHistory()` when the session is backed, and says *Loading…* instead of an empty verdict while in flight. Separately, `GET /pr` for an **outlet** caller emitted one row per `agency_pr` **membership**, so a PR with two memberships came back twice under the same `id` and the web's id-keyed map kept the last one: Vicky rendered **Tier I** (Delta) on an Atlas-supplied night. The outlet filter now also matches `shift_assignment.agency_id`, i.e. the agency that actually supplied the PR to that venue. | Outlet ← Agency/PR | `ShiftHistoryLog.tsx` (`OutletPrShiftHistorySheet`) · `pr.repository.ts` (`listPaginated`) | `shift_assignment` (status=completed) + `agency_pr.tier` | ✅ Verified over HTTP as both outlet owners (`probe-outlet-pr-list-tier.ts`: 4/4 PRs one row each, Vicky `tier_3`, 10/10 completed rows usable). Sheet **rendering** not yet clicked in a browser |
+| O8 | **Every check-in / check-out stamp renders LOCAL time.** `Out 2026-08-06T06:17:45.947Z` → `Out 2:17 pm`. The formatter already existed but was **private to `RosterShiftTable`**, so the fix had reached one roster cell and none of the other four sites printing the same field. Extracted to the leaf module `lib/attendance-stamp.ts` (zero imports, so no cycle risk) and wired at all five: the outlet Today card's ops line, the roster table cell, the roster card's `In …`, the Live-workforce check-in column, and the roster sheet's "Released early ·". The date is prefixed **only** when the stamp did not land on the shift's own date — the overnight / checked-in-a-day-early case. Demo `"21:45"` strings pass through untouched. | Outlet + Agency ← PR | `lib/attendance-stamp.ts` · `OutletTodayOperationPanel` · `RosterShiftTable` · `LiveWorkforceTable` · `routes/agency/roster` | `shift_assignment.check_in_at` / `check_out_at` (display only) | ✅ Verified — formatter exercised against the real live stamps in `Asia/Kuala_Lumpur`: `06:17:45.947Z`→`2:17 pm`, the old `04:01Z`→`12:01 pm`, `"21:45"`→`"21:45"`, unparseable → unchanged |
 | O6 | **Special-event prices show as the Workspace's two lists, off the REAL menu** — Post Job's `Prices` field renders **DRINKS PRICE** + **SERVICE ENTITLEMENT** (counts, RM range, ↔ move, per-list Add More) via the extracted `ShiftEventPriceEditor`, and now reads the outlet's **backend** `outlet_drink_menu` (passed down as `workspaceMenu`, like `prCandidates`) instead of the demo store. Edits stay on that event's `eventDrinkMenu`; the workspace list is cloned on switch and **never written**, so later events keep Workspace prices. Seed corrected: **Havoc is a service, Tips added as a service** (`DEFAULT_PER_TIP_RM`). | Outlet (self) | `ShiftEventPriceEditor.tsx` · `post-job-fields.tsx` · `routes/outlet/bookings.tsx` · `outlet-demo.ts` | backend `outlet_drink_menu` (read-only) → draft `eventDrinkMenu` | ✅ Verified (live: Post Job now shows the same 6 drinks RM 30–200 / 3 services RM 50–1000 as Workspace; editing Tips→999 fired **no PUT**, only the GET) |
 
 ### Agency side (SL)
@@ -318,6 +320,13 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 ---
 
 ## 9. TO-DO (undone) — full backlog, prioritized
+
+### ▶ ~~OUTLET TODAY CARD PRINTS A RAW UTC TIMESTAMP~~ — ✅ CLOSED 6 Aug 2026 (§8 O8)
+
+The PR card's ops line read **`Out 2026-08-06T06:17:45.947Z · Atlas Agency`**; it now reads
+**`Out 2:17 pm`**. The formatter existed — it was **private to one file**, which is why the fix had
+reached one roster cell and none of the other four places that print the same field. Extracted to
+`lib/attendance-stamp.ts` and wired at all five. See §10.
 
 ### ▶ THE SHIFT DETAIL PANEL STILL SHOWS EVENT PRICES AS ONE RUN-ON LINE (5 Aug 2026)
 
@@ -1052,6 +1061,55 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+
+> **6 Aug 2026 — THE OUTLET WAS READING A PR'S GRADE FROM AN AGENCY THAT HAD NOTHING TO DO WITH
+> THE SHIFT.**
+>
+> *"continue with the shift history fix, also why is "Vicky" in the outlet shift showing up as
+> "Tier 1" when she is supposed to be "Tier 3"?"*
+>
+> Two faults, one screenshot. The second one is the interesting one.
+>
+> **1. The Shift-history sheet was fed by a slice its own card doesn't use.** `OutletPrShiftHistorySheet`
+> read `store.shiftHistory` and nothing else. The demo seed was retired the day before, so the slice
+> is empty on every session — and the sheet answered *"No shift history yet for Vicky at Emhub
+> Testing"* while the database held **8 completed assignments** for her at that venue. It now reads
+> `useOutletHistory()` when the session is backed, exactly like the outlet History screen, and
+> distinguishes *Loading…* from *nothing here* — an in-flight request must not read as a verdict.
+> Same bug family as the three dead buttons fixed the day before: **the card rendered from backend
+> props while the thing behind it read a demo slice.**
+>
+> **2. `GET /pr` returned the same PR twice, with two different tiers, and the web kept the wrong
+> one.** The outlet branch of `listPaginated` iterates `agency_pr` **memberships** while every row it
+> emits claims `id === userId`. The agency branch is pinned to one `agencyId` so it can only ever see
+> one membership per account; an outlet caller is pinned to none. Vicky is `tier_3` at Atlas and
+> `tier_1` at Delta, so she came back twice, and `new Map(prs.map(p => [p.id, p]))` kept whichever row
+> landed last — **Tier I**, from an agency that did not supply that night. Alice (`tier_2` Atlas,
+> `tier_1` ×2 elsewhere) was wrong on the same screen for the same reason. The outlet's `EXISTS` now
+> also matches `shift_assignment.agency_id`, so an outlet sees the membership of the agency that
+> actually **supplied** the PR to its venue — which also makes `pagination.totalCount` a count of PRs
+> again instead of of memberships.
+>
+> *The lesson: a scope filter that narrows the ROWS but not the FACT lets a row through carrying
+> someone else's answer.* The tier was never "defaulting" to 1 — it was a real, correct `tier_1` from
+> the wrong membership, which is why it looked believable.
+>
+> **3. And the stamp beside them was eight hours wrong.** The same card printed
+> `Out 2026-08-06T06:17:45.947Z`. A formatter for exactly this already existed — `formatCheckInStamp`,
+> **private to `RosterShiftTable`** — so the rule "a stamp renders LOCAL time" had reached one roster
+> cell and none of the other four sites that print the same field. It is now the leaf module
+> `lib/attendance-stamp.ts` and all five call it. *A fix kept private to the file that found the bug
+> is a fix that cannot reach the bug's siblings* — the same shape as the roster-cancel/no-show lesson.
+> Exercised against the real live stamps in `Asia/Kuala_Lumpur`: `06:17:45.947Z` → **2:17 pm**, the old
+> `04:01Z` → **12:01 pm**, demo `"21:45"` → `"21:45"`, unparseable → unchanged.
+>
+> Verified over HTTP as both outlet owners before and independently of any browser: `probe-outlet-pr-list-tier.ts`
+> → 4/4 PRs one row each (Alice II, Haziq I, Nurul II, Vicky III — matching the agency portal exactly),
+> 10/10 completed assignments usable by the sheet. Data facts first established read-only in
+> `probe-outlet-pr-tier-and-history.ts`, which also proved the narrowing drops nothing (**zero**
+> assignments whose `agency_id` has no matching membership). Backend `tsc` 0 errors; `apps/web` 120,
+> its baseline, none in the touched region.
 
 
 > **6 Aug 2026 — Real Settings: hide demo Finance/Ops/IC/Notifications cards.**
