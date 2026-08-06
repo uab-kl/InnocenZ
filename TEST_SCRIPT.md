@@ -316,6 +316,34 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ SETTLED — an agency sees only ITS OWN tier (owner decision, 6 Aug 2026)
+
+Owner asked *"agency poster page and manage pr page where is the others outlet tier ?"* after the
+PR phone started showing one badge per agency (Alice: Atlas · TIER II, Starline · TIER I).
+
+**Decision: each agency's tier stays private. No code change — this is already the behaviour.**
+`pr.repository.ts:429` scopes the list to `agency_pr.agencyId = <acting agency>`, so every PR row
+carries that agency's own grading and no one else's. The asymmetry is deliberate:
+
+- **The PR sees every tier** — they are all gradings *of her*, so she is entitled to them.
+- **An agency sees only its own** — `agency_pr.tier` is that agency's competitive judgement of a
+  freelancer. Publishing it to a rival leaks their rate card and poaching value.
+
+⚠️ Do **not** "sync" tier to one value across agencies to make screens match. Two agencies grading
+the same PR differently is two true facts. See §10, 6 Aug.
+
+### ▶ `composePr` invents a tier, and breaks ties arbitrarily (found 6 Aug 2026, NOT fixed)
+
+`pr/pr.repository.ts:118` — `tier: membership?.tier ?? 'tier_1'`. A PR with no `agency_pr` row is
+reported as **Tier I**, a grading nobody gave them: the same class of bug as the hardcoded
+`TIER V` just removed from the phone. Tier should be nullable and render as "not graded yet".
+
+`buildSyntheticPr` also documents *"the OLDEST wins … tie-broken by id"* for multi-agency accounts.
+Vicky's two memberships share an **identical `created_at`**, so that tie is decided by uuid sort —
+i.e. arbitrarily. `listPaginated` does not use this path, so the portal screens are correct today;
+**anything reading one PR by id is not.** Fixing it means threading the acting agency into the
+single-PR read, not picking a better tie-break.
+
 ### ▶ ONE SOURCE **AND** ONE MOMENT — PR data must update everywhere at once (owner, 6 Aug 2026)
 
 *"make sure all links any changes also changes simultaneously … no any different data, just take from
