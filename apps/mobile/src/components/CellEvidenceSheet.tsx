@@ -111,6 +111,13 @@ function ShiftHead({
    */
   const shiftTitle = shift.eventName ?? shift.outletName ?? 'Shift';
   const shiftVenue = shift.eventName ? shift.outletName : null;
+  /*
+   * SPECIAL only. `event_kind` defaults to 'normal', so tagging every card
+   * would put the same word on every shift the PR ever opens — a badge that
+   * appears everywhere is one they stop reading, and then it cannot do its job
+   * on the night it matters.
+   */
+  const isSpecialEvent = shift.eventKind === 'special';
   const collapsible = typeof expanded === 'boolean' && !!onToggle;
   if (collapsible && !expanded) {
     /*
@@ -128,7 +135,10 @@ function ShiftHead({
         accessibilityLabel={`${shiftTitle} — tap to see check-in, receipts and items`}
       >
         <View style={s.shiftHeadText}>
-          <Text style={s.shiftTitle}>{shiftTitle}</Text>
+          <View style={s.shiftTitleRow}>
+            <Text style={s.shiftTitle}>{shiftTitle}</Text>
+            {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
+          </View>
           <Text style={s.shiftSlot}>
             {shiftVenue ? `${shiftVenue} · ` : ''}
             {shift.slot ? `${shift.slot} · ` : ''}
@@ -161,7 +171,13 @@ function ShiftHead({
           accessibilityState={{ expanded: true }}
         >
           <View style={s.shiftHeadText}>
+            <View style={s.shiftTitleRow}>
+              <View style={s.shiftTitleRow}>
             <Text style={s.shiftTitle}>{shiftTitle}</Text>
+            {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
+          </View>
+              {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
+            </View>
             {(shiftVenue || shift.slot) && (
               <Text style={s.shiftSlot}>
                 {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
@@ -173,7 +189,10 @@ function ShiftHead({
         </Pressable>
       ) : (
         <>
-          <Text style={s.shiftTitle}>{shiftTitle}</Text>
+          <View style={s.shiftTitleRow}>
+            <Text style={s.shiftTitle}>{shiftTitle}</Text>
+            {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
+          </View>
           {(shiftVenue || shift.slot) && (
             <Text style={s.shiftSlot}>
               {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
@@ -632,6 +651,23 @@ const s = StyleSheet.create({
     gap: 12,
   },
   shiftHeadText: { flex: 1, minWidth: 0 },
+  // The tag sits beside the name and wraps under it on a narrow phone rather
+  // than squeezing the name — the name is the thing being identified.
+  shiftTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  eventTag: {
+    fontFamily: F.sora,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    color: '#e8c27a',
+    borderWidth: 1,
+    borderColor: 'rgba(232,194,122,0.45)',
+    backgroundColor: 'rgba(232,194,122,0.1)',
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   shiftHeadRight: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   shiftSubtotal: { fontFamily: F.sora, fontSize: 14, fontWeight: '800', color: C.txt },
   shiftMore: { marginTop: 4, fontFamily: F.manrope, fontSize: 11, color: C.violetL },
