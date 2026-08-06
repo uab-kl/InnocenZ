@@ -1170,7 +1170,15 @@ function RequestEditForm({
 					}
 				>
 					<div className="flex flex-wrap items-center justify-between gap-2">
-						<Label htmlFor="request-quote">Quoted (RM)</Label>
+						<Label
+							htmlFor="request-quote"
+							className={
+								quoteMissing ? "flex items-center gap-1.5 text-amber-500" : ""
+							}
+						>
+							{quoteMissing && <AlertCircle className="size-4 shrink-0" />}
+							Quoted (RM)
+						</Label>
 						{quoteMissing && (
 							<span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-500">
 								Needed to resolve
@@ -1181,9 +1189,15 @@ function RequestEditForm({
 						<>
 							{/* The RM sits INSIDE the field: the label says "(RM)" but
 								the value is what the eye lands on, and a bare 1200
-								reads as a quantity rather than money. */}
+								reads as a quantity rather than money. The placeholder is
+								dimmed hard — at normal muted weight "0.00" reads as a
+								price already entered, which is the whole misreading. */}
 							<div className="relative">
-								<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+								<span
+									className={`pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-semibold ${
+										quoteMissing ? "text-amber-500/80" : "text-muted-foreground"
+									}`}
+								>
 									RM
 								</span>
 								<Input
@@ -1195,19 +1209,32 @@ function RequestEditForm({
 									placeholder="0.00"
 									value={quote}
 									onChange={(e) => setQuote(e.target.value)}
-									className={`h-11 pl-11 text-lg font-semibold tabular-nums${
+									className={`h-12 pl-11 text-xl font-semibold tabular-nums placeholder:font-normal placeholder:text-muted-foreground/35${
 										quoteMissing
-											? " border-amber-500/70 focus-visible:ring-amber-500"
+											? " border-amber-500/70 bg-amber-500/[0.03] focus-visible:ring-amber-500"
 											: ""
 									}`}
 								/>
 							</div>
 							{quoteMissing ? (
-								<p className="text-sm font-medium text-amber-500">
-									Set the price before you Resolve — there is no list price to
-									fall back on, so resolving now would put the agency on a
-									negotiated tier costing nothing.
-								</p>
+								<>
+									{/* One short sentence carries the consequence. The
+										earlier three-line amber paragraph was the kind of
+										warning people learn to scroll past. */}
+									<p className="text-sm font-medium text-amber-500">
+										Resolve with this empty and the agency lands on a negotiated
+										tier costing nothing.
+									</p>
+									{/* An anchor to price AGAINST. Custom replaces the tier
+										price, so the tier it replaces is the one number the
+										admin would otherwise go hunting for. */}
+									{plan && (
+										<p className="text-xs text-muted-foreground">
+											{plan.name} is RM {formatPrice(plan.price)}{" "}
+											{plan.billingCycle} — Custom replaces it.
+										</p>
+									)}
+								</>
 							) : (
 								<>
 									<p className="text-sm text-muted-foreground">
@@ -1217,9 +1244,12 @@ function RequestEditForm({
 											: ""}
 									</p>
 									{quoteGiven && (
-										<p className="text-sm font-medium text-emerald-500">
-											RM {formatPrice(parsedQuote)} becomes the agency's tier
-											price when you Resolve.
+										<p className="flex items-center gap-1.5 text-sm font-medium text-emerald-500">
+											<CheckCircle2 className="size-4 shrink-0" />
+											<span>
+												RM {formatPrice(parsedQuote)} becomes the agency's tier
+												price when you Resolve.
+											</span>
 										</p>
 									)}
 								</>
