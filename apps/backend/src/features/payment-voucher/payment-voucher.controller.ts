@@ -1216,7 +1216,21 @@ export class PaymentVoucherControllerClass {
       if (!pr) return res.status(403).json({ success: false, message: 'No PR profile for this account', data: null });
 
       const { weekStart, weekEnd } = weekBounds();
-      const draft = await this.paymentVoucherRepository.getCurrentWeekDraft(
+      // READ the week; do not look for a DRAFT of it.
+      //
+      // getCurrentWeekDraft() filters to OPEN_WEEK_STATUSES (pending_review,
+      // disputed) because the WRITE path needs the one voucher it may still
+      // append lines to. Using it here meant that the moment the agency ISSUED
+      // the voucher — status `sent` — this read returned null and the PR's
+      // whole week blanked: every cell a dash, total RM 0.00, while the agency
+      // screen showed that same week at RM 3,708.21 (PV-000006, seen 6 Aug
+      // 2026). The PR is never less entitled to see the money than at the
+      // moment it is issued to them.
+      //
+      // Reading and writing want different lookups. This is the read, so it
+      // takes the week's voucher whatever its status — the same call
+      // getMyLastWeek() already makes.
+      const draft = await this.paymentVoucherRepository.getWeekVoucher(
         pr.id,
         weekStart,
         pr.userId,
