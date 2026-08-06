@@ -1,5 +1,6 @@
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import type { PrPayClass } from "@agency-portal/lib/pr-penalties";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import type { PrPersonnel } from "@/services/pr-personnel";
 
 // Every value of the backend's `pr_tier` enum. It carried only the first three
@@ -92,9 +93,21 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		height: profile?.comcardHeightCm ?? 0,
 		weight: profile?.comcardWeightKg ?? 0,
 		race: profile?.race ?? "",
-		avatarPhoto: profile?.profileImage ?? null,
-		comcardImageUrl: profile?.comcardImage ?? null,
-		portfolioPhotos: profile?.portfolioPhotos ?? undefined,
+		// R2 KEYS, NOT URLS. The backend stores an object key
+		// (`user/<id>/comcard/<uuid>.jpg`) and its own util says so out loud:
+		// "Clients prepend R2_PUBLIC_URL". Handing that key straight to an <img
+		// src> renders a broken image — exactly what the agency saw on Vicky's
+		// comcard while every other fact on the card was correct.
+		//
+		// `apiAssetUrl` is the resolver the rest of the app already uses: full
+		// URLs and data URLs pass through untouched, stored keys get the R2 base
+		// prepended, and it falls back to the proxied /img path when R2 is not
+		// configured. Never build this URL by hand.
+		avatarPhoto: apiAssetUrl(profile?.profileImage) ?? null,
+		comcardImageUrl: apiAssetUrl(profile?.comcardImage) ?? null,
+		portfolioPhotos: profile?.portfolioPhotos?.map(
+			(photo) => apiAssetUrl(photo) ?? photo,
+		),
 		languages: profile?.languages ?? [],
 		// Roster grading, from `agency_pr` (0089). These were hardcoded to ""/0
 		// before the columns existed, so the Manage-PR editor could never show
