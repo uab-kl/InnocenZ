@@ -6,6 +6,8 @@ import {
 	type AgencyCollectionInvoice,
 	type AgencyManagedPR,
 	type AgencyRosterSlot,
+	BLANK_AGENCY_FINANCE_HEAD,
+	BLANK_AGENCY_OWNER,
 	buildDefaultTierRates,
 	cloneTierRates,
 	DEFAULT_AGENCY_OWNER,
@@ -32,6 +34,11 @@ import {
 } from "@agency-portal/lib/demo-clock";
 import { mergeHistoryDemoLedger } from "@agency-portal/lib/history-demo-sync";
 import {
+	BLANK_OUTLET_FINANCE_HEAD,
+	BLANK_OUTLET_OPS_HEAD,
+	BLANK_OUTLET_OWNER,
+	BLANK_OUTLET_SETTINGS,
+	BLANK_OUTLET_WORKSPACE,
 	DEFAULT_OUTLET_FINANCE_HEAD,
 	DEFAULT_OUTLET_OPS_HEAD,
 	DEFAULT_OUTLET_OWNER,
@@ -1473,13 +1480,17 @@ export function buildDemoStoreReset() {
  * empty. Used for REAL backend logins so the ported agency/outlet portals
  * render their normal pages with no rows and zeroed KPIs. Session identity
  * (role / sub-role / user) is set separately at login and is intentionally NOT
- * reset here. Object slices keep their DEFAULT_* shapes so components that read
- * nested fields don't crash; array/number slices are emptied.
+ * reset here.
+ *
+ * Object slices that need a shape use BLANK_* (empty strings / empty menus) —
+ * NEVER DEFAULT_* Velvet/Atlas fixtures. Spreading demo defaults into a real
+ * session left Chen Wei Jie / Velvet 23 / Atlas on Settings until overlays
+ * loaded (and forever for fields the API does not return).
  *
  * This map holds only the slices whose blank value is not simply "empty": the
- * object slices that must keep a DEFAULT_* shape, and the two derived slices
- * that have to be recomputed from empty inputs. Every other demo slice is
- * blanked generically in buildBlankPortalReset() below.
+ * object slices that must keep a shape, and the two derived slices that have
+ * to be recomputed from empty inputs. Every other demo slice is blanked
+ * generically in buildBlankPortalReset() below.
  */
 function explicitBlankSlices() {
 	return {
@@ -1507,8 +1518,8 @@ function explicitBlankSlices() {
 			outletConfirmed: false,
 		}),
 		agencyCollections: [],
-		agencyOwner: { ...DEFAULT_AGENCY_OWNER },
-		agencyFinanceHead: { ...DEFAULT_FINANCE_HEAD },
+		agencyOwner: { ...BLANK_AGENCY_OWNER },
+		agencyFinanceHead: { ...BLANK_AGENCY_FINANCE_HEAD },
 
 		// ---- PR-portal slices ------------------------------------------------
 		// These are the web PR demo's own state. A real agency or outlet session
@@ -1543,11 +1554,13 @@ function explicitBlankSlices() {
 		bookings: [],
 		pvs: [],
 		walletBalance: 0,
-		outletWorkspace: { ...DEFAULT_OUTLET_WORKSPACE },
-		outletSettings: { ...DEFAULT_OUTLET_SETTINGS },
-		outletOwner: { ...DEFAULT_OUTLET_OWNER },
-		outletFinanceHead: { ...DEFAULT_OUTLET_FINANCE_HEAD },
-		outletOpsHead: { ...DEFAULT_OUTLET_OPS_HEAD },
+		// BLANK_* — not DEFAULT_* (Velvet/Atlas). Real logins must never show
+		// fixture names, emails, logos, or drink menus.
+		outletWorkspace: { ...BLANK_OUTLET_WORKSPACE },
+		outletSettings: { ...BLANK_OUTLET_SETTINGS },
+		outletOwner: { ...BLANK_OUTLET_OWNER },
+		outletFinanceHead: { ...BLANK_OUTLET_FINANCE_HEAD },
+		outletOpsHead: { ...BLANK_OUTLET_OPS_HEAD },
 		pendingPRs: [],
 		pendingAgencyLinks: [],
 		pendingCutlostRequests: [],
@@ -1591,5 +1604,16 @@ export function buildBlankPortalReset() {
 		);
 	}
 
-	return blank as ReturnType<typeof explicitBlankSlices>;
+	// The loop above copies EVERY demo key, so the object really does carry all
+	// of them — the old cast to `ReturnType<typeof explicitBlankSlices>` named
+	// only the handful declared by hand and silently hid the other ~12
+	// (`checkedIn`, `drinks`, `prPortfolio`, `paymentCardLast4`, …). That went
+	// unnoticed while this was only ever fed to `setState`, which takes a
+	// partial; it surfaced the moment the store used it as its INITIAL state and
+	// a third of the slices came back untyped.
+	//
+	// `prComcard` is excluded because it is genuinely absent: it lands in
+	// `unblankable` and is never assigned, which is what leaves the PR portal's
+	// comcard alone. Naming it here would be the same lie in the other direction.
+	return blank as Omit<ReturnType<typeof buildDemoStoreReset>, "prComcard">;
 }

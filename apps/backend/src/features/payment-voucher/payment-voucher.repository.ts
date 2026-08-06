@@ -658,6 +658,10 @@ export class PaymentVoucherRepositoryClass {
       contactEmail: string | null;
       addressLine1: string | null;
       addressLine2: string | null;
+      city: string | null;
+      postcode: string | null;
+      state: string | null;
+      country: string | null;
     } | null;
     pr: {
       name: string;
@@ -678,6 +682,10 @@ export class PaymentVoucherRepositoryClass {
           agencyEmail: AgencyTable.contactEmail,
           agencyAddress1: AgencyTable.addressLine1,
           agencyAddress2: AgencyTable.addressLine2,
+          agencyCity: AgencyTable.city,
+          agencyPostcode: AgencyTable.postcode,
+          agencyState: AgencyTable.state,
+          agencyCountry: AgencyTable.country,
           // `main.pr` is gone — `prId` IS the `userId` now, so identity comes
           // straight off the account: name/nickname off `user`/`user_profile`,
           // IC off `user_profile.id_no`, phone off the account (one fact, one
@@ -723,6 +731,10 @@ export class PaymentVoucherRepositoryClass {
               contactEmail: row.agencyEmail,
               addressLine1: row.agencyAddress1,
               addressLine2: row.agencyAddress2,
+              city: row.agencyCity,
+              postcode: row.agencyPostcode,
+              state: row.agencyState,
+              country: row.agencyCountry,
             }
           : null,
         pr: row.prName

@@ -19,14 +19,18 @@ export const AgencyTable = MainSchema.table('agency', {
   name: varchar('name', { length: 255 }).notNull(),
   agencyCode: varchar('agency_code', { length: 6 }).notNull().unique(),
   ssmNo: varchar('ssm_no', { length: 100 }).notNull(),
+  logoImage: varchar('logo_image'),
   contactName: varchar('contact_name', { length: 100 }),
   contactEmail: varchar('contact_email', { length: 255 }),
   contactPhone: varchar('contact_phone', { length: 50 }),
-  // The issuing agency's address, printed on the payment voucher (migration
-  // 0077) — until these existed the exported voucher read "Address: —". Same
-  // two-line shape `outlet` already uses, so the two read alike.
+  // Company address on the ORG (0077 lines + 0098 locality). Not the portal
+  // user's home — that only belongs on user_profile for PRs.
   addressLine1: varchar('address_line_1', { length: 255 }),
   addressLine2: varchar('address_line_2', { length: 255 }),
+  city: varchar('city', { length: 100 }),
+  postcode: varchar('postcode', { length: 20 }),
+  state: varchar('state', { length: 100 }),
+  country: varchar('country', { length: 100 }),
   status: agencyStatusEnum('status').notNull().default('pending_review'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

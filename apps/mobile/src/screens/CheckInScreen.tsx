@@ -268,8 +268,40 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         ? 'Nothing logged yet. Scan a receipt or self-log at least one drink or tip — with its picture — before you check out. Once the shift closes, that commission cannot be claimed.'
         : null;
 
+  /**
+   * What this shift pays THIS PR, in RM — the one figure every wage number on
+   * this screen renders. Display only: it decides nothing and writes nothing.
+   *
+   * Once the shift is SEALED (`payRule` set), `payAmount` is the answer and the
+   * rate card is not. Since migration 0097 the server pro-rates the day rate by
+   * the minutes actually worked, so a PR who left early is owed less than the
+   * card says — reading the card here is how the app came to show RM700 for a
+   * shift whose voucher pays RM385.
+   *
+   * ⚠️ A sealed zero is a REAL answer (the stamps fell entirely outside the
+   * shift window), so this must not fall through on a falsy amount. Hence the
+   * seal is tested explicitly rather than chaining `||` across the two — an `||`
+   * would quietly restore the full day rate on exactly the shift that earned
+   * nothing.
+   *
+   * Before the seal nothing has been earned yet, so the forecast stands exactly
+   * as it always did: the card first, the assign-time `payAmount` behind it.
+   *
+   * 🔴 Never recompute the pro-rata here. The server owns the rule; this renders
+   * what it decided. That is what stops release-early — or any later rule — from
+   * needing a second implementation on the phone that can drift from the money.
+   */
+  const shiftWagesRm = !active
+    ? 0
+    : active.payRule != null
+      ? Number(active.payAmount) ||
+        0
+      : Number(active.rate?.wagePerHour) ||
+        Number(active.payAmount) ||
+        0;
+
   const finalPayout = active
-    ? (Number(active.rate?.wagePerHour) || Number(active.payAmount)) +
+    ? (shiftWagesRm) +
       receiptCommissionTotal(todayReceipts)
     : 0;
   const completeDuration = active
@@ -288,7 +320,13 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     ? overtimeHours(active.checkInAt, new Date(active.checkOutAt).getTime())
     : 0;
   const otPendingAmount = active
-    ? overtimePay(otHoursWorked, active.rate, Number(active.payPerHour) || 0)
+    ? overtimePay(
+        otHoursWorked,
+        active.rate,
+        Number(active.payPerHour) || 0,
+        // The sealed window, so this estimate matches what the agency approves.
+        active.scheduledMinutes,
+      )
     : 0;
 
   const statusLabel =
@@ -323,13 +361,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
         if (forCheckout) {
           const sealed = await checkOutShiftAssignment(token, active.id, fix);
-          // Flat tier wages from Post Job "Pay by PR tier → Wages" (rate.wagePerHour),
-          // falling back to the sealed assignment payAmount.
+          // The amount the SERVER just sealed, first — it is the only party that
+          // knows how many minutes were worked, and since 0097 it pro-rates the
+          // day rate by them. This row is what the PR reads as their wages, so
+          // preferring the rate card here printed the full day on a shift that
+          // earned a fraction of it. `sealed.payRule` marks a row the new rule
+          // decided; a falsy amount on such a row is a real zero, not a miss.
+          // The rate card stays as the fallback for a server that sealed nothing
+          // (a commission-only PR) and for rows predating the rule.
           const wagesRm =
-            Number(active.rate?.wagePerHour) ||
-            Number(sealed.payAmount) ||
-            Number(active.payAmount) ||
-            0;
+            sealed.payRule != null
+              ? Number(sealed.payAmount) || 0
+              : Number(active.rate?.wagePerHour) ||
+                Number(sealed.payAmount) ||
+                Number(active.payAmount) ||
+                0;
           await addLine({
             kind: 'wages',
             source: 'checkin',
@@ -479,7 +525,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <View style={styles.briefBody}>
                   <Text style={styles.briefBodyLabel}>Est. payout</Text>
                   <Text style={styles.briefBodyValue}>
-                    {formatRM(Number(active.rate?.wagePerHour) || Number(active.payAmount))}
+                    {formatRM(shiftWagesRm)}
                   </Text>
                   <Text style={[styles.briefBodyLabel, { marginTop: 8 }]}>Shift time</Text>
                   <Text style={styles.briefBodyValue}>{shiftTime}</Text>
@@ -558,7 +604,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   checkedOut={false}
                   checkInAt={active.checkInAt}
                   checkOutAt={active.checkOutAt}
-                  dutyWagesRm={Number(active.rate?.wagePerHour) || Number(active.payAmount)}
+                  dutyWagesRm={shiftWagesRm}
                   targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
                   dayKey={todayKey}
                 />
@@ -608,7 +654,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   checkedOut
                   checkInAt={active.checkInAt}
                   checkOutAt={active.checkOutAt}
-                  dutyWagesRm={Number(active.rate?.wagePerHour) || Number(active.payAmount)}
+                  dutyWagesRm={shiftWagesRm}
                   targetSalesRm={active.rate?.targetSalesRm ? Number(active.rate.targetSalesRm) : null}
                   dayKey={todayKey}
                 />

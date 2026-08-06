@@ -12,6 +12,7 @@ import {
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGalleryPicker";
 import { useAgencyPendingPrs } from "@agency-portal/hooks/use-agency-pending-prs";
+import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
@@ -19,6 +20,7 @@ import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-re
 import {
 	cutlostRequestDetail,
 	cutlostRequestTitle,
+	toPendingCutlostRequest,
 } from "@agency-portal/lib/outlet-cutlost-requests";
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
@@ -1126,9 +1128,16 @@ function AgencyPending() {
 		[pendingPRs, activeAgencyId],
 	);
 	const signups = backend.backed ? backend.signups : demoSignups;
+	// Real requests when there is a session, the demo store otherwise — the same
+	// `backed` split the signups list above already uses. The endpoint scopes
+	// itself to this agency's shifts, so no agency id is passed and none can be.
+	const liveCutlost = useCutlostRequests({ status: "pending" });
 	const cutlostRequests = useMemo(
-		() => pendingCutlostRequests.filter((r) => r.status === "pending"),
-		[pendingCutlostRequests],
+		() =>
+			liveCutlost.backed
+				? liveCutlost.requests.map(toPendingCutlostRequest)
+				: pendingCutlostRequests.filter((r) => r.status === "pending"),
+		[liveCutlost.backed, liveCutlost.requests, pendingCutlostRequests],
 	);
 
 	// PR MC/leave requests are real backend rows parked at `leave_pending`, and
@@ -1462,10 +1471,30 @@ function AgencyPending() {
 					) : selectedCutlost ? (
 						<CutlostDetailPanel
 							req={selectedCutlost}
-							onApprove={() => approveCutlostRequest(selectedCutlost.id)}
-							onReject={(reason) =>
-								rejectCutlostRequest(selectedCutlost.id, reason)
-							}
+							// Approving is what RELEASES people — it seals a pro-rated wage
+							// on every named PR — so on a real session it must reach the
+							// server. The store actions stay for the demo logins.
+							onApprove={() => {
+								if (liveCutlost.backed) {
+									void liveCutlost.decide({
+										id: selectedCutlost.id,
+										decision: "approve",
+									});
+									return;
+								}
+								approveCutlostRequest(selectedCutlost.id);
+							}}
+							onReject={(reason) => {
+								if (liveCutlost.backed) {
+									void liveCutlost.decide({
+										id: selectedCutlost.id,
+										decision: "reject",
+										reason,
+									});
+									return;
+								}
+								rejectCutlostRequest(selectedCutlost.id, reason);
+							}}
 						/>
 					) : (
 						<div className="iz-approvals-empty">

@@ -7,8 +7,24 @@ import viteReact, { reactCompilerPreset } from '@vitejs/plugin-react';
 import { nitro } from 'nitro/vite';
 import { defineConfig } from 'vite';
 
+// Opt-in: `VITE_TANSTACK_DEVTOOLS=1 pnpm dev:web` — slows SSR when Metro co-runs.
+const enableDevtools = process.env.VITE_TANSTACK_DEVTOOLS === '1';
+// Set by `tools/scripts/dev-all.mjs` when Vite co-runs with Metro.
+const coRunWithMetro = process.env.INNOCENZ_DEV_ALL === '1';
+
 const config = defineConfig({
-  resolve: { tsconfigPaths: true },
+  resolve: {
+    tsconfigPaths: true,
+    // TanStack Start also dedupes these; keep here so client + SSR share one copy
+    // without absolute aliases (aliasing to node_modules/react makes Vite's SSR
+    // runner execute CJS index.js as ESM → "module is not defined").
+    dedupe: ['react', 'react-dom'],
+  },
+  // country-state-city ships multi‑MB city JSON; pre-bundling it often hits Vite's
+  // 120s optimizer timeout (worse under `pnpm dev:all` with Metro on Windows).
+  optimizeDeps: {
+    exclude: ['country-state-city'],
+  },
   server: {
     // Proxy only backend-owned /img paths so Vite can still serve marketing
     // assets from apps/web/public/img (landing, UAB badge, etc.).
@@ -23,9 +39,24 @@ const config = defineConfig({
         changeOrigin: true,
       },
     },
+    ...(coRunWithMetro
+      ? {
+          watch: {
+            // Don't compete with Metro for these trees on Windows.
+            ignored: [
+              '**/apps/mobile/**',
+              '**/apps/backend/**',
+              '**/postgres/**',
+              '**/.git/**',
+              '**/android/**',
+              '**/ios/**',
+            ],
+          },
+        }
+      : {}),
   },
   plugins: [
-    devtools(),
+    ...(enableDevtools ? [devtools()] : []),
     paraglideVitePlugin({
       project: './project.inlang',
       outdir: './src/paraglide',

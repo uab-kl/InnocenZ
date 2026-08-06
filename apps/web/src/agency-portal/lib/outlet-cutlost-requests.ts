@@ -22,6 +22,53 @@ export type PendingCutlostRequest = {
 	rationale?: string[];
 };
 
+/**
+ * A backend cut-loss request in the shape these screens already render.
+ *
+ * The two differ because the backend stores nothing it can reach by FK: outlet
+ * name, event, slot and date all arrive joined, and the PR names come from the
+ * assignment rows. Mapping here rather than reshaping the components keeps the
+ * demo store and the real endpoint on ONE rendering path.
+ *
+ * `cutlostBefore` has no server-side counterpart — it is a display figure the
+ * prototype computed from its own store — so it is 0 rather than invented.
+ */
+export function toPendingCutlostRequest(live: {
+	id: string;
+	shiftId: string;
+	kind: CutlostRequestKind;
+	status: "pending" | "approved" | "rejected";
+	slotsCut: number | null;
+	estimatedSavings: string;
+	rationale: string[] | null;
+	declineReason: string | null;
+	createdAt: string;
+	outletName: string | null;
+	shiftDate: string;
+	slot: string | null;
+	eventName: string | null;
+	releasedAssignments: Array<{ prId: string; prName: string | null }>;
+}): PendingCutlostRequest {
+	return {
+		id: live.id,
+		shiftId: live.shiftId,
+		outletName: live.outletName ?? "Venue",
+		shiftEvent: live.eventName ?? live.slot ?? "Shift",
+		shiftLabel: live.slot ?? "",
+		dateLabel: live.shiftDate,
+		kind: live.kind,
+		status: live.status,
+		releasedPrIds: live.releasedAssignments.map((a) => a.prId),
+		releasedPrNames: live.releasedAssignments.map((a) => a.prName ?? "a PR"),
+		slotsCut: live.slotsCut ?? undefined,
+		estimatedSavings: Number(live.estimatedSavings) || 0,
+		cutlostBefore: 0,
+		requestedAt: live.createdAt,
+		declineReason: live.declineReason ?? undefined,
+		rationale: live.rationale ?? undefined,
+	};
+}
+
 export function cutlostRequestTitle(
 	req: Pick<
 		PendingCutlostRequest,

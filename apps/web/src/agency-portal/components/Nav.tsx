@@ -1,5 +1,4 @@
 import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
-import { PrNotificationBell } from "@agency-portal/components/pr/PrNotificationBell";
 import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
 import { goToWelcome } from "@agency-portal/lib/go-welcome";
 import {
@@ -8,20 +7,21 @@ import {
 	WELCOME_PATH,
 } from "@agency-portal/lib/nav-back";
 import { OUTLET_SUB_ROLE_LABELS } from "@agency-portal/lib/outlet-rbac";
-
-import {
-	fmtDTopbar,
-	getPrProfile,
-	getShiftToday,
-} from "@agency-portal/lib/pr-demo";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
 import { usePrPortalReady } from "@agency-portal/lib/use-pr-sub-role";
 import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
-import type { ReactNode } from "react";
-import { useEffect, useState } from "react";
+import { lazy, type ReactNode, Suspense } from "react";
+
+// PR demo + notification bell live in a separate chunk so agency/outlet SSR
+// (and login recovery) never waits on that graph.
+const PrPortalTopbar = lazy(() =>
+	import("@agency-portal/components/pr/PrPortalTopbar").then((m) => ({
+		default: m.PrPortalTopbar,
+	})),
+);
 
 export interface NavItem {
 	to: string;
@@ -105,34 +105,6 @@ const ROLE_LABELS: Record<
 	},
 };
 
-function formatTopbarTime(d: Date) {
-	return d.toLocaleTimeString("en-MY", {
-		hour: "2-digit",
-		minute: "2-digit",
-		hour12: false,
-	});
-}
-
-function PrTopbarDateTime() {
-	const [time, setTime] = useState(() => formatTopbarTime(new Date()));
-	const today = getShiftToday();
-	const dateLine = fmtDTopbar(today[0], today[1], today[2]);
-
-	useEffect(() => {
-		const tick = () => setTime(formatTopbarTime(new Date()));
-		tick();
-		const id = window.setInterval(tick, 30_000);
-		return () => window.clearInterval(id);
-	}, []);
-
-	return (
-		<div className="iz-topbar-datetime" aria-label={`${dateLine}, ${time}`}>
-			<span className="iz-topbar-date">{dateLine}</span>
-			<span className="iz-topbar-time">{time}</span>
-		</div>
-	);
-}
-
 export type AppTopbarProps = {
 	backTo?: string;
 
@@ -143,6 +115,9 @@ export type AppTopbarProps = {
 	onBack?: () => void | boolean;
 
 	hideBack?: boolean;
+
+	/** Extra class on the back/cancel control (e.g. larger Cancel edit). */
+	backClassName?: string;
 };
 
 export function PortalBackButton({
@@ -215,6 +190,8 @@ export function AppTopbar({
 	onBack,
 
 	hideBack = false,
+
+	backClassName,
 }: AppTopbarProps) {
 	const { pathname } = useLocation();
 
@@ -236,16 +213,13 @@ export function AppTopbar({
 		role = prSubRole === "pr_tied" ? "host_tied" : "host";
 	}
 
-	const prProfile = prSubRole ? getPrProfile(prSubRole) : null;
-
 	const meta = ROLE_LABELS[role];
 
-	const displayName = prDisplayName ?? prProfile?.name ?? meta.name;
+	const displayName = prDisplayName ?? meta.name;
 
-	const displayAv =
-		displayName.trim()[0]?.toUpperCase() ?? prProfile?.av ?? meta.av;
+	const displayAv = displayName.trim()[0]?.toUpperCase() ?? meta.av;
 
-	const displayGradient = prProfile?.avg ?? meta.gradient;
+	const displayGradient = meta.gradient;
 
 	const displayLabel =
 		pathname.startsWith("/outlet") && outletSubRole
@@ -282,41 +256,24 @@ export function AppTopbar({
 					backTo={backTo}
 					backLabel={backLabel}
 					onBack={onBack}
+					className={backClassName}
 				/>
 			)}
 
 			{!isPortalShell && (
 				<>
 					{isPrPortal ? (
-						<>
-							<Link
-								to="/host/profile"
-								className="iz-topbar-identity iz-topbar-identity--link iz-topbar-identity--pr"
-								aria-label="Open profile"
-								title="Profile"
-							>
-								<div
-									className={`iz-avatar iz-avatar--sm${prAvatarPhoto ? " iz-avatar-photo" : ""}`}
-									style={
-										prAvatarPhoto ? undefined : { background: displayGradient }
-									}
-								>
-									{prAvatarPhoto ? (
-										<img src={publicAssetPath(prAvatarPhoto)} alt="" />
-									) : (
-										displayAv
-									)}
-								</div>
-								<div className="iz-topbar-meta">
-									<div className="iz-topbar-name">{displayName}</div>
-									<div className="iz-topbar-role">{displayLabel}</div>
-								</div>
-							</Link>
-							<div className="iz-topbar-actions iz-topbar-actions--pr">
-								<PrTopbarDateTime />
-								<PrNotificationBell />
-							</div>
-						</>
+						<Suspense fallback={<span className="iz-topbar-spacer" aria-hidden />}>
+							<PrPortalTopbar
+								prSubRole={prSubRole}
+								fallbackName={meta.name}
+								fallbackLabel={displayLabel}
+								fallbackAv={meta.av}
+								fallbackGradient={meta.gradient}
+								prDisplayName={prDisplayName}
+								prAvatarPhoto={prAvatarPhoto}
+							/>
+						</Suspense>
 					) : (
 						<div className="iz-topbar-identity">
 							<div

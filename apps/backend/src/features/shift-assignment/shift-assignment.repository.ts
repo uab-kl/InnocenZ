@@ -4,7 +4,7 @@ import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
-import { AgencyPrTable } from '@/features/pr/pr.model';
+import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { DEFAULT_GEOFENCE_RADIUS_M } from './check-in-geofence';
@@ -400,6 +400,7 @@ export class ShiftAssignmentRepositoryClass {
           // onto the assignment. Composed into one display line below.
           outletAddressLine1: OutletTable.addressLine1,
           outletAddressLine2: OutletTable.addressLine2,
+          outletCity: OutletTable.city,
           outletPostcode: OutletTable.postcode,
           outletState: OutletTable.state,
           // The venue pin, same FK path as getOutletGeoFenceForAssignment.
@@ -413,8 +414,8 @@ export class ShiftAssignmentRepositoryClass {
         .where(ownership)
         .orderBy(ShiftTable.shiftDate);
       return rows.map((row) => {
-        // "50000 Kuala Lumpur" — postcode + state read as one piece.
-        const cityLine = [row.outletPostcode, row.outletState]
+        // "50000 Petaling Jaya, Selangor" — city/postcode + state as one piece.
+        const cityLine = [row.outletPostcode, row.outletCity, row.outletState]
           .map((s) => s?.trim())
           .filter(Boolean)
           .join(' ');
@@ -1138,6 +1139,10 @@ export class ShiftAssignmentRepositoryClass {
       outletName: string | null;
       overtimeMinutes: number | null;
       payAmount: string | null;
+      /** The FULL day rate — what overtime is priced on. See `overtimeBasisAmount`. */
+      dayRateAmount: string | null;
+      /** The shift's window — the divisor for both pay and the overtime rate. */
+      scheduledMinutes: number | null;
     }>
   > {
     try {
@@ -1153,6 +1158,8 @@ export class ShiftAssignmentRepositoryClass {
           outletName: OutletTable.name,
           overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
           payAmount: ShiftAssignmentTable.payAmount,
+          dayRateAmount: ShiftAssignmentTable.dayRateAmount,
+          scheduledMinutes: ShiftAssignmentTable.scheduledMinutes,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))

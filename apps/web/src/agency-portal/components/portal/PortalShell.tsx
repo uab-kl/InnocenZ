@@ -6,6 +6,7 @@ import {
 	navIsActive,
 } from "@agency-portal/components/Nav";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
+import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import {
 	AGENCY_SUB_ROLE_LABELS,
@@ -13,6 +14,7 @@ import {
 } from "@agency-portal/lib/agency-rbac";
 import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
 	OUTLET_SUB_ROLE_LABELS,
 	outletCan,
@@ -22,6 +24,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
+import { isOrgProfileOnly } from "@/components/organization/org-status";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 
 export type PortalKind = "agency" | "outlet";
@@ -88,11 +91,18 @@ function mergeNavItems(
 	base: NavItem[],
 	agencySubRole: ReturnType<typeof useStore.getState>["agencySubRole"],
 	outletSubRole: ReturnType<typeof useStore.getState>["outletSubRole"],
+	orgProfileOnly: boolean,
 ): NavItem[] {
 	const seen = new Set(base.map((i) => i.to));
 	const extras = portal === "agency" ? AGENCY_EXTRAS : OUTLET_EXTRAS;
 	const filtered = extras.filter((item) => {
 		if (seen.has(item.to)) return false;
+		// Pending / suspended: only Settings / Profile — no Workspace or Subscription.
+		if (orgProfileOnly) {
+			return (
+				item.to === "/outlet/settings" || item.to === "/agency/profile"
+			);
+		}
 		if (portal === "agency")
 			return agencyCan(
 				agencySubRole,
@@ -327,11 +337,18 @@ export function PortalShell({
 			? AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"]
 			: OUTLET_SUB_ROLE_LABELS[outletSubRole ?? "outlet_owner"];
 
+	const orgProfileOnly =
+		getPortalSessionKind() === "real" &&
+		(portal === "agency"
+			? isOrgProfileOnly(getAgencyIdentity()?.agencyStatus)
+			: isOrgProfileOnly(getOutletIdentity()?.outletStatus));
+
 	const sidebarItems = mergeNavItems(
 		portal,
 		navItems,
 		agencySubRole,
 		outletSubRole,
+		orgProfileOnly,
 	);
 
 	// A session that did not authenticate against the backend renders fixtures,

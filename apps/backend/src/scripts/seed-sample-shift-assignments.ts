@@ -2,7 +2,7 @@ import 'dotenv/config';
 
 import { eq } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { AgencyPrTable } from '@/features/pr/pr.model';
+import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import {

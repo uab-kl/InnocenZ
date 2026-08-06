@@ -30,6 +30,7 @@ function OutletLayout() {
 	// Client-only demo island (zustand + window/matchMedia); defer to the client
 	// to keep SSR hydration clean.
 	const [mounted, setMounted] = useState(false);
+	const [orgStatus, setOrgStatus] = useState<string | null>(null);
 
 	// Real backend accounts see the same pages with no data; demo accounts keep
 	// their seeded data. Blank before the first portal render so real accounts
@@ -42,15 +43,30 @@ function OutletLayout() {
 			// mount; re-apply the persisted real identity so it survives reloads.
 			const identity = getOutletIdentity();
 			if (identity) {
+				setOrgStatus(identity.outletStatus);
 				useStore.getState().setOutletSubRole(identity.subRole);
-				useStore.setState((st) => ({
-					outletOwner: { ...st.outletOwner, orgName: identity.outletName },
-					outletWorkspace: {
-						...st.outletWorkspace,
-						outletName: identity.outletName,
+				void import("@agency-portal/lib/outlet-demo").then(
+					({ BLANK_OUTLET_OWNER }) => {
+						useStore.setState((st) => ({
+							outletOwner: {
+								...BLANK_OUTLET_OWNER,
+								orgName: identity.outletName,
+								email: st.outletOwner.email,
+								ownerName: st.outletOwner.ownerName,
+								accountActivated: identity.outletStatus === "active",
+							},
+							outletWorkspace: {
+								...st.outletWorkspace,
+								outletName: identity.outletName,
+							},
+						}));
 					},
-				}));
+				);
+			} else {
+				setOrgStatus(null);
 			}
+		} else {
+			setOrgStatus(null);
 		}
 		setMounted(true);
 	}, []);
@@ -58,14 +74,17 @@ function OutletLayout() {
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const outletSubRole = useStore((s) => s.outletSubRole);
-	const navItems = getOutletNavItems(outletSubRole);
+	const navItems = getOutletNavItems(outletSubRole, orgStatus);
 
 	useEffect(() => {
 		if (!mounted) return;
-		if (!canAccessOutletPath(outletSubRole, pathname)) {
-			navigate({ to: getOutletDefaultRoute(outletSubRole), replace: true });
+		if (!canAccessOutletPath(outletSubRole, pathname, orgStatus)) {
+			navigate({
+				to: getOutletDefaultRoute(outletSubRole, orgStatus),
+				replace: true,
+			});
 		}
-	}, [mounted, pathname, outletSubRole, navigate]);
+	}, [mounted, pathname, outletSubRole, orgStatus, navigate]);
 
 	if (!mounted) {
 		return <div style={{ minHeight: "100svh", background: "#0e0a1a" }} />;

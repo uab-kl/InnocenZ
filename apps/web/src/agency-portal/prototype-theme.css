@@ -7318,6 +7318,209 @@
 	font-size: 1.35rem;
 }
 
+/* Profile settings — clear view vs edit */
+.iz-profile-field {
+	padding: 12px 0;
+	border-bottom: 1px solid var(--iz-line);
+}
+.iz-profile-field:last-child {
+	border-bottom: 0;
+	padding-bottom: 2px;
+}
+.iz-profile-field__label {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	text-transform: uppercase;
+	color: var(--iz-muted);
+	margin-bottom: 6px;
+}
+.iz-profile-field__lock {
+	margin-left: auto;
+	display: inline-flex;
+	opacity: 0.7;
+	color: var(--iz-muted2);
+}
+.iz-profile-field__value {
+	margin: 0;
+	font-family: var(--font-sora, "Sora", sans-serif);
+	font-size: 15px;
+	font-weight: 650;
+	line-height: 1.35;
+	color: var(--iz-txt);
+	word-break: break-word;
+}
+.iz-profile-field__hint {
+	margin: 4px 0 0;
+	font-size: 11px;
+	line-height: 1.35;
+	color: var(--iz-muted2);
+}
+.iz-profile-field__input {
+	width: 100%;
+	padding: 11px 12px;
+	border-radius: 12px;
+	border: 1px solid rgba(217, 185, 122, 0.45);
+	background: rgba(8, 5, 15, 0.45);
+	color: var(--iz-txt);
+	font-family: var(--font-sora, "Sora", sans-serif);
+	font-size: 15px;
+	font-weight: 650;
+	outline: none;
+	transition:
+		border-color 0.15s,
+		box-shadow 0.15s;
+}
+.iz-profile-field__input:focus {
+	border-color: rgba(217, 185, 122, 0.85);
+	box-shadow: 0 0 0 3px rgba(217, 185, 122, 0.14);
+}
+.iz-profile-field--edit {
+	padding-top: 14px;
+	padding-bottom: 14px;
+}
+.iz-profile-field--locked .iz-profile-field__value {
+	color: var(--iz-muted);
+	font-weight: 600;
+}
+
+.iz-profile-section {
+	border-radius: 16px;
+	border: 1px solid var(--iz-line);
+	background: var(--iz-grad-card);
+	padding: 4px 14px 6px;
+	margin-bottom: 4px;
+}
+.iz-profile-section--editing {
+	border-color: rgba(217, 185, 122, 0.4);
+	box-shadow:
+		inset 0 1px 0 rgba(217, 185, 122, 0.08),
+		0 0 0 1px rgba(217, 185, 122, 0.08);
+}
+
+.iz-profile-edit-banner {
+	display: flex;
+	align-items: flex-start;
+	gap: 10px;
+	margin: 0 0 14px;
+	padding: 12px 14px;
+	border-radius: 14px;
+	border: 1px solid rgba(232, 198, 106, 0.35);
+	background: linear-gradient(
+		135deg,
+		rgba(232, 198, 106, 0.14),
+		rgba(232, 198, 106, 0.04)
+	);
+}
+.iz-profile-edit-banner__dot {
+	width: 8px;
+	height: 8px;
+	margin-top: 5px;
+	border-radius: 999px;
+	background: var(--iz-amber);
+	box-shadow: 0 0 0 4px rgba(232, 198, 106, 0.18);
+	flex-shrink: 0;
+	animation: iz-profile-pulse 1.6s ease-in-out infinite;
+}
+@keyframes iz-profile-pulse {
+	0%,
+	100% {
+		opacity: 1;
+		transform: scale(1);
+	}
+	50% {
+		opacity: 0.65;
+		transform: scale(0.92);
+	}
+}
+.iz-profile-edit-banner__title {
+	margin: 0;
+	font-family: var(--font-sora, "Sora", sans-serif);
+	font-size: 13px;
+	font-weight: 750;
+	color: var(--iz-amber);
+}
+.iz-profile-edit-banner__body {
+	margin: 2px 0 0;
+	font-size: 12px;
+	line-height: 1.4;
+	color: var(--iz-muted);
+}
+
+.iz-profile-edit-trigger {
+	margin-top: 14px;
+	min-width: 160px;
+}
+
+.iz-profile-photo-actions {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	justify-content: center;
+	gap: 8px 12px;
+	margin-top: 12px;
+}
+.iz-profile-photo-actions__change {
+	min-height: 36px;
+	padding-inline: 14px;
+	font-size: 13px;
+}
+.iz-profile-photo-actions__remove {
+	border: none;
+	background: transparent;
+	color: var(--iz-red);
+	font-size: 12px;
+	font-weight: 650;
+	cursor: pointer;
+	padding: 4px 6px;
+	text-decoration: underline;
+	text-underline-offset: 2px;
+}
+.iz-profile-photo-actions__remove:hover {
+	color: #ffb0b0;
+}
+
+.iz-settings-profile--editing .iz-avatar--xl {
+	box-shadow: 0 0 0 3px rgba(217, 185, 122, 0.45);
+}
+
+.iz-profile-edit-dock {
+	position: sticky;
+	bottom: max(12px, env(safe-area-inset-bottom, 0px));
+	z-index: 40;
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 10px;
+	margin-top: 18px;
+	padding: 12px;
+	border-radius: 16px;
+	border: 1px solid rgba(217, 185, 122, 0.35);
+	background: color-mix(in srgb, var(--iz-panel) 92%, transparent);
+	backdrop-filter: blur(12px);
+	box-shadow: 0 -8px 28px -12px rgba(0, 0, 0, 0.55);
+}
+.iz-profile-edit-dock .iz-btn {
+	width: 100%;
+	min-height: 48px;
+	justify-content: center;
+	font-size: 15px;
+	font-weight: 700;
+	gap: 8px;
+}
+.iz-profile-edit-dock__cancel {
+	font-size: 15px;
+}
+.iz-profile-edit-dock__save {
+	font-weight: 750;
+}
+
+.iz-profile-actions {
+	padding-bottom: 8px;
+}
+
 .iz-stat-tile {
 	background: var(--iz-grad-card);
 	border: 1px solid var(--iz-line);
@@ -9824,6 +10027,28 @@ button.iz-pr-offer-row:hover {
 .iz-topbar-back-label {
 	white-space: nowrap;
 }
+/* Larger Cancel edit control on Settings / Profile */
+.iz-topbar-back--cancel {
+	height: 42px;
+	min-height: 42px;
+	padding: 0 14px 0 12px;
+	gap: 6px;
+	border-radius: 12px;
+	font-size: 14px;
+	font-weight: 700;
+	color: var(--iz-txt);
+	border-color: rgba(217, 185, 122, 0.4);
+	background: rgba(217, 185, 122, 0.1);
+}
+.iz-topbar-back--cancel svg {
+	width: 18px;
+	height: 18px;
+}
+.iz-topbar-back--cancel:hover {
+	border-color: rgba(217, 185, 122, 0.65);
+	background: rgba(217, 185, 122, 0.16);
+	color: var(--iz-txt);
+}
 @media (max-width: 380px) {
 	.iz-topbar-back {
 		width: 30px;
@@ -9833,6 +10058,14 @@ button.iz-pr-offer-row:hover {
 	}
 	.iz-topbar-back-label {
 		display: none;
+	}
+	.iz-topbar-back--cancel {
+		width: auto;
+		max-width: none;
+		padding: 0 12px 0 10px;
+	}
+	.iz-topbar-back--cancel .iz-topbar-back-label {
+		display: inline;
 	}
 }
 .iz-topbar-identity {

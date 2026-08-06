@@ -12,6 +12,7 @@ export interface Outlet {
 	logoImage: string | null;
 	addressLine1: string | null;
 	addressLine2: string | null;
+	city: string | null;
 	postcode: string | null;
 	state: string | null;
 	country: string | null;
@@ -85,6 +86,8 @@ export interface OutletMembership {
 	userId: string;
 	outletId: string;
 	outletName: string;
+	/** Organisation status (`pending_review` / `active` / …). */
+	outletStatus: string;
 	subRole: OutletMemberSubRole;
 	status: string;
 }

@@ -1533,6 +1533,69 @@ export const DEFAULT_OUTLET_OPS_HEAD: OutletOpsHead = {
 	email: "ops@velvet23.my",
 };
 
+/**
+ * Empty shapes for REAL backend sessions. Never put Velvet names/photos/emails
+ * into a live login — `buildBlankPortalReset` and Settings overlays use these.
+ */
+export const BLANK_OUTLET_OWNER: OutletOwnerSettings = {
+	ownerName: "",
+	mobile: "",
+	email: "",
+	ic: "",
+	orgName: "",
+	otpChannel: "email",
+	accountActivated: false,
+	avatarPhoto: null,
+	subscriptionPlanId: "starter",
+};
+
+export const BLANK_OUTLET_FINANCE_HEAD: OutletFinanceHead = {
+	name: "",
+	ic: "",
+	email: "",
+};
+
+export const BLANK_OUTLET_OPS_HEAD: OutletOpsHead = {
+	name: "",
+	ic: "",
+	email: "",
+};
+
+export const BLANK_OUTLET_SETTINGS: OutletSettings = {
+	venueName: "",
+	location: "",
+	notifyShiftUpdates: true,
+	notifyReconciliation: true,
+	notifyInvoiceDue: true,
+};
+
+export const BLANK_OUTLET_WORKSPACE: OutletWorkspaceSettings = {
+	outletName: "",
+	basePayPerHour: 0,
+	drinkPct: 0,
+	tipPct: 0,
+	tablePct: 0,
+	otAfterHours: 6,
+	tierRates: normalizeTierRates(
+		{
+			wagePerHour: 0,
+			drinkPct: 0,
+			tipPct: 0,
+			tablePct: 0,
+			otAfterHours: 6,
+		},
+		undefined,
+	),
+	commissionOnlyRates: defaultCommissionOnlyRateSettings(),
+	perDrinkRm: 0,
+	perTableRm: 0,
+	drinkMenu: [],
+	happyHourStart: "20:00",
+	happyHourEnd: "22:00",
+	happyHourDrinkDiscountPct: 0,
+	penaltyRules: DEFAULT_PENALTY_RULES,
+};
+
 export {
 	getOutletWeeklyReport,
 	type OutletWeeklyDaySales,

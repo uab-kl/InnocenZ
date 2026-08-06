@@ -1,5 +1,6 @@
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import type { LucideIcon } from "lucide-react";
+import { isOrgProfileOnly } from "@/components/organization/org-status";
 
 /** Module 9 · Agency Owner vs Agency Finance */
 export type AgencySubRole = "agency_owner" | "agency_finance";
@@ -116,24 +117,35 @@ const ALL_NAV: AgencyNavItem[] = [
 	},
 ];
 
+/** Profile path while the organisation is pending or suspended. */
+export const AGENCY_PENDING_PROFILE_PATH = "/agency/profile";
+
 export function getAgencyNavItems(
 	role: AgencySubRole | null | undefined,
+	orgStatus?: string | null,
 ): AgencyNavItem[] {
+	if (isOrgProfileOnly(orgStatus)) return [];
 	const r = resolveAgencySubRole(role);
 	return ALL_NAV.filter((item) => agencyCan(r, item.permission));
 }
 
 export function getAgencyDefaultRoute(
 	role: AgencySubRole | null | undefined,
+	orgStatus?: string | null,
 ): string {
-	const items = getAgencyNavItems(role);
+	if (isOrgProfileOnly(orgStatus)) return AGENCY_PENDING_PROFILE_PATH;
+	const items = getAgencyNavItems(role, orgStatus);
 	return items[0]?.to ?? "/agency/pv";
 }
 
 export function canAccessAgencyPath(
 	role: AgencySubRole | null | undefined,
 	pathname: string,
+	orgStatus?: string | null,
 ): boolean {
+	if (isOrgProfileOnly(orgStatus)) {
+		return pathname.startsWith("/agency/profile");
+	}
 	const r = resolveAgencySubRole(role);
 	if (pathname === "/agency" || pathname === "/agency/")
 		return agencyCan(r, "viewHome");

@@ -10,6 +10,8 @@ export interface OutletSessionIdentity {
 	outletId: string;
 	outletName: string;
 	subRole: OutletSubRole;
+	/** Organisation status — `pending_review` / `suspended` → profile only. */
+	outletStatus: string;
 }
 
 const IDENTITY_KEY = "iz-outlet-identity";
@@ -53,6 +55,9 @@ export function identityFromMembership(
 		outletId: m.outletId,
 		outletName: m.outletName,
 		subRole: outletSubRoleFromBackend(m.subRole),
+		// Prefer the org status from the API; missing field (older backend) →
+		// do not lock the portal — only explicit pending/suspended restrict.
+		outletStatus: m.outletStatus || "active",
 	};
 }
 
@@ -84,6 +89,10 @@ export function getOutletIdentity(): OutletSessionIdentity | null {
 					: parsed.subRole === "outlet_ops"
 						? "outlet_ops"
 						: "outlet_owner",
+			outletStatus:
+				typeof parsed.outletStatus === "string"
+					? parsed.outletStatus
+					: "active",
 		};
 	} catch {
 		return null;

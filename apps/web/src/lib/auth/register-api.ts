@@ -1,4 +1,9 @@
 import { getPublicClient } from "@/lib/axios-v1";
+import {
+	countryName,
+	DEFAULT_COUNTRY_CODE,
+	stateName,
+} from "@/lib/geo/country-state-city";
 import type { ApiResponse } from "./auth-api";
 import type { SignupInput } from "./register-schemas";
 
@@ -10,10 +15,21 @@ export interface RegisterResponse {
 	status: string;
 }
 
-function normalizePhoneNumber(phoneNum: string): string {
-	const trimmed = phoneNum.trim();
-	if (trimmed.startsWith("+")) return trimmed;
-	return `+${trimmed.replace(/\D/g, "")}`;
+/** Malaysia only — same dial composition as mobile PR signup. */
+export const SIGNUP_PHONE_DIAL = "+60";
+
+/** Local MY digits → E.164 (`+60123456789`). Strips leading 0s like mobile. */
+export function toSignupPhoneE164(localPhone: string): string {
+	const localDigits = localPhone
+		.replace(/\D/g, "")
+		.replace(/^0+/, "")
+		.slice(0, 10);
+	return `${SIGNUP_PHONE_DIAL}${localDigits}`;
+}
+
+function optionalField(value: string | undefined): string | undefined {
+	const trimmed = value?.trim();
+	return trimmed ? trimmed : undefined;
 }
 
 async function fileToBase64(file: File): Promise<string> {
@@ -33,15 +49,19 @@ export async function registerUser(
 	// caller naming its own role was the escalation hole, and the two VITE_*
 	// role ids this used to read were shipped in the bundle anyway.
 	const client = getPublicClient();
+	const countryCode = input.countryCode || DEFAULT_COUNTRY_CODE;
+	const resolvedCountry = countryName(countryCode);
+	const resolvedState = optionalField(stateName(countryCode, input.stateCode));
+
 	const payload: Record<string, unknown> = {
 		email: input.loginEmail,
-		phoneNum: normalizePhoneNumber(input.phoneNum),
-		username: input.companyName,
+		phoneNum: toSignupPhoneE164(input.phoneNum),
+		// Account display name = PIC; company name lives on agency/outlet only.
+		username: input.personInCharge,
 		password: input.password,
 		companyName: input.companyName,
-		companyRegistrationOld: input.companyRegistrationOld,
+		companyRegistrationOld: optionalField(input.companyRegistrationOld),
 		companyRegistrationNew: input.companyRegistrationNew,
-		companyAddress: input.companyAddress,
 		personInCharge: input.personInCharge,
 		contactEmail: input.email,
 		packageId: input.packageId,
@@ -50,6 +70,13 @@ export async function registerUser(
 		ackDeclarationOfTruth: input.ackDeclarationOfTruth,
 		ackInformationSharing: input.ackInformationSharing,
 		acceptTerms: input.acceptTerms,
+		// Company address → agency/outlet columns (not user_profile).
+		addressLine1: optionalField(input.addressLine1),
+		addressLine2: optionalField(input.addressLine2),
+		city: optionalField(input.city),
+		postcode: optionalField(input.postcode),
+		state: resolvedState,
+		country: resolvedCountry,
 	};
 
 	payload.logoFileName = input.logoFile.name;

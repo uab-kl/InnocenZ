@@ -74,19 +74,53 @@ const registerProfileFields = {
   languages: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
 };
 
-const RegisterSchema = z.object({
+/**
+ * Web outlet/agency signup fields. Zod used to strip these (unknown keys), so
+ * register created a user + role and never an organisation row.
+ *
+ * Company address uses the same field names as PR profile address, but they are
+ * written to `agency` / `outlet` — not `user_profile`. Portal owners do not
+ * need a home address on signup.
+ */
+const registerOrgFields = {
+  companyName: z.string().trim().min(1).max(150).optional(),
+  /** Optional legacy SSM number — empty string cleared to undefined. */
+  companyRegistrationOld: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
+  companyRegistrationNew: z.string().trim().min(1).max(50).optional(),
+  companyAddress: z.string().trim().min(1).max(500).optional(),
+  personInCharge: z.string().trim().min(1).max(100).optional(),
+  /** PIC contact email (may differ from login `email`). */
+  contactEmail: z.email('Invalid contact email').optional(),
+  /** Landing-page package id (e.g. `outlet-basic`) — not a catalog UUID yet. */
+  packageId: z.string().trim().min(1).max(100).optional(),
+  ackPersonalInfo: z.boolean().optional(),
+  ackDeclarationOfTruth: z.boolean().optional(),
+  ackInformationSharing: z.boolean().optional(),
+  acceptTerms: z.boolean().optional(),
+  logoFileName: z.string().trim().min(1).max(255).optional(),
+  logoContentType: z.string().trim().min(1).max(100).optional(),
+  logoBase64: z.string().min(1).optional(),
+};
+
+const RegisterSchema = z
+  .object({
     email: z.email('Invalid email format').optional(),
     phoneNum: z.string(),
     username: z.string().min(1, 'Username is required'),
     // Empty string is not "optional" in Zod — treat "" as missing so public
     // clients that omit a password don't get a misleading min-length error.
     password: z
-        .union([
-            z.string().min(6, 'Password must be at least 6 characters long'),
-            z.literal(''),
-        ])
-        .optional()
-        .transform((value) => (value === '' ? undefined : value)),
+      .union([
+        z.string().min(6, 'Password must be at least 6 characters long'),
+        z.literal(''),
+      ])
+      .optional()
+      .transform((value) => (value === '' ? undefined : value)),
     /**
      * What kind of account is signing up. This is what a PUBLIC caller gets to
      * choose; the server turns it into a role (features/auth/signup-roles.ts).
@@ -107,8 +141,34 @@ const RegisterSchema = z.object({
      */
     agencyId: z.string().uuid().optional(),
     ...registerProfileFields,
-});
-
+    ...registerOrgFields,
+  })
+  .superRefine((data, ctx) => {
+    if (data.accountType !== 'agency' && data.accountType !== 'outlet') return;
+    const required: Array<[keyof typeof data, string]> = [
+      ['companyName', 'Company name is required'],
+      ['companyRegistrationNew', 'Company registration (new) is required'],
+      ['personInCharge', 'Person in charge is required'],
+      ['password', 'Password must be at least 6 characters long'],
+    ];
+    for (const [key, message] of required) {
+      if (!data[key]) {
+        ctx.addIssue({ code: 'custom', message, path: [key] });
+      }
+    }
+    if (
+      data.ackPersonalInfo !== true ||
+      data.ackDeclarationOfTruth !== true ||
+      data.ackInformationSharing !== true ||
+      data.acceptTerms !== true
+    ) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'All declarations and terms must be accepted',
+        path: ['acceptTerms'],
+      });
+    }
+  });
 const FirstTimeLoginSchema = z.object({
     email: z.email('Invalid email format').optional(),
     phoneNum: z.string(),

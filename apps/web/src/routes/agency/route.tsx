@@ -31,6 +31,7 @@ function AgencyLayout() {
 	// matchMedia usage), so defer all portal rendering to the client to keep
 	// SSR hydration clean.
 	const [mounted, setMounted] = useState(false);
+	const [orgStatus, setOrgStatus] = useState<string | null>(null);
 
 	// Real backend accounts see the same pages with no data; demo accounts keep
 	// their seeded data. Blank before the first portal render so real accounts
@@ -43,12 +44,27 @@ function AgencyLayout() {
 			// the operator's real identity (resolved at sign-in) on every mount.
 			const identity = getAgencyIdentity();
 			if (identity) {
-				useStore.setState((st) => ({
-					activeAgencyId: identity.agencyId,
-					agencySubRole: identity.subRole,
-					agencyOwner: { ...st.agencyOwner, orgName: identity.orgName },
-				}));
+				setOrgStatus(identity.agencyStatus);
+				void import("@agency-portal/lib/agency-demo").then(
+					({ BLANK_AGENCY_OWNER }) => {
+						useStore.setState((st) => ({
+							activeAgencyId: identity.agencyId,
+							agencySubRole: identity.subRole,
+							agencyOwner: {
+								...BLANK_AGENCY_OWNER,
+								orgName: identity.orgName,
+								email: st.agencyOwner.email,
+								ownerName: st.agencyOwner.ownerName,
+								accountActivated: identity.agencyStatus === "active",
+							},
+						}));
+					},
+				);
+			} else {
+				setOrgStatus(null);
 			}
+		} else {
+			setOrgStatus(null);
 		}
 		setMounted(true);
 	}, []);
@@ -56,14 +72,17 @@ function AgencyLayout() {
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const agencySubRole = useStore((s) => s.agencySubRole);
-	const navItems = getAgencyNavItems(agencySubRole);
+	const navItems = getAgencyNavItems(agencySubRole, orgStatus);
 
 	useEffect(() => {
 		if (!mounted) return;
-		if (!canAccessAgencyPath(agencySubRole, pathname)) {
-			navigate({ to: getAgencyDefaultRoute(agencySubRole), replace: true });
+		if (!canAccessAgencyPath(agencySubRole, pathname, orgStatus)) {
+			navigate({
+				to: getAgencyDefaultRoute(agencySubRole, orgStatus),
+				replace: true,
+			});
 		}
-	}, [mounted, pathname, agencySubRole, navigate]);
+	}, [mounted, pathname, agencySubRole, orgStatus, navigate]);
 
 	if (!mounted) {
 		return <div style={{ minHeight: "100svh", background: "#0e0a1a" }} />;

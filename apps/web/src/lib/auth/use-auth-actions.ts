@@ -9,6 +9,7 @@ function loginUserToProfile(user: LoginUser): User {
 	return {
 		id: user.id,
 		email: user.email,
+		username: user.displayName,
 		displayName: user.displayName,
 		contactNo: "",
 		isActive: user.status === "active",

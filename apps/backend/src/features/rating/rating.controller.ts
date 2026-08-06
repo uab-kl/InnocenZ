@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
 import { RatingRepositoryClass } from './rating.repository.js';
 import { RatingFilter } from './rating.model.js';
-import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository.js';

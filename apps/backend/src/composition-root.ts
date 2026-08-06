@@ -46,8 +46,8 @@ import { OutletWorkspaceRepositoryClass } from '@/features/outlet-workspace/outl
 import { OutletWorkspaceControllerClass } from '@/features/outlet-workspace/outlet-workspace.controller.js';
 import { RatingRepositoryClass } from '@/features/rating/rating.repository.js';
 import { RatingControllerClass } from '@/features/rating/rating.controller.js';
-import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
-import { PrControllerClass } from '@/features/pr/pr.controller.js';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository.js';
+import { PrControllerClass } from '@/features/pr-personnel/pr.controller.js';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository.js';
 import { ShiftControllerClass } from '@/features/shift/shift.controller.js';
 import { ShiftSaleRepositoryClass } from '@/features/shift-sale/shift-sale.repository.js';
@@ -59,6 +59,8 @@ import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shif
 import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shift-assignment.controller.js';
 import { OutletSwapRepositoryClass } from '@/features/outlet-swap/outlet-swap.repository.js';
 import { OutletSwapControllerClass } from '@/features/outlet-swap/outlet-swap.controller.js';
+import { CutlostRepositoryClass } from '@/features/cutlost/cutlost.repository.js';
+import { CutlostControllerClass } from '@/features/cutlost/cutlost.controller.js';
 import { PaymentVoucherGeneratorClass } from '@/features/payment-voucher/payment-voucher-generator.js';
 import { CollectionInvoiceRepositoryClass } from '@/features/collection-invoice/collection-invoice.repository.js';
 import { CollectionInvoiceControllerClass } from '@/features/collection-invoice/collection-invoice.controller.js';
@@ -75,8 +77,13 @@ export const roleRepository = new RoleRepositoryClass();
 export const adminMfaRepository = new AdminMfaRepositoryClass();
 export const phoneVerificationRepository = new PhoneVerificationRepositoryClass();
 export const otpController = new OtpControllerClass(phoneVerificationRepository, userRepository);
-// Declared before authController — PR register writes agency_pr by user_id.
+// Declared before authController — PR register writes agency_pr by user_id;
+// outlet/agency web register creates the org + owner membership.
 export const agencyPrRepository = new AgencyPrRepository();
+export const agencyRepository = new AgencyRepositoryClass();
+export const agencyMemberRepository = new AgencyMemberRepositoryClass();
+export const outletRepository = new OutletRepositoryClass();
+export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -86,6 +93,10 @@ export const authController = new AuthControllerClass(
   adminMfaRepository,
   phoneVerificationRepository,
   agencyPrRepository,
+  agencyRepository,
+  agencyMemberRepository,
+  outletRepository,
+  outletMemberRepository,
 );
 export const healthController = new HealthControllerClass();
 
@@ -113,11 +124,6 @@ export const notificationController = new NotificationControllerClass(notificati
 export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
 
-export const agencyRepository = new AgencyRepositoryClass();
-export const agencyMemberRepository = new AgencyMemberRepositoryClass();
-
-export const outletRepository = new OutletRepositoryClass();
-export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const outletController = new OutletControllerClass(outletRepository, outletMemberRepository);
 
 
@@ -217,6 +223,8 @@ export const shiftAssignmentController = new ShiftAssignmentControllerClass(shif
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
 export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const cutlostRepository = new CutlostRepositoryClass();
+export const cutlostController = new CutlostControllerClass(cutlostRepository, shiftRepository, shiftAssignmentRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
 export const shiftSaleRepository = new ShiftSaleRepositoryClass();
 export const shiftSaleController = new ShiftSaleControllerClass(

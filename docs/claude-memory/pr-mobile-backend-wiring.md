@@ -54,5 +54,5 @@ The user is wiring the InnocenZ mobile PR app (`apps/mobile`) to its real backen
 3. Use FK joins to pull data from other tables (e.g. outlet/pr name) — never duplicate a name column.
 
 **Known pre-existing issues (not from this work):**
-- `apps/backend/src/features/pr/pr.repository.ts:92,150` — `toProfile()` `portfolioPhotos` type mismatch `(string|null)[]` vs `string[]`. Fails strict tsc; runtime fine under tsx. See [[innocenz-admin-backlog]].
+- `apps/backend/src/features/pr-personnel/pr.repository.ts:92,150` — `toProfile()` `portfolioPhotos` type mismatch `(string|null)[]` vs `string[]`. Fails strict tsc; runtime fine under tsx. See [[innocenz-admin-backlog]].
 - `apps/backend/src/features/shift-assignment/shift-assignment.repository.ts` `buildCostConditions` — references `NON_STAFFING_STATUSES` which is never defined/imported (TS2304 at HEAD). `reportCostByPrDay` (admin/agency P&L cost aggregation) would ReferenceError at runtime if hit. Spawned background task to define it as `['cancelled','no_show']`.

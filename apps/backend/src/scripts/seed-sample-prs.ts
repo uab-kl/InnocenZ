@@ -7,7 +7,7 @@ import { UserProfileTable } from '@/features/user/user-profile/user-profile.mode
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { AgencyPrTable } from '@/features/pr/pr.model';
+import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 import { hashPassword } from '@/util/password';
 import { DEFAULT_PROFILE_IMAGE } from '@/util/profile-image';
 import { logger } from '@/util/logger';

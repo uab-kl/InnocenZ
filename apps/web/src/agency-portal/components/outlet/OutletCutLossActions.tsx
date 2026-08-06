@@ -1,6 +1,7 @@
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCardTitle, IzPill } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
 import { recommendBestEffortCutlost } from "@agency-portal/lib/outlet-cutlost-recommendations";
 import { cutlostRequestTitle } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
@@ -89,13 +90,33 @@ export function OutletCutLossActions({
 			window.removeEventListener(OUTLET_OPEN_CUTLOST_EVENT, openFromChip);
 	}, [sectionId]);
 
-	const pendingRequest = useMemo(
-		() =>
-			pendingCutlostRequests.find(
-				(r) => r.shiftId === shift.id && r.status === "pending",
-			),
-		[pendingCutlostRequests, shift.id],
-	);
+	// Backed by the real endpoint when a session exists, the demo store otherwise
+	// — the prototype logins still run on it. Scoped to THIS shift so the badge
+	// below reflects this card, not any other request the venue has open.
+	const cutlost = useCutlostRequests({ shiftId: shift.id });
+
+	const pendingRequest = useMemo(() => {
+		if (cutlost.backed) {
+			const live = cutlost.requests.find((r) => r.status === "pending");
+			if (!live) return undefined;
+			// Adapted to the store's shape so the rendering below stays one code
+			// path. `estimatedSavings` arrives as a numeric(12,2) string.
+			return {
+				id: live.id,
+				shiftId: live.shiftId,
+				kind: live.kind,
+				status: live.status,
+				estimatedSavings: Number(live.estimatedSavings),
+				slotsCut: live.slotsCut ?? undefined,
+				releasedPrNames: live.releasedAssignments.map(
+					(a) => a.prName ?? "a PR",
+				),
+			} as unknown as (typeof pendingCutlostRequests)[number];
+		}
+		return pendingCutlostRequests.find(
+			(r) => r.shiftId === shift.id && r.status === "pending",
+		);
+	}, [cutlost.backed, cutlost.requests, pendingCutlostRequests, shift.id]);
 
 	const cutSlotsLabor = Math.round(perSlotLabor * openSlots);
 	const cutAllSavings = outletShiftCutLossSavings(
@@ -131,18 +152,43 @@ export function OutletCutLossActions({
 	if (!hasActions && cutLoss <= 0 && savedCredited <= 0 && !pendingRequest)
 		return null;
 
+	// Both submits go to the backend on a real session and to the demo store
+	// otherwise. Nothing is released here either way: this raises a REQUEST, and
+	// only the agency's approval closes anyone's shift.
 	const submitBestEffort = () => {
 		if (!bestEffortPlan) return;
-		requestOutletCutlostReduction(shift.id, {
-			kind: "best_effort",
-			prIds: bestEffortPlan.prIds,
-			slotsCut: bestEffortPlan.slotsCut,
-			rationale: bestEffortPlan.rationale,
-		});
+		if (cutlost.backed) {
+			void cutlost.raise({
+				shiftId: shift.id,
+				kind: "best_effort",
+				prIds: bestEffortPlan.prIds,
+				slotsCut: bestEffortPlan.slotsCut,
+				// The figure the outlet is looking at right now, sent so the agency
+				// approves the SAME number — the rate card can move in between.
+				estimatedSavings: bestEffortPlan.estimatedSavings,
+				rationale: bestEffortPlan.rationale,
+			});
+		} else {
+			requestOutletCutlostReduction(shift.id, {
+				kind: "best_effort",
+				prIds: bestEffortPlan.prIds,
+				slotsCut: bestEffortPlan.slotsCut,
+				rationale: bestEffortPlan.rationale,
+			});
+		}
 		setBestEffortOpen(false);
 	};
 
 	const submitCutSlots = () => {
+		if (cutlost.backed) {
+			void cutlost.raise({
+				shiftId: shift.id,
+				kind: "cut_slots",
+				slotsCut: openSlots,
+				estimatedSavings: cutSlotsLabor,
+			});
+			return;
+		}
 		requestOutletCutlostReduction(shift.id, {
 			kind: "cut_slots",
 			slots: openSlots,

@@ -20,6 +20,10 @@ export type VoucherExportAgency = {
   contactEmail: string | null;
   addressLine1: string | null;
   addressLine2: string | null;
+  city: string | null;
+  postcode: string | null;
+  state: string | null;
+  country: string | null;
 } | null;
 
 export type VoucherExportPr = {
@@ -33,14 +37,17 @@ export type VoucherExportPr = {
 } | null;
 
 /**
- * The two address lines as one string, or '' when neither is set.
+ * Agency company address as one string, or '' when nothing is set.
  *
  * Returns EMPTY rather than a dash so each caller decides its own placeholder —
  * the workbook and the print HTML render an unset field differently, and baking
  * one in here would make the other lie about which it is.
  */
 export function joinAddress(agency: VoucherExportAgency): string {
-  return [agency?.addressLine1, agency?.addressLine2]
+  const locality = [agency?.postcode, agency?.city, agency?.state]
+    .filter((part): part is string => !!part && part.trim() !== '')
+    .join(' ');
+  return [agency?.addressLine1, agency?.addressLine2, locality, agency?.country]
     .filter((part): part is string => !!part && part.trim() !== '')
     .join(', ');
 }

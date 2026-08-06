@@ -209,9 +209,24 @@ const OT_MULTIPLIER = 1.5;
 export function overtimeRate(
   rate: ShiftAssignmentRate | null,
   payPerHour: number,
+  /**
+   * This shift's own scheduled window in minutes (`scheduledMinutes`, sealed at
+   * check-out by migration 0097). When known it WINS over the rate card's
+   * standard-shift length, because the server prices the approval that way and
+   * the phone must never quote a figure the agency will not see.
+   */
+  scheduledMinutes?: number | null,
 ): number {
   const dailyWage = Number(rate?.wagePerHour);
-  const shiftHours = Number(rate?.otAfterHours);
+  // This shift's real window first, the rate card's standard shift second. They
+  // differ on every booking that is not six hours, and not cosmetically: at
+  // RM700 a 2-hour shift makes an ordinary hour RM350, so pricing overtime at
+  // `700/6 × 1.5` = RM175 pays an overtime hour HALF of an ordinary one.
+  // Overtime is 1.5× of what an hour on THIS shift is worth.
+  const shiftHours =
+    scheduledMinutes != null && scheduledMinutes > 0
+      ? scheduledMinutes / 60
+      : Number(rate?.otAfterHours);
   if (Number.isFinite(dailyWage) && dailyWage > 0 && Number.isFinite(shiftHours) && shiftHours > 0) {
     return (dailyWage / shiftHours) * OT_MULTIPLIER;
   }
@@ -233,9 +248,11 @@ export function overtimePay(
   otHours: number,
   rate: ShiftAssignmentRate | null,
   payPerHour: number,
+  /** This shift's scheduled window — see overtimeRate. */
+  scheduledMinutes?: number | null,
 ): number {
   if (otHours <= 0) return 0;
-  const otRate = overtimeRate(rate, payPerHour);
+  const otRate = overtimeRate(rate, payPerHour, scheduledMinutes);
   if (otRate <= 0) return 0;
   return Math.round(otHours * otRate * 100) / 100;
 }

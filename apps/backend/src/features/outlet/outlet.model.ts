@@ -17,6 +17,7 @@ export const OutletTable = MainSchema.table('outlet', {
   logoImage: varchar('logo_image'),
   addressLine1: varchar('address_line_1', { length: 255 }),
   addressLine2: varchar('address_line_2', { length: 255 }),
+  city: varchar('city', { length: 100 }),
   postcode: varchar('postcode', { length: 20 }),
   state: varchar('state', { length: 100 }),
   country: varchar('country', { length: 100 }).default('Malaysia'),

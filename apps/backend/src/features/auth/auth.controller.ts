@@ -23,6 +23,7 @@ import {
   type SignupAccountType,
 } from './signup-roles.js';
 import { saveProfileImageFile } from '@/util/profile-image.js';
+import { saveOrgLogoFromBase64 } from '@/util/org-logo.js';
 import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
 import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
@@ -34,6 +35,10 @@ import {
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
+import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
+import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
+import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
+import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
 
 export class AuthControllerClass {
@@ -46,6 +51,10 @@ export class AuthControllerClass {
     private adminMfaRepository: AdminMfaRepositoryClass,
     private phoneVerificationRepository: PhoneVerificationRepositoryClass,
     private agencyPrRepository: AgencyPrRepository,
+    private agencyRepository: AgencyRepositoryClass,
+    private agencyMemberRepository: AgencyMemberRepositoryClass,
+    private outletRepository: OutletRepositoryClass,
+    private outletMemberRepository: OutletMemberRepositoryClass,
   ) {}
 
   /** Wrong attempts before the account locks. */
@@ -395,6 +404,117 @@ export class AuthControllerClass {
   }
 
   /**
+   * Web outlet/agency self-register: create the organisation as `pending_review`
+   * and link the new user as `owner`. Package selection is not written yet —
+   * admin assigns a plan on approval.
+   *
+   * Company address goes on `agency` / `outlet` only. The portal user gets PIC
+   * name on `user_profile` — not a home address (that is for PRs).
+   *
+   * Returns the new org so the caller can upload the logo (needs the org id
+   * for the R2 key) and write `logo_image`.
+   */
+  private async createOrgForSignup(
+    userId: string,
+    body: {
+      accountType?: SignupAccountType;
+      companyName?: string;
+      companyRegistrationOld?: string;
+      companyRegistrationNew?: string;
+      /** @deprecated Prefer addressLine1. */
+      companyAddress?: string;
+      addressLine1?: string;
+      addressLine2?: string;
+      city?: string;
+      postcode?: string;
+      state?: string;
+      country?: string;
+      personInCharge?: string;
+      contactEmail?: string;
+      email?: string;
+      phoneNum: string;
+      packageId?: string;
+    },
+    actor: string,
+  ): Promise<{ kind: 'agency' | 'outlet'; id: string; name: string }> {
+    const name = body.companyName!;
+    const ssmNo = body.companyRegistrationNew!;
+    const addressLine1 = body.addressLine1 ?? body.companyAddress ?? null;
+    const addressLine2 = body.addressLine2 ?? null;
+    const city = body.city ?? null;
+    const postcode = body.postcode ?? null;
+    const state = body.state ?? null;
+    const country = body.country ?? null;
+    const contactName = body.personInCharge ?? null;
+    const contactEmail = body.contactEmail ?? body.email ?? null;
+    const contactPhone = body.phoneNum;
+
+    if (body.accountType === 'agency') {
+      const agencyCode = await this.agencyRepository.generateUniqueCode();
+      const agency = await this.agencyRepository.create({
+        name,
+        agencyCode,
+        ssmNo,
+        contactName,
+        contactEmail,
+        contactPhone,
+        addressLine1,
+        addressLine2,
+        city,
+        postcode,
+        state,
+        country,
+        status: 'pending_review',
+        createdBy: actor,
+        updatedBy: actor,
+      });
+      await this.agencyMemberRepository.add({
+        agencyId: agency.id,
+        userId,
+        subRole: 'owner',
+        status: 'active',
+        createdBy: actor,
+        updatedBy: actor,
+      });
+      logger.info('[AuthController.register] Agency created for signup', {
+        agencyId: agency.id,
+        userId,
+        packageId: body.packageId ?? null,
+      });
+      return { kind: 'agency', id: agency.id, name: agency.name };
+    }
+
+    const outlet = await this.outletRepository.create({
+      name,
+      addressLine1,
+      addressLine2,
+      city,
+      postcode,
+      state,
+      country: country ?? 'Malaysia',
+      businessLicense: body.companyRegistrationOld ?? null,
+      ssmNo,
+      status: 'pending_review',
+      createdBy: actor,
+      updatedBy: actor,
+    });
+    await this.outletMemberRepository.add({
+      outletId: outlet.id,
+      userId,
+      subRole: 'owner',
+      status: 'active',
+      createdBy: actor,
+      updatedBy: actor,
+    });
+    logger.info('[AuthController.register] Outlet created for signup', {
+      outletId: outlet.id,
+      userId,
+      packageId: body.packageId ?? null,
+    });
+    return { kind: 'outlet', id: outlet.id, name: outlet.name };
+  }
+
+  /**
    * Public PR sign-up gate for step 1: refuse phones / ID numbers that already
    * belong to an account so the wizard does not burn five steps on a duplicate.
    */
@@ -648,12 +768,63 @@ export class AuthControllerClass {
           verificationStatus: 'pending',
           updatedBy: actor,
         });
+      } else if (
+        (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') &&
+        parsedBody.personInCharge
+      ) {
+        // Web org signup: PIC name only. Company address lives on agency/outlet.
+        await this.userProfileRepository.update(user.id, {
+          fullName: parsedBody.personInCharge,
+          updatedBy: actor,
+        });
+      }
+
+      // Outlet / agency web signup — create the organisation + owner membership.
+      // Previously register only wrote user + user_role + empty user_profile.
+      if (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') {
+        const org = await this.createOrgForSignup(user.id, parsedBody, actor);
+
+        // Logo → R2, then key on agency/outlet.logo_image (not user.profileImage).
+        if (parsedBody.logoBase64 && parsedBody.logoFileName) {
+          try {
+            const logoKey = await saveOrgLogoFromBase64({
+              kind: org.kind,
+              orgId: org.id,
+              orgName: org.name,
+              fileName: parsedBody.logoFileName,
+              contentType: parsedBody.logoContentType,
+              base64: parsedBody.logoBase64,
+            });
+            if (org.kind === 'agency') {
+              await this.agencyRepository.update(org.id, {
+                logoImage: logoKey,
+                updatedBy: actor,
+              });
+            } else {
+              await this.outletRepository.update(org.id, {
+                logoImage: logoKey,
+                updatedBy: actor,
+              });
+            }
+          } catch (logoError) {
+            // Account + org already exist — do not 400 (retry would hit
+            // USER_ALREADY_EXISTS). Logo can be re-uploaded after approval.
+            logger.error('[AuthController.register] Org logo upload failed', {
+              orgId: org.id,
+              kind: org.kind,
+              error: logoError,
+            });
+          }
+        }
       }
 
       // After profile exists so R2 path can use user_profile.full_name.
       if (req.file) {
         const profileImage = await saveProfileImageFile(
-          { id: user.id, fullName: parsedBody.fullName },
+          {
+            id: user.id,
+            fullName: parsedBody.fullName ?? parsedBody.personInCharge,
+          },
           req.file,
         );
         const updatedUser = await this.userRepository.updateUser(

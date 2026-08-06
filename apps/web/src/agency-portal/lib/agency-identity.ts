@@ -11,6 +11,8 @@ export interface AgencySessionIdentity {
 	orgName: string;
 	agencyCode: string;
 	subRole: AgencySubRole;
+	/** Organisation status — `pending_review` / `suspended` → profile only. */
+	agencyStatus: string;
 }
 
 const IDENTITY_KEY = "iz-agency-identity";
@@ -53,6 +55,9 @@ export function identityFromMembership(
 		orgName: m.agencyName,
 		agencyCode: m.agencyCode,
 		subRole: agencySubRoleFromBackend(m.subRole),
+		// Prefer the org status from the API; missing field (older backend) →
+		// do not lock the portal — only explicit pending/suspended restrict.
+		agencyStatus: m.agencyStatus || "active",
 	};
 }
 
@@ -82,6 +87,10 @@ export function getAgencyIdentity(): AgencySessionIdentity | null {
 				typeof parsed.agencyCode === "string" ? parsed.agencyCode : "",
 			subRole:
 				parsed.subRole === "agency_finance" ? "agency_finance" : "agency_owner",
+			agencyStatus:
+				typeof parsed.agencyStatus === "string"
+					? parsed.agencyStatus
+					: "active",
 		};
 	} catch {
 		return null;

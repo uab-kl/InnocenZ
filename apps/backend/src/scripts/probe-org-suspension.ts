@@ -1,15 +1,12 @@
 /**
- * Proves that suspending an organisation locks its people out — and, just as
- * importantly, that nobody legitimate was locked out by the change.
+ * Proves inactive organisations lock people out — and that suspended /
+ * pending_review do not (they keep a profile-only portal session).
  *
- * The second half is the one worth having. A denial rule is easy to write and
- * easy to over-apply: `pending_review` is the DEFAULT status for both `agency`
- * and `outlet`, so a rule that denied "not active" would have shut out every
- * organisation nobody has reviewed yet, and a platform admin holds no
- * membership row at all. Both carve-outs are asserted here against live data,
- * so an over-broad rule shows up as a failing check rather than a support call.
+ * Also asserts that nobody legitimate was locked out by the denial rule:
+ * `pending_review` is the DEFAULT status for both `agency` and `outlet`, and a
+ * platform admin holds no membership row at all.
  *
- * The suspension it performs is restored in a `finally`.
+ * The inactivation it performs is restored in a `finally`.
  *
  *   npx tsx --tsconfig tsconfig.json src/scripts/probe-org-suspension.ts
  */
@@ -34,7 +31,7 @@ function check(label: string, ok: boolean, detail: string) {
 }
 
 async function main() {
-  console.log('\nORG SUSPENSION — live\n');
+  console.log('\nORG ACCESS DENIAL — live\n');
 
   const agencies = await db
     .select({ id: AgencyTable.id, name: AgencyTable.name, status: AgencyTable.status })
@@ -48,14 +45,12 @@ async function main() {
   console.log(`  agencies (${agencies.length}):`, JSON.stringify(tally(agencies)));
   console.log(`  outlets  (${outlets.length}):`, JSON.stringify(tally(outlets)));
 
-  const deniedNow = [...agencies, ...outlets].filter(
-    (o) => o.status === 'suspended' || o.status === 'inactive',
-  );
+  const deniedNow = [...agencies, ...outlets].filter((o) => o.status === 'inactive');
   check(
     'nobody is newly locked out by this change',
     deniedNow.length === 0,
     deniedNow.length === 0
-      ? 'every live organisation is active or pending_review'
+      ? 'no live organisation is inactive'
       : `WOULD NOW BE BLOCKED: ${deniedNow.map((o) => `${o.name}(${o.status})`).join(', ')}`,
   );
 
@@ -81,11 +76,32 @@ async function main() {
       .where(eq(AgencyTable.id, member.agencyId));
     console.log(`  [temporarily suspended "${member.name}"]`);
 
-    const during = await suspendedOrgBlock(member.userId);
+    const duringSuspended = await suspendedOrgBlock(member.userId);
     check(
-      'a SUSPENDED agency blocks its member',
-      typeof during === 'string' && /suspended/i.test(during),
-      `got ${JSON.stringify(during)}`,
+      'a SUSPENDED agency does NOT block login (profile-only portal)',
+      duringSuspended === null,
+      `got ${JSON.stringify(duringSuspended)}`,
+    );
+  } finally {
+    await db
+      .update(AgencyTable)
+      .set({ status: 'active' })
+      .where(eq(AgencyTable.id, member.agencyId));
+    console.log(`  [restored "${member.name}" to active after suspend test]`);
+  }
+
+  try {
+    await db
+      .update(AgencyTable)
+      .set({ status: 'inactive' })
+      .where(eq(AgencyTable.id, member.agencyId));
+    console.log(`  [temporarily inactivated "${member.name}"]`);
+
+    const duringInactive = await suspendedOrgBlock(member.userId);
+    check(
+      'an INACTIVE agency blocks its member',
+      typeof duringInactive === 'string' && /inactive/i.test(duringInactive),
+      `got ${JSON.stringify(duringInactive)}`,
     );
   } finally {
     await db
@@ -118,10 +134,10 @@ async function main() {
   }
 
   console.log(`\n${passed} passed, ${failed} failed\n`);
-  process.exit(failed === 0 ? 0 : 1);
+  process.exit(failed > 0 ? 1 : 0);
 }
 
-void main().catch((e) => {
-  console.error('\n  ERROR:', e instanceof Error ? e.message : e);
+main().catch((err) => {
+  console.error(err);
   process.exit(1);
 });

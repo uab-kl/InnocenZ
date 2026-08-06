@@ -1,0 +1,16 @@
+﻿---
+description: Real outlet/agency sessions must never show Velvet/Atlas demo fixtures
+alwaysApply: true
+---
+
+# No demo data on real portal sessions
+
+When `getPortalSessionKind() === "real"` (backend login for outlet/agency):
+
+1. **Never** seed or merge UI from `DEFAULT_OUTLET_*`, `DEFAULT_AGENCY_*`, Velvet 23, Atlas, or other fixture names/emails/logos/menus.
+2. Use `BLANK_OUTLET_*` / `BLANK_AGENCY_*` (in `outlet-demo.ts` / `agency-demo.ts`) for empty shapes.
+3. `buildBlankPortalReset()` must use those `BLANK_*` constants — not `DEFAULT_*`.
+4. Settings/Profile overlays merge onto `BLANK_*`, then real API/membership fields — never onto demo defaults (empty API fields must stay empty, not show Chen Wei Jie / Michelle Lim / Bukit Bintang).
+5. Demo accounts (`demo@*.invalid`, `getPortalSessionKind() === "demo"`) may keep the full demo seed.
+
+If a real login still shows fixture copy, treat it as a bug: wipe the slice and wire the backend field.

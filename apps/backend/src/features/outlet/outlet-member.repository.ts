@@ -12,12 +12,15 @@ export type OutletMemberEnriched = OutletUserType & {
 };
 
 /** One outlet membership joined to its outlet — used to resolve a signed-in
- * operator's own outlet + role at session start (mirrors the agency side). */
+ * operator's own outlet + role at session start (mirrors the agency side).
+ * `outletStatus` is the organisation's status (`pending_review` / `active` / …),
+ * distinct from the membership row's own `status`. */
 export type OutletMembershipWithOutlet = {
   membershipId: string;
   userId: string;
   outletId: string;
   outletName: string;
+  outletStatus: string;
   subRole: OutletUserType['subRole'];
   status: string;
 };
@@ -160,6 +163,7 @@ export class OutletMemberRepositoryClass {
           userId: OutletUserTable.userId,
           outletId: OutletUserTable.outletId,
           outletName: OutletTable.name,
+          outletStatus: OutletTable.status,
           subRole: OutletUserTable.subRole,
           status: OutletUserTable.status,
         })

@@ -66,5 +66,8 @@ native memory. After meaningful sessions, update both `docs/claude-memory/` and 
 - PR-scoped backend endpoints use the `/mine` pattern (derive `pr.id` server-side via
   `prRepository.getByUserId`, placed BEFORE `/:id` and OUTSIDE role guards).
 - Branch `jk` = this user; branch `SL` = teammate (outlet + agency web).
+- **Real outlet/agency logins: NEVER leave Velvet/Atlas demo data on screen.**
+  Use `BLANK_OUTLET_*` / `BLANK_AGENCY_*` in `buildBlankPortalReset` and Settings
+  overlays — not `DEFAULT_*`. See `.cursor/rules/no-demo-data-on-real-sessions.mdc`.
 
 <!-- nx configuration end-->

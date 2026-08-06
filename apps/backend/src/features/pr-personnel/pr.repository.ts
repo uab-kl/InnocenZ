@@ -133,13 +133,13 @@ function composePr(params: {
 /**
  * Builds the synthetic PR for one user account. `null` when the user does not
  * exist OR does not hold the `pr` role — a PR is a `user` with that role, not
- * a row in a dropped `pr` table. An account with zero `agency_pr` rows still
- * resolves (agencyId `''`, status `pending`) once the role check passes.
+ * a row in a dropped `pr` table.
  *
- * When an account holds more than one `agency_pr` row (multiple agencies),
- * the OLDEST wins — same "originating agency" tie-break the old `pr` bridge
- * used for a user with drifted duplicate `pr` rows, tie-broken by id so the
- * order is total.
+ * Identity always comes from `user` ⋈ `user_role`/`role` ⋈ `user_profile`.
+ * `agency_pr` is OPTIONAL enrichment (agency / tier / roster). If that table
+ * is missing columns (migrations not applied) or has no row yet, we still
+ * return the identity-only PR — `agencyId ''`, status `pending` — so /mine
+ * paths keep working.
  */
 async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | null> {
   const [account] = await db
@@ -163,12 +163,7 @@ async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | nul
     .limit(1);
   if (!account) return null;
 
-  const memberships = await db
-    .select()
-    .from(AgencyPrTable)
-    .where(eq(AgencyPrTable.userId, userId))
-    .orderBy(asc(AgencyPrTable.createdAt), asc(AgencyPrTable.id));
-  const primary = memberships[0] ?? null;
+  const primary = await loadPrimaryMembership(userId);
 
   const profile = toProfile({
     profileImage: account.profileImage,
@@ -200,6 +195,71 @@ async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | nul
     accountUpdatedBy: account.updatedBy,
     profile,
   });
+}
+
+/**
+ * Oldest `agency_pr` row for the account, or `null` when there is none / the
+ * table cannot be read. Never throws — identity resolution must not depend on
+ * membership schema being fully migrated.
+ */
+async function loadPrimaryMembership(userId: string): Promise<AgencyPrType | null> {
+  try {
+    // Core membership columns only (0032 + 0091 + 0093). Roster grading
+    // (0089: place / years_exp / kpi_tier / pay_class) is loaded separately so
+    // a missing 0089 migration cannot blank the whole /mine path.
+    const [core] = await db
+      .select({
+        id: AgencyPrTable.id,
+        agencyId: AgencyPrTable.agencyId,
+        userId: AgencyPrTable.userId,
+        approveStatus: AgencyPrTable.approveStatus,
+        tier: AgencyPrTable.tier,
+        rejectReason: AgencyPrTable.rejectReason,
+        createdAt: AgencyPrTable.createdAt,
+        updatedAt: AgencyPrTable.updatedAt,
+        createdBy: AgencyPrTable.createdBy,
+        updatedBy: AgencyPrTable.updatedBy,
+      })
+      .from(AgencyPrTable)
+      .where(eq(AgencyPrTable.userId, userId))
+      .orderBy(asc(AgencyPrTable.createdAt), asc(AgencyPrTable.id))
+      .limit(1);
+
+    if (!core) return null;
+
+    let place: string | null = null;
+    let yearsExp: number | null = null;
+    let kpiTier: string | null = null;
+    let payClass: string | null = null;
+    try {
+      const [roster] = await db
+        .select({
+          place: AgencyPrTable.place,
+          yearsExp: AgencyPrTable.yearsExp,
+          kpiTier: AgencyPrTable.kpiTier,
+          payClass: AgencyPrTable.payClass,
+        })
+        .from(AgencyPrTable)
+        .where(eq(AgencyPrTable.id, core.id))
+        .limit(1);
+      if (roster) {
+        place = roster.place;
+        yearsExp = roster.yearsExp;
+        kpiTier = roster.kpiTier;
+        payClass = roster.payClass;
+      }
+    } catch {
+      // 0089 not applied — roster stays null; membership still usable.
+    }
+
+    return { ...core, place, yearsExp, kpiTier, payClass };
+  } catch (error) {
+    logger.warn(
+      '[PrRepository.buildSyntheticPr] agency_pr membership skipped (identity-only PR):',
+      error,
+    );
+    return null;
+  }
 }
 
 export class PrRepositoryClass {
@@ -448,6 +508,23 @@ export class PrRepositoryClass {
       }
       // Outlet callers only see PRs actually rostered at one of their venues.
       // An empty array must match nothing, not everything — guard before the join.
+      //
+      // 🔴 This query iterates MEMBERSHIPS, and every row it emits claims
+      // `id === userId`. Unlike the agency path (pinned to one `agencyId`), an
+      // outlet caller is pinned to none — so an account with two `agency_pr`
+      // rows came back TWICE under the same id, carrying two different tiers.
+      // The web keys those rows by id, so the last row won and the outlet portal
+      // showed a tier from an agency that had nothing to do with the shift:
+      // Vicky read "Tier I" (her Delta membership) on an Atlas-supplied night
+      // where the agency portal correctly read "Tier III".
+      //
+      // The membership an outlet is entitled to see is the one belonging to the
+      // agency that actually SUPPLIED the PR to its venue, so match the
+      // assignment's own `agency_id` too. That collapses the duplicate, fixes
+      // the tier, and makes `totalCount` a count of PRs again rather than of
+      // memberships. Nothing is lost by narrowing: `shift_assignment.agency_id`
+      // is NOT NULL and every live row resolves a membership — verified against
+      // the database by scripts/probe-outlet-pr-tier-and-history.ts.
       if (filter?.assignedToOutletIds) {
         if (filter.assignedToOutletIds.length === 0) return { prs: [], totalCount: 0 };
         conditions.push(
@@ -463,6 +540,7 @@ export class PrRepositoryClass {
                   // on rows that predate the dual-write, so this is the
                   // reliable key to join a membership's `userId` against.
                   eq(ShiftAssignmentTable.prId, AgencyPrTable.userId),
+                  eq(ShiftAssignmentTable.agencyId, AgencyPrTable.agencyId),
                   inArray(ShiftTable.outletId, filter.assignedToOutletIds),
                 ),
               ),

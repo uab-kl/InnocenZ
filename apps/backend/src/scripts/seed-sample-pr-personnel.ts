@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { and, eq, inArray } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
-import { AgencyPrTable, type PrTier } from '@/features/pr/pr.model';
+import { AgencyPrTable, type PrTier } from '@/features/pr-personnel/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { logger } from '@/util/logger';

@@ -121,7 +121,11 @@ async function isBackendResponding(port, timeoutMs = 2000) {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
     try {
-      await fetch(`http://127.0.0.1:${port}/graphql`, { signal: controller.signal });
+      // Use /api/v1/health — a bare GET /graphql trips Apollo CSRF prevention
+      // (no content-type / apollo-require-preflight) and logs a scary 400.
+      await fetch(`http://127.0.0.1:${port}/api/v1/health`, {
+        signal: controller.signal,
+      });
       return true;
     } finally {
       clearTimeout(timer);
@@ -267,4 +271,35 @@ export function prefixOutput(label, color, reset, chunk, stream) {
     if (!line.length) continue;
     process[stream].write(`${color}[${label}]${reset} ${line}\n`);
   }
+}
+
+/**
+ * Wait until `url` accepts an HTTP connection (any status counts).
+ * Used by `dev:all` to start Vite before Expo so both file watchers don't
+ * cold-start at once on Windows (Metro + Vite fighting → 60s SSR timeouts).
+ */
+export async function waitForHttp(
+  url,
+  { timeoutMs = 120_000, intervalMs = 400, label = 'service' } = {},
+) {
+  const started = Date.now();
+  process.stdout.write(`[dev] waiting for ${label}…`);
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 2_000);
+      try {
+        await fetch(url, { signal: controller.signal });
+        process.stdout.write(' ready\n');
+        return true;
+      } finally {
+        clearTimeout(timer);
+      }
+    } catch {
+      process.stdout.write('.');
+      await new Promise((r) => setTimeout(r, intervalMs));
+    }
+  }
+  process.stdout.write(` timed out after ${timeoutMs}ms\n`);
+  return false;
 }

@@ -6,7 +6,7 @@ import {
 	type PrNotification,
 	type PrNotificationKind,
 	prNotificationsForRecipient,
-} from "@agency-portal/lib/pr-features";
+} from "@agency-portal/lib/pr-notifications";
 import { useStore } from "@agency-portal/lib/store";
 import { usePrPortalReady } from "@agency-portal/lib/use-pr-sub-role";
 import { Link, useNavigate } from "@tanstack/react-router";

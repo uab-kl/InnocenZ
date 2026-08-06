@@ -1,3 +1,9 @@
+/**
+ * Feature folder: `pr-personnel` (not `pr`).
+ * `main.pr` was dropped — this module owns the synthetic PR identity + `agency_pr`
+ * membership model. HTTP stays at `/api/v1/pr`. Membership writes live in
+ * `features/agency/agency-pr.repository.ts`.
+ */
 import { integer, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { AgencyTable } from '@/features/agency/agency.model';
@@ -99,12 +105,6 @@ export const AgencyPrTable = MainSchema.table(
 export type AgencyPrType = typeof AgencyPrTable.$inferSelect;
 export type AgencyPrInsertType = typeof AgencyPrTable.$inferInsert;
 
-/**
- * Comcard / identity fields that live on the linked user account rather than on
- * the `pr` row itself — the same source the admin PR screen reads. Read-only
- * here; the PR portal owns the writes. Every field is null when the PR has no
- * `userId`, or no `user_profile` row yet.
- */
 export type PrProfile = {
   profileImage: string | null;
   gender: string | null;

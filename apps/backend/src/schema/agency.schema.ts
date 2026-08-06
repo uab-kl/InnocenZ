@@ -7,10 +7,22 @@ export const CreateAgencySchema = z.object({
   contactName: z.string().optional(),
   contactEmail: z.string().email('Invalid email').optional(),
   contactPhone: z.string().optional(),
+  addressLine1: z.string().optional(),
+  addressLine2: z.string().optional(),
+  city: z.string().optional(),
+  postcode: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
 });
 
 export const UpdateAgencySchema = CreateAgencySchema.partial().extend({
   status: z.enum(agencyStatusValues).optional(),
+  /** Base64 (or data-URL) logo — uploaded to R2; not a DB column. */
+  logoBase64: z.string().min(1).optional(),
+  logoFileName: z.string().trim().min(1).max(255).optional(),
+  logoContentType: z.string().trim().min(1).max(100).optional(),
+  /** Clear `logo_image` without uploading a replacement. */
+  clearLogo: z.boolean().optional(),
 });
 
 export const AddAgencyMemberSchema = z.object({

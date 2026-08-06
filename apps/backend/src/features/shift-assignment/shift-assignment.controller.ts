@@ -5,7 +5,7 @@ import {
   ShiftTierOverride,
 } from './shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
-import { PrRepositoryClass } from '@/features/pr/pr.repository';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -18,12 +18,18 @@ import {
   LineDateConflictError,
   MAX_PLAUSIBLE_SHIFT_HOURS,
   overtimeAmountCents,
+  overtimeBasisAmount,
 } from '@/features/payment-voucher/payment-voucher-audit';
 import { formatCents } from '@/features/payment-voucher/payment-voucher-balance';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository';
 import { buildOvertimeLine, overtimeDedupeRef } from '@/features/payment-voucher/overtime-line';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
-import { overtimeFromStamps } from './overtime';
+import { sealCheckOut } from './seal-checkout';
+import {
+  PR_TIER_TO_OUTLET_LABEL,
+  mergeRate,
+  resolveTierWages as resolveTierWagesShared,
+} from './resolve-tier-wages';
 import { shiftsOverlap } from '@/util/slot-window';
 import {
   CheckInMineSchema,
@@ -40,47 +46,6 @@ const PG_UNIQUE_VIOLATION = '23505';
 /** MC / leave proof bounds — the phone downscales, the server still enforces. */
 const MAX_LEAVE_PHOTOS = 5;
 const MAX_LEAVE_PHOTO_CHARS = 3_000_000;
-
-/**
- * The `pr.tier` enum maps to the outlet workspace's tier-rate labels. Ranked
- * tiers carry a label (`outlet_tier_rate.kind='tier'`); commission-only is a
- * label-less row (`kind='commission_only'`), so it resolves via the flag below,
- * not a label. Keep this in step with `prTierValues` and the outlet portal's
- * `OUTLET_PR_TIERS`.
- */
-const PR_TIER_TO_OUTLET_LABEL: Record<string, string> = {
-  tier_1: 'Tier I',
-  tier_2: 'Tier II',
-  tier_3: 'Tier III',
-  tier_4: 'Tier IV',
-  tier_5: 'Tier V',
-  servant: 'Servant',
-};
-
-/**
- * Effective rate for one assignment: the per-shift override wins field-by-field
- * over the outlet workspace default; the happy-hour window always comes from the
- * workspace (a shift override never moves it). `overridden` flags that a shift
- * override row applied, so the mobile app can show "rate set for this shift".
- * Returns null only when neither source has a rate configured.
- */
-function mergeRate(
-  ws: ResolvedTierRate | undefined,
-  ov: ShiftTierOverride | undefined,
-): (ResolvedTierRate & { overridden: boolean }) | null {
-  if (!ws && !ov) return null;
-  return {
-    wagePerHour: ov?.wagePerHour ?? ws?.wagePerHour ?? null,
-    drinkPct: ov?.drinkPct ?? ws?.drinkPct ?? '0',
-    happyHourDrinkPct: ov?.happyHourDrinkPct ?? ws?.happyHourDrinkPct ?? null,
-    tipPct: ov?.tipPct ?? ws?.tipPct ?? '0',
-    otAfterHours: ov?.otAfterHours ?? ws?.otAfterHours ?? null,
-    targetSalesRm: ov?.targetSalesRm ?? ws?.targetSalesRm ?? null,
-    happyHourStart: ws?.happyHourStart ?? '',
-    happyHourEnd: ws?.happyHourEnd ?? '',
-    overridden: !!ov,
-  };
-}
 
 /**
  * A caller is scoped one of three ways: admin (everything), agency member
@@ -132,30 +97,14 @@ export class ShiftAssignmentControllerClass {
    * Post Job "Pay by PR tier → Wages", else the outlet workspace tier rate.
    * Commission-only PRs have no wages row (null).
    */
-  private async resolveTierWages(
+  private resolveTierWages(
     pr: { tier: string },
     shiftId: string,
     outletId: string,
   ): Promise<string | null> {
-    const commissionOnly = pr.tier === 'commission_only';
-    if (commissionOnly) return null;
-    const tierLabel = PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null;
-    const [rateByOutlet, overrideByShift] = await Promise.all([
-      this.shiftAssignmentRepository.resolveTierRatesForOutlets({
-        outletIds: [outletId],
-        tierLabel,
-        commissionOnly,
-      }),
-      this.shiftAssignmentRepository.resolveShiftTierOverrides({
-        shiftIds: [shiftId],
-        tierLabel,
-        commissionOnly,
-      }),
-    ]);
-    const rate = mergeRate(rateByOutlet.get(outletId), overrideByShift.get(shiftId));
-    if (rate?.wagePerHour == null || rate.wagePerHour === '') return null;
-    const n = Number(rate.wagePerHour);
-    return Number.isFinite(n) ? n.toFixed(2) : null;
+    // Delegates to the shared resolver: cut-loss releases a PR through the same
+    // seal, so it must reach the same day rate. Two copies would be two answers.
+    return resolveTierWagesShared(this.shiftAssignmentRepository, pr, shiftId, outletId);
   }
 
   private resolveScope(req: Request): Promise<OrgScope> {
@@ -341,39 +290,6 @@ export class ShiftAssignmentControllerClass {
    * check-in; sets check_out_at and seals the row as `completed` (the state the
    * weekly PV job rolls up).
    */
-  /** "8pm", "20:00", "8.30pm" → minutes since midnight, or null when not a clock time. */
-  private slotClockToMinutes(token: string): number | null {
-    const m = token.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i);
-    if (!m) return null;
-    let hour = Number(m[1]);
-    const minutes = Number(m[2] ?? '0');
-    const meridiem = m[3]?.toLowerCase();
-    if (meridiem) {
-      if (hour < 1 || hour > 12) return null;
-      hour = (hour % 12) + (meridiem === 'pm' ? 12 : 0);
-    } else if (hour > 23) return null;
-    if (minutes > 59) return null;
-    return hour * 60 + minutes;
-  }
-
-  /**
-   * The scheduled end of a shift as a Date: shift_date + the slot's end time,
-   * rolled to the next day when the window crosses midnight ("22:00 - 04:00").
-   * Null when the free-text slot has no parseable window — then no clamp.
-   */
-  private scheduledShiftEnd(shiftDate: string, slot: string | null): Date | null {
-    if (!slot) return null;
-    const parts = slot.split(/[—–-]/);
-    if (parts.length !== 2) return null;
-    const start = this.slotClockToMinutes(parts[0]);
-    const end = this.slotClockToMinutes(parts[1]);
-    if (start == null || end == null) return null;
-    const [y, m, d] = shiftDate.split('-').map(Number);
-    const endDate = new Date(y, (m || 1) - 1, d || 1, Math.floor(end / 60), end % 60);
-    if (end <= start) endDate.setDate(endDate.getDate() + 1);
-    return endDate;
-  }
-
   async checkOutMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
@@ -425,30 +341,24 @@ export class ShiftAssignmentControllerClass {
       // clamps below the check-in stamp (a PR who started late still closes
       // with a forward duration), and an unparseable slot means no clamp.
       const now = new Date();
-      const scheduledEnd = shift ? this.scheduledShiftEnd(shift.shiftDate, shift.slot) : null;
-      const clampTo =
-        scheduledEnd && now > scheduledEnd && scheduledEnd > new Date(existing.checkInAt)
-          ? scheduledEnd
-          : now;
-      // RECORD the overtime before the clamp destroys the evidence for it.
-      //
-      // The clamp overwrites `check_out_at` with the scheduled end, so after this
-      // update the row no longer knows when the PR actually stopped. Deriving the
-      // minutes later is therefore impossible — it has to happen here or not at
-      // all, which is why migration 0077's columns sat unwritten and every hour of
-      // overtime worked until now is unrecoverable.
-      const overtime = overtimeFromStamps(new Date(existing.checkInAt), scheduledEnd, now);
+      // The clamp, the overtime claim and the wage — all of it. Shared with the
+      // cut-loss release path so a PR sent home early and a PR who taps out
+      // themselves are paid identically for identical hours; see seal-checkout.ts.
+      const seal = sealCheckOut({
+        checkInAt: new Date(existing.checkInAt),
+        shiftDate: shift?.shiftDate ?? null,
+        slot: shift?.slot ?? null,
+        dayRate: tierWages,
+        now,
+      });
+      const { scheduled, overtime, earned } = seal;
+      const scheduledEnd = scheduled?.end ?? null;
+      const clampTo = seal.checkOutAt;
       const assignment = await this.shiftAssignmentRepository.update(id, {
-        checkOutAt: clampTo,
-        // NULL status means "no overtime on this shift" — the overwhelming
-        // majority of rows — so both columns are written only when there is a
-        // real claim. `pending` is the only state a check-out may set: approval
-        // belongs to the agency, and a shift that sealed itself approved would be
-        // a PR authorising their own pay.
-        ...(overtime.minutes != null
-          ? { overtimeMinutes: overtime.minutes, overtimeStatus: 'pending' as const }
-          : {}),
-        status: 'completed',
+        ...seal.columns,
+        // The only thing this path adds over the shared close: where the phone
+        // said it was. A release has no fix behind it at all, which is precisely
+        // why `released_by` exists to tell the two apart.
         ...(outFix
           ? {
               checkOutLat: String(outFix.lat),
@@ -457,10 +367,24 @@ export class ShiftAssignmentControllerClass {
               checkOutAccuracyM: outFix.accuracyM,
             }
           : {}),
-        // Seal flat tier wages onto the assignment so PV / History match Post Job.
-        ...(tierWages != null ? { payAmount: tierWages } : {}),
         updatedBy: actor,
       });
+      // A sealed 0.00 is the one wage outcome worth interrupting someone over.
+      // The stamps put this PR entirely outside their own shift window — the
+      // shape that billed assignment 6574b2ee a full day for twelve seconds —
+      // and paying nothing is correct but must never happen quietly.
+      if (earned.rule === 'never_present') {
+        logger.error(
+          `[shift-assignment.checkOut] ${id}: check-in ${existing.checkInAt} .. check-out ` +
+            `${clampTo.toISOString()} falls outside the scheduled window ` +
+            `(${scheduled?.start.toISOString()} .. ${scheduled?.end.toISOString()}) — sealed 0.00`,
+        );
+      } else if (earned.rule === 'pro_rata') {
+        logger.info(
+          `[shift-assignment.checkOut] ${id}: pro-rata ${earned.workedMinutes}/${earned.scheduledMinutes} min ` +
+            `of RM${earned.dayRate} — sealed RM${earned.amount}`,
+        );
+      }
       // A forgotten check-out is worth seeing even though it claims nothing —
       // otherwise the only trace of it is a shift that quietly sealed at its
       // scheduled hours, and a PR who really did work late has no way to say so.
@@ -764,7 +688,18 @@ export class ShiftAssignmentControllerClass {
         // approves and what lands on the voucher cannot be two numbers. Zero
         // means the claim cannot be priced (a commission-only PR has no daily
         // wage) — the approval refuses that case rather than paying nothing.
-        amount: formatCents(overtimeAmountCents(row.payAmount, row.overtimeMinutes)),
+        //
+        // The basis is the FULL day rate, never the sealed `payAmount`: since
+        // 0097 that amount can be pro-rated, and a PR who came in late and
+        // stayed late would otherwise have their overtime rate cut by exactly
+        // the minutes they were short at the start.
+        //
+        // Divided by the SHIFT'S window, not a flat six hours, so the premium is
+        // 1.5× of what an hour on this shift is really worth — the same divisor
+        // the wage was pro-rated at.
+        amount: formatCents(
+          overtimeAmountCents(overtimeBasisAmount(row), row.overtimeMinutes, row.scheduledMinutes),
+        ),
       }));
       res.status(200).json({ success: true, message: 'OK', data: claims });
     } catch (error) {
@@ -890,7 +825,13 @@ export class ShiftAssignmentControllerClass {
         assignmentId: id,
         shiftDate,
         minutes,
-        payAmount: assignment.payAmount,
+        // The full day rate, not the possibly pro-rated sealed amount — the OT
+        // rate is a property of the rate card, not of how much this particular
+        // night happened to earn.
+        payAmount: overtimeBasisAmount(assignment),
+        // Same window the wage was pro-rated at, so the 1.5× premium is 1.5× of
+        // this shift's own ordinary hour rather than of a notional six-hour one.
+        scheduledMinutes: assignment.scheduledMinutes,
         outlet: outletName,
         actor,
       });
@@ -1273,11 +1214,20 @@ export class ShiftAssignmentControllerClass {
       // also meets the next morning's 02:00–06:00 — the same-date-only test
       // this replaced never compared those, and overnight is the normal shape
       // here. Label-only slots carry no window and never clash.
+      //
+      // A CLOSED shift never clashes. `completed` joins the excluded statuses
+      // because cut-loss releases a PR mid-shift precisely so they can be sent
+      // somewhere else the same night: their released row still carries the
+      // original window, so an overlap test that counted it would refuse the
+      // re-assignment the release existed to make possible. A row is closed when
+      // it has a check-out stamp, and a stamp is a fact about the past — it
+      // cannot collide with work not yet done.
       const others = await this.shiftAssignmentRepository.listForPr(pr.id);
       const clash = others.find(
         (a) =>
           a.shiftId !== shift.id &&
-          !['cancelled', 'no_show', 'leave_approved'].includes(a.status) &&
+          !['cancelled', 'no_show', 'leave_approved', 'completed'].includes(a.status) &&
+          !a.checkOutAt &&
           shiftsOverlap(shift.shiftDate, shift.slot, a.shiftDate, a.slot),
       );
       if (clash) {

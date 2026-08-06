@@ -42,6 +42,7 @@ export function addressQueryFromOutlet(outlet: {
   name?: string | null;
   addressLine1?: string | null;
   addressLine2?: string | null;
+  city?: string | null;
   postcode?: string | null;
   state?: string | null;
   country?: string | null;
@@ -50,6 +51,7 @@ export function addressQueryFromOutlet(outlet: {
     outlet.name,
     outlet.addressLine1,
     outlet.addressLine2,
+    outlet.city,
     outlet.postcode,
     outlet.state,
     outlet.country,

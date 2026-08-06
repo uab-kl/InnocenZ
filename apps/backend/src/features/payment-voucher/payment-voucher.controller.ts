@@ -49,7 +49,7 @@ import {
   type ResolvedDrinkItem,
   ShiftAssignmentRepositoryClass,
 } from '@/features/shift-assignment/shift-assignment.repository';
-import { PrRepositoryClass } from '@/features/pr/pr.repository';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { Error } from '@/error/index';
@@ -87,7 +87,7 @@ import {
   PaymentVoucherReceiptType,
   PaymentVoucherType,
 } from './payment-voucher.model';
-import type { PrType } from '@/features/pr/pr.model';
+import type { PrType } from '@/features/pr-personnel/pr.model';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;

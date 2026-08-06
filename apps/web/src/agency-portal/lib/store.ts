@@ -70,6 +70,7 @@ import {
 	migrateDemoDateIso,
 } from "@agency-portal/lib/demo-clock";
 import {
+	buildBlankPortalReset,
 	buildDemoStoreReset,
 	buildPrDemoReset,
 	mergeAutoConfirmAgencyAssignments,
@@ -918,7 +919,32 @@ interface StoreState {
 	dismissToast: (id: number) => void;
 }
 
-const demoSnapshot = buildDemoStoreReset();
+/**
+ * The store's starting data — BLANK, not the demo fixtures.
+ *
+ * Every slice below reads its initial value from here, so this one line decides
+ * whether the app boots on invented data or on nothing. It used to be
+ * `buildDemoStoreReset()`, which meant the prototype's fixtures were the default
+ * everywhere and each real login had to overwrite them on mount. That ordering
+ * is backwards: demo data was ambient and truth was the exception.
+ *
+ * `buildBlankPortalReset()` is the SAME slice list, emptied — arrays and numbers
+ * cleared, `DEFAULT_*` object shapes kept so components reading nested fields do
+ * not crash, and `outletPnl` / `agencyReconciliation` RECOMPUTED from empty
+ * inputs rather than set to `[]` (passing `undefined` there would fall back to
+ * the seeded outlet list and quietly restore demo rows).
+ *
+ * ⚠️ `prComcard` deliberately survives this. It is the one slice with no sound
+ * blank value — the obvious constant, `DEFAULT_COMCARD`, is a comcard's STYLING
+ * rather than a comcard — so blanking it would write the wrong shape purely
+ * because the name reads correctly. It is PR-portal only, so no agency or outlet
+ * screen sees it. `buildBlankPortalReset` warns about it by name in DEV; that
+ * warning is the live list of anything else that ever slips through.
+ *
+ * The fixtures are still reachable on purpose, through `resetDemo()` — an
+ * explicit action, no longer the ambient default.
+ */
+const initialSnapshot = buildBlankPortalReset();
 
 function mergeAgencyPRs(
 	persisted: AgencyManagedPR[] | undefined,
@@ -1624,15 +1650,15 @@ export const useStore = create<StoreState>()(
 				get().toast("En route — outlet sees you on Live GPS", "success");
 			},
 
-			shiftAccepted: demoSnapshot.shiftAccepted,
-			pendingApproval: demoSnapshot.pendingApproval,
-			acceptedShiftIndex: demoSnapshot.acceptedShiftIndex,
-			checkedIn: demoSnapshot.checkedIn,
-			checkedOut: demoSnapshot.checkedOut,
-			drinks: demoSnapshot.drinks,
-			tables: demoSnapshot.tables,
-			prActiveShift: demoSnapshot.prActiveShift,
-			prSessionByRole: demoSnapshot.prSessionByRole ?? {},
+			shiftAccepted: initialSnapshot.shiftAccepted,
+			pendingApproval: initialSnapshot.pendingApproval,
+			acceptedShiftIndex: initialSnapshot.acceptedShiftIndex,
+			checkedIn: initialSnapshot.checkedIn,
+			checkedOut: initialSnapshot.checkedOut,
+			drinks: initialSnapshot.drinks,
+			tables: initialSnapshot.tables,
+			prActiveShift: initialSnapshot.prActiveShift,
+			prSessionByRole: initialSnapshot.prSessionByRole ?? {},
 
 			prNotifications: [...SEED_PR_NOTIFICATIONS],
 			opsNotifications: [],
@@ -2270,15 +2296,15 @@ export const useStore = create<StoreState>()(
 			},
 
 			prComcard: { ...COMCARD },
-			prPortfolio: demoSnapshot.prPortfolio,
+			prPortfolio: initialSnapshot.prPortfolio,
 			prLanguages: ["English", "Mandarin", "Cantonese"],
 			prDisplayName: null,
 			prEmail: null,
 			prIcName: null,
 			prMobile: null,
-			prAvatarPhoto: demoSnapshot.prAvatarPhoto,
+			prAvatarPhoto: initialSnapshot.prAvatarPhoto,
 			prPayrollAgencyId: null,
-			prAgencies: demoSnapshot.prAgencies ?? ["atlas"],
+			prAgencies: initialSnapshot.prAgencies ?? ["atlas"],
 			setPrAgencies: (ids) =>
 				set({ prAgencies: ids.length ? [...ids] : ["atlas"] }),
 			setPrPayrollAgency: (agencyId) => {
@@ -2363,7 +2389,7 @@ export const useStore = create<StoreState>()(
 				);
 			},
 
-			prPaymentVouchers: demoSnapshot.prPaymentVouchers,
+			prPaymentVouchers: initialSnapshot.prPaymentVouchers,
 			ensurePreviousWeekPv: () => {
 				const st = get();
 				const role = st.prSubRole;
@@ -2713,7 +2739,7 @@ export const useStore = create<StoreState>()(
 				);
 			},
 
-			prReceiptScans: demoSnapshot.prReceiptScans,
+			prReceiptScans: initialSnapshot.prReceiptScans,
 			addReceiptScan: (draft) => {
 				const shift = get().prActiveShift;
 				if (!get().checkedIn || get().checkedOut) {
@@ -3384,7 +3410,7 @@ export const useStore = create<StoreState>()(
 				);
 			},
 
-			agencyCollections: demoSnapshot.agencyCollections,
+			agencyCollections: initialSnapshot.agencyCollections,
 			markCollectionSettled: (id) => {
 				set((st) => ({
 					agencyCollections: st.agencyCollections.map((c) =>
@@ -3419,7 +3445,7 @@ export const useStore = create<StoreState>()(
 				);
 			},
 
-			agencyReconciliation: demoSnapshot.agencyReconciliation,
+			agencyReconciliation: initialSnapshot.agencyReconciliation,
 			confirmAgencyReconciliation: () => {
 				set((st) => ({
 					agencyReconciliation: {
@@ -3461,7 +3487,7 @@ export const useStore = create<StoreState>()(
 				set((st) => syncLedgerState(st, {}));
 			},
 
-			agencyRoster: demoSnapshot.agencyRoster,
+			agencyRoster: initialSnapshot.agencyRoster,
 			editRosterSlot: (id, patch) => {
 				const slot = get().agencyRoster.find((s) => s.id === id);
 				set((st) => ({
@@ -4637,7 +4663,7 @@ export const useStore = create<StoreState>()(
 				get().toast("Reconciliation adjusted — re-confirm required", "info");
 			},
 
-			agencyPRs: demoSnapshot.agencyPRs,
+			agencyPRs: initialSnapshot.agencyPRs,
 			specialServiceOrders: SEED_SPECIAL_SERVICES.map((r) => ({ ...r })),
 			outletCommissionRules: [...OUTLET_COMMISSION_RULES],
 			scalingTierMultipliers: { ...SCALING_TIER_MULTIPLIERS },
@@ -5112,13 +5138,13 @@ export const useStore = create<StoreState>()(
 					"info",
 				);
 			},
-			shiftHistory: demoSnapshot.shiftHistory,
+			shiftHistory: initialSnapshot.shiftHistory,
 
-			prs: demoSnapshot.prs,
-			shifts: demoSnapshot.shifts,
-			outletPnl: demoSnapshot.outletPnl,
-			outletPnlSyncAt: demoSnapshot.outletPnlSyncAt,
-			outletMoneyEditCount: demoSnapshot.outletMoneyEditCount,
+			prs: initialSnapshot.prs,
+			shifts: initialSnapshot.shifts,
+			outletPnl: initialSnapshot.outletPnl,
+			outletPnlSyncAt: initialSnapshot.outletPnlSyncAt,
+			outletMoneyEditCount: initialSnapshot.outletMoneyEditCount,
 			updateOutletShiftMoney: (shiftId, patch) => {
 				const st = get();
 				const menu = st.outletWorkspace.drinkMenu ?? DEFAULT_OUTLET_DRINK_MENU;
@@ -5245,24 +5271,24 @@ export const useStore = create<StoreState>()(
 				const label = delta > 0 ? `+1 ${drink.name}` : `-1 ${drink.name}`;
 				get().toast(`${label} · RM ${drink.priceRm}`, "info");
 			},
-			bookings: demoSnapshot.bookings,
-			pvs: demoSnapshot.pvs,
-			walletBalance: demoSnapshot.walletBalance,
-			ratings: demoSnapshot.ratings,
-			outletWorkspace: demoSnapshot.outletWorkspace,
-			outletSettings: demoSnapshot.outletSettings,
-			outletOwner: demoSnapshot.outletOwner,
+			bookings: initialSnapshot.bookings,
+			pvs: initialSnapshot.pvs,
+			walletBalance: initialSnapshot.walletBalance,
+			ratings: initialSnapshot.ratings,
+			outletWorkspace: initialSnapshot.outletWorkspace,
+			outletSettings: initialSnapshot.outletSettings,
+			outletOwner: initialSnapshot.outletOwner,
 			outletSubscriptionBilling: syncOutletSubscriptionBilling(
 				OUTLET_SUBSCRIPTION_BILLING.map((inv) => ({ ...inv })),
-				demoSnapshot.outletOwner.subscriptionPlanId,
+				initialSnapshot.outletOwner.subscriptionPlanId,
 			),
-			outletFinanceHead: demoSnapshot.outletFinanceHead,
-			outletOpsHead: demoSnapshot.outletOpsHead,
-			shiftApplicants: demoSnapshot.shiftApplicants,
-			postSealRatePrompt: demoSnapshot.postSealRatePrompt,
-			paymentCardLast4: demoSnapshot.paymentCardLast4,
-			pendingPRs: demoSnapshot.pendingPRs,
-			pendingAgencyLinks: demoSnapshot.pendingAgencyLinks ?? [],
+			outletFinanceHead: initialSnapshot.outletFinanceHead,
+			outletOpsHead: initialSnapshot.outletOpsHead,
+			shiftApplicants: initialSnapshot.shiftApplicants,
+			postSealRatePrompt: initialSnapshot.postSealRatePrompt,
+			paymentCardLast4: initialSnapshot.paymentCardLast4,
+			pendingPRs: initialSnapshot.pendingPRs,
+			pendingAgencyLinks: initialSnapshot.pendingAgencyLinks ?? [],
 			approveAgencyLink: (id) => {
 				const link = get().pendingAgencyLinks.find((l) => l.id === id);
 				if (!link) return;
@@ -5346,7 +5372,7 @@ export const useStore = create<StoreState>()(
 					);
 				}
 			},
-			pendingCutlostRequests: demoSnapshot.pendingCutlostRequests ?? [],
+			pendingCutlostRequests: initialSnapshot.pendingCutlostRequests ?? [],
 
 			approvePendingPR: (id) => {
 				const pending = get().pendingPRs.find((p) => p.id === id);
@@ -6999,7 +7025,7 @@ export const useStore = create<StoreState>()(
 						: current.prLanguages,
 				};
 				const seedAgencyById = Object.fromEntries(
-					demoSnapshot.agencyPRs.map((s) => [s.id, s]),
+					initialSnapshot.agencyPRs.map((s) => [s.id, s]),
 				);
 				const mergedAgencyPRs = mergedAgencyPRsForLedger.map((pr) => {
 					let next = syncAgencyPrFromPrPortal(
@@ -7100,7 +7126,7 @@ export const useStore = create<StoreState>()(
 					prSwapRequests: mergePrSwapRequests(
 						p?.prSwapRequests,
 						current.prSwapRequests,
-						mergeAgencyRoster(p?.agencyRoster, demoSnapshot.agencyRoster),
+						mergeAgencyRoster(p?.agencyRoster, initialSnapshot.agencyRoster),
 					),
 					prAgencyTiedAt: p?.prAgencyTiedAt ?? current.prAgencyTiedAt,
 					prCheckInMeta: p?.prCheckInMeta ?? current.prCheckInMeta,
@@ -7135,11 +7161,11 @@ export const useStore = create<StoreState>()(
 									mergeDemoRosterAssignmentSlots(
 										mergeAgencyRoster(
 											p?.agencyRoster,
-											demoSnapshot.agencyRoster,
+											initialSnapshot.agencyRoster,
 										),
-										demoSnapshot.agencyRoster,
+										initialSnapshot.agencyRoster,
 									),
-									demoSnapshot.agencyRoster,
+									initialSnapshot.agencyRoster,
 								),
 							),
 							{
@@ -7194,11 +7220,11 @@ export const useStore = create<StoreState>()(
 									mergeDemoRosterAssignmentSlots(
 										mergeAgencyRoster(
 											p?.agencyRoster,
-											demoSnapshot.agencyRoster,
+											initialSnapshot.agencyRoster,
 										),
-										demoSnapshot.agencyRoster,
+										initialSnapshot.agencyRoster,
 									),
-									demoSnapshot.agencyRoster,
+									initialSnapshot.agencyRoster,
 								),
 							),
 							{
@@ -7225,11 +7251,11 @@ export const useStore = create<StoreState>()(
 											ws,
 										),
 									),
-									demoSnapshot.shifts,
+									initialSnapshot.shifts,
 								),
-								demoSnapshot.shifts,
+								initialSnapshot.shifts,
 							),
-							demoSnapshot.shifts,
+							initialSnapshot.shifts,
 						);
 						return syncAgencyRosterToOutletShifts(merged, mergedRoster);
 					})(),
@@ -7250,7 +7276,7 @@ export const useStore = create<StoreState>()(
 						return recomputeAllOutletPnl(
 							shifts,
 							undefined,
-							mergeAgencyRoster(p?.agencyRoster, demoSnapshot.agencyRoster),
+							mergeAgencyRoster(p?.agencyRoster, initialSnapshot.agencyRoster),
 							menu,
 							rules,
 						);

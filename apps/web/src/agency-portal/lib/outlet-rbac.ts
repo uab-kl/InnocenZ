@@ -1,5 +1,6 @@
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import type { LucideIcon } from "lucide-react";
+import { isOrgProfileOnly } from "@/components/organization/org-status";
 
 /** Matches Module 10 outlet columns: Owner, Finance, Ops Head */
 export type OutletSubRole = "outlet_owner" | "outlet_finance" | "outlet_ops";
@@ -130,9 +131,22 @@ const ALL_NAV: OutletNavItem[] = [
 	},
 ];
 
+/** Profile / settings path while the organisation is pending or suspended. */
+export const OUTLET_PENDING_PROFILE_PATH = "/outlet/settings";
+
+function isOutletPendingProfilePath(pathname: string): boolean {
+	return (
+		pathname.startsWith("/outlet/settings") ||
+		pathname.startsWith("/outlet/profile")
+	);
+}
+
 export function getOutletNavItems(
 	role: OutletSubRole | null | undefined,
+	orgStatus?: string | null,
 ): OutletNavItem[] {
+	// Pending / suspended orgs may sign in but only use profile/settings.
+	if (isOrgProfileOnly(orgStatus)) return [];
 	const r = role ?? "outlet_owner";
 	return ALL_NAV.filter((item) => {
 		if (item.to === "/outlet/bookings") {
@@ -144,8 +158,10 @@ export function getOutletNavItems(
 
 export function getOutletDefaultRoute(
 	role: OutletSubRole | null | undefined,
+	orgStatus?: string | null,
 ): string {
-	const items = getOutletNavItems(role);
+	if (isOrgProfileOnly(orgStatus)) return OUTLET_PENDING_PROFILE_PATH;
+	const items = getOutletNavItems(role, orgStatus);
 	return items[0]?.to ?? "/outlet/billing";
 }
 
@@ -153,7 +169,11 @@ export function getOutletDefaultRoute(
 export function canAccessOutletPath(
 	role: OutletSubRole | null | undefined,
 	pathname: string,
+	orgStatus?: string | null,
 ): boolean {
+	if (isOrgProfileOnly(orgStatus)) {
+		return isOutletPendingProfilePath(pathname);
+	}
 	const r = role ?? "outlet_owner";
 	if (pathname === "/outlet" || pathname === "/outlet/") {
 		return outletCan(r, "viewLiveDashboard");

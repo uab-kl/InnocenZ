@@ -29,6 +29,26 @@ export const orgStatusBadgeColors: Record<OrgStatus, string> = {
 	inactive: "border-muted-foreground/30 bg-muted text-muted-foreground",
 };
 
+/** True when the organisation is awaiting admin approval (login OK, portal limited). */
+export function isOrgPendingReview(
+	status: string | null | undefined,
+): boolean {
+	return (status ?? "").toLowerCase() === "pending_review";
+}
+
+/** True when the organisation is suspended (login OK, portal limited, red UI). */
+export function isOrgSuspended(status: string | null | undefined): boolean {
+	return (status ?? "").toLowerCase() === "suspended";
+}
+
+/**
+ * Pending review or suspended — may sign in, but portal is profile/settings only.
+ * Inactive orgs are refused at login (backend `suspendedOrgBlock`).
+ */
+export function isOrgProfileOnly(status: string | null | undefined): boolean {
+	return isOrgPendingReview(status) || isOrgSuspended(status);
+}
+
 export function formatSubRole(subRole: string): string {
 	return subRole
 		.split("_")

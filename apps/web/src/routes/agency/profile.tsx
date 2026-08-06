@@ -4,33 +4,39 @@ import {
 	IzPageTitle,
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
-import { AppTopbar } from "@agency-portal/components/Nav";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
-import { useAgencyProfile } from "@agency-portal/hooks/use-agency-profile";
-import type {
-	AgencyFinanceHead,
-	AgencyOwnerSettings,
-} from "@agency-portal/lib/agency-demo";
+import { PendingReviewBanner } from "@agency-portal/components/portal/PendingReviewBanner";
 import {
+	ProfileEditDock,
+	ProfileEditTrigger,
+	ProfilePhotoActions,
+	ProfileSectionCard,
+	ProfileSettingsField,
+} from "@agency-portal/components/portal/profile-settings-ui";
+import { useAgencyProfile } from "@agency-portal/hooks/use-agency-profile";
+import {
+	BLANK_AGENCY_FINANCE_HEAD,
+	BLANK_AGENCY_OWNER,
+	type AgencyFinanceHead,
+	type AgencyOwnerSettings,
 	agencySubscriptionBillingForWeeklyPv,
 	agencyWeeklyPvCount,
 	ownedByAgency,
 } from "@agency-portal/lib/agency-demo";
+import {
+	getAgencyIdentity,
+	saveAgencyIdentity,
+} from "@agency-portal/lib/agency-identity";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { getPreviousWeekSundayIso } from "@agency-portal/lib/demo-clock";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute } from "@tanstack/react-router";
 import {
-	Building2,
-	Camera,
-	Mail,
-	Pencil,
-	Phone,
-	Shield,
-	User,
-	X,
-} from "lucide-react";
+	isOrgPendingReview,
+	isOrgSuspended,
+} from "@/components/organization/org-status";
+import { Building2, Mail, Phone, Shield, User } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 
 export const Route = createFileRoute("/agency/profile")({
@@ -58,25 +64,30 @@ function AgencyProfile() {
 	// Real login → overlay the real agency identity in read mode (see the hook).
 	const profile = useAgencyProfile();
 	const [editing, setEditing] = useState(false);
+	const [saving, setSaving] = useState(false);
 	const [securityOpen, setSecurityOpen] = useState(false);
 	const [draft, setDraft] = useState(agencyOwner);
 	const [financeDraft, setFinanceDraft] = useState(agencyFinanceHead);
 	const [inviteEmail, setInviteEmail] = useState(agencyFinanceHead.email);
+	const [logoMeta, setLogoMeta] = useState<{
+		fileName: string;
+		contentType: string;
+	} | null>(null);
+	const [logoCleared, setLogoCleared] = useState(false);
 	const avatarFileRef = useRef<HTMLInputElement>(null);
 	const canEdit = agencyCan(agencySubRole, "editSettings");
 
-	// Read mode overlays the real backend identity (overlay carries only defined
-	// fields, so demo values fill any gaps); editing uses the local draft. The
-	// backend has no agency-update endpoint, so edits do not persist there.
+	// Real login → never merge onto Atlas demo defaults. Demo sessions keep the
+	// store seed. Editing uses the local draft.
 	const owner =
-		!editing && profile.backed && profile.owner
-			? { ...agencyOwner, ...profile.owner }
+		!editing && profile.backed
+			? { ...BLANK_AGENCY_OWNER, ...(profile.owner ?? {}) }
 			: editing
 				? draft
 				: agencyOwner;
 	const finance =
-		!editing && profile.backed && profile.finance
-			? { ...agencyFinanceHead, ...profile.finance }
+		!editing && profile.backed
+			? { ...BLANK_AGENCY_FINANCE_HEAD, ...(profile.finance ?? {}) }
 			: editing
 				? financeDraft
 				: agencyFinanceHead;
@@ -96,8 +107,8 @@ function AgencyProfile() {
 	const avatarLetter =
 		owner.ownerName.trim()[0]?.toUpperCase() ??
 		owner.orgName.trim()[0]?.toUpperCase() ??
-		"A";
-	const editCardClass = editing ? " border-[rgba(217,185,122,.25)]" : "";
+		"?";
+	const fieldMode = editing && canEdit ? "edit" : "view";
 
 	const update = (patch: Partial<AgencyOwnerSettings>) =>
 		setDraft((d) => ({ ...d, ...patch }));
@@ -105,17 +116,38 @@ function AgencyProfile() {
 		setFinanceDraft((d) => ({ ...d, ...patch }));
 
 	const startEdit = () => {
-		// Seed the edit form from the real identity when available.
-		setDraft({ ...agencyOwner, ...(profile.owner ?? {}) });
-		setFinanceDraft({ ...agencyFinanceHead, ...(profile.finance ?? {}) });
-		setInviteEmail(profile.finance?.email ?? agencyFinanceHead.email);
+		if (profile.backed) {
+			setDraft({ ...BLANK_AGENCY_OWNER, ...(profile.owner ?? {}) });
+			setFinanceDraft({
+				...BLANK_AGENCY_FINANCE_HEAD,
+				...(profile.finance ?? {}),
+			});
+			setInviteEmail(profile.finance?.email ?? "");
+		} else {
+			setDraft({ ...agencyOwner, ...(profile.owner ?? {}) });
+			setFinanceDraft({ ...agencyFinanceHead, ...(profile.finance ?? {}) });
+			setInviteEmail(profile.finance?.email ?? agencyFinanceHead.email);
+		}
+		setLogoMeta(null);
+		setLogoCleared(false);
 		setEditing(true);
 	};
 
 	const cancelEdit = () => {
-		setDraft({ ...agencyOwner });
-		setFinanceDraft({ ...agencyFinanceHead });
-		setInviteEmail(agencyFinanceHead.email);
+		if (profile.backed) {
+			setDraft({ ...BLANK_AGENCY_OWNER, ...(profile.owner ?? {}) });
+			setFinanceDraft({
+				...BLANK_AGENCY_FINANCE_HEAD,
+				...(profile.finance ?? {}),
+			});
+			setInviteEmail(profile.finance?.email ?? "");
+		} else {
+			setDraft({ ...agencyOwner });
+			setFinanceDraft({ ...agencyFinanceHead });
+			setInviteEmail(agencyFinanceHead.email);
+		}
+		setLogoMeta(null);
+		setLogoCleared(false);
 		setEditing(false);
 	};
 
@@ -139,12 +171,73 @@ function AgencyProfile() {
 		const reader = new FileReader();
 		reader.onload = () => {
 			update({ avatarPhoto: reader.result as string });
-			toast("Profile photo updated", "success");
+			setLogoMeta({
+				fileName: file.name || "logo.png",
+				contentType: file.type || "image/png",
+			});
+			setLogoCleared(false);
+			toast("Logo selected — tap Save to upload", "success");
 		};
 		reader.readAsDataURL(file);
 	};
 
 	const saveEdit = async () => {
+		if (!draft.orgName.trim()) {
+			toast("Enter organization name", "warn");
+			return;
+		}
+		if (profile.backed) {
+			if (!canEdit) {
+				toast("Only the agency owner can edit this profile", "warn");
+				return;
+			}
+			setSaving(true);
+			try {
+				const nextLogo = draft.avatarPhoto;
+				const logoIsNew =
+					typeof nextLogo === "string" && nextLogo.startsWith("data:");
+				await profile.save({
+					orgName: draft.orgName.trim(),
+					...(logoIsNew
+						? {
+								logoDataUrl: nextLogo,
+								logoFileName: logoMeta?.fileName,
+								logoContentType: logoMeta?.contentType,
+							}
+						: {}),
+					...(logoCleared && !logoIsNew ? { clearLogo: true } : {}),
+				});
+				const identity = getAgencyIdentity();
+				if (identity) {
+					saveAgencyIdentity({
+						...identity,
+						orgName: draft.orgName.trim(),
+					});
+				}
+			} catch (err) {
+				const msg =
+					err && typeof err === "object" && "response" in err
+						? String(
+								(err as { response?: { data?: { message?: string } } })
+									.response?.data?.message ?? "",
+							)
+						: err instanceof Error
+							? err.message
+							: "";
+				toast(
+					msg.trim() || "Could not save — the server refused the change",
+					"warn",
+				);
+				setSaving(false);
+				return;
+			}
+			setSaving(false);
+			setLogoMeta(null);
+			setLogoCleared(false);
+			setEditing(false);
+			toast("Agency profile saved", "success");
+			return;
+		}
 		if (!draft.ownerName.trim()) {
 			toast("Enter owner name", "warn");
 			return;
@@ -152,20 +245,6 @@ function AgencyProfile() {
 		if (!draft.mobile.trim()) {
 			toast("Enter mobile number", "warn");
 			return;
-		}
-		// Real session: persist the backed fields FIRST and bail out if the server
-		// refuses, so the screen never shows a saved state the database did not
-		// accept. A demo session has no agency id and keeps the store-only path.
-		if (profile.backed) {
-			try {
-				await profile.save({
-					orgName: draft.orgName.trim(),
-					ownerName: draft.ownerName.trim(),
-				});
-			} catch {
-				toast("Could not save — the server refused the change", "warn");
-				return;
-			}
 		}
 		const nextFinance = { ...financeDraft };
 		const inviteChanged = inviteEmail.trim() !== agencyFinanceHead.email;
@@ -185,23 +264,14 @@ function AgencyProfile() {
 			scalingTierMultipliers,
 			outletCommissionRules: outletCommissionRules.map((r) => ({ ...r })),
 		});
-		if (profile.backed) {
-			toast("Settings saved", "success");
-		}
 		if (inviteChanged && inviteEmail.trim()) {
-			// The member-write endpoints are now open to the agency OWNER, not just
-			// admin — but there is still no screen that calls them, and sending an
-			// invite email needs a mailer that does not exist. So this stays worded
-			// as intent, never as a completed action: the previous version said an
-			// ADMIN had to add the member, which stopped being true the moment the
-			// routes were widened. A message about a capability has to be revisited
-			// when the capability moves.
 			toast(
 				`Finance Head invite for ${inviteEmail.trim()} is not sent — no invite is delivered yet`,
 				"warn",
 			);
 		}
 		setEditing(false);
+		toast("Settings saved", "success");
 	};
 
 	if (!agencyCan(agencySubRole, "viewSettings")) {
@@ -220,27 +290,24 @@ function AgencyProfile() {
 	}
 
 	const isFinanceReadOnly = agencySubRole === "agency_finance";
-	const fieldsLocked = !editing || !canEdit;
+	const orgStatus = getAgencyIdentity()?.agencyStatus;
 
 	return (
 		<div className="iz-screen">
-			{editing && <AppTopbar onBack={cancelEdit} backLabel="Cancel edit" />}
 			<header>
 				<IzPageTitle>Settings</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{owner.orgName}</p>
-				{editing && (
-					<span className="iz-pill iz-pill-amber mt-2 !text-[10px]">
-						Editing
-					</span>
-				)}
 				{isFinanceReadOnly && !editing && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
 						Finance view — read-only · cannot edit owner settings
 					</p>
 				)}
 			</header>
+			<PendingReviewBanner orgStatus={orgStatus} kind="agency" />
 
-			<div className="iz-settings-profile flex flex-col items-center py-5">
+			<div
+				className={`iz-settings-profile flex flex-col items-center py-5${editing ? " iz-settings-profile--editing" : ""}`}
+			>
 				<input
 					ref={avatarFileRef}
 					type="file"
@@ -261,235 +328,197 @@ function AgencyProfile() {
 							avatarLetter
 						)}
 					</div>
-					{editing && canEdit && (
-						<>
-							<button
-								type="button"
-								className="iz-avatar-edit"
-								aria-label="Upload profile photo"
-								onClick={openAvatarUpload}
-							>
-								<Camera className="h-3.5 w-3.5" />
-							</button>
-							{draft.avatarPhoto && (
-								<button
-									type="button"
-									className="iz-avatar-remove"
-									aria-label="Remove profile photo"
-									onClick={() => update({ avatarPhoto: null })}
-								>
-									<X className="h-3 w-3" />
-								</button>
-							)}
-						</>
-					)}
 				</div>
 				<div className="mt-3 font-sora text-lg font-bold">{owner.orgName}</div>
 				<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
-				<div className="mt-1 flex items-center gap-1 iz-tiny text-[var(--iz-green)]">
+				<div
+					className={`mt-1 flex items-center gap-1 iz-tiny ${
+						isOrgSuspended(orgStatus)
+							? "text-[var(--iz-red)]"
+							: owner.accountActivated
+								? "text-[var(--iz-green)]"
+								: "text-[var(--iz-amber)]"
+					}`}
+				>
 					<Shield className="h-3 w-3" />
-					{owner.accountActivated
-						? `Verified · ${subscriptionBilling.priceLabel} · usage-based weekly`
-						: "Pending OTP activation"}
+					{isOrgSuspended(orgStatus)
+						? "Suspended · profile only"
+						: owner.accountActivated
+							? `Verified · ${subscriptionBilling.priceLabel} · usage-based weekly`
+							: profile.backed || isOrgPendingReview(orgStatus)
+								? "Pending admin approval"
+								: "Pending OTP activation"}
 				</div>
-				{editing && canEdit && (
-					<p className="iz-tiny iz-muted2 mt-2 text-center">
-						Tap the camera to upload your agency profile photo.
-					</p>
+				{editing && canEdit ? (
+					<ProfilePhotoActions
+						hasPhoto={Boolean(draft.avatarPhoto)}
+						onChangePhoto={openAvatarUpload}
+						onRemovePhoto={
+							draft.avatarPhoto
+								? () => {
+										update({ avatarPhoto: null });
+										setLogoMeta(null);
+										setLogoCleared(true);
+									}
+								: undefined
+						}
+					/>
+				) : (
+					canEdit && <ProfileEditTrigger onClick={startEdit} />
 				)}
 			</div>
 
 			<IzSectionLabel>Owner information</IzSectionLabel>
-			<IzCard className={editCardClass}>
-				<Field
-					icon={User}
-					label="Owner name"
-					value={owner.ownerName}
-					onChange={(v) => update({ ownerName: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
-					icon={Phone}
-					label="Mobile"
-					value={owner.mobile}
-					onChange={() => {}}
-					readOnly
-					hint="Change in Login & security"
-				/>
-				<Field
-					icon={Mail}
-					label="Email"
-					value={owner.email}
-					onChange={() => {}}
-					readOnly
-					hint="Change in Login & security"
-				/>
-				<Field
-					icon={Shield}
-					label="IC (for PV)"
-					value={owner.ic}
-					onChange={(v) => update({ ic: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
+			<ProfileSectionCard editing={editing && canEdit}>
+				<ProfileSettingsField
 					icon={Building2}
 					label="Organization"
 					value={owner.orgName}
 					onChange={(v) => update({ orgName: v })}
-					readOnly={fieldsLocked}
+					mode={fieldMode}
+					placeholder="Agency name"
 				/>
-			</IzCard>
-
-			<IzSectionLabel>Finance Head · dual-sign PV</IzSectionLabel>
-			<IzCard className={editCardClass}>
-				<p className="iz-tiny iz-muted mb-2">
-					IC + e-signature auto-stamps every PV (1st of 2 sigs)
-				</p>
-				<Field
+				<ProfileSettingsField
 					icon={User}
-					label="Name"
-					value={finance.name}
-					onChange={(v) => updateFinance({ name: v })}
-					readOnly={fieldsLocked}
+					label="Owner name"
+					value={owner.ownerName}
+					onChange={(v) => update({ ownerName: v })}
+					mode={profile.backed && editing ? "locked" : fieldMode}
+					hint={
+						profile.backed && editing
+							? "Owner name comes from your login username"
+							: undefined
+					}
+					placeholder="Full name"
 				/>
-				<Field
-					icon={Shield}
-					label="IC"
-					value={finance.ic}
-					onChange={(v) => updateFinance({ ic: v })}
-					readOnly={fieldsLocked}
+				<ProfileSettingsField
+					icon={Phone}
+					label="Mobile"
+					value={owner.mobile}
+					mode="locked"
+					hint="Change in Login & security"
 				/>
-				<Field
+				<ProfileSettingsField
 					icon={Mail}
 					label="Email"
-					value={finance.email}
-					onChange={(v) => updateFinance({ email: v })}
-					readOnly={fieldsLocked}
+					value={owner.email}
+					mode="locked"
+					hint="Change in Login & security"
 				/>
-				{finance.eSignatureStored && (
-					<p className="iz-tiny text-[var(--iz-green)] mt-2">
-						E-signature on file ✓
-					</p>
+				{!profile.backed && (
+					<ProfileSettingsField
+						icon={Shield}
+						label="IC (for PV)"
+						value={owner.ic}
+						onChange={(v) => update({ ic: v })}
+						mode={fieldMode}
+					/>
 				)}
-			</IzCard>
+			</ProfileSectionCard>
 
-			{editing && canEdit && (
+			{/* Demo-only Finance Head form — real staff live in OrgMembersPanel. */}
+			{!profile.backed && (
 				<>
-					<IzSectionLabel>Invite Finance Head</IzSectionLabel>
-					<IzCard className={editCardClass}>
-						<p className="iz-tiny iz-muted mb-2">
-							Sub-role invite · requires IC + e-signature for dual-sign PV
+					<IzSectionLabel>Finance Head · dual-sign PV</IzSectionLabel>
+					<ProfileSectionCard editing={editing && canEdit}>
+						<p className="iz-tiny iz-muted mb-1 pt-2">
+							IC + e-signature auto-stamps every PV (1st of 2 sigs)
 						</p>
-						<input
-							className="iz-field-input !text-sm"
-							placeholder="finance@agency.my"
-							value={inviteEmail}
-							onChange={(e) => setInviteEmail(e.target.value)}
+						<ProfileSettingsField
+							icon={User}
+							label="Name"
+							value={finance.name}
+							onChange={(v) => updateFinance({ name: v })}
+							mode={fieldMode}
 						/>
-					</IzCard>
+						<ProfileSettingsField
+							icon={Shield}
+							label="IC"
+							value={finance.ic}
+							onChange={(v) => updateFinance({ ic: v })}
+							mode={fieldMode}
+						/>
+						<ProfileSettingsField
+							icon={Mail}
+							label="Email"
+							value={finance.email}
+							onChange={(v) => updateFinance({ email: v })}
+							mode={fieldMode}
+						/>
+						{finance.eSignatureStored && (
+							<p className="iz-tiny text-[var(--iz-green)] mt-2 mb-2">
+								E-signature on file ✓
+							</p>
+						)}
+					</ProfileSectionCard>
+
+					{editing && canEdit && (
+						<>
+							<IzSectionLabel>Invite Finance Head</IzSectionLabel>
+							<ProfileSectionCard editing>
+								<p className="iz-tiny iz-muted mb-2 pt-2">
+									Sub-role invite · requires IC + e-signature for dual-sign PV
+								</p>
+								<input
+									className="iz-profile-field__input mb-3"
+									placeholder="finance@agency.my"
+									value={inviteEmail}
+									onChange={(e) => setInviteEmail(e.target.value)}
+								/>
+							</ProfileSectionCard>
+						</>
+					)}
 				</>
 			)}
 
-			{/* Real staff of this agency, from `agency_user`. Distinct from the
-			    Finance Head card above, which is the demo profile form. */}
-			<OrgMembersPanel
-				kind="agency"
-				orgId={profile.agencyId}
-				canManage={canEdit}
-			/>
+			{/* Real staff from `agency_user`. */}
+			{!editing && (
+				<OrgMembersPanel
+					kind="agency"
+					orgId={profile.agencyId}
+					canManage={canEdit}
+				/>
+			)}
 
-			<IzSectionLabel>Login &amp; security</IzSectionLabel>
-			<IzCard>
-				<p className="iz-tiny iz-muted mb-3">
-					Update password anytime. Email and mobile changes require OTP
-					verification.
-				</p>
-				<button
-					type="button"
-					className="iz-btn iz-btn-primary w-full"
-					onClick={() => setSecurityOpen(true)}
-				>
-					Security settings
-				</button>
-			</IzCard>
+			{!editing && (
+				<>
+					<IzSectionLabel>Login &amp; security</IzSectionLabel>
+					<IzCard>
+						<p className="iz-tiny iz-muted mb-3">
+							Update password anytime. Email and mobile changes require OTP
+							verification.
+						</p>
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary w-full"
+							onClick={() => setSecurityOpen(true)}
+						>
+							Security settings
+						</button>
+					</IzCard>
+				</>
+			)}
 
 			<SecuritySettingsSheets
 				open={securityOpen}
 				onClose={() => setSecurityOpen(false)}
 				sheetVariant="side"
-				email={agencyOwner.email}
-				mobile={agencyOwner.mobile}
+				email={owner.email}
+				mobile={owner.mobile}
 				canEdit={canEdit}
-				onUpdateEmail={(email) => saveAgencyOwner({ email })}
-				onUpdateMobile={(mobile) => saveAgencyOwner({ mobile })}
+				onUpdateEmail={(email) => {
+					if (!profile.backed) saveAgencyOwner({ email });
+				}}
+				onUpdateMobile={(mobile) => {
+					if (!profile.backed) saveAgencyOwner({ mobile });
+				}}
 			/>
 
-			{canEdit && (
-				<div className="iz-profile-actions mt-4">
-					{editing ? (
-						<>
-							<button
-								type="button"
-								className="iz-btn iz-btn-primary"
-								onClick={saveEdit}
-							>
-								Save settings
-							</button>
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft mt-2.5"
-								onClick={cancelEdit}
-							>
-								Cancel
-							</button>
-						</>
-					) : (
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary"
-							onClick={startEdit}
-						>
-							<Pencil className="h-4 w-4" /> Edit settings
-						</button>
-					)}
-				</div>
-			)}
-		</div>
-	);
-}
-
-function Field({
-	icon: Icon,
-	label,
-	value,
-	onChange,
-	readOnly,
-	hint,
-}: {
-	icon: typeof User;
-	label: string;
-	value: string;
-	onChange: (v: string) => void;
-	readOnly?: boolean;
-	hint?: string;
-}) {
-	return (
-		<div className="border-b border-[var(--iz-line)] py-2.5 last:border-0">
-			<div className="flex items-center gap-2 iz-tiny iz-muted">
-				<Icon className="h-3 w-3" /> {label}
-			</div>
-			{readOnly ? (
-				<>
-					<p className="mt-1 font-medium text-[var(--iz-txt)]">
-						{value || "—"}
-					</p>
-					{hint && <p className="iz-tiny iz-muted2 mt-0.5">{hint}</p>}
-				</>
-			) : (
-				<input
-					className="mt-1 w-full bg-transparent font-medium text-[var(--iz-txt)] outline-none"
-					value={value}
-					onChange={(e) => onChange(e.target.value)}
+			{canEdit && editing && (
+				<ProfileEditDock
+					onSave={saveEdit}
+					onCancel={cancelEdit}
+					saving={saving}
 				/>
 			)}
 		</div>

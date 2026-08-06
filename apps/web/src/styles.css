@@ -1070,96 +1070,259 @@ html {
   box-shadow: 0 0 0 3px color-mix(in oklab, var(--royal-gold) 18%, transparent);
 }
 
-.login-page .signup-form .login-field-label {
-  font-size: 1.5625rem;
-}
-
-.login-page .signup-form .signup-section-title {
-  font-size: 1.5rem;
+/* —— Signup (long form): denser type + stepped section panels —— */
+.signup-page .signup-kicker {
+  font-size: 0.75rem;
   font-weight: 700;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
 }
 
-.login-page .signup-form .login-input,
-.login-page .signup-form [data-slot="input-group-control"],
-.login-page .signup-form [data-slot="textarea"],
-.login-page .signup-form [data-slot="select-trigger"] {
-  font-size: 1.5rem;
+.signup-page .signup-heading {
+  font-family: var(--font-display);
+  font-weight: 400;
+  line-height: 1.08;
+  letter-spacing: 0.02em;
 }
 
-.login-page .signup-form .signup-helper,
-.login-page .signup-form [data-slot="field-description"] {
-  font-size: 1.25rem;
-  line-height: 1.5;
+.signup-page .signup-heading span {
+  font-size: clamp(2.25rem, 4.5vw, 3.25rem);
 }
 
-.login-page .signup-form .signup-account-title {
-  font-size: 1.375rem;
+.signup-page .signup-lede {
+  font-size: clamp(1rem, 1.8vw, 1.125rem);
+  line-height: 1.55;
 }
 
-.login-page .signup-form .signup-account-desc {
+.signup-page .signup-form .login-field-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.signup-page .signup-form .login-input,
+.signup-page .signup-form [data-slot="input-group-control"],
+.signup-page .signup-form [data-slot="textarea"],
+.signup-page .signup-form [data-slot="select-trigger"],
+.signup-page .signup-form .signup-textarea {
+  font-size: 1rem;
+  line-height: 1.4;
+}
+
+.signup-page .signup-form .login-input {
+  height: 2.875rem;
+}
+
+.signup-page .signup-form [data-slot="input-group"] {
+  min-height: 2.875rem;
+}
+
+.signup-page .signup-form .login-btn {
+  height: 3.25rem;
+  font-size: 1.0625rem;
+}
+
+.signup-page .signup-form .login-support {
+  font-size: 0.9375rem;
+}
+
+.signup-page .login-back,
+.signup-page .hz-nav-lang-trigger {
+  font-size: 0.8125rem;
+}
+
+.signup-section {
+  border-radius: 1rem;
+  border: 1px solid color-mix(in oklab, var(--royal-gold) 18%, transparent);
+  background: color-mix(in oklab, var(--card) 72%, transparent);
+  backdrop-filter: blur(10px);
+  padding: 1.25rem 1.25rem 1.35rem;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
+}
+
+@media (min-width: 640px) {
+  .signup-section {
+    padding: 1.5rem 1.6rem 1.65rem;
+  }
+}
+
+.signup-section--account {
+  padding: 0.85rem;
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+  backdrop-filter: none;
+}
+
+.signup-section-header {
+  display: flex;
+  align-items: baseline;
+  gap: 0.75rem;
+  margin-bottom: 0.4rem;
+  padding-bottom: 0.35rem;
+  border-bottom: 1px solid color-mix(in oklab, var(--royal-gold) 16%, transparent);
+}
+
+.signup-step {
+  font-family: var(--font-display);
   font-size: 1.125rem;
+  line-height: 1;
+  color: var(--royal-gold);
+  opacity: 0.9;
+}
+
+.signup-section-title {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: color-mix(in oklab, var(--foreground) 88%, transparent);
+}
+
+.signup-section-body {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.signup-account-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.signup-account-card {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.45rem;
+  border-radius: 0.9rem;
+  border: 1px solid color-mix(in oklab, var(--royal-gold) 20%, transparent);
+  background: color-mix(in oklab, var(--card) 70%, transparent);
+  padding: 1rem 1.05rem 1.1rem;
+  text-align: left;
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease,
+    box-shadow 0.2s ease,
+    transform 0.2s ease;
+}
+
+.signup-account-card:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--royal-gold) 40%, transparent);
+  background: color-mix(in oklab, var(--card) 85%, transparent);
+}
+
+.signup-account-card--selected {
+  border-color: color-mix(in oklab, var(--royal-gold) 65%, transparent);
+  background: color-mix(in oklab, var(--royal-gold) 12%, transparent);
+  box-shadow:
+    0 0 0 1px color-mix(in oklab, var(--royal-gold) 25%, transparent),
+    0 10px 28px color-mix(in oklab, var(--royal-gold) 12%, transparent);
+}
+
+.signup-account-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 999px;
+  background: color-mix(in oklab, var(--royal-gold) 10%, transparent);
+}
+
+.signup-account-title {
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--foreground);
+}
+
+.signup-account-desc {
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: color-mix(in oklab, var(--muted-foreground) 95%, transparent);
+}
+
+.signup-helper,
+.signup-page .signup-form [data-slot="field-description"] {
+  font-size: 0.8125rem;
   line-height: 1.45;
 }
 
-.login-page .signup-form .signup-upload-title {
-  font-size: 1.3125rem;
+.signup-field-error {
+  font-size: 0.8125rem !important;
 }
 
-.login-page .signup-form .signup-upload-hint {
-  font-size: 1.125rem;
+.signup-upload {
+  min-height: 8.5rem;
+  border-radius: 0.9rem;
+  border: 1px dashed color-mix(in oklab, var(--royal-gold) 32%, transparent);
+  background: color-mix(in oklab, var(--background) 45%, transparent);
+  transition:
+    border-color 0.2s ease,
+    background 0.2s ease;
 }
 
-.login-page .signup-form .login-btn {
-  font-size: 1.625rem;
+.signup-upload:hover {
+  border-color: color-mix(in oklab, var(--royal-gold) 55%, transparent);
+  background: color-mix(in oklab, var(--background) 60%, transparent);
 }
 
-.login-page .signup-form .login-support {
-  font-size: 1.375rem;
+.signup-upload-title {
+  font-size: 0.9375rem;
 }
 
-.login-page .signup-form [data-slot="select-item"] {
-  font-size: 1.5rem;
+.signup-upload-hint {
+  font-size: 0.8125rem;
+}
+
+.signup-submit-wrap {
+  margin-top: 0.25rem;
+  border-radius: 1rem;
+  border: 1px solid color-mix(in oklab, var(--royal-gold) 18%, transparent);
+  background: color-mix(in oklab, var(--card) 72%, transparent);
+  padding: 1.25rem;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.22);
 }
 
 .signup-package-select-content [data-slot="select-item"],
 .signup-package-item {
-  font-size: 1.5rem;
-  line-height: 1.45;
-  padding-top: 0.75rem;
-  padding-bottom: 0.75rem;
+  font-size: 0.9375rem;
+  line-height: 1.4;
+  padding-top: 0.55rem;
+  padding-bottom: 0.55rem;
 }
 
 .signup-package-select-content [data-slot="select-item-indicator"] svg {
-  width: 1.25rem;
-  height: 1.25rem;
+  width: 1rem;
+  height: 1rem;
 }
 
 .signup-disclaimer-dialog [data-slot="dialog-title"],
 .signup-disclaimer-title {
-  font-size: 2.25rem;
+  font-size: 1.5rem;
   line-height: 1.25;
 }
 
 .signup-disclaimer-dialog [data-slot="dialog-description"],
 .signup-disclaimer-body {
-  font-size: 1.5rem;
+  font-size: 1rem;
   line-height: 1.6;
 }
 
 .signup-disclaimer-dialog .signup-disclaimer-done,
 .signup-disclaimer-done {
-  font-size: 1.5rem;
+  font-size: 1rem;
 }
 
-.login-page .signup-form .signup-ack-label {
-  font-size: 1.375rem;
-  line-height: 1.5;
+.signup-page .signup-form .signup-ack-label {
+  font-size: 0.9375rem;
+  line-height: 1.45;
 }
 
-.login-page .signup-form .signup-ack-checkbox {
-  width: 1.375rem;
-  height: 1.375rem;
+.signup-page .signup-form .signup-ack-checkbox {
+  width: 1.125rem;
+  height: 1.125rem;
 }
 
 .landing-page h1,
