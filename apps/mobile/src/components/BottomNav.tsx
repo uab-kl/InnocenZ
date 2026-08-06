@@ -2,25 +2,30 @@
  * `.iz-tabbar` / `.iz-pr-tabbar` port — Shifts · Check-In · Payment · History
  * · Profile with the gold top indicator + glow on the active tab.
  */
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
+import { useLocale } from '../i18n';
 import { Briefcase, HistoryIcon, MapPin, UserIcon, Wallet, type IconComponent } from './icons';
 
 export type PrTab = 'shifts' | 'checkin' | 'payment' | 'history' | 'profile';
 
-const TABS: { key: PrTab; label: string; icon: IconComponent }[] = [
-  { key: 'shifts', label: 'Today', icon: Briefcase },
-  { key: 'checkin', label: 'Check-In', icon: MapPin },
-  { key: 'payment', label: 'Payment', icon: Wallet },
-  { key: 'history', label: 'History', icon: HistoryIcon },
-  { key: 'profile', label: 'Profile', icon: UserIcon },
-];
-
 export function BottomNav({ active, onChange }: { active: PrTab; onChange: (tab: PrTab) => void }) {
+  const { t } = useLocale();
+  const tabs = useMemo(
+    (): { key: PrTab; label: string; icon: IconComponent }[] => [
+      { key: 'shifts', label: t.nav.today, icon: Briefcase },
+      { key: 'checkin', label: t.nav.checkIn, icon: MapPin },
+      { key: 'payment', label: t.nav.payment, icon: Wallet },
+      { key: 'history', label: t.nav.history, icon: HistoryIcon },
+      { key: 'profile', label: t.nav.profile, icon: UserIcon },
+    ],
+    [t],
+  );
+
   return (
     <View style={styles.tabbar}>
-      {TABS.map(({ key, label, icon: Icon }) => {
+      {tabs.map(({ key, label, icon: Icon }) => {
         const on = key === active;
         const color = on ? C.goldL : C.muted2;
         return (

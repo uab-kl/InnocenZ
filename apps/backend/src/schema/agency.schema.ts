@@ -26,7 +26,7 @@ export const UpdateAgencySchema = CreateAgencySchema.partial().extend({
 });
 
 export const AddAgencyMemberSchema = z.object({
-  /** Preferred — invite by email; user must already have an InnocenZ account. */
+  /** Preferred — invite by email; invitee sets up account on accept if new. */
   email: z.string().email('Invalid email').optional(),
   userId: z.string().uuid('Invalid user ID').optional(),
   /** Membership lane (owner / finance). Inferred from roleId when omitted. */

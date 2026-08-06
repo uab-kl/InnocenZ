@@ -186,8 +186,8 @@ function AgencyProfile() {
 			toast("Please choose an image file", "warn");
 			return;
 		}
-		if (file.size > 2_500_000) {
-			toast("Image must be under 2.5 MB", "warn");
+		if (file.size > 5 * 1024 * 1024) {
+			toast("Image must be under 5 MB", "warn");
 			return;
 		}
 		const reader = new FileReader();
@@ -327,7 +327,6 @@ function AgencyProfile() {
 		<div className="iz-screen">
 			<header>
 				<IzPageTitle>Settings</IzPageTitle>
-				<p className="iz-tiny iz-muted mt-0.5">{owner.orgName}</p>
 				{isFinanceReadOnly && !editing && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
 						Finance view — read-only · cannot edit owner settings

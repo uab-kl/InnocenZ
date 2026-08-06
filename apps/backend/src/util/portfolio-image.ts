@@ -43,16 +43,14 @@ export function isUserPortfolioImagePath(pathname: string | null | undefined): b
   return Boolean(pathname?.startsWith('/img/users/portfolio/'));
 }
 
-/** R2 key: user/pr/{userId}_{fullName}/portfolio/{filename} */
+/** R2 key: user/{userId}/portfolio/{filename} */
 export function portfolioImageObjectKey(
   userId: string,
-  fullName: string,
   filename: string,
 ): string {
-  const folder = `${userId}_${sanitizePathSegment(fullName)}`;
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'photo';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/pr/${folder}/portfolio/${safeName}${ext}`;
+  return `user/${userId}/portfolio/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -84,7 +82,7 @@ export async function savePortfolioImageFile(
   if (r2Configured()) {
     // Unique object name so mobile/CDN caches invalidate on replace.
     const filename = `slot-${slot}-${Date.now()}${ext}`;
-    const key = portfolioImageObjectKey(user.id, user.fullName ?? 'user', filename);
+    const key = portfolioImageObjectKey(user.id, filename);
     const storedKey = await r2PutObject({ key, body, contentType });
     if (file.path) {
       try {

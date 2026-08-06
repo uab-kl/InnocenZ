@@ -7,6 +7,7 @@ import { Modal, Pressable, StyleSheet, Text, TextInput, View } from 'react-nativ
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { usePrNav } from '../lib/pr-nav';
 import { useSession } from '../lib/session';
+import { useLocale } from '../i18n';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
@@ -39,6 +40,7 @@ const DIAL_PICKER_OPTIONS = COUNTRY_DIAL_OPTIONS.map((c) => ({
 
 export function SecurityScreen() {
   const { goBack } = usePrNav();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const keyboardInset = useKeyboardInset();
   const { me, token, signOut, refreshMe } = useSession();
@@ -77,18 +79,18 @@ export function SecurityScreen() {
   const savePassword = async () => {
     if (!token || busy) return;
     if (newPw.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t.security.passwordMin);
       return;
     }
     if (newPw !== confirmPw) {
-      setError('Passwords do not match');
+      setError(t.security.passwordMismatch);
       return;
     }
     setBusy(true);
     setError(null);
     try {
       await changePassword(token, curPw, newPw);
-      setMsg('Password updated');
+      setMsg(t.security.passwordUpdated);
       setSheet('menu');
       setCurPw('');
       setNewPw('');
@@ -146,13 +148,13 @@ export function SecurityScreen() {
     <View style={[styles.screen, { paddingTop: insets.top + 10 }]}>
       <Pressable style={styles.back} onPress={closeAll} hitSlop={10}>
         <ChevronLeft size={20} color={C.goldL} />
-        <Text style={styles.backText}>Profile</Text>
+        <Text style={styles.backText}>{t.nav.profile}</Text>
       </Pressable>
 
       <Text style={styles.eyebrow}>ACCOUNT</Text>
       <View style={styles.titleRow}>
         <Shield size={22} color={C.accent} />
-        <Text style={styles.title}>Security settings</Text>
+        <Text style={styles.title}>{t.security.title}</Text>
       </View>
       <Text style={styles.meta}>
         Change password with your current one, or change phone via WhatsApp OTP.
@@ -164,15 +166,17 @@ export function SecurityScreen() {
       <Pressable style={styles.card} onPress={() => setSheet('menu')}>
         <Lock size={18} color={C.goldL} />
         <View style={{ flex: 1 }}>
-          <Text style={styles.cardTitle}>Open security settings</Text>
-          <Text style={styles.cardSub}>Password · Phone</Text>
+          <Text style={styles.cardTitle}>{t.security.title}</Text>
+          <Text style={styles.cardSub}>
+            {t.security.changePassword} · {t.security.changePhone}
+          </Text>
         </View>
       </Pressable>
 
       <Pressable style={[styles.card, styles.dangerCard]} onPress={() => setSheet('delete')}>
         <Trash2 size={18} color={C.red} />
         <View style={{ flex: 1 }}>
-          <Text style={[styles.cardTitle, { color: C.red }]}>Delete account</Text>
+          <Text style={[styles.cardTitle, { color: C.red }]}>{t.security.deleteAccount}</Text>
           <Text style={styles.cardSub}>Sign out of this device (demo delete)</Text>
         </View>
       </Pressable>
@@ -190,10 +194,10 @@ export function SecurityScreen() {
           >
             {sheet === 'menu' && (
               <>
-                <Text style={styles.sheetTitle}>Security settings</Text>
+                <Text style={styles.sheetTitle}>{t.security.title}</Text>
                 <MenuRow
                   icon={Lock}
-                  label="Change password"
+                  label={t.security.changePassword}
                   onPress={() => {
                     setError(null);
                     setSheet('password');
@@ -201,25 +205,25 @@ export function SecurityScreen() {
                 />
                 <MenuRow
                   icon={Phone}
-                  label="Change phone"
+                  label={t.security.changePhone}
                   onPress={() => {
                     setError(null);
                     setSheet('phone');
                   }}
                 />
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet(null)}>
-                  <Text style={styles.sheetCancelText}>Close</Text>
+                  <Text style={styles.sheetCancelText}>{t.common.close}</Text>
                 </Pressable>
               </>
             )}
 
             {sheet === 'password' && (
               <>
-                <Text style={styles.sheetTitle}>Change password</Text>
-                <Field label="Current password" value={curPw} onChange={setCurPw} secure />
-                <Field label="New password" value={newPw} onChange={setNewPw} secure />
+                <Text style={styles.sheetTitle}>{t.security.changePassword}</Text>
+                <Field label={t.security.currentPassword} value={curPw} onChange={setCurPw} secure />
+                <Field label={t.security.newPassword} value={newPw} onChange={setNewPw} secure />
                 <Field
-                  label="Confirm new password"
+                  label={t.security.confirmPassword}
                   value={confirmPw}
                   onChange={setConfirmPw}
                   secure
@@ -231,11 +235,11 @@ export function SecurityScreen() {
                   disabled={busy}
                 >
                   <Text style={styles.primaryText}>
-                    {busy ? 'Saving…' : 'Save password'}
+                    {busy ? t.common.loading : t.common.save}
                   </Text>
                 </Pressable>
                 <Pressable style={styles.sheetCancel} onPress={() => setSheet('menu')}>
-                  <Text style={styles.sheetCancelText}>Back</Text>
+                  <Text style={styles.sheetCancelText}>{t.common.back}</Text>
                 </Pressable>
               </>
             )}

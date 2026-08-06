@@ -7,9 +7,9 @@ export const outletStatusValues = ['pending_review', 'active', 'inactive', 'susp
 export type OutletStatus = (typeof outletStatusValues)[number];
 export const outletStatusEnum = MainSchema.enum('outlet_status', outletStatusValues);
 
+/** Portal lane labels (API / UI). Stored on `user_role`→`role`, not `outlet_user`. */
 export const outletUserSubRoleValues = ['owner', 'finance', 'operations_head'] as const;
 export type OutletUserSubRole = (typeof outletUserSubRoleValues)[number];
-export const outletUserSubRoleEnum = MainSchema.enum('outlet_user_sub_role', outletUserSubRoleValues);
 
 export const OutletTable = MainSchema.table('outlet', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
@@ -39,7 +39,6 @@ export const OutletUserTable = MainSchema.table('outlet_user', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   outletId: uuid('outlet_id').notNull().references(() => OutletTable.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => UserTable.id, { onDelete: 'cascade' }),
-  subRole: outletUserSubRoleEnum('sub_role').notNull(),
   status: varchar('status', { length: 50 }).notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

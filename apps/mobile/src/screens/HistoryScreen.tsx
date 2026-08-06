@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
+import { useLocale } from '../i18n';
 import { useViewportSize } from '../lib/viewport';
 import { PaymentHistoryPanel } from '../components/PaymentHistoryPanel';
 import { ShiftHistoryPanel } from '../components/ShiftHistoryPanel';
@@ -14,6 +15,7 @@ import type { PrTab } from '../components/BottomNav';
 type HistTab = 'shifts' | 'payment';
 
 export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
+  const { t } = useLocale();
   const { width } = useViewportSize();
   const titleSize = Math.min(28, Math.max(22.4, width * 0.052));
   const [tab, setTab] = useState<HistTab>('shifts');
@@ -23,7 +25,7 @@ export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       <View style={styles.pageHeader}>
         <View style={styles.headerTitleRow}>
           <HistoryIcon size={22} color={C.accent} />
-          <Text style={[styles.headerTitle, { fontSize: titleSize }]}>History</Text>
+          <Text style={[styles.headerTitle, { fontSize: titleSize }]}>{t.history.title}</Text>
         </View>
       </View>
 
@@ -33,7 +35,9 @@ export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           onPress={() => setTab('shifts')}
         >
           <Briefcase size={14} color={tab === 'shifts' ? C.goldL : C.prMuted} />
-          <Text style={[styles.hubText, tab === 'shifts' && { color: C.goldL }]}>Shifts</Text>
+          <Text style={[styles.hubText, tab === 'shifts' && { color: C.goldL }]}>
+            {t.history.shifts}
+          </Text>
         </Pressable>
         <Pressable
           style={[styles.hubBtn, tab === 'payment' && styles.hubBtnOnPay]}
@@ -41,7 +45,7 @@ export function HistoryScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         >
           <Wallet size={14} color={tab === 'payment' ? C.violetL : C.prMuted} />
           <Text style={[styles.hubText, tab === 'payment' && { color: C.violetL }]}>
-            Payment history
+            {t.payment.history}
           </Text>
         </Pressable>
       </View>

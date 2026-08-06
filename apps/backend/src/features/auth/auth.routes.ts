@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { authController, agencyRepository, otpController, orgMemberInviteController } from '@/composition-root.js';
+import { authController, agencyRepository, otpController, orgMemberInviteController, subscriptionRepository } from '@/composition-root.js';
 import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
@@ -26,17 +26,39 @@ router.post(
  */
 router.get('/agencies', async (_req, res) => {
   try {
-    const { agencies } = await agencyRepository.listPaginated({
-      filter: { status: 'active' },
-      page: 1,
-      pageSize: 200,
-    });
-    const data = agencies
-      .map((a) => ({ id: a.id, name: a.name }))
-      .sort((a, b) => a.name.localeCompare(b.name));
+    const data = await agencyRepository.listActiveNames(200);
     res.status(200).json({ success: true, message: 'OK', data });
   } catch {
     res.status(500).json({ success: false, message: 'Could not list agencies', data: null });
+  }
+});
+
+/**
+ * Package enrollment for outlet/agency signup — active PLAN rows from
+ * `main.subscription` (real catalog UUIDs). Not the old marketing slug ids.
+ */
+router.get('/signup-packages', async (req, res) => {
+  try {
+    const accountType = String(req.query.accountType ?? '');
+    if (accountType !== 'agency' && accountType !== 'outlet') {
+      return res.status(400).json({
+        success: false,
+        message: 'accountType must be agency or outlet',
+        data: null,
+      });
+    }
+    const plans = await subscriptionRepository.listSignupPlans(accountType);
+    const data = plans.map((p) => ({
+      id: p.id,
+      name: p.name,
+      price: p.price,
+      billingCycle: p.billingCycle,
+      coverage: p.coverage,
+      subscriptionType: p.subscriptionType,
+    }));
+    res.status(200).json({ success: true, message: 'OK', data });
+  } catch {
+    res.status(500).json({ success: false, message: 'Could not list packages', data: null });
   }
 });
 

@@ -43,7 +43,7 @@ export const GeocodeQuerySchema = z.object({
 });
 
 export const AddOutletMemberSchema = z.object({
-  /** Preferred — invite by email; user must already have an InnocenZ account. */
+  /** Preferred — invite by email; invitee sets up account on accept if new. */
   email: z.string().email('Invalid email').optional(),
   userId: z.string().uuid('Invalid user ID').optional(),
   /** Membership lane (owner / finance / ops). Inferred from roleId when omitted. */
@@ -61,9 +61,26 @@ export const UpdateOutletMemberSchema = z.object({
   status: z.string().optional(),
 });
 
-export const AcceptOrgMemberInviteSchema = z.object({
-  token: z.string().trim().min(16).max(128),
-});
+export const AcceptOrgMemberInviteSchema = z
+  .object({
+    token: z.string().trim().min(16).max(128),
+    /** Display name — stored as username + user_profile.full_name. */
+    name: z.string().trim().min(1, 'Name is required').max(100),
+    /** Defaults to the invited email when omitted. */
+    email: z.string().trim().email('Invalid email').optional(),
+    phoneNum: z
+      .string()
+      .trim()
+      .max(32)
+      .optional()
+      .transform((v) => (v && v.length > 0 ? v : undefined)),
+    password: z.string().min(6, 'Password must be at least 6 characters'),
+    confirmPassword: z.string().min(6, 'Confirm your password'),
+  })
+  .refine((d) => d.password === d.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
 
 export type CreateOutletInput = z.infer<typeof CreateOutletSchema>;
 export type UpdateOutletInput = z.infer<typeof UpdateOutletSchema>;

@@ -26,7 +26,9 @@ import {
   savePhoneCountryCode,
 } from '../lib/phone-prefs';
 import { useSession } from '../lib/session';
+import { useLocale } from '../i18n';
 import { IzButton } from '../components/ui';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { Eye, EyeOff, Lock, LogIn } from '../components/icons';
 import { ForgotPasswordModal } from './ForgotPasswordModal';
 import { COUNTRY_BY_CODE, COUNTRY_DIAL_OPTIONS } from './sign-up/constants';
@@ -64,6 +66,7 @@ function LoginScreenInner({
   scroller: React.RefObject<ScrollView | null>;
 }) {
   const { signIn } = useSession();
+  const { t } = useLocale();
   const insets = useSafeAreaInsets();
   const keyboardScroll = useKeyboardScroll();
   const keyboardHeight = useKeyboardHeight();
@@ -120,7 +123,7 @@ function LoginScreenInner({
       savePhoneCountryCode(phoneCountryCode);
       await signIn(phoneLoginIdentifier(phoneCountryCode, phoneNumber), password);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Sign in failed — please try again.');
+      setError(e instanceof ApiError ? e.message : t.login.signInFailed);
     } finally {
       setBusy(false);
     }
@@ -163,6 +166,9 @@ function LoginScreenInner({
               { opacity: brandOpacity, transform: [{ translateY: brandY }] },
             ]}
           >
+            <View style={styles.langRow}>
+              <LanguageSwitcher compact />
+            </View>
             <Image
               source={LOGO}
               style={[styles.logo, keyboardHeight > 0 && styles.logoCompact]}
@@ -173,7 +179,7 @@ function LoginScreenInner({
               InnocenZ
             </Text>
             {keyboardHeight === 0 ? (
-              <Text style={styles.brandLine}>For promotional models</Text>
+              <Text style={styles.brandLine}>{t.login.brandLine}</Text>
             ) : null}
           </Animated.View>
 
@@ -183,11 +189,11 @@ function LoginScreenInner({
               { opacity: formOpacity, transform: [{ translateY: formY }] },
             ]}
           >
-            <Text style={styles.title}>Welcome back</Text>
-            <Text style={styles.subtitle}>Sign in with your mobile number.</Text>
+            <Text style={styles.title}>{t.login.title}</Text>
+            <Text style={styles.subtitle}>{t.login.subtitle}</Text>
 
             <View style={styles.field}>
-              <Text style={styles.fieldLabel}>Mobile number</Text>
+              <Text style={styles.fieldLabel}>{t.login.mobileNumber}</Text>
               <View ref={phoneWrapRef} style={styles.phoneRow} collapsable={false}>
                 <Picker
                   value={phoneCountryCode}
@@ -198,9 +204,9 @@ function LoginScreenInner({
                     if (error) setError(null);
                   }}
                   width={118}
-                  placeholder="Code"
+                  placeholder={t.login.dialCode}
                   displayValue={closedDialLabel}
-                  title="Country & dial code"
+                  title={t.login.dialTitle}
                   searchable
                 />
                 <View
@@ -214,8 +220,8 @@ function LoginScreenInner({
                   <TextInput
                     style={styles.input}
                     value={phoneNumber}
-                    onChangeText={(t) => {
-                      setPhoneNumber(t);
+                    onChangeText={(text) => {
+                      setPhoneNumber(text);
                       if (error) setError(null);
                     }}
                     onFocus={() => {
@@ -235,7 +241,7 @@ function LoginScreenInner({
             </View>
 
             <View style={styles.field} ref={passWrapRef} collapsable={false}>
-              <Text style={styles.fieldLabel}>Password</Text>
+              <Text style={styles.fieldLabel}>{t.login.password}</Text>
               <View
                 style={[
                   styles.inputWrap,
@@ -247,8 +253,8 @@ function LoginScreenInner({
                 <TextInput
                   style={styles.input}
                   value={password}
-                  onChangeText={(t) => {
-                    setPassword(t);
+                  onChangeText={(text) => {
+                    setPassword(text);
                     if (error) setError(null);
                   }}
                   onFocus={() => {
@@ -256,7 +262,7 @@ function LoginScreenInner({
                     reveal(passWrapRef.current);
                   }}
                   onBlur={() => setPassFocused(false)}
-                  placeholder="Your password"
+                  placeholder={t.login.passwordPlaceholder}
                   placeholderTextColor={C.muted2}
                   secureTextEntry={!showPassword}
                   autoCapitalize="none"
@@ -267,7 +273,7 @@ function LoginScreenInner({
                 <Pressable
                   onPress={() => setShowPassword((v) => !v)}
                   hitSlop={10}
-                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                  accessibilityLabel={showPassword ? t.login.hidePassword : t.login.showPassword}
                 >
                   {showPassword ? (
                     <EyeOff size={17} color={C.muted2} />
@@ -285,11 +291,11 @@ function LoginScreenInner({
               hitSlop={10}
               style={styles.forgotLink}
             >
-              <Text style={styles.forgotText}>Forgot password?</Text>
+              <Text style={styles.forgotText}>{t.login.forgotPassword}</Text>
             </Pressable>
 
             <IzButton
-              label={busy ? 'Signing in…' : 'Sign in'}
+              label={busy ? t.login.signingIn : t.login.signIn}
               icon={LogIn}
               onPress={submit}
               disabled={busy || !canSubmit}
@@ -299,7 +305,8 @@ function LoginScreenInner({
             {onCreateAccount ? (
               <Pressable onPress={onCreateAccount} hitSlop={10} style={styles.signUpLink}>
                 <Text style={styles.signUpText}>
-                  New here? <Text style={styles.signUpAccent}>Create an account</Text>
+                  {t.login.newHere}{' '}
+                  <Text style={styles.signUpAccent}>{t.login.createAccount}</Text>
                 </Text>
               </Pressable>
             ) : null}
@@ -369,6 +376,11 @@ const styles = StyleSheet.create({
   brand: {
     alignItems: 'center',
     marginBottom: 32,
+  },
+  langRow: {
+    alignSelf: 'stretch',
+    alignItems: 'flex-end',
+    marginBottom: 8,
   },
   brandCompact: {
     marginBottom: 16,

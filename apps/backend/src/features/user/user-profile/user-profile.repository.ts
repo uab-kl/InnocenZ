@@ -149,7 +149,9 @@ export class UserProfileRepositoryClass {
       return profile ?? null;
     } catch (error) {
       logger.error('[UserProfileRepository.update] Error:', error);
-      return null;
+      // Callers (especially register) must see failures — swallowing here left
+      // PR sign-ups "successful" with an empty id_no / id_type.
+      throw error;
     }
   }
 

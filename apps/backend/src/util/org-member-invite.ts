@@ -25,7 +25,7 @@ export function createOrgMemberInviteSecret(): {
 }
 
 export function hashOrgMemberInviteToken(rawToken: string): string {
-  return createHash('sha256').update(rawToken).digest('hex');
+  return createHash('sha256').update(rawToken.trim()).digest('hex');
 }
 
 export function normalizeInviteEmail(email: string): string {

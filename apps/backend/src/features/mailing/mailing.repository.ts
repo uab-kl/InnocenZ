@@ -197,9 +197,9 @@ export async function sendOrgMemberInviteMail(input: {
   const html = renderTemplate('org_member_invite.html', variables);
   const subject = `[InnocenZ] Invitation to join ${input.orgName}`;
   const text = [
-    `You have been invited to join ${input.orgName} (${orgKindLabel}) as ${input.subRoleLabel}.`,
+    `You have been invited to join ${input.orgName} as ${input.subRoleLabel}.`,
     '',
-    'Accept the invitation:',
+    'Open this link to set up your account and join:',
     input.acceptLink,
     '',
     'This link expires in 7 days.',

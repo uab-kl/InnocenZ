@@ -29,6 +29,7 @@ import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
 import { useSession } from '../lib/session';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { usePrNav } from '../lib/pr-nav';
+import { useLocale } from '../i18n';
 import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
 import { EmptyDashed, IzButton, Pill } from '../components/ui';
@@ -60,6 +61,7 @@ function localYmd(d: Date): Ymd {
 }
 
 export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
+  const { t } = useLocale();
   const { token } = useSession();
   const { setTab } = usePrNav();
   // Keep local session in sync so Scan / Shifts don't bounce the PR back to
@@ -472,8 +474,8 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
       {phase === 'idle' ? (
         <View style={{ marginTop: 12 }}>
-          <Text style={styles.pageLabel}>ATTENDANCE</Text>
-          <Text style={styles.pageTitle}>Check in</Text>
+          <Text style={styles.pageLabel}>{t.checkin.pageLabel}</Text>
+          <Text style={styles.pageTitle}>{t.checkin.title}</Text>
           <EmptyDashed>
             {loading
               ? 'Loading your shift…'
@@ -481,7 +483,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           </EmptyDashed>
           <View style={styles.idleActions}>
             <IzButton
-              label="View schedule"
+              label={t.checkin.viewSchedule}
               variant="soft"
               small
               onPress={() => onNavigate('shifts')}
@@ -496,7 +498,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               onPress={() => setBriefOpen((o) => !o)}
             >
               <View style={styles.briefHead}>
-                <Text style={styles.briefPage}>ATTENDANCE</Text>
+                <Text style={styles.briefPage}>{t.checkin.pageLabel}</Text>
                 <View style={styles.statusBlock}>
                   <Text style={styles.statusK}>Status</Text>
                   <Text style={styles.statusV}>{statusLabel}</Text>

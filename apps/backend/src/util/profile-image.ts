@@ -54,17 +54,15 @@ export function sanitizePathSegment(value: string): string {
 
 /**
  * R2 key for any account's avatar (admin / agency / outlet / PR):
- *   user/{userId}_{name}/profile/{filename}
+ *   user/{userId}/profile/{filename}
  */
 export function profileImageObjectKey(
   userId: string,
-  fullName: string,
   filename: string,
 ): string {
-  const folder = `${userId}_${sanitizePathSegment(fullName)}`;
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'avatar';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/${folder}/profile/${safeName}${ext}`;
+  return `user/${userId}/profile/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -79,7 +77,7 @@ function fileBuffer(file: Express.Multer.File): Buffer {
  * Falls back to local `/img/…` when R2 is not configured.
  */
 export async function saveProfileImageFile(
-  user: { id: string; fullName: string | null | undefined },
+  user: { id: string; fullName?: string | null | undefined },
   file: Express.Multer.File,
 ): Promise<string> {
   const ext = path.extname(file.originalname).toLowerCase();
@@ -96,7 +94,7 @@ export async function saveProfileImageFile(
   if (r2Configured()) {
     // Unique name so clients don't keep showing a cached previous avatar.
     const filename = `avatar-${Date.now()}${ext}`;
-    const key = profileImageObjectKey(user.id, user.fullName ?? 'user', filename);
+    const key = profileImageObjectKey(user.id, filename);
     const storedKey = await r2PutObject({ key, body, contentType });
     // Clean up multer temp file if disk storage was used.
     if (file.path) {

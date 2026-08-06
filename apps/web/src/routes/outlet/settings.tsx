@@ -222,8 +222,8 @@ function OutletSettingsPage() {
 			toast("Please choose an image file", "warn");
 			return;
 		}
-		if (file.size > 2_500_000) {
-			toast("Image must be under 2.5 MB", "warn");
+		if (file.size > 5 * 1024 * 1024) {
+			toast("Image must be under 5 MB", "warn");
 			return;
 		}
 		const reader = new FileReader();

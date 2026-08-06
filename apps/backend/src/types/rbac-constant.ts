@@ -24,7 +24,8 @@ export type PortalCodeValue = (typeof portalCode)[keyof typeof portalCode];
  * Canonical roles on `main.role` (seeded by init-roles).
  * Portal access is lane roles under each portal — there is no bare `agency` /
  * `outlet` role row. Signup owners get `Owner`; invites pick Owner/Finance/Ops Head.
- * Membership.sub_role still stores owner | finance | operations_head for org gates.
+ * Membership is tenancy only (`agency_user` / `outlet_user`); lane roles live on
+ * `user_role` → `role` (Owner / Finance / Ops Head per portal).
  */
 export const portalRoleName = {
   ADMIN: 'admin',

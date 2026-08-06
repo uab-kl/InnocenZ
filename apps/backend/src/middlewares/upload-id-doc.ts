@@ -13,7 +13,7 @@ const fileFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
   cb(null, true);
 };
 
-/** Memory buffer — `saveUserIdDocFile` writes the final path under id-docs/. */
+/** Memory buffer — `saveUserIdDocFile` uploads to R2 (or local /img fallback). */
 export const uploadIdDoc = multer({
   storage: multer.memoryStorage(),
   limits,

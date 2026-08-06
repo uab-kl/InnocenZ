@@ -37,7 +37,6 @@ export async function seedOutletRoles(): Promise<void> {
   const members = await db
     .select({
       userId: OutletUserTable.userId,
-      subRole: OutletUserTable.subRole,
       email: UserTable.email,
       username: UserTable.username,
       outletName: OutletTable.name,
@@ -82,7 +81,7 @@ export async function seedOutletRoles(): Promise<void> {
     });
     granted += 1;
     logger.info(
-      `  granted outlet role → ${member.email ?? member.username} (${member.subRole} @ ${member.outletName})`,
+      `  granted outlet role → ${member.email ?? member.username} (@ ${member.outletName})`,
     );
   }
 

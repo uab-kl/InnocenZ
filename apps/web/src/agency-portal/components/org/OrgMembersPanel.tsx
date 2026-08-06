@@ -1,5 +1,15 @@
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@agency-portal/components/ui/alert-dialog";
+import {
 	type OrgKind,
 	type OrgMember,
 	serverMessage,
@@ -11,7 +21,8 @@ import { Mail, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
 import { useProfile } from "@/lib/auth/use-profile";
-import { fetchRoles } from "@/services/rbac";
+import { fetchAgencyInviteRoles } from "@/services/agency";
+import { fetchOutletInviteRoles } from "@/services/outlet";
 
 /** Fallback when portal RBAC roles have not been seeded yet. */
 const FALLBACK_SUB_ROLES: Record<
@@ -73,12 +84,20 @@ export function OrgMembersPanel({
 		useOrgMembers(kind, orgId);
 
 	const rolesQuery = useQuery({
-		queryKey: ["portal-invite-roles", kind],
+		queryKey: ["portal-invite-roles", kind, orgId ?? "none"],
+		enabled: Boolean(orgId),
 		queryFn: async () => {
-			const res = await fetchRoles({ pageSize: 200, status: "active" }, kickToLogin);
-			return (res.data ?? []).filter(
-				(r) => r.portalCode === kind && r.status === "active",
-			);
+			const id = orgId as string;
+			const res =
+				kind === "agency"
+					? await fetchAgencyInviteRoles(id, kickToLogin)
+					: await fetchOutletInviteRoles(id, kickToLogin);
+			return (res.data ?? []).map((r) => ({
+				roleId: r.id,
+				roleName: r.roleName,
+				portalCode: r.portalCode,
+				status: r.status,
+			}));
 		},
 		staleTime: 60_000,
 	});
@@ -127,7 +146,7 @@ export function OrgMembersPanel({
 
 	const [email, setEmail] = useState("");
 	const [selectedKey, setSelectedKey] = useState("");
-	const [confirmingId, setConfirmingId] = useState<string | null>(null);
+	const [memberToRemove, setMemberToRemove] = useState<OrgMember | null>(null);
 
 	// Keep selection valid when options swap (fallback lanes → portal role ids).
 	useEffect(() => {
@@ -161,11 +180,18 @@ export function OrgMembersPanel({
 				roleId: selected.roleId ?? undefined,
 			});
 			setEmail("");
+			const acceptUrl =
+				result && typeof result === "object" && "acceptUrl" in result
+					? (result as { acceptUrl?: string }).acceptUrl
+					: undefined;
 			toast(
 				result.message?.trim() ||
 					`Invitation sent to ${trimmed} — they must accept the email to join`,
 				"success",
 			);
+			if (acceptUrl && typeof window !== "undefined") {
+				console.info("[invite] acceptUrl", acceptUrl);
+			}
 		} catch (error) {
 			toast(serverMessage(error, "Could not invite that person"), "warn");
 		}
@@ -181,13 +207,15 @@ export function OrgMembersPanel({
 		}
 	};
 
-	const onRemove = async (member: OrgMember) => {
+	const onRemove = async () => {
+		if (!memberToRemove) return;
+		const member = memberToRemove;
 		try {
 			await removeMember.mutateAsync(member.id);
-			setConfirmingId(null);
+			setMemberToRemove(null);
 			toast("Member removed", "success");
 		} catch (error) {
-			setConfirmingId(null);
+			setMemberToRemove(null);
 			toast(serverMessage(error, "Could not remove that member"), "warn");
 		}
 	};
@@ -209,7 +237,7 @@ export function OrgMembersPanel({
 					return (
 						<div
 							key={member.id}
-							className="flex flex-wrap items-center gap-2 border-b border-[var(--iz-line)] py-2.5 last:border-0"
+							className="flex items-center gap-2 border-b border-[var(--iz-line)] py-2.5 last:border-0"
 						>
 							<div className="min-w-0 flex-1">
 								<div className="truncate text-sm font-semibold text-[var(--iz-txt)]">
@@ -226,63 +254,79 @@ export function OrgMembersPanel({
 							</div>
 
 							{member.status !== "active" && (
-								<span className="iz-pill iz-pill-amber !text-[10px]">
+								<span className="iz-pill iz-pill-amber shrink-0 !text-[10px]">
 									{member.status}
 								</span>
 							)}
 
-							{canManage && !isSelf ? (
-								<select
-									className="iz-field-input !w-auto !text-xs"
-									value={member.subRole}
-									onChange={(e) => void onChangeRole(member, e.target.value)}
-									aria-label={`Role for ${member.username || member.email || "member"}`}
-								>
-									{memberRoleOptions.map((role) => (
-										<option key={role.value} value={role.value}>
-											{role.label}
-										</option>
-									))}
-								</select>
-							) : (
-								<span className="iz-tiny iz-muted capitalize">
-									{labelForSubRole(member.subRole)}
-								</span>
-							)}
-
-							{canManage &&
-								!isSelf &&
-								(confirmingId === member.id ? (
-									<span className="flex items-center gap-1">
-										<button
-											type="button"
-											className="iz-btn iz-btn-soft !px-2 !py-1 !text-[11px]"
-											onClick={() => void onRemove(member)}
-										>
-											Confirm
-										</button>
-										<button
-											type="button"
-											className="iz-btn iz-btn-soft !px-2 !py-1 !text-[11px]"
-											onClick={() => setConfirmingId(null)}
-										>
-											Cancel
-										</button>
-									</span>
+							<div className="flex shrink-0 items-center gap-1.5">
+								{canManage && !isSelf ? (
+									<select
+										className="iz-field-input !w-auto !text-xs"
+										value={member.subRole}
+										onChange={(e) => void onChangeRole(member, e.target.value)}
+										aria-label={`Role for ${member.username || member.email || "member"}`}
+									>
+										{memberRoleOptions.map((role) => (
+											<option key={role.value} value={role.value}>
+												{role.label}
+											</option>
+										))}
+									</select>
 								) : (
+									<span className="iz-tiny iz-muted capitalize">
+										{labelForSubRole(member.subRole)}
+									</span>
+								)}
+
+								{canManage && !isSelf && (
 									<button
 										type="button"
-										className="iz-btn iz-btn-soft !px-2 !py-1"
+										className="iz-btn iz-btn-sm iz-btn-soft !inline-flex !h-8 !w-8 !items-center !justify-center !p-0"
 										aria-label={`Remove ${member.username || member.email || "member"}`}
-										onClick={() => setConfirmingId(member.id)}
+										onClick={() => setMemberToRemove(member)}
 									>
 										<Trash2 className="h-3.5 w-3.5" />
 									</button>
-								))}
+								)}
+							</div>
 						</div>
 					);
 				})}
 			</IzCard>
+
+			<AlertDialog
+				open={Boolean(memberToRemove)}
+				onOpenChange={(open) => {
+					if (!open) setMemberToRemove(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>Remove team member?</AlertDialogTitle>
+						<AlertDialogDescription>
+							{memberToRemove
+								? `Remove ${memberToRemove.username || memberToRemove.email || "this member"} from the team? They will lose portal access for this organisation.`
+								: "Remove this member from the team?"}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel disabled={removeMember.isPending}>
+							Cancel
+						</AlertDialogCancel>
+						<AlertDialogAction
+							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+							disabled={removeMember.isPending}
+							onClick={(e) => {
+								e.preventDefault();
+								void onRemove();
+							}}
+						>
+							{removeMember.isPending ? "Removing…" : "Remove"}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 
 			{canManage && (
 				<>

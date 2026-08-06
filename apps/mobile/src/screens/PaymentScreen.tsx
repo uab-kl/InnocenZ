@@ -51,6 +51,7 @@ import { pickProofPhotos } from '../lib/proof-photo';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useViewportSize } from '../lib/viewport';
+import { useLocale } from '../i18n';
 import { IzButton, Pill } from '../components/ui';
 import { ChevronDown, Flag, ImagePlus, Search, Wallet, XIcon } from '../components/icons';
 import type { PrTab } from '../components/BottomNav';
@@ -181,6 +182,7 @@ function shortStamp(iso: string | null): string {
 // the identical grid for the same voucher.
 
 export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
+  const { t } = useLocale();
   const { openPv, route } = usePrNav();
   const { token } = useSession();
   const keyboardInset = useKeyboardInset();
@@ -774,7 +776,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       <View style={styles.pageHeader}>
         <View style={styles.headerTitleRow}>
           <Wallet size={22} color={C.accent} />
-          <Text style={[styles.headerTitle, { fontSize: titleSize }]}>Payment</Text>
+          <Text style={[styles.headerTitle, { fontSize: titleSize }]}>{t.payment.title}</Text>
         </View>
       </View>
 

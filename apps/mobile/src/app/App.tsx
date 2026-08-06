@@ -4,9 +4,9 @@
  * Rebuild stamp: 2026-07-20T00:30Z
  */
 import React, { useState } from 'react';
-import { ActivityIndicator, StatusBar, StyleSheet, View } from 'react-native';
+import { StatusBar } from 'react-native';
 import { AppSafeAreaProvider } from '../lib/safe-area';
-import { C, ensureWebFonts } from '../theme/theme';
+import { ensureWebFonts } from '../theme/theme';
 import { SessionProvider, useSession } from '../lib/session';
 import { ShiftSessionProvider } from '../lib/shift-session';
 import { ActiveShiftProvider } from '../lib/active-shift';
@@ -14,7 +14,9 @@ import { PrEarningsProvider } from '../lib/pr-earnings';
 import { PaymentHistoryProvider } from '../lib/payment-history';
 import { SignedPvProvider } from '../lib/signed-pv';
 import { PrNavProvider, usePrNav } from '../lib/pr-nav';
+import { LocaleProvider } from '../i18n';
 import { PhoneFrame } from '../components/PhoneFrame';
+import { BootSplash } from '../components/BootSplash';
 import { BottomNav } from '../components/BottomNav';
 import { TopBar } from '../components/TopBar';
 import { LoginScreen } from '../screens/LoginScreen';
@@ -70,9 +72,7 @@ function AppShell() {
   if (booting) {
     return (
       <PhoneFrame scroll={false}>
-        <View style={styles.center}>
-          <ActivityIndicator color={C.gold} size="large" />
-        </View>
+        <BootSplash />
       </PhoneFrame>
     );
   }
@@ -98,19 +98,13 @@ function AppShell() {
 
 export const App = () => (
   <AppSafeAreaProvider>
-    <SessionProvider>
-      <StatusBar barStyle="light-content" />
-      <AppShell />
-    </SessionProvider>
+    <LocaleProvider>
+      <SessionProvider>
+        <StatusBar barStyle="light-content" />
+        <AppShell />
+      </SessionProvider>
+    </LocaleProvider>
   </AppSafeAreaProvider>
 );
-
-const styles = StyleSheet.create({
-  center: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-});
 
 export default App;

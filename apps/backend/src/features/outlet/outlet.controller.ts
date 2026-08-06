@@ -3,6 +3,7 @@ import { OutletRepositoryClass } from './outlet.repository';
 import { OutletMemberRepositoryClass } from './outlet-member.repository';
 import { UserRepositoryClass } from '@/features/user/user.repository';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository';
+import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
 import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
@@ -41,6 +42,7 @@ export class OutletControllerClass {
     private userRepository: UserRepositoryClass,
     private roleRepository: RoleRepositoryClass,
     private inviteRepository: OrgMemberInviteRepositoryClass,
+    private userRoleRepository: UserRoleRepositoryClass,
   ) {}
 
   async list(req: Request, res: Response) {
@@ -379,6 +381,38 @@ export class OutletControllerClass {
 
   // --- Members ---
 
+  /** Active RBAC roles for this outlet portal — invite dropdown (not /rbac admin). */
+  async listInviteRoles(req: Request, res: Response) {
+    try {
+      const outletId = paramId(req.params.id);
+      const existing = await this.outletRepository.getById(outletId);
+      if (!existing) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const portal = await portalRepository.getPortalByCode('outlet');
+      if (!portal) {
+        return res.status(500).json({
+          success: false,
+          message: 'Outlet portal is not seeded',
+          data: null,
+        });
+      }
+      const roles = (await this.roleRepository.getAllRoles())
+        .filter((r) => r.portalId === portal.id && r.status === 'active')
+        .map((r) => ({
+          id: r.id,
+          roleName: r.roleName,
+          portalId: r.portalId,
+          portalCode: 'outlet' as const,
+          status: r.status,
+        }));
+      res.status(200).json({ success: true, message: 'OK', data: roles });
+    } catch (error) {
+      logger.error('[OutletController.listInviteRoles] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async listMembers(req: Request, res: Response) {
     try {
       const outletId = paramId(req.params.id);
@@ -543,7 +577,8 @@ export class OutletControllerClass {
         data: {
           invite,
           emailed: mail.emailed,
-          ...(mail.emailed ? {} : { acceptUrl: mail.acceptUrl }),
+          // Always return so owners can open/copy when email clients break localhost links.
+          acceptUrl: mail.acceptUrl,
         },
       });
     } catch (error) {
@@ -565,7 +600,7 @@ export class OutletControllerClass {
       // says nothing about `:memberId` — the row actually being written. Without
       // this, an operator could address their OWN venue and mutate a member of
       // somebody else's. 404, not 403: a foreign member id must not be confirmed.
-      const target = await this.outletMemberRepository.getById(memberId);
+      const target = await this.outletMemberRepository.getByIdEnriched(memberId);
       if (!target || target.outletId !== outletId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
@@ -585,14 +620,49 @@ export class OutletControllerClass {
         });
       }
 
-      const members = await this.outletMemberRepository.listByOutlet(outletId);
+      const members = await this.outletMemberRepository.listByOutletWithUser(outletId);
       const refusal = guardMemberChange({ members, target, next: parsed.data });
       if (refusal) {
         return res.status(409).json({ success: false, message: refusal, data: null });
       }
 
-      const member = await this.outletMemberRepository.update(memberId, { ...parsed.data, updatedBy: getActor(req) });
-      if (!member) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const actor = getActor(req);
+      if (parsed.data.subRole != null && parsed.data.subRole !== target.subRole) {
+        const roleName = portalRoleNameForSubRole('outlet', parsed.data.subRole);
+        const nextRole = await this.roleRepository.findByNameAndPortalCode(roleName, 'outlet');
+        if (!nextRole) {
+          return res.status(500).json({
+            success: false,
+            message: `Role '${roleName}' is not seeded`,
+            data: null,
+          });
+        }
+        const portal = await portalRepository.getPortalByCode('outlet');
+        const held = await this.userRoleRepository.getUserRoles(target.userId);
+        for (const r of held) {
+          if (portal && r.portalId === portal.id) {
+            await this.userRoleRepository.removeRoleFromUser(target.userId, r.id);
+          }
+        }
+        await this.userRoleRepository.assignRoleToUser({
+          userId: target.userId,
+          roleId: nextRole.id,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+      }
+
+      const memberRow =
+        parsed.data.status != null
+          ? await this.outletMemberRepository.update(memberId, {
+              status: parsed.data.status,
+              updatedBy: actor,
+            })
+          : await this.outletMemberRepository.getById(memberId);
+      if (!memberRow) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const member = await this.outletMemberRepository.getByIdEnriched(memberId);
       res.status(200).json({ success: true, message: 'Member updated', data: member });
     } catch (error) {
       logger.error('[OutletController.updateMember] Error:', error);
@@ -606,7 +676,7 @@ export class OutletControllerClass {
       const memberId = paramId(req.params.memberId);
 
       // Same two checks as updateMember, and for the same reasons.
-      const target = await this.outletMemberRepository.getById(memberId);
+      const target = await this.outletMemberRepository.getByIdEnriched(memberId);
       if (!target || target.outletId !== outletId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
@@ -622,7 +692,7 @@ export class OutletControllerClass {
         });
       }
 
-      const members = await this.outletMemberRepository.listByOutlet(outletId);
+      const members = await this.outletMemberRepository.listByOutletWithUser(outletId);
       const refusal = guardMemberChange({ members, target });
       if (refusal) {
         return res.status(409).json({ success: false, message: refusal, data: null });

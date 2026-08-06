@@ -18,7 +18,7 @@ import {
 } from '@/util/portfolio-image';
 import { deleteComcardImageFile, saveComcardImageFile } from '@/util/comcard-image';
 import { generateAndStoreComcard } from '@/util/comcard-generate';
-import { saveUserIdDocFile, withUserProfile, withUserProfiles } from '@/util/user-profile-image';
+import { saveUserIdDocFile, deleteUserIdDocFile, withUserProfile, withUserProfiles } from '@/util/user-profile-image';
 import { logger } from '@/util/logger';
 import { r2Configured } from '@/util/r2';
 
@@ -244,6 +244,48 @@ export class UserControllerClass {
       if (fullName !== undefined) {
         await this.userProfileRepository.update(id, {
           fullName,
+          updatedBy: actor,
+        });
+      }
+
+      // One-time identity heal: allow saving idType/idNo/dob only while the
+      // profile still has no ID (e.g. older register path that dropped them).
+      const idTypeRaw =
+        typeof req.body?.idType === 'string' ? req.body.idType.trim() : undefined;
+      const idNoRaw =
+        typeof req.body?.idNo === 'string' ? req.body.idNo.trim() : undefined;
+      const dobRaw =
+        typeof req.body?.dob === 'string' ? req.body.dob.trim() : undefined;
+      if (idTypeRaw || idNoRaw || dobRaw) {
+        const existingProfile =
+          (await this.userProfileRepository.getByUserId(id)) ??
+          (await this.userProfileRepository.createEmpty(id, actor));
+        if (existingProfile.idNo) {
+          return res.status(403).json({
+            success: false,
+            message: 'ID number is already set and cannot be changed here',
+            data: null,
+          });
+        }
+        const idTypeValues = ['NRIC', 'Passport', 'Work permit'] as const;
+        if (
+          !idTypeRaw ||
+          !(idTypeValues as readonly string[]).includes(idTypeRaw) ||
+          !idNoRaw ||
+          idNoRaw.length < 4 ||
+          !dobRaw ||
+          !/^\d{4}-\d{2}-\d{2}$/.test(dobRaw)
+        ) {
+          return res.status(400).json({
+            success: false,
+            message: 'idType, idNo, and dob (YYYY-MM-DD) are required to save ID',
+            data: null,
+          });
+        }
+        await this.userProfileRepository.update(id, {
+          idType: idTypeRaw as (typeof idTypeValues)[number],
+          idNo: idNoRaw,
+          dob: dobRaw,
           updatedBy: actor,
         });
       }
@@ -679,11 +721,20 @@ export class UserControllerClass {
         profile = await this.userProfileRepository.createEmpty(id, actor);
       }
 
-      const publicPath = saveUserIdDocFile(id, side, req.file);
+      const previous =
+        side === 'front' ? profile.idPhotoFront : profile.idPhotoBack;
+      const storedRef = await saveUserIdDocFile(
+        { id, fullName: profile.fullName ?? existingUser.username },
+        side,
+        req.file,
+      );
       await this.userProfileRepository.update(id, {
-        ...(side === 'front' ? { idPhotoFront: publicPath } : { idPhotoBack: publicPath }),
+        ...(side === 'front' ? { idPhotoFront: storedRef } : { idPhotoBack: storedRef }),
         updatedBy: actor,
       });
+      if (previous && previous !== storedRef) {
+        await deleteUserIdDocFile(previous);
+      }
 
       profile = await this.userProfileRepository.getByUserId(id);
 

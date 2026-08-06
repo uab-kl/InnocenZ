@@ -7,6 +7,10 @@ import { MemberSubscriptionTable } from '@/features/member-subscription/member-s
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
+import { RoleTable } from '@/features/rbac/role/role.model';
+import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
+import { PortalTable } from '@/features/rbac/portal/portal.model';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
 import { hashPassword } from '@/util/password';
 import { logger } from '@/util/logger';
 
@@ -171,15 +175,46 @@ export async function seedSampleOrgs(): Promise<void> {
 
       await db
         .delete(OutletUserTable)
-        .where(and(eq(OutletUserTable.userId, userId), eq(OutletUserTable.subRole, member.subRole)));
+        .where(eq(OutletUserTable.userId, userId));
       await db.insert(OutletUserTable).values({
         outletId: velvetId,
         userId,
-        subRole: member.subRole,
         status: 'active',
         createdBy: ACTOR,
         updatedBy: ACTOR,
       });
+
+      const roleName = portalRoleNameForSubRole('outlet', member.subRole);
+      const [portal] = await db
+        .select({ id: PortalTable.id })
+        .from(PortalTable)
+        .where(eq(PortalTable.code, 'outlet'))
+        .limit(1);
+      if (portal) {
+        const [role] = await db
+          .select({ id: RoleTable.id })
+          .from(RoleTable)
+          .where(and(eq(RoleTable.roleName, roleName), eq(RoleTable.portalId, portal.id)))
+          .limit(1);
+        if (role) {
+          const held = await db
+            .select({ id: UserRoleTable.id, roleId: UserRoleTable.roleId, portalId: RoleTable.portalId })
+            .from(UserRoleTable)
+            .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
+            .where(eq(UserRoleTable.userId, userId));
+          for (const row of held) {
+            if (row.portalId === portal.id) {
+              await db.delete(UserRoleTable).where(eq(UserRoleTable.id, row.id));
+            }
+          }
+          await db.insert(UserRoleTable).values({
+            userId,
+            roleId: role.id,
+            createdBy: ACTOR,
+            updatedBy: ACTOR,
+          });
+        }
+      }
     }
   }
 

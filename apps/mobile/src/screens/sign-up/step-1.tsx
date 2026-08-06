@@ -65,30 +65,17 @@ export function Step1Persona({
 					placeholder="E.g. Moon, Charlotte"
 				/>
 			</Field>
-			<Row>
-				<Field label="First name*" flex error={fieldErrors.firstName}>
-					<Input
-						value={draft.firstName}
-						onChangeText={(t) => {
-							clearFieldError('firstName');
-							patch({ firstName: t });
-						}}
-						placeholder="E.g. Joe"
-						autoCapitalize="words"
-					/>
-				</Field>
-				<Field label="Last name*" flex error={fieldErrors.lastName}>
-					<Input
-						value={draft.lastName}
-						onChangeText={(t) => {
-							clearFieldError('lastName');
-							patch({ lastName: t });
-						}}
-						placeholder="E.g. Low"
-						autoCapitalize="words"
-					/>
-				</Field>
-			</Row>
+			<Field label="Full name*" hint="As on your IC / passport." error={fieldErrors.fullName}>
+				<Input
+					value={draft.fullName}
+					onChangeText={(t) => {
+						clearFieldError('fullName');
+						patch({ fullName: t });
+					}}
+					placeholder="E.g. Joe Low"
+					autoCapitalize="words"
+				/>
+			</Field>
 			<Field
 				label="Phone number*"
 				hint="Must registered on WhatsApp"

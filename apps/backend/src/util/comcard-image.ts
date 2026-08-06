@@ -38,16 +38,14 @@ export function isUserComcardImagePath(pathname: string | null | undefined): boo
   return Boolean(pathname?.startsWith('/img/users/comcard/'));
 }
 
-/** R2 key: user/pr/{userId}_{fullName}/comcard/{filename} */
+/** R2 key: user/{userId}/comcard/{filename} */
 export function comcardImageObjectKey(
   userId: string,
-  fullName: string,
   filename: string,
 ): string {
-  const folder = `${userId}_${sanitizePathSegment(fullName)}`;
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'comcard';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/pr/${folder}/comcard/${safeName}${ext}`;
+  return `user/${userId}/comcard/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -61,7 +59,7 @@ function fileBuffer(file: Express.Multer.File): Buffer {
  * Clients prepend `R2_PUBLIC_URL`. Falls back to local `/img/…` without R2.
  */
 export async function saveComcardImageFile(
-  user: { id: string; fullName: string | null | undefined },
+  user: { id: string; fullName?: string | null | undefined },
   file: Express.Multer.File,
 ): Promise<string> {
   const ext = path.extname(file.originalname).toLowerCase();
@@ -77,7 +75,7 @@ export async function saveComcardImageFile(
 
   if (r2Configured()) {
     const filename = `comcard-${Date.now()}${ext}`;
-    const key = comcardImageObjectKey(user.id, user.fullName ?? 'user', filename);
+    const key = comcardImageObjectKey(user.id, filename);
     const storedKey = await r2PutObject({ key, body, contentType });
     if (file.path) {
       try {

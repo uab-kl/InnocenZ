@@ -9,7 +9,6 @@ import path from 'node:path';
 import '@/load-env';
 import pg from 'pg';
 import { r2Configured, r2PutObject } from '@/util/r2';
-import { sanitizePathSegment } from '@/util/profile-image';
 
 const USER_ID = process.argv[2] ?? '4003eadb-d067-4f60-af24-6910805f04f1';
 
@@ -30,7 +29,7 @@ async function main() {
   await client.connect();
 
   const { rows } = await client.query(
-    `SELECT p.full_name, p.portfolio_photos
+    `SELECT p.portfolio_photos
      FROM main.user_profile p
      WHERE p.user_id = $1`,
     [USER_ID],
@@ -40,7 +39,6 @@ async function main() {
     process.exit(1);
   }
 
-  const fullName: string = rows[0].full_name ?? 'user';
   const raw = rows[0].portfolio_photos;
   const photos: (string | null)[] = Array.isArray(raw) ? raw : [];
   const next: (string | null)[] = photos.map((p) => p ?? null);
@@ -68,7 +66,7 @@ async function main() {
     }
 
     const ext = path.extname(localPath).toLowerCase() || '.jpg';
-    const key = `user/pr/${USER_ID}_${sanitizePathSegment(fullName)}/portfolio/slot-${slot}${ext}`;
+    const key = `user/${USER_ID}/portfolio/slot-${slot}${ext}`;
     const url = await r2PutObject({
       key,
       body: fs.readFileSync(localPath),

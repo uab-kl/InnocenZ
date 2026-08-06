@@ -67,6 +67,47 @@ export class SubscriptionRepositoryClass {
     }
   }
 
+  /**
+   * Active PLAN products for agency/outlet signup enrollment.
+   * Excludes add-ons (e.g. POS Integration). Prefer `subscription_type`;
+   * fall back to billing_cycle (weekly≈agency, monthly≈outlet) when type is missing.
+   */
+  async listSignupPlans(accountType: SubscriptionType): Promise<Subscription[]> {
+    try {
+      const rows = await db
+        .select()
+        .from(SubscriptionTable)
+        .where(
+          and(
+            eq(SubscriptionTable.status, 'active'),
+            eq(SubscriptionTable.kind, 'plan'),
+            eq(SubscriptionTable.subscriptionType, accountType),
+          ),
+        )
+        .orderBy(SubscriptionTable.price);
+
+      // Custom is negotiated later — not a self-serve signup pick.
+      const enrollable = (list: Subscription[]) =>
+        list.filter((s) => s.name.toLowerCase() !== 'custom');
+
+      if (rows.length > 0) return enrollable(rows);
+
+      // Legacy rows without subscription_type (or mistyped): weekly↔agency, monthly↔outlet.
+      const all = await this.getAllSubscriptions();
+      const cycle = accountType === 'agency' ? 'weekly' : 'monthly';
+      return enrollable(
+        all
+          .filter((s) => s.status === 'active')
+          .filter((s) => (s.kind ?? 'plan') === 'plan')
+          .filter((s) => s.billingCycle === cycle)
+          .sort((a, b) => Number(a.price) - Number(b.price)),
+      );
+    } catch (error) {
+      logger.error('[SubscriptionRepository.listSignupPlans] Error:', error);
+      return [];
+    }
+  }
+
   async createSubscription(
     subscription: Omit<SubscriptionInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction,

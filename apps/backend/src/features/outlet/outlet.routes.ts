@@ -87,6 +87,11 @@ const canReadMembers = requireRole('admin', 'agency', 'outlet');
 const canWriteMembers = [requireRole('admin', 'outlet'), outletOwnerOfParam];
 
 router.get('/:id/members', canReadMembers, outletController.listMembers.bind(outletController));
+router.get(
+  '/:id/invite-roles',
+  ...canWriteMembers,
+  outletController.listInviteRoles.bind(outletController),
+);
 router.post('/:id/members', ...canWriteMembers, outletController.addMember.bind(outletController));
 router.put('/:id/members/:memberId', ...canWriteMembers, outletController.updateMember.bind(outletController));
 router.delete('/:id/members/:memberId', ...canWriteMembers, outletController.removeMember.bind(outletController));

@@ -71,7 +71,19 @@ const registerProfileFields = {
   comcardWaistCm: comcardCm.optional(),
   comcardHipCm: comcardCm.optional(),
   /** Spoken / preferred languages → user_profile.languages. */
-  languages: z.array(z.string().trim().min(1).max(50)).max(20).optional(),
+  languages: z.preprocess((value) => {
+    // Multipart register can send a JSON-stringified array.
+    if (typeof value === 'string') {
+      const trimmed = value.trim();
+      if (!trimmed) return undefined;
+      try {
+        return JSON.parse(trimmed) as unknown;
+      } catch {
+        return trimmed.split(',').map((s) => s.trim()).filter(Boolean);
+      }
+    }
+    return value;
+  }, z.array(z.string().trim().min(1).max(50)).max(20).optional()),
 };
 
 /**
@@ -97,7 +109,8 @@ const registerOrgFields = {
   /** PIC contact email (may differ from login `email`). */
   contactEmail: z.email('Invalid contact email').optional(),
   /** Landing-page package id (e.g. `outlet-basic`) — not a catalog UUID yet. */
-  packageId: z.string().trim().min(1).max(100).optional(),
+  /** Catalog plan id (`main.subscription.id`) chosen at Package enrollment. */
+  packageId: z.string().uuid().optional(),
   ackPersonalInfo: z.boolean().optional(),
   ackDeclarationOfTruth: z.boolean().optional(),
   ackInformationSharing: z.boolean().optional(),

@@ -27,7 +27,11 @@ function detectApiUrl(): string {
 
 const API_URL = detectApiUrl(); // e.g. http://localhost:7777/api
 const API_BASE = `${API_URL}/v1`;
-const API_ORIGIN = API_URL.replace(/\/api$/, '');
+/** Server origin for legacy `/img/…` assets (strip `/api` or `/api/v1` like web). */
+const API_ORIGIN = API_URL.replace(/\/$/, '').replace(/\/api(\/v1)?$/, '');
+
+/** Same blank placeholder the backend / web treat as “no photo”. */
+const DEFAULT_PROFILE_IMAGE = '/img/blank-profile-picture.png';
 
 /** Cached from `/auth/me` / user responses so the phone does not need Expo env. */
 let cachedR2PublicBase: string | null = null;
@@ -50,16 +54,25 @@ function r2PublicBase(): string | null {
   return null;
 }
 
+function isR2ObjectKey(ref: string): boolean {
+  return (
+    ref.startsWith('user/') ||
+    ref.startsWith('agency/') ||
+    ref.startsWith('outlet/')
+  );
+}
+
 /**
- * Absolute URL for a stored image path.
- * - `user/…` (R2 object key) → public base + key
- * - `https://…` (legacy full R2 URL) → returned as-is
- * - `/img/…` (legacy local backend path) → prefixed with API origin
+ * Absolute URL for a stored image path — same rules as web `apiAssetUrl`.
+ * - blank / missing → null (show initials, not the placeholder PNG)
+ * - `https://…` / `data:` → as-is
+ * - `user/` | `agency/` | `outlet/` (R2 key) → public base + key
+ * - `/img/…` (legacy) → API origin + path
  */
 export function assetUrl(pathname: string | null | undefined): string | null {
-  if (!pathname) return null;
+  if (!pathname || pathname === DEFAULT_PROFILE_IMAGE) return null;
   if (/^https?:\/\//.test(pathname) || pathname.startsWith('data:')) return pathname;
-  if (pathname.startsWith('user/')) {
+  if (isR2ObjectKey(pathname)) {
     const base = r2PublicBase();
     if (!base) {
       console.warn('[assetUrl] R2 public URL unknown; cannot resolve key', pathname);
@@ -67,7 +80,8 @@ export function assetUrl(pathname: string | null | undefined): string | null {
     }
     return `${base}/${pathname}`;
   }
-  return `${API_ORIGIN}${pathname.startsWith('/') ? '' : '/'}${pathname}`;
+  const normalized = pathname.startsWith('/') ? pathname : `/${pathname}`;
+  return `${API_ORIGIN}${normalized}`;
 }
 
 export type ApiEnvelope<T> = { success: boolean; message: string; data: T };
@@ -319,7 +333,14 @@ export function registerPr(input: {
 
   const form = new FormData();
   for (const [key, value] of Object.entries(fields)) {
-    form.append(key, value);
+    if (value == null) continue;
+    // Arrays/objects must stay JSON — FormData stringifies them as useless text.
+    form.append(
+      key,
+      typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean'
+        ? String(value)
+        : JSON.stringify(value),
+    );
   }
   (form as unknown as { append: (name: string, value: Blob, fileName?: string) => void }).append(
     'profileImage',
@@ -388,11 +409,13 @@ export function fetchMyAgencyLinks(accessToken: string, userId: string): Promise
   });
 }
 
-/** Every agency the PR can ask to join — real rows, real ids, from `agency`. */
-export function fetchAgencies(accessToken: string): Promise<{ id: string; name: string }[]> {
-  return request<{ id: string; name: string }[]>('/agency?pageSize=100', {
-    headers: { Authorization: `Bearer ${accessToken}` },
-  });
+/**
+ * Every active agency the PR can ask to join.
+ * Uses `/auth/agencies` (id + name only) — `GET /agency` is admin/agency-only
+ * after RBAC, so a PR JWT gets 403 there and the profile picker stayed empty.
+ */
+export function fetchAgencies(_accessToken?: string): Promise<{ id: string; name: string }[]> {
+  return fetchPublicAgencies();
 }
 
 /**
@@ -423,6 +446,10 @@ export type ProfileUpdate = {
   /** Legal full name — persisted to user_profile.full_name (what admin reads). */
   fullName?: string;
   email?: string;
+  /** One-time identity fill when register left id_no empty. */
+  idType?: string;
+  idNo?: string;
+  dob?: string;
   portfolioPhotos?: (string | null)[];
   comcardHeightCm?: number | null;
   comcardWeightKg?: number | null;

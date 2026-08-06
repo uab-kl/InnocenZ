@@ -3,9 +3,21 @@ import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
-import { OutletUserTable, OutletUserInsertType, OutletUserType, OutletTable } from './outlet.model';
+import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
+import { RoleTable } from '@/features/rbac/role/role.model';
+import { PortalTable } from '@/features/rbac/portal/portal.model';
+import { laneFromRoleHints } from '@/features/rbac/portal-role-map';
+import {
+  OutletUserTable,
+  OutletUserInsertType,
+  OutletUserType,
+  OutletUserSubRole,
+  OutletTable,
+} from './outlet.model';
 
 export type OutletMemberEnriched = OutletUserType & {
+  /** Derived from `user_role` → `role` (outlet portal). */
+  subRole: OutletUserSubRole;
   username: string;
   email: string | null;
   phoneNum: string | null;
@@ -21,9 +33,39 @@ export type OutletMembershipWithOutlet = {
   outletId: string;
   outletName: string;
   outletStatus: string;
-  subRole: OutletUserType['subRole'];
+  /** Derived from RBAC, not a column on outlet_user. */
+  subRole: OutletUserSubRole;
   status: string;
 };
+
+async function outletLanesByUserIds(
+  userIds: string[],
+): Promise<Map<string, OutletUserSubRole>> {
+  const map = new Map<string, OutletUserSubRole>();
+  if (userIds.length === 0) return map;
+
+  const rows = await db
+    .select({
+      userId: UserRoleTable.userId,
+      roleName: RoleTable.roleName,
+      portalCode: PortalTable.code,
+    })
+    .from(UserRoleTable)
+    .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
+    .leftJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
+    .where(inArray(UserRoleTable.userId, userIds));
+
+  const byUser = new Map<string, Array<{ portalCode: string | null; roleName: string }>>();
+  for (const row of rows) {
+    const list = byUser.get(row.userId) ?? [];
+    list.push({ portalCode: row.portalCode, roleName: row.roleName ?? 'Owner' });
+    byUser.set(row.userId, list);
+  }
+  for (const userId of userIds) {
+    map.set(userId, laneFromRoleHints('outlet', byUser.get(userId) ?? []));
+  }
+  return map;
+}
 
 export class OutletMemberRepositoryClass {
   async add(
@@ -74,6 +116,15 @@ export class OutletMemberRepositoryClass {
     }
   }
 
+  async getByIdEnriched(
+    id: string,
+  ): Promise<(OutletUserType & { subRole: OutletUserSubRole }) | null> {
+    const member = await this.getById(id);
+    if (!member) return null;
+    const lanes = await outletLanesByUserIds([member.userId]);
+    return { ...member, subRole: lanes.get(member.userId) ?? 'owner' };
+  }
+
   async getByOutletAndUser(outletId: string, userId: string): Promise<OutletUserType | null> {
     try {
       const [member] = await db
@@ -93,27 +144,17 @@ export class OutletMemberRepositoryClass {
     }
   }
 
-  async listByOutlet(outletId: string): Promise<OutletUserType[]> {
-    try {
-      return db
-        .select()
-        .from(OutletUserTable)
-        .where(eq(OutletUserTable.outletId, outletId))
-        .orderBy(OutletUserTable.createdAt);
-    } catch (error) {
-      logger.error('[OutletMemberRepository.listByOutlet] Error:', error);
-      return [];
-    }
+  async listByOutlet(outletId: string): Promise<OutletMemberEnriched[]> {
+    return this.listByOutletWithUser(outletId);
   }
 
   async listByOutletWithUser(outletId: string): Promise<OutletMemberEnriched[]> {
     try {
-      return db
+      const rows = await db
         .select({
           id: OutletUserTable.id,
           outletId: OutletUserTable.outletId,
           userId: OutletUserTable.userId,
-          subRole: OutletUserTable.subRole,
           status: OutletUserTable.status,
           createdAt: OutletUserTable.createdAt,
           updatedAt: OutletUserTable.updatedAt,
@@ -127,6 +168,12 @@ export class OutletMemberRepositoryClass {
         .innerJoin(UserTable, eq(UserTable.id, OutletUserTable.userId))
         .where(eq(OutletUserTable.outletId, outletId))
         .orderBy(OutletUserTable.createdAt);
+
+      const lanes = await outletLanesByUserIds(rows.map((r) => r.userId));
+      return rows.map((r) => ({
+        ...r,
+        subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
+      }));
     } catch (error) {
       logger.error('[OutletMemberRepository.listByOutletWithUser] Error:', error);
       return [];
@@ -164,14 +211,18 @@ export class OutletMemberRepositoryClass {
           outletId: OutletUserTable.outletId,
           outletName: OutletTable.name,
           outletStatus: OutletTable.status,
-          subRole: OutletUserTable.subRole,
           status: OutletUserTable.status,
         })
         .from(OutletUserTable)
         .innerJoin(OutletTable, eq(OutletTable.id, OutletUserTable.outletId))
         .where(and(...conditions))
         .orderBy(OutletTable.name);
-      return rows;
+
+      const lanes = await outletLanesByUserIds(rows.map((r) => r.userId));
+      return rows.map((r) => ({
+        ...r,
+        subRole: lanes.get(r.userId) ?? ('owner' as OutletUserSubRole),
+      }));
     } catch (error) {
       logger.error('[OutletMemberRepository.listMembershipsByUserIds] Error:', error);
       return [];

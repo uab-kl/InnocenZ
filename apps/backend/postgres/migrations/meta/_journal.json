@@ -743,6 +743,20 @@
       "when": 1788000000000,
       "tag": "0105_drop_agency_outlet_identity_roles",
       "breakpoints": true
+    },
+    {
+      "idx": 106,
+      "version": "7",
+      "when": 1788100000000,
+      "tag": "0106_agency_address_locality_ensure",
+      "breakpoints": true
+    },
+    {
+      "idx": 107,
+      "version": "7",
+      "when": 1788200000000,
+      "tag": "0107_drop_membership_sub_role",
+      "breakpoints": true
     }
   ]
 }

@@ -54,7 +54,6 @@ async function main() {
   const agencyMem = await db
     .select({
       id: AgencyUserTable.id,
-      subRole: AgencyUserTable.subRole,
       status: AgencyUserTable.status,
       agencyName: AgencyTable.name,
       agencyStatus: AgencyTable.status,
@@ -68,7 +67,6 @@ async function main() {
   const outletMem = await db
     .select({
       id: OutletUserTable.id,
-      subRole: OutletUserTable.subRole,
       status: OutletUserTable.status,
       outletName: OutletTable.name,
       outletStatus: OutletTable.status,
@@ -81,13 +79,21 @@ async function main() {
 
   const needAgency = agencyMem.some((m) => m.status === 'active');
   const needOutlet = outletMem.some((m) => m.status === 'active');
-  const hasAgency = roles.some((r) => r.roleName === 'agency');
-  const hasOutlet = roles.some((r) => r.roleName === 'outlet');
+  const hasAgency = roles.some(
+    (r) => r.portalCode === 'agency' || r.roleName === 'agency' || r.roleName === 'Owner',
+  );
+  const hasOutlet = roles.some(
+    (r) => r.portalCode === 'outlet' || r.roleName === 'outlet' || r.roleName === 'Owner',
+  );
   const hasAdmin = roles.some((r) => r.roleName === 'admin');
 
-  const toGrant: string[] = [];
-  if (needAgency && !hasAgency) toGrant.push('agency');
-  if (needOutlet && !hasOutlet) toGrant.push('outlet');
+  const toGrant: Array<{ roleName: string; portal: 'agency' | 'outlet' }> = [];
+  if (needAgency && !roles.some((r) => r.portalCode === 'agency')) {
+    toGrant.push({ roleName: 'Owner', portal: 'agency' });
+  }
+  if (needOutlet && !roles.some((r) => r.portalCode === 'outlet')) {
+    toGrant.push({ roleName: 'Owner', portal: 'outlet' });
+  }
   if (!needAgency && !needOutlet && !hasAdmin && roles.length === 0) {
     console.log(
       '\nNo org membership and no roles — cannot infer portal. Assign manually in admin.',
@@ -105,20 +111,29 @@ async function main() {
 
   if (!APPLY || toGrant.length === 0) {
     if (!APPLY && toGrant.length > 0) {
-      console.log('\nDry run. Re-run with --apply to grant:', toGrant.join(', '));
+      console.log(
+        '\nDry run. Re-run with --apply to grant:',
+        toGrant.map((g) => `${g.roleName}@${g.portal}`).join(', '),
+      );
     } else if (toGrant.length === 0 && (hasAgency || hasOutlet || hasAdmin)) {
       console.log('\nUser already has a portal role — check frontend redirect / session.');
     }
     process.exit(0);
   }
 
-  for (const roleName of toGrant) {
+  for (const g of toGrant) {
+    const [portal] = await db
+      .select({ id: PortalTable.id })
+      .from(PortalTable)
+      .where(eq(PortalTable.code, g.portal))
+      .limit(1);
+    if (!portal) throw new Error(`Missing portal ${g.portal}`);
     const [role] = await db
       .select({ id: RoleTable.id })
       .from(RoleTable)
-      .where(eq(RoleTable.roleName, roleName))
+      .where(and(eq(RoleTable.roleName, g.roleName), eq(RoleTable.portalId, portal.id)))
       .limit(1);
-    if (!role) throw new Error(`Missing role ${roleName}`);
+    if (!role) throw new Error(`Missing role ${g.roleName}@${g.portal}`);
     const [existing] = await db
       .select({ id: UserRoleTable.id })
       .from(UserRoleTable)
@@ -133,7 +148,7 @@ async function main() {
       createdBy: ACTOR,
       updatedBy: ACTOR,
     });
-    console.log(`Granted role: ${roleName}`);
+    console.log(`Granted role: ${g.roleName}@${g.portal}`);
   }
 
   console.log('\nDone. Sign out and sign in again.\n');

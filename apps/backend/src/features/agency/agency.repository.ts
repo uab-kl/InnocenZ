@@ -103,6 +103,26 @@ export class AgencyRepositoryClass {
     }
   }
 
+  /**
+   * Active agencies for PR sign-up / join pickers — id + name only.
+   * Avoids `select()` of the full row so a lagging migration (logo/address
+   * columns) cannot empty the mobile agency list.
+   */
+  async listActiveNames(limit = 200): Promise<Array<{ id: string; name: string }>> {
+    try {
+      const rows = await db
+        .select({ id: AgencyTable.id, name: AgencyTable.name })
+        .from(AgencyTable)
+        .where(eq(AgencyTable.status, 'active'))
+        .orderBy(AgencyTable.name)
+        .limit(limit);
+      return rows;
+    } catch (error) {
+      logger.error('[AgencyRepository.listActiveNames] Error:', error);
+      throw error;
+    }
+  }
+
   async generateUniqueCode(): Promise<string> {
     for (let attempts = 0; attempts < 10; attempts++) {
       const code = Math.floor(100000 + Math.random() * 900000).toString();

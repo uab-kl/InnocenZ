@@ -1,7 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-import { sanitizePathSegment } from '@/util/profile-image';
 import { isR2ObjectKey, r2Configured, r2PublicUrl, r2PutObject } from '@/util/r2';
 import { normalizePortfolioSlots } from '@/util/portfolio-image';
 
@@ -136,7 +135,6 @@ export async function generateAndStoreComcard(input: {
     .png()
     .toBuffer();
 
-  const folder = `${input.userId}_${sanitizePathSegment(input.fullName ?? 'user')}`;
-  const key = `user/pr/${folder}/comcard/comcard-${Date.now()}.png`;
+  const key = `user/${input.userId}/comcard/comcard-${Date.now()}.png`;
   return r2PutObject({ key, body: png, contentType: 'image/png' });
 }

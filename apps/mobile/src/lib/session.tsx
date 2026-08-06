@@ -8,7 +8,7 @@ import { Platform } from 'react-native';
 import {
   ApiError,
   fetchMe,
-  fetchMemberships,
+  fetchMyAgencyLinks,
   login,
   phoneCandidates,
   updateUserProfile,
@@ -78,10 +78,13 @@ function writeStoredToken(token: string | null) {
 type SessionState = {
   me: Me | null;
   token: string | null;
-  /** Active PR agency memberships from /agency/memberships (admin data). */
+  /** Approved agency_pr links for this PR (mapped to the old membership shape). */
   agencies: AgencyMembership[];
   booting: boolean;
-  signIn: (identifier: string, password: string) => Promise<void>;
+  signIn: (
+    identifier: string,
+    password: string,
+  ) => Promise<{ user: Me; accessToken: string }>;
   signOut: () => void;
   updateProfile: (patch: ProfileUpdate) => Promise<void>;
   uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
@@ -101,16 +104,29 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
   const [agencies, setAgencies] = useState<AgencyMembership[]>([]);
   const [booting, setBooting] = useState(true);
 
-  // Agencies come from the same membership rows the admin PR list shows.
+  // agency_pr links (not agency_user — that table is portal operators only).
   useEffect(() => {
     if (!token || !me) {
       setAgencies([]);
       return;
     }
     let cancelled = false;
-    fetchMemberships(token, me.id)
+    fetchMyAgencyLinks(token, me.id)
       .then((rows) => {
-        if (!cancelled) setAgencies(rows.filter((r) => r.status === 'active'));
+        if (cancelled) return;
+        setAgencies(
+          rows
+            .filter((r) => r.approveStatus === 'approved')
+            .map((r) => ({
+              membershipId: `${r.agencyId}:${r.userId}`,
+              userId: r.userId,
+              agencyId: r.agencyId,
+              agencyName: r.agencyName,
+              agencyCode: r.agencyCode,
+              subRole: 'pr',
+              status: 'active',
+            })),
+        );
       })
       .catch(() => {
         /* non-fatal — profile falls back to the agency-tie flag */
@@ -146,7 +162,7 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         writeStoredToken(result.accessToken);
         setToken(result.accessToken);
         setMe(user);
-        return;
+        return { user, accessToken: result.accessToken };
       } catch (error) {
         lastError = error;
         if (!(error instanceof ApiError) || (error.status !== 400 && error.status !== 401)) {

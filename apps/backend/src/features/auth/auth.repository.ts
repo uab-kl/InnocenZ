@@ -16,7 +16,7 @@ import { RolePermissionGroupType } from '@/schema/rbac.schema.js';
 import { ResetPasswordTokenTable, ResetPasswordTokenType } from './auth.model.js';
 import { AgencyUserTable } from '@/features/agency/agency.model.js';
 import { OutletUserTable } from '@/features/outlet/outlet.model.js';
-import { portalRoleName } from '@/types/rbac-constant.js';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
 import { SYSTEM_ACTOR } from '@/util/actor.js';
 export class AuthRepositoryClass {
   constructor(
@@ -68,17 +68,21 @@ export class AuthRepositoryClass {
     }
   }
 
+  /**
+   * Backfill: active membership without a portal role gets Owner.
+   * Lane is never read from agency_user / outlet_user (column dropped).
+   */
   async ensurePortalRolesFromMembership(userId: string): Promise<void> {
     try {
       const [agencyMem] = await db
-        .select({ id: AgencyUserTable.id, subRole: AgencyUserTable.subRole })
+        .select({ id: AgencyUserTable.id })
         .from(AgencyUserTable)
         .where(
           and(eq(AgencyUserTable.userId, userId), eq(AgencyUserTable.status, 'active')),
         )
         .limit(1);
       const [outletMem] = await db
-        .select({ id: OutletUserTable.id, subRole: OutletUserTable.subRole })
+        .select({ id: OutletUserTable.id })
         .from(OutletUserTable)
         .where(
           and(eq(OutletUserTable.userId, userId), eq(OutletUserTable.status, 'active')),
@@ -94,21 +98,16 @@ export class AuthRepositoryClass {
 
       const grants: Array<{ roleName: string; portal: 'agency' | 'outlet' }> = [];
       if (agencyMem && !havePortal.has('agency')) {
-        const sub = String(agencyMem.subRole ?? 'owner');
         grants.push({
-          roleName:
-            sub.includes('finance') ? portalRoleName.FINANCE : portalRoleName.OWNER,
+          roleName: portalRoleNameForSubRole('agency', 'owner'),
           portal: 'agency',
         });
       }
       if (outletMem && !havePortal.has('outlet')) {
-        const sub = String(outletMem.subRole ?? 'owner').toLowerCase();
-        let roleName = portalRoleName.OWNER;
-        if (sub.includes('finance')) roleName = portalRoleName.FINANCE;
-        else if (sub.includes('ops') || sub.includes('operation')) {
-          roleName = portalRoleName.OPS_HEAD;
-        }
-        grants.push({ roleName, portal: 'outlet' });
+        grants.push({
+          roleName: portalRoleNameForSubRole('outlet', 'owner'),
+          portal: 'outlet',
+        });
       }
 
       for (const g of grants) {

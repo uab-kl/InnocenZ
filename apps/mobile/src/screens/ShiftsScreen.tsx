@@ -20,6 +20,7 @@ import {
 import { useSession } from '../lib/session';
 import { type ShiftAssignmentRecord } from '../lib/api';
 import { useViewportSize } from '../lib/viewport';
+import { useLocale } from '../i18n';
 import { Section } from '../components/Section';
 import { AgencySchedulePanel } from '../components/AgencySchedulePanel';
 import { OutletSwapRequests } from '../components/OutletSwapRequests';
@@ -76,6 +77,7 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
 }
 
 export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
+  const { t } = useLocale();
   const { me } = useSession();
   const { openPv } = usePrNav();
 
@@ -240,6 +242,14 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
     : completedToday.length > 0
       ? 'Complete'
       : 'Off';
+  const todayStatusLabel =
+    todayStatus === 'On duty'
+      ? t.shifts.onDuty
+      : todayStatus === 'Tonight'
+        ? t.shifts.tonight
+        : todayStatus === 'Complete'
+          ? t.shifts.complete
+          : todayStatus;
 
   // CTA per card, not per global phase — a completed card always offers its
   // summary even while a fresh same-day shift owns the Check in button.
@@ -258,7 +268,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
         <View style={styles.headerTitleRow}>
           <Briefcase size={22} color={C.accent} />
           <Text style={[styles.headerTitle, { fontSize: titleSize }]}>
-            Hi, <Text style={styles.headerTitleAccent}>{firstName}</Text>
+            {t.shifts.hi.split('{name}')[0]}
+            <Text style={styles.headerTitleAccent}>{firstName}</Text>
           </Text>
         </View>
       </View>
@@ -266,21 +277,21 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
       {/* Hub strip — Today / To-do / Upcoming */}
           <View style={styles.hubTabs}>
             <HubTab
-              label="TODAY"
-              value={todayStatus}
+              label={t.shifts.today}
+              value={todayStatusLabel}
               valueColor={todayStatus === 'Complete' ? C.green : C.goldL}
               on={open.today}
               onPress={() => toggleHubSection('today')}
             />
             <HubTab
-              label="TO-DO"
+              label={t.shifts.todo}
               value={String(todoCount)}
               valueColor={todoCount > 0 ? C.amber : C.txt}
               on={open.todo}
               onPress={() => toggleHubSection('todo')}
             />
             <HubTab
-              label="UPCOMING"
+              label={t.shifts.upcoming}
               value={String(upcomingCount)}
               valueColor={C.txt}
               on={open.agency}

@@ -31,7 +31,9 @@ import {
 import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
 import { pickImageFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
+import { useLocale } from '../i18n';
 import { Avatar, IzButton } from '../components/ui';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { PortfolioSlotGrid } from '../components/PortfolioSlotGrid';
 import { AppToast, useToast } from '../components/Toast';
 import { LanguageMultiPicker } from './sign-up/fields';
@@ -79,6 +81,7 @@ const TIER_LABEL: Record<string, string> = {
 
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
+  const { t } = useLocale();
   const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, uploadComcardImage, generateComcard, token } =
     useSession();
 
@@ -346,7 +349,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
   };
 
-  /** Gallery-pick with the 2.5 MB guard; null = cancelled / too big / unavailable. */
+  /** Gallery-pick with the 5 MB guard; null = cancelled / too big / unavailable. */
   const pickValidatedImage = async () => {
     const picked = await pickImageFromGallery();
     if (!picked) {
@@ -355,8 +358,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       }
       return null;
     }
-    if (picked.size != null && picked.size > 2_500_000) {
-      setError('Image must be under 2.5 MB');
+    if (picked.size != null && picked.size > 5 * 1024 * 1024) {
+      setError('Image must be under 5 MB');
       return null;
     }
     return picked;
@@ -720,7 +723,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             ) : comcardTiles.mode === 'empty' ? (
               <View style={[styles.collage, styles.collageEmpty]}>
                 <Text style={styles.collageEmptyText}>
-                  No comcard yet — add photos to your gallery below to build one.
+                  {t.profile.noComcard}
                 </Text>
               </View>
             ) : (
@@ -755,7 +758,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           {canSaveComcard && comcardTiles.mode !== 'empty' && (
             <View style={styles.comcardActions}>
               <IzButton
-                label={savingComcard ? 'Saving…' : me?.profile.comcardImage ? 'Update saved comcard' : 'Save comcard'}
+                label={
+                  savingComcard
+                    ? t.profile.savingComcard
+                    : me?.profile.comcardImage
+                      ? t.profile.updateComcard
+                      : t.profile.saveComcard
+                }
                 onPress={() => {
                   void saveComcardToDatabase();
                 }}
@@ -766,11 +775,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               {comcardSavedHint ? (
                 <Text style={styles.comcardSavedHint}>{comcardSavedHint}</Text>
               ) : me?.profile.comcardImage ? (
-                <Text style={styles.comcardSavedHint}>Saved to profile</Text>
+                <Text style={styles.comcardSavedHint}>{t.profile.savedToProfile}</Text>
               ) : (
-                <Text style={styles.comcardHint}>
-                  Comcard auto-saves when you change portfolio photos
-                </Text>
+                <Text style={styles.comcardHint}>{t.profile.comcardHint}</Text>
               )}
             </View>
           )}
@@ -779,21 +786,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <>
               <View style={styles.measureGrid}>
                 <View style={styles.measure}>
-                  <Text style={styles.measureLabel}>HEIGHT</Text>
+                  <Text style={styles.measureLabel}>{t.profile.height}</Text>
                   <View style={styles.measureRow}>
                     <Text style={styles.measureValue}>{me?.profile.comcardHeightCm || '—'}</Text>
                     <Text style={styles.measureSuffix}>cm</Text>
                   </View>
                 </View>
                 <View style={styles.measure}>
-                  <Text style={styles.measureLabel}>WEIGHT</Text>
+                  <Text style={styles.measureLabel}>{t.profile.weight}</Text>
                   <View style={styles.measureRow}>
                     <Text style={styles.measureValue}>{me?.profile.comcardWeightKg || '—'}</Text>
                     <Text style={styles.measureSuffix}>kg</Text>
                   </View>
                 </View>
                 <View style={styles.measure}>
-                  <Text style={styles.measureLabel}>AGE</Text>
+                  <Text style={styles.measureLabel}>{t.profile.age}</Text>
                   <View style={styles.measureRow}>
                     <Text style={styles.measureValue}>{me?.profile.dob ? age : '—'}</Text>
                     <Text style={styles.measureSuffix}>y</Text>
@@ -802,21 +809,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               </View>
               <View style={styles.measureGrid}>
                 <View style={styles.measure}>
-                  <Text style={styles.measureLabel}>BUST</Text>
+                  <Text style={styles.measureLabel}>{t.profile.bust}</Text>
                   <View style={styles.measureRow}>
                     <Text style={styles.measureValue}>{me?.profile.comcardBustCm || '—'}</Text>
                     <Text style={styles.measureSuffix}>cm</Text>
                   </View>
                 </View>
                 <View style={styles.measure}>
-                  <Text style={styles.measureLabel}>WAIST</Text>
+                  <Text style={styles.measureLabel}>{t.profile.waist}</Text>
                   <View style={styles.measureRow}>
                     <Text style={styles.measureValue}>{me?.profile.comcardWaistCm || '—'}</Text>
                     <Text style={styles.measureSuffix}>cm</Text>
                   </View>
                 </View>
                 <View style={styles.measure}>
-                  <Text style={styles.measureLabel}>HIP</Text>
+                  <Text style={styles.measureLabel}>{t.profile.hip}</Text>
                   <View style={styles.measureRow}>
                     <Text style={styles.measureValue}>{me?.profile.comcardHipCm || '—'}</Text>
                     <Text style={styles.measureSuffix}>cm</Text>
@@ -830,7 +837,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             <>
               <View style={styles.measureGrid}>
                 <MeasureField
-                  label="HEIGHT"
+                  label={t.profile.height}
                   suffix="cm"
                   value={draft.height ? String(draft.height) : ''}
                   onChange={(v) =>
@@ -838,7 +845,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   }
                 />
                 <MeasureField
-                  label="WEIGHT"
+                  label={t.profile.weight}
                   suffix="kg"
                   value={draft.weight ? String(draft.weight) : ''}
                   onChange={(v) =>
@@ -846,7 +853,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   }
                 />
                 <MeasureField
-                  label="AGE"
+                  label={t.profile.age}
                   suffix="y"
                   value={draft.age ? String(draft.age) : ''}
                   onChange={(v) =>
@@ -856,7 +863,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               </View>
               <View style={styles.measureGrid}>
                 <MeasureField
-                  label="BUST"
+                  label={t.profile.bust}
                   suffix="cm"
                   value={draft.bust ? String(draft.bust) : ''}
                   onChange={(v) =>
@@ -864,7 +871,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   }
                 />
                 <MeasureField
-                  label="WAIST"
+                  label={t.profile.waist}
                   suffix="cm"
                   value={draft.waist ? String(draft.waist) : ''}
                   onChange={(v) =>
@@ -872,7 +879,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   }
                 />
                 <MeasureField
-                  label="HIP"
+                  label={t.profile.hip}
                   suffix="cm"
                   value={draft.hip ? String(draft.hip) : ''}
                   onChange={(v) =>
@@ -951,7 +958,7 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
         {/* Languages */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Languages</Text>
+          <Text style={styles.sectionTitle}>{t.profile.languages}</Text>
           {editing ? (
             <View style={styles.langPickerWrap}>
               <LanguageMultiPicker
@@ -982,13 +989,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         {editing ? (
           <>
             <IzButton
-              label={saving ? 'Saving…' : 'Save profile'}
+              label={saving ? t.profile.saving : t.profile.saveProfile}
               onPress={saveEdit}
               disabled={saving}
             />
             {saving && <ActivityIndicator color={C.gold} style={{ marginTop: 8 }} />}
             <IzButton
-              label="Cancel"
+              label={t.profile.cancel}
               variant="soft"
               onPress={cancelEdit}
               disabled={saving}
@@ -996,17 +1003,22 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             />
           </>
         ) : (
-          <IzButton label="Edit profile" icon={Pencil} onPress={startEdit} />
+          <IzButton label={t.profile.editProfile} icon={Pencil} onPress={startEdit} />
         )}
+      </View>
+
+      <View style={styles.appLangRow}>
+        <Text style={styles.appLangLabel}>{t.profile.appLanguage}</Text>
+        <LanguageSwitcher compact />
       </View>
 
       <Pressable style={styles.securityBtn} onPress={openSecurity}>
         <Lock size={14} color={C.txt} />
-        <Text style={styles.securityText}>Security settings</Text>
+        <Text style={styles.securityText}>{t.profile.securitySettings}</Text>
       </Pressable>
 
       <Pressable style={styles.signOutBtn} onPress={signOut}>
-        <Text style={styles.signOutText}>Sign out</Text>
+        <Text style={styles.signOutText}>{t.profile.signOut}</Text>
       </Pressable>
     </View>
   );
@@ -1060,6 +1072,21 @@ function MeasureField({
 
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
+  appLangRow: {
+    marginTop: 18,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
+  },
+  appLangLabel: {
+    fontFamily: F.sora,
+    fontSize: 14,
+    fontWeight: '600',
+    color: C.muted,
+  },
   hero: {
     marginTop: 8,
     borderRadius: 18,

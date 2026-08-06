@@ -22,6 +22,7 @@ import { AgencyPrApproveStatus, agencyPrApproveStatusValues } from '@/features/p
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
 import { r2DeleteStoredRef } from '@/util/r2';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository';
+import { UserRoleRepositoryClass } from '@/features/rbac/user-role/user-role.repository';
 import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository';
 import {
   createOrgMemberInviteSecret,
@@ -34,6 +35,8 @@ import {
   portalRoleNameForSubRole,
 } from '@/features/rbac/portal-role-map';
 import { portalRepository } from '@/features/rbac/portal/portal.repository';
+import { portalRoleName } from '@/types/rbac-constant.js';
+import type { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
 
 function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;
@@ -59,6 +62,8 @@ export class AgencyControllerClass {
     private userProfileRepository: UserProfileRepositoryClass,
     private roleRepository: RoleRepositoryClass,
     private inviteRepository: OrgMemberInviteRepositoryClass,
+    private authRepository: AuthRepositoryClass,
+    private userRoleRepository: UserRoleRepositoryClass,
   ) {}
 
   /**
@@ -68,10 +73,26 @@ export class AgencyControllerClass {
    */
   async listPrLinks(req: Request, res: Response) {
     try {
-      const userIds = String(req.query.userIds ?? '')
+      let userIds = String(req.query.userIds ?? '')
         .split(',')
         .map((value) => value.trim())
         .filter(Boolean);
+
+      const callerId = req.user?.id;
+      if (!callerId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      // Admin + agency operators may look up any PR; a PR may only read self.
+      const roles = await this.authRepository.getRolesForUserIds([callerId]);
+      const canBrowseOthers = roles.some(
+        (r) =>
+          r.roleName === portalRoleName.ADMIN ||
+          r.portalCode === 'agency',
+      );
+      if (!canBrowseOthers) {
+        userIds = [callerId];
+      }
 
       if (userIds.length === 0) {
         return res.status(200).json({ success: true, message: 'OK', data: [] });
@@ -388,6 +409,38 @@ export class AgencyControllerClass {
     }
   }
 
+  /** Active RBAC roles for this agency portal — invite dropdown (not /rbac admin). */
+  async listInviteRoles(req: Request, res: Response) {
+    try {
+      const agencyId = paramId(req.params.id);
+      const existing = await this.agencyRepository.getById(agencyId);
+      if (!existing) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const portal = await portalRepository.getPortalByCode('agency');
+      if (!portal) {
+        return res.status(500).json({
+          success: false,
+          message: 'Agency portal is not seeded',
+          data: null,
+        });
+      }
+      const roles = (await this.roleRepository.getAllRoles())
+        .filter((r) => r.portalId === portal.id && r.status === 'active')
+        .map((r) => ({
+          id: r.id,
+          roleName: r.roleName,
+          portalId: r.portalId,
+          portalCode: 'agency' as const,
+          status: r.status,
+        }));
+      res.status(200).json({ success: true, message: 'OK', data: roles });
+    } catch (error) {
+      logger.error('[AgencyController.listInviteRoles] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async listMembers(req: Request, res: Response) {
     try {
       const agencyId = paramId(req.params.id);
@@ -560,7 +613,7 @@ export class AgencyControllerClass {
         data: {
           invite,
           emailed: mail.emailed,
-          ...(mail.emailed ? {} : { acceptUrl: mail.acceptUrl }),
+          acceptUrl: mail.acceptUrl,
         },
       });
     } catch (error) {
@@ -584,7 +637,7 @@ export class AgencyControllerClass {
       // member of somebody else's. A scope check on the wrong parameter is not
       // a scope check. 404 rather than 403: a foreign member id must not be
       // confirmed as existing.
-      const target = await this.agencyMemberRepository.getById(memberId);
+      const target = await this.agencyMemberRepository.getByIdEnriched(memberId);
       if (!target || target.agencyId !== agencyId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
@@ -610,8 +663,43 @@ export class AgencyControllerClass {
         return res.status(409).json({ success: false, message: refusal, data: null });
       }
 
-      const member = await this.agencyMemberRepository.update(memberId, { ...parsed.data, updatedBy: getActor(req) });
-      if (!member) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      const actor = getActor(req);
+      if (parsed.data.subRole != null && parsed.data.subRole !== target.subRole) {
+        const roleName = portalRoleNameForSubRole('agency', parsed.data.subRole);
+        const nextRole = await this.roleRepository.findByNameAndPortalCode(roleName, 'agency');
+        if (!nextRole) {
+          return res.status(500).json({
+            success: false,
+            message: `Role '${roleName}' is not seeded`,
+            data: null,
+          });
+        }
+        const portal = await portalRepository.getPortalByCode('agency');
+        const held = await this.userRoleRepository.getUserRoles(target.userId);
+        for (const r of held) {
+          if (portal && r.portalId === portal.id) {
+            await this.userRoleRepository.removeRoleFromUser(target.userId, r.id);
+          }
+        }
+        await this.userRoleRepository.assignRoleToUser({
+          userId: target.userId,
+          roleId: nextRole.id,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+      }
+
+      const memberRow =
+        parsed.data.status != null
+          ? await this.agencyMemberRepository.update(memberId, {
+              status: parsed.data.status,
+              updatedBy: actor,
+            })
+          : await this.agencyMemberRepository.getById(memberId);
+      if (!memberRow) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      const member = await this.agencyMemberRepository.getByIdEnriched(memberId);
       res.status(200).json({ success: true, message: 'Member updated', data: member });
     } catch (error) {
       logger.error('[AgencyController.updateMember] Error:', error);
@@ -625,7 +713,7 @@ export class AgencyControllerClass {
       const memberId = paramId(req.params.memberId);
 
       // Same two checks as updateMember, and for the same reasons.
-      const target = await this.agencyMemberRepository.getById(memberId);
+      const target = await this.agencyMemberRepository.getByIdEnriched(memberId);
       if (!target || target.agencyId !== agencyId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }

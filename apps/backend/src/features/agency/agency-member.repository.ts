@@ -3,6 +3,10 @@ import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { UserTable } from '@/features/user/user.model';
+import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
+import { RoleTable } from '@/features/rbac/role/role.model';
+import { PortalTable } from '@/features/rbac/portal/portal.model';
+import { laneFromRoleHints } from '@/features/rbac/portal-role-map';
 import {
   AgencyUserTable,
   AgencyUserInsertType,
@@ -12,6 +16,8 @@ import {
 } from './agency.model';
 
 export type AgencyMemberEnriched = AgencyUserType & {
+  /** Derived from `user_role` → `role` (agency portal). */
+  subRole: AgencyUserSubRole;
   username: string;
   email: string | null;
   phoneNum: string | null;
@@ -26,6 +32,7 @@ export type AgencyMembershipWithAgency = {
   agencyName: string;
   agencyCode: string;
   agencyStatus: string;
+  /** Derived from RBAC, not a column on agency_user. */
   subRole: AgencyUserSubRole;
   status: string;
 };
@@ -35,6 +42,46 @@ export type ListMembersOptions = {
   status?: string;
   search?: string;
 };
+
+type RoleJoinRow = {
+  userId: string;
+  roleName: string | null;
+  portalCode: string | null;
+};
+
+async function agencyLanesByUserIds(
+  userIds: string[],
+): Promise<Map<string, AgencyUserSubRole>> {
+  const map = new Map<string, AgencyUserSubRole>();
+  if (userIds.length === 0) return map;
+
+  const rows = await db
+    .select({
+      userId: UserRoleTable.userId,
+      roleName: RoleTable.roleName,
+      portalCode: PortalTable.code,
+    })
+    .from(UserRoleTable)
+    .innerJoin(RoleTable, eq(RoleTable.id, UserRoleTable.roleId))
+    .leftJoin(PortalTable, eq(PortalTable.id, RoleTable.portalId))
+    .where(inArray(UserRoleTable.userId, userIds));
+
+  const byUser = new Map<string, RoleJoinRow[]>();
+  for (const row of rows) {
+    const list = byUser.get(row.userId) ?? [];
+    list.push(row);
+    byUser.set(row.userId, list);
+  }
+  for (const userId of userIds) {
+    const hints = (byUser.get(userId) ?? []).map((r) => ({
+      portalCode: r.portalCode,
+      roleName: r.roleName ?? 'Owner',
+    }));
+    const lane = laneFromRoleHints('agency', hints);
+    map.set(userId, lane === 'operations_head' ? 'finance' : lane);
+  }
+  return map;
+}
 
 export class AgencyMemberRepositoryClass {
   async add(
@@ -85,6 +132,14 @@ export class AgencyMemberRepositoryClass {
     }
   }
 
+  /** Membership + derived agency lane from RBAC. */
+  async getByIdEnriched(id: string): Promise<(AgencyUserType & { subRole: AgencyUserSubRole }) | null> {
+    const member = await this.getById(id);
+    if (!member) return null;
+    const lanes = await agencyLanesByUserIds([member.userId]);
+    return { ...member, subRole: lanes.get(member.userId) ?? 'owner' };
+  }
+
   async getByAgencyAndUser(agencyId: string, userId: string): Promise<AgencyUserType | null> {
     try {
       const [member] = await db
@@ -105,9 +160,6 @@ export class AgencyMemberRepositoryClass {
   ): Promise<AgencyMemberEnriched[]> {
     try {
       const conditions = [eq(AgencyUserTable.agencyId, agencyId)];
-      if (options.subRole) {
-        conditions.push(eq(AgencyUserTable.subRole, options.subRole));
-      }
       if (options.status) {
         conditions.push(eq(AgencyUserTable.status, options.status));
       }
@@ -122,12 +174,11 @@ export class AgencyMemberRepositoryClass {
         );
       }
 
-      return db
+      const rows = await db
         .select({
           id: AgencyUserTable.id,
           agencyId: AgencyUserTable.agencyId,
           userId: AgencyUserTable.userId,
-          subRole: AgencyUserTable.subRole,
           status: AgencyUserTable.status,
           createdAt: AgencyUserTable.createdAt,
           updatedAt: AgencyUserTable.updatedAt,
@@ -141,6 +192,16 @@ export class AgencyMemberRepositoryClass {
         .innerJoin(UserTable, eq(UserTable.id, AgencyUserTable.userId))
         .where(and(...conditions))
         .orderBy(AgencyUserTable.createdAt);
+
+      const lanes = await agencyLanesByUserIds(rows.map((r) => r.userId));
+      const enriched = rows.map((r) => ({
+        ...r,
+        subRole: lanes.get(r.userId) ?? ('owner' as AgencyUserSubRole),
+      }));
+      if (options.subRole) {
+        return enriched.filter((r) => r.subRole === options.subRole);
+      }
+      return enriched;
     } catch (error) {
       logger.error('[AgencyMemberRepository.listByAgency] Error:', error);
       return [];
@@ -167,9 +228,6 @@ export class AgencyMemberRepositoryClass {
 
     try {
       const conditions = [inArray(AgencyUserTable.userId, userIds)];
-      if (options.subRole) {
-        conditions.push(eq(AgencyUserTable.subRole, options.subRole));
-      }
       if (options.status) {
         conditions.push(eq(AgencyUserTable.status, options.status));
       }
@@ -182,7 +240,6 @@ export class AgencyMemberRepositoryClass {
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
           agencyStatus: AgencyTable.status,
-          subRole: AgencyUserTable.subRole,
           status: AgencyUserTable.status,
         })
         .from(AgencyUserTable)
@@ -190,7 +247,15 @@ export class AgencyMemberRepositoryClass {
         .where(and(...conditions))
         .orderBy(AgencyTable.name);
 
-      return rows;
+      const lanes = await agencyLanesByUserIds(rows.map((r) => r.userId));
+      const enriched = rows.map((r) => ({
+        ...r,
+        subRole: lanes.get(r.userId) ?? ('owner' as AgencyUserSubRole),
+      }));
+      if (options.subRole) {
+        return enriched.filter((r) => r.subRole === options.subRole);
+      }
+      return enriched;
     } catch (error) {
       logger.error('[AgencyMemberRepository.listMembershipsByUserIds] Error:', error);
       return [];
@@ -210,5 +275,4 @@ export class AgencyMemberRepositoryClass {
       return false;
     }
   }
-
 }

@@ -6,7 +6,7 @@ function imageFileSchema(messages: SignupTranslations["validation"]) {
 		.instanceof(File, {
 			message: messages.logoRequired,
 		})
-		.refine((file) => file.size <= 2 * 1024 * 1024, messages.logoMaxSize)
+		.refine((file) => file.size <= 5 * 1024 * 1024, messages.logoMaxSize)
 		.refine((file) => file.type.startsWith("image/"), messages.logoImageType);
 }
 
@@ -65,7 +65,10 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.min(1, messages.passwordRequired)
 				.min(8, messages.passwordMin),
 			confirmPassword: z.string().min(1, messages.confirmPasswordRequired),
-			packageId: z.string().min(1, messages.packageRequired),
+			packageId: z
+				.string()
+				.min(1, messages.packageRequired)
+				.uuid(messages.packageRequired),
 			logoFile: imageFileSchema(messages),
 			ackPersonalInfo: z.boolean().refine((value) => value, {
 				message: messages.ackPersonalInfo,
@@ -109,7 +112,7 @@ export const SignupSchema = createSignupSchema({
 	passwordsMismatch: "Passwords do not match",
 	packageRequired: "Please select a package",
 	logoRequired: "Logo is required",
-	logoMaxSize: "Logo must be 2 MB or smaller",
+	logoMaxSize: "Logo must be 5 MB or smaller",
 	logoImageType: "Logo must be an image file",
 	ackPersonalInfo: "Please acknowledge the Personal Information Disclaimer",
 	ackDeclarationOfTruth: "Please acknowledge the Declaration of Truth",

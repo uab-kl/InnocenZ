@@ -29,8 +29,9 @@ export interface OrgMember {
 /**
  * Member management for one organisation, agency or outlet.
  *
- * Invite creates a `pending` membership + email; the invitee must accept before
- * status becomes `active`. The server owns every other rule (scope, last owner).
+ * Invite creates a pending invite + email; the invitee sets up their account
+ * (name / email / password) on the accept link before membership becomes active.
+ * The server owns every other rule (scope, last owner).
  */
 export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 	const { logout } = useAuth();
@@ -62,7 +63,7 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 			email: string;
 			subRole: string;
 			roleId?: string;
-		}): Promise<{ message?: string }> => {
+		}): Promise<{ message?: string; acceptUrl?: string }> => {
 			const id = orgId as string;
 			const payload = {
 				email: input.email.trim(),
@@ -73,7 +74,14 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 				kind === "agency"
 					? await addAgencyMember(id, payload, logout)
 					: await addOutletMember(id, payload, logout);
-			return { message: res.message };
+			const data = res.data as
+				| { acceptUrl?: string; emailed?: boolean }
+				| null
+				| undefined;
+			return {
+				message: res.message,
+				acceptUrl: data?.acceptUrl,
+			};
 		},
 		onSuccess: invalidate,
 	});

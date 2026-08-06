@@ -5,8 +5,15 @@ import {
   ALLOWED_PROFILE_IMAGE_EXTENSIONS,
   ensureProfileImageDir,
   PROFILE_IMAGE_UPLOAD_DIR,
+  sanitizePathSegment,
   withProfileImage,
 } from '@/util/profile-image';
+import {
+  isR2ObjectKey,
+  r2Configured,
+  r2DeleteStoredRef,
+  r2PutObject,
+} from '@/util/r2';
 import {
   emptyUserProfileResponse,
   toUserProfileResponse,
@@ -16,32 +23,108 @@ import { UserType } from '@/features/user/user.model';
 
 export const USER_ID_DOC_UPLOAD_DIR = path.join(PROFILE_IMAGE_UPLOAD_DIR, 'id-docs');
 
+const CONTENT_TYPE_BY_EXT: Record<string, string> = {
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.png': 'image/png',
+  '.webp': 'image/webp',
+};
+
 export function ensureUserIdDocDir(): void {
   ensureProfileImageDir();
   fs.mkdirSync(USER_ID_DOC_UPLOAD_DIR, { recursive: true });
 }
 
-export function saveUserIdDocFile(
+export function idDocPublicPath(userId: string, side: 'front' | 'back', ext: string): string {
+  return `/img/users/id-docs/${userId}-${side}${ext}`;
+}
+
+export function isUserIdDocPath(pathname: string | null | undefined): boolean {
+  return Boolean(pathname?.startsWith('/img/users/id-docs/'));
+}
+
+/** R2 key: user/{userId}/id-docs/{side}-{timestamp}{ext} */
+export function idDocObjectKey(
   userId: string,
   side: 'front' | 'back',
-  file: Express.Multer.File,
+  filename: string,
 ): string {
-  ensureUserIdDocDir();
+  const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || `id-${side}`;
+  const ext = path.extname(filename).toLowerCase() || '.jpg';
+  return `user/${userId}/id-docs/${safeName}${ext}`;
+}
+
+function fileBuffer(file: Express.Multer.File): Buffer {
+  if (file.buffer?.length) return file.buffer;
+  if (file.path) return fs.readFileSync(file.path);
+  throw new Error('ID document file has no data');
+}
+
+/**
+ * Upload an ID front/back photo to Cloudflare R2 and return the **object key**.
+ * Clients prepend `R2_PUBLIC_URL`. Falls back to local `/img/…` without R2.
+ */
+export async function saveUserIdDocFile(
+  user: { id: string; fullName?: string | null | undefined },
+  side: 'front' | 'back',
+  file: Express.Multer.File,
+): Promise<string> {
   const ext = path.extname(file.originalname).toLowerCase();
   if (!ALLOWED_PROFILE_IMAGE_EXTENSIONS.has(ext)) {
     throw new Error('Only JPG, PNG, and WebP images are allowed');
   }
 
-  const filename = `${userId}-${side}${ext}`;
-  const filePath = path.join(USER_ID_DOC_UPLOAD_DIR, filename);
+  const body = fileBuffer(file);
+  const contentType =
+    file.mimetype && file.mimetype.startsWith('image/')
+      ? file.mimetype
+      : (CONTENT_TYPE_BY_EXT[ext] ?? 'application/octet-stream');
 
-  if (file.buffer) {
-    fs.writeFileSync(filePath, file.buffer);
-  } else if (file.path) {
-    fs.renameSync(file.path, filePath);
+  if (r2Configured()) {
+    const filename = `id-${side}-${Date.now()}${ext}`;
+    const key = idDocObjectKey(user.id, side, filename);
+    const storedKey = await r2PutObject({ key, body, contentType });
+    if (file.path) {
+      try {
+        fs.unlinkSync(file.path);
+      } catch {
+        // ignore
+      }
+    }
+    return storedKey;
   }
 
-  return `/img/users/id-docs/${filename}`;
+  // Local fallback (no R2_* in env).
+  ensureUserIdDocDir();
+  const filePath = path.join(USER_ID_DOC_UPLOAD_DIR, `${user.id}-${side}${ext}`);
+  fs.writeFileSync(filePath, body);
+  if (file.path && file.path !== filePath) {
+    try {
+      fs.unlinkSync(file.path);
+    } catch {
+      // ignore
+    }
+  }
+  return idDocPublicPath(user.id, side, ext);
+}
+
+export async function deleteUserIdDocFile(
+  pathname: string | null | undefined,
+): Promise<void> {
+  if (!pathname) return;
+
+  if (isR2ObjectKey(pathname) || /^https?:\/\//.test(pathname)) {
+    await r2DeleteStoredRef(pathname);
+    return;
+  }
+
+  if (!isUserIdDocPath(pathname)) return;
+  const filePath = path.join(process.cwd(), 'public', pathname.replace(/^\//, ''));
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+  } catch {
+    // ignore cleanup failures
+  }
 }
 
 /**

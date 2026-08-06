@@ -87,6 +87,8 @@ export const agencyMemberRepository = new AgencyMemberRepositoryClass();
 export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const orgMemberInviteRepository = new OrgMemberInviteRepositoryClass();
+export const subscriptionRepository = new SubscriptionRepositoryClass();
+export const memberSubscriptionRepository = new MemberSubscriptionRepositoryClass();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -100,6 +102,8 @@ export const authController = new AuthControllerClass(
   agencyMemberRepository,
   outletRepository,
   outletMemberRepository,
+  subscriptionRepository,
+  memberSubscriptionRepository,
 );
 export const healthController = new HealthControllerClass();
 
@@ -129,7 +133,6 @@ export const notificationRepository = new NotificationRepositoryClass();
 // The read side. Producers write through notify(); recipients read through here.
 export const notificationController = new NotificationControllerClass(notificationRepository);
 
-export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const subscriptionController = new SubscriptionControllerClass(subscriptionRepository);
 
 export const outletController = new OutletControllerClass(
@@ -138,6 +141,7 @@ export const outletController = new OutletControllerClass(
   userRepository,
   roleRepository,
   orgMemberInviteRepository,
+  userRoleRepository,
 );
 
 export const orgMemberInviteController = new OrgMemberInviteControllerClass(
@@ -149,12 +153,12 @@ export const orgMemberInviteController = new OrgMemberInviteControllerClass(
   userRepository,
   roleRepository,
   userRoleRepository,
+  userProfileRepository,
 );
 
 export const platformConfigRepository = new PlatformConfigRepositoryClass();
 export const platformConfigController = new PlatformConfigControllerClass(platformConfigRepository);
 
-export const memberSubscriptionRepository = new MemberSubscriptionRepositoryClass();
 /**
  * Repositories for resolveOrgScope (util/org-scope.ts), the scope resolver five
  * other controllers already use. Declared after the member repositories.
@@ -200,6 +204,8 @@ export const agencyController = new AgencyControllerClass(
   userProfileRepository,
   roleRepository,
   orgMemberInviteRepository,
+  authRepository,
+  userRoleRepository,
 );
 
 export const specialServiceRepository = new SpecialServiceRepositoryClass();

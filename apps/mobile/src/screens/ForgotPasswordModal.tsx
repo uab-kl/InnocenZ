@@ -19,6 +19,7 @@ import {
   savePhoneCountryCode,
 } from '../lib/phone-prefs';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
+import { formatMessage, useLocale } from '../i18n';
 import { COUNTRY_BY_CODE, COUNTRY_DIAL_OPTIONS } from './sign-up/constants';
 import { Picker } from './sign-up/fields';
 import { normalizeOtpInput } from './sign-up/step-6';
@@ -47,6 +48,7 @@ export function ForgotPasswordModal({
   initialCountryCode,
   initialLocalNumber,
 }: Props) {
+  const { t } = useLocale();
   const keyboardInset = useKeyboardInset();
   const [step, setStep] = useState<Step>('phone');
   const [phoneCountryCode, setPhoneCountryCode] = useState(
@@ -129,11 +131,11 @@ export function ForgotPasswordModal({
   const savePassword = async () => {
     if (!verificationId || busy) return;
     if (password.length < 6) {
-      setError('Password must be at least 6 characters');
+      setError(t.security.passwordMin);
       return;
     }
     if (password !== confirm) {
-      setError('Passwords do not match');
+      setError(t.security.passwordMismatch);
       return;
     }
     setBusy(true);
@@ -157,11 +159,9 @@ export function ForgotPasswordModal({
         >
           {step === 'phone' && (
             <>
-              <Text style={styles.title}>Forgot password</Text>
-              <Text style={styles.hint}>
-                We will send a 6-digit code on WhatsApp to your registered number.
-              </Text>
-              <Text style={styles.label}>Mobile number</Text>
+              <Text style={styles.title}>{t.forgot.title}</Text>
+              <Text style={styles.hint}>{t.forgot.phoneHint}</Text>
+              <Text style={styles.label}>{t.login.mobileNumber}</Text>
               <View style={styles.phoneRow}>
                 <Picker
                   value={phoneCountryCode}
@@ -171,9 +171,9 @@ export function ForgotPasswordModal({
                     savePhoneCountryCode(code);
                   }}
                   width={118}
-                  placeholder="Code"
+                  placeholder={t.login.dialCode}
                   displayValue={closedDialLabel}
-                  title="Country & dial code"
+                  title={t.login.dialTitle}
                   searchable
                 />
                 <TextInput
@@ -192,25 +192,25 @@ export function ForgotPasswordModal({
                 onPress={() => void sendCode()}
                 disabled={busy || !localDigits}
               >
-                <Text style={styles.primaryText}>{busy ? 'Sending…' : 'Send WhatsApp code'}</Text>
+                <Text style={styles.primaryText}>
+                  {busy ? t.forgot.sending : t.forgot.sendCode}
+                </Text>
               </Pressable>
               <Pressable style={styles.cancel} onPress={onClose}>
-                <Text style={styles.cancelText}>Cancel</Text>
+                <Text style={styles.cancelText}>{t.common.cancel}</Text>
               </Pressable>
             </>
           )}
 
           {step === 'otp' && (
             <>
-              <Text style={styles.title}>Enter code</Text>
-              <Text style={styles.hint}>
-                Code sent on WhatsApp to {country?.dialCode ?? ''} {localDigits}
-              </Text>
+              <Text style={styles.title}>{t.forgot.otpTitle}</Text>
+              <Text style={styles.hint}>{t.forgot.otpHint}</Text>
               {info ? <Text style={styles.info}>{info}</Text> : null}
               <TextInput
                 style={styles.input}
                 value={otp}
-                onChangeText={(t) => setOtp(normalizeOtpInput(t))}
+                onChangeText={(text) => setOtp(normalizeOtpInput(text))}
                 placeholder="123456"
                 placeholderTextColor={C.muted2}
                 keyboardType="number-pad"
@@ -224,7 +224,9 @@ export function ForgotPasswordModal({
                 onPress={() => void verifyCode()}
                 disabled={busy || otp.length !== 6}
               >
-                <Text style={styles.primaryText}>{busy ? 'Checking…' : 'Verify code'}</Text>
+                <Text style={styles.primaryText}>
+                  {busy ? t.forgot.verifying : t.forgot.verify}
+                </Text>
               </Pressable>
               <Pressable
                 style={styles.cancel}
@@ -232,36 +234,38 @@ export function ForgotPasswordModal({
                 disabled={resendIn > 0 || busy}
               >
                 <Text style={styles.cancelText}>
-                  {resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend code'}
+                  {resendIn > 0
+                    ? formatMessage(t.forgot.resendIn, { s: resendIn })
+                    : t.forgot.resend}
                 </Text>
               </Pressable>
               <Pressable style={styles.cancel} onPress={() => setStep('phone')}>
-                <Text style={styles.cancelText}>Back</Text>
+                <Text style={styles.cancelText}>{t.common.back}</Text>
               </Pressable>
             </>
           )}
 
           {step === 'password' && (
             <>
-              <Text style={styles.title}>New password</Text>
-              <Text style={styles.hint}>Choose a new password for this account.</Text>
-              <Text style={styles.label}>New password</Text>
+              <Text style={styles.title}>{t.forgot.newPassword}</Text>
+              <Text style={styles.hint}>{t.forgot.phoneHint}</Text>
+              <Text style={styles.label}>{t.forgot.newPassword}</Text>
               <TextInput
                 style={styles.input}
                 value={password}
                 onChangeText={setPassword}
                 secureTextEntry
-                placeholder="At least 6 characters"
+                placeholder={t.security.passwordMin}
                 placeholderTextColor={C.muted2}
                 autoCapitalize="none"
               />
-              <Text style={styles.label}>Confirm password</Text>
+              <Text style={styles.label}>{t.forgot.confirmPassword}</Text>
               <TextInput
                 style={styles.input}
                 value={confirm}
                 onChangeText={setConfirm}
                 secureTextEntry
-                placeholder="Repeat password"
+                placeholder={t.forgot.confirmPassword}
                 placeholderTextColor={C.muted2}
                 autoCapitalize="none"
               />
@@ -271,23 +275,25 @@ export function ForgotPasswordModal({
                 onPress={() => void savePassword()}
                 disabled={busy || password.length < 6}
               >
-                <Text style={styles.primaryText}>{busy ? 'Saving…' : 'Update password'}</Text>
+                <Text style={styles.primaryText}>
+                  {busy ? t.forgot.saving : t.forgot.setPassword}
+                </Text>
               </Pressable>
               <Pressable style={styles.cancel} onPress={() => setStep('otp')}>
-                <Text style={styles.cancelText}>Back</Text>
+                <Text style={styles.cancelText}>{t.common.back}</Text>
               </Pressable>
             </>
           )}
 
           {step === 'done' && (
             <>
-              <Text style={styles.title}>Password updated</Text>
-              <Text style={styles.hint}>You can sign in with your new password.</Text>
+              <Text style={styles.title}>{t.forgot.doneTitle}</Text>
+              <Text style={styles.hint}>{t.forgot.doneBody}</Text>
               <Pressable
                 style={[styles.primary, grad(GRADIENTS.accent, C.accent)]}
                 onPress={onClose}
               >
-                <Text style={styles.primaryText}>Back to sign in</Text>
+                <Text style={styles.primaryText}>{t.forgot.backToSignIn}</Text>
               </Pressable>
             </>
           )}

@@ -123,6 +123,40 @@ export async function fetchAgencyMembers(
 	};
 }
 
+/** Portal RBAC roles for the invite dropdown (owner-scoped; not admin /rbac). */
+export async function fetchAgencyInviteRoles(
+	agencyId: string,
+	onRefreshFail: () => void,
+): Promise<{
+	success: boolean;
+	message: string;
+	data: Array<{
+		id: string;
+		roleName: string;
+		portalId: string | null;
+		portalCode: string;
+		status: string;
+	}>;
+}> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: Array<{
+			id: string;
+			roleName: string;
+			portalId: string | null;
+			portalCode: string;
+			status: string;
+		}>;
+	}>(`/agency/${agencyId}/invite-roles`);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
+}
+
 /**
  * Invite an EXISTING user by email (`POST /agency/:id/members`).
  * Creates an `agency_user` row as `pending` and emails an accept link.

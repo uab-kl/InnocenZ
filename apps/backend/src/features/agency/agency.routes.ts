@@ -14,9 +14,10 @@ router.get(
   agencyController.listMemberships.bind(agencyController),
 );
 // Before '/:id' so the literal path is not captured as an agency id.
+// PRs may read their own links (controller clamps userIds to self).
 router.get(
   '/pr-links',
-  requireRole('admin', 'agency'),
+  requireRole('admin', 'agency', 'pr'),
   agencyController.listPrLinks.bind(agencyController),
 );
 router.get('/:id', requireRole('admin', 'agency', 'outlet'), agencyController.getById.bind(agencyController));
@@ -82,6 +83,11 @@ const canReadMembers = requireRole('admin', 'agency', 'outlet');
 const canWriteMembers = [requireRole('admin', 'agency'), agencyOwnerOfParam];
 
 router.get('/:id/members', canReadMembers, agencyController.listMembers.bind(agencyController));
+router.get(
+  '/:id/invite-roles',
+  ...canWriteMembers,
+  agencyController.listInviteRoles.bind(agencyController),
+);
 router.post('/:id/members', ...canWriteMembers, agencyController.addMember.bind(agencyController));
 router.put('/:id/members/:memberId', ...canWriteMembers, agencyController.updateMember.bind(agencyController));
 router.delete('/:id/members/:memberId', ...canWriteMembers, agencyController.removeMember.bind(agencyController));

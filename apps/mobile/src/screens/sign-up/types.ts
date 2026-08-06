@@ -16,8 +16,8 @@ export const PORTFOLIO_PHOTO_MAX = 8;
 
 export type Draft = {
 	floorNickname: string;
-	firstName: string;
-	lastName: string;
+	/** Legal full name → user_profile.full_name */
+	fullName: string;
 	email: string;
 	/** ISO country for the dial picker (unique even when dial codes are shared). */
 	phoneCountryCode: string | null;
@@ -76,8 +76,7 @@ export type Draft = {
 export function emptyDraft(): Draft {
 	return {
 		floorNickname: '',
-		firstName: '',
-		lastName: '',
+		fullName: '',
 		email: '',
 		phoneCountryCode: loadPhoneCountryCode(),
 		phoneNumber: '',
@@ -172,8 +171,7 @@ export function validateStep(step: number, draft: Draft, localDigits: string): S
 
 	if (step === 1) {
 		if (!draft.floorNickname.trim()) fields.floorNickname = 'Nickname is required.';
-		if (!draft.firstName.trim()) fields.firstName = 'First name is required.';
-		if (!draft.lastName.trim()) fields.lastName = 'Last name is required.';
+		if (!draft.fullName.trim()) fields.fullName = 'Full name is required.';
 		if (!draft.phoneCountryCode) fields.phoneCountryCode = 'Please choose a country dial code.';
 		if (localDigits.length < 9) fields.phone = 'That mobile number looks too short.';
 		if (!draft.nationality.trim()) fields.nationality = 'Nationality is required.';

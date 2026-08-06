@@ -7,12 +7,11 @@ export type AgencyStatus = (typeof agencyStatusValues)[number];
 export const agencyStatusEnum = MainSchema.enum('agency_status', agencyStatusValues);
 
 /**
- * Sub-roles of a portal operator. `pr` was removed in migration 0033 — a PR is
- * not a portal user, and the PR-to-agency link lives on `agency_pr`.
+ * Sub-roles of a portal operator (API / UI labels). Stored on `user_role`→`role`,
+ * not on `agency_user` — membership is tenancy only.
  */
 export const agencyUserSubRoleValues = ['owner', 'finance'] as const;
 export type AgencyUserSubRole = (typeof agencyUserSubRoleValues)[number];
-export const agencyUserSubRoleEnum = MainSchema.enum('agency_user_sub_role', agencyUserSubRoleValues);
 
 export const AgencyTable = MainSchema.table('agency', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
@@ -43,7 +42,6 @@ export const AgencyUserTable = MainSchema.table('agency_user', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
   agencyId: uuid('agency_id').notNull().references(() => AgencyTable.id, { onDelete: 'cascade' }),
   userId: uuid('user_id').notNull().references(() => UserTable.id, { onDelete: 'cascade' }),
-  subRole: agencyUserSubRoleEnum('sub_role').notNull(),
   status: varchar('status', { length: 50 }).notNull().default('active'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),

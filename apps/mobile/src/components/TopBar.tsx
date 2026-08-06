@@ -14,6 +14,7 @@ import {
   markNotificationRead,
   type NotificationRecord,
 } from '../lib/api';
+import { formatMessage, useLocale } from '../i18n';
 import { Avatar, IzButton } from './ui';
 import { Bell, ChevronLeft, FileText } from './icons';
 import { usePrNav } from '../lib/pr-nav';
@@ -38,6 +39,7 @@ export function TopBar({
   onBack?: () => void;
 }) {
   const { me, token } = useSession();
+  const { t } = useLocale();
   const { openPv } = usePrNav();
   const { awaiting } = useAwaitingLastWeekPv();
   const time = useClock();
@@ -100,8 +102,11 @@ export function TopBar({
         ? [
             {
               id: `n-pv-${awaiting.todo.pvId}`,
-              title: 'Payment Voucher ready',
-              body: `${awaiting.todo.ref} · ${formatRM(awaiting.todo.net)} net — Finance Head pre-signed. Review & sign.`,
+              title: t.topbar.pvReadyTitle,
+              body: formatMessage(t.topbar.pvReadyBody, {
+                ref: awaiting.todo.ref,
+                net: formatRM(awaiting.todo.net),
+              }),
               at: weekPvIssueDayLabel(1),
               read: false as boolean,
               pvId: awaiting.todo.pvId as string | undefined,
@@ -114,12 +119,11 @@ export function TopBar({
       ...n,
       read: n.read || readIds.includes(n.id),
     }));
-  }, [rows, awaiting, readIds]);
+  }, [rows, awaiting, readIds, t]);
   const unread = notifications.filter((n) => !n.read).length;
 
   const displayName = me?.username ?? 'PR';
-  const roleLabel = me?.profile.underAgency ? 'PR · Agency-Tied' : 'PR';
-
+  const roleLabel = me?.profile.underAgency ? t.topbar.prAgencyTied : t.topbar.pr;
   return (
     <View style={[styles.topbar, grad(GRADIENTS.topbar, 'transparent')]}>
       {backLabel && onBack ? (
@@ -189,7 +193,7 @@ export function TopBar({
         <View style={styles.sheetBackdrop}>
           <Pressable style={styles.backdropTap} onPress={() => setSheetOpen(false)} />
           <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
-            <Text style={styles.sheetTitle}>Notifications</Text>
+            <Text style={styles.sheetTitle}>{t.topbar.notifications}</Text>
             <Text style={styles.sheetHint}>
               Assignments, swaps, PVs, and SOS receipts — tap to open the screen.
             </Text>
@@ -230,14 +234,14 @@ export function TopBar({
                 }}
               >
                 <Text style={styles.markAllText}>
-                  {markingAll ? 'Marking…' : `Mark all ${unread} as read`}
+                  {markingAll ? t.common.loading : t.topbar.markAllRead}
                 </Text>
               </Pressable>
             )}
 
             <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
             {notifications.length === 0 ? (
-              <Text style={styles.sheetHint}>No notifications right now.</Text>
+              <Text style={styles.sheetHint}>{t.topbar.noNotifications}</Text>
             ) : (
               notifications.map((n) => (
               <Pressable
@@ -276,7 +280,7 @@ export function TopBar({
             </ScrollView>
             {/* Close is red app-wide (owner's colour code). */}
             <Pressable style={styles.sheetCloseBtn} onPress={() => setSheetOpen(false)}>
-              <Text style={styles.sheetCloseText}>Close</Text>
+              <Text style={styles.sheetCloseText}>{t.topbar.close}</Text>
             </Pressable>
           </View>
         </View>

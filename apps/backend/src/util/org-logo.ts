@@ -1,9 +1,9 @@
 /**
  * Organisation logo upload (outlet / agency signup + Settings).
  *
- * R2 key shapes:
- *   agency → agency/{id}_{name}/logo/{logo}
- *   outlet → outlet/{id}_{name}/logo/{logo}
+ * R2 key shapes (flat id folders, same style as user/{id}/…):
+ *   agency → agency/{id}/logo/{filename}
+ *   outlet → outlet/{id}/logo/{filename}
  *
  * Stores the **object key** in `agency.logo_image` / `outlet.logo_image`.
  * Clients resolve display as `R2_PUBLIC_URL + '/' + key`.
@@ -24,21 +24,17 @@ const CONTENT_TYPE_BY_EXT: Record<string, string> = {
   '.gif': 'image/gif',
 };
 
-/** Max decoded payload (~2 MB) — matches the web signup client check. */
-const MAX_BYTES = 2 * 1024 * 1024;
+/** Max decoded payload (~5 MB) — matches the web signup client check. */
+const MAX_BYTES = 5 * 1024 * 1024;
 
 export function orgLogoObjectKey(
   kind: OrgLogoKind,
   orgId: string,
-  orgName: string,
   filename: string,
 ): string {
-  const folder = `${orgId}_${sanitizePathSegment(orgName)}`;
   const safeBase = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'logo';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  const file = `${safeBase}${ext}`;
-  // agency/{id_name}/logo/… and outlet/{id_name}/logo/… — not under user/.
-  return `${kind}/${folder}/logo/${file}`;
+  return `${kind}/${orgId}/logo/${safeBase}${ext}`;
 }
 
 function extFromFileName(fileName: string): string {
@@ -76,7 +72,8 @@ export function decodeLogoBase64(raw: string): Buffer {
 export async function saveOrgLogoFromBase64(input: {
   kind: OrgLogoKind;
   orgId: string;
-  orgName: string;
+  /** Kept for call-site compatibility; not used in the R2 key. */
+  orgName?: string;
   fileName: string;
   contentType?: string;
   base64: string;
@@ -98,7 +95,7 @@ export async function saveOrgLogoFromBase64(input: {
     throw new Error('Logo file is empty');
   }
   if (body.length > MAX_BYTES) {
-    throw new Error('Logo must be 2 MB or smaller');
+    throw new Error('Logo must be 5 MB or smaller');
   }
 
   const contentType =
@@ -108,6 +105,6 @@ export async function saveOrgLogoFromBase64(input: {
 
   // Unique name so a re-upload never serves a cached previous logo.
   const filename = `logo-${Date.now()}${ext}`;
-  const key = orgLogoObjectKey(input.kind, input.orgId, input.orgName, filename);
+  const key = orgLogoObjectKey(input.kind, input.orgId, filename);
   return r2PutObject({ key, body, contentType });
 }

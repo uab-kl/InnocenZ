@@ -213,7 +213,7 @@ export function Step5Summary({
 	const portfolioTileW =
 		portfolioGridW > 0 ? (portfolioGridW - portfolioGap) / 2 : 0;
 	const portfolioTileH = portfolioTileW > 0 ? portfolioTileW * (4 / 3) : 0;
-	const legalName = `${draft.firstName} ${draft.lastName}`.trim();
+	const legalName = draft.fullName.trim();
 	const agencyName = agencies.find((a) => a.id === draft.agencyId)?.name || '—';
 	const address = [
 		draft.addressLine1,

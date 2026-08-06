@@ -50,8 +50,8 @@ export function PortfolioGalleryPicker({
 			onWarn?.("Please choose an image file");
 			return;
 		}
-		if (file.size > 2_500_000) {
-			onWarn?.("Image must be under 2.5 MB (prototype limit)");
+		if (file.size > 5 * 1024 * 1024) {
+			onWarn?.("Image must be under 5 MB");
 			return;
 		}
 		readImageFile(file, (dataUrl) => {

@@ -262,6 +262,40 @@ export async function fetchOutletMembers(
 	};
 }
 
+/** Portal RBAC roles for the invite dropdown (owner-scoped; not admin /rbac). */
+export async function fetchOutletInviteRoles(
+	outletId: string,
+	onRefreshFail: () => void,
+): Promise<{
+	success: boolean;
+	message: string;
+	data: Array<{
+		id: string;
+		roleName: string;
+		portalId: string | null;
+		portalCode: string;
+		status: string;
+	}>;
+}> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: Array<{
+			id: string;
+			roleName: string;
+			portalId: string | null;
+			portalCode: string;
+			status: string;
+		}>;
+	}>(`/outlet/${outletId}/invite-roles`);
+	return {
+		success: response.data.success,
+		message: response.data.message,
+		data: response.data.data ?? [],
+	};
+}
+
 // The geocode and geo-fence calls live above: geocodeOutletAddress,
 // geocodeOutletFreeText and setOutletGeoFence. A second pair of them arrived
 // on the same merge under different names, hitting the identical two

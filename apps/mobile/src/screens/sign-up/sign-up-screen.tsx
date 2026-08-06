@@ -12,12 +12,15 @@ import {
 	fetchPublicAgencies,
 	registerPr,
 	sendPrOtp,
+	updateUserProfile,
 	verifyPrOtp,
 	type PublicAgency,
 	type RegisterCheckConflict,
 } from '../../lib/api';
 import { useSession } from '../../lib/session';
+import { formatMessage, useLocale } from '../../i18n';
 import { IzButton } from '../../components/ui';
+import { LanguageSwitcher } from '../../components/LanguageSwitcher';
 import { ChevronLeft } from '../../components/icons';
 import { CODE_LENGTH, RESEND_SECONDS, STEPS } from './constants';
 import { emptyDraft, phoneParts, validateStep, type Draft, type FieldErrors } from './types';
@@ -45,8 +48,14 @@ function SignUpScreenInner({
 	onBackToSignIn: () => void;
 	scroller: React.RefObject<ScrollView | null>;
 }) {
-	const { signIn, uploadAvatar, generateComcard, uploadIdDoc, uploadPortfolioPhoto } =
-		useSession();
+	const {
+		signIn,
+		uploadAvatar,
+		generateComcard,
+		uploadIdDoc,
+		uploadPortfolioPhoto,
+	} = useSession();
+	const { t } = useLocale();
 	const insets = useSafeAreaInsets();
 	const keyboardScroll = useKeyboardScroll();
 	const keyboardHeight = keyboardScroll?.keyboardHeight ?? 0;
@@ -85,6 +94,10 @@ function SignUpScreenInner({
 
 	const agencyFetched = useRef(false);
 	const current = STEPS[step - 1];
+	const stepCopy = t.signup.steps[step - 1] ?? {
+		title: current.title,
+		subtitle: current.subtitle,
+	};
 	const patch = (part: Partial<Draft>) => setDraft((d) => ({ ...d, ...part }));
 	const clearFieldError = useCallback((key: keyof FieldErrors) => {
 		setFieldErrors((prev) => {
@@ -263,7 +276,7 @@ function SignUpScreenInner({
 				email: draft.email.trim() || undefined,
 				...(draft.agencyId ? { agencyId: draft.agencyId } : {}),
 				profile: {
-					fullName: `${draft.firstName} ${draft.lastName}`.trim(),
+					fullName: draft.fullName.trim(),
 					nationality: draft.nationality.trim(),
 					idType: draft.idType,
 					idNo: draft.idNo.trim(),
@@ -284,7 +297,23 @@ function SignUpScreenInner({
 					languages: draft.languages,
 				},
 			});
-			await signIn(phoneNum, draft.password);
+			const { user: signedIn, accessToken } = await signIn(phoneNum, draft.password);
+			// Guarantee ID is on user_profile — heal if register left it blank.
+			if (
+				!signedIn.profile.idNo &&
+				draft.idType &&
+				draft.idNo.trim() &&
+				draft.dob.trim()
+			) {
+				await updateUserProfile(accessToken, signedIn.id, {
+					username: signedIn.username,
+					idType: draft.idType,
+					idNo: draft.idNo.trim(),
+					dob: draft.dob.trim(),
+				}).catch(() => {
+					/* non-fatal — register already created the account */
+				});
+			}
 			try {
 				if (draft.profileImageFile) {
 					await uploadAvatar(draft.profileImageFile, 'avatar.jpg');
@@ -327,10 +356,16 @@ function SignUpScreenInner({
 
 	const primary =
 		step < 5
-			? { label: busy ? 'Please wait…' : 'Continue', onPress: goNext }
+			? { label: busy ? t.common.loading : t.common.continue, onPress: goNext }
 			: step === 5
-				? { label: busy ? 'Sending…' : 'Create account', onPress: () => proceedToVerification() }
-				: { label: busy ? 'Submitting…' : 'Verify & submit', onPress: verifyAndSubmit };
+				? {
+						label: busy ? t.signup.submitting : t.signup.submit,
+						onPress: () => proceedToVerification(),
+					}
+				: {
+						label: busy ? t.signup.submitting : t.common.continue,
+						onPress: verifyAndSubmit,
+					};
 
 	// Shrink the screen by the keyboard height so fields + footer stay above it.
 	const liftedPad = keyboardHeight > 0 ? Math.max(0, keyboardHeight - insets.bottom) : 0;
@@ -352,14 +387,17 @@ function SignUpScreenInner({
 			) : null}
 
 			<View style={styles.head}>
+				<View style={styles.langRow}>
+					<LanguageSwitcher compact />
+				</View>
 				<Text style={styles.eyebrow}>
-					STEP {step} OF {STEPS.length}
+					{formatMessage(t.signup.stepOf, { step, total: STEPS.length })}
 				</Text>
 				<View style={styles.titleRow}>
 					<current.icon size={19} color={C.accent} strokeWidth={2.2} />
-					<Text style={styles.title}>{current.title}</Text>
+					<Text style={styles.title}>{stepCopy.title}</Text>
 				</View>
-				<Text style={styles.subtitle}>{current.subtitle}</Text>
+				<Text style={styles.subtitle}>{stepCopy.subtitle}</Text>
 			</View>
 
 			<View style={styles.dots}>
@@ -445,7 +483,7 @@ function SignUpScreenInner({
 			<View style={[styles.footer, { paddingBottom: 4 }]}>
 				<View style={styles.footerHalf}>
 					<IzButton
-						label={step === 1 ? 'Back' : 'Previous'}
+						label={step === 1 ? t.signup.backToSignIn : t.signup.previous}
 						icon={ChevronLeft}
 						variant="soft"
 						small
@@ -469,6 +507,10 @@ function SignUpScreenInner({
 const styles = StyleSheet.create({
 	screen: { flex: 1, paddingHorizontal: 18 },
 	head: { marginBottom: 12 },
+	langRow: {
+		alignSelf: 'flex-end',
+		marginBottom: 8,
+	},
 	eyebrow: {
 		fontFamily: F.sora,
 		fontSize: 11,

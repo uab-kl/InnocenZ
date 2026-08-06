@@ -20,7 +20,7 @@ import {
 	UserRound,
 	type LucideIcon,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { SignupAcknowledgements } from "@/components/auth/signup-acknowledgements";
 import { Button } from "@/components/ui/button";
@@ -58,7 +58,10 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
-import { getSignupPackages } from "@/constants/signup-packages";
+import {
+	fetchSignupPackages,
+	type SignupPackageOption,
+} from "@/constants/signup-packages";
 import {
 	type SignupAccountType,
 	signupAccountTypes,
@@ -100,7 +103,7 @@ function RequiredMark() {
 
 export function SignupForm() {
 	const navigate = useNavigate();
-	const { locale, t } = useLandingLocale();
+	const { t } = useLandingLocale();
 	const copy = t.signup;
 	const fields = copy.fields;
 	const signupSchema = useMemo(
@@ -113,6 +116,11 @@ export function SignupForm() {
 	const [successOpen, setSuccessOpen] = useState(false);
 	const [registeredAs, setRegisteredAs] = useState<SignupAccountType>("outlet");
 	const [sameAsCompanyEmail, setSameAsCompanyEmail] = useState(false);
+	const [accountType, setAccountType] = useState<SignupAccountType>("outlet");
+	const [packages, setPackages] = useState<SignupPackageOption[]>([]);
+	const [packagesLoading, setPackagesLoading] = useState(true);
+	const [packagesError, setPackagesError] = useState<string | null>(null);
+	const [packagesTick, setPackagesTick] = useState(0);
 
 	const goToLogin = () => {
 		setSuccessOpen(false);
@@ -137,7 +145,7 @@ export function SignupForm() {
 			loginEmail: "",
 			password: "",
 			confirmPassword: "",
-			packageId: getSignupPackages("outlet", locale)[0]?.id ?? "",
+			packageId: "",
 			logoFile: null as File | null,
 			ackPersonalInfo: false,
 			ackDeclarationOfTruth: false,
@@ -194,6 +202,44 @@ export function SignupForm() {
 		},
 	});
 
+	// Client-only load from `main.subscription` (avoid SSR empty dehydrate).
+	useEffect(() => {
+		let cancelled = false;
+		setPackagesLoading(true);
+		setPackagesError(null);
+		fetchSignupPackages(accountType)
+			.then((list) => {
+				if (cancelled) return;
+				setPackages(list);
+				const current = form.getFieldValue("packageId");
+				const stillValid = list.some((pkg) => pkg.id === current);
+				form.setFieldValue(
+					"packageId",
+					stillValid ? current : (list[0]?.id ?? ""),
+				);
+			})
+			.catch((err) => {
+				if (cancelled) return;
+				setPackages([]);
+				form.setFieldValue("packageId", "");
+				const message = axios.isAxiosError(err)
+					? ((err.response?.data as { message?: string })?.message ??
+						err.message)
+					: err instanceof Error
+						? err.message
+						: "Could not load plans";
+				setPackagesError(message);
+			})
+			.finally(() => {
+				if (!cancelled) setPackagesLoading(false);
+			});
+		return () => {
+			cancelled = true;
+		};
+		// form is a stable tanstack form API; packagesTick forces manual retry.
+		// eslint-disable-next-line react-hooks/exhaustive-deps -- reload on account / retry only
+	}, [accountType, packagesTick]);
+
 	return (
 		<>
 		<form
@@ -229,8 +275,8 @@ export function SignupForm() {
 										disabled={form.state.isSubmitting}
 										onClick={() => {
 											field.handleChange(type.key);
-											const packages = getSignupPackages(type.key, locale);
-											form.setFieldValue("packageId", packages[0]?.id ?? "");
+											setAccountType(type.key);
+											form.setFieldValue("packageId", "");
 										}}
 										className={cn(
 											"flex flex-col items-start gap-2 rounded-xl border px-4 py-4 text-left transition-all",
@@ -583,63 +629,90 @@ export function SignupForm() {
 				<section className="space-y-6">
 					<SectionTitle>{copy.sections.packageEnrollment}</SectionTitle>
 
-					<form.Subscribe selector={(state) => state.values.accountType}>
-						{(accountType) => (
-							<form.Field name="packageId">
-								{(field) => {
-									const packages = getSignupPackages(accountType, locale);
-									const isInvalid =
-										field.state.meta.isDirty && !field.state.meta.isValid;
-									const selected = packages.find(
-										(pkg) => pkg.id === field.state.value,
-									);
+					<form.Field name="packageId">
+						{(field) => {
+							const isInvalid =
+								field.state.meta.isDirty && !field.state.meta.isValid;
+							const selected = packages.find(
+								(pkg) => pkg.id === field.state.value,
+							);
+							const empty =
+								!packagesLoading && !packagesError && packages.length === 0;
 
-									return (
-										<Field data-invalid={isInvalid}>
-											<FieldLabel
-												htmlFor={field.name}
-												className="login-field-label"
-											>
-												{fields.package.label}
-												<RequiredMark />
-											</FieldLabel>
-											<Select
-												value={field.state.value}
-												onValueChange={field.handleChange}
-												disabled={form.state.isSubmitting}
-											>
-												<SelectTrigger
-													id={field.name}
-													className="login-input-group h-auto w-full border-royal-gold/20 bg-background/60 py-3"
+							return (
+								<Field data-invalid={isInvalid}>
+									<FieldLabel
+										htmlFor={field.name}
+										className="login-field-label"
+									>
+										{fields.package.label}
+										<RequiredMark />
+									</FieldLabel>
+									<Select
+										value={field.state.value || undefined}
+										onValueChange={field.handleChange}
+										disabled={
+											form.state.isSubmitting ||
+											packagesLoading ||
+											packages.length === 0
+										}
+									>
+										<SelectTrigger
+											id={field.name}
+											className="login-input-group h-auto w-full border-royal-gold/20 bg-background/60 py-3"
+										>
+											<SelectValue
+												placeholder={
+													packagesLoading
+														? "Loading plans…"
+														: fields.package.placeholder
+												}
+											/>
+										</SelectTrigger>
+										<SelectContent className="signup-package-select-content">
+											{packages.map((pkg) => (
+												<SelectItem
+													key={pkg.id}
+													value={pkg.id}
+													className="signup-package-item py-3 text-[1.5rem] leading-snug"
 												>
-													<SelectValue
-														placeholder={fields.package.placeholder}
-													/>
-												</SelectTrigger>
-												<SelectContent className="signup-package-select-content">
-													{packages.map((pkg) => (
-														<SelectItem
-															key={pkg.id}
-															value={pkg.id}
-															className="signup-package-item py-3 text-[1.5rem] leading-snug"
-														>
-															{pkg.name} · {pkg.capacity} · {pkg.priceLabel}
-															{pkg.period}
-														</SelectItem>
-													))}
-												</SelectContent>
-											</Select>
-											{selected && (
-												<FieldDescription className="signup-helper text-muted-foreground">
-													{selected.detail}
-												</FieldDescription>
-											)}
-										</Field>
-									);
-								}}
-							</form.Field>
-						)}
-					</form.Subscribe>
+													{pkg.name} · {pkg.capacity} · {pkg.priceLabel}
+													{pkg.period}
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+									{packagesLoading && (
+										<FieldDescription className="signup-helper text-muted-foreground">
+											Loading plans from the catalog…
+										</FieldDescription>
+									)}
+									{packagesError && (
+										<FieldDescription className="signup-helper flex flex-wrap items-center gap-2 text-destructive">
+											<span>Could not load plans: {packagesError}</span>
+											<button
+												type="button"
+												className="underline underline-offset-2"
+												onClick={() => setPackagesTick((n) => n + 1)}
+											>
+												Retry
+											</button>
+										</FieldDescription>
+									)}
+									{empty && (
+										<FieldDescription className="signup-helper text-muted-foreground">
+											No active plans for this account type in the database.
+										</FieldDescription>
+									)}
+									{selected && !packagesLoading && (
+										<FieldDescription className="signup-helper text-muted-foreground">
+											{selected.detail}
+										</FieldDescription>
+									)}
+								</Field>
+							);
+						}}
+					</form.Field>
 				</section>
 
 				<section className="space-y-6">

@@ -373,7 +373,8 @@ export function ShiftStatusPanel({
                   const uri =
                     it.src.startsWith('data:') || it.src.startsWith('http')
                       ? it.src
-                      : assetUrl(it.src) ?? it.src;
+                      : assetUrl(it.src);
+                  if (!uri) return null;
                   return (
                     <View key={`${it.lineId}-${it.idx}`} style={styles.galleryItem}>
                       <Pressable onPress={() => setLightbox(uri)}>

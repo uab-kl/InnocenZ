@@ -17,7 +17,7 @@ export type PickedImage = {
   filename: string;
   /** Local URI for an instant <Image> preview, when available. */
   previewUri: string | null;
-  /** Size in bytes when known (used for the 2.5 MB guard). */
+  /** Size in bytes when known (used for the 5 MB guard). */
   size: number | null;
 };
 

@@ -1,9 +1,9 @@
 /**
  * Removes mistaken specialized portal roles (agency_owner, outlet_owner, …).
- * Org lanes stay on membership.sub_role; portal access uses agency / outlet.
+ * Org lanes live on user_role → role (Owner / Finance / Ops Head per portal).
  *
  * For each user holding a specialized role:
- *   - ensure they also have agency or outlet
+ *   - ensure they also have agency or outlet Owner (legacy remap)
  *   - drop the specialized user_role row
  * Then delete role_permission + role for those names.
  *

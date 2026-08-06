@@ -159,7 +159,6 @@ async function ensureOwnerMembership(userId: string, outletId: string): Promise<
       and(
         eq(OutletUserTable.userId, userId),
         eq(OutletUserTable.outletId, outletId),
-        eq(OutletUserTable.subRole, 'owner'),
       ),
     )
     .limit(1);
@@ -176,7 +175,6 @@ async function ensureOwnerMembership(userId: string, outletId: string): Promise<
   await db.insert(OutletUserTable).values({
     outletId,
     userId,
-    subRole: 'owner',
     status: 'active',
     createdBy: ACTOR,
     updatedBy: ACTOR,

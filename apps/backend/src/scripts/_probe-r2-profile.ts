@@ -19,7 +19,7 @@ async function main() {
     process.exit(1);
   }
 
-  const key = `user/pr/_probe_test/profile-${Date.now()}.png`;
+  const key = `user/_probe/profile-${Date.now()}.png`;
   const url = await r2PutObject({
     key,
     body: PNG,

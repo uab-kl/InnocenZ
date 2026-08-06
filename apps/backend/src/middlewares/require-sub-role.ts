@@ -7,10 +7,10 @@ import {
 import { Error } from '@/error/index.js';
 import { requirePermission } from '@/middlewares/require-permission.js';
 import { portalRoleName } from '@/types/rbac-constant.js';
+import { laneFromRoleHints } from '@/features/rbac/portal-role-map.js';
 
 /**
- * Org ACL: portal role (`agency` / `outlet`) on user_role + membership.sub_role
- * for lane checks. Membership also carries tenancy (which org).
+ * Org ACL: portal lane from user_role → role; membership for tenancy only.
  */
 
 export type AgencySubRole = 'owner' | 'finance';
@@ -39,9 +39,13 @@ async function holdsAgencyLane(
     );
   if (!hasAgencyPortal) return false;
   const memberships = await agencyMemberRepository.listByUser(userId);
-  return memberships.some(
-    (m) => m.status === 'active' && allowed.includes(m.subRole as AgencySubRole),
+  if (!memberships.some((m) => m.status === 'active')) return false;
+  const lane = laneFromRoleHints(
+    'agency',
+    roles.map((r) => ({ portalCode: r.portalCode, roleName: r.roleName })),
   );
+  const agencyLane: AgencySubRole = lane === 'operations_head' ? 'finance' : lane;
+  return allowed.includes(agencyLane);
 }
 
 async function holdsOutletLane(
@@ -60,9 +64,12 @@ async function holdsOutletLane(
     );
   if (!hasOutletPortal) return false;
   const memberships = await outletMemberRepository.listByUser(userId);
-  return memberships.some(
-    (m) => m.status === 'active' && allowed.includes(m.subRole as OutletSubRole),
+  if (!memberships.some((m) => m.status === 'active')) return false;
+  const lane = laneFromRoleHints(
+    'outlet',
+    roles.map((r) => ({ portalCode: r.portalCode, roleName: r.roleName })),
   );
+  return allowed.includes(lane);
 }
 
 function guard(

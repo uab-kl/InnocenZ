@@ -40,6 +40,8 @@ import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository.js';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository.js';
+import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
+import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
 
 export class AuthControllerClass {
@@ -56,6 +58,8 @@ export class AuthControllerClass {
     private agencyMemberRepository: AgencyMemberRepositoryClass,
     private outletRepository: OutletRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
+    private subscriptionRepository: SubscriptionRepositoryClass,
+    private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
   ) {}
 
   /** Wrong attempts before the account locks. */
@@ -478,10 +482,16 @@ export class AuthControllerClass {
       await this.agencyMemberRepository.add({
         agencyId: agency.id,
         userId,
-        subRole: 'owner',
         status: 'active',
         createdBy: actor,
         updatedBy: actor,
+      });
+      await this.enrollSignupPackage({
+        accountType: 'agency',
+        orgId: agency.id,
+        orgName: agency.name,
+        packageId: body.packageId,
+        actor,
       });
       logger.info('[AuthController.register] Agency created for signup', {
         agencyId: agency.id,
@@ -508,10 +518,16 @@ export class AuthControllerClass {
     await this.outletMemberRepository.add({
       outletId: outlet.id,
       userId,
-      subRole: 'owner',
       status: 'active',
       createdBy: actor,
       updatedBy: actor,
+    });
+    await this.enrollSignupPackage({
+      accountType: 'outlet',
+      orgId: outlet.id,
+      orgName: outlet.name,
+      packageId: body.packageId,
+      actor,
     });
     logger.info('[AuthController.register] Outlet created for signup', {
       outletId: outlet.id,
@@ -519,6 +535,66 @@ export class AuthControllerClass {
       packageId: body.packageId ?? null,
     });
     return { kind: 'outlet', id: outlet.id, name: outlet.name };
+  }
+
+  /**
+   * Write the chosen catalog plan into `member_subscription`.
+   * `packageId` is `subscription.id` (UUID) from GET /auth/signup-packages.
+   */
+  private async enrollSignupPackage(input: {
+    accountType: 'agency' | 'outlet';
+    orgId: string;
+    orgName: string;
+    packageId?: string;
+    actor: string;
+  }): Promise<void> {
+    const packageId = input.packageId?.trim();
+    if (!packageId) {
+      logger.warn('[AuthController.enrollSignupPackage] No packageId on signup', {
+        orgId: input.orgId,
+      });
+      return;
+    }
+
+    const plan = await this.subscriptionRepository.getSubscriptionById(packageId);
+    if (!plan || plan.status !== 'active' || (plan.kind ?? 'plan') !== 'plan') {
+      logger.warn('[AuthController.enrollSignupPackage] Invalid packageId', {
+        packageId,
+        orgId: input.orgId,
+      });
+      return;
+    }
+    if (
+      plan.subscriptionType &&
+      plan.subscriptionType !== input.accountType
+    ) {
+      logger.warn('[AuthController.enrollSignupPackage] Plan audience mismatch', {
+        packageId,
+        expected: input.accountType,
+        got: plan.subscriptionType,
+      });
+      return;
+    }
+
+    const row = await this.memberSubscriptionRepository.create({
+      subscriberType: input.accountType,
+      subscriberId: input.orgId,
+      subscriberName: input.orgName,
+      subscriptionId: plan.id,
+      planName: plan.name,
+      amount: plan.price,
+      billingCycle: plan.billingCycle,
+      status: 'active',
+      startedAt: new Date(),
+      createdBy: input.actor,
+      updatedBy: input.actor,
+    });
+    if (!row) {
+      logger.error('[AuthController.enrollSignupPackage] Ledger insert failed', {
+        packageId,
+        orgId: input.orgId,
+      });
+    }
   }
 
   /**
@@ -742,7 +818,7 @@ export class AuthControllerClass {
         parsedBody.state &&
         parsedBody.country
       ) {
-        await this.userProfileRepository.update(user.id, {
+        const savedProfile = await this.userProfileRepository.update(user.id, {
           fullName: parsedBody.fullName,
           nationality: parsedBody.nationality,
           idType: parsedBody.idType,
@@ -775,6 +851,21 @@ export class AuthControllerClass {
           verificationStatus: 'pending',
           updatedBy: actor,
         });
+        // Public PR sign-up is useless without a persisted ID number — refuse
+        // rather than returning 201 with a blank profile.
+        if (isPublicPr && (!savedProfile?.idNo || !savedProfile.idType)) {
+          logger.error('[AuthController.register] Identity not persisted after profile update', {
+            userId: user.id,
+            hasRow: Boolean(savedProfile),
+            idNo: parsedBody.idNo,
+            idType: parsedBody.idType,
+          });
+          return res.status(500).json({
+            success: false,
+            message: 'Could not save ID details — please try again',
+            data: null,
+          });
+        }
       } else if (
         (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') &&
         parsedBody.personInCharge
@@ -783,6 +874,12 @@ export class AuthControllerClass {
         await this.userProfileRepository.update(user.id, {
           fullName: parsedBody.personInCharge,
           updatedBy: actor,
+        });
+      } else if (isPublicPr) {
+        return res.status(400).json({
+          success: false,
+          message: 'Profile details including ID number are required for PR sign-up',
+          data: null,
         });
       }
 
