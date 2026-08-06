@@ -202,7 +202,9 @@ export async function fetchOutletMembershipsForUser(
  */
 export async function addOutletMember(
 	outletId: string,
-	payload: { email: string; subRole: string } | { userId: string; subRole: string },
+	payload:
+		| { email: string; subRole?: string; roleId?: string }
+		| { userId: string; subRole?: string; roleId?: string },
 	onRefreshFail: () => void,
 ): Promise<OutletMemberApiResponse> {
 	const client = getClient(onRefreshFail);

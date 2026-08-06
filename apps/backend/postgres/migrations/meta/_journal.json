@@ -729,6 +729,20 @@
       "when": 1787800000000,
       "tag": "0103_rbac_portal_cru",
       "breakpoints": true
+    },
+    {
+      "idx": 104,
+      "version": "7",
+      "when": 1787900000000,
+      "tag": "0104_role_portal_name_unique",
+      "breakpoints": true
+    },
+    {
+      "idx": 105,
+      "version": "7",
+      "when": 1788000000000,
+      "tag": "0105_drop_agency_outlet_identity_roles",
+      "breakpoints": true
     }
   ]
 }

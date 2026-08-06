@@ -61,9 +61,14 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 		mutationFn: async (input: {
 			email: string;
 			subRole: string;
+			roleId?: string;
 		}): Promise<{ message?: string }> => {
 			const id = orgId as string;
-			const payload = { email: input.email.trim(), subRole: input.subRole };
+			const payload = {
+				email: input.email.trim(),
+				subRole: input.subRole,
+				...(input.roleId ? { roleId: input.roleId } : {}),
+			};
 			const res =
 				kind === "agency"
 					? await addAgencyMember(id, payload, logout)

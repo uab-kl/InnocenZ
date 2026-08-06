@@ -21,7 +21,6 @@ import { cn, getErrorMessage, statusColors } from "@/lib/utils";
 import type { PortalCode, RbacPagination, RbacRole } from "@/services/rbac";
 
 export type RoleStatusFilter = "all" | "active" | "inactive";
-export type RolePortalFilter = "all" | PortalCode;
 
 interface RolesGridProps {
 	roles: RbacRole[];
@@ -33,21 +32,12 @@ interface RolesGridProps {
 	isError: boolean;
 	error: Error | null;
 	statusFilter: RoleStatusFilter;
-	portalFilter: RolePortalFilter;
 	onStatusFilterChange: (value: RoleStatusFilter) => void;
-	onPortalFilterChange: (value: RolePortalFilter) => void;
 	onPageChange: (page: number) => void;
 	onRetry: () => void;
 	onCreateClick: () => void;
 	onRoleClick: (role: RbacRole) => void;
 }
-
-const PORTAL_TABS: { value: RolePortalFilter; label: string }[] = [
-	{ value: "all", label: "All" },
-	{ value: "admin", label: "Admin" },
-	{ value: "agency", label: "Agency" },
-	{ value: "outlet", label: "Outlet" },
-];
 
 type PortalGroupKey = PortalCode | "none";
 
@@ -106,76 +96,46 @@ export function RolesGrid({
 	isError,
 	error,
 	statusFilter,
-	portalFilter,
 	onStatusFilterChange,
-	onPortalFilterChange,
 	onPageChange,
 	onRetry,
 	onCreateClick,
 	onRoleClick,
 }: RolesGridProps) {
-	const filtered =
-		portalFilter === "all"
-			? roles
-			: roles.filter((r) => r.portalCode === portalFilter);
-
 	const groups = PORTAL_GROUPS.map((meta) => ({
 		...meta,
-		roles: filtered
+		roles: roles
 			.filter((r) => groupKey(r) === meta.key)
 			.sort((a, b) =>
 				formatRoleName(a.roleName).localeCompare(formatRoleName(b.roleName)),
 			),
-	})).filter((g) => {
-		if (portalFilter !== "all" && g.key !== portalFilter) return false;
-		return g.roles.length > 0 || (portalFilter !== "all" && g.key === portalFilter);
-	});
+	})).filter((g) => g.roles.length > 0);
 
 	return (
 		<div className="space-y-5">
-			<div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-				<div className="inline-flex w-fit rounded-lg border border-(--lavender-soft)/35 bg-card/80 p-1">
-					{PORTAL_TABS.map((tab) => (
-						<button
-							key={tab.value}
-							type="button"
-							onClick={() => onPortalFilterChange(tab.value)}
-							className={cn(
-								"rounded-md px-4 py-2 text-base font-medium transition-colors",
-								portalFilter === tab.value
-									? "bg-[color:var(--lavender-soft)] text-lavender shadow-sm"
-									: "text-muted-foreground hover:text-foreground",
-							)}
-						>
-							{tab.label}
-						</button>
-					))}
-				</div>
-
-				<div className="flex flex-wrap items-center gap-2">
-					{isFetching && (
-						<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-					)}
-					<Select
-						value={statusFilter}
-						onValueChange={(value) =>
-							onStatusFilterChange(value as RoleStatusFilter)
-						}
-					>
-						<SelectTrigger className="w-36" aria-label="Filter by status">
-							<SelectValue placeholder="Status" />
-						</SelectTrigger>
-						<SelectContent>
-							<SelectItem value="all">All status</SelectItem>
-							<SelectItem value="active">Active</SelectItem>
-							<SelectItem value="inactive">Inactive</SelectItem>
-						</SelectContent>
-					</Select>
-					<Button onClick={onCreateClick} className="shrink-0">
-						<Plus className="mr-2 h-4 w-4" />
-						Create Role
-					</Button>
-				</div>
+			<div className="flex flex-wrap items-center justify-end gap-2">
+				{isFetching && (
+					<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+				)}
+				<Select
+					value={statusFilter}
+					onValueChange={(value) =>
+						onStatusFilterChange(value as RoleStatusFilter)
+					}
+				>
+					<SelectTrigger className="w-36" aria-label="Filter by status">
+						<SelectValue placeholder="Status" />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value="all">All status</SelectItem>
+						<SelectItem value="active">Active</SelectItem>
+						<SelectItem value="inactive">Inactive</SelectItem>
+					</SelectContent>
+				</Select>
+				<Button onClick={onCreateClick} className="shrink-0">
+					<Plus className="mr-2 h-4 w-4" />
+					Create Role
+				</Button>
 			</div>
 
 			{isLoading && roles.length === 0 ? (
@@ -197,10 +157,10 @@ export function RolesGrid({
 						Try again
 					</Button>
 				</div>
-			) : filtered.length === 0 ? (
+			) : roles.length === 0 ? (
 				<div className="flex min-h-56 flex-col items-center justify-center gap-2 rounded-2xl border border-dashed border-(--lavender-soft)/40 bg-card/40 text-muted-foreground">
 					<Shield className="h-7 w-7 opacity-60" />
-					<span className="text-sm">No roles for this filter</span>
+					<span className="text-sm">No roles yet</span>
 				</div>
 			) : (
 				<div className="space-y-4">

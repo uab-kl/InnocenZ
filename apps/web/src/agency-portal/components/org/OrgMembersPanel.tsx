@@ -6,35 +6,57 @@ import {
 	useOrgMembers,
 } from "@agency-portal/hooks/use-org-members";
 import { useStore } from "@agency-portal/lib/store";
-import { useProfile } from "@/lib/auth/use-profile";
+import { useQuery } from "@tanstack/react-query";
 import { Mail, Trash2, UserPlus } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { kickToLogin } from "@/lib/auth/guards";
+import { useProfile } from "@/lib/auth/use-profile";
+import { fetchRoles } from "@/services/rbac";
 
-/** Invite lanes map to portal roles (agency_owner, outlet_ops, …) on the server. */
-const SUB_ROLES: Record<OrgKind, Array<{ value: string; label: string }>> = {
+/** Fallback when portal RBAC roles have not been seeded yet. */
+const FALLBACK_SUB_ROLES: Record<
+	OrgKind,
+	Array<{ value: string; label: string }>
+> = {
 	agency: [
-		{ value: "owner", label: "Agency Owner" },
-		{ value: "finance", label: "Agency Finance" },
+		{ value: "owner", label: "Owner" },
+		{ value: "finance", label: "Finance" },
 	],
 	outlet: [
-		{ value: "owner", label: "Outlet Owner" },
-		{ value: "finance", label: "Outlet Finance" },
-		{ value: "operations_head", label: "Outlet Ops" },
+		{ value: "owner", label: "Owner" },
+		{ value: "finance", label: "Finance" },
+		{ value: "operations_head", label: "Ops" },
 	],
 };
 
-const labelFor = (kind: OrgKind, subRole: string) =>
-	SUB_ROLES[kind].find((r) => r.value === subRole)?.label ?? subRole;
+function formatRoleName(name: string) {
+	return name.replace(/_/g, " ");
+}
+
+function inferSubRole(kind: OrgKind, roleName: string): string {
+	const n = roleName.trim().toLowerCase().replace(/[_\s]+/g, " ");
+	if (
+		n === "owner" ||
+		n.includes("owner") ||
+		n === "agency" ||
+		n === "outlet"
+	) {
+		return "owner";
+	}
+	if (n.includes("finance")) return "finance";
+	if (kind === "outlet" && (n.includes("ops") || n.includes("operation"))) {
+		return "operations_head";
+	}
+	return kind === "agency" ? "finance" : "operations_head";
+}
 
 /**
  * Staff of one organisation: who is in it, what they may do, and adding or
  * removing them.
  *
- * Every rule lives on the server — a member id from another org 404s, and
- * anything that would leave the org with no active owner 409s. This panel does
- * not pre-empt those checks; it shows what the server said. A client-side copy
- * of a permission rule drifts, and the copy that drifts is the one the user
- * believes.
+ * Invite role options come from RBAC roles for this portal only.
+ * Membership still uses owner / finance / ops for org gates; the selected
+ * portal role is what gets granted on accept.
  */
 export function OrgMembersPanel({
 	kind,
@@ -49,15 +71,78 @@ export function OrgMembersPanel({
 	const { data: me } = useProfile();
 	const { members, isLoading, addMember, changeMember, removeMember } =
 		useOrgMembers(kind, orgId);
+
+	const rolesQuery = useQuery({
+		queryKey: ["portal-invite-roles", kind],
+		queryFn: async () => {
+			const res = await fetchRoles({ pageSize: 200, status: "active" }, kickToLogin);
+			return (res.data ?? []).filter(
+				(r) => r.portalCode === kind && r.status === "active",
+			);
+		},
+		staleTime: 60_000,
+	});
+
+	const portalRoles = rolesQuery.data ?? [];
+
+	const inviteOptions = useMemo(() => {
+		if (portalRoles.length === 0) {
+			return FALLBACK_SUB_ROLES[kind].map((r) => ({
+				key: r.value,
+				label: r.label,
+				roleId: null as string | null,
+				subRole: r.value,
+			}));
+		}
+		return portalRoles
+			.slice()
+			.sort((a, b) =>
+				formatRoleName(a.roleName).localeCompare(formatRoleName(b.roleName)),
+			)
+			.map((r) => ({
+				key: r.roleId,
+				label: formatRoleName(r.roleName),
+				roleId: r.roleId as string,
+				subRole: inferSubRole(kind, r.roleName),
+			}));
+	}, [kind, portalRoles]);
+
+	const memberRoleOptions = useMemo(() => {
+		// Membership change still writes sub_role enum — one option per lane,
+		// labeled from a matching portal role when available.
+		const lanes = FALLBACK_SUB_ROLES[kind];
+		return lanes.map((lane) => {
+			const match = portalRoles.find(
+				(r) => inferSubRole(kind, r.roleName) === lane.value,
+			);
+			return {
+				value: lane.value,
+				label: match ? formatRoleName(match.roleName) : lane.label,
+			};
+		});
+	}, [kind, portalRoles]);
+
+	const labelForSubRole = (subRole: string) =>
+		memberRoleOptions.find((r) => r.value === subRole)?.label ?? subRole;
+
 	const [email, setEmail] = useState("");
-	const [newRole, setNewRole] = useState(
-		kind === "agency" ? "finance" : "operations_head",
-	);
+	const [selectedKey, setSelectedKey] = useState("");
 	const [confirmingId, setConfirmingId] = useState<string | null>(null);
 
-	// No real session = no org id = nothing truthful to show. Rendering an empty
-	// team list on a demo session would read as "this agency has no staff".
+	// Keep selection valid when options swap (fallback lanes → portal role ids).
+	useEffect(() => {
+		if (inviteOptions.length === 0) {
+			setSelectedKey("");
+			return;
+		}
+		if (!inviteOptions.some((o) => o.key === selectedKey)) {
+			setSelectedKey(inviteOptions[0]!.key);
+		}
+	}, [inviteOptions, selectedKey]);
+
 	if (!orgId) return null;
+
+	const selected = inviteOptions.find((o) => o.key === selectedKey);
 
 	const onAdd = async () => {
 		const trimmed = email.trim();
@@ -65,10 +150,15 @@ export function OrgMembersPanel({
 			toast("Enter the person's email", "warn");
 			return;
 		}
+		if (!selected) {
+			toast("Pick a role for this invite", "warn");
+			return;
+		}
 		try {
 			const result = await addMember.mutateAsync({
 				email: trimmed,
-				subRole: newRole,
+				subRole: selected.subRole,
+				roleId: selected.roleId ?? undefined,
 			});
 			setEmail("");
 			toast(
@@ -85,10 +175,8 @@ export function OrgMembersPanel({
 		if (subRole === member.subRole) return;
 		try {
 			await changeMember.mutateAsync({ memberId: member.id, subRole });
-			toast(`Role changed to ${labelFor(kind, subRole)}`, "success");
+			toast(`Role changed to ${labelForSubRole(subRole)}`, "success");
 		} catch (error) {
-			// The 409 text is the only explanation of WHY, e.g. "Cannot change the
-			// last active owner". A generic error would hide the rule.
 			toast(serverMessage(error, "Could not change that role"), "warn");
 		}
 	};
@@ -108,10 +196,7 @@ export function OrgMembersPanel({
 		<>
 			<IzSectionLabel>Team · {members.length} member(s)</IzSectionLabel>
 			<IzCard>
-				<p className="iz-tiny iz-muted mb-2">
-					Invite grants a portal role (Owner / Finance / Ops) with its module
-					C/R/U matrix. Membership still ties them to this organisation.
-				</p>
+
 
 				{isLoading && <p className="iz-tiny iz-muted2">Loading team…</p>}
 
@@ -122,79 +207,79 @@ export function OrgMembersPanel({
 				{members.map((member) => {
 					const isSelf = Boolean(me?.id && member.userId === me.id);
 					return (
-					<div
-						key={member.id}
-						className="flex flex-wrap items-center gap-2 border-b border-[var(--iz-line)] py-2.5 last:border-0"
-					>
-						<div className="min-w-0 flex-1">
-							<div className="truncate text-sm font-semibold text-[var(--iz-txt)]">
-								{member.username || member.email || "—"}
-								{isSelf && (
-									<span className="iz-tiny iz-muted ml-1.5 font-medium">
-										(you)
-									</span>
-								)}
+						<div
+							key={member.id}
+							className="flex flex-wrap items-center gap-2 border-b border-[var(--iz-line)] py-2.5 last:border-0"
+						>
+							<div className="min-w-0 flex-1">
+								<div className="truncate text-sm font-semibold text-[var(--iz-txt)]">
+									{member.username || member.email || "—"}
+									{isSelf && (
+										<span className="iz-tiny iz-muted ml-1.5 font-medium">
+											(you)
+										</span>
+									)}
+								</div>
+								<div className="iz-tiny iz-muted truncate">
+									{member.email ?? "no email"}
+								</div>
 							</div>
-							<div className="iz-tiny iz-muted truncate">
-								{member.email ?? "no email"}
-							</div>
-						</div>
 
-						{member.status !== "active" && (
-							<span className="iz-pill iz-pill-amber !text-[10px]">
-								{member.status}
-							</span>
-						)}
-
-						{canManage ? (
-							<select
-								className="iz-field-input !w-auto !text-xs"
-								value={member.subRole}
-								onChange={(e) => void onChangeRole(member, e.target.value)}
-								aria-label={`Role for ${member.username || member.email || "member"}`}
-							>
-								{SUB_ROLES[kind].map((role) => (
-									<option key={role.value} value={role.value}>
-										{role.label}
-									</option>
-								))}
-							</select>
-						) : (
-							<span className="iz-tiny iz-muted">
-								{labelFor(kind, member.subRole)}
-							</span>
-						)}
-
-						{canManage &&
-							!isSelf &&
-							(confirmingId === member.id ? (
-								<span className="flex items-center gap-1">
-									<button
-										type="button"
-										className="iz-btn iz-btn-soft !px-2 !py-1 !text-[11px]"
-										onClick={() => void onRemove(member)}
-									>
-										Confirm
-									</button>
-									<button
-										type="button"
-										className="iz-btn iz-btn-soft !px-2 !py-1 !text-[11px]"
-										onClick={() => setConfirmingId(null)}
-									>
-										Cancel
-									</button>
+							{member.status !== "active" && (
+								<span className="iz-pill iz-pill-amber !text-[10px]">
+									{member.status}
 								</span>
-							) : (
-								<button
-									type="button"
-									className="iz-btn iz-btn-soft !px-2 !py-1"
-									aria-label={`Remove ${member.username || member.email || "member"}`}
-									onClick={() => setConfirmingId(member.id)}
+							)}
+
+							{canManage && !isSelf ? (
+								<select
+									className="iz-field-input !w-auto !text-xs"
+									value={member.subRole}
+									onChange={(e) => void onChangeRole(member, e.target.value)}
+									aria-label={`Role for ${member.username || member.email || "member"}`}
 								>
-									<Trash2 className="h-3.5 w-3.5" />
-								</button>
-							))}
-					</div>
+									{memberRoleOptions.map((role) => (
+										<option key={role.value} value={role.value}>
+											{role.label}
+										</option>
+									))}
+								</select>
+							) : (
+								<span className="iz-tiny iz-muted capitalize">
+									{labelForSubRole(member.subRole)}
+								</span>
+							)}
+
+							{canManage &&
+								!isSelf &&
+								(confirmingId === member.id ? (
+									<span className="flex items-center gap-1">
+										<button
+											type="button"
+											className="iz-btn iz-btn-soft !px-2 !py-1 !text-[11px]"
+											onClick={() => void onRemove(member)}
+										>
+											Confirm
+										</button>
+										<button
+											type="button"
+											className="iz-btn iz-btn-soft !px-2 !py-1 !text-[11px]"
+											onClick={() => setConfirmingId(null)}
+										>
+											Cancel
+										</button>
+									</span>
+								) : (
+									<button
+										type="button"
+										className="iz-btn iz-btn-soft !px-2 !py-1"
+										aria-label={`Remove ${member.username || member.email || "member"}`}
+										onClick={() => setConfirmingId(member.id)}
+									>
+										<Trash2 className="h-3.5 w-3.5" />
+									</button>
+								))}
+						</div>
 					);
 				})}
 			</IzCard>
@@ -215,13 +300,14 @@ export function OrgMembersPanel({
 								/>
 							</span>
 							<select
-								className="iz-field-input !w-auto !text-xs"
-								value={newRole}
-								onChange={(e) => setNewRole(e.target.value)}
+								className="iz-field-input relative z-10 !w-auto min-w-[7.5rem] shrink-0 !text-xs capitalize"
+								value={selectedKey || inviteOptions[0]?.key || ""}
+								onChange={(e) => setSelectedKey(e.target.value)}
 								aria-label="Role for the new member"
+								disabled={inviteOptions.length === 0}
 							>
-								{SUB_ROLES[kind].map((role) => (
-									<option key={role.value} value={role.value}>
+								{inviteOptions.map((role) => (
+									<option key={role.key} value={role.key}>
 										{role.label}
 									</option>
 								))}
@@ -229,13 +315,18 @@ export function OrgMembersPanel({
 							<button
 								type="button"
 								className="iz-btn iz-btn-primary !px-3 !py-2 !text-xs"
-								disabled={addMember.isPending}
+								disabled={addMember.isPending || !selected}
 								onClick={() => void onAdd()}
 							>
 								<UserPlus className="h-3.5 w-3.5" />
 								{addMember.isPending ? "Sending…" : "Invite"}
 							</button>
 						</div>
+						{rolesQuery.isError && (
+							<p className="iz-tiny text-[var(--iz-danger)] mt-2">
+								Could not load {kind} portal roles — using defaults.
+							</p>
+						)}
 					</IzCard>
 				</>
 			)}

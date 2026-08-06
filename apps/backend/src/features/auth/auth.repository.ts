@@ -71,34 +71,62 @@ export class AuthRepositoryClass {
   async ensurePortalRolesFromMembership(userId: string): Promise<void> {
     try {
       const [agencyMem] = await db
-        .select({ id: AgencyUserTable.id })
+        .select({ id: AgencyUserTable.id, subRole: AgencyUserTable.subRole })
         .from(AgencyUserTable)
         .where(
           and(eq(AgencyUserTable.userId, userId), eq(AgencyUserTable.status, 'active')),
         )
         .limit(1);
       const [outletMem] = await db
-        .select({ id: OutletUserTable.id })
+        .select({ id: OutletUserTable.id, subRole: OutletUserTable.subRole })
         .from(OutletUserTable)
         .where(
           and(eq(OutletUserTable.userId, userId), eq(OutletUserTable.status, 'active')),
         )
         .limit(1);
 
-      const needed: string[] = [];
-      if (agencyMem) needed.push(portalRoleName.AGENCY);
-      if (outletMem) needed.push(portalRoleName.OUTLET);
-      if (needed.length === 0) return;
+      if (!agencyMem && !outletMem) return;
 
       const existing = await this.getRolesForUserIds([userId]);
-      const have = new Set(existing.map((r) => r.roleName));
+      const havePortal = new Set(
+        existing.map((r) => r.portalCode).filter((c): c is string => Boolean(c)),
+      );
 
-      for (const roleName of needed) {
-        if (have.has(roleName)) continue;
+      const grants: Array<{ roleName: string; portal: 'agency' | 'outlet' }> = [];
+      if (agencyMem && !havePortal.has('agency')) {
+        const sub = String(agencyMem.subRole ?? 'owner');
+        grants.push({
+          roleName:
+            sub.includes('finance') ? portalRoleName.FINANCE : portalRoleName.OWNER,
+          portal: 'agency',
+        });
+      }
+      if (outletMem && !havePortal.has('outlet')) {
+        const sub = String(outletMem.subRole ?? 'owner').toLowerCase();
+        let roleName = portalRoleName.OWNER;
+        if (sub.includes('finance')) roleName = portalRoleName.FINANCE;
+        else if (sub.includes('ops') || sub.includes('operation')) {
+          roleName = portalRoleName.OPS_HEAD;
+        }
+        grants.push({ roleName, portal: 'outlet' });
+      }
+
+      for (const g of grants) {
+        const [portal] = await db
+          .select({ id: PortalTable.id })
+          .from(PortalTable)
+          .where(eq(PortalTable.code, g.portal))
+          .limit(1);
+        if (!portal) continue;
         const [role] = await db
           .select({ id: RoleTable.id })
           .from(RoleTable)
-          .where(eq(RoleTable.roleName, roleName))
+          .where(
+            and(
+              sql`lower(${RoleTable.roleName}) = ${g.roleName.toLowerCase()}`,
+              eq(RoleTable.portalId, portal.id),
+            ),
+          )
           .limit(1);
         if (!role) continue;
         await this.userRoleRepository.assignRoleToUser({
@@ -108,7 +136,7 @@ export class AuthRepositoryClass {
           updatedBy: SYSTEM_ACTOR,
         });
         logger.info(
-          `[AuthRepository.ensurePortalRolesFromMembership] Granted ${roleName} to ${userId}`,
+          `[AuthRepository.ensurePortalRolesFromMembership] Granted ${g.roleName}@${g.portal} to ${userId}`,
         );
       }
     } catch (error) {

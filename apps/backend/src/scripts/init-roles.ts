@@ -1,10 +1,10 @@
 import 'dotenv/config';
 
-import { eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { PortalTable } from '@/features/rbac/portal/portal.model';
-import { portalRoleName } from '@/types/rbac-constant';
+import { SEEDED_PORTAL_ROLES } from '@/types/rbac-constant';
 import { logger } from '@/util/logger';
 
 const ACTOR = 'system';
@@ -14,14 +14,6 @@ const PORTALS = [
   { code: 'agency', name: 'Agency' },
   { code: 'outlet', name: 'Outlet' },
 ] as const;
-
-/** Canonical roles only — org lanes use membership.sub_role, not extra role rows. */
-const ROLE_PORTAL: Record<string, string | null> = {
-  [portalRoleName.ADMIN]: 'admin',
-  [portalRoleName.AGENCY]: 'agency',
-  [portalRoleName.OUTLET]: 'outlet',
-  [portalRoleName.PR]: null,
-};
 
 async function ensurePortal(code: string, name: string): Promise<string> {
   const [existing] = await db
@@ -44,20 +36,30 @@ async function ensurePortal(code: string, name: string): Promise<string> {
   return row!.id;
 }
 
+/** Roles are unique per (lower(role_name), portal_id) — e.g. Owner under agency + outlet. */
 async function ensureRole(roleName: string, portalId: string | null): Promise<void> {
+  const portalMatch =
+    portalId == null
+      ? isNull(RoleTable.portalId)
+      : eq(RoleTable.portalId, portalId);
+
   const [existing] = await db
-    .select({ id: RoleTable.id, portalId: RoleTable.portalId })
+    .select({ id: RoleTable.id, portalId: RoleTable.portalId, status: RoleTable.status, roleName: RoleTable.roleName })
     .from(RoleTable)
-    .where(eq(RoleTable.roleName, roleName))
+    .where(and(sql`lower(${RoleTable.roleName}) = ${roleName.trim().toLowerCase()}`, portalMatch))
     .limit(1);
 
   if (existing) {
-    if (existing.portalId !== portalId) {
-      await db
-        .update(RoleTable)
-        .set({ portalId, updatedAt: new Date(), updatedBy: ACTOR })
-        .where(eq(RoleTable.id, existing.id));
-      logger.info(`Role portal linked: ${roleName} → ${portalId ?? 'null'}`);
+    const patch: { status?: string; roleName?: string; updatedAt: Date; updatedBy: string } = {
+      updatedAt: new Date(),
+      updatedBy: ACTOR,
+    };
+    if (existing.status !== 'active') patch.status = 'active';
+    // Prefer canonical seeded casing (Owner vs owner).
+    if (existing.roleName !== roleName) patch.roleName = roleName;
+    if (patch.status || patch.roleName) {
+      await db.update(RoleTable).set(patch).where(eq(RoleTable.id, existing.id));
+      logger.info(`Role normalized: ${roleName} (${portalId ?? 'no portal'})`);
     }
     return;
   }
@@ -69,7 +71,7 @@ async function ensureRole(roleName: string, portalId: string | null): Promise<vo
     createdBy: ACTOR,
     updatedBy: ACTOR,
   });
-  logger.info(`Default role created: ${roleName}`);
+  logger.info(`Default role created: ${roleName} (${portalId ?? 'no portal'})`);
 }
 
 export async function initRoles(): Promise<void> {
@@ -78,12 +80,14 @@ export async function initRoles(): Promise<void> {
     portalIdByCode.set(p.code, await ensurePortal(p.code, p.name));
   }
 
-  for (const [roleName, portalCode] of Object.entries(ROLE_PORTAL)) {
-    const portalId = portalCode ? (portalIdByCode.get(portalCode) ?? null) : null;
-    await ensureRole(roleName, portalId);
+  for (const row of SEEDED_PORTAL_ROLES) {
+    const portalId = row.portal ? (portalIdByCode.get(row.portal) ?? null) : null;
+    await ensureRole(row.roleName, portalId);
   }
 
-  logger.info(`Default roles ready: ${Object.keys(ROLE_PORTAL).join(', ')}`);
+  logger.info(
+    `Default roles ready: ${SEEDED_PORTAL_ROLES.map((r) => `${r.roleName}@${r.portal ?? 'none'}`).join(', ')}`,
+  );
 }
 
 const isDirectRun = process.argv[1]?.includes('init-roles');

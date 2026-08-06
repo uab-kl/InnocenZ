@@ -1,21 +1,28 @@
-import { and, eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { Subscription, SubscriptionTable, SubscriptionInsertType, SubscriptionType } from './subscription.model.js';
 import { RoleTable } from '@/features/rbac/role/role.model.js';
+import { PortalTable } from '@/features/rbac/portal/portal.model.js';
 import { logger } from '@/util/logger.js';
 import { DbTransaction } from '@/types/db-transaction.js';
 
 export class SubscriptionRepositoryClass {
   /**
    * The main.role row a plan audience maps to, for subscription.role_id.
-   * Returns null if the role is missing so a plan can still be created.
+   * Plans grant portal Owner (agency/outlet identity roles were removed).
    */
   async roleIdForType(subscriptionType: SubscriptionType): Promise<string | null> {
     try {
       const [row] = await db
         .select({ id: RoleTable.id })
         .from(RoleTable)
-        .where(eq(RoleTable.roleName, subscriptionType))
+        .innerJoin(PortalTable, eq(RoleTable.portalId, PortalTable.id))
+        .where(
+          and(
+            sql`lower(${RoleTable.roleName}) = 'owner'`,
+            eq(PortalTable.code, subscriptionType),
+          ),
+        )
         .limit(1);
       return row?.id ?? null;
     } catch (error) {

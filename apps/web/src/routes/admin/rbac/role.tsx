@@ -10,7 +10,6 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import {
-	type RolePortalFilter,
 	type RoleStatusFilter,
 	RoleSheet,
 	RolesGrid,
@@ -30,7 +29,7 @@ import {
 export const Route = createFileRoute("/admin/rbac/role")({
 	component: RolePage,
 	head: () => ({
-		meta: [{ title: "Roles — Innocenz Admin" }],
+		meta: [{ title: "RBAC — Innocenz Admin" }],
 	}),
 });
 
@@ -40,7 +39,6 @@ function RolePage() {
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const [statusFilter, setStatusFilter] = useState<RoleStatusFilter>("all");
-	const [portalFilter, setPortalFilter] = useState<RolePortalFilter>("all");
 	const [currentPage, setCurrentPage] = useState(1);
 	const [sheetOpen, setSheetOpen] = useState(false);
 	const [sheetMode, setSheetMode] = useState<"create" | "manage">("create");
@@ -109,7 +107,7 @@ function RolePage() {
 
 	return (
 		<PageShell>
-			<PageHeader icon={Shield} title="Roles" />
+			<PageHeader icon={Shield} title="RBAC" />
 
 			<RolesGrid
 				roles={data?.data ?? []}
@@ -121,13 +119,8 @@ function RolePage() {
 				isError={isError}
 				error={error as Error | null}
 				statusFilter={statusFilter}
-				portalFilter={portalFilter}
 				onStatusFilterChange={(value) => {
 					setStatusFilter(value);
-					setCurrentPage(1);
-				}}
-				onPortalFilterChange={(value) => {
-					setPortalFilter(value);
 					setCurrentPage(1);
 				}}
 				onPageChange={setCurrentPage}

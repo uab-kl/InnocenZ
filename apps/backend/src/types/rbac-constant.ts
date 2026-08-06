@@ -21,18 +21,43 @@ export const portalCode = {
 export type PortalCodeValue = (typeof portalCode)[keyof typeof portalCode];
 
 /**
- * Canonical web/mobile role names on `main.role`.
- * Org lanes (owner / finance / ops) live on agency_user / outlet_user.sub_role —
- * do NOT mint separate outlet_owner / agency_finance roles.
+ * Canonical roles on `main.role` (seeded by init-roles).
+ * Portal access is lane roles under each portal — there is no bare `agency` /
+ * `outlet` role row. Signup owners get `Owner`; invites pick Owner/Finance/Ops Head.
+ * Membership.sub_role still stores owner | finance | operations_head for org gates.
  */
 export const portalRoleName = {
   ADMIN: 'admin',
-  AGENCY: 'agency',
-  OUTLET: 'outlet',
   PR: 'pr',
+  OWNER: 'Owner',
+  FINANCE: 'Finance',
+  OPS_HEAD: 'Ops Head',
+  /**
+   * @deprecated Not seeded. Kept for legacy user_role rows / requireRole expand
+   * until migration remaps them onto Owner.
+   */
+  AGENCY: 'agency',
+  /**
+   * @deprecated Not seeded. See AGENCY.
+   */
+  OUTLET: 'outlet',
 } as const;
 
-/** Legacy specialized names — delete via remove-specialized-portal-roles.ts only. */
+/** Seed rows: roleName + portal code (null = unassigned / mobile). */
+export const SEEDED_PORTAL_ROLES: ReadonlyArray<{
+  roleName: string;
+  portal: PortalCodeValue | null;
+}> = [
+  { roleName: portalRoleName.ADMIN, portal: 'admin' },
+  { roleName: portalRoleName.OWNER, portal: 'agency' },
+  { roleName: portalRoleName.FINANCE, portal: 'agency' },
+  { roleName: portalRoleName.OWNER, portal: 'outlet' },
+  { roleName: portalRoleName.FINANCE, portal: 'outlet' },
+  { roleName: portalRoleName.OPS_HEAD, portal: 'outlet' },
+  { roleName: portalRoleName.PR, portal: null },
+];
+
+/** Legacy snake_case names — delete via remove-specialized-portal-roles.ts only. */
 export const LEGACY_SPECIALIZED_ROLE_NAMES = [
   'agency_owner',
   'agency_finance',

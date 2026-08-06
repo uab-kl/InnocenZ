@@ -27,7 +27,12 @@ import {
   sendOrgMemberInviteEmail,
 } from '@/util/org-member-invite';
 import { sendOrgApprovedNotificationEmail } from '@/features/mailing/mailing.repository';
-import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
+import {
+  inferMembershipSubRole,
+  portalRoleNameForSubRole,
+} from '@/features/rbac/portal-role-map';
+import { portalRepository } from '@/features/rbac/portal/portal.repository';
+import { outletUserSubRoleValues } from './outlet.model';
 
 export class OutletControllerClass {
   constructor(
@@ -448,12 +453,45 @@ export class OutletControllerClass {
         }
       }
 
-      const roleName = portalRoleNameForSubRole('outlet', parsed.data.subRole);
-      const role = await this.roleRepository.getRoleByName(roleName);
-      if (!role) {
-        return res.status(500).json({
+      let role = null as Awaited<ReturnType<RoleRepositoryClass['getRoleById']>>;
+      let subRole = parsed.data.subRole;
+
+      if (parsed.data.roleId) {
+        role = await this.roleRepository.getRoleById(parsed.data.roleId);
+        if (!role || role.status !== 'active') {
+          return res.status(400).json({
+            success: false,
+            message: 'Invalid or inactive role',
+            data: null,
+          });
+        }
+        const portal = await portalRepository.getPortalByCode('outlet');
+        if (!portal || role.portalId !== portal.id) {
+          return res.status(400).json({
+            success: false,
+            message: 'Role does not belong to the outlet portal',
+            data: null,
+          });
+        }
+        subRole =
+          subRole ??
+          (inferMembershipSubRole('outlet', role.roleName) as (typeof outletUserSubRoleValues)[number]);
+      } else {
+        const roleName = portalRoleNameForSubRole('outlet', subRole!);
+        role = await this.roleRepository.findByNameAndPortalCode(roleName, 'outlet');
+        if (!role) {
+          return res.status(500).json({
+            success: false,
+            message: `Role '${roleName}' is not seeded`,
+            data: null,
+          });
+        }
+      }
+
+      if (!subRole) {
+        return res.status(400).json({
           success: false,
-          message: `Role '${roleName}' is not seeded`,
+          message: 'subRole or roleId is required',
           data: null,
         });
       }
@@ -470,7 +508,7 @@ export class OutletControllerClass {
           token: secret.tokenHash,
           expiresAt: secret.expiresAt,
           roleId: role.id,
-          subRole: parsed.data.subRole,
+          subRole,
           updatedBy: actor,
         });
       } else {
@@ -481,7 +519,7 @@ export class OutletControllerClass {
           outletId,
           agencyId: null,
           roleId: role.id,
-          subRole: parsed.data.subRole,
+          subRole,
           status: 'pending',
           acceptedUserId: null,
           createdBy: actor,
@@ -493,7 +531,7 @@ export class OutletControllerClass {
         to: email,
         orgKind: 'outlet',
         orgName: outlet.name,
-        subRole: parsed.data.subRole,
+        subRole,
         rawToken: secret.rawToken,
       });
 
@@ -530,6 +568,21 @@ export class OutletControllerClass {
       const target = await this.outletMemberRepository.getById(memberId);
       if (!target || target.outletId !== outletId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // You manage others' lanes — not your own. Appoint another owner first if
+      // you need to step down; never self-demote through this endpoint.
+      if (
+        req.user?.id &&
+        target.userId === req.user.id &&
+        parsed.data.subRole != null &&
+        parsed.data.subRole !== target.subRole
+      ) {
+        return res.status(409).json({
+          success: false,
+          message: 'You cannot change your own role',
+          data: null,
+        });
       }
 
       const members = await this.outletMemberRepository.listByOutlet(outletId);

@@ -46,9 +46,14 @@ export const AddOutletMemberSchema = z.object({
   /** Preferred — invite by email; user must already have an InnocenZ account. */
   email: z.string().email('Invalid email').optional(),
   userId: z.string().uuid('Invalid user ID').optional(),
-  subRole: z.enum(outletUserSubRoleValues),
+  /** Membership lane (owner / finance / ops). Inferred from roleId when omitted. */
+  subRole: z.enum(outletUserSubRoleValues).optional(),
+  /** Portal RBAC role to grant on accept (must belong to the outlet portal). */
+  roleId: z.string().uuid('Invalid role ID').optional(),
 }).refine((d) => Boolean(d.email?.trim() || d.userId), {
   message: 'email or userId is required',
+}).refine((d) => Boolean(d.subRole || d.roleId), {
+  message: 'subRole or roleId is required',
 });
 
 export const UpdateOutletMemberSchema = z.object({

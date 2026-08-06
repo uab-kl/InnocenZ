@@ -1,6 +1,8 @@
 /**
- * Delete leftover "owner" roles (and similar display names). Org ownership is
- * membership.sub_role; portal access is agency / outlet — not a Role named owner.
+ * Delete leftover lowercase / spaced owner role names that predate seeded
+ * portal lane roles (`Owner` under agency + outlet).
+ *
+ * Does NOT delete seeded `Owner` / `Finance` / `Ops Head` rows.
  *
  *   pnpm exec tsx --tsconfig apps/backend/tsconfig.json apps/backend/src/scripts/remove-orphan-unassigned-roles.ts
  *   pnpm exec tsx --tsconfig apps/backend/tsconfig.json apps/backend/src/scripts/remove-orphan-unassigned-roles.ts --apply
@@ -17,6 +19,15 @@ import { portalRoleName } from "@/types/rbac-constant.js";
 import { SYSTEM_ACTOR } from "@/util/actor.js";
 
 const APPLY = process.argv.includes("--apply");
+
+/** Keep seeded display names (case-sensitive). */
+const KEEP_NAMES = new Set<string>([
+	portalRoleName.OWNER,
+	portalRoleName.FINANCE,
+	portalRoleName.OPS_HEAD,
+	portalRoleName.ADMIN,
+	portalRoleName.PR,
+]);
 
 async function roleIdByName(name: string): Promise<string | null> {
 	const [row] = await db
@@ -45,7 +56,7 @@ async function ensureUserRole(userId: string, roleId: string) {
 }
 
 async function main() {
-	const targets = await db
+	const candidates = await db
 		.select({
 			id: RoleTable.id,
 			roleName: RoleTable.roleName,
@@ -62,7 +73,9 @@ async function main() {
 			),
 		);
 
-	console.log(`Found ${targets.length} owner-like role(s):`);
+	const targets = candidates.filter((r) => !KEEP_NAMES.has(r.roleName));
+
+	console.log(`Found ${targets.length} legacy owner-like role(s):`);
 	for (const r of targets) {
 		const [{ count }] = await db
 			.select({ count: sql<number>`count(*)::int` })

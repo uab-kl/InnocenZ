@@ -130,7 +130,9 @@ export async function fetchAgencyMembers(
  */
 export async function addAgencyMember(
 	agencyId: string,
-	payload: { email: string; subRole: string } | { userId: string; subRole: string },
+	payload:
+		| { email: string; subRole?: string; roleId?: string }
+		| { userId: string; subRole?: string; roleId?: string },
 	onRefreshFail: () => void,
 ): Promise<AgencyMemberApiResponse> {
 	const client = getClient(onRefreshFail);

@@ -539,9 +539,9 @@ export function RoleSheet({
 									Saving…
 								</>
 							) : isManage ? (
-								"Save matrix"
+								"Save"
 							) : (
-								"Create role"
+								"Create"
 							)}
 						</Button>
 					</SheetFooter>

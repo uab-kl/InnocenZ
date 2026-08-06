@@ -14,6 +14,9 @@ function filterRoles(roles: RoleType[], roleName?: string, status?: string): Rol
   });
 }
 
+const DUPLICATE_ROLE_MESSAGE =
+  'A role with this name already exists in this portal. Use a different name, or pick another portal.';
+
 export class RoleControllerClass {
   constructor(private roleRepository: RoleRepositoryClass) {}
 
@@ -43,14 +46,38 @@ export class RoleControllerClass {
   async createRole(req: Request, res: Response) {
     try {
       const parsed = RoleSchema.safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
+      }
+
+      const portalId = parsed.data.portalId ?? null;
+      const clash = await this.roleRepository.findByNameAndPortal(
+        parsed.data.roleName,
+        portalId,
+      );
+      if (clash) {
+        return res.status(409).json({
+          success: false,
+          message: DUPLICATE_ROLE_MESSAGE,
+          data: null,
+        });
+      }
+
       const data = await this.roleRepository.createRole({
         ...parsed.data,
+        portalId,
         createdBy: getActor(req),
         updatedBy: getActor(req),
       });
       res.status(201).json({ success: true, message: 'Role created', data });
-    } catch {
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        return res.status(409).json({
+          success: false,
+          message: DUPLICATE_ROLE_MESSAGE,
+          data: null,
+        });
+      }
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
@@ -58,14 +85,47 @@ export class RoleControllerClass {
   async updateRole(req: Request, res: Response) {
     try {
       const parsed = RoleSchema.partial().safeParse(req.body);
-      if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
-      const data = await this.roleRepository.updateRole(paramId(req.params.id), {
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
+      }
+
+      const roleId = paramId(req.params.id);
+      const existing = await this.roleRepository.getRoleById(roleId);
+      if (!existing) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const nextName = parsed.data.roleName ?? existing.roleName;
+      const nextPortalId =
+        parsed.data.portalId !== undefined ? parsed.data.portalId : existing.portalId;
+
+      const clash = await this.roleRepository.findByNameAndPortal(
+        nextName,
+        nextPortalId,
+        roleId,
+      );
+      if (clash) {
+        return res.status(409).json({
+          success: false,
+          message: DUPLICATE_ROLE_MESSAGE,
+          data: null,
+        });
+      }
+
+      const data = await this.roleRepository.updateRole(roleId, {
         ...parsed.data,
         updatedBy: getActor(req),
       });
       if (!data) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       res.status(200).json({ success: true, message: 'Role updated', data });
-    } catch {
+    } catch (error) {
+      if (isUniqueViolation(error)) {
+        return res.status(409).json({
+          success: false,
+          message: DUPLICATE_ROLE_MESSAGE,
+          data: null,
+        });
+      }
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
@@ -82,4 +142,13 @@ export class RoleControllerClass {
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: string }).code === '23505'
+  );
 }

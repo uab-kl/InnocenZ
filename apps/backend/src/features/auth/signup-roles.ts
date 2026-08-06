@@ -11,21 +11,18 @@
  * deliberately absent: minting one requires an authenticated admin caller, which
  * is enforced in AuthController.registerUser.
  */
+import { portalRoleName } from '@/types/rbac-constant.js';
+
 export const SIGNUP_ACCOUNT_TYPES = ['agency', 'outlet', 'pr'] as const;
 
 export type SignupAccountType = (typeof SIGNUP_ACCOUNT_TYPES)[number];
 
-/**
- * accountType (what the client calls itself) -> role_name (what the DB calls
- * it). They happen to be identical today; the map exists so that stays a fact
- * about the data rather than an assumption baked into the controller.
- */
-/** First org user gets the portal role; lane is agency_user/outlet_user.sub_role. */
+/** First org user gets Owner on that portal; PR stays mobile `pr`. */
 const ROLE_NAME_BY_ACCOUNT_TYPE: Readonly<Record<SignupAccountType, string>> =
   Object.freeze({
-    agency: 'agency',
-    outlet: 'outlet',
-    pr: 'pr',
+    agency: portalRoleName.OWNER,
+    outlet: portalRoleName.OWNER,
+    pr: portalRoleName.PR,
   });
 
 export function isSignupAccountType(value: unknown): value is SignupAccountType {
@@ -38,4 +35,13 @@ export function isSignupAccountType(value: unknown): value is SignupAccountType 
 /** The role name a public sign-up of this account type may be given. */
 export function roleNameForAccountType(accountType: SignupAccountType): string {
   return ROLE_NAME_BY_ACCOUNT_TYPE[accountType];
+}
+
+/** Portal for looking up the seeded role row (null = unassigned / mobile). */
+export function portalCodeForAccountType(
+  accountType: SignupAccountType,
+): 'agency' | 'outlet' | null {
+  if (accountType === 'agency') return 'agency';
+  if (accountType === 'outlet') return 'outlet';
+  return null;
 }

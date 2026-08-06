@@ -18,6 +18,7 @@ import { UserRepositoryClass as UserRepository } from '@/features/user/user.repo
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository.js';
 import { RoleRepositoryClass } from '@/features/rbac/role/role.repository.js';
 import {
+  portalCodeForAccountType,
   roleNameForAccountType,
   SIGNUP_ACCOUNT_TYPES,
   type SignupAccountType,
@@ -390,11 +391,17 @@ export class AuthControllerClass {
     }
 
     const roleName = roleNameForAccountType(body.accountType);
-    const role = await this.roleRepository.getRoleByName(roleName);
+    const portal = portalCodeForAccountType(body.accountType);
+    const role = await this.roleRepository.findByNameAndPortalCode(
+      roleName,
+      portal,
+    );
     if (!role) {
-      // The four default roles are seeded by scripts/init-roles.ts. Missing one
+      // Default roles are seeded by scripts/init-roles.ts. Missing one
       // is a deployment fault, not something the caller did wrong.
-      logger.error(`[AuthController.register] Role '${roleName}' is not seeded`);
+      logger.error(
+        `[AuthController.register] Role '${roleName}' @ ${portal ?? 'none'} is not seeded`,
+      );
       return {
         error: { status: 500, message: 'Sign-up is not configured for this account type' },
       };

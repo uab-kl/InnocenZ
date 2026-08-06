@@ -31,6 +31,23 @@ const ROLE_DASHBOARD: Record<string, string> = {
 };
 
 export const Route = createFileRoute("/login")({
+	validateSearch: (search: Record<string, unknown>): {
+		email?: string;
+		next?: string;
+	} => {
+		const email =
+			typeof search.email === "string" ? search.email.trim() : undefined;
+		const nextRaw =
+			typeof search.next === "string" ? search.next.trim() : undefined;
+		const next =
+			nextRaw === "/agency" || nextRaw === "/outlet"
+				? nextRaw
+				: undefined;
+		return {
+			...(email ? { email } : {}),
+			...(next ? { next } : {}),
+		};
+	},
 	component: RouteComponent,
 	head: () => ({
 		meta: [
@@ -50,12 +67,13 @@ const formSchema = z.object({
 
 function RouteComponent() {
 	const { login } = useAuthActions();
+	const { email: prefillEmail } = Route.useSearch();
 	const [error, setError] = useState("");
 	const [showPassword, setShowPassword] = useState(false);
 
 	const form = useForm({
 		defaultValues: {
-			email: "",
+			email: prefillEmail ?? "",
 			password: "",
 		},
 		validators: {

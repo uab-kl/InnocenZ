@@ -76,9 +76,17 @@ function brandDefaults(recipientEmail: string) {
   };
 }
 
-function portalLoginLink(orgKind: 'outlet' | 'agency'): string {
+function portalLoginLink(
+  orgKind: 'outlet' | 'agency',
+  recipientEmail: string,
+): string {
   const base = env.FRONTEND_URL.replace(/\/$/, '');
-  return orgKind === 'agency' ? `${base}/agency` : `${base}/outlet`;
+  const params = new URLSearchParams();
+  const email = recipientEmail.trim();
+  if (email) params.set('email', email);
+  // After sign-in, login already routes by role; hint helps dual-portal users.
+  params.set('next', orgKind === 'agency' ? '/agency' : '/outlet');
+  return `${base}/login?${params.toString()}`;
 }
 
 /** Low-level send — prefer named helpers below when a template exists. */
@@ -134,7 +142,7 @@ export async function sendOrgApprovedNotificationEmail(input: {
     return null;
   }
 
-  const loginLink = portalLoginLink(input.orgKind);
+  const loginLink = portalLoginLink(input.orgKind, input.recipientEmail);
   const orgKindLabel = input.orgKind === 'agency' ? 'agency' : 'outlet';
   const variables: OrgApprovedNotificationVariables = {
     ...brandDefaults(input.recipientEmail),

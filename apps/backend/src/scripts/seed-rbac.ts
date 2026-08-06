@@ -1,6 +1,6 @@
 import 'dotenv/config';
 
-import { and, eq } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { RoleTable } from '@/features/rbac/role/role.model';
 import { ModuleTable } from '@/features/rbac/module/module.model';
@@ -57,33 +57,74 @@ const MODULES: ModuleDef[] = [
 
 type MatrixEntry = [string, PermissionTypeCode[]]; // module_key, types
 
-const MATRIX: Record<string, '*' | MatrixEntry[]> = {
-  [portalRoleName.ADMIN]: '*',
-  [portalRoleName.AGENCY]: [
-    ['dashboard', READ],
-    ['roster', CRU],
-    ['approvals', CRU],
-    ['payment_voucher', CRU],
-    ['history', READ],
-    ['settings', CRU],
-    ['workforce', CRU],
-    ['collections', RU],
-  ],
-  [portalRoleName.OUTLET]: [
-    ['dashboard', READ],
-    ['booking', CRU],
-    ['rating', CRU],
-    ['history', READ],
-    ['billing', READ],
-    ['sales', CRU],
-    ['workspace', CRU],
-    ['settings', CRU],
-    ['special_service', CRU],
-  ],
-  [portalRoleName.PR]: [
-    // PR has no portal modules; keep empty (mobile uses role name gates).
-  ],
+type RoleGrant = {
+  roleName: string;
+  portal: PortalCode | null;
+  grant: '*' | MatrixEntry[];
 };
+
+const AGENCY_OWNER: MatrixEntry[] = [
+  ['dashboard', READ],
+  ['roster', CRU],
+  ['approvals', CRU],
+  ['payment_voucher', CRU],
+  ['history', READ],
+  ['settings', CRU],
+  ['workforce', CRU],
+  ['collections', RU],
+];
+
+const AGENCY_FINANCE: MatrixEntry[] = [
+  ['dashboard', READ],
+  ['payment_voucher', RU],
+  ['history', READ],
+  ['settings', READ],
+  ['collections', RU],
+];
+
+const OUTLET_OWNER: MatrixEntry[] = [
+  ['dashboard', READ],
+  ['booking', CRU],
+  ['rating', CRU],
+  ['history', READ],
+  ['billing', READ],
+  ['sales', CRU],
+  ['workspace', CRU],
+  ['settings', CRU],
+  ['special_service', CRU],
+];
+
+const OUTLET_FINANCE: MatrixEntry[] = [
+  ['dashboard', READ],
+  ['history', READ],
+  ['billing', READ],
+  ['sales', READ],
+  ['workspace', READ],
+  ['settings', READ],
+  ['special_service', READ],
+];
+
+const OUTLET_OPS: MatrixEntry[] = [
+  ['dashboard', READ],
+  ['booking', CRU],
+  ['rating', CRU],
+  ['history', READ],
+  ['sales', CRU],
+  ['workspace', CRU],
+  ['settings', READ],
+  ['special_service', CRU],
+];
+
+/** Permission matrices for every seeded role (init-roles must run first). */
+const ROLE_GRANTS: RoleGrant[] = [
+  { roleName: portalRoleName.ADMIN, portal: 'admin', grant: '*' },
+  { roleName: portalRoleName.OWNER, portal: 'agency', grant: AGENCY_OWNER },
+  { roleName: portalRoleName.FINANCE, portal: 'agency', grant: AGENCY_FINANCE },
+  { roleName: portalRoleName.OWNER, portal: 'outlet', grant: OUTLET_OWNER },
+  { roleName: portalRoleName.FINANCE, portal: 'outlet', grant: OUTLET_FINANCE },
+  { roleName: portalRoleName.OPS_HEAD, portal: 'outlet', grant: OUTLET_OPS },
+  { roleName: portalRoleName.PR, portal: null, grant: [] },
+];
 
 async function portalId(code: string): Promise<string> {
   const [row] = await db
@@ -190,14 +231,21 @@ export async function seedRbac(): Promise<void> {
     }
   }
 
-  for (const [roleName, grant] of Object.entries(MATRIX)) {
+  for (const { roleName, portal, grant } of ROLE_GRANTS) {
+    const portalMatch =
+      portal == null
+        ? isNull(RoleTable.portalId)
+        : eq(RoleTable.portalId, portalIds[portal]);
+
     const [role] = await db
-      .select({ id: RoleTable.id, portalId: RoleTable.portalId })
+      .select({ id: RoleTable.id })
       .from(RoleTable)
-      .where(eq(RoleTable.roleName, roleName))
+      .where(and(sql`lower(${RoleTable.roleName}) = ${roleName.trim().toLowerCase()}`, portalMatch))
       .limit(1);
     if (!role) {
-      logger.warn(`[seed-rbac] Role "${roleName}" not found — run init-roles first.`);
+      logger.warn(
+        `[seed-rbac] Role "${roleName}" @ ${portal ?? 'none'} not found — run init-roles first.`,
+      );
       continue;
     }
 
@@ -206,26 +254,18 @@ export async function seedRbac(): Promise<void> {
       for (const [key, id] of permIdByKey.entries()) {
         if (key.startsWith('admin:')) permIds.push(id);
       }
-    } else {
-      const portalCode =
-        roleName.startsWith('agency')
-          ? 'agency'
-          : roleName.startsWith('outlet')
-            ? 'outlet'
-            : roleName === 'admin'
-              ? 'admin'
-              : null;
+    } else if (portal) {
       for (const [moduleKey, types] of grant) {
         for (const type of types) {
-          const id = permIdByKey.get(`${portalCode}:${moduleKey}:${type}`);
+          const id = permIdByKey.get(`${portal}:${moduleKey}:${type}`);
           if (id) permIds.push(id);
-          else logger.warn(`[seed-rbac] Missing perm ${portalCode}:${moduleKey}:${type}`);
+          else logger.warn(`[seed-rbac] Missing perm ${portal}:${moduleKey}:${type}`);
         }
       }
     }
 
-    if (permIds.length === 0 && grant !== '*' && (grant as MatrixEntry[]).length === 0) {
-      logger.info(`[seed-rbac] ${roleName}: 0 permissions (expected for pr).`);
+    if (permIds.length === 0) {
+      logger.info(`[seed-rbac] ${roleName}@${portal ?? 'none'}: 0 permissions.`);
       continue;
     }
 
@@ -241,7 +281,9 @@ export async function seedRbac(): Promise<void> {
       )
       .onConflictDoNothing();
 
-    logger.info(`[seed-rbac] ${roleName}: ${permIds.length} permissions ensured.`);
+    logger.info(
+      `[seed-rbac] ${roleName}@${portal ?? 'none'}: ${permIds.length} permissions ensured.`,
+    );
   }
 
   logger.info(

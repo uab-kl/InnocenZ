@@ -102,14 +102,17 @@ async function signedInPortals(): Promise<{
 		throw redirect({ to: "/login" });
 	}
 	const names = roles.map((r) => (r.roleName ?? "").toLowerCase());
+	const fromRolePortal = roles
+		.map((r) => r.portalCode)
+		.filter((p): p is PortalCode => p === "admin" || p === "agency" || p === "outlet");
 	const fromRoles = names
 		.map(portalFromRoleName)
 		.filter((p): p is PortalCode => p != null);
 	const fromApi = portalsFromApi.filter(
 		(p): p is PortalCode => p === "admin" || p === "agency" || p === "outlet",
 	);
-	// Prefer role-name mapping; API portal codes only fill gaps (custom roles).
-	const portals = [...new Set([...fromRoles, ...fromApi])];
+	// Prefer portal codes on roles / /auth/me.portals (lane roles like Owner).
+	const portals = [...new Set([...fromRolePortal, ...fromApi, ...fromRoles])];
 	// Admin portal requires the canonical admin role — never via a stray portalCode.
 	const hasAdminRole = names.some((n) => n === "admin");
 	const gated = hasAdminRole

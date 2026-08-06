@@ -1,6 +1,7 @@
-import { eq, ilike, and, SQL } from 'drizzle-orm';
+import { eq, and, isNull, sql, ne } from 'drizzle-orm';
 import { db } from '@/db/index';
-import { RoleTable, RoleType, RoleInsertType, RoleFilter } from './role.model';
+import { RoleTable, RoleType, RoleInsertType } from './role.model';
+import { PortalTable } from '../portal/portal.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 export class RoleRepositoryClass {
@@ -22,6 +23,59 @@ export class RoleRepositoryClass {
       return role.length > 0 ? role[0] : null;
     } catch (error) {
       logger.error('[RoleRepository.getRoleByName] Error:', error);
+      return null;
+    }
+  }
+
+  /** Case-insensitive name unique within the same portal (null portal = unassigned). */
+  async findByNameAndPortal(
+    roleName: string,
+    portalId: string | null | undefined,
+    excludeRoleId?: string,
+  ): Promise<RoleType | null> {
+    try {
+      const nameKey = roleName.trim().toLowerCase();
+      const portalMatch =
+        portalId == null || portalId === ''
+          ? isNull(RoleTable.portalId)
+          : eq(RoleTable.portalId, portalId);
+      const conditions = [
+        sql`lower(${RoleTable.roleName}) = ${nameKey}`,
+        portalMatch,
+      ];
+      if (excludeRoleId) {
+        conditions.push(ne(RoleTable.id, excludeRoleId));
+      }
+      const [role] = await db
+        .select()
+        .from(RoleTable)
+        .where(and(...conditions))
+        .limit(1);
+      return role ?? null;
+    } catch (error) {
+      logger.error('[RoleRepository.findByNameAndPortal] Error:', error);
+      return null;
+    }
+  }
+
+  /** Resolve seeded role by display name + portal.code (or null portal). */
+  async findByNameAndPortalCode(
+    roleName: string,
+    portalCode: string | null,
+  ): Promise<RoleType | null> {
+    try {
+      if (portalCode == null) {
+        return this.findByNameAndPortal(roleName, null);
+      }
+      const [portal] = await db
+        .select({ id: PortalTable.id })
+        .from(PortalTable)
+        .where(eq(PortalTable.code, portalCode))
+        .limit(1);
+      if (!portal) return null;
+      return this.findByNameAndPortal(roleName, portal.id);
+    } catch (error) {
+      logger.error('[RoleRepository.findByNameAndPortalCode] Error:', error);
       return null;
     }
   }
@@ -67,6 +121,14 @@ export class RoleRepositoryClass {
       return role || null;
     } catch (error) {
       logger.error('[RoleRepository.updateRole] Error:', error);
+      if (
+        typeof error === 'object' &&
+        error !== null &&
+        'code' in error &&
+        (error as { code?: string }).code === '23505'
+      ) {
+        throw error;
+      }
       return null;
     }
   }

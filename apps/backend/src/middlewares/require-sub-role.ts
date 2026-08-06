@@ -29,11 +29,14 @@ async function holdsAgencyLane(
   allowed: readonly AgencySubRole[],
 ): Promise<boolean> {
   const roles = await authRepository.getRolesForUserIds([userId]);
-  const names = roles.map((r) => r.roleName);
-  // Accept legacy specialized names until remove-specialized-portal-roles runs.
   const hasAgencyPortal =
-    names.includes(portalRoleName.AGENCY) ||
-    names.some((n) => n === 'agency_owner' || n === 'agency_finance');
+    roles.some((r) => r.portalCode === 'agency') ||
+    roles.some(
+      (r) =>
+        r.roleName === portalRoleName.AGENCY ||
+        r.roleName === 'agency_owner' ||
+        r.roleName === 'agency_finance',
+    );
   if (!hasAgencyPortal) return false;
   const memberships = await agencyMemberRepository.listByUser(userId);
   return memberships.some(
@@ -46,12 +49,14 @@ async function holdsOutletLane(
   allowed: readonly OutletSubRole[],
 ): Promise<boolean> {
   const roles = await authRepository.getRolesForUserIds([userId]);
-  const names = roles.map((r) => r.roleName);
   const hasOutletPortal =
-    names.includes(portalRoleName.OUTLET) ||
-    names.some(
-      (n) =>
-        n === 'outlet_owner' || n === 'outlet_finance' || n === 'outlet_ops',
+    roles.some((r) => r.portalCode === 'outlet') ||
+    roles.some(
+      (r) =>
+        r.roleName === portalRoleName.OUTLET ||
+        r.roleName === 'outlet_owner' ||
+        r.roleName === 'outlet_finance' ||
+        r.roleName === 'outlet_ops',
     );
   if (!hasOutletPortal) return false;
   const memberships = await outletMemberRepository.listByUser(userId);

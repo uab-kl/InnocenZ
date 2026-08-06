@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { z } from "zod";
 import { businessSections } from "@/constants/business-sections";
-import { rbacSections } from "@/constants/rbac-sections";
+import { sidebarRbacSections } from "@/constants/rbac-sections";
 import { userTypes } from "@/constants/user-types";
 
 const ChildNavLinkSchema = z.object({
@@ -77,7 +77,7 @@ export const sidebarSections: SidebarSection[] = [
 		key: "operation",
 		label: "Operation",
 		items: [
-			...rbacSections.map((section) => ({
+			...sidebarRbacSections.map((section) => ({
 				key: `sidebar-rbac-${section.key}`,
 				title: section.title,
 				href: section.href,
@@ -188,7 +188,7 @@ export const allNavigationItems: NavLinkSchemaType[] = [
 		icon: Shield,
 		allowedPermission: ["*"],
 		variant: "default",
-		children: rbacSections.map((section) => ({
+		children: sidebarRbacSections.map((section) => ({
 			key: `sidebar-rbac-${section.key}`,
 			title: section.title,
 			href: section.href,
