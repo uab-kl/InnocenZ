@@ -316,6 +316,35 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ ONE SOURCE **AND** ONE MOMENT — PR data must update everywhere at once (owner, 6 Aug 2026)
+
+*"make sure all links any changes also changes simultaneously … no any different data, just take from
+the same database"*.
+
+These are TWO requirements and only the first is covered by the consolidation sweep:
+
+1. **ONE SOURCE** — every surface reads PR facts through `managedPrFromBackend`. In flight.
+2. **ONE MOMENT** — when a PR is edited ANYWHERE, every surface showing that PR refetches. **Not
+   covered.** One source with a stale cache still shows two different answers, which is
+   indistinguishable to the owner from the bug just fixed.
+
+- [ ] **Audit every PR write for cache invalidation.** The Manage PR editor (`PUT /pr/:id`), the
+  roster's assign/unassign, approvals, and the PR's own profile save all change facts the agency
+  screens display. Each write must invalidate the PR query key — the discipline
+  `useAgencyReceiptEdit` already applies to receipts, where it invalidates the feed, the evidence
+  detail AND the voucher list because a receipt appears in all three.
+- [ ] **Watch `staleTime`.** `useAgencyReceipts` uses 60s and `useReceiptCatalogue` 5min; a PR query
+  with a long staleTime will look "not linked" for that whole window even when it is.
+- [ ] **The PR's own app is a SEPARATE CLIENT.** She edits her profile on the phone; the agency's
+  browser cannot know. Either shorten the PR query's staleTime, refetch on window focus, or accept a
+  documented lag — but decide deliberately rather than leaving it to chance.
+- [ ] ⚠️ **TIER IS PER-AGENCY AND MUST NOT BE UNIFIED.** `agency_pr.tier` is a membership fact: Atlas
+  grading a PR Tier III while another agency grades her Tier V is CORRECT. The bug is that
+  `composePr` picks the OLDEST membership and prints that tier on the PR's own profile as if it were
+  global. Do NOT "fix" this by making the two screens agree — fix it by resolving the membership from
+  the caller's scope, and decide what her own profile shows when she is on two rosters. Languages,
+  height, weight, age, name and photos ARE account-level and must always agree.
+
 ### ▶ THE AGENCY'S "WHAT DO I HAVE TO DO" SURFACE (owner, 6 Aug 2026 — SPEC, not started)
 
 *"need to make a shift pending approve to remind the agency that before raise pv … notification
