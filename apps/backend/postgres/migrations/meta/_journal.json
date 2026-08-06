@@ -680,6 +680,13 @@
       "when": 1787100000000,
       "tag": "0096_user_profile_comcard_dimensions",
       "breakpoints": true
+    },
+    {
+      "idx": 97,
+      "version": "7",
+      "when": 1787200000000,
+      "tag": "0097_shift_assignment_pro_rata_wage",
+      "breakpoints": true
     }
   ]
 }

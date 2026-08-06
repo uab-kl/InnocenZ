@@ -747,6 +747,21 @@ export type ShiftAssignmentRecord = {
   leaveProofPhotos: string[] | null;
   checkInAt: string | null;
   checkOutAt: string | null;
+  /**
+   * How `payAmount` was arrived at (migration 0097). Null until check-out seals
+   * the shift, and on every row sealed before the rule existed.
+   *
+   * ⚠️ `payAmount` is the EARNED amount — pro-rated by the minutes actually
+   * worked — so it is what the PR is owed and what reaches the voucher.
+   * `dayRateAmount` is the full rate it was taken from. Display `payAmount`; the
+   * rate card is only the forecast, and only until the shift closes.
+   * `scheduledMinutes` is also the divisor overtime is priced on, so the phone's
+   * OT estimate agrees with what the agency approves.
+   */
+  dayRateAmount: string | null;
+  workedMinutes: number | null;
+  scheduledMinutes: number | null;
+  payRule: string | null;
   /** Shift day as YYYY-MM-DD. */
   shiftDate: string;
   slot: string | null;

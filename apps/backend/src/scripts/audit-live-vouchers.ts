@@ -126,6 +126,16 @@ async function main() {
         // money the stamps cannot justify. See maxOvertimeCents.
         overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
         overtimeStatus: ShiftAssignmentTable.overtimeStatus,
+        // Migration 0097, load-bearing for the same reason as the two above.
+        // `pay_amount` may now be pro-rated, so overtime prices off
+        // `day_rate_amount`; `scheduled_minutes` is the divisor for both pay and
+        // the overtime rate; and `overtime_amount` FREEZES what was approved, so
+        // a decided claim is answered from that decision rather than re-derived
+        // at today's divisor — which would flag every past approval on a shift
+        // that was not exactly six hours.
+        dayRateAmount: ShiftAssignmentTable.dayRateAmount,
+        scheduledMinutes: ShiftAssignmentTable.scheduledMinutes,
+        overtimeAmount: ShiftAssignmentTable.overtimeAmount,
         shiftDate: ShiftTable.shiftDate,
       })
       .from(ShiftAssignmentTable)
