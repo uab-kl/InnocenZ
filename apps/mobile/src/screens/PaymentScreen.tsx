@@ -7,7 +7,6 @@ import {
   Alert,
   Image,
   Modal,
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -48,6 +47,7 @@ import {
   thisWeekDayStatus,
   weekDisputable,
 } from '../lib/receipt-review';
+import { pickProofPhotos } from '../lib/proof-photo';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useViewportSize } from '../lib/viewport';
@@ -78,47 +78,21 @@ type DisputeTarget = {
   week: WeekTab;
 };
 
-type HtmlFileInput = {
-  type: string;
-  accept: string;
-  multiple: boolean;
-  files: FileList | null;
-  onchange: ((ev: Event) => void) | null;
-  click: () => void;
-};
-
-function readImageFiles(files: FileList | null): Promise<string[]> {
-  if (!files?.length) return Promise.resolve([]);
-  const imageFiles = Array.from(files).filter((file) => file.type.startsWith('image/'));
-  return Promise.all(
-    imageFiles.map(
-      (file) =>
-        new Promise<string>((resolve, reject) => {
-          const reader = new FileReader();
-          reader.onload = () => resolve(String(reader.result));
-          reader.onerror = () => reject(reader.error);
-          reader.readAsDataURL(file);
-        }),
-    ),
-  );
-}
-
-function pickDisputeImages(onPicked: (urls: string[]) => void) {
-  if (Platform.OS !== 'web') return;
-  const doc = (globalThis as { document?: { createElement: (tag: string) => HtmlFileInput } })
-    .document;
-  if (!doc) return;
-  const input = doc.createElement('input');
-  input.type = 'file';
-  input.accept = 'image/*';
-  input.multiple = true;
-  input.onchange = () => {
-    void readImageFiles(input.files).then((urls) => {
-      if (urls.length) onPicked(urls);
-    });
-  };
-  input.click();
-}
+/*
+ * "Attach files (images)" did nothing on a phone.
+ *
+ * This screen carried its own picker whose first line was
+ * `if (Platform.OS !== 'web') return;` — so on a real device the button
+ * rendered, took the tap, and returned immediately. Nothing opened, nothing
+ * was said. Meanwhile proof-photo.ts already had a working native path; this
+ * was a web-only duplicate of it that never grew one.
+ *
+ * Deleted in favour of the shared helper, asking for the LIBRARY: the photo a
+ * PR attaches to a dispute was taken hours ago, so opening the camera would
+ * make them cancel out of it first.
+ */
+const pickDisputeImages = (onPicked: (urls: string[]) => void) =>
+  pickProofPhotos(onPicked, { multiple: true, source: 'library' });
 
 const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
   { key: 'wages', label: 'Daily wages' },

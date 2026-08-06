@@ -66,13 +66,21 @@ export function downscaleToDataUrl(file: Blob, maxPx = 1024, quality = 0.7): Pro
  */
 export function pickProofPhotos(
   onPicked: (urls: string[]) => void,
-  opts: { multiple?: boolean } = {},
+  opts: { multiple?: boolean; source?: 'camera' | 'library' } = {},
 ) {
-  const { multiple = true } = opts;
+  const { multiple = true, source = 'camera' } = opts;
   if (Platform.OS !== 'web') {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const { captureReceiptPhoto } = require('./receipt-ocr') as typeof import('./receipt-ocr');
-    void captureReceiptPhoto().then((shot) => {
+    const ocr = require('./receipt-ocr') as typeof import('./receipt-ocr');
+    if (source === 'library') {
+      // "Attach files" means a photo they already have — go straight to the
+      // library rather than opening the camera and making them cancel it.
+      void ocr.pickPhotosFromLibrary(multiple).then((urls) => {
+        if (urls.length) onPicked(urls);
+      });
+      return;
+    }
+    void ocr.captureReceiptPhoto().then((shot) => {
       if (shot?.dataUrl) onPicked([shot.dataUrl]);
     });
     return;
