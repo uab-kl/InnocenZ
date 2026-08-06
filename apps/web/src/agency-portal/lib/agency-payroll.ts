@@ -109,11 +109,33 @@ export function resolvePvPrLabel(
 	pv: Pick<PrPaymentVoucher, "prName" | "prIc"> & { prNickname?: string },
 	agencyPRs: AgencyManagedPR[] = [],
 ): string {
-	const legal = resolvePvPrName(pv, agencyPRs);
-	const nickname = pv.prNickname?.trim();
-	if (!nickname) return legal;
-	if (nickname.toLowerCase() === legal.trim().toLowerCase()) return legal;
-	return `${nickname} (${legal})`;
+	return formatPayeeLabel(pv.prNickname, resolvePvPrName(pv, agencyPRs));
+}
+
+/**
+ * `(Vicky) Victoria Tan Mei Lin` — the owner's exact format, 5 Aug 2026.
+ *
+ * THE BRACKETS GO ROUND THE NICKNAME, and the nickname comes first. An earlier
+ * pass read the instruction the other way and shipped `Vicky (Victoria Tan Mei
+ * Lin)`; this is the corrected order and the one to keep.
+ *
+ * ONE formatter, called by every screen that names a payee — the voucher card
+ * and the dispute row already drifted apart once because each formatted its own
+ * label, which is how the nickname ended up on one screen and not the other.
+ *
+ * Falls back to whichever half exists. A nickname that merely repeats the legal
+ * name prints once, not as "(Victoria Tan Mei Lin) Victoria Tan Mei Lin".
+ */
+export function formatPayeeLabel(
+	nickname: string | null | undefined,
+	legalName: string | null | undefined,
+): string {
+	const nick = nickname?.trim();
+	const legal = legalName?.trim();
+	if (!nick) return legal ?? "";
+	if (!legal) return nick;
+	if (nick.toLowerCase() === legal.toLowerCase()) return legal;
+	return `(${nick}) ${legal}`;
 }
 
 export function pvBelongsToAgencyPr(

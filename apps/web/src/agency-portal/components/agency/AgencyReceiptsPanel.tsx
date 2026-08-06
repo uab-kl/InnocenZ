@@ -7,6 +7,7 @@ import {
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
 import {
@@ -204,7 +205,12 @@ function ReceiptRow({
 							</IzPill>
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							{receipt.prName ?? "Unknown PR"} · {receiptOutlet(receipt)}
+							{/* The feed has carried prNickname since the receipt review shipped;
+							    this row simply never read it. Shared formatter, so all three
+							    payee surfaces say the same thing. */}
+							{formatPayeeLabel(receipt.prNickname, receipt.prName) ||
+								"Unknown PR"}{" "}
+							· {receiptOutlet(receipt)}
 							{receipt.orderNo ? ` · order ${receipt.orderNo}` : ""}
 						</p>
 						<p className="iz-tiny iz-muted2 mt-0.5">
@@ -474,7 +480,12 @@ export function AgencyReceiptsPanel({
 	const prOptions = useMemo(() => {
 		const byId = new Map<string, string>();
 		for (const r of weekReceipts) {
-			if (r.prId) byId.set(r.prId, r.prName ?? r.prId);
+			// The filter names people the same way the rows do — picking "Vicky"
+			// from a dropdown that only lists legal names is a lookup the agency
+			// should not have to do in their head.
+			if (r.prId) {
+				byId.set(r.prId, formatPayeeLabel(r.prNickname, r.prName) || r.prId);
+			}
 		}
 		return [...byId.entries()].sort((a, b) => a[1].localeCompare(b[1]));
 	}, [weekReceipts]);

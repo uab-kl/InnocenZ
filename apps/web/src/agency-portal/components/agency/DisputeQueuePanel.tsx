@@ -2,6 +2,7 @@ import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyRece
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { useStore } from "@agency-portal/lib/store";
 import { Check, ImageOff, Paperclip, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -221,15 +222,14 @@ function DisputeRow({
 		<div className="rounded-xl border border-[var(--iz-line)] p-3">
 			<div className="flex flex-wrap items-start justify-between gap-2">
 				<div>
-					{/* Nickname first, legal name behind it — the same label the Payment
-					    Vouchers card uses. The floor knows her as Vicky; the money is in
-					    the legal name, and a reviewer has to see the two are one person. */}
+					{/* The SHARED formatter, not a second copy — formatting the label here
+					    by hand is exactly how this row ended up without a nickname while
+					    the voucher card had one. */}
 					<div className="text-sm font-semibold">
-						{dispute.voucher.prNickname && dispute.voucher.prName
-							? `${dispute.voucher.prNickname} (${dispute.voucher.prName})`
-							: (dispute.voucher.prNickname ??
-								dispute.voucher.prName ??
-								"Unknown PR")}{" "}
+						{formatPayeeLabel(
+							dispute.voucher.prNickname,
+							dispute.voucher.prName,
+						) || "Unknown PR"}{" "}
 						· {COMPONENT_LABEL[dispute.component]}
 					</div>
 					<p className="iz-tiny iz-muted mt-0.5">

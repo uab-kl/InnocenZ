@@ -1050,6 +1050,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **6 Aug 2026 — LAST WEEK LOST ITS VOUCHER THE MOMENT IT WAS SIGNED.**
+>
+> Owner: *"where is the last week pv? show in agency last week tab payroll page"*.
+>
+> `LAST_WEEK_REVIEW_STATUSES` held `{SENT, PENDING_REVIEW, DISPUTED}` — **not SIGNED**. So a voucher
+> disappeared from the tab at the exact moment it became real: PV-000004 for 26 Jul–01 Aug sat in the
+> PR's History as *"Signed 4 Aug 2026 · RM 700.00"* while the agency's Last Week tab for that same
+> week read *"0 PVs · No vouchers match these filters"*. The one screen an agency uses to look back at
+> a week could not show that week's only voucher. Adding SIGNED restores it (now 2 PVs, both "To
+> pay"). PAID stays out — `payrollActivePvs` drops it, because a paid voucher belongs to History.
+>
+> **Payee naming corrected and unified.** The format is `(Vicky) Victoria Tan Mei Lin` — brackets
+> round the NICKNAME, nickname first. An earlier pass read the instruction the other way and shipped
+> `Vicky (Victoria Tan Mei Lin)`. One shared `formatPayeeLabel(nickname, legalName)` now serves all
+> four payee surfaces (PV card, dispute row, receipt row, receipts PR filter); each had formatted its
+> own label, which is exactly why the nickname appeared on one screen and not another. A nickname
+> equal to the legal name prints once — Alice Yee Mei Me's `pr.nickname` IS her legal name, so her row
+> correctly shows one name rather than it twice.
+>
+> ⚠️ **Still not showing `(Vicky)` for Victoria, and the UI is no longer the suspect.** The repository
+> joins `pr.nickname` through `pr_id` and the controller returns the whole row, so the field reaches
+> the client. Either `pr.nickname` is unset or equal to her legal name in the DB — check **Manage PR**
+> — or the backend has not reloaded the new join. Do not add more UI for this until the column is
+> confirmed.
+
 
 > **6 Aug 2026 — THIS-WEEK WENT BLANK THE MOMENT THE VOUCHER WAS ISSUED
 > (`7087a93`).** The PR's Payment → This week showed every cell as a dash and
