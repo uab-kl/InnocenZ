@@ -1051,6 +1051,38 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ## 10. Changelog (what changed / what's done — append newest at top)
 
 
+> **6 Aug 2026 — THIS-WEEK WENT BLANK THE MOMENT THE VOUCHER WAS ISSUED
+> (`7087a93`).** The PR's Payment → This week showed every cell as a dash and
+> **RM 0.00** while the agency screen showed the same week at **RM 3,708.21**.
+> `getMyCurrentWeek` read the week through `getCurrentWeekDraft`, which filters to
+> `OPEN_WEEK_STATUSES` (`pending_review`, `disputed`) — that filter belongs to the
+> **write** path, which needs the one voucher a new self-log may still append to.
+> As a **read** it returned `null` the instant the agency issued the voucher
+> (`sent`). Now reads `getWeekVoucher` whatever the status, the same call
+> `getMyLastWeek` already made. **This is the third instance of the same
+> read/write conflation** — first `disputed`, then `sent` on Last week, now `sent`
+> on This week. Live-proven on PV-000006 (week `2026-08-02`, Victoria):
+> `getCurrentWeekDraft = null` vs `getWeekVoucher = PV-000006 sent net=3708.21
+> lines=12`, via the new `_probe-week-read.ts` (runs both lookups side by side).
+> ⚠️ **Restart the backend after pull** — tsx watch serves stale routes.
+
+
+> **6 Aug 2026 — NOTIFICATIONS: SCROLL, MARK-ALL-READ; NO CLEAR (`9049cd6`,
+> `da1a008`).** The bell sheet could not be scrolled on a real phone (a `Pressable`
+> backdrop wrapping the `ScrollView` steals the drag on Android) — the backdrop is
+> now a sibling, the list a real `ScrollView`, Close is red, padding uses safe-area
+> insets. **Mark all N as read** fans out one `POST /notification/:id/read` per
+> unread row (there is no bulk endpoint), clears the badge optimistically, then
+> re-reads — a row whose POST failed comes back **unread** rather than looking
+> cleared. Derived rows (`backed: false`) clear locally, which is all they ever
+> were. 🔴 **CLEAR is NOT shipped:** `/notification` exposes only `list`,
+> `unread-count` and `POST /:id/read` — hiding rows locally would look cleared and
+> reappear on the next 60s poll. Needs a real delete/dismiss endpoint (§9). Also:
+> the "Forgot to check out?" to-do card is collapsible, and its three facts are
+> three labelled lines instead of one wrapping ribbon; the Payment grid's `TOT`
+> column now reads **TOTAL / week** (`2d0c5e2`).
+
+
 > **5 Aug 2026 — `main.pr` DROPPED (migration 0089).** Ops `pr_id` values remapped to
 > equal `user_id`; FKs to `pr` removed; table gone. Runtime identity is synthetic
 > `id === userId` from `user` + `user_profile` + `agency_pr`. Prefer `user_id` in new
@@ -2379,7 +2411,7 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 > Closes the "DB ahead of repo" gap: editor code, dispute-queue wiring, and readers for
 > `payment_voucher_line.outlet_id` + `review_withdrawn_at` are in git. §9 uncommitted-tree block
 > marked closed; next is live agency click-through + day/receipt agreement audit highs.
-> Doc renew only in this commit (code already at `57bd165`).
+> Doc renew only in this commit (code already at `57bd165`).
 
 > **4 Aug 2026 — 🔴 RESOLVING THE DISPUTE BLANKED THE WEEK AGAIN (reading and writing are not one question).**
 >
