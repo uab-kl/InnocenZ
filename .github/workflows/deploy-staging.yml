@@ -1,19 +1,19 @@
 name: Deploy Staging
 
+# Triggers: manual Run workflow | push to main | push tags beta-* / v* / staging-*
 on:
-  # Always available: Actions → Deploy Staging → Run workflow
   workflow_dispatch:
   push:
-    # Auto-deploy when main moves (no tag required)
     branches:
       - main
     tags:
-      - 'v*'
-      - 'staging-*'
-      - 'beta-*'
+      - "v*"
+      - "staging-*"
+      - "beta-*"
 
 permissions:
   contents: read
+  actions: write
 
 concurrency:
   group: deploy-${{ github.workflow }}-${{ github.ref }}
@@ -44,7 +44,6 @@ jobs:
           echo "frontend_tags=${DOCKERHUB_NAMESPACE}/innocenz-frontend:staging-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-frontend:staging" >> "$GITHUB_OUTPUT"
           echo "backend_tags=${DOCKERHUB_NAMESPACE}/innocenz-backend:staging-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-backend:staging" >> "$GITHUB_OUTPUT"
 
-  # Frontend + backend build/push in parallel (same pattern as uab-monitor-support).
   frontend:
     needs: prepare
     runs-on: ubuntu-latest
