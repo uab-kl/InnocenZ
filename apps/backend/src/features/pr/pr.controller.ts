@@ -40,16 +40,23 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
         : row.approveStatus === 'pending'
           ? 'pending'
           : 'inactive';
+  // Every field that is actually returned below has to be listed here, or a PR
+  // who filled in only the omitted ones collapses to `profile: null` and the
+  // agency card falls back to placeholder numbers for a body she did record.
   const profileHasValue = [
     row.profileImage,
     row.gender,
     row.race,
+    row.languages,
     row.dob,
     row.nationality,
     row.portfolioPhotos,
     row.comcardImage,
     row.comcardHeightCm,
     row.comcardWeightKg,
+    row.comcardBustCm,
+    row.comcardWaistCm,
+    row.comcardHipCm,
   ].some((v) => v !== null && v !== undefined);
   const rosterHasValue = [row.place, row.yearsExp, row.kpiTier, row.payClass].some(
     (v) => v !== null && v !== undefined,
@@ -77,7 +84,7 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
           race: row.race,
           dob: row.dob != null ? String(row.dob).slice(0, 10) : null,
           nationality: row.nationality,
-          languages: null,
+          languages: row.languages,
           portfolioPhotos: row.portfolioPhotos,
           comcardImage: row.comcardImage,
           comcardHeightCm: row.comcardHeightCm,

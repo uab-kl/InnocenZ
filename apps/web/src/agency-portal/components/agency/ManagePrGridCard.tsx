@@ -4,6 +4,7 @@ import { IzPill } from "@agency-portal/components/iz/ui";
 import { formatOutletHistRm } from "@agency-portal/components/outlet/outlet-history-ui";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { languagesFromPr } from "@agency-portal/lib/agency-demo";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import type { getAgencyPrFlags } from "@agency-portal/lib/agency-pr-flags";
 import { cn } from "@agency-portal/lib/utils";
 import { Check, Star } from "lucide-react";
@@ -89,7 +90,12 @@ export function ManagePrGridCard({
 
 			<div className="iz-pr-manage-card__body">
 				<div className="iz-pr-manage-card__name-row">
-					<p className="iz-pr-manage-card__name">{pr.name}</p>
+					{/* "(Vicky) Victoria Tan Mei Lin" — the ONE payee formatter, so the
+					    roster card names a PR exactly as the voucher and dispute rows do.
+					    It collapses to a single name when the account carries only one. */}
+					<p className="iz-pr-manage-card__name">
+						{formatPayeeLabel(pr.name, pr.icName)}
+					</p>
 					{averageRating !== null && (
 						<span className="iz-pr-manage-card__rating">
 							<Star className="iz-pr-manage-card__rating-star" aria-hidden />

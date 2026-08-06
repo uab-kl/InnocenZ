@@ -1,6 +1,6 @@
 import {
 	type ComcardPreviewData,
-	comcardWeight,
+	comcardMeasure,
 } from "@agency-portal/components/agency/Comcard3dPreview";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
@@ -97,13 +97,14 @@ export function PrComcardPickerThumb({
 						className="font-semibold leading-tight text-[#222]"
 						style={{ fontSize: "0.8em", marginTop: "0.15em" }}
 					>
-						Age {pr.age}
+						Age {comcardMeasure(pr.age)}
 					</p>
 					<p
 						className="whitespace-nowrap font-semibold leading-tight text-[#222]"
 						style={{ fontSize: "0.8em" }}
 					>
-						{pr.height}cm · {comcardWeight(pr.weight)}kg
+						{comcardMeasure(pr.height, "cm")} ·{" "}
+						{comcardMeasure(pr.weight, "kg")}
 					</p>
 				</div>
 			</div>
@@ -154,7 +155,6 @@ export function PortfolioComcardVisual({
 	 */
 	showBadge?: boolean;
 }) {
-	const weight = comcardWeight(pr.weight);
 	const grid = photos.slice(0, 4);
 
 	return (
@@ -167,9 +167,12 @@ export function PortfolioComcardVisual({
 				</div>
 				<div className="iz-portfolio-comcard__overlay">
 					<p className="iz-portfolio-comcard__name">{pr.name}</p>
-					<p className="iz-portfolio-comcard__line">Age {pr.age}</p>
 					<p className="iz-portfolio-comcard__line">
-						{pr.height}cm · {weight}kg
+						Age {comcardMeasure(pr.age)}
+					</p>
+					<p className="iz-portfolio-comcard__line">
+						{comcardMeasure(pr.height, "cm")} ·{" "}
+						{comcardMeasure(pr.weight, "kg")}
 					</p>
 				</div>
 				{showBadge && (

@@ -35,6 +35,7 @@ import {
 	resolveAgencyPrPhoto,
 	sortAgencyPrsByName,
 } from "@agency-portal/lib/agency-demo";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
 	getAgencyPrFlags,
 	isAgencyPrActive,
@@ -547,9 +548,13 @@ function buildAgencyPrDraft(pr: AgencyManagedPR): AgencyPrDraft {
 		icName: pr.icName ?? pr.name ?? "",
 		mobile: pr.mobile ?? "",
 		email: pr.email ?? "",
-		age: pr.age ?? 22,
-		height: pr.height ?? 165,
-		weight: pr.weight ?? 52,
+		// 0 = the account has no figure on file. The old `?? 22 / ?? 165 / ?? 52`
+		// pre-filled the editor with a stranger's body, and saveEdit then WROTE it
+		// to `user_profile` the moment the agency saved any unrelated change —
+		// which is how the agency's numbers and the PR's own screen diverged.
+		age: pr.age ?? 0,
+		height: pr.height ?? 0,
+		weight: pr.weight ?? 0,
 		race: pr.race ?? "",
 		place: pr.place ?? "",
 		yearsExp: pr.yearsExp ?? 0,
@@ -703,14 +708,25 @@ function AgencyPrDetail({
 			toast("Select at least one language", "warn");
 			return;
 		}
-		const payload = {
+		// A measurement the PR has not given is OMITTED, never clamped. This used to
+		// read `Math.max(18, …)` / `Math.max(140, …)` / `Math.max(35, …)`, so a
+		// blank box was saved as age 18 / 140cm / 35kg — numbers nobody typed,
+		// written to `user_profile` on any unrelated edit and permanently at odds
+		// with what the PR sees on her own profile. `saveProfile` skips undefined
+		// keys, so leaving one out leaves the stored value alone.
+		const measure = (value: number, min: number, max: number) =>
+			value > 0 ? Math.max(min, Math.min(max, Math.round(value))) : undefined;
+		const age = measure(draft.age, 18, 60);
+		const height = measure(draft.height, 140, 220);
+		const weight = measure(draft.weight, 35, 120);
+		const payload: Parameters<typeof onSaveProfile>[1] = {
 			name,
 			icName,
 			mobile: draft.mobile.trim(),
 			email: draft.email.trim(),
-			age: Math.max(18, Math.min(60, Math.round(draft.age))),
-			height: Math.max(140, Math.min(220, Math.round(draft.height))),
-			weight: Math.max(35, Math.min(120, Math.round(draft.weight))),
+			...(age !== undefined ? { age } : {}),
+			...(height !== undefined ? { height } : {}),
+			...(weight !== undefined ? { weight } : {}),
 			race: draft.race.trim(),
 			place: draft.place.trim(),
 			yearsExp: Math.max(0, Math.min(40, Math.round(draft.yearsExp))),
@@ -771,7 +787,10 @@ function AgencyPrDetail({
 				<p className="iz-tiny iz-muted2 uppercase tracking-widest">
 					Managed PR
 				</p>
-				<IzPageTitle>{display.name}</IzPageTitle>
+				{/* The ONE payee formatter — "(Vicky) Victoria Tan Mei Lin". */}
+				<IzPageTitle>
+					{formatPayeeLabel(display.name, display.icName)}
+				</IzPageTitle>
 				<div className="mt-1 flex flex-wrap items-center gap-1.5">
 					<IzPill
 						variant={isAgencyPrActive(detail) ? "green" : "ink"}
@@ -779,8 +798,9 @@ function AgencyPrDetail({
 					>
 						{isAgencyPrActive(detail) ? "Active" : "Inactive"}
 					</IzPill>
+					{/* Blank fields say so. "IC  · not rated yet" read as a broken line. */}
 					<p className="iz-tiny iz-muted">
-						IC {detail.ic} ·{" "}
+						IC {detail.ic || "—"} ·{" "}
 						{averageRating === null
 							? "not rated yet"
 							: `${formatStars(averageRating)} ★ avg`}
@@ -820,7 +840,7 @@ function AgencyPrDetail({
 								</div>
 							) : (
 								<div className="font-sora text-[17px] font-bold">
-									{display.name}
+									{formatPayeeLabel(display.name, display.icName)}
 								</div>
 							)}
 							<span className="iz-tier shrink-0">
@@ -920,16 +940,19 @@ function AgencyPrDetail({
 						<AgencyComcardInput
 							label="Height (cm)"
 							value={draft.height}
+							blankZero
 							onChange={(n) => setDraft((p) => ({ ...p, height: n }))}
 						/>
 						<AgencyComcardInput
 							label="Weight (kg)"
 							value={draft.weight}
+							blankZero
 							onChange={(n) => setDraft((p) => ({ ...p, weight: n }))}
 						/>
 						<AgencyComcardInput
 							label="Age"
 							value={draft.age}
+							blankZero
 							onChange={(n) => setDraft((p) => ({ ...p, age: n }))}
 						/>
 					</div>
@@ -998,15 +1021,15 @@ function AgencyPrDetail({
 							<div className="iz-kv-list">
 								<div className="iz-v-sum">
 									<span className="iz-muted">Mobile</span>
-									<b>{display.mobile}</b>
+									<b>{display.mobile || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
 									<span className="iz-muted">Email</span>
-									<b>{display.email}</b>
+									<b>{display.email || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
 									<span className="iz-muted">IC</span>
-									<b>{detail.ic}</b>
+									<b>{detail.ic || "—"}</b>
 								</div>
 							</div>
 						)}
@@ -1097,11 +1120,11 @@ function AgencyPrDetail({
 							<div className="iz-kv-list">
 								<div className="iz-v-sum">
 									<span className="iz-muted">Race</span>
-									<b>{display.race}</b>
+									<b>{display.race || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
 									<span className="iz-muted">Place</span>
-									<b>{display.place}</b>
+									<b>{display.place || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
 									<span className="iz-muted">Experience</span>
@@ -1441,18 +1464,27 @@ function AgencyComcardInput({
 	label,
 	value,
 	onChange,
+	blankZero,
 }: {
 	label: string;
 	value: number;
 	onChange: (n: number) => void;
+	/**
+	 * For height / weight / age, 0 means "the account has no figure on file", so
+	 * the box shows empty rather than a 0 that reads like a measurement. Years of
+	 * experience is NOT one of these — 0 years is a real answer.
+	 */
+	blankZero?: boolean;
 }) {
+	const shown =
+		Number.isFinite(value) && !(blankZero && value === 0) ? value : "";
 	return (
 		<div className="iz-comcard-field">
 			<label>{label}</label>
 			<input
 				type="number"
 				inputMode="numeric"
-				value={Number.isFinite(value) ? value : ""}
+				value={shown}
 				onChange={(e) => onChange(Number(e.target.value))}
 			/>
 		</div>

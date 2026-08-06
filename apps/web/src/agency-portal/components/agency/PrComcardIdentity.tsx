@@ -2,7 +2,7 @@ import {
 	Comcard3dPreviewThumb,
 	Comcard3dPreviewVisual,
 	type ComcardPreviewData,
-	comcardWeight,
+	comcardMeasure,
 } from "@agency-portal/components/agency/Comcard3dPreview";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCardTitle, IzPill } from "@agency-portal/components/iz/ui";
@@ -11,8 +11,6 @@ import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { languagesFromPr } from "@agency-portal/lib/agency-demo";
 import { cn } from "@agency-portal/lib/utils";
 import { useState } from "react";
-
-const COMCARD_FALLBACK = { height: 165, weight: 52, age: 24 };
 
 export function toComcardPreview(
 	pr: Pick<
@@ -27,12 +25,16 @@ export function toComcardPreview(
 		| "portfolioPhotos"
 	>,
 ): ComcardPreviewData {
+	// Straight through, no substitutions. These three used to fall back to
+	// 165cm/52kg/24y, which is how the agency's card described a body the PR had
+	// never entered while her own Profile screen showed her real one. 0 reaches
+	// the renderers as an em-dash.
 	return {
 		id: pr.id,
 		name: pr.name,
-		height: pr.height ?? COMCARD_FALLBACK.height,
-		weight: pr.weight ?? COMCARD_FALLBACK.weight,
-		age: pr.age ?? COMCARD_FALLBACK.age,
+		height: pr.height,
+		weight: pr.weight,
+		age: pr.age,
 		avatarPhoto: pr.avatarPhoto,
 		comcardImageUrl: pr.comcardImageUrl,
 		portfolioPhotos: pr.portfolioPhotos,
@@ -44,12 +46,13 @@ export function comcardPreviewFromSlot(
 	pr?: AgencyManagedPR | null,
 ): ComcardPreviewData {
 	if (pr) return toComcardPreview(pr);
+	// A slot with no roster record behind it: we have a name and nothing else.
 	return {
 		id: slot.prId,
 		name: slot.prName,
-		height: COMCARD_FALLBACK.height,
-		weight: COMCARD_FALLBACK.weight,
-		age: COMCARD_FALLBACK.age,
+		height: 0,
+		weight: 0,
+		age: 0,
 	};
 }
 
@@ -116,7 +119,8 @@ export function PrComcardIdentity({
 					))}
 				</div>
 				<p className="iz-tiny iz-muted2 mt-3 text-center">
-					{pr.height} cm · {comcardWeight(pr.weight)} kg · {pr.age}y
+					{comcardMeasure(pr.height, " cm")} ·{" "}
+					{comcardMeasure(pr.weight, " kg")} · {comcardMeasure(pr.age, "y")}
 					{profile?.place ? ` · ${profile.place}` : ""}
 				</p>
 			</IzSheet>

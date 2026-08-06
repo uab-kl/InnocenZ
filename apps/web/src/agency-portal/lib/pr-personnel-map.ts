@@ -53,71 +53,6 @@ export function ageFromDob(dob: string | null | undefined): number {
 }
 
 /**
- * Backend has no dedicated comcard column — sample seeds (and some uploads) keep
- * the rendered photo comcard inside `portfolio_photos` (e.g. `vicky-comcard.png`).
- * Pull that out so agency UI can treat it as `comcardImageUrl` instead of only
- * showing it in the gallery / falling back to the 3D silhouette.
- *
- * Also repairs demo Vicky portfolios where a later user-upload slot 404s but the
- * neighboring slots are still the seed gallery photos — swap those broken
- * `/img/users/portfolio/…` paths back to the matching `vicky-N.png` seed.
- */
-export function splitPortfolioComcard(
-	photos: (string | null)[] | null | undefined,
-): {
-	comcardImageUrl: string | null;
-	portfolioPhotos: (string | null)[] | undefined;
-} {
-	if (!photos?.length) {
-		return { comcardImageUrl: null, portfolioPhotos: photos ?? undefined };
-	}
-
-	const repaired = repairDemoGalleryUploads(photos);
-
-	let comcardImageUrl: string | null = null;
-	const portfolioPhotos: (string | null)[] = [];
-	for (const src of repaired) {
-		if (src && /comcard/i.test(src) && !comcardImageUrl) {
-			comcardImageUrl = src;
-			continue;
-		}
-		portfolioPhotos.push(src);
-	}
-
-	// Demo Vicky seed: gallery portraits without a comcard slot still have a
-	// known photo-comcard asset we can show in the comcard panel.
-	if (
-		!comcardImageUrl &&
-		portfolioPhotos.some((p) => p && /\/img\/pr\/gallery\/vicky-\d/i.test(p))
-	) {
-		comcardImageUrl = "/img/pr/gallery/vicky-comcard.png";
-	}
-
-	return {
-		comcardImageUrl,
-		portfolioPhotos: portfolioPhotos.some(Boolean)
-			? portfolioPhotos
-			: undefined,
-	};
-}
-
-/** Replace orphaned user-upload slots with seed gallery peers when present. */
-function repairDemoGalleryUploads(
-	photos: (string | null)[],
-): (string | null)[] {
-	const hasSeedGallery = photos.some(
-		(p) => p && /\/img\/pr\/gallery\/vicky-\d+\.png$/i.test(p),
-	);
-	if (!hasSeedGallery) return photos;
-
-	return photos.map((src, index) => {
-		if (!src || !/\/img\/users\/portfolio\//i.test(src)) return src;
-		const seed = `/img/pr/gallery/vicky-${index + 1}.png`;
-		return seed;
-	});
-}
-
-/**
  * Map a thin backend PR record into the rich demo `AgencyManagedPR` shape.
  * Backend-backed fields carry real data:
  *   - `name`  ← nickname (floor/display name), falling back to legal name
@@ -128,21 +63,24 @@ function repairDemoGalleryUploads(
  *   - comcard identity (`age`/`height`/`weight`/`race`, avatar, portfolio) ←
  *     the linked user account's profile — the same source the admin PR screen
  *     reads, so both screens show one PR the same way
- *   - `comcardImageUrl` ← portfolio slot whose path contains "comcard" (backend
- *     has no separate comcard field)
+ *   - `comcardImageUrl` ← `user_profile.comcard_image`
  *   - `languages` ← the same user_profile row the PR edits in their own portal
  * The remaining demo-only fields (rating, KPI, penalties, attendance, pay
  * class, …) have no backend yet, so they get neutral placeholders. `rating: 0`
  * is one of those placeholders, NOT a score — see lib/pr-rating-summary.ts,
  * which derives the real average from the `rating` table instead. This is the accepted hybrid tradeoff: real where the backend
  * is real, cosmetic placeholders elsewhere.
+ *
+ * `0` IS THE ONE SPELLING OF "the account does not carry this" for age, height
+ * and weight. It used to be three different spellings — `height ?? 0`,
+ * `weight ?? undefined`, `age → 0` — so one blank profile printed "0cm", the
+ * invented "52kg" (the weight default downstream) and "0y" side by side. The
+ * comcard renderers turn this 0 into an em-dash; nothing may turn it into a
+ * number the PR never entered.
  */
 export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 	const profile = pr.profile ?? null;
 	const roster = pr.roster ?? null;
-	const { comcardImageUrl, portfolioPhotos } = splitPortfolioComcard(
-		profile?.portfolioPhotos,
-	);
 	return {
 		id: pr.id,
 		name: pr.nickname?.trim() || pr.name,
@@ -152,7 +90,7 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		email: pr.email ?? "",
 		age: ageFromDob(profile?.dob),
 		height: profile?.comcardHeightCm ?? 0,
-		weight: profile?.comcardWeightKg ?? undefined,
+		weight: profile?.comcardWeightKg ?? 0,
 		race: profile?.race ?? "",
 		avatarPhoto: profile?.profileImage ?? null,
 		comcardImageUrl: profile?.comcardImage ?? null,

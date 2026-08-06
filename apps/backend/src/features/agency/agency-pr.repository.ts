@@ -58,6 +58,8 @@ export type AgencyPrEnriched = {
   profileImage: string | null;
   gender: string | null;
   race: string | null;
+  /** Spoken languages the PR set on their own profile — `user_profile.languages`. */
+  languages: string[] | null;
   /** ISO date or drizzle date string. */
   dob: string | Date | null;
   nationality: string | null;
@@ -146,6 +148,9 @@ export class AgencyPrRepository {
           profileImage: UserTable.profileImage,
           gender: UserProfileTable.gender,
           race: UserProfileTable.race,
+          // The join is already here — omitting this column was the reason an
+          // agency saw no languages for a PR who had set them in her own portal.
+          languages: UserProfileTable.languages,
           dob: UserProfileTable.dob,
           nationality: UserProfileTable.nationality,
           portfolioPhotos: UserProfileTable.portfolioPhotos,
