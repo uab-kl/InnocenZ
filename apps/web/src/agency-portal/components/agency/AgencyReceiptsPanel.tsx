@@ -7,6 +7,7 @@ import {
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
+import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
@@ -22,7 +23,7 @@ import {
 	Search,
 	SlidersHorizontal,
 } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type {
 	AgencyReceipt,
 	PaymentVoucherReceiptStatus,
@@ -96,16 +97,8 @@ function formatLoggedAt(iso: string): string {
 	});
 }
 
-/**
- * A proof photo is an opaque string — the PR app sends a data URL, older rows
- * hold a path. Rendering a path as an image gives a broken icon that reads as
- * "the evidence is missing", which is the one thing this panel must never say by
- * accident, so only what is certainly renderable is rendered.
- */
-const isRenderablePhoto = (photo: string) =>
-	photo.startsWith("data:image/") ||
-	photo.startsWith("https://") ||
-	photo.startsWith("http://");
+// `isRenderablePhoto` moved to ProofPhotoViewer — one rule about what counts as
+// renderable evidence, in one place, rather than a private copy per panel.
 
 /**
  * Does this receipt fall in the payroll week the tab is showing?
@@ -154,22 +147,13 @@ function ReceiptRow({
 	// Pending rows open themselves: the whole point of the row is the decision,
 	// and a decision behind a click is one the reviewer can walk past.
 	const [open, setOpen] = useState(receipt.status === "pending");
-	const [zoomPhoto, setZoomPhoto] = useState<string | null>(null);
+	// The enlarge overlay that lived here is gone — ProofPhotoViewer owns it now,
+	// with zoom and pan this one never had.
 	// Closed by default. The editor states what a correction costs and carries
 	// three live write buttons, so it is opened deliberately rather than sitting
 	// under the reviewer's cursor while they are only reading.
 	const [editing, setEditing] = useState(false);
 
-	// Escape closes the enlarged photo. Without this the overlay is mouse-only —
-	// it covers the screen, so a keyboard user would have nothing to tab to.
-	useEffect(() => {
-		if (!zoomPhoto) return;
-		const onKey = (e: KeyboardEvent) => {
-			if (e.key === "Escape") setZoomPhoto(null);
-		};
-		window.addEventListener("keydown", onKey);
-		return () => window.removeEventListener("keydown", onKey);
-	}, [zoomPhoto]);
 	const total = sumLines(receipt);
 	const photos = receipt.proofPhotos ?? [];
 	// Verified means the week closed. The server refuses to re-decide it, so the
@@ -278,35 +262,12 @@ function ReceiptRow({
 								<span className="iz-tiny iz-muted2">No proof attached</span>
 							</>
 						)}
-						{photos.map((photo, i) =>
-							isRenderablePhoto(photo) ? (
-								<button
-									// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
-									key={`${receipt.id}-photo-${i}`}
-									type="button"
-									// A 64px thumbnail cannot be read. The point of the photo is
-									// that a reviewer checks the printed figures against the line,
-									// so it has to open big enough to actually read.
-									className="cursor-zoom-in rounded border border-[var(--iz-line)] transition-colors hover:border-[var(--iz-gold-d)]"
-									onClick={() => setZoomPhoto(photo)}
-									aria-label={`Enlarge proof ${i + 1} for ${receipt.receiptNo}`}
-								>
-									<img
-										src={photo}
-										alt={`Proof ${i + 1} for ${receipt.receiptNo}`}
-										className="h-16 w-16 rounded object-cover"
-									/>
-								</button>
-							) : (
-								<span
-									// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
-									key={`${receipt.id}-photo-${i}`}
-									className="iz-tiny iz-muted2 break-all"
-								>
-									{photo}
-								</span>
-							),
-						)}
+						{/* The SHARED viewer, same as the dispute queue and the verify
+						    panel. This row's own enlarge showed the photo at one fixed
+						    size, still unreadable when the paper was shot at an angle —
+						    the shared one zooms to 6x and pans, which is what checking a
+						    printed total against a line actually needs. */}
+						<ProofPhotos photos={photos} label={`${receipt.receiptNo} scan`} />
 					</div>
 
 					{receipt.status !== "pending" && (
@@ -375,41 +336,6 @@ function ReceiptRow({
 					{decidable && editing && (
 						<AgencyReceiptEditor receipt={receipt} lines={receipt.lines} />
 					)}
-				</div>
-			)}
-
-			{/*
-			 * Full-size proof. A dialog rather than a new tab: the reviewer is
-			 * comparing the paper against the line right beside it, and a tab switch
-			 * loses that. Backdrop click and Escape both close, and the image is
-			 * bounded to the viewport so a tall receipt scrolls instead of
-			 * overflowing off-screen.
-			 */}
-			{zoomPhoto && (
-				<div
-					className="fixed inset-0 z-50 flex items-center justify-center overflow-auto bg-black/80 p-4"
-					role="dialog"
-					aria-modal="true"
-					aria-label={`Proof photo for ${receipt.receiptNo}`}
-				>
-					<button
-						type="button"
-						className="absolute inset-0 cursor-zoom-out"
-						onClick={() => setZoomPhoto(null)}
-						aria-label="Close enlarged photo"
-					/>
-					<img
-						src={zoomPhoto}
-						alt={`Proof for ${receipt.receiptNo}`}
-						className="relative max-h-[90vh] max-w-[min(90vw,900px)] rounded-lg border border-[var(--iz-line)] object-contain shadow-2xl"
-					/>
-					<button
-						type="button"
-						className="iz-btn iz-btn-soft absolute top-4 right-4 !h-8 !px-3 !text-xs"
-						onClick={() => setZoomPhoto(null)}
-					>
-						Close
-					</button>
 				</div>
 			)}
 		</div>
