@@ -145,6 +145,53 @@ export function formatStampClock(iso: string | null, absent: string): string {
 	return at.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
 }
 
+/**
+ * A shift's own day, spelled in full: "Thu 6 Aug 2026".
+ *
+ * The YEAR is deliberate. A payroll queue holds disputes months apart and
+ * "Thu 6 Aug" alone reads as this year to anyone skimming it.
+ *
+ * Parsed with an explicit `T00:00:00` so the string is read as a LOCAL date.
+ * `new Date("2026-08-06")` is parsed as UTC midnight, which in UTC+8 renders as
+ * the 6th but in any negative offset renders as the 5th.
+ */
+export function formatShiftDayDate(iso: string | null): string {
+	if (!iso) return "—";
+	const d = new Date(`${iso.slice(0, 10)}T00:00:00`);
+	if (Number.isNaN(d.getTime())) return iso;
+	return d.toLocaleDateString("en-GB", {
+		weekday: "short",
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	});
+}
+
+/**
+ * How long the PR was actually on the floor: check-in to shift end.
+ *
+ * Derived from the two stamps and NOTHING else. The phone's `shiftDurationLabel`
+ * must not be ported here — it carries a hardcoded `scheduledHours = 6` default
+ * and appends OT guessed from it, while the caller ALSO prints the server's
+ * `overtime_minutes`, so the same shift shows OT twice from two disagreeing
+ * sources. `overtime_minutes` is the only OT truth; this function never touches
+ * it.
+ *
+ * Returns "—" unless both stamps exist — a running shift has no duration yet,
+ * and a zero would read as one.
+ */
+export function formatShiftDuration(
+	checkInAt: string | null,
+	checkOutAt: string | null,
+): string {
+	if (!checkInAt || !checkOutAt) return "—";
+	const start = new Date(checkInAt).getTime();
+	const end = new Date(checkOutAt).getTime();
+	if (Number.isNaN(start) || Number.isNaN(end) || end < start) return "—";
+	const minutes = Math.round((end - start) / 60000);
+	return `${Math.floor(minutes / 60)}h ${minutes % 60}m`;
+}
+
 export function formatPayeeLabel(
 	nickname: string | null | undefined,
 	legalName: string | null | undefined,

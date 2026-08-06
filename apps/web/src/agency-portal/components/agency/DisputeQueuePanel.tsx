@@ -5,6 +5,8 @@ import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import {
 	formatPayeeLabel,
+	formatShiftDayDate,
+	formatShiftDuration,
 	formatStampClock,
 } from "@agency-portal/lib/agency-payroll";
 import { useStore } from "@agency-portal/lib/store";
@@ -119,9 +121,7 @@ function DisputeShiftBlock({ shift }: { shift: DisputeShift }) {
 	return (
 		<div className="rounded-md border border-[var(--iz-line,#2a2a3a)] px-2.5 py-2">
 			<div className="flex flex-wrap items-center gap-1.5">
-				<span className="text-sm font-semibold">
-					{shift.outletName || "—"}
-				</span>
+				<span className="text-sm font-semibold">{shift.outletName || "—"}</span>
 				{/* The event TYPE, always present — the column is NOT NULL and
 				    defaults to 'normal', so once we have the shift we have this. */}
 				<span
@@ -134,6 +134,13 @@ function DisputeShiftBlock({ shift }: { shift: DisputeShift }) {
 			</div>
 			<p className="iz-tiny iz-muted mt-0.5">
 				{shift.eventName?.trim() || "No event name"} · {shift.slot || "—"}
+			</p>
+			{/* The shift's OWN day, with the year — a payroll queue holds claims
+			    months apart, and "Thu 6 Aug" alone reads as this year. This is
+			    shift.shiftDate, NOT the dispute's date: the latter is the day the
+			    receipt was logged, which differs on a midnight-crossing shift. */}
+			<p className="iz-tiny iz-muted2 mt-0.5">
+				{formatShiftDayDate(shift.shiftDate)}
 			</p>
 			<div className="mt-1.5 flex flex-wrap gap-4">
 				<span>
@@ -151,6 +158,15 @@ function DisputeShiftBlock({ shift }: { shift: DisputeShift }) {
 					<span className="font-mono text-sm">
 						{formatStampClock(shift.checkOutAt, "still on duty")}
 						{ot > 0 ? ` · +${ot}m OT` : ""}
+					</span>
+				</span>
+				<span>
+					{/* Derived from the two stamps ONLY. The OT beside "Shift end"
+					    comes from the server's overtime_minutes and is the sole OT
+					    truth — this never adds a second guess at it. */}
+					<span className="iz-tiny iz-muted block">Duration</span>
+					<span className="font-mono text-sm">
+						{formatShiftDuration(shift.checkInAt, shift.checkOutAt)}
 					</span>
 				</span>
 			</div>

@@ -1741,6 +1741,39 @@ export class PaymentVoucherControllerClass {
         toDate: typeof req.query.toDate === 'string' ? req.query.toDate : undefined,
       });
 
+      // One batched lookup for the whole feed, not one per receipt. Scoped to
+      // the PRs on these rows — `listByIdsForPrs` keeps the security boundary,
+      // so an assignment id that does not belong to the receipt's PR resolves
+      // to nothing rather than surfacing someone else's shift times.
+      const receiptShiftById = new Map(
+        (
+          await this.shiftAssignmentRepository.listByIdsForPrs(
+            [...new Set(rows.map((r) => r.prId).filter((id): id is string => !!id))],
+            [
+              ...new Set(
+                rows
+                  .map((r) => r.receipt.shiftAssignmentId)
+                  .filter((id): id is string => !!id),
+              ),
+            ],
+          )
+        ).map((f) => [
+          f.id,
+          {
+            assignmentId: f.id,
+            outletName: f.outletName,
+            eventName: f.eventName,
+            eventKind: f.eventKind,
+            shiftDate: f.shiftDate,
+            slot: f.slot,
+            checkInAt: f.checkInAt ? f.checkInAt.toISOString() : null,
+            // Shift END — clamped to the scheduled end, not when the PR left.
+            checkOutAt: f.checkOutAt ? f.checkOutAt.toISOString() : null,
+            overtimeMinutes: f.overtimeMinutes,
+          },
+        ]),
+      );
+
       res.status(200).json({
         success: true,
         message: 'OK',
@@ -1768,6 +1801,14 @@ export class PaymentVoucherControllerClass {
           prName: r.prName,
           prNickname: r.prNickname,
           shiftAssignmentId: r.receipt.shiftAssignmentId,
+          // THE SHIFT THE OUTLET POSTED, resolved through the assignment FK the
+          // row already carries: what the outlet named the night, whether it
+          // marked it special, its window, and when this PR actually worked it.
+          // Singular here — unlike a dispute, a receipt names exactly ONE
+          // assignment, so there is nothing to disambiguate. Null when the
+          // receipt has no assignment (self-logged before the shift was known)
+          // or when the id does not resolve to THIS PR, which fails closed.
+          shift: receiptShiftById.get(r.receipt.shiftAssignmentId ?? '') ?? null,
           lines: r.lines.map((l) => ({
             id: l.id,
             lineDate: l.lineDate,

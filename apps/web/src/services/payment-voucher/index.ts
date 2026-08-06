@@ -521,6 +521,17 @@ export interface AgencyReceipt {
 	prName: string | null;
 	prNickname: string | null;
 	shiftAssignmentId: string | null;
+	/**
+	 * The shift the OUTLET posted, behind this paper — what they named the
+	 * night, whether they marked it special, its window, and this PR's stamps.
+	 *
+	 * Singular, unlike a dispute's `shifts`: a receipt names exactly ONE
+	 * assignment, so there is nothing to disambiguate. Null when the receipt
+	 * carries no assignment (self-logged before the shift was known) or when
+	 * the id does not resolve to this PR — both mean "we cannot say", never
+	 * "no shift happened".
+	 */
+	shift: DisputeShift | null;
 	lines: AgencyReceiptLine[];
 }
 
