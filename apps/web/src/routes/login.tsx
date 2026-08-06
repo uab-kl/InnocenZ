@@ -118,8 +118,23 @@ function RouteComponent() {
 						id: profile.id,
 						email: profile.email || value.email,
 						displayName: profile.displayName,
+						username: profile.username,
 					});
-					hardNavigate("/agency");
+					const { getAgencyIdentity } = await import(
+						"@agency-portal/lib/agency-identity"
+					);
+					const { AGENCY_PENDING_PROFILE_PATH } = await import(
+						"@agency-portal/lib/agency-rbac"
+					);
+					const { isOrgProfileOnly } = await import(
+						"@/components/organization/org-status"
+					);
+					const identity = getAgencyIdentity();
+					hardNavigate(
+						isOrgProfileOnly(identity?.agencyStatus)
+							? AGENCY_PENDING_PROFILE_PATH
+							: "/agency",
+					);
 					return;
 				}
 				if (role === "outlet") {
@@ -127,8 +142,23 @@ function RouteComponent() {
 						id: profile.id,
 						email: profile.email || value.email,
 						displayName: profile.displayName,
+						username: profile.username,
 					});
-					hardNavigate("/outlet");
+					const { getOutletIdentity } = await import(
+						"@agency-portal/lib/outlet-identity"
+					);
+					const { OUTLET_PENDING_PROFILE_PATH } = await import(
+						"@agency-portal/lib/outlet-rbac"
+					);
+					const { isOrgProfileOnly } = await import(
+						"@/components/organization/org-status"
+					);
+					const identity = getOutletIdentity();
+					hardNavigate(
+						isOrgProfileOnly(identity?.outletStatus)
+							? OUTLET_PENDING_PROFILE_PATH
+							: "/outlet",
+					);
 					return;
 				}
 

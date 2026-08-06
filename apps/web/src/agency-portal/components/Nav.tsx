@@ -115,6 +115,9 @@ export type AppTopbarProps = {
 	onBack?: () => void | boolean;
 
 	hideBack?: boolean;
+
+	/** Extra class on the back/cancel control (e.g. larger Cancel edit). */
+	backClassName?: string;
 };
 
 export function PortalBackButton({
@@ -187,6 +190,8 @@ export function AppTopbar({
 	onBack,
 
 	hideBack = false,
+
+	backClassName,
 }: AppTopbarProps) {
 	const { pathname } = useLocation();
 
@@ -251,6 +256,7 @@ export function AppTopbar({
 					backTo={backTo}
 					backLabel={backLabel}
 					onBack={onBack}
+					className={backClassName}
 				/>
 			)}
 

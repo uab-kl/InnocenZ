@@ -126,6 +126,8 @@ export async function startAgencyRealSession(profile: {
 	id: string;
 	email: string;
 	displayName: string;
+	/** `user.username` — owner display name on Settings. */
+	username?: string;
 }): Promise<void> {
 	setPortalSessionKind("real");
 	const normalized = profile.email.trim().toLowerCase();
@@ -158,12 +160,17 @@ export async function startAgencyRealSession(profile: {
 		const resolved = identity;
 		identityLib.saveAgencyIdentity(resolved);
 		store.setAgencySubRole(resolved.subRole);
+		const { BLANK_AGENCY_OWNER } = await import(
+			"@agency-portal/lib/agency-demo"
+		);
 		useStore.setState((st) => ({
 			activeAgencyId: resolved.agencyId,
 			agencyOwner: {
-				...st.agencyOwner,
+				...BLANK_AGENCY_OWNER,
 				orgName: resolved.orgName,
 				email: normalized,
+				ownerName: profile.username || profile.displayName || "",
+				accountActivated: resolved.agencyStatus === "active",
 			},
 		}));
 	} else {
@@ -185,6 +192,8 @@ export async function startOutletRealSession(profile: {
 	id: string;
 	email: string;
 	displayName: string;
+	/** `user.username` — owner display name on Settings. */
+	username?: string;
 }): Promise<void> {
 	setPortalSessionKind("real");
 	const normalized = profile.email.trim().toLowerCase();
@@ -217,11 +226,18 @@ export async function startOutletRealSession(profile: {
 		const resolved = identity;
 		identityLib.saveOutletIdentity(resolved);
 		store.setOutletSubRole(resolved.subRole);
+		const { BLANK_OUTLET_OWNER } = await import(
+			"@agency-portal/lib/outlet-demo"
+		);
 		useStore.setState((st) => ({
 			outletOwner: {
-				...st.outletOwner,
+				...BLANK_OUTLET_OWNER,
 				orgName: resolved.outletName,
 				email: normalized,
+				// `profile.displayName` is mapped from `user.username` in fetchProfile.
+				ownerName: profile.username || profile.displayName || "",
+				mobile: "",
+				accountActivated: resolved.outletStatus === "active",
 			},
 			outletWorkspace: {
 				...st.outletWorkspace,

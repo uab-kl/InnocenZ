@@ -59,11 +59,16 @@ export async function updateOutlet(
 		name?: string;
 		addressLine1?: string;
 		addressLine2?: string;
+		city?: string;
 		postcode?: string;
 		state?: string;
 		country?: string;
 		ssmNo?: string;
 		businessLicense?: string;
+		logoBase64?: string;
+		logoFileName?: string;
+		logoContentType?: string;
+		clearLogo?: boolean;
 	},
 	onRefreshFail: () => void,
 ): Promise<OutletApiResponse> {

@@ -59,6 +59,16 @@ export async function updateAgency(
 		contactName?: string;
 		contactEmail?: string;
 		contactPhone?: string;
+		addressLine1?: string;
+		addressLine2?: string;
+		city?: string;
+		postcode?: string;
+		state?: string;
+		country?: string;
+		logoBase64?: string;
+		logoFileName?: string;
+		logoContentType?: string;
+		clearLogo?: boolean;
 	},
 	onRefreshFail: () => void,
 ): Promise<AgencyApiResponse> {

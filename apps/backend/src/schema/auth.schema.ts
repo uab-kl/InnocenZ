@@ -77,10 +77,20 @@ const registerProfileFields = {
 /**
  * Web outlet/agency signup fields. Zod used to strip these (unknown keys), so
  * register created a user + role and never an organisation row.
+ *
+ * Company address uses the same field names as PR profile address, but they are
+ * written to `agency` / `outlet` — not `user_profile`. Portal owners do not
+ * need a home address on signup.
  */
 const registerOrgFields = {
   companyName: z.string().trim().min(1).max(150).optional(),
-  companyRegistrationOld: z.string().trim().min(1).max(50).optional(),
+  /** Optional legacy SSM number — empty string cleared to undefined. */
+  companyRegistrationOld: z
+    .string()
+    .trim()
+    .max(50)
+    .optional()
+    .transform((value) => (value ? value : undefined)),
   companyRegistrationNew: z.string().trim().min(1).max(50).optional(),
   companyAddress: z.string().trim().min(1).max(500).optional(),
   personInCharge: z.string().trim().min(1).max(100).optional(),
@@ -137,9 +147,7 @@ const RegisterSchema = z
     if (data.accountType !== 'agency' && data.accountType !== 'outlet') return;
     const required: Array<[keyof typeof data, string]> = [
       ['companyName', 'Company name is required'],
-      ['companyRegistrationOld', 'Company registration (old) is required'],
       ['companyRegistrationNew', 'Company registration (new) is required'],
-      ['companyAddress', 'Company address is required'],
       ['personInCharge', 'Person in charge is required'],
       ['password', 'Password must be at least 6 characters long'],
     ];

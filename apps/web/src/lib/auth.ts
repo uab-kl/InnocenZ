@@ -1,6 +1,8 @@
 export interface User {
 	id: string;
 	email: string;
+	/** `user.username` from the DB (PIC / display name for org accounts). */
+	username: string;
 	displayName: string;
 	contactNo: string;
 	isActive: boolean;

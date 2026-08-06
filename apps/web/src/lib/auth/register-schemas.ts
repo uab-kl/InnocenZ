@@ -23,10 +23,7 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.string()
 				.min(1, messages.companyNameRequired)
 				.max(150, messages.companyNameMax),
-			companyRegistrationOld: z
-				.string()
-				.min(1, messages.companyRegistrationOldRequired)
-				.max(50, messages.registrationNumberMax),
+			companyRegistrationOld: z.string().max(50, messages.registrationNumberMax),
 			companyRegistrationNew: z
 				.string()
 				.min(1, messages.companyRegistrationNewRequired)
@@ -45,8 +42,16 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.max(100, messages.personInChargeMax),
 			phoneNum: z
 				.string()
-				.min(8, messages.phoneRequired)
-				.max(20, messages.phoneMax),
+				.trim()
+				.min(1, messages.phoneRequired)
+				.refine((value) => {
+					const digits = value.replace(/\D/g, "").replace(/^0+/, "");
+					return digits.length >= 9;
+				}, messages.phoneMin)
+				.refine((value) => {
+					const digits = value.replace(/\D/g, "").replace(/^0+/, "");
+					return digits.length <= 10;
+				}, messages.phoneMax),
 			email: z
 				.string()
 				.min(1, messages.emailRequired)
@@ -87,13 +92,13 @@ export type SignupInput = z.infer<ReturnType<typeof createSignupSchema>>;
 export const SignupSchema = createSignupSchema({
 	companyNameRequired: "Company name is required",
 	companyNameMax: "Company name must be 150 characters or fewer",
-	companyRegistrationOldRequired: "Old company registration number is required",
 	companyRegistrationNewRequired: "New company registration number is required",
 	registrationNumberMax: "Registration number is too long",
 	personInChargeRequired: "Person in charge is required",
 	personInChargeMax: "Name must be 100 characters or fewer",
-	phoneRequired: "Please enter a valid contact number",
-	phoneMax: "Contact number is too long",
+	phoneRequired: "Please enter a valid mobile number",
+	phoneMax: "Mobile number is too long",
+	phoneMin: "That mobile number looks too short",
 	emailRequired: "Email is required",
 	emailInvalid: "Please enter a valid email address",
 	loginEmailRequired: "Email login ID is required",
@@ -103,7 +108,7 @@ export const SignupSchema = createSignupSchema({
 	confirmPasswordRequired: "Please confirm your password",
 	passwordsMismatch: "Passwords do not match",
 	packageRequired: "Please select a package",
-	logoRequired: "Outlet / agency image or logo is required",
+	logoRequired: "Logo is required",
 	logoMaxSize: "Logo must be 2 MB or smaller",
 	logoImageType: "Logo must be an image file",
 	ackPersonalInfo: "Please acknowledge the Personal Information Disclaimer",

@@ -1,33 +1,46 @@
 import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
-import { AppTopbar } from "@agency-portal/components/Nav";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { GeoFenceCard } from "@agency-portal/components/outlet/GeoFenceCard";
 import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
+import { PendingReviewBanner } from "@agency-portal/components/portal/PendingReviewBanner";
+import {
+	ProfileEditDock,
+	ProfileEditTrigger,
+	ProfilePhotoActions,
+	ProfileSectionCard,
+	ProfileSettingsField,
+} from "@agency-portal/components/portal/profile-settings-ui";
 import { useOutletProfile } from "@agency-portal/hooks/use-outlet-profile";
-import type {
-	OutletFinanceHead,
-	OutletOpsHead,
-	OutletOwnerSettings,
+import {
+	BLANK_OUTLET_FINANCE_HEAD,
+	BLANK_OUTLET_OPS_HEAD,
+	BLANK_OUTLET_OWNER,
+	BLANK_OUTLET_SETTINGS,
+	type OutletFinanceHead,
+	type OutletOpsHead,
+	type OutletOwnerSettings,
 } from "@agency-portal/lib/outlet-demo";
+import { getOutletIdentity, saveOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute } from "@tanstack/react-router";
 import {
+	isOrgPendingReview,
+	isOrgSuspended,
+} from "@/components/organization/org-status";
+import {
 	Building2,
-	Camera,
 	Mail,
 	MapPin,
-	Pencil,
 	Phone,
 	Shield,
 	User,
 	Wrench,
-	X,
 } from "lucide-react";
 import { useRef, useState } from "react";
 
@@ -83,46 +96,52 @@ function OutletSettingsPage() {
 	const profile = useOutletProfile();
 
 	const [editing, setEditing] = useState(false);
+	const [saving, setSaving] = useState(false);
 	const [securityOpen, setSecurityOpen] = useState(false);
 	const [draft, setDraft] = useState(outletOwner);
 	const [financeDraft, setFinanceDraft] = useState(outletFinanceHead);
 	const [opsDraft, setOpsDraft] = useState(outletOpsHead);
 	const [locationDraft, setLocationDraft] = useState(outletSettings.location);
+	const [logoMeta, setLogoMeta] = useState<{
+		fileName: string;
+		contentType: string;
+	} | null>(null);
+	const [logoCleared, setLogoCleared] = useState(false);
 	const avatarFileRef = useRef<HTMLInputElement>(null);
 	const canEdit = outletCan(outletSubRole, "editSettings");
 
-	// Read mode overlays the real backend identity (overlay carries only defined
-	// fields, so demo values fill any gaps); editing uses the local draft. This
-	// wire is read-only — the save flow still writes to the demo store only.
+	// Real login → never merge onto Velvet demo defaults (empty API fields used
+	// to leave Chen Wei Jie / Michelle Lim / Bukit Bintang on screen). Demo
+	// sessions keep the store seed. Editing uses the local draft.
 	const owner =
-		!editing && profile.backed && profile.owner
-			? { ...outletOwner, ...profile.owner }
+		!editing && profile.backed
+			? { ...BLANK_OUTLET_OWNER, ...(profile.owner ?? {}) }
 			: editing
 				? draft
 				: outletOwner;
 	const finance =
-		!editing && profile.backed && profile.finance
-			? { ...outletFinanceHead, ...profile.finance }
+		!editing && profile.backed
+			? { ...BLANK_OUTLET_FINANCE_HEAD, ...(profile.finance ?? {}) }
 			: editing
 				? financeDraft
 				: outletFinanceHead;
 	const ops =
-		!editing && profile.backed && profile.ops
-			? { ...outletOpsHead, ...profile.ops }
+		!editing && profile.backed
+			? { ...BLANK_OUTLET_OPS_HEAD, ...(profile.ops ?? {}) }
 			: editing
 				? opsDraft
 				: outletOpsHead;
 	const location =
-		!editing && profile.backed && profile.settings?.location
-			? profile.settings.location
+		!editing && profile.backed
+			? (profile.settings?.location ?? BLANK_OUTLET_SETTINGS.location)
 			: editing
 				? locationDraft
 				: outletSettings.location;
 	const avatarLetter =
 		owner.ownerName.trim()[0]?.toUpperCase() ??
 		owner.orgName.trim()[0]?.toUpperCase() ??
-		"V";
-	const editCardClass = editing ? " border-[rgba(217,185,122,.25)]" : "";
+		"?";
+	const fieldMode = editing && canEdit ? "edit" : "view";
 
 	const update = (patch: Partial<OutletOwnerSettings>) =>
 		setDraft((d) => ({ ...d, ...patch }));
@@ -132,19 +151,47 @@ function OutletSettingsPage() {
 		setOpsDraft((d) => ({ ...d, ...patch }));
 
 	const startEdit = () => {
-		// Seed the edit form from the real identity when available.
-		setDraft({ ...outletOwner, ...(profile.owner ?? {}) });
-		setFinanceDraft({ ...outletFinanceHead, ...(profile.finance ?? {}) });
-		setOpsDraft({ ...outletOpsHead, ...(profile.ops ?? {}) });
-		setLocationDraft(profile.settings?.location ?? outletSettings.location);
+		// Seed from real overlays on a blank base — never from Velvet demo.
+		if (profile.backed) {
+			setDraft({ ...BLANK_OUTLET_OWNER, ...(profile.owner ?? {}) });
+			setFinanceDraft({
+				...BLANK_OUTLET_FINANCE_HEAD,
+				...(profile.finance ?? {}),
+			});
+			setOpsDraft({ ...BLANK_OUTLET_OPS_HEAD, ...(profile.ops ?? {}) });
+			setLocationDraft(
+				profile.settings?.location ?? BLANK_OUTLET_SETTINGS.location,
+			);
+		} else {
+			setDraft({ ...outletOwner });
+			setFinanceDraft({ ...outletFinanceHead });
+			setOpsDraft({ ...outletOpsHead });
+			setLocationDraft(outletSettings.location);
+		}
+		setLogoMeta(null);
+		setLogoCleared(false);
 		setEditing(true);
 	};
 
 	const cancelEdit = () => {
-		setDraft({ ...outletOwner });
-		setFinanceDraft({ ...outletFinanceHead });
-		setOpsDraft({ ...outletOpsHead });
-		setLocationDraft(outletSettings.location);
+		if (profile.backed) {
+			setDraft({ ...BLANK_OUTLET_OWNER, ...(profile.owner ?? {}) });
+			setFinanceDraft({
+				...BLANK_OUTLET_FINANCE_HEAD,
+				...(profile.finance ?? {}),
+			});
+			setOpsDraft({ ...BLANK_OUTLET_OPS_HEAD, ...(profile.ops ?? {}) });
+			setLocationDraft(
+				profile.settings?.location ?? BLANK_OUTLET_SETTINGS.location,
+			);
+		} else {
+			setDraft({ ...outletOwner });
+			setFinanceDraft({ ...outletFinanceHead });
+			setOpsDraft({ ...outletOpsHead });
+			setLocationDraft(outletSettings.location);
+		}
+		setLogoMeta(null);
+		setLogoCleared(false);
 		setEditing(false);
 	};
 
@@ -168,36 +215,89 @@ function OutletSettingsPage() {
 		const reader = new FileReader();
 		reader.onload = () => {
 			update({ avatarPhoto: reader.result as string });
-			toast("Profile photo updated", "success");
+			setLogoMeta({
+				fileName: file.name || "logo.png",
+				contentType: file.type || "image/png",
+			});
+			setLogoCleared(false);
+			toast("Logo selected — tap Save to upload", "success");
 		};
 		reader.readAsDataURL(file);
 	};
 
 	const saveEdit = async () => {
-		if (!draft.ownerName.trim()) {
-			toast("Enter owner name", "warn");
+		if (!draft.orgName.trim()) {
+			toast("Enter outlet name", "warn");
+			return;
+		}
+		if (!draft.ownerName.trim() || draft.ownerName.trim().length < 2) {
+			toast("Enter owner name (at least 2 characters)", "warn");
+			return;
+		}
+		if (!locationDraft.trim()) {
+			toast("Enter location", "warn");
+			return;
+		}
+		// Real session: outlet owner may change outlet name, owner display name
+		// (`user.username`), and location (outlet address). Mobile/email stay in
+		// Login & security.
+		if (profile.backed) {
+			if (!canEdit) {
+				toast("Only the outlet owner can edit this profile", "warn");
+				return;
+			}
+			setSaving(true);
+			try {
+				const nextLogo = draft.avatarPhoto;
+				const logoIsNew =
+					typeof nextLogo === "string" && nextLogo.startsWith("data:");
+				await profile.save({
+					venueName: draft.orgName.trim(),
+					ownerName: draft.ownerName.trim(),
+					location: locationDraft.trim(),
+					...(logoIsNew
+						? {
+								logoDataUrl: nextLogo,
+								logoFileName: logoMeta?.fileName,
+								logoContentType: logoMeta?.contentType,
+							}
+						: {}),
+					...(logoCleared && !logoIsNew ? { clearLogo: true } : {}),
+				});
+				const identity = getOutletIdentity();
+				if (identity) {
+					saveOutletIdentity({
+						...identity,
+						outletName: draft.orgName.trim(),
+					});
+				}
+			} catch (err) {
+				const msg =
+					err && typeof err === "object" && "response" in err
+						? String(
+								(err as { response?: { data?: { message?: string } } })
+									.response?.data?.message ?? "",
+							)
+						: err instanceof Error
+							? err.message
+							: "";
+				toast(
+					msg.trim() || "Could not save — the server refused the change",
+					"warn",
+				);
+				setSaving(false);
+				return;
+			}
+			setSaving(false);
+			setLogoMeta(null);
+			setLogoCleared(false);
+			setEditing(false);
+			toast("Owner information saved", "success");
 			return;
 		}
 		if (!draft.mobile.trim()) {
 			toast("Enter mobile number", "warn");
 			return;
-		}
-		if (!draft.orgName.trim()) {
-			toast("Enter venue name", "warn");
-			return;
-		}
-		// Real session: persist the venue name FIRST and bail out if the server
-		// refuses, so the screen never shows a saved state the database rejected.
-		// Only the name goes up — see the note on `save` in use-outlet-profile:
-		// the location line is five columns joined for display, and writing it
-		// back would flatten them into one.
-		if (profile.backed) {
-			try {
-				await profile.save({ venueName: draft.orgName.trim() });
-			} catch {
-				toast("Could not save — the server refused the change", "warn");
-				return;
-			}
 		}
 		saveOutletProfileSettings({
 			owner: {
@@ -211,10 +311,8 @@ function OutletSettingsPage() {
 			opsHead: { ...opsDraft },
 			location: locationDraft.trim(),
 		});
-		if (profile.backed) {
-			toast("Venue name saved · address is not persisted yet", "success");
-		}
 		setEditing(false);
+		toast("Settings saved", "success");
 	};
 
 	if (!outletCan(outletSubRole, "viewSettings")) {
@@ -236,29 +334,26 @@ function OutletSettingsPage() {
 
 	const isSubRoleReadOnly =
 		outletSubRole === "outlet_finance" || outletSubRole === "outlet_ops";
-	const fieldsLocked = !editing || !canEdit;
+	const orgStatus = getOutletIdentity()?.outletStatus;
 
 	return (
 		<OutletPage>
-			{editing && <AppTopbar onBack={cancelEdit} backLabel="Cancel edit" />}
-			<OutletPageHeader
-				title="Settings"
-				hint={owner.orgName}
-				trailing={
-					editing ? (
-						<span className="iz-pill iz-pill-amber !text-[10px]">Editing</span>
-					) : undefined
-				}
-			/>
+			<OutletPageHeader title="Settings" hint={owner.orgName} />
+			<PendingReviewBanner orgStatus={orgStatus} kind="outlet" />
+			{profile.backed && profile.isLoading && (
+				<p className="iz-tiny iz-muted mb-3">Loading your outlet profile…</p>
+			)}
 			{isSubRoleReadOnly && !editing && (
 				<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
 					{outletSubRole === "outlet_finance"
-						? "Finance view — read-only · cannot edit owner profile"
-						: "Ops view — read-only · cannot edit owner profile"}
+						? "Finance view — read-only. Only the outlet owner can edit owner information."
+						: "Ops view — read-only. Only the outlet owner can edit owner information."}
 				</p>
 			)}
 
-			<div className="iz-settings-profile flex flex-col items-center py-5">
+			<div
+				className={`iz-settings-profile flex flex-col items-center py-5${editing ? " iz-settings-profile--editing" : ""}`}
+			>
 				<input
 					ref={avatarFileRef}
 					type="file"
@@ -281,263 +376,221 @@ function OutletSettingsPage() {
 							avatarLetter
 						)}
 					</div>
-					{editing && canEdit && (
-						<>
-							<button
-								type="button"
-								className="iz-avatar-edit"
-								aria-label="Upload profile photo"
-								onClick={openAvatarUpload}
-							>
-								<Camera className="h-3.5 w-3.5" />
-							</button>
-							{draft.avatarPhoto && (
-								<button
-									type="button"
-									className="iz-avatar-remove"
-									aria-label="Remove profile photo"
-									onClick={() => update({ avatarPhoto: null })}
-								>
-									<X className="h-3 w-3" />
-								</button>
-							)}
-						</>
-					)}
 				</div>
 				<div className="mt-3 font-sora text-lg font-bold">{owner.orgName}</div>
 				<p className="iz-tiny iz-muted mt-0.5">{owner.ownerName}</p>
-				<div className="mt-1 flex items-center gap-1 iz-tiny text-[var(--iz-green)]">
+				<div
+					className={`mt-1 flex items-center gap-1 iz-tiny ${
+						isOrgSuspended(orgStatus)
+							? "text-[var(--iz-red)]"
+							: owner.accountActivated
+								? "text-[var(--iz-green)]"
+								: "text-[var(--iz-amber)]"
+					}`}
+				>
 					<Shield className="h-3 w-3" />
-					{owner.accountActivated
-						? "Verified · outlet active"
-						: "Pending OTP activation"}
+					{isOrgSuspended(orgStatus)
+						? "Suspended · profile only"
+						: owner.accountActivated
+							? "Verified · outlet active"
+							: profile.backed || isOrgPendingReview(orgStatus)
+								? "Pending admin approval"
+								: "Pending OTP activation"}
 				</div>
-				{editing && canEdit && (
-					<p className="iz-tiny iz-muted2 mt-2 text-center">
-						Tap the camera to upload your outlet profile photo.
-					</p>
+				{editing && canEdit ? (
+					<ProfilePhotoActions
+						hasPhoto={Boolean(draft.avatarPhoto)}
+						onChangePhoto={openAvatarUpload}
+						onRemovePhoto={
+							draft.avatarPhoto
+								? () => {
+										update({ avatarPhoto: null });
+										setLogoMeta(null);
+										setLogoCleared(true);
+									}
+								: undefined
+						}
+					/>
+				) : (
+					canEdit && <ProfileEditTrigger onClick={startEdit} />
 				)}
 			</div>
 
 			<IzSectionLabel>Owner information</IzSectionLabel>
-			<IzCard className={editCardClass}>
-				<Field
+			<ProfileSectionCard editing={editing && canEdit}>
+				<ProfileSettingsField
+					icon={Building2}
+					label="Outlet name"
+					value={owner.orgName}
+					onChange={(v) => update({ orgName: v })}
+					mode={fieldMode}
+					placeholder="Venue / outlet name"
+				/>
+				<ProfileSettingsField
 					icon={User}
 					label="Owner name"
 					value={owner.ownerName}
 					onChange={(v) => update({ ownerName: v })}
-					readOnly={fieldsLocked}
+					mode={fieldMode}
+					placeholder="Display name"
 				/>
-				<Field
+				<ProfileSettingsField
 					icon={Phone}
 					label="Mobile"
 					value={owner.mobile}
-					onChange={() => {}}
-					readOnly
+					mode="locked"
 					hint="Change in Login & security"
 				/>
-				<Field
+				<ProfileSettingsField
 					icon={Mail}
 					label="Email"
 					value={owner.email}
-					onChange={() => {}}
-					readOnly
+					mode="locked"
 					hint="Change in Login & security"
 				/>
-				<Field
-					icon={Shield}
-					label="IC (for PV)"
-					value={owner.ic}
-					onChange={(v) => update({ ic: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
-					icon={Building2}
-					label="Venue"
-					value={owner.orgName}
-					onChange={(v) => update({ orgName: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
+				{!profile.backed && (
+					<ProfileSettingsField
+						icon={Shield}
+						label="IC (for PV)"
+						value={owner.ic}
+						onChange={(v) => update({ ic: v })}
+						mode={fieldMode}
+					/>
+				)}
+				<ProfileSettingsField
 					icon={MapPin}
 					label="Location"
 					value={location}
 					onChange={setLocationDraft}
-					readOnly={fieldsLocked}
+					mode={fieldMode}
+					placeholder="Address, city, postcode"
 				/>
-			</IzCard>
+			</ProfileSectionCard>
 
 			{/* Renders its own section label, and nothing at all on a demo session. */}
 			<GeoFenceCard canEdit={canEdit} />
 
-			<IzSectionLabel>Finance Head</IzSectionLabel>
-			<IzCard className={editCardClass}>
-				<p className="iz-tiny iz-muted mb-2">
-					Weekly reconciliation · due Sundays · billing sign-off
-				</p>
-				<Field
-					icon={User}
-					label="Name"
-					value={finance.name}
-					onChange={(v) => updateFinance({ name: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
-					icon={Shield}
-					label="IC"
-					value={finance.ic}
-					onChange={(v) => updateFinance({ ic: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
-					icon={Mail}
-					label="Email"
-					value={finance.email}
-					onChange={(v) => updateFinance({ email: v })}
-					readOnly={fieldsLocked}
-				/>
-			</IzCard>
+			{/* Demo-only Finance/Ops cards — real staff live in OrgMembersPanel. */}
+			{!profile.backed && (
+				<>
+					<IzSectionLabel>Finance Head</IzSectionLabel>
+					<ProfileSectionCard editing={editing && canEdit}>
+						<p className="iz-tiny iz-muted mb-1 pt-2">
+							Weekly reconciliation · due Sundays · billing sign-off
+						</p>
+						<ProfileSettingsField
+							icon={User}
+							label="Name"
+							value={finance.name}
+							onChange={(v) => updateFinance({ name: v })}
+							mode={fieldMode}
+						/>
+						<ProfileSettingsField
+							icon={Shield}
+							label="IC"
+							value={finance.ic}
+							onChange={(v) => updateFinance({ ic: v })}
+							mode={fieldMode}
+						/>
+						<ProfileSettingsField
+							icon={Mail}
+							label="Email"
+							value={finance.email}
+							onChange={(v) => updateFinance({ email: v })}
+							mode={fieldMode}
+						/>
+					</ProfileSectionCard>
 
-			<IzSectionLabel>Ops Head</IzSectionLabel>
-			<IzCard className={editCardClass}>
-				<p className="iz-tiny iz-muted mb-2">
-					Floor operations · shift staffing · sales logging
-				</p>
-				<Field
-					icon={Wrench}
-					label="Name"
-					value={ops.name}
-					onChange={(v) => updateOps({ name: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
-					icon={Shield}
-					label="IC"
-					value={ops.ic}
-					onChange={(v) => updateOps({ ic: v })}
-					readOnly={fieldsLocked}
-				/>
-				<Field
-					icon={Mail}
-					label="Email"
-					value={ops.email}
-					onChange={(v) => updateOps({ email: v })}
-					readOnly={fieldsLocked}
-				/>
-			</IzCard>
+					<IzSectionLabel>Ops Head</IzSectionLabel>
+					<ProfileSectionCard editing={editing && canEdit}>
+						<p className="iz-tiny iz-muted mb-1 pt-2">
+							Floor operations · shift staffing · sales logging
+						</p>
+						<ProfileSettingsField
+							icon={Wrench}
+							label="Name"
+							value={ops.name}
+							onChange={(v) => updateOps({ name: v })}
+							mode={fieldMode}
+						/>
+						<ProfileSettingsField
+							icon={Shield}
+							label="IC"
+							value={ops.ic}
+							onChange={(v) => updateOps({ ic: v })}
+							mode={fieldMode}
+						/>
+						<ProfileSettingsField
+							icon={Mail}
+							label="Email"
+							value={ops.email}
+							onChange={(v) => updateOps({ email: v })}
+							mode={fieldMode}
+						/>
+					</ProfileSectionCard>
 
-			<IzSectionLabel>Notifications</IzSectionLabel>
-			<IzCard className="mt-2 !py-0 px-4">
-				<ToggleRow
-					label="Shift updates"
-					desc="PR accept/decline · roster changes"
-					on={outletSettings.notifyShiftUpdates}
-					onChange={(v) => saveOutletSettings({ notifyShiftUpdates: v })}
+					<IzSectionLabel>Notifications</IzSectionLabel>
+					<IzCard className="mt-2 !py-0 px-4">
+						<ToggleRow
+							label="Shift updates"
+							desc="PR accept/decline · roster changes"
+							on={outletSettings.notifyShiftUpdates}
+							onChange={(v) => saveOutletSettings({ notifyShiftUpdates: v })}
+						/>
+					</IzCard>
+				</>
+			)}
+
+			{/* Real staff from `outlet_user` (owner / finance / ops). */}
+			{!editing && (
+				<OrgMembersPanel
+					kind="outlet"
+					orgId={profile.outletId}
+					canManage={canEdit}
 				/>
-			</IzCard>
+			)}
 
-			{/* Real staff of this venue, from `outlet_user`. Distinct from the
-			    Finance/Ops Head cards above, which are the demo profile form. */}
-			<OrgMembersPanel
-				kind="outlet"
-				orgId={profile.outletId}
-				canManage={canEdit}
-			/>
-
-			<IzSectionLabel>Login &amp; security</IzSectionLabel>
-			<IzCard>
-				<p className="iz-tiny iz-muted mb-3">
-					Update password anytime. Email and mobile changes require OTP
-					verification.
-				</p>
-				<button
-					type="button"
-					className="iz-btn iz-btn-primary w-full"
-					onClick={() => setSecurityOpen(true)}
-				>
-					Security settings
-				</button>
-			</IzCard>
+			{!editing && (
+				<>
+					<IzSectionLabel>Login &amp; security</IzSectionLabel>
+					<IzCard>
+						<p className="iz-tiny iz-muted mb-3">
+							Update password anytime. Email and mobile changes require OTP
+							verification.
+						</p>
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary w-full"
+							onClick={() => setSecurityOpen(true)}
+						>
+							Security settings
+						</button>
+					</IzCard>
+				</>
+			)}
 
 			<SecuritySettingsSheets
 				open={securityOpen}
 				onClose={() => setSecurityOpen(false)}
 				sheetVariant="side"
-				email={outletOwner.email}
-				mobile={outletOwner.mobile}
+				email={owner.email}
+				mobile={owner.mobile}
 				canEdit={canEdit}
-				onUpdateEmail={(email) => saveOutletOwner({ email })}
-				onUpdateMobile={(mobile) => saveOutletOwner({ mobile })}
+				onUpdateEmail={(email) => {
+					if (!profile.backed) saveOutletOwner({ email });
+				}}
+				onUpdateMobile={(mobile) => {
+					if (!profile.backed) saveOutletOwner({ mobile });
+				}}
 			/>
 
-			{canEdit && (
-				<div className="iz-profile-actions mt-4">
-					{editing ? (
-						<>
-							<button
-								type="button"
-								className="iz-btn iz-btn-primary"
-								onClick={saveEdit}
-							>
-								Save settings
-							</button>
-							<button
-								type="button"
-								className="iz-btn iz-btn-soft mt-2.5"
-								onClick={cancelEdit}
-							>
-								Cancel
-							</button>
-						</>
-					) : (
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary"
-							onClick={startEdit}
-						>
-							<Pencil className="h-4 w-4" /> Edit settings
-						</button>
-					)}
-				</div>
-			)}
-		</OutletPage>
-	);
-}
-
-function Field({
-	icon: Icon,
-	label,
-	value,
-	onChange,
-	readOnly,
-	hint,
-}: {
-	icon: typeof User;
-	label: string;
-	value: string;
-	onChange: (v: string) => void;
-	readOnly?: boolean;
-	hint?: string;
-}) {
-	return (
-		<div className="border-b border-[var(--iz-line)] py-2.5 last:border-0">
-			<div className="flex items-center gap-2 iz-tiny iz-muted">
-				<Icon className="h-3 w-3" /> {label}
-			</div>
-			{readOnly ? (
-				<>
-					<p className="mt-1 font-medium text-[var(--iz-txt)]">
-						{value || "—"}
-					</p>
-					{hint && <p className="iz-tiny iz-muted2 mt-0.5">{hint}</p>}
-				</>
-			) : (
-				<input
-					className="mt-1 w-full bg-transparent font-medium text-[var(--iz-txt)] outline-none"
-					value={value}
-					onChange={(e) => onChange(e.target.value)}
+			{canEdit && editing && (
+				<ProfileEditDock
+					onSave={saveEdit}
+					onCancel={cancelEdit}
+					saving={saving}
 				/>
 			)}
-		</div>
+		</OutletPage>
 	);
 }

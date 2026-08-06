@@ -346,6 +346,7 @@ export class ShiftAssignmentRepositoryClass {
           // onto the assignment. Composed into one display line below.
           outletAddressLine1: OutletTable.addressLine1,
           outletAddressLine2: OutletTable.addressLine2,
+          outletCity: OutletTable.city,
           outletPostcode: OutletTable.postcode,
           outletState: OutletTable.state,
           // The venue pin, same FK path as getOutletGeoFenceForAssignment.
@@ -359,8 +360,8 @@ export class ShiftAssignmentRepositoryClass {
         .where(ownership)
         .orderBy(ShiftTable.shiftDate);
       return rows.map((row) => {
-        // "50000 Kuala Lumpur" — postcode + state read as one piece.
-        const cityLine = [row.outletPostcode, row.outletState]
+        // "50000 Petaling Jaya, Selangor" — city/postcode + state as one piece.
+        const cityLine = [row.outletPostcode, row.outletCity, row.outletState]
           .map((s) => s?.trim())
           .filter(Boolean)
           .join(' ');

@@ -19,6 +19,8 @@ import {
 } from '@/schema/agency.schema';
 import { AgencyFilter, AgencyUserSubRole, AgencyStatus, agencyUserSubRoleValues } from './agency.model';
 import { AgencyPrApproveStatus, agencyPrApproveStatusValues } from '@/features/pr-personnel/pr.model';
+import { saveOrgLogoFromBase64 } from '@/util/org-logo';
+import { r2DeleteStoredRef } from '@/util/r2';
 
 function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;
@@ -270,8 +272,52 @@ export class AgencyControllerClass {
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
-      const agency = await this.agencyRepository.update(id, { ...parsed.data, updatedBy: getActor(req) });
+      const {
+        logoBase64,
+        logoFileName,
+        logoContentType,
+        clearLogo,
+        ...rest
+      } = parsed.data;
+      let agency = await this.agencyRepository.update(id, {
+        ...rest,
+        updatedBy: getActor(req),
+      });
       if (!agency) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const previousLogo = agency.logoImage;
+      if (clearLogo) {
+        await r2DeleteStoredRef(previousLogo);
+        const cleared = await this.agencyRepository.update(id, {
+          logoImage: null,
+          updatedBy: getActor(req),
+        });
+        if (cleared) agency = cleared;
+      } else if (logoBase64 && logoFileName) {
+        try {
+          const logoKey = await saveOrgLogoFromBase64({
+            kind: 'agency',
+            orgId: agency.id,
+            orgName: agency.name,
+            fileName: logoFileName,
+            contentType: logoContentType,
+            base64: logoBase64,
+          });
+          const withLogo = await this.agencyRepository.update(id, {
+            logoImage: logoKey,
+            updatedBy: getActor(req),
+          });
+          if (withLogo) agency = withLogo;
+          if (previousLogo && previousLogo !== logoKey) {
+            await r2DeleteStoredRef(previousLogo);
+          }
+        } catch (logoError) {
+          const msg =
+            logoError instanceof Error ? logoError.message : 'Logo upload failed';
+          return res.status(400).json({ success: false, message: msg, data: null });
+        }
+      }
+
       res.status(200).json({ success: true, message: 'Agency updated', data: agency });
     } catch (error) {
       logger.error('[AgencyController.update] Error:', error);

@@ -1836,6 +1836,19 @@ export const DEFAULT_AGENCY_OWNER: AgencyOwnerSettings = {
 	subscriptionPlanId: "growth",
 };
 
+/** Empty shapes for REAL backend sessions — no Atlas names/emails. */
+export const BLANK_AGENCY_OWNER: AgencyOwnerSettings = {
+	ownerName: "",
+	mobile: "",
+	email: "",
+	ic: "",
+	orgName: "",
+	otpChannel: "email",
+	accountActivated: false,
+	avatarPhoto: null,
+	subscriptionPlanId: "starter",
+};
+
 export interface AgencyFinanceHead {
 	name: string;
 	ic: string;
@@ -1851,6 +1864,13 @@ export const DEFAULT_FINANCE_HEAD: AgencyFinanceHead = {
 	email: "finance@atlas-agency.my",
 	eSignatureStored: true,
 	signatureDataUrl: buildDemoESignatureDataUrl("Sarah Tan"),
+};
+
+export const BLANK_AGENCY_FINANCE_HEAD: AgencyFinanceHead = {
+	name: "",
+	ic: "",
+	email: "",
+	eSignatureStored: false,
 };
 
 /** Delta Agency — second operating agency, peer to Atlas (owner@delta-agency.my). */

@@ -23,6 +23,7 @@ import {
   type SignupAccountType,
 } from './signup-roles.js';
 import { saveProfileImageFile } from '@/util/profile-image.js';
+import { saveOrgLogoFromBase64 } from '@/util/org-logo.js';
 import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
 import { AdminMfaRepositoryClass } from '@/features/admin-mfa/admin-mfa.repository.js';
@@ -406,6 +407,12 @@ export class AuthControllerClass {
    * Web outlet/agency self-register: create the organisation as `pending_review`
    * and link the new user as `owner`. Package selection is not written yet —
    * admin assigns a plan on approval.
+   *
+   * Company address goes on `agency` / `outlet` only. The portal user gets PIC
+   * name on `user_profile` — not a home address (that is for PRs).
+   *
+   * Returns the new org so the caller can upload the logo (needs the org id
+   * for the R2 key) and write `logo_image`.
    */
   private async createOrgForSignup(
     userId: string,
@@ -414,7 +421,14 @@ export class AuthControllerClass {
       companyName?: string;
       companyRegistrationOld?: string;
       companyRegistrationNew?: string;
+      /** @deprecated Prefer addressLine1. */
       companyAddress?: string;
+      addressLine1?: string;
+      addressLine2?: string;
+      city?: string;
+      postcode?: string;
+      state?: string;
+      country?: string;
       personInCharge?: string;
       contactEmail?: string;
       email?: string;
@@ -422,10 +436,15 @@ export class AuthControllerClass {
       packageId?: string;
     },
     actor: string,
-  ): Promise<void> {
+  ): Promise<{ kind: 'agency' | 'outlet'; id: string; name: string }> {
     const name = body.companyName!;
     const ssmNo = body.companyRegistrationNew!;
-    const address = body.companyAddress ?? null;
+    const addressLine1 = body.addressLine1 ?? body.companyAddress ?? null;
+    const addressLine2 = body.addressLine2 ?? null;
+    const city = body.city ?? null;
+    const postcode = body.postcode ?? null;
+    const state = body.state ?? null;
+    const country = body.country ?? null;
     const contactName = body.personInCharge ?? null;
     const contactEmail = body.contactEmail ?? body.email ?? null;
     const contactPhone = body.phoneNum;
@@ -439,8 +458,12 @@ export class AuthControllerClass {
         contactName,
         contactEmail,
         contactPhone,
-        addressLine1: address,
-        addressLine2: null,
+        addressLine1,
+        addressLine2,
+        city,
+        postcode,
+        state,
+        country,
         status: 'pending_review',
         createdBy: actor,
         updatedBy: actor,
@@ -458,13 +481,17 @@ export class AuthControllerClass {
         userId,
         packageId: body.packageId ?? null,
       });
-      return;
+      return { kind: 'agency', id: agency.id, name: agency.name };
     }
 
     const outlet = await this.outletRepository.create({
       name,
-      addressLine1: address,
-      addressLine2: null,
+      addressLine1,
+      addressLine2,
+      city,
+      postcode,
+      state,
+      country: country ?? 'Malaysia',
       businessLicense: body.companyRegistrationOld ?? null,
       ssmNo,
       status: 'pending_review',
@@ -484,6 +511,7 @@ export class AuthControllerClass {
       userId,
       packageId: body.packageId ?? null,
     });
+    return { kind: 'outlet', id: outlet.id, name: outlet.name };
   }
 
   /**
@@ -744,10 +772,9 @@ export class AuthControllerClass {
         (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') &&
         parsedBody.personInCharge
       ) {
-        // Web org signup: PIC name on the empty profile; company lives on agency/outlet.
+        // Web org signup: PIC name only. Company address lives on agency/outlet.
         await this.userProfileRepository.update(user.id, {
           fullName: parsedBody.personInCharge,
-          addressLine1: parsedBody.companyAddress ?? null,
           updatedBy: actor,
         });
       }
@@ -755,7 +782,40 @@ export class AuthControllerClass {
       // Outlet / agency web signup — create the organisation + owner membership.
       // Previously register only wrote user + user_role + empty user_profile.
       if (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') {
-        await this.createOrgForSignup(user.id, parsedBody, actor);
+        const org = await this.createOrgForSignup(user.id, parsedBody, actor);
+
+        // Logo → R2, then key on agency/outlet.logo_image (not user.profileImage).
+        if (parsedBody.logoBase64 && parsedBody.logoFileName) {
+          try {
+            const logoKey = await saveOrgLogoFromBase64({
+              kind: org.kind,
+              orgId: org.id,
+              orgName: org.name,
+              fileName: parsedBody.logoFileName,
+              contentType: parsedBody.logoContentType,
+              base64: parsedBody.logoBase64,
+            });
+            if (org.kind === 'agency') {
+              await this.agencyRepository.update(org.id, {
+                logoImage: logoKey,
+                updatedBy: actor,
+              });
+            } else {
+              await this.outletRepository.update(org.id, {
+                logoImage: logoKey,
+                updatedBy: actor,
+              });
+            }
+          } catch (logoError) {
+            // Account + org already exist — do not 400 (retry would hit
+            // USER_ALREADY_EXISTS). Logo can be re-uploaded after approval.
+            logger.error('[AuthController.register] Org logo upload failed', {
+              orgId: org.id,
+              kind: org.kind,
+              error: logoError,
+            });
+          }
+        }
       }
 
       // After profile exists so R2 path can use user_profile.full_name.

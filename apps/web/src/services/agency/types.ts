@@ -51,6 +51,13 @@ export interface Agency {
 	contactName: string | null;
 	contactEmail: string | null;
 	contactPhone: string | null;
+	logoImage?: string | null;
+	addressLine1?: string | null;
+	addressLine2?: string | null;
+	city?: string | null;
+	postcode?: string | null;
+	state?: string | null;
+	country?: string | null;
 	status: AgencyStatus;
 	createdAt: string;
 	updatedAt: string;
@@ -79,6 +86,8 @@ export interface AgencyMembership {
 	agencyId: string;
 	agencyName: string;
 	agencyCode: string;
+	/** Organisation status (`pending_review` / `active` / …). */
+	agencyStatus: string;
 	subRole: AgencyUserSubRole;
 	status: string;
 }

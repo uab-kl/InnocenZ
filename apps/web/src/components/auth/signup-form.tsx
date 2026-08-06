@@ -18,10 +18,10 @@ import {
 	Phone,
 	Search,
 	UserRound,
-	X,
 	type LucideIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toast } from "sonner";
 import { SignupAcknowledgements } from "@/components/auth/signup-acknowledgements";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +35,6 @@ import {
 import {
 	Field,
 	FieldDescription,
-	FieldError,
 	FieldGroup,
 	FieldLabel,
 	toFieldErrors,
@@ -82,6 +81,23 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 	);
 }
 
+function firstFieldErrorMessage(errors: unknown[]): string | undefined {
+	const items = toFieldErrors(errors);
+	for (const item of items) {
+		const message = item?.message?.trim();
+		if (message) return message;
+	}
+	return undefined;
+}
+
+function RequiredMark() {
+	return (
+		<span className="ml-0.5 text-destructive" aria-hidden>
+			*
+		</span>
+	);
+}
+
 export function SignupForm() {
 	const navigate = useNavigate();
 	const { locale, t } = useLandingLocale();
@@ -94,9 +110,9 @@ export function SignupForm() {
 	const [showPassword, setShowPassword] = useState(false);
 	const [showConfirmPassword, setShowConfirmPassword] = useState(false);
 	const [logoPreview, setLogoPreview] = useState<string | null>(null);
-	const [submitError, setSubmitError] = useState<string | null>(null);
 	const [successOpen, setSuccessOpen] = useState(false);
 	const [registeredAs, setRegisteredAs] = useState<SignupAccountType>("outlet");
+	const [sameAsCompanyEmail, setSameAsCompanyEmail] = useState(false);
 
 	const goToLogin = () => {
 		setSuccessOpen(false);
@@ -132,10 +148,20 @@ export function SignupForm() {
 			onChange: signupSchema,
 			onSubmit: signupSchema,
 		},
+		onSubmitInvalid: ({ formApi }) => {
+			const fieldMeta = formApi.state.fieldMeta;
+			for (const meta of Object.values(fieldMeta)) {
+				const message = firstFieldErrorMessage(meta?.errors ?? []);
+				if (message) {
+					toast.error(message);
+					return;
+				}
+			}
+			toast.error(copy.errors.unexpected);
+		},
 		onSubmit: async ({ value }) => {
-			setSubmitError(null);
 			if (!value.logoFile) {
-				setSubmitError(copy.validation.logoRequired);
+				toast.error(copy.validation.logoRequired);
 				return;
 			}
 			try {
@@ -144,22 +170,26 @@ export function SignupForm() {
 					logoFile: value.logoFile,
 				});
 				if (!result.success) {
-					setSubmitError(result.message || copy.errors.registrationFailed);
+					toast.error(result.message || copy.errors.registrationFailed);
 					return;
 				}
 				setRegisteredAs(value.accountType);
 				setSuccessOpen(true);
 			} catch (err) {
 				if (axios.isAxiosError(err)) {
-					const message =
+					const status = err.response?.status;
+					// 5xx / no response — never surface raw server/SQL text.
+					if (!status || status >= 500) {
+						toast.error(copy.errors.internalServerError);
+						return;
+					}
+					toast.error(
 						(err.response?.data as { message?: string })?.message ||
-						(err.response?.status === 500
-							? copy.errors.internalServerError
-							: copy.errors.registrationFailed);
-					setSubmitError(message);
+							copy.errors.registrationFailed,
+					);
 					return;
 				}
-				setSubmitError(copy.errors.unexpected);
+				toast.error(copy.errors.unexpected);
 			}
 		},
 	});
@@ -170,6 +200,7 @@ export function SignupForm() {
 			id="signup-form"
 			className="signup-form"
 			aria-label={copy.heading.line2}
+			noValidate
 			onSubmit={(e) => {
 				e.preventDefault();
 				form.handleSubmit();
@@ -253,6 +284,7 @@ export function SignupForm() {
 									label={fields.companyRegistrationOld.label}
 									icon={BadgeCheck}
 									placeholder={fields.companyRegistrationOld.placeholder}
+									required={false}
 									isSubmitting={form.state.isSubmitting}
 								/>
 							)}
@@ -280,7 +312,6 @@ export function SignupForm() {
 								placeholder={fields.addressLine1.placeholder}
 								autoComplete="address-line1"
 								required={false}
-								optionalHint={copy.optionalHint}
 								isSubmitting={form.state.isSubmitting}
 							/>
 						)}
@@ -295,50 +326,10 @@ export function SignupForm() {
 								placeholder={fields.addressLine2.placeholder}
 								autoComplete="address-line2"
 								required={false}
-								optionalHint={copy.optionalHint}
 								isSubmitting={form.state.isSubmitting}
 							/>
 						)}
 					</form.Field>
-
-					<div className="grid gap-6 sm:grid-cols-2">
-						<Field>
-							<FieldLabel className="login-field-label">
-								{fields.country.label}
-							</FieldLabel>
-							<div className="login-input-group flex h-auto w-full items-center rounded-md border border-royal-gold/20 bg-background/40 px-3 py-3 text-foreground">
-								{fields.country.value}
-							</div>
-							<FieldDescription className="signup-helper text-muted-foreground">
-								{fields.country.notice}
-							</FieldDescription>
-						</Field>
-
-						<form.Field name="stateCode">
-							{(field) => {
-								const states = listStates(DEFAULT_COUNTRY_CODE);
-								return (
-									<SignupGeoSelect
-										label={fields.state.label}
-										placeholder={fields.state.placeholder}
-										searchPlaceholder={copy.searchPlaceholder}
-										noResults={copy.noResults}
-										value={field.state.value}
-										disabled={form.state.isSubmitting}
-										optionalHint={copy.optionalHint}
-										options={states.map((s) => ({
-											value: s.isoCode,
-											label: s.name,
-										}))}
-										onChange={(next) => {
-											field.handleChange(next);
-											form.setFieldValue("city", "");
-										}}
-									/>
-								);
-							}}
-						</form.Field>
-					</div>
 
 					<div className="grid gap-6 sm:grid-cols-2">
 						<form.Field name="city">
@@ -360,7 +351,6 @@ export function SignupForm() {
 													placeholder={fields.city.placeholder}
 													autoComplete="address-level2"
 													required={false}
-													optionalHint={copy.optionalHint}
 													isSubmitting={
 														form.state.isSubmitting || !stateCode
 													}
@@ -377,7 +367,6 @@ export function SignupForm() {
 												disabled={
 													form.state.isSubmitting || !stateCode
 												}
-												optionalHint={copy.optionalHint}
 												options={cities.map((c) => ({
 													value: c.name,
 													label: c.name,
@@ -399,10 +388,47 @@ export function SignupForm() {
 									placeholder={fields.postcode.placeholder}
 									autoComplete="postal-code"
 									required={false}
-									optionalHint={copy.optionalHint}
 									isSubmitting={form.state.isSubmitting}
 								/>
 							)}
+						</form.Field>
+					</div>
+
+					<div className="grid gap-6 sm:grid-cols-2">
+						<Field>
+							<FieldLabel className="login-field-label">
+								{fields.country.label}
+							</FieldLabel>
+							<div className="login-input-group flex h-11 w-full items-center rounded-md border border-royal-gold/20 bg-background/40 px-3 text-base leading-normal text-foreground">
+								{fields.country.value}
+							</div>
+							<FieldDescription className="signup-helper text-muted-foreground">
+								{fields.country.notice}
+							</FieldDescription>
+						</Field>
+
+						<form.Field name="stateCode">
+							{(field) => {
+								const states = listStates(DEFAULT_COUNTRY_CODE);
+								return (
+									<SignupGeoSelect
+										label={fields.state.label}
+										placeholder={fields.state.placeholder}
+										searchPlaceholder={copy.searchPlaceholder}
+										noResults={copy.noResults}
+										value={field.state.value}
+										disabled={form.state.isSubmitting}
+										options={states.map((s) => ({
+											value: s.isoCode,
+											label: s.name,
+										}))}
+										onChange={(next) => {
+											field.handleChange(next);
+											form.setFieldValue("city", "");
+										}}
+									/>
+								);
+							}}
 						</form.Field>
 					</div>
 				</section>
@@ -425,13 +451,12 @@ export function SignupForm() {
 
 					<form.Field name="phoneNum">
 						{(field) => (
-							<SignupTextField
+							<SignupPhoneField
 								field={field}
 								label={fields.phoneNum.label}
-								icon={Phone}
 								placeholder={fields.phoneNum.placeholder}
-								type="tel"
-								autoComplete="tel"
+								dialDisplay={fields.phoneNum.dialDisplay}
+								dialNotice={fields.phoneNum.dialNotice}
 								isSubmitting={form.state.isSubmitting}
 							/>
 						)}
@@ -448,6 +473,11 @@ export function SignupForm() {
 								autoComplete="email"
 								isSubmitting={form.state.isSubmitting}
 								description={fields.email.description}
+								onValueChange={(next) => {
+									if (sameAsCompanyEmail) {
+										form.setFieldValue("loginEmail", next);
+									}
+								}}
 							/>
 						)}
 					</form.Field>
@@ -458,16 +488,41 @@ export function SignupForm() {
 
 					<form.Field name="loginEmail">
 						{(field) => (
-							<SignupTextField
-								field={field}
-								label={fields.loginEmail.label}
-								icon={AtSign}
-								placeholder={fields.loginEmail.placeholder}
-								type="email"
-								autoComplete="username"
-								isSubmitting={form.state.isSubmitting}
-								description={fields.loginEmail.description}
-							/>
+							<div className="space-y-3">
+								<SignupTextField
+									field={field}
+									label={fields.loginEmail.label}
+									icon={AtSign}
+									placeholder={fields.loginEmail.placeholder}
+									type="email"
+									autoComplete="username"
+									isSubmitting={
+										form.state.isSubmitting || sameAsCompanyEmail
+									}
+									description={fields.loginEmail.description}
+								/>
+								<label className="flex cursor-pointer items-start gap-3 text-foreground">
+									<input
+										type="checkbox"
+										checked={sameAsCompanyEmail}
+										disabled={form.state.isSubmitting}
+										onChange={(event) => {
+											const checked = event.target.checked;
+											setSameAsCompanyEmail(checked);
+											if (checked) {
+												form.setFieldValue(
+													"loginEmail",
+													form.getFieldValue("email"),
+												);
+											}
+										}}
+										className="signup-ack-checkbox mt-0.5 size-5 shrink-0 rounded border border-royal-gold/40 bg-background accent-[var(--royal-gold)]"
+									/>
+									<span className="signup-ack-label text-sm font-medium leading-snug">
+										{fields.loginEmail.sameAsCompanyEmail}
+									</span>
+								</label>
+							</div>
 						)}
 					</form.Field>
 
@@ -535,7 +590,6 @@ export function SignupForm() {
 									const packages = getSignupPackages(accountType, locale);
 									const isInvalid =
 										field.state.meta.isDirty && !field.state.meta.isValid;
-									const errorId = `${field.name}-error`;
 									const selected = packages.find(
 										(pkg) => pkg.id === field.state.value,
 									);
@@ -547,12 +601,12 @@ export function SignupForm() {
 												className="login-field-label"
 											>
 												{fields.package.label}
+												<RequiredMark />
 											</FieldLabel>
 											<Select
 												value={field.state.value}
 												onValueChange={field.handleChange}
 												disabled={form.state.isSubmitting}
-												required
 											>
 												<SelectTrigger
 													id={field.name}
@@ -580,13 +634,6 @@ export function SignupForm() {
 													{selected.detail}
 												</FieldDescription>
 											)}
-											{isInvalid && (
-												<FieldError
-													id={errorId}
-													errors={toFieldErrors(field.state.meta.errors)}
-													className="text-xl"
-												/>
-											)}
 										</Field>
 									);
 								}}
@@ -598,90 +645,135 @@ export function SignupForm() {
 				<section className="space-y-6">
 					<SectionTitle>{copy.sections.branding}</SectionTitle>
 
-					<form.Field name="logoFile">
-						{(field) => {
-							const isInvalid =
-								field.state.meta.isDirty && !field.state.meta.isValid;
-							const errorId = `${field.name}-error`;
+					<form.Subscribe selector={(state) => state.values.accountType}>
+						{(accountType) => {
+							const logoLabel =
+								accountType === "agency"
+									? fields.logo.labelAgency
+									: fields.logo.labelOutlet;
+							const logoUploadTitle =
+								accountType === "agency"
+									? fields.logo.uploadTitleAgency
+									: fields.logo.uploadTitleOutlet;
 
 							return (
-								<Field data-invalid={isInvalid}>
-									<FieldLabel
-										htmlFor="signup-logo"
-										className="login-field-label"
-									>
-										{fields.logo.label}
-									</FieldLabel>
-									<div className="flex flex-col gap-4 sm:flex-row sm:items-start">
-										<label
-											htmlFor="signup-logo"
-											className={cn(
-												"flex min-h-40 flex-1 cursor-pointer flex-col items-center justify-center gap-3 rounded-xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-8 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
-												form.state.isSubmitting &&
-													"pointer-events-none opacity-60",
-											)}
-										>
-											<ImagePlus className="h-10 w-10 text-royal-gold" />
-											<span className="signup-upload-title font-medium text-foreground">
-												{fields.logo.uploadTitle}
-											</span>
-											<span className="signup-upload-hint text-muted-foreground">
-												{fields.logo.uploadHint}
-											</span>
-											<input
-												id="signup-logo"
-												type="file"
-												required
-												accept="image/png,image/jpeg,image/webp,image/gif"
-												className="sr-only"
-												disabled={form.state.isSubmitting}
-												onChange={(event) => {
-													const file = event.target.files?.[0] ?? null;
-													field.handleChange(file);
-													if (logoPreview) URL.revokeObjectURL(logoPreview);
-													setLogoPreview(
-														file ? URL.createObjectURL(file) : null,
-													);
-												}}
-											/>
-										</label>
+								<form.Field name="logoFile">
+									{(field) => {
+										const isInvalid =
+											field.state.meta.isDirty && !field.state.meta.isValid;
 
-										{logoPreview && (
-											<div className="relative shrink-0">
-												<img
-													src={logoPreview}
-													alt="Logo preview"
-													className="h-36 w-36 rounded-xl border border-royal-gold/25 object-cover"
-												/>
-												<Button
-													type="button"
-													variant="secondary"
-													size="icon-sm"
-													className="absolute -top-2 -right-2"
-													disabled={form.state.isSubmitting}
-													onClick={() => {
-														field.handleChange(null);
-														if (logoPreview) URL.revokeObjectURL(logoPreview);
-														setLogoPreview(null);
-													}}
-													aria-label="Remove logo"
+										const clearLogo = () => {
+											field.handleChange(null);
+											if (logoPreview) URL.revokeObjectURL(logoPreview);
+											setLogoPreview(null);
+										};
+
+										const onPickFile = (
+											event: React.ChangeEvent<HTMLInputElement>,
+										) => {
+											const file = event.target.files?.[0] ?? null;
+											field.handleChange(file);
+											if (logoPreview) URL.revokeObjectURL(logoPreview);
+											setLogoPreview(
+												file ? URL.createObjectURL(file) : null,
+											);
+											// Allow re-selecting the same file after remove.
+											event.target.value = "";
+										};
+
+										return (
+											<Field data-invalid={isInvalid}>
+												<FieldLabel
+													htmlFor="signup-logo"
+													className="login-field-label"
 												>
-													<X className="h-4 w-4" />
-												</Button>
-											</div>
-										)}
-									</div>
-									{isInvalid && (
-										<FieldError
-											id={errorId}
-											errors={toFieldErrors(field.state.meta.errors)}
-											className="text-xl"
-										/>
-									)}
-								</Field>
+													{logoLabel}
+													<RequiredMark />
+												</FieldLabel>
+
+												{logoPreview ? (
+													<div className="signup-logo-showcase relative overflow-hidden rounded-2xl border border-royal-gold/25 bg-background/35">
+														<div className="flex flex-col items-center gap-5 px-6 py-8 sm:flex-row sm:items-center sm:gap-8 sm:px-8 sm:py-7">
+															<div className="relative flex size-28 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-royal-gold/20 bg-[#0c0a12] shadow-[inset_0_0_0_1px_rgba(255,255,255,0.04)] sm:size-32">
+																<img
+																	src={logoPreview}
+																	alt=""
+																	className="max-h-full max-w-full object-contain p-3"
+																/>
+															</div>
+															<div className="min-w-0 flex-1 text-center sm:text-left">
+																<p className="signup-upload-title font-medium text-foreground">
+																	{logoUploadTitle}
+																</p>
+																<p className="signup-upload-hint mt-1 text-muted-foreground">
+																	{fields.logo.uploadHint}
+																</p>
+																<div className="mt-4 flex flex-wrap items-center justify-center gap-2 sm:justify-start">
+																	<label
+																		htmlFor="signup-logo"
+																		className={cn(
+																			"inline-flex cursor-pointer items-center justify-center rounded-md border border-royal-gold/35 bg-royal-gold/10 px-3.5 py-2 text-sm font-medium text-gold-bright transition-colors hover:border-royal-gold/55 hover:bg-royal-gold/15",
+																			form.state.isSubmitting &&
+																				"pointer-events-none opacity-60",
+																		)}
+																	>
+																		Change
+																	</label>
+																	<Button
+																		type="button"
+																		variant="ghost"
+																		size="sm"
+																		className="text-muted-foreground hover:text-destructive"
+																		disabled={form.state.isSubmitting}
+																		onClick={clearLogo}
+																	>
+																		Remove
+																	</Button>
+																</div>
+															</div>
+														</div>
+														<input
+															id="signup-logo"
+															type="file"
+															accept="image/png,image/jpeg,image/webp,image/gif"
+															className="sr-only"
+															disabled={form.state.isSubmitting}
+															onChange={onPickFile}
+														/>
+													</div>
+												) : (
+													<label
+														htmlFor="signup-logo"
+														className={cn(
+															"flex min-h-44 w-full cursor-pointer flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-royal-gold/30 bg-background/40 px-6 py-10 text-center transition-colors hover:border-royal-gold/50 hover:bg-background/55",
+															form.state.isSubmitting &&
+																"pointer-events-none opacity-60",
+														)}
+													>
+														<ImagePlus className="h-10 w-10 text-royal-gold" />
+														<span className="signup-upload-title font-medium text-foreground">
+															{logoUploadTitle}
+														</span>
+														<span className="signup-upload-hint text-muted-foreground">
+															{fields.logo.uploadHint}
+														</span>
+														<input
+															id="signup-logo"
+															type="file"
+															accept="image/png,image/jpeg,image/webp,image/gif"
+															className="sr-only"
+															disabled={form.state.isSubmitting}
+															onChange={onPickFile}
+														/>
+													</label>
+												)}
+											</Field>
+										);
+									}}
+								</form.Field>
 							);
 						}}
-					</form.Field>
+					</form.Subscribe>
 				</section>
 
 				<form.Field name="ackPersonalInfo">
@@ -711,15 +803,13 @@ export function SignupForm() {
 				</form.Field>
 			</FieldGroup>
 
-			<form.Subscribe
-				selector={(state) => [state.isSubmitting, state.canSubmit]}
-			>
-				{([isSubmitting, canSubmit]) => (
+			<form.Subscribe selector={(state) => state.isSubmitting}>
+				{(isSubmitting) => (
 					<Button
 						type="submit"
 						form="signup-form"
 						className="login-btn mt-8 w-full bg-(image:--gradient-royal) font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95"
-						disabled={isSubmitting || !canSubmit}
+						disabled={isSubmitting}
 						aria-busy={isSubmitting}
 					>
 						{isSubmitting ? (
@@ -733,12 +823,6 @@ export function SignupForm() {
 					</Button>
 				)}
 			</form.Subscribe>
-
-			{submitError ? (
-				<p role="alert" className="mt-4 text-center text-xl text-destructive">
-					{submitError}
-				</p>
-			) : null}
 
 			<p className="login-support mt-8 text-center text-muted-foreground">
 				{copy.footer.alreadyHaveAccount}{" "}
@@ -787,7 +871,7 @@ export function SignupForm() {
 				<DialogFooter showCloseButton={false} className="mt-2 sm:justify-center">
 					<Button
 						type="button"
-						className="login-btn w-full bg-(image:--gradient-royal) text-[1.35rem] font-bold text-[#1a1726] shadow-glow-gold hover:opacity-95 sm:w-auto sm:min-w-48"
+						className="signup-success-btn h-11 w-full rounded-md bg-(image:--gradient-royal) px-8 text-base font-bold text-[#1a1726] hover:opacity-95 sm:w-auto sm:min-w-44"
 						onClick={goToLogin}
 					>
 						{copy.success.continueToLogin}
@@ -817,7 +901,7 @@ interface SignupTextFieldProps {
 	isSubmitting: boolean;
 	description?: string;
 	required?: boolean;
-	optionalHint?: string;
+	onValueChange?: (value: string) => void;
 }
 
 function SignupTextField({
@@ -830,20 +914,15 @@ function SignupTextField({
 	isSubmitting,
 	description,
 	required = true,
-	optionalHint = "optional",
+	onValueChange,
 }: SignupTextFieldProps) {
 	const isInvalid = field.state.meta.isDirty && !field.state.meta.isValid;
-	const errorId = `${field.name}-error`;
 
 	return (
 		<Field data-invalid={isInvalid}>
 			<FieldLabel htmlFor={field.name} className="login-field-label">
 				{label}
-				{!required ? (
-					<span className="ml-1 font-normal text-muted-foreground">
-						({optionalHint})
-					</span>
-				) : null}
+				{required ? <RequiredMark /> : null}
 			</FieldLabel>
 			<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 				<InputGroupAddon align="inline-start">
@@ -857,14 +936,16 @@ function SignupTextField({
 					id={field.name}
 					name={field.name}
 					type={type}
-					required={required}
 					placeholder={placeholder}
 					value={field.state.value}
 					onBlur={field.handleBlur}
-					onChange={(e) => field.handleChange(e.target.value)}
+					onChange={(e) => {
+						field.handleChange(e.target.value);
+						onValueChange?.(e.target.value);
+					}}
 					disabled={isSubmitting}
 					aria-invalid={isInvalid}
-					aria-describedby={isInvalid ? errorId : undefined}
+					aria-required={required}
 					autoComplete={autoComplete}
 					className="login-input"
 				/>
@@ -873,13 +954,6 @@ function SignupTextField({
 				<FieldDescription className="signup-helper text-muted-foreground">
 					{description}
 				</FieldDescription>
-			)}
-			{isInvalid && (
-				<FieldError
-					id={errorId}
-					errors={toFieldErrors(field.state.meta.errors)}
-					className="text-xl"
-				/>
 			)}
 		</Field>
 	);
@@ -894,7 +968,6 @@ function SignupGeoSelect({
 	options,
 	disabled,
 	onChange,
-	optionalHint = "optional",
 }: {
 	label: string;
 	placeholder: string;
@@ -904,7 +977,6 @@ function SignupGeoSelect({
 	options: Array<{ value: string; label: string }>;
 	disabled?: boolean;
 	onChange: (value: string) => void;
-	optionalHint?: string;
 }) {
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
@@ -927,12 +999,7 @@ function SignupGeoSelect({
 
 	return (
 		<Field>
-			<FieldLabel className="login-field-label">
-				{label}
-				<span className="ml-1 font-normal text-muted-foreground">
-					({optionalHint})
-				</span>
-			</FieldLabel>
+			<FieldLabel className="login-field-label">{label}</FieldLabel>
 			<Popover
 				open={open}
 				onOpenChange={(next) => {
@@ -1045,6 +1112,82 @@ interface SignupPasswordFieldProps {
 	isSubmitting: boolean;
 }
 
+function SignupPhoneField({
+	field,
+	label,
+	placeholder,
+	dialDisplay,
+	dialNotice,
+	isSubmitting,
+}: {
+	field: {
+		name: string;
+		state: {
+			value: string;
+			meta: { isDirty: boolean; isValid: boolean; errors: unknown[] };
+		};
+		handleBlur: () => void;
+		handleChange: (value: string) => void;
+	};
+	label: string;
+	placeholder: string;
+	dialDisplay: string;
+	dialNotice: string;
+	isSubmitting: boolean;
+}) {
+	const isInvalid = field.state.meta.isDirty && !field.state.meta.isValid;
+
+	return (
+		<Field data-invalid={isInvalid}>
+			<FieldLabel htmlFor={field.name} className="login-field-label">
+				{label}
+				<RequiredMark />
+			</FieldLabel>
+			<div className="flex gap-2">
+				<div
+					className="login-input-group flex h-auto shrink-0 items-center gap-2 rounded-md border border-royal-gold/20 bg-background/40 px-3 py-3 text-base text-foreground"
+					aria-label={dialDisplay}
+				>
+					<span className="whitespace-nowrap font-medium">{dialDisplay}</span>
+				</div>
+				<InputGroup className="login-input-group h-auto min-w-0 flex-1 border-royal-gold/20 bg-background/60">
+					<InputGroupAddon align="inline-start">
+						<Phone
+							className="size-5 text-royal-gold"
+							strokeWidth={1.75}
+							aria-hidden
+						/>
+					</InputGroupAddon>
+					<InputGroupInput
+						id={field.name}
+						name={field.name}
+						type="tel"
+						inputMode="numeric"
+						autoComplete="tel-national"
+						placeholder={placeholder}
+						value={field.state.value}
+						onBlur={field.handleBlur}
+						onChange={(e) => {
+							const digits = e.target.value
+								.replace(/\D/g, "")
+								.replace(/^0+/, "")
+								.slice(0, 10);
+							field.handleChange(digits);
+						}}
+						disabled={isSubmitting}
+						aria-invalid={isInvalid}
+						aria-required
+						className="login-input"
+					/>
+				</InputGroup>
+			</div>
+			<FieldDescription className="signup-helper text-muted-foreground">
+				{dialNotice}
+			</FieldDescription>
+		</Field>
+	);
+}
+
 function SignupPasswordField({
 	field,
 	label,
@@ -1054,12 +1197,12 @@ function SignupPasswordField({
 	isSubmitting,
 }: SignupPasswordFieldProps) {
 	const isInvalid = field.state.meta.isDirty && !field.state.meta.isValid;
-	const errorId = `${field.name}-error`;
 
 	return (
 		<Field data-invalid={isInvalid}>
 			<FieldLabel htmlFor={field.name} className="login-field-label">
 				{label}
+				<RequiredMark />
 			</FieldLabel>
 			<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 				<InputGroupAddon align="inline-start">
@@ -1073,14 +1216,13 @@ function SignupPasswordField({
 					id={field.name}
 					name={field.name}
 					type={showPassword ? "text" : "password"}
-					required
 					placeholder={placeholder}
 					value={field.state.value}
 					onBlur={field.handleBlur}
 					onChange={(e) => field.handleChange(e.target.value)}
 					disabled={isSubmitting}
 					aria-invalid={isInvalid}
-					aria-describedby={isInvalid ? errorId : undefined}
+					aria-required
 					autoComplete="new-password"
 					className="login-input"
 				/>
@@ -1109,13 +1251,6 @@ function SignupPasswordField({
 					</InputGroupButton>
 				</InputGroupAddon>
 			</InputGroup>
-			{isInvalid && (
-				<FieldError
-					id={errorId}
-					errors={toFieldErrors(field.state.meta.errors)}
-					className="signup-field-error"
-				/>
-			)}
 		</Field>
 	);
 }

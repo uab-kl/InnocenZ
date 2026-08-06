@@ -43,15 +43,32 @@ export interface SignupTranslations {
 		state: { label: string; placeholder: string };
 		country: { label: string; value: string; notice: string };
 		personInCharge: { label: string; placeholder: string };
-		phoneNum: { label: string; placeholder: string };
+		phoneNum: {
+			label: string;
+			placeholder: string;
+			/** Fixed Malaysia dial shown beside the number (e.g. 🇲🇾 +60). */
+			dialDisplay: string;
+			dialNotice: string;
+		};
 		email: { label: string; placeholder: string; description: string };
-		loginEmail: { label: string; placeholder: string; description: string };
+		loginEmail: {
+			label: string;
+			placeholder: string;
+			description: string;
+			/** Checkbox: copy company contact email into login email. */
+			sameAsCompanyEmail: string;
+		};
 		password: { label: string; placeholder: string };
 		confirmPassword: { label: string; placeholder: string };
 		package: { label: string; placeholder: string };
-		logo: { label: string; uploadTitle: string; uploadHint: string };
+		logo: {
+			labelOutlet: string;
+			labelAgency: string;
+			uploadTitleOutlet: string;
+			uploadTitleAgency: string;
+			uploadHint: string;
+		};
 	};
-	optionalHint: string;
 	searchPlaceholder: string;
 	noResults: string;
 	acknowledgements: {
@@ -85,13 +102,13 @@ export interface SignupTranslations {
 	validation: {
 		companyNameRequired: string;
 		companyNameMax: string;
-		companyRegistrationOldRequired: string;
 		companyRegistrationNewRequired: string;
 		registrationNumberMax: string;
 		personInChargeRequired: string;
 		personInChargeMax: string;
 		phoneRequired: string;
 		phoneMax: string;
+		phoneMin: string;
 		emailRequired: string;
 		emailInvalid: string;
 		loginEmailRequired: string;
@@ -169,7 +186,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			},
 			addressLine2: {
 				label: "Address line 2",
-				placeholder: "Floor, suite, landmark (optional)",
+				placeholder: "Floor, suite, landmark",
 			},
 			city: {
 				label: "City",
@@ -194,7 +211,9 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			},
 			phoneNum: {
 				label: "Contact number",
-				placeholder: "+60123456789",
+				placeholder: "e.g. 123456789",
+				dialDisplay: "🇲🇾 +60",
+				dialNotice: "Malaysia numbers only.",
 			},
 			email: {
 				label: "Email",
@@ -205,6 +224,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				label: "Email login ID",
 				placeholder: "you@company.com",
 				description: "This email will be used to sign in to your portal.",
+				sameAsCompanyEmail: "Same as company email",
 			},
 			password: {
 				label: "Password",
@@ -219,12 +239,13 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				placeholder: "Select a pricing package",
 			},
 			logo: {
-				label: "Outlet / agency image or logo",
-				uploadTitle: "Upload logo or venue image",
-				uploadHint: "PNG, JPG, or WEBP up to 2 MB · Required",
+				labelOutlet: "Outlet logo",
+				labelAgency: "Agency logo",
+				uploadTitleOutlet: "Upload outlet logo",
+				uploadTitleAgency: "Upload agency logo",
+				uploadHint: "PNG, JPG, or WEBP up to 2 MB",
 			},
 		},
-		optionalHint: "optional",
 		searchPlaceholder: "Search…",
 		noResults: "No results found.",
 		acknowledgements: {
@@ -259,28 +280,28 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 		success: {
 			title: "Registration successful",
 			bodyOutlet:
-				"Your outlet account has been submitted. Please wait for InnocenZ admin approval before you can sign in. You will receive an email once your account is approved.",
+				"Your outlet account has been submitted for InnocenZ admin approval. You can sign in now to update your profile — other portal features unlock after approval. You will receive an email once your account is approved.",
 			bodyAgency:
-				"Your PR agency account has been submitted. Please wait for InnocenZ admin approval before you can sign in. You will receive an email once your account is approved.",
+				"Your PR agency account has been submitted for InnocenZ admin approval. You can sign in now to update your profile — other portal features unlock after approval. You will receive an email once your account is approved.",
 			continueToLogin: "Back to sign in",
 		},
 		errors: {
 			registrationFailed: "Registration failed. Please try again.",
-			internalServerError: "Internal server error.",
+			internalServerError:
+				"Our server encountered an error. Please try again later.",
 			unexpected: "An unexpected error occurred. Please try again.",
 		},
 		validation: {
 			companyNameRequired: "Company name is required",
 			companyNameMax: "Company name must be 150 characters or fewer",
-			companyRegistrationOldRequired:
-				"Old company registration number is required",
 			companyRegistrationNewRequired:
 				"New company registration number is required",
 			registrationNumberMax: "Registration number is too long",
 			personInChargeRequired: "Person in charge is required",
 			personInChargeMax: "Name must be 100 characters or fewer",
-			phoneRequired: "Please enter a valid contact number",
-			phoneMax: "Contact number is too long",
+			phoneRequired: "Please enter a valid mobile number",
+			phoneMax: "Mobile number is too long",
+			phoneMin: "That mobile number looks too short",
 			emailRequired: "Email is required",
 			emailInvalid: "Please enter a valid email address",
 			loginEmailRequired: "Email login ID is required",
@@ -290,7 +311,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			confirmPasswordRequired: "Please confirm your password",
 			passwordsMismatch: "Passwords do not match",
 			packageRequired: "Please select a package",
-			logoRequired: "Outlet / agency image or logo is required",
+			logoRequired: "Logo is required",
 			logoMaxSize: "Logo must be 2 MB or smaller",
 			logoImageType: "Logo must be an image file",
 			ackPersonalInfo: "Please acknowledge the Personal Information Disclaimer",
@@ -355,7 +376,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			},
 			addressLine2: {
 				label: "地址第二行",
-				placeholder: "楼层、套房、地标（可选）",
+				placeholder: "楼层、套房、地标",
 			},
 			city: {
 				label: "城市",
@@ -380,7 +401,9 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			},
 			phoneNum: {
 				label: "联系电话",
-				placeholder: "+60123456789",
+				placeholder: "例如 123456789",
+				dialDisplay: "🇲🇾 +60",
+				dialNotice: "目前仅支持马来西亚号码。",
 			},
 			email: {
 				label: "电子邮箱",
@@ -391,6 +414,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				label: "登录邮箱",
 				placeholder: "you@company.com",
 				description: "此邮箱将用于登录您的门户。",
+				sameAsCompanyEmail: "与公司邮箱相同",
 			},
 			password: {
 				label: "密码",
@@ -405,12 +429,13 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				placeholder: "选择定价套餐",
 			},
 			logo: {
-				label: "门店 / 代理图片或标志",
-				uploadTitle: "上传标志或门店图片",
-				uploadHint: "PNG、JPG 或 WEBP，最大 2 MB · 必填",
+				labelOutlet: "门店标志",
+				labelAgency: "代理标志",
+				uploadTitleOutlet: "上传门店标志",
+				uploadTitleAgency: "上传代理标志",
+				uploadHint: "PNG、JPG 或 WEBP，最大 2 MB",
 			},
 		},
-		optionalHint: "可选",
 		searchPlaceholder: "搜索…",
 		noResults: "未找到结果。",
 		acknowledgements: {
@@ -445,26 +470,26 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 		success: {
 			title: "注册成功",
 			bodyOutlet:
-				"您的门店账户已提交。请等待 InnocenZ 管理员审批后再登录。账户获批后，您将收到电子邮件通知。",
+				"您的门店账户已提交，等待 InnocenZ 管理员审批。您现在可以登录并更新个人资料；其他门户功能将在获批后开放。账户获批后，您将收到电子邮件通知。",
 			bodyAgency:
-				"您的 PR 代理账户已提交。请等待 InnocenZ 管理员审批后再登录。账户获批后，您将收到电子邮件通知。",
+				"您的 PR 代理账户已提交，等待 InnocenZ 管理员审批。您现在可以登录并更新个人资料；其他门户功能将在获批后开放。账户获批后，您将收到电子邮件通知。",
 			continueToLogin: "返回登录",
 		},
 		errors: {
 			registrationFailed: "注册失败，请重试。",
-			internalServerError: "服务器内部错误。",
+			internalServerError: "服务器发生错误，请稍后再试。",
 			unexpected: "发生意外错误，请重试。",
 		},
 		validation: {
 			companyNameRequired: "公司名称为必填项",
 			companyNameMax: "公司名称不能超过 150 个字符",
-			companyRegistrationOldRequired: "旧公司注册号为必填项",
 			companyRegistrationNewRequired: "新公司注册号为必填项",
 			registrationNumberMax: "注册号过长",
 			personInChargeRequired: "负责人为必填项",
 			personInChargeMax: "姓名不能超过 100 个字符",
-			phoneRequired: "请输入有效的联系电话",
-			phoneMax: "联系电话过长",
+			phoneRequired: "请输入有效的手机号码",
+			phoneMax: "手机号码过长",
+			phoneMin: "手机号码过短",
 			emailRequired: "电子邮箱为必填项",
 			emailInvalid: "请输入有效的电子邮箱",
 			loginEmailRequired: "登录邮箱为必填项",
@@ -474,7 +499,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			confirmPasswordRequired: "请确认密码",
 			passwordsMismatch: "两次输入的密码不一致",
 			packageRequired: "请选择套餐",
-			logoRequired: "门店 / 代理图片或标志为必填项",
+			logoRequired: "标志为必填项",
 			logoMaxSize: "标志文件不能超过 2 MB",
 			logoImageType: "标志必须是图片文件",
 			ackPersonalInfo: "请确认个人信息免责声明",

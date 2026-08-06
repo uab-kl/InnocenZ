@@ -1,7 +1,17 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import {
+	BLANK_OUTLET_FINANCE_HEAD,
+	BLANK_OUTLET_OPS_HEAD,
+	BLANK_OUTLET_OWNER,
+	BLANK_OUTLET_SETTINGS,
+	type OutletSettings,
+} from "@agency-portal/lib/outlet-demo";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { useAuth } from "@/lib/auth-context";
+import { updateMyDisplayName } from "@/lib/auth/profile-api";
+import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import {
 	fetchOutletById,
 	fetchOutletMembers,
@@ -16,6 +26,8 @@ export interface OutletProfileOwnerOverlay {
 	orgName?: string;
 	mobile?: string;
 	email?: string;
+	avatarPhoto?: string | null;
+	accountActivated?: boolean;
 }
 
 /** Backend-backed subset of a demo finance/ops head. */
@@ -30,14 +42,30 @@ export interface OutletProfileSettingsOverlay {
 	location?: string;
 }
 
-/** Backend-backed subset of one finance/ops member, or `{}` when absent. */
+/** @deprecated Prefer BLANK_OUTLET_OWNER from outlet-demo — kept as alias. */
+export const REAL_OUTLET_OWNER_BLANK = BLANK_OUTLET_OWNER;
+/** @deprecated Prefer BLANK_OUTLET_FINANCE_HEAD from outlet-demo. */
+export const REAL_OUTLET_FINANCE_BLANK = BLANK_OUTLET_FINANCE_HEAD;
+/** @deprecated Prefer BLANK_OUTLET_OPS_HEAD from outlet-demo. */
+export const REAL_OUTLET_OPS_BLANK = BLANK_OUTLET_OPS_HEAD;
+/** @deprecated Prefer BLANK_OUTLET_SETTINGS from outlet-demo. */
+export const REAL_OUTLET_SETTINGS_BLANK: Pick<
+	OutletSettings,
+	"venueName" | "location"
+> = {
+	venueName: BLANK_OUTLET_SETTINGS.venueName,
+	location: BLANK_OUTLET_SETTINGS.location,
+};
+
+/** Backend-backed subset of one finance/ops member, or `null` when absent. */
 function memberOverlay(
 	members: OutletMember[],
 	subRole: "finance" | "operations_head",
-): OutletProfileMemberOverlay {
+): OutletProfileMemberOverlay | null {
 	const member = members.find((m) => m.subRole === subRole);
-	if (!member) return {};
+	if (!member) return null;
 	const overlay: OutletProfileMemberOverlay = {};
+	// Finance/ops display name is also `user.username` from the members join.
 	if (member.username) overlay.name = member.username;
 	if (member.email) overlay.email = member.email;
 	return overlay;
@@ -48,6 +76,7 @@ function joinAddress(outlet: Outlet): string {
 	return [
 		outlet.addressLine1,
 		outlet.addressLine2,
+		outlet.city,
 		outlet.postcode,
 		outlet.state,
 		outlet.country,
@@ -58,28 +87,19 @@ function joinAddress(outlet: Outlet): string {
 }
 
 /**
- * Read-only real identity for the outlet Settings/Profile screens.
+ * Real identity for the outlet Settings/Profile screens — all fields from DB.
  *
- * Gated on a real session (`getOutletIdentity()`); demo sessions get `backed:
- * false` and no overlays, keeping the pure demo form. Reads the real outlet
- * record + its members. Overlays carry only defined fields so a spread never
- * clobbers a demo value with `undefined`.
+ * - Owner name / mobile / email → `user` (`username`, `phone_num`, `email`) via
+ *   `GET /outlet/:id/members` join, with `/auth/me` as fallback for the signed-in
+ *   owner (same columns).
+ * - Org name / address / logo / status → `outlet` row via `GET /outlet/:id`.
  *
- * `save` persists the venue NAME through `PUT /outlet/:id`, and nothing else.
- *
- * ⚠️ `location` is deliberately NOT saved. The screen shows one address line,
- * but that line is DERIVED — `joinAddress()` above concatenates five columns
- * (addressLine1/2, postcode, state, country). Writing the edited string back
- * would have to pick a column to put it in, flattening five fields into one and
- * silently emptying the other four. Splitting a free-text address is a parsing
- * problem, not a wiring one, so the location input stays store-only until the
- * form itself has five fields.
- *
- * The map pin is not here either: moving it is `PATCH /outlet/:id/geo-fence`,
- * its own endpoint because saving a pin switches hard geofencing on.
+ * Demo sessions get `backed: false`. When `backed`, callers merge onto
+ * {@link BLANK_OUTLET_OWNER} — never Velvet defaults.
  */
 export function useOutletProfile() {
 	const { logout } = useAuth();
+	const { data: me } = useProfile();
 	const identity = useMemo(() => getOutletIdentity(), []);
 	const backed = identity !== null;
 	const outletId = identity?.outletId ?? null;
@@ -93,7 +113,13 @@ export function useOutletProfile() {
 
 	const membersQuery = useQuery({
 		queryKey: ["outlet", "members", outletId ?? "none"],
-		queryFn: () => fetchOutletMembers(outletId as string, logout),
+		// Must return the array — same cache key as `useOrgMembers`, which calls
+		// `.map` on the cached value. Caching the full `{ data: [...] }` envelope
+		// made `members.map` throw after Settings save invalidated this key.
+		queryFn: async () => {
+			const res = await fetchOutletMembers(outletId as string, logout);
+			return res.data ?? [];
+		},
 		enabled: backed,
 		staleTime: 60_000,
 	});
@@ -101,29 +127,52 @@ export function useOutletProfile() {
 	const owner = useMemo<OutletProfileOwnerOverlay | null>(() => {
 		if (!backed) return null;
 		const outlet = outletQuery.data?.data;
-		const members = membersQuery.data?.data ?? [];
+		const members = membersQuery.data ?? [];
 		const ownerMember = members.find((m) => m.subRole === "owner");
 
 		const overlay: OutletProfileOwnerOverlay = {};
-		const orgName = identity?.outletName || outlet?.name;
+
+		// Org fields from `outlet` first; identity is only a bootstrap cache.
+		const orgName = outlet?.name?.trim() || identity?.outletName?.trim();
 		if (orgName) overlay.orgName = orgName;
-		if (ownerMember?.username) overlay.ownerName = ownerMember.username;
-		if (ownerMember?.phoneNum) overlay.mobile = ownerMember.phoneNum;
-		if (ownerMember?.email) overlay.email = ownerMember.email;
+
+		// Owner name is always `user.username` (never user_profile.full_name).
+		const ownerName =
+			ownerMember?.username?.trim() || me?.username?.trim() || undefined;
+		if (ownerName) overlay.ownerName = ownerName;
+
+		const mobile =
+			ownerMember?.phoneNum?.trim() || me?.contactNo?.trim() || undefined;
+		if (mobile) overlay.mobile = mobile;
+
+		const email =
+			ownerMember?.email?.trim() || me?.email?.trim() || undefined;
+		if (email) overlay.email = email;
+
+		const logoUrl = apiAssetUrl(outlet?.logoImage);
+		if (logoUrl) overlay.avatarPhoto = logoUrl;
+		else if (outlet) overlay.avatarPhoto = null;
+
+		if (outlet?.status) {
+			overlay.accountActivated = outlet.status === "active";
+		} else if (identity?.outletStatus) {
+			overlay.accountActivated = identity.outletStatus === "active";
+		}
 		return overlay;
-	}, [backed, outletQuery.data, membersQuery.data, identity]);
+	}, [backed, outletQuery.data, membersQuery.data, identity, me]);
 
 	const finance = useMemo<OutletProfileMemberOverlay | null>(() => {
 		if (!backed) return null;
-		return memberOverlay(membersQuery.data?.data ?? [], "finance");
-	}, [backed, membersQuery.data]);
-	const ops = useMemo<OutletProfileMemberOverlay | null>(() => {
-		if (!backed) return null;
-		return memberOverlay(membersQuery.data?.data ?? [], "operations_head");
+		if (!membersQuery.data) return null;
+		return memberOverlay(membersQuery.data, "finance");
 	}, [backed, membersQuery.data]);
 
-	// The venue's saved map pin, parsed to numbers (columns store strings).
-	// null coords = pin never dropped = check-in fence OFF for this venue.
+	const ops = useMemo<OutletProfileMemberOverlay | null>(() => {
+		if (!backed) return null;
+		if (!membersQuery.data) return null;
+		return memberOverlay(membersQuery.data, "operations_head");
+	}, [backed, membersQuery.data]);
+
 	const geo = useMemo(() => {
 		if (!backed) return null;
 		const outlet = outletQuery.data?.data;
@@ -141,28 +190,70 @@ export function useOutletProfile() {
 		if (!backed) return null;
 		const outlet = outletQuery.data?.data;
 		const overlay: OutletProfileSettingsOverlay = {};
-		const venueName = identity?.outletName || outlet?.name;
+		const venueName = outlet?.name?.trim() || identity?.outletName?.trim();
 		if (venueName) overlay.venueName = venueName;
 		if (outlet) {
-			const location = joinAddress(outlet);
-			if (location) overlay.location = location;
+			overlay.location = joinAddress(outlet);
 		}
 		return overlay;
 	}, [backed, outletQuery.data, identity]);
 
 	const queryClient = useQueryClient();
 	const saveMutation = useMutation({
-		mutationFn: (payload: { venueName?: string }) => {
+		mutationFn: async (payload: {
+			venueName?: string;
+			ownerName?: string;
+			location?: string;
+			/** New logo as a data URL (`data:image/…;base64,…`). */
+			logoDataUrl?: string | null;
+			logoFileName?: string;
+			logoContentType?: string;
+			/** True when the owner cleared the logo. */
+			clearLogo?: boolean;
+		}) => {
 			if (!outletId) throw new Error("No real outlet session");
-			return updateOutlet(
-				outletId,
-				payload.venueName ? { name: payload.venueName } : {},
-				logout,
-			);
+
+			const outletPatch: Parameters<typeof updateOutlet>[1] = {};
+			if (payload.venueName?.trim()) {
+				outletPatch.name = payload.venueName.trim();
+			}
+			if (payload.location !== undefined) {
+				// Settings shows one "Location" line (joined address). Persist it as
+				// address_line_1 and clear the other address parts so the joined
+				// display round-trips instead of appending stale city/postcode.
+				const line = payload.location.trim();
+				outletPatch.addressLine1 = line || undefined;
+				outletPatch.addressLine2 = "";
+				outletPatch.city = "";
+				outletPatch.postcode = "";
+				outletPatch.state = "";
+			}
+			if (payload.clearLogo) {
+				outletPatch.clearLogo = true;
+			} else if (payload.logoDataUrl?.startsWith("data:")) {
+				outletPatch.logoBase64 = payload.logoDataUrl;
+				outletPatch.logoFileName = payload.logoFileName || "logo.png";
+				outletPatch.logoContentType =
+					payload.logoContentType || "image/png";
+			}
+
+			const outletPromise =
+				Object.keys(outletPatch).length > 0
+					? updateOutlet(outletId, outletPatch, logout)
+					: Promise.resolve(null);
+
+			const ownerPromise =
+				payload.ownerName?.trim() && me?.id
+					? updateMyDisplayName(me.id, payload.ownerName.trim())
+					: Promise.resolve(null);
+
+			const [outletResult] = await Promise.all([outletPromise, ownerPromise]);
+			return outletResult;
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["outlet", "profile"] });
 			queryClient.invalidateQueries({ queryKey: ["outlet", "members"] });
+			queryClient.invalidateQueries({ queryKey: profileQueryKey });
 		},
 	});
 
@@ -177,7 +268,10 @@ export function useOutletProfile() {
 		finance,
 		ops,
 		settings,
-		isLoading: outletQuery.isLoading || membersQuery.isLoading,
+		isLoading:
+			outletQuery.isLoading ||
+			membersQuery.isLoading ||
+			(backed && !me),
 		save: saveMutation.mutateAsync,
 		isSaving: saveMutation.isPending,
 	};

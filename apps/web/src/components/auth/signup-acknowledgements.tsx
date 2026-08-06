@@ -8,7 +8,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
-import { Field, FieldError, toFieldErrors } from "@/components/ui/field";
+import { Field } from "@/components/ui/field";
 import { useLandingLocale } from "@/lib/landing-i18n";
 import { cn } from "@/lib/utils";
 
@@ -91,95 +91,80 @@ export function SignupAcknowledgements({
 
 	return (
 		<>
-			<header className="signup-section-header">
-				<span className="signup-step" aria-hidden>
-					06
-				</span>
-				<h2 className="signup-section-title">
-					{t.signup.sections.acknowledgements}
-				</h2>
-			</header>
+			<div className="signup-acknowledgements">
+				<header className="signup-section-header">
+					<span className="signup-step" aria-hidden>
+						06
+					</span>
+					<h2 className="signup-section-title">
+						{t.signup.sections.acknowledgements}
+					</h2>
+				</header>
 
-			<div className="signup-section-body">
-				<div className="overflow-hidden rounded-xl border border-royal-gold/20 bg-background/30">
-					{acknowledgementRows.map((row, index) => {
-						const isInvalid =
-							row.field.state.meta.isDirty && !row.field.state.meta.isValid;
-						const errorId = `${row.name}-error`;
-
-						return (
-							<div
-								key={row.name}
-								className={cn(
-									"px-3.5 py-3.5",
-									index < acknowledgementRows.length - 1 &&
-										"border-b border-royal-gold/12",
-								)}
-							>
-								<AcknowledgementRow
-									id={row.name}
-									checked={row.field.state.value}
-									disabled={isSubmitting}
-									label={row.label}
-									onCheckedChange={row.field.handleChange}
-									onBlur={row.field.handleBlur}
-									onOpen={() => setOpenDisclaimer(row.disclaimerId)}
-								/>
-								{isInvalid && (
-									<FieldError
-										id={errorId}
-										errors={toFieldErrors(row.field.state.meta.errors)}
-										className="signup-field-error mt-2"
+				<div className="signup-section-body">
+					<div className="overflow-hidden rounded-xl border border-royal-gold/20 bg-background/30">
+						{acknowledgementRows.map((row, index) => {
+							return (
+								<div
+									key={row.name}
+									className={cn(
+										"px-3.5 py-3.5",
+										index < acknowledgementRows.length - 1 &&
+											"border-b border-royal-gold/12",
+									)}
+								>
+									<AcknowledgementRow
+										id={row.name}
+										checked={row.field.state.value}
+										disabled={isSubmitting}
+										label={row.label}
+										onCheckedChange={row.field.handleChange}
+										onBlur={row.field.handleBlur}
+										onOpen={() => setOpenDisclaimer(row.disclaimerId)}
 									/>
-								)}
-							</div>
-						);
-					})}
-				</div>
+								</div>
+							);
+						})}
+					</div>
 
-				<div className="border-t border-royal-gold/16 pt-5">
-					<header className="mb-3 flex items-baseline gap-3">
-						<span className="signup-step" aria-hidden>
-							07
-						</span>
-						<h3 className="signup-section-title">{t.signup.sections.terms}</h3>
-					</header>
+					<div className="border-t border-royal-gold/16 pt-5">
+						<header className="mb-3 flex items-baseline gap-3">
+							<span className="signup-step" aria-hidden>
+								07
+							</span>
+							<h3 className="signup-section-title">
+								{t.signup.sections.terms}
+							</h3>
+						</header>
 
-					<Field
-						data-invalid={
-							fields.acceptTerms.state.meta.isDirty &&
-							!fields.acceptTerms.state.meta.isValid
-						}
-					>
-						<AcknowledgementRow
-							id="acceptTerms"
-							checked={fields.acceptTerms.state.value}
-							disabled={isSubmitting}
-							onCheckedChange={fields.acceptTerms.handleChange}
-							onBlur={fields.acceptTerms.handleBlur}
-							onOpen={() => setOpenDisclaimer("terms")}
-							label={
-								<>
-									{copy.termsCheckboxPrefix}{" "}
-									<button
-										type="button"
-										className="signup-ack-link font-medium text-gold-bright underline underline-offset-4 hover:text-gold"
-										onClick={() => setOpenDisclaimer("terms")}
-									>
-										{copy.termsCheckboxLink}
-									</button>
-								</>
+						<Field
+							data-invalid={
+								fields.acceptTerms.state.meta.isDirty &&
+								!fields.acceptTerms.state.meta.isValid
 							}
-						/>
-						{fields.acceptTerms.state.meta.isDirty &&
-							!fields.acceptTerms.state.meta.isValid && (
-								<FieldError
-									id="acceptTerms-error"
-									errors={toFieldErrors(fields.acceptTerms.state.meta.errors)}
-									className="signup-field-error mt-2"
-								/>
-							)}
-					</Field>
+						>
+							<AcknowledgementRow
+								id="acceptTerms"
+								checked={fields.acceptTerms.state.value}
+								disabled={isSubmitting}
+								onCheckedChange={fields.acceptTerms.handleChange}
+								onBlur={fields.acceptTerms.handleBlur}
+								onOpen={() => setOpenDisclaimer("terms")}
+								label={
+									<>
+										{copy.termsCheckboxPrefix}{" "}
+										<button
+											type="button"
+											className="signup-ack-link font-medium text-gold-bright underline underline-offset-4 hover:text-gold"
+											onClick={() => setOpenDisclaimer("terms")}
+										>
+											{copy.termsCheckboxLink}
+										</button>
+									</>
+								}
+							/>
+						</Field>
+					</div>
 				</div>
 			</div>
 

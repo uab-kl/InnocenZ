@@ -4,23 +4,23 @@ import { AgencyTable, AgencyUserTable } from '@/features/agency/agency.model.js'
 import { OutletTable, OutletUserTable } from '@/features/outlet/outlet.model.js';
 
 /**
- * Organisation statuses that deny access to the people inside them.
+ * Organisation statuses that deny sign-in entirely.
  *
- * `suspended` and `inactive` only — **`pending_review` is deliberately NOT
- * here**, and that carve-out is the whole design of this file. `pending_review`
- * is the column DEFAULT for both `agency` and `outlet`, so treating it as a
- * denial would lock out every organisation that has never been through a review
- * nobody has yet built a screen for. Blocking a not-yet-approved venue is a
- * different product decision from blocking a suspended one, and only the second
- * was asked for.
+ * **`inactive` only.** `pending_review` and `suspended` may still authenticate;
+ * the portal then limits them to profile/settings (client RBAC). Treating
+ * `pending_review` as a denial would lock out every organisation that has never
+ * been through a review. Treating `suspended` as a denial was the old X55
+ * behaviour; product now wants suspended orgs to keep a profile-only session
+ * (red status) so owners can still update contact details and see why access
+ * is limited.
  */
-const DENIED_ORG_STATUSES = new Set(['suspended', 'inactive']);
+const DENIED_ORG_STATUSES = new Set(['inactive']);
 
 /** One organisation a user belongs to, with the organisation's own status. */
 type Membership = { kind: 'agency' | 'outlet'; name: string | null; status: string };
 
 /**
- * Does a suspended organisation block this account?
+ * Does an inactive organisation block this account?
  *
  * Returns a reason to refuse with, or `null` to allow.
  *
@@ -29,8 +29,8 @@ type Membership = { kind: 'agency' | 'outlet'; name: string | null; status: stri
  *  1. **No memberships means no opinion.** Platform admins and PRs hold no
  *     `agency_user`/`outlet_user` row, so an "is your org active?" test would
  *     refuse everyone who has no organisation at all. Absence of a membership
- *     is not a suspended membership.
- *  2. **One live organisation is enough.** A user who belongs to a suspended
+ *     is not a denied membership.
+ *  2. **One live organisation is enough.** A user who belongs to an inactive
  *     agency AND an active one still has somewhere legitimate to work; refusing
  *     the whole account would punish them for the other organisation's status.
  *  3. **The membership row's own `status` is filtered first.** `agency_user`
@@ -62,8 +62,8 @@ export async function suspendedOrgBlock(userId: string): Promise<string | null> 
   // Rule 2 — at least one organisation is not denied, so let them in.
   if (memberships.some((m) => !DENIED_ORG_STATUSES.has(m.status))) return null;
 
-  // Every organisation this account belongs to is suspended or inactive. Name
-  // the organisation and its state: it is the user's OWN organisation, so this
+  // Every organisation this account belongs to is inactive. Name the
+  // organisation and its state: it is the user's OWN organisation, so this
   // discloses nothing they cannot already see, and a bare "invalid credentials"
   // would send someone to reset a password that was never the problem.
   const worst = memberships[0];

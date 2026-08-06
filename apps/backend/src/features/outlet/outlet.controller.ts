@@ -16,6 +16,8 @@ import {
 } from '@/schema/outlet.schema';
 import { addressQueryFromOutlet, geocodeAddress } from './geocode';
 import { OutletFilter, OutletStatus } from './outlet.model';
+import { saveOrgLogoFromBase64 } from '@/util/org-logo';
+import { r2DeleteStoredRef } from '@/util/r2';
 
 export class OutletControllerClass {
   constructor(
@@ -116,12 +118,22 @@ export class OutletControllerClass {
       if (!parsed.success) {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
-      const { lat, lng, ...rest } = parsed.data;
+      const {
+        lat,
+        lng,
+        logoBase64,
+        logoFileName,
+        logoContentType,
+        clearLogo,
+        ...rest
+      } = parsed.data;
       const addressTouched =
         rest.addressLine1 !== undefined ||
         rest.addressLine2 !== undefined ||
+        rest.city !== undefined ||
         rest.postcode !== undefined ||
-        rest.state !== undefined;
+        rest.state !== undefined ||
+        rest.country !== undefined;
       let outlet = await this.outletRepository.update(id, {
         ...rest,
         lat: lat !== undefined ? String(lat) : undefined,
@@ -129,6 +141,43 @@ export class OutletControllerClass {
         updatedBy: getActor(req),
       });
       if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      // Logo is not a column on the Zod rest shape that maps 1:1 — strip above,
+      // then upload to R2 (or clear) and store only the object key. Always
+      // delete the previous R2 object so Remove does not leave an orphan.
+      const previousLogo = outlet.logoImage;
+      if (clearLogo) {
+        await r2DeleteStoredRef(previousLogo);
+        const cleared = await this.outletRepository.update(id, {
+          logoImage: null,
+          updatedBy: getActor(req),
+        });
+        if (cleared) outlet = cleared;
+      } else if (logoBase64 && logoFileName) {
+        try {
+          const logoKey = await saveOrgLogoFromBase64({
+            kind: 'outlet',
+            orgId: outlet.id,
+            orgName: outlet.name,
+            fileName: logoFileName,
+            contentType: logoContentType,
+            base64: logoBase64,
+          });
+          const withLogo = await this.outletRepository.update(id, {
+            logoImage: logoKey,
+            updatedBy: getActor(req),
+          });
+          if (withLogo) outlet = withLogo;
+          // New key uploaded — drop the old object (ignore if same / missing).
+          if (previousLogo && previousLogo !== logoKey) {
+            await r2DeleteStoredRef(previousLogo);
+          }
+        } catch (logoError) {
+          const msg =
+            logoError instanceof Error ? logoError.message : 'Logo upload failed';
+          return res.status(400).json({ success: false, message: msg, data: null });
+        }
+      }
 
       // The check-in fence must FOLLOW the venue: an address edit re-geocodes
       // the saved address and moves the pin in the same save, so the fence can

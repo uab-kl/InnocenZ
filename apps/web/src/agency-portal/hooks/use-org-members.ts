@@ -144,7 +144,7 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 	});
 
 	return {
-		members: membersQuery.data ?? [],
+		members: Array.isArray(membersQuery.data) ? membersQuery.data : [],
 		isLoading: membersQuery.isLoading,
 		addMember,
 		changeMember,

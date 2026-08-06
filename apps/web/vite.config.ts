@@ -20,6 +20,11 @@ const config = defineConfig({
     // runner execute CJS index.js as ESM → "module is not defined").
     dedupe: ['react', 'react-dom'],
   },
+  // country-state-city ships multi‑MB city JSON; pre-bundling it often hits Vite's
+  // 120s optimizer timeout (worse under `pnpm dev:all` with Metro on Windows).
+  optimizeDeps: {
+    exclude: ['country-state-city'],
+  },
   server: {
     // Proxy only backend-owned /img paths so Vite can still serve marketing
     // assets from apps/web/public/img (landing, UAB badge, etc.).

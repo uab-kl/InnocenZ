@@ -49,6 +49,7 @@ export async function fetchProfile(): Promise<User> {
 	return {
 		id: profile.id,
 		email: profile.email ?? "",
+		username: profile.username,
 		displayName: profile.username,
 		contactNo: profile.phoneNum ?? "",
 		isActive: profile.status.toLowerCase() === "active",

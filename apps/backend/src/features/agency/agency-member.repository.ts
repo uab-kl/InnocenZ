@@ -17,12 +17,15 @@ export type AgencyMemberEnriched = AgencyUserType & {
   phoneNum: string | null;
 };
 
+/** `agencyStatus` is the organisation's status (`pending_review` / `active` / …),
+ * distinct from the membership row's own `status`. */
 export type AgencyMembershipWithAgency = {
   membershipId: string;
   userId: string;
   agencyId: string;
   agencyName: string;
   agencyCode: string;
+  agencyStatus: string;
   subRole: AgencyUserSubRole;
   status: string;
 };
@@ -178,6 +181,7 @@ export class AgencyMemberRepositoryClass {
           agencyId: AgencyUserTable.agencyId,
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
+          agencyStatus: AgencyTable.status,
           subRole: AgencyUserTable.subRole,
           status: AgencyUserTable.status,
         })
