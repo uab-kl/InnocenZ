@@ -212,6 +212,8 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   // A forgotten check-out is a caution the PR must SEE — pop To-do open once
   // when it appears (same one-shot pattern as swap requests).
   const [overdueAlerted, setOverdueAlerted] = useState(false);
+  /** Open by default — a forgotten check-out costs the shift, so it announces itself. */
+  const [overdueOpen, setOverdueOpen] = useState(true);
   useEffect(() => {
     if (overdueCheckout && !overdueAlerted) {
       setOverdueAlerted(true);
@@ -355,31 +357,60 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                   style={[
                     styles.todoCard,
                     {
+                      flexDirection: 'column',
+                      alignItems: 'stretch',
                       borderColor: 'rgba(232,198,106,0.4)',
                       backgroundColor: 'rgba(232,198,106,0.06)',
                       marginBottom: 10,
                     },
                   ]}
                 >
-                  <View style={styles.todoIcon}>
-                    <Clock size={16} color={C.amber} />
-                  </View>
-                  <View style={styles.todoBody}>
-                    <Text style={styles.todoTitle}>Forgot to check out?</Text>
-                    <Text style={styles.todoSubtitle}>
-                      {overdueCheckout.assignment.outletName ?? 'Outlet'} · shift ended{' '}
-                      {overdueEndHm} · pay locks to the shift window
-                    </Text>
-                  </View>
-                  <IzButton
-                    label="Check out"
-                    small
-                    fullWidth={false}
-                    onPress={() => {
-                      focus(null);
-                      onNavigate('checkin');
-                    }}
-                  />
+                  {/*
+                    * A COLUMN, and collapsible.
+                    *
+                    * It was one fixed row — icon | text | button — so on a real
+                    * phone the button held its width and crushed the message
+                    * into a four-line ribbon ("Emhub Testing · / shift ended
+                    * 12:00 · / pay locks to the / shift window"). Stacking lets
+                    * the text use the full width at any screen size.
+                    *
+                    * Collapsing matters because this card CANNOT be dismissed —
+                    * it stays until the PR checks out, deliberately, since
+                    * forgetting costs them the shift's pay. Folding it to its
+                    * title lets them park it without losing the warning.
+                    */}
+                  <Pressable
+                    style={styles.overdueHead}
+                    onPress={() => setOverdueOpen((o) => !o)}
+                    accessibilityRole="button"
+                    accessibilityState={{ expanded: overdueOpen }}
+                  >
+                    <View style={styles.todoIcon}>
+                      <Clock size={16} color={C.amber} />
+                    </View>
+                    <Text style={[styles.todoTitle, { flex: 1 }]}>Forgot to check out?</Text>
+                    <ChevronDown
+                      size={16}
+                      color={C.amber}
+                      style={overdueOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+                    />
+                  </Pressable>
+                  {overdueOpen && (
+                    <>
+                      <Text style={[styles.todoSubtitle, { marginTop: 8 }]}>
+                        {overdueCheckout.assignment.outletName ?? 'Outlet'} · shift ended{' '}
+                        {overdueEndHm} · pay locks to the shift window
+                      </Text>
+                      <IzButton
+                        label="Check out"
+                        onPress={() => {
+                          focus(null);
+                          onNavigate('checkin');
+                        }}
+                        style={{ marginTop: 10 }}
+                      />
+                    </>
+                  )}
                 </View>
               )}
               <OutletSwapRequests swaps={outletSwaps} />
@@ -732,6 +763,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line,
   },
+  overdueHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   todoIcon: {
     width: 36,
     height: 36,

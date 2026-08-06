@@ -4,7 +4,7 @@
  * Identity comes from the backend session (/auth/me).
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import { Modal, Pressable, StyleSheet, Text, View } from 'react-native';
+import { Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import { fmtClock, fmtDTopbar, formatRM, todayYmd, weekPvIssueDayLabel } from '../lib/demo-shifts';
 import { useSession } from '../lib/session';
@@ -17,6 +17,7 @@ import {
 import { Avatar, IzButton } from './ui';
 import { Bell, ChevronLeft, FileText } from './icons';
 import { usePrNav } from '../lib/pr-nav';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 function useClock(): string {
   const [time, setTime] = useState(() => fmtClock(new Date()));
@@ -42,6 +43,8 @@ export function TopBar({
   const time = useClock();
   const [y, m, d] = todayYmd();
   const [sheetOpen, setSheetOpen] = useState(false);
+  // Device inset — keeps Close clear of the 3-button / gesture nav bar.
+  const insets = useSafeAreaInsets();
   const [readIds, setReadIds] = useState<string[]>([]);
 
   const [rows, setRows] = useState<NotificationRecord[]>([]);
@@ -173,12 +176,23 @@ export function TopBar({
       </View>
 
       <Modal visible={sheetOpen} transparent animationType="fade" onRequestClose={() => setSheetOpen(false)}>
-        <Pressable style={styles.sheetBackdrop} onPress={() => setSheetOpen(false)}>
-          <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
+        {/*
+          * The backdrop is a SIBLING, and the list is a real ScrollView.
+          *
+          * Two faults, one symptom. The sheet had NO ScrollView at all, so a PR
+          * with more than a screenful of notifications could not reach the older
+          * ones — and the whole sheet sat inside a `Pressable` whose tap-guard
+          * swallows the drag on Android, so adding one alone would still not
+          * have scrolled. Both fixed together, per the flexible-UI rule.
+          */}
+        <View style={styles.sheetBackdrop}>
+          <Pressable style={styles.backdropTap} onPress={() => setSheetOpen(false)} />
+          <View style={[styles.sheet, { paddingBottom: 16 + insets.bottom }]}>
             <Text style={styles.sheetTitle}>Notifications</Text>
             <Text style={styles.sheetHint}>
               Assignments, swaps, PVs, and SOS receipts — tap to open the screen.
             </Text>
+            <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
             {notifications.length === 0 ? (
               <Text style={styles.sheetHint}>No notifications right now.</Text>
             ) : (
@@ -216,9 +230,13 @@ export function TopBar({
               </Pressable>
               ))
             )}
-            <IzButton label="Close" variant="soft" onPress={() => setSheetOpen(false)} style={{ marginTop: 12 }} />
-          </Pressable>
-        </Pressable>
+            </ScrollView>
+            {/* Close is red app-wide (owner's colour code). */}
+            <Pressable style={styles.sheetCloseBtn} onPress={() => setSheetOpen(false)}>
+              <Text style={styles.sheetCloseText}>Close</Text>
+            </Pressable>
+          </View>
+        </View>
       </Modal>
     </View>
   );
@@ -361,11 +379,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line2,
     padding: 18,
-    paddingBottom: 26,
-    maxWidth: 392,
+    // Fills a real phone; caps only on a tablet. 392 was the WEB frame width.
+    maxWidth: 520,
     width: '100%',
     alignSelf: 'center',
+    // Bounded so Close stays reachable; the list inside shrinks to fit.
+    maxHeight: '85%',
   },
+  /** Dismiss area ABOVE the sheet — a sibling, never a Pressable ancestor. */
+  backdropTap: { flex: 1 },
+  sheetScroll: { flexShrink: 1, marginTop: 4 },
+  sheetCloseBtn: {
+    marginTop: 12,
+    borderRadius: 12,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.45)',
+    backgroundColor: 'rgba(240,138,138,0.12)',
+  },
+  sheetCloseText: { fontFamily: F.sora, fontSize: 15, fontWeight: '700', color: C.red },
   sheetTitle: {
     fontFamily: F.sora,
     fontSize: 22,
