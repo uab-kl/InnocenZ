@@ -879,8 +879,25 @@ function RequestEditForm({
 	const quoteGiven =
 		rawQuote !== "" && !Number.isNaN(parsedQuote) && parsedQuote > 0;
 	const quoteHasFallback = request.type === "pos_integration_quote" && !!plan;
+	/*
+	 * An EXIT is never quoted. The agency is LEAVING the negotiated price for an
+	 * ordinary tier, so the rate card supplies the number — there is nothing to
+	 * negotiate and nothing that can be dangerously left blank.
+	 *
+	 * Without this the warning fired on a cancellation and said the opposite of
+	 * the card directly above it: "resolving now would put the agency on a
+	 * negotiated tier costing nothing", on a request whose whole purpose is to
+	 * move them OFF the negotiated tier and onto Starter's list price.
+	 */
 	const quoteMissing =
-		editableQuote && negotiable && !quoteHasFallback && !quoteGiven;
+		editableQuote && negotiable && !isExit && !quoteHasFallback && !quoteGiven;
+	/*
+	 * A price to anchor against — only where one exists. On an exit the CURRENT
+	 * plan is Custom itself, which by definition has no list price, so this
+	 * printed the nonsense "Custom is RM 0.00 weekly — Custom replaces it".
+	 */
+	const quoteAnchor =
+		plan && Number(plan.price) > 0 && plan.name !== "Custom" ? plan : null;
 
 	/**
 	 * What resolving actually does, in the subscriber's own terms. The two
@@ -1228,18 +1245,26 @@ function RequestEditForm({
 									{/* An anchor to price AGAINST. Custom replaces the tier
 										price, so the tier it replaces is the one number the
 										admin would otherwise go hunting for. */}
-									{plan && (
+									{quoteAnchor && (
 										<p className="text-xs text-muted-foreground">
-											{plan.name} is RM {formatPrice(plan.price)}{" "}
-											{plan.billingCycle} — Custom replaces it.
+											{quoteAnchor.name} is RM {formatPrice(quoteAnchor.price)}{" "}
+											{quoteAnchor.billingCycle} — Custom replaces it.
 										</p>
 									)}
 								</>
 							) : (
 								<>
+									{/*
+										A RESET is not a quote. The agency is going back to the
+										rate card, so the tier they land on already has a price
+										and this field has nothing to set. Saying so beats an
+										empty box that looks like unfinished work.
+									*/}
 									<p className="text-sm text-muted-foreground">
-										Estimate — negotiate or change it before Resolve.
-										{request.type === "pos_integration_quote" && plan
+										{isExit
+											? "No quote needed — the negotiated price ends on Resolve and the rate card takes over."
+											: "Estimate — negotiate or change it before Resolve."}
+										{!isExit && request.type === "pos_integration_quote" && plan
 											? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
 											: ""}
 									</p>
