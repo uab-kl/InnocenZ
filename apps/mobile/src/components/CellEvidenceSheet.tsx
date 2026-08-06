@@ -54,6 +54,28 @@ function dayLabel(iso: string): string {
   return `${wd} ${d.getUTCDate()} ${mo}`;
 }
 
+const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const MONTHS = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * "Thu 6 Aug 2026" from a YYYY-MM-DD shift date — the same line the agency
+ * card prints (617f5d4), so one shift reads identically in both portals.
+ *
+ * Built from the parts rather than `toLocaleDateString`: the date is a CALENDAR
+ * day, and handing 'YYYY-MM-DD' to `new Date()` parses it as UTC midnight,
+ * which in Asia/KL renders the previous day. Formatted by hand it cannot drift.
+ */
+function longShiftDay(iso: string | null | undefined): string {
+  if (!iso) return '';
+  const [y, m, d] = iso.split('-').map(Number);
+  if (!y || !m || !d) return iso;
+  const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
+  return `${weekday} ${d} ${MONTHS[m - 1]} ${y}`;
+}
+
 /** A finished shift — tapped out and sealed. These are the ones that collapse. */
 function isDone(group: EvidenceGroup): boolean {
   return !!group.shift?.checkOutAt;
@@ -117,7 +139,17 @@ function ShiftHead({
    * appears everywhere is one they stop reading, and then it cannot do its job
    * on the night it matters.
    */
-  const isSpecialEvent = shift.eventKind === 'special';
+  /*
+   * ALWAYS shown, matching the agency card (617f5d4) which prints
+   * "[Normal shift]" as readily as "[Special event]".
+   *
+   * I first tagged only the special ones, on the reasoning that a badge on
+   * every card is one nobody reads. The owner's screenshot settles it the
+   * other way, and rightly: the two portals describe the SAME shift, and a PR
+   * ringing the agency about it must not be reading a card that omits what
+   * theirs shows. Silence is not the same statement as "Normal".
+   */
+  const eventKindLabel = shift.eventKind === 'special' ? 'Special event' : 'Normal shift';
   const collapsible = typeof expanded === 'boolean' && !!onToggle;
   if (collapsible && !expanded) {
     /*
@@ -137,13 +169,14 @@ function ShiftHead({
         <View style={s.shiftHeadText}>
           <View style={s.shiftTitleRow}>
             <Text style={s.shiftTitle}>{shiftTitle}</Text>
-            {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
+            <Text style={s.eventTag}>{eventKindLabel}</Text>
           </View>
           <Text style={s.shiftSlot}>
             {shiftVenue ? `${shiftVenue} · ` : ''}
             {shift.slot ? `${shift.slot} · ` : ''}
             {shiftDurationLabel(shift.checkInAt, shift.checkOutAt)}
           </Text>
+          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
           <Text style={s.shiftMore}>Tap to see details</Text>
         </View>
         <View style={s.shiftHeadRight}>
@@ -172,17 +205,15 @@ function ShiftHead({
         >
           <View style={s.shiftHeadText}>
             <View style={s.shiftTitleRow}>
-              <View style={s.shiftTitleRow}>
-            <Text style={s.shiftTitle}>{shiftTitle}</Text>
-            {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
-          </View>
-              {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
+              <Text style={s.shiftTitle}>{shiftTitle}</Text>
+              <Text style={s.eventTag}>{eventKindLabel}</Text>
             </View>
             {(shiftVenue || shift.slot) && (
               <Text style={s.shiftSlot}>
                 {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
               </Text>
             )}
+            <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
             <Text style={s.shiftMore}>Tap to collapse</Text>
           </View>
           <Text style={[s.chevron, s.chevronOpen]}>⌄</Text>
@@ -191,13 +222,14 @@ function ShiftHead({
         <>
           <View style={s.shiftTitleRow}>
             <Text style={s.shiftTitle}>{shiftTitle}</Text>
-            {isSpecialEvent && <Text style={s.eventTag}>SPECIAL</Text>}
+            <Text style={s.eventTag}>{eventKindLabel}</Text>
           </View>
           {(shiftVenue || shift.slot) && (
             <Text style={s.shiftSlot}>
               {[shiftVenue, shift.slot].filter(Boolean).join(' · ')}
             </Text>
           )}
+          <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
         </>
       )}
       <View style={s.stampRow}>
@@ -654,6 +686,13 @@ const s = StyleSheet.create({
   // The tag sits beside the name and wraps under it on a narrow phone rather
   // than squeezing the name — the name is the thing being identified.
   shiftTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
+  shiftDay: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 12,
+    fontWeight: '700',
+    color: C.txt,
+  },
   eventTag: {
     fontFamily: F.sora,
     fontSize: 9,
