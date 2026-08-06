@@ -316,6 +316,50 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ THE AGENCY'S "WHAT DO I HAVE TO DO" SURFACE (owner, 6 Aug 2026 — SPEC, not started)
+
+*"need to make a shift pending approve to remind the agency that before raise pv … notification
+redirect to the page, redirect to here the day review … think any else to put that need the agency
+todo"*.
+
+**The idea:** every notification names an ACTION and tapping it lands on the exact control that
+performs it. Today they name a fact and land nowhere.
+
+**Build on what exists — do NOT invent a second rule.** `voucherSendGate()` already computes exactly
+why a week cannot go out (held days, unreviewed days, pending receipts, pending overtime, week not
+finished). That function IS the to-do list; it has simply never been rendered as one. And `pv.tsx`
+already parses `search.pv` and `search.status`, so deep-linking is half-built.
+
+- [ ] **A shift pending approval must block/warn BEFORE a PV is raised** — the owner's specific ask.
+  An unapproved check-in/out means the wage line is not final, so raising a voucher on it produces a
+  figure that can still move. Surface it through the same gate, worded like the others.
+- [ ] **Every notification carries a destination.** Add a route + params to the notification row and
+  land the reviewer on the panel, scrolled to the row: `1 voucher awaiting day review` →
+  `/agency/pv?pv=<voucherId>` with Day Review open and the undecided day highlighted; `Overtime needs
+  approval` → the Overtime sub-tab filtered to that claim; `Cover needed` → the roster row; `Rating
+  dropped` → that PR in Manage PR.
+- [ ] **One "Needs you" list on Today**, counted FROM the gate rather than hand-maintained. The four
+  tiles there (PR ON DUTY / PENDING APPROVALS / PENDING AGENCY REVIEW / DISPUTES) hint at this but
+  are not actionable.
+
+**Everything that should appear as an agency to-do** — each has a real source, none needs DDL:
+1. **Shifts pending approval** — wage lines not final yet. *(the new one)*
+2. **Overtime claims undecided** — already in `voucherSendGate`.
+3. **Days not reviewed, or HELD** — `dayReviews[].status`.
+4. **Days gone STALE** — approved, then the total moved; needs re-approval. Only visible inside the
+   panel today.
+5. **Receipts waiting on you** — `pendingReceiptCount`.
+6. **Open disputes** — visible via the new Open/Resolved filter, but not counted as work.
+7. **Voucher not finance-signed** — blocks the send.
+8. **Signed but unpaid** — the To-pay queue; money owed.
+9. **PR missing bank details** — cannot be paid even once signed (`user_profile.bank_*`).
+10. **Outlet with no drinks/service list** — blocks receipt-line verification for that outlet.
+11. **Receipt with no photo or no shift link** — cannot be verified against a catalogue.
+
+⚠️ **Ordering rule:** sort by what BLOCKS MONEY first (send gate, then payment), never by recency. A
+rating drop and a held day are not the same kind of urgent, and a list that mixes them by timestamp
+trains the agency to ignore it.
+
 ### ▶ THE NICKNAME LIVES ON `user.username` — THERE IS NO `pr` TABLE (6 Aug 2026)
 
 **Root cause of the nickname never appearing**, after three wrong guesses. `main.pr` was DROPPED;
