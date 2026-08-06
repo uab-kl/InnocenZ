@@ -1,4 +1,5 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
+import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyPvReceiptReview } from "@agency-portal/hooks/use-agency-pv-receipt-review";
 import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
@@ -80,10 +81,8 @@ const kindOfComponent = (
 	return undefined;
 };
 
-const isRenderablePhoto = (photo: string) =>
-	photo.startsWith("data:image/") ||
-	photo.startsWith("https://") ||
-	photo.startsWith("http://");
+// `isRenderablePhoto` moved to ProofPhotoViewer — one rule about what counts as
+// renderable evidence, in one place, rather than a private copy per panel.
 
 /**
  * One receipt, with the agency's decision on it.
@@ -168,29 +167,10 @@ function ReceiptRow({
 				</p>
 			)}
 
-			{proofPhotos.length > 0 && (
-				<div className="mt-1.5 flex flex-wrap gap-1.5">
-					{proofPhotos.map((photo, i) =>
-						isRenderablePhoto(photo) ? (
-							<img
-								// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
-								key={`${receipt.id}-photo-${i}`}
-								src={photo}
-								alt={`Proof ${i + 1} for ${receipt.receiptNo}`}
-								className="h-16 w-16 rounded border border-[var(--iz-line)] object-cover"
-							/>
-						) : (
-							<span
-								// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
-								key={`${receipt.id}-photo-${i}`}
-								className="iz-tiny iz-muted2 break-all"
-							>
-								{photo}
-							</span>
-						),
-					)}
-				</div>
-			)}
+			{/* Zoomable, like the dispute queue: a 64px thumbnail of a phone photo
+			    cannot be read, and the whole point of this panel is checking the
+			    printed figures against the lines. */}
+			<ProofPhotos photos={proofPhotos} label={`${receipt.receiptNo} scan`} />
 
 			<div className="mt-1.5">
 				{lines.map((line) => (
