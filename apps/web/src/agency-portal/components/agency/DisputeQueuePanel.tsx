@@ -3,12 +3,16 @@ import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyDisputes } from "@agency-portal/hooks/use-agency-disputes";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
-import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import {
+	formatPayeeLabel,
+	formatStampClock,
+} from "@agency-portal/lib/agency-payroll";
 import { useStore } from "@agency-portal/lib/store";
 import { Check, ImageOff, Paperclip, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
 	AgencyReceipt,
+	DisputeShift,
 	PaymentVoucherDispute,
 } from "@/services/payment-voucher";
 
@@ -39,8 +43,13 @@ function formatDay(iso: string): string {
 /**
  * The receipts a dispute is actually ABOUT.
  *
- * A dispute names a DAY and a COMPONENT, never a receipt — the PR tapped a grid
- * cell, and that cell is a sum. So the paper behind it is found the same way the
+ * A dispute MAY name one receipt (`receiptId`, migration 0088) and when it does
+ * that is the answer — exactly one paper, no derivation. The old docstring here
+ * said "never a receipt", which stopped being true at 0088; deriving anyway is
+ * how a two-shift night showed BOTH shifts' receipts as the evidence for a
+ * claim about one of them, directly contradicting the shift block above.
+ *
+ * With no `receiptId` the claim covers the whole day, so fall back to how the
  * cell was built: lines on that date, in that bucket. A receipt qualifies if it
  * carries even one such line.
  *
@@ -56,6 +65,9 @@ function receiptsForDispute(
 	dispute: PaymentVoucherDispute,
 	receipts: AgencyReceipt[],
 ): AgencyReceipt[] {
+	if (dispute.receiptId) {
+		return receipts.filter((r) => r.id === dispute.receiptId);
+	}
 	return receipts.filter(
 		(r) =>
 			r.voucherId === dispute.voucherId &&
@@ -91,6 +103,100 @@ function disputedSubtotal(
  * that claim was built on. The targeted receipt endpoints removed that trap, and
  * with it the reason to send the reviewer somewhere else mid-decision.
  */
+/**
+ * One shift behind a disputed figure: where it was, what the night was called,
+ * whether it was a special event, its window, and the two stamps.
+ *
+ * Every absent value is spelled out. "not checked in" and "still on duty" are
+ * different facts and neither is a dash — the agency is about to rule on money.
+ *
+ * `slot` prints VERBATIM. It must never go through `formatShiftTimeRange` /
+ * `parseShiftWindow`, whose `?? "22:00"` / `?? "04:00"` defaults would render a
+ * null slot as a confident, entirely fabricated "10pm – 4am".
+ */
+function DisputeShiftBlock({ shift }: { shift: DisputeShift }) {
+	const ot = shift.overtimeMinutes ?? 0;
+	return (
+		<div className="rounded-md border border-[var(--iz-line,#2a2a3a)] px-2.5 py-2">
+			<div className="flex flex-wrap items-center gap-1.5">
+				<span className="text-sm font-semibold">
+					{shift.outletName || "—"}
+				</span>
+				{/* The event TYPE, always present — the column is NOT NULL and
+				    defaults to 'normal', so once we have the shift we have this. */}
+				<span
+					className={`iz-pill !text-[10px] ${
+						shift.eventKind === "special" ? "iz-pill-amber" : "iz-pill-ink"
+					}`}
+				>
+					{shift.eventKind === "special" ? "Special event" : "Normal shift"}
+				</span>
+			</div>
+			<p className="iz-tiny iz-muted mt-0.5">
+				{shift.eventName?.trim() || "No event name"} · {shift.slot || "—"}
+			</p>
+			<div className="mt-1.5 flex flex-wrap gap-4">
+				<span>
+					<span className="iz-tiny iz-muted block">Check-in</span>
+					<span className="font-mono text-sm">
+						{formatStampClock(shift.checkInAt, "not checked in")}
+					</span>
+				</span>
+				<span>
+					{/* "Shift end", NOT "checked out". The stored stamp is clamped to
+					    the scheduled end when the PR taps out, so calling it a
+					    check-out asserts a time that never happened on every
+					    overtime shift. The real overrun is the OT beside it. */}
+					<span className="iz-tiny iz-muted block">Shift end</span>
+					<span className="font-mono text-sm">
+						{formatStampClock(shift.checkOutAt, "still on duty")}
+						{ot > 0 ? ` · +${ot}m OT` : ""}
+					</span>
+				</span>
+			</div>
+		</div>
+	);
+}
+
+/**
+ * Which shift a claim is about — one, several, or none, and it says which.
+ *
+ * A dispute names a receipt only when the contested cell had one. With no
+ * receipt the claim covers the WHOLE day, so every shift the PR worked that day
+ * is in scope. Rendering `shifts[0]` would be a silent pick: two shifts in one
+ * night are usually at different outlets, so the card would show the wrong
+ * venue AND the wrong check-in while looking authoritative.
+ */
+function DisputeShiftFacts({ dispute }: { dispute: PaymentVoucherDispute }) {
+	const shifts = dispute.shifts ?? [];
+
+	if (shifts.length === 0) {
+		return (
+			<p className="iz-tiny iz-muted2 mt-2">
+				Which shift · not linked — this claim names no receipt, or the receipt
+				has no shift record.
+			</p>
+		);
+	}
+
+	return (
+		<div className="mt-2">
+			<p className="iz-tiny iz-muted mb-1">
+				{shifts.length > 1
+					? `This claim covers the whole day — ${shifts.length} shifts worked`
+					: dispute.receiptId
+						? "The shift behind this figure"
+						: "This claim covers the whole day — 1 shift worked"}
+			</p>
+			<div className="flex flex-col gap-1.5">
+				{shifts.map((shift) => (
+					<DisputeShiftBlock key={shift.assignmentId} shift={shift} />
+				))}
+			</div>
+		</div>
+	);
+}
+
 function DisputeEvidence({
 	dispute,
 	receipts,
@@ -287,6 +393,10 @@ function DisputeRow({
 					<span className="iz-pill iz-pill-amber !text-[10px]">Open</span>
 				)}
 			</div>
+
+			{/* WHICH SHIFT this money is about — above the figures, because the
+			    answer to "is this claim right" starts with which night it was. */}
+			<DisputeShiftFacts dispute={dispute} />
 
 			<div className="mt-2 flex flex-wrap gap-4 text-sm">
 				<span>

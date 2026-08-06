@@ -126,6 +126,25 @@ export function resolvePvPrLabel(
  * Falls back to whichever half exists. A nickname that merely repeats the legal
  * name prints once, not as "(Victoria Tan Mei Lin) Victoria Tan Mei Lin".
  */
+/**
+ * An attendance stamp as a clock time, or an explicit word when there isn't one.
+ *
+ * ONE spelling. Every check-in/check-out clock in this portal is currently its
+ * own inline `toLocaleTimeString("en-MY", …)` copy — nine of them at last
+ * count — which is exactly how two screens come to disagree about one stamp.
+ *
+ * `absent` is REQUIRED rather than defaulted: "not checked in" and "still on
+ * duty" are different facts, and a shared default would let a caller print the
+ * wrong one by omission. A null stamp never renders as a bare dash here — the
+ * agency is ruling on money and needs to know which of the two it is.
+ */
+export function formatStampClock(iso: string | null, absent: string): string {
+	if (!iso) return absent;
+	const at = new Date(iso);
+	if (Number.isNaN(at.getTime())) return absent;
+	return at.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" });
+}
+
 export function formatPayeeLabel(
 	nickname: string | null | undefined,
 	legalName: string | null | undefined,

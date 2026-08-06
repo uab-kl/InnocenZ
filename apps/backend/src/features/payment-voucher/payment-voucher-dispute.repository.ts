@@ -337,6 +337,118 @@ export class PaymentVoucherDisputeRepositoryClass {
    * wrong ones is how cross-tenant leaks happen. `agencyId: null` means admin,
    * which is unscoped by design.
    */
+  /**
+   * WHICH SHIFT each dispute is about — as assignment ids, never one id.
+   *
+   * The only column that narrows a dispute to a shift is `dispute.receipt_id`
+   * (migration 0088), and it is NULLABLE BY DESIGN: the phone sends it only
+   * when the contested cell has a receipt, and every pre-0088 row is null. A
+   * null does NOT mean "unknown" — it means the claim covers the whole day and
+   * bucket, i.e. EVERY shift the PR worked that day. That is why this returns
+   * an array per dispute: a single id would force a silent pick, and on a
+   * two-shift night the shifts are usually at DIFFERENT outlets, so the card
+   * would show the wrong venue AND the wrong check-in while looking
+   * authoritative.
+   *
+   * Do NOT resolve a shift by matching `shift.shift_date = dispute.dispute_date`.
+   * `dispute_date` pairs with `line_date` — the day the receipt was LOGGED, not
+   * the shift's own date — so that match breaks on midnight-crossing shifts and
+   * on re-dated receipts. Go through the receipt FK or not at all.
+   *
+   * Three fixed queries regardless of queue size (the queue reads up to 200
+   * rows), not one per dispute. Callers must STILL scope the returned ids to
+   * the owning PR — see `listByIdsForPrs`.
+   */
+  async resolveAssignmentIdsForDisputes(
+    rows: Array<{ dispute: PaymentVoucherDispute }>,
+  ): Promise<Map<string, string[]>> {
+    const out = new Map<string, string[]>();
+    if (rows.length === 0) return out;
+    try {
+      // (A) Disputes that DO name a receipt — the exact, unambiguous path.
+      const directReceiptIds = [
+        ...new Set(rows.map((r) => r.dispute.receiptId).filter((id): id is string => !!id)),
+      ];
+      const assignmentByReceipt = new Map<string, string | null>();
+      if (directReceiptIds.length > 0) {
+        const receipts = await db
+          .select({
+            id: PaymentVoucherReceiptTable.id,
+            shiftAssignmentId: PaymentVoucherReceiptTable.shiftAssignmentId,
+          })
+          .from(PaymentVoucherReceiptTable)
+          .where(inArray(PaymentVoucherReceiptTable.id, directReceiptIds));
+        for (const r of receipts) assignmentByReceipt.set(r.id, r.shiftAssignmentId ?? null);
+      }
+
+      // (B) Disputes with NO receipt — the claim spans the whole day+bucket, so
+      // collect every receipt reachable from that day's lines in that bucket.
+      const wholeDay = rows.filter((r) => !r.dispute.receiptId).map((r) => r.dispute);
+      const dayLines: Array<{
+        voucherId: string;
+        /** Nullable: an UNDATED line belongs to no day, so the equality test
+         *  below excludes it from every day-scoped claim, which is correct. */
+        lineDate: string | null;
+        component: PaymentVoucherComponent | null;
+        shiftAssignmentId: string | null;
+      }> = [];
+      if (wholeDay.length > 0) {
+        const lines = await db
+          .select({
+            voucherId: PaymentVoucherLineTable.voucherId,
+            lineDate: PaymentVoucherLineTable.lineDate,
+            component: PaymentVoucherLineTable.component,
+            shiftAssignmentId: PaymentVoucherReceiptTable.shiftAssignmentId,
+          })
+          .from(PaymentVoucherLineTable)
+          .leftJoin(
+            PaymentVoucherReceiptTable,
+            eq(PaymentVoucherLineTable.receiptId, PaymentVoucherReceiptTable.id),
+          )
+          .where(
+            and(
+              inArray(PaymentVoucherLineTable.voucherId, [
+                ...new Set(wholeDay.map((d) => d.voucherId)),
+              ]),
+              inArray(PaymentVoucherLineTable.lineDate, [
+                ...new Set(wholeDay.map((d) => d.disputeDate)),
+              ]),
+            ),
+          );
+        dayLines.push(...lines);
+      }
+
+      for (const { dispute } of rows) {
+        if (dispute.receiptId) {
+          const assignmentId = assignmentByReceipt.get(dispute.receiptId) ?? null;
+          out.set(dispute.id, assignmentId ? [assignmentId] : []);
+          continue;
+        }
+        // Same bucket rule as the value reader above — including the legacy
+        // NULL-component fallback, so a dispute on an old voucher still
+        // resolves instead of silently reading as "not linked".
+        const wanted = LINE_COMPONENTS_FOR[dispute.component];
+        const ids = dayLines
+          .filter(
+            (l) =>
+              l.voucherId === dispute.voucherId &&
+              l.lineDate === dispute.disputeDate &&
+              (l.component === null
+                ? dispute.component === 'others'
+                : wanted.includes(l.component)) &&
+              !!l.shiftAssignmentId,
+          )
+          .map((l) => l.shiftAssignmentId as string);
+        out.set(dispute.id, [...new Set(ids)]);
+      }
+      return out;
+    } catch (error) {
+      logger.error('[PaymentVoucherDisputeRepository.resolveAssignmentIdsForDisputes]', error);
+      // Fail CLOSED: no shift block beats the wrong shift block.
+      return new Map();
+    }
+  }
+
   async listForScope(
     agencyId: string | null,
     options?: { openOnly?: boolean; limit?: number },

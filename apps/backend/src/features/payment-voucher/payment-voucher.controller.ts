@@ -3206,15 +3206,64 @@ export class PaymentVoucherControllerClass {
         openOnly: req.query.open === '1' || req.query.open === 'true',
       });
 
+      // WHICH SHIFT each claim is about. Two batched steps: dispute -> receipt
+      // -> assignment ids, then those ids -> the shift facts. Both fail closed —
+      // an unresolvable dispute gets `shifts: []` and the card says "not
+      // linked", which is the honest answer for a wages/OT claim (no receipt
+      // exists by design) and far better than a confident wrong outlet.
+      const assignmentIdsByDispute =
+        await this.paymentVoucherDisputeRepository.resolveAssignmentIdsForDisputes(rows);
+      const everyAssignmentId = [
+        ...new Set([...assignmentIdsByDispute.values()].flat()),
+      ];
+      const prIds = [...new Set(rows.map((r) => r.voucher.prId).filter((id): id is string => !!id))];
+      const factsById = new Map(
+        (await this.shiftAssignmentRepository.listByIdsForPrs(prIds, everyAssignmentId)).map(
+          (f) => [f.id, f],
+        ),
+      );
+
       res.status(200).json({
         success: true,
         message: 'Disputes fetched',
         data: rows.map(({ dispute, voucher }) => ({
           ...dispute,
+          // ALWAYS an array — `[]`, never null and never omitted, so the panel
+          // has one shape to branch on. A singular field here would be the
+          // silent pick this whole path exists to prevent.
+          shifts: (assignmentIdsByDispute.get(dispute.id) ?? [])
+            .map((id) => factsById.get(id))
+            .filter((f): f is NonNullable<typeof f> => !!f)
+            // The PR boundary, re-checked per row: `listByIdsForPrs` scopes to
+            // the set of PRs in this queue, so pairing each shift back to THIS
+            // dispute's own PR is what stops one PR's stamps landing on
+            // another's card.
+            .filter((f) => f.prId === voucher.prId)
+            .map((f) => ({
+              assignmentId: f.id,
+              outletName: f.outletName,
+              eventName: f.eventName,
+              eventKind: f.eventKind,
+              shiftDate: f.shiftDate,
+              slot: f.slot,
+              checkInAt: f.checkInAt ? f.checkInAt.toISOString() : null,
+              // Shift END — clamped server-side to the scheduled end, NOT the
+              // moment the PR left. `overtimeMinutes` carries the real overrun.
+              checkOutAt: f.checkOutAt ? f.checkOutAt.toISOString() : null,
+              overtimeMinutes: f.overtimeMinutes,
+            })),
           voucher: {
             id: voucher.id,
             prId: voucher.prId,
             prName: voucher.prName,
+            // The repository selects this and the browser's DTO declares it —
+            // this hand-listed projection was the only thing dropping it, so
+            // `formatPayeeLabel(undefined, legal)` hit its `if (!nick) return
+            // legal` guard and every dispute card read "Alice Yee Mei Me" with
+            // no "(Alice)". TypeScript could not catch it: the interface
+            // declared a field the wire omitted. The sibling receipts endpoint
+            // in this same controller already projects it.
+            prNickname: voucher.prNickname,
             weekStart: voucher.weekStart,
             weekEnd: voucher.weekEnd,
             status: voucher.status,
