@@ -48,8 +48,17 @@ export type OvertimeLineInput = {
   shiftDate: string;
   /** Minutes recorded at check-out, before the clamp. */
   minutes: number;
-  /** The tier wage sealed onto the assignment; null for a commission-only PR. */
+  /**
+   * The FULL day rate (`day_rate_amount`), not the possibly pro-rated
+   * `pay_amount` — callers pass it through `overtimeBasisAmount`. Null for a
+   * commission-only PR, who has no daily wage to derive an hourly rate from.
+   */
   payAmount: string | number | null;
+  /**
+   * The shift's scheduled window, so the hourly rate this is 1.5× of is the same
+   * hourly rate the wage was pro-rated at. Null falls back to a standard shift.
+   */
+  scheduledMinutes?: number | null;
   outlet?: string | null;
   actor: string;
 };
@@ -81,7 +90,7 @@ export function buildOvertimeLine(input: OvertimeLineInput): {
   line: BuiltOvertimeLine;
   amountCents: number;
 } {
-  const amountCents = overtimeAmountCents(input.payAmount, input.minutes);
+  const amountCents = overtimeAmountCents(input.payAmount, input.minutes, input.scheduledMinutes);
   return {
     amountCents,
     line: {

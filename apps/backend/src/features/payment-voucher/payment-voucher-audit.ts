@@ -87,7 +87,21 @@ export type AuditAssignment = {
   shiftDate: string;
   /** Assignment status; only 'completed' can justify wages. */
   status: string;
+  /**
+   * What the shift EARNED — pro-rated by the minutes worked since 0097, so a
+   * wages line is still compared against this and not against the rate card.
+   */
   payAmount: string | number | null;
+  /**
+   * The full day rate `payAmount` was derived from (0097). Null on older rows,
+   * where the two were the same number. Read only via `overtimeBasisAmount`.
+   */
+  dayRateAmount?: string | number | null;
+  /**
+   * The shift's scheduled window (0097) — the divisor for BOTH pay and overtime.
+   * Null on rows sealed before it, which fall back to STANDARD_SHIFT_HOURS.
+   */
+  scheduledMinutes?: number | null;
   checkInAt: Date | string | null;
   checkOutAt: Date | string | null;
   /**
@@ -102,6 +116,17 @@ export type AuditAssignment = {
   overtimeMinutes?: number | null;
   /** 'pending' | 'approved' | 'rejected', or null when there was no claim. */
   overtimeStatus?: string | null;
+  /**
+   * What the agency actually APPROVED, frozen at the moment of the decision.
+   *
+   * Load-bearing, not decoration: this is the figure the budget below must use
+   * for a decided claim. Recomputing from today's rate would restate a decision
+   * somebody already made — the exact thing the column exists to prevent — and
+   * the moment the OT divisor changed from a flat 6 hours to the shift's own
+   * window, every previously-approved line on a shift that was not six hours
+   * would have started reading as money nothing justifies.
+   */
+  overtimeAmount?: string | number | null;
 };
 
 /** One receipt behind the commission lines, as stored. */
@@ -296,6 +321,28 @@ function elapsedHours(from: Date | string | null, to: Date | string | null): num
 }
 
 /**
+ * The daily wage overtime is priced against — the FULL rate-card figure.
+ *
+ * The ONE place this choice is made, because it is easy to get wrong in a way
+ * nothing catches. Since 0097 `payAmount` is what the shift EARNED and may be
+ * pro-rated below the day rate; `dayRateAmount` is the rate it was taken from.
+ * Overtime is `daily wage ÷ standard shift × 1.5` — a property of the rate card,
+ * not of how much this particular night happened to earn — so pricing it off
+ * `payAmount` would cut the OT rate of a PR who arrived late and stayed late by
+ * exactly the minutes they were short at the start. That is the one shift where
+ * pro-rata and overtime both fire, and it is the case nobody would think to test.
+ *
+ * Falls back to `payAmount` for rows sealed before 0097, where the two were the
+ * same number by definition.
+ */
+export function overtimeBasisAmount(assignment: {
+  dayRateAmount?: string | number | null;
+  payAmount: string | number | null;
+}): string | number | null {
+  return assignment.dayRateAmount ?? assignment.payAmount;
+}
+
+/**
  * What N minutes of overtime are worth against a sealed daily wage, in cents.
  *
  * The ONE place this arithmetic lives. The rate is the daily wage over a
@@ -309,6 +356,11 @@ function elapsedHours(from: Date | string | null, to: Date | string | null): num
 export function overtimeAmountCents(
   payAmount: string | number | null | undefined,
   minutes: number | null | undefined,
+  /**
+   * The shift's own scheduled window (`shift_assignment.scheduled_minutes`, 0097).
+   * Omit — or pass null — only when the window is genuinely unknown.
+   */
+  scheduledMinutes?: number | null,
 ): number {
   if (!minutes || minutes <= 0) return 0;
   let dailyWageCents: number;
@@ -318,7 +370,22 @@ export function overtimeAmountCents(
     return 0;
   }
   if (dailyWageCents <= 0) return 0;
-  const hourlyCents = dailyWageCents / STANDARD_SHIFT_HOURS;
+  // The ordinary hour is the day rate over THIS SHIFT'S window — the same
+  // divisor `earnedWage` pro-rates with — so the 1.5× premium is always 1.5× of
+  // what an hour on this shift is actually worth (owner's decision, 6 Aug 2026).
+  //
+  // ⚠️ Dividing by the flat STANDARD_SHIFT_HOURS instead is not a rounding
+  // difference, it inverts on short shifts. At RM700: a 2-hour booking makes an
+  // ordinary hour RM350, while `700/6 × 1.5` prices the overtime hour at RM175 —
+  // **overtime paid at half an ordinary hour**. At 4 hours the premium silently
+  // vanishes to 1.0×; only at exactly 6 hours did the intended 1.5× hold. While
+  // wages sealed flat there was no ordinary hourly rate to disagree with, which
+  // is why this went unnoticed until pro-rata gave the day rate a divisor.
+  const shiftHours =
+    scheduledMinutes != null && scheduledMinutes > 0
+      ? scheduledMinutes / 60
+      : STANDARD_SHIFT_HOURS;
+  const hourlyCents = dailyWageCents / shiftHours;
   return Math.round((hourlyCents * OT_MULTIPLIER * minutes) / 60);
 }
 
@@ -352,7 +419,24 @@ export function overtimeAmountCents(
 export function maxOvertimeCents(assignment: AuditAssignment): number {
   if (assignment.overtimeStatus != null) {
     if (assignment.overtimeStatus !== 'approved') return 0;
-    return overtimeAmountCents(assignment.payAmount, assignment.overtimeMinutes);
+    // The FROZEN figure wins whenever the decision recorded one. Recomputing it
+    // would restate what an agency already approved at whatever the rate card
+    // and the divisor happen to say today — and the divisor did change, so a
+    // recompute would have flagged every past approval on a shift that was not
+    // exactly six hours. Only a decision that stored no amount is re-derived.
+    if (assignment.overtimeAmount != null) {
+      try {
+        return toCents(assignment.overtimeAmount);
+      } catch {
+        // Unreadable frozen amount — fall through and derive, which is still
+        // better than budgeting 0 against a line an agency genuinely approved.
+      }
+    }
+    return overtimeAmountCents(
+      overtimeBasisAmount(assignment),
+      assignment.overtimeMinutes,
+      assignment.scheduledMinutes,
+    );
   }
 
   const hours = elapsedHours(assignment.checkInAt, assignment.checkOutAt);
@@ -360,7 +444,11 @@ export function maxOvertimeCents(assignment: AuditAssignment): number {
   const overtimeHours = Math.max(0, hours - STANDARD_SHIFT_HOURS);
   if (overtimeHours === 0) return 0;
 
-  return overtimeAmountCents(assignment.payAmount, overtimeHours * 60);
+  return overtimeAmountCents(
+    overtimeBasisAmount(assignment),
+    overtimeHours * 60,
+    assignment.scheduledMinutes,
+  );
 }
 
 /**

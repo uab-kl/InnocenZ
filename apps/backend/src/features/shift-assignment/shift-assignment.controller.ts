@@ -18,13 +18,15 @@ import {
   LineDateConflictError,
   MAX_PLAUSIBLE_SHIFT_HOURS,
   overtimeAmountCents,
+  overtimeBasisAmount,
 } from '@/features/payment-voucher/payment-voucher-audit';
 import { formatCents } from '@/features/payment-voucher/payment-voucher-balance';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository';
 import { buildOvertimeLine, overtimeDedupeRef } from '@/features/payment-voucher/overtime-line';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
 import { overtimeFromStamps } from './overtime';
-import { shiftsOverlap } from '@/util/slot-window';
+import { earnedWage } from './wage';
+import { shiftsOverlap, shiftWindowInstants } from '@/util/slot-window';
 import {
   CheckInMineSchema,
   CreateShiftAssignmentSchema,
@@ -341,39 +343,6 @@ export class ShiftAssignmentControllerClass {
    * check-in; sets check_out_at and seals the row as `completed` (the state the
    * weekly PV job rolls up).
    */
-  /** "8pm", "20:00", "8.30pm" → minutes since midnight, or null when not a clock time. */
-  private slotClockToMinutes(token: string): number | null {
-    const m = token.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*(am|pm)?$/i);
-    if (!m) return null;
-    let hour = Number(m[1]);
-    const minutes = Number(m[2] ?? '0');
-    const meridiem = m[3]?.toLowerCase();
-    if (meridiem) {
-      if (hour < 1 || hour > 12) return null;
-      hour = (hour % 12) + (meridiem === 'pm' ? 12 : 0);
-    } else if (hour > 23) return null;
-    if (minutes > 59) return null;
-    return hour * 60 + minutes;
-  }
-
-  /**
-   * The scheduled end of a shift as a Date: shift_date + the slot's end time,
-   * rolled to the next day when the window crosses midnight ("22:00 - 04:00").
-   * Null when the free-text slot has no parseable window — then no clamp.
-   */
-  private scheduledShiftEnd(shiftDate: string, slot: string | null): Date | null {
-    if (!slot) return null;
-    const parts = slot.split(/[—–-]/);
-    if (parts.length !== 2) return null;
-    const start = this.slotClockToMinutes(parts[0]);
-    const end = this.slotClockToMinutes(parts[1]);
-    if (start == null || end == null) return null;
-    const [y, m, d] = shiftDate.split('-').map(Number);
-    const endDate = new Date(y, (m || 1) - 1, d || 1, Math.floor(end / 60), end % 60);
-    if (end <= start) endDate.setDate(endDate.getDate() + 1);
-    return endDate;
-  }
-
   async checkOutMine(req: Request, res: Response) {
     try {
       const userId = req.user?.id;
@@ -425,7 +394,11 @@ export class ShiftAssignmentControllerClass {
       // clamps below the check-in stamp (a PR who started late still closes
       // with a forward duration), and an unparseable slot means no clamp.
       const now = new Date();
-      const scheduledEnd = shift ? this.scheduledShiftEnd(shift.shiftDate, shift.slot) : null;
+      // Read in the VENUE's timezone, not the server's — see shiftWindowInstants.
+      // The same window now decides two things, and they must be the same window:
+      // where the clamp stops, and what the wage is pro-rated against.
+      const scheduled = shift ? shiftWindowInstants(shift.shiftDate, shift.slot) : null;
+      const scheduledEnd = scheduled?.end ?? null;
       const clampTo =
         scheduledEnd && now > scheduledEnd && scheduledEnd > new Date(existing.checkInAt)
           ? scheduledEnd
@@ -438,6 +411,18 @@ export class ShiftAssignmentControllerClass {
       // all, which is why migration 0077's columns sat unwritten and every hour of
       // overtime worked until now is unrecoverable.
       const overtime = overtimeFromStamps(new Date(existing.checkInAt), scheduledEnd, now);
+      // What the shift actually EARNED, from the stamps. `tierWages` is the day
+      // rate — the forecast — and sealing it flat is what paid a PR who left
+      // three hours early the full day, on the ordinary check-out path, with no
+      // feature involved. Priced off `clampTo` rather than `now` so a forgotten
+      // check-out cannot buy time past the window twice: the clamp already caps
+      // it, and anything beyond is overtime for the agency to decide.
+      const earned = earnedWage({
+        dayRate: tierWages,
+        scheduled,
+        checkInAt: new Date(existing.checkInAt),
+        checkOutAt: clampTo,
+      });
       const assignment = await this.shiftAssignmentRepository.update(id, {
         checkOutAt: clampTo,
         // NULL status means "no overtime on this shift" — the overwhelming
@@ -457,10 +442,37 @@ export class ShiftAssignmentControllerClass {
               checkOutAccuracyM: outFix.accuracyM,
             }
           : {}),
-        // Seal flat tier wages onto the assignment so PV / History match Post Job.
-        ...(tierWages != null ? { payAmount: tierWages } : {}),
+        // Seal what the shift EARNED, plus the evidence for it. Written together
+        // or not at all: an amount without its divisor is a figure nobody can
+        // check, and `dayRateAmount` is what keeps overtime priced off the full
+        // rate after `payAmount` has been reduced.
+        ...(earned.amount != null
+          ? {
+              payAmount: earned.amount,
+              dayRateAmount: earned.dayRate,
+              workedMinutes: earned.workedMinutes,
+              scheduledMinutes: earned.scheduledMinutes,
+              payRule: earned.rule,
+            }
+          : {}),
         updatedBy: actor,
       });
+      // A sealed 0.00 is the one wage outcome worth interrupting someone over.
+      // The stamps put this PR entirely outside their own shift window — the
+      // shape that billed assignment 6574b2ee a full day for twelve seconds —
+      // and paying nothing is correct but must never happen quietly.
+      if (earned.rule === 'never_present') {
+        logger.error(
+          `[shift-assignment.checkOut] ${id}: check-in ${existing.checkInAt} .. check-out ` +
+            `${clampTo.toISOString()} falls outside the scheduled window ` +
+            `(${scheduled?.start.toISOString()} .. ${scheduled?.end.toISOString()}) — sealed 0.00`,
+        );
+      } else if (earned.rule === 'pro_rata') {
+        logger.info(
+          `[shift-assignment.checkOut] ${id}: pro-rata ${earned.workedMinutes}/${earned.scheduledMinutes} min ` +
+            `of RM${earned.dayRate} — sealed RM${earned.amount}`,
+        );
+      }
       // A forgotten check-out is worth seeing even though it claims nothing —
       // otherwise the only trace of it is a shift that quietly sealed at its
       // scheduled hours, and a PR who really did work late has no way to say so.
@@ -764,7 +776,18 @@ export class ShiftAssignmentControllerClass {
         // approves and what lands on the voucher cannot be two numbers. Zero
         // means the claim cannot be priced (a commission-only PR has no daily
         // wage) — the approval refuses that case rather than paying nothing.
-        amount: formatCents(overtimeAmountCents(row.payAmount, row.overtimeMinutes)),
+        //
+        // The basis is the FULL day rate, never the sealed `payAmount`: since
+        // 0097 that amount can be pro-rated, and a PR who came in late and
+        // stayed late would otherwise have their overtime rate cut by exactly
+        // the minutes they were short at the start.
+        //
+        // Divided by the SHIFT'S window, not a flat six hours, so the premium is
+        // 1.5× of what an hour on this shift is really worth — the same divisor
+        // the wage was pro-rated at.
+        amount: formatCents(
+          overtimeAmountCents(overtimeBasisAmount(row), row.overtimeMinutes, row.scheduledMinutes),
+        ),
       }));
       res.status(200).json({ success: true, message: 'OK', data: claims });
     } catch (error) {
@@ -890,7 +913,13 @@ export class ShiftAssignmentControllerClass {
         assignmentId: id,
         shiftDate,
         minutes,
-        payAmount: assignment.payAmount,
+        // The full day rate, not the possibly pro-rated sealed amount — the OT
+        // rate is a property of the rate card, not of how much this particular
+        // night happened to earn.
+        payAmount: overtimeBasisAmount(assignment),
+        // Same window the wage was pro-rated at, so the 1.5× premium is 1.5× of
+        // this shift's own ordinary hour rather than of a notional six-hour one.
+        scheduledMinutes: assignment.scheduledMinutes,
         outlet: outletName,
         actor,
       });

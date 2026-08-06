@@ -31,29 +31,40 @@ function sinceArg(): string {
 async function main() {
   const since = sinceArg();
 
-  // `pr.tier` is the enum `tier_1..tier_4`; `outlet_tier_rate.tier` holds the
-  // DISPLAY label ("Tier I"). They never join raw — the app bridges them with
-  // PR_TIER_TO_OUTLET_LABEL in shift-assignment.controller.ts, and this check
-  // has to use the SAME bridge or it reports a fault that does not exist.
+  // `agency_pr.tier` is the enum `tier_1..tier_5`/`servant`; `outlet_tier_rate.tier`
+  // holds the DISPLAY label ("Tier I"). They never join raw — the app bridges
+  // them with PR_TIER_TO_OUTLET_LABEL in shift-assignment.controller.ts, and this
+  // check has to use the SAME bridge or it reports a fault that does not exist.
+  //
+  // PR identity comes from `user` + `user_profile` + `agency_pr`. `main.pr` was
+  // DROPPED in 0095 and this script still joined it, so it errored out instead of
+  // reporting anything — and a check that cannot run is not a check that passes.
   const result = await db.execute(sql`
     WITH tier_map(enum_value, label) AS (
-      VALUES ('tier_1','Tier I'), ('tier_2','Tier II'),
-             ('tier_3','Tier III'), ('tier_4','Tier IV')
+      VALUES ('tier_1','Tier I'), ('tier_2','Tier II'), ('tier_3','Tier III'),
+             ('tier_4','Tier IV'), ('tier_5','Tier V'), ('servant','Servant')
     )
     SELECT
-      s.shift_date   AS shift_date,
-      sa.pay_amount  AS sealed_pay,
-      pr.name        AS pr_name,
-      pr.tier        AS pr_tier,
-      o.name         AS outlet_name,
+      s.shift_date          AS shift_date,
+      sa.pay_amount         AS sealed_pay,
+      sa.day_rate_amount    AS sealed_day_rate,
+      sa.pay_rule           AS pay_rule,
+      sa.worked_minutes     AS worked_minutes,
+      sa.scheduled_minutes  AS scheduled_minutes,
+      COALESCE(NULLIF(TRIM(u.username), ''), NULLIF(TRIM(up.full_name), ''), 'PR') AS pr_name,
+      ap.tier               AS pr_tier,
+      o.name                AS outlet_name,
       -- Same precedence the app resolves in: the per-shift override wins over
       -- the outlet's workspace default. Comparing against only one of the two
       -- would report a false fault every time a shift carries its own rate.
       COALESCE(spt.daily_wage, otr.daily_wage) AS card_daily_wage,
       CASE WHEN spt.daily_wage IS NOT NULL THEN 'shift' ELSE 'outlet' END AS card_source
     FROM main.shift_assignment sa
-    JOIN main.pr           pr ON pr.id = sa.pr_id
-    LEFT JOIN tier_map     tm ON tm.enum_value = pr.tier::text
+    LEFT JOIN main."user"       u  ON u.id       = COALESCE(sa.user_id, sa.pr_id)
+    LEFT JOIN main.user_profile up ON up.user_id = COALESCE(sa.user_id, sa.pr_id)
+    LEFT JOIN main.agency_pr    ap ON ap.user_id = COALESCE(sa.user_id, sa.pr_id)
+                                  AND ap.agency_id = sa.agency_id
+    LEFT JOIN tier_map     tm ON tm.enum_value = ap.tier::text
     LEFT JOIN main.shift    s ON s.id  = sa.shift_id
     LEFT JOIN main.outlet   o ON o.id  = s.outlet_id
     LEFT JOIN main.shift_pay_tier spt
@@ -91,14 +102,41 @@ async function main() {
       console.log(`      sealed ${sealed.toFixed(2)} · NO rate-card row for this outlet+tier`);
       continue;
     }
-    if (Math.abs(sealed - card) < TOLERANCE) {
+
+    // Since 0097 the sealed amount is what the shift EARNED, so comparing it
+    // straight to the day rate would report every pro-rated shift as a fault —
+    // this check would have turned into a false-alarm generator the day the
+    // wage rule shipped. The rate card is still the thing under test: what must
+    // agree is the card against `day_rate_amount`, and then the pro-rata
+    // arithmetic against the minutes the row itself recorded.
+    const worked = Number(row.worked_minutes);
+    const scheduled = Number(row.scheduled_minutes);
+    const proRated =
+      row.pay_rule === 'pro_rata' && Number.isFinite(worked) && scheduled > 0;
+    // Rows sealed before 0097 carry no day rate; there the sealed amount IS the
+    // rate, exactly as this check always assumed.
+    const dayRate =
+      row.sealed_day_rate === null || row.sealed_day_rate === undefined
+        ? sealed
+        : Number(row.sealed_day_rate);
+    const expected = proRated
+      ? Math.round((dayRate * worked * 100) / scheduled) / 100
+      : dayRate;
+    const detail = proRated ? `  (pro-rata ${worked}/${scheduled} min)` : '';
+
+    if (Math.abs(dayRate - card) < TOLERANCE && Math.abs(sealed - expected) < TOLERANCE) {
       agree++;
       console.log(`OK  ${label}`);
-      console.log(`      sealed ${sealed.toFixed(2)} = card ${card.toFixed(2)}`);
+      console.log(
+        `      day rate ${dayRate.toFixed(2)} = card ${card.toFixed(2)} · sealed ${sealed.toFixed(2)}${detail}`,
+      );
     } else {
       differ++;
       console.log(`XX  ${label}`);
-      console.log(`      sealed ${sealed.toFixed(2)} != card ${card.toFixed(2)}   <-- DISAGREES`);
+      console.log(
+        `      day rate ${dayRate.toFixed(2)} vs card ${card.toFixed(2)} · ` +
+          `sealed ${sealed.toFixed(2)} vs expected ${expected.toFixed(2)}${detail}   <-- DISAGREES`,
+      );
     }
   }
 

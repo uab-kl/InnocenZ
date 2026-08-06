@@ -1072,6 +1072,10 @@ export class ShiftAssignmentRepositoryClass {
       outletName: string | null;
       overtimeMinutes: number | null;
       payAmount: string | null;
+      /** The FULL day rate — what overtime is priced on. See `overtimeBasisAmount`. */
+      dayRateAmount: string | null;
+      /** The shift's window — the divisor for both pay and the overtime rate. */
+      scheduledMinutes: number | null;
     }>
   > {
     try {
@@ -1087,6 +1091,8 @@ export class ShiftAssignmentRepositoryClass {
           outletName: OutletTable.name,
           overtimeMinutes: ShiftAssignmentTable.overtimeMinutes,
           payAmount: ShiftAssignmentTable.payAmount,
+          dayRateAmount: ShiftAssignmentTable.dayRateAmount,
+          scheduledMinutes: ShiftAssignmentTable.scheduledMinutes,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))

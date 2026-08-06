@@ -5,6 +5,7 @@ import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { checkVoucherBalance } from './payment-voucher-balance';
 import { auditVoucher } from './payment-voucher-audit';
 import { paymentDueDate } from './payment-voucher-week';
+import { describeWorkedTime } from '@/features/shift-assignment/wage';
 
 export type GenerateWeeklyParams = {
   /** Inclusive week window, yyyy-MM-dd. Typically the just-finished Mon–Sun. */
@@ -56,6 +57,27 @@ export type GenerateWeeklyResult = {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * What one shift's wages line says it is for.
+ *
+ * A pro-rated line states so on its face. Without it the agency sees RM520 where
+ * the rate card says RM700 and cannot tell an under-worked shift from a mispriced
+ * one — which becomes a dispute, and a phone call, over something the record
+ * already knows the answer to. Only `pro_rata` is annotated: a full day needs no
+ * explanation, and labelling every line would make the note invisible.
+ */
+function describeShiftLine(row: {
+  shiftDate: string;
+  slot: string | null;
+  eventName: string | null;
+  assignment: { payRule?: string | null; workedMinutes?: number | null; scheduledMinutes?: number | null };
+}): string {
+  const base = row.eventName ?? row.slot ?? `Shift on ${row.shiftDate}`;
+  const { payRule, workedMinutes, scheduledMinutes } = row.assignment;
+  if (payRule !== 'pro_rata' || workedMinutes == null || scheduledMinutes == null) return base;
+  return `${base} — pro-rata ${describeWorkedTime(workedMinutes, scheduledMinutes)}`.slice(0, 500);
 }
 
 /**
@@ -122,7 +144,7 @@ export class PaymentVoucherGeneratorClass {
         const lines = prRows.map((row) => ({
           lineDate: row.shiftDate,
           outlet: row.outletName ?? undefined,
-          description: row.eventName ?? row.slot ?? `Shift on ${row.shiftDate}`,
+          description: describeShiftLine(row),
           quantity: 1,
           amount: row.assignment.payAmount,
           ref: row.assignment.id,
@@ -200,6 +222,15 @@ export class PaymentVoucherGeneratorClass {
               shiftDate: row.shiftDate,
               status: row.assignment.status,
               payAmount: row.assignment.payAmount,
+              // The overtime BASIS (0097). `payAmount` may now be pro-rated, and
+              // budgeting overtime against a reduced figure would flag a
+              // correctly-approved OT line as money nothing justifies.
+              dayRateAmount: row.assignment.dayRateAmount,
+              // The OT divisor, and the FROZEN approved amount. Both are needed
+              // or the budget is re-derived at today's rate and every past
+              // approval on a shift that was not six hours reads as invented.
+              scheduledMinutes: row.assignment.scheduledMinutes,
+              overtimeAmount: row.assignment.overtimeAmount,
               checkInAt: row.assignment.checkInAt,
               checkOutAt: row.assignment.checkOutAt,
               // The overtime budget is derived from these, NOT from the stamps,

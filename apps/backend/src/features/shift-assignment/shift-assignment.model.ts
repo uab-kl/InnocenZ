@@ -9,6 +9,9 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
+// Type-only: the column's shape is the wage rule's own union, and a value import
+// here would pull money arithmetic into the schema module for nothing.
+import type { WageRule } from './wage';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { ShiftTable } from '@/features/shift/shift.model';
 import { UserTable } from '@/features/user/user.model';
@@ -48,6 +51,12 @@ export const shiftAssignmentStatusEnum = MainSchema.enum(
  * means several PRs staff one shift). `payAmount` is what this PR earns for the
  * shift; the weekly PV job groups completed assignments by PR and rolls them
  * into voucher lines. `agencyId` is denormalized from the shift for scoping.
+ *
+ * ⚠️ `payAmount` means two different things depending on when you read it. At
+ * ASSIGN time it is a forecast — the tier rate, what the shift is expected to
+ * pay. At CHECK-OUT it is sealed to what was actually EARNED, which since 0097 is
+ * pro-rated by the minutes worked (see `wage.ts` and `payRule` below). Only the
+ * sealed figure reaches a voucher; the weekly job reads `completed` rows only.
  */
 export const ShiftAssignmentTable = MainSchema.table(
   'shift_assignment',
@@ -116,6 +125,29 @@ export const ShiftAssignmentTable = MainSchema.table(
     overtimeAmount: numeric('overtime_amount', { precision: 12, scale: 2 }),
     overtimeDecidedAt: timestamp('overtime_decided_at', { withTimezone: true }),
     overtimeDecidedBy: varchar('overtime_decided_by'),
+    /**
+     * How `payAmount` was arrived at (migration 0097) — the evidence behind a
+     * pro-rated wage, written at check-out beside the amount it explains.
+     *
+     * `payAmount` is now what the shift EARNED (day rate × worked ÷ scheduled,
+     * see `wage.ts`), not the flat tier rate it used to be. Without these four a
+     * voucher line reading RM520 against a RM700 rate card is unexplainable: an
+     * agency cannot tell an under-worked shift from a mispriced one, and the PR
+     * has nothing to dispute against.
+     *
+     * ⚠️ `dayRateAmount` is the OVERTIME BASIS and must stay the FULL rate. OT is
+     * priced as `daily wage ÷ standard shift × 1.5`, so deriving it from a
+     * pro-rated `payAmount` would quietly shrink every overtime hour of a PR who
+     * arrived late and stayed late — the one case where both rules fire on the
+     * same shift. Every caller of `overtimeAmountCents` reads this first.
+     *
+     * All four are NULL on rows sealed before 0097, which is what tells a reader
+     * "this row predates the rule" rather than "this shift had no schedule".
+     */
+    dayRateAmount: numeric('day_rate_amount', { precision: 12, scale: 2 }),
+    workedMinutes: integer('worked_minutes'),
+    scheduledMinutes: integer('scheduled_minutes'),
+    payRule: varchar('pay_rule', { length: 20 }).$type<WageRule>(),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),
