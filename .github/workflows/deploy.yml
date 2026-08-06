@@ -1,13 +1,13 @@
-name: Deploy Staging
+name: Deploy
 
-# Triggers: manual Run workflow | push to main | push tags beta-* / v* / staging-*
+# Triggers: manual Run workflow | push tags v* / staging-* / beta-*
 on:
   workflow_dispatch:
   push:
     tags:
-      - "v*"
-      - "staging-*"
-      - "beta-*"
+      - 'v*'
+      - 'staging-*'
+      - 'beta-*'
 
 permissions:
   contents: read
@@ -65,9 +65,10 @@ jobs:
           file: ./apps/web/Dockerfile
           push: true
           tags: ${{ needs.prepare.outputs.frontend_tags }}
+          # VITE_* baked at image build — uses *_PROD secrets (not VPS .env.frontend).
           build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL_STAGING }}
-            VITE_GRAPHQL_ENDPOINT=${{ secrets.VITE_GRAPHQL_ENDPOINT_STAGING }}
+            VITE_API_URL=${{ secrets.VITE_API_URL_PROD }}
+            VITE_GRAPHQL_ENDPOINT=${{ secrets.VITE_GRAPHQL_ENDPOINT_PROD }}
             VITE_OUTLET_ROLE_ID=${{ secrets.VITE_OUTLET_ROLE_ID_STAGING }}
             VITE_AGENCY_ROLE_ID=${{ secrets.VITE_AGENCY_ROLE_ID_STAGING }}
           cache-from: type=gha,scope=frontend
