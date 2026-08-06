@@ -2,7 +2,7 @@ import { Request, Response } from 'express';
 import { AgencyRepositoryClass } from './agency.repository';
 import { AgencyMemberRepositoryClass } from './agency-member.repository';
 import { AgencyPrRepository } from './agency-pr.repository';
-import { PrRepositoryClass } from '@/features/pr/pr.repository';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { UserRepositoryClass } from '@/features/user/user.repository';
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository';
 import { notify } from '@/features/notification/notify';
@@ -18,7 +18,7 @@ import {
   UpdateAgencyMemberSchema,
 } from '@/schema/agency.schema';
 import { AgencyFilter, AgencyUserSubRole, AgencyStatus, agencyUserSubRoleValues } from './agency.model';
-import { AgencyPrApproveStatus, agencyPrApproveStatusValues } from '@/features/pr/pr.model';
+import { AgencyPrApproveStatus, agencyPrApproveStatusValues } from '@/features/pr-personnel/pr.model';
 
 function parseSubRole(value: unknown): AgencyUserSubRole | undefined {
   if (typeof value !== 'string') return undefined;

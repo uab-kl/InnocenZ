@@ -1,6 +1,6 @@
 import { logger } from '@/util/logger';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
-import { PrRepositoryClass } from '@/features/pr/pr.repository';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { PaymentVoucherRepositoryClass } from './payment-voucher.repository';
 import { checkVoucherBalance } from './payment-voucher-balance';
 import { auditVoucher } from './payment-voucher-audit';

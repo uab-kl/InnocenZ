@@ -8,7 +8,7 @@ import {
   type AgencyPrType,
   type PrStatus,
   type PrTier,
-} from '@/features/pr/pr.model';
+} from '@/features/pr-personnel/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { logger } from '@/util/logger';
 

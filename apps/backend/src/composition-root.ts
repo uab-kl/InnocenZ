@@ -46,8 +46,8 @@ import { OutletWorkspaceRepositoryClass } from '@/features/outlet-workspace/outl
 import { OutletWorkspaceControllerClass } from '@/features/outlet-workspace/outlet-workspace.controller.js';
 import { RatingRepositoryClass } from '@/features/rating/rating.repository.js';
 import { RatingControllerClass } from '@/features/rating/rating.controller.js';
-import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
-import { PrControllerClass } from '@/features/pr/pr.controller.js';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository.js';
+import { PrControllerClass } from '@/features/pr-personnel/pr.controller.js';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository.js';
 import { ShiftControllerClass } from '@/features/shift/shift.controller.js';
 import { ShiftSaleRepositoryClass } from '@/features/shift-sale/shift-sale.repository.js';

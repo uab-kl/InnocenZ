@@ -6,7 +6,7 @@ import userRoutes from '@/features/user/user.routes.js';
 import { rbacRoutes } from '@/features/rbac/index.js';
 import subscriptionRoutes from '@/features/subscription/subscription.routes.js';
 import agencyRoutes from '@/features/agency/agency.routes.js';
-import prRoutes from '@/features/pr/pr.routes.js';
+import prRoutes from '@/features/pr-personnel/pr.routes.js';
 import shiftRoutes from '@/features/shift/shift.routes.js';
 import paymentVoucherRoutes from '@/features/payment-voucher/payment-voucher.routes.js';
 import paymentVoucherExportRoutes from '@/features/payment-voucher/payment-voucher-export.routes.js';

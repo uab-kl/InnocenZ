@@ -12,6 +12,7 @@ import {
   spawnProc,
   makeShutdown,
   prefixOutput,
+  waitForHttp,
 } from './dev-shared.mjs';
 
 const webRoot = `${root}/apps/web`;
@@ -37,6 +38,7 @@ const mobileApiUrl = process.env.EXPO_PUBLIC_API_URL?.trim() || process.env.MOBI
 const colors = {
   web: '\x1b[36m', // cyan
   backend: '\x1b[32m', // green
+  expo: '\x1b[35m', // magenta
   reset: '\x1b[0m',
   bold: '\x1b[1m',
 };
@@ -65,7 +67,8 @@ ${colors.bold}Web + Mobile + backend${colors.reset}
   ${colors.backend}backend${colors.reset}   http://localhost:${backendPort}/api${ownsBackend ? '' : ' (already running, reusing)'}
   ${colors.backend}api url${colors.reset}   ${publicApiUrl}
 
-Expo needs a real TTY for the QR code — its output is not prefixed like the others.
+Startup is staggered (backend → web → Expo) so Metro and Vite do not cold-start
+together. Expo still owns this TTY for the QR code.
 `);
 
 if (webPort !== WEB_PORT_START) {
@@ -97,6 +100,11 @@ if (!ownsBackend) {
   });
 }
 
+await waitForHttp(`http://127.0.0.1:${backendPort}/api/v1/health`, {
+  label: 'backend',
+  timeoutMs: 90_000,
+});
+
 const web = spawnProc(
   children,
   'pnpm',
@@ -107,6 +115,8 @@ const web = spawnProc(
       PORT: String(webPort),
       WEB_PORT: String(webPort),
       VITE_API_URL: publicApiUrl,
+      // Narrow Vite's watch + skip heavy plugins when co-running with Metro.
+      INNOCENZ_DEV_ALL: '1',
     },
     stdio: ['ignore', 'pipe', 'pipe'],
     shell: isWin,
@@ -119,13 +129,23 @@ web.on('exit', (code) => {
   shutdown(code ?? 0);
 });
 
+await waitForHttp(`http://127.0.0.1:${webPort}/`, {
+  label: 'web',
+  timeoutMs: 120_000,
+});
+
+console.log(`${colors.expo}[expo]${colors.reset} starting Metro (after web is up)…`);
+
 // Use the workspace-root Expo CLI with mobile cwd. `pnpm exec` from apps/mobile
 // looks for apps/mobile/node_modules/expo, which does not exist with hoisted installs.
 const expoCli = resolveBin('expo', ['bin', 'cli'], [mobileRoot]);
-const expo = spawnProc(children, process.execPath, [expoCli, 'start'], {
+const expo = spawnProc(children, process.execPath, [expoCli, 'start', '--max-workers', '2'], {
   cwd: mobileRoot,
   stdio: 'inherit',
-  env: mobileApiUrl ? { EXPO_PUBLIC_API_URL: mobileApiUrl } : {},
+  env: {
+    ...(mobileApiUrl ? { EXPO_PUBLIC_API_URL: mobileApiUrl } : {}),
+    INNOCENZ_DEV_ALL: '1',
+  },
 });
 expo.on('exit', (code) => {
   if (code) console.error(`[expo] exited with code ${code}`);

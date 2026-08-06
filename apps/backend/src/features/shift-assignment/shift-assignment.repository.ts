@@ -4,7 +4,7 @@ import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
-import { AgencyPrTable } from '@/features/pr/pr.model';
+import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { DEFAULT_GEOFENCE_RADIUS_M } from './check-in-geofence';

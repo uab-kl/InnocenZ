@@ -128,8 +128,8 @@ function repairDemoGalleryUploads(
  *   - comcard identity (`age`/`height`/`weight`/`race`, avatar, portfolio) ←
  *     the linked user account's profile — the same source the admin PR screen
  *     reads, so both screens show one PR the same way
- *   - `comcardImageUrl` ← portfolio slot whose path contains "comcard" (backend
- *     has no separate comcard field)
+ *   - `comcardImageUrl` ← dedicated `user_profile.comcard_image` when set; otherwise a
+ *     portfolio slot whose path contains "comcard" (older seeds had no separate field)
  *   - `languages` ← the same user_profile row the PR edits in their own portal
  * The remaining demo-only fields (rating, KPI, penalties, attendance, pay
  * class, …) have no backend yet, so they get neutral placeholders. `rating: 0`
@@ -155,8 +155,8 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		weight: profile?.comcardWeightKg ?? undefined,
 		race: profile?.race ?? "",
 		avatarPhoto: profile?.profileImage ?? null,
-		comcardImageUrl: profile?.comcardImage ?? null,
-		portfolioPhotos: profile?.portfolioPhotos ?? undefined,
+		comcardImageUrl: profile?.comcardImage ?? comcardImageUrl,
+		portfolioPhotos: portfolioPhotos ?? profile?.portfolioPhotos ?? undefined,
 		languages: profile?.languages ?? [],
 		// Roster grading, from `agency_pr` (0089). These were hardcoded to ""/0
 		// before the columns existed, so the Manage-PR editor could never show

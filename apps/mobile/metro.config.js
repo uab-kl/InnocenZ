@@ -1,9 +1,25 @@
+const path = require('path');
 const { withNxMetro } = require('@nx/expo');
 const { getDefaultConfig } = require('@expo/metro-config');
 const { mergeConfig } = require('metro-config');
 
-const defaultConfig = getDefaultConfig(__dirname);
+const projectRoot = __dirname;
+const monorepoRoot = path.resolve(projectRoot, '../..');
+const defaultConfig = getDefaultConfig(projectRoot);
 const { assetExts, sourceExts } = defaultConfig.resolver;
+
+/**
+ * When `pnpm dev:all` runs Vite + Metro together, Metro must not crawl/watch
+ * the web or backend trees — that exhausts Windows file watchers and makes
+ * Vite SSR time out (login lag). Paths are OS-agnostic (`[/\\]`).
+ */
+const coRunBlockList = [
+  /[/\\]apps[/\\]web[/\\].*/,
+  /[/\\]apps[/\\]backend[/\\].*/,
+  /[/\\]postgres[/\\].*/,
+  /[/\\]\.git[/\\].*/,
+  /[/\\]\.cursor[/\\].*/,
+];
 
 /**
  * Metro configuration
@@ -19,7 +35,10 @@ const customConfig = {
   resolver: {
     assetExts: assetExts.filter((ext) => ext !== 'svg'),
     sourceExts: [...sourceExts, 'cjs', 'mjs', 'svg'],
+    blockList: coRunBlockList,
   },
+  // Prefer watching the mobile app; monorepo packages resolve on demand.
+  watchFolders: [projectRoot, path.join(monorepoRoot, 'node_modules')],
 };
 
 module.exports = withNxMetro(mergeConfig(defaultConfig, customConfig), {

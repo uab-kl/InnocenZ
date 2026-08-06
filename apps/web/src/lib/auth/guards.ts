@@ -64,6 +64,9 @@ export async function ensurePortal(portal: "admin" | "agency" | "outlet") {
 
 export const ensureAdminPortal = () => ensurePortal("admin");
 
+/** Prevents a 401 storm (e.g. notification poll) from stacking full-page assigns. */
+let kickToLoginInFlight = false;
+
 export function kickToLogin() {
 	clearAuthTokens();
 	if (typeof window === "undefined") return;
@@ -71,7 +74,8 @@ export function kickToLogin() {
 	// Both halves have to account for the locale prefix: the live pathname is
 	// `/en/login`, so comparing it to '/login' never matched and the guard
 	// re-assigned the location even when already on the login screen.
-	if (deLocalizeHref(window.location.pathname) !== "/login") {
-		hardNavigate("/login");
-	}
+	if (deLocalizeHref(window.location.pathname) === "/login") return;
+	if (kickToLoginInFlight) return;
+	kickToLoginInFlight = true;
+	hardNavigate("/login");
 }

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { SpecialServiceRepositoryClass } from './special-service.repository.js';
-import { PrRepositoryClass } from '@/features/pr/pr.repository.js';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository.js';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository.js';
 import {
   SpecialServiceAdminAccepted,

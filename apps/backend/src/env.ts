@@ -53,7 +53,25 @@ export const env = createEnv({
     R2_ACCESS_KEY_ID: z.string().min(1).optional(),
     R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
     R2_PUBLIC_URL: z.string().url().optional(),
+    // Brevo SMTP (optional at boot — sendEmail returns a clear error when missing).
+    // Prefer BREVO_* names; legacy SMTP_* still accepted via runtimeEnv mapping.
+    SENDER_EMAIL: z.string().email().optional(),
+    ADMIN_EMAIL: z.string().email().optional(),
+    BREVO_SMTP_HOST: z.string().min(1).optional(),
+    BREVO_SMTP_USER: z.string().min(1).optional(),
+    BREVO_SMTP_KEY: z.string().min(1).optional(),
+    BREVO_SMTP_PORT: z.coerce.number().int().min(1).max(65535).default(587),
   },
-  runtimeEnv: process.env,
+  runtimeEnv: {
+    ...process.env,
+    // Map legacy SMTP_* → BREVO_* so older .env.example keys still work.
+    BREVO_SMTP_HOST: process.env.BREVO_SMTP_HOST || process.env.SMTP_HOST,
+    BREVO_SMTP_USER: process.env.BREVO_SMTP_USER || process.env.SMTP_USER,
+    BREVO_SMTP_KEY:
+      process.env.BREVO_SMTP_KEY ||
+      process.env.SMTP_KEY ||
+      process.env.SMTP_PASSWORD,
+    BREVO_SMTP_PORT: process.env.BREVO_SMTP_PORT || process.env.SMTP_PORT || '587',
+  },
   emptyStringAsUndefined: true,
 });

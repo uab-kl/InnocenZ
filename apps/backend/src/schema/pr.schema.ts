@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { prTierValues, prStatusValues } from '@/features/pr/pr.model';
+import { prTierValues, prStatusValues } from '@/features/pr-personnel/pr.model';
 
 export const CreatePrSchema = z.object({
   // Optional here: for agency callers it is derived from their own agency and
