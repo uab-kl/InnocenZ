@@ -1,6 +1,8 @@
 name: Deploy Staging
 
 on:
+  # Manual run from Actions → Deploy Staging → "Run workflow"
+  workflow_dispatch:
   push:
     tags:
       - 'v*'
