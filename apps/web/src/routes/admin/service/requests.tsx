@@ -898,6 +898,15 @@ function RequestEditForm({
 	 */
 	const quoteAnchor =
 		plan && Number(plan.price) > 0 && plan.name !== "Custom" ? plan : null;
+	/*
+	 * Does the exit actually LAND the subscriber somewhere new?
+	 *
+	 * Only the agency's does: coming off Custom hands them to an ordinary tier.
+	 * The venue's POS exit drops an add-on billed BESIDE the plan, so the plan
+	 * continues untouched — nothing begins, and the row says so itself
+	 * ("Plan (continues)").
+	 */
+	const exitLandsSomewhere = isExit && !isAddonRequest;
 
 	/**
 	 * What resolving actually does, in the subscriber's own terms. The two
@@ -1087,14 +1096,24 @@ function RequestEditForm({
 							{isExit && fromPlan === "—" ? arrangementName : fromPlan}
 						</dd>
 					</div>
+					{/*
+						Green means something BEGINS, so it belongs only to the agency
+						exit, where the tier genuinely changes hands ("Tier (returns
+						to) · Starter"). The venue's POS exit says "Plan (continues)" —
+						the plan is untouched and carries on exactly as before. Marking
+						that green announced a change on the one row whose whole point
+						is that nothing happens to it.
+					*/}
 					<div
 						className={`flex items-center justify-between gap-2${
-							isExit ? " rounded-md bg-emerald-500/5 px-2 py-1" : ""
+							exitLandsSomewhere ? " rounded-md bg-emerald-500/5 px-2 py-1" : ""
 						}`}
 					>
 						<dt
 							className={
-								isExit ? "text-emerald-500/90" : "text-muted-foreground"
+								exitLandsSomewhere
+									? "text-emerald-500/90"
+									: "text-muted-foreground"
 							}
 						>
 							{isExit
@@ -1108,7 +1127,9 @@ function RequestEditForm({
 										: "To plan"}
 						</dt>
 						<dd
-							className={`text-right${isExit ? " font-semibold text-emerald-500" : ""}`}
+							className={`text-right${
+								exitLandsSomewhere ? " font-semibold text-emerald-500" : ""
+							}`}
 						>
 							{toPlan}
 						</dd>
