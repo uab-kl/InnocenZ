@@ -1,7 +1,12 @@
 name: Deploy Staging
 
 on:
+  # Always available: Actions → Deploy Staging → Run workflow
+  workflow_dispatch:
   push:
+    # Auto-deploy when main moves (no tag required)
+    branches:
+      - main
     tags:
       - 'v*'
       - 'staging-*'
