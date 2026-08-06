@@ -867,6 +867,21 @@ function RequestEditForm({
 						? "Set before resolve"
 						: "—";
 
+	/*
+	 * Is a price actually OWED here, and has one been given?
+	 *
+	 * A Custom tier has no list price to fall back on — resolve it blank and the
+	 * agency lands on a negotiated tier priced at nothing. A POS quote is the one
+	 * case with a real fallback (the current plan's price), so it is not nagged.
+	 * RM 0 counts as unset: nobody negotiates a Custom plan down to free, and a
+	 * silent zero is exactly the outcome this warning exists to prevent.
+	 */
+	const quoteGiven =
+		rawQuote !== "" && !Number.isNaN(parsedQuote) && parsedQuote > 0;
+	const quoteHasFallback = request.type === "pos_integration_quote" && !!plan;
+	const quoteMissing =
+		editableQuote && negotiable && !quoteHasFallback && !quoteGiven;
+
 	/**
 	 * What resolving actually does, in the subscriber's own terms. The two
 	 * arrangements end differently — dropping POS leaves the venue's plan alone,
@@ -1138,26 +1153,77 @@ function RequestEditForm({
 					/>
 				</div>
 
-				<div className="space-y-1.5">
-					<Label htmlFor="request-quote">Quoted (RM)</Label>
+				{/*
+					A price with no fallback is the one field on this sheet that
+					CANNOT be left alone, yet it looked exactly like Remarks — a
+					plain input under a plain label, its "0.00" placeholder reading
+					as a filled-in zero. Resolve sat two inches below, enabled.
+					While it is unset the field is framed and labelled as owed; once
+					a real number is in, the frame drops and the line below states
+					what that number is about to become.
+				*/}
+				<div
+					className={
+						quoteMissing
+							? "space-y-1.5 rounded-lg border border-amber-500/60 bg-amber-500/5 p-3 ring-1 ring-amber-500/25"
+							: "space-y-1.5"
+					}
+				>
+					<div className="flex flex-wrap items-center justify-between gap-2">
+						<Label htmlFor="request-quote">Quoted (RM)</Label>
+						{quoteMissing && (
+							<span className="rounded-full border border-amber-500/60 bg-amber-500/10 px-2 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-amber-500">
+								Needed to resolve
+							</span>
+						)}
+					</div>
 					{editableQuote ? (
 						<>
-							<Input
-								id="request-quote"
-								type="number"
-								min={0}
-								step="0.01"
-								inputMode="decimal"
-								placeholder="0.00"
-								value={quote}
-								onChange={(e) => setQuote(e.target.value)}
-							/>
-							<p className="text-sm text-muted-foreground">
-								Estimate — negotiate or change it before Resolve.
-								{request.type === "pos_integration_quote" && plan
-									? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
-									: ""}
-							</p>
+							{/* The RM sits INSIDE the field: the label says "(RM)" but
+								the value is what the eye lands on, and a bare 1200
+								reads as a quantity rather than money. */}
+							<div className="relative">
+								<span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm font-medium text-muted-foreground">
+									RM
+								</span>
+								<Input
+									id="request-quote"
+									type="number"
+									min={0}
+									step="0.01"
+									inputMode="decimal"
+									placeholder="0.00"
+									value={quote}
+									onChange={(e) => setQuote(e.target.value)}
+									className={`h-11 pl-11 text-lg font-semibold tabular-nums${
+										quoteMissing
+											? " border-amber-500/70 focus-visible:ring-amber-500"
+											: ""
+									}`}
+								/>
+							</div>
+							{quoteMissing ? (
+								<p className="text-sm font-medium text-amber-500">
+									Set the price before you Resolve — there is no list price to
+									fall back on, so resolving now would put the agency on a
+									negotiated tier costing nothing.
+								</p>
+							) : (
+								<>
+									<p className="text-sm text-muted-foreground">
+										Estimate — negotiate or change it before Resolve.
+										{request.type === "pos_integration_quote" && plan
+											? ` Leave empty to use the current plan price (RM ${formatPrice(plan.price)}) on Resolve.`
+											: ""}
+									</p>
+									{quoteGiven && (
+										<p className="text-sm font-medium text-emerald-500">
+											RM {formatPrice(parsedQuote)} becomes the agency's tier
+											price when you Resolve.
+										</p>
+									)}
+								</>
+							)}
 						</>
 					) : negotiable ? (
 						<>
