@@ -2,6 +2,8 @@
 
 - [InnocenZ database rules](innocenz-database-rules.md) — standing rules: reuse tables, 4 audit columns together, FK-only (no name copies), id-first PKs, UI writes persist + called by primary id
 
+- [RBAC Portal → Role → Module C/R/U](innocenz-rbac-portal-cru.md) — 3 master portals, specialized roles, module_key + C/R/U only; migrate 0103 + seed/backfill
+
 - [Sync memory mirrors](sync-memory-mirrors.md) — standing rule: mirror this memory to repo docs/claude-memory + CLAUDE.md + the Excel "Claude Code Memory" tab (multi-device user)
 
 - [Verify against test script](verify-against-test-script.md) — standing rule: check every InnocenZ change against TEST_SCRIPT.md and add new requirements into it

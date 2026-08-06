@@ -2,6 +2,7 @@ import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 import type { BackendModule } from "./mappers";
 import { mapModule } from "./mappers";
+import { fetchPortals } from "./portals";
 import type { CreateModuleInput, UpdateModuleInput } from "./schemas";
 import type {
 	ModuleApiResponse,
@@ -21,18 +22,25 @@ export async function fetchModules(
 		pageSize: params.pageSize,
 	});
 
-	const response = await client.get<{
-		success: boolean;
-		message: string;
-		data: BackendModule[];
-		pagination: ModulesApiResponse["pagination"];
-	}>(`/rbac/module${queryString}`);
+	const [response, portals] = await Promise.all([
+		client.get<{
+			success: boolean;
+			message: string;
+			data: BackendModule[];
+			pagination: ModulesApiResponse["pagination"];
+		}>(`/rbac/module${queryString}`),
+		fetchPortals(onRefreshFail).catch(() => []),
+	]);
+
+	const portalCodeById = new Map(
+		portals.map((p) => [p.id, p.code] as const),
+	);
 
 	return {
 		success: response.data.success,
 		message: response.data.message,
 		pagination: response.data.pagination,
-		data: (response.data.data ?? []).map(mapModule),
+		data: (response.data.data ?? []).map((m) => mapModule(m, portalCodeById)),
 	};
 }
 

@@ -1,23 +1,33 @@
 import { timestamp, uuid, varchar, unique } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
+import { UserTable } from '@/features/user/user.model';
+import { RoleTable } from '../role/role.model';
 
-export const UserRoleTable = MainSchema.table('user_role', {
+export const UserRoleTable = MainSchema.table(
+  'user_role',
+  {
     id: uuid('id').defaultRandom().notNull().primaryKey(),
-    userId: uuid('user_id').notNull(),
-    roleId: uuid('role_id').notNull(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => UserTable.id),
+    roleId: uuid('role_id')
+      .notNull()
+      .references(() => RoleTable.id),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),
     updatedBy: varchar('updated_by').notNull(),
-}, (table) => ({
+  },
+  (table) => ({
     uniqueUserRole: unique().on(table.userId, table.roleId),
-}));
+  }),
+);
 
 export type UserRoleType = typeof UserRoleTable.$inferSelect;
 export type UserRoleInsertType = typeof UserRoleTable.$inferInsert;
 
 export type UserRoleFilter = {
-    id?: string | string[];
-    userId?: string | string[];
-    roleId?: string | string[];
+  id?: string | string[];
+  userId?: string | string[];
+  roleId?: string | string[];
 };

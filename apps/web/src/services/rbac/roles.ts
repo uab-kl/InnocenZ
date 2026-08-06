@@ -2,6 +2,7 @@ import { getClient } from "@/lib/axios-v1";
 import { buildQueryParams } from "@/lib/build-query-params";
 import type { BackendRole } from "./mappers";
 import { mapRole } from "./mappers";
+import { fetchPortals } from "./portals";
 import type { CreateRoleInput, UpdateRoleInput } from "./schemas";
 import type {
 	RoleApiResponse,
@@ -21,18 +22,25 @@ export async function fetchRoles(
 		pageSize: params.pageSize,
 	});
 
-	const response = await client.get<{
-		success: boolean;
-		message: string;
-		data: BackendRole[];
-		pagination: RolesApiResponse["pagination"];
-	}>(`/rbac/role${queryString}`);
+	const [response, portals] = await Promise.all([
+		client.get<{
+			success: boolean;
+			message: string;
+			data: BackendRole[];
+			pagination: RolesApiResponse["pagination"];
+		}>(`/rbac/role${queryString}`),
+		fetchPortals(onRefreshFail).catch(() => []),
+	]);
+
+	const portalCodeById = new Map(
+		portals.map((p) => [p.id, p.code] as const),
+	);
 
 	return {
 		success: response.data.success,
 		message: response.data.message,
 		pagination: response.data.pagination,
-		data: (response.data.data ?? []).map(mapRole),
+		data: (response.data.data ?? []).map((r) => mapRole(r, portalCodeById)),
 	};
 }
 
@@ -55,7 +63,7 @@ export async function fetchRoleById(
 }
 
 function normalizeRoleInput<T extends { roleName: string }>(input: T): T {
-	return { ...input, roleName: input.roleName.trim().toLowerCase() };
+	return { ...input, roleName: input.roleName.trim() };
 }
 
 export async function createRole(

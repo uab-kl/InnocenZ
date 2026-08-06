@@ -123,8 +123,8 @@ function ModulePage() {
 		<PageShell>
 			<PageHeader
 				icon={LayoutGrid}
-				title="Module Management"
-				description="Manage application modules used to group permissions"
+				title="Modules"
+				description="Portal-scoped feature areas with stable keys for C/R/U checks"
 			/>
 
 			<ModulesTable

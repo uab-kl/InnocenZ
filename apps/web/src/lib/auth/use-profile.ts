@@ -19,12 +19,19 @@ interface MeResponse {
 	status: string;
 	profileImage?: string | null;
 	r2PublicUrl?: string | null;
-	roles: { id: string; roleName: string }[];
+	portals?: string[];
+	roles: {
+		id: string;
+		roleName: string;
+		portalId?: string | null;
+		portalCode?: string | null;
+	}[];
 	permissions: {
 		moduleId: string;
 		moduleName: string;
+		moduleKey?: string;
 		permissionId: string;
-		permissionType: "read" | "create" | "update" | "delete";
+		permissionType: "read" | "create" | "update";
 	}[];
 }
 
@@ -46,6 +53,15 @@ export async function fetchProfile(): Promise<User> {
 	const profile = response.data.data;
 	noteR2PublicUrl(profile.r2PublicUrl);
 
+	const modulePermissions = profile.permissions
+		.filter((p) => p.permissionType !== undefined)
+		.map((p) => ({
+			moduleKey:
+				p.moduleKey ?? p.moduleName.toLowerCase().replace(/\s+/g, "_"),
+			moduleName: p.moduleName,
+			permissionType: p.permissionType,
+		}));
+
 	return {
 		id: profile.id,
 		email: profile.email ?? "",
@@ -55,6 +71,7 @@ export async function fetchProfile(): Promise<User> {
 		isActive: profile.status.toLowerCase() === "active",
 		profileImage: profile.profileImage ?? null,
 		roles: profile.roles.map((r) => r.roleName),
+		portals: profile.portals ?? [],
 		readPermission: profile.permissions
 			.filter((p) => p.permissionType === "read")
 			.map((p) => p.moduleName),
@@ -64,6 +81,7 @@ export async function fetchProfile(): Promise<User> {
 		updatePermission: profile.permissions
 			.filter((p) => p.permissionType === "update")
 			.map((p) => p.moduleName),
+		modulePermissions,
 	};
 }
 

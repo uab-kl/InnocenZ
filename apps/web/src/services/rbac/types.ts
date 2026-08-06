@@ -1,6 +1,15 @@
 export type RbacStatus = "active" | "inactive";
 
-export type PermissionType = "read" | "create" | "update" | "delete";
+export type PermissionType = "read" | "create" | "update";
+
+export type PortalCode = "admin" | "agency" | "outlet";
+
+export interface RbacPortal {
+	id: string;
+	code: PortalCode;
+	name: string;
+	status: RbacStatus;
+}
 
 export interface RbacPagination {
 	page: number;
@@ -14,6 +23,8 @@ export interface RbacPagination {
 export interface RbacRole {
 	roleId: string;
 	roleName: string;
+	portalId: string | null;
+	portalCode: PortalCode | null;
 	status: RbacStatus;
 	createdAt: string;
 	updatedAt: string;
@@ -24,6 +35,9 @@ export interface RbacRole {
 export interface RbacModule {
 	moduleId: string;
 	moduleName: string;
+	moduleKey: string;
+	portalId: string | null;
+	portalCode: PortalCode | null;
 	status: RbacStatus;
 	createdAt: string;
 	updatedAt: string;
@@ -50,6 +64,7 @@ export interface RolePermissionGroup {
 	permissionType: PermissionType;
 	moduleId: string;
 	moduleName: string;
+	moduleKey?: string;
 }
 
 export interface RolesApiResponse {

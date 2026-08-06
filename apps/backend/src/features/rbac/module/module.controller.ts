@@ -1,7 +1,10 @@
 import { Request, Response } from 'express';
 import { ModuleRepositoryClass } from './module.repository';
 import { ModuleType } from './module.model';
-import { ModuleSchema } from '@/schema/rbac.schema';
+import { PermissionRepositoryClass } from '@/features/rbac/permission/permission.repository';
+import { ModuleSchema, withModuleKey } from '@/schema/rbac.schema';
+import { permissionTypeValues } from '@/types/rbac-constant';
+import { db } from '@/db/index';
 import { paginate } from '@/util/pagination';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -16,7 +19,10 @@ function filterModules(modules: ModuleType[], moduleName?: string, status?: stri
 }
 
 export class ModuleControllerClass {
-  constructor(private moduleRepository: ModuleRepositoryClass) {}
+  constructor(
+    private moduleRepository: ModuleRepositoryClass,
+    private permissionRepository: PermissionRepositoryClass,
+  ) {}
 
   async getModules(req: Request, res: Response) {
     try {
@@ -47,11 +53,33 @@ export class ModuleControllerClass {
     try {
       const parsed = ModuleSchema.safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
-      const data = await this.moduleRepository.createModule({
-        ...parsed.data,
-        createdBy: getActor(req),
-        updatedBy: getActor(req),
+      const actor = getActor(req);
+      const moduleInput = {
+        ...withModuleKey(parsed.data),
+        createdBy: actor,
+        updatedBy: actor,
+      };
+
+      // Creating a module always seeds its C/R/U permission rows — admins assign
+      // them on the role matrix, not via a separate permissions catalogue.
+      const data = await db.transaction(async (tx) => {
+        const created = await this.moduleRepository.createModule(moduleInput, tx);
+        for (const permissionType of permissionTypeValues) {
+          await this.permissionRepository.createPermission(
+            {
+              moduleId: created.id,
+              permissionType,
+              description: `${permissionType} ${created.moduleName}`,
+              status: 'active',
+              createdBy: actor,
+              updatedBy: actor,
+            },
+            tx,
+          );
+        }
+        return created;
       });
+
       res.status(201).json({ success: true, message: 'Module created', data });
     } catch {
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -62,8 +90,12 @@ export class ModuleControllerClass {
     try {
       const parsed = ModuleSchema.partial().safeParse(req.body);
       if (!parsed.success) return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message });
+      const patch = { ...parsed.data };
+      if (patch.moduleName && !patch.moduleKey) {
+        Object.assign(patch, withModuleKey({ moduleName: patch.moduleName }));
+      }
       const data = await this.moduleRepository.updateModule(paramId(req.params.id), {
-        ...parsed.data,
+        ...patch,
         updatedBy: getActor(req),
       });
       if (!data) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });

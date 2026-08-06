@@ -1,6 +1,10 @@
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import type { LucideIcon } from "lucide-react";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
+import {
+	canModule,
+	OUTLET_FEATURE_MODULE,
+} from "@/lib/auth/module-permissions";
 
 /** Matches Module 10 outlet columns: Owner, Finance, Ops Head */
 export type OutletSubRole = "outlet_owner" | "outlet_finance" | "outlet_ops";
@@ -28,6 +32,8 @@ type Permission =
 	| "viewSettings"
 	| "editSettings"
 	| "orderSpecialService";
+
+type ModulePerm = { moduleKey: string; permissionType: string };
 
 const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
 	outlet_owner: [
@@ -76,9 +82,23 @@ const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
 export function outletCan(
 	role: OutletSubRole | null | undefined,
 	permission: Permission,
+	modulePermissions?: ModulePerm[] | null,
 ): boolean {
 	const r = role ?? "outlet_owner";
-	return ROLE_PERMISSIONS[r].includes(permission);
+	const fallback = ROLE_PERMISSIONS[r].includes(permission);
+	if (!modulePermissions?.length) return fallback;
+
+	const outletKeys = new Set(
+		Object.values(OUTLET_FEATURE_MODULE).map((m) => m.key),
+	);
+	const hasOutletGrants = modulePermissions.some((p) =>
+		outletKeys.has(p.moduleKey),
+	);
+	if (!hasOutletGrants) return fallback;
+
+	const map = OUTLET_FEATURE_MODULE[permission];
+	if (!map) return fallback;
+	return canModule(modulePermissions, map.key, map.type);
 }
 
 export type OutletNavItem = {
@@ -108,10 +128,6 @@ const ALL_NAV: OutletNavItem[] = [
 		permission: "viewLiveDashboard",
 	},
 	{
-		// Viewing is `viewLiveDashboard`, not `ratePrs`, deliberately: GET /rating
-		// carries no sub-role guard, so Outlet Finance — who cannot rate — may still
-		// read what the venue has said about a PR. The screen itself says which of
-		// the two the reader holds.
 		to: "/outlet/ratings",
 		label: "Ratings",
 		icon: iconForNav("Ratings"),
@@ -144,24 +160,28 @@ function isOutletPendingProfilePath(pathname: string): boolean {
 export function getOutletNavItems(
 	role: OutletSubRole | null | undefined,
 	orgStatus?: string | null,
+	modulePermissions?: ModulePerm[] | null,
 ): OutletNavItem[] {
-	// Pending / suspended orgs may sign in but only use profile/settings.
 	if (isOrgProfileOnly(orgStatus)) return [];
 	const r = role ?? "outlet_owner";
 	return ALL_NAV.filter((item) => {
 		if (item.to === "/outlet/bookings") {
-			return outletCan(r, "postJob") || outletCan(r, "orderSpecialService");
+			return (
+				outletCan(r, "postJob", modulePermissions) ||
+				outletCan(r, "orderSpecialService", modulePermissions)
+			);
 		}
-		return outletCan(r, item.permission);
+		return outletCan(r, item.permission, modulePermissions);
 	});
 }
 
 export function getOutletDefaultRoute(
 	role: OutletSubRole | null | undefined,
 	orgStatus?: string | null,
+	modulePermissions?: ModulePerm[] | null,
 ): string {
 	if (isOrgProfileOnly(orgStatus)) return OUTLET_PENDING_PROFILE_PATH;
-	const items = getOutletNavItems(role, orgStatus);
+	const items = getOutletNavItems(role, orgStatus, modulePermissions);
 	return items[0]?.to ?? "/outlet/billing";
 }
 
@@ -170,35 +190,31 @@ export function canAccessOutletPath(
 	role: OutletSubRole | null | undefined,
 	pathname: string,
 	orgStatus?: string | null,
+	modulePermissions?: ModulePerm[] | null,
 ): boolean {
 	if (isOrgProfileOnly(orgStatus)) {
 		return isOutletPendingProfilePath(pathname);
 	}
 	const r = role ?? "outlet_owner";
+	const can = (p: Permission) => outletCan(r, p, modulePermissions);
 	if (pathname === "/outlet" || pathname === "/outlet/") {
-		return outletCan(r, "viewLiveDashboard");
+		return can("viewLiveDashboard");
 	}
 	if (pathname.startsWith("/outlet/bookings")) {
-		return outletCan(r, "postJob") || outletCan(r, "orderSpecialService");
+		return can("postJob") || can("orderSpecialService");
 	}
 	if (pathname.startsWith("/outlet/special-service")) {
-		return outletCan(r, "orderSpecialService") || outletCan(r, "postJob");
+		return can("orderSpecialService") || can("postJob");
 	}
-	if (pathname.startsWith("/outlet/history"))
-		return outletCan(r, "viewHistory");
-	if (pathname.startsWith("/outlet/calendar"))
-		return outletCan(r, "viewLiveDashboard");
-	if (pathname.startsWith("/outlet/ratings"))
-		return outletCan(r, "viewLiveDashboard");
+	if (pathname.startsWith("/outlet/history")) return can("viewHistory");
+	if (pathname.startsWith("/outlet/calendar")) return can("viewLiveDashboard");
+	if (pathname.startsWith("/outlet/ratings")) return can("viewLiveDashboard");
 	if (pathname.startsWith("/outlet/billing")) {
-		return outletCan(r, "viewBilling") || outletCan(r, "viewSalesDashboard");
+		return can("viewBilling") || can("viewSalesDashboard");
 	}
-	if (pathname.startsWith("/outlet/subscription"))
-		return outletCan(r, "viewSettings");
-	if (pathname.startsWith("/outlet/workspace"))
-		return outletCan(r, "viewWorkspace");
-	if (pathname.startsWith("/outlet/settings"))
-		return outletCan(r, "viewSettings");
+	if (pathname.startsWith("/outlet/subscription")) return can("viewSettings");
+	if (pathname.startsWith("/outlet/workspace")) return can("viewWorkspace");
+	if (pathname.startsWith("/outlet/settings")) return can("viewSettings");
 	if (pathname.startsWith("/outlet/profile")) return true;
 	return false;
 }

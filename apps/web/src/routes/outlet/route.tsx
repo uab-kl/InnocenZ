@@ -15,8 +15,10 @@ import {
 	useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
-import { ensurePortal } from "@/lib/auth/guards";
+import { ensurePortal, guardPortalClient } from "@/lib/auth/guards";
+import { useProfile } from "@/lib/auth/use-profile";
 import "@agency-portal/prototype-theme.css";
 import "@agency-portal/agency-app-overrides.css";
 
@@ -31,63 +33,96 @@ function OutletLayout() {
 	// to keep SSR hydration clean.
 	const [mounted, setMounted] = useState(false);
 	const [orgStatus, setOrgStatus] = useState<string | null>(null);
+	const { data: profile } = useProfile();
+	const modulePermissions =
+		getPortalSessionKind() === "real" ? profile?.modulePermissions : undefined;
 
 	// Real backend accounts see the same pages with no data; demo accounts keep
 	// their seeded data. Blank before the first portal render so real accounts
 	// never flash the demo seed. The persist merge re-seeds empty slices on
 	// reload, so this must run on every mount (not just at login).
 	useEffect(() => {
-		if (getPortalSessionKind() === "real") {
-			useStore.setState(buildBlankPortalReset());
-			// The blank reset wipes outletOwner / sub-role to demo defaults every
-			// mount; re-apply the persisted real identity so it survives reloads.
-			const identity = getOutletIdentity();
-			if (identity) {
-				setOrgStatus(identity.outletStatus);
-				useStore.getState().setOutletSubRole(identity.subRole);
-				void import("@agency-portal/lib/outlet-demo").then(
-					({ BLANK_OUTLET_OWNER }) => {
-						useStore.setState((st) => ({
-							outletOwner: {
-								...BLANK_OUTLET_OWNER,
-								orgName: identity.outletName,
-								email: st.outletOwner.email,
-								ownerName: st.outletOwner.ownerName,
-								accountActivated: identity.outletStatus === "active",
-							},
-							outletWorkspace: {
-								...st.outletWorkspace,
-								outletName: identity.outletName,
-							},
-						}));
-					},
-				);
+		let cancelled = false;
+		void (async () => {
+			const ok = await guardPortalClient("outlet");
+			if (cancelled || !ok) return;
+			if (getPortalSessionKind() === "real") {
+				useStore.setState(buildBlankPortalReset());
+				// The blank reset wipes outletOwner / sub-role to demo defaults every
+				// mount; re-apply the persisted real identity so it survives reloads.
+				const identity = getOutletIdentity();
+				if (identity) {
+					setOrgStatus(identity.outletStatus);
+					useStore.getState().setOutletSubRole(identity.subRole);
+					void import("@agency-portal/lib/outlet-demo").then(
+						({ BLANK_OUTLET_OWNER }) => {
+							useStore.setState((st) => ({
+								outletOwner: {
+									...BLANK_OUTLET_OWNER,
+									orgName: identity.outletName,
+									email: st.outletOwner.email,
+									ownerName: st.outletOwner.ownerName,
+									accountActivated: identity.outletStatus === "active",
+								},
+								outletWorkspace: {
+									...st.outletWorkspace,
+									outletName: identity.outletName,
+								},
+							}));
+						},
+					);
+				} else {
+					setOrgStatus(null);
+				}
 			} else {
 				setOrgStatus(null);
 			}
-		} else {
-			setOrgStatus(null);
-		}
-		setMounted(true);
+			setMounted(true);
+		})();
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const outletSubRole = useStore((s) => s.outletSubRole);
-	const navItems = getOutletNavItems(outletSubRole, orgStatus);
+	const navItems = getOutletNavItems(
+		outletSubRole,
+		orgStatus,
+		modulePermissions,
+	);
 
 	useEffect(() => {
 		if (!mounted) return;
-		if (!canAccessOutletPath(outletSubRole, pathname, orgStatus)) {
-			navigate({
-				to: getOutletDefaultRoute(outletSubRole, orgStatus),
-				replace: true,
-			});
+		if (
+			canAccessOutletPath(
+				outletSubRole,
+				pathname,
+				orgStatus,
+				modulePermissions,
+			)
+		) {
+			return;
 		}
-	}, [mounted, pathname, outletSubRole, orgStatus, navigate]);
+		const dest = getOutletDefaultRoute(
+			outletSubRole,
+			orgStatus,
+			modulePermissions,
+		);
+		if (dest === pathname || dest === pathname.replace(/\/$/, "")) return;
+		navigate({ to: dest, replace: true });
+	}, [
+		mounted,
+		pathname,
+		outletSubRole,
+		orgStatus,
+		modulePermissions,
+		navigate,
+	]);
 
 	if (!mounted) {
-		return <div style={{ minHeight: "100svh", background: "#0e0a1a" }} />;
+		return <PortalGateLoading variant="portal" />;
 	}
 
 	return (

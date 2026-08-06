@@ -4,9 +4,11 @@ import moduleRoutes from '@/features/rbac/module/module.routes.js';
 import permissionRoutes from '@/features/rbac/permission/permission.routes.js';
 import rolePermissionRoutes from '@/features/rbac/role-permission/role-permission.routes.js';
 import userRoleRoutes from '@/features/rbac/user-role/user-role.routes.js';
+import portalRoutes from '@/features/rbac/portal/portal.routes.js';
 
 const rbacRoutes = Router();
 
+rbacRoutes.use('/portal', portalRoutes);
 rbacRoutes.use('/role', roleRoutes);
 rbacRoutes.use('/module', moduleRoutes);
 rbacRoutes.use('/permission', permissionRoutes);

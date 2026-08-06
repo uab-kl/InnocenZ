@@ -914,19 +914,34 @@ export class AuthControllerClass {
         return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
       }
 
+      // Heal accounts that still have org membership but lost specialized
+      // portal roles (agency_owner / outlet_owner) after the role cleanup.
+      await this.authRepository.ensurePortalRolesFromMembership(user.id);
+
       const roles = await this.authRepository.getRolesForUserIds([user.id]);
       const permissions = await this.authRepository.getUserPermissions(user.id);
       const profile = await this.userProfileRepository.getByUserId(user.id);
+
+      const portals = [
+        ...new Set(roles.map((r) => r.portalCode).filter((c): c is string => Boolean(c))),
+      ];
 
       return res.status(200).json({
         success: true,
         message: 'OK',
         data: {
           ...withUserProfile(user, profile),
-          roles: roles.map((r) => ({ id: r.roleId, roleName: r.roleName })),
+          portals,
+          roles: roles.map((r) => ({
+            id: r.roleId,
+            roleName: r.roleName,
+            portalId: r.portalId,
+            portalCode: r.portalCode,
+          })),
           permissions: permissions.map((p) => ({
             moduleId: p.moduleId,
             moduleName: p.moduleName,
+            moduleKey: p.moduleKey,
             permissionId: p.permissionId,
             permissionType: p.permissionType,
           })),

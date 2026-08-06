@@ -27,6 +27,7 @@ import {
   sendOrgMemberInviteEmail,
 } from '@/util/org-member-invite';
 import { sendOrgApprovedNotificationEmail } from '@/features/mailing/mailing.repository';
+import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map';
 
 export class OutletControllerClass {
   constructor(
@@ -447,11 +448,12 @@ export class OutletControllerClass {
         }
       }
 
-      const role = await this.roleRepository.getRoleByName('outlet');
+      const roleName = portalRoleNameForSubRole('outlet', parsed.data.subRole);
+      const role = await this.roleRepository.getRoleByName(roleName);
       if (!role) {
         return res.status(500).json({
           success: false,
-          message: "Role 'outlet' is not seeded",
+          message: `Role '${roleName}' is not seeded`,
           data: null,
         });
       }

@@ -20,6 +20,7 @@ export type SignupAccountType = (typeof SIGNUP_ACCOUNT_TYPES)[number];
  * it). They happen to be identical today; the map exists so that stays a fact
  * about the data rather than an assumption baked into the controller.
  */
+/** First org user gets the portal role; lane is agency_user/outlet_user.sub_role. */
 const ROLE_NAME_BY_ACCOUNT_TYPE: Readonly<Record<SignupAccountType, string>> =
   Object.freeze({
     agency: 'agency',

@@ -1,4 +1,6 @@
+import { useRouterState } from "@tanstack/react-router";
 import { WHATSAPP_CONTACT_URL } from "@/constants/contact";
+import { deLocalizeHref } from "@/paraglide/runtime";
 
 const TANSTACK_TRIGGER_SIZE = 56;
 const TANSTACK_OFFSET_BOTTOM = 9;
@@ -19,7 +21,14 @@ function WhatsAppIcon({ className }: { className?: string }) {
 	);
 }
 
+/** Public / marketing contact FAB — hidden inside the admin shell. */
 export function WhatsAppContactButton() {
+	const pathname = useRouterState({ select: (s) => s.location.pathname });
+	const path = deLocalizeHref(pathname);
+	if (path === "/admin" || path.startsWith("/admin/")) {
+		return null;
+	}
+
 	return (
 		<a
 			href={WHATSAPP_CONTACT_URL}

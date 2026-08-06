@@ -1,4 +1,5 @@
 import type {
+	PortalCode,
 	RbacModule,
 	RbacPermission,
 	RbacRole,
@@ -8,6 +9,7 @@ import type {
 export interface BackendRole {
 	id: string;
 	roleName: string;
+	portalId?: string | null;
 	status: string;
 	createdAt: string;
 	updatedAt: string;
@@ -18,6 +20,8 @@ export interface BackendRole {
 export interface BackendModule {
 	id: string;
 	moduleName: string;
+	moduleKey?: string;
+	portalId?: string | null;
 	status: string;
 	createdAt: string;
 	updatedAt: string;
@@ -44,12 +48,30 @@ export interface BackendRolePermissionGroup {
 	permissionType: string;
 	moduleId: string;
 	moduleName: string;
+	moduleKey?: string;
 }
 
-export function mapRole(role: BackendRole): RbacRole {
+function portalCodeFromRoleName(roleName: string): PortalCode | null {
+	const n = roleName.toLowerCase();
+	if (n === "admin") return "admin";
+	if (n.startsWith("agency")) return "agency";
+	if (n.startsWith("outlet")) return "outlet";
+	return null;
+}
+
+export function mapRole(
+	role: BackendRole,
+	portalCodeById?: Map<string, PortalCode>,
+): RbacRole {
+	const fromMap =
+		role.portalId && portalCodeById
+			? (portalCodeById.get(role.portalId) ?? null)
+			: null;
 	return {
 		roleId: role.id,
 		roleName: role.roleName,
+		portalId: role.portalId ?? null,
+		portalCode: fromMap ?? portalCodeFromRoleName(role.roleName),
 		status: role.status as RbacRole["status"],
 		createdAt: role.createdAt,
 		updatedAt: role.updatedAt,
@@ -58,10 +80,22 @@ export function mapRole(role: BackendRole): RbacRole {
 	};
 }
 
-export function mapModule(module: BackendModule): RbacModule {
+export function mapModule(
+	module: BackendModule,
+	portalCodeById?: Map<string, PortalCode>,
+): RbacModule {
+	const fromMap =
+		module.portalId && portalCodeById
+			? (portalCodeById.get(module.portalId) ?? null)
+			: null;
 	return {
 		moduleId: module.id,
 		moduleName: module.moduleName,
+		moduleKey:
+			module.moduleKey ??
+			module.moduleName.toLowerCase().replace(/\s+/g, "_"),
+		portalId: module.portalId ?? null,
+		portalCode: fromMap,
 		status: module.status as RbacModule["status"],
 		createdAt: module.createdAt,
 		updatedAt: module.updatedAt,
@@ -96,5 +130,6 @@ export function mapRolePermissionGroup(
 			item.permissionType as RolePermissionGroup["permissionType"],
 		moduleId: item.moduleId,
 		moduleName: item.moduleName,
+		moduleKey: item.moduleKey,
 	};
 }

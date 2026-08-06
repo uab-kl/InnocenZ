@@ -5,12 +5,22 @@ import { agencyOwnerOfParam, refuseOrgStatusChange } from '@/middlewares/require
 
 const router = Router();
 
-router.get('/', agencyController.list.bind(agencyController));
-router.get('/memberships', agencyController.listMemberships.bind(agencyController));
+// Directory listing is admin + agency only — outlet must not enumerate agencies
+// (admin dashboard pending_review used to succeed for any signed-in JWT).
+router.get('/', requireRole('admin', 'agency'), agencyController.list.bind(agencyController));
+router.get(
+  '/memberships',
+  requireRole('admin', 'agency'),
+  agencyController.listMemberships.bind(agencyController),
+);
 // Before '/:id' so the literal path is not captured as an agency id.
-router.get('/pr-links', agencyController.listPrLinks.bind(agencyController));
-router.get('/:id', agencyController.getById.bind(agencyController));
-router.post('/', agencyController.create.bind(agencyController));
+router.get(
+  '/pr-links',
+  requireRole('admin', 'agency'),
+  agencyController.listPrLinks.bind(agencyController),
+);
+router.get('/:id', requireRole('admin', 'agency', 'outlet'), agencyController.getById.bind(agencyController));
+router.post('/', requireRole('admin', 'agency'), agencyController.create.bind(agencyController));
 // Editing the agency record is agencyCan('editSettings') — owner only. This
 // carried no role gate at all before, so any signed-in account could rewrite an
 // agency's own details.

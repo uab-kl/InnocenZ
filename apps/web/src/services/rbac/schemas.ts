@@ -1,21 +1,30 @@
 import { z } from "zod";
 
-const permissionTypes = ["read", "create", "update", "delete"] as const;
+const permissionTypes = ["read", "create", "update"] as const;
 
 export const RoleSchema = z.object({
-	// Persist lowercase to match seeded roles / requireRole checks.
-	roleName: z
+	roleName: z.string().trim().min(1).max(100),
+	// Form values use `string` ("" when unset). Output is uuid | null for the API.
+	portalId: z
 		.string()
-		.trim()
-		.min(1)
-		.max(100)
-		.transform((name) => name.toLowerCase()),
-	status: z.enum(["active", "inactive"]).default("active"),
+		.transform((v) => (v.length > 0 ? v : null))
+		.pipe(z.string().uuid().nullable()),
+	status: z.enum(["active", "inactive"]),
 });
 
 export const ModuleSchema = z.object({
 	moduleName: z.string().min(1).max(100),
-	status: z.enum(["active", "inactive"]).default("active"),
+	moduleKey: z
+		.string()
+		.trim()
+		.min(1)
+		.max(100)
+		.transform((key) => key.toLowerCase().replace(/\s+/g, "_")),
+	portalId: z
+		.string()
+		.transform((v) => (v.length > 0 ? v : null))
+		.pipe(z.string().uuid().nullable()),
+	status: z.enum(["active", "inactive"]),
 });
 
 export const PermissionSchema = z.object({

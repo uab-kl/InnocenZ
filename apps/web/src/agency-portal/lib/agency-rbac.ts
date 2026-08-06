@@ -1,6 +1,10 @@
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import type { LucideIcon } from "lucide-react";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
+import {
+	AGENCY_FEATURE_MODULE,
+	canModule,
+} from "@/lib/auth/module-permissions";
 
 /** Module 9 · Agency Owner vs Agency Finance */
 export type AgencySubRole = "agency_owner" | "agency_finance";
@@ -24,6 +28,8 @@ type Permission =
 	| "viewHistory"
 	| "viewWorkforce"
 	| "overrideSignedPv";
+
+type ModulePerm = { moduleKey: string; permissionType: string };
 
 const ROLE_PERMISSIONS: Record<AgencySubRole, Permission[]> = {
 	agency_owner: [
@@ -61,11 +67,28 @@ function resolveAgencySubRole(
 	return "agency_owner";
 }
 
+/** Prefer module C/R/U from /auth/me when present; else fall back to sub-role matrix. */
 export function agencyCan(
 	role: AgencySubRole | null | undefined,
 	permission: Permission,
+	modulePermissions?: ModulePerm[] | null,
 ): boolean {
-	return ROLE_PERMISSIONS[resolveAgencySubRole(role)].includes(permission);
+	const fallback =
+		ROLE_PERMISSIONS[resolveAgencySubRole(role)].includes(permission);
+	if (!modulePermissions?.length) return fallback;
+
+	const agencyKeys = new Set(
+		Object.values(AGENCY_FEATURE_MODULE).map((m) => m.key),
+	);
+	const hasAgencyGrants = modulePermissions.some((p) =>
+		agencyKeys.has(p.moduleKey),
+	);
+	// Permissions from another portal (or stale rows) must not lock this console out.
+	if (!hasAgencyGrants) return fallback;
+
+	const map = AGENCY_FEATURE_MODULE[permission];
+	if (!map) return fallback;
+	return canModule(modulePermissions, map.key, map.type);
 }
 
 export type AgencyNavItem = {
@@ -100,15 +123,6 @@ const ALL_NAV: AgencyNavItem[] = [
 		icon: iconForNav("Payroll"),
 		permission: "viewPv",
 	},
-	// PHASE 2 — "Job Posting" (agency service bookings) is hidden for now.
-	// Uncomment to bring it back; the /agency/special-service route itself is
-	// untouched, so nothing else needs restoring.
-	// {
-	//   to: '/agency/special-service',
-	//   label: 'Job Posting',
-	//   icon: iconForNav('Job Posting'),
-	//   permission: 'viewPv',
-	// },
 	{
 		to: "/agency/history",
 		label: "History",
@@ -123,18 +137,22 @@ export const AGENCY_PENDING_PROFILE_PATH = "/agency/profile";
 export function getAgencyNavItems(
 	role: AgencySubRole | null | undefined,
 	orgStatus?: string | null,
+	modulePermissions?: ModulePerm[] | null,
 ): AgencyNavItem[] {
 	if (isOrgProfileOnly(orgStatus)) return [];
 	const r = resolveAgencySubRole(role);
-	return ALL_NAV.filter((item) => agencyCan(r, item.permission));
+	return ALL_NAV.filter((item) =>
+		agencyCan(r, item.permission, modulePermissions),
+	);
 }
 
 export function getAgencyDefaultRoute(
 	role: AgencySubRole | null | undefined,
 	orgStatus?: string | null,
+	modulePermissions?: ModulePerm[] | null,
 ): string {
 	if (isOrgProfileOnly(orgStatus)) return AGENCY_PENDING_PROFILE_PATH;
-	const items = getAgencyNavItems(role, orgStatus);
+	const items = getAgencyNavItems(role, orgStatus, modulePermissions);
 	return items[0]?.to ?? "/agency/pv";
 }
 
@@ -142,29 +160,24 @@ export function canAccessAgencyPath(
 	role: AgencySubRole | null | undefined,
 	pathname: string,
 	orgStatus?: string | null,
+	modulePermissions?: ModulePerm[] | null,
 ): boolean {
 	if (isOrgProfileOnly(orgStatus)) {
 		return pathname.startsWith("/agency/profile");
 	}
 	const r = resolveAgencySubRole(role);
-	if (pathname === "/agency" || pathname === "/agency/")
-		return agencyCan(r, "viewHome");
-	if (pathname.startsWith("/agency/roster"))
-		return agencyCan(r, "viewWorkforce");
-	if (pathname.startsWith("/agency/pv")) return agencyCan(r, "viewPv");
-	if (pathname.startsWith("/agency/special-service"))
-		return agencyCan(r, "viewPv");
-	if (pathname.startsWith("/agency/history"))
-		return agencyCan(r, "viewHistory");
-	if (pathname.startsWith("/agency/subscription"))
-		return agencyCan(r, "viewSettings");
-	if (pathname.startsWith("/agency/pending"))
-		return agencyCan(r, "approvePrSignups");
-	if (pathname.startsWith("/agency/prs")) return agencyCan(r, "managePr");
-	if (pathname.startsWith("/agency/outlets")) return agencyCan(r, "managePr");
-	if (pathname.startsWith("/agency/profile"))
-		return agencyCan(r, "viewSettings");
-	if (pathname.startsWith("/agency/live")) return agencyCan(r, "viewWorkforce");
+	const can = (p: Permission) => agencyCan(r, p, modulePermissions);
+	if (pathname === "/agency" || pathname === "/agency/") return can("viewHome");
+	if (pathname.startsWith("/agency/roster")) return can("viewWorkforce");
+	if (pathname.startsWith("/agency/pv")) return can("viewPv");
+	if (pathname.startsWith("/agency/special-service")) return can("viewPv");
+	if (pathname.startsWith("/agency/history")) return can("viewHistory");
+	if (pathname.startsWith("/agency/subscription")) return can("viewSettings");
+	if (pathname.startsWith("/agency/pending")) return can("approvePrSignups");
+	if (pathname.startsWith("/agency/prs")) return can("managePr");
+	if (pathname.startsWith("/agency/outlets")) return can("managePr");
+	if (pathname.startsWith("/agency/profile")) return can("viewSettings");
+	if (pathname.startsWith("/agency/live")) return can("viewWorkforce");
 	return true;
 }
 

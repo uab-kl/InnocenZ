@@ -106,9 +106,11 @@ export const healthController = new HealthControllerClass();
 export const roleController = new RoleControllerClass(roleRepository);
 
 export const moduleRepository = new ModuleRepositoryClass();
-export const moduleController = new ModuleControllerClass(moduleRepository);
-
 export const permissionRepository = new PermissionRepositoryClass();
+export const moduleController = new ModuleControllerClass(
+  moduleRepository,
+  permissionRepository,
+);
 export const permissionController = new PermissionControllerClass(permissionRepository);
 
 export const rolePermissionRepository = new RolePermissionRepositoryClass();

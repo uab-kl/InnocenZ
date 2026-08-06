@@ -24,6 +24,7 @@ export class RolePermissionRepositoryClass {
           permissionType: PermissionTable.permissionType,
           moduleId: PermissionTable.moduleId,
           moduleName: ModuleTable.moduleName,
+          moduleKey: ModuleTable.moduleKey,
         })
         .from(RolePermissionTable)
         .innerJoin(PermissionTable, eq(RolePermissionTable.permissionId, PermissionTable.id))

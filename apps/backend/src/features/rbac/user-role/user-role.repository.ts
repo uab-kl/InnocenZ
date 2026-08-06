@@ -25,14 +25,16 @@ export class UserRoleRepositoryClass {
     try{
       const results = await db
         .select({
-          id: UserRoleTable.id,
+          id: RoleTable.id,
           roleName: RoleTable.roleName,
+          portalId: RoleTable.portalId,
           status: RoleTable.status,
           createdAt: RoleTable.createdAt,
           updatedAt: RoleTable.updatedAt,
           createdBy: RoleTable.createdBy,
           updatedBy: RoleTable.updatedBy,
-        })      .from(UserRoleTable)
+        })
+      .from(UserRoleTable)
       .innerJoin(RoleTable, eq(UserRoleTable.roleId, RoleTable.id))
       .where(and(
         Array.isArray(userId) ? inArray(UserRoleTable.userId, userId as string[]) : eq(UserRoleTable.userId, userId as string),

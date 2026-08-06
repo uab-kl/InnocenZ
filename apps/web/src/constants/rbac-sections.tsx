@@ -1,24 +1,17 @@
-import { Key, LayoutGrid, Shield } from "lucide-react";
+import { LayoutGrid, Shield } from "lucide-react";
 
 export const rbacSections = [
 	{
 		key: "role",
-		title: "Role",
-		description: "Manage roles and assign access levels.",
+		title: "Roles",
+		description: "Portal-scoped roles and module C/R/U matrix.",
 		href: "/admin/rbac/role",
 		icon: Shield,
 	},
 	{
-		key: "permission",
-		title: "Permission",
-		description: "Manage permissions and access rules.",
-		href: "/admin/rbac/permission",
-		icon: Key,
-	},
-	{
 		key: "module",
-		title: "Module",
-		description: "Manage application modules and features.",
+		title: "Modules",
+		description: "Portal-scoped feature modules (each creates C/R/U automatically).",
 		href: "/admin/rbac/module",
 		icon: LayoutGrid,
 	},

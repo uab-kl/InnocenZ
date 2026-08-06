@@ -10,16 +10,16 @@ import { useProfile } from "@/lib/auth/use-profile";
 import { Mail, Trash2, UserPlus } from "lucide-react";
 import { useState } from "react";
 
-/** Sub-roles each org actually has, mirroring the backend enums. */
+/** Invite lanes map to portal roles (agency_owner, outlet_ops, …) on the server. */
 const SUB_ROLES: Record<OrgKind, Array<{ value: string; label: string }>> = {
 	agency: [
-		{ value: "owner", label: "Owner" },
-		{ value: "finance", label: "Finance Head" },
+		{ value: "owner", label: "Agency Owner" },
+		{ value: "finance", label: "Agency Finance" },
 	],
 	outlet: [
-		{ value: "owner", label: "Owner" },
-		{ value: "finance", label: "Finance Head" },
-		{ value: "operations_head", label: "Ops Head" },
+		{ value: "owner", label: "Outlet Owner" },
+		{ value: "finance", label: "Outlet Finance" },
+		{ value: "operations_head", label: "Outlet Ops" },
 	],
 };
 
@@ -109,8 +109,8 @@ export function OrgMembersPanel({
 			<IzSectionLabel>Team · {members.length} member(s)</IzSectionLabel>
 			<IzCard>
 				<p className="iz-tiny iz-muted mb-2">
-					Who works here and what they may do. Roles decide who can approve
-					money.
+					Invite grants a portal role (Owner / Finance / Ops) with its module
+					C/R/U matrix. Membership still ties them to this organisation.
 				</p>
 
 				{isLoading && <p className="iz-tiny iz-muted2">Loading team…</p>}

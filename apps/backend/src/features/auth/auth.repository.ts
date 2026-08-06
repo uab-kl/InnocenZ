@@ -5,6 +5,7 @@ import { logger } from '@/util/logger.js';
 import { UserInsertType, UserTable, UserType } from '@/features/user/user.model.js';
 import { UserRoleTable, UserRoleInsertType, UserRoleType } from '@/features/rbac/user-role/user-role.model.js';
 import { RoleInsertType, RoleTable, RoleType } from '@/features/rbac/role/role.model.js';
+import { PortalTable } from '@/features/rbac/portal/portal.model.js';
 import { DbTransaction } from '@/types/db-transaction';
 import { ModuleTable, ModuleType, ModuleInsertType } from '@/features/rbac/module/module.model.js';
 import { PermissionTable, PermissionType, PermissionInsertType } from '@/features/rbac/permission/permission.model.js';
@@ -13,6 +14,10 @@ import { UserRepositoryClass as UserRepository } from '@/features/user/user.repo
 import { UserRoleRepositoryClass as UserRoleRepository } from '@/features/rbac/user-role/user-role.repository.js';
 import { RolePermissionGroupType } from '@/schema/rbac.schema.js';
 import { ResetPasswordTokenTable, ResetPasswordTokenType } from './auth.model.js';
+import { AgencyUserTable } from '@/features/agency/agency.model.js';
+import { OutletUserTable } from '@/features/outlet/outlet.model.js';
+import { portalRoleName } from '@/types/rbac-constant.js';
+import { SYSTEM_ACTOR } from '@/util/actor.js';
 export class AuthRepositoryClass {
   constructor(
     private jwtController: JwtControllerClass,
@@ -34,7 +39,9 @@ export class AuthRepositoryClass {
     }
   }
 
-  async getRolesForUserIds(userIds: string[]): Promise<Array<{ userId: string; roleId: string; roleName: string }>> {
+  async getRolesForUserIds(
+    userIds: string[],
+  ): Promise<Array<{ userId: string; roleId: string; roleName: string; portalId: string | null; portalCode: string | null }>> {
     if (userIds.length === 0) return [];
     try {
       const results = await db
@@ -42,9 +49,12 @@ export class AuthRepositoryClass {
           userId: UserRoleTable.userId,
           roleId: RoleTable.id,
           roleName: RoleTable.roleName,
+          portalId: RoleTable.portalId,
+          portalCode: PortalTable.code,
         })
         .from(UserRoleTable)
         .innerJoin(RoleTable, eq(UserRoleTable.roleId, RoleTable.id))
+        .leftJoin(PortalTable, eq(RoleTable.portalId, PortalTable.id))
         .where(and(inArray(UserRoleTable.userId, userIds)));
       return results;
     } catch (error) {
@@ -55,6 +65,54 @@ export class AuthRepositoryClass {
       // agency owner mid-click.
       logger.error('[AuthRepository.getRolesForUserIds] Error:', error);
       throw error;
+    }
+  }
+
+  async ensurePortalRolesFromMembership(userId: string): Promise<void> {
+    try {
+      const [agencyMem] = await db
+        .select({ id: AgencyUserTable.id })
+        .from(AgencyUserTable)
+        .where(
+          and(eq(AgencyUserTable.userId, userId), eq(AgencyUserTable.status, 'active')),
+        )
+        .limit(1);
+      const [outletMem] = await db
+        .select({ id: OutletUserTable.id })
+        .from(OutletUserTable)
+        .where(
+          and(eq(OutletUserTable.userId, userId), eq(OutletUserTable.status, 'active')),
+        )
+        .limit(1);
+
+      const needed: string[] = [];
+      if (agencyMem) needed.push(portalRoleName.AGENCY);
+      if (outletMem) needed.push(portalRoleName.OUTLET);
+      if (needed.length === 0) return;
+
+      const existing = await this.getRolesForUserIds([userId]);
+      const have = new Set(existing.map((r) => r.roleName));
+
+      for (const roleName of needed) {
+        if (have.has(roleName)) continue;
+        const [role] = await db
+          .select({ id: RoleTable.id })
+          .from(RoleTable)
+          .where(eq(RoleTable.roleName, roleName))
+          .limit(1);
+        if (!role) continue;
+        await this.userRoleRepository.assignRoleToUser({
+          userId,
+          roleId: role.id,
+          createdBy: SYSTEM_ACTOR,
+          updatedBy: SYSTEM_ACTOR,
+        });
+        logger.info(
+          `[AuthRepository.ensurePortalRolesFromMembership] Granted ${roleName} to ${userId}`,
+        );
+      }
+    } catch (error) {
+      logger.error('[AuthRepository.ensurePortalRolesFromMembership] Error:', error);
     }
   }
 
@@ -140,6 +198,7 @@ export class AuthRepositoryClass {
           permissionType: PermissionTable.permissionType,
           moduleId: PermissionTable.moduleId,
           moduleName: ModuleTable.moduleName,
+          moduleKey: ModuleTable.moduleKey,
         })
         .from(UserRoleTable)
         .innerJoin(RoleTable, eq(UserRoleTable.roleId, RoleTable.id))
@@ -161,6 +220,24 @@ export class AuthRepositoryClass {
       logger.error('[AuthRepository.getUserPermissions] Error:', error);
       return [];
     }
+  }
+
+  /** True if the user holds create|read|update on the given module_key (any portal). */
+  async userHasPermission(
+    userId: string,
+    moduleKey: string,
+    permissionType: 'create' | 'read' | 'update',
+  ): Promise<boolean> {
+    const perms = await this.getUserPermissions(userId);
+    return perms.some(
+      (p) => p.moduleKey === moduleKey && p.permissionType === permissionType,
+    );
+  }
+
+  /** True if any of the user's roles belong to the given portal code. */
+  async userHasPortal(userId: string, portalCode: string): Promise<boolean> {
+    const roles = await this.getRolesForUserIds([userId]);
+    return roles.some((r) => r.portalCode === portalCode);
   }
 
   async createResetPasswordToken(userId: string, token: string, expiresAt: Date): Promise<void> {

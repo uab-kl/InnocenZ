@@ -9,7 +9,12 @@ import { Shield } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
-import { RoleSheet, type RoleStatusFilter, RolesGrid } from "@/components/rbac";
+import {
+	type RolePortalFilter,
+	type RoleStatusFilter,
+	RoleSheet,
+	RolesGrid,
+} from "@/components/rbac";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import {
@@ -25,16 +30,17 @@ import {
 export const Route = createFileRoute("/admin/rbac/role")({
 	component: RolePage,
 	head: () => ({
-		meta: [{ title: "Role Management — Innocenz Admin" }],
+		meta: [{ title: "Roles — Innocenz Admin" }],
 	}),
 });
 
-const PAGE_SIZE = 12;
+const PAGE_SIZE = 50;
 
 function RolePage() {
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const [statusFilter, setStatusFilter] = useState<RoleStatusFilter>("all");
+	const [portalFilter, setPortalFilter] = useState<RolePortalFilter>("all");
 	const [currentPage, setCurrentPage] = useState(1);
 	const [sheetOpen, setSheetOpen] = useState(false);
 	const [sheetMode, setSheetMode] = useState<"create" | "manage">("create");
@@ -59,7 +65,7 @@ function RolePage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["rbac-roles"] });
 			closeSheet();
-			toast.success(response.message || "Role created successfully");
+			toast.success(response.message || "Role created");
 		},
 	});
 
@@ -85,7 +91,7 @@ function RolePage() {
 			queryClient.invalidateQueries({ queryKey: ["rbac-roles"] });
 			queryClient.invalidateQueries({ queryKey: ["rbac-role-permissions"] });
 			closeSheet();
-			toast.success(permissionsResponse.message || "Role updated successfully");
+			toast.success(permissionsResponse.message || "Role matrix saved");
 		},
 	});
 
@@ -96,18 +102,6 @@ function RolePage() {
 		saveManageMutation.reset();
 	};
 
-	const openCreate = () => {
-		setSheetMode("create");
-		setSelectedRole(null);
-		setSheetOpen(true);
-	};
-
-	const openManage = (role: RbacRole) => {
-		setSheetMode("manage");
-		setSelectedRole(role);
-		setSheetOpen(true);
-	};
-
 	const sheetError = toMutationError(
 		sheetMode === "manage" ? saveManageMutation.error : createMutation.error,
 		sheetMode === "manage" ? "Failed to update role" : "Failed to create role",
@@ -115,11 +109,7 @@ function RolePage() {
 
 	return (
 		<PageShell>
-			<PageHeader
-				icon={Shield}
-				title="Role Management"
-				description="Create and manage roles for your organization"
-			/>
+			<PageHeader icon={Shield} title="Roles" />
 
 			<RolesGrid
 				roles={data?.data ?? []}
@@ -131,14 +121,27 @@ function RolePage() {
 				isError={isError}
 				error={error as Error | null}
 				statusFilter={statusFilter}
+				portalFilter={portalFilter}
 				onStatusFilterChange={(value) => {
 					setStatusFilter(value);
 					setCurrentPage(1);
 				}}
+				onPortalFilterChange={(value) => {
+					setPortalFilter(value);
+					setCurrentPage(1);
+				}}
 				onPageChange={setCurrentPage}
 				onRetry={() => refetch()}
-				onCreateClick={openCreate}
-				onRoleClick={openManage}
+				onCreateClick={() => {
+					setSheetMode("create");
+					setSelectedRole(null);
+					setSheetOpen(true);
+				}}
+				onRoleClick={(role) => {
+					setSheetMode("manage");
+					setSelectedRole(role);
+					setSheetOpen(true);
+				}}
 			/>
 
 			<RoleSheet

@@ -156,6 +156,13 @@ export async function startAgencyRealSession(profile: {
 	store.setRole("agency");
 	useStore.setState(buildBlankPortalReset());
 
+	// Drop leftover outlet session so an outlet operator never flashes agency UI
+	// from a previous login on this browser.
+	const { clearOutletIdentity } = await import(
+		"@agency-portal/lib/outlet-identity"
+	);
+	clearOutletIdentity();
+
 	if (identity) {
 		const resolved = identity;
 		identityLib.saveAgencyIdentity(resolved);
@@ -221,6 +228,11 @@ export async function startOutletRealSession(profile: {
 	store.signIn(profile.displayName || normalized, normalized);
 	store.setRole("vendor");
 	useStore.setState(buildBlankPortalReset());
+
+	const { clearAgencyIdentity } = await import(
+		"@agency-portal/lib/agency-identity"
+	);
+	clearAgencyIdentity();
 
 	if (identity) {
 		const resolved = identity;

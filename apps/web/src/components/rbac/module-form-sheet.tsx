@@ -1,4 +1,5 @@
 import { useForm } from "@tanstack/react-form";
+import { useQuery } from "@tanstack/react-query";
 import { AlertCircle, LayoutGrid, Loader2 } from "lucide-react";
 import { useEffect } from "react";
 import { Button } from "@/components/ui/button";
@@ -10,6 +11,13 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
+import {
 	Sheet,
 	SheetContent,
 	SheetDescription,
@@ -18,9 +26,11 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { kickToLogin } from "@/lib/auth/guards";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	type CreateModuleInput,
+	fetchPortals,
 	ModuleSchema,
 	type RbacModule,
 } from "@/services/rbac";
@@ -44,9 +54,18 @@ export function ModuleFormSheet({
 	isSubmitting,
 	error,
 }: ModuleFormSheetProps) {
+	const portalsQuery = useQuery({
+		queryKey: ["rbac-portals"],
+		queryFn: () => fetchPortals(kickToLogin),
+		enabled: open,
+		staleTime: 60_000,
+	});
+
 	const form = useForm({
 		defaultValues: {
 			moduleName: "",
+			moduleKey: "",
+			portalId: "" as string,
 			status: "active" as "active" | "inactive",
 		},
 		validators: {
@@ -54,7 +73,13 @@ export function ModuleFormSheet({
 			onSubmit: ModuleSchema,
 		},
 		onSubmit: async ({ value }) => {
-			onSubmit(value);
+			onSubmit({
+				...value,
+				portalId: value.portalId || null,
+				moduleKey:
+					value.moduleKey ||
+					value.moduleName.toLowerCase().replace(/\s+/g, "_"),
+			});
 		},
 	});
 
@@ -63,6 +88,8 @@ export function ModuleFormSheet({
 			form.reset();
 			if (mode === "edit" && module) {
 				form.setFieldValue("moduleName", module.moduleName);
+				form.setFieldValue("moduleKey", module.moduleKey);
+				form.setFieldValue("portalId", module.portalId ?? "");
 				form.setFieldValue("status", module.status);
 			}
 		}
@@ -89,8 +116,8 @@ export function ModuleFormSheet({
 							</SheetTitle>
 							<SheetDescription>
 								{isEdit
-									? "Update module details and status."
-									: "Add a new application module for permission grouping."}
+									? "Update module details, key, portal, and status."
+									: "Add a portal-scoped module for C/R/U permission grouping."}
 							</SheetDescription>
 						</div>
 					</div>
@@ -118,6 +145,40 @@ export function ModuleFormSheet({
 											placeholder="Enter module name"
 											value={field.state.value}
 											onBlur={field.handleBlur}
+											onChange={(event) => {
+												field.handleChange(event.target.value);
+												if (!isEdit) {
+													form.setFieldValue(
+														"moduleKey",
+														event.target.value
+															.toLowerCase()
+															.replace(/\s+/g, "_"),
+													);
+												}
+											}}
+											disabled={isSubmitting}
+											aria-invalid={isInvalid}
+										/>
+										{isInvalid && (
+											<FieldError errors={field.state.meta.errors} />
+										)}
+									</Field>
+								);
+							}}
+						</form.Field>
+
+						<form.Field name="moduleKey">
+							{(field) => {
+								const isInvalid =
+									field.state.meta.isTouched && !field.state.meta.isValid;
+								return (
+									<Field data-invalid={isInvalid}>
+										<FieldLabel htmlFor="module-key">Module Key</FieldLabel>
+										<Input
+											id="module-key"
+											placeholder="e.g. payment_voucher"
+											value={field.state.value}
+											onBlur={field.handleBlur}
 											onChange={(event) =>
 												field.handleChange(event.target.value)
 											}
@@ -130,6 +191,30 @@ export function ModuleFormSheet({
 									</Field>
 								);
 							}}
+						</form.Field>
+
+						<form.Field name="portalId">
+							{(field) => (
+								<Field>
+									<FieldLabel htmlFor="module-portal">Portal</FieldLabel>
+									<Select
+										value={field.state.value || undefined}
+										onValueChange={(v) => field.handleChange(v)}
+										disabled={isSubmitting || portalsQuery.isLoading}
+									>
+										<SelectTrigger id="module-portal" className="w-full">
+											<SelectValue placeholder="Select portal" />
+										</SelectTrigger>
+										<SelectContent>
+											{(portalsQuery.data ?? []).map((p) => (
+												<SelectItem key={p.id} value={p.id}>
+													{p.name} ({p.code})
+												</SelectItem>
+											))}
+										</SelectContent>
+									</Select>
+								</Field>
+							)}
 						</form.Field>
 
 						<form.Field name="status">

@@ -1,7 +1,5 @@
 import { Link, useLocation } from "@tanstack/react-router";
-import { ChevronDown, ChevronLeft } from "lucide-react";
-import { useEffect, useState } from "react";
-import { ScrollArea } from "@/components/ui/scroll-area";
+import { ChevronLeft } from "lucide-react";
 import {
 	SidebarContent,
 	SidebarHeader,
@@ -18,12 +16,22 @@ import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
 import { cn } from "@/lib/utils";
 
+function isAdminUser(user: {
+	roles?: string[];
+	portals?: string[];
+} | null): boolean {
+	if (!user) return false;
+	if (user.portals?.includes("admin")) return true;
+	return (user.roles ?? []).some((r) => r.toLowerCase() === "admin");
+}
+
 export function Sidebar() {
 	const location = useLocation();
 	const { user } = useCurrentUser();
 	const { state } = useSidebar();
 	const collapsed = state === "collapsed";
 	const badges = useSidebarBadges();
+	const admin = isAdminUser(user);
 
 	const isActive = (href: string) => {
 		const cleanPathname = location.pathname.replace(/^\/en/, "");
@@ -50,10 +58,11 @@ export function Sidebar() {
 	};
 
 	const canAccess = (item: SidebarNavItem) => {
+		// Platform admins always see the full admin shell.
+		if (admin) return true;
 		if (!user?.readPermission?.length) {
 			return item.allowedPermission.includes("*");
 		}
-
 		return item.allowedPermission.some(hasPermission);
 	};
 
@@ -85,21 +94,19 @@ export function Sidebar() {
 				</div>
 			</SidebarHeader>
 
-			<SidebarContent className="relative">
-				<ScrollArea className="h-full px-2 py-3">
-					<nav aria-label="Admin navigation" className="space-y-5">
-						{sidebarSections.map((section) => (
-							<SidebarSectionGroup
-								key={section.key}
-								section={section}
-								collapsed={collapsed}
-								isActive={isActive}
-								canAccess={canAccess}
-								badges={badges}
-							/>
-						))}
-					</nav>
-				</ScrollArea>
+			<SidebarContent className="px-2 py-3">
+				<nav aria-label="Admin navigation" className="space-y-5 pb-6">
+					{sidebarSections.map((section) => (
+						<SidebarSectionGroup
+							key={section.key}
+							section={section}
+							collapsed={collapsed}
+							isActive={isActive}
+							canAccess={canAccess}
+							badges={badges}
+						/>
+					))}
+				</nav>
 			</SidebarContent>
 
 			<SidebarCollapseToggle />
@@ -121,64 +128,45 @@ function SidebarSectionGroup({
 	badges: Record<string, number>;
 }) {
 	const visibleItems = section.items.filter(canAccess);
-	const sectionActive = visibleItems.some((item) => isActive(item.href));
-	const [open, setOpen] = useState(true);
-
-	useEffect(() => {
-		if (sectionActive) setOpen(true);
-	}, [sectionActive]);
 
 	if (visibleItems.length === 0) return null;
 
 	return (
 		<div className="admin-sidebar-section">
 			{!collapsed && (
-				<button
-					type="button"
-					onClick={() => setOpen((value) => !value)}
-					className="admin-sidebar-section-header"
-					aria-expanded={open}
-				>
+				<div className="admin-sidebar-section-header pointer-events-none">
 					<span>{section.label}</span>
-					<ChevronDown
-						className={cn(
-							"h-4 w-4 shrink-0 transition-transform duration-200",
-							open && "rotate-180",
-						)}
-					/>
-				</button>
+				</div>
 			)}
 
-			{open && (
-				<ul className={cn("space-y-1", collapsed && "space-y-1.5")}>
-					{visibleItems.map((item) => {
-						const badge = badges[item.key] ?? item.badge;
-						return (
-							<li key={item.key}>
-								<Link
-									to={item.href}
-									title={collapsed ? item.title : undefined}
-									className={cn(
-										"admin-sidebar-nav-item",
-										isActive(item.href) && "admin-sidebar-nav-item-active",
-										collapsed && "justify-center px-2",
-									)}
-								>
-									<item.icon className="h-[22px] w-[22px] shrink-0" />
-									{!collapsed && (
-										<>
-											<span className="flex-1 truncate">{item.title}</span>
-											{badge != null && badge > 0 && (
-												<span className="admin-sidebar-badge">{badge}</span>
-											)}
-										</>
-									)}
-								</Link>
-							</li>
-						);
-					})}
-				</ul>
-			)}
+			<ul className={cn("space-y-1", collapsed && "space-y-1.5")}>
+				{visibleItems.map((item) => {
+					const badge = badges[item.key] ?? item.badge;
+					return (
+						<li key={item.key}>
+							<Link
+								to={item.href}
+								title={collapsed ? item.title : undefined}
+								className={cn(
+									"admin-sidebar-nav-item",
+									isActive(item.href) && "admin-sidebar-nav-item-active",
+									collapsed && "justify-center px-2",
+								)}
+							>
+								<item.icon className="h-[22px] w-[22px] shrink-0" />
+								{!collapsed && (
+									<>
+										<span className="flex-1 truncate">{item.title}</span>
+										{badge != null && badge > 0 && (
+											<span className="admin-sidebar-badge">{badge}</span>
+										)}
+									</>
+								)}
+							</Link>
+						</li>
+					);
+				})}
+			</ul>
 		</div>
 	);
 }

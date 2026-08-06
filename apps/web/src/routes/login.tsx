@@ -21,12 +21,13 @@ import {
 } from "@/components/ui/input-group";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
+import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { hardNavigate } from "@/lib/hard-navigate";
 
 const ROLE_DASHBOARD: Record<string, string> = {
 	admin: "/admin/dashboard",
-	agency: "/agency/dashboard",
-	outlet: "/outlet/dashboard",
+	agency: "/agency",
+	outlet: "/outlet",
 };
 
 export const Route = createFileRoute("/login")({
@@ -110,10 +111,9 @@ function RouteComponent() {
 					password: value.password,
 				});
 				const profile = await fetchProfile();
-				const role = profile.roles[0]?.toLowerCase();
+				const home = pickHomePortal(profile.portals, profile.roles);
 
-				// Real backend accounts land on the same portal pages with no data.
-				if (role === "agency") {
+				if (home === "agency") {
 					await startAgencyRealSession({
 						id: profile.id,
 						email: profile.email || value.email,
@@ -137,7 +137,7 @@ function RouteComponent() {
 					);
 					return;
 				}
-				if (role === "outlet") {
+				if (home === "outlet") {
 					await startOutletRealSession({
 						id: profile.id,
 						email: profile.email || value.email,
@@ -161,7 +161,12 @@ function RouteComponent() {
 					);
 					return;
 				}
+				if (home === "admin") {
+					hardNavigate("/admin/dashboard");
+					return;
+				}
 
+				const role = profile.roles[0]?.toLowerCase() ?? "";
 				hardNavigate((role && ROLE_DASHBOARD[role]) || "/no-access");
 			} catch (err) {
 				if (axios.isAxiosError(err)) {

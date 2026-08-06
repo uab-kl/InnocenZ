@@ -6,77 +6,143 @@ import { RoleTable } from '@/features/rbac/role/role.model';
 import { ModuleTable } from '@/features/rbac/module/module.model';
 import { PermissionTable } from '@/features/rbac/permission/permission.model';
 import { RolePermissionTable } from '@/features/rbac/role-permission/role-permission.model';
-import { permissionTypeValues, type PermissionTypeCode } from '@/types/rbac-constant';
+import { PortalTable } from '@/features/rbac/portal/portal.model';
+import { permissionTypeValues, type PermissionTypeCode, portalRoleName } from '@/types/rbac-constant';
 import { logger } from '@/util/logger';
 
-// Seeds the RBAC engine: modules, CRUD permissions per module, and role -> permission
-// assignments for every role. Idempotent (existence-checked + onConflictDoNothing);
-// safe to re-run and never wipes admin-made changes.
+/**
+ * Seeds portal-scoped modules, C/R/U permissions, and role → permission matrices.
+ * Idempotent. Mirrors former agencyCan / outletCan / admin full access.
+ */
 const ACTOR = 'system';
 
-const CRUD: PermissionTypeCode[] = [...permissionTypeValues];
+const CRU: PermissionTypeCode[] = [...permissionTypeValues];
 const READ: PermissionTypeCode[] = ['read'];
-const CRU: PermissionTypeCode[] = ['create', 'read', 'update'];
+const RU: PermissionTypeCode[] = ['read', 'update'];
 
-// Functional areas across the admin panel and the role portals.
-const MODULES = [
-  'Dashboard',
-  'User Management',
-  'Access Control',
-  'Plan',
-  'Subscription',
-  'Special Service',
-  'Audit Log',
-  'Roster',
-  'Payment Voucher',
-  'Booking',
-  'Billing',
-  'Rating',
-] as const;
+type PortalCode = 'admin' | 'agency' | 'outlet';
 
-type RoleName = 'admin' | 'agency' | 'outlet' | 'pr';
-// '*' = every permission on every module. Otherwise a list of [module, allowed types].
-const MATRIX: Record<RoleName, '*' | Array<[string, PermissionTypeCode[]]>> = {
-  admin: '*',
-  agency: [
-    ['Dashboard', READ],
-    ['User Management', READ],
-    ['Roster', CRUD],
-    ['Payment Voucher', CRU],
-    ['Booking', READ],
-    ['Special Service', CRU],
-    ['Subscription', READ],
+type ModuleDef = { key: string; name: string; portal: PortalCode };
+
+const MODULES: ModuleDef[] = [
+  // Admin
+  { key: 'dashboard', name: 'Dashboard', portal: 'admin' },
+  { key: 'user_management', name: 'User Management', portal: 'admin' },
+  { key: 'access_control', name: 'Access Control', portal: 'admin' },
+  { key: 'plan', name: 'Plan', portal: 'admin' },
+  { key: 'subscription', name: 'Subscription', portal: 'admin' },
+  { key: 'special_service', name: 'Special Service', portal: 'admin' },
+  { key: 'audit_log', name: 'Audit Log', portal: 'admin' },
+  { key: 'billing', name: 'Billing', portal: 'admin' },
+  // Agency
+  { key: 'dashboard', name: 'Dashboard', portal: 'agency' },
+  { key: 'roster', name: 'Roster', portal: 'agency' },
+  { key: 'approvals', name: 'Approvals', portal: 'agency' },
+  { key: 'payment_voucher', name: 'Payment Voucher', portal: 'agency' },
+  { key: 'history', name: 'History', portal: 'agency' },
+  { key: 'settings', name: 'Settings', portal: 'agency' },
+  { key: 'workforce', name: 'Workforce', portal: 'agency' },
+  { key: 'collections', name: 'Collections', portal: 'agency' },
+  // Outlet
+  { key: 'dashboard', name: 'Dashboard', portal: 'outlet' },
+  { key: 'booking', name: 'Booking', portal: 'outlet' },
+  { key: 'rating', name: 'Rating', portal: 'outlet' },
+  { key: 'history', name: 'History', portal: 'outlet' },
+  { key: 'billing', name: 'Billing', portal: 'outlet' },
+  { key: 'sales', name: 'Sales', portal: 'outlet' },
+  { key: 'workspace', name: 'Workspace', portal: 'outlet' },
+  { key: 'settings', name: 'Settings', portal: 'outlet' },
+  { key: 'special_service', name: 'Special Service', portal: 'outlet' },
+];
+
+type MatrixEntry = [string, PermissionTypeCode[]]; // module_key, types
+
+const MATRIX: Record<string, '*' | MatrixEntry[]> = {
+  [portalRoleName.ADMIN]: '*',
+  [portalRoleName.AGENCY]: [
+    ['dashboard', READ],
+    ['roster', CRU],
+    ['approvals', CRU],
+    ['payment_voucher', CRU],
+    ['history', READ],
+    ['settings', CRU],
+    ['workforce', CRU],
+    ['collections', RU],
   ],
-  outlet: [
-    ['Dashboard', READ],
-    ['Booking', CRUD],
-    ['Billing', READ],
-    ['Rating', CRU],
-    ['Special Service', CRU],
-    ['Subscription', READ],
+  [portalRoleName.OUTLET]: [
+    ['dashboard', READ],
+    ['booking', CRU],
+    ['rating', CRU],
+    ['history', READ],
+    ['billing', READ],
+    ['sales', CRU],
+    ['workspace', CRU],
+    ['settings', CRU],
+    ['special_service', CRU],
   ],
-  pr: [
-    ['Dashboard', READ],
-    ['Roster', READ],
-    ['Payment Voucher', READ],
-    ['Rating', READ],
+  [portalRoleName.PR]: [
+    // PR has no portal modules; keep empty (mobile uses role name gates).
   ],
 };
 
-function titleCase(value: string): string {
-  return value.charAt(0).toUpperCase() + value.slice(1);
+async function portalId(code: string): Promise<string> {
+  const [row] = await db
+    .select({ id: PortalTable.id })
+    .from(PortalTable)
+    .where(eq(PortalTable.code, code))
+    .limit(1);
+  if (!row) throw new Error(`[seed-rbac] Portal "${code}" missing — run init-roles first`);
+  return row.id;
 }
 
-async function ensureModule(name: string): Promise<string> {
+async function ensureModule(
+  portalIdValue: string,
+  key: string,
+  name: string,
+): Promise<string> {
   const [existing] = await db
     .select({ id: ModuleTable.id })
     .from(ModuleTable)
+    .where(and(eq(ModuleTable.portalId, portalIdValue), eq(ModuleTable.moduleKey, key)))
+    .limit(1);
+  if (existing) {
+    await db
+      .update(ModuleTable)
+      .set({ moduleName: name, status: 'active', updatedAt: new Date(), updatedBy: ACTOR })
+      .where(eq(ModuleTable.id, existing.id));
+    return existing.id;
+  }
+
+  // Legacy rows may have the name without portal/key — adopt them.
+  const [byName] = await db
+    .select({ id: ModuleTable.id, portalId: ModuleTable.portalId, moduleKey: ModuleTable.moduleKey })
+    .from(ModuleTable)
     .where(eq(ModuleTable.moduleName, name))
     .limit(1);
-  if (existing) return existing.id;
+  if (byName && (!byName.portalId || byName.portalId === portalIdValue)) {
+    await db
+      .update(ModuleTable)
+      .set({
+        portalId: portalIdValue,
+        moduleKey: key,
+        status: 'active',
+        updatedAt: new Date(),
+        updatedBy: ACTOR,
+      })
+      .where(eq(ModuleTable.id, byName.id));
+    return byName.id;
+  }
+
   const [row] = await db
     .insert(ModuleTable)
-    .values({ moduleName: name, status: 'active', createdBy: ACTOR, updatedBy: ACTOR })
+    .values({
+      moduleName: name,
+      moduleKey: key,
+      portalId: portalIdValue,
+      status: 'active',
+      createdBy: ACTOR,
+      updatedBy: ACTOR,
+    })
     .returning({ id: ModuleTable.id });
   return row!.id;
 }
@@ -92,12 +158,13 @@ async function ensurePermission(
     .where(and(eq(PermissionTable.moduleId, moduleId), eq(PermissionTable.permissionType, type)))
     .limit(1);
   if (existing) return existing.id;
+
   const [row] = await db
     .insert(PermissionTable)
     .values({
       moduleId,
       permissionType: type,
-      description: `${titleCase(type)} ${moduleName}`,
+      description: `${type} ${moduleName}`,
       status: 'active',
       createdBy: ACTOR,
       updatedBy: ACTOR,
@@ -107,22 +174,25 @@ async function ensurePermission(
 }
 
 export async function seedRbac(): Promise<void> {
-  // 1. Modules + all CRUD permissions per module.
-  const moduleIdByName = new Map<string, string>();
-  const permIdByKey = new Map<string, string>(); // `${module}:${type}` -> permissionId
-  for (const name of MODULES) {
-    const moduleId = await ensureModule(name);
-    moduleIdByName.set(name, moduleId);
-    for (const type of CRUD) {
-      permIdByKey.set(`${name}:${type}`, await ensurePermission(moduleId, name, type));
+  const portalIds: Record<PortalCode, string> = {
+    admin: await portalId('admin'),
+    agency: await portalId('agency'),
+    outlet: await portalId('outlet'),
+  };
+
+  const permIdByKey = new Map<string, string>(); // `${portal}:${moduleKey}:${type}`
+
+  for (const mod of MODULES) {
+    const mid = await ensureModule(portalIds[mod.portal], mod.key, mod.name);
+    for (const type of CRU) {
+      const pid = await ensurePermission(mid, mod.name, type);
+      permIdByKey.set(`${mod.portal}:${mod.key}:${type}`, pid);
     }
   }
 
-  // 2. Role -> permission assignments.
-  const roleIdByName = new Map<string, string>();
-  for (const roleName of Object.keys(MATRIX) as RoleName[]) {
+  for (const [roleName, grant] of Object.entries(MATRIX)) {
     const [role] = await db
-      .select({ id: RoleTable.id })
+      .select({ id: RoleTable.id, portalId: RoleTable.portalId })
       .from(RoleTable)
       .where(eq(RoleTable.roleName, roleName))
       .limit(1);
@@ -130,22 +200,35 @@ export async function seedRbac(): Promise<void> {
       logger.warn(`[seed-rbac] Role "${roleName}" not found — run init-roles first.`);
       continue;
     }
-    roleIdByName.set(roleName, role.id);
 
-    const grant = MATRIX[roleName];
-    const permIds: string[] = [];
+    let permIds: string[] = [];
     if (grant === '*') {
-      permIds.push(...permIdByKey.values());
+      for (const [key, id] of permIdByKey.entries()) {
+        if (key.startsWith('admin:')) permIds.push(id);
+      }
     } else {
-      for (const [moduleName, types] of grant) {
+      const portalCode =
+        roleName.startsWith('agency')
+          ? 'agency'
+          : roleName.startsWith('outlet')
+            ? 'outlet'
+            : roleName === 'admin'
+              ? 'admin'
+              : null;
+      for (const [moduleKey, types] of grant) {
         for (const type of types) {
-          const id = permIdByKey.get(`${moduleName}:${type}`);
+          const id = permIdByKey.get(`${portalCode}:${moduleKey}:${type}`);
           if (id) permIds.push(id);
+          else logger.warn(`[seed-rbac] Missing perm ${portalCode}:${moduleKey}:${type}`);
         }
       }
     }
 
-    if (permIds.length === 0) continue;
+    if (permIds.length === 0 && grant !== '*' && (grant as MatrixEntry[]).length === 0) {
+      logger.info(`[seed-rbac] ${roleName}: 0 permissions (expected for pr).`);
+      continue;
+    }
+
     await db
       .insert(RolePermissionTable)
       .values(
@@ -162,11 +245,10 @@ export async function seedRbac(): Promise<void> {
   }
 
   logger.info(
-    `[seed-rbac] Done. ${MODULES.length} modules, ${MODULES.length * CRUD.length} permissions.`,
+    `[seed-rbac] Done. ${MODULES.length} modules, ${MODULES.length * CRU.length} permissions.`,
   );
 }
 
-// Only auto-run when invoked as a CLI script (not when imported from boot/migrate).
 const isDirectRun = process.argv[1]?.includes('seed-rbac');
 if (isDirectRun) {
   seedRbac()

@@ -100,7 +100,7 @@ export function ModulesTable({
 							)}
 						</CardTitle>
 						<CardDescription>
-							Application modules used to group permissions.
+							Portal-scoped modules with stable keys. Creating a module also creates its C · R · U permissions for the role matrix.
 						</CardDescription>
 					</div>
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
@@ -142,7 +142,9 @@ export function ModulesTable({
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Module Name</TableHead>
+								<TableHead>Module</TableHead>
+								<TableHead className="w-[140px]">Key</TableHead>
+								<TableHead className="w-[100px]">Portal</TableHead>
 								<TableHead className="w-[120px]">Status</TableHead>
 								<TableHead className="w-[180px]">Created</TableHead>
 								<TableHead className="w-[60px]" />
@@ -151,7 +153,7 @@ export function ModulesTable({
 						<TableBody>
 							{showLoading ? (
 								<TableRow>
-									<TableCell colSpan={4} className="h-32">
+									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
 											<span>Loading modules...</span>
@@ -160,7 +162,7 @@ export function ModulesTable({
 								</TableRow>
 							) : isError ? (
 								<TableRow>
-									<TableCell colSpan={4} className="h-32">
+									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
@@ -178,7 +180,7 @@ export function ModulesTable({
 								</TableRow>
 							) : modules.length === 0 ? (
 								<TableRow>
-									<TableCell colSpan={4} className="h-32">
+									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<LayoutGrid className="h-6 w-6" />
 											<span>No modules found</span>
@@ -190,6 +192,12 @@ export function ModulesTable({
 									<TableRow key={module.moduleId}>
 										<TableCell className="font-medium">
 											{module.moduleName}
+										</TableCell>
+										<TableCell className="font-mono text-xs text-muted-foreground">
+											{module.moduleKey}
+										</TableCell>
+										<TableCell className="capitalize text-sm">
+											{module.portalCode ?? "—"}
 										</TableCell>
 										<TableCell>
 											<Badge

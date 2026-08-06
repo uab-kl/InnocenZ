@@ -15,8 +15,10 @@ import {
 	useNavigate,
 } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
-import { ensurePortal } from "@/lib/auth/guards";
+import { ensurePortal, guardPortalClient } from "@/lib/auth/guards";
+import { useProfile } from "@/lib/auth/use-profile";
 import "@agency-portal/prototype-theme.css";
 import "@agency-portal/agency-app-overrides.css";
 
@@ -32,60 +34,94 @@ function AgencyLayout() {
 	// SSR hydration clean.
 	const [mounted, setMounted] = useState(false);
 	const [orgStatus, setOrgStatus] = useState<string | null>(null);
+	const { data: profile } = useProfile();
+	const modulePermissions =
+		getPortalSessionKind() === "real" ? profile?.modulePermissions : undefined;
 
 	// Real backend accounts see the same pages with no data; demo accounts keep
 	// their seeded data. Blank before the first portal render so real accounts
 	// never flash the demo seed. The persist merge re-seeds empty slices on
 	// reload, so this must run on every mount (not just at login).
 	useEffect(() => {
-		if (getPortalSessionKind() === "real") {
-			useStore.setState(buildBlankPortalReset());
-			// buildBlankPortalReset resets agencyOwner to the demo default, so re-apply
-			// the operator's real identity (resolved at sign-in) on every mount.
-			const identity = getAgencyIdentity();
-			if (identity) {
-				setOrgStatus(identity.agencyStatus);
-				void import("@agency-portal/lib/agency-demo").then(
-					({ BLANK_AGENCY_OWNER }) => {
-						useStore.setState((st) => ({
-							activeAgencyId: identity.agencyId,
-							agencySubRole: identity.subRole,
-							agencyOwner: {
-								...BLANK_AGENCY_OWNER,
-								orgName: identity.orgName,
-								email: st.agencyOwner.email,
-								ownerName: st.agencyOwner.ownerName,
-								accountActivated: identity.agencyStatus === "active",
-							},
-						}));
-					},
-				);
+		let cancelled = false;
+		void (async () => {
+			const ok = await guardPortalClient("agency");
+			if (cancelled || !ok) return;
+			if (getPortalSessionKind() === "real") {
+				useStore.setState(buildBlankPortalReset());
+				// buildBlankPortalReset resets agencyOwner to the demo default, so re-apply
+				// the operator's real identity (resolved at sign-in) on every mount.
+				const identity = getAgencyIdentity();
+				if (identity) {
+					setOrgStatus(identity.agencyStatus);
+					void import("@agency-portal/lib/agency-demo").then(
+						({ BLANK_AGENCY_OWNER }) => {
+							useStore.setState((st) => ({
+								activeAgencyId: identity.agencyId,
+								agencySubRole: identity.subRole,
+								agencyOwner: {
+									...BLANK_AGENCY_OWNER,
+									orgName: identity.orgName,
+									email: st.agencyOwner.email,
+									ownerName: st.agencyOwner.ownerName,
+									accountActivated: identity.agencyStatus === "active",
+								},
+							}));
+						},
+					);
+				} else {
+					setOrgStatus(null);
+				}
 			} else {
 				setOrgStatus(null);
 			}
-		} else {
-			setOrgStatus(null);
-		}
-		setMounted(true);
+			setMounted(true);
+		})();
+		return () => {
+			cancelled = true;
+		};
 	}, []);
 
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
 	const agencySubRole = useStore((s) => s.agencySubRole);
-	const navItems = getAgencyNavItems(agencySubRole, orgStatus);
+	const navItems = getAgencyNavItems(
+		agencySubRole,
+		orgStatus,
+		modulePermissions,
+	);
 
 	useEffect(() => {
 		if (!mounted) return;
-		if (!canAccessAgencyPath(agencySubRole, pathname, orgStatus)) {
-			navigate({
-				to: getAgencyDefaultRoute(agencySubRole, orgStatus),
-				replace: true,
-			});
+		if (
+			canAccessAgencyPath(
+				agencySubRole,
+				pathname,
+				orgStatus,
+				modulePermissions,
+			)
+		) {
+			return;
 		}
-	}, [mounted, pathname, agencySubRole, orgStatus, navigate]);
+		const dest = getAgencyDefaultRoute(
+			agencySubRole,
+			orgStatus,
+			modulePermissions,
+		);
+		// Avoid replace-loop when default is also blocked (keeps shell visible).
+		if (dest === pathname || dest === pathname.replace(/\/$/, "")) return;
+		navigate({ to: dest, replace: true });
+	}, [
+		mounted,
+		pathname,
+		agencySubRole,
+		orgStatus,
+		modulePermissions,
+		navigate,
+	]);
 
 	if (!mounted) {
-		return <div style={{ minHeight: "100svh", background: "#0e0a1a" }} />;
+		return <PortalGateLoading variant="portal" />;
 	}
 
 	return (

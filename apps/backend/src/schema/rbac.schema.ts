@@ -2,20 +2,33 @@ import { z } from 'zod';
 import { permissionTypeValues } from '@/types/rbac-constant';
 
 export const RoleSchema = z.object({
-  // Seeded roles and guards match lowercase names (`admin`, `agency`, …).
-  roleName: z
-    .string()
-    .trim()
-    .min(1)
-    .max(100)
-    .transform((name) => name.toLowerCase()),
+  roleName: z.string().trim().min(1).max(100),
+  portalId: z.uuid().nullable().optional(),
   status: z.string().default('active'),
 });
 
 export const ModuleSchema = z.object({
   moduleName: z.string().min(1).max(100),
+  moduleKey: z
+    .string()
+    .trim()
+    .min(1)
+    .max(100)
+    .transform((key) => key.toLowerCase().replace(/\s+/g, '_'))
+    .optional(),
+  portalId: z.uuid().nullable().optional(),
   status: z.string().default('active'),
 });
+
+/** Normalize optional moduleKey from moduleName before insert/update. */
+export function withModuleKey<T extends { moduleName: string; moduleKey?: string }>(
+  data: T,
+): T & { moduleKey: string } {
+  const moduleKey =
+    data.moduleKey ??
+    data.moduleName.toLowerCase().replace(/[^a-z0-9]+/gi, '_').replace(/^_|_$/g, '');
+  return { ...data, moduleKey };
+}
 
 export const PermissionSchema = z.object({
   moduleId: z.uuid(),
@@ -51,4 +64,5 @@ export type RolePermissionGroupType = {
   permissionType: string;
   moduleId: string;
   moduleName: string;
+  moduleKey: string;
 };

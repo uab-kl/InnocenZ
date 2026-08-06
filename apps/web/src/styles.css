@@ -1713,12 +1713,20 @@ p a:hover {
   color: var(--sidebar-foreground);
 }
 
-.admin-sidebar [data-slot='sidebar-container'] {
-  overflow: visible;
+/* Admin sidebar fills the viewport; nav scrolls inside SidebarContent.
+   Do not use overflow:visible on the inner column — that let content
+   dictate height and left a gap under the rail when the page scrolled. */
+.admin-sidebar[data-slot="sidebar-container"] {
+	height: 100svh;
+	top: 0;
+	bottom: 0;
 }
 
-.admin-sidebar [data-sidebar='sidebar'] {
-  overflow: visible;
+.admin-sidebar [data-slot="sidebar-inner"],
+.admin-sidebar [data-sidebar="sidebar"] {
+	height: 100%;
+	min-height: 100%;
+	background-color: var(--sidebar);
 }
 
 code {

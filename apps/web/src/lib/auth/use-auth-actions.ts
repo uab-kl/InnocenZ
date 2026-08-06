@@ -14,9 +14,11 @@ function loginUserToProfile(user: LoginUser): User {
 		contactNo: "",
 		isActive: user.status === "active",
 		roles: [],
+		portals: [],
 		readPermission: ["*"],
 		createPermission: [],
 		updatePermission: [],
+		modulePermissions: [],
 	};
 }
 

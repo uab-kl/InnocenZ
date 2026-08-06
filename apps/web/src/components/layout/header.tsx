@@ -18,6 +18,7 @@ import {
 	DropdownMenuSeparator,
 	DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { getBusinessSectionByKey } from "@/constants/business-sections";
 import { allNavigationItems } from "@/constants/links";
 import { getRbacSectionByKey } from "@/constants/rbac-sections";
@@ -97,6 +98,7 @@ export function Header() {
 	};
 
 	const roleLabel = user?.roles?.[0] ?? "Admin";
+	const avatarSrc = apiAssetUrl(user?.profileImage);
 
 	return (
 		<header className="flex h-16 items-center justify-between border-b bg-background px-6">
@@ -137,10 +139,12 @@ export function Header() {
 						>
 							<div className="relative shrink-0">
 								<Avatar className="h-9 w-9">
-									<AvatarImage
-										src={`https://api.dicebear.com/9.x/glass/svg?seed=${user?.displayName}`}
-										alt={user?.displayName ?? ""}
-									/>
+									{avatarSrc ? (
+										<AvatarImage
+											src={avatarSrc}
+											alt={user?.displayName ?? ""}
+										/>
+									) : null}
 									<AvatarFallback>
 										{user?.displayName?.charAt(0) ?? (
 											<UserIcon className="h-4 w-4" />
