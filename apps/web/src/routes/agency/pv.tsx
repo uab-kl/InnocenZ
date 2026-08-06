@@ -809,7 +809,11 @@ function AgencyPV() {
 								<ul className="mt-1.5 space-y-0.5">
 									{unsignedPaymentWeekPvs.map((p) => (
 										<li key={p.id} className="iz-tiny iz-muted2">
-											{resolvePvPrName(p, agencyPRs)} ·{" "}
+											{/* `resolvePvPrLabel`, not `resolvePvPrName` — the sibling
+										    list below already used the label, so one screen printed
+										    "Victoria Tan Mei Lin" here and "(Vicky) Victoria Tan Mei
+										    Lin" there, for the same PR. */}
+											{resolvePvPrLabel(p, agencyPRs)} ·{" "}
 											{formatRM(getPvNetTotal(p))} ·{" "}
 											{agencyPvStatusLabel(p.status)}
 										</li>
