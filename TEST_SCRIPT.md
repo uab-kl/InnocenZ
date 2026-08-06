@@ -1084,6 +1084,31 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **6 Aug 2026 — THE DISPUTE QUEUE SHOWS THE EVIDENCE, AND SAYS WHICH IS WHICH.**
+>
+> Owner: *"where is the proof attach photo to see? and the original that the ocr out photo?"*, then
+> *"in the dispute need differentiate the original ocr and the proof that the pr new attach"*.
+>
+> The panel printed **"1 proof image"** beside a paperclip and rendered nothing — no `<img>` existed
+> anywhere in the file. So the one thing a reviewer needs in order to judge a claim, the picture of
+> the paper, was the one thing the dispute queue would not show. The receipt's own scan was not shown
+> either, in any form.
+>
+> Both now render as thumbnails opening full size in a new tab, and they are deliberately SEPARATED,
+> because they are different facts:
+> - **"What the PR attached · N images"** — on the dispute row, with the claim. What they
+>   photographed in order to argue.
+> - **"The scanned receipt · printed 21:43"** — inside each matched receipt, with the record. The
+>   original the OCR read the figures off.
+>
+> Settling a "wrong commission" claim means holding those two against each other; neither was on
+> screen. A receipt with no photo now says "self-logged without one" rather than leaving a gap that
+> reads as a load failure.
+>
+> ⚠️ `isRenderablePhoto` is now in THREE files (PayrollVerifyPanel, AgencyReceiptsPanel and here).
+> Duplicated knowingly at 86% context — showing the evidence today beat refactoring three components
+> — but it belongs in one place. See §9.
+
 
 > **6 Aug 2026 — CHECK-IN SHOWED A SHIFT FROM SEVEN DAYS EARLIER (`4dac4d9`).**
 > Alice's Check-In tab rendered a **30 Jul** shift — already `Complete`, already

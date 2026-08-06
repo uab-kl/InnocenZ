@@ -160,6 +160,30 @@ function DisputeEvidence({
 							</span>
 						</div>
 
+						{/* THE PAPER ITSELF — the scan the OCR read these figures off.
+						    Distinct from the PR's dispute attachment above: that is what
+						    they photographed to argue, this is the original record being
+						    argued about. Settling a "wrong commission" claim means holding
+						    the two side by side, and neither was on screen. */}
+						{(receipt.proofPhotos ?? []).length > 0 ? (
+							<>
+								<p className="iz-tiny iz-muted2 mt-2">
+									The scanned receipt
+									{receipt.receiptTime
+										? ` · printed ${receipt.receiptTime}`
+										: ""}
+								</p>
+								<ProofPhotos
+									photos={receipt.proofPhotos ?? []}
+									label={`${receipt.receiptNo} scan`}
+								/>
+							</>
+						) : (
+							<p className="iz-tiny iz-muted2 mt-2">
+								No photo on this receipt — it was self-logged without one.
+							</p>
+						)}
+
 						{editable && (
 							<button
 								type="button"
@@ -289,7 +313,8 @@ function DisputeRow({
 					<>
 						<Paperclip className="h-3.5 w-3.5" />
 						<span className="iz-tiny">
-							{proof.length} proof image{proof.length > 1 ? "s" : ""}
+							What the PR attached · {proof.length} image
+							{proof.length > 1 ? "s" : ""}
 						</span>
 					</>
 				) : (
@@ -300,6 +325,7 @@ function DisputeRow({
 					</>
 				)}
 			</div>
+			<ProofPhotos photos={proof} label="PR proof" />
 
 			<DisputeEvidence dispute={dispute} receipts={receipts} />
 
@@ -373,6 +399,65 @@ function DisputeRow({
  * self-logged receipts that the claim rested on. The targeted receipt endpoints
  * removed that trap.
  */
+/**
+ * A proof photo is an opaque string — the PR app sends a data URL, older rows
+ * hold a path. Rendering a path as an image gives a broken icon, which reads as
+ * "the evidence is missing" — the one thing this panel must never say by
+ * accident. So render only what is certainly renderable, and print the rest as
+ * the reference it is.
+ *
+ * ⚠️ Third copy of this predicate (PayrollVerifyPanel and AgencyReceiptsPanel
+ * each have their own). Consolidating them is in §9; duplicating it once more to
+ * show evidence today beat leaving the evidence invisible.
+ */
+const isRenderablePhoto = (photo: string) =>
+	photo.startsWith("data:image/") ||
+	photo.startsWith("https://") ||
+	photo.startsWith("http://");
+
+/**
+ * The photos themselves, not a count of them.
+ *
+ * This panel printed "1 proof image" beside a paperclip and rendered nothing —
+ * so the one thing a reviewer needs in order to judge a claim, the picture of
+ * the paper, was the one thing the dispute queue would not show them. Opening
+ * each in a new tab is deliberate: a thumbnail settles "is there evidence", full
+ * size settles "does it say what they claim".
+ */
+function ProofPhotos({ photos, label }: { photos: string[]; label: string }) {
+	if (photos.length === 0) return null;
+	return (
+		<div className="mt-1.5 flex flex-wrap gap-1.5">
+			{photos.map((photo, i) =>
+				isRenderablePhoto(photo) ? (
+					<a
+						// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
+						key={`${label}-${i}`}
+						href={photo}
+						target="_blank"
+						rel="noreferrer"
+						title="Open full size"
+					>
+						<img
+							src={photo}
+							alt={`${label} ${i + 1}`}
+							className="h-16 w-16 rounded border border-[var(--iz-line)] object-cover"
+						/>
+					</a>
+				) : (
+					<span
+						// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
+						key={`${label}-${i}`}
+						className="iz-tiny iz-muted2 break-all"
+					>
+						{photo}
+					</span>
+				),
+			)}
+		</div>
+	);
+}
+
 /** Open = nobody has decided it yet. `outcome` stays null until somebody does. */
 const isOpenDispute = (d: PaymentVoucherDispute) => !d.outcome;
 
