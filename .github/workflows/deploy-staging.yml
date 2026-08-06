@@ -1,8 +1,6 @@
 name: Deploy Staging
 
 on:
-  # Manual run from Actions → Deploy Staging → "Run workflow"
-  workflow_dispatch:
   push:
     tags:
       - 'v*'
@@ -17,11 +15,14 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  docker:
+  prepare:
     runs-on: ubuntu-latest
     env:
       DOCKERHUB_NAMESPACE: juneyou
-
+    outputs:
+      short_sha: ${{ steps.meta.outputs.short_sha }}
+      frontend_tags: ${{ steps.meta.outputs.frontend_tags }}
+      backend_tags: ${{ steps.meta.outputs.backend_tags }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v5
@@ -34,8 +35,17 @@ jobs:
         run: |
           set -euo pipefail
           SHORT_SHA="$(git rev-parse --short=7 HEAD)"
+          echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
           echo "frontend_tags=${DOCKERHUB_NAMESPACE}/innocenz-frontend:staging-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-frontend:staging" >> "$GITHUB_OUTPUT"
           echo "backend_tags=${DOCKERHUB_NAMESPACE}/innocenz-backend:staging-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-backend:staging" >> "$GITHUB_OUTPUT"
+
+  # Frontend + backend build/push in parallel (same pattern as uab-monitor-support).
+  frontend:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -52,7 +62,7 @@ jobs:
           context: .
           file: ./apps/web/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.frontend_tags }}
+          tags: ${{ needs.prepare.outputs.frontend_tags }}
           build-args: |
             VITE_API_URL=${{ secrets.VITE_API_URL_STAGING }}
             VITE_GRAPHQL_ENDPOINT=${{ secrets.VITE_GRAPHQL_ENDPOINT_STAGING }}
@@ -61,12 +71,28 @@ jobs:
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
 
+  backend:
+    needs: prepare
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v5
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
       - name: Build and push backend
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./apps/backend/Dockerfile
           push: true
-          tags: ${{ steps.meta.outputs.backend_tags }}
+          tags: ${{ needs.prepare.outputs.backend_tags }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
