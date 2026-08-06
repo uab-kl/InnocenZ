@@ -1157,6 +1157,40 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **6 Aug 2026 — ONE PR, ONE ROW, ONE ANSWER.** (commit `98ee4a0`)
+>
+> Owner: *"this sill showing the wrong data"*, then *"if the manage pr is tier 3 follow the
+> database then in the pr profile need show to exactly same tier"*.
+>
+> Queried the live DB for Vicky rather than reasoning from the screens:
+>
+> | fact | database | what a screen showed |
+> |---|---|---|
+> | `user_profile.languages` | English, Mandarin, Hokkien, **Cantonese** | roster popover: 3 |
+> | `rating` rows | **none** | gold `0★` on every backend PR |
+> | `agency_pr.tier` | Atlas `tier_3` · Delta `tier_1` | phone profile: hardcoded `TIER V` |
+>
+> Causes, all display-layer — the reads were already correct:
+> `slice(0, 3)` on languages; a `rating != null` guard that let the `rating: 0`
+> placeholder through as a score; and the literal string `TIER V` in
+> `ProfileScreen.tsx`. `GET /agency/pr-links` already joined `agency_pr` and
+> simply never selected `tier` — added (no migration).
+>
+> **Tier is per-membership, and that is not a bug.** Atlas grading her `tier_3`
+> while Delta grades her `tier_1` is two true facts. The profile shows one badge
+> when her approved agencies agree and names each agency when they don't, instead
+> of picking one and calling it "the" tier. Nothing may "sync" these to one value.
+>
+> **`tier_5` exists nowhere in the database for her** — so the earlier read that
+> the roster's Tier III was the wrong one was backwards: Manage PR was right and
+> the phone was inventing the badge.
+>
+> Also: the roster row printed `Victoria Tan Mei Lin (Vicky)`, inside out versus
+> every voucher. Both now go through `formatPayeeLabel`.
+>
+> ⚠️ Needs a **phone-app reload** (the profile caches `myLinks` on mount). Backend
+> is a repository-only change, so `tsx watch` picks it up without a restart.
+
 > **6 Aug 2026 — THE DISPUTE QUEUE SHOWS THE EVIDENCE, AND SAYS WHICH IS WHICH.**
 >
 > Owner: *"where is the proof attach photo to see? and the original that the ocr out photo?"*, then
