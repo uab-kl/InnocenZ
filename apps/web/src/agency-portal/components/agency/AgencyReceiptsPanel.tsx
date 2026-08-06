@@ -1,5 +1,6 @@
 import { AgencyReceiptEditor } from "@agency-portal/components/agency/AgencyReceiptEditor";
 import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
+import { ShiftFactsBlock } from "@agency-portal/components/agency/ShiftFactsBlock";
 import {
 	formatRM,
 	IzCard,
@@ -8,12 +9,7 @@ import {
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
-import {
-	formatPayeeLabel,
-	formatShiftDayDate,
-	formatShiftDuration,
-	formatStampClock,
-} from "@agency-portal/lib/agency-payroll";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
 import {
@@ -202,33 +198,17 @@ function ReceiptRow({
 							· {receiptOutlet(receipt)}
 							{receipt.orderNo ? ` · order ${receipt.orderNo}` : ""}
 						</p>
-						{/* THE SHIFT THE OUTLET POSTED — what they named the night, whether
-						    they marked it special, its window, and when this PR actually
-						    worked it. Without this a stack of receipts from one venue is
-						    indistinguishable, and the reviewer cannot tell which night's
-						    money they are approving. "Shift end" is deliberate: the stamp
-						    is clamped to the scheduled end, so calling it a check-out
-						    would assert a time that never happened on an overtime shift. */}
+						{/* THE SHIFT THE OUTLET POSTED — without it a stack of receipts from
+						    one venue is indistinguishable and the reviewer cannot tell which
+						    night's money they are approving.
+						    THE SAME block the dispute queue draws — one component, not a
+						    second spelling. The agency reads both screens while deciding
+						    the same money, and a one-liner here beside a block there is
+						    how they drift. */}
 						{receipt.shift && (
-							<p className="iz-tiny iz-muted2 mt-0.5">
-								{receipt.shift.eventName?.trim() || "No event name"} ·{" "}
-								{receipt.shift.eventKind === "special"
-									? "Special event"
-									: "Normal shift"}
-								{receipt.shift.slot ? ` · ${receipt.shift.slot}` : ""}
-								{" · "}
-								{formatShiftDayDate(receipt.shift.shiftDate)} · in{" "}
-								{formatStampClock(receipt.shift.checkInAt, "not checked in")} ·
-								end{" "}
-								{formatStampClock(receipt.shift.checkOutAt, "still on duty")} ·{" "}
-								{formatShiftDuration(
-									receipt.shift.checkInAt,
-									receipt.shift.checkOutAt,
-								)}
-								{(receipt.shift.overtimeMinutes ?? 0) > 0
-									? ` · +${receipt.shift.overtimeMinutes}m OT`
-									: ""}
-							</p>
+							<div className="mt-1.5">
+								<ShiftFactsBlock shift={receipt.shift} />
+							</div>
 						)}
 						<p className="iz-tiny iz-muted2 mt-0.5">
 							Logged {formatLoggedAt(receipt.loggedAt)}
