@@ -46,6 +46,7 @@ export function TopBar({
   // Device inset — keeps Close clear of the 3-button / gesture nav bar.
   const insets = useSafeAreaInsets();
   const [readIds, setReadIds] = useState<string[]>([]);
+  const [markingAll, setMarkingAll] = useState(false);
 
   const [rows, setRows] = useState<NotificationRecord[]>([]);
 
@@ -192,6 +193,48 @@ export function TopBar({
             <Text style={styles.sheetHint}>
               Assignments, swaps, PVs, and SOS receipts — tap to open the screen.
             </Text>
+            {/*
+              * MARK ALL READ — real, one POST per unread row.
+              *
+              * There is no bulk endpoint (`/notification` exposes list,
+              * unread-count and POST /:id/read only), so this fans out over the
+              * unread ones. The badge clears optimistically and the list is
+              * re-read from the server afterwards, so a row that failed comes
+              * BACK unread rather than looking cleared — a notification silently
+              * dropped is one the PR never acts on.
+              *
+              * Derived rows (`backed: false`, the awaiting-PV stand-in) have no
+              * server row to mark; they clear locally, which is all they ever
+              * were.
+              */}
+            {unread > 0 && (
+              <Pressable
+                style={styles.markAllBtn}
+                disabled={markingAll}
+                onPress={async () => {
+                  const ids = notifications.filter((n) => !n.read).map((n) => n.id);
+                  setReadIds((prev) => [...prev, ...ids]);
+                  if (!token) return;
+                  setMarkingAll(true);
+                  try {
+                    const backed = notifications.filter((n) => !n.read && n.backed);
+                    await Promise.allSettled(
+                      backed.map((n) => markNotificationRead(token, n.id)),
+                    );
+                    setRows(await fetchMyNotifications(token));
+                  } catch {
+                    /* the 60s poll re-reads and corrects whatever stuck */
+                  } finally {
+                    setMarkingAll(false);
+                  }
+                }}
+              >
+                <Text style={styles.markAllText}>
+                  {markingAll ? 'Marking…' : `Mark all ${unread} as read`}
+                </Text>
+              </Pressable>
+            )}
+
             <ScrollView style={styles.sheetScroll} showsVerticalScrollIndicator={false}>
             {notifications.length === 0 ? (
               <Text style={styles.sheetHint}>No notifications right now.</Text>
@@ -389,6 +432,17 @@ const styles = StyleSheet.create({
   /** Dismiss area ABOVE the sheet — a sibling, never a Pressable ancestor. */
   backdropTap: { flex: 1 },
   sheetScroll: { flexShrink: 1, marginTop: 4 },
+  markAllBtn: {
+    marginTop: 8,
+    alignSelf: 'flex-start',
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(183,156,232,0.4)',
+    backgroundColor: 'rgba(183,156,232,0.12)',
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+  },
+  markAllText: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.violetL },
   sheetCloseBtn: {
     marginTop: 12,
     borderRadius: 12,
