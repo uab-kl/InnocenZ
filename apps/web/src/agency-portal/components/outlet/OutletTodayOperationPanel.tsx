@@ -28,6 +28,7 @@ import {
 	languagesFromPr,
 	rosterSlotAgencyName,
 } from "@agency-portal/lib/agency-demo";
+import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import {
 	OUTLET_LIVE_SALES_SECTION_ID,
 	OUTLET_OPEN_LIVE_SALES_EVENT,
@@ -323,7 +324,32 @@ export function OutletTodayOperationPanel({
 		return counts;
 	}, [staffTonight]);
 
-	const openPrData = openPr ? prs.find((p) => p.id === openPr) : null;
+	/**
+	 * Every PR whose card is on screen, by id.
+	 *
+	 * 🔴 Resolve the sheets from HERE, never from the `prs` store slice. The card
+	 * list above already falls back to building a PR out of `agencyPRs` when the
+	 * marketplace slice has no match — that fallback is what lets a
+	 * backend-sourced PR render at all — but the sheet lookups did a bare
+	 * `prs.find()` with no such fallback. So on a real outlet session every card
+	 * appeared and every button did nothing: the click set its state, the lookup
+	 * returned null, and the render gate below (`openPr && openPrData && …`)
+	 * silently declined to mount the sheet. No error, no empty state, nothing in
+	 * the console — the worst shape a bug can take.
+	 *
+	 * `prs` is the one prop with no backend override — `roster` and `agencyPrs`
+	 * both take one — so it is empty for every real session, and since the demo
+	 * seed was retired it is empty for demo ones too.
+	 *
+	 * The invariant this restores: a card that can be shown is a card whose
+	 * sheets can open.
+	 */
+	const prOnScreenById = useMemo(
+		() => new Map(staffTonight.map((e) => [e.pr.id, e.pr])),
+		[staffTonight],
+	);
+
+	const openPrData = openPr ? (prOnScreenById.get(openPr) ?? null) : null;
 	const openPrCheckedOut = useMemo(
 		() =>
 			staffTonight.find((e) => e.pr.id === openPr)?.displayStatus ===
@@ -339,12 +365,14 @@ export function OutletTodayOperationPanel({
 			? comcardPreviewFromSlot(
 					{
 						prId: comcardPreviewId,
-						prName: prs.find((p) => p.id === comcardPreviewId)?.name ?? "PR",
+						prName: prOnScreenById.get(comcardPreviewId)?.name ?? "PR",
 					},
 					null,
 				)
 			: null;
-	const historyPr = historyPrId ? prs.find((p) => p.id === historyPrId) : null;
+	const historyPr = historyPrId
+		? (prOnScreenById.get(historyPrId) ?? null)
+		: null;
 	const historyPrSlot = historyPrId
 		? rosterTonight.find((s) => s.prId === historyPrId)
 		: undefined;
@@ -363,8 +391,21 @@ export function OutletTodayOperationPanel({
 				outletName,
 				drinkMenu: outletWorkspace.drinkMenu ?? [],
 				rosterSlots: rosterTonight,
-				prIds: shift.prs ?? [],
-				prNameById: Object.fromEntries(prs.map((p) => [p.id, p.name])),
+				// The PRs actually on screen, unioned with the shift's own list: a
+				// backend-mapped shift can carry no `prs` array at all, and a row
+				// keyed off an id with no card is one the Live-sales sheet could
+				// never surface — which is the other half of why that button did
+				// nothing. Names come from the same resolved list for the same
+				// reason; reading `prs` here left every row labelled "PR".
+				prIds: [
+					...new Set([
+						...(shift.prs ?? []),
+						...staffTonight.map((e) => e.pr.id),
+					]),
+				],
+				prNameById: Object.fromEntries(
+					staffTonight.map((e) => [e.pr.id, e.pr.name]),
+				),
 				trainingLevelById: Object.fromEntries(
 					agencyPRs.map((p) => [p.id, p.trainingLevel]),
 				),
@@ -384,7 +425,7 @@ export function OutletTodayOperationPanel({
 			outletWorkspace.happyHourStart,
 			outletWorkspace.happyHourEnd,
 			rosterTonight,
-			prs,
+			staffTonight,
 			agencyPRs,
 			tierRates,
 			prReceiptScans,
@@ -527,10 +568,13 @@ export function OutletTodayOperationPanel({
 								? rosterSlotAgencyName(slot, ownerAgencyName)
 								: ownerAgencyName;
 							const opsLine = [
+								// A stamp renders LOCAL time. A backend slot carries the full
+								// UTC ISO string, so this line read
+								// "Out 2026-08-06T06:17:45.947Z" — and 06:17Z is 2:17 pm here.
 								displayStatus === "on-duty" && slot?.checkedInAt
-									? `In ${slot.checkedInAt}`
+									? `In ${formatAttendanceStamp(slot.checkedInAt, slot.dateIso)}`
 									: displayStatus === "checked-out" && slot?.checkedOutAt
-										? `Out ${slot.checkedOutAt}`
+										? `Out ${formatAttendanceStamp(slot.checkedOutAt, slot.dateIso)}`
 										: null,
 								drinkUnits ? `${drinkUnits} drinks` : null,
 								agencyLabel ?? null,

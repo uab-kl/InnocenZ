@@ -1604,5 +1604,16 @@ export function buildBlankPortalReset() {
 		);
 	}
 
-	return blank as ReturnType<typeof explicitBlankSlices>;
+	// The loop above copies EVERY demo key, so the object really does carry all
+	// of them — the old cast to `ReturnType<typeof explicitBlankSlices>` named
+	// only the handful declared by hand and silently hid the other ~12
+	// (`checkedIn`, `drinks`, `prPortfolio`, `paymentCardLast4`, …). That went
+	// unnoticed while this was only ever fed to `setState`, which takes a
+	// partial; it surfaced the moment the store used it as its INITIAL state and
+	// a third of the slices came back untyped.
+	//
+	// `prComcard` is excluded because it is genuinely absent: it lands in
+	// `unblankable` and is never assigned, which is what leaves the PR portal's
+	// comcard alone. Naming it here would be the same lie in the other direction.
+	return blank as Omit<ReturnType<typeof buildDemoStoreReset>, "prComcard">;
 }

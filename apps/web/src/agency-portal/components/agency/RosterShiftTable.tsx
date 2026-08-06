@@ -20,6 +20,7 @@ import {
 	rosterPageDisplayStatus,
 	rosterSlotAgencyName,
 } from "@agency-portal/lib/agency-demo";
+import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import {
 	findOutletShiftForRosterSlot,
 	type OutletDrinkPrice,
@@ -71,35 +72,6 @@ function resolveRosterSlotFloorSales(
 
 function formatRosterSlotDrinks(floor: OutletPrLiveSales): string {
 	return floor.drinkSalesRm > 0 ? formatRM(floor.drinkSalesRm) : "—";
-}
-
-/**
- * Check-in stamps arrive as a UTC ISO string, and the cell used to print it
- * raw: "2026-07-29T04:01:04.748Z". Unreadable at a glance, and actively
- * misleading — 04:01Z is 12:01 pm in Malaysia, so a lunchtime check-in looked
- * like a 4am one.
- *
- * Shows local time. The date is added only when the stamp did not land on the
- * shift's own date, which is the case worth noticing: a shift running past
- * midnight, or a PR who checked in a day early.
- */
-function formatCheckInStamp(iso: string, shiftDateIso?: string): string {
-	const at = new Date(iso);
-	if (Number.isNaN(at.getTime())) return iso;
-
-	const time = at.toLocaleTimeString(undefined, {
-		hour: "numeric",
-		minute: "2-digit",
-	});
-	// en-CA gives yyyy-MM-dd, which is the shape dateIso already uses.
-	const stampDate = at.toLocaleDateString("en-CA");
-	if (!shiftDateIso || stampDate === shiftDateIso) return time;
-
-	const day = at.toLocaleDateString(undefined, {
-		day: "numeric",
-		month: "short",
-	});
-	return `${day} · ${time}`;
 }
 
 function formatRosterSlotTips(floor: OutletPrLiveSales): string {
@@ -520,7 +492,7 @@ function RosterTableRow({
 				title={slot.checkedInAt ?? undefined}
 			>
 				{slot.checkedInAt
-					? formatCheckInStamp(slot.checkedInAt, slot.dateIso)
+					? formatAttendanceStamp(slot.checkedInAt, slot.dateIso)
 					: "—"}
 			</td>
 			<td className="iz-portal-table-status">
@@ -683,7 +655,11 @@ function RosterShiftCard({
 			</div>
 			<div className="iz-roster-card-meta mt-2">
 				<span>{formatRosterShiftTime(slot)}</span>
-				{slot.checkedInAt && <span>In {slot.checkedInAt}</span>}
+				{slot.checkedInAt && (
+					<span>
+						In {formatAttendanceStamp(slot.checkedInAt, slot.dateIso)}
+					</span>
+				)}
 				<span>
 					Drinks{" "}
 					{onOpenEarningsSheet ? (

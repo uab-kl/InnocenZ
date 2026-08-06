@@ -25,6 +25,7 @@ import {
 } from "@agency-portal/components/outlet/outlet-history-ui";
 import { ShiftHistoryExpandableMoneyBlock } from "@agency-portal/components/outlet/ShiftHistoryExpandableMoneyBlock";
 import { useAgencyRatings } from "@agency-portal/hooks/use-agency-ratings";
+import { useOutletHistory } from "@agency-portal/hooks/use-outlet-history";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import { getLiveTodayIso } from "@agency-portal/lib/demo-clock";
 import { shiftHistoryForOutlet } from "@agency-portal/lib/portal-sync";
@@ -726,7 +727,18 @@ function ShiftHistoryShiftCard({
 	);
 }
 
-/** Outlet portal — shift-by-shift history for one PR at the current outlet. */
+/**
+ * Outlet portal — shift-by-shift history for one PR at the current outlet.
+ *
+ * 🔴 Reads the BACKEND on a real session, exactly like the outlet History screen
+ * (routes/outlet/history.tsx). This used to read `store.shiftHistory` and
+ * nothing else, so once the demo seed was retired every PR on the Today panel
+ * reported "No shift history yet" while the database held sealed nights for
+ * them — Vicky alone had 8 completed assignments at Emhub Testing. The card that
+ * opens this sheet renders from backend props, so the sheet behind it has to
+ * come from the same source; a sheet fed by a slice its own card doesn't use is
+ * how an empty state ends up lying.
+ */
 export function OutletPrShiftHistorySheet({
 	open,
 	onClose,
@@ -742,24 +754,29 @@ export function OutletPrShiftHistorySheet({
 	outletName: string;
 	agencyName?: string;
 }) {
-	const shiftHistory = useStore((s) => s.shiftHistory) ?? [];
+	const backend = useOutletHistory();
+	const demoShiftHistory = useStore((s) => s.shiftHistory) ?? [];
 	const demoRatings = useStore((s) => s.ratings);
 	const backendRatings = useAgencyRatings();
 	const outletRatings = backendRatings.backed
 		? backendRatings.ratings
 		: demoRatings;
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
-	const agencyPRs = useStore((s) => s.agencyPRs);
+	const storeAgencyPRs = useStore((s) => s.agencyPRs);
+	// Tier drives the commission split below, and on a real session the demo
+	// slice is empty — take the roster from wherever the rows came from.
+	const agencyPRs = backend.backed ? backend.prs : storeAgencyPRs;
 	const perDrinkRm = useStore((s) => s.outletWorkspace.perDrinkRm);
-	const rows = useMemo(
-		() =>
-			sortShiftHistoryDesc(
-				shiftHistoryForOutlet(shiftHistory, outletName).filter(
-					(r) => r.prId === prId,
-				),
-			),
-		[shiftHistory, outletName, prId],
-	);
+	const rows = useMemo(() => {
+		// Backend rows are already scoped server-side to the caller's own venues
+		// and are labelled with the signed-in outlet's name, so re-filtering them
+		// by the `outletName` prop (which comes from the demo workspace slice)
+		// would drop every row whenever those two names disagree.
+		const source = backend.backed
+			? backend.rows
+			: shiftHistoryForOutlet(demoShiftHistory, outletName);
+		return sortShiftHistoryDesc(source.filter((r) => r.prId === prId));
+	}, [backend.backed, backend.rows, demoShiftHistory, outletName, prId]);
 	const totals = useMemo(
 		() => ({
 			totalPayout: rows.reduce((a, r) => a + r.totalPayout, 0),
@@ -815,8 +832,12 @@ export function OutletPrShiftHistorySheet({
 
 			{rows.length === 0 ? (
 				<IzCard className="text-center">
+					{/* "Nothing here" and "not fetched yet" are different answers — say
+					    which one it is, or an in-flight request reads as a verdict. */}
 					<p className="iz-sm iz-muted">
-						No shift history yet for {prName} at {outletName}
+						{backend.isLoading
+							? "Loading shift history…"
+							: `No shift history yet for ${prName} at ${outletName}`}
 					</p>
 				</IzCard>
 			) : (

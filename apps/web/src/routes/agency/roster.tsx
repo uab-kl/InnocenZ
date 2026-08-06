@@ -41,6 +41,7 @@ import {
 	listAvailableShiftsForEarlyReleaseReassign,
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
+import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
@@ -925,7 +926,10 @@ function EditRosterModal({
 						{slot.date}
 					</span>
 					<span className="iz-sheet-meta-pill">
-						Released early{slot.checkedOutAt ? ` · ${slot.checkedOutAt}` : ""}
+						Released early
+						{slot.checkedOutAt
+							? ` · ${formatAttendanceStamp(slot.checkedOutAt, slot.dateIso)}`
+							: ""}
 					</span>
 				</div>
 

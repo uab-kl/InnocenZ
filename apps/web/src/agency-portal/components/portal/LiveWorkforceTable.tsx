@@ -21,6 +21,7 @@ import {
 	rosterSlotsForAgency,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
+import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import {
 	type OutletPrLiveSales,
 	type RosterShiftEarningsContext,
@@ -127,7 +128,11 @@ function WorkforceRow({
 				{slot ? formatRosterShiftTime(slot) : "—"}
 			</td>
 			<td className="iz-portal-table-meta">
-				{slot?.checkedInAt ?? entry.checkIn ?? "—"}
+				{(() => {
+					// Local time, never the raw UTC stamp a backend slot carries.
+					const stamp = slot?.checkedInAt ?? entry.checkIn;
+					return stamp ? formatAttendanceStamp(stamp, slot?.dateIso) : "—";
+				})()}
 			</td>
 			<td className="iz-portal-table-status">
 				<IzPill variant={st.variant} className="!py-0.5 !text-[9px]">

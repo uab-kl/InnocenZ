@@ -508,6 +508,23 @@ export class PrRepositoryClass {
       }
       // Outlet callers only see PRs actually rostered at one of their venues.
       // An empty array must match nothing, not everything — guard before the join.
+      //
+      // 🔴 This query iterates MEMBERSHIPS, and every row it emits claims
+      // `id === userId`. Unlike the agency path (pinned to one `agencyId`), an
+      // outlet caller is pinned to none — so an account with two `agency_pr`
+      // rows came back TWICE under the same id, carrying two different tiers.
+      // The web keys those rows by id, so the last row won and the outlet portal
+      // showed a tier from an agency that had nothing to do with the shift:
+      // Vicky read "Tier I" (her Delta membership) on an Atlas-supplied night
+      // where the agency portal correctly read "Tier III".
+      //
+      // The membership an outlet is entitled to see is the one belonging to the
+      // agency that actually SUPPLIED the PR to its venue, so match the
+      // assignment's own `agency_id` too. That collapses the duplicate, fixes
+      // the tier, and makes `totalCount` a count of PRs again rather than of
+      // memberships. Nothing is lost by narrowing: `shift_assignment.agency_id`
+      // is NOT NULL and every live row resolves a membership — verified against
+      // the database by scripts/probe-outlet-pr-tier-and-history.ts.
       if (filter?.assignedToOutletIds) {
         if (filter.assignedToOutletIds.length === 0) return { prs: [], totalCount: 0 };
         conditions.push(
@@ -523,6 +540,7 @@ export class PrRepositoryClass {
                   // on rows that predate the dual-write, so this is the
                   // reliable key to join a membership's `userId` against.
                   eq(ShiftAssignmentTable.prId, AgencyPrTable.userId),
+                  eq(ShiftAssignmentTable.agencyId, AgencyPrTable.agencyId),
                   inArray(ShiftTable.outletId, filter.assignedToOutletIds),
                 ),
               ),
