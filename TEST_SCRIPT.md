@@ -316,6 +316,27 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ STILL OPEN after the one-source sweep (verified 6 Aug 2026, NOT fixed)
+
+The `pr-data-one-source` sweep shipped in `98ee4a0`; its remaining findings were re-checked
+against the tree, and these three are still true:
+
+1. **Two cache keys for one endpoint.** `["roster","prs"]` and `["outlet","today","prs"]` both
+   hold the same `GET /pr`. Every agency-side write invalidates only the first, so an outlet tab
+   open in the same browser keeps stale PR facts for up to 60s. This is the **ONE MOMENT** half
+   below — one source with two caches still shows two answers.
+2. **Admin cannot show languages at all.** `services/pr/prs.ts` reads `GET /user`, not `GET /pr`,
+   and that response has no `languages` / `comcardImage`. Not a mapper bug — the endpoint shape
+   is missing the fields, so the admin PR sheet structurally cannot agree with the other screens.
+3. **~40 raw name prints** still bypass `formatPayeeLabel` — concentrated in outlet history, GPS /
+   attendance panels, special-service cards, and the name drawn ON the comcard artwork
+   (`Comcard3dPreview`, `PortfolioComcardVisual`). Also `routes/outlet/ratings.tsx`, which prints
+   the backend's `prName` (legal name) so a rating card and the roster name the same person
+   differently.
+
+Fixed on the way past: `pv.tsx` printed `resolvePvPrName` in one list and `resolvePvPrLabel` in
+its sibling — same screen, same PR, two names (`932678e`).
+
 ### ▶ SETTLED — an agency sees only ITS OWN tier (owner decision, 6 Aug 2026)
 
 Owner asked *"agency poster page and manage pr page where is the others outlet tier ?"* after the
