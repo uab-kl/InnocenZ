@@ -24,9 +24,13 @@ import { formatCents } from '@/features/payment-voucher/payment-voucher-balance'
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository';
 import { buildOvertimeLine, overtimeDedupeRef } from '@/features/payment-voucher/overtime-line';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
-import { overtimeFromStamps } from './overtime';
-import { earnedWage } from './wage';
-import { shiftsOverlap, shiftWindowInstants } from '@/util/slot-window';
+import { sealCheckOut } from './seal-checkout';
+import {
+  PR_TIER_TO_OUTLET_LABEL,
+  mergeRate,
+  resolveTierWages as resolveTierWagesShared,
+} from './resolve-tier-wages';
+import { shiftsOverlap } from '@/util/slot-window';
 import {
   CheckInMineSchema,
   CreateShiftAssignmentSchema,
@@ -42,47 +46,6 @@ const PG_UNIQUE_VIOLATION = '23505';
 /** MC / leave proof bounds — the phone downscales, the server still enforces. */
 const MAX_LEAVE_PHOTOS = 5;
 const MAX_LEAVE_PHOTO_CHARS = 3_000_000;
-
-/**
- * The `pr.tier` enum maps to the outlet workspace's tier-rate labels. Ranked
- * tiers carry a label (`outlet_tier_rate.kind='tier'`); commission-only is a
- * label-less row (`kind='commission_only'`), so it resolves via the flag below,
- * not a label. Keep this in step with `prTierValues` and the outlet portal's
- * `OUTLET_PR_TIERS`.
- */
-const PR_TIER_TO_OUTLET_LABEL: Record<string, string> = {
-  tier_1: 'Tier I',
-  tier_2: 'Tier II',
-  tier_3: 'Tier III',
-  tier_4: 'Tier IV',
-  tier_5: 'Tier V',
-  servant: 'Servant',
-};
-
-/**
- * Effective rate for one assignment: the per-shift override wins field-by-field
- * over the outlet workspace default; the happy-hour window always comes from the
- * workspace (a shift override never moves it). `overridden` flags that a shift
- * override row applied, so the mobile app can show "rate set for this shift".
- * Returns null only when neither source has a rate configured.
- */
-function mergeRate(
-  ws: ResolvedTierRate | undefined,
-  ov: ShiftTierOverride | undefined,
-): (ResolvedTierRate & { overridden: boolean }) | null {
-  if (!ws && !ov) return null;
-  return {
-    wagePerHour: ov?.wagePerHour ?? ws?.wagePerHour ?? null,
-    drinkPct: ov?.drinkPct ?? ws?.drinkPct ?? '0',
-    happyHourDrinkPct: ov?.happyHourDrinkPct ?? ws?.happyHourDrinkPct ?? null,
-    tipPct: ov?.tipPct ?? ws?.tipPct ?? '0',
-    otAfterHours: ov?.otAfterHours ?? ws?.otAfterHours ?? null,
-    targetSalesRm: ov?.targetSalesRm ?? ws?.targetSalesRm ?? null,
-    happyHourStart: ws?.happyHourStart ?? '',
-    happyHourEnd: ws?.happyHourEnd ?? '',
-    overridden: !!ov,
-  };
-}
 
 /**
  * A caller is scoped one of three ways: admin (everything), agency member
@@ -134,30 +97,14 @@ export class ShiftAssignmentControllerClass {
    * Post Job "Pay by PR tier → Wages", else the outlet workspace tier rate.
    * Commission-only PRs have no wages row (null).
    */
-  private async resolveTierWages(
+  private resolveTierWages(
     pr: { tier: string },
     shiftId: string,
     outletId: string,
   ): Promise<string | null> {
-    const commissionOnly = pr.tier === 'commission_only';
-    if (commissionOnly) return null;
-    const tierLabel = PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null;
-    const [rateByOutlet, overrideByShift] = await Promise.all([
-      this.shiftAssignmentRepository.resolveTierRatesForOutlets({
-        outletIds: [outletId],
-        tierLabel,
-        commissionOnly,
-      }),
-      this.shiftAssignmentRepository.resolveShiftTierOverrides({
-        shiftIds: [shiftId],
-        tierLabel,
-        commissionOnly,
-      }),
-    ]);
-    const rate = mergeRate(rateByOutlet.get(outletId), overrideByShift.get(shiftId));
-    if (rate?.wagePerHour == null || rate.wagePerHour === '') return null;
-    const n = Number(rate.wagePerHour);
-    return Number.isFinite(n) ? n.toFixed(2) : null;
+    // Delegates to the shared resolver: cut-loss releases a PR through the same
+    // seal, so it must reach the same day rate. Two copies would be two answers.
+    return resolveTierWagesShared(this.shiftAssignmentRepository, pr, shiftId, outletId);
   }
 
   private resolveScope(req: Request): Promise<OrgScope> {
@@ -394,65 +341,30 @@ export class ShiftAssignmentControllerClass {
       // clamps below the check-in stamp (a PR who started late still closes
       // with a forward duration), and an unparseable slot means no clamp.
       const now = new Date();
-      // Read in the VENUE's timezone, not the server's — see shiftWindowInstants.
-      // The same window now decides two things, and they must be the same window:
-      // where the clamp stops, and what the wage is pro-rated against.
-      const scheduled = shift ? shiftWindowInstants(shift.shiftDate, shift.slot) : null;
-      const scheduledEnd = scheduled?.end ?? null;
-      const clampTo =
-        scheduledEnd && now > scheduledEnd && scheduledEnd > new Date(existing.checkInAt)
-          ? scheduledEnd
-          : now;
-      // RECORD the overtime before the clamp destroys the evidence for it.
-      //
-      // The clamp overwrites `check_out_at` with the scheduled end, so after this
-      // update the row no longer knows when the PR actually stopped. Deriving the
-      // minutes later is therefore impossible — it has to happen here or not at
-      // all, which is why migration 0077's columns sat unwritten and every hour of
-      // overtime worked until now is unrecoverable.
-      const overtime = overtimeFromStamps(new Date(existing.checkInAt), scheduledEnd, now);
-      // What the shift actually EARNED, from the stamps. `tierWages` is the day
-      // rate — the forecast — and sealing it flat is what paid a PR who left
-      // three hours early the full day, on the ordinary check-out path, with no
-      // feature involved. Priced off `clampTo` rather than `now` so a forgotten
-      // check-out cannot buy time past the window twice: the clamp already caps
-      // it, and anything beyond is overtime for the agency to decide.
-      const earned = earnedWage({
-        dayRate: tierWages,
-        scheduled,
+      // The clamp, the overtime claim and the wage — all of it. Shared with the
+      // cut-loss release path so a PR sent home early and a PR who taps out
+      // themselves are paid identically for identical hours; see seal-checkout.ts.
+      const seal = sealCheckOut({
         checkInAt: new Date(existing.checkInAt),
-        checkOutAt: clampTo,
+        shiftDate: shift?.shiftDate ?? null,
+        slot: shift?.slot ?? null,
+        dayRate: tierWages,
+        now,
       });
+      const { scheduled, overtime, earned } = seal;
+      const scheduledEnd = scheduled?.end ?? null;
+      const clampTo = seal.checkOutAt;
       const assignment = await this.shiftAssignmentRepository.update(id, {
-        checkOutAt: clampTo,
-        // NULL status means "no overtime on this shift" — the overwhelming
-        // majority of rows — so both columns are written only when there is a
-        // real claim. `pending` is the only state a check-out may set: approval
-        // belongs to the agency, and a shift that sealed itself approved would be
-        // a PR authorising their own pay.
-        ...(overtime.minutes != null
-          ? { overtimeMinutes: overtime.minutes, overtimeStatus: 'pending' as const }
-          : {}),
-        status: 'completed',
+        ...seal.columns,
+        // The only thing this path adds over the shared close: where the phone
+        // said it was. A release has no fix behind it at all, which is precisely
+        // why `released_by` exists to tell the two apart.
         ...(outFix
           ? {
               checkOutLat: String(outFix.lat),
               checkOutLng: String(outFix.lng),
               checkOutDistanceM: outFix.distanceM,
               checkOutAccuracyM: outFix.accuracyM,
-            }
-          : {}),
-        // Seal what the shift EARNED, plus the evidence for it. Written together
-        // or not at all: an amount without its divisor is a figure nobody can
-        // check, and `dayRateAmount` is what keeps overtime priced off the full
-        // rate after `payAmount` has been reduced.
-        ...(earned.amount != null
-          ? {
-              payAmount: earned.amount,
-              dayRateAmount: earned.dayRate,
-              workedMinutes: earned.workedMinutes,
-              scheduledMinutes: earned.scheduledMinutes,
-              payRule: earned.rule,
             }
           : {}),
         updatedBy: actor,
@@ -1302,11 +1214,20 @@ export class ShiftAssignmentControllerClass {
       // also meets the next morning's 02:00–06:00 — the same-date-only test
       // this replaced never compared those, and overnight is the normal shape
       // here. Label-only slots carry no window and never clash.
+      //
+      // A CLOSED shift never clashes. `completed` joins the excluded statuses
+      // because cut-loss releases a PR mid-shift precisely so they can be sent
+      // somewhere else the same night: their released row still carries the
+      // original window, so an overlap test that counted it would refuse the
+      // re-assignment the release existed to make possible. A row is closed when
+      // it has a check-out stamp, and a stamp is a fact about the past — it
+      // cannot collide with work not yet done.
       const others = await this.shiftAssignmentRepository.listForPr(pr.id);
       const clash = others.find(
         (a) =>
           a.shiftId !== shift.id &&
-          !['cancelled', 'no_show', 'leave_approved'].includes(a.status) &&
+          !['cancelled', 'no_show', 'leave_approved', 'completed'].includes(a.status) &&
+          !a.checkOutAt &&
           shiftsOverlap(shift.shiftDate, shift.slot, a.shiftDate, a.slot),
       );
       if (clash) {

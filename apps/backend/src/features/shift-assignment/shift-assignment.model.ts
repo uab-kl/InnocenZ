@@ -148,6 +148,18 @@ export const ShiftAssignmentTable = MainSchema.table(
     workedMinutes: integer('worked_minutes'),
     scheduledMinutes: integer('scheduled_minutes'),
     payRule: varchar('pay_rule', { length: 20 }).$type<WageRule>(),
+    /**
+     * WHO closed this shift, when it was not the PR (migration 0098, cut-loss).
+     *
+     * An approved release stamps check-out on the PR's behalf, and the stamp it
+     * writes is indistinguishable from one the PR tapped — same column, same
+     * shape. Nothing else records the difference and it cannot be inferred
+     * afterwards, which matters twice over: the PR is owed an explanation for a
+     * short wage, and a released stamp has no geofence fix and no selfie behind
+     * it. NULL on every row a PR closed themselves.
+     */
+    releasedBy: varchar('released_by'),
+    releaseReason: varchar('release_reason', { length: 500 }),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

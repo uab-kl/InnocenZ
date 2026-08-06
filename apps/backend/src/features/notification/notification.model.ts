@@ -34,6 +34,18 @@ export const notificationKindValues = [
   'agency_join_resolved',
   /** A PR's average rating fell below the warning threshold (migration 0067). */
   'pr_rating_low',
+  /** An outlet asked to cut a shift's cost — waiting on the agency (0098). */
+  'cutlost_requested',
+  /** The agency approved or rejected that request. Outlet-addressed. */
+  'cutlost_decided',
+  /**
+   * This PR was sent home early by an approved cut-loss (0098). PR-addressed.
+   *
+   * Deliberately NOT `shift_cancelled`: the shift was not cancelled, it was
+   * shortened. They worked part of it and are owed part of the day, and filing
+   * this under cancellation would tell them the opposite of what happened.
+   */
+  'shift_released_early',
   /**
    * A PR dropped out of a shift and the AGENCY needs to find cover (0068).
    * Agency-addressed, like overtime_pending_approval.
