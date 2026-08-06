@@ -27,7 +27,9 @@ import {
 	agencyIdOf,
 	languagesFromPr,
 	rosterSlotAgencyName,
+	splitCardLanguages,
 } from "@agency-portal/lib/agency-demo";
+import { recordRating } from "@agency-portal/lib/pr-rating-summary";
 import {
 	OUTLET_LIVE_SALES_SECTION_ID,
 	OUTLET_OPEN_LIVE_SALES_EVENT,
@@ -281,9 +283,11 @@ export function OutletTodayOperationPanel({
 						id: agencyPr!.id,
 						name: agencyPr!.name,
 						rating: agencyPr!.rating,
-						languages: agencyPr!.languages.map((l) =>
-							l.length <= 3 ? l : l.slice(0, 2).toUpperCase(),
-						),
+						// The stored spelling, whole. This used to rewrite anything longer
+						// than three characters as its first two letters upper-cased, so
+						// "Cantonese" became "CA" — a fourth way to write one value that
+						// user_profile.languages holds exactly once.
+						languages: agencyPr!.languages,
 						status: "booked" as const,
 						avatar: "✨",
 						comcardImageUrl: agencyPr!.comcardImageUrl ?? null,
@@ -558,7 +562,13 @@ export function OutletTodayOperationPanel({
 										<Comcard3dPreviewCard
 											pr={comcardPr}
 											trainingLevel={agencyProfile?.trainingLevel}
-											rating={agencyProfile?.rating ?? pr.rating}
+											// `agencyProfile.rating` is the mapper's 0 placeholder
+											// on every backend PR — passing it printed "0★" on a
+											// card whose owner has never been rated at all.
+											rating={
+												(agencyProfile ? recordRating(agencyProfile) : null) ??
+												pr.rating
+											}
 											languages={langs}
 											place={agencyProfile?.place}
 										/>
@@ -669,25 +679,29 @@ export function OutletTodayOperationPanel({
 							{comcardPreviewProfile?.trainingLevel && (
 								<TierBadge tier={comcardPreviewProfile.trainingLevel} />
 							)}
-							{comcardPreviewProfile?.rating != null && (
-								<IzPill variant="gold" className="!py-0.5 !text-[9px]">
-									{comcardPreviewProfile.rating}★
-								</IzPill>
-							)}
-							{(comcardPreviewProfile
-								? languagesFromPr(comcardPreviewProfile)
-								: []
-							)
-								.slice(0, 3)
-								.map((lang) => (
-									<IzPill
-										key={lang}
-										variant="violet"
-										className="!py-0.5 !text-[9px]"
-									>
-										{lang}
+							{/* `rating: 0` is "GET /pr carries no rating", not one star. */}
+							{comcardPreviewProfile != null &&
+								recordRating(comcardPreviewProfile) !== null && (
+									<IzPill variant="gold" className="!py-0.5 !text-[9px]">
+										{recordRating(comcardPreviewProfile)}★
 									</IzPill>
-								))}
+								)}
+							{/* Every language on the account. The `slice(0, 3)` here was the
+							    same silent truncation as the agency roster popover — the
+							    outlet and the agency read one user_profile row and printed
+							    different answers from it. */}
+							{splitCardLanguages(
+								comcardPreviewProfile ?? { languages: [] },
+								Number.POSITIVE_INFINITY,
+							).shown.map((lang) => (
+								<IzPill
+									key={lang}
+									variant="violet"
+									className="!py-0.5 !text-[9px]"
+								>
+									{lang}
+								</IzPill>
+							))}
 						</div>
 					</div>
 				)}

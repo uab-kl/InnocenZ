@@ -27,6 +27,16 @@ export type PrAgencyLink = {
   agencyName: string;
   agencyCode: string;
   approveStatus: AgencyPrApproveStatus;
+  /**
+   * THIS agency's grading of the PR (`agency_pr.tier`), e.g. 'tier_3'.
+   *
+   * Per-membership, not global: a PR can be tier_3 at one agency and tier_1 at
+   * another, and both are true. It is carried here because the PR's own phone
+   * profile printed a hardcoded "TIER V" — a tier that exists nowhere in the
+   * database — beside a Manage-PR card reading tier_3 off this very row.
+   * Null only when the agency has not graded them yet.
+   */
+  tier: string | null;
 };
 
 /** A PR on an agency's membership list, with account fields folded in. */
@@ -90,6 +100,7 @@ export class AgencyPrRepository {
           agencyName: AgencyTable.name,
           agencyCode: AgencyTable.agencyCode,
           approveStatus: AgencyPrTable.approveStatus,
+          tier: AgencyPrTable.tier,
         })
         .from(AgencyPrTable)
         .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyPrTable.agencyId))

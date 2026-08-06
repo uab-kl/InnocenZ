@@ -22,6 +22,7 @@ import {
 	IzSelect,
 } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
+import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
 import { useOutletSwapMutations } from "@agency-portal/hooks/use-outlet-swap-mutations";
 import {
 	assignmentStatusFromRoster,
@@ -36,6 +37,7 @@ import {
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
 	type AgencyOutletAvailableShift,
 	listAvailableShiftsForEarlyReleaseReassign,
@@ -44,6 +46,7 @@ import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
 import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
+import { recordRating } from "@agency-portal/lib/pr-rating-summary";
 import {
 	DEFAULT_ROSTER_DATE_ISO,
 	getPrScheduleState,
@@ -104,9 +107,31 @@ function AgencyRoster() {
 	const allAgencyPRs = useStore((s) => s.agencyPRs);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
 	const toast = useStore((s) => s.toast);
+	// 🔴 THE ROSTER'S PR FACTS COME FROM THE SAME PLACE MANAGE PR READS.
+	//
+	// This used to be `scopeToAgency(useStore(s => s.agencyPRs), …)` — the DEMO
+	// slice, which `buildBlankPortalReset` sets to [] on every real login. So the
+	// Shifts table below was handed backend slots (real UUID prIds) together with
+	// an EMPTY roster, and `prById.get(slot.prId)` was undefined for every row.
+	// That one mismatch is the whole reported bug: no comcard photo, height /
+	// weight / age as em-dashes, NO languages at all (which is why the popover
+	// showed three of Vicky's four — it was actually showing the slot's own
+	// nothing), no tier tag, no place, an empty swap-replacement picker, and a
+	// Planning filter header reading "0 of 0 PRs" above a table full of rows.
+	//
+	// `useAgencyPrs` owns the very ["roster","prs"] cache entry `useRosterSlots`
+	// already fills, so this is zero extra network — the same rows, put through
+	// `managedPrFromBackend` instead of thrown away. The join is exact:
+	// AgencyManagedPR.id === PrPersonnel.id === agency_pr.user_id === slot.prId.
+	//
+	// Demo sessions have no backend identity and their PRs only exist in the
+	// store, so they keep reading it — `scopeToAgency` is theirs alone now
+	// (GET /pr is already agency-scoped server-side).
+	const backed = useMemo(() => getAgencyIdentity() !== null, []);
+	const { prs: backendPRs } = useAgencyPrs({ enabled: backed });
 	const agencyPRs = useMemo(
-		() => scopeToAgency(allAgencyPRs, activeAgencyId),
-		[allAgencyPRs, activeAgencyId],
+		() => (backed ? backendPRs : scopeToAgency(allAgencyPRs, activeAgencyId)),
+		[backed, backendPRs, allAgencyPRs, activeAgencyId],
 	);
 	const [planningDate, setPlanningDate] = useState(DEFAULT_ROSTER_DATE_ISO);
 	const weekStartIso = mondayOfWeek(planningDate);
@@ -374,6 +399,17 @@ function AgencyRoster() {
 	);
 
 	const openEdit = useCallback((id: string) => setEditId(id), []);
+
+	/** "(Vicky) Victoria Tan Mei Lin" for a slot, from the canonical PR record. */
+	const prLabelForSlot = useCallback(
+		(slot: AgencyRosterSlot) => {
+			const pr = agencyPRs.find((p) => p.id === slot.prId);
+			// No record behind the slot: the slot's own name is genuinely all we
+			// hold — do not invent the missing half.
+			return pr ? formatPayeeLabel(pr.name, pr.icName) : slot.prName;
+		},
+		[agencyPRs],
+	);
 
 	return (
 		<div className="iz-screen iz-roster-page">
@@ -683,6 +719,10 @@ function AgencyRoster() {
 			{editSlot && (
 				<EditRosterModal
 					slot={editSlot}
+					// The canonical record names the person; `slot.prName` is the floor
+					// nickname the slot mapper carries, so this sheet said "Vicky" while
+					// the voucher for the same shift said "(Vicky) Victoria Tan Mei Lin".
+					prLabel={prLabelForSlot(editSlot)}
 					onClose={() => setEditId(null)}
 					onSave={(patch) => {
 						handleEditSave(editSlot.id, patch);
@@ -765,9 +805,18 @@ function AgencyRoster() {
 							className="mb-4 w-full"
 						>
 							<option value="">Select PR…</option>
+							{/* One payee spelling, and no invented score: `p.rating` is the
+							    mapper's 0 placeholder on every backend PR, so this option
+							    used to read "Vicky · 0★ · Tier I". */}
 							{replacementCandidates.map((p) => (
 								<option key={p.id} value={p.id}>
-									{p.name} · {p.rating}★ · {p.trainingLevel}
+									{[
+										formatPayeeLabel(p.name, p.icName),
+										recordRating(p) !== null ? `${recordRating(p)}★` : null,
+										p.trainingLevel,
+									]
+										.filter(Boolean)
+										.join(" · ")}
 								</option>
 							))}
 						</IzSelect>
@@ -792,6 +841,7 @@ function AgencyRoster() {
 
 function EditRosterModal({
 	slot,
+	prLabel,
 	onClose,
 	onSave,
 	onRequestOutletSwap,
@@ -802,6 +852,8 @@ function EditRosterModal({
 	onUnassign,
 }: {
 	slot: AgencyRosterSlot;
+	/** The PR named as the rest of the portal names them — see formatPayeeLabel. */
+	prLabel: string;
 	onClose: () => void;
 	onSave: (patch: Partial<AgencyRosterSlot>) => void;
 	/** `toShiftId` is the destination SHIFT, not an outlet — the swap record
@@ -902,7 +954,7 @@ function EditRosterModal({
 						<p className="iz-tiny iz-muted2 uppercase tracking-widest">
 							Reassign
 						</p>
-						<h3>{slot.prName}</h3>
+						<h3>{prLabel}</h3>
 					</div>
 					<button
 						type="button"
@@ -994,7 +1046,7 @@ function EditRosterModal({
 						<p className="iz-tiny iz-muted2 uppercase tracking-widest">
 							Edit shift
 						</p>
-						<h3>{slot.prName}</h3>
+						<h3>{prLabel}</h3>
 					</div>
 					<button
 						type="button"
@@ -1035,7 +1087,7 @@ function EditRosterModal({
 							Request outlet swap
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							{slot.prName} must approve before the outlet changes.
+							{prLabel} must approve before the outlet changes.
 						</p>
 						<div className="mt-3">
 							<span className="iz-field-label">New shift</span>
@@ -1126,7 +1178,7 @@ function EditRosterModal({
 							Cancel shift
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							Remove this assignment — {slot.prName} will be notified and freed
+							Remove this assignment — {prLabel} will be notified and freed
 							for {slot.date}.
 						</p>
 						<button
@@ -1147,7 +1199,7 @@ function EditRosterModal({
 							Remove assignment
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
-							Unassign {slot.prName} from this shift. The assignment is deleted
+							Unassign {prLabel} from this shift. The assignment is deleted
 							and the slot reopens — use this to undo an assignment, not to
 							cancel a confirmed shift.
 						</p>
@@ -1187,7 +1239,7 @@ function EditRosterModal({
 			>
 				<IzCardTitle>Cancel this shift?</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3">
-					{slot.prName} at{" "}
+					{prLabel} at{" "}
 					<strong className="text-[var(--iz-txt)]">{slot.outlet}</strong> ·{" "}
 					{slot.date} · {slot.shift}. This cannot be undone.
 				</p>
@@ -1220,7 +1272,7 @@ function EditRosterModal({
 			>
 				<IzCardTitle>Remove this assignment?</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3">
-					{slot.prName} at{" "}
+					{prLabel} at{" "}
 					<strong className="text-[var(--iz-txt)]">{slot.outlet}</strong> ·{" "}
 					{slot.date} · {slot.shift}. The assignment row is deleted and the slot
 					reopens. This cannot be undone.

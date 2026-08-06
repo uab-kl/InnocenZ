@@ -8,6 +8,7 @@ import type {
 	AgencyRosterSlot,
 	RosterSlotStatus,
 } from "@agency-portal/lib/agency-demo";
+import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { managedPrFromBackend } from "@agency-portal/lib/pr-personnel-map";
 import { getPrScheduleState } from "@agency-portal/lib/roster-availability";
 import {
@@ -263,9 +264,11 @@ export function RosterBackendTimetable({
 							) : (
 								prRows.map((pr) => {
 									const profile = managedPrFromBackend(pr);
-									const displayName = pr.nickname
-										? `${pr.name} (${pr.nickname})`
-										: pr.name;
+									// Nickname FIRST: "(Vicky) Victoria Tan Mei Lin". This row
+									// had the two halves the other way round, so the same PR
+									// read one way here and the other way on every payment
+									// voucher. `formatPayeeLabel` is the single spelling.
+									const displayName = formatPayeeLabel(pr.nickname, pr.name);
 									return (
 										<tr key={pr.id}>
 											<th scope="row" className="iz-roster-week-pr">
@@ -455,9 +458,9 @@ function AssignBackendCellSheet({
 					<p className="iz-tiny iz-muted2 uppercase tracking-widest">
 						Planning · {dateIso}
 					</p>
-					<h3>
-						Assign {pr.nickname ? `${pr.name} (${pr.nickname})` : pr.name}
-					</h3>
+					{/* Same spelling as the row that opened this sheet, and as the
+					    voucher that eventually pays the shift — see formatPayeeLabel. */}
+					<h3>Assign {formatPayeeLabel(pr.nickname, pr.name)}</h3>
 				</div>
 				<button
 					type="button"

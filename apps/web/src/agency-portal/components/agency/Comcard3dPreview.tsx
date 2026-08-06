@@ -6,9 +6,12 @@ import {
 	StaticComcardVisual,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { getComcardDemoStyle } from "@agency-portal/lib/comcard-demo";
-import { publicAssetPath } from "@agency-portal/lib/public-asset";
+import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
 import type { ReactNode } from "react";
+
+/** Languages the compact grid comcard shows before collapsing into "+N". */
+const MAX_CARD_LANGUAGES = 2;
 
 export type ComcardPreviewData = {
 	id?: string;
@@ -128,7 +131,13 @@ export function Comcard3dPreviewThumb({
 		data.portfolioPhotos?.find((src): src is string => Boolean(src)) ||
 		null;
 
-	if (thumbPhoto) {
+	// `prPhotoSrc`, not `publicAssetPath`: a stored photo is an R2 OBJECT KEY
+	// (`user/<id>/comcard/<uuid>.jpg`), and prefixing that with the Vite base
+	// produces a URL nothing serves. The mapper already resolves the keys it
+	// returns, but a caller that builds ComcardPreviewData by hand does not — so
+	// the resolver belongs at the <img>, where it can never be skipped.
+	const thumbSrc = prPhotoSrc(thumbPhoto);
+	if (thumbSrc) {
 		return (
 			<div
 				className={cn(
@@ -137,7 +146,7 @@ export function Comcard3dPreviewThumb({
 				)}
 			>
 				<img
-					src={publicAssetPath(thumbPhoto)}
+					src={thumbSrc}
 					alt=""
 					className="iz-comcard-3d-preview--thumb-photo__img"
 				/>
@@ -230,7 +239,12 @@ export function Comcard3dPreviewCard({
 	place?: string;
 	className?: string;
 }) {
-	const langLine = languages.filter(Boolean).slice(0, 2).join(" · ");
+	// Two fit; the rest are counted, not dropped. This was a bare `slice(0, 2)`
+	// with nothing to say a third existed, so the same PR listed two languages
+	// here and four on Manage PR.
+	const allLangs = languages.filter(Boolean);
+	const langLine = allLangs.slice(0, MAX_CARD_LANGUAGES).join(" · ");
+	const hiddenLangs = Math.max(0, allLangs.length - MAX_CARD_LANGUAGES);
 
 	return (
 		<div
@@ -255,7 +269,10 @@ export function Comcard3dPreviewCard({
 					<p className="min-w-0 truncate font-sora text-[11px] font-bold leading-tight text-[var(--iz-txt)]">
 						{pr.name}
 					</p>
-					{rating != null && (
+					{/* `> 0`, not `!= null`: every backend PR carries `rating: 0` as a
+					    placeholder for "GET /pr returns no rating", and the old null-check
+					    printed it as a gold "0★" — a score the outlet never gave. */}
+					{rating != null && rating > 0 && (
 						<IzPill variant="gold" className="shrink-0 !px-1 !py-0 !text-[8px]">
 							{rating}★
 						</IzPill>
@@ -267,8 +284,16 @@ export function Comcard3dPreviewCard({
 					</p>
 				)}
 				{(langLine || place) && (
-					<p className="mt-0.5 line-clamp-1 text-[9px] text-[var(--iz-muted)]">
-						{[langLine, place].filter(Boolean).join(" · ")}
+					<p
+						className="mt-0.5 line-clamp-1 text-[9px] text-[var(--iz-muted)]"
+						title={allLangs.length > 0 ? allLangs.join(" · ") : undefined}
+					>
+						{[
+							hiddenLangs > 0 ? `${langLine} +${hiddenLangs}` : langLine,
+							place,
+						]
+							.filter(Boolean)
+							.join(" · ")}
 					</p>
 				)}
 			</div>

@@ -366,6 +366,13 @@ export type PrAgencyLink = {
   agencyName: string;
   agencyCode: string;
   approveStatus: string;
+  /**
+   * This agency's grading of us (`agency_pr.tier`), e.g. 'tier_3'. Null until
+   * they grade us. Per-membership — two agencies may grade the same PR
+   * differently and both are correct, so the profile shows whose tier is whose
+   * rather than picking one and calling it "the" tier.
+   */
+  tier: string | null;
 };
 
 /**

@@ -1380,6 +1380,40 @@ export function languagesFromPr(
 	return [];
 }
 
+/** A PR's languages split into the ones a card shows and the ones it hides. */
+export interface CardLanguages {
+	/** Every language on the account, normalized — the tooltip / title text. */
+	all: string[];
+	/** The ones that fit. */
+	shown: string[];
+	/** How many `shown` leaves out. 0 when the card shows them all. */
+	hidden: number;
+}
+
+/**
+ * ONE language renderer for every card, popover and comcard sheet.
+ *
+ * Four surfaces each truncated on their own — `slice(0, 3)` on the roster
+ * popover and the outlet comcard sheet, `slice(0, 2)` on the grid comcard — and
+ * only the Manage-PR card said how many it had dropped. That is why a PR who
+ * speaks English, Mandarin, Hokkien and Cantonese read as four languages on
+ * Manage PR and on her own phone, but as three on the roster with nothing to
+ * say a fourth existed. Truncating is a layout decision; SILENTLY truncating is
+ * a different fact. Callers render `shown` and, when `hidden > 0`, a "+N" chip
+ * carrying `all` as its title.
+ */
+export function splitCardLanguages(
+	pr: Pick<AgencyManagedPR, "languages">,
+	max: number,
+): CardLanguages {
+	const all = languagesFromPr(pr).filter(Boolean);
+	return {
+		all,
+		shown: all.slice(0, max),
+		hidden: Math.max(0, all.length - max),
+	};
+}
+
 /** Push PR portal profile media onto the matching agency roster record */
 export function syncAgencyPrFromPrPortal(
 	agencyPr: AgencyManagedPR,

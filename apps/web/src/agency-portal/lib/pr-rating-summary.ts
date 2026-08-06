@@ -40,6 +40,22 @@ export function summarizePrRatings(
 }
 
 /**
+ * The record's OWN rating, or null when it carries none.
+ *
+ * `managedPrFromBackend` sets `rating: 0` as a placeholder — `GET /pr` returns
+ * no rating at all — so `pr.rating != null` is true for every backend PR and
+ * printed a flat "0★" on the roster popover, the outlet comcard sheet and the
+ * PR-tonight card, next to a Manage-PR card showing the person's real stars.
+ * A guard has to ask whether there IS a score, and this is the one place that
+ * answers it. Only demo rows ever return a number here.
+ */
+export function recordRating(
+	pr: Pick<AgencyManagedPR, "rating">,
+): number | null {
+	return pr.rating > 0 ? pr.rating : null;
+}
+
+/**
  * The average to show for a PR, or null when there is nothing to show.
  *
  * Backend PRs arrive with `rating: 0` — a placeholder, not a score — because
@@ -53,7 +69,7 @@ export function displayAverage(
 	summary: PrRatingSummary,
 ): number | null {
 	if (summary.average !== null) return summary.average;
-	return pr.rating > 0 ? pr.rating : null;
+	return recordRating(pr);
 }
 
 /** One decimal, so a rating reads the same wherever it appears. */

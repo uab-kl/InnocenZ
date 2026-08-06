@@ -3,7 +3,7 @@ import { toComcardPreview } from "@agency-portal/components/agency/PrComcardIden
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { formatOutletHistRm } from "@agency-portal/components/outlet/outlet-history-ui";
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
-import { languagesFromPr } from "@agency-portal/lib/agency-demo";
+import { splitCardLanguages } from "@agency-portal/lib/agency-demo";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import type { getAgencyPrFlags } from "@agency-portal/lib/agency-pr-flags";
 import { cn } from "@agency-portal/lib/utils";
@@ -39,11 +39,13 @@ export function ManagePrGridCard({
 	const preview = toComcardPreview(pr);
 	// Two languages fit; the rest were silently dropped, so a PR who speaks five
 	// looked identical to one who speaks two. Say how many are hidden — the full
-	// list is on their profile.
-	const allLangs = languagesFromPr(pr).filter(Boolean);
-	const hiddenLangCount = Math.max(0, allLangs.length - MAX_CARD_LANGUAGES);
-	const langs = allLangs.slice(0, MAX_CARD_LANGUAGES).join(" · ");
-	const metaLine = [langs, pr.place].filter(Boolean).join(" · ");
+	// list is on their profile. The rule now lives in `splitCardLanguages` so the
+	// roster popover and the comcard card cannot each invent their own cap.
+	const cardLangs = splitCardLanguages(pr, MAX_CARD_LANGUAGES);
+	const hiddenLangCount = cardLangs.hidden;
+	const metaLine = [cardLangs.shown.join(" · "), pr.place]
+		.filter(Boolean)
+		.join(" · ");
 	const paid = formatOutletHistRm(pr.totalPaid ?? 0);
 
 	return (
@@ -114,7 +116,7 @@ export function ManagePrGridCard({
 					{hiddenLangCount > 0 && (
 						<span
 							className="iz-pr-manage-card__more-langs"
-							title={allLangs.join(" · ")}
+							title={cardLangs.all.join(" · ")}
 						>
 							+{hiddenLangCount}
 						</span>
