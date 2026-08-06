@@ -891,8 +891,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       </View>
                     ))}
                     <View style={styles.gridCol}>
-                      <Text style={styles.gridDay}>TOT</Text>
-                      <Text style={styles.gridDate}> </Text>
+                      {/*
+                        * "TOT" meant nothing to the PR reading it. The column
+                        * is each row's seven days added up, so it says so —
+                        * and it keeps the two-line shape of the day columns
+                        * (WED / 5) instead of a lone abbreviation. 5 chars at
+                        * 10px bold clears the 56px column.
+                        */}
+                      <Text style={styles.gridDay}>TOTAL</Text>
+                      <Text style={styles.gridDate}>week</Text>
                     </View>
                   </View>
 
@@ -1126,8 +1133,15 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                       </View>
                     ))}
                     <View style={styles.gridCol}>
-                      <Text style={styles.gridDay}>TOT</Text>
-                      <Text style={styles.gridDate}> </Text>
+                      {/*
+                        * "TOT" meant nothing to the PR reading it. The column
+                        * is each row's seven days added up, so it says so —
+                        * and it keeps the two-line shape of the day columns
+                        * (WED / 5) instead of a lone abbreviation. 5 chars at
+                        * 10px bold clears the 56px column.
+                        */}
+                      <Text style={styles.gridDay}>TOTAL</Text>
+                      <Text style={styles.gridDate}>week</Text>
                     </View>
                   </View>
 

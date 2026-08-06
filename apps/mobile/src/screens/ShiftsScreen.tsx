@@ -397,9 +397,31 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                   </Pressable>
                   {overdueOpen && (
                     <>
-                      <Text style={[styles.todoSubtitle, { marginTop: 8 }]}>
-                        {overdueCheckout.assignment.outletName ?? 'Outlet'} · shift ended{' '}
-                        {overdueEndHm} · pay locks to the shift window
+                      {/*
+                        * THREE facts, three lines — not one dot-separated run.
+                        *
+                        * "Emhub Testing · shift ended 12:00 · pay locks to the
+                        * shift window" wrapped mid-clause on a phone, so the
+                        * outlet, the time and the CONSEQUENCE ran together as one
+                        * grey ribbon. The consequence is the reason the card
+                        * exists — it is money — so it gets its own amber line
+                        * rather than being the tail of a sentence.
+                        */}
+                      <View style={styles.overdueFacts}>
+                        <View style={styles.overdueRow}>
+                          <Text style={styles.overdueKey}>WHERE</Text>
+                          <Text style={styles.overdueVal}>
+                            {overdueCheckout.assignment.outletName ?? 'Outlet'}
+                          </Text>
+                        </View>
+                        <View style={styles.overdueRow}>
+                          <Text style={styles.overdueKey}>SHIFT ENDED</Text>
+                          <Text style={styles.overdueVal}>{overdueEndHm}</Text>
+                        </View>
+                      </View>
+                      <Text style={styles.overdueWarn}>
+                        Your pay stops at {overdueEndHm} whenever you tap out — check out now to
+                        close the shift.
                       </Text>
                       <IzButton
                         label="Check out"
@@ -764,6 +786,50 @@ const styles = StyleSheet.create({
     borderColor: C.line,
   },
   overdueHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  overdueFacts: {
+    marginTop: 10,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+    backgroundColor: 'rgba(0,0,0,0.18)',
+    paddingVertical: 4,
+    paddingHorizontal: 10,
+  },
+  overdueRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    // No fixed widths: the label column sizes to its own text and the value
+    // takes the rest, so a long outlet name wraps instead of being clipped on
+    // a narrow phone.
+    gap: 10,
+    paddingVertical: 6,
+  },
+  overdueKey: {
+    fontFamily: F.manrope,
+    fontSize: C.fsTiny - 1,
+    fontWeight: '700',
+    letterSpacing: 0.8,
+    color: C.prMuted,
+    paddingTop: 1,
+  },
+  overdueVal: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: F.sora,
+    fontSize: C.fsTiny + 1,
+    fontWeight: '700',
+    color: C.txt,
+    textAlign: 'right',
+  },
+  overdueWarn: {
+    fontFamily: F.manrope,
+    fontSize: C.fsTiny,
+    lineHeight: C.fsTiny * 1.45,
+    // The champagne this card is already built from (todoIcon's chip and the
+    // Check-out gradient) — NOT C.gold, which is violet in this palette.
+    color: '#e8c27a',
+    marginTop: 10,
+  },
   todoIcon: {
     width: 36,
     height: 36,
