@@ -965,6 +965,31 @@ export class PaymentVoucherControllerClass {
       // paths also write 'sent', but that is a voucher coming BACK from a
       // dispute, and re-gating it would strand a PR's own complaint.
       if (data.status === 'sent' && existing.status === 'pending_review') {
+        /*
+         * A WEEK STILL RUNNING CANNOT BE SENT.
+         *
+         * Sending seals the week: createOrGetWeekDraft refuses to append to
+         * anything that is not pending_review/disputed, so from that moment no
+         * further receipt can be logged against it. Doing that mid-week strands
+         * every shift left in the week — on 6 Aug 2026 the 2–8 Aug voucher was
+         * sent, and Vicky's 6 Aug scan then had nowhere to go: the app told her
+         * to "ask your agency to reopen it", an action that does not exist.
+         *
+         * Signing and sending is NEXT week's work, on a week that has finished
+         * earning. Refused up to and including week_end, because the last night
+         * of the week is still a working night.
+         */
+        const today = klToday();
+        if (existing.weekEnd && today <= existing.weekEnd) {
+          return res.status(409).json({
+            success: false,
+            message:
+              `This voucher covers ${existing.weekStart} to ${existing.weekEnd}, which is still ` +
+              'running. Sending it now closes the week and blocks every receipt the PR has yet ' +
+              `to log. Send it once the week has ended — from the day after ${existing.weekEnd}.`,
+            data: null,
+          });
+        }
         // Rewriting the lines in the same call would have the gate judge the OLD
         // day totals and then send the NEW ones — the exact substitution
         // `approved_total_cents` exists to catch. Split the two steps so the
