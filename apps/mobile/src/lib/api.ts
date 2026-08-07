@@ -280,6 +280,19 @@ export function changePhoneWithOtp(
   });
 }
 
+/** Soft-delete own account (status=inactive + PII scrub). Requires current password. */
+export function deleteOwnAccount(
+  accessToken: string,
+  userId: string,
+  password: string,
+): Promise<{ id: string; status: string }> {
+  return request<{ id: string; status: string }>(`/user/${userId}/delete`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ password }),
+  });
+}
+
 export type RegisterPrProfile = {
   fullName: string;
   nationality: string;

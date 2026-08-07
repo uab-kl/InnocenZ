@@ -9,6 +9,7 @@ import {
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatMessage, useLocale } from '../../i18n';
 import { C, F } from '../../theme/theme';
 import { Calendar, Check, ChevronDown } from '../../components/icons';
 import { useKeyboardHeight } from '../../lib/keyboard';
@@ -88,7 +89,7 @@ export function Picker({
 	options,
 	onSelect,
 	width,
-	placeholder = 'Choose',
+	placeholder,
 	title,
 	searchable = false,
 	displayValue,
@@ -105,13 +106,15 @@ export function Picker({
 	/** Override the closed-field label (e.g. show `🇲🇾 +60` while value is `MY`). */
 	displayValue?: string | null;
 }) {
+	const { t } = useLocale();
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
 	const insets = useSafeAreaInsets();
 	const keyboardHeight = useKeyboardHeight();
 	const items = useMemo(() => normalizeOptions(options), [options]);
 	const selected = items.find((o) => o.value === value);
-	const shown = displayValue ?? selected?.label ?? placeholder;
+	const emptyLabel = placeholder ?? t.signup.choose;
+	const shown = displayValue ?? selected?.label ?? emptyLabel;
 	const empty = value == null || value === '';
 
 	const filtered = useMemo(() => {
@@ -160,14 +163,14 @@ export function Picker({
 						]}
 						onPress={(e) => e.stopPropagation()}
 					>
-						<Text style={styles.pickerSheetTitle}>{title ?? 'Select'}</Text>
+						<Text style={styles.pickerSheetTitle}>{title ?? t.signup.choose}</Text>
 						{searchable ? (
 							<View style={styles.pickerSearchWrap}>
 								<TextInput
 									style={styles.pickerSearch}
 									value={query}
 									onChangeText={setQuery}
-									placeholder="Search country or code"
+									placeholder={t.signup.searchCountryOrCode}
 									placeholderTextColor={C.muted2}
 									autoCorrect={false}
 									autoCapitalize="none"
@@ -210,11 +213,11 @@ export function Picker({
 								);
 							})}
 							{filtered.length === 0 ? (
-								<Text style={styles.pickerEmpty}>No matches.</Text>
+								<Text style={styles.pickerEmpty}>{t.signup.noMatches}</Text>
 							) : null}
 						</ScrollView>
 						<Pressable style={styles.pickerCancel} onPress={close}>
-							<Text style={styles.pickerCancelText}>Cancel</Text>
+							<Text style={styles.pickerCancelText}>{t.common.cancel}</Text>
 						</Pressable>
 					</Pressable>
 				</Pressable>
@@ -223,20 +226,20 @@ export function Picker({
 	);
 }
 
-const MONTHS = [
-	{ value: 1, label: 'Jan' },
-	{ value: 2, label: 'Feb' },
-	{ value: 3, label: 'Mar' },
-	{ value: 4, label: 'Apr' },
-	{ value: 5, label: 'May' },
-	{ value: 6, label: 'Jun' },
-	{ value: 7, label: 'Jul' },
-	{ value: 8, label: 'Aug' },
-	{ value: 9, label: 'Sep' },
-	{ value: 10, label: 'Oct' },
-	{ value: 11, label: 'Nov' },
-	{ value: 12, label: 'Dec' },
-];
+const MONTH_KEYS = [
+	'monthJan',
+	'monthFeb',
+	'monthMar',
+	'monthApr',
+	'monthMay',
+	'monthJun',
+	'monthJul',
+	'monthAug',
+	'monthSep',
+	'monthOct',
+	'monthNov',
+	'monthDec',
+] as const;
 
 function daysInMonth(year: number, month: number) {
 	return new Date(year, month, 0).getDate();
@@ -266,7 +269,7 @@ export function DatePicker({
 	value,
 	onSelect,
 	placeholder = 'YYYY-MM-DD',
-	title = 'Date of birth',
+	title,
 	/** Youngest allowed age (default 18 — IMI foreign-worker floor). */
 	minAge = 18,
 	/** Oldest allowed age. */
@@ -279,8 +282,18 @@ export function DatePicker({
 	minAge?: number;
 	maxAge?: number;
 }) {
+	const { t } = useLocale();
 	const insets = useSafeAreaInsets();
 	const [open, setOpen] = useState(false);
+	const sheetTitle = title ?? t.signup.dob;
+	const months = useMemo(
+		() =>
+			MONTH_KEYS.map((key, i) => ({
+				value: i + 1,
+				label: t.signup[key],
+			})),
+		[t.signup],
+	);
 
 	const today = useMemo(() => new Date(), []);
 	const maxYear = today.getFullYear() - minAge;
@@ -342,22 +355,22 @@ export function DatePicker({
 						]}
 						onPress={(e) => e.stopPropagation()}
 					>
-						<Text style={styles.pickerSheetTitle}>{title}</Text>
+						<Text style={styles.pickerSheetTitle}>{sheetTitle}</Text>
 						<View style={styles.dateCols}>
 							<DateCol
-								label="Year"
+								label={t.signup.year}
 								items={years.map((y) => ({ value: y, label: String(y) }))}
 								selected={year}
 								onSelect={pickYear}
 							/>
 							<DateCol
-								label="Month"
-								items={MONTHS.map((m) => ({ value: m.value, label: m.label }))}
+								label={t.signup.month}
+								items={months.map((m) => ({ value: m.value, label: m.label }))}
 								selected={month}
 								onSelect={pickMonth}
 							/>
 							<DateCol
-								label="Day"
+								label={t.signup.day}
 								items={Array.from({ length: maxDay }, (_, i) => ({
 									value: i + 1,
 									label: pad2(i + 1),
@@ -367,10 +380,10 @@ export function DatePicker({
 							/>
 						</View>
 						<Pressable style={styles.dateConfirm} onPress={confirm}>
-							<Text style={styles.dateConfirmText}>Confirm</Text>
+							<Text style={styles.dateConfirmText}>{t.signup.confirm}</Text>
 						</Pressable>
 						<Pressable style={styles.pickerCancel} onPress={() => setOpen(false)}>
-							<Text style={styles.pickerCancelText}>Cancel</Text>
+							<Text style={styles.pickerCancelText}>{t.common.cancel}</Text>
 						</Pressable>
 					</Pressable>
 				</Pressable>
@@ -427,8 +440,8 @@ export function LanguageMultiPicker({
 	value,
 	options,
 	onChange,
-	title = 'Preferred languages',
-	placeholder = 'Choose languages',
+	title,
+	placeholder,
 }: {
 	value: string[];
 	options: readonly string[];
@@ -436,11 +449,14 @@ export function LanguageMultiPicker({
 	title?: string;
 	placeholder?: string;
 }) {
+	const { t } = useLocale();
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState('');
 	const [other, setOther] = useState('');
 	const insets = useSafeAreaInsets();
 	const keyboardHeight = useKeyboardHeight();
+	const sheetTitle = title ?? t.signup.preferredLanguages;
+	const emptyLabel = placeholder ?? t.signup.chooseLanguages;
 
 	const selected = useMemo(
 		() => new Set(value.map((v) => v.trim()).filter(Boolean)),
@@ -483,7 +499,7 @@ export function LanguageMultiPicker({
 
 	const summary =
 		value.length === 0
-			? placeholder
+			? emptyLabel
 			: value.length <= 2
 				? value.join(', ')
 				: `${value.slice(0, 2).join(', ')} +${value.length - 2}`;
@@ -533,13 +549,13 @@ export function LanguageMultiPicker({
 						]}
 						onPress={(e) => e.stopPropagation()}
 					>
-						<Text style={styles.pickerSheetTitle}>{title}</Text>
+						<Text style={styles.pickerSheetTitle}>{sheetTitle}</Text>
 						<View style={styles.pickerSearchWrap}>
 							<TextInput
 								style={styles.pickerSearch}
 								value={query}
 								onChangeText={setQuery}
-								placeholder="Search languages"
+								placeholder={t.signup.searchLanguages}
 								placeholderTextColor={C.muted2}
 								autoCorrect={false}
 								autoCapitalize="none"
@@ -590,7 +606,7 @@ export function LanguageMultiPicker({
 								);
 							})}
 							{presetFiltered.length === 0 && customSelected.length === 0 ? (
-								<Text style={styles.pickerEmpty}>No matches — add it below.</Text>
+								<Text style={styles.pickerEmpty}>{t.signup.noLangMatches}</Text>
 							) : null}
 						</ScrollView>
 
@@ -599,7 +615,7 @@ export function LanguageMultiPicker({
 								style={styles.langOtherInput}
 								value={other}
 								onChangeText={setOther}
-								placeholder="Other language"
+								placeholder={t.signup.otherLanguage}
 								placeholderTextColor={C.muted2}
 								autoCorrect={false}
 								autoCapitalize="words"
@@ -611,17 +627,19 @@ export function LanguageMultiPicker({
 								onPress={addOther}
 								disabled={!other.trim()}
 							>
-								<Text style={styles.langOtherAddText}>Add</Text>
+								<Text style={styles.langOtherAddText}>{t.signup.add}</Text>
 							</Pressable>
 						</View>
 
 						<Pressable style={styles.dateConfirm} onPress={close}>
 							<Text style={styles.dateConfirmText}>
-								{value.length ? `Done · ${value.length} selected` : 'Done'}
+								{value.length
+									? formatMessage(t.signup.doneSelected, { count: value.length })
+									: t.signup.done}
 							</Text>
 						</Pressable>
 						<Pressable style={styles.pickerCancel} onPress={close}>
-							<Text style={styles.pickerCancelText}>Cancel</Text>
+							<Text style={styles.pickerCancelText}>{t.common.cancel}</Text>
 						</Pressable>
 					</Pressable>
 				</Pressable>

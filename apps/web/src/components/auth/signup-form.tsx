@@ -227,7 +227,7 @@ export function SignupForm() {
 						err.message)
 					: err instanceof Error
 						? err.message
-						: "Could not load plans";
+						: copy.packages.loadFailed;
 				setPackagesError(message);
 			})
 			.finally(() => {
@@ -664,7 +664,7 @@ export function SignupForm() {
 											<SelectValue
 												placeholder={
 													packagesLoading
-														? "Loading plans…"
+														? copy.packages.loadingShort
 														: fields.package.placeholder
 												}
 											/>
@@ -684,12 +684,14 @@ export function SignupForm() {
 									</Select>
 									{packagesLoading && (
 										<FieldDescription className="signup-helper text-muted-foreground">
-											Loading plans from the catalog…
+											{copy.packages.loadingLong}
 										</FieldDescription>
 									)}
 									{packagesError && (
 										<FieldDescription className="signup-helper flex flex-wrap items-center gap-2 text-destructive">
-											<span>Could not load plans: {packagesError}</span>
+											<span>
+												{copy.packages.loadFailed}: {packagesError}
+											</span>
 											<button
 												type="button"
 												className="underline underline-offset-2"

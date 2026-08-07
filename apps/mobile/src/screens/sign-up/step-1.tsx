@@ -1,5 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
+import { useLocale } from '../../i18n';
 import { PR_LANGUAGE_OPTIONS } from '../../lib/demo-services';
 import { savePhoneCountryCode } from '../../lib/phone-prefs';
 import {
@@ -42,6 +43,8 @@ export function Step1Persona({
 	patch,
 	clearFieldError,
 }: Props) {
+	const { t } = useLocale();
+	const s = t.signup;
 	const country = draft.phoneCountryCode
 		? COUNTRY_BY_CODE[draft.phoneCountryCode]
 		: null;
@@ -51,34 +54,30 @@ export function Step1Persona({
 
 	return (
 		<>
-			<Field
-				label="Nickname*"
-				hint="Shown on roster and the outlet floor."
-				error={fieldErrors.floorNickname}
-			>
+			<Field label={s.nickname} hint={s.nicknameHint} error={fieldErrors.floorNickname}>
 				<Input
 					value={draft.floorNickname}
-					onChangeText={(t) => {
+					onChangeText={(text) => {
 						clearFieldError('floorNickname');
-						patch({ floorNickname: t.slice(0, 20) });
+						patch({ floorNickname: text.slice(0, 20) });
 					}}
-					placeholder="E.g. Moon, Charlotte"
+					placeholder={s.nicknamePlaceholder}
 				/>
 			</Field>
-			<Field label="Full name*" hint="As on your IC / passport." error={fieldErrors.fullName}>
+			<Field label={s.fullName} hint={s.fullNameHint} error={fieldErrors.fullName}>
 				<Input
 					value={draft.fullName}
-					onChangeText={(t) => {
+					onChangeText={(text) => {
 						clearFieldError('fullName');
-						patch({ fullName: t });
+						patch({ fullName: text });
 					}}
-					placeholder="E.g. Joe Low"
+					placeholder={s.fullNamePlaceholder}
 					autoCapitalize="words"
 				/>
 			</Field>
 			<Field
-				label="Phone number*"
-				hint="Must registered on WhatsApp"
+				label={s.phoneNumber}
+				hint={s.phoneHint}
 				error={fieldErrors.phoneCountryCode || fieldErrors.phone}
 			>
 				<View style={styles.inline}>
@@ -91,34 +90,34 @@ export function Step1Persona({
 							savePhoneCountryCode(countryCode);
 						}}
 						width={128}
-						placeholder="Code"
+						placeholder={s.dialCode}
 						displayValue={closedDialLabel}
-						title="Country & dial code"
+						title={s.dialTitle}
 						searchable
 					/>
 					<View style={{ flex: 1 }}>
 						<Input
 							value={localDigits}
-							onChangeText={(t) => {
+							onChangeText={(text) => {
 								clearFieldError('phone');
-								patch({ phoneNumber: t });
+								patch({ phoneNumber: text });
 							}}
-							placeholder="E.g. 123456789"
+							placeholder={s.phonePlaceholder}
 							keyboardType="phone-pad"
 						/>
 					</View>
 				</View>
 			</Field>
-			<Field label="Email">
+			<Field label={s.email}>
 				<Input
 					value={draft.email}
-					onChangeText={(t) => patch({ email: t })}
-					placeholder="you@example.com"
+					onChangeText={(text) => patch({ email: text })}
+					placeholder={s.emailPlaceholder}
 					keyboardType="email-address"
 					autoCapitalize="none"
 				/>
 			</Field>
-			<Field label="Nationality*" error={fieldErrors.nationality}>
+			<Field label={s.nationality} error={fieldErrors.nationality}>
 				<Picker
 					value={draft.nationality || null}
 					options={NATIONALITY_OPTIONS}
@@ -126,13 +125,13 @@ export function Step1Persona({
 						clearFieldError('nationality');
 						patch({ nationality: v });
 					}}
-					title="Nationality"
+					title={s.nationality}
 					searchable
-					placeholder="Choose"
+					placeholder={s.choose}
 				/>
 			</Field>
 			<Row>
-				<Field label="ID type*" flex error={fieldErrors.idType}>
+				<Field label={s.idType} flex error={fieldErrors.idType}>
 					<Picker
 						value={draft.idType || null}
 						options={[...ID_TYPES]}
@@ -146,7 +145,6 @@ export function Step1Persona({
 									idType === 'NRIC' && draft.dob
 										? mergeNricWithDob(draft.dob, draft.idNo)
 										: draft.idNo,
-								// Changing ID type invalidates prior captures; passport needs no back.
 								idPhotoFrontUri: '',
 								idPhotoBackUri: '',
 								idPhotoFrontFile: null,
@@ -155,74 +153,79 @@ export function Step1Persona({
 								idBackOcrOk: idType === 'Passport',
 							});
 						}}
-						title="ID type"
-						placeholder="Choose"
+						title={s.idType}
+						placeholder={s.choose}
 					/>
 				</Field>
-				<Field label="Date of birth*" flex error={fieldErrors.dob}>
+				<Field label={s.dob} flex error={fieldErrors.dob}>
 					<DatePicker
 						value={draft.dob}
 						onSelect={(dob) => {
 							clearFieldError('dob');
 							patch({
 								dob,
-								idNo: draft.idType === 'NRIC' ? mergeNricWithDob(dob, draft.idNo) : draft.idNo,
+								idNo:
+									draft.idType === 'NRIC'
+										? mergeNricWithDob(dob, draft.idNo)
+										: draft.idNo,
 							});
 						}}
-						placeholder="YYYY-MM-DD"
-						title="Date of birth"
+						placeholder={s.dobPlaceholder}
+						title={s.dob}
 					/>
 				</Field>
 			</Row>
-			<Field
-				label="ID No*"
-				error={fieldErrors.idNo}
-			>
+			<Field label={s.idNo} error={fieldErrors.idNo}>
 				<Input
 					value={draft.idType ? draft.idNo : ''}
 					editable={Boolean(draft.idType)}
 					keyboardType={draft.idType === 'NRIC' ? 'number-pad' : 'default'}
 					maxLength={draft.idType === 'NRIC' ? 12 : undefined}
-					onChangeText={(t) => {
+					onChangeText={(text) => {
 						clearFieldError('idNo');
-						patch({ idNo: draft.idType === 'NRIC' ? mergeNricWithDob(draft.dob, t) : t });
+						patch({
+							idNo:
+								draft.idType === 'NRIC'
+									? mergeNricWithDob(draft.dob, text)
+									: text,
+						});
 					}}
 					placeholder={
 						draft.idType
 							? draft.idType === 'NRIC'
-								? '1234881234'
-								: 'Document number'
-							: 'Please select ID type first'
+								? s.idNoNricPlaceholder
+								: s.idNoDocPlaceholder
+							: s.idNoSelectTypeFirst
 					}
 				/>
 			</Field>
 			<Row>
-				<Field label="Height" flex error={fieldErrors.heightCm}>
+				<Field label={s.height} flex error={fieldErrors.heightCm}>
 					<Input
 						value={draft.heightCm}
-						onChangeText={(t) => {
+						onChangeText={(text) => {
 							clearFieldError('heightCm');
-							patch({ heightCm: t.replace(/\D/g, '').slice(0, 3) });
+							patch({ heightCm: text.replace(/\D/g, '').slice(0, 3) });
 						}}
-						placeholder="in cm"
+						placeholder={s.inCm}
 						keyboardType="number-pad"
 					/>
 				</Field>
-				<Field label="Weight" flex error={fieldErrors.weightKg}>
+				<Field label={s.weight} flex error={fieldErrors.weightKg}>
 					<Input
 						value={draft.weightKg}
-						onChangeText={(t) => {
+						onChangeText={(text) => {
 							clearFieldError('weightKg');
-							patch({ weightKg: t.replace(/\D/g, '').slice(0, 3) });
+							patch({ weightKg: text.replace(/\D/g, '').slice(0, 3) });
 						}}
-						placeholder="in kg"
+						placeholder={s.inKg}
 						keyboardType="number-pad"
 					/>
 				</Field>
 			</Row>
 			<Field
-				label="3 dimensions (BWH)"
-				hint="Optional — Bust · Waist · Hip in cm"
+				label={s.bwh}
+				hint={s.bwhHint}
 				error={
 					fieldErrors.bustCm || fieldErrors.waistCm || fieldErrors.hipCm || null
 				}
@@ -231,42 +234,39 @@ export function Step1Persona({
 					<View style={{ flex: 1 }}>
 						<Input
 							value={draft.bustCm}
-							onChangeText={(t) => {
+							onChangeText={(text) => {
 								clearFieldError('bustCm');
-								patch({ bustCm: t.replace(/\D/g, '').slice(0, 3) });
+								patch({ bustCm: text.replace(/\D/g, '').slice(0, 3) });
 							}}
-							placeholder="Bust"
+							placeholder={s.bust}
 							keyboardType="number-pad"
 						/>
 					</View>
 					<View style={{ flex: 1 }}>
 						<Input
 							value={draft.waistCm}
-							onChangeText={(t) => {
+							onChangeText={(text) => {
 								clearFieldError('waistCm');
-								patch({ waistCm: t.replace(/\D/g, '').slice(0, 3) });
+								patch({ waistCm: text.replace(/\D/g, '').slice(0, 3) });
 							}}
-							placeholder="Waist"
+							placeholder={s.waist}
 							keyboardType="number-pad"
 						/>
 					</View>
 					<View style={{ flex: 1 }}>
 						<Input
 							value={draft.hipCm}
-							onChangeText={(t) => {
+							onChangeText={(text) => {
 								clearFieldError('hipCm');
-								patch({ hipCm: t.replace(/\D/g, '').slice(0, 3) });
+								patch({ hipCm: text.replace(/\D/g, '').slice(0, 3) });
 							}}
-							placeholder="Hip"
+							placeholder={s.hip}
 							keyboardType="number-pad"
 						/>
 					</View>
 				</View>
 			</Field>
-			<Field
-				label="Preferred languages*"
-				error={fieldErrors.languages}
-			>
+			<Field label={s.preferredLanguages} error={fieldErrors.languages}>
 				<LanguageMultiPicker
 					value={draft.languages}
 					options={PR_LANGUAGE_OPTIONS}

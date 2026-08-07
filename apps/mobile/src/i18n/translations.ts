@@ -1,4 +1,7 @@
 import type { AppLocale } from './locale-prefs';
+import { signupFieldCopy, type SignupFieldCopy } from './signup-copy';
+
+export type { SignupFieldCopy };
 
 export type AppTranslations = {
   lang: {
@@ -102,6 +105,11 @@ export type AppTranslations = {
     changePassword: string;
     changePhone: string;
     deleteAccount: string;
+    deleteAccountTitle: string;
+    deleteAccountHint: string;
+    deleteAccountConfirm: string;
+    deleteAccountPassword: string;
+    deleteAccountDone: string;
     currentPassword: string;
     newPassword: string;
     confirmPassword: string;
@@ -165,18 +173,18 @@ export type AppTranslations = {
     shifts: string;
     payments: string;
   };
-    signup: {
-      title: string;
-      backToSignIn: string;
-      next: string;
-      previous: string;
-      back: string;
-      submit: string;
-      submitting: string;
-      stepOf: string;
-      steps: { title: string; subtitle: string }[];
-    };
-  };
+  signup: {
+    title: string;
+    backToSignIn: string;
+    next: string;
+    previous: string;
+    back: string;
+    submit: string;
+    submitting: string;
+    stepOf: string;
+    steps: { title: string; subtitle: string }[];
+  } & SignupFieldCopy;
+};
 
 export const translations: Record<AppLocale, AppTranslations> = {
   en: {
@@ -281,6 +289,12 @@ export const translations: Record<AppLocale, AppTranslations> = {
       changePassword: 'Change password',
       changePhone: 'Change phone',
       deleteAccount: 'Delete account',
+      deleteAccountTitle: 'Delete account?',
+      deleteAccountHint:
+        'This permanently disables your account, removes identity photos and profile data, and signs you out. Payroll history may be retained as required by law. Enter your password to confirm.',
+      deleteAccountConfirm: 'Delete my account',
+      deleteAccountPassword: 'Current password',
+      deleteAccountDone: 'Account deleted',
       currentPassword: 'Current password',
       newPassword: 'New password',
       confirmPassword: 'Confirm password',
@@ -361,6 +375,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
         { title: 'Summary', subtitle: 'Photos & review' },
         { title: 'OTP', subtitle: 'Verify your mobile' },
       ],
+      ...signupFieldCopy.en,
     },
   },
   zh: {
@@ -465,6 +480,12 @@ export const translations: Record<AppLocale, AppTranslations> = {
       changePassword: '修改密码',
       changePhone: '更换手机号',
       deleteAccount: '删除账号',
+      deleteAccountTitle: '删除账号？',
+      deleteAccountHint:
+        '将永久停用你的账号，删除身份证件照片与个人资料，并退出登录。依法可能保留薪资相关记录。请输入密码以确认。',
+      deleteAccountConfirm: '删除我的账号',
+      deleteAccountPassword: '当前密码',
+      deleteAccountDone: '账号已删除',
       currentPassword: '当前密码',
       newPassword: '新密码',
       confirmPassword: '确认密码',
@@ -545,6 +566,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
         { title: '摘要', subtitle: '照片与确认' },
         { title: '验证码', subtitle: '验证手机号' },
       ],
+      ...signupFieldCopy.zh,
     },
   },
   'zh-Hant': {
@@ -649,6 +671,12 @@ export const translations: Record<AppLocale, AppTranslations> = {
       changePassword: '修改密碼',
       changePhone: '更換手機號',
       deleteAccount: '刪除帳號',
+      deleteAccountTitle: '刪除帳號？',
+      deleteAccountHint:
+        '將永久停用你的帳號，刪除身分證件照片與個人資料，並登出。依法可能保留薪資相關紀錄。請輸入密碼以確認。',
+      deleteAccountConfirm: '刪除我的帳號',
+      deleteAccountPassword: '目前密碼',
+      deleteAccountDone: '帳號已刪除',
       currentPassword: '目前密碼',
       newPassword: '新密碼',
       confirmPassword: '確認密碼',
@@ -729,6 +757,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
         { title: '摘要', subtitle: '照片與確認' },
         { title: '驗證碼', subtitle: '驗證手機號' },
       ],
+      ...signupFieldCopy['zh-Hant'],
     },
   },
 };

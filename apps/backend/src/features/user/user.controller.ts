@@ -1,10 +1,12 @@
 import { Request, Response } from 'express';
+import { randomUUID } from 'node:crypto';
 import { UserRepositoryClass } from './user.repository';
 import { UserProfileRepositoryClass } from './user-profile/user-profile.repository';
 import { UserFilter, UserSortField, UserStatus, userStatusValues } from './user.model';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
+import { comparePassword, hashPassword } from '@/util/password';
 import {
   deleteProfileImageFile,
   saveProfileImageFile,
@@ -172,6 +174,138 @@ export class UserControllerClass {
       });
     } catch (error) {
       logger.error('[UserController.setStatus] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * PR (or any signed-in user) soft-deletes **their own** account.
+   * Sets `status=inactive`, frees phone/email for re-registration, scrubs
+   * profile PII + identity photos from R2/local, and invalidates the password.
+   * Row stays for audit / payroll FKs — not a hard DELETE.
+   */
+  async deleteOwnAccount(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const actorId = req.user?.id;
+      if (!actorId || actorId !== id) {
+        return res.status(403).json({
+          success: false,
+          message: Error.UNAUTHORIZED,
+          data: null,
+        });
+      }
+
+      const password = typeof req.body?.password === 'string' ? req.body.password : '';
+      if (!password) {
+        return res.status(400).json({
+          success: false,
+          message: 'Password is required to delete your account',
+          data: null,
+        });
+      }
+
+      const user = await this.userRepository.getUserById(id);
+      if (!user) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (user.status !== 'active') {
+        return res.status(409).json({
+          success: false,
+          message: 'Account is already deleted or inactive',
+          data: null,
+        });
+      }
+      if (!user.passwordHash || !(await comparePassword(password, user.passwordHash))) {
+        return res.status(401).json({
+          success: false,
+          message: 'Incorrect password',
+          data: null,
+        });
+      }
+
+      const profile = await this.userProfileRepository.getByUserId(id);
+      const actor = getActor(req);
+
+      // Best-effort media cleanup — account soft-delete must still succeed.
+      await Promise.allSettled([
+        deleteProfileImageFile(user.profileImage),
+        deleteUserIdDocFile(profile?.idPhotoFront),
+        deleteUserIdDocFile(profile?.idPhotoBack),
+        deleteComcardImageFile(profile?.comcardImage),
+        ...(profile?.portfolioPhotos ?? []).map((ref) =>
+          ref ? deletePortfolioImageFile(ref) : Promise.resolve(),
+        ),
+      ]);
+
+      const tombstonePhone = `deleted_${id.replace(/-/g, '')}`;
+      const tombstoneUser = `deleted_${id.slice(0, 8)}`;
+      const deadHash = await hashPassword(randomUUID());
+
+      const updated = await this.userRepository.updateUser(
+        {
+          status: 'inactive',
+          phoneNum: tombstonePhone,
+          email: null,
+          username: tombstoneUser,
+          profileImage: null,
+          passwordHash: deadHash,
+          blockedReason: 'user_requested_deletion',
+          updatedBy: actor,
+        },
+        id,
+      );
+      if (!updated) {
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
+      }
+
+      if (profile) {
+        await this.userProfileRepository.update(id, {
+          fullName: null,
+          nationality: null,
+          gender: null,
+          race: null,
+          languages: null,
+          portfolioPhotos: null,
+          comcardImage: null,
+          comcardHeightCm: null,
+          comcardWeightKg: null,
+          comcardBustCm: null,
+          comcardWaistCm: null,
+          comcardHipCm: null,
+          idType: null,
+          idNo: null,
+          dob: null,
+          addressLine1: null,
+          addressLine2: null,
+          city: null,
+          postcode: null,
+          state: null,
+          country: null,
+          idPhotoFront: null,
+          idPhotoBack: null,
+          bankName: null,
+          bankAccountNo: null,
+          verificationStatus: 'rejected',
+          verifiedAt: null,
+          updatedBy: actor,
+        });
+      }
+
+      logger.warn(`[UserController.deleteOwnAccount] ${actor} soft-deleted account ${id}`);
+      return res.status(200).json({
+        success: true,
+        message: 'Account deleted. You can no longer sign in.',
+        data: { id, status: 'inactive' as const },
+      });
+    } catch (error) {
+      logger.error('[UserController.deleteOwnAccount] Error:', error);
       return res
         .status(500)
         .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

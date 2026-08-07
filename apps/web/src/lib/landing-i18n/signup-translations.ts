@@ -71,6 +71,12 @@ export interface SignupTranslations {
 	};
 	searchPlaceholder: string;
 	noResults: string;
+	privacyPolicy: string;
+	packages: {
+		loadingShort: string;
+		loadingLong: string;
+		loadFailed: string;
+	};
 	acknowledgements: {
 		personalInfo: SignupDisclaimerCopy;
 		declarationOfTruth: SignupDisclaimerCopy;
@@ -248,6 +254,12 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 		},
 		searchPlaceholder: "Search…",
 		noResults: "No results found.",
+		privacyPolicy: "Privacy Policy",
+		packages: {
+			loadingShort: "Loading plans…",
+			loadingLong: "Loading plans from the catalog…",
+			loadFailed: "Could not load plans",
+		},
 		acknowledgements: {
 			personalInfo: {
 				title: "Personal Information Disclaimer",
@@ -438,6 +450,12 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 		},
 		searchPlaceholder: "搜索…",
 		noResults: "未找到结果。",
+		privacyPolicy: "隐私政策",
+		packages: {
+			loadingShort: "正在加载套餐…",
+			loadingLong: "正在从目录加载套餐…",
+			loadFailed: "无法加载套餐",
+		},
 		acknowledgements: {
 			personalInfo: {
 				title: "个人信息免责声明",

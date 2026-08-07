@@ -12,11 +12,11 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PublicAgency } from '../../lib/api';
 import { captureFromCamera, pickImageFromGallery } from '../../lib/photo-file';
+import { formatMessage, useLocale } from '../../i18n';
 import { C, F, GRADIENTS, grad } from '../../theme/theme';
 import { Camera, Check, ImagePlus, XIcon } from '../../components/icons';
 import {
-	getPrDisclaimer,
-	PR_ACKNOWLEDGEMENTS,
+	getPrDisclaimerFromCopy,
 	type PrDisclaimerId,
 } from './acknowledgements';
 import { Field, Input, Row } from './fields';
@@ -53,22 +53,32 @@ function ageFromDob(dob: string): number {
 function SinglePhotoCard({
 	title,
 	optional,
+	optionalLabel,
 	hint,
 	uri,
 	error,
 	busy,
 	aspect,
+	addLabel,
+	removeLabel,
+	cameraLabel,
+	galleryLabel,
 	onCamera,
 	onGallery,
 	onClear,
 }: {
 	title: string;
 	optional?: boolean;
+	optionalLabel: string;
 	hint: string;
 	uri: string;
 	error?: string;
 	busy: boolean;
 	aspect: 'square' | 'portrait';
+	addLabel: string;
+	removeLabel: string;
+	cameraLabel: string;
+	galleryLabel: string;
 	onCamera: () => void;
 	onGallery: () => void;
 	onClear: () => void;
@@ -77,7 +87,7 @@ function SinglePhotoCard({
 		<View style={styles.block}>
 			<View style={styles.blockHead}>
 				<Text style={styles.photoTitle}>{title}</Text>
-				{optional ? <Text style={styles.optionalPill}>Optional</Text> : null}
+				{optional ? <Text style={styles.optionalPill}>{optionalLabel}</Text> : null}
 			</View>
 			<View style={styles.singleRow}>
 				<View
@@ -92,7 +102,7 @@ function SinglePhotoCard({
 							) : (
 								<>
 									<Camera size={22} color={C.muted2} strokeWidth={2} />
-									<Text style={styles.photoEmptyText}>Add photo</Text>
+									<Text style={styles.photoEmptyText}>{addLabel}</Text>
 								</>
 							)}
 						</View>
@@ -109,7 +119,7 @@ function SinglePhotoCard({
 					<View style={styles.actionsCol}>
 						{uri ? (
 							<Pressable style={styles.softBtn} onPress={onClear} disabled={busy}>
-								<Text style={styles.softBtnText}>Remove</Text>
+								<Text style={styles.softBtnText}>{removeLabel}</Text>
 							</Pressable>
 						) : null}
 						<Pressable
@@ -122,13 +132,13 @@ function SinglePhotoCard({
 							) : (
 								<>
 									<Camera size={14} color="#241a08" strokeWidth={2.2} />
-									<Text style={styles.primaryBtnText}>Camera</Text>
+									<Text style={styles.primaryBtnText}>{cameraLabel}</Text>
 								</>
 							)}
 						</Pressable>
 						<Pressable style={styles.softBtn} onPress={onGallery} disabled={busy}>
 							<ImagePlus size={14} color={C.prMuted} strokeWidth={2.2} />
-							<Text style={styles.softBtnText}>Gallery</Text>
+							<Text style={styles.softBtnText}>{galleryLabel}</Text>
 						</Pressable>
 					</View>
 				</View>
@@ -143,21 +153,21 @@ type AckKey =
 	| 'ackInformationSharing'
 	| 'acceptTerms';
 
-const ACK_ROWS: { key: AckKey; disclaimerId: PrDisclaimerId; label: string }[] = [
+const ACK_ROWS: { key: AckKey; disclaimerId: PrDisclaimerId; labelKey: 'ackPersonalInfo' | 'ackDeclaration' | 'ackSharing' }[] = [
 	{
 		key: 'ackPersonalInfo',
 		disclaimerId: 'personal-info',
-		label: 'Personal Information Disclaimer',
+		labelKey: 'ackPersonalInfo',
 	},
 	{
 		key: 'ackDeclarationOfTruth',
 		disclaimerId: 'declaration-of-truth',
-		label: 'Declaration of Truth',
+		labelKey: 'ackDeclaration',
 	},
 	{
 		key: 'ackInformationSharing',
 		disclaimerId: 'information-sharing',
-		label: 'Agency Information Sharing',
+		labelKey: 'ackSharing',
 	},
 ];
 
@@ -205,6 +215,7 @@ export function Step5Summary({
 	patch,
 	clearFieldError,
 }: Props) {
+	const { t } = useLocale();
 	const insets = useSafeAreaInsets();
 	const [busySlot, setBusySlot] = useState<SingleSlot | 'portfolio' | null>(null);
 	const [openDisclaimer, setOpenDisclaimer] = useState<PrDisclaimerId | null>(null);
@@ -225,7 +236,9 @@ export function Step5Summary({
 	]
 		.filter(Boolean)
 		.join(', ');
-	const activeDisclaimer = openDisclaimer ? getPrDisclaimer(openDisclaimer) : null;
+	const activeDisclaimer = openDisclaimer
+		? getPrDisclaimerFromCopy(t.signup, openDisclaimer)
+		: null;
 
 	const toggleAck = (key: AckKey) => {
 		clearFieldError(key);
@@ -319,25 +332,30 @@ export function Step5Summary({
 				</View>
 				<View style={styles.heroBody}>
 					<Text style={styles.heroNick} numberOfLines={1}>
-						{draft.floorNickname || 'Your nickname'}
+						{draft.floorNickname || t.signup.yourNickname}
 					</Text>
 					<Text style={styles.heroLegal} numberOfLines={1}>
-						{legalName || 'Legal name'}
+						{legalName || t.signup.legalName}
 					</Text>
 					<Text style={styles.heroPhone}>{fullPhone || '—'}</Text>
 				</View>
 			</View>
 
-			<Text style={styles.sectionEyebrow}>YOUR PHOTOS</Text>
+			<Text style={styles.sectionEyebrow}>{t.signup.yourPhotos}</Text>
 
 			{/* 1. Profile → user.profile_image */}
 			<SinglePhotoCard
-				title="Profile*"
-				hint="Avatar · face clear · camera or gallery"
+				title={t.signup.profilePhoto}
+				hint={t.signup.profilePhotoHint}
 				uri={draft.profileImageUri}
 				error={fieldErrors.profileImageUri}
 				busy={busySlot === 'profile'}
 				aspect="square"
+				optionalLabel={t.signup.optional}
+				addLabel={t.signup.addPhotos}
+				removeLabel={t.signup.remove}
+				cameraLabel={t.signup.camera}
+				galleryLabel={t.signup.gallery}
 				onCamera={() => void pickSingle('profile', 'camera')}
 				onGallery={() => void pickSingle('profile', 'gallery')}
 				onClear={() => {
@@ -349,13 +367,16 @@ export function Step5Summary({
 			{/* 2. Portfolio → user_profile.portfolio_photos */}
 			<View style={styles.block}>
 				<View style={styles.blockHead}>
-					<Text style={styles.photoTitle}>Portfolio</Text>
-					<Text style={styles.optionalPill}>Optional</Text>
+					<Text style={styles.photoTitle}>{t.signup.portfolio}</Text>
+					<Text style={styles.optionalPill}>{t.signup.optional}</Text>
 				</View>
 				<Text style={styles.photoHint}>
-					Up to {PORTFOLIO_PHOTO_MAX} gallery photos — first 4 build your comcard
+					{formatMessage(t.signup.portfolioHint, { max: PORTFOLIO_PHOTO_MAX })}
 					{draft.portfolioPhotos.length
-						? ` · ${draft.portfolioPhotos.length}/${PORTFOLIO_PHOTO_MAX}`
+						? formatMessage(t.signup.portfolioHintCount, {
+								count: draft.portfolioPhotos.length,
+								max: PORTFOLIO_PHOTO_MAX,
+							})
 						: ''}
 				</Text>
 				{fieldErrors.portfolioPhotos ? (
@@ -388,7 +409,9 @@ export function Step5Summary({
 								<View style={styles.cellShade} pointerEvents="none" />
 								<View style={styles.cellBadge}>
 									<Text style={styles.cellBadgeText}>{label}</Text>
-									{index < 4 ? <Text style={styles.cellBadgeTag}>card</Text> : null}
+									{index < 4 ? (
+										<Text style={styles.cellBadgeTag}>{t.signup.cardTag}</Text>
+									) : null}
 								</View>
 								<Pressable
 									style={styles.removeBtn}
@@ -417,21 +440,21 @@ export function Step5Summary({
 									<View style={styles.addIconWrap}>
 										<ImagePlus size={18} color={C.violetL} strokeWidth={1.8} />
 									</View>
-									<Text style={styles.addTitle}>Add photo</Text>
+									<Text style={styles.addTitle}>{t.signup.addPhotos}</Text>
 									<View style={styles.addActions}>
 										<Pressable
 											style={styles.addBtn}
 											onPress={() => void addPortfolio('camera')}
 										>
 											<Camera size={14} color={C.accent} strokeWidth={2.2} />
-											<Text style={styles.addText}>Camera</Text>
+											<Text style={styles.addText}>{t.signup.camera}</Text>
 										</Pressable>
 										<Pressable
 											style={styles.addBtn}
 											onPress={() => void addPortfolio('gallery')}
 										>
 											<ImagePlus size={14} color={C.prMuted} strokeWidth={2.2} />
-											<Text style={styles.addTextMuted}>Gallery</Text>
+											<Text style={styles.addTextMuted}>{t.signup.gallery}</Text>
 										</Pressable>
 									</View>
 								</>
@@ -444,13 +467,10 @@ export function Step5Summary({
 			{/* 3. Comcard preview — same 2×2 + overlay as Profile (auto, not uploaded by hand) */}
 			<View style={styles.block}>
 				<View style={styles.blockHead}>
-					<Text style={styles.photoTitle}>Comcard preview</Text>
-					<Text style={styles.optionalPill}>Auto</Text>
+					<Text style={styles.photoTitle}>{t.signup.comcardPreview}</Text>
+					<Text style={styles.optionalPill}>{t.signup.comcardAuto}</Text>
 				</View>
-				<Text style={styles.photoHint}>
-					Built from your portfolio (same layout as Profile). Saved after you create the
-					account.
-				</Text>
+				<Text style={styles.photoHint}>{t.signup.comcardHint}</Text>
 				<View style={styles.comcardWrap}>
 					<View style={styles.comcard}>
 						{hasComcardPhotos ? (
@@ -474,7 +494,9 @@ export function Step5Summary({
 									<Text style={styles.comcardOverlayName} numberOfLines={1}>
 										{displayName.slice(0, 20)}
 									</Text>
-									<Text style={styles.comcardOverlayStats}>Age {age || '—'}</Text>
+									<Text style={styles.comcardOverlayStats}>
+										{formatMessage(t.signup.ageStat, { age: age || '—' })}
+									</Text>
 									<Text style={styles.comcardOverlayStats}>
 										{height}cm {weight}kg
 									</Text>
@@ -482,80 +504,81 @@ export function Step5Summary({
 							</View>
 						) : (
 							<View style={[styles.collage, styles.collageEmpty]}>
-								<Text style={styles.collageEmptyText}>
-									Add portfolio photos above to preview your comcard.
-								</Text>
+								<Text style={styles.collageEmptyText}>{t.signup.comcardEmpty}</Text>
 							</View>
 						)}
 					</View>
 				</View>
 			</View>
 
-			<Text style={styles.sectionEyebrow}>REVIEW DETAILS</Text>
+			<Text style={styles.sectionEyebrow}>{t.signup.review}</Text>
 
 			<View style={styles.card}>
-				<Text style={styles.cardTitle}>Identity</Text>
-				<Fact label="Nationality" value={draft.nationality} />
+				<Text style={styles.cardTitle}>{t.signup.reviewIdentity}</Text>
+				<Fact label={t.signup.nationality} value={draft.nationality} />
 				<Fact label={draft.idType || 'ID'} value={draft.idNo} />
-				<Fact label="Date of birth" value={draft.dob} />
-				<Fact label="Email" value={draft.email || '—'} />
+				<Fact label={t.signup.dob} value={draft.dob} />
+				<Fact label={t.signup.email} value={draft.email || '—'} />
 				<Fact
-					label="Height / Weight"
+					label={t.signup.heightWeight}
 					value={`${draft.heightCm || '—'} cm · ${draft.weightKg || '—'} kg`}
 				/>
 				<Fact
-					label="3 dimensions (BWH)"
+					label={t.signup.bwh}
 					value={`${draft.bustCm || '—'} · ${draft.waistCm || '—'} · ${draft.hipCm || '—'} cm`}
 				/>
 				<Fact
-					label="Languages"
+					label={t.signup.languages}
 					value={draft.languages.length ? draft.languages.join(', ') : '—'}
 				/>
 			</View>
 
 			<View style={styles.card}>
-				<Text style={styles.cardTitle}>Address</Text>
+				<Text style={styles.cardTitle}>{t.signup.reviewAddress}</Text>
 				<Text style={styles.addressText}>{address || '—'}</Text>
 			</View>
 
 			<View style={styles.card}>
-				<Text style={styles.cardTitle}>Agency</Text>
+				<Text style={styles.cardTitle}>{t.signup.reviewAgency}</Text>
 				<Fact
-					label="Referral"
+					label={t.signup.referral}
 					value={
 						draft.underAgency === true
-							? 'Yes — referred'
+							? t.signup.referralYes
 							: draft.underAgency === false
-								? 'No — asking to join'
+								? t.signup.referralNo
 								: '—'
 					}
 				/>
-				<Fact label={draft.underAgency ? 'Added by' : 'Asking to join'} value={agencyName} />
+				<Fact
+					label={draft.underAgency ? t.signup.addedBy : t.signup.askingToJoin}
+					value={agencyName}
+				/>
 			</View>
 
-			<Text style={styles.sectionEyebrow}>LOGIN PASSWORD</Text>
+			<Text style={styles.sectionEyebrow}>{t.signup.loginPassword}</Text>
 			<View style={styles.passwordCard}>
 				<Row>
-					<Field label="Password*" flex error={fieldErrors.password}>
+					<Field label={t.signup.password} flex error={fieldErrors.password}>
 						<Input
 							value={draft.password}
-							onChangeText={(t) => {
+							onChangeText={(text) => {
 								clearFieldError('password');
-								patch({ password: t });
+								patch({ password: text });
 							}}
-							placeholder="Min 6 characters"
+							placeholder={t.signup.passwordPlaceholder}
 							secureTextEntry
 							autoCapitalize="none"
 						/>
 					</Field>
-					<Field label="Confirm*" flex error={fieldErrors.confirm}>
+					<Field label={t.signup.confirmPassword} flex error={fieldErrors.confirm}>
 						<Input
 							value={draft.confirm}
-							onChangeText={(t) => {
+							onChangeText={(text) => {
 								clearFieldError('confirm');
-								patch({ confirm: t });
+								patch({ confirm: text });
 							}}
-							placeholder="Repeat password"
+							placeholder={t.signup.confirmPasswordPlaceholder}
 							secureTextEntry
 							autoCapitalize="none"
 						/>
@@ -563,7 +586,7 @@ export function Step5Summary({
 				</Row>
 			</View>
 
-			<Text style={styles.sectionEyebrow}>AGREE & CONTINUE</Text>
+			<Text style={styles.sectionEyebrow}>{t.signup.agreeContinue}</Text>
 			<View style={styles.ackCard}>
 				{ACK_ROWS.map((row, index) => (
 					<View
@@ -572,10 +595,7 @@ export function Step5Summary({
 					>
 						<AckCheck
 							checked={draft[row.key]}
-							label={
-								PR_ACKNOWLEDGEMENTS.find((d) => d.id === row.disclaimerId)?.title ??
-								row.label
-							}
+							label={t.signup[row.labelKey]}
 							error={fieldErrors[row.key]}
 							onToggle={() => toggleAck(row.key)}
 							onOpen={() => setOpenDisclaimer(row.disclaimerId)}
@@ -590,12 +610,12 @@ export function Step5Summary({
 						onOpen={() => setOpenDisclaimer('terms')}
 						label={
 							<Text style={styles.ackTermsText}>
-								I agree to the{' '}
+								{t.signup.ackTermsPrefix}
 								<Text
 									style={styles.ackLink}
 									onPress={() => setOpenDisclaimer('terms')}
 								>
-									Terms & Conditions
+									{t.signup.ackTermsLink}
 								</Text>
 							</Text>
 						}
@@ -624,7 +644,7 @@ export function Step5Summary({
 							style={[styles.modalDone, grad(GRADIENTS.accent, C.accent)]}
 							onPress={() => setOpenDisclaimer(null)}
 						>
-							<Text style={styles.modalDoneText}>Done</Text>
+							<Text style={styles.modalDoneText}>{t.signup.ackDone}</Text>
 						</Pressable>
 					</View>
 				</View>

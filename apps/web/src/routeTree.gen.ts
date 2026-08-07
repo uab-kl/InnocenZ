@@ -12,6 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AgencyRouteRouteImport } from './routes/agency/route'
+import { Route as DeleteAccountRouteImport } from './routes/delete-account'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoAccessRouteImport } from './routes/no-access'
 import { Route as NotFoundRouteImport } from './routes/not-found'
@@ -83,6 +84,11 @@ const AdminRouteRoute = AdminRouteRouteImport.update({
 const AgencyRouteRoute = AgencyRouteRouteImport.update({
   id: '/agency',
   path: '/agency',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const DeleteAccountRoute = DeleteAccountRouteImport.update({
+  id: '/delete-account',
+  path: '/delete-account',
   getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
@@ -383,6 +389,7 @@ export interface FileRoutesByFullPath {
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
+  '/delete-account': typeof DeleteAccountRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -443,6 +450,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
+  '/delete-account': typeof DeleteAccountRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -505,6 +513,7 @@ export interface FileRoutesById {
   '/admin': typeof AdminRouteRouteWithChildren
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
+  '/delete-account': typeof DeleteAccountRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
@@ -569,6 +578,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agency'
     | '/outlet'
+    | '/delete-account'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -629,6 +639,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/admin'
+    | '/delete-account'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -690,6 +701,7 @@ export interface FileRouteTypes {
     | '/admin'
     | '/agency'
     | '/outlet'
+    | '/delete-account'
     | '/login'
     | '/no-access'
     | '/not-found'
@@ -753,6 +765,7 @@ export interface RootRouteChildren {
   AdminRouteRoute: typeof AdminRouteRouteWithChildren
   AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
   OutletRouteRoute: typeof OutletRouteRouteWithChildren
+  DeleteAccountRoute: typeof DeleteAccountRoute
   LoginRoute: typeof LoginRoute
   NoAccessRoute: typeof NoAccessRoute
   NotFoundRoute: typeof NotFoundRoute
@@ -783,6 +796,13 @@ declare module '@tanstack/react-router' {
       path: '/agency'
       fullPath: '/agency'
       preLoaderRoute: typeof AgencyRouteRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/delete-account': {
+      id: '/delete-account'
+      path: '/delete-account'
+      fullPath: '/delete-account'
+      preLoaderRoute: typeof DeleteAccountRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -1360,6 +1380,7 @@ const rootRouteChildren: RootRouteChildren = {
   AdminRouteRoute: AdminRouteRouteWithChildren,
   AgencyRouteRoute: AgencyRouteRouteWithChildren,
   OutletRouteRoute: OutletRouteRouteWithChildren,
+  DeleteAccountRoute: DeleteAccountRoute,
   LoginRoute: LoginRoute,
   NoAccessRoute: NoAccessRoute,
   NotFoundRoute: NotFoundRoute,

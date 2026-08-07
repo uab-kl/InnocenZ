@@ -146,8 +146,46 @@ function SignUpScreenInner({
 	const describe = (e: unknown, fallback: string) =>
 		e instanceof ApiError ? e.message : fallback;
 
+	const validationCopy = {
+		nicknameRequired: t.signup.nicknameRequired,
+		fullNameRequired: t.signup.fullNameRequired,
+		dialRequired: t.signup.dialRequired,
+		phoneShort: t.signup.phoneShort,
+		nationalityRequired: t.signup.nationalityRequired,
+		idTypeRequired: t.signup.idTypeRequired,
+		dobRequired: t.signup.dobRequired,
+		idNoSelectFirst: t.signup.idNoSelectFirst,
+		idNoRequired: t.signup.idNoRequired,
+		languagesRequired: t.signup.languagesRequired,
+		addressLine1Required: t.signup.addressLine1Required,
+		cityRequired: t.signup.cityRequired,
+		postcodeRequired: t.signup.postcodeRequired,
+		stateRequired: t.signup.stateRequired,
+		countryRequired: t.signup.countryRequired,
+		joiningRequired: t.signup.joiningRequired,
+		agencyRequired: t.signup.agencyRequired,
+		profileRequired: t.signup.profileRequired,
+		idFrontRequired: t.signup.idFrontRequired,
+		idPassportPageRequired: t.signup.idPassportPageRequired,
+		idFrontOcrFail: t.signup.idFrontOcrFail,
+		idPassportOcrFail: t.signup.idPassportOcrFail,
+		idBackRequired: t.signup.idBackRequired,
+		idBackOcrFail: t.signup.idBackOcrFail,
+		passwordRequired: t.signup.passwordRequired,
+		passwordMin: t.signup.passwordMin,
+		confirmRequired: t.signup.confirmRequired,
+		passwordMismatch: t.signup.passwordMismatch,
+		ackRequired: t.signup.ackRequired,
+		fixHighlighted: t.signup.fixHighlighted,
+	};
+
 	const goNext = async () => {
-		const { fields, toast: toastMsg } = validateStep(step, draft, localDigits);
+		const { fields, toast: toastMsg } = validateStep(
+			step,
+			draft,
+			localDigits,
+			validationCopy,
+		);
 		if (toastMsg) {
 			setFieldErrors(fields);
 			showToast(toastMsg);
@@ -179,7 +217,7 @@ function SignUpScreenInner({
 					setBusy(false);
 					return;
 				}
-				const msg = describe(e, 'Could not verify phone / ID — try again.');
+				const msg = describe(e, t.signup.toastVerifyPhoneFailed);
 				setError(msg);
 				showToast(msg);
 				setBusy(false);
@@ -203,7 +241,12 @@ function SignUpScreenInner({
 		async (resending = false) => {
 			if (busy) return;
 			if (!resending) {
-				const { fields, toast: toastMsg } = validateStep(5, draft, localDigits);
+				const { fields, toast: toastMsg } = validateStep(
+					5,
+					draft,
+					localDigits,
+					validationCopy,
+				);
 				if (toastMsg) {
 					setFieldErrors(fields);
 					showToast(toastMsg);
@@ -220,16 +263,18 @@ function SignUpScreenInner({
 				setOtp('');
 				setStep(6);
 				setNotice(
-					resending ? 'A new code is on its way.' : `Code sent on WhatsApp to ${fullPhone}.`,
+					resending
+						? t.signup.toastCodeResent
+						: formatMessage(t.signup.toastCodeSent, { phone: fullPhone }),
 				);
 			} catch (e) {
 				if (e instanceof ApiError && e.status === 409) {
 					setStep(1);
-					const msg = 'That number already has an account. Use another, or sign in.';
+					const msg = t.signup.toastPhoneTaken;
 					setError(msg);
 					showToast(msg);
 				} else {
-					const msg = describe(e, 'Could not send the code — please try again.');
+					const msg = describe(e, t.signup.toastSendCodeFailed);
 					setError(msg);
 					showToast(msg);
 				}
@@ -237,13 +282,13 @@ function SignUpScreenInner({
 				setBusy(false);
 			}
 		},
-		[busy, draft, localDigits, phoneNum, fullPhone, showToast],
+		[busy, draft, localDigits, phoneNum, fullPhone, showToast, validationCopy, t.signup],
 	);
 
 	const verifyAndSubmit = async () => {
 		if (busy) return;
 		if (!verificationId && otp.length !== CODE_LENGTH) {
-			const msg = 'Enter all six digits.';
+			const msg = t.signup.toastOtpIncomplete;
 			setError(msg);
 			showToast(msg);
 			return;
@@ -337,16 +382,16 @@ function SignUpScreenInner({
 				}
 			} catch {
 				// Account exists — photos can be finished from Profile.
-				showToast('Account created. Some photos failed — finish them from Profile.');
+				showToast(t.signup.toastPhotosPartial);
 			}
 		} catch (e) {
 			if (!hasReceipt) setOtp('');
 			const msg =
 				e instanceof ApiError && e.status === 410
-					? 'That code expired. Tap Resend for a new one.'
+					? t.signup.toastOtpExpired
 					: hasReceipt
-						? describe(e, 'Could not finish creating your account. Tap Verify & submit again.')
-						: describe(e, 'That code is not right. Check and try again.');
+						? describe(e, t.signup.toastRegisterFailed)
+						: describe(e, t.signup.toastOtpWrong);
 			setError(msg);
 			showToast(msg);
 		} finally {

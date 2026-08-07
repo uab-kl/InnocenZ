@@ -166,21 +166,72 @@ function parseOptionalMeasure(
 }
 
 /** Collect per-field errors for the current step (all invalid fields at once). */
-export function validateStep(step: number, draft: Draft, localDigits: string): StepValidation {
+export function validateStep(
+	step: number,
+	draft: Draft,
+	localDigits: string,
+	copy?: {
+		nicknameRequired?: string;
+		fullNameRequired?: string;
+		dialRequired?: string;
+		phoneShort?: string;
+		nationalityRequired?: string;
+		idTypeRequired?: string;
+		dobRequired?: string;
+		idNoSelectFirst?: string;
+		idNoRequired?: string;
+		languagesRequired?: string;
+		addressLine1Required?: string;
+		cityRequired?: string;
+		postcodeRequired?: string;
+		stateRequired?: string;
+		countryRequired?: string;
+		joiningRequired?: string;
+		agencyRequired?: string;
+		profileRequired?: string;
+		idFrontRequired?: string;
+		idPassportPageRequired?: string;
+		idFrontOcrFail?: string;
+		idPassportOcrFail?: string;
+		idBackRequired?: string;
+		idBackOcrFail?: string;
+		passwordRequired?: string;
+		passwordMin?: string;
+		confirmRequired?: string;
+		passwordMismatch?: string;
+		ackRequired?: string;
+		fixHighlighted?: string;
+	},
+): StepValidation {
 	const fields: FieldErrors = {};
 
 	if (step === 1) {
-		if (!draft.floorNickname.trim()) fields.floorNickname = 'Nickname is required.';
-		if (!draft.fullName.trim()) fields.fullName = 'Full name is required.';
-		if (!draft.phoneCountryCode) fields.phoneCountryCode = 'Please choose a country dial code.';
-		if (localDigits.length < 9) fields.phone = 'That mobile number looks too short.';
-		if (!draft.nationality.trim()) fields.nationality = 'Nationality is required.';
-		if (!draft.idType) fields.idType = 'Please select an ID type.';
-		if (!draft.dob.trim()) fields.dob = 'Date of birth is required.';
+		if (!draft.floorNickname.trim()) {
+			fields.floorNickname = copy?.nicknameRequired ?? 'Nickname is required.';
+		}
+		if (!draft.fullName.trim()) {
+			fields.fullName = copy?.fullNameRequired ?? 'Full name is required.';
+		}
+		if (!draft.phoneCountryCode) {
+			fields.phoneCountryCode =
+				copy?.dialRequired ?? 'Please choose a country dial code.';
+		}
+		if (localDigits.length < 9) {
+			fields.phone = copy?.phoneShort ?? 'That mobile number looks too short.';
+		}
+		if (!draft.nationality.trim()) {
+			fields.nationality = copy?.nationalityRequired ?? 'Nationality is required.';
+		}
 		if (!draft.idType) {
-			fields.idNo = 'Please select ID type first.';
+			fields.idType = copy?.idTypeRequired ?? 'Please select an ID type.';
+		}
+		if (!draft.dob.trim()) {
+			fields.dob = copy?.dobRequired ?? 'Date of birth is required.';
+		}
+		if (!draft.idType) {
+			fields.idNo = copy?.idNoSelectFirst ?? 'Please select ID type first.';
 		} else if (!draft.idNo.trim()) {
-			fields.idNo = 'ID number is required.';
+			fields.idNo = copy?.idNoRequired ?? 'ID number is required.';
 		} else if (draft.idType === 'NRIC') {
 			if (!isValidNricFormat(draft.idNo)) {
 				fields.idNo = `NRIC must be ${NRIC_LENGTH} digits like 1234881234 (no dashes).`;
@@ -200,65 +251,87 @@ export function validateStep(step: number, draft: Draft, localDigits: string): S
 		const hipErr = parseOptionalMeasure(draft.hipCm, 40, 200, 'Hip');
 		if (hipErr) fields.hipCm = hipErr;
 		if (draft.languages.length === 0) {
-			fields.languages = 'Pick at least one preferred language.';
+			fields.languages =
+				copy?.languagesRequired ?? 'Pick at least one preferred language.';
 		}
 	} else if (step === 2) {
-		if (!draft.addressLine1.trim()) fields.addressLine1 = 'Address line 1 is required.';
-		if (!draft.city.trim()) fields.city = 'City is required.';
-		if (!draft.postcode.trim()) fields.postcode = 'Postcode is required.';
-		if (!draft.state.trim()) fields.state = 'Please choose a state.';
-		if (!draft.country.trim()) fields.country = 'Please choose a country.';
+		if (!draft.addressLine1.trim()) {
+			fields.addressLine1 =
+				copy?.addressLine1Required ?? 'Address line 1 is required.';
+		}
+		if (!draft.city.trim()) {
+			fields.city = copy?.cityRequired ?? 'City is required.';
+		}
+		if (!draft.postcode.trim()) {
+			fields.postcode = copy?.postcodeRequired ?? 'Postcode is required.';
+		}
+		if (!draft.state.trim()) {
+			fields.state = copy?.stateRequired ?? 'Please choose a state.';
+		}
+		if (!draft.country.trim()) {
+			fields.country = copy?.countryRequired ?? 'Please choose a country.';
+		}
 	} else if (step === 3) {
 		if (draft.underAgency === null) {
-			fields.underAgency = 'Please tell us whether an agency referred you.';
+			fields.underAgency =
+				copy?.joiningRequired ?? 'Please tell us whether an agency referred you.';
 		} else if (draft.underAgency === true && !draft.agencyId) {
-			fields.agencyId = 'Please pick the agency that added you.';
+			fields.agencyId =
+				copy?.agencyRequired ?? 'Please pick the agency that added you.';
 		}
 	} else if (step === 4) {
 		const passportOnly = draft.idType === 'Passport';
 		if (!draft.idPhotoFrontUri.trim()) {
 			fields.idPhotoFrontUri = passportOnly
-				? 'Capture the passport photo page.'
-				: 'Capture the front of your ID.';
+				? (copy?.idPassportPageRequired ?? 'Capture the passport photo page.')
+				: (copy?.idFrontRequired ?? 'Capture the front of your ID.');
 		} else if (!draft.idFrontOcrOk) {
 			fields.idPhotoFrontUri = passportOnly
-				? 'Passport number on the photo must match what you entered. Retake.'
-				: 'Front photo must be the front of your ID and show the correct ID number. Retake.';
+				? (copy?.idPassportOcrFail ??
+					'Passport number on the photo must match what you entered. Retake.')
+				: (copy?.idFrontOcrFail ??
+					'Front photo must be the front of your ID and show the correct ID number. Retake.');
 		}
 		// Passport is one page only — no back. NRIC / work permit still need both sides.
 		if (!passportOnly) {
 			if (!draft.idPhotoBackUri.trim()) {
-				fields.idPhotoBackUri = 'Capture the back of your ID.';
+				fields.idPhotoBackUri =
+					copy?.idBackRequired ?? 'Capture the back of your ID.';
 			} else if (!draft.idBackOcrOk) {
 				fields.idPhotoBackUri =
+					copy?.idBackOcrFail ??
 					'Back photo must be the back of your ID and show the correct ID number. Retake.';
 			}
 		}
 	} else if (step === 5) {
 		if (!draft.profileImageUri.trim() || !draft.profileImageFile) {
-			fields.profileImageUri = 'Add a profile photo.';
+			fields.profileImageUri = copy?.profileRequired ?? 'Add a profile photo.';
 		}
 		if (!draft.password.trim()) {
-			fields.password = 'Password is required.';
+			fields.password = copy?.passwordRequired ?? 'Password is required.';
 		} else if (draft.password.length < MIN_PASSWORD) {
-			fields.password = `Password must be at least ${MIN_PASSWORD} characters.`;
+			fields.password =
+				copy?.passwordMin ??
+				`Password must be at least ${MIN_PASSWORD} characters.`;
 		}
 		if (!draft.confirm.trim()) {
-			fields.confirm = 'Confirm your password.';
+			fields.confirm = copy?.confirmRequired ?? 'Confirm your password.';
 		} else if (draft.password !== draft.confirm) {
-			fields.confirm = 'Both passwords must match.';
+			fields.confirm = copy?.passwordMismatch ?? 'Both passwords must match.';
 		}
+		const ackMsg =
+			copy?.ackRequired ?? 'Please acknowledge the Personal Information Disclaimer.';
 		if (!draft.ackPersonalInfo) {
-			fields.ackPersonalInfo = 'Please acknowledge the Personal Information Disclaimer.';
+			fields.ackPersonalInfo = ackMsg;
 		}
 		if (!draft.ackDeclarationOfTruth) {
-			fields.ackDeclarationOfTruth = 'Please acknowledge the Declaration of Truth.';
+			fields.ackDeclarationOfTruth = ackMsg;
 		}
 		if (!draft.ackInformationSharing) {
-			fields.ackInformationSharing = 'Please acknowledge Agency Information Sharing.';
+			fields.ackInformationSharing = ackMsg;
 		}
 		if (!draft.acceptTerms) {
-			fields.acceptTerms = 'You must accept the Terms & Conditions.';
+			fields.acceptTerms = ackMsg;
 		}
 	}
 
@@ -268,7 +341,9 @@ export function validateStep(step: number, draft: Draft, localDigits: string): S
 	const toast =
 		messages.length === 1
 			? messages[0]
-			: `Please fix ${messages.length} fields before continuing.`;
+			: (copy?.fixHighlighted ??
+				`Please fix ${messages.length} fields before continuing.`);
 
 	return { fields, toast };
 }
+

@@ -9,6 +9,8 @@ import {
 	View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { formatMessage, useLocale } from '../../i18n';
+import type { SignupFieldCopy } from '../../i18n/signup-copy';
 import { C, F, GRADIENTS, grad } from '../../theme/theme';
 import { Camera, Check, Shield } from '../../components/icons';
 import { captureFromCamera } from '../../lib/photo-file';
@@ -30,6 +32,24 @@ type Props = {
 	clearFieldError: (key: keyof FieldErrors) => void;
 };
 
+type OcrCopy = Pick<
+	SignupFieldCopy,
+	| 'readingSide'
+	| 'idSideHint'
+	| 'idMatched'
+	| 'wrongSide'
+	| 'photoMismatch'
+	| 'photoMissingId'
+	| 'unreadableSide'
+	| 'ocrUnavailable'
+	| 'readingPassport'
+	| 'passportHint'
+	| 'passportMatched'
+	| 'passportMismatch'
+	| 'passportMissing'
+	| 'unreadablePassport'
+>;
+
 /**
  * Play / App Store: show an in-app rationale the first time the user taps
  * camera on Step 4 — even if OS camera permission was already granted
@@ -38,89 +58,115 @@ type Props = {
  */
 let idCameraExplainerAcked = false;
 
-function idLabel(idType: IdType | ''): string {
-	if (idType === 'Passport') return 'passport';
-	if (idType === 'Work permit') return 'work permit';
-	return 'NRIC';
+function idLabel(
+	idType: IdType | '',
+	copy: Pick<SignupFieldCopy, 'docNric' | 'docPassport' | 'docWorkPermit'>,
+): string {
+	if (idType === 'Passport') return copy.docPassport;
+	if (idType === 'Work permit') return copy.docWorkPermit;
+	return copy.docNric;
 }
 
 function ocrMessage(
 	side: 'front' | 'back',
 	result: IdOcrMatch | null,
 	busy: boolean,
+	copy: OcrCopy &
+		Pick<
+			SignupFieldCopy,
+			'sideFront' | 'sideBack' | 'wrongSideUnknown' | 'wrongSideLooksLike'
+		>,
 ): { text: string; tone: 'ok' | 'bad' | 'muted' } {
-	if (busy) return { text: `Reading ${side} ID…`, tone: 'muted' };
+	const sideLabel = side === 'front' ? copy.sideFront : copy.sideBack;
+	if (busy) {
+		return {
+			text: formatMessage(copy.readingSide, { side: sideLabel }),
+			tone: 'muted',
+		};
+	}
 	if (!result) {
 		return {
-			text: `${side === 'front' ? 'Front' : 'Back'} must show that face of your ID — number checked too.`,
+			text: formatMessage(copy.idSideHint, { side: sideLabel }),
 			tone: 'muted',
 		};
 	}
 	if (result.status === 'matched') {
-		return { text: `ID matched on ${side}: ${result.seen}`, tone: 'ok' };
+		return {
+			text: formatMessage(copy.idMatched, { side: sideLabel, seen: result.seen ?? '' }),
+			tone: 'ok',
+		};
 	}
 	if (result.status === 'wrong_side') {
 		const got =
 			result.detected === 'unknown'
-				? 'could not confirm the side'
-				: `looks like the ${result.detected}`;
+				? copy.wrongSideUnknown
+				: formatMessage(copy.wrongSideLooksLike, { detected: result.detected });
 		return {
-			text: `Wrong side — this photo ${got}. Capture the ${result.expectedSide}.`,
+			text: formatMessage(copy.wrongSide, {
+				got,
+				expected:
+					result.expectedSide === 'front'
+						? copy.sideFront
+						: result.expectedSide === 'back'
+							? copy.sideBack
+							: result.expectedSide,
+			}),
 			tone: 'bad',
 		};
 	}
 	if (result.status === 'mismatch') {
 		return {
 			text: result.seen
-				? `Photo shows ${result.seen}, but you entered ${result.expected}. Retake or fix Step 1.`
-				: `Could not find ID ${result.expected} on the ${side}. Retake a clearer shot.`,
+				? formatMessage(copy.photoMismatch, {
+						seen: result.seen,
+						expected: result.expected,
+					})
+				: formatMessage(copy.photoMissingId, {
+						expected: result.expected,
+						side: sideLabel,
+					}),
 			tone: 'bad',
 		};
 	}
 	if (result.status === 'unreadable') {
 		return {
-			text: `Could not read any ID number on the ${side}. Retake with better light, no glare.`,
+			text: formatMessage(copy.unreadableSide, { side: sideLabel }),
 			tone: 'bad',
 		};
 	}
-	return {
-		text: 'OCR is not available in this build — use the phone app with ML Kit. Cannot skip.',
-		tone: 'bad',
-	};
+	return { text: copy.ocrUnavailable, tone: 'bad' };
 }
 
 function passportOcrMessage(
 	result: IdOcrMatch | null,
 	busy: boolean,
+	copy: OcrCopy,
 ): { text: string; tone: 'ok' | 'bad' | 'muted' } {
-	if (busy) return { text: 'Reading passport number…', tone: 'muted' };
+	if (busy) return { text: copy.readingPassport, tone: 'muted' };
 	if (!result) {
-		return {
-			text: 'Passport photo page will be checked against your passport number.',
-			tone: 'muted',
-		};
+		return { text: copy.passportHint, tone: 'muted' };
 	}
 	if (result.status === 'matched') {
-		return { text: `Passport number matched: ${result.seen}`, tone: 'ok' };
+		return {
+			text: formatMessage(copy.passportMatched, { seen: result.seen ?? '' }),
+			tone: 'ok',
+		};
 	}
 	if (result.status === 'mismatch') {
 		return {
 			text: result.seen
-				? `Photo shows ${result.seen}, but you entered ${result.expected}. Retake or fix Step 1.`
-				: `Could not find passport ${result.expected} on the page. Retake a clearer shot.`,
+				? formatMessage(copy.passportMismatch, {
+						seen: result.seen,
+						expected: result.expected,
+					})
+				: formatMessage(copy.passportMissing, { expected: result.expected }),
 			tone: 'bad',
 		};
 	}
 	if (result.status === 'unreadable') {
-		return {
-			text: 'Could not read the passport number. Retake with better light, no glare.',
-			tone: 'bad',
-		};
+		return { text: copy.unreadablePassport, tone: 'bad' };
 	}
-	return {
-		text: 'OCR is not available in this build — use the phone app with ML Kit. Cannot skip.',
-		tone: 'bad',
-	};
+	return { text: copy.ocrUnavailable, tone: 'bad' };
 }
 
 function CaptureRow({
@@ -132,6 +178,9 @@ function CaptureRow({
 	spinning,
 	onCapture,
 	onClear,
+	removeLabel,
+	retakeLabel,
+	openCameraLabel,
 }: {
 	label: string;
 	uri: string;
@@ -141,6 +190,9 @@ function CaptureRow({
 	spinning: boolean;
 	onCapture: () => void;
 	onClear: () => void;
+	removeLabel: string;
+	retakeLabel: string;
+	openCameraLabel: string;
 }) {
 	return (
 		<View style={styles.row}>
@@ -166,7 +218,7 @@ function CaptureRow({
 				{uri ? (
 					<>
 						<Pressable style={styles.btnSoft} onPress={onClear} disabled={busy}>
-							<Text style={styles.btnSoftText}>Remove</Text>
+							<Text style={styles.btnSoftText}>{removeLabel}</Text>
 						</Pressable>
 						<Pressable style={styles.btnPrimary} onPress={onCapture} disabled={busy}>
 							{spinning ? (
@@ -174,7 +226,7 @@ function CaptureRow({
 							) : (
 								<>
 									<Camera size={15} color="#241a08" strokeWidth={2.2} />
-									<Text style={styles.btnPrimaryText}>Retake</Text>
+									<Text style={styles.btnPrimaryText}>{retakeLabel}</Text>
 								</>
 							)}
 						</Pressable>
@@ -186,7 +238,7 @@ function CaptureRow({
 						) : (
 							<>
 								<Camera size={15} color="#241a08" strokeWidth={2.2} />
-								<Text style={styles.btnPrimaryText}>Open camera</Text>
+								<Text style={styles.btnPrimaryText}>{openCameraLabel}</Text>
 							</>
 						)}
 					</Pressable>
@@ -197,6 +249,7 @@ function CaptureRow({
 }
 
 export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }: Props) {
+	const { t } = useLocale();
 	const insets = useSafeAreaInsets();
 	const [busySlot, setBusySlot] = useState<Slot | null>(null);
 	const [ocrBusySlot, setOcrBusySlot] = useState<Slot | null>(null);
@@ -204,7 +257,7 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 	const [backOcr, setBackOcr] = useState<IdOcrMatch | null>(null);
 	const [promptOpen, setPromptOpen] = useState(false);
 	const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
-	const doc = idLabel(draft.idType);
+	const doc = idLabel(draft.idType, t.signup);
 
 	const runOcr = useCallback(
 		async (slot: Slot, uri: string) => {
@@ -355,10 +408,11 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 
 	const passportOnly = draft.idType === 'Passport';
 	const frontBusy = ocrBusySlot === 'idPhotoFrontUri';
+	const ocrCopy = t.signup;
 	const frontMsg = passportOnly
-		? passportOcrMessage(frontOcr, frontBusy)
-		: ocrMessage('front', frontOcr, frontBusy);
-	const backMsg = ocrMessage('back', backOcr, ocrBusySlot === 'idPhotoBackUri');
+		? passportOcrMessage(frontOcr, frontBusy, ocrCopy)
+		: ocrMessage('front', frontOcr, frontBusy, ocrCopy);
+	const backMsg = ocrMessage('back', backOcr, ocrBusySlot === 'idPhotoBackUri', ocrCopy);
 	const busy = busySlot !== null || ocrBusySlot !== null;
 	const verified =
 		frontOcr?.status === 'matched' &&
@@ -368,15 +422,15 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 		<>
 			<View style={styles.intro}>
 				<Shield size={18} color={C.accent} strokeWidth={2.1} />
-				<Text style={styles.introBody}>
-					{passportOnly
-						? 'Photograph the passport photo page only (one side). We OCR it and check the passport number matches what you entered.'
-						: `Photograph the front and back of your ${doc}. We check the ID number AND that each photo is the correct side — swapping front/back will not pass.`}
-				</Text>
+				<Text style={styles.introBody}>{t.signup.idVerifyIntro}</Text>
 			</View>
 
 			<CaptureRow
-				label={passportOnly ? `1. ${doc} photo page*` : `1. ${doc} front*`}
+				label={
+					passportOnly
+						? formatMessage(t.signup.passportPage, { doc })
+						: formatMessage(t.signup.idFront, { doc })
+				}
 				uri={draft.idPhotoFrontUri}
 				msg={frontMsg}
 				error={fieldErrors.idPhotoFrontUri}
@@ -399,11 +453,14 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 							: {}),
 					});
 				}}
+				removeLabel={t.signup.remove}
+				retakeLabel={t.signup.retake}
+				openCameraLabel={t.signup.openCamera}
 			/>
 
 			{!passportOnly ? (
 				<CaptureRow
-					label={`2. ${doc} back*`}
+					label={formatMessage(t.signup.idBack, { doc })}
 					uri={draft.idPhotoBackUri}
 					msg={backMsg}
 					error={fieldErrors.idPhotoBackUri}
@@ -419,17 +476,16 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 							idBackOcrOk: false,
 						});
 					}}
+					removeLabel={t.signup.remove}
+					retakeLabel={t.signup.retake}
+					openCameraLabel={t.signup.openCamera}
 				/>
 			) : null}
 
 			{verified ? (
 				<View style={styles.okBanner}>
 					<Check size={14} color={C.green} strokeWidth={2.6} />
-					<Text style={styles.okBannerText}>
-						{passportOnly
-							? 'Passport number verified on the photo page'
-							: 'Front and back verified (correct sides + matching ID)'}
-					</Text>
+					<Text style={styles.okBannerText}>{t.signup.idVerifyOk}</Text>
 				</View>
 			) : null}
 
@@ -442,17 +498,13 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 				<View style={styles.promptBackdrop}>
 					<View style={[styles.promptSheet, { paddingBottom: 18 + Math.max(insets.bottom, 12) }]}>
 						<Camera size={26} color={C.accent} strokeWidth={2.2} />
-						<Text style={styles.promptTitle}>Camera access needed</Text>
-						<Text style={styles.promptBody}>
-							{passportOnly
-								? 'InnocenZ needs your camera to photograph the passport photo page. One photo is enough — we check the passport number with on-phone OCR.'
-								: 'InnocenZ needs your camera to photograph your ID card. Capture the correct front and back — swapping sides or using the same photo twice will not pass. We also check the ID number on both sides with on-phone OCR.'}
-						</Text>
+						<Text style={styles.promptTitle}>{t.signup.idCameraTitle}</Text>
+						<Text style={styles.promptBody}>{t.signup.idCameraBody}</Text>
 						<Pressable
 							style={[styles.promptEnableBtn, grad(GRADIENTS.accent, C.accent)]}
 							onPress={confirmCameraAccess}
 						>
-							<Text style={styles.promptEnableText}>Allow camera & continue</Text>
+							<Text style={styles.promptEnableText}>{t.signup.idCameraAllow}</Text>
 						</Pressable>
 						<Pressable
 							style={styles.promptCancel}
@@ -461,7 +513,7 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 								setPendingSlot(null);
 							}}
 						>
-							<Text style={styles.promptCancelText}>Not now</Text>
+							<Text style={styles.promptCancelText}>{t.signup.idCameraNotNow}</Text>
 						</Pressable>
 					</View>
 				</View>

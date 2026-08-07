@@ -10,18 +10,11 @@
     "newArchEnabled": true,
     "ios": {
       "bundleIdentifier": "com.innocenz.mobile",
-      "supportsTablet": true,
-      "config": {
-        "googleMapsApiKey": "AIzaSyDIvKLWKko9xNfwHTm0czohNYbYFdB8uXs"
-      }
+      "supportsTablet": true
     },
     "android": {
       "package": "com.innocenz.mobile",
-      "config": {
-        "googleMaps": {
-          "apiKey": "AIzaSyDIvKLWKko9xNfwHTm0czohNYbYFdB8uXs"
-        }
-      },
+      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"

@@ -59,7 +59,7 @@ function SignupPageContent() {
 								to="/policy"
 								className="text-foreground/65 underline-offset-4 hover:text-gold-bright hover:underline"
 							>
-								Privacy Policy
+								{copy.privacyPolicy}
 							</Link>
 						</p>
 					</div>
@@ -110,7 +110,7 @@ function SignupPageContent() {
 							to="/policy"
 							className="text-foreground/65 underline-offset-4 hover:text-gold-bright hover:underline"
 						>
-							Privacy Policy
+							{copy.privacyPolicy}
 						</Link>
 					</p>
 				</div>

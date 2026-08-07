@@ -1,3 +1,4 @@
+import { useLocale } from '../../i18n';
 import { COUNTRY_OPTIONS, statesForCountry } from './constants';
 import { Field, Input, Picker } from './fields';
 import type { Draft, FieldErrors } from './types';
@@ -15,6 +16,8 @@ function sanitizePostcode(country: string, raw: string) {
 }
 
 export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Props) {
+	const { t } = useLocale();
+	const s = t.signup;
 	const country = draft.country.trim();
 	const isMalaysia = country === 'Malaysia';
 	const stateOptions = country ? [...statesForCountry(country)] : [];
@@ -22,35 +25,35 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 
 	return (
 		<>
-			<Field label="Address line 1*" error={fieldErrors.addressLine1}>
+			<Field label={s.addressLine1} error={fieldErrors.addressLine1}>
 				<Input
 					value={draft.addressLine1}
-					onChangeText={(t) => {
+					onChangeText={(text) => {
 						clearFieldError('addressLine1');
-						patch({ addressLine1: t });
+						patch({ addressLine1: text });
 					}}
-					placeholder="Unit, street"
+					placeholder={s.addressLine1Placeholder}
 				/>
 			</Field>
-			<Field label="Address line 2">
+			<Field label={s.addressLine2}>
 				<Input
 					value={draft.addressLine2}
-					onChangeText={(t) => patch({ addressLine2: t })}
-					placeholder="Area"
+					onChangeText={(text) => patch({ addressLine2: text })}
+					placeholder={s.addressLine2Placeholder}
 				/>
 			</Field>
-			<Field label="City*" error={fieldErrors.city}>
+			<Field label={s.city} error={fieldErrors.city}>
 				<Input
 					value={draft.city}
-					onChangeText={(t) => {
+					onChangeText={(text) => {
 						clearFieldError('city');
-						patch({ city: t });
+						patch({ city: text });
 					}}
-					placeholder="City"
+					placeholder={s.cityPlaceholder}
 					autoCapitalize="words"
 				/>
 			</Field>
-			<Field label="Country*" error={fieldErrors.country}>
+			<Field label={s.country} error={fieldErrors.country}>
 				<Picker
 					value={country || null}
 					options={COUNTRY_OPTIONS}
@@ -65,18 +68,18 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 							postcode: sanitizePostcode(v, draft.postcode),
 						});
 					}}
-					title="Country"
+					title={s.country}
 					searchable
-					placeholder="Choose"
+					placeholder={s.choose}
 				/>
 			</Field>
 			<Field
-				label={isMalaysia ? 'State*' : 'State / province*'}
+				label={isMalaysia ? s.state : s.stateProvince}
 				error={fieldErrors.state}
-				hint={!country ? 'Choose a country first — the list depends on it.' : undefined}
+				hint={!country ? s.stateHintNeedCountry : undefined}
 			>
 				{!country ? (
-					<Input value="" editable={false} placeholder="Choose country first" />
+					<Input value="" editable={false} placeholder={s.chooseCountryFirst} />
 				) : stateOptions.length > 0 ? (
 					<Picker
 						key={country}
@@ -86,37 +89,34 @@ export function Step2Address({ draft, fieldErrors, patch, clearFieldError }: Pro
 							clearFieldError('state');
 							patch({ state: v });
 						}}
-						title={isMalaysia ? 'State' : 'State / province'}
-						placeholder="Choose"
+						title={isMalaysia ? s.state : s.stateProvince}
+						placeholder={s.choose}
 						searchable={stateOptions.length > 12}
 					/>
 				) : (
 					<Input
 						value={draft.state}
-						onChangeText={(t) => {
+						onChangeText={(text) => {
 							clearFieldError('state');
-							patch({ state: t });
+							patch({ state: text });
 						}}
-						placeholder="State or province"
+						placeholder={s.stateOrProvincePlaceholder}
 						autoCapitalize="words"
 					/>
 				)}
 			</Field>
-			<Field
-				label="Postcode*"
-				error={fieldErrors.postcode}
-			>
+			<Field label={s.postcode} error={fieldErrors.postcode}>
 				{!country ? (
-					<Input value="" editable={false} placeholder="Choose country first" />
+					<Input value="" editable={false} placeholder={s.chooseCountryFirst} />
 				) : (
 					<Input
 						key={`postcode-${country}`}
 						value={draft.postcode}
-						onChangeText={(t) => {
+						onChangeText={(text) => {
 							clearFieldError('postcode');
-							patch({ postcode: sanitizePostcode(country, t) });
+							patch({ postcode: sanitizePostcode(country, text) });
 						}}
-						placeholder={isMalaysia ? '50000' : 'Postcode'}
+						placeholder={isMalaysia ? '50000' : s.postcodePlaceholder}
 						keyboardType={isMalaysia ? 'number-pad' : 'default'}
 					/>
 				)}

@@ -1,5 +1,6 @@
 import React, { useRef } from 'react';
 import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { formatMessage, useLocale } from '../../i18n';
 import { C, F } from '../../theme/theme';
 import { IzButton } from '../../components/ui';
 import { Building2, Check, Search, UserIcon } from '../../components/icons';
@@ -69,6 +70,7 @@ export function Step3Agency({
 	setAgencySearch,
 	loadAgencies,
 }: Props) {
+	const { t } = useLocale();
 	const referred = draft.underAgency === true;
 	const independent = draft.underAgency === false;
 	const searchWrapRef = useRef<View>(null);
@@ -77,13 +79,13 @@ export function Step3Agency({
 	return (
 		<>
 			<Field
-				label="How are you joining?*"
-				hint="An agency still has to add you before you can be given shifts."
+				label={t.signup.joiningHow}
+				hint={t.signup.joiningHint}
 				error={fieldErrors.underAgency}
 			>
 				<View style={pathStyles.stack}>
 					<PathCard
-						title="Pick an agency"
+						title={t.signup.pickAgency}
 						body=""
 						icon={Building2}
 						on={referred}
@@ -95,7 +97,7 @@ export function Step3Agency({
 						}}
 					/>
 					<PathCard
-						title="Joining on my own"
+						title={t.signup.joiningOwn}
 						body=""
 						icon={UserIcon}
 						on={independent}
@@ -111,13 +113,12 @@ export function Step3Agency({
 
 			{draft.underAgency !== null ? (
 				<Field
-					label={referred ? 'Which agency added you?* ' : 'Ask an agency to accept you'}
-					
+					label={referred ? t.signup.whichAgency : t.signup.askAgency}
 					error={fieldErrors.agencyId}
 				>
 					{agencyState === 'loading' ? (
 						<View style={agencyStyles.emptyBox}>
-							<Text style={styles.note}>Loading agencies…</Text>
+							<Text style={styles.note}>{t.signup.loadingAgencies}</Text>
 						</View>
 					) : null}
 
@@ -127,7 +128,7 @@ export function Step3Agency({
 							<TextInput
 								value={agencySearch}
 								onChangeText={setAgencySearch}
-								placeholder="Search by agency name"
+								placeholder={t.signup.searchAgency}
 								placeholderTextColor={C.muted2}
 								style={agencyStyles.searchInput}
 								autoCapitalize="none"
@@ -184,22 +185,29 @@ export function Step3Agency({
 
 					{agencyState === 'ready' && agencies.length === 0 ? (
 						<View style={agencyStyles.emptyBox}>
-							<Text style={styles.note}>No agencies are listed yet.</Text>
+							<Text style={styles.note}>{t.signup.noAgencies}</Text>
 						</View>
 					) : null}
 
 					{agencyState === 'ready' && agencies.length > 0 && visibleAgencies.length === 0 ? (
 						<View style={agencyStyles.emptyBox}>
-							<Text style={styles.note}>No agency matches “{agencySearch.trim()}”.</Text>
+							<Text style={styles.note}>
+								{formatMessage(t.signup.noAgencyMatch, { q: agencySearch.trim() })}
+							</Text>
 						</View>
 					) : null}
 
 					{agencyState === 'failed' ? (
 						<View style={agencyStyles.emptyBox}>
 							<Text style={[styles.note, { marginBottom: 10 }]}>
-								Could not load the agency list.
+								{t.signup.agencyLoadFailed}
 							</Text>
-							<IzButton label="Try again" variant="soft" small onPress={loadAgencies} />
+							<IzButton
+								label={t.signup.tryAgain}
+								variant="soft"
+								small
+								onPress={loadAgencies}
+							/>
 						</View>
 					) : null}
 				</Field>
@@ -211,14 +219,14 @@ export function Step3Agency({
 				(agencyState === 'ready' && agencies.length > 0 && visibleAgencies.length === 0)) ? (
 				<View style={agencyStyles.callout}>
 					<Text style={agencyStyles.calloutText}>
-						Tell your agency your floor nickname and mobile number — they link you from Manage PR.
+						{t.signup.agencyCalloutReferred}
 					</Text>
 				</View>
 			) : null}
 			{independent && draft.agencyId ? (
 				<View style={agencyStyles.callout}>
 					<Text style={agencyStyles.calloutText}>
-						They still have to accept you before you can be given shifts.
+						{t.signup.agencyCalloutIndependent}
 					</Text>
 				</View>
 			) : null}

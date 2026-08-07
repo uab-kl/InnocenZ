@@ -1213,6 +1213,10 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+| 2026-08-07 | **PR account soft-delete + Play Console URL.** Mobile Security → Delete account calls `POST /user/:id/delete` (password confirm): sets `inactive`, scrubs PII + ID/portfolio media, frees phone/email. Public page `/delete-account` for Google Play account-deletion URL. | PR (mobile) + Web (public) | ⚠️ Reported |
+
+| 2026-08-07 | **PR mobile signup full i18n (en / zh / zh-Hant).** Field labels, pickers, OCR messages, step-5 review/acks, validation toasts, and wizard toasts via `signup-copy.ts` + `useLocale`. Language switcher already on signup. | PR (mobile register) | ⚠️ Reported |
+
 > **7 Aug 2026 — Prod login 500: missing `admin_mfa` on fresh DB.**
 > Table never had a CREATE in the journal (only on old shared DB). Correct
 > password → MFA lookup → relation missing → 500. Migration **0108** +

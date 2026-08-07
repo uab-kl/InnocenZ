@@ -2,6 +2,7 @@ import React, { useCallback } from 'react';
 import { Platform, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F } from '../../theme/theme';
 import { Phone } from '../../components/icons';
+import { formatMessage, useLocale } from '../../i18n';
 import { CODE_LENGTH } from './constants';
 
 type Props = {
@@ -23,7 +24,6 @@ export function normalizeOtpInput(raw: string): string {
 
 async function readClipboardText(): Promise<string> {
 	try {
-		// Optional — present when expo-clipboard is installed.
 		// eslint-disable-next-line @typescript-eslint/no-require-imports
 		const Clip = require('expo-clipboard') as {
 			getStringAsync: () => Promise<string>;
@@ -31,7 +31,6 @@ async function readClipboardText(): Promise<string> {
 		return (await Clip.getStringAsync()) ?? '';
 	} catch {
 		try {
-			// Legacy RN Clipboard (some builds still expose it).
 			// eslint-disable-next-line @typescript-eslint/no-require-imports
 			const rn = require('react-native') as {
 				Clipboard?: { getString: () => Promise<string> };
@@ -45,6 +44,9 @@ async function readClipboardText(): Promise<string> {
 }
 
 export function Step6Otp({ fullPhone, otp, setOtp, resendIn, busy, onResend }: Props) {
+	const { t } = useLocale();
+	const s = t.signup;
+
 	const pasteCode = useCallback(async () => {
 		const text = await readClipboardText();
 		const next = normalizeOtpInput(text);
@@ -57,18 +59,15 @@ export function Step6Otp({ fullPhone, otp, setOtp, resendIn, busy, onResend }: P
 				<Phone size={26} color={C.accentL} strokeWidth={2} />
 			</View>
 			<Text style={styles.otpLead}>
-				Enter the 6-digit code sent on WhatsApp to <Text style={styles.otpPhone}>{fullPhone}</Text>
+				{formatMessage(s.otpLead, { phone: fullPhone })}
 			</Text>
-			<Text style={styles.otpHint}>
-				After WhatsApp Copy code, tap Paste code — or long-press the box and Paste.
-			</Text>
+			<Text style={styles.otpHint}>{s.otpHint}</Text>
 			<TextInput
 				style={styles.otpInput}
 				value={otp}
-				onChangeText={(t) => setOtp(normalizeOtpInput(t))}
+				onChangeText={(text) => setOtp(normalizeOtpInput(text))}
 				placeholder="123456"
 				placeholderTextColor={C.muted2}
-				// Android number-pad often blocks paste from WhatsApp Copy code.
 				keyboardType={Platform.OS === 'ios' ? 'number-pad' : 'numeric'}
 				textContentType="oneTimeCode"
 				autoComplete="one-time-code"
@@ -79,12 +78,18 @@ export function Step6Otp({ fullPhone, otp, setOtp, resendIn, busy, onResend }: P
 			/>
 			<View style={styles.otpActions}>
 				<Pressable onPress={() => void pasteCode()} disabled={busy} hitSlop={8}>
-					<Text style={styles.paste}>Paste code</Text>
+					<Text style={styles.paste}>{s.pasteCode}</Text>
 				</Pressable>
 				<Text style={styles.actionDot}>·</Text>
-				<Pressable onPress={() => resendIn === 0 && onResend()} disabled={resendIn > 0 || busy} hitSlop={8}>
+				<Pressable
+					onPress={() => resendIn === 0 && onResend()}
+					disabled={resendIn > 0 || busy}
+					hitSlop={8}
+				>
 					<Text style={[styles.resend, resendIn > 0 && styles.resendOff]}>
-						{resendIn > 0 ? `Resend in ${resendIn}s` : 'Resend OTP'}
+						{resendIn > 0
+							? formatMessage(s.resendIn, { s: resendIn })
+							: s.resendOtp}
 					</Text>
 				</Pressable>
 			</View>
@@ -112,7 +117,6 @@ const styles = StyleSheet.create({
 		textAlign: 'center',
 		maxWidth: 280,
 	},
-	otpPhone: { fontFamily: F.sora, fontWeight: '700', color: C.txt },
 	otpHint: {
 		fontFamily: F.manrope,
 		fontSize: 12,

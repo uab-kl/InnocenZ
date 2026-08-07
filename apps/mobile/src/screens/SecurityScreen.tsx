@@ -14,6 +14,7 @@ import {
   ApiError,
   changePassword,
   changePhoneWithOtp,
+  deleteOwnAccount,
   sendPrOtp,
   verifyPrOtp,
 } from '../lib/api';
@@ -52,6 +53,7 @@ export function SecurityScreen() {
   const [curPw, setCurPw] = useState('');
   const [newPw, setNewPw] = useState('');
   const [confirmPw, setConfirmPw] = useState('');
+  const [deletePw, setDeletePw] = useState('');
 
   const [phoneCountryCode, setPhoneCountryCode] = useState(loadPhoneCountryCode);
   const [phoneNumber, setPhoneNumber] = useState('');
@@ -139,9 +141,24 @@ export function SecurityScreen() {
     }
   };
 
-  const deleteAccount = () => {
-    setSheet(null);
-    signOut();
+  const deleteAccount = async () => {
+    if (!token || !me || busy) return;
+    if (!deletePw.trim()) {
+      setError(t.security.deleteAccountPassword);
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await deleteOwnAccount(token, me.id, deletePw);
+      setSheet(null);
+      setDeletePw('');
+      await signOut();
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not delete account');
+    } finally {
+      setBusy(false);
+    }
   };
 
   return (
@@ -173,11 +190,18 @@ export function SecurityScreen() {
         </View>
       </Pressable>
 
-      <Pressable style={[styles.card, styles.dangerCard]} onPress={() => setSheet('delete')}>
+      <Pressable
+        style={[styles.card, styles.dangerCard]}
+        onPress={() => {
+          setError(null);
+          setDeletePw('');
+          setSheet('delete');
+        }}
+      >
         <Trash2 size={18} color={C.red} />
         <View style={{ flex: 1 }}>
           <Text style={[styles.cardTitle, { color: C.red }]}>{t.security.deleteAccount}</Text>
-          <Text style={styles.cardSub}>Sign out of this device (demo delete)</Text>
+          <Text style={styles.cardSub}>{t.security.deleteAccountConfirm}</Text>
         </View>
       </Pressable>
 
@@ -331,16 +355,37 @@ export function SecurityScreen() {
 
             {sheet === 'delete' && (
               <>
-                <Text style={styles.sheetTitle}>Delete account?</Text>
-                <Text style={styles.sheetHint}>
-                  This signs you out of this device. Full account deletion is not
-                  available yet.
-                </Text>
-                <Pressable style={styles.dangerBtn} onPress={deleteAccount}>
-                  <Text style={styles.dangerBtnText}>Sign out</Text>
+                <Text style={styles.sheetTitle}>{t.security.deleteAccountTitle}</Text>
+                <Text style={styles.sheetHint}>{t.security.deleteAccountHint}</Text>
+                <TextInput
+                  style={styles.input}
+                  value={deletePw}
+                  onChangeText={setDeletePw}
+                  placeholder={t.security.deleteAccountPassword}
+                  placeholderTextColor={C.muted2}
+                  secureTextEntry
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                />
+                {error ? <Text style={styles.sheetError}>{error}</Text> : null}
+                <Pressable
+                  style={[styles.dangerBtn, busy && { opacity: 0.6 }]}
+                  onPress={() => void deleteAccount()}
+                  disabled={busy}
+                >
+                  <Text style={styles.dangerBtnText}>
+                    {busy ? '…' : t.security.deleteAccountConfirm}
+                  </Text>
                 </Pressable>
-                <Pressable style={styles.sheetCancel} onPress={() => setSheet(null)}>
-                  <Text style={styles.sheetCancelText}>Cancel</Text>
+                <Pressable
+                  style={styles.sheetCancel}
+                  onPress={() => {
+                    setDeletePw('');
+                    setError(null);
+                    setSheet(null);
+                  }}
+                >
+                  <Text style={styles.sheetCancelText}>{t.common.cancel}</Text>
                 </Pressable>
               </>
             )}

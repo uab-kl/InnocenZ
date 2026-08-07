@@ -1,19 +1,19 @@
 {
   "build": {
     "production": {
+      "environment": "production",
       "android": {
         "buildType": "app-bundle"
       }
     },
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "environment": "development"
     },
     "preview": {
       "distribution": "internal",
-      "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.0.13:7777/api"
-      },
+      "environment": "preview",
       "ios": {
         "simulator": true
       },
