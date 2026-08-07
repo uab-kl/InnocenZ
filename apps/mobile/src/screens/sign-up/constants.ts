@@ -132,6 +132,19 @@ export const MY_STATES = [...STATES_BY_COUNTRY.Malaysia];
 
 export const ID_TYPES = ['NRIC', 'Passport', 'Work permit'] as const;
 
+/** Demonym stored on `user_profile.nationality` for MY — NRIC is MY-only. */
+export const MALAYSIAN_NATIONALITY = 'Malaysian';
+
+/** NRIC only for Malaysians; everyone else gets Passport / Work permit. */
+export function idTypesForNationality(
+	nationality: string | null | undefined,
+): readonly (typeof ID_TYPES)[number][] {
+	if (nationality?.trim() === MALAYSIAN_NATIONALITY) {
+		return ID_TYPES;
+	}
+	return ['Passport', 'Work permit'];
+}
+
 export const NRIC_LENGTH = 12;
 export const CODE_LENGTH = 6;
 export const MIN_PASSWORD = 6; // matches RegisterSchema on the backend

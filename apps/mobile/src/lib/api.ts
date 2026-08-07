@@ -84,7 +84,13 @@ export function assetUrl(pathname: string | null | undefined): string | null {
   return `${API_ORIGIN}${normalized}`;
 }
 
-export type ApiEnvelope<T> = { success: boolean; message: string; data: T };
+export type ApiEnvelope<T> = {
+  success: boolean;
+  message: string;
+  data: T;
+  /** Present on some public/auth payloads so clients can resolve R2 object keys. */
+  r2PublicUrl?: string | null;
+};
 
 export type LoginResult = {
   accessToken: string;
@@ -156,6 +162,8 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (!res.ok || !body?.success) {
     throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status, body?.data ?? null);
   }
+  // Envelope-level (e.g. public /auth/agencies) — signup has no /auth/me yet.
+  noteR2PublicUrl(body.r2PublicUrl);
   if (body.data && typeof body.data === 'object') {
     noteR2PublicUrl(body.data as { r2PublicUrl?: string | null });
   }
@@ -183,17 +191,54 @@ export function login(identifier: string, password: string): Promise<LoginResult
  * accountType + a verified phone_verification row.
  * ------------------------------------------------------------------ */
 
-/** Name + id only — enough to pick an agency during sign-up, nothing more. */
-export type PublicAgency = { id: string; name: string };
+/** Name + id (+ optional logo key/url) — enough to pick an agency during sign-up. */
+export type PublicAgency = {
+  id: string;
+  name: string;
+  logoImage?: string | null;
+  /** Absolute CDN URL resolved right after fetch (signup has no /auth/me yet). */
+  logoUrl?: string | null;
+};
 
 /**
  * Agency list for the sign-up wizard. Must live under /auth to be reachable:
  * `GET /agency` sits below `v1Router.use(authenticateJWT)` (router/v1.ts:32)
- * so a PR who has no account yet gets a 401 from it. Not built yet — the
- * screen falls back to typing the agency name by hand.
+ * so a PR who has no account yet gets a 401 from it.
+ *
+ * Prefer server-built `logoUrl` (`https://cdn…/agency/{id}/logo/…`); fall back
+ * to joining `r2PublicUrl` + `logoImage` key on the client.
  */
-export function fetchPublicAgencies(): Promise<PublicAgency[]> {
-  return request<PublicAgency[]>('/auth/agencies');
+export async function fetchPublicAgencies(): Promise<PublicAgency[]> {
+  const res = await fetch(`${API_BASE}/auth/agencies?_=${Date.now()}`, {
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
+  }).catch(() => null);
+  if (!res) {
+    throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
+  }
+  const body = (await res.json().catch(() => null)) as ApiEnvelope<
+    Array<{
+      id: string;
+      name: string;
+      logoImage?: string | null;
+      logoUrl?: string | null;
+    }>
+  > | null;
+  if (!res.ok || !body?.success || !Array.isArray(body.data)) {
+    throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status);
+  }
+  noteR2PublicUrl(body);
+  const base = (body.r2PublicUrl ?? cachedR2PublicBase)?.replace(/\/$/, '') || null;
+  return body.data.map((a) => {
+    const key = a.logoImage?.replace(/^\//, '') || null;
+    const fromServer = a.logoUrl?.trim() || null;
+    const joined = key && base ? `${base}/${key}` : null;
+    return {
+      id: a.id,
+      name: a.name,
+      logoImage: key,
+      logoUrl: fromServer || joined || assetUrl(key),
+    };
+  });
 }
 
 /** Step-1 gate: phone + ID must not already belong to an account. */

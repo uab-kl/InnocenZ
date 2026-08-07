@@ -58,6 +58,9 @@ export function extractIdCandidates(ocrText: string): string[] {
  * Heuristic front vs back from OCR keywords.
  * MyKad front: citizenship / gender / name / address fields.
  * MyKad back: government-property legal block (Malay + English).
+ *
+ * Do NOT count titles that appear on both faces (MYKAD / KAD PENGENALAN) —
+ * those alone used to mark a back photo as "front".
  */
 export function guessIdCardSide(ocrText: string, idType: string): IdSideGuess {
   const t = ocrText
@@ -65,35 +68,35 @@ export function guessIdCardSide(ocrText: string, idType: string): IdSideGuess {
     .replace(/[0O]/g, 'O')
     .replace(/\s+/g, ' ');
 
-  // Shared card title can appear on either face — weak signal alone.
   const frontKeys =
     idType === 'Work permit'
       ? [
           'FOREIGN WORKER',
-          'WORKER',
-          'PERMIT',
-          'PASSPORT',
           'NATIONALITY',
           'GENDER',
-          'NAME',
-          'DOB',
           'DATE OF BIRTH',
           'EMPLOYER',
           'SECTOR',
+          'PASSPORT NO',
+          'PERMIT NO',
         ]
       : [
+          // Personal-data face only — not the legal-text reverse.
           'WARGANEGARA',
           'LELAKI',
           'PEREMPUAN',
           'AGAMA',
           'ALAMAT',
           'NAMA',
-          'MYKAD',
-          'KAD PENGENALAN',
           'MALE',
           'FEMALE',
           'CITIZEN',
           'ADDRESS',
+          'RELIGION',
+          'ISLAM',
+          'BUDDHA',
+          'HINDU',
+          'CHRISTIAN',
         ];
 
   const backKeys =
@@ -115,11 +118,16 @@ export function guessIdCardSide(ocrText: string, idType: string): IdSideGuess {
           'PROPERTY OF THE GOVERNMENT',
           'THIS CARD IS THE PROPERTY',
           'GOVERNMENT OF MALAYSIA',
+          'KERAJAAN MALAYSIA',
           'PENALTI',
           'PENALTY',
           'JANGAN',
+          'DO NOT BEND',
           'DO NOT',
           'TAMPER',
+          'MENGGUNAKAN',
+          'DIPERBUAT',
+          'PEMILIKAN',
         ];
 
   let frontHits = 0;
@@ -131,10 +139,10 @@ export function guessIdCardSide(ocrText: string, idType: string): IdSideGuess {
     if (t.includes(k)) backHits += 1;
   }
 
-  if (backHits >= 2 && backHits > frontHits) return 'back';
+  // Legal-block cues win — even one is enough to call it the reverse.
+  if (backHits >= 1 && backHits >= frontHits) return 'back';
+  // Personal-data face needs 2+ cues (one keyword alone is too noisy for OCR).
   if (frontHits >= 2 && frontHits > backHits) return 'front';
-  if (backHits >= 1 && frontHits === 0) return 'back';
-  if (frontHits >= 1 && backHits === 0) return 'front';
   return 'unknown';
 }
 
@@ -220,10 +228,18 @@ export async function verifyIdPhotoMatches(
   const side = guessIdCardSide(text, idType);
 
   // Passport is a single page — side check does not apply.
+  //
+  // Dual-sided docs: only refuse when OCR clearly sees the OPPOSITE face.
+  // MyKad back is mostly dense Malay legal text — ML Kit often returns
+  // "unknown" even on a good shot. Requiring a positive "back" guess made
+  // the reverse slot nearly impossible. Number match + not-obviously-front
+  // is enough for the back slot; front still rejects a clear reverse face
+  // (so a back photo with legal-block keywords cannot pass as front).
   if (expectedSide !== 'any' && idType !== 'Passport') {
-    // Only refuse when OCR clearly sees the opposite face. "Unknown" still
-    // needs the ID number match; step-4 cross-checks both photos afterward.
-    if (side !== 'unknown' && side !== expectedSide) {
+    const clearlyWrong =
+      (expectedSide === 'front' && side === 'back') ||
+      (expectedSide === 'back' && side === 'front');
+    if (clearlyWrong) {
       return {
         status: 'wrong_side',
         seen: match.seen,

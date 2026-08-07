@@ -10,13 +10,18 @@ import {
 	ApiError,
 	checkPrRegisterAvailability,
 	fetchPublicAgencies,
+	generateUserComcard,
 	registerPr,
 	sendPrOtp,
 	updateUserProfile,
+	uploadUserIdDoc,
+	uploadUserPortfolioPhoto,
+	uploadUserProfileImage,
 	verifyPrOtp,
 	type PublicAgency,
 	type RegisterCheckConflict,
 } from '../../lib/api';
+import { resolveUploadFile } from '../../lib/photo-file';
 import { useSession } from '../../lib/session';
 import { formatMessage, useLocale } from '../../i18n';
 import { IzButton } from '../../components/ui';
@@ -48,13 +53,7 @@ function SignUpScreenInner({
 	onBackToSignIn: () => void;
 	scroller: React.RefObject<ScrollView | null>;
 }) {
-	const {
-		signIn,
-		uploadAvatar,
-		generateComcard,
-		uploadIdDoc,
-		uploadPortfolioPhoto,
-	} = useSession();
+	const { signIn, refreshMe } = useSession();
 	const { t } = useLocale();
 	const insets = useSafeAreaInsets();
 	const keyboardScroll = useKeyboardScroll();
@@ -153,6 +152,7 @@ function SignUpScreenInner({
 		phoneShort: t.signup.phoneShort,
 		nationalityRequired: t.signup.nationalityRequired,
 		idTypeRequired: t.signup.idTypeRequired,
+		nricMalaysianOnly: t.signup.nricMalaysianOnly,
 		dobRequired: t.signup.dobRequired,
 		idNoSelectFirst: t.signup.idNoSelectFirst,
 		idNoRequired: t.signup.idNoRequired,
@@ -359,29 +359,75 @@ function SignUpScreenInner({
 					/* non-fatal — register already created the account */
 				});
 			}
-			try {
-				if (draft.profileImageFile) {
-					await uploadAvatar(draft.profileImageFile, 'avatar.jpg');
+			// Must use accessToken + signedIn.id from signIn — session
+			// upload* hooks still close over pre-login token/me (null).
+			// Each asset uploads independently so one failure cannot skip IC.
+			const uploadFailures: string[] = [];
+			const runUpload = async (label: string, work: () => Promise<unknown>) => {
+				try {
+					await work();
+				} catch {
+					uploadFailures.push(label);
 				}
-				if (draft.idPhotoFrontFile) {
-					await uploadIdDoc('front', draft.idPhotoFrontFile, 'id-front.jpg');
+			};
+
+			const avatar = resolveUploadFile(
+				draft.profileImageFile,
+				draft.profileImageUri,
+				'avatar.jpg',
+			);
+			if (avatar) {
+				await runUpload('avatar', () =>
+					uploadUserProfileImage(accessToken, signedIn.id, avatar, 'avatar.jpg'),
+				);
+			}
+
+			const idFront = resolveUploadFile(
+				draft.idPhotoFrontFile,
+				draft.idPhotoFrontUri,
+				'id-front.jpg',
+			);
+			if (idFront) {
+				await runUpload('id-front', () =>
+					uploadUserIdDoc(accessToken, signedIn.id, 'front', idFront, 'id-front.jpg'),
+				);
+			}
+
+			const needsIdBack = draft.idType !== 'Passport';
+			const idBack = needsIdBack
+				? resolveUploadFile(draft.idPhotoBackFile, draft.idPhotoBackUri, 'id-back.jpg')
+				: null;
+			if (idBack) {
+				await runUpload('id-back', () =>
+					uploadUserIdDoc(accessToken, signedIn.id, 'back', idBack, 'id-back.jpg'),
+				);
+			}
+
+			for (let i = 0; i < draft.portfolioPhotos.length; i++) {
+				const slot = draft.portfolioPhotos[i];
+				const file = resolveUploadFile(slot.file, slot.uri, `portfolio-${i + 1}.jpg`);
+				if (!file) {
+					uploadFailures.push(`portfolio-${i + 1}`);
+					continue;
 				}
-				if (draft.idPhotoBackFile) {
-					await uploadIdDoc('back', draft.idPhotoBackFile, 'id-back.jpg');
-				}
-				for (let i = 0; i < draft.portfolioPhotos.length; i++) {
-					await uploadPortfolioPhoto(
+				await runUpload(`portfolio-${i + 1}`, () =>
+					uploadUserPortfolioPhoto(
+						accessToken,
+						signedIn.id,
 						i,
-						draft.portfolioPhotos[i].file,
+						file,
 						`portfolio-${i + 1}.jpg`,
-					);
-				}
-				// Same auto comcard as Profile — built from the first 4 portfolio slots.
-				if (draft.portfolioPhotos.length > 0) {
-					await generateComcard();
-				}
-			} catch {
-				// Account exists — photos can be finished from Profile.
+					),
+				);
+			}
+			if (draft.portfolioPhotos.length > 0 && !uploadFailures.some((f) => f.startsWith('portfolio-'))) {
+				await runUpload('comcard', () => generateUserComcard(accessToken, signedIn.id));
+			}
+
+			await refreshMe(accessToken).catch(() => {
+				/* non-fatal — uploads already persisted */
+			});
+			if (uploadFailures.length > 0) {
 				showToast(t.signup.toastPhotosPartial);
 			}
 		} catch (e) {

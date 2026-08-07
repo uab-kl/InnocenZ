@@ -1213,6 +1213,16 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+| 2026-08-07 | **Agency logos via API proxy (not CDN).** Phone RN Image failed on `cdn.innocenz.net` even when the key `agency/{id}/logo/…` was correct. `GET /auth/agencies` now returns `logoUrl` → `/api/v1/auth/agencies/:id/logo` which streams the R2 object through the backend the phone already reaches. | PR (mobile) + API | ⚠️ Reported |
+
+| 2026-08-07 | **Agency signup logos: server returns absolute `logoUrl`.** `GET /auth/agencies` now includes `logoUrl` = `R2_PUBLIC_URL` + `agency/{id}/logo/…` key (plus `logoImage` key). Mobile uses that URL directly. | PR (mobile) + API | ⚠️ Reported |
+
+| 2026-08-07 | **Signup photos in bucket but Profile blank.** After register uploads, `refreshMe()` no-op'd because React `token` state was still null; now `refreshMe(accessToken)` loads avatar/portfolio/comcard into session. Avatar falls back to initial on image error. | PR (mobile) | ⚠️ Reported |
+
+| 2026-08-07 | **Signup agency logos: gray box fix.** Resolve `logoUrl` at fetch (after `r2PublicUrl`), cache-bust `/auth/agencies`, and paint thumbs with absoluteFill + `onError` → Building2. | PR (mobile register) | ⚠️ Reported |
+
+| 2026-08-07 | **Signup ID photos: upload after sign-in hardened.** Post-register IC/avatar/portfolio use `accessToken` + rebuild file from URI if Blob dropped; each asset uploads independently so one failure cannot skip ID. IC remains signup-only (no Profile re-upload). Existing accounts created before the fix still have null ID photos — delete + re-register. | PR (mobile register) | ⚠️ Reported |
+
 | 2026-08-07 | **PR account soft-delete + Play Console URL.** Mobile Security → Delete account calls `POST /user/:id/delete` (password confirm): sets `inactive`, scrubs PII + ID/portfolio media, frees phone/email. Public page `/delete-account` for Google Play account-deletion URL. | PR (mobile) + Web (public) | ⚠️ Reported |
 
 | 2026-08-07 | **PR mobile signup full i18n (en / zh / zh-Hant).** Field labels, pickers, OCR messages, step-5 review/acks, validation toasts, and wizard toasts via `signup-copy.ts` + `useLocale`. Language switcher already on signup. | PR (mobile register) | ⚠️ Reported |

@@ -3,7 +3,7 @@
  * Identity linked to admin backend PR "Vicky" (+60123456789).
  * Rebuild stamp: 2026-07-20T00:30Z
  */
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { StatusBar } from 'react-native';
 import { AppSafeAreaProvider } from '../lib/safe-area';
 import { ensureWebFonts } from '../theme/theme';
@@ -68,6 +68,12 @@ function LoggedInShell() {
 function AppShell() {
   const { me, booting } = useSession();
   const [authView, setAuthView] = useState<'signIn' | 'signUp'>('signIn');
+
+  // Signup leaves authView on 'signUp'; clear it once logged in so logout
+  // returns to Login, not the registration wizard.
+  useEffect(() => {
+    if (me) setAuthView('signIn');
+  }, [me]);
 
   if (booting) {
     return (

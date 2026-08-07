@@ -47,20 +47,29 @@ const profileOnlyFields = {
 type ProfileOnlyBody = z.infer<z.ZodObject<typeof profileOnlyFields>>;
 
 function profileRefinements(data: ProfileOnlyBody, ctx: z.RefinementCtx) {
-  if (data.idType === 'NRIC' && data.idNo && data.dob) {
-    const digits = digitsOnlyNric(data.idNo);
-    if (digits.length !== NRIC_LENGTH) {
+  if (data.idType === 'NRIC') {
+    if (data.nationality.trim().toLowerCase() !== 'malaysian') {
       ctx.addIssue({
         code: 'custom',
-        message: `NRIC must be ${NRIC_LENGTH} digits`,
-        path: ['idNo'],
+        message: 'NRIC is only for Malaysian nationality',
+        path: ['idType'],
       });
-    } else if (!nricMatchesDob(data.dob, data.idNo)) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'First 6 NRIC digits must match date of birth (YYMMDD)',
-        path: ['idNo'],
-      });
+    }
+    if (data.idNo && data.dob) {
+      const digits = digitsOnlyNric(data.idNo);
+      if (digits.length !== NRIC_LENGTH) {
+        ctx.addIssue({
+          code: 'custom',
+          message: `NRIC must be ${NRIC_LENGTH} digits`,
+          path: ['idNo'],
+        });
+      } else if (!nricMatchesDob(data.dob, data.idNo)) {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'First 6 NRIC digits must match date of birth (YYMMDD)',
+          path: ['idNo'],
+        });
+      }
     }
   }
 }
@@ -70,14 +79,14 @@ export const UserProfileCreateSchema = z
   .superRefine((data, ctx) => profileRefinements(data, ctx));
 
 export const UserProfileUpdateSchema = UserProfileCreateSchema.partial().superRefine((data, ctx) => {
-  if (data.idType === 'NRIC' && data.idNo && data.dob) {
+  if (data.idType === 'NRIC') {
     profileRefinements(
       {
         fullName: data.fullName ?? '',
         nationality: data.nationality ?? '',
         idType: data.idType,
-        idNo: data.idNo,
-        dob: data.dob,
+        idNo: data.idNo ?? '',
+        dob: data.dob ?? '',
         addressLine1: data.addressLine1 ?? '',
         city: data.city ?? '',
         postcode: data.postcode ?? '',

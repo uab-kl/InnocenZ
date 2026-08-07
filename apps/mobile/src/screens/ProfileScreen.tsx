@@ -29,7 +29,7 @@ import {
   PORTFOLIO_SLOTS,
 } from '../lib/demo-shifts';
 import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
-import { pickImageFromGallery } from '../lib/photo-file';
+import { pickImageFromGallery, pickImagesFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
 import { useLocale } from '../i18n';
 import { Avatar, IzButton } from '../components/ui';
@@ -365,6 +365,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     return picked;
   };
 
+  const pickValidatedImages = async (max: number) => {
+    const picked = await pickImagesFromGallery({ max });
+    if (!picked.length) return { images: [] as typeof picked, skippedOversize: false };
+    const images = picked.filter((p) => p.size == null || p.size <= 5 * 1024 * 1024);
+    return { images, skippedOversize: images.length < picked.length };
+  };
+
   const onPickAvatar = async () => {
     if (!canPickImages) return;
     const picked = await pickValidatedImage();
@@ -382,27 +389,93 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   const onPickPortfolio = async (slot: number) => {
     if (!canPickImages) return;
-    const picked = await pickValidatedImage();
-    if (!picked) return;
-    const preview = picked.previewUri;
-    if (preview) {
-      setSlotPreviewUri((prev) => {
-        const next = [...prev];
-        next[slot] = preview;
-        return next;
-      });
+    const slots = portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS);
+    const replacing = Boolean(slots[slot]);
+
+    // Replace one filled slot → single pick.
+    if (replacing) {
+      const picked = await pickValidatedImage();
+      if (!picked) return;
+      const preview = picked.previewUri;
+      if (preview) {
+        setSlotPreviewUri((prev) => {
+          const next = [...prev];
+          next[slot] = preview;
+          return next;
+        });
+      }
+      setSaving(true);
+      setError(null);
+      try {
+        const updated = await uploadPortfolioPhoto(slot, picked.file, picked.filename);
+        setDraft((d) => ({
+          ...d,
+          portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
+        }));
+        try {
+          await generateComcard();
+          setComcardSavedHint('Comcard updated');
+        } catch {
+          /* Non-fatal */
+        }
+      } catch (e) {
+        setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
+      } finally {
+        if (preview) {
+          setSlotPreviewUri((prev) => {
+            const next = [...prev];
+            if (next[slot] === preview) next[slot] = null;
+            return next;
+          });
+          if (Platform.OS === 'web' && typeof URL !== 'undefined' && 'revokeObjectURL' in URL) {
+            URL.revokeObjectURL(preview);
+          }
+        }
+        setSaving(false);
+      }
+      return;
     }
+
+    // Empty slot → multi-select into remaining empty slots (from tapped slot, then wrap).
+    const emptyIndices: number[] = [];
+    for (let i = slot; i < PORTFOLIO_SLOTS; i++) {
+      if (!slots[i]) emptyIndices.push(i);
+    }
+    for (let i = 0; i < slot; i++) {
+      if (!slots[i]) emptyIndices.push(i);
+    }
+    if (!emptyIndices.length) return;
+
+    const { images: pickedList, skippedOversize } = await pickValidatedImages(emptyIndices.length);
+    if (!pickedList.length) return;
+
+    const previews = pickedList.map((p) => p.previewUri);
+    setSlotPreviewUri((prev) => {
+      const next = [...prev];
+      pickedList.forEach((_, i) => {
+        const s = emptyIndices[i];
+        const preview = previews[i];
+        if (s != null && preview) next[s] = preview;
+      });
+      return next;
+    });
+
     setSaving(true);
-    setError(null);
+    setError(skippedOversize ? 'Some images were over 5 MB and were skipped' : null);
     try {
-      const updated = await uploadPortfolioPhoto(slot, picked.file, picked.filename);
-      // Always sync draft + clear preview so the gallery shows the new R2 URL
-      // (same-slot overwrite used to keep an identical URL → Image cache stuck).
-      setDraft((d) => ({
-        ...d,
-        portfolio: portfolioSlotsFromProfile(updated.profile.portfolioPhotos, PORTFOLIO_SLOTS),
-      }));
-      // Keep the saved comcard in sync with the gallery (first 4 slots).
+      let latest = me;
+      for (let i = 0; i < pickedList.length; i++) {
+        const target = emptyIndices[i];
+        const picked = pickedList[i];
+        if (target == null || !picked) continue;
+        latest = await uploadPortfolioPhoto(target, picked.file, picked.filename);
+      }
+      if (latest) {
+        setDraft((d) => ({
+          ...d,
+          portfolio: portfolioSlotsFromProfile(latest.profile.portfolioPhotos, PORTFOLIO_SLOTS),
+        }));
+      }
       try {
         await generateComcard();
         setComcardSavedHint('Comcard updated');
@@ -412,14 +485,18 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not upload portfolio photo');
     } finally {
-      if (preview) {
-        setSlotPreviewUri((prev) => {
-          const next = [...prev];
-          if (next[slot] === preview) next[slot] = null;
-          return next;
-        });
-        if (Platform.OS === 'web' && typeof URL !== 'undefined' && 'revokeObjectURL' in URL) {
-          URL.revokeObjectURL(preview);
+      setSlotPreviewUri((prev) => {
+        const next = [...prev];
+        for (let i = 0; i < emptyIndices.length; i++) {
+          const s = emptyIndices[i];
+          const preview = previews[i];
+          if (s != null && preview && next[s] === preview) next[s] = null;
+        }
+        return next;
+      });
+      if (Platform.OS === 'web' && typeof URL !== 'undefined' && 'revokeObjectURL' in URL) {
+        for (const preview of previews) {
+          if (preview) URL.revokeObjectURL(preview);
         }
       }
       setSaving(false);

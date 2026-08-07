@@ -45,6 +45,14 @@ export type AppTranslations = {
     signIn: string;
     signingIn: string;
     signInFailed: string;
+    /** Backend: "This account is not registered yet." */
+    accountNotRegistered: string;
+    /** Backend: "This account is inactive." */
+    accountInactive: string;
+    /** Backend: "Wrong password" */
+    wrongPassword: string;
+    /** Backend lockout — `{m}` = minutes */
+    tooManyAttempts: string;
     newHere: string;
     createAccount: string;
   };
@@ -229,6 +237,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signIn: 'Sign in',
       signingIn: 'Signing in…',
       signInFailed: 'Sign in failed — please try again.',
+      accountNotRegistered: 'This account is not registered yet.',
+      accountInactive: 'This account is inactive.',
+      wrongPassword: 'Wrong password',
+      tooManyAttempts: 'Too many failed attempts. Try again in {m} minutes.',
       newHere: 'New here?',
       createAccount: 'Create an account',
     },
@@ -420,6 +432,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signIn: '登录',
       signingIn: '登录中…',
       signInFailed: '登录失败，请重试。',
+      accountNotRegistered: '此账号尚未注册。',
+      accountInactive: '此账号已停用。',
+      wrongPassword: '密码错误',
+      tooManyAttempts: '尝试次数过多。请在 {m} 分钟后再试。',
       newHere: '还没有账号？',
       createAccount: '创建账号',
     },
@@ -611,6 +627,10 @@ export const translations: Record<AppLocale, AppTranslations> = {
       signIn: '登入',
       signingIn: '登入中…',
       signInFailed: '登入失敗，請重試。',
+      accountNotRegistered: '此帳號尚未註冊。',
+      accountInactive: '此帳號已停用。',
+      wrongPassword: '密碼錯誤',
+      tooManyAttempts: '嘗試次數過多。請在 {m} 分鐘後再試。',
       newHere: '還沒有帳號？',
       createAccount: '建立帳號',
     },
@@ -770,4 +790,23 @@ export function formatMessage(
   return template.replace(/\{(\w+)\}/g, (_, key: string) =>
     vars[key] != null ? String(vars[key]) : `{${key}}`,
   );
+}
+
+/**
+ * Map English login API messages to the active locale.
+ * Backend auth errors are English-only; the phone shows them raw unless we translate here.
+ */
+export function localizeLoginError(
+  message: string,
+  login: AppTranslations['login'],
+): string {
+  const trimmed = message.trim();
+  if (trimmed === 'This account is not registered yet.') return login.accountNotRegistered;
+  if (trimmed === 'This account is inactive.') return login.accountInactive;
+  if (trimmed === 'Wrong password') return login.wrongPassword;
+  const lockout = /^Too many failed attempts\. Try again in (\d+) minutes?\.?$/i.exec(
+    trimmed,
+  );
+  if (lockout) return formatMessage(login.tooManyAttempts, { m: lockout[1] });
+  return trimmed || login.signInFailed;
 }

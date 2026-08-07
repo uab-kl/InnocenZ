@@ -157,6 +157,16 @@ const RegisterSchema = z
     ...registerOrgFields,
   })
   .superRefine((data, ctx) => {
+    if (data.idType === 'NRIC') {
+      const nationality = data.nationality?.trim().toLowerCase() ?? '';
+      if (nationality !== 'malaysian') {
+        ctx.addIssue({
+          code: 'custom',
+          message: 'NRIC is only for Malaysian nationality',
+          path: ['idType'],
+        });
+      }
+    }
     if (data.accountType !== 'agency' && data.accountType !== 'outlet') return;
     const required: Array<[keyof typeof data, string]> = [
       ['companyName', 'Company name is required'],

@@ -97,10 +97,16 @@ function ocrMessage(
 		};
 	}
 	if (result.status === 'wrong_side') {
+		const detectedLabel =
+			result.detected === 'front'
+				? copy.sideFront
+				: result.detected === 'back'
+					? copy.sideBack
+					: result.detected;
 		const got =
 			result.detected === 'unknown'
 				? copy.wrongSideUnknown
-				: formatMessage(copy.wrongSideLooksLike, { detected: result.detected });
+				: formatMessage(copy.wrongSideLooksLike, { detected: detectedLabel });
 		return {
 			text: formatMessage(copy.wrongSide, {
 				got,
@@ -253,8 +259,28 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 	const insets = useSafeAreaInsets();
 	const [busySlot, setBusySlot] = useState<Slot | null>(null);
 	const [ocrBusySlot, setOcrBusySlot] = useState<Slot | null>(null);
-	const [frontOcr, setFrontOcr] = useState<IdOcrMatch | null>(null);
-	const [backOcr, setBackOcr] = useState<IdOcrMatch | null>(null);
+	// Restore OCR “matched” UI when the user leaves Step 4 and comes back —
+	// draft keeps idFrontOcrOk / photos, but local OCR state remounts empty.
+	const [frontOcr, setFrontOcr] = useState<IdOcrMatch | null>(() =>
+		draft.idFrontOcrOk && draft.idPhotoFrontUri
+			? {
+					status: 'matched',
+					seen: draft.idNo.trim() || 'OK',
+					side: draft.idType === 'Passport' ? 'unknown' : 'front',
+					rawText: `__kept_front__:${draft.idPhotoFrontUri}`,
+				}
+			: null,
+	);
+	const [backOcr, setBackOcr] = useState<IdOcrMatch | null>(() =>
+		draft.idBackOcrOk && draft.idPhotoBackUri
+			? {
+					status: 'matched',
+					seen: draft.idNo.trim() || 'OK',
+					side: 'back',
+					rawText: `__kept_back__:${draft.idPhotoBackUri}`,
+				}
+			: null,
+	);
 	const [promptOpen, setPromptOpen] = useState(false);
 	const [pendingSlot, setPendingSlot] = useState<Slot | null>(null);
 	const doc = idLabel(draft.idType, t.signup);
@@ -339,6 +365,10 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 					patch({ [okKey]: ok });
 				}
 				if (ok) clearFieldError(slot);
+			} catch {
+				// Native OCR / camera quirks must not take down the signup screen.
+				setResult({ status: 'unreadable' });
+				patch({ [okKey]: false });
 			} finally {
 				setOcrBusySlot(null);
 			}
@@ -379,6 +409,8 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 						: {}),
 				});
 				await runOcr(slot, picked.previewUri);
+			} catch {
+				// Camera cancel / native failure — keep the wizard alive.
 			} finally {
 				setBusySlot(null);
 			}
@@ -409,14 +441,50 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 	const passportOnly = draft.idType === 'Passport';
 	const frontBusy = ocrBusySlot === 'idPhotoFrontUri';
 	const ocrCopy = t.signup;
+	// If draft already says OCR passed (user left & returned), force a green
+	// “matched” line even before local OCR state hydrates.
+	const frontDisplay: IdOcrMatch | null =
+		frontOcr?.status === 'matched'
+			? frontOcr
+			: draft.idFrontOcrOk && draft.idPhotoFrontUri
+				? {
+						status: 'matched',
+						seen: draft.idNo.trim() || 'OK',
+						side: passportOnly ? 'unknown' : 'front',
+						rawText: '',
+					}
+				: frontOcr;
+	const backDisplay: IdOcrMatch | null =
+		backOcr?.status === 'matched'
+			? backOcr
+			: draft.idBackOcrOk && draft.idPhotoBackUri
+				? {
+						status: 'matched',
+						seen: draft.idNo.trim() || 'OK',
+						side: 'back',
+						rawText: '',
+					}
+				: backOcr;
 	const frontMsg = passportOnly
-		? passportOcrMessage(frontOcr, frontBusy, ocrCopy)
-		: ocrMessage('front', frontOcr, frontBusy, ocrCopy);
-	const backMsg = ocrMessage('back', backOcr, ocrBusySlot === 'idPhotoBackUri', ocrCopy);
+		? passportOcrMessage(frontDisplay, frontBusy, ocrCopy)
+		: ocrMessage('front', frontDisplay, frontBusy, ocrCopy);
+	const backMsg = ocrMessage('back', backDisplay, ocrBusySlot === 'idPhotoBackUri', ocrCopy);
 	const busy = busySlot !== null || ocrBusySlot !== null;
-	const verified =
-		frontOcr?.status === 'matched' &&
-		(passportOnly || backOcr?.status === 'matched');
+	const frontOk =
+		frontDisplay?.status === 'matched' ||
+		(draft.idFrontOcrOk && Boolean(draft.idPhotoFrontUri));
+	const backOk =
+		passportOnly ||
+		backDisplay?.status === 'matched' ||
+		(draft.idBackOcrOk && Boolean(draft.idPhotoBackUri));
+	const verified = frontOk && backOk;
+	const restored =
+		verified &&
+		((frontOcr?.rawText?.startsWith('__kept_') ?? false) ||
+			(backOcr?.rawText?.startsWith('__kept_') ?? false) ||
+			(draft.idFrontOcrOk &&
+				Boolean(draft.idPhotoFrontUri) &&
+				frontOcr?.status === 'matched'));
 
 	return (
 		<>
@@ -485,7 +553,14 @@ export function Step4VerifyPhotos({ draft, fieldErrors, patch, clearFieldError }
 			{verified ? (
 				<View style={styles.okBanner}>
 					<Check size={14} color={C.green} strokeWidth={2.6} />
-					<Text style={styles.okBannerText}>{t.signup.idVerifyOk}</Text>
+					<View style={styles.okBannerCopy}>
+						<Text style={styles.okBannerText}>
+							{restored ? t.signup.idVerifyKept : t.signup.idVerifyOk}
+						</Text>
+						<Text style={styles.okBannerHint}>
+							{restored ? t.signup.idVerifyContinueHint : t.signup.idVerifyOkHint}
+						</Text>
+					</View>
 				</View>
 			) : null}
 
@@ -622,18 +697,28 @@ const styles = StyleSheet.create({
 	},
 	okBanner: {
 		flexDirection: 'row',
-		alignItems: 'center',
+		alignItems: 'flex-start',
 		gap: 8,
 		padding: 12,
 		borderRadius: 12,
 		backgroundColor: C.greenBg,
 		marginBottom: 8,
 	},
+	okBannerCopy: {
+		flex: 1,
+		gap: 2,
+	},
 	okBannerText: {
 		fontFamily: F.sora,
 		fontSize: 13,
 		fontWeight: '700',
 		color: C.green,
+	},
+	okBannerHint: {
+		fontFamily: F.manrope,
+		fontSize: 12,
+		lineHeight: 17,
+		color: C.prMuted,
 	},
 	promptBackdrop: {
 		flex: 1,

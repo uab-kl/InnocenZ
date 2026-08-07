@@ -11,7 +11,11 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { PublicAgency } from '../../lib/api';
-import { captureFromCamera, pickImageFromGallery } from '../../lib/photo-file';
+import {
+	captureFromCamera,
+	pickImageFromGallery,
+	pickImagesFromGallery,
+} from '../../lib/photo-file';
 import { formatMessage, useLocale } from '../../i18n';
 import { C, F, GRADIENTS, grad } from '../../theme/theme';
 import { Camera, Check, ImagePlus, XIcon } from '../../components/icons';
@@ -274,16 +278,30 @@ export function Step5Summary({
 	const addPortfolio = useCallback(
 		async (source: PhotoSource) => {
 			if (busySlot || draft.portfolioPhotos.length >= PORTFOLIO_PHOTO_MAX) return;
+			const remaining = PORTFOLIO_PHOTO_MAX - draft.portfolioPhotos.length;
 			setBusySlot('portfolio');
 			try {
-				const picked =
-					source === 'gallery'
-						? await pickImageFromGallery()
-						: await captureFromCamera({
-								facing: 'back',
-								aspect: [3, 4],
-								filename: `portfolio-${draft.portfolioPhotos.length + 1}.jpg`,
-							});
+				if (source === 'gallery') {
+					const picked = await pickImagesFromGallery({ max: remaining });
+					const valid = picked.filter((p) => p.previewUri);
+					if (!valid.length) return;
+					clearFieldError('portfolioPhotos');
+					patch({
+						portfolioPhotos: [
+							...draft.portfolioPhotos,
+							...valid.map((p) => ({
+								uri: p.previewUri as string,
+								file: p.file,
+							})),
+						].slice(0, PORTFOLIO_PHOTO_MAX),
+					});
+					return;
+				}
+				const picked = await captureFromCamera({
+					facing: 'back',
+					aspect: [3, 4],
+					filename: `portfolio-${draft.portfolioPhotos.length + 1}.jpg`,
+				});
 				if (!picked?.previewUri) return;
 				clearFieldError('portfolioPhotos');
 				patch({

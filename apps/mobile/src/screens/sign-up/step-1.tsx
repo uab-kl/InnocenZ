@@ -6,8 +6,9 @@ import { savePhoneCountryCode } from '../../lib/phone-prefs';
 import {
 	COUNTRY_BY_CODE,
 	COUNTRY_DIAL_OPTIONS,
-	ID_TYPES,
+	MALAYSIAN_NATIONALITY,
 	NATIONALITY_OPTIONS,
+	idTypesForNationality,
 } from './constants';
 import {
 	Field,
@@ -51,6 +52,15 @@ export function Step1Persona({
 	const closedDialLabel = country
 		? `${country.flag ? `${country.flag} ` : ''}${country.dialCode}`
 		: null;
+	const idTypeOptions = idTypesForNationality(draft.nationality);
+
+	const clearIdPhotos = {
+		idPhotoFrontUri: '',
+		idPhotoBackUri: '',
+		idPhotoFrontFile: null as null,
+		idPhotoBackFile: null as null,
+		idFrontOcrOk: false,
+	};
 
 	return (
 		<>
@@ -123,7 +133,15 @@ export function Step1Persona({
 					options={NATIONALITY_OPTIONS}
 					onSelect={(v) => {
 						clearFieldError('nationality');
-						patch({ nationality: v });
+						clearFieldError('idType');
+						const next: Partial<Draft> = { nationality: v };
+						// NRIC is Malaysia-only — drop it when nationality leaves MY.
+						if (v !== MALAYSIAN_NATIONALITY && draft.idType === 'NRIC') {
+							next.idType = '';
+							next.idNo = '';
+							Object.assign(next, clearIdPhotos, { idBackOcrOk: false });
+						}
+						patch(next);
 					}}
 					title={s.nationality}
 					searchable
@@ -134,7 +152,7 @@ export function Step1Persona({
 				<Field label={s.idType} flex error={fieldErrors.idType}>
 					<Picker
 						value={draft.idType || null}
-						options={[...ID_TYPES]}
+						options={[...idTypeOptions]}
 						onSelect={(v) => {
 							const idType = v as IdType;
 							clearFieldError('idType');
@@ -145,11 +163,7 @@ export function Step1Persona({
 									idType === 'NRIC' && draft.dob
 										? mergeNricWithDob(draft.dob, draft.idNo)
 										: draft.idNo,
-								idPhotoFrontUri: '',
-								idPhotoBackUri: '',
-								idPhotoFrontFile: null,
-								idPhotoBackFile: null,
-								idFrontOcrOk: false,
+								...clearIdPhotos,
 								idBackOcrOk: idType === 'Passport',
 							});
 						}}

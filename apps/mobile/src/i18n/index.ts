@@ -9,5 +9,6 @@ export { LocaleProvider, useLocale } from './context';
 export {
   translations,
   formatMessage,
+  localizeLoginError,
   type AppTranslations,
 } from './translations';

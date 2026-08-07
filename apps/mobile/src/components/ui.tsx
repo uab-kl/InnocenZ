@@ -31,31 +31,37 @@ export function Avatar({
   size?: number;
   radius?: number;
   fontSize?: number;
-  photoPath?: string | null;
   initial?: string;
   logo?: boolean;
   gradientCss?: string;
+  photoPath?: string | null;
   style?: StyleProp<ViewStyle>;
 }) {
   const uri = assetUrl(photoPath);
+  const [broken, setBroken] = React.useState(false);
+  React.useEffect(() => {
+    setBroken(false);
+  }, [uri]);
+  const showPhoto = Boolean(uri) && !broken;
   return (
     <View
       style={[
         styles.avatar,
         { width: size, height: size, borderRadius: radius },
-        !uri && grad(gradientCss, '#C99B4E'),
+        !showPhoto && grad(gradientCss, '#C99B4E'),
         logo && { backgroundColor: '#0a0a0a' },
         style,
       ]}
     >
-      {uri ? (
+      {showPhoto ? (
         <Image
-          source={{ uri }}
+          source={{ uri: uri! }}
           style={[
             StyleSheet.absoluteFillObject,
             logo && { transform: [{ scale: 1.28 }, { translateY: -size * 0.04 }] },
           ]}
           resizeMode="cover"
+          onError={() => setBroken(true)}
         />
       ) : (
         <Text style={[styles.avatarInitial, { fontSize }]}>{initial ?? '?'}</Text>

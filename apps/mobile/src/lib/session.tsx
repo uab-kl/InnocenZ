@@ -93,7 +93,7 @@ type SessionState = {
   /** Auto-build comcard from saved portfolio (server-side). */
   generateComcard: () => Promise<Me>;
   uploadIdDoc: (side: 'front' | 'back', file: Blob, filename?: string) => Promise<Me>;
-  refreshMe: () => Promise<void>;
+  refreshMe: (accessTokenOverride?: string) => Promise<void>;
 };
 
 const SessionContext = createContext<SessionState | null>(null);
@@ -179,9 +179,13 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
     setMe(null);
   }, []);
 
-  const refreshMe = useCallback(async () => {
-    if (!token) return;
-    const user = await fetchMe(token);
+  const refreshMe = useCallback(async (accessTokenOverride?: string) => {
+    // Override required right after signIn — React state `token` is still null
+    // until the next render, so a bare refreshMe() would no-op and leave
+    // profileImage / portfolio / comcard blank after signup uploads.
+    const t = accessTokenOverride ?? token;
+    if (!t) return;
+    const user = await fetchMe(t);
     setMe(user);
   }, [token]);
 

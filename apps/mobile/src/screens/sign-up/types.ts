@@ -1,6 +1,12 @@
 import { loadPhoneCountryCode } from '../../lib/phone-prefs';
 import { isValidNricFormat, nricMatchesDob } from '../../lib/id-ocr';
-import { COUNTRY_BY_CODE, ID_TYPES, MIN_PASSWORD, NRIC_LENGTH } from './constants';
+import {
+	COUNTRY_BY_CODE,
+	ID_TYPES,
+	MALAYSIAN_NATIONALITY,
+	MIN_PASSWORD,
+	NRIC_LENGTH,
+} from './constants';
 
 export type IdType = (typeof ID_TYPES)[number];
 
@@ -177,6 +183,7 @@ export function validateStep(
 		phoneShort?: string;
 		nationalityRequired?: string;
 		idTypeRequired?: string;
+		nricMalaysianOnly?: string;
 		dobRequired?: string;
 		idNoSelectFirst?: string;
 		idNoRequired?: string;
@@ -224,6 +231,12 @@ export function validateStep(
 		}
 		if (!draft.idType) {
 			fields.idType = copy?.idTypeRequired ?? 'Please select an ID type.';
+		} else if (
+			draft.idType === 'NRIC' &&
+			draft.nationality.trim() !== MALAYSIAN_NATIONALITY
+		) {
+			fields.idType =
+				copy?.nricMalaysianOnly ?? 'NRIC is only for Malaysian nationality.';
 		}
 		if (!draft.dob.trim()) {
 			fields.dob = copy?.dobRequired ?? 'Date of birth is required.';
@@ -232,7 +245,10 @@ export function validateStep(
 			fields.idNo = copy?.idNoSelectFirst ?? 'Please select ID type first.';
 		} else if (!draft.idNo.trim()) {
 			fields.idNo = copy?.idNoRequired ?? 'ID number is required.';
-		} else if (draft.idType === 'NRIC') {
+		} else if (
+			draft.idType === 'NRIC' &&
+			draft.nationality.trim() === MALAYSIAN_NATIONALITY
+		) {
 			if (!isValidNricFormat(draft.idNo)) {
 				fields.idNo = `NRIC must be ${NRIC_LENGTH} digits like 1234881234 (no dashes).`;
 			} else if (draft.dob && !nricMatchesDob(draft.idNo, draft.dob)) {

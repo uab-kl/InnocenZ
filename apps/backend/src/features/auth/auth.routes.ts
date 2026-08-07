@@ -3,6 +3,7 @@ import { authController, agencyRepository, otpController, orgMemberInviteControl
 import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
+import { env } from '@/env.js';
 
 const router = Router();
 
@@ -21,15 +22,63 @@ router.post(
 /**
  * Agency names for the PR sign-up wizard. Public by necessity: a PR choosing
  * an agency has no account yet, and `GET /agency` sits below the JWT guard
- * (router/v1.ts:32). Deliberately narrow — only ACTIVE agencies, and only
- * `id` + `name`, never agencyCode / ssmNo / contact details.
+ * (router/v1.ts:32). Deliberately narrow — only ACTIVE agencies.
+ *
+ * `logoImage` = R2 key `agency/{id}/logo/…`
+ * `logoUrl`   = same-origin proxy `/auth/agencies/:id/logo` (phone Image can
+ *               reach the API LAN host; CDN hosts often fail on device).
  */
-router.get('/agencies', async (_req, res) => {
+router.get('/agencies', async (req, res) => {
   try {
-    const data = await agencyRepository.listActiveNames(200);
-    res.status(200).json({ success: true, message: 'OK', data });
+    const rows = await agencyRepository.listActiveNames(200);
+    const r2PublicUrl = env.R2_PUBLIC_URL?.replace(/\/$/, '') ?? null;
+    const origin = `${req.protocol}://${req.get('host')}`;
+    const basePath = req.baseUrl; // `/api/v1/auth`
+    const data = rows.map((a) => ({
+      id: a.id,
+      name: a.name,
+      logoImage: a.logoImage,
+      logoUrl: a.logoImage
+        ? `${origin}${basePath}/agencies/${a.id}/logo`
+        : null,
+    }));
+    res.status(200).json({
+      success: true,
+      message: 'OK',
+      data,
+      r2PublicUrl,
+    });
   } catch {
     res.status(500).json({ success: false, message: 'Could not list agencies', data: null });
+  }
+});
+
+/**
+ * Stream an active agency's logo through this API so mobile RN Image loads
+ * from the same host as `/auth/agencies` (not directly from the CDN).
+ */
+router.get('/agencies/:id/logo', async (req, res) => {
+  try {
+    const id = String(req.params.id ?? '');
+    const agency = await agencyRepository.getById(id);
+    if (!agency || agency.status !== 'active' || !agency.logoImage) {
+      return res.status(404).end();
+    }
+    const cdnBase = env.R2_PUBLIC_URL?.replace(/\/$/, '');
+    if (!cdnBase) return res.status(503).end();
+    const key = agency.logoImage.replace(/^\//, '');
+    const upstream = await fetch(`${cdnBase}/${key}`);
+    if (!upstream.ok) {
+      return res.status(upstream.status === 404 ? 404 : 502).end();
+    }
+    const contentType = upstream.headers.get('content-type') || 'image/jpeg';
+    const buf = Buffer.from(await upstream.arrayBuffer());
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Cache-Control', 'public, max-age=600');
+    res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin');
+    return res.status(200).send(buf);
+  } catch {
+    return res.status(500).end();
   }
 });
 

@@ -1,10 +1,10 @@
-import React, { useRef } from 'react';
-import { Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import React, { useRef, useState } from 'react';
+import { Image, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
 import { formatMessage, useLocale } from '../../i18n';
 import { C, F } from '../../theme/theme';
 import { IzButton } from '../../components/ui';
 import { Building2, Check, Search, UserIcon } from '../../components/icons';
-import type { PublicAgency } from '../../lib/api';
+import { assetUrl, type PublicAgency } from '../../lib/api';
 import { Field, fieldStyles as styles } from './fields';
 import { reportFocusFromView, useKeyboardScroll } from './keyboard-scroll';
 import type { Draft, FieldErrors } from './types';
@@ -23,6 +23,44 @@ type Props = {
 	setAgencySearch: (v: string) => void;
 	loadAgencies: () => void;
 };
+
+/** Agency list thumb — paints `logoUrl` from `agency/{id}/logo/…` on the CDN. */
+function AgencyLogo({
+	logoUrl,
+	logoImage,
+	name,
+	selected,
+}: {
+	logoUrl?: string | null;
+	logoImage?: string | null;
+	name: string;
+	selected: boolean;
+}) {
+	const uri = (logoUrl || assetUrl(logoImage) || '').trim() || null;
+	const [broken, setBroken] = useState(false);
+	React.useEffect(() => {
+		setBroken(false);
+	}, [uri]);
+	const show = Boolean(uri) && !broken;
+	const initial = name.trim().charAt(0).toUpperCase() || '?';
+	return (
+		<View style={[agencyStyles.avatar, selected && agencyStyles.avatarOn]}>
+			{show ? (
+				<Image
+					key={uri!}
+					source={{ uri: uri! }}
+					style={agencyStyles.avatarImg}
+					resizeMode="cover"
+					onError={() => setBroken(true)}
+				/>
+			) : (
+				<Text style={[agencyStyles.avatarInitial, selected && agencyStyles.avatarInitialOn]}>
+					{initial}
+				</Text>
+			)}
+		</View>
+	);
+}
 
 function PathCard({
 	title,
@@ -165,9 +203,12 @@ export function Step3Agency({
 											last && agencyStyles.rowLast,
 										]}
 									>
-										<View style={[agencyStyles.avatar, on && agencyStyles.avatarOn]}>
-											<Building2 size={15} color={on ? C.accent : C.prMuted} strokeWidth={2.1} />
-										</View>
+										<AgencyLogo
+											logoUrl={a.logoUrl}
+											logoImage={a.logoImage}
+											name={a.name}
+											selected={on}
+										/>
 										<Text
 											style={[agencyStyles.name, on && agencyStyles.nameOn]}
 											numberOfLines={1}
@@ -345,11 +386,24 @@ const agencyStyles = StyleSheet.create({
 		backgroundColor: C.glass2,
 		borderWidth: 1,
 		borderColor: C.line,
+		overflow: 'hidden',
+		position: 'relative',
+	},
+	avatarImg: {
+		width: 34,
+		height: 34,
 	},
 	avatarOn: {
 		backgroundColor: 'rgba(227,184,119,0.14)',
 		borderColor: 'rgba(227,184,119,0.35)',
 	},
+	avatarInitial: {
+		fontFamily: F.sora,
+		fontSize: 14,
+		fontWeight: '700',
+		color: C.prMuted,
+	},
+	avatarInitialOn: { color: C.accent },
 	name: { flex: 1, fontFamily: F.sora, fontSize: 15, fontWeight: '600', color: C.prMuted },
 	nameOn: { color: C.accentL },
 	check: {

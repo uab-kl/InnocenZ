@@ -26,7 +26,7 @@ import {
   savePhoneCountryCode,
 } from '../lib/phone-prefs';
 import { useSession } from '../lib/session';
-import { useLocale } from '../i18n';
+import { localizeLoginError, useLocale } from '../i18n';
 import { IzButton } from '../components/ui';
 import { LanguageSwitcher } from '../components/LanguageSwitcher';
 import { Eye, EyeOff, Lock, LogIn } from '../components/icons';
@@ -123,7 +123,11 @@ function LoginScreenInner({
       savePhoneCountryCode(phoneCountryCode);
       await signIn(phoneLoginIdentifier(phoneCountryCode, phoneNumber), password);
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : t.login.signInFailed);
+      setError(
+        e instanceof ApiError
+          ? localizeLoginError(e.message, t.login)
+          : t.login.signInFailed,
+      );
     } finally {
       setBusy(false);
     }

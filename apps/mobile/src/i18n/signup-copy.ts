@@ -94,6 +94,10 @@ export type SignupFieldCopy = {
   passportHint: string;
   idVerifyIntro: string;
   idVerifyOk: string;
+  /** Shown when returning to Step 4 with photos already verified. */
+  idVerifyKept: string;
+  idVerifyContinueHint: string;
+  idVerifyOkHint: string;
 
   yourNickname: string;
   legalName: string;
@@ -164,6 +168,7 @@ export type SignupFieldCopy = {
   phoneShort: string;
   nationalityRequired: string;
   idTypeRequired: string;
+  nricMalaysianOnly: string;
   dobRequired: string;
   idNoSelectFirst: string;
   idNoRequired: string;
@@ -327,6 +332,9 @@ const en: SignupFieldCopy = {
   passportHint: 'Passport photo page will be checked against your passport number.',
   idVerifyIntro: 'Capture clear photos of your ID. We check the number matches Step 1.',
   idVerifyOk: 'ID photos verified',
+  idVerifyKept: 'ID already verified',
+  idVerifyContinueHint: 'Photos are still saved. Tap Continue to go to the next step.',
+  idVerifyOkHint: 'Tap Continue to go to the next step.',
 
   yourNickname: 'Your nickname',
   legalName: 'Legal name',
@@ -335,7 +343,7 @@ const en: SignupFieldCopy = {
   profilePhotoHint: 'Avatar · face clear · camera or gallery',
   portfolio: 'Portfolio',
   optional: 'Optional',
-  portfolioHint: 'Up to {max} gallery photos — first 4 build your comcard',
+  portfolioHint: 'Up to {max} gallery photos (multi-select OK) — first 4 build your comcard',
   portfolioHintCount: ' · {count}/{max}',
   cardTag: 'card',
   addPhotos: 'Add photos',
@@ -403,6 +411,7 @@ const en: SignupFieldCopy = {
   phoneShort: 'That mobile number looks too short.',
   nationalityRequired: 'Nationality is required.',
   idTypeRequired: 'Please select an ID type.',
+  nricMalaysianOnly: 'NRIC is only for Malaysian nationality. Use Passport or Work permit.',
   dobRequired: 'Date of birth is required.',
   idNoSelectFirst: 'Please select ID type first.',
   idNoRequired: 'ID number is required.',
@@ -462,7 +471,7 @@ const en: SignupFieldCopy = {
   toastPhoneTaken: 'That number already has an account. Use another, or sign in.',
   toastSendCodeFailed: 'Could not send the code — please try again.',
   toastOtpIncomplete: 'Enter all six digits.',
-  toastPhotosPartial: 'Account created. Some photos failed — finish them from Profile.',
+  toastPhotosPartial: 'Account created. Some photos failed to upload — try signing up again if ID photos are missing.',
   toastOtpExpired: 'That code expired. Tap Resend for a new one.',
   toastRegisterFailed:
     'Could not finish creating your account. Tap Verify & submit again.',
@@ -475,7 +484,7 @@ const zh: SignupFieldCopy = {
   nicknamePlaceholder: '例如 Moon、Charlotte',
   fullName: '全名*',
   fullNameHint: '与身份证 / 护照一致。',
-  fullNamePlaceholder: '例如 张三',
+  fullNamePlaceholder: '例如 Joe Low',
   choose: '请选择',
   phoneNumber: '手机号码*',
   phoneHint: '须已注册 WhatsApp',
@@ -561,6 +570,9 @@ const zh: SignupFieldCopy = {
   passportHint: '将核对护照资料页与你填写的护照号码。',
   idVerifyIntro: '请拍摄清晰的证件照片。我们会核对号码与第 1 步是否一致。',
   idVerifyOk: '证件照片已核验',
+  idVerifyKept: '证件已核验',
+  idVerifyContinueHint: '照片仍保留。点继续进入下一步。',
+  idVerifyOkHint: '点继续进入下一步。',
 
   yourNickname: '你的昵称',
   legalName: '法定姓名',
@@ -569,7 +581,7 @@ const zh: SignupFieldCopy = {
   profilePhotoHint: '头像 · 面部清晰 · 相机或相册',
   portfolio: '作品集',
   optional: '选填',
-  portfolioHint: '最多 {max} 张相册照片 — 前 4 张用于名片卡',
+  portfolioHint: '最多 {max} 张相册照片（可多选）— 前 4 张用于名片卡',
   portfolioHintCount: ' · {count}/{max}',
   cardTag: '名片',
   addPhotos: '添加照片',
@@ -635,6 +647,7 @@ const zh: SignupFieldCopy = {
   phoneShort: '手机号码过短。',
   nationalityRequired: '请填写国籍。',
   idTypeRequired: '请选择证件类型。',
+  nricMalaysianOnly: 'NRIC 仅适用于马来西亚籍。请使用护照或工作准证。',
   dobRequired: '请填写出生日期。',
   idNoSelectFirst: '请先选择证件类型。',
   idNoRequired: '请填写证件号码。',
@@ -691,7 +704,7 @@ const zh: SignupFieldCopy = {
   toastPhoneTaken: '该号码已有账户。请换号，或直接登录。',
   toastSendCodeFailed: '无法发送验证码 — 请重试。',
   toastOtpIncomplete: '请输入完整 6 位验证码。',
-  toastPhotosPartial: '账户已创建。部分照片上传失败 — 请到个人资料补传。',
+  toastPhotosPartial: '账户已创建。部分照片上传失败 — 若身份证照片缺失请重新注册。',
   toastOtpExpired: '验证码已过期。请点重发获取新码。',
   toastRegisterFailed: '无法完成注册。请再点「验证并提交」。',
   toastOtpWrong: '验证码不正确。请核对后重试。',
@@ -787,6 +800,9 @@ const zhHant: SignupFieldCopy = {
   passportHint: '將核對護照資料頁與你填寫的護照號碼。',
   idVerifyIntro: '請拍攝清晰的證件照片。我們會核對號碼與第 1 步是否一致。',
   idVerifyOk: '證件照片已核驗',
+  idVerifyKept: '證件已核驗',
+  idVerifyContinueHint: '照片仍保留。點繼續進入下一步。',
+  idVerifyOkHint: '點繼續進入下一步。',
 
   yourNickname: '你的暱稱',
   legalName: '法定姓名',
@@ -795,7 +811,7 @@ const zhHant: SignupFieldCopy = {
   profilePhotoHint: '頭像 · 面部清晰 · 相機或相簿',
   portfolio: '作品集',
   optional: '選填',
-  portfolioHint: '最多 {max} 張相簿照片 — 前 4 張用於名片卡',
+  portfolioHint: '最多 {max} 張相簿照片（可多選）— 前 4 張用於名片卡',
   cardTag: '名片',
   addPhotos: '新增照片',
   camera: '相機',
@@ -860,6 +876,7 @@ const zhHant: SignupFieldCopy = {
   phoneShort: '手機號碼過短。',
   nationalityRequired: '請填寫國籍。',
   idTypeRequired: '請選擇證件類型。',
+  nricMalaysianOnly: 'NRIC 僅適用於馬來西亞籍。請使用護照或工作准證。',
   dobRequired: '請填寫出生日期。',
   idNoSelectFirst: '請先選擇證件類型。',
   idNoRequired: '請填寫證件號碼。',
@@ -916,7 +933,7 @@ const zhHant: SignupFieldCopy = {
   toastPhoneTaken: '該號碼已有帳戶。請換號，或直接登入。',
   toastSendCodeFailed: '無法傳送驗證碼 — 請重試。',
   toastOtpIncomplete: '請輸入完整 6 位驗證碼。',
-  toastPhotosPartial: '帳戶已建立。部分照片上傳失敗 — 請到個人資料補傳。',
+  toastPhotosPartial: '帳戶已建立。部分照片上傳失敗 — 若身分證照片缺失請重新註冊。',
   toastOtpExpired: '驗證碼已過期。請點重發取得新碼。',
   toastRegisterFailed: '無法完成註冊。請再點「驗證並提交」。',
   toastOtpWrong: '驗證碼不正確。請核對後重試。',
