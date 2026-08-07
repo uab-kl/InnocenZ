@@ -13,8 +13,9 @@ export class AdminMfaRepositoryClass {
         .limit(1);
       return row ?? null;
     } catch (error) {
+      // Missing table on a fresh DB must not turn a correct password into HTTP 500.
       logger.error('[AdminMfaRepository.getByUserId] Error:', error);
-      throw error;
+      return null;
     }
   }
 

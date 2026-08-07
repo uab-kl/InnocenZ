@@ -757,6 +757,13 @@
       "when": 1788200000000,
       "tag": "0107_drop_membership_sub_role",
       "breakpoints": true
+    },
+    {
+      "idx": 108,
+      "version": "7",
+      "when": 1788300000000,
+      "tag": "0108_admin_mfa",
+      "breakpoints": true
     }
   ]
 }

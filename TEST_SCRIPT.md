@@ -1213,6 +1213,12 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **7 Aug 2026 — Prod login 500: missing `admin_mfa` on fresh DB.**
+> Table never had a CREATE in the journal (only on old shared DB). Correct
+> password → MFA lookup → relation missing → 500. Migration **0108** +
+> MFA getByUserId fails soft. Run `pnpm migrate:deploy` on prod.
+
+
 | 2026-08-06 | **RBAC: drop specialized portal roles.** Stop auto-creating `agency_owner` / `outlet_owner` / finance / ops roles. Canonical roles are `admin` · `agency` · `outlet` · `pr`; org lanes stay on membership `sub_role`. Signup/invite assign `agency`/`outlet`. Cleanup: `remove-specialized-portal-roles.ts --apply`. | Admin ↔ Agency ↔ Outlet | ⚠️ Reported |
 | 2026-08-06 | **RBAC redesign: Portal → Role → Module C/R/U.** Migration `0103_rbac_portal_cru`: `main.portal` (admin/agency/outlet), `role.portal_id`, `m_module.portal_id` + `module_key`, drop `delete` from `permission_type`, `user_role` FKs. Seeded specialized roles (`agency_owner`/`agency_finance`/`outlet_owner`/`outlet_finance`/`outlet_ops`) with portal matrices; `migrate-sub-roles-to-user-roles` backfills from membership. Backend: `requirePortal` / `requirePermission`, `/auth/me` returns `portals` + `moduleKey`, invites assign specialized roles, signup uses owner roles. Frontend: `ensurePortal` on portals, admin Role/Module portal pickers + C/R/U-only, agency/outlet nav prefers module permissions. ⚠️ **Live migrate blocked** — local `DATABASE_URL` DB `innocenz-2.0` missing; run `pnpm migrate:deploy` when DB is up. | Admin ↔ Agency ↔ Outlet | ⚠️ Reported |
 

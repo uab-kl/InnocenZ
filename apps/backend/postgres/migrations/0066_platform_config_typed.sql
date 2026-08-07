@@ -24,15 +24,23 @@ ALTER TABLE "main"."platform_config" ADD COLUMN IF NOT EXISTS "status" varchar D
 -- the default would silently double the platform fee, which is a pricing
 -- decision, not a migration. The cross join yields no rows when the key is
 -- absent, so a fresh database is left on the 5.00 default untouched.
-UPDATE "main"."platform_config" AS p
-SET "platform_fee_percent" = src.v
-FROM (
-  SELECT ("value")::numeric(5, 2) AS v
-  FROM "main"."platform_config"
-  WHERE "key" = 'PLATFORM_FEE_PERCENTAGE'
-  LIMIT 1
-) AS src
-WHERE TRUE;--> statement-breakpoint
+-- Skip entirely when `key` was never present (already typed, or empty bootstrap).
+DO $$ BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'main' AND table_name = 'platform_config' AND column_name = 'key'
+  ) THEN
+    UPDATE "main"."platform_config" AS p
+    SET "platform_fee_percent" = src.v
+    FROM (
+      SELECT ("value")::numeric(5, 2) AS v
+      FROM "main"."platform_config"
+      WHERE "key" = 'PLATFORM_FEE_PERCENTAGE'
+      LIMIT 1
+    ) AS src
+    WHERE TRUE;
+  END IF;
+END $$;--> statement-breakpoint
 
 -- The typed design holds exactly one row (the repository does getOrCreate on
 -- limit 1). Keep the oldest; anything else was a second setting under the old
