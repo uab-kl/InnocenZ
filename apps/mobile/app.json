@@ -1,20 +1,24 @@
 {
   "expo": {
     "name": "InnocenZ",
-    "slug": "innocenz-mobile",
+    "slug": "innocenz",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "@org/mobile",
+    "scheme": "innocenz",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "bundleIdentifier": "com.innocenz.mobile",
+      "bundleIdentifier": "com.uab.innocenz",
+      "buildNumber": "7",
       "supportsTablet": true
     },
     "android": {
-      "package": "com.innocenz.mobile",
-      "blockedPermissions": ["android.permission.RECORD_AUDIO"],
+      "package": "com.unitedalliedbusiness.innocenz",
+      "versionCode": 7,
+      "blockedPermissions": [
+        "android.permission.RECORD_AUDIO"
+      ],
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
@@ -54,8 +58,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "3114a391-b87d-49ca-be3c-b95b06c65b17"
+        "projectId": "047cb4ce-82f6-47ff-81a1-8d0044e79643"
       }
-    }
+    },
+    "owner": "unitedalliedbusiness"
   }
 }

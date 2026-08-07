@@ -1,4 +1,4 @@
-package com.innocenz.mobile
+package com.unitedalliedbusiness.innocenz
 
 import android.app.Application
 import android.content.res.Configuration

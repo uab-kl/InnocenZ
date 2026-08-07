@@ -1,4 +1,4 @@
-package com.innocenz.mobile
+package com.unitedalliedbusiness.innocenz
 import expo.modules.splashscreen.SplashScreenManager
 
 import android.os.Build

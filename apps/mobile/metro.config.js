@@ -1,10 +1,17 @@
 const path = require('path');
+const { existsSync } = require('node:fs');
+const { config: loadEnv } = require('dotenv');
 const { withNxMetro } = require('@nx/expo');
 const { getDefaultConfig } = require('@expo/metro-config');
 const { mergeConfig } = require('metro-config');
 
 const projectRoot = __dirname;
 const monorepoRoot = path.resolve(projectRoot, '../..');
+const rootEnv = path.resolve(monorepoRoot, '.env');
+const mobileEnv = path.resolve(projectRoot, '.env');
+
+if (existsSync(rootEnv)) loadEnv({ path: rootEnv });
+if (existsSync(mobileEnv)) loadEnv({ path: mobileEnv, override: true });
 const defaultConfig = getDefaultConfig(projectRoot);
 const { assetExts, sourceExts } = defaultConfig.resolver;
 
