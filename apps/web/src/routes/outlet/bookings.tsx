@@ -47,8 +47,22 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { startOfToday } from "date-fns";
 import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 
 type PostJobTab = "shifts" | "services";
+
+/**
+ * The server's own explanation of a failed post, when it sent one. Every
+ * rejection here is actionable by a human (link the venue to an agency, get the
+ * role granted, re-activate the membership) and none of them are fixed by
+ * retrying, so the message has to reach the screen.
+ */
+function postShiftErrorMessage(err: unknown): string {
+	const message = (
+		err as { response?: { data?: { message?: string } } } | undefined
+	)?.response?.data?.message;
+	return message?.trim() || "Could not post shifts — please try again";
+}
 
 export const Route = createFileRoute("/outlet/bookings")({
 	validateSearch: (search: Record<string, unknown>): { tab?: PostJobTab } => ({
@@ -508,9 +522,26 @@ function PostJobPage() {
 					);
 					resetForm();
 				})
-				.catch(() => {
-					toast("Could not post shifts — please try again", "warn");
+				.catch((err) => {
+					// Show what the server actually said. The generic retry message hid
+					// every real cause — above all "This outlet has no onboarding agency
+					// to request PR from" (the venue is not linked to an agency), which
+					// no amount of retrying fixes and which reads on screen as the post
+					// having silently vanished.
+					console.error("[PostJob] POST /shift failed", err);
+					toast(postShiftErrorMessage(err), "warn");
 				});
+			return;
+		}
+
+		// A real session that lost its outlet identity must NOT fall through to the
+		// demo store: it would list the shift as posted while nothing reached the
+		// database, and the row would evaporate on the next refresh.
+		if (getPortalSessionKind() === "real") {
+			toast(
+				"Your outlet session has expired — sign out and sign in again before posting",
+				"warn",
+			);
 			return;
 		}
 

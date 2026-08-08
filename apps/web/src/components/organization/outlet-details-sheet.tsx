@@ -1,4 +1,4 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
 	Building2,
 	CalendarDays,
@@ -13,7 +13,17 @@ import {
 	User,
 	Users,
 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import {
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@/components/ui/select";
 import {
 	Sheet,
 	SheetContent,
@@ -24,9 +34,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate, getErrorMessage } from "@/lib/utils";
-import { fetchAgencyById } from "@/services/agency";
+import { fetchAgencies, fetchAgencyById } from "@/services/agency";
 import type { Outlet, OutletMember } from "@/services/outlet";
-import { fetchOutletMembers } from "@/services/outlet";
+import {
+	fetchOutletMembers,
+	setOutletOnboardingAgency,
+} from "@/services/outlet";
 import {
 	ApprovalStatusCard,
 	apiAssetUrl,
@@ -84,6 +97,102 @@ function MemberCard({ member }: { member: OutletMember }) {
 				</span>
 			</div>
 		</div>
+	);
+}
+
+const UNLINKED = "__none__";
+
+/**
+ * The venue's PR-fulfilment agency — the ONLY place `onboarded_by_agency_id`
+ * is set anywhere in the product.
+ *
+ * It is not cosmetic: `POST /shift` routes an outlet's posted job to this
+ * agency and refuses the post outright when it is null, so an unlinked venue
+ * sees "Could not post shifts" forever. Signup leaves it null and approval does
+ * not fill it in, which is why seeded dev outlets could post and real
+ * signed-up ones could not.
+ */
+function OnboardingAgencyCard({ outlet }: { outlet: Outlet }) {
+	const { logout } = useAuth();
+	const queryClient = useQueryClient();
+	const [selected, setSelected] = useState(
+		outlet.onboardedByAgencyId ?? UNLINKED,
+	);
+
+	// Re-sync when the sheet is pointed at a different venue, or after a save
+	// refetches the row — otherwise the picker keeps the previous outlet's value.
+	useEffect(() => {
+		setSelected(outlet.onboardedByAgencyId ?? UNLINKED);
+	}, [outlet.onboardedByAgencyId]);
+
+	const agenciesQuery = useQuery({
+		queryKey: ["agencies", "active", "picker"],
+		queryFn: () => fetchAgencies({ status: "active", pageSize: 200 }, logout),
+		staleTime: 60_000,
+	});
+
+	const mutation = useMutation({
+		mutationFn: (agencyId: string | null) =>
+			setOutletOnboardingAgency(outlet.id, agencyId, logout),
+		onSuccess: (response) => {
+			queryClient.invalidateQueries({ queryKey: ["outlets"] });
+			queryClient.invalidateQueries({ queryKey: ["outlet-by-id"] });
+			toast.success(response.message || "Onboarding agency updated");
+		},
+		onError: (err) => {
+			toast.error(getErrorMessage(err) || "Failed to update onboarding agency");
+		},
+	});
+
+	const agencies = agenciesQuery.data?.data ?? [];
+	const current = outlet.onboardedByAgencyId ?? UNLINKED;
+	const dirty = selected !== current;
+
+	return (
+		<DetailSection
+			title="PR fulfilment agency"
+			description="The agency this venue's posted jobs are routed to. Until one is set, the outlet cannot post a shift."
+		>
+			<div className="space-y-2 sm:col-span-2">
+				<Select value={selected} onValueChange={setSelected}>
+					<SelectTrigger className="w-full">
+						<SelectValue placeholder="Select an agency" />
+					</SelectTrigger>
+					<SelectContent>
+						<SelectItem value={UNLINKED}>Not linked</SelectItem>
+						{agencies.map((agency) => (
+							<SelectItem key={agency.id} value={agency.id}>
+								{agency.name}
+							</SelectItem>
+						))}
+					</SelectContent>
+				</Select>
+
+				{!outlet.onboardedByAgencyId && (
+					<p className="text-sm text-destructive">
+						Not linked — every Post Job attempt from this outlet is rejected
+						with “This outlet has no onboarding agency to request PR from”.
+					</p>
+				)}
+
+				{agenciesQuery.isError && (
+					<p className="text-sm text-destructive">
+						{getErrorMessage(agenciesQuery.error)}
+					</p>
+				)}
+
+				<Button
+					size="sm"
+					disabled={!dirty || mutation.isPending}
+					onClick={() =>
+						mutation.mutate(selected === UNLINKED ? null : selected)
+					}
+				>
+					{mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+					Save agency
+				</Button>
+			</div>
+		</DetailSection>
 	);
 }
 
@@ -192,6 +301,8 @@ export function OutletDetailsSheet({
 										value={formatDate(outlet.createdAt)}
 									/>
 								</DetailSection>
+
+								<OnboardingAgencyCard outlet={outlet} />
 							</TabsContent>
 
 							<TabsContent value="location" className="space-y-3 pt-2">
