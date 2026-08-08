@@ -17,7 +17,9 @@ import {
   GeocodeQuerySchema,
   AddOutletMemberSchema,
   UpdateOutletMemberSchema,
+  SetOutletOnboardingAgencySchema,
 } from '@/schema/outlet.schema';
+import { AgencyRepositoryClass } from '@/features/agency/agency.repository';
 import { addressQueryFromOutlet, geocodeAddress } from './geocode';
 import { OutletFilter, OutletStatus } from './outlet.model';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo';
@@ -43,6 +45,9 @@ export class OutletControllerClass {
     private roleRepository: RoleRepositoryClass,
     private inviteRepository: OrgMemberInviteRepositoryClass,
     private userRoleRepository: UserRoleRepositoryClass,
+    // Only to prove the agency in setOnboardingAgency() exists — a bad uuid
+    // would otherwise surface as an FK violation 500 instead of a 400.
+    private agencyRepository: AgencyRepositoryClass,
   ) {}
 
   async list(req: Request, res: Response) {
@@ -145,6 +150,11 @@ export class OutletControllerClass {
         logoFileName,
         logoContentType,
         clearLogo,
+        // Which agency fulfils this venue's PR requests is an ADMIN act, not a
+        // self-service field: PUT /outlet/:id is reachable by the venue's own
+        // owner, so leaving it in `rest` let an outlet point its jobs at any
+        // agency on the platform. Set it through PATCH /:id/onboarding-agency.
+        onboardedByAgencyId: _onboardedByAgencyId,
         ...rest
       } = parsed.data;
       const addressTouched =
@@ -363,6 +373,61 @@ export class OutletControllerClass {
       res.status(200).json({ success: true, message: 'Outlet approved', data: outlet });
     } catch (error) {
       logger.error('[OutletController.approve] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * Admin-only: link the venue to the agency that fulfils its PR requests
+   * (`PATCH /outlet/:id/onboarding-agency`, body `{ agencyId }`, null unlinks).
+   *
+   * This closes a gap that made the outlet portal unusable in production: an
+   * outlet posting a job derives its agency from `onboarded_by_agency_id`
+   * (ShiftController.create), but signup never set that column and approve only
+   * flips `status` — so every self-signed-up outlet got
+   * "This outlet has no onboarding agency to request PR from" on every post,
+   * while seeded dev outlets worked because the seed scripts fill it in.
+   */
+  async setOnboardingAgency(req: Request, res: Response) {
+    try {
+      const id = paramId(req.params.id);
+      const parsed = SetOutletOnboardingAgencySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const existing = await this.outletRepository.getById(id);
+      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      const { agencyId } = parsed.data;
+      if (agencyId) {
+        const agency = await this.agencyRepository.getById(agencyId);
+        if (!agency) {
+          return res.status(400).json({ success: false, message: 'Agency not found', data: null });
+        }
+        if (agency.status !== 'active') {
+          return res.status(400).json({
+            success: false,
+            message: 'That agency is not active — approve it before linking a venue to it',
+            data: null,
+          });
+        }
+      }
+
+      const outlet = await this.outletRepository.update(id, {
+        onboardedByAgencyId: agencyId,
+        updatedBy: getActor(req),
+      });
+      if (!outlet) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+
+      logger.info('[OutletController.setOnboardingAgency] Linked', { outletId: id, agencyId });
+      res.status(200).json({
+        success: true,
+        message: agencyId ? 'Onboarding agency updated' : 'Onboarding agency cleared',
+        data: outlet,
+      });
+    } catch (error) {
+      logger.error('[OutletController.setOnboardingAgency] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }

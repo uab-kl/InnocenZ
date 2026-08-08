@@ -1,0 +1,26 @@
+diff --git a/src/Watcher.js b/src/Watcher.js
+index c07d5c0ef151e4e02bc3b17e879d10dc63228125..61c03d49077ac7a317fd10aa83fc24e91f758b9e 100644
+--- a/src/Watcher.js
++++ b/src/Watcher.js
+@@ -52,7 +52,7 @@ function _interopRequireDefault(e) {
+   return e && e.__esModule ? e : { default: e };
+ }
+ const debug = require("debug")("Metro:Watcher");
+-const MAX_WAIT_TIME = 240000;
++const MAX_WAIT_TIME = 900000; // InnocenZ: was 240000 — Windows monorepo watcher setup exceeds 4min under dev:all load, wedging Metro (blank :8081)
+ let nextInstanceId = 0;
+ class Watcher extends _events.default {
+   #activeWatcher;
+diff --git a/src/Watcher.js.flow b/src/Watcher.js.flow
+index 99e10618a14dff909dab09e024c700b93eebb722..f29a80a58e8571d534e9fb055f86afa952d1ea11 100644
+--- a/src/Watcher.js.flow
++++ b/src/Watcher.js.flow
+@@ -34,7 +34,7 @@ import {performance} from 'perf_hooks';
+ // eslint-disable-next-line import/no-commonjs
+ const debug = require('debug')('Metro:Watcher');
+ 
+-const MAX_WAIT_TIME = 240000;
++const MAX_WAIT_TIME = 900000; // InnocenZ: was 240000 — Windows monorepo watcher setup exceeds 4min under dev:all load, wedging Metro (blank :8081)
+ 
+ type InternalCrawlOptions = Readonly<{
+   previousState: CrawlerOptions['previousState'],

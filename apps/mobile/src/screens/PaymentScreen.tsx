@@ -47,7 +47,7 @@ import {
   thisWeekDayStatus,
   weekDisputable,
 } from '../lib/receipt-review';
-import { pickProofPhotos } from '../lib/proof-photo';
+import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useKeyboardInset } from '../lib/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useViewportSize } from '../lib/viewport';
@@ -1739,7 +1739,13 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   >
                     {disputePhotos.map((src, index) => (
                       <View key={`${index}-${src.slice(0, 24)}`} style={styles.photoThumb}>
-                        <Image source={{ uri: src }} style={styles.photoImg} />
+                        {/* Fresh picks are data URLs; entries may be R2 keys if
+                            ever seeded from a saved dispute — resolve for display,
+                            submit still sends the raw strings. */}
+                        <Image
+                          source={{ uri: resolveProofPhotoUri(src) }}
+                          style={styles.photoImg}
+                        />
                         <Pressable
                           style={styles.photoRemove}
                           onPress={() =>

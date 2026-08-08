@@ -17,7 +17,14 @@
  * resolves the dev machine's LAN IP from Expo's hostUri, which is right for a
  * phone and wrong for a browser sitting on the same machine as the backend.
  */
-import { mobileRoot, readRootEnv, resolveBin, spawnProc, makeShutdown } from './dev-shared.mjs';
+import {
+  mobileRoot,
+  readRootEnv,
+  clearCorruptMetroCaches,
+  resolveBin,
+  spawnProc,
+  makeShutdown,
+} from './dev-shared.mjs';
 
 const children = [];
 const shutdown = makeShutdown(children);
@@ -32,6 +39,10 @@ const r2PublicUrl =
   rootEnv.EXPO_PUBLIC_R2_PUBLIC_URL?.trim() || rootEnv.R2_PUBLIC_URL?.trim() || '';
 
 console.log(`Starting Expo web against ${apiUrl} (backend must already be running).`);
+
+// A force-killed Metro can leave a corrupt file-map cache → silent minutes-long
+// re-crawl → blank localhost:8081 on every device. Purge before Expo starts.
+clearCorruptMetroCaches();
 
 const expoCli = resolveBin('expo', ['bin', 'cli'], [mobileRoot]);
 const expo = spawnProc(children, process.execPath, [expoCli, 'start', '--web'], {

@@ -8,9 +8,9 @@ import { C, F } from '../theme/theme';
 import { formatRM } from '../lib/demo-shifts';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { usePrEarnings, receiptCommissionTotal } from '../lib/pr-earnings';
-import { assetUrl, type PrReceiptLine } from '../lib/api';
+import type { PrReceiptLine } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
-import { pickProofPhotos } from '../lib/proof-photo';
+import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { isReceiptLocked } from '../lib/receipt-review';
 import {
   Camera,
@@ -370,11 +370,9 @@ export function ShiftStatusPanel({
                 contentContainerStyle={styles.galleryRow}
               >
                 {proofItems.map((it) => {
-                  const uri =
-                    it.src.startsWith('data:') || it.src.startsWith('http')
-                      ? it.src
-                      : assetUrl(it.src);
-                  if (!uri) return null;
+                  // `it.src` may be a legacy data URL or an R2 key — resolve for
+                  // display only; removal/dedupe still key on the raw string.
+                  const uri = resolveProofPhotoUri(it.src);
                   return (
                     <View key={`${it.lineId}-${it.idx}`} style={styles.galleryItem}>
                       <Pressable onPress={() => setLightbox(uri)}>

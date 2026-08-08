@@ -8,6 +8,7 @@ import React from 'react';
 import { Image, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import type { PrReceiptLine } from '../lib/api';
+import { resolveProofPhotoUri } from '../lib/proof-photo';
 
 type PhotoGroup = { label: string; photos: string[]; lineCount: number };
 
@@ -59,7 +60,13 @@ export function ScannedReceiptsCard({
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             <View style={s.thumbs}>
               {g.photos.map((src, i) => (
-                <Image key={`${i}-${src.slice(0, 24)}`} source={{ uri: src }} style={s.thumb} />
+                /* `src` may be an R2 key — resolved for display; the key (and the
+                   dedupe in collectReceiptPhotoGroups) stays on the raw string. */
+                <Image
+                  key={`${i}-${src.slice(0, 24)}`}
+                  source={{ uri: resolveProofPhotoUri(src) }}
+                  style={s.thumb}
+                />
               ))}
             </View>
           </ScrollView>

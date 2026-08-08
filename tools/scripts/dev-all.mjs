@@ -7,6 +7,7 @@ import {
   findFreePort,
   claimBackendOwnership,
   releaseBackendLock,
+  clearCorruptMetroCaches,
   clearStaleDevPorts,
   resolveBin,
   spawnProc,
@@ -52,6 +53,9 @@ await clearStaleDevPorts({
   webPortStart: WEB_PORT_START,
   backendPort: BACKEND_PORT_START,
 });
+// A force-killed Metro can leave a corrupt file-map cache → silent minutes-long
+// re-crawl → blank localhost:8081 on every device. Purge before Expo starts.
+clearCorruptMetroCaches();
 
 const webPort = await findFreePort(WEB_PORT_START, new Set([BACKEND_PORT_START]));
 const backendPort = BACKEND_PORT_START;

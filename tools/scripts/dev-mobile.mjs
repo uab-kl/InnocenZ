@@ -4,6 +4,7 @@ import {
   readRootEnv,
   claimBackendOwnership,
   releaseBackendLock,
+  clearCorruptMetroCaches,
   resolveBin,
   spawnProc,
   makeShutdown,
@@ -62,6 +63,10 @@ if (!mobileOnly) {
 } else {
   console.log('Starting Expo only.');
 }
+
+// A force-killed Metro can leave a corrupt file-map cache → silent minutes-long
+// re-crawl → blank localhost:8081 on every device. Purge before Expo starts.
+clearCorruptMetroCaches();
 
 // Use the workspace-root Expo CLI with mobile cwd. `pnpm exec` from apps/mobile
 // looks for apps/mobile/node_modules/expo, which does not exist with hoisted installs.

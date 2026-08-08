@@ -37,7 +37,7 @@ import {
   ymdToIso,
 } from '../lib/demo-shifts';
 import { useActiveShift } from '../lib/active-shift';
-import { pickProofPhotos } from '../lib/proof-photo';
+import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
 import {
   cancelMyShiftAssignment,
@@ -618,7 +618,13 @@ export function AgencySchedulePanel() {
                 <View style={styles.mcThumbRow}>
                   {leavePhotos.map((uri, i) => (
                     <View key={`${i}-${uri.slice(-16)}`} style={styles.mcThumbWrap}>
-                      <Image source={{ uri }} style={styles.mcThumb} resizeMode="cover" />
+                      {/* Entries may be data URLs (fresh snaps) or R2 keys (server
+                          leave_proof_photos) — resolve for display only. */}
+                      <Image
+                        source={{ uri: resolveProofPhotoUri(uri) }}
+                        style={styles.mcThumb}
+                        resizeMode="cover"
+                      />
                       <Pressable
                         style={styles.mcThumbX}
                         hitSlop={6}

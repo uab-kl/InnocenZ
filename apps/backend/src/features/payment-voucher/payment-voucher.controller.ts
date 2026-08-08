@@ -56,6 +56,10 @@ import { Error } from '@/error/index';
 import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import { env } from '@/env';
+import { deleteProofPhotoKeys, saveProofPhotosToR2 } from '@/util/pv-proof-photo';
+import { sanitizePathSegment } from '@/util/profile-image';
+import { r2Configured, r2PutObject } from '@/util/r2';
 import { notify } from '@/features/notification/notify.js';
 import {
   CreatePaymentVoucherSchema,
@@ -143,6 +147,16 @@ function resolveTotals(params: {
 
 function todayIso(): string {
   return new Date().toISOString().slice(0, 10);
+}
+
+/**
+ * Base URL clients join with stored R2 object keys (`user/…`) to build image
+ * URLs — same contract as `withUserProfile` in util/user-profile-image.ts.
+ * Null when R2 is not configured; keys are never rewritten server-side, and
+ * legacy rows still hold base64 data URLs the client renders directly.
+ */
+function r2PublicBase(): string | null {
+  return env.R2_PUBLIC_URL?.replace(/\/$/, '') ?? null;
 }
 
 /**
@@ -1282,6 +1296,10 @@ export class PaymentVoucherControllerClass {
           weekEnd,
           net: draft?.net ?? '0.00',
           status: draft?.status ?? null,
+          // Proof photos now store bare R2 keys (`user/…`); the client joins
+          // this base + '/' + key. Old rows still hold data URLs, rendered
+          // as-is — the keys themselves are never rewritten server-side.
+          r2PublicUrl: r2PublicBase(),
           lines,
           // The shifts those lines came from, so the Payment grid can prove a
           // day's figure against the check-in/check-out that earned it.
@@ -1333,6 +1351,8 @@ export class PaymentVoucherControllerClass {
           weekEnd,
           net: voucher?.net ?? '0.00',
           status: voucher?.status ?? null,
+          // Same key→URL join base as current-week — one rule, both sections.
+          r2PublicUrl: r2PublicBase(),
           // A PR can dispute this issued voucher; surface the persisted dispute
           // so the "Last week" grid reflects it after a reload (§3 F).
           disputeReason: voucher?.disputeReason ?? null,
@@ -1469,7 +1489,11 @@ export class PaymentVoucherControllerClass {
         });
       }
 
-      res.status(200).json({ success: true, message: 'OK', data: weeks });
+      // `data` is an ARRAY of weeks, so the key→URL join base rides at the
+      // envelope's top level — additive, and no week payload is reshaped.
+      res
+        .status(200)
+        .json({ success: true, message: 'OK', data: weeks, r2PublicUrl: r2PublicBase() });
     } catch (error) {
       logger.error('[PaymentVoucherController.getMyHistory] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -1529,6 +1553,16 @@ export class PaymentVoucherControllerClass {
         }
       }
 
+      // Proof photos land in R2 (bare object keys in the jsonb); on any R2
+      // failure the data URLs store unchanged, so the log never fails on storage.
+      const proofPhotos = parsed.data.proofPhotos?.length
+        ? await saveProofPhotosToR2({
+            userId: req.user!.id,
+            kind: 'receipts',
+            photos: parsed.data.proofPhotos,
+          })
+        : (parsed.data.proofPhotos ?? null);
+
       const line = await this.paymentVoucherRepository.addLine(draft.id, {
         lineDate,
         outlet: parsed.data.outlet,
@@ -1536,7 +1570,7 @@ export class PaymentVoucherControllerClass {
         quantity: parsed.data.quantity ?? 1,
         amount: parsed.data.commission.toFixed(2),
         ref: encodeRef(parsed.data.kind, parsed.data.source, parsed.data.sales, parsed.data.dedupeRef),
-        proofPhotos: parsed.data.proofPhotos ?? null,
+        proofPhotos,
         createdBy: actor,
         updatedBy: actor,
       });
@@ -1646,6 +1680,18 @@ export class PaymentVoucherControllerClass {
         }
       }
 
+      // ONE R2 conversion for the snap: the receipt row and its first line
+      // (i === 0 below) both store the SAME keys, so one picture stays one
+      // object. On any R2 failure the data URLs store unchanged — the submit
+      // must never fail on storage.
+      const proofPhotos = parsed.data.proofPhotos?.length
+        ? await saveProofPhotosToR2({
+            userId: req.user!.id,
+            kind: 'receipts',
+            photos: parsed.data.proofPhotos,
+          })
+        : (parsed.data.proofPhotos ?? null);
+
       // The RECEIPT row records the paper's printed date/time verbatim
       // (receipt_date / receipt_time). The PAY LINES bucket on the day they
       // were logged, so the earning lands in the current shift/week PV even
@@ -1660,7 +1706,7 @@ export class PaymentVoucherControllerClass {
           receiptDate: parsed.data.receiptDate ?? null,
           receiptTime: parsed.data.receiptTime ?? null,
           note: parsed.data.note ?? null,
-          proofPhotos: parsed.data.proofPhotos ?? null,
+          proofPhotos,
           // Only a MANUAL self-log waits on the agency (owner's decision #3):
           // an OCR scan and a check-in seal were not self-declared, so holding
           // them would block a week on evidence nobody disputes. The PR can
@@ -1682,7 +1728,7 @@ export class PaymentVoucherControllerClass {
             `${parsed.data.orderNo ?? ''}:${i}`,
             item.category,
           ),
-          proofPhotos: i === 0 ? (parsed.data.proofPhotos ?? null) : null,
+          proofPhotos: i === 0 ? proofPhotos : null,
           createdBy: actor,
           updatedBy: actor,
         })),
@@ -2537,7 +2583,19 @@ export class PaymentVoucherControllerClass {
         patch.lineDate = parsed.data.lineDate;
       }
       if (parsed.data.outlet !== undefined) patch.outlet = parsed.data.outlet;
-      if (parsed.data.proofPhotos !== undefined) patch.proofPhotos = parsed.data.proofPhotos;
+      if (parsed.data.proofPhotos !== undefined) {
+        // NEW pictures (data URLs) upload to R2; entries that are ALREADY R2
+        // keys pass through unchanged — the gallery edit round-trips kept
+        // photos as the keys it was served. On any R2 failure the data URLs
+        // store unchanged, so the edit never fails on storage.
+        patch.proofPhotos = parsed.data.proofPhotos?.length
+          ? await saveProofPhotosToR2({
+              userId: req.user!.id,
+              kind: 'receipts',
+              photos: parsed.data.proofPhotos,
+            })
+          : parsed.data.proofPhotos;
+      }
       patch.ref = encodeRef(
         parsed.data.kind ?? cur.kind,
         parsed.data.source ?? cur.source,
@@ -2549,11 +2607,23 @@ export class PaymentVoucherControllerClass {
       if (!line) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       // A re-snapped picture must follow the paper: keep the parent receipt's
       // photo in step with the line the app displays and the agency verifies.
+      // The CONVERTED array (R2 keys), never the raw payload — the two rows
+      // must reference the same objects.
       if (parsed.data.proofPhotos !== undefined && owned.line.receiptId) {
         await this.paymentVoucherRepository.updateReceiptPhotos(
           owned.line.receiptId,
-          parsed.data.proofPhotos ?? null,
+          patch.proofPhotos ?? null,
           getActor(req),
+        );
+      }
+      // The gallery edit REMOVED pictures: their R2 objects go too. Diffed old
+      // vs new AFTER the successful write; keys only (a data URL has no object
+      // behind it), and best-effort — a failed cleanup never fails the edit.
+      if (parsed.data.proofPhotos !== undefined) {
+        const kept = new Set(patch.proofPhotos ?? []);
+        await deleteProofPhotoKeys(
+          req.user!.id,
+          (owned.line.proofPhotos ?? []).filter((p) => !kept.has(p)),
         );
       }
       // Re-read the receipt statuses so the row the app puts back on screen
@@ -2600,6 +2670,10 @@ export class PaymentVoucherControllerClass {
       }
 
       await this.paymentVoucherRepository.deleteLine(lineId);
+      // The R2 cleanup set: the line's own photo keys, plus the receipt's when
+      // the receipt goes with it. Collected BEFORE the receipt row is deleted —
+      // its proof_photos are unreadable afterwards.
+      const removedPhotos: (string | null | undefined)[] = [];
       // Removing the LAST line of a scanned receipt removes the receipt too —
       // its snap goes with it, and the order number becomes scannable again on
       // this shift instead of a ghost RCP blocking every re-scan.
@@ -2607,10 +2681,27 @@ export class PaymentVoucherControllerClass {
         const left = await this.paymentVoucherRepository.countLinesForReceipt(
           owned.line.receiptId,
         );
+        const rcpt = await this.paymentVoucherRepository.getReceiptWithVoucher(
+          owned.line.receiptId,
+        );
         if (left === 0) {
+          removedPhotos.push(...(owned.line.proofPhotos ?? []));
+          removedPhotos.push(...(rcpt?.receipt.proofPhotos ?? []));
           await this.paymentVoucherRepository.deleteReceipt(owned.line.receiptId);
+        } else {
+          // The receipt SURVIVES, and its photo is stored once and inherited
+          // by every sibling line — so a key the receipt still references is
+          // live evidence, not garbage. Only keys it does not carry may go.
+          const stillReferenced = new Set(rcpt?.receipt.proofPhotos ?? []);
+          removedPhotos.push(
+            ...(owned.line.proofPhotos ?? []).filter((p) => !stillReferenced.has(p)),
+          );
         }
+      } else {
+        removedPhotos.push(...(owned.line.proofPhotos ?? []));
       }
+      // Best-effort: only this PR's own proof-photo keys are deletable, failures swallowed.
+      await deleteProofPhotoKeys(req.user!.id, removedPhotos);
       res.status(200).json({ success: true, message: 'Removed', data: null });
     } catch (error) {
       logger.error('[PaymentVoucherController.deleteMyLine] Error:', error);
@@ -2732,6 +2823,45 @@ export class PaymentVoucherControllerClass {
       });
       if (!signed) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // ARCHIVE the signed document to R2 at a DETERMINISTIC key — no DB
+      // column holds it: user/{prUserId}/pv/{voucherNo || voucherId}.pdf.
+      // Same renderer as every other PV export, so the archived paper can
+      // never diverge from what the PR downloads. NON-FATAL by design: the
+      // signature is already recorded above, and a storage hiccup must not
+      // un-sign a voucher or fail the request.
+      try {
+        if (r2Configured()) {
+          const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+          if (bundle) {
+            const pdf = await buildVoucherPdf({
+              voucher: bundle.voucher,
+              agency: bundle.agency,
+              pr: bundle.pr,
+              lines: this.voucherExportLines(bundle),
+            });
+            // Always end with the uuid so the key is collision-proof: distinct
+            // voucherNos can sanitize to the same segment ('PV 001' / 'PV#001'
+            // both → 'PV_001'), and an all-punctuation number sanitizes to the
+            // 'user' fallback — either would silently overwrite an earlier
+            // signed voucher's archived PDF.
+            const label = signed.voucherNo
+              ? sanitizePathSegment(signed.voucherNo)
+              : '';
+            const name = label ? `${label}-${voucherId}` : voucherId;
+            await r2PutObject({
+              key: `user/${req.user!.id}/pv/${name}.pdf`,
+              body: pdf,
+              contentType: 'application/pdf',
+            });
+          }
+        }
+      } catch (archiveError) {
+        logger.warn(
+          '[PaymentVoucherController.signMyVoucher] PV PDF archive to R2 failed (non-fatal)',
+          archiveError,
+        );
       }
 
       return res
@@ -3096,6 +3226,17 @@ export class PaymentVoucherControllerClass {
             parsed.data.receiptId ?? null,
           );
 
+      // Dispute evidence to R2 (kind 'disputes'), bare keys in the jsonb; on
+      // any R2 failure the data URLs store unchanged. These objects are NEVER
+      // deleted on withdraw — dispute history keeps its evidence.
+      const disputeProofPhotos = parsed.data.proofPhotos?.length
+        ? await saveProofPhotosToR2({
+            userId: req.user!.id,
+            kind: 'disputes',
+            photos: parsed.data.proofPhotos,
+          })
+        : parsed.data.proofPhotos;
+
       let dispute;
       try {
         dispute = await this.paymentVoucherDisputeRepository.create({
@@ -3106,7 +3247,7 @@ export class PaymentVoucherControllerClass {
           note: parsed.data.note ?? null,
           disputedAmount,
           claimedAmount: parsed.data.claimedAmount?.toFixed(2) ?? null,
-          proofPhotos: parsed.data.proofPhotos,
+          proofPhotos: disputeProofPhotos,
           // The FK — which shift's paper. `receiptRefs` is no longer written:
           // it held the receipt NUMBER as text, which could not be joined.
           receiptId: parsed.data.receiptId ?? null,

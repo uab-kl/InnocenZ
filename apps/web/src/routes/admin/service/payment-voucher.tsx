@@ -42,6 +42,7 @@ import {
 	TableRow,
 } from "@/components/ui/table";
 import { useAuth } from "@/lib/auth-context";
+import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import { formatDate, formatNumber, formatPrice } from "@/lib/utils";
 import {
 	type DisputeComponent,
@@ -539,14 +540,15 @@ function ReceiptEvidence({
 									<div className="mt-2 flex flex-wrap gap-2">
 										{photos.map((src) => (
 											<a
+												// Key stays the RAW string; only the displayed URL is resolved.
 												key={`${receipt.id}-${src}`}
-												href={src}
+												href={resolveProofPhotoUrl(src)}
 												target="_blank"
 												rel="noreferrer"
 												title="Open full size"
 											>
 												<img
-													src={src}
+													src={resolveProofPhotoUrl(src)}
 													alt={`Proof for receipt ${receipt.receiptNo}`}
 													className="h-20 w-20 rounded border object-cover transition hover:brightness-110"
 												/>
@@ -712,13 +714,13 @@ function VoucherDisputes({
 								{dispute.proofPhotos.map((src) => (
 									<a
 										key={`${dispute.id}-${src}`}
-										href={src}
+										href={resolveProofPhotoUrl(src)}
 										target="_blank"
 										rel="noreferrer"
 										title="Open full size"
 									>
 										<img
-											src={src}
+											src={resolveProofPhotoUrl(src)}
 											alt={`Proof for the ${dispute.component} dispute on ${dispute.disputeDate}`}
 											className="h-20 w-20 rounded border object-cover transition hover:brightness-110"
 										/>

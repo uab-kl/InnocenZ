@@ -1,8 +1,10 @@
 import { createServer } from 'node:net';
 import { spawn, spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import v8 from 'node:v8';
 
 export const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 export const mobileRoot = path.join(root, 'apps/mobile');
@@ -223,6 +225,37 @@ export function killPortListeners(ports) {
     spawnSync('sh', ['-c', `fuser -k ${port}/tcp >/dev/null 2>&1 || true`], {
       stdio: 'ignore',
     });
+  }
+}
+
+/**
+ * Delete corrupt Metro file-map caches (%TEMP%\metro-file-map-*) left by a
+ * force-killed Metro dying mid cache write. Metro only WARNS on a corrupt
+ * cache, then silently full-crawls the monorepo for minutes — during which
+ * every bundle request 500s and localhost:8081 renders a blank page (web,
+ * Android and iOS alike; 8 Aug 2026). Validating at startup keeps warm,
+ * healthy caches and turns the failure mode into one log line.
+ */
+export function clearCorruptMetroCaches() {
+  const tmp = os.tmpdir();
+  let names = [];
+  try {
+    names = fs.readdirSync(tmp).filter((n) => n.startsWith('metro-file-map-'));
+  } catch {
+    return; // Unreadable temp dir — Metro will handle its own cache.
+  }
+  for (const name of names) {
+    const file = path.join(tmp, name);
+    try {
+      v8.deserialize(fs.readFileSync(file));
+    } catch {
+      try {
+        fs.rmSync(file, { force: true });
+        console.log(`Removed corrupt Metro cache ${name} (avoids a minutes-long silent re-crawl).`);
+      } catch {
+        // Locked by a live Metro — leave it; that process owns it.
+      }
+    }
   }
 }
 

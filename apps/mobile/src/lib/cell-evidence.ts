@@ -118,6 +118,8 @@ export function buildCellEvidence(
         pending: lines.some((l) => l.pending),
         lines,
         subtotal: lines.reduce((s, l) => s + l.commission, 0),
+        // ⚠️ Deduped on the RAW stored strings (data URLs or R2 keys) — never on
+        // resolved URLs. Renderers call resolveProofPhotoUri at display time.
         photos: [...new Set(lines.flatMap((l) => l.proofPhotos ?? []))],
       };
     });

@@ -3,8 +3,36 @@
  * Web-only for now (like the dispute picker); native camera is a follow-up.
  * Photos are downscaled to a bounded JPEG data URL so they stay small enough to
  * persist in payment_voucher_line.proof_photos (jsonb).
+ *
+ * UPLOADS still send data URLs — the server converts them to R2 objects — so
+ * arrays coming BACK from the PV/leave APIs now mix legacy `data:` URLs with
+ * R2 object keys (`user/{userId}/receipts/…`). `resolveProofPhotoUri` is the
+ * one place that turns a stored entry into something an <Image> can load.
  */
 import { Platform } from 'react-native';
+import { r2PublicBase } from './api';
+
+/**
+ * Display URI for ONE stored proof-photo entry (PV receipt/line/dispute
+ * `proof_photos`, shift_assignment `leave_proof_photos`).
+ *
+ * - `data:` / `http(s)` URIs pass through untouched (legacy rows, local snaps).
+ * - `user/…` R2 object keys join with the public base resolved by the shared
+ *   `r2PublicBase()` chain (env → base noted from API responses → expo
+ *   `extra.r2PublicUrl`), or the raw string as last resort. Uses the SAME
+ *   chain as `assetUrl` so a standalone build that only carries the base in
+ *   expo `extra` still resolves keys.
+ *
+ * ⚠️ Resolve at RENDER time only. Dedupe/equality/carry-forward logic must keep
+ * comparing (and sending back) the RAW stored strings, never resolved URLs.
+ */
+export function resolveProofPhotoUri(photo: string): string {
+  if (photo.startsWith('data:') || /^https?:\/\//.test(photo)) return photo;
+  if (!photo.startsWith('user/')) return photo;
+  const base = r2PublicBase();
+  if (!base) return photo;
+  return `${base.replace(/\/+$/, '')}/${photo}`;
+}
 
 type HtmlFileInput = {
   type: string;

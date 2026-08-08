@@ -45,6 +45,7 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import {
 	fetchShiftAssignments,
@@ -1015,13 +1016,13 @@ function LeaveDetailPanel({
 						{mcPhotos.map((src, i) => (
 							<a
 								key={`${req.id}-mc-${i}`}
-								href={src}
+								href={resolveProofPhotoUrl(src)}
 								target="_blank"
 								rel="noreferrer"
 								title="Open full size"
 							>
 								<img
-									src={src}
+									src={resolveProofPhotoUrl(src)}
 									alt={`MC document ${i + 1} from ${prName}`}
 									className="h-32 w-32 rounded-lg border border-white/10 object-cover transition hover:brightness-110"
 								/>

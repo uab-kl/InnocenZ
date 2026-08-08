@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
+import { resolveProofPhotoUri } from '../lib/proof-photo';
 import type { ReceiptClaimState } from '../lib/receipt-review';
 
 const KIND_LABEL: Record<CellEvidence['kind'], string> = {
@@ -543,7 +544,9 @@ export function CellEvidenceSheet({
                               accessibilityRole="imagebutton"
                               accessibilityLabel="Open the receipt photo full size"
                             >
-                              <Image source={{ uri: src }} style={s.thumb} />
+                              {/* `src` may be an R2 key — resolve for display only;
+                                  keys, dedupe and zoom state stay on the raw string. */}
+                              <Image source={{ uri: resolveProofPhotoUri(src) }} style={s.thumb} />
                             </Pressable>
                           ))}
                         </View>
@@ -591,7 +594,11 @@ export function CellEvidenceSheet({
           {zoom && (
             <Modal visible transparent animationType="fade" onRequestClose={() => setZoom(null)}>
               <Pressable style={s.zoomBackdrop} onPress={() => setZoom(null)}>
-                <Image source={{ uri: zoom }} style={s.zoomImage} resizeMode="contain" />
+                <Image
+                  source={{ uri: resolveProofPhotoUri(zoom) }}
+                  style={s.zoomImage}
+                  resizeMode="contain"
+                />
                 <Text style={s.zoomHint}>Tap anywhere to close</Text>
               </Pressable>
             </Modal>

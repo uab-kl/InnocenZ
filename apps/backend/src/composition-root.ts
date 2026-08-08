@@ -142,6 +142,7 @@ export const outletController = new OutletControllerClass(
   roleRepository,
   orgMemberInviteRepository,
   userRoleRepository,
+  agencyRepository,
 );
 
 export const orgMemberInviteController = new OrgMemberInviteControllerClass(

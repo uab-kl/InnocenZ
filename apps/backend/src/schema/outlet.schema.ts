@@ -27,6 +27,18 @@ export const UpdateOutletSchema = CreateOutletSchema.partial().extend({
   clearLogo: z.boolean().optional(),
 });
 
+/**
+ * Admin links a venue to the agency that fulfils its PR requests.
+ *
+ * `outlet.onboarded_by_agency_id` is what POST /shift routes a posted job
+ * through, and until this endpoint existed NOTHING in the running product ever
+ * wrote it — signup leaves it null, approve only flips status — so every
+ * self-signed-up outlet was permanently unable to post a shift. `null` unlinks.
+ */
+export const SetOutletOnboardingAgencySchema = z.object({
+  agencyId: z.string().uuid('Invalid agency ID').nullable(),
+});
+
 export const UpdateGeoFenceSchema = z.object({
   lat: z.number().min(-90).max(90),
   lng: z.number().min(-180).max(180),
@@ -82,6 +94,7 @@ export const AcceptOrgMemberInviteSchema = z
     path: ['confirmPassword'],
   });
 
+export type SetOutletOnboardingAgencyInput = z.infer<typeof SetOutletOnboardingAgencySchema>;
 export type CreateOutletInput = z.infer<typeof CreateOutletSchema>;
 export type UpdateOutletInput = z.infer<typeof UpdateOutletSchema>;
 export type AddOutletMemberInput = z.infer<typeof AddOutletMemberSchema>;

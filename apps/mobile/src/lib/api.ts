@@ -42,8 +42,13 @@ export function noteR2PublicUrl(payload: { r2PublicUrl?: string | null } | null 
   if (raw) cachedR2PublicBase = raw.replace(/\/$/, '');
 }
 
+/** The R2 public base noted from API responses so far (no trailing slash). */
+export function notedR2PublicBase(): string | null {
+  return cachedR2PublicBase;
+}
+
 /** Public R2 base — env first, then value learned from the backend. */
-function r2PublicBase(): string | null {
+export function r2PublicBase(): string | null {
   const fromEnv = process.env.EXPO_PUBLIC_R2_PUBLIC_URL?.trim();
   if (fromEnv) return fromEnv.replace(/\/$/, '');
   if (cachedR2PublicBase) return cachedR2PublicBase;
@@ -163,7 +168,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status, body?.data ?? null);
   }
   // Envelope-level (e.g. public /auth/agencies) — signup has no /auth/me yet.
-  noteR2PublicUrl(body.r2PublicUrl);
+  noteR2PublicUrl(body);
   if (body.data && typeof body.data === 'object') {
     noteR2PublicUrl(body.data as { r2PublicUrl?: string | null });
   }
@@ -1359,6 +1364,12 @@ export type PrCurrentWeek = {
    * back to in-session state, which is all it had before.
    */
   disputes?: PrWeekDispute[];
+  /**
+   * Public R2 base for resolving `user/…` proof-photo keys in `lines[].proofPhotos`
+   * (and dispute proof photos). `request()` notes it via `noteR2PublicUrl`;
+   * `resolveProofPhotoUri` (lib/proof-photo.ts) joins base + key at render time.
+   */
+  r2PublicUrl?: string | null;
 };
 
 /** The four buckets a day's earnings split into — one dispute each, per day. */

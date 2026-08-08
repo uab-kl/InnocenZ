@@ -13,6 +13,7 @@ import { type ComponentType, type ReactNode, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { env } from "@/env";
+import { getR2PublicBase } from "@/lib/proof-photo";
 import { formatDate } from "@/lib/utils";
 import {
 	type OrgStatus,
@@ -21,14 +22,6 @@ import {
 } from "./org-status";
 
 const DEFAULT_PROFILE_IMAGE = "/img/blank-profile-picture.png";
-
-/** Learned from `/auth/me` when VITE_R2_PUBLIC_URL is not baked into the bundle. */
-let cachedR2PublicBase: string | undefined;
-
-export function noteR2PublicUrl(url: string | null | undefined): void {
-	const raw = url?.trim();
-	if (raw) cachedR2PublicBase = raw.replace(/\/$/, "");
-}
 
 /** Resolve a stored asset ref (R2 key, full URL, or /img/…) to a browser URL. */
 export function apiAssetUrl(
@@ -42,8 +35,7 @@ export function apiAssetUrl(
 		path.startsWith("agency/") ||
 		path.startsWith("outlet/")
 	) {
-		const r2 =
-			env.VITE_R2_PUBLIC_URL?.replace(/\/$/, "") || cachedR2PublicBase;
+		const r2 = getR2PublicBase();
 		return r2 ? `${r2}/${path}` : undefined;
 	}
 	const normalized = path.startsWith("/") ? path : `/${path}`;

@@ -1,9 +1,11 @@
 import { Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 
 /**
- * A proof photo is an opaque string — the PR app sends a data URL, older rows
- * hold a path. Rendering a path as an image gives a broken icon, which reads as
+ * A proof photo is an opaque string — the PR app sends a data URL or an R2
+ * object key (resolve keys with `resolveProofPhotoUrl` FIRST), older rows hold
+ * a path. Rendering a path as an image gives a broken icon, which reads as
  * "the evidence is missing" — the one thing these panels must never say by
  * accident. So render only what is certainly renderable, and print the rest as
  * the reference it is.
@@ -171,18 +173,22 @@ export function ProofPhotos({
 	return (
 		<>
 			<div className="mt-1.5 flex flex-wrap gap-1.5">
-				{photos.map((photo, i) =>
-					isRenderablePhoto(photo) ? (
+				{photos.map((photo, i) => {
+					// R2 object keys become https URLs here; legacy data URLs pass
+					// through. The RAW string stays the identity (keys, dedupe) — only
+					// what <img>/the lightbox receive is resolved.
+					const url = resolveProofPhotoUrl(photo);
+					return isRenderablePhoto(url) ? (
 						<button
 							// biome-ignore lint/suspicious/noArrayIndexKey: photos are opaque strings with no id
 							key={`${label}-${i}`}
 							type="button"
 							className="group relative"
-							onClick={() => setOpen(photo)}
+							onClick={() => setOpen(url)}
 							title="Click to zoom"
 						>
 							<img
-								src={photo}
+								src={url}
 								alt={`${label} ${i + 1}`}
 								className="h-16 w-16 rounded border border-[var(--iz-line)] object-cover"
 							/>
@@ -198,8 +204,8 @@ export function ProofPhotos({
 						>
 							{photo}
 						</span>
-					),
-				)}
+					);
+				})}
 			</div>
 			{open && (
 				<PhotoLightbox photo={open} alt={label} onClose={() => setOpen(null)} />

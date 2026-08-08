@@ -3,7 +3,7 @@ import type { User } from "@/lib/auth";
 import { getAccessToken, hasValidTokens } from "@/lib/auth/auth-storage";
 import { kickToLogin } from "@/lib/auth/guards";
 import { getClient } from "@/lib/axios-v1";
-import { noteR2PublicUrl } from "@/components/organization/details-sheet-parts";
+import { noteR2PublicUrl } from "@/lib/proof-photo";
 
 interface ApiResponse<T> {
 	success: boolean;
@@ -56,8 +56,7 @@ export async function fetchProfile(): Promise<User> {
 	const modulePermissions = profile.permissions
 		.filter((p) => p.permissionType !== undefined)
 		.map((p) => ({
-			moduleKey:
-				p.moduleKey ?? p.moduleName.toLowerCase().replace(/\s+/g, "_"),
+			moduleKey: p.moduleKey ?? p.moduleName.toLowerCase().replace(/\s+/g, "_"),
 			moduleName: p.moduleName,
 			permissionType: p.permissionType,
 		}));

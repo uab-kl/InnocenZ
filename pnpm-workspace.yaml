@@ -20,4 +20,5 @@ overrides:
   react-native: 0.83.6
 
 patchedDependencies:
+  metro-file-map@0.83.7: patches/metro-file-map@0.83.7.patch
   react-native@0.83.6: patches/react-native@0.83.6.patch

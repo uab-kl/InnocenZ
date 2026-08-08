@@ -14,6 +14,7 @@ import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
+import { saveProofPhotosToR2 } from '@/util/pv-proof-photo';
 import {
   LineDateConflictError,
   MAX_PLAUSIBLE_SHIFT_HOURS,
@@ -536,8 +537,16 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: `Too many photos (max ${MAX_LEAVE_PHOTOS})`, data: null });
       }
       const proofPhotos: string[] = [];
+      // A fresh photo is a data URL; a photo already stored on this assignment
+      // comes back as this user's own R2 key (`user/{userId}/leave/…`), so an
+      // amend flow can re-send what the server served without the PR having to
+      // re-photograph the MC. saveProofPhotosToR2 passes owned keys through and
+      // drops foreign ones.
+      const ownedLeavePrefix = `user/${userId}/leave/`;
       for (const photo of rawPhotos) {
-        if (typeof photo !== 'string' || !photo.startsWith('data:image/')) {
+        const isOwnedKey =
+          typeof photo === 'string' && photo.startsWith(ownedLeavePrefix);
+        if (typeof photo !== 'string' || (!photo.startsWith('data:image/') && !isOwnedKey)) {
           return res.status(400).json({ success: false, message: 'Each MC photo must be an image', data: null });
         }
         if (photo.length > MAX_LEAVE_PHOTO_CHARS) {
@@ -568,10 +577,21 @@ export class ShiftAssignmentControllerClass {
         });
       }
 
+      // Validated as data URLs above (the phone only ever sends those), then
+      // stored as bare R2 keys under user/{userId}/leave/mc-…. On any R2
+      // failure the data URLs store unchanged — a storage hiccup must never
+      // block an MC from being filed. Old rows keep their data URLs; readers
+      // tolerate both formats.
+      const storedProofPhotos = await saveProofPhotosToR2({
+        userId,
+        kind: 'leave',
+        photos: proofPhotos,
+      });
+
       const assignment = await this.shiftAssignmentRepository.update(id, {
         status: 'leave_pending',
         notes: reason,
-        leaveProofPhotos: proofPhotos,
+        leaveProofPhotos: storedProofPhotos,
         updatedBy: getActor(req),
       });
       res.status(200).json({ success: true, message: 'Leave request sent — your agency will review it', data: assignment });
