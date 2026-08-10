@@ -6,7 +6,9 @@ import {
 	IzSectionLabel,
 } from "@agency-portal/components/iz/ui";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
+import { SignatureOnFileCard } from "@agency-portal/components/org/SignatureOnFileCard";
 import { PendingReviewBanner } from "@agency-portal/components/portal/PendingReviewBanner";
+import { ProfileAddressFields } from "@agency-portal/components/portal/profile-address-fields";
 import {
 	ProfileEditDock,
 	ProfileEditTrigger,
@@ -14,37 +16,36 @@ import {
 	ProfileSectionCard,
 	ProfileSettingsField,
 } from "@agency-portal/components/portal/profile-settings-ui";
-import { ProfileAddressFields } from "@agency-portal/components/portal/profile-address-fields";
 import { useAgencyProfile } from "@agency-portal/hooks/use-agency-profile";
 import {
-	BLANK_AGENCY_FINANCE_HEAD,
-	BLANK_AGENCY_OWNER,
 	type AgencyFinanceHead,
 	type AgencyOwnerSettings,
 	agencySubscriptionBillingForWeeklyPv,
 	agencyWeeklyPvCount,
+	BLANK_AGENCY_FINANCE_HEAD,
+	BLANK_AGENCY_OWNER,
 	ownedByAgency,
 } from "@agency-portal/lib/agency-demo";
 import {
 	getAgencyIdentity,
 	saveAgencyIdentity,
 } from "@agency-portal/lib/agency-identity";
-import {
-	EMPTY_ORG_ADDRESS,
-	resolveOrgAddressForSave,
-	type OrgAddress,
-} from "@agency-portal/lib/org-address";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { getPreviousWeekSundayIso } from "@agency-portal/lib/demo-clock";
+import {
+	EMPTY_ORG_ADDRESS,
+	type OrgAddress,
+	resolveOrgAddressForSave,
+} from "@agency-portal/lib/org-address";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute } from "@tanstack/react-router";
+import { Building2, Mail, Phone, Shield, User } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import {
 	isOrgPendingReview,
 	isOrgSuspended,
 } from "@/components/organization/org-status";
-import { Building2, Mail, Phone, Shield, User } from "lucide-react";
-import { useMemo, useRef, useState } from "react";
 
 export const Route = createFileRoute("/agency/profile")({
 	component: AgencyProfile,
@@ -249,8 +250,8 @@ function AgencyProfile() {
 				const msg =
 					err && typeof err === "object" && "response" in err
 						? String(
-								(err as { response?: { data?: { message?: string } } })
-									.response?.data?.message ?? "",
+								(err as { response?: { data?: { message?: string } } }).response
+									?.data?.message ?? "",
 							)
 						: err instanceof Error
 							? err.message
@@ -524,6 +525,11 @@ function AgencyProfile() {
 					canManage={canEdit}
 				/>
 			)}
+
+			{/* Sits with Login & security, not with the demo Finance Head card
+			    above: this is the signed-in person's own signature, whoever they
+			    are, and it is real. */}
+			{!editing && <SignatureOnFileCard />}
 
 			{!editing && (
 				<>

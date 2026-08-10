@@ -1,4 +1,9 @@
 import type { AgencySubRole } from "@agency-portal/lib/agency-rbac";
+import {
+	readTabScoped,
+	removeTabScoped,
+	writeTabScoped,
+} from "@/lib/auth/tab-scoped-storage";
 import type { AgencyMembership, AgencyUserSubRole } from "@/services/agency";
 
 /**
@@ -62,16 +67,12 @@ export function identityFromMembership(
 }
 
 export function saveAgencyIdentity(identity: AgencySessionIdentity): void {
-	try {
-		localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
-	} catch {
-		// localStorage unavailable (SSR / privacy mode) — nothing to persist.
-	}
+	writeTabScoped(IDENTITY_KEY, JSON.stringify(identity));
 }
 
 export function getAgencyIdentity(): AgencySessionIdentity | null {
 	try {
-		const raw = localStorage.getItem(IDENTITY_KEY);
+		const raw = readTabScoped(IDENTITY_KEY);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw) as Partial<AgencySessionIdentity>;
 		if (
@@ -98,9 +99,5 @@ export function getAgencyIdentity(): AgencySessionIdentity | null {
 }
 
 export function clearAgencyIdentity(): void {
-	try {
-		localStorage.removeItem(IDENTITY_KEY);
-	} catch {
-		// localStorage unavailable — nothing to clear.
-	}
+	removeTabScoped(IDENTITY_KEY);
 }

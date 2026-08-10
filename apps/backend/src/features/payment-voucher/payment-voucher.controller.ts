@@ -118,6 +118,15 @@ import {
   PaymentVoucherType,
 } from './payment-voucher.model';
 import type { PrType } from '@/features/pr-personnel/pr.model';
+// The outlet's floor-sales mirror. A LEAF module by design — importing the
+// shift-sale feature wholesale from here would close a cycle.
+import {
+  recomputeShiftSale,
+  recomputeShiftSaleForAssignment,
+  recomputeShiftSaleForLine,
+  recomputeShiftSaleForReceipt,
+  resolveShiftPrForLine,
+} from '@/features/shift-sale/shift-sale-from-receipts.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -1773,6 +1782,15 @@ export class PaymentVoucherControllerClass {
         })),
       );
 
+      // Mirror the gross onto the outlet's floor sales. Best-effort by design:
+      // it logs and returns false rather than throwing, so a hiccup in the
+      // revenue mirror can never fail the PR's receipt. A manual self-log lands
+      // 'pending' and contributes nothing until the agency approves it — the
+      // recompute still runs, and correctly writes zero.
+      if (parsed.data.assignmentId) {
+        await recomputeShiftSaleForAssignment(parsed.data.assignmentId, actor);
+      }
+
       res.status(201).json({
         success: true,
         message: 'Receipt logged',
@@ -1975,6 +1993,11 @@ export class PaymentVoucherControllerClass {
           .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
       }
 
+      // THE gate that moves money onto the outlet's screen. Only 'approved' and
+      // 'verified' receipts count as floor sales, so this transition both admits
+      // a receipt and — on withdrawal — takes it back out again.
+      await recomputeShiftSaleForReceipt(receiptId, getActor(req));
+
       return res.status(200).json({
         success: true,
         message: parsed.data.status === 'approved' ? 'Receipt approved' : 'Approval withdrawn',
@@ -2059,6 +2082,10 @@ export class PaymentVoucherControllerClass {
         owned.receipt.status === 'approved'
           ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
           : owned.receipt;
+
+      // AFTER the drop back to pending: a corrected figure the agency has not
+      // re-approved must leave the outlet's revenue until it does.
+      await recomputeShiftSaleForReceipt(receiptId, actor);
 
       return res.status(200).json({
         success: true,
@@ -2401,6 +2428,11 @@ export class PaymentVoucherControllerClass {
           ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
           : owned.receipt;
 
+      // AFTER the drop back to pending, never before: an approved receipt that
+      // just went stale contributes nothing until it is approved again, and the
+      // recompute must see the status it ends on.
+      await recomputeShiftSaleForReceipt(receiptId, actor);
+
       return res.status(201).json({
         success: true,
         message:
@@ -2529,6 +2561,12 @@ export class PaymentVoucherControllerClass {
           ? await this.paymentVoucherRepository.setReceiptStatus(receiptId, 'pending', actor)
           : updated.receipt;
 
+      // A header edit can drop an approved receipt back to pending (above), which
+      // takes its gross out of the outlet's floor sales until it is approved
+      // again. Re-dating also MOVES the lines, and sold_on follows the shift, so
+      // the recompute is what keeps the two in step.
+      await recomputeShiftSaleForReceipt(receiptId, actor);
+
       // The moved lines ride back for the same reason the day review returns its
       // receipts: the card that shows them must re-render from the response that
       // moved them, never from a second read that could describe another moment.
@@ -2637,11 +2675,18 @@ export class PaymentVoucherControllerClass {
             })
           : parsed.data.proofPhotos;
       }
+      // ⚠️ `cur.category` MUST ride through. This re-encode used to stop at
+      // `dedupe`, so field 5 came back empty and an edited line LOST its
+      // category — the only thing that separates a service entitlement from a
+      // tip (`kind` calls both of them 'tips'). Harmless while nothing read it;
+      // now that floor sales buckets on category, dropping it would silently
+      // move a PR's service revenue into the outlet's tips on any edit.
       patch.ref = encodeRef(
         parsed.data.kind ?? cur.kind,
         parsed.data.source ?? cur.source,
         parsed.data.sales ?? cur.sales,
         cur.dedupe || undefined,
+        cur.category || undefined,
       );
 
       const line = await this.paymentVoucherRepository.updateLine(lineId, patch);
@@ -2675,6 +2720,10 @@ export class PaymentVoucherControllerClass {
       const statuses = receiptInfoMap(
         await this.paymentVoucherRepository.listReceipts(owned.voucher.id),
       );
+      // Quantity and gross both live on this row, so an edit moves the outlet's
+      // revenue. Recompute re-derives the whole (shift, PR) total, so no
+      // compensating write is needed for the old figure.
+      await recomputeShiftSaleForLine(lineId, getActor(req));
       res
         .status(200)
         .json({ success: true, message: 'Updated', data: toReceiptLineDTO(line, statuses) });
@@ -2710,6 +2759,10 @@ export class PaymentVoucherControllerClass {
         });
       }
 
+      // Resolved BEFORE the delete — see resolveShiftPrForLine. Afterwards this
+      // line, and possibly its whole receipt, no longer exist to resolve from.
+      const saleKey = await resolveShiftPrForLine(lineId);
+
       await this.paymentVoucherRepository.deleteLine(lineId);
       // The R2 cleanup set: the line's own photo keys, plus the receipt's when
       // the receipt goes with it. Collected BEFORE the receipt row is deleted —
@@ -2743,6 +2796,9 @@ export class PaymentVoucherControllerClass {
       }
       // Best-effort: only this PR's own proof-photo keys are deletable, failures swallowed.
       await deleteProofPhotoKeys(req.user!.id, removedPhotos);
+      // Re-derives from what REMAINS, so the removed line's gross drops out of
+      // the outlet's revenue. Writes a zero row when nothing is left.
+      if (saleKey) await recomputeShiftSale(saleKey, getActor(req));
       res.status(200).json({ success: true, message: 'Removed', data: null });
     } catch (error) {
       logger.error('[PaymentVoucherController.deleteMyLine] Error:', error);

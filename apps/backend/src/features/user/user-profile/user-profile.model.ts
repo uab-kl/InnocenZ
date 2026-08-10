@@ -1,4 +1,4 @@
-import { date, integer, jsonb, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
+import { date, integer, jsonb, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { UserTable } from '@/features/user/user.model';
 
@@ -59,6 +59,20 @@ export const UserProfileTable = MainSchema.table('user_profile', {
    */
   bankName: varchar('bank_name', { length: 255 }),
   bankAccountNo: varchar('bank_account_no', { length: 50 }),
+  /**
+   * The signature this person has on file, as vector ink ({w,h,strokes}) —
+   * the same shape `payment_voucher.finance_head_signature` stores (0111).
+   *
+   * Kept so signing a voucher is a TAP rather than a redraw. The voucher still
+   * takes its own copy of the strokes at sign time: a signature already applied
+   * to a money document must not change because the signer later updated the
+   * one on file. This column is the source for the next signature, never the
+   * record of a past one.
+   *
+   * Sensitive in the same sense as the documents above — a signature image is
+   * forgeable — so it is named in `IDENTITY_DOC_FIELDS`.
+   */
+  signatureInk: text('signature_ink'),
   verificationStatus: verificationStatusEnum('verification_status').default('draft'),
   verifiedAt: timestamp('verified_at', { withTimezone: true }),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
@@ -104,6 +118,7 @@ export type UserProfileResponse = {
   idPhotoBack: string | null;
   bankName: string | null;
   bankAccountNo: string | null;
+  signatureInk: string | null;
   verificationStatus: VerificationStatus | null;
   verifiedAt: Date | null;
   createdAt: Date | null;
@@ -141,6 +156,7 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     idPhotoBack: null,
     bankName: null,
     bankAccountNo: null,
+    signatureInk: null,
     verificationStatus: 'draft',
     verifiedAt: null,
     createdAt: null,
@@ -179,6 +195,7 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     idPhotoBack: profile.idPhotoBack,
     bankName: profile.bankName,
     bankAccountNo: profile.bankAccountNo,
+    signatureInk: profile.signatureInk,
     verificationStatus: profile.verificationStatus,
     verifiedAt: profile.verifiedAt,
     createdAt: profile.createdAt,

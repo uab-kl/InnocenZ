@@ -82,6 +82,10 @@ type FloorSalesDayRow = {
 	dayLabel: string;
 	drinkSales: number;
 	tipsSales: number;
+	// Real receipts split service entitlements out of tips (backend
+	// service_sales_rm). The demo sources below have no such concept and report
+	// a literal 0 — the field exists so all three producers stay one shape.
+	serviceSales: number;
 	total: number;
 };
 
@@ -103,7 +107,12 @@ function tipsSalesRmFromUnits(tips: number): number {
 function floorBreakdownFromHistory(
 	rows: ShiftHistoryRow[],
 	perDrinkRm: number,
-): { days: FloorSalesDayRow[]; drinkSales: number; tipsSales: number } {
+): {
+	days: FloorSalesDayRow[];
+	drinkSales: number;
+	tipsSales: number;
+	serviceSales: number;
+} {
 	const byDay = new Map<string, Omit<FloorSalesDayRow, "total">>();
 
 	for (const row of rows) {
@@ -120,6 +129,7 @@ function floorBreakdownFromHistory(
 				dayLabel: weekdayLabel(row.dateIso),
 				drinkSales: 0,
 				tipsSales: 0,
+				serviceSales: 0,
 			} satisfies Omit<FloorSalesDayRow, "total">);
 		cur.drinkSales += drinkSales;
 		cur.tipsSales += tipsSales;
@@ -128,12 +138,14 @@ function floorBreakdownFromHistory(
 
 	const days = [...byDay.values()]
 		.sort((a, b) => a.dateIso.localeCompare(b.dateIso))
-		.map((d) => ({ ...d, total: d.drinkSales + d.tipsSales }));
+		.map((d) => ({ ...d, total: d.drinkSales + d.tipsSales + d.serviceSales }));
 
 	return {
 		days,
 		drinkSales: days.reduce((sum, d) => sum + d.drinkSales, 0),
 		tipsSales: days.reduce((sum, d) => sum + d.tipsSales, 0),
+		// Demo history carries no service entitlements.
+		serviceSales: 0,
 	};
 }
 
@@ -143,7 +155,12 @@ function floorBreakdownFromVelvetNights(
 	todayIso: string,
 	perDrinkRm: number,
 	allowedDateIsos?: Set<string>,
-): { days: FloorSalesDayRow[]; drinkSales: number; tipsSales: number } {
+): {
+	days: FloorSalesDayRow[];
+	drinkSales: number;
+	tipsSales: number;
+	serviceSales: number;
+} {
 	const byDay = new Map<string, Omit<FloorSalesDayRow, "total">>();
 
 	for (const night of mappedVelvetReportNights()) {
@@ -167,17 +184,20 @@ function floorBreakdownFromVelvetNights(
 			dayLabel: weekdayLabel(night.dateIso),
 			drinkSales,
 			tipsSales,
+			serviceSales: 0,
 		});
 	}
 
 	const days = [...byDay.values()]
 		.sort((a, b) => a.dateIso.localeCompare(b.dateIso))
-		.map((d) => ({ ...d, total: d.drinkSales + d.tipsSales }));
+		.map((d) => ({ ...d, total: d.drinkSales + d.tipsSales + d.serviceSales }));
 
 	return {
 		days,
 		drinkSales: days.reduce((sum, d) => sum + d.drinkSales, 0),
 		tipsSales: days.reduce((sum, d) => sum + d.tipsSales, 0),
+		// The velvet demo nights carry no service entitlements.
+		serviceSales: 0,
 	};
 }
 
@@ -482,7 +502,12 @@ export function OutletSalesDashboard() {
 				customDateIsoSet,
 			);
 		}
-		return { days: [] as FloorSalesDayRow[], drinkSales: 0, tipsSales: 0 };
+		return {
+			days: [] as FloorSalesDayRow[],
+			drinkSales: 0,
+			tipsSales: 0,
+			serviceSales: 0,
+		};
 	}, [
 		backed,
 		salesReport,
@@ -563,7 +588,10 @@ export function OutletSalesDashboard() {
 	const sealedDayCount = dayRows.filter(
 		(d) => d.dateIso <= todayIso && (d.earned > 0 || d.sales > 0),
 	).length;
-	const growthUp = wowGrowthPct >= 0;
+	// null = the prior window has no positive baseline to divide by. Rendered as
+	// "no prior data" rather than 0% (reads as flat) or an invented 100%.
+	const hasGrowth = typeof wowGrowthPct === "number";
+	const growthUp = hasGrowth && (wowGrowthPct as number) >= 0;
 	const floorTableDays = isCurrentWeek
 		? floorBreakdown.days.filter((d) => d.dateIso <= todayIso)
 		: floorBreakdown.days;
@@ -612,18 +640,26 @@ export function OutletSalesDashboard() {
 								<span
 									className={cn(
 										"iz-outlet-report-badge",
-										growthUp
-											? "iz-outlet-report-badge--up"
-											: "iz-outlet-report-badge--down",
+										!hasGrowth
+											? "iz-outlet-report-badge--margin"
+											: growthUp
+												? "iz-outlet-report-badge--up"
+												: "iz-outlet-report-badge--down",
 									)}
 								>
-									{growthUp ? (
-										<TrendingUp className="h-3 w-3" />
+									{hasGrowth ? (
+										<>
+											{growthUp ? (
+												<TrendingUp className="h-3 w-3" />
+											) : (
+												<TrendingDown className="h-3 w-3" />
+											)}
+											{growthUp ? "+" : ""}
+											{wowGrowthPct}% vs prior
+										</>
 									) : (
-										<TrendingDown className="h-3 w-3" />
+										"No prior data"
 									)}
-									{growthUp ? "+" : ""}
-									{wowGrowthPct}% vs prior
 								</span>
 								<span className="iz-outlet-report-badge iz-outlet-report-badge--margin">
 									{marginPct}% margin
@@ -659,7 +695,7 @@ export function OutletSalesDashboard() {
 
 						{expandedMetric === "floor" && (
 							<div className="iz-outlet-report-expand">
-								<div className="grid grid-cols-2 gap-2">
+								<div className="grid grid-cols-3 gap-2">
 									<div className="iz-outlet-report-expand__tile">
 										<p className="iz-outlet-report-expand__tile-label">
 											Drink sales
@@ -676,26 +712,39 @@ export function OutletSalesDashboard() {
 											{formatRM(floorBreakdown.tipsSales)}
 										</p>
 									</div>
+									{/* Its own tile, never merged into tips: services are the
+									    bulk of what PRs log, and calling them "tips" would
+									    misstate the split on a money screen. */}
+									<div className="iz-outlet-report-expand__tile">
+										<p className="iz-outlet-report-expand__tile-label">
+											Service sales
+										</p>
+										<p className="iz-outlet-report-expand__tile-value">
+											{formatRM(floorBreakdown.serviceSales)}
+										</p>
+									</div>
 								</div>
 								<p className="iz-tiny iz-muted2 mt-2">
 									Drink sales = logged units × RM {perDrinkRm} · Tips = floor
-									tips logged per shift
+									tips logged per shift · Services = entitlements on approved
+									receipts
 								</p>
 								{floorTableDays.length > 0 ? (
 									<div className="mt-3 overflow-x-auto">
 										<div className="min-w-[28rem]">
-											<div className="grid grid-cols-[3rem_1fr_6rem_6rem_6rem] gap-2 px-1 pb-1 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)]">
+											<div className="grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] gap-2 px-1 pb-1 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)]">
 												<span>Day</span>
 												<span>Date</span>
 												<span className="text-right">Drinks</span>
 												<span className="text-right">Tips</span>
+												<span className="text-right">Services</span>
 												<span className="text-right">Total</span>
 											</div>
 											<div className="space-y-1">
 												{floorTableDays.map((row) => (
 													<div
 														key={row.dateIso}
-														className="grid grid-cols-[3rem_1fr_6rem_6rem_6rem] items-center gap-2 rounded-lg border border-[var(--iz-line)] bg-black/15 px-2 py-1.5"
+														className="grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] items-center gap-2 rounded-lg border border-[var(--iz-line)] bg-black/15 px-2 py-1.5"
 													>
 														<span className="font-sora text-xs font-bold text-[var(--iz-txt)]">
 															{row.dayLabel}
@@ -708,6 +757,9 @@ export function OutletSalesDashboard() {
 														</span>
 														<span className="text-right font-mono text-[10px] tabular-nums text-[var(--iz-muted)]">
 															{formatRM(row.tipsSales)}
+														</span>
+														<span className="text-right font-mono text-[10px] tabular-nums text-[var(--iz-muted)]">
+															{formatRM(row.serviceSales)}
 														</span>
 														<span className="text-right font-mono text-[10px] font-semibold tabular-nums text-[var(--iz-gold-l)]">
 															{formatRM(row.total)}

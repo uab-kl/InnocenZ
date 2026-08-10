@@ -15,7 +15,9 @@ export type NotificationKind =
 	| "agency_join_resolved"
 	| "pr_rating_low"
 	| "shift_cover_needed"
-	| "pv_day_review_pending";
+	| "pv_day_review_pending"
+	| "leave_requested"
+	| "leave_decided";
 
 export interface NotificationRecord {
 	id: string;

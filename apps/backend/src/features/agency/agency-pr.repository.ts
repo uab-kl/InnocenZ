@@ -74,6 +74,16 @@ export type AgencyPrEnriched = {
   dob: string | Date | null;
   nationality: string | null;
   portfolioPhotos: (string | null)[] | null;
+  /**
+   * IC scans the PR uploaded at sign-up. Returned so the agency's Approvals
+   * screen can actually verify identity — it read "Missing" for every PR
+   * because these were never selected, not because no scan existed.
+   *
+   * These are `IDENTITY_DOC_FIELDS`: only ever send them from a route that is
+   * role-gated AND scoped to the agency in `:id` (see agency.routes.ts).
+   */
+  idPhotoFront: string | null;
+  idPhotoBack: string | null;
   comcardImage: string | null;
   comcardHeightCm: number | null;
   comcardWeightKg: number | null;
@@ -165,6 +175,12 @@ export class AgencyPrRepository {
           dob: UserProfileTable.dob,
           nationality: UserProfileTable.nationality,
           portfolioPhotos: UserProfileTable.portfolioPhotos,
+          // Same join, same omission as `languages` above: the agency was
+          // approving PRs against an IC panel that said "Missing" while the
+          // scans sat in R2. Safe to send only because this route is now
+          // role-gated and agency-scoped.
+          idPhotoFront: UserProfileTable.idPhotoFront,
+          idPhotoBack: UserProfileTable.idPhotoBack,
           comcardImage: UserProfileTable.comcardImage,
           comcardHeightCm: UserProfileTable.comcardHeightCm,
           comcardWeightKg: UserProfileTable.comcardWeightKg,

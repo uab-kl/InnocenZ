@@ -62,6 +62,12 @@ export interface ShiftAssignment {
 	outletId?: string;
 	/** Venue name, joined from the outlet FK on the LIST endpoint only. */
 	outletName?: string | null;
+	/**
+	 * Staffing agency's name, joined from the assignment's agency FK on the LIST
+	 * endpoint only. An outlet cannot read `/agency`, so this is its one source
+	 * for the name — see use-outlet-history.ts.
+	 */
+	agencyName?: string | null;
 	shiftDate?: string;
 }
 

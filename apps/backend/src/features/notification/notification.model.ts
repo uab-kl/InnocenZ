@@ -61,6 +61,20 @@ export const notificationKindValues = [
    * silence and the first person to notice was a PR asking where their money was.
    */
   'pv_day_review_pending',
+  /**
+   * A PR filed an MC / leave request and the agency has to decide (0110).
+   * Agency-addressed, like shift_cover_needed.
+   *
+   * Distinct from shift_cover_needed on purpose: nobody is off yet. This is a
+   * decision waiting to be made, not a staffing gap — cover is raised later by
+   * approveLeave, and only if it approves.
+   */
+  'leave_requested',
+  /**
+   * The agency approved or rejected that MC / leave request (0110).
+   * PR-addressed — one kind for both outcomes, like cutlost_decided.
+   */
+  'leave_decided',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);

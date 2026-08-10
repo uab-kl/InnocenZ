@@ -34,6 +34,8 @@ const KIND_MAP: Record<NotificationKind, OpsNotificationKind> = {
 	pr_rating_low: "pr_rating_low",
 	shift_cover_needed: "shift_cover_needed",
 	pv_day_review_pending: "pv_day_review_pending",
+	leave_requested: "leave_requested",
+	leave_decided: "leave_decided",
 };
 
 /**
@@ -75,6 +77,11 @@ function hrefFor(
 			case "shift_cover_needed":
 				return "/agency/roster";
 			case "agency_join_resolved":
+			// The body says "Review it on Approvals → MC/Leaves", so the row has
+			// to land on Approvals. It opens on the Agency-Tied tab: `navigate`
+			// is typed against the route union and `hrefFor` returns a bare path,
+			// so the `?tab=leaves` deep link needs a search-aware href first.
+			case "leave_requested":
 				return "/agency/pending";
 			// The rating that dropped belongs to a PR, so land on the PR list
 			// rather than the roster.

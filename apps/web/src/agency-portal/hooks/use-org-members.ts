@@ -63,7 +63,11 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 			email: string;
 			subRole: string;
 			roleId?: string;
-		}): Promise<{ message?: string; acceptUrl?: string }> => {
+		}): Promise<{
+			message?: string;
+			acceptUrl?: string;
+			emailed?: boolean;
+		}> => {
 			const id = orgId as string;
 			const payload = {
 				email: input.email.trim(),
@@ -81,6 +85,7 @@ export function useOrgMembers(kind: OrgKind, orgId: string | null) {
 			return {
 				message: res.message,
 				acceptUrl: data?.acceptUrl,
+				emailed: data?.emailed,
 			};
 		},
 		onSuccess: invalidate,

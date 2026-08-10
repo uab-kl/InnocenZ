@@ -111,6 +111,20 @@ export function releaseBackendLock() {
   }
 }
 
+// How long a lock holder gets to finish backend bootstrap (env, DB, Apollo, RBAC
+// seed) before we stop believing its lock. Bootstrap is seconds; this is a wide
+// margin so a slow-but-healthy start is never raced.
+const BACKEND_BOOTSTRAP_GRACE_MS = 120_000;
+
+/** Age of the lockfile, or Infinity when there is none. */
+function backendLockAgeMs() {
+  try {
+    return Date.now() - fs.statSync(BACKEND_LOCK_PATH).mtimeMs;
+  } catch {
+    return Number.POSITIVE_INFINITY;
+  }
+}
+
 // A TCP bind-probe is not trustworthy on Windows: without SO_EXCLUSIVEADDRUSE
 // (which Node doesn't set by default), a second process can successfully bind()
 // a port another process already holds, so `isPortFree` can report "free" for a
@@ -145,6 +159,28 @@ export async function claimBackendOwnership(backendPort) {
   if (ownsBackend && (await isBackendResponding(backendPort))) {
     releaseBackendLock();
     ownsBackend = false;
+  }
+  // A LIVE lock holder is not proof of a live backend. `dev:all` can outlive its
+  // own backend child (crashed, or killed by hand), and the lock then outlives
+  // the server: every later `dev:web` reads a live holder PID, declines to start
+  // a backend, and prints "already running, reusing it" while nothing listens.
+  // The port stays dead for as long as that parent lives and the app shows
+  // "Network Error" on every call. Past the bootstrap grace window, believe the
+  // port over the lock and take over.
+  if (
+    !ownsBackend &&
+    backendLockAgeMs() > BACKEND_BOOTSTRAP_GRACE_MS &&
+    !(await isBackendResponding(backendPort))
+  ) {
+    console.log(
+      `[dev] Backend lock is held but nothing answers on port ${backendPort} — taking over and starting a backend.`
+    );
+    try {
+      fs.unlinkSync(BACKEND_LOCK_PATH);
+    } catch {
+      // Someone else cleaned it up first — acquire below decides the winner.
+    }
+    ownsBackend = acquireBackendLock();
   }
   return ownsBackend;
 }

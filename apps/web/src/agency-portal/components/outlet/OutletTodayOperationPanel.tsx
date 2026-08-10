@@ -7,6 +7,7 @@ import {
 	comcardPreviewFromSlot,
 	toComcardPreview,
 } from "@agency-portal/components/agency/PrComcardIdentity";
+import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { OutletPrShiftHistorySheet } from "@agency-portal/components/iz/ShiftHistoryLog";
 import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
@@ -193,6 +194,9 @@ export function OutletTodayOperationPanel({
 	const canRate = outletCan(outletSubRole, "ratePrs");
 	const [openPr, setOpenPr] = useState<string | null>(null);
 	const [comcardPreviewId, setComcardPreviewId] = useState<string | null>(null);
+	// A comcard at sheet size is too small to read the PR's stats off; tapping it
+	// opens the same zoomable viewer the proof photos use.
+	const [comcardZoomOpen, setComcardZoomOpen] = useState(false);
 	const [historyPrId, setHistoryPrId] = useState<string | null>(null);
 	const [liveSalesPrId, setLiveSalesPrId] = useState<string | null>(null);
 	const [prTonightOpen, setPrTonightOpen] = useState(false);
@@ -714,11 +718,26 @@ export function OutletTodayOperationPanel({
 								) : null;
 							})()}
 						</p>
-						<Comcard3dPreviewVisual
-							pr={comcardPreviewPr}
-							showName={false}
-							compact
-						/>
+						<button
+							type="button"
+							className="block w-full cursor-zoom-in"
+							onClick={() => setComcardZoomOpen(true)}
+							aria-label="Enlarge comcard"
+						>
+							<Comcard3dPreviewVisual
+								pr={comcardPreviewPr}
+								showName={false}
+								compact
+							/>
+						</button>
+						{comcardZoomOpen && (
+							<PhotoLightbox
+								alt={`${comcardPreviewPr.name} · comcard`}
+								onClose={() => setComcardZoomOpen(false)}
+							>
+								<Comcard3dPreviewVisual pr={comcardPreviewPr} />
+							</PhotoLightbox>
+						)}
 						<div className="iz-outlet-comcard-sheet__pills">
 							{comcardPreviewProfile?.trainingLevel && (
 								<TierBadge tier={comcardPreviewProfile.trainingLevel} />

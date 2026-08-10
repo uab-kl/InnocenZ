@@ -214,9 +214,22 @@ export type PublicAgency = {
  * to joining `r2PublicUrl` + `logoImage` key on the client.
  */
 export async function fetchPublicAgencies(): Promise<PublicAgency[]> {
-  const res = await fetch(`${API_BASE}/auth/agencies?_=${Date.now()}`, {
-    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-cache' },
-  }).catch(() => null);
+  /*
+   * Sent with NO custom headers, deliberately.
+   *
+   * This used to carry `Cache-Control: no-cache`, which is not a CORS-safelisted
+   * request header. On the web build the browser preflighted, the backend
+   * answered `Access-Control-Allow-Headers: Content-Type,Authorization,
+   * X-Requested-With,Accept,Origin` — no `Cache-Control` — and the real request
+   * was then blocked, so `fetch` rejected before any status existed. On a phone
+   * there is no CORS, so it only ever failed on web, and the profile picker's
+   * swallowed error rendered the block as "no agencies exist".
+   *
+   * `Content-Type` went too: it says nothing about a GET that has no body, and
+   * without it this is a SIMPLE request that skips the preflight entirely.
+   * `?_=` already defeats caching, which is what the header was reaching for.
+   */
+  const res = await fetch(`${API_BASE}/auth/agencies?_=${Date.now()}`).catch(() => null);
   if (!res) {
     throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
   }
@@ -473,13 +486,11 @@ export function fetchMyAgencyLinks(accessToken: string, userId: string): Promise
 }
 
 /**
- * Every active agency the PR can ask to join.
- * Uses `/auth/agencies` (id + name only) — `GET /agency` is admin/agency-only
- * after RBAC, so a PR JWT gets 403 there and the profile picker stayed empty.
+ * Every active agency a PR can ask to join is `fetchPublicAgencies()` above —
+ * ONE function for one list. A token-taking `fetchAgencies` wrapper used to sit
+ * here, and its signature is what kept the profile picker calling the
+ * admin/agency-only `GET /agency` long after the public route existed.
  */
-export function fetchAgencies(_accessToken?: string): Promise<{ id: string; name: string }[]> {
-  return fetchPublicAgencies();
-}
 
 /**
  * Set which agencies this PR wants to be under. New links land as `pending`

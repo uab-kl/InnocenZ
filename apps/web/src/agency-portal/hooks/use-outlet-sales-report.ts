@@ -36,7 +36,13 @@ export interface WeeklyReport {
 	margin: number;
 	shifts: number;
 	avgTicket: number;
-	wowGrowthPct: number;
+	/**
+	 * Net-sales change against the preceding comparable window, or NULL when no
+	 * honest percentage exists — a prior period that earned nothing (or lost
+	 * money) has no baseline to divide by. Callers must render the null case as
+	 * "no prior data", never as 0% (which reads as "flat") or 100%.
+	 */
+	wowGrowthPct: number | null;
 	topPrs: { prId: string; name: string; earned: number }[];
 }
 
@@ -47,10 +53,13 @@ export interface FloorBreakdown {
 		dayLabel: string;
 		drinkSales: number;
 		tipsSales: number;
+		serviceSales: number;
 		total: number;
 	}[];
 	drinkSales: number;
 	tipsSales: number;
+	/** Service entitlements — their own bucket, never folded into tips. */
+	serviceSales: number;
 }
 
 export interface TopPrRow {
@@ -71,7 +80,12 @@ export interface UseOutletSalesReport {
 	buildTopPrs: (range: SalesReportRange) => TopPrRow[];
 }
 
-const EMPTY_FLOOR: FloorBreakdown = { days: [], drinkSales: 0, tipsSales: 0 };
+const EMPTY_FLOOR: FloorBreakdown = {
+	days: [],
+	drinkSales: 0,
+	tipsSales: 0,
+	serviceSales: 0,
+};
 
 function weekdayLabel(dateIso: string): string {
 	return new Date(`${dateIso}T12:00:00`).toLocaleDateString("en-GB", {
@@ -84,6 +98,55 @@ function dayDisplay(dateIso: string): string {
 		day: "numeric",
 		month: "short",
 	});
+}
+
+/** Shifts an ISO day by `days`, in UTC so a DST boundary can't drop or add one. */
+function shiftIso(dateIso: string, days: number): string {
+	const d = new Date(`${dateIso}T00:00:00Z`);
+	d.setUTCDate(d.getUTCDate() + days);
+	return d.toISOString().slice(0, 10);
+}
+
+/** Inclusive day count between two ISO days. */
+function spanDays(startIso: string, endIso: string): number {
+	const ms =
+		new Date(`${endIso}T00:00:00Z`).getTime() -
+		new Date(`${startIso}T00:00:00Z`).getTime();
+	return Math.round(ms / 86_400_000) + 1;
+}
+
+/**
+ * The window this one is compared against.
+ *
+ * A WEEK shifts back exactly 7 days, never by its own length: the current week
+ * is capped at today, so a 4-day Sun–Wed window shifted by 4 would land on
+ * Wed–Sat of the prior week — comparing midweek trade against a weekend and
+ * calling the difference growth. Shifting by 7 keeps the same weekdays AND the
+ * same partial length, which is the only like-for-like comparison available.
+ *
+ * A CUSTOM range has no weekday meaning, so it shifts by its own span to give
+ * the equal-length window immediately before it.
+ */
+function priorRangeFor(range: SalesReportRange): SalesReportRange {
+	const isWeek = !range.dateIsos || range.dateIsos.length === 0;
+	const shift = isWeek ? 7 : spanDays(range.startIso, range.endIso);
+	return {
+		startIso: shiftIso(range.startIso, -shift),
+		endIso: shiftIso(range.endIso, -shift),
+	};
+}
+
+/**
+ * Percentage change, or NULL when the baseline cannot carry one.
+ *
+ * A percentage needs a positive baseline. A prior window that lost money or
+ * earned nothing gives none: "+100%" against a zero baseline is invented, and
+ * a swing from −RM 8,000 to +RM 2,000 is not "+125%" — the sign flip makes the
+ * ratio meaningless. Null says so, and the badge renders "no prior data".
+ */
+function growthPct(current: number, prior: number): number | null {
+	if (!(prior > 0)) return null;
+	return Math.round(((current - prior) / prior) * 100);
 }
 
 function inRange(dateIso: string, range: SalesReportRange): boolean {
@@ -149,6 +212,23 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 		[costByPrDay],
 	);
 
+	/**
+	 * Sales, cost and net for a window — the same arithmetic the headline shows.
+	 * Used for the current window AND its comparison window, so the two can never
+	 * be computed two different ways.
+	 */
+	const totalsFor = (
+		range: SalesReportRange,
+	): { sales: number; cost: number; margin: number; days: number } => {
+		const salesDays = byDaySales.filter((d) => inRange(d.soldOn, range));
+		const costRows = costByPrDay.filter((c) => inRange(c.soldOn, range));
+		const sales = salesDays.reduce((s, d) => s + d.totalSalesRm, 0);
+		const cost = costRows.reduce((s, c) => s + c.cost, 0);
+		const dayIsos = new Set<string>(salesDays.map((d) => d.soldOn));
+		for (const c of costRows) dayIsos.add(c.soldOn);
+		return { sales, cost, margin: sales - cost, days: dayIsos.size };
+	};
+
 	const buildReport = (range: SalesReportRange): WeeklyReport | null => {
 		const salesDays = byDaySales.filter((d) => inRange(d.soldOn, range));
 		const costInRange = costByPrDay.filter((c) => inRange(c.soldOn, range));
@@ -187,9 +267,11 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 			margin,
 			shifts,
 			avgTicket: shifts > 0 ? Math.round(totalSales / shifts) : 0,
-			// No prior-period comparison from the backend yet — the demo's WoW growth
-			// needs a second window; left at 0 until a comparison endpoint exists.
-			wowGrowthPct: 0,
+			// A real comparison, no endpoint required: this hook already pulls the
+			// outlet's WHOLE history in one fetch and slices client-side, so the
+			// prior window is sitting in memory. The old note claiming it needed a
+			// backend endpoint was reading the fetch as if it were range-scoped.
+			wowGrowthPct: growthPct(margin, totalsFor(priorRangeFor(range)).margin),
 			topPrs: buildTopPrs(range).map((p) => ({
 				prId: p.prId,
 				name: p.name,
@@ -210,12 +292,16 @@ export function useOutletSalesReport(): UseOutletSalesReport {
 				dayLabel: weekdayLabel(d.soldOn),
 				drinkSales: d.drinkSalesRm,
 				tipsSales: d.tipSalesRm,
-				total: d.drinkSalesRm + d.tipSalesRm,
+				serviceSales: d.serviceSalesRm,
+				// Must stay the sum of all THREE buckets — the headline reads the
+				// backend's own total_sales_rm, and the two have to agree.
+				total: d.drinkSalesRm + d.tipSalesRm + d.serviceSalesRm,
 			}));
 		return {
 			days,
 			drinkSales: days.reduce((s, d) => s + d.drinkSales, 0),
 			tipsSales: days.reduce((s, d) => s + d.tipsSales, 0),
+			serviceSales: days.reduce((s, d) => s + d.serviceSales, 0),
 		};
 	};
 

@@ -1,5 +1,6 @@
 import { Maximize2, Minus, Plus, RotateCcw, X } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { type ReactNode, useCallback, useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 
 /**
@@ -37,14 +38,21 @@ const STEP = 0.5;
  * and makes the backdrop feel broken. Escape closes, matching every other
  * dismissable surface in the portal.
  */
-function PhotoLightbox({
+export function PhotoLightbox({
 	photo,
 	alt,
 	onClose,
+	children,
 }: {
-	photo: string;
+	/** Ignored when `children` is given. */
+	photo?: string;
 	alt: string;
 	onClose: () => void;
+	/**
+	 * Render this instead of an <img> — for things that are composed rather
+	 * than photographed, like a comcard. Same zoom and pan either way.
+	 */
+	children?: ReactNode;
 }) {
 	const [zoom, setZoom] = useState(1);
 	const [offset, setOffset] = useState({ x: 0, y: 0 });
@@ -70,9 +78,16 @@ function PhotoLightbox({
 		return () => window.removeEventListener("keydown", onKey);
 	}, [onClose, zoom, zoomTo]);
 
-	return (
+	// PORTALLED TO <body>, and z-300 rather than z-50. Callers inside a sheet hit
+	// a wall otherwise: sheets are translucent, transformed panels, and an
+	// ancestor with transform/filter becomes the containing block for
+	// `position: fixed` and traps z-index in its own stacking context — the
+	// viewer came out washed-out and clipped inside its parent. No z-index wins
+	// that from within; the layer has to leave the subtree. Harmless for the
+	// three panels that already used this: it was full-screen fixed anyway.
+	return createPortal(
 		<div
-			className="fixed inset-0 z-50 flex flex-col bg-black/85 backdrop-blur-sm"
+			className="fixed inset-0 z-[300] flex flex-col bg-black/85 backdrop-blur-sm"
 			// Backdrop click closes; clicks on the image itself must not, or a pan
 			// ending over the backdrop would dismiss the viewer mid-drag.
 			onMouseDown={(e) => {
@@ -136,19 +151,33 @@ function PhotoLightbox({
 				onMouseUp={() => setDragFrom(null)}
 				onMouseLeave={() => setDragFrom(null)}
 			>
-				<img
-					src={photo}
-					alt={alt}
-					draggable={false}
-					className="max-h-full max-w-full select-none object-contain"
-					style={{
-						transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-						cursor:
-							zoom > MIN_ZOOM ? (dragFrom ? "grabbing" : "grab") : "default",
-					}}
-				/>
+				{children ? (
+					<div
+						className="select-none"
+						style={{
+							transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+							cursor:
+								zoom > MIN_ZOOM ? (dragFrom ? "grabbing" : "grab") : "default",
+						}}
+					>
+						{children}
+					</div>
+				) : (
+					<img
+						src={photo}
+						alt={alt}
+						draggable={false}
+						className="max-h-full max-w-full select-none object-contain"
+						style={{
+							transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
+							cursor:
+								zoom > MIN_ZOOM ? (dragFrom ? "grabbing" : "grab") : "default",
+						}}
+					/>
+				)}
 			</div>
-		</div>
+		</div>,
+		document.body,
 	);
 }
 

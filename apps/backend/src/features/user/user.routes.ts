@@ -35,6 +35,17 @@ const canListUsers = requireRole('admin', 'agency', 'outlet');
 // ...and that shape-level job, decided 30 Jul 2026: an outlet keeps the list but
 // loses the identity documents on every row of it. See redact-identity-docs.ts.
 router.get('', canListUsers, redactIdentityDocsForOutlet, userController.list.bind(userController));
+// The caller's own signature on file (migration 0111) — read and written with
+// NO id in the path, so neither can be aimed at somebody else. Both sit BEFORE
+// every `/:id` route below, or `me` is parsed as a user id and 404s.
+//
+// No role guard on purpose: this is the caller's own signature, and every role
+// that signs anything needs it. The scope is the JWT, which is the strongest
+// scope available here — an admin cannot read another person's signature
+// through this route either, which is deliberate for a forgeable artefact.
+router.get('/me/signature', userController.getMySignature.bind(userController));
+router.put('/me/signature', userController.saveMySignature.bind(userController));
+
 router.patch('/:id/status', requireRole('admin'), userController.setStatus.bind(userController));
 // Self soft-delete (Play / App Store). POST avoids DELETE+body flakiness on mobile.
 router.post('/:id/delete', userController.deleteOwnAccount.bind(userController));

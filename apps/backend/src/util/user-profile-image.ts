@@ -201,6 +201,11 @@ const IDENTITY_DOC_FIELDS = [
   // nearer to it.
   'bankName',
   'bankAccountNo',
+  // The signature on file (migration 0111), named here the same day the column
+  // was added, for the reason stated above. A signature is the one identity
+  // artefact that is directly forgeable — handing it to every venue that
+  // resolves a PR's display name would be the worst leak on this list.
+  'signatureInk',
 ] as const;
 
 function redactIdentityDocs<T extends object>(profile: T): T {

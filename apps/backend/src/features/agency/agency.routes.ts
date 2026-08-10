@@ -1,7 +1,11 @@
 import { Router } from 'express';
 import { agencyController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
-import { agencyOwnerOfParam, refuseOrgStatusChange } from '@/middlewares/require-sub-role.js';
+import {
+  agencyOwnerOfParam,
+  refuseOrgStatusChange,
+  requireAgencySubRoleScoped,
+} from '@/middlewares/require-sub-role.js';
 
 const router = Router();
 
@@ -43,7 +47,24 @@ router.put(
 router.patch('/:id/approve', requireAdmin, agencyController.approve.bind(agencyController));
 router.patch('/:id/suspend', requireAdmin, agencyController.suspend.bind(agencyController));
 
-router.get('/:id/prs', agencyController.listAgencyPrs.bind(agencyController));
+// This carried NO gate at all while every route around it had one, so any
+// signed-in token — a PR's, an outlet's, another agency's — could read any
+// agency's full roster by id: names, `id_no`, `dob`, email and phone. Scoped to
+// the agency in `:id` for the same reason `PUT /:id` is: a bare role check
+// passes every agency owner for EVERY agency, which is not a scope check.
+//
+// `finance` is allowed alongside `owner` because payroll works from this
+// roster; the approval WRITE below stays owner-only. Admin bypasses the scope
+// guard (require-sub-role.ts), which is what keeps the admin PR-tab working.
+//
+// Read-scoping this route is what makes it safe to return the IC document keys
+// it now selects — those must never sit behind an open endpoint.
+router.get(
+  '/:id/prs',
+  requireRole('admin', 'agency'),
+  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+  agencyController.listAgencyPrs.bind(agencyController),
+);
 // Approvals write path — membership by user_id (not deprecated pr.id).
 router.patch(
   '/:id/prs/:userId/approval',

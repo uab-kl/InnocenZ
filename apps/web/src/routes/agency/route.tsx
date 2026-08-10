@@ -1,12 +1,16 @@
 import { PortalShell } from "@agency-portal/components/portal/PortalShell";
 import { Toasts } from "@agency-portal/components/Toasts";
-import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import {
+	getAgencyIdentity,
+	saveAgencyIdentity,
+} from "@agency-portal/lib/agency-identity";
 import {
 	canAccessAgencyPath,
 	getAgencyDefaultRoute,
 	getAgencyNavItems,
 } from "@agency-portal/lib/agency-rbac";
 import { buildBlankPortalReset } from "@agency-portal/lib/demo-seed";
+import { resolveAgencyIdentityForUser } from "@agency-portal/lib/resolve-session-identity";
 import { useStore } from "@agency-portal/lib/store";
 import {
 	createFileRoute,
@@ -49,9 +53,19 @@ function AgencyLayout() {
 			if (cancelled || !ok) return;
 			if (getPortalSessionKind() === "real") {
 				useStore.setState(buildBlankPortalReset());
-				// buildBlankPortalReset resets agencyOwner to the demo default, so re-apply
-				// the operator's real identity (resolved at sign-in) on every mount.
-				const identity = getAgencyIdentity();
+				// buildBlankPortalReset resets agencyOwner to the demo default, so
+				// re-apply the operator's real identity on every mount.
+				//
+				// The stored value is only a CACHE. When this tab has none — a fresh
+				// tab, or one whose cache a sign-out elsewhere cleared — re-derive from
+				// the signed-in account's own memberships, so the identity is tied to
+				// the token instead of to whatever another tab last wrote.
+				let identity = getAgencyIdentity();
+				if (!identity && profile?.id) {
+					identity = await resolveAgencyIdentityForUser(profile.id);
+					if (cancelled) return;
+					if (identity) saveAgencyIdentity(identity);
+				}
 				if (identity) {
 					setOrgStatus(identity.agencyStatus);
 					void import("@agency-portal/lib/agency-demo").then(
@@ -80,7 +94,10 @@ function AgencyLayout() {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+		// `profile.id` is fetched, so it arrives AFTER the first mount. Without it
+		// here the effect would run once with no id and the re-derive above could
+		// never fire. The re-run is safe: every step is idempotent.
+	}, [profile?.id]);
 
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
@@ -94,12 +111,7 @@ function AgencyLayout() {
 	useEffect(() => {
 		if (!mounted) return;
 		if (
-			canAccessAgencyPath(
-				agencySubRole,
-				pathname,
-				orgStatus,
-				modulePermissions,
-			)
+			canAccessAgencyPath(agencySubRole, pathname, orgStatus, modulePermissions)
 		) {
 			return;
 		}

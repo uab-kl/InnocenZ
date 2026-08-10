@@ -15,6 +15,15 @@ export interface RegisterResponse {
 	status: string;
 }
 
+/**
+ * The signup logo upload fails open on the server (the account is still
+ * created), so `logoUploadFailed` rides beside `data` to say the org was made
+ * without its logo. Optional: PR signups have no org and omit it entirely.
+ */
+export type RegisterApiResponse = ApiResponse<RegisterResponse> & {
+	logoUploadFailed?: boolean;
+};
+
 /** Malaysia only — same dial composition as mobile PR signup. */
 export const SIGNUP_PHONE_DIAL = "+60";
 
@@ -44,7 +53,7 @@ async function fileToBase64(file: File): Promise<string> {
 
 export async function registerUser(
 	input: SignupInput,
-): Promise<ApiResponse<RegisterResponse>> {
+): Promise<RegisterApiResponse> {
 	// No roleId. The server derives the role from `accountType` below — a public
 	// caller naming its own role was the escalation hole, and the two VITE_*
 	// role ids this used to read were shipped in the bundle anyway.
@@ -79,11 +88,17 @@ export async function registerUser(
 		country: resolvedCountry,
 	};
 
+	// Outlet only → `outlet.onboarded_by_agency_id`. An agency has no onboarding
+	// agency of its own, and the server rejects an id that is not an ACTIVE one.
+	if (input.accountType === "outlet") {
+		payload.onboardedByAgencyId = optionalField(input.onboardedByAgencyId);
+	}
+
 	payload.logoFileName = input.logoFile.name;
 	payload.logoContentType = input.logoFile.type;
 	payload.logoBase64 = await fileToBase64(input.logoFile);
 
-	const response = await client.post<ApiResponse<RegisterResponse>>(
+	const response = await client.post<RegisterApiResponse>(
 		"/auth/register",
 		payload,
 	);

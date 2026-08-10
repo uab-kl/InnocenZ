@@ -57,6 +57,9 @@ export interface AgencyPr {
 	/** ISO `YYYY-MM-DD`. Age is DERIVED from this — there is no age column. */
 	dob?: string | null;
 	portfolioPhotos?: (string | null)[] | null;
+	/** IC scans from sign-up — only sent by the gated, agency-scoped PR route. */
+	idPhotoFront?: string | null;
+	idPhotoBack?: string | null;
 	comcardImage?: string | null;
 	comcardHeightCm?: number | null;
 	comcardWeightKg?: number | null;

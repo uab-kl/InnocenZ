@@ -35,6 +35,14 @@ export const ShiftSaleTable = MainSchema.table(
     drinkSalesRm: numeric('drink_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
     tipUnits: integer('tip_units').notNull().default(0),
     tipSalesRm: numeric('tip_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
+    // Service entitlements are their OWN bucket (0109), not folded into tips —
+    // they are the bulk of a PR's logged gross, and reporting them to the outlet
+    // as "tips" would misstate the Floor Sales breakdown.
+    serviceUnits: integer('service_units').notNull().default(0),
+    serviceSalesRm: numeric('service_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
+    // drink + tip + service. STORED, not derived — every writer must keep it in
+    // step, because the Reports headline reads THIS while the Floor Sales card
+    // sums the three buckets, and nothing reconciles the two.
     totalSalesRm: numeric('total_sales_rm', { precision: 12, scale: 2 }).notNull().default('0'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
@@ -69,6 +77,7 @@ export type ShiftSaleDayTotals = {
   soldOn: string;
   drinkSalesRm: number;
   tipSalesRm: number;
+  serviceSalesRm: number;
   totalSalesRm: number;
 };
 

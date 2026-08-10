@@ -33,6 +33,12 @@ export type OpsNotificationKind =
 	// kind rather than `pv_ready`: that one announces a voucher the PR can sign,
 	// this one is the opposite — money stuck, and the agency has to act.
 	| "pv_day_review_pending"
+	// A PR asked to be excused from a shift. Its own kind rather than
+	// `shift_cover_needed`: nobody is off yet and the shift is still staffed —
+	// this is a decision to make, not a gap to fill.
+	| "leave_requested"
+	// The agency answered that request — approved or rejected. PR-addressed.
+	| "leave_decided"
 	// Last resort for a row whose backend kind this build has never heard of.
 	// The `notification_kind` DB enum grows by migration and a shared dev database
 	// routinely runs ahead of the web app — mapping such a row to a neutral kind
