@@ -15,6 +15,7 @@ import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { saveProofPhotosToR2 } from '@/util/pv-proof-photo';
+import { isOwnedUserKey } from '@/util/user-folder';
 import {
   LineDateConflictError,
   MAX_PLAUSIBLE_SHIFT_HOURS,
@@ -542,10 +543,13 @@ export class ShiftAssignmentControllerClass {
       // amend flow can re-send what the server served without the PR having to
       // re-photograph the MC. saveProofPhotosToR2 passes owned keys through and
       // drops foreign ones.
-      const ownedLeavePrefix = `user/${userId}/leave/`;
       for (const photo of rawPhotos) {
+        // Owner is proven by the uuid head so BOTH `user/<uuid>/leave/…` and
+        // `user/pr/<slug>-<id8>/leave/…` are accepted as this PR's own key.
         const isOwnedKey =
-          typeof photo === 'string' && photo.startsWith(ownedLeavePrefix);
+          typeof photo === 'string' &&
+          isOwnedUserKey(photo, userId) &&
+          photo.includes('/leave/');
         if (typeof photo !== 'string' || (!photo.startsWith('data:image/') && !isOwnedKey)) {
           return res.status(400).json({ success: false, message: 'Each MC photo must be an image', data: null });
         }

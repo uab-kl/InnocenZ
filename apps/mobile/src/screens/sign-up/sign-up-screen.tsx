@@ -428,7 +428,10 @@ function SignUpScreenInner({
 				/* non-fatal — uploads already persisted */
 			});
 			if (uploadFailures.length > 0) {
-				showToast(t.signup.toastPhotosPartial);
+				// Name what actually failed. A bare "some photos didn't upload" is
+				// easy to miss and impossible to act on — an R2 outage silently ate
+				// the avatar, the IC photos and the whole gallery behind this toast.
+				showToast(`${t.signup.toastPhotosPartial} — ${uploadFailures.join(', ')}`);
 			}
 		} catch (e) {
 			if (!hasReceipt) setOtp('');

@@ -20,6 +20,7 @@
  * until R2 access is fixed. One warn per call, not one per photo.
  */
 import { logger } from '@/util/logger';
+import { isOwnedUserKey, userFolder } from '@/util/user-folder';
 import {
   isR2ObjectKey,
   r2Configured,
@@ -71,15 +72,49 @@ function decodeDataUrl(
  *  - a `data:image/…` URL uploads and comes back as its bare object key;
  *  - anything else (legacy https URL, unsupported mime, oversized/empty
  *    payload) is stored exactly as the client sent it — same as today;
- *  - when R2 is off or a put throws, the data URL is stored unchanged and ONE
- *    warn is logged. An R2 failure must never fail the request.
+ *  - when R2 is off or a put throws this THROWS. Evidence that quietly became
+ *    a base64 blob in Postgres still looked saved to the PR who filed it.
+ *
+ * `bucket` and `source` shape the key so drink and tip evidence, and scanned
+ * versus self-logged evidence, are separable in the bucket without opening a
+ * single file:
+ *   user/<id>/receipts/drinks/scan-<ts>-<i>.jpg
+ *   user/<id>/receipts/tips/log-<ts>-<i>.jpg
+ * Omit them and the flat legacy shape (`rcp-<ts>-<i>.jpg`) is used.
  */
+export type ProofPhotoBucket = 'drinks' | 'tips';
+export type ProofPhotoSource = 'scan' | 'log';
+
+/**
+ * Which folder a piece of evidence belongs in. Accepts BOTH vocabularies used
+ * in this codebase — the `payment_voucher_component` enum stored on a line, and
+ * the shorter `kind` the PR app posts — so callers never have to translate.
+ * Anything else (wages, ot, deduction, other) has no bucket: those are not
+ * PR-evidenced components and stay in the flat receipts/ folder.
+ */
+export function proofBucketForComponent(
+  component: string | null | undefined,
+): ProofPhotoBucket | undefined {
+  if (component === 'drink_commission' || component === 'drinks') return 'drinks';
+  if (component === 'tip_commission' || component === 'tips') return 'tips';
+  return undefined;
+}
+
+/** `payment_voucher_receipt.source` ('scan' | 'manual') -> the filename lead. */
+export function proofSourceForReceipt(
+  source: string | null | undefined,
+): ProofPhotoSource {
+  return source === 'scan' ? 'scan' : 'log';
+}
+
 export async function saveProofPhotosToR2(input: {
   userId: string;
   kind: ProofPhotoKind;
   photos: string[];
+  bucket?: ProofPhotoBucket;
+  source?: ProofPhotoSource;
 }): Promise<string[]> {
-  const { userId, kind, photos } = input;
+  const { userId, kind, photos, bucket, source } = input;
   if (photos.length === 0) return photos;
 
   let warned = false;
@@ -93,17 +128,20 @@ export async function saveProofPhotosToR2(input: {
   };
 
   if (!r2Configured()) {
-    // Only worth a warning when something would actually have uploaded.
+    // Evidence that silently became a base64 blob in Postgres still LOOKS saved
+    // to the PR who filed it. Refusing is the honest outcome: 22 proof photos
+    // had to be migrated out of the database because this used to return them.
     if (photos.some((p) => DATA_URL_RE.test(p.trim()))) {
       warnOnce('R2 not configured');
+      throw new Error(
+        'Photo storage is not configured — the photo was not saved. Set R2_* and retry.',
+      );
     }
     return photos;
   }
 
   // One timestamp per batch; the index keeps sibling keys unique.
   const stamp = Date.now();
-  const ownedPrefix = `user/${userId}/`;
-  let r2Broken = false;
   const out: string[] = [];
   for (let i = 0; i < photos.length; i++) {
     const photo = photos[i]!;
@@ -113,35 +151,39 @@ export async function saveProofPhotosToR2(input: {
       // PR's key (or an agency/outlet logo key) on their own line, which would
       // (a) display someone else's photo as this PR's evidence and (b) let the
       // next edit/delete wipe that object off R2. Foreign keys are dropped.
-      if (photo.startsWith(ownedPrefix)) out.push(photo);
+      // Ownership is proven by the uuid head, which appears in BOTH the legacy
+      // `user/<uuid>/…` shape and the role-foldered `user/pr/<slug>-<id8>/…`
+      // one — a PR's pre-rename evidence must not start looking foreign.
+      if (isOwnedUserKey(photo, userId)) out.push(photo);
       else logger.warn('[pv-proof-photo] dropped foreign R2 key', { userId });
       continue;
     }
     const decoded = decodeDataUrl(photo);
-    if (!decoded || r2Broken) {
+    if (!decoded) {
       out.push(photo);
       continue;
     }
     try {
+      const folder = bucket ? `${kind}/${bucket}` : kind;
+      const lead = bucket ? (source ?? 'log') : KEY_PREFIX[kind];
       const key = await r2PutObject({
-        key: `user/${userId}/${kind}/${KEY_PREFIX[kind]}-${stamp}-${i}${decoded.ext}`,
+        key: `user/${userFolder(userId)}/${folder}/${lead}-${stamp}-${i}${decoded.ext}`,
         body: decoded.body,
         contentType: decoded.contentType,
       });
       out.push(key);
     } catch (error) {
-      // e.g. AccessDenied — keep the feature working on data URLs until the
-      // token is fixed, and stop trying for the rest of this batch.
-      r2Broken = true;
+      // Was: swallow and keep the data URL. That is how AccessDenied quietly
+      // filled Postgres with base64 while every screen reported success.
       warnOnce('upload failed', error);
-      out.push(photo);
+      throw new Error('Could not save the photo to storage — nothing was recorded. Try again.');
     }
   }
   return out;
 }
 
 /** Only proof-photo objects may be deleted — never profile/id-doc/pv archives. */
-const DELETABLE_FOLDER_RE = /^(receipts|disputes|leave)\//;
+const DELETABLE_FOLDER_RE = /^user\/(?:[^/]+\/){1,2}(?:receipts|disputes|leave)\//;
 
 /**
  * Best-effort R2 cleanup for photos removed from a row. Data URLs have no
@@ -154,11 +196,12 @@ export async function deleteProofPhotoKeys(
   userId: string,
   photos: (string | null | undefined)[],
 ): Promise<void> {
-  const ownedPrefix = `user/${userId}/`;
   for (const photo of photos) {
     if (!photo || !isR2ObjectKey(photo)) continue;
-    if (!photo.startsWith(ownedPrefix)) continue;
-    if (!DELETABLE_FOLDER_RE.test(photo.slice(ownedPrefix.length))) continue;
+    if (!isOwnedUserKey(photo, userId)) continue;
+    // Match the kind folder anywhere after the owner segment, so this works for
+    // both `user/<uuid>/receipts/…` and `user/pr/<slug>-<id8>/receipts/…`.
+    if (!DELETABLE_FOLDER_RE.test(photo)) continue;
     try {
       // r2DeleteObject already logs-and-swallows; the outer catch also covers
       // the not-configured throw from getClient().

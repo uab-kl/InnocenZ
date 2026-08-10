@@ -22,6 +22,26 @@ export type ReceiptShot = {
 /** Keep proof photos under the backend's 1.5 MB per-photo schema cap. */
 const MAX_PROOF_CHARS = 1_400_000;
 
+/**
+ * Archive quality first, then fall back.
+ *
+ * This used to send a single 1024px / 0.7 shot, sized for when proof photos
+ * were stored as base64 IN POSTGRES. They now go to R2, so the only real limit
+ * is the request body — and a receipt that is evidence in a pay dispute should
+ * stay legible when the agency zooms into a line item, not be a 200 KB
+ * thumbnail using a fifth of the budget.
+ *
+ * Each step is tried in turn and the FIRST that fits the cap wins, so an
+ * oversized photo degrades instead of vanishing: the old code returned null on
+ * overflow and both callers silently discard a null, so a PR could snap proof
+ * and have it disappear with no error shown.
+ */
+const DOWNSCALE_STEPS: readonly { width: number; compress: number }[] = [
+  { width: 2048, compress: 0.82 },
+  { width: 1600, compress: 0.75 },
+  { width: 1024, compress: 0.7 },
+];
+
 async function downscale(uri: string): Promise<{ uri: string; dataUrl: string | null }> {
   try {
     // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -29,16 +49,23 @@ async function downscale(uri: string): Promise<{ uri: string; dataUrl: string | 
     const manipulateAsync = manip.manipulateAsync ?? manip.default?.manipulateAsync;
     const SaveFormat = manip.SaveFormat ?? manip.default?.SaveFormat;
     if (!manipulateAsync) return { uri, dataUrl: null };
-    const out = await manipulateAsync(uri, [{ resize: { width: 1024 } }], {
-      compress: 0.7,
-      format: SaveFormat?.JPEG ?? 'jpeg',
-      base64: true,
-    });
-    const dataUrl = out?.base64 ? `data:image/jpeg;base64,${out.base64}` : null;
-    return {
-      uri: out?.uri ?? uri,
-      dataUrl: dataUrl && dataUrl.length <= MAX_PROOF_CHARS ? dataUrl : null,
-    };
+
+    // Always re-encode from the ORIGINAL uri, never from the previous step's
+    // output — chaining lossy JPEG passes would compound artefacts.
+    let bestUri = uri;
+    for (const step of DOWNSCALE_STEPS) {
+      const out = await manipulateAsync(uri, [{ resize: { width: step.width } }], {
+        compress: step.compress,
+        format: SaveFormat?.JPEG ?? 'jpeg',
+        base64: true,
+      });
+      if (out?.uri) bestUri = out.uri;
+      const dataUrl = out?.base64 ? `data:image/jpeg;base64,${out.base64}` : null;
+      if (dataUrl && dataUrl.length <= MAX_PROOF_CHARS) {
+        return { uri: bestUri, dataUrl };
+      }
+    }
+    return { uri: bestUri, dataUrl: null };
   } catch {
     return { uri, dataUrl: null };
   }

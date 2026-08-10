@@ -18,7 +18,7 @@ import {
 } from '../../lib/photo-file';
 import { formatMessage, useLocale } from '../../i18n';
 import { C, F, GRADIENTS, grad } from '../../theme/theme';
-import { Camera, Check, ImagePlus, XIcon } from '../../components/icons';
+import { Camera, Check, Eye, EyeOff, ImagePlus, XIcon } from '../../components/icons';
 import {
 	getPrDisclaimerFromCopy,
 	type PrDisclaimerId,
@@ -224,6 +224,9 @@ export function Step5Summary({
 	const [busySlot, setBusySlot] = useState<SingleSlot | 'portfolio' | null>(null);
 	const [openDisclaimer, setOpenDisclaimer] = useState<PrDisclaimerId | null>(null);
 	const [portfolioGridW, setPortfolioGridW] = useState(0);
+	// One toggle for both boxes: the fields sit side by side in a narrow Row, so
+	// an eye inside each would crowd the value it is meant to reveal.
+	const [showPassword, setShowPassword] = useState(false);
 	const portfolioGap = 10;
 	const portfolioTileW =
 		portfolioGridW > 0 ? (portfolioGridW - portfolioGap) / 2 : 0;
@@ -585,7 +588,7 @@ export function Step5Summary({
 								patch({ password: text });
 							}}
 							placeholder={t.signup.passwordPlaceholder}
-							secureTextEntry
+							secureTextEntry={!showPassword}
 							autoCapitalize="none"
 						/>
 					</Field>
@@ -597,12 +600,29 @@ export function Step5Summary({
 								patch({ confirm: text });
 							}}
 							placeholder={t.signup.confirmPasswordPlaceholder}
-							secureTextEntry
+							secureTextEntry={!showPassword}
 							autoCapitalize="none"
 						/>
 					</Field>
 				</Row>
 			</View>
+
+			<Pressable
+				onPress={() => setShowPassword((v) => !v)}
+				hitSlop={10}
+				style={styles.revealRow}
+				accessibilityRole="button"
+				accessibilityLabel={showPassword ? t.login.hidePassword : t.login.showPassword}
+			>
+				{showPassword ? (
+					<EyeOff size={17} color={C.accent} />
+				) : (
+					<Eye size={17} color={C.muted2} />
+				)}
+				<Text style={[styles.revealText, showPassword && styles.revealTextOn]}>
+					{showPassword ? t.login.hidePassword : t.login.showPassword}
+				</Text>
+			</Pressable>
 
 			<Text style={styles.sectionEyebrow}>{t.signup.agreeContinue}</Text>
 			<View style={styles.ackCard}>
@@ -1074,6 +1094,20 @@ const styles = StyleSheet.create({
 		lineHeight: 20,
 		color: C.txt,
 	},
+	revealRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		alignSelf: 'flex-start',
+		gap: 8,
+		paddingVertical: 10,
+		paddingHorizontal: 4,
+	},
+	revealText: {
+		fontFamily: F.manrope,
+		fontSize: 13,
+		color: C.muted2,
+	},
+	revealTextOn: { color: C.accent },
 	passwordCard: {
 		borderRadius: 12,
 		borderWidth: 1,

@@ -154,19 +154,26 @@ type WebFileList = {
  * Native: `allowsMultipleSelection` + `selectionLimit`.
  * Web: `<input type="file" multiple>`.
  */
-export async function pickImagesFromGallery(
+/**
+ * Why the pick produced no images. Backing out of the system picker is normal
+ * and must NOT be reported as a broken build — only `unavailable` means the
+ * picker itself could not run.
+ */
+export type PickOutcome = 'ok' | 'cancelled' | 'unavailable';
+
+export async function pickImagesFromGalleryEx(
   opts?: GalleryPickOpts,
-): Promise<PickedImage[]> {
+): Promise<{ status: PickOutcome; images: PickedImage[] }> {
   const max =
     opts?.max != null && Number.isFinite(opts.max)
       ? Math.max(0, Math.floor(opts.max))
       : undefined;
-  if (max === 0) return [];
+  if (max === 0) return { status: 'cancelled', images: [] };
 
   if (Platform.OS !== 'web') {
     try {
       const ImagePicker = loadImagePicker();
-      if (!ImagePicker) return [];
+      if (!ImagePicker) return { status: 'unavailable', images: [] };
       const multi = max == null || max > 1;
       const res = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ['images'],
@@ -175,12 +182,15 @@ export async function pickImagesFromGallery(
         allowsMultipleSelection: multi,
         ...(multi && max != null ? { selectionLimit: max } : {}),
       });
-      if (res.canceled || !res.assets?.length) return [];
+      if (res.canceled || !res.assets?.length) return { status: 'cancelled', images: [] };
       const assets = max != null ? res.assets.slice(0, max) : res.assets;
-      return assets.map((a, i) => toPicked(a, `photo-${i + 1}.jpg`));
+      return {
+        status: 'ok',
+        images: assets.map((a, i) => toPicked(a, `photo-${i + 1}.jpg`)),
+      };
     } catch {
       // expo-image-picker not in this build yet — rebuild the dev app.
-      return [];
+      return { status: 'unavailable', images: [] };
     }
   }
 
@@ -188,7 +198,7 @@ export async function pickImagesFromGallery(
     type CaptureInput = WebInput & { capture?: string; multiple?: boolean };
     const doc = (globalThis as { document?: { createElement: (tag: string) => CaptureInput } })
       .document;
-    if (!doc) return resolve([]);
+    if (!doc) return resolve({ status: 'unavailable', images: [] });
     const input = doc.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
@@ -196,7 +206,7 @@ export async function pickImagesFromGallery(
     if (max == null || max > 1) input.multiple = true;
     input.onchange = () => {
       const list = input.files as WebFileList | null | undefined;
-      if (!list?.length) return resolve([]);
+      if (!list?.length) return resolve({ status: 'cancelled', images: [] });
       const limit = max != null ? Math.min(list.length, max) : list.length;
       const out: PickedImage[] = [];
       for (let i = 0; i < limit; i++) {
@@ -213,16 +223,29 @@ export async function pickImagesFromGallery(
           size: file.size,
         });
       }
-      resolve(out);
+      resolve({ status: out.length ? 'ok' : 'cancelled', images: out });
     };
     input.click();
   });
+}
+
+export async function pickImagesFromGallery(
+  opts?: GalleryPickOpts,
+): Promise<PickedImage[]> {
+  return (await pickImagesFromGalleryEx(opts)).images;
+}
+
+/** Single-image pick that also reports WHY it came back empty. */
+export async function pickImageFromGalleryEx(opts?: {
+  capture?: 'user' | 'environment';
+}): Promise<{ status: PickOutcome; image: PickedImage | null }> {
+  const { status, images } = await pickImagesFromGalleryEx({ ...opts, max: 1 });
+  return { status, image: images[0] ?? null };
 }
 
 /** Single-image gallery pick (avatar, ID, replace-one portfolio slot). */
 export async function pickImageFromGallery(opts?: {
   capture?: 'user' | 'environment';
 }): Promise<PickedImage | null> {
-  const [one] = await pickImagesFromGallery({ ...opts, max: 1 });
-  return one ?? null;
+  return (await pickImageFromGalleryEx(opts)).image;
 }

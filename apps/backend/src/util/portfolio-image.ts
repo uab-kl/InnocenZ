@@ -10,6 +10,8 @@ import {
   r2DeleteStoredRef,
   r2PutObject,
 } from '@/util/r2';
+import { logger } from '@/util/logger';
+import { userFolder } from '@/util/user-folder';
 
 export const PORTFOLIO_SLOT_COUNT = 8;
 export const PORTFOLIO_IMAGE_UPLOAD_DIR = path.join(
@@ -50,7 +52,7 @@ export function portfolioImageObjectKey(
 ): string {
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'photo';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/${userId}/portfolio/${safeName}${ext}`;
+  return `user/${userFolder(userId)}/portfolio/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -83,15 +85,22 @@ export async function savePortfolioImageFile(
     // Unique object name so mobile/CDN caches invalidate on replace.
     const filename = `slot-${slot}-${Date.now()}${ext}`;
     const key = portfolioImageObjectKey(user.id, filename);
-    const storedKey = await r2PutObject({ key, body, contentType });
-    if (file.path) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch {
-        // ignore
+    try {
+      const storedKey = await r2PutObject({ key, body, contentType });
+      if (file.path) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch {
+          // ignore
+        }
       }
+      return storedKey;
+    } catch (error) {
+      // Configured but refused (e.g. AccessDenied). Falling through to disk
+      // keeps the photo; letting this throw loses it — the bytes exist only in
+      // this request's buffer.
+      logger.error('[portfolio-image] R2 upload failed — falling back to disk', error);
     }
-    return storedKey;
   }
 
   ensurePortfolioImageDir();

@@ -14,6 +14,8 @@ import {
   r2DeleteStoredRef,
   r2PutObject,
 } from '@/util/r2';
+import { logger } from '@/util/logger';
+import { userFolder } from '@/util/user-folder';
 import {
   emptyUserProfileResponse,
   toUserProfileResponse,
@@ -51,7 +53,7 @@ export function idDocObjectKey(
 ): string {
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || `id-${side}`;
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/${userId}/id-docs/${safeName}${ext}`;
+  return `user/${userFolder(userId)}/id-docs/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -83,15 +85,21 @@ export async function saveUserIdDocFile(
   if (r2Configured()) {
     const filename = `id-${side}-${Date.now()}${ext}`;
     const key = idDocObjectKey(user.id, side, filename);
-    const storedKey = await r2PutObject({ key, body, contentType });
-    if (file.path) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch {
-        // ignore
+    try {
+      const storedKey = await r2PutObject({ key, body, contentType });
+      if (file.path) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch {
+          // ignore
+        }
       }
+      return storedKey;
+    } catch (error) {
+      // Configured but refused (e.g. AccessDenied) — fall through to disk. An
+      // IC photo lost here cannot be re-derived; the PR would have to re-shoot it.
+      logger.error('[user-profile-image] R2 upload failed — falling back to disk', error);
     }
-    return storedKey;
   }
 
   // Local fallback (no R2_* in env).
