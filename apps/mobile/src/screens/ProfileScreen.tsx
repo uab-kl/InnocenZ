@@ -29,7 +29,7 @@ import {
   PORTFOLIO_SLOTS,
 } from '../lib/demo-shifts';
 import { PR_LANGUAGE_OPTIONS } from '../lib/demo-services';
-import { pickImageFromGallery, pickImagesFromGallery } from '../lib/photo-file';
+import { pickImageFromGalleryEx, pickImagesFromGallery } from '../lib/photo-file';
 import { useSession } from '../lib/session';
 import { useLocale } from '../i18n';
 import { Avatar, IzButton } from '../components/ui';
@@ -362,9 +362,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
 
   /** Gallery-pick with the 5 MB guard; null = cancelled / too big / unavailable. */
   const pickValidatedImage = async () => {
-    const picked = await pickImageFromGallery();
+    // Backing out of the picker is not a failure. Only 'unavailable' means the
+    // picker could not run — anything else here used to paint the "rebuild the
+    // dev app" error over a perfectly normal cancel.
+    const { status, image: picked } = await pickImageFromGalleryEx();
     if (!picked) {
-      if (Platform.OS !== 'web') {
+      if (status === 'unavailable' && Platform.OS !== 'web') {
         setError('Could not open the gallery — rebuild the dev app (expo run:android).');
       }
       return null;
@@ -384,13 +387,18 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   };
 
   const onPickAvatar = async () => {
-    if (!canPickImages) return;
+    // `saving` guard: the badge stays pressable during the round-trip, and a
+    // second upload makes the controller delete the object the first one just
+    // stored — leaving a non-null key pointing at nothing.
+    if (!canPickImages || saving) return;
     const picked = await pickValidatedImage();
     if (!picked) return;
     setSaving(true);
     setError(null);
     try {
       await uploadAvatar(picked.file, picked.filename);
+      // A successful upload used to look identical to doing nothing.
+      showToast('Profile photo updated');
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not upload photo');
     } finally {

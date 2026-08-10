@@ -10,6 +10,8 @@ import {
   r2DeleteStoredRef,
   r2PutObject,
 } from '@/util/r2';
+import { logger } from '@/util/logger';
+import { userFolder } from '@/util/user-folder';
 
 export const COMCARD_IMAGE_UPLOAD_DIR = path.join(
   process.cwd(),
@@ -45,7 +47,7 @@ export function comcardImageObjectKey(
 ): string {
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'comcard';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/${userId}/comcard/${safeName}${ext}`;
+  return `user/${userFolder(userId)}/comcard/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -76,15 +78,21 @@ export async function saveComcardImageFile(
   if (r2Configured()) {
     const filename = `comcard-${Date.now()}${ext}`;
     const key = comcardImageObjectKey(user.id, filename);
-    const storedKey = await r2PutObject({ key, body, contentType });
-    if (file.path) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch {
-        // ignore
+    try {
+      const storedKey = await r2PutObject({ key, body, contentType });
+      if (file.path) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch {
+          // ignore
+        }
       }
+      return storedKey;
+    } catch (error) {
+      // Configured but refused (e.g. AccessDenied) — fall through to disk so
+      // the comcard survives instead of dying with the request.
+      logger.error('[comcard-image] R2 upload failed — falling back to disk', error);
     }
-    return storedKey;
   }
 
   ensureComcardImageDir();

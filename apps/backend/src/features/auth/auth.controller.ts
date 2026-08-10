@@ -24,6 +24,7 @@ import {
   type SignupAccountType,
 } from './signup-roles.js';
 import { saveProfileImageFile } from '@/util/profile-image.js';
+import { refreshUserFolder } from '@/util/user-folder.js';
 import { saveOrgLogoFromBase64 } from '@/util/org-logo.js';
 import { withUserProfile } from '@/util/user-profile-image.js';
 import { z } from 'zod';
@@ -729,6 +730,9 @@ export class AuthControllerClass {
         }
       }
 
+      // Name the offending field. Both of these used to return the same bare
+      // USER_ALREADY_EXISTS on the last step of a 6-step form, for a value typed
+      // back on step 1 — leaving no way to tell which field to change.
       // Outlet sign-up names its onboarding agency. Re-check it here rather than
       // trusting the id: the list is public, so a hand-rolled POST could name a
       // suspended / non-existent agency and the FK would only catch the latter.
@@ -753,7 +757,8 @@ export class AuthControllerClass {
         if (existingEmail) {
           return res.status(409).json({
             success: false,
-            message: Error.USER_ALREADY_EXISTS,
+            message: `That email (${parsedBody.email}) is already registered. Use another one, or leave the email blank.`,
+            data: null,
           });
         }
       }
@@ -762,7 +767,8 @@ export class AuthControllerClass {
       if (existingPhone) {
         return res.status(409).json({
           success: false,
-          message: Error.USER_ALREADY_EXISTS,
+          message: `That phone number (${parsedBody.phoneNum}) is already registered. Sign in instead, or use another number.`,
+          data: null,
         });
       }
 
@@ -803,6 +809,11 @@ export class AuthControllerClass {
         },
         resolved.roleId,
       );
+
+      // The folder cache was primed at boot, so this brand-new user is not in
+      // it yet — without this their avatar and ID docs would be written to a
+      // raw-uuid folder while everyone else uses `user/pr/<name>-<id8>/`.
+      await refreshUserFolder(user.id);
 
       if (isPublicPr && parsedBody.verificationId) {
         await this.phoneVerificationRepository.update(parsedBody.verificationId, {

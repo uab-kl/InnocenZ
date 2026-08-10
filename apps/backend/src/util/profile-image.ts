@@ -1,5 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { logger } from '@/util/logger';
+import { userFolder } from '@/util/user-folder';
 import {
   isR2ObjectKey,
   r2Configured,
@@ -62,7 +64,7 @@ export function profileImageObjectKey(
 ): string {
   const safeName = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'avatar';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `user/${userId}/profile/${safeName}${ext}`;
+  return `user/${userFolder(userId)}/profile/${safeName}${ext}`;
 }
 
 function fileBuffer(file: Express.Multer.File): Buffer {
@@ -95,19 +97,29 @@ export async function saveProfileImageFile(
     // Unique name so clients don't keep showing a cached previous avatar.
     const filename = `avatar-${Date.now()}${ext}`;
     const key = profileImageObjectKey(user.id, filename);
-    const storedKey = await r2PutObject({ key, body, contentType });
-    // Clean up multer temp file if disk storage was used.
-    if (file.path) {
-      try {
-        fs.unlinkSync(file.path);
-      } catch {
-        // ignore
+    try {
+      const storedKey = await r2PutObject({ key, body, contentType });
+      // Clean up multer temp file if disk storage was used.
+      if (file.path) {
+        try {
+          fs.unlinkSync(file.path);
+        } catch {
+          // ignore
+        }
       }
+      return storedKey;
+    } catch (error) {
+      // R2 is CONFIGURED but refused the write (e.g. AccessDenied from a token
+      // scoped to the wrong bucket). Without this the throw escaped, sign-up
+      // 500'd *after* the user row was committed, and the photo — which only
+      // ever existed as this in-memory buffer — was lost with no way back.
+      // Fall through to disk so the picture survives; '/img/...' is a format
+      // the read path already understands.
+      logger.error('[profile-image] R2 upload failed — falling back to disk', error);
     }
-    return storedKey;
   }
 
-  // Local fallback (no R2_* in env).
+  // Local fallback (no R2_* in env, or R2 refused the write above).
   ensureProfileImageDir();
   const filename = `${user.id}${ext}`;
   const filePath = path.join(PROFILE_IMAGE_UPLOAD_DIR, filename);

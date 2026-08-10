@@ -8,7 +8,6 @@ import { RoleTable } from '@/features/rbac/role/role.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { hashPassword } from '@/util/password';
 import { logger } from '@/util/logger';
-import { DEFAULT_PROFILE_IMAGE } from '@/util/profile-image';
 
 const DEFAULT_ADMIN_EMAIL = process.env.DEFAULT_ADMIN_EMAIL ?? 'innocenz@gmail.com';
 const DEFAULT_ADMIN_PASSWORD = process.env.DEFAULT_ADMIN_PASSWORD;
@@ -63,13 +62,11 @@ export async function initAdmin(): Promise<void> {
   if (existingUser) {
     await ensureAdminRoleForUser(existingUser.id, adminRoleId);
 
-    if (!existingUser.profileImage) {
-      await db
-        .update(UserTable)
-        .set({ profileImage: DEFAULT_PROFILE_IMAGE, updatedAt: new Date(), updatedBy: ACTOR })
-        .where(eq(UserTable.id, existingUser.id));
-      logger.info(`Default admin profile image set: ${DEFAULT_ADMIN_EMAIL}`);
-    }
+    // Deliberately does NOT write a placeholder into profile_image.
+    // NULL is how "no photo" is stored; resolveProfileImage() substitutes
+    // DEFAULT_PROFILE_IMAGE when serving, so the column holds either a real R2
+    // key or nothing. Seeding the disk path here re-created a non-R2 image
+    // reference on every `migrate:deploy`, undoing the R2 migration each run.
 
     const [existingProfile] = await db
       .select({ id: UserProfileTable.id })
@@ -104,7 +101,7 @@ export async function initAdmin(): Promise<void> {
       email: DEFAULT_ADMIN_EMAIL,
       username: DEFAULT_ADMIN_NAME,
       passwordHash,
-      profileImage: DEFAULT_PROFILE_IMAGE,
+      // No profileImage: see the note above — NULL means "no photo".
       status: 'active',
       createdBy: ACTOR,
       updatedBy: ACTOR,

@@ -653,6 +653,13 @@ export async function uploadUserProfileImage(
       body: form,
     });
   } catch (e) {
+    // Multer's 5 MB cap aborts the request mid-body, which surfaces here as a
+    // failed fetch. Reporting that as "cannot reach the backend" sends people
+    // hunting their Wi-Fi for a problem that is really the file size.
+    const size = (file as { size?: number }).size;
+    if (size != null && size > 5 * 1024 * 1024) {
+      throw new ApiError('That photo is too large — pick one under 5 MB', 413);
+    }
     throw unreachableBackend(e);
   }
   const body = (await res.json().catch(() => null)) as ApiEnvelope<Me> | null;

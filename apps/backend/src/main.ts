@@ -24,6 +24,7 @@ import { scheduler } from './scheduler/scheduler';
 import { registerJobs } from './scheduler/jobs';
 import { initAdmin } from './scripts/init-admin';
 import { initRoles } from './scripts/init-roles';
+import { primeUserFolders } from '@/util/user-folder';
 import { seedRbac } from './scripts/seed-rbac';
 import { ensureProfileImageDir } from './util/profile-image';
 import { registerAllAuditOldDataFetchers } from './features/audit-log/audit-log.wrapper';
@@ -298,6 +299,11 @@ async function bootstrap(): Promise<void> {
     } catch (error) {
       logger.error('Failed to initialize seed data', error);
     }
+
+    // Warm the id -> R2 folder map (`user/pr/vicky-93ea08b0/`). OUTSIDE the try
+    // above on purpose: a seeding failure must not leave every upload writing
+    // raw-uuid folders. primeUserFolders swallows its own errors.
+    await primeUserFolders();
   })();
 }
 

@@ -3,6 +3,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import { isR2ObjectKey, r2Configured, r2PublicUrl, r2PutObject } from '@/util/r2';
 import { normalizePortfolioSlots } from '@/util/portfolio-image';
+import { userFolder } from '@/util/user-folder';
 
 const W = 600;
 const H = 800;
@@ -135,6 +136,6 @@ export async function generateAndStoreComcard(input: {
     .png()
     .toBuffer();
 
-  const key = `user/${input.userId}/comcard/comcard-${Date.now()}.png`;
+  const key = `user/${userFolder(input.userId)}/comcard/comcard-${Date.now()}.png`;
   return r2PutObject({ key, body: png, contentType: 'image/png' });
 }

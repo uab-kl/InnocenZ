@@ -11,6 +11,27 @@ import {
 } from './payment-voucher-excel.js';
 import { issueExportTicket, redeemExportTicket } from './payment-voucher-export-ticket.js';
 import { buildVoucherPdf } from './payment-voucher-pdf.js';
+import { archiveVoucherPdf } from './payment-voucher-archive.js';
+
+/**
+ * The line rows as the printed PV document shows them. Shared by the
+ * authenticated /mine export, the ticket download, the sign-time archive and
+ * the backfill script — module-level rather than a private method so an
+ * offline script can render a voucher exactly as the app does.
+ */
+export function voucherExportLines(bundle: {
+  voucher: { lines: PaymentVoucherLineType[] };
+}) {
+  // No receipt-status map on purpose: the printed document shows kind, date,
+  // outlet, quantity and commission, none of which depend on the review state.
+  return bundle.voucher.lines.map((line) => toReceiptLineDTO(line)).map((l) => ({
+    kind: l.kind,
+    lineDate: l.lineDate,
+    outlet: l.outlet,
+    quantity: l.quantity,
+    commission: l.commission,
+  }));
+}
 import { checkLineAgainstWeek, LineDateConflictError } from './payment-voucher-audit.js';
 
 /**
@@ -57,7 +78,12 @@ import { paramId, uuidParam } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { env } from '@/env';
-import { deleteProofPhotoKeys, saveProofPhotosToR2 } from '@/util/pv-proof-photo';
+import {
+  deleteProofPhotoKeys,
+  proofBucketForComponent,
+  proofSourceForReceipt,
+  saveProofPhotosToR2,
+} from '@/util/pv-proof-photo';
 import { sanitizePathSegment } from '@/util/profile-image';
 import { r2Configured, r2PutObject } from '@/util/r2';
 import { notify } from '@/features/notification/notify.js';
@@ -1562,13 +1588,16 @@ export class PaymentVoucherControllerClass {
         }
       }
 
-      // Proof photos land in R2 (bare object keys in the jsonb); on any R2
-      // failure the data URLs store unchanged, so the log never fails on storage.
+      // Proof photos land in R2 (bare object keys in the jsonb), foldered by
+      // component and capture method so drink vs tip and scan vs self-log are
+      // separable in the bucket without opening a file.
       const proofPhotos = parsed.data.proofPhotos?.length
         ? await saveProofPhotosToR2({
             userId: req.user!.id,
             kind: 'receipts',
             photos: parsed.data.proofPhotos,
+            bucket: proofBucketForComponent(parsed.data.kind),
+            source: proofSourceForReceipt(parsed.data.source),
           })
         : (parsed.data.proofPhotos ?? null);
 
@@ -1698,6 +1727,16 @@ export class PaymentVoucherControllerClass {
             userId: req.user!.id,
             kind: 'receipts',
             photos: parsed.data.proofPhotos,
+            // One paper receipt can carry drink AND tip items. Bucket it only
+            // when every item agrees; a mixed slip stays in the flat receipts/
+            // folder rather than being filed under a component it half belongs to.
+            bucket: (() => {
+              const buckets = new Set(
+                (parsed.data.items ?? []).map((it) => proofBucketForComponent(it.kind)),
+              );
+              return buckets.size === 1 ? [...buckets][0] : undefined;
+            })(),
+            source: proofSourceForReceipt(parsed.data.source),
           })
         : (parsed.data.proofPhotos ?? null);
 
@@ -2631,6 +2670,8 @@ export class PaymentVoucherControllerClass {
               userId: req.user!.id,
               kind: 'receipts',
               photos: parsed.data.proofPhotos,
+              bucket: proofBucketForComponent(parsed.data.kind ?? cur.kind),
+              source: proofSourceForReceipt(parsed.data.source ?? cur.source),
             })
           : parsed.data.proofPhotos;
       }
@@ -2888,30 +2929,24 @@ export class PaymentVoucherControllerClass {
       // signature is already recorded above, and a storage hiccup must not
       // un-sign a voucher or fail the request.
       try {
-        if (r2Configured()) {
-          const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
-          if (bundle) {
-            const pdf = await buildVoucherPdf({
+        const bundle = await this.paymentVoucherRepository.getExportBundle(voucherId);
+        if (bundle) {
+          await archiveVoucherPdf({
+            // The voucher's OWN payee, not whoever is signing. They are the
+            // same person on this route today, but keying the archive off the
+            // request would file the document under the wrong PR the moment
+            // anyone else is allowed to sign on their behalf.
+            prUserId: signed.userId ?? req.user!.id,
+            voucherId,
+            voucherNo: signed.voucherNo,
+            weekStart: signed.weekStart,
+            document: {
               voucher: bundle.voucher,
               agency: bundle.agency,
               pr: bundle.pr,
-              lines: this.voucherExportLines(bundle),
-            });
-            // Always end with the uuid so the key is collision-proof: distinct
-            // voucherNos can sanitize to the same segment ('PV 001' / 'PV#001'
-            // both → 'PV_001'), and an all-punctuation number sanitizes to the
-            // 'user' fallback — either would silently overwrite an earlier
-            // signed voucher's archived PDF.
-            const label = signed.voucherNo
-              ? sanitizePathSegment(signed.voucherNo)
-              : '';
-            const name = label ? `${label}-${voucherId}` : voucherId;
-            await r2PutObject({
-              key: `user/${req.user!.id}/pv/${name}.pdf`,
-              body: pdf,
-              contentType: 'application/pdf',
-            });
-          }
+              lines: voucherExportLines(bundle),
+            },
+          });
         }
       } catch (archiveError) {
         logger.warn(
@@ -2962,19 +2997,6 @@ export class PaymentVoucherControllerClass {
     }
   }
 
-  /** Shared by the authenticated /mine export and the ticket download. */
-  private voucherExportLines(bundle: { voucher: { lines: PaymentVoucherLineType[] } }) {
-    // No receipt-status map on purpose: the printed document shows kind, date,
-    // outlet, quantity and commission, none of which depend on the review state.
-    return bundle.voucher.lines.map((line) => toReceiptLineDTO(line)).map((l) => ({
-      kind: l.kind,
-      lineDate: l.lineDate,
-      outlet: l.outlet,
-      quantity: l.quantity,
-      commission: l.commission,
-    }));
-  }
-
   private async sendVoucherExcel(
     res: Response,
     bundle: NonNullable<
@@ -2985,7 +3007,7 @@ export class PaymentVoucherControllerClass {
       voucher: bundle.voucher,
       agency: bundle.agency,
       pr: bundle.pr,
-      lines: this.voucherExportLines(bundle),
+      lines: voucherExportLines(bundle),
     });
     const filename = `${voucherRef(bundle.voucher)}-payment-voucher.xlsx`;
     res.setHeader(
@@ -3020,7 +3042,7 @@ export class PaymentVoucherControllerClass {
         voucher: bundle.voucher,
         agency: bundle.agency,
         pr: bundle.pr,
-        lines: this.voucherExportLines(bundle),
+        lines: voucherExportLines(bundle),
       });
       const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
@@ -3113,7 +3135,7 @@ export class PaymentVoucherControllerClass {
         voucher: bundle.voucher,
         agency: bundle.agency,
         pr: bundle.pr,
-        lines: this.voucherExportLines(bundle),
+        lines: voucherExportLines(bundle),
       });
       const filename = `${voucherRef(bundle.voucher)}-payment-voucher.pdf`;
       res.setHeader('Content-Type', 'application/pdf');
@@ -3144,7 +3166,7 @@ export class PaymentVoucherControllerClass {
         voucher: bundle.voucher,
         agency: bundle.agency,
         pr: bundle.pr,
-        lines: this.voucherExportLines(bundle),
+        lines: voucherExportLines(bundle),
       });
       return res.status(200).type('html').send(html);
     } catch (error) {
@@ -3290,6 +3312,8 @@ export class PaymentVoucherControllerClass {
             userId: req.user!.id,
             kind: 'disputes',
             photos: parsed.data.proofPhotos,
+            // Disputes are drinks/tips-only, so the component always buckets.
+            bucket: proofBucketForComponent(component),
           })
         : parsed.data.proofPhotos;
 
