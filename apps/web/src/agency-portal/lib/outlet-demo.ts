@@ -415,8 +415,35 @@ export function outletDrinkCategory(d: OutletDrinkPrice): OutletDrinkCategory {
 	return d.category === "drink" ? "drink" : "service";
 }
 
+/**
+ * The name a new row shows as a PLACEHOLDER, and falls back to on save. A blank
+ * field is nothing to delete before typing; a blank saved name would be a row
+ * nobody can identify on a receipt, so the two must not be the same thing.
+ */
+export function defaultOutletMenuItemName(
+	category: OutletDrinkCategory,
+): string {
+	return category === "drink" ? "New drink" : "New service";
+}
+
+/** Fill in any name the outlet left blank, so a saved menu is never nameless. */
+export function withOutletMenuNamesResolved(
+	menu: OutletDrinkPrice[],
+): OutletDrinkPrice[] {
+	return menu.map((d) =>
+		d.name.trim()
+			? d
+			: { ...d, name: defaultOutletMenuItemName(outletDrinkCategory(d)) },
+	);
+}
+
 export const DEFAULT_OUTLET_DRINK_MENU: OutletDrinkPrice[] = [
-	{ id: "tips", name: "Tips", priceRm: DEFAULT_PER_TIP_RM, category: "service" },
+	{
+		id: "tips",
+		name: "Tips",
+		priceRm: DEFAULT_PER_TIP_RM,
+		category: "service",
+	},
 	{
 		id: "booking-com",
 		name: "Booking commission",
@@ -446,6 +473,16 @@ const SEEDED_SERVICE_MENU_IDS = ["booking-com", "tips"] as const;
 
 /** Workspace page anchor — Service Entitlement section */
 export const OUTLET_SERVICE_ENTITLEMENT_SECTION_ID = "service-entitlement";
+
+/** Workspace page anchor — Drinks Price section */
+export const OUTLET_DRINKS_PRICE_SECTION_ID = "drinks-price";
+
+/**
+ * Workspace page anchor — opens BOTH price lists (Drinks Price and Service
+ * Entitlement) and lands on the first. Post Job's "Prices" row links here,
+ * because "Follow Workspace" covers both lists, not drinks alone.
+ */
+export const OUTLET_PRICES_SECTION_ID = "prices";
 
 /** Outlet home — PR tonight staffing grid */
 export const OUTLET_PR_TONIGHT_SECTION_ID = "pr-tonight";

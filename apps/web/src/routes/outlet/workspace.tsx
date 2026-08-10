@@ -19,10 +19,13 @@ import {
 } from "@agency-portal/lib/agency-demo";
 import {
 	drinkMenuPriceRange,
+	OUTLET_DRINKS_PRICE_SECTION_ID,
+	OUTLET_PRICES_SECTION_ID,
 	OUTLET_SERVICE_ENTITLEMENT_SECTION_ID,
 	type OutletDrinkPrice,
 	outletDrinkCategory,
 	sortOutletDrinkMenuByPrice,
+	withOutletMenuNamesResolved,
 } from "@agency-portal/lib/outlet-demo";
 import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { useStore } from "@agency-portal/lib/store";
@@ -133,21 +136,37 @@ function OutletWorkspacePage() {
 		}
 	}, [source]);
 
+	// Both price lists start collapsed; a deep link opens the ones it names. They
+	// are controlled (not defaultOpen) so arriving on #prices can open both.
+	const [drinksOpen, setDrinksOpen] = useState(false);
+	const [servicesOpen, setServicesOpen] = useState(false);
+
 	useEffect(() => {
-		const scrollToServiceEntitlement = () => {
-			if (
-				window.location.hash.replace("#", "") !==
-				OUTLET_SERVICE_ENTITLEMENT_SECTION_ID
-			)
-				return;
-			document
-				.getElementById(OUTLET_SERVICE_ENTITLEMENT_SECTION_ID)
-				?.scrollIntoView({ behavior: "smooth", block: "start" });
+		const openLinkedSection = () => {
+			const hash = window.location.hash.replace("#", "");
+			const wantsDrinks =
+				hash === OUTLET_DRINKS_PRICE_SECTION_ID ||
+				hash === OUTLET_PRICES_SECTION_ID;
+			const wantsServices =
+				hash === OUTLET_SERVICE_ENTITLEMENT_SECTION_ID ||
+				hash === OUTLET_PRICES_SECTION_ID;
+			if (!wantsDrinks && !wantsServices) return;
+			if (wantsDrinks) setDrinksOpen(true);
+			if (wantsServices) setServicesOpen(true);
+			const targetId = wantsDrinks
+				? OUTLET_DRINKS_PRICE_SECTION_ID
+				: OUTLET_SERVICE_ENTITLEMENT_SECTION_ID;
+			// Scroll after the newly expanded body has laid out, or the section
+			// lands off-screen at its collapsed height.
+			requestAnimationFrame(() => {
+				document
+					.getElementById(targetId)
+					?.scrollIntoView({ behavior: "smooth", block: "start" });
+			});
 		};
-		scrollToServiceEntitlement();
-		window.addEventListener("hashchange", scrollToServiceEntitlement);
-		return () =>
-			window.removeEventListener("hashchange", scrollToServiceEntitlement);
+		openLinkedSection();
+		window.addEventListener("hashchange", openLinkedSection);
+		return () => window.removeEventListener("hashchange", openLinkedSection);
 	}, []);
 
 	const markDirty = () => {
@@ -302,7 +321,7 @@ function OutletWorkspacePage() {
 			</OutletSection>
 
 			<OutletSection
-				id="drinks-price"
+				id={OUTLET_DRINKS_PRICE_SECTION_ID}
 				title="Drinks Price"
 				hint={
 					drinkItems.length
@@ -310,7 +329,8 @@ function OutletWorkspacePage() {
 						: "Add drinks below"
 				}
 				collapsible
-				defaultOpen={false}
+				open={drinksOpen}
+				onOpenChange={setDrinksOpen}
 			>
 				<IzCard className="!py-3">
 					<OutletDrinkMenuEditor
@@ -340,7 +360,8 @@ function OutletWorkspacePage() {
 						: "Add services below"
 				}
 				collapsible
-				defaultOpen={false}
+				open={servicesOpen}
+				onOpenChange={setServicesOpen}
 			>
 				<IzCard className="!py-3">
 					<OutletDrinkMenuEditor
@@ -407,15 +428,22 @@ function OutletWorkspacePage() {
 					type="button"
 					className="iz-btn iz-btn-primary mt-5"
 					onClick={() => {
+						// A row the outlet added but never named is still showing its
+						// placeholder; bank that name so nothing saves as a blank line.
+						const toSave = {
+							...draft,
+							drinkMenu: withOutletMenuNamesResolved(fullMenu),
+						};
+						setDraft(toSave);
 						if (backend.backed) {
 							backend
-								.save(draft)
+								.save(toSave)
 								.then(() => toast("Workspace saved", "success"))
 								.catch(() =>
 									toast("Could not save workspace — try again", "warn"),
 								);
 						} else {
-							saveOutletWorkspace(draft);
+							saveOutletWorkspace(toSave);
 						}
 						draftDirtyRef.current = false;
 					}}

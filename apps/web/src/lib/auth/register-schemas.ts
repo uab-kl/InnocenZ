@@ -23,7 +23,9 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.string()
 				.min(1, messages.companyNameRequired)
 				.max(150, messages.companyNameMax),
-			companyRegistrationOld: z.string().max(50, messages.registrationNumberMax),
+			companyRegistrationOld: z
+				.string()
+				.max(50, messages.registrationNumberMax),
 			companyRegistrationNew: z
 				.string()
 				.min(1, messages.companyRegistrationNewRequired)
@@ -69,6 +71,12 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 				.string()
 				.min(1, messages.packageRequired)
 				.uuid(messages.packageRequired),
+			/**
+			 * Outlet only — `outlet.onboarded_by_agency_id`. Left empty by an
+			 * agency signup, required for an outlet (enforced in the superRefine
+			 * below so agencies are not blocked by a field they never see).
+			 */
+			onboardedByAgencyId: optionalText(64),
 			logoFile: imageFileSchema(messages),
 			ackPersonalInfo: z.boolean().refine((value) => value, {
 				message: messages.ackPersonalInfo,
@@ -86,6 +94,18 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 		.refine((data) => data.password === data.confirmPassword, {
 			message: messages.passwordsMismatch,
 			path: ["confirmPassword"],
+		})
+		.superRefine((data, ctx) => {
+			// A venue with no onboarding agency cannot post a single shift, so the
+			// picker is required — but only for outlets; an agency has none.
+			if (data.accountType !== "outlet") return;
+			if (!data.onboardedByAgencyId.trim()) {
+				ctx.addIssue({
+					code: "custom",
+					message: messages.onboardingAgencyRequired,
+					path: ["onboardedByAgencyId"],
+				});
+			}
 		});
 }
 
@@ -111,6 +131,7 @@ export const SignupSchema = createSignupSchema({
 	confirmPasswordRequired: "Please confirm your password",
 	passwordsMismatch: "Passwords do not match",
 	packageRequired: "Please select a package",
+	onboardingAgencyRequired: "Please select the agency that onboarded you",
 	logoRequired: "Logo is required",
 	logoMaxSize: "Logo must be 5 MB or smaller",
 	logoImageType: "Logo must be an image file",

@@ -1,6 +1,7 @@
 import { formatRM, IzPill } from "@agency-portal/components/iz/ui";
 import { LiveWorkforceTable } from "@agency-portal/components/portal/LiveWorkforceTable";
 import { PortalClickableTableRow } from "@agency-portal/components/portal/PortalClickableTableRow";
+import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
 import {
 	ownedByAgency,
 	rosterSlotsForAgency,
@@ -51,8 +52,6 @@ export function AgencyHomeHubTabs({
 	);
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const perDrinkRm = useStore((s) => s.outletWorkspace.perDrinkRm);
-	const pendingPRs = useStore((s) => s.pendingPRs);
-	const pendingCutlostRequests = useStore((s) => s.pendingCutlostRequests);
 	const allPrPaymentVouchers = useStore((s) => s.prPaymentVouchers ?? []);
 	// Tenant scoping — PVs attributed via OWNED PRs so Delta's tiles never count Atlas PVs.
 	const prPaymentVouchers = useMemo(
@@ -95,12 +94,11 @@ export function AgencyHomeHubTabs({
 		[agencyRoster, outletCommissionRules, perDrinkRm],
 	);
 
-	const signups = pendingPRs.filter(
-		(p) => p.status === "pending" && (p.agencyId ?? "atlas") === activeAgencyId,
-	);
-	const cutlostRequests = pendingCutlostRequests.filter(
-		(r) => r.status === "pending",
-	);
+	// One source with `/agency/pending`, so this tile can never again show 0 next
+	// to a page listing real work. All four terms below are what its three tabs
+	// count — MC/leave included, which this tile used to omit entirely.
+	const approvals = useAgencyApprovalQueue();
+	const { signups, linkRequests, cutlostRequests, leaveRequests } = approvals;
 	const pendingReview = prPaymentVouchers.filter(
 		(p) => p.status === "PENDING_REVIEW",
 	);
@@ -108,7 +106,7 @@ export function AgencyHomeHubTabs({
 
 	const counts: Record<HubTab, number> = {
 		"on-duty": workforce.length,
-		approvals: signups.length + cutlostRequests.length,
+		approvals: approvals.total,
 		review: pendingReview.length,
 		disputes: disputes.length,
 	};
@@ -159,9 +157,11 @@ export function AgencyHomeHubTabs({
 						<h3 className="font-sora text-base font-bold">Pending approvals</h3>
 						<HubPanelLink to="/agency/pending" label="Open approvals" />
 					</div>
-					{signups.length + cutlostRequests.length === 0 ? (
+					{approvals.total === 0 ? (
 						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							Nothing awaiting approval.
+							{approvals.isLoading
+								? "Loading approvals…"
+								: "Nothing awaiting approval."}
 						</p>
 					) : (
 						<div className="iz-portal-table-wrap">
@@ -193,6 +193,54 @@ export function AgencyHomeHubTabs({
 											</td>
 										</PortalClickableTableRow>
 									))}
+									{linkRequests.map((l) => (
+										<PortalClickableTableRow
+											key={l.id}
+											target={{ to: "/agency/pending" }}
+										>
+											<td>
+												<div className="iz-portal-table-pr">
+													<span className="iz-portal-table-av">
+														{l.prName.trim()[0]}
+													</span>
+													<span className="iz-portal-table-name">
+														{l.prName}
+													</span>
+												</div>
+											</td>
+											<td className="iz-portal-table-meta">Link request</td>
+											<td className="iz-portal-table-meta">
+												Wants to link · {l.requestedAt}
+											</td>
+										</PortalClickableTableRow>
+									))}
+									{leaveRequests.map((req) => {
+										const prName = req.prName ?? "PR";
+										return (
+											<PortalClickableTableRow
+												key={req.id}
+												target={{
+													to: "/agency/pending",
+													search: { tab: "leaves" },
+												}}
+											>
+												<td>
+													<div className="iz-portal-table-pr">
+														<span className="iz-portal-table-av">
+															{prName.trim()[0]}
+														</span>
+														<span className="iz-portal-table-name">
+															{prName}
+														</span>
+													</div>
+												</td>
+												<td className="iz-portal-table-meta">MC / leave</td>
+												<td className="iz-portal-table-meta">
+													{req.outletName ?? "Outlet"} · {req.shiftDate ?? "—"}
+												</td>
+											</PortalClickableTableRow>
+										);
+									})}
 									{cutlostRequests.map((req) => (
 										<PortalClickableTableRow
 											key={req.id}

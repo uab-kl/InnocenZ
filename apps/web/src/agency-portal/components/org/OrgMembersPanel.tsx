@@ -24,7 +24,13 @@ import { useProfile } from "@/lib/auth/use-profile";
 import { fetchAgencyInviteRoles } from "@/services/agency";
 import { fetchOutletInviteRoles } from "@/services/outlet";
 
-/** Fallback when portal RBAC roles have not been seeded yet. */
+/**
+ * Fallback when portal RBAC roles have not been seeded yet.
+ *
+ * These are the lanes a member can HOLD. Owner is deliberately not one you can
+ * invite into — see `inviteOptions` — but it stays here because the role picker
+ * on an existing member still has to offer it.
+ */
 const FALLBACK_SUB_ROLES: Record<
 	OrgKind,
 	Array<{ value: string; label: string }>
@@ -45,7 +51,10 @@ function formatRoleName(name: string) {
 }
 
 function inferSubRole(kind: OrgKind, roleName: string): string {
-	const n = roleName.trim().toLowerCase().replace(/[_\s]+/g, " ");
+	const n = roleName
+		.trim()
+		.toLowerCase()
+		.replace(/[_\s]+/g, " ");
 	if (
 		n === "owner" ||
 		n.includes("owner") ||
@@ -104,16 +113,30 @@ export function OrgMembersPanel({
 
 	const portalRoles = rolesQuery.data ?? [];
 
+	/**
+	 * Roles you may invite INTO — never Owner.
+	 *
+	 * An invite goes to an address with no account yet, so offering Owner hands
+	 * the organisation to whoever opens that email. Ownership still moves: invite
+	 * them into a lower lane, then change their role from the member list once
+	 * they have accepted. The server refuses an Owner invite either way; this
+	 * filter is what keeps a stale roles response from showing a dead option.
+	 */
 	const inviteOptions = useMemo(() => {
-		if (portalRoles.length === 0) {
-			return FALLBACK_SUB_ROLES[kind].map((r) => ({
-				key: r.value,
-				label: r.label,
-				roleId: null as string | null,
-				subRole: r.value,
-			}));
+		const invitable = portalRoles.filter(
+			(r) => inferSubRole(kind, r.roleName) !== "owner",
+		);
+		if (invitable.length === 0) {
+			return FALLBACK_SUB_ROLES[kind]
+				.filter((r) => r.value !== "owner")
+				.map((r) => ({
+					key: r.value,
+					label: r.label,
+					roleId: null as string | null,
+					subRole: r.value,
+				}));
 		}
-		return portalRoles
+		return invitable
 			.slice()
 			.sort((a, b) =>
 				formatRoleName(a.roleName).localeCompare(formatRoleName(b.roleName)),
@@ -144,8 +167,28 @@ export function OrgMembersPanel({
 	const labelForSubRole = (subRole: string) =>
 		memberRoleOptions.find((r) => r.value === subRole)?.label ?? subRole;
 
+	/**
+	 * Lanes this picker may move a member INTO — never Owner, matching the invite
+	 * box. `memberRoleOptions` keeps every lane because it is also what labels a
+	 * row, and an owner still has to read as "Owner".
+	 *
+	 * Consequence: an owner cannot be demoted from this screen either, which is
+	 * why an owner's row renders as text rather than a select — a select whose
+	 * options exclude the current value would display the wrong lane and fire a
+	 * change on first touch. `PUT /:id/members/:memberId` still accepts owner.
+	 */
+	const assignableRoleOptions = memberRoleOptions.filter(
+		(r) => r.value !== "owner",
+	);
+
 	const [email, setEmail] = useState("");
 	const [selectedKey, setSelectedKey] = useState("");
+	// Only set when the server saved the invite but could not email it. Without
+	// this the accept link went to the console and the invite was unreachable.
+	const [manualLink, setManualLink] = useState<{
+		to: string;
+		url: string;
+	} | null>(null);
 	const [memberToRemove, setMemberToRemove] = useState<OrgMember | null>(null);
 
 	// Keep selection valid when options swap (fallback lanes → portal role ids).
@@ -180,18 +223,17 @@ export function OrgMembersPanel({
 				roleId: selected.roleId ?? undefined,
 			});
 			setEmail("");
-			const acceptUrl =
-				result && typeof result === "object" && "acceptUrl" in result
-					? (result as { acceptUrl?: string }).acceptUrl
-					: undefined;
+			const acceptUrl = result.acceptUrl;
 			toast(
 				result.message?.trim() ||
-				`Invitation sent to ${trimmed} — they must accept the email to join`,
+					`Invitation sent to ${trimmed} — they must accept the email to join`,
 				"success",
 			);
-			if (acceptUrl && typeof window !== "undefined") {
-				console.info("[invite] acceptUrl", acceptUrl);
-			}
+			setManualLink(
+				acceptUrl && result.emailed === false
+					? { to: trimmed, url: acceptUrl }
+					: null,
+			);
 		} catch (error) {
 			toast(serverMessage(error, "Could not invite that person"), "warn");
 		}
@@ -224,8 +266,6 @@ export function OrgMembersPanel({
 		<>
 			<IzSectionLabel>Team · {members.length} member(s)</IzSectionLabel>
 			<IzCard>
-
-
 				{isLoading && <p className="iz-tiny iz-muted2">Loading team…</p>}
 
 				{!isLoading && members.length === 0 && (
@@ -260,14 +300,14 @@ export function OrgMembersPanel({
 							)}
 
 							<div className="flex shrink-0 items-center gap-1.5">
-								{canManage && !isSelf ? (
+								{canManage && !isSelf && member.subRole !== "owner" ? (
 									<select
 										className="iz-field-input !w-auto !text-xs"
 										value={member.subRole}
 										onChange={(e) => void onChangeRole(member, e.target.value)}
 										aria-label={`Role for ${member.username || member.email || "member"}`}
 									>
-										{memberRoleOptions.map((role) => (
+										{assignableRoleOptions.map((role) => (
 											<option key={role.value} value={role.value}>
 												{role.label}
 											</option>
@@ -369,6 +409,13 @@ export function OrgMembersPanel({
 						{rolesQuery.isError && (
 							<p className="iz-tiny text-[var(--iz-danger)] mt-2">
 								Could not load {kind} portal roles — using defaults.
+							</p>
+						)}
+						{manualLink && (
+							<p className="iz-tiny iz-muted mt-2 break-all">
+								The invitation for {manualLink.to} was saved but no email went
+								out. Send them this link — it expires in 7 days:{" "}
+								<span className="text-[var(--iz-txt)]">{manualLink.url}</span>
 							</p>
 						)}
 					</IzCard>

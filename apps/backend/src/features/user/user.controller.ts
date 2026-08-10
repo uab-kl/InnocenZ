@@ -23,6 +23,7 @@ import { generateAndStoreComcard } from '@/util/comcard-generate';
 import { saveUserIdDocFile, deleteUserIdDocFile, withUserProfile, withUserProfiles } from '@/util/user-profile-image';
 import { logger } from '@/util/logger';
 import { r2Configured } from '@/util/r2';
+import { SaveMySignatureSchema } from '@/schema/user-profile.schema';
 
 const SORT_FIELDS: UserSortField[] = ['CREATED_AT', 'UPDATED_AT', 'USERNAME', 'EMAIL', 'STATUS'];
 
@@ -39,6 +40,81 @@ export class UserControllerClass {
     private userRepository: UserRepositoryClass,
     private userProfileRepository: UserProfileRepositoryClass,
   ) {}
+
+  /**
+   * The signature the CALLER has on file (migration 0111).
+   *
+   * Scoped to `req.user.id` with no id in the path, so there is no target to
+   * get wrong: this cannot be pointed at another person's signature the way an
+   * `/:id` route could. That matters more here than elsewhere — a signature is
+   * forgeable, so read and write are both self-only, with no admin override.
+   */
+  async getMySignature(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+      const profile = await this.userProfileRepository.getByUserId(userId);
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: { signature: profile?.signatureInk ?? null },
+      });
+    } catch (error) {
+      logger.error('[UserController.getMySignature] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /** Record or clear the caller's signature. `signature: null` withdraws it. */
+  async saveMySignature(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+      const parsed = SaveMySignatureSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: parsed.error.issues[0]?.message ?? 'Invalid signature',
+          data: null,
+        });
+      }
+
+      const actor = getActor(req) || userId;
+      // A profile row may not exist yet — an agency operator invited by email
+      // has one created on accept, but older accounts predate that.
+      const existing =
+        (await this.userProfileRepository.getByUserId(userId)) ??
+        (await this.userProfileRepository.createEmpty(userId, actor));
+      if (!existing) {
+        return res.status(500).json({
+          success: false,
+          message: 'Could not open your profile to store the signature',
+          data: null,
+        });
+      }
+
+      const signatureInk = parsed.data.signature
+        ? JSON.stringify(parsed.data.signature)
+        : null;
+      await this.userProfileRepository.update(userId, {
+        signatureInk,
+        updatedBy: actor,
+      });
+
+      res.status(200).json({
+        success: true,
+        message: signatureInk ? 'Signature saved' : 'Signature removed',
+        data: { signature: signatureInk },
+      });
+    } catch (error) {
+      logger.error('[UserController.saveMySignature] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
 
   async list(req: Request, res: Response) {
     try {

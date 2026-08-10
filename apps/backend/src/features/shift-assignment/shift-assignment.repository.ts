@@ -3,6 +3,7 @@ import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
+import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 import { UserTable } from '@/features/user/user.model';
@@ -263,11 +264,18 @@ export class ShiftAssignmentRepositoryClass {
           prName: prDisplayNameSql,
           outletId: ShiftTable.outletId,
           outletName: OutletTable.name,
+          // Joined through the assignment's own agency FK — an OUTLET caller is
+          // barred from GET /agency (it must not enumerate agencies), so without
+          // this it can only ever show the literal "Agency" for whoever staffed
+          // its own night. Reading the name here leaks nothing extra: the outlet
+          // already knows this agency worked for it.
+          agencyName: AgencyTable.name,
           shiftDate: ShiftTable.shiftDate,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(OutletTable.id, ShiftTable.outletId))
+        .leftJoin(AgencyTable, eq(AgencyTable.id, ShiftAssignmentTable.agencyId))
         .leftJoin(UserTable, eq(UserTable.id, assigneeUserId))
         .leftJoin(UserProfileTable, eq(UserProfileTable.userId, assigneeUserId))
         .where(whereClause)
@@ -280,6 +288,7 @@ export class ShiftAssignmentRepositoryClass {
         prName: row.prName,
         outletId: row.outletId,
         outletName: row.outletName,
+        agencyName: row.agencyName,
         shiftDate: row.shiftDate,
       }));
 

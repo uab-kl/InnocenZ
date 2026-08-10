@@ -61,6 +61,16 @@ export interface SignupTranslations {
 		password: { label: string; placeholder: string };
 		confirmPassword: { label: string; placeholder: string };
 		package: { label: string; placeholder: string };
+		/** Outlet only — which agency onboarded this venue. */
+		onboardingAgency: {
+			label: string;
+			placeholder: string;
+			description: string;
+			loading: string;
+			loadFailed: string;
+			empty: string;
+			retry: string;
+		};
 		logo: {
 			labelOutlet: string;
 			labelAgency: string;
@@ -98,6 +108,8 @@ export interface SignupTranslations {
 		title: string;
 		bodyOutlet: string;
 		bodyAgency: string;
+		/** Shown when the account was created but the logo upload failed. */
+		logoUploadFailed: string;
 		continueToLogin: string;
 	};
 	errors: {
@@ -124,6 +136,7 @@ export interface SignupTranslations {
 		confirmPasswordRequired: string;
 		passwordsMismatch: string;
 		packageRequired: string;
+		onboardingAgencyRequired: string;
 		logoRequired: string;
 		logoMaxSize: string;
 		logoImageType: string;
@@ -244,6 +257,16 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				label: "Package to enroll",
 				placeholder: "Select a pricing package",
 			},
+			onboardingAgency: {
+				label: "Onboarded by agency",
+				placeholder: "Select the agency that onboarded you",
+				description:
+					"The PR agency that brought your venue onto InnocenZ. Every shift you post is routed to this agency — our admin confirms it when your account is approved.",
+				loading: "Loading agencies…",
+				loadFailed: "Could not load agencies",
+				empty: "No active agencies are available right now.",
+				retry: "Retry",
+			},
 			logo: {
 				labelOutlet: "Outlet logo",
 				labelAgency: "Agency logo",
@@ -295,6 +318,8 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				"Your outlet account has been submitted for InnocenZ admin approval. You can sign in now to update your profile — other portal features unlock after approval. You will receive an email once your account is approved.",
 			bodyAgency:
 				"Your PR agency account has been submitted for InnocenZ admin approval. You can sign in now to update your profile — other portal features unlock after approval. You will receive an email once your account is approved.",
+			logoUploadFailed:
+				"Your account was created, but the logo could not be saved. Please upload it again in Settings.",
 			continueToLogin: "Back to sign in",
 		},
 		errors: {
@@ -323,6 +348,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			confirmPasswordRequired: "Please confirm your password",
 			passwordsMismatch: "Passwords do not match",
 			packageRequired: "Please select a package",
+			onboardingAgencyRequired: "Please select the agency that onboarded you",
 			logoRequired: "Logo is required",
 			logoMaxSize: "Logo must be 5 MB or smaller",
 			logoImageType: "Logo must be an image file",
@@ -440,6 +466,16 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				label: "注册套餐",
 				placeholder: "选择定价套餐",
 			},
+			onboardingAgency: {
+				label: "引荐代理",
+				placeholder: "选择引荐您加入的代理",
+				description:
+					"将您的门店引入 InnocenZ 的公关代理。您发布的每个班次都会发送给该代理——账户审批时由管理员确认。",
+				loading: "正在加载代理…",
+				loadFailed: "无法加载代理",
+				empty: "目前没有可选的活跃代理。",
+				retry: "重试",
+			},
 			logo: {
 				labelOutlet: "门店标志",
 				labelAgency: "代理标志",
@@ -491,6 +527,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 				"您的门店账户已提交，等待 InnocenZ 管理员审批。您现在可以登录并更新个人资料；其他门户功能将在获批后开放。账户获批后，您将收到电子邮件通知。",
 			bodyAgency:
 				"您的 PR 代理账户已提交，等待 InnocenZ 管理员审批。您现在可以登录并更新个人资料；其他门户功能将在获批后开放。账户获批后，您将收到电子邮件通知。",
+			logoUploadFailed: "账户已创建，但标志未能保存。请在“设置”中重新上传。",
 			continueToLogin: "返回登录",
 		},
 		errors: {
@@ -517,6 +554,7 @@ export const signupTranslations: Record<"en" | "zh", SignupTranslations> = {
 			confirmPasswordRequired: "请确认密码",
 			passwordsMismatch: "两次输入的密码不一致",
 			packageRequired: "请选择套餐",
+			onboardingAgencyRequired: "请选择引荐您加入的代理",
 			logoRequired: "标志为必填项",
 			logoMaxSize: "标志文件不能超过 5 MB",
 			logoImageType: "标志必须是图片文件",

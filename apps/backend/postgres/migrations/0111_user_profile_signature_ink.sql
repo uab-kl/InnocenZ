@@ -1,0 +1,13 @@
+-- One signature on file per PERSON, so signing a voucher is a tap instead of a
+-- redraw. Same vector-ink shape as `payment_voucher.finance_head_signature`
+-- ({w,h,strokes}) — the voucher keeps its OWN copy at sign time, because a
+-- signature already applied to a money document must not change when the signer
+-- later updates the one on file.
+--
+-- On `user_profile` rather than `agency_user`: a signature is a fact about the
+-- person, like their IC and bank account, which this table already holds. It
+-- also follows the same person if they later serve a second organisation.
+--
+-- ⚠️ Sensitive — added to `IDENTITY_DOC_FIELDS` in the same commit, so an
+-- outlet-only caller reading `GET /user` never receives it.
+ALTER TABLE "main"."user_profile" ADD COLUMN "signature_ink" text;

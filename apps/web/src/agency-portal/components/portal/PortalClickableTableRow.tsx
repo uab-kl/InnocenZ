@@ -5,7 +5,12 @@ import type { KeyboardEvent, ReactNode } from "react";
 type RowTarget =
 	| { to: "/agency/prs"; search?: { pr?: string } }
 	| { to: "/agency/pv"; search?: { pv?: string; status?: PrPvStatus } }
-	| { to: "/agency/pending"; search?: { tab?: "signups" | "cutlost" } }
+	// Mirrors the Approvals route's own `Tab` union — a value missing here is a
+	// row that cannot deep-link to its tab, which is how MC/leave stayed absent.
+	| {
+			to: "/agency/pending";
+			search?: { tab?: "signups" | "cutlost" | "leaves" };
+	  }
 	| { to: "/agency/roster" };
 
 export function PortalClickableTableRow({

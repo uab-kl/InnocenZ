@@ -2,6 +2,7 @@ import {
 	Comcard3dPreviewVisual,
 	type ComcardPreviewData,
 } from "@agency-portal/components/agency/Comcard3dPreview";
+import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCard, IzPill } from "@agency-portal/components/iz/ui";
 import {
@@ -11,8 +12,7 @@ import {
 	StaticComcardVisual,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGalleryPicker";
-import { useAgencyPendingPrs } from "@agency-portal/hooks/use-agency-pending-prs";
-import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
+import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
@@ -20,7 +20,6 @@ import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-re
 import {
 	cutlostRequestDetail,
 	cutlostRequestTitle,
-	toPendingCutlostRequest,
 } from "@agency-portal/lib/outlet-cutlost-requests";
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
@@ -47,10 +46,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
 import { fetchOutlets } from "@/services/outlet/outlet";
-import {
-	fetchShiftAssignments,
-	type ShiftAssignment,
-} from "@/services/shift-assignment";
+import type { ShiftAssignment } from "@/services/shift-assignment";
 
 /**
  * Every image on this screen goes through the PR photo resolver.
@@ -278,12 +274,47 @@ function DocPreviewSheet({
 	gallerySlots: string[];
 	onClose: () => void;
 }) {
+	// An IC scan at thumbnail size is not readable, which is the whole point of
+	// this panel — tap any document to open it in the shared PhotoLightbox, the
+	// same zoom-and-pan viewer the proof photos use. The comcard is a composed
+	// visual rather than one image, hence a union rather than just a src.
+	//
+	// `from` records which document the zoom belongs to. The sheet stays mounted
+	// across previews (it only returns null), so without this a zoom left open
+	// on the IC would reappear over the next document opened. Tagging it is
+	// exact where a reset-on-change effect was merely close.
+	const [zoom, setZoom] = useState<
+		| { kind: "img"; from: DocTab; src: string; alt: string }
+		| { kind: "comcard"; from: DocTab }
+		| null
+	>(null);
+	const openZoom = (z: NonNullable<typeof zoom>) => setZoom(z);
+	const closeZoom = () => setZoom(null);
+
+	// Hooks must run before this — the sheet renders nothing when closed.
 	if (!preview) return null;
+
+	/** Wrap an image so tapping it opens the lightbox. */
+	const zoomable = (
+		src: string,
+		alt: string,
+		imgClassName: string,
+		wrapClassName?: string,
+	) => (
+		<button
+			type="button"
+			className={cn("block w-full cursor-zoom-in", wrapClassName)}
+			onClick={() => openZoom({ kind: "img", from: preview, src, alt })}
+			aria-label={`Enlarge ${alt}`}
+		>
+			<img src={docImageSrc(src)} alt={alt} className={imgClassName} />
+		</button>
+	);
 	const title =
 		preview === "ic"
 			? "IC photos"
 			: preview === "selfie"
-				? "Selfie verification"
+				? "Profile picture"
 				: preview === "comcard"
 					? "Comcard"
 					: "Portfolio gallery";
@@ -321,11 +352,11 @@ function DocPreviewSheet({
 						<div key={side} className="space-y-1">
 							<p className="iz-tiny iz-muted2">{side}</p>
 							{src ? (
-								<img
-									src={docImageSrc(src)}
-									alt={`IC ${side.toLowerCase()}`}
-									className="aspect-[3/2] w-full rounded-xl border border-[var(--iz-line)] object-cover"
-								/>
+								zoomable(
+									src,
+									`IC ${side.toLowerCase()}`,
+									"aspect-[3/2] w-full rounded-xl border border-[var(--iz-line)] object-cover",
+								)
 							) : (
 								<div className="aspect-[3/2] rounded-xl bg-gradient-to-br from-[var(--iz-bg3)] to-[var(--iz-line)]" />
 							)}
@@ -336,11 +367,12 @@ function DocPreviewSheet({
 			{preview === "selfie" && (
 				<div className="px-4 pb-4">
 					{selfiePhoto ? (
-						<img
-							src={docImageSrc(selfiePhoto)}
-							alt="Selfie verification"
-							className="mx-auto aspect-[3/4] max-w-[220px] rounded-xl border border-[var(--iz-line)] object-cover"
-						/>
+						zoomable(
+							selfiePhoto,
+							"Profile picture",
+							"aspect-[3/4] w-full rounded-xl border border-[var(--iz-line)] object-cover",
+							"mx-auto max-w-[220px]",
+						)
 					) : (
 						<div className="mx-auto aspect-[3/4] max-w-[220px] rounded-xl bg-gradient-to-br from-[var(--iz-violet-bg)] to-[var(--iz-bg3)]" />
 					)}
@@ -353,19 +385,49 @@ function DocPreviewSheet({
 							key={i}
 							className="aspect-square overflow-hidden rounded-lg border border-[var(--iz-line)]"
 						>
-							<img
-								src={docImageSrc(src)}
-								alt={`Portfolio ${i + 1}`}
-								className="h-full w-full object-cover"
-							/>
+							{zoomable(
+								src,
+								`Portfolio ${i + 1}`,
+								"h-full w-full object-cover",
+								"h-full",
+							)}
 						</div>
 					))}
 				</div>
 			)}
 			{preview === "comcard" && (
 				<div className="px-4 pb-4">
-					<PendingComcardVisual signup={signup} className="mx-auto" />
+					<button
+						type="button"
+						className="block w-full cursor-zoom-in"
+						onClick={() => openZoom({ kind: "comcard", from: preview })}
+						aria-label="Enlarge comcard"
+					>
+						<PendingComcardVisual signup={signup} className="mx-auto" />
+					</button>
 				</div>
+			)}
+
+			{/* Lightbox. The backdrop is a real <button> rather than a div with an
+			    onClick so it is keyboard-reachable and passes a11y lint; the
+			    content sits above it and is click-through, so tapping the image
+			    closes too — the usual lightbox behaviour. z-index clears the
+			    sheet's own stacking context (max in the theme is 200). */}
+			{zoom && zoom.from === preview && (
+				<PhotoLightbox
+					alt={zoom.kind === "img" ? zoom.alt : `${signup.name} · comcard`}
+					onClose={closeZoom}
+				>
+					{zoom.kind === "img" ? (
+						<img
+							src={docImageSrc(zoom.src)}
+							alt={zoom.alt}
+							className="max-h-[92vh] max-w-[92vw] rounded-lg object-contain"
+						/>
+					) : (
+						<PendingComcardVisual signup={signup} />
+					)}
+				</PhotoLightbox>
 			)}
 		</IzSheet>
 	);
@@ -429,7 +491,7 @@ function DocumentTabs({
 				) : (
 					<Camera className="h-4 w-4 text-[var(--iz-muted)]" />
 				)}
-				<span className="t">Selfie</span>
+				<span className="t">Profile picture</span>
 				<span className="s">{hasSelfie ? "Verified" : "Missing"}</span>
 			</button>
 			<button
@@ -538,15 +600,12 @@ function DocumentPreviewStack({
 							type="button"
 							className="iz-approvals-doc-cell verified selfie"
 							onClick={() => onPreview("selfie")}
-							aria-label="Selfie verification"
+							aria-label="Profile picture"
 						>
-							<span className="cell-label">Selfie</span>
+							<span className="cell-label">Profile picture</span>
 							<div className="cell-media">
 								{selfiePhoto ? (
-									<img
-										src={docImageSrc(selfiePhoto)}
-										alt="Selfie verification"
-									/>
+									<img src={docImageSrc(selfiePhoto)} alt={signup.name} />
 								) : (
 									<span className="cell-fill selfie" />
 								)}
@@ -1079,26 +1138,15 @@ export const Route = createFileRoute("/agency/pending")({
 function AgencyPending() {
 	const { tab: tabFromSearch } = Route.useSearch();
 	const {
-		pendingPRs,
-		pendingCutlostRequests,
 		approvePendingPR,
 		rejectPendingPR,
 		approveCutlostRequest,
 		rejectCutlostRequest,
 		invitePendingPR,
 		agencySubRole,
-		pendingAgencyLinks,
-		activeAgencyId,
 		approveAgencyLink,
 		rejectAgencyLink,
 	} = useStore();
-	const agencyLinkRequests = useMemo(
-		() =>
-			pendingAgencyLinks.filter(
-				(l) => l.status === "pending" && l.agencyId === activeAgencyId,
-			),
-		[pendingAgencyLinks, activeAgencyId],
-	);
 	const { date, time } = nowAgencyDateTime();
 	const [tab, setTab] = useState<Tab>("signups");
 	const [selectedSignupId, setSelectedSignupId] = useState<string | null>(null);
@@ -1118,41 +1166,25 @@ function AgencyPending() {
 		if (tabFromSearch) setTab(tabFromSearch);
 	}, [tabFromSearch]);
 
-	// Real login → real pending PRs (docs stay placeholder); demo store otherwise.
-	const backend = useAgencyPendingPrs();
-	const demoSignups = useMemo(
-		() =>
-			pendingPRs.filter(
-				(p) =>
-					p.status === "pending" && (p.agencyId ?? "atlas") === activeAgencyId,
-			),
-		[pendingPRs, activeAgencyId],
-	);
-	const signups = backend.backed ? backend.signups : demoSignups;
-	// Real requests when there is a session, the demo store otherwise — the same
-	// `backed` split the signups list above already uses. The endpoint scopes
-	// itself to this agency's shifts, so no agency id is passed and none can be.
-	const liveCutlost = useCutlostRequests({ status: "pending" });
-	const cutlostRequests = useMemo(
-		() =>
-			liveCutlost.backed
-				? liveCutlost.requests.map(toPendingCutlostRequest)
-				: pendingCutlostRequests.filter((r) => r.status === "pending"),
-		[liveCutlost.backed, liveCutlost.requests, pendingCutlostRequests],
-	);
+	// The queue itself — sign-ups, link requests, cutlost and MC/leave — comes
+	// from the shared hook, so this page and the Today hub's "Pending approvals"
+	// tile count the same rows. The tile used to assemble its own from the demo
+	// store and read 0 while this page listed real work.
+	const queue = useAgencyApprovalQueue();
+	const {
+		signups,
+		linkRequests: agencyLinkRequests,
+		cutlostRequests,
+		leaveRequests,
+		backend,
+		cutlost: liveCutlost,
+	} = queue;
 
-	// PR MC/leave requests are real backend rows parked at `leave_pending`, and
-	// this page is their only review surface. The "roster"-prefixed keys are
-	// deliberate: the roster's planning grid and backfill panel share them, so a
-	// decision here refreshes those too.
+	// The MC/leave decision lives here — this page is its only review surface.
+	// The "roster"-prefixed query keys are deliberate: the roster's planning grid
+	// and backfill panel share them, so a decision here refreshes those too.
 	const { logout } = useAuth();
 	const rosterMut = useRosterMutations();
-	const leaveQuery = useQuery({
-		queryKey: ["roster", "leave-requests"],
-		queryFn: () =>
-			fetchShiftAssignments({ status: "leave_pending", pageSize: 100 }, logout),
-		staleTime: 15_000,
-	});
 	const outletsQuery = useQuery({
 		queryKey: ["roster", "outlets"],
 		queryFn: () => fetchOutlets({ pageSize: 500 }, logout),
@@ -1161,10 +1193,6 @@ function AgencyPending() {
 	const outletNameById = useMemo(
 		() => new Map((outletsQuery.data?.data ?? []).map((o) => [o.id, o.name])),
 		[outletsQuery.data],
-	);
-	const leaveRequests = useMemo(
-		() => leaveQuery.data?.data ?? [],
-		[leaveQuery.data],
 	);
 	const leaveOutletName = (req: ShiftAssignment) =>
 		(req.outletId ? outletNameById.get(req.outletId) : undefined) ?? "Outlet";
@@ -1246,7 +1274,10 @@ function AgencyPending() {
 							className={cn("iz-approvals-tab", tab === "leaves" && "on")}
 							onClick={() => setTab("leaves")}
 						>
-							MC/Leaves ({leaveRequests.length})
+							{/* "(0)" while the query is still in flight reads as "there are
+							    none", which is a different claim from "not known yet" — and
+							    it is the claim that made a pending request look deleted. */}
+							MC/Leaves ({queue.leaveIsLoading ? "…" : leaveRequests.length})
 						</button>
 					</div>
 
@@ -1300,7 +1331,7 @@ function AgencyPending() {
 														/>
 														<VerificationBadge
 															ok={!!p.hasSelfie}
-															label="Selfie"
+															label="Profile picture"
 														/>
 														<VerificationBadge
 															ok={galleryCount > 0}
@@ -1344,7 +1375,7 @@ function AgencyPending() {
 								</>
 							)
 						) : tab === "leaves" ? (
-							leaveQuery.isLoading ? (
+							queue.leaveIsLoading ? (
 								<p className="iz-tiny iz-muted px-1 py-4 text-center">
 									Loading MC / leave requests…
 								</p>

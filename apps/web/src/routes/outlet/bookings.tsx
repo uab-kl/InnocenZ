@@ -19,6 +19,7 @@ import {
 	formatJobDates,
 	isoFromJobDate,
 	newDraftShift,
+	resolveDraftEventName,
 	starTierToMinRating,
 	workspaceTierRatesSignature,
 } from "@agency-portal/components/outlet/post-job-fields";
@@ -133,6 +134,14 @@ function PostJobPage() {
 	// `outlet_drink_menu`, so Post Job must too or the two screens disagree.
 	const backedWorkspace = useOutletWorkspace();
 	const workspaceMenu = backedWorkspace.workspace?.drinkMenu;
+	// ...and the same again for the RATE CARD, which was still store-only. The
+	// Workspace page picks the backend copy the identical way; leaving Post Job on
+	// the store meant a real outlet saw blank tier rates here and a full card
+	// there, and "Reset to workspace rates" reset to the blank one.
+	const effectiveWorkspace =
+		backedWorkspace.backed && backedWorkspace.workspace
+			? backedWorkspace.workspace
+			: outletWorkspace;
 	const prPoolEmptyHint = !prPool.backed
 		? undefined
 		: prPool.isLoading
@@ -145,15 +154,18 @@ function PostJobPage() {
 	const outletName = outletWorkspace.outletName;
 
 	const [composer, setComposer] = useState<DraftShift>(() =>
-		newDraftShift(undefined, outletWorkspace),
+		newDraftShift(undefined, effectiveWorkspace),
 	);
 
 	const [draftShifts, setDraftShifts] = useState<DraftShift[]>([]);
 
 	const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
 
+	// The backend card arrives a beat after mount, so this signature change is
+	// also what seeds a real session's composer — it starts on the store's blank
+	// rates and is re-synced the moment the real ones land.
 	const workspaceRatesKey = workspaceTierRatesSignature(
-		outletWorkspace.tierRates,
+		effectiveWorkspace.tierRates,
 	);
 	const prevWorkspaceRatesKey = useRef(workspaceRatesKey);
 
@@ -162,12 +174,12 @@ function PostJobPage() {
 		prevWorkspaceRatesKey.current = workspaceRatesKey;
 		setComposer((c) => ({
 			...c,
-			...applyWorkspaceRatesToDraftShift(c, outletWorkspace),
+			...applyWorkspaceRatesToDraftShift(c, effectiveWorkspace),
 		}));
 		setDraftShifts((cur) =>
 			cur.map((s) => ({
 				...s,
-				...applyWorkspaceRatesToDraftShift(s, outletWorkspace),
+				...applyWorkspaceRatesToDraftShift(s, effectiveWorkspace),
 			})),
 		);
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- sync post-job drafts when workspace rates are saved
@@ -288,6 +300,9 @@ function PostJobPage() {
 		const snapshot = newDraftShift({
 			selectedDateIsos: [...composer.selectedDateIsos],
 
+			// Kept raw, blank included: the summary card and the post payload each
+			// resolve the placeholder's suggestion, so re-editing this shift still
+			// shows an empty field rather than text to delete.
 			event: composer.event,
 
 			eventKind: composer.eventKind,
@@ -330,13 +345,13 @@ function PostJobPage() {
 		setDraftShifts((cur) => [...cur, snapshot]);
 
 		const resetPayTierRows = defaultComposerPayTierRows(
-			outletWorkspace.tierRates,
+			effectiveWorkspace.tierRates,
 			6,
 		);
 		setComposer((c) => ({
 			...c,
-			tierRates: draftTierRatesFromWorkspace(outletWorkspace),
-			payPerHour: outletWorkspace.tierRates["Tier I"].wagePerHour,
+			tierRates: draftTierRatesFromWorkspace(effectiveWorkspace),
+			payPerHour: effectiveWorkspace.tierRates["Tier I"].wagePerHour,
 			payTierRows: resetPayTierRows,
 			quantity: totalPrCountFromPayTierRows(resetPayTierRows),
 			prIds: [],
@@ -465,7 +480,9 @@ function PostJobPage() {
 			// nobody had made and made the field read as a restriction.
 			languages: buildLanguagesLabel(s.langs, s.otherLang),
 
-			event: s.event,
+			// Posting straight from the composer skips addDraftShift, so fall back
+			// to the placeholder's suggestion here too rather than post a blank name.
+			event: resolveDraftEventName(s),
 
 			eventKind: s.eventKind,
 
@@ -504,7 +521,7 @@ function PostJobPage() {
 		}));
 
 		const resetForm = () => {
-			setComposer(newDraftShift(undefined, outletWorkspace));
+			setComposer(newDraftShift(undefined, effectiveWorkspace));
 			setDraftShifts([]);
 			setEditingShiftId(null);
 		};
@@ -641,6 +658,7 @@ function PostJobPage() {
 								prCandidates={prPool.backed ? prPool.prs : undefined}
 								prEmptyHint={prPoolEmptyHint}
 								workspaceMenu={workspaceMenu}
+								workspaceRates={effectiveWorkspace}
 							/>
 
 							{draftShifts.length > 0 && (
@@ -673,6 +691,7 @@ function PostJobPage() {
 													prCandidates={prPool.backed ? prPool.prs : undefined}
 													prEmptyHint={prPoolEmptyHint}
 													workspaceMenu={workspaceMenu}
+													workspaceRates={effectiveWorkspace}
 												/>
 											) : (
 												<DraftShiftSummary

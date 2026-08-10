@@ -1,7 +1,11 @@
 import type { AgencySessionIdentity } from "@agency-portal/lib/agency-identity";
 import type { OutletSessionIdentity } from "@agency-portal/lib/outlet-identity";
+import {
+	resolveAgencyIdentityForUser,
+	resolveOutletIdentityForUser,
+} from "@agency-portal/lib/resolve-session-identity";
 import { saveAuthTokens } from "@/lib/auth/auth-storage";
-import { kickToLogin } from "@/lib/auth/guards";
+import { readTabScoped, writeTabScoped } from "@/lib/auth/tab-scoped-storage";
 
 /**
  * Demo account that unlocks the ported agency portal (proto demo data).
@@ -23,13 +27,15 @@ const SEVEN_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 const SESSION_KIND_KEY = "iz-session-kind";
 export type PortalSessionKind = "demo" | "real";
 
-/** Persist how the current portal session was authenticated. */
+/**
+ * Persist how the current portal session was authenticated.
+ *
+ * PER-TAB. Shared, a demo sign-in in any tab flipped every other tab's session
+ * kind — and `real` is what makes the portal blank the demo seed, so that flip
+ * put demo data on a real operator's screen.
+ */
 export function setPortalSessionKind(kind: PortalSessionKind): void {
-	try {
-		localStorage.setItem(SESSION_KIND_KEY, kind);
-	} catch {
-		// localStorage unavailable (SSR / privacy mode) — nothing to persist.
-	}
+	writeTabScoped(SESSION_KIND_KEY, kind);
 }
 
 /**
@@ -37,11 +43,7 @@ export function setPortalSessionKind(kind: PortalSessionKind): void {
  * blank data; `demo` (or unset, for legacy sessions) keeps the seeded demo data.
  */
 export function getPortalSessionKind(): PortalSessionKind | null {
-	try {
-		return localStorage.getItem(SESSION_KIND_KEY) as PortalSessionKind | null;
-	} catch {
-		return null;
-	}
+	return readTabScoped(SESSION_KIND_KEY) as PortalSessionKind | null;
 }
 
 /**
@@ -131,25 +133,17 @@ export async function startAgencyRealSession(profile: {
 }): Promise<void> {
 	setPortalSessionKind("real");
 	const normalized = profile.email.trim().toLowerCase();
-	const [{ useStore }, { buildBlankPortalReset }, identityLib, agencySvc] =
+	const [{ useStore }, { buildBlankPortalReset }, identityLib] =
 		await Promise.all([
 			import("@agency-portal/lib/store"),
 			import("@agency-portal/lib/demo-seed"),
 			import("@agency-portal/lib/agency-identity"),
-			import("@/services/agency"),
 		]);
 
-	let identity: AgencySessionIdentity | null = null;
-	try {
-		const res = await agencySvc.fetchAgencyMembershipsForUser(
-			profile.id,
-			kickToLogin,
-		);
-		const primary = identityLib.pickPrimaryMembership(res.data);
-		if (primary) identity = identityLib.identityFromMembership(primary);
-	} catch {
-		identity = null;
-	}
+	// Same resolver the portal mount uses, so login and re-derive can never
+	// disagree about which membership wins.
+	const identity: AgencySessionIdentity | null =
+		await resolveAgencyIdentityForUser(profile.id);
 
 	const store = useStore.getState();
 	store.signIn(profile.displayName || normalized, normalized);
@@ -170,7 +164,7 @@ export async function startAgencyRealSession(profile: {
 		const { BLANK_AGENCY_OWNER } = await import(
 			"@agency-portal/lib/agency-demo"
 		);
-		useStore.setState((st) => ({
+		useStore.setState(() => ({
 			activeAgencyId: resolved.agencyId,
 			agencyOwner: {
 				...BLANK_AGENCY_OWNER,
@@ -204,25 +198,17 @@ export async function startOutletRealSession(profile: {
 }): Promise<void> {
 	setPortalSessionKind("real");
 	const normalized = profile.email.trim().toLowerCase();
-	const [{ useStore }, { buildBlankPortalReset }, identityLib, outletSvc] =
+	const [{ useStore }, { buildBlankPortalReset }, identityLib] =
 		await Promise.all([
 			import("@agency-portal/lib/store"),
 			import("@agency-portal/lib/demo-seed"),
 			import("@agency-portal/lib/outlet-identity"),
-			import("@/services/outlet"),
 		]);
 
-	let identity: OutletSessionIdentity | null = null;
-	try {
-		const res = await outletSvc.fetchOutletMembershipsForUser(
-			profile.id,
-			kickToLogin,
-		);
-		const primary = identityLib.pickPrimaryMembership(res.data);
-		if (primary) identity = identityLib.identityFromMembership(primary);
-	} catch {
-		identity = null;
-	}
+	// Same resolver the portal mount uses, so login and re-derive can never
+	// disagree about which membership wins.
+	const identity: OutletSessionIdentity | null =
+		await resolveOutletIdentityForUser(profile.id);
 
 	const store = useStore.getState();
 	store.signIn(profile.displayName || normalized, normalized);

@@ -764,6 +764,27 @@
       "when": 1788300000000,
       "tag": "0108_admin_mfa",
       "breakpoints": true
+    },
+    {
+      "idx": 109,
+      "version": "7",
+      "when": 1788400000000,
+      "tag": "0109_shift_sale_service_bucket",
+      "breakpoints": true
+    },
+    {
+      "idx": 110,
+      "version": "7",
+      "when": 1788500000000,
+      "tag": "0110_notification_kind_leave_requested",
+      "breakpoints": true
+    },
+    {
+      "idx": 111,
+      "version": "7",
+      "when": 1788600000000,
+      "tag": "0111_user_profile_signature_ink",
+      "breakpoints": true
     }
   ]
 }

@@ -9,7 +9,6 @@ import {
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { fetchAgencies } from "@/services/agency/agency";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
 
@@ -38,8 +37,8 @@ export interface OutletHistoryData {
  * Rows are COMPLETED shift-assignments for the caller's own venues — the same
  * per-assignment shape the agency History uses. The list response joins the PR
  * display name and shift date. PR profile photos come from `/pr` (outlet-scoped
- * to PRs rostered at the caller's venues — same as Today). Agency names come
- * from the agency directory for the "by agency" filter. As on the agency side
+ * to PRs rostered at the caller's venues — same as Today). Agency names ride on
+ * the assignment itself for the "by agency" filter. As on the agency side
  * the backend has no per-shift drink/tip sales, so the money breakdown is
  * wages-only.
  */
@@ -61,14 +60,12 @@ export function useOutletHistory(): OutletHistoryData {
 		staleTime: 60_000,
 	});
 
-	// An outlet's nights can be staffed by more than one agency, so the
-	// id -> name map for the agency filter comes from the directory endpoint.
-	const agenciesQuery = useQuery({
-		queryKey: ["agencies", "directory"],
-		queryFn: () => fetchAgencies({ pageSize: 200 }, logout),
-		enabled: backed,
-		staleTime: 5 * 60_000,
-	});
+	// NOTE: this used to build an id -> name map from GET /agency. That endpoint is
+	// `requireRole('admin','agency')` — an outlet must not enumerate agencies — so
+	// the call always failed, the map was always empty, and EVERY row fell back to
+	// the literal "Agency". The History filter then collapsed to one useless
+	// option. The name now rides on the assignment itself, joined server-side from
+	// its agency FK, which needs no directory access at all.
 
 	// Same key/fn as outlet Today so history cards share the PR photo cache.
 	const prsQuery = useQuery({
@@ -81,9 +78,6 @@ export function useOutletHistory(): OutletHistoryData {
 	const rows = useMemo<ShiftHistoryRow[]>(() => {
 		if (!backed) return [];
 		const assignments = assignmentsQuery.data?.data ?? [];
-		const agencyNameById = new Map(
-			(agenciesQuery.data?.data ?? []).map((a) => [a.id, a.name]),
-		);
 
 		const built: ShiftHistoryRow[] = [];
 		for (const a of assignments) {
@@ -98,12 +92,14 @@ export function useOutletHistory(): OutletHistoryData {
 					shiftDate: a.shiftDate,
 					prName: a.prName ?? "Unknown PR",
 					outletName,
-					agencyName: agencyNameById.get(a.agencyId) ?? "Agency",
+					// Falls back only if the agency row itself is gone, which the
+					// FK makes near-impossible — not on every row, as before.
+					agencyName: a.agencyName ?? "Agency",
 				}),
 			);
 		}
 		return sortShiftHistoryDesc(built);
-	}, [backed, outletName, assignmentsQuery.data, agenciesQuery.data]);
+	}, [backed, outletName, assignmentsQuery.data]);
 
 	const prs = useMemo<AgencyManagedPR[]>(
 		() => (backed ? (prsQuery.data?.data ?? []).map(managedPrFromBackend) : []),
@@ -115,10 +111,6 @@ export function useOutletHistory(): OutletHistoryData {
 		outletName,
 		rows,
 		prs,
-		isLoading:
-			backed &&
-			(assignmentsQuery.isLoading ||
-				agenciesQuery.isLoading ||
-				prsQuery.isLoading),
+		isLoading: backed && (assignmentsQuery.isLoading || prsQuery.isLoading),
 	};
 }

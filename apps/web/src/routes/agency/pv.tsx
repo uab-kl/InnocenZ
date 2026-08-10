@@ -28,6 +28,7 @@ import {
 	useAgencyPvs,
 } from "@agency-portal/hooks/use-agency-pvs";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
+import { useMySignature } from "@agency-portal/hooks/use-my-signature";
 import { usePvIssuer } from "@agency-portal/hooks/use-pv-issuer";
 import {
 	agencySubscriptionBillingForWeeklyPv,
@@ -1191,6 +1192,14 @@ function PvDetail({
 	 */
 	const financeSigned = Boolean(v.financeHeadSignedAt);
 
+	/**
+	 * The signer's own signature on file, if they have recorded one — the ink the
+	 * tap-to-sign button sends. Null means no stored signature OR stored ink that
+	 * will not parse, and both cases fall back to the pad: a one-tap button that
+	 * posts something the server rejects would be worse than no button.
+	 */
+	const { ink: storedSignature } = useMySignature();
+
 	const handleFinanceSign = async (ink: {
 		w: number;
 		h: number;
@@ -1516,15 +1525,57 @@ function PvDetail({
 											onCancel={() => setSignOpen(false)}
 										/>
 									</div>
+								) : storedSignature ? (
+									/*
+									 * Tap-to-sign. The stored ink is PRE-LOADED, never applied
+									 * automatically: opening the voucher and pressing this is
+									 * still the act of signing, and the preview above the button
+									 * shows exactly which mark is about to go on the document.
+									 * Drawing a fresh one stays available, because a signer must
+									 * be able to sign as themselves today rather than as their
+									 * past self.
+									 */
+									<>
+										<div className="mt-2 flex h-14 items-end rounded-lg border border-[var(--iz-line)] bg-white/95 px-2 py-1">
+											<SignatureInkMark
+												ink={JSON.stringify(storedSignature)}
+												label="Your signature on file"
+												className="h-10 w-full"
+											/>
+										</div>
+										<button
+											type="button"
+											className="iz-btn iz-btn-primary mt-2 w-full"
+											disabled={isSigning}
+											onClick={() => void handleFinanceSign(storedSignature)}
+										>
+											<Pencil className="h-4 w-4" />
+											{isSigning ? "Signing…" : "Sign with my signature"}
+										</button>
+										<button
+											type="button"
+											className="iz-btn iz-btn-ghost mt-1.5 w-full"
+											disabled={isSigning}
+											onClick={() => setSignOpen(true)}
+										>
+											Draw a different signature
+										</button>
+									</>
 								) : (
-									<button
-										type="button"
-										className="iz-btn iz-btn-primary mt-2 w-full"
-										disabled={isSigning}
-										onClick={() => setSignOpen(true)}
-									>
-										<Pencil className="h-4 w-4" /> Sign this voucher
-									</button>
+									<>
+										<button
+											type="button"
+											className="iz-btn iz-btn-primary mt-2 w-full"
+											disabled={isSigning}
+											onClick={() => setSignOpen(true)}
+										>
+											<Pencil className="h-4 w-4" /> Sign this voucher
+										</button>
+										<p className="iz-tiny iz-muted2 mt-1 text-center">
+											Save a signature in Settings to sign with one tap next
+											time.
+										</p>
+									</>
 								)}
 							</div>
 						)}

@@ -30,6 +30,7 @@ import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
+import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import { fetchShifts, type Shift } from "@/services/shift";
 
 const STATUS_CELL: Record<string, { className: string; label: string }> = {
@@ -143,11 +144,21 @@ export function RosterBackendTimetable({
 		return map;
 	}, [roster]);
 
-	// Open backend shifts (remaining capacity, not sealed) grouped by day.
+	// Open backend shifts (remaining capacity, not sealed, NOT already finished)
+	// grouped by day.
+	//
+	// "Open" used to mean only unsealed-and-not-full — a capacity question. The
+	// grouping key is a DATE, so a shift stayed assignable for the rest of the
+	// day after it ended, and every shift on an earlier day of the week stayed
+	// assignable outright. Assigning there produces a slot nobody can check into.
+	// `hasShiftEnded` is overnight-aware; see shift-window.ts for why that is not
+	// optional (most rows in this table cross midnight).
 	const openShiftsByDay = useMemo(() => {
 		const map: Record<string, Shift[]> = {};
+		const now = new Date();
 		for (const s of shiftsQuery.data?.data ?? []) {
 			if (s.status === "sealed" || s.filled >= s.quantity) continue;
+			if (hasShiftEnded(s.shiftDate, s.slot, now)) continue;
 			const outletName = outletNameById.get(s.outletId) ?? s.outletId;
 			if (filters.outlet && outletName !== filters.outlet) continue;
 			const list = map[s.shiftDate];
