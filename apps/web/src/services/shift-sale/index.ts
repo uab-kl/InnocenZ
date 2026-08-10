@@ -17,6 +17,9 @@ export interface ShiftSale {
 	drinkSalesRm: string;
 	tipUnits: number;
 	tipSalesRm: string;
+	serviceUnits: number;
+	serviceSalesRm: string;
+	// drink + tip + service.
 	totalSalesRm: string;
 	createdAt: string;
 	updatedAt: string;
@@ -28,6 +31,8 @@ export interface ShiftSaleDayTotals {
 	soldOn: string;
 	drinkSalesRm: number;
 	tipSalesRm: number;
+	// Service entitlements — their own bucket, NOT folded into tips.
+	serviceSalesRm: number;
 	totalSalesRm: number;
 }
 

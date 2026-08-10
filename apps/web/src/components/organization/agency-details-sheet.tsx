@@ -19,6 +19,7 @@ import { formatDate } from "@/lib/utils";
 import type { Agency } from "@/services/agency";
 import {
 	ApprovalStatusCard,
+	apiAssetUrl,
 	DetailField,
 	DetailSection,
 	DetailsHero,
@@ -62,6 +63,11 @@ export function AgencyDetailsSheet({
 							name={agency.name}
 							subtitle={`Agency code ${agency.agencyCode}`}
 							status={agency.status}
+							// R2 object key -> public bucket URL, the same path the
+							// agency portal's own Settings header uses. NOT `logoUrl`:
+							// that proxies through the backend's R2 API token, which is
+							// the fragile half.
+							imageUrl={apiAssetUrl(agency.logoImage)}
 						/>
 
 						<Tabs defaultValue="basic">

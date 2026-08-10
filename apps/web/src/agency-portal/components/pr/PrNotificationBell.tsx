@@ -41,6 +41,10 @@ const PR_KIND_MAP: Record<NotificationKind, PrNotificationKind> = {
 	// Also agency-addressed: it is the agency that reviews a held day. Mapped to
 	// "pv" so that if one ever reaches a PR bell it still reads as money news.
 	pv_day_review_pending: "pv",
+	// Agency-addressed, so a PR should never receive one — the map is keyed by
+	// the full union and has to stay total.
+	leave_requested: "assignment",
+	leave_decided: "assignment",
 };
 
 /**

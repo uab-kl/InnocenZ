@@ -2,12 +2,14 @@ import { AccountAvatarCard } from "@agency-portal/components/auth/AccountAvatarC
 import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecuritySettingsSheets";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
+import { SignatureOnFileCard } from "@agency-portal/components/org/SignatureOnFileCard";
 import { GeoFenceCard } from "@agency-portal/components/outlet/GeoFenceCard";
 import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
 import { PendingReviewBanner } from "@agency-portal/components/portal/PendingReviewBanner";
+import { ProfileAddressFields } from "@agency-portal/components/portal/profile-address-fields";
 import {
 	ProfileEditDock,
 	ProfileEditTrigger,
@@ -15,8 +17,14 @@ import {
 	ProfileSectionCard,
 	ProfileSettingsField,
 } from "@agency-portal/components/portal/profile-settings-ui";
-import { ProfileAddressFields } from "@agency-portal/components/portal/profile-address-fields";
 import { useOutletProfile } from "@agency-portal/hooks/use-outlet-profile";
+import {
+	EMPTY_ORG_ADDRESS,
+	joinOrgAddress,
+	type OrgAddress,
+	orgAddressFromRow,
+	resolveOrgAddressForSave,
+} from "@agency-portal/lib/org-address";
 import {
 	BLANK_OUTLET_FINANCE_HEAD,
 	BLANK_OUTLET_OPS_HEAD,
@@ -26,30 +34,19 @@ import {
 	type OutletOwnerSettings,
 } from "@agency-portal/lib/outlet-demo";
 import {
-	EMPTY_ORG_ADDRESS,
-	joinOrgAddress,
-	orgAddressFromRow,
-	resolveOrgAddressForSave,
-	type OrgAddress,
-} from "@agency-portal/lib/org-address";
-import { getOutletIdentity, saveOutletIdentity } from "@agency-portal/lib/outlet-identity";
+	getOutletIdentity,
+	saveOutletIdentity,
+} from "@agency-portal/lib/outlet-identity";
 import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute } from "@tanstack/react-router";
+import { Building2, Mail, Phone, Shield, User, Wrench } from "lucide-react";
+import { useRef, useState } from "react";
 import {
 	isOrgPendingReview,
 	isOrgSuspended,
 } from "@/components/organization/org-status";
-import {
-	Building2,
-	Mail,
-	Phone,
-	Shield,
-	User,
-	Wrench,
-} from "lucide-react";
-import { useRef, useState } from "react";
 
 export const Route = createFileRoute("/outlet/settings")({
 	component: OutletSettingsPage,
@@ -293,8 +290,8 @@ function OutletSettingsPage() {
 				const msg =
 					err && typeof err === "object" && "response" in err
 						? String(
-								(err as { response?: { data?: { message?: string } } })
-									.response?.data?.message ?? "",
+								(err as { response?: { data?: { message?: string } } }).response
+									?.data?.message ?? "",
 							)
 						: err instanceof Error
 							? err.message
@@ -572,6 +569,11 @@ function OutletSettingsPage() {
 					canManage={canEdit}
 				/>
 			)}
+
+			{/* Sits with Login & security, not with the demo Finance/Ops cards
+			    above: this is the signed-in person's own signature, whoever they
+			    are, and it is real. */}
+			{!editing && <SignatureOnFileCard />}
 
 			{!editing && (
 				<>

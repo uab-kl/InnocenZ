@@ -1,4 +1,9 @@
 import type { OutletSubRole } from "@agency-portal/lib/outlet-rbac";
+import {
+	readTabScoped,
+	removeTabScoped,
+	writeTabScoped,
+} from "@/lib/auth/tab-scoped-storage";
 import type { OutletMemberSubRole, OutletMembership } from "@/services/outlet";
 
 /**
@@ -62,16 +67,12 @@ export function identityFromMembership(
 }
 
 export function saveOutletIdentity(identity: OutletSessionIdentity): void {
-	try {
-		localStorage.setItem(IDENTITY_KEY, JSON.stringify(identity));
-	} catch {
-		// localStorage unavailable (SSR / privacy mode) — nothing to persist.
-	}
+	writeTabScoped(IDENTITY_KEY, JSON.stringify(identity));
 }
 
 export function getOutletIdentity(): OutletSessionIdentity | null {
 	try {
-		const raw = localStorage.getItem(IDENTITY_KEY);
+		const raw = readTabScoped(IDENTITY_KEY);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw) as Partial<OutletSessionIdentity>;
 		if (
@@ -100,9 +101,5 @@ export function getOutletIdentity(): OutletSessionIdentity | null {
 }
 
 export function clearOutletIdentity(): void {
-	try {
-		localStorage.removeItem(IDENTITY_KEY);
-	} catch {
-		// localStorage unavailable — nothing to clear.
-	}
+	removeTabScoped(IDENTITY_KEY);
 }

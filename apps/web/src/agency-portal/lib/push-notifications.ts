@@ -928,6 +928,8 @@ export const OPS_KIND_LABEL: Record<OpsNotification["kind"], string> = {
 	pr_rating_low: "Rating drop",
 	shift_cover_needed: "Cover needed",
 	pv_day_review_pending: "Day review",
+	leave_requested: "MC / leave",
+	leave_decided: "MC / leave",
 	unknown: "Update",
 };
 

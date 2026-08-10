@@ -61,11 +61,18 @@ function pendingPrFromMembership(pr: AgencyPr): PendingPR {
 		portfolioPhotos: (pr.portfolioPhotos ?? []).map((photo) =>
 			prPhotoSrc(photo),
 		),
-		// IC scans and the signup selfie have no column on user_profile, so this
-		// endpoint genuinely cannot report them. `false` here is "we have no
-		// record of one", not a placeholder for a value we chose not to read.
-		hasIcPhotos: false,
-		hasSelfie: false,
+		// The selfie IS the account's profile photo — there is no separate
+		// selfie column, and `profileImage` is already in this payload, so this
+		// reads a value the endpoint always sent rather than widening it.
+		hasSelfie: Boolean(pr.profileImage),
+		selfiePhoto: prPhotoSrc(pr.profileImage) ?? undefined,
+		// IC scans live on `user_profile.id_photo_front` / `_back`. They read
+		// "Missing" for every PR because this mapper hardcoded `false`, not
+		// because no scan existed — the route now selects them, and it is
+		// role-gated and agency-scoped before it does (agency.routes.ts).
+		hasIcPhotos: Boolean(pr.idPhotoFront || pr.idPhotoBack),
+		icPhotoFront: prPhotoSrc(pr.idPhotoFront) ?? undefined,
+		icPhotoBack: prPhotoSrc(pr.idPhotoBack) ?? undefined,
 		submittedAt: pr.createdAt
 			? fmtDateLabelFromIso(String(pr.createdAt).slice(0, 10))
 			: undefined,

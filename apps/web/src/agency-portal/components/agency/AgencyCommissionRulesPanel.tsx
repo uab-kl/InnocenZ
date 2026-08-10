@@ -1,11 +1,10 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
+import { useAgencyOutletWorkspace } from "@agency-portal/hooks/use-agency-outlet-workspace";
 import { formatTierWageRange } from "@agency-portal/lib/agency-demo";
-import {
-	resolveOutletTierRates,
-	rulesMatchOutlet,
-} from "@agency-portal/lib/outlet-agency-sync";
+import { resolveOutletTierRates } from "@agency-portal/lib/outlet-agency-sync";
 import { drinkMenuPriceRange } from "@agency-portal/lib/outlet-demo";
+import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
 
 export function AgencyCommissionRulesPanel({
@@ -16,19 +15,34 @@ export function AgencyCommissionRulesPanel({
 	tableOnly?: boolean;
 }) {
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
-	const outletWorkspace = useStore((s) => s.outletWorkspace);
+	const demoWorkspace = useStore((s) => s.outletWorkspace);
+	// Real agency session → the rates this outlet actually saved from its own
+	// Workspace screen (same row, read by id). Demo sessions keep the demo store.
+	const backend = useAgencyOutletWorkspace(outlet);
+	const workspace = backend.backed ? backend.workspace : demoWorkspace;
+
+	// Only a backed session can land here with nothing (the demo store always has
+	// a workspace), and it must never fall back to the demo rate card: those
+	// defaults are a fixture outlet's money, and rendering them is exactly what
+	// made the agency look out of sync with the outlet.
+	if (!workspace) {
+		return (
+			<p className="iz-tiny iz-muted2">
+				{backend.isLoading
+					? "Loading rates…"
+					: "This outlet has not saved its workspace rates yet."}
+			</p>
+		);
+	}
 
 	const tierRates = resolveOutletTierRates(
 		outlet,
 		outletCommissionRules,
-		outletWorkspace,
+		workspace,
 	);
-	const syncedFromWorkspace = rulesMatchOutlet(
-		outlet,
-		outletWorkspace.outletName,
-	);
+	const syncedFromWorkspace = outletMatches(outlet, workspace.outletName);
 	const tierHint = `${formatTierWageRange(tierRates)} · synced from outlet workspace`;
-	const drinkMenu = outletWorkspace.drinkMenu ?? [];
+	const drinkMenu = workspace.drinkMenu ?? [];
 	const drinkRange =
 		drinkMenu.length > 0 ? drinkMenuPriceRange(drinkMenu) : null;
 
@@ -46,7 +60,7 @@ export function AgencyCommissionRulesPanel({
 				<IzCard flat className="!py-3">
 					<WorkspaceTierRatesEditor
 						tierRates={tierRates}
-						commissionOnlyRates={outletWorkspace.commissionOnlyRates}
+						commissionOnlyRates={workspace.commissionOnlyRates}
 						onPatchTier={() => {}}
 						onPatchCommissionOnly={() => {}}
 						readOnly

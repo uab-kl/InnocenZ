@@ -4,6 +4,7 @@ import {
   emailConfigured,
   sendOrgMemberInviteMail,
 } from '@/features/mailing/mailing.repository.js';
+import { logger } from '@/util/logger.js';
 
 /** Membership status until the invitee accepts — kept for UI labels only. */
 export const ORG_MEMBER_PENDING = 'pending';
@@ -50,13 +51,21 @@ export async function sendOrgMemberInviteEmail(input: {
     return { emailed: false, acceptUrl };
   }
 
-  const result = await sendOrgMemberInviteMail({
-    recipientEmail: input.to,
-    orgName: input.orgName,
-    orgKind: input.orgKind,
-    subRoleLabel: input.subRole,
-    acceptLink: acceptUrl,
-  });
-
-  return { emailed: Boolean(result), acceptUrl };
+  // The invite row is already committed by the time we get here, so a rejected
+  // recipient or a bad SMTP key must not throw: that turns a saved invitation
+  // into a 500 and tells the owner it failed. Report emailed:false instead and
+  // let the caller hand over the accept link.
+  try {
+    const result = await sendOrgMemberInviteMail({
+      recipientEmail: input.to,
+      orgName: input.orgName,
+      orgKind: input.orgKind,
+      subRoleLabel: input.subRole,
+      acceptLink: acceptUrl,
+    });
+    return { emailed: Boolean(result), acceptUrl };
+  } catch (error) {
+    logger.error('[org-member-invite] Could not send invite email:', error);
+    return { emailed: false, acceptUrl };
+  }
 }

@@ -18,8 +18,8 @@ import { C, F } from '../theme/theme';
 import {
   ApiError,
   assetUrl,
-  fetchAgencies,
   fetchMyAgencyLinks,
+  fetchPublicAgencies,
   portfolioSlotsFromProfile,
   updateMyAgencies,
   type PrAgencyLink,
@@ -96,6 +96,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   /** Real agencies from the backend — the checkbox list the PR picks from. */
   const [agencyOptions, setAgencyOptions] = useState<{ id: string; name: string }[]>([]);
+  /**
+   * How the agency list last loaded. A refusal or an unreachable backend must
+   * never render as an agency-less database: this picker read `GET /agency`,
+   * which RBAC allows only admin + agency, so every PR token 403'd and the
+   * swallowed error painted "no agencies" over a full table. The list is public
+   * now (`/auth/agencies`), and a failure says so and offers a retry.
+   */
+  const [agencyState, setAgencyState] = useState<'loading' | 'ready' | 'failed'>('loading');
   /** This PR's own agency_pr links, pending ones included. */
   const [myLinks, setMyLinks] = useState<PrAgencyLink[]>([]);
   const [draft, setDraft] = useState<Draft>(() => emptyDraft());
@@ -122,20 +130,23 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     }
   }, [token, me]);
 
-  useEffect(() => {
-    if (!token) return;
-    let alive = true;
-    fetchAgencies(token)
+  /**
+   * Same public list the sign-up wizard reads — no token, so it does not depend
+   * on what the PR's role is allowed to enumerate.
+   */
+  const loadAgencies = React.useCallback(() => {
+    setAgencyState('loading');
+    fetchPublicAgencies()
       .then((list) => {
-        if (alive) setAgencyOptions(list.map((a) => ({ id: a.id, name: a.name })));
+        setAgencyOptions(list.map((a) => ({ id: a.id, name: a.name })));
+        setAgencyState('ready');
       })
-      .catch(() => {
-        /* Non-fatal: the picker just stays empty. */
-      });
-    return () => {
-      alive = false;
-    };
-  }, [token]);
+      .catch(() => setAgencyState('failed'));
+  }, []);
+
+  useEffect(() => {
+    loadAgencies();
+  }, [loadAgencies]);
 
   useEffect(() => {
     void reloadMyLinks();
@@ -749,8 +760,22 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 )}
                 {agencyMenuOpen && (
                   <View style={styles.agencyMenu}>
-                    {agencyOptions.length === 0 && (
-                      <Text style={styles.langEmptyText}>No agencies available.</Text>
+                    {agencyState === 'loading' && (
+                      <Text style={styles.langEmptyText}>{t.signup.loadingAgencies}</Text>
+                    )}
+                    {agencyState === 'failed' && (
+                      <>
+                        <Text style={styles.agencyLoadError}>{t.signup.agencyLoadFailed}</Text>
+                        <IzButton
+                          label={t.signup.tryAgain}
+                          variant="soft"
+                          small
+                          onPress={loadAgencies}
+                        />
+                      </>
+                    )}
+                    {agencyState === 'ready' && agencyOptions.length === 0 && (
+                      <Text style={styles.langEmptyText}>{t.signup.noAgencies}</Text>
                     )}
                     {agencyOptions.map((a) => {
                       const on = draft.agencyIds.includes(a.id);
@@ -1539,6 +1564,13 @@ const styles = StyleSheet.create({
   },
   langPillText: { fontFamily: F.sora, fontSize: 12, fontWeight: '600', color: C.violetL },
   langEmptyText: { marginTop: 8, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
+  agencyLoadError: {
+    marginTop: 8,
+    marginBottom: 10,
+    fontFamily: F.manrope,
+    fontSize: 13,
+    color: C.red,
+  },
   metaPending: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.amber },
   langPickerWrap: { marginTop: 8 },
   error: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.red },

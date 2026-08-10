@@ -409,7 +409,16 @@ export class AgencyControllerClass {
     }
   }
 
-  /** Active RBAC roles for this agency portal — invite dropdown (not /rbac admin). */
+  /**
+   * Active RBAC roles for this agency portal — invite dropdown (not /rbac admin).
+   *
+   * Owner is withheld on purpose: an invitation goes to an address that has no
+   * account yet, so granting the top lane there hands the agency to whoever
+   * opens that email. Ownership is still transferable — the owner promotes a
+   * member who has already accepted and signed in, via
+   * `PUT /:id/members/:memberId`. `addMember` enforces the same rule, because a
+   * dropdown that omits a value does not stop a POST that names it.
+   */
   async listInviteRoles(req: Request, res: Response) {
     try {
       const agencyId = paramId(req.params.id);
@@ -426,7 +435,12 @@ export class AgencyControllerClass {
         });
       }
       const roles = (await this.roleRepository.getAllRoles())
-        .filter((r) => r.portalId === portal.id && r.status === 'active')
+        .filter(
+          (r) =>
+            r.portalId === portal.id &&
+            r.status === 'active' &&
+            inferMembershipSubRole('agency', r.roleName) !== 'owner',
+        )
         .map((r) => ({
           id: r.id,
           roleName: r.roleName,
@@ -562,6 +576,21 @@ export class AgencyControllerClass {
         return res.status(400).json({
           success: false,
           message: 'subRole or roleId is required',
+          data: null,
+        });
+      }
+
+      // No invitation may grant Owner — see listInviteRoles. Checked on BOTH the
+      // lane and the role, since either one alone reaches the top lane: subRole
+      // is what `agencyOwnerOfParam` reads, roleId is what accept grants.
+      if (
+        subRole === 'owner' ||
+        inferMembershipSubRole('agency', role.roleName) === 'owner'
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            'Owner cannot be invited — invite them as Finance, then change their role once they have joined',
           data: null,
         });
       }

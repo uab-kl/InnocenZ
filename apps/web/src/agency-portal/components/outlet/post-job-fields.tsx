@@ -52,6 +52,7 @@ import {
 	getOutletSubscriptionPlan,
 	isOtherDressCode,
 	isOtherSpecialEvent,
+	OUTLET_PRICES_SECTION_ID,
 	SHIFT_EVENT_KIND_LABELS,
 	SHIFT_SPECIAL_EVENT_OPTIONS,
 	type ShiftDestination,
@@ -83,6 +84,7 @@ import {
 import { formatStars } from "@agency-portal/lib/pr-rating-summary";
 import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
+import { Link } from "@tanstack/react-router";
 import { addDays, format, startOfToday } from "date-fns";
 import { Check, Minus, Pencil, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -96,7 +98,6 @@ const DEFAULT_DRAFT_TIER_BASE: OutletTierRateSettings = {
 };
 
 const DRAFT_NORMAL_EVENT_DEFAULT = "Friday lounge";
-const DRAFT_NORMAL_EVENT_PLACEHOLDER = "e.g. Friday lounge, ladies night";
 
 const DRAFT_SPECIAL_EVENT_DEFAULTS: Record<ShiftSpecialEventType, string> = {
 	vip: "Private VIP — Hennessy Launch",
@@ -107,15 +108,8 @@ const DRAFT_SPECIAL_EVENT_DEFAULTS: Record<ShiftSpecialEventType, string> = {
 	other: "",
 };
 
-const DRAFT_SPECIAL_EVENT_PLACEHOLDERS: Record<ShiftSpecialEventType, string> =
-	{
-		vip: "e.g. Private VIP — Hennessy Launch",
-		launch: "e.g. Champagne product launch",
-		private_table: "e.g. Private table buyout",
-		brand_activation: "e.g. Brand night activation",
-		corporate: "e.g. Corporate table event",
-		other: "Name your special event",
-	};
+/** Only used where a kind has no suggested name of its own to show greyed out. */
+const DRAFT_EVENT_FALLBACK_PLACEHOLDER = "Name your event";
 
 const DRAFT_EVENT_PRESETS = new Set([
 	DRAFT_NORMAL_EVENT_DEFAULT,
@@ -132,22 +126,37 @@ export function defaultDraftEventName(
 	return DRAFT_SPECIAL_EVENT_DEFAULTS[type] ?? "Special event";
 }
 
+/**
+ * The suggested name, shown greyed out INSIDE the empty field. It is a hint, not
+ * a value — the outlet types over it instead of first clearing seeded text.
+ */
 export function draftEventPlaceholder(
 	eventKind: ShiftEventKind,
 	specialEventType?: string,
 ): string {
-	if (eventKind === "normal") return DRAFT_NORMAL_EVENT_PLACEHOLDER;
-	const type = (specialEventType ?? "vip") as ShiftSpecialEventType;
-	return DRAFT_SPECIAL_EVENT_PLACEHOLDERS[type] ?? "Name your special event";
+	return (
+		defaultDraftEventName(eventKind, specialEventType) ||
+		DRAFT_EVENT_FALLBACK_PLACEHOLDER
+	);
 }
 
-function resolveDraftEventOnPresetChange(
-	current: string,
-	eventKind: ShiftEventKind,
-	specialEventType?: string,
+/**
+ * What actually gets posted: whatever the outlet typed, else the suggestion the
+ * placeholder was showing. An untouched field must never post a blank name.
+ */
+export function resolveDraftEventName(
+	shift: Pick<DraftShift, "event" | "eventKind" | "specialEventType">,
 ): string {
-	if (!DRAFT_EVENT_PRESETS.has(current.trim())) return current;
-	return defaultDraftEventName(eventKind, specialEventType);
+	return (
+		shift.event.trim() ||
+		defaultDraftEventName(shift.eventKind, shift.specialEventType)
+	);
+}
+
+function resolveDraftEventOnPresetChange(current: string): string {
+	// Clear a leftover preset literal (from an older draft) so the new kind's
+	// suggestion shows as a placeholder; anything the outlet typed is kept.
+	return DRAFT_EVENT_PRESETS.has(current.trim()) ? "" : current;
 }
 
 export function draftTierRatesFromWorkspace(
@@ -286,9 +295,10 @@ export function newDraftShift(
 		selectedDateIsos: partial?.selectedDateIsos?.length
 			? sortJobDateIsos(partial.selectedDateIsos)
 			: [defaultDateIso],
-		event:
-			partial?.event ??
-			defaultDraftEventName(eventKind, partial?.specialEventType ?? "vip"),
+		// Empty by default — the suggested name renders as a placeholder instead,
+		// so a fresh draft has nothing to delete before typing. resolveDraftEventName
+		// puts the suggestion back at post time.
+		event: partial?.event ?? "",
 		eventKind,
 		specialEventType: partial?.specialEventType ?? "vip",
 		customSpecialEventName: partial?.customSpecialEventName ?? "",
@@ -1385,7 +1395,7 @@ export function DraftShiftSummary({
 				)}
 			/>
 			<DraftDrinkPricingSummary shift={shift} workspaceMenu={workspaceMenu} />
-			<SummaryLine label="Event" value={shift.event} stacked />
+			<SummaryLine label="Event" value={resolveDraftEventName(shift)} stacked />
 			<SummaryLine label="Time" value={shift.shiftTime} />
 			<SummaryLine label="People needed" value={String(shift.quantity)} />
 			<SummaryLine
@@ -1432,6 +1442,7 @@ export function DraftShiftEditor({
 	prCandidates,
 	prEmptyHint,
 	workspaceMenu,
+	workspaceRates,
 }: {
 	shift: DraftShift;
 	onChange: (patch: Partial<DraftShift>) => void;
@@ -1451,12 +1462,29 @@ export function DraftShiftEditor({
 	prEmptyHint?: string;
 	/** The outlet's real price list on a backed session; omitted on demo ones. */
 	workspaceMenu?: OutletDrinkPrice[];
+	/** The outlet's real rate card on a backed session; omitted on demo ones. */
+	workspaceRates?: Pick<
+		OutletWorkspaceSettings,
+		"tierRates" | "commissionOnlyRates"
+	>;
 }) {
 	// Demo sessions have no backend pool, so the language options come from the
 	// demo roster instead. A real session passes `prCandidates` and ignores this.
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const outletOwner = useStore((s) => s.outletOwner);
-	const outletWorkspace = useStore((s) => s.outletWorkspace);
+	const storeWorkspace = useStore((s) => s.outletWorkspace);
+	// Same story as the price list below: a real session's rate card lives in the
+	// backend and arrives as a prop. Reading only the store showed Post Job the
+	// blank demo card while the Workspace page showed the real one — and made
+	// "Reset to workspace rates" reset to that blank card, which on screen is
+	// indistinguishable from the button doing nothing.
+	const outletWorkspace = useMemo(
+		() =>
+			workspaceRates
+				? { ...storeWorkspace, ...workspaceRates }
+				: storeWorkspace,
+		[storeWorkspace, workspaceRates],
+	);
 	const workspaceRatesKey = workspaceTierRatesSignature(
 		outletWorkspace.tierRates,
 	);
@@ -1708,10 +1736,6 @@ export function DraftShiftEditor({
 									type="button"
 									onClick={() => {
 										const nextKind = kind;
-										const nextSpecialType =
-											nextKind === "special"
-												? (shift.specialEventType ?? "vip")
-												: undefined;
 										onChange({
 											eventKind: nextKind,
 											specialEventType:
@@ -1728,11 +1752,7 @@ export function DraftShiftEditor({
 													? (shift.eventDrinkMenu ??
 														cloneDrinkMenu(workspaceDrinkMenu))
 													: undefined,
-											event: resolveDraftEventOnPresetChange(
-												shift.event,
-												nextKind,
-												nextSpecialType,
-											),
+											event: resolveDraftEventOnPresetChange(shift.event),
 										});
 									}}
 									className={cn(
@@ -1758,11 +1778,7 @@ export function DraftShiftEditor({
 												customSpecialEventName: isOtherSpecialEvent(option.id)
 													? (shift.customSpecialEventName ?? "")
 													: "",
-												event: resolveDraftEventOnPresetChange(
-													shift.event,
-													"special",
-													option.id,
-												),
+												event: resolveDraftEventOnPresetChange(shift.event),
 											})
 										}
 										className={cn(
@@ -1814,7 +1830,14 @@ export function DraftShiftEditor({
 							</button>
 						</div>
 					) : (
-						<div className="iz-job-posting-control">
+						// Locked here, editable in Workspace — so the row is the way there.
+						// #prices opens both price lists (drinks and services) on arrival.
+						<Link
+							to="/outlet/workspace"
+							hash={OUTLET_PRICES_SECTION_ID}
+							className="iz-job-posting-control block w-full min-w-0 transition-opacity hover:opacity-80"
+							aria-label="Edit prices in Workspace"
+						>
 							<PostJobLockedValue>
 								Follow Workspace
 								{(() => {
@@ -1822,7 +1845,7 @@ export function DraftShiftEditor({
 									return ` · RM ${range.min}–${range.max}`;
 								})()}
 							</PostJobLockedValue>
-						</div>
+						</Link>
 					)}
 				</PostJobShiftField>
 

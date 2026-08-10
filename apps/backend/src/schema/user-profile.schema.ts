@@ -74,11 +74,27 @@ function profileRefinements(data: ProfileOnlyBody, ctx: z.RefinementCtx) {
   }
 }
 
-export const UserProfileCreateSchema = z
-  .object({ ...userAccountFields, ...profileOnlyFields })
-  .superRefine((data, ctx) => profileRefinements(data, ctx));
+/**
+ * The plain object, kept separate from the refined create schema.
+ *
+ * `UserProfileUpdateSchema` used to be `UserProfileCreateSchema.partial()`,
+ * which zod v4 refuses AT IMPORT TIME — ".partial() cannot be used on object
+ * schemas containing refinements" is thrown while the module is evaluated, not
+ * when a request is validated. Nothing imported this file until the signature
+ * schema below was added, so the throw had never run and the module looked
+ * healthy; the first import took the whole backend down on boot.
+ *
+ * Behaviour is unchanged: the update schema re-applies `profileRefinements`
+ * itself in its own `superRefine` below, which is where those checks were
+ * actually coming from.
+ */
+const userProfileObject = z.object({ ...userAccountFields, ...profileOnlyFields });
 
-export const UserProfileUpdateSchema = UserProfileCreateSchema.partial().superRefine((data, ctx) => {
+export const UserProfileCreateSchema = userProfileObject.superRefine((data, ctx) =>
+  profileRefinements(data, ctx),
+);
+
+export const UserProfileUpdateSchema = userProfileObject.partial().superRefine((data, ctx) => {
   if (data.idType === 'NRIC') {
     profileRefinements(
       {
@@ -114,3 +130,28 @@ export const UserProfileSubmitSchema = UserProfileCreateSchema.superRefine((data
 });
 
 export type UserProfileBody = z.infer<typeof UserProfileCreateSchema>;
+
+/**
+ * The signature a person keeps on file (migration 0111).
+ *
+ * Bounds are copied from `PrSignVoucherSchema` deliberately, not loosened: ink
+ * that can be SAVED here must be ink that can be SIGNED with, or the tap-to-sign
+ * button would hand the voucher endpoint a payload it refuses — a failure the
+ * signer could do nothing about.
+ *
+ * `null` clears it, which is the only way to withdraw a signature once given.
+ */
+export const SaveMySignatureSchema = z.object({
+  signature: z
+    .object({
+      w: z.number().min(20).max(4000),
+      h: z.number().min(20).max(2000),
+      strokes: z
+        .array(z.array(z.tuple([z.number(), z.number()])).min(2).max(2000))
+        .min(1)
+        .max(100),
+    })
+    .nullable(),
+});
+
+export type SaveMySignatureInput = z.infer<typeof SaveMySignatureSchema>;

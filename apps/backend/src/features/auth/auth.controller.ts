@@ -445,6 +445,8 @@ export class AuthControllerClass {
       email?: string;
       phoneNum: string;
       packageId?: string;
+      /** Outlet only — already validated as an ACTIVE agency by registerUser. */
+      onboardedByAgencyId?: string;
     },
     actor: string,
   ): Promise<{ kind: 'agency' | 'outlet'; id: string; name: string }> {
@@ -512,6 +514,11 @@ export class AuthControllerClass {
       businessLicense: body.companyRegistrationOld ?? null,
       ssmNo,
       status: 'pending_review',
+      // The agency the venue named at sign-up. Same column the admin Outlet
+      // Details panel reads and PATCH :id/onboarding-agency writes — this is a
+      // DECLARATION, not a self-grant: the outlet stays `pending_review` until
+      // an admin approves, and the admin can repoint it there.
+      onboardedByAgencyId: body.onboardedByAgencyId ?? null,
       createdBy: actor,
       updatedBy: actor,
     });
@@ -533,6 +540,7 @@ export class AuthControllerClass {
       outletId: outlet.id,
       userId,
       packageId: body.packageId ?? null,
+      onboardedByAgencyId: outlet.onboardedByAgencyId ?? null,
     });
     return { kind: 'outlet', id: outlet.id, name: outlet.name };
   }
@@ -721,6 +729,25 @@ export class AuthControllerClass {
         }
       }
 
+      // Outlet sign-up names its onboarding agency. Re-check it here rather than
+      // trusting the id: the list is public, so a hand-rolled POST could name a
+      // suspended / non-existent agency and the FK would only catch the latter.
+      // Checked BEFORE createUserWithRole so a rejection leaves no half account.
+      if (parsedBody.accountType === 'outlet' && parsedBody.onboardedByAgencyId) {
+        const agency = await this.agencyRepository.getById(parsedBody.onboardedByAgencyId);
+        if (!agency || agency.status !== 'active') {
+          logger.warn('[AuthController.register] Rejecting unknown onboarding agency', {
+            onboardedByAgencyId: parsedBody.onboardedByAgencyId,
+            found: Boolean(agency),
+          });
+          return res.status(400).json({
+            success: false,
+            message: 'That onboarding agency is not available — pick one from the list',
+            data: null,
+          });
+        }
+      }
+
       if (parsedBody.email) {
         const existingEmail = await this.userRepository.getUserByLoginMethod('email', parsedBody.email);
         if (existingEmail) {
@@ -883,6 +910,12 @@ export class AuthControllerClass {
         });
       }
 
+      // The logo is REQUIRED by the signup form, but its upload deliberately
+      // fails open below (see the catch). Report that back so the UI can tell
+      // the owner their logo did not save instead of leaving them to discover
+      // a blank Settings header later.
+      let logoUploadFailed = false;
+
       // Outlet / agency web signup — create the organisation + owner membership.
       // Previously register only wrote user + user_role + empty user_profile.
       if (parsedBody.accountType === 'agency' || parsedBody.accountType === 'outlet') {
@@ -913,6 +946,7 @@ export class AuthControllerClass {
           } catch (logoError) {
             // Account + org already exist — do not 400 (retry would hit
             // USER_ALREADY_EXISTS). Logo can be re-uploaded after approval.
+            logoUploadFailed = true;
             logger.error('[AuthController.register] Org logo upload failed', {
               orgId: org.id,
               kind: org.kind,
@@ -946,6 +980,9 @@ export class AuthControllerClass {
         success: true,
         message: 'User registered successfully',
         data: withUserProfile(user, profile),
+        // Sibling of `data`, not inside it: `data` is the user record, and this
+        // is a fact about the request. Absent on PR signups, which have no org.
+        logoUploadFailed,
       });
     } catch (error) {
       if (error instanceof z.ZodError) {

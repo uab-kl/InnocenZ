@@ -2,6 +2,7 @@ import { AgencyCommissionRulesPanel } from "@agency-portal/components/agency/Age
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { formatOutletHistRm } from "@agency-portal/components/outlet/outlet-history-ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
+import { useAgencyOutletWorkspace } from "@agency-portal/hooks/use-agency-outlet-workspace";
 import {
 	formatTierSalesTargets,
 	formatTierWageRange,
@@ -62,6 +63,13 @@ export function AgencyOutletDetailView({
 			day.dateIso === DEFAULT_ROSTER_DATE_ISO || day.dateLabel === "Today",
 	);
 	const futureOverview = demandOverview.find((day) => day.dateIso === "future");
+	// Same query as the rate table below (react-query dedupes it), so the
+	// subtitle can't quote demo money while the table shows the outlet's real
+	// rates — `summary.rule` is a demo fixture on a backed session.
+	const backendWorkspace = useAgencyOutletWorkspace(summary.outlet).workspace;
+	const headWage = backendWorkspace?.basePayPerHour ?? summary.rule.wagePerHour;
+	const headDrinkPct = backendWorkspace?.drinkPct ?? summary.rule.drinkPct;
+	const headTipPct = backendWorkspace?.tipPct ?? summary.rule.tipPct;
 
 	return (
 		<div className="iz-screen iz-outlet-detail-page">
@@ -77,8 +85,8 @@ export function AgencyOutletDetailView({
 				<div className="min-w-0">
 					<h1 className="iz-outlet-detail-head__title">{summary.outlet}</h1>
 					<p className="iz-outlet-detail-head__meta">
-						Wage RM{summary.rule.wagePerHour.toLocaleString("en-MY")}/shift ·
-						Drinks {summary.rule.drinkPct}% · Tips {summary.rule.tipPct}%
+						Wage RM{headWage.toLocaleString("en-MY")}/shift · Drinks{" "}
+						{headDrinkPct}% · Tips {headTipPct}%
 					</p>
 				</div>
 			</header>

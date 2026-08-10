@@ -1,12 +1,16 @@
 import { PortalShell } from "@agency-portal/components/portal/PortalShell";
 import { Toasts } from "@agency-portal/components/Toasts";
 import { buildBlankPortalReset } from "@agency-portal/lib/demo-seed";
-import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import {
+	getOutletIdentity,
+	saveOutletIdentity,
+} from "@agency-portal/lib/outlet-identity";
 import {
 	canAccessOutletPath,
 	getOutletDefaultRoute,
 	getOutletNavItems,
 } from "@agency-portal/lib/outlet-rbac";
+import { resolveOutletIdentityForUser } from "@agency-portal/lib/resolve-session-identity";
 import { useStore } from "@agency-portal/lib/store";
 import {
 	createFileRoute,
@@ -49,8 +53,19 @@ function OutletLayout() {
 			if (getPortalSessionKind() === "real") {
 				useStore.setState(buildBlankPortalReset());
 				// The blank reset wipes outletOwner / sub-role to demo defaults every
-				// mount; re-apply the persisted real identity so it survives reloads.
-				const identity = getOutletIdentity();
+				// mount; re-apply the real identity so it survives reloads.
+				//
+				// The stored value is only a CACHE. When this tab has none — a fresh
+				// tab, or one whose cache a sign-out elsewhere cleared — re-derive from
+				// the signed-in account's own memberships. That ties the identity to
+				// the token rather than to whatever another tab last wrote, and it
+				// self-heals a stale value with no re-login.
+				let identity = getOutletIdentity();
+				if (!identity && profile?.id) {
+					identity = await resolveOutletIdentityForUser(profile.id);
+					if (cancelled) return;
+					if (identity) saveOutletIdentity(identity);
+				}
 				if (identity) {
 					setOrgStatus(identity.outletStatus);
 					useStore.getState().setOutletSubRole(identity.subRole);
@@ -82,7 +97,11 @@ function OutletLayout() {
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+		// `profile.id` is fetched, so it arrives AFTER the first mount. Without it
+		// here the effect would run once with no id and the re-derive above could
+		// never fire — the tab would sit on a missing identity and fall through to
+		// demo data. The re-run is safe: every step is idempotent.
+	}, [profile?.id]);
 
 	const navigate = useNavigate();
 	const { pathname } = useLocation();
@@ -96,12 +115,7 @@ function OutletLayout() {
 	useEffect(() => {
 		if (!mounted) return;
 		if (
-			canAccessOutletPath(
-				outletSubRole,
-				pathname,
-				orgStatus,
-				modulePermissions,
-			)
+			canAccessOutletPath(outletSubRole, pathname, orgStatus, modulePermissions)
 		) {
 			return;
 		}

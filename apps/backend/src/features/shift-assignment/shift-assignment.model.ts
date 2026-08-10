@@ -184,6 +184,12 @@ export type ShiftAssignmentWithContextType = ShiftAssignmentType & {
   outletId: string;
   /** Joined from the outlet FK — null only if the shift's outlet row is gone. */
   outletName: string | null;
+  /**
+   * Joined from the assignment's agency FK, for the same reason `prName` rides
+   * inline: an outlet caller cannot read `/agency` (it must not enumerate
+   * agencies), so this is its only way to name who staffed its own night.
+   */
+  agencyName: string | null;
   shiftDate: string;
 };
 

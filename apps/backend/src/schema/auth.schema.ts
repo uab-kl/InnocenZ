@@ -111,6 +111,14 @@ const registerOrgFields = {
   /** Landing-page package id (e.g. `outlet-basic`) — not a catalog UUID yet. */
   /** Catalog plan id (`main.subscription.id`) chosen at Package enrollment. */
   packageId: z.string().uuid().optional(),
+  /**
+   * Outlet signup only — the agency that onboarded this venue, written to
+   * `outlet.onboarded_by_agency_id` (the column POST /shift routes a posted job
+   * through). Ids come from the public GET /auth/agencies list; the controller
+   * re-checks the agency is ACTIVE before writing it, and the venue still lands
+   * as `pending_review` for an admin to confirm or repoint.
+   */
+  onboardedByAgencyId: z.string().uuid('Select the agency that onboarded you').optional(),
   ackPersonalInfo: z.boolean().optional(),
   ackDeclarationOfTruth: z.boolean().optional(),
   ackInformationSharing: z.boolean().optional(),
@@ -178,6 +186,17 @@ const RegisterSchema = z
       if (!data[key]) {
         ctx.addIssue({ code: 'custom', message, path: [key] });
       }
+    }
+    // Outlet only. An agency signing up has no onboarding agency of its own,
+    // and a venue without one cannot post a single shift (ShiftController.create
+    // reads `onboarded_by_agency_id`), so ask for it at sign-up rather than
+    // leaving every self-registered outlet inert until an admin notices.
+    if (data.accountType === 'outlet' && !data.onboardedByAgencyId) {
+      ctx.addIssue({
+        code: 'custom',
+        message: 'Select the agency that onboarded you',
+        path: ['onboardedByAgencyId'],
+      });
     }
     if (
       data.ackPersonalInfo !== true ||

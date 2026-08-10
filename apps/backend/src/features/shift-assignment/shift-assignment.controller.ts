@@ -594,7 +594,20 @@ export class ShiftAssignmentControllerClass {
         leaveProofPhotos: storedProofPhotos,
         updatedBy: getActor(req),
       });
+      const actor = getActor(req);
       res.status(200).json({ success: true, message: 'Leave request sent — your agency will review it', data: assignment });
+
+      // Same false promise cancelMine used to make: that message has been
+      // saying "your agency will review it" since the endpoint shipped, while
+      // nothing told the agency there was anything to review.
+      void this.notifyAgencyLeaveRequested({
+        agencyId: existing.agencyId,
+        assignmentId: id,
+        shiftId: existing.shiftId,
+        prName: pr?.name ?? 'PR',
+        reason,
+        actor,
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentController.requestLeaveMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -638,6 +651,19 @@ export class ShiftAssignmentControllerClass {
         reason: 'leave_approved',
         actor,
       });
+
+      // And tell the PR, who until now watched the agency get notified about
+      // their own MC while they heard nothing either way.
+      void this.notifyPr({
+        prId: existing.prId,
+        kind: 'leave_decided',
+        title: 'MC / leave approved',
+        body: 'Your agency approved the request — you are excused from this shift with no penalty.',
+        payload: { assignmentId: id, shiftId: existing.shiftId, decision: 'approved' },
+        actor,
+      }).catch((error) => {
+        logger.error('[ShiftAssignmentController.approveLeave] notify Error:', error);
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentController.approveLeave] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -670,6 +696,19 @@ export class ShiftAssignmentControllerClass {
         updatedBy: getActor(req),
       });
       res.status(200).json({ success: true, message: 'Leave rejected — the PR stays on this shift', data: assignment });
+
+      // The PR is still expected to work this shift — of the two outcomes this
+      // is the one they MUST be told about, and it was the one telling nobody.
+      void this.notifyPr({
+        prId: existing.prId,
+        kind: 'leave_decided',
+        title: 'MC / leave rejected',
+        body: 'Your agency rejected the request — you are still on this shift.',
+        payload: { assignmentId: id, shiftId: existing.shiftId, decision: 'rejected' },
+        actor: getActor(req),
+      }).catch((error) => {
+        logger.error('[ShiftAssignmentController.rejectLeave] notify Error:', error);
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentController.rejectLeave] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -1315,6 +1354,51 @@ export class ShiftAssignmentControllerClass {
    * unlike the three shift ones, which go to the PR. Never throws — a failed
    * notification must not undo the release the PR is entitled to.
    */
+  /**
+   * A PR filed an MC/leave request — the agency has a decision to make.
+   *
+   * Addressed to the agency's active members, resolved the same way
+   * notifyAgencyCoverNeeded resolves them. Never throws: a failed notification
+   * must not undo an MC the PR has already filed.
+   *
+   * NOT `shift_cover_needed`. Nobody is off yet, and the shift is still fully
+   * staffed — pointing the agency at the roster's backfill list here would be
+   * telling it to replace someone who may well be working that night. Cover is
+   * raised afterwards by approveLeave, and only if it approves.
+   */
+  private async notifyAgencyLeaveRequested(input: {
+    agencyId: string;
+    assignmentId: string;
+    shiftId: string;
+    prName: string;
+    reason: string;
+    actor: string;
+  }): Promise<void> {
+    try {
+      const shift = await this.shiftRepository.getById(input.shiftId);
+      const members = await this.agencyMemberRepository.listByAgency(input.agencyId);
+      const recipients = members.filter((m) => m.status === 'active').map((m) => m.userId);
+      if (recipients.length === 0) return;
+
+      const when = shift
+        ? `${shift.shiftDate}${shift.slot ? ` · ${shift.slot}` : ''}`
+        : 'an upcoming shift';
+
+      await notifyMany(recipients, {
+        kind: 'leave_requested',
+        title: `MC / leave request — ${input.prName}`,
+        body: `${input.prName} asked to be excused from ${when}: "${input.reason}". Review it on Approvals → MC/Leaves.`,
+        payload: {
+          assignmentId: input.assignmentId,
+          shiftId: input.shiftId,
+        },
+        actor: input.actor,
+      });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.notifyAgencyLeaveRequested] Error:', error);
+    }
+  }
+
   private async notifyAgencyCoverNeeded(input: {
     agencyId: string;
     assignmentId: string;
@@ -1352,7 +1436,7 @@ export class ShiftAssignmentControllerClass {
 
   private async notifyPr(input: {
     prId: string;
-    kind: 'shift_assigned' | 'shift_cancelled';
+    kind: 'shift_assigned' | 'shift_cancelled' | 'leave_decided';
     title: string;
     body?: string;
     payload: Record<string, unknown>;
