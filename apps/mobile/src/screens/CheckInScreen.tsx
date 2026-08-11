@@ -32,7 +32,7 @@ import { usePrNav } from '../lib/pr-nav';
 import { useLocale } from '../i18n';
 import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
-import { EmptyDashed, IzButton, Pill } from '../components/ui';
+import { Avatar, EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 import { MapPin } from '../components/icons';
@@ -528,9 +528,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <Text style={styles.event}>{active.eventName ?? 'Shift'}</Text>
                   <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
                 </View>
-                <View style={styles.mark}>
-                  <Text style={styles.markText}>{outletName.trim()[0]?.toUpperCase()}</Text>
-                </View>
+                {/*
+                  * The venue's own logo, with its initial as the fallback —
+                  * the same Avatar the Today card uses, so one shift does not
+                  * look like two different venues across two tabs. `logo`
+                  * gives it the dark plate and slight scale a wordmark needs.
+                  */}
+                <Avatar
+                  size={52}
+                  radius={999}
+                  fontSize={22}
+                  photoPath={active?.outletLogo}
+                  initial={outletName.trim()[0]?.toUpperCase()}
+                  logo
+                  style={styles.mark}
+                />
               </View>
               {briefOpen && (
                 <View style={styles.briefBody}>
@@ -1007,12 +1019,6 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  markText: {
-    fontFamily: F.sora,
-    fontSize: 22,
-    fontWeight: '800',
-    color: C.txt,
   },
   briefBody: {
     marginTop: 14,

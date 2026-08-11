@@ -885,6 +885,16 @@ export type ShiftAssignmentRecord = {
   eventKind: string;
   payPerHour: string;
   outletName: string | null;
+  /**
+   * The venue's COMPANY logo (`outlet.logo_image`), via the same FK as the
+   * address — NOT the outlet owner's personal account avatar, which lives on
+   * `user.profile_image` and is a different picture of a different thing.
+   *
+   * Optional because a backend that has not been restarted yet omits it; null
+   * when the outlet has uploaded none. Either way the card falls back to the
+   * venue's initial rather than showing an empty circle.
+   */
+  outletLogo?: string | null;
   /** The shift outlet's address (composed from its address columns via FK). */
   outletAddress: string | null;
   /** Venue pin off the outlet FK — null until the outlet drops its pin. */
