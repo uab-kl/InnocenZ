@@ -1,8 +1,13 @@
+import {
+	findAgencyManagedPr,
+	resolveAgencyPrPhoto,
+} from "@agency-portal/lib/agency-demo";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import {
 	GEOFENCE_METERS,
 	type GpsTrackingRow,
 } from "@agency-portal/lib/gps-locations";
+import { useStore } from "@agency-portal/lib/store";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -24,6 +29,8 @@ const MAX_ACCURACY_BUFFER_M = 30;
 export interface AttendanceStampNoFix {
 	assignmentId: string;
 	prName: string;
+	/** Unresolved photo reference; null when there is none. See `PrFaceBubble`. */
+	prPhoto: string | null;
 	at: string;
 }
 
@@ -31,6 +38,8 @@ export interface AttendanceStampNoFix {
 export interface AttendanceNotArrived {
 	assignmentId: string;
 	prName: string;
+	/** Unresolved photo reference; null when there is none. See `PrFaceBubble`. */
+	prPhoto: string | null;
 	slot: string | null;
 }
 
@@ -82,6 +91,10 @@ export function useAgencyAttendanceFixes(
 ): UseAgencyAttendanceFixesResult {
 	const { logout } = useAuth();
 	const backed = getAgencyIdentity() !== null;
+	// The attendance feed carries prId and prName but no photo. The agency's own
+	// roster already holds the resolved one, so the face costs a lookup rather
+	// than a new backend field.
+	const agencyPRs = useStore((s) => s.agencyPRs);
 
 	const query = useQuery({
 		queryKey: ["agency", "attendance-fixes", dateIso ?? "today"] as const,
@@ -99,6 +112,8 @@ export function useAgencyAttendanceFixes(
 		const byOutlet = new Map<string, AttendanceOutletGroup>();
 
 		for (const fix of fixes) {
+			const managed = findAgencyManagedPr(agencyPRs, fix.prId, fix.prName);
+			const prPhoto = managed ? resolveAgencyPrPhoto(managed) : null;
 			const outlet = fix.outlet.name ?? "Unnamed venue";
 			const radiusM = fix.outlet.radiusM ?? GEOFENCE_METERS;
 			const group = byOutlet.get(outlet) ?? {
@@ -116,6 +131,7 @@ export function useAgencyAttendanceFixes(
 				group.notArrived.push({
 					assignmentId: fix.assignmentId,
 					prName: fix.prName,
+					prPhoto,
 					slot: fix.slot,
 				});
 			} else if (
@@ -130,6 +146,7 @@ export function useAgencyAttendanceFixes(
 				group.noFix.push({
 					assignmentId: fix.assignmentId,
 					prName: fix.prName,
+					prPhoto,
 					at: stamp.at,
 				});
 			} else {
@@ -140,6 +157,7 @@ export function useAgencyAttendanceFixes(
 					slotId: fix.assignmentId,
 					prId: fix.prId,
 					prName: fix.prName,
+					prPhoto,
 					outlet,
 					status: "on-duty",
 					meters,
@@ -178,5 +196,5 @@ export function useAgencyAttendanceFixes(
 			),
 			hasUnpinnedVenue: groups.some((g) => !g.pinned),
 		};
-	}, [fixes, backed, query.isLoading]);
+	}, [fixes, backed, query.isLoading, agencyPRs]);
 }

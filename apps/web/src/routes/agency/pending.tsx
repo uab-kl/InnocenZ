@@ -2,6 +2,7 @@ import {
 	Comcard3dPreviewVisual,
 	type ComcardPreviewData,
 } from "@agency-portal/components/agency/Comcard3dPreview";
+import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCard, IzPill } from "@agency-portal/components/iz/ui";
@@ -14,7 +15,11 @@ import {
 import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGalleryPicker";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
-import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
+import {
+	findAgencyManagedPr,
+	nowAgencyDateTime,
+	resolveAgencyPrPhoto,
+} from "@agency-portal/lib/agency-demo";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
@@ -130,26 +135,72 @@ function avatarVariant(id: string) {
 	return AVATAR_VARIANTS[hash];
 }
 
+/**
+ * Look up a PR's own photo by id, for the rows that carry only an id and a name.
+ *
+ * An MC/leave row is a `shift_assignment` — it has `prId` and `prName` and no
+ * photo at all, and an agency-link request is the same shape. The agency's own
+ * PR roster is already in the store with the resolved photo on it, so the face
+ * is one lookup away rather than a new backend field.
+ */
+function usePrPhotoById() {
+	const agencyPRs = useStore((s) => s.agencyPRs);
+	return useMemo(
+		() => (prId: string | null | undefined, prName?: string | null) => {
+			if (!prId && !prName) return null;
+			const pr = findAgencyManagedPr(
+				agencyPRs,
+				prId ?? "",
+				prName ?? undefined,
+			);
+			return pr ? resolveAgencyPrPhoto(pr) : null;
+		},
+		[agencyPRs],
+	);
+}
+
 function ApprovalsAvatar({
 	name,
 	id,
+	photo,
 	size = "md",
 }: {
 	name: string;
 	id: string;
+	/**
+	 * The PR's own photo, UNRESOLVED — a raw R2 key or demo path; this component
+	 * runs it through `prPhotoSrc`. Every approvals row used to be a coloured
+	 * initial and nothing else, so the agency approved, rejected and excused
+	 * people it could not see, while History showed the same PR's face.
+	 */
+	photo?: string | null;
 	size?: "sm" | "md" | "lg";
 }) {
-	const initial = name.trim()[0]?.toUpperCase() ?? "?";
 	return (
-		<span
+		<PrFaceBubble
+			name={name}
+			photo={photo}
 			className={cn(
 				"iz-approvals-avatar",
 				`iz-approvals-avatar--${avatarVariant(id)}`,
 				size,
 			)}
-		>
-			{initial}
-		</span>
+			photoClassName="iz-approvals-avatar--photo"
+		/>
+	);
+}
+
+/**
+ * The applicant's own face, best available. A sign-up has no `avatarPhoto` yet
+ * — they are not on the roster — so the order mirrors `resolveAgencyPrPhoto`:
+ * the selfie they submitted, then the comcard, then the first portfolio slot.
+ */
+function pendingPrPhoto(signup: PendingPR) {
+	return (
+		signup.selfiePhoto ??
+		signup.comcardImageUrl ??
+		signup.portfolioPhotos?.find(Boolean) ??
+		null
 	);
 }
 
@@ -699,6 +750,7 @@ function SignupDetailPanel({
 					<ApprovalsAvatar
 						name={pendingFloorNickname(signup)}
 						id={signup.id}
+						photo={pendingPrPhoto(signup)}
 						size="lg"
 					/>
 					<div className="min-w-0">
@@ -954,11 +1006,17 @@ function LinkRequestDetailPanel({
 	onApprove: () => void;
 	onReject: () => void;
 }) {
+	const prPhoto = usePrPhotoById()(link.prId, link.prName);
 	return (
 		<>
 			<div className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
-					<ApprovalsAvatar name={link.prName} id={link.id} size="lg" />
+					<ApprovalsAvatar
+						name={link.prName}
+						id={link.id}
+						photo={prPhoto}
+						size="lg"
+					/>
 					<div className="min-w-0">
 						<h2 className="iz-approvals-detail-name">{link.prName}</h2>
 						<p className="iz-approvals-detail-meta">
@@ -1026,12 +1084,18 @@ function LeaveDetailPanel({
 }) {
 	const prName = req.prName ?? "PR";
 	const mcPhotos = req.leaveProofPhotos ?? [];
+	const prPhoto = usePrPhotoById()(req.prId, req.prName);
 
 	return (
 		<>
 			<div className="iz-approvals-detail-head">
 				<div className="iz-approvals-detail-profile">
-					<ApprovalsAvatar name={prName} id={req.id} size="lg" />
+					<ApprovalsAvatar
+						name={prName}
+						id={req.id}
+						photo={prPhoto}
+						size="lg"
+					/>
 					<div className="min-w-0">
 						<h2 className="iz-approvals-detail-name">{prName}</h2>
 						<p className="iz-approvals-detail-meta">
@@ -1042,24 +1106,45 @@ function LeaveDetailPanel({
 						</IzPill>
 					</div>
 				</div>
-				<div className="iz-approvals-detail-actions">
-					<button
-						type="button"
-						className="iz-btn iz-btn-primary !py-2 !text-xs"
-						disabled={busy}
-						onClick={onApprove}
-					>
-						Approve · excuse shift
-					</button>
-					<button
-						type="button"
-						className="iz-btn iz-btn-soft !py-2 !text-xs"
-						disabled={busy}
-						onClick={onReject}
-					>
-						Reject
-					</button>
-				</div>
+				{/* Decided requests are the RECORD, not work: the backend rejects a
+				    second decision ("Only a pending leave request can be…"), so
+				    offering the buttons here would only produce an error. Show what
+				    was decided, and when, instead. */}
+				{req.leaveStatus && req.leaveStatus !== "pending" ? (
+					<div className="iz-approvals-detail-actions">
+						<IzPill variant={req.leaveStatus === "approved" ? "green" : "red"}>
+							{req.leaveStatus === "approved" ? "Approved" : "Rejected"}
+							{req.leaveDecidedAt
+								? ` · ${new Date(req.leaveDecidedAt).toLocaleString(undefined, {
+										day: "2-digit",
+										month: "short",
+										year: "numeric",
+										hour: "2-digit",
+										minute: "2-digit",
+									})}`
+								: ""}
+						</IzPill>
+					</div>
+				) : (
+					<div className="iz-approvals-detail-actions">
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary !py-2 !text-xs"
+							disabled={busy}
+							onClick={onApprove}
+						>
+							Approve · excuse shift
+						</button>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !py-2 !text-xs"
+							disabled={busy}
+							onClick={onReject}
+						>
+							Reject
+						</button>
+					</div>
+				)}
 			</div>
 
 			{/* The MC picture the PR uploaded — the thing this decision rests on,
@@ -1148,6 +1233,7 @@ function AgencyPending() {
 		rejectAgencyLink,
 	} = useStore();
 	const { date, time } = nowAgencyDateTime();
+	const prPhotoById = usePrPhotoById();
 	const [tab, setTab] = useState<Tab>("signups");
 	const [selectedSignupId, setSelectedSignupId] = useState<string | null>(null);
 	const [selectedCutlostId, setSelectedCutlostId] = useState<string | null>(
@@ -1176,9 +1262,29 @@ function AgencyPending() {
 		linkRequests: agencyLinkRequests,
 		cutlostRequests,
 		leaveRequests,
+		leaveHistory,
 		backend,
 		cutlost: liveCutlost,
 	} = queue;
+
+	/**
+	 * Which MC/leave rows the list shows. "pending" is the work queue (the
+	 * default, so the tab still opens on what needs deciding); the rest are
+	 * history. Filtering on leave_status, never `status` — a rejection reverts
+	 * `status` to `assigned` and would otherwise be invisible.
+	 */
+	const [leaveFilter, setLeaveFilter] = useState<
+		"pending" | "approved" | "rejected" | "all"
+	>("pending");
+	const leaveList = useMemo(() => {
+		// Newest decision first — history is read backwards.
+		const decided = [...leaveHistory].sort((a, b) =>
+			(b.leaveDecidedAt ?? "").localeCompare(a.leaveDecidedAt ?? ""),
+		);
+		if (leaveFilter === "pending") return leaveRequests;
+		if (leaveFilter === "all") return [...leaveRequests, ...decided];
+		return decided.filter((r) => r.leaveStatus === leaveFilter);
+	}, [leaveFilter, leaveRequests, leaveHistory]);
 
 	// The MC/leave decision lives here — this page is its only review surface.
 	// The "roster"-prefixed query keys are deliberate: the roster's planning grid
@@ -1216,20 +1322,24 @@ function AgencyPending() {
 			);
 		} else {
 			setSelectedLeaveId((id) =>
-				id && leaveRequests.some((r) => r.id === id)
+				id && leaveList.some((r) => r.id === id)
 					? id
-					: (leaveRequests[0]?.id ?? null),
+					: (leaveList[0]?.id ?? null),
 			);
 		}
-	}, [tab, signups, agencyLinkRequests, cutlostRequests, leaveRequests]);
+	}, [tab, signups, agencyLinkRequests, cutlostRequests, leaveList]);
 
 	const selectedSignup = signups.find((s) => s.id === selectedSignupId) ?? null;
 	const selectedLink =
 		agencyLinkRequests.find((l) => l.id === selectedSignupId) ?? null;
 	const selectedCutlost =
 		cutlostRequests.find((r) => r.id === selectedCutlostId) ?? null;
+	// Searched across BOTH lists: a request stays selected after you decide it,
+	// when it moves out of the queue and into history.
 	const selectedLeave =
-		leaveRequests.find((r) => r.id === selectedLeaveId) ?? null;
+		leaveRequests.find((r) => r.id === selectedLeaveId) ??
+		leaveHistory.find((r) => r.id === selectedLeaveId) ??
+		null;
 
 	if (!agencyCan(agencySubRole, "approvePrSignups")) {
 		return (
@@ -1317,7 +1427,12 @@ function AgencyPending() {
 												)}
 												onClick={() => setSelectedSignupId(p.id)}
 											>
-												<ApprovalsAvatar name={floorName} id={p.id} size="sm" />
+												<ApprovalsAvatar
+													name={floorName}
+													id={p.id}
+													photo={pendingPrPhoto(p)}
+													size="sm"
+												/>
 												<div className="min-w-0 flex-1">
 													<span className="name">{floorName}</span>
 													<span className="sub">
@@ -1358,7 +1473,12 @@ function AgencyPending() {
 											)}
 											onClick={() => setSelectedSignupId(l.id)}
 										>
-											<ApprovalsAvatar name={l.prName} id={l.id} size="sm" />
+											<ApprovalsAvatar
+												name={l.prName}
+												id={l.id}
+												photo={prPhotoById(l.prId, l.prName)}
+												size="sm"
+											/>
 											<div className="min-w-0 flex-1">
 												<span className="name">{l.prName}</span>
 												<span className="sub">
@@ -1375,44 +1495,97 @@ function AgencyPending() {
 								</>
 							)
 						) : tab === "leaves" ? (
-							queue.leaveIsLoading ? (
-								<p className="iz-tiny iz-muted px-1 py-4 text-center">
-									Loading MC / leave requests…
-								</p>
-							) : leaveRequests.length === 0 ? (
-								<p className="iz-tiny iz-muted px-1 py-4 text-center">
-									No MC / leave requests
-								</p>
-							) : (
-								leaveRequests.map((req) => (
-									<button
-										key={req.id}
-										type="button"
-										className={cn(
-											"iz-approvals-list-item",
-											selectedLeaveId === req.id && "on",
-										)}
-										onClick={() => setSelectedLeaveId(req.id)}
-									>
-										<ApprovalsAvatar
-											name={req.prName ?? "PR"}
-											id={req.id}
-											size="sm"
-										/>
-										<div className="min-w-0 flex-1">
-											<span className="name">{req.prName ?? "PR"}</span>
-											<span className="sub">
-												{leaveOutletName(req)} · {req.shiftDate ?? "—"}
-											</span>
-											<span className="badges">
-												<span className="iz-approvals-verify-badge gallery">
-													MC / leave
+							<>
+								{/* Current vs history. Counts come from the two queries, so
+								    "Pending" is work-to-do and the rest is the record. */}
+								<div className="mb-2 flex flex-wrap gap-1">
+									{(
+										[
+											["pending", `Current (${leaveRequests.length})`],
+											["approved", "Approved"],
+											["rejected", "Rejected"],
+											[
+												"all",
+												`All (${leaveRequests.length + leaveHistory.length})`,
+											],
+										] as const
+									).map(([value, label]) => (
+										<button
+											key={value}
+											type="button"
+											className={cn(
+												"iz-chip iz-tiny",
+												leaveFilter === value && "on",
+											)}
+											onClick={() => setLeaveFilter(value)}
+										>
+											{label}
+										</button>
+									))}
+								</div>
+								{queue.leaveIsLoading || queue.leaveHistoryIsLoading ? (
+									<p className="iz-tiny iz-muted px-1 py-4 text-center">
+										Loading MC / leave requests…
+									</p>
+								) : leaveList.length === 0 ? (
+									<p className="iz-tiny iz-muted px-1 py-4 text-center">
+										{leaveFilter === "pending"
+											? "No MC / leave requests waiting"
+											: "No MC / leave records here"}
+									</p>
+								) : (
+									leaveList.map((req) => (
+										<button
+											key={req.id}
+											type="button"
+											className={cn(
+												"iz-approvals-list-item",
+												selectedLeaveId === req.id && "on",
+											)}
+											onClick={() => setSelectedLeaveId(req.id)}
+										>
+											<ApprovalsAvatar
+												name={req.prName ?? "PR"}
+												id={req.id}
+												photo={prPhotoById(req.prId, req.prName)}
+												size="sm"
+											/>
+											<div className="min-w-0 flex-1">
+												<span className="name">{req.prName ?? "PR"}</span>
+												<span className="sub">
+													{leaveOutletName(req)} · {req.shiftDate ?? "—"}
 												</span>
-											</span>
-										</div>
-									</button>
-								))
-							)
+												<span className="badges">
+													<span
+														className={cn(
+															"iz-approvals-verify-badge",
+															req.leaveStatus === "approved"
+																? "ok"
+																: req.leaveStatus === "rejected"
+																	? "bad"
+																	: "gallery",
+														)}
+													>
+														{req.leaveStatus === "approved"
+															? "Approved"
+															: req.leaveStatus === "rejected"
+																? "Rejected"
+																: "Awaiting decision"}
+													</span>
+													{req.leaveDecidedAt ? (
+														<span className="iz-tiny iz-muted">
+															{new Date(req.leaveDecidedAt).toLocaleDateString(
+																undefined,
+																{ day: "2-digit", month: "short" },
+															)}
+														</span>
+													) : null}
+												</span>
+											</div>
+										</button>
+									))
+								)}
+							</>
 						) : cutlostRequests.length === 0 ? (
 							<p className="iz-tiny iz-muted px-1 py-4 text-center">
 								No cutlost requests

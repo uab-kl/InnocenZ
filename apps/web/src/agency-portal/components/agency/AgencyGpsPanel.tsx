@@ -1,4 +1,5 @@
 import { GpsRoadMap } from "@agency-portal/components/agency/GpsRoadMap";
+import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import { IzCard, IzPill } from "@agency-portal/components/iz/ui";
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import type {
@@ -165,9 +166,11 @@ export function AgencyGpsPanel({
 													)}
 												>
 													<div className="iz-roster-gps-row-top">
-														<span className="iz-roster-gps-avatar">
-															{row.prName.trim()[0]}
-														</span>
+														<PrFaceBubble
+															name={row.prName}
+															photo={row.prPhoto}
+															className="iz-roster-gps-avatar"
+														/>
 														<div className="min-w-0 flex-1">
 															<div className="iz-roster-gps-row-head">
 																<span className="iz-roster-gps-row-name">

@@ -1,3 +1,4 @@
+import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import type {
 	GeoCoord,
 	GpsMapBounds,
@@ -37,26 +38,27 @@ function OutletMarker({ label }: { label: string }) {
 
 function PrMarker({
 	name,
+	photo,
 	inRange,
 	selected,
 	enRoute,
 }: {
 	name: string;
+	photo?: string | null;
 	inRange: boolean;
 	selected: boolean;
 	enRoute: boolean;
 }) {
-	const initial = name.trim()[0]?.toUpperCase() ?? "?";
 	return (
 		<div
 			className={`iz-gmaps-marker iz-gmaps-marker-pr${selected ? " selected" : ""}${enRoute ? " warn" : inRange ? "" : " warn"}`}
 			title={name}
 		>
-			<span
+			<PrFaceBubble
+				name={name}
+				photo={photo}
 				className={`iz-gmaps-pr-dot${inRange && !enRoute ? " in-range" : ""}`}
-			>
-				{initial}
-			</span>
+			/>
 			{selected && (
 				<span className="iz-gmaps-marker-label iz-gmaps-marker-label-pr">
 					{name}
@@ -341,6 +343,7 @@ export function GpsRoadMap({
 						>
 							<PrMarker
 								name={row.prName}
+								photo={row.prPhoto}
 								inRange={row.inRange}
 								selected={isSelected}
 								enRoute={row.status === "en-route"}
