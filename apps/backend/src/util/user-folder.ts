@@ -58,6 +58,18 @@ function idPart(userId: string): string {
 }
 
 /**
+ * The same uuid head, for named folders outside `user/` (org logos).
+ *
+ * Exported rather than copied so both conventions move together if ID_CHARS
+ * ever changes — a folder whose id length disagreed with the one ownership is
+ * checked against is the kind of drift that surfaces months later as a missing
+ * photo.
+ */
+export function idHead(id: string): string {
+  return idPart(id);
+}
+
+/**
  * `pr/vicky-93ea08b0` — TWO segments, so the bucket has one folder per role
  * and `user/pr/` contains only PRs.
  */

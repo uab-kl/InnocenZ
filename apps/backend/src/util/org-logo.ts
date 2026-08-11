@@ -1,9 +1,24 @@
 /**
  * Organisation logo upload (outlet / agency signup + Settings).
  *
- * R2 key shapes (flat id folders, same style as user/{id}/…):
- *   agency → agency/{id}/logo/{filename}
- *   outlet → outlet/{id}/logo/{filename}
+ * R2 key shapes — NAMED folders, the same convention `user/` already uses:
+ *   agency → agency/atlas-agency-c30fcd15/logo/{filename}
+ *   outlet → outlet/emhub-testing-31ffefb5/logo/{filename}
+ *
+ * These were bare uuids, so the Cloudflare dashboard listed three folders
+ * called `31ffefb5-21e3-…` and nothing said which venue was which. The org
+ * name was ALREADY being passed in and thrown away ("kept for call-site
+ * compatibility; not used in the R2 key") — every caller supplied it, nothing
+ * spent it.
+ *
+ * WHY THE ID SUFFIX STAYS: same reason as `user-folder.ts`. Two outlets may be
+ * named "Emhub Testing", and a name-only folder would merge them into one
+ * prefix. The name is decoration and may change; the id may not.
+ *
+ * OLD KEYS KEEP WORKING and are deliberately NOT migrated. `logo_image` stores
+ * the FULL key, so an existing row still points at its existing object — the
+ * bucket simply holds both shapes until a logo is re-uploaded. Nothing derives
+ * the org id back out of a key, so the shape is free to change.
  *
  * Stores the **object key** in `agency.logo_image` / `outlet.logo_image`.
  * Clients resolve display as `R2_PUBLIC_URL + '/' + key`.
@@ -11,6 +26,7 @@
 import path from 'node:path';
 import { sanitizePathSegment } from '@/util/profile-image';
 import { r2Configured, r2PutObject } from '@/util/r2';
+import { idHead, slugifyUsername } from '@/util/user-folder';
 
 export type OrgLogoKind = 'agency' | 'outlet';
 
@@ -27,14 +43,26 @@ const CONTENT_TYPE_BY_EXT: Record<string, string> = {
 /** Max decoded payload (~5 MB) — matches the web signup client check. */
 const MAX_BYTES = 5 * 1024 * 1024;
 
+/**
+ * `atlas-agency-c30fcd15` — readable, and still unique per org.
+ *
+ * Falls back to the FULL uuid when the org has no usable name, which is a
+ * valid key and matches what every existing row already holds.
+ */
+export function orgFolder(orgId: string, orgName: string | null | undefined): string {
+  const slug = slugifyUsername(orgName);
+  return slug ? `${slug}-${idHead(orgId)}` : orgId;
+}
+
 export function orgLogoObjectKey(
   kind: OrgLogoKind,
   orgId: string,
+  orgName: string | null | undefined,
   filename: string,
 ): string {
   const safeBase = sanitizePathSegment(filename.replace(/\.[^.]+$/, '')) || 'logo';
   const ext = path.extname(filename).toLowerCase() || '.jpg';
-  return `${kind}/${orgId}/logo/${safeBase}${ext}`;
+  return `${kind}/${orgFolder(orgId, orgName)}/logo/${safeBase}${ext}`;
 }
 
 function extFromFileName(fileName: string): string {
@@ -72,7 +100,7 @@ export function decodeLogoBase64(raw: string): Buffer {
 export async function saveOrgLogoFromBase64(input: {
   kind: OrgLogoKind;
   orgId: string;
-  /** Kept for call-site compatibility; not used in the R2 key. */
+  /** Names the folder. Every caller already passed it; it used to be dropped. */
   orgName?: string;
   fileName: string;
   contentType?: string;
@@ -105,6 +133,6 @@ export async function saveOrgLogoFromBase64(input: {
 
   // Unique name so a re-upload never serves a cached previous logo.
   const filename = `logo-${Date.now()}${ext}`;
-  const key = orgLogoObjectKey(input.kind, input.orgId, filename);
+  const key = orgLogoObjectKey(input.kind, input.orgId, input.orgName, filename);
   return r2PutObject({ key, body, contentType });
 }
