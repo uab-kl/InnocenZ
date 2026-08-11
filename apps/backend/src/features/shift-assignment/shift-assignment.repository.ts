@@ -275,6 +275,16 @@ export class ShiftAssignmentRepositoryClass {
           // already knows this agency worked for it.
           agencyName: AgencyTable.name,
           shiftDate: ShiftTable.shiftDate,
+          /*
+           * The shift's own window ("22:00 — 04:00"). Every other query in this
+           * file already selects it; this list was the one that did not, so the
+           * agency's MC/leave queue had a date but no time — and its detail
+           * panel printed the VENUE beside a clock icon for want of anything
+           * better to put there.
+           */
+          slot: ShiftTable.slot,
+          eventName: ShiftTable.eventName,
+          eventKind: ShiftTable.eventKind,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
@@ -294,6 +304,9 @@ export class ShiftAssignmentRepositoryClass {
         outletName: row.outletName,
         agencyName: row.agencyName,
         shiftDate: row.shiftDate,
+        slot: row.slot,
+        eventName: row.eventName,
+        eventKind: row.eventKind,
       }));
 
       return { assignments, totalCount };

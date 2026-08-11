@@ -78,6 +78,16 @@ export interface ShiftAssignment {
 	 */
 	agencyName?: string | null;
 	shiftDate?: string;
+	/**
+	 * The shift's own window — "22:00 — 04:00". LIST endpoint only, like the
+	 * joins above. Null on a shift with no slot recorded; absent entirely from a
+	 * backend that has not been restarted since this was added.
+	 */
+	slot?: string | null;
+	/** The outlet's name for the night, joined from the shift. */
+	eventName?: string | null;
+	/** `shift.event_kind` — 'normal' | 'special'. Never null in the database. */
+	eventKind?: string | null;
 }
 
 export interface ShiftAssignmentsQueryParams {

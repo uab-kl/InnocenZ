@@ -13747,6 +13747,47 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-muted);
 }
 
+/*
+ * The MC/leave sub-filter — Current / Approved / Rejected / All.
+ *
+ * `.iz-chip` sets font-size 15px and wins over `iz-tiny` on source order, so
+ * these rendered as large as primary buttons and read as four actions rather
+ * than one filter under the tab that owns them. Scoped here rather than by
+ * reordering `.iz-chip`, which every other screen depends on.
+ */
+.iz-approvals-subfilter .iz-chip {
+	padding: 4px 9px;
+	border-radius: 8px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.3px;
+}
+
+/* The event name leads the Shift card — it is the one line that says WHICH
+   night this is, so it reads as a heading rather than another muted detail. */
+.iz-approvals-info-line--lead {
+	flex-wrap: wrap;
+	margin-top: 2px;
+	font-family: "Sora", sans-serif;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--iz-text, #f0e8ff);
+}
+
+/* Champagne, the same tag the PR app puts on its own shift cards, so one
+   shift does not look like two different things across the two apps. */
+.iz-approvals-event-tag {
+	font-family: "Sora", sans-serif;
+	font-size: 9px;
+	font-weight: 800;
+	letter-spacing: 0.4px;
+	color: #e8c27a;
+	border: 1px solid rgba(232, 194, 122, 0.45);
+	background: rgba(232, 194, 122, 0.1);
+	border-radius: 999px;
+	padding: 1px 6px;
+}
+
 .iz-approvals-docs {
 	margin-top: 4px;
 }
