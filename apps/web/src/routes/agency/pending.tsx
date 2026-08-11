@@ -39,6 +39,7 @@ import {
 	Mail,
 	Phone,
 	Sparkles,
+	Store,
 	TrendingDown,
 	UserMinus,
 	UserPlus,
@@ -175,6 +176,43 @@ function pendingPrPhoto(signup: PendingPR) {
 		signup.portfolioPhotos?.find(Boolean) ??
 		null
 	);
+}
+
+/**
+ * "Mon · 10 Aug 2026" — the weekday spelled out beside the date.
+ *
+ * Built from the date PARTS, never `new Date(iso)`: a bare `YYYY-MM-DD` parses
+ * as UTC midnight, which in Asia/Kuala_Lumpur renders as the PREVIOUS day. An
+ * MC request for the 10th showing as the 9th is the kind of error an agency
+ * acts on before anyone notices.
+ */
+function leaveDayLabel(iso: string | null | undefined): string {
+	if (!iso) return "—";
+	const [y, m, d] = iso.split("-").map(Number);
+	if (!y || !m || !d) return iso;
+	const wd = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][
+		new Date(Date.UTC(y, m - 1, d)).getUTCDay()
+	];
+	const mo = [
+		"Jan",
+		"Feb",
+		"Mar",
+		"Apr",
+		"May",
+		"Jun",
+		"Jul",
+		"Aug",
+		"Sep",
+		"Oct",
+		"Nov",
+		"Dec",
+	][m - 1];
+	return `${wd} · ${d} ${mo} ${y}`;
+}
+
+/** "Special event" / "Normal shift" — the outlet's toggle, worded as the PR app words it. */
+function leaveEventKindLabel(kind: string | null | undefined): string {
+	return kind === "special" ? "Special event" : "Normal shift";
 }
 
 function pendingFloorNickname(signup: PendingPR) {
@@ -1162,12 +1200,32 @@ function LeaveDetailPanel({
 				</div>
 				<div className="iz-approvals-info-card">
 					<h3 className="iz-approvals-info-title">Shift</h3>
+					{/*
+					 * The night the agency is deciding about: which event, when it runs,
+					 * and where. The venue used to sit behind the CLOCK icon — a place
+					 * labelled as a time — because the list endpoint was the one query in
+					 * the file that never selected `slot`, so there was no time to show.
+					 */}
+					{req.eventName?.trim() && (
+						<p className="iz-approvals-info-line iz-approvals-info-line--lead">
+							{req.eventName.trim()}
+							<span className="iz-approvals-event-tag">
+								{leaveEventKindLabel(req.eventKind)}
+							</span>
+						</p>
+					)}
 					<p className="iz-approvals-info-line">
 						<Calendar className="h-3.5 w-3.5 shrink-0" />
-						{req.shiftDate ?? "—"}
+						{leaveDayLabel(req.shiftDate)}
 					</p>
 					<p className="iz-approvals-info-line">
 						<Clock className="h-3.5 w-3.5 shrink-0" />
+						{/* Null when the shift records no window — said plainly rather than
+						    left blank, which reads as "still loading". */}
+						{req.slot?.trim() || "Shift time not recorded"}
+					</p>
+					<p className="iz-approvals-info-line">
+						<Store className="h-3.5 w-3.5 shrink-0" />
 						{outletName}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-2">
@@ -1239,6 +1297,20 @@ function AgencyPending() {
 		backend,
 		cutlost: liveCutlost,
 	} = queue;
+
+	/*
+	 * Every filter carries its own count. Two of the four had none, so an empty
+	 * result was indistinguishable from an unvisited one without clicking —
+	 * and "MC/Leaves (0)" sitting above "All (2)" reads as a contradiction
+	 * until you know the TAB counts work-to-do while the sub-filter counts the
+	 * record.
+	 */
+	const approvedCount = leaveHistory.filter(
+		(r) => r.leaveStatus === "approved",
+	).length;
+	const rejectedCount = leaveHistory.filter(
+		(r) => r.leaveStatus === "rejected",
+	).length;
 
 	/**
 	 * Which MC/leave rows the list shows. "pending" is the work queue (the
@@ -1471,12 +1543,12 @@ function AgencyPending() {
 							<>
 								{/* Current vs history. Counts come from the two queries, so
 								    "Pending" is work-to-do and the rest is the record. */}
-								<div className="mb-2 flex flex-wrap gap-1">
+								<div className="iz-approvals-subfilter mb-2 flex flex-wrap gap-1">
 									{(
 										[
 											["pending", `Current (${leaveRequests.length})`],
-											["approved", "Approved"],
-											["rejected", "Rejected"],
+											["approved", `Approved (${approvedCount})`],
+											["rejected", `Rejected (${rejectedCount})`],
 											[
 												"all",
 												`All (${leaveRequests.length + leaveHistory.length})`,
