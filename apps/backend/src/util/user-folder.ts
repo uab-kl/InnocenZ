@@ -1,11 +1,13 @@
 /**
- * The per-user folder in R2: a role folder plus a named folder, rather than a
- * bare uuid, so the bucket is readable in the Cloudflare dashboard and
- * `user/pr/` holds nothing but PRs.
+ * The per-user folder in R2: ONE named folder rather than a bare uuid, so the
+ * bucket is readable in the Cloudflare dashboard.
  *
- *   user/pr/vicky-93ea08b0/receipts/drinks/scan-….jpg
- *   user/agency/dato-lim-wei-khoon-96cb6034/profile/avatar-….png
- *   user/admin/uab-innocenz-admin-91e1a150/profile/avatar-….png
+ *   user/vicky-pr-93ea08b0/receipts/drinks/scan-….jpg
+ *   user/atlas-agency-owner-96cb6034/profile/avatar-….png
+ *   user/innocenz-admin-86cef074/profile/avatar-….png
+ *
+ * Who they belong to in front, what they do behind, the id last — see
+ * `composeUserFolder`.
  *
  * WHY THE ID SUFFIX IS NOT OPTIONAL: `user.username` has no unique constraint
  * and duplicates already exist in this database (two `jk`, two `Ng Jun Yu`).
@@ -70,19 +72,26 @@ export function idHead(id: string): string {
 }
 
 /**
- * The org they work for in FRONT, what they do BEHIND, then who they are.
+ * ONE folder per user: who they belong to in FRONT, what they do BEHIND, and
+ * the id last.
  *
- *   user/atlas-agency/finance/dato-lim-wei-khoon-96cb6034/…
- *   user/emhub-testing/owner/emhub-testing-owner-a1b2c3d4/…
- *   user/pr/vicky-93ea08b0/…
+ *   user/atlas-agency-owner-96cb6034/…
+ *   user/emhub-testing-owner-d83bcc1d/…
+ *   user/vicky-pr-93ea08b0/…
+ *   user/innocenz-admin-86cef074/…
  *
- * A PR keeps the two-segment shape: they belong to no single organisation —
- * they can be tied to two agencies at once — so there is no org folder to put
- * them under, and `pr` IS their lane.
+ * FRONT is the organisation they work for — the agency or the outlet. A PR
+ * belongs to no single organisation (they can be tied to two agencies at
+ * once), so their own nickname stands in front instead, and `pr` is what goes
+ * behind it.
  *
- * `orgName` missing (an agency/outlet user with no tenancy row yet) falls back
- * to the portal lane, i.e. the old `agency/…` shape. `subRole` missing falls
- * back to omitting that segment rather than inventing "owner".
+ * THE ID IS LAST AND IS NOT OPTIONAL. `user.username` has no unique constraint
+ * and duplicates already exist in this database (two `jk`, two `Ng Jun Yu`) —
+ * and now that the front is the ORG, an agency's two finance staff would
+ * otherwise both be `atlas-agency-finance`, one prefix holding two people,
+ * where one user's proof-photo cleanup deletes the other's evidence. The uuid
+ * head is also what ownership is actually checked against; the org name and
+ * the role are decoration and may change, the id may not.
  */
 export function composeUserFolder(
   userId: string,
@@ -92,22 +101,20 @@ export function composeUserFolder(
   subRole?: string | null,
 ): string {
   const lane = slugifyUsername(role) || 'pr';
-  const name = slugifyUsername(username);
-  const leaf = name ? `${name}-${idPart(userId)}` : idPart(userId);
+  // Org first; a PR (and an admin) has none, so their own name leads.
+  const front = slugifyUsername(orgName) || slugifyUsername(username) || lane;
+  // The specific job when known, else the portal lane — a PR's lane IS `pr`.
+  const job = slugifyUsername(subRole) || lane;
+  const parts = [front, job, idPart(userId)];
 
-  // PRs are org-less by design — see above.
-  if (lane === 'pr') return `pr/${leaf}`;
-
-  const org = slugifyUsername(orgName);
-  const job = slugifyUsername(subRole);
-  const parts = [org || lane, job, leaf].filter(Boolean);
   /*
-   * Never repeat a segment. An admin belongs to no organisation, so the lane
-   * stands in for the org — and `role.role_name` for an admin is also "admin",
-   * which produced `user/admin/admin/innocenz-admin-86cef074/`. One `admin` is
-   * the lane, the other says nothing.
+   * Never say the same word twice. The admin's username already ends in
+   * "admin" and `role.role_name` is also "admin", which would read
+   * `innocenz-admin-admin-86cef074`.
    */
-  return parts.filter((p, i) => p !== parts[i - 1]).join('/');
+  return parts
+    .filter((p, i) => i === 0 || !parts.slice(0, i).join('-').endsWith(p))
+    .join('-');
 }
 
 /** Call after creating or renaming a user so the next key uses the new name. */
@@ -129,7 +136,7 @@ export function userFolder(userId: string): string {
   return cache.get(userId) ?? userId;
 }
 
-/** `user/pr-vicky-93ea08b0/` — the prefix every key for this user starts with. */
+/** `user/vicky-pr-93ea08b0/` — the prefix every key for this user starts with. */
 export function userFolderPrefix(userId: string): string {
   return `user/${userFolder(userId)}/`;
 }
@@ -152,16 +159,18 @@ export function isOwnedUserKey(key: string, userId: string): boolean {
    * this rejects is a photo its own owner loses: dropped on carry-forward and
    * skipped by cleanup.
    *
-   *   1  user/<full-uuid>/…                          owner in segment 1
-   *   2  user/pr/<slug>-<id8>/…                      owner in segment 2
-   *   3  user/<org>/<sub-role>/<slug>-<id8>/…        owner in segment 3
+   *   1  user/<full-uuid>/…                    owner in segment 1  (legacy)
+   *   2  user/pr/<slug>-<id8>/…                owner in segment 2  (interim)
+   *   3  user/<org>-<role>-<id8>/…             owner in segment 1  (current)
    *
-   * Scanning three segments rather than two is what keeps shape 3 owned. It
-   * cannot produce a false positive: only the id8 tail is ever compared, and
-   * an org or sub-role segment is a slug with no `-<id8>` suffix. Matching on
-   * the id ALONE — never the name, the org or the role — is also what lets
-   * someone be renamed, promoted or moved between agencies without losing
-   * access to their own evidence.
+   * Shape 2 existed only briefly but objects written under it are still in the
+   * bucket until the migration moves them, so it is still matched. Scanning
+   * two segments covers all three; it cannot produce a false positive, because
+   * only the id8 tail is ever compared and no org or role slug carries one.
+   *
+   * Matching on the id ALONE — never the name, the org or the role — is what
+   * lets someone be renamed, promoted, or moved between agencies without
+   * losing access to their own evidence.
    */
   for (const segment of parts.slice(0, 3)) {
     if (segment === userId || segment === id || segment.endsWith(`-${id}`)) return true;

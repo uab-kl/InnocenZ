@@ -32,6 +32,23 @@
  * the moment either changed, and the bucket would end up with three
  * conventions instead of one.
  *
+ * ⚠️ RUN THIS BEFORE RESTARTING THE BACKEND, NOT AFTER.
+ *
+ * Payment-voucher PDFs are the one asset whose key NO database column holds —
+ * `voucherPdfKey()` recomputes it from `userFolder(prUserId)` on every request
+ * (see payment-voucher-archive.ts: "The key is DETERMINISTIC"). So they need no
+ * repointing, but they are order-sensitive in a way the stored refs are not:
+ *
+ *   migrate → restart   brief window where a running server still computes the
+ *                       OLD key for a file already moved: a 404 on a PV PDF
+ *                       download, closed by the restart.
+ *   restart → migrate   the server computes the NEW key while the file is still
+ *                       at the old one — the same 404, but it lasts until the
+ *                       migration finishes rather than until a restart.
+ *
+ * Either way nothing is lost and no reference breaks permanently. Migrating
+ * first keeps the window to seconds.
+ *
  * Credentials are read from the environment at runtime, exactly as the server
  * reads them. Nothing is written to disk.
  */
