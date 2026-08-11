@@ -106,6 +106,10 @@ export type AppTranslations = {
     savingComcard: string;
     noComcard: string;
     savedToProfile: string;
+    /** Shown IN the comcard frame when a saved comcard will not load on this device. */
+    comcardUnavailable: string;
+    /** The caption under the button in that same case — never "Saved to profile". */
+    comcardUnavailableHint: string;
     comcardHint: string;
   };
   security: {
@@ -294,6 +298,9 @@ export const translations: Record<AppLocale, AppTranslations> = {
       savingComcard: 'Saving…',
       noComcard: 'No comcard yet — add photos to your gallery below to build one.',
       savedToProfile: 'Saved to profile',
+      comcardUnavailable: 'Saved — not loading here',
+      comcardUnavailableHint:
+        'Saved to your profile. The image is not loading on this device.',
       comcardHint: 'Save to share with agencies and outlets.',
     },
     security: {
@@ -489,6 +496,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       savingComcard: '保存中…',
       noComcard: '暂无名片卡 — 请在下方相册添加照片以生成。',
       savedToProfile: '已保存到资料',
+      comcardUnavailable: '已保存 — 此处无法加载',
+      comcardUnavailableHint: '已保存到资料。图片在本设备上无法加载。',
       comcardHint: '保存后可分享给经纪公司与门店。',
     },
     security: {
@@ -684,6 +693,8 @@ export const translations: Record<AppLocale, AppTranslations> = {
       savingComcard: '儲存中…',
       noComcard: '暫無名片卡 — 請在下方相簿新增照片以產生。',
       savedToProfile: '已儲存到資料',
+      comcardUnavailable: '已儲存 — 此處無法載入',
+      comcardUnavailableHint: '已儲存到資料。圖片在本裝置上無法載入。',
       comcardHint: '儲存後可分享給經紀公司與門店。',
     },
     security: {

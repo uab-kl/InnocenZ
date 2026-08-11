@@ -46,8 +46,33 @@ function withIosPodProperties(config) {
   });
 }
 
+/**
+ * Public R2 base, carried into the binary as config rather than only as an
+ * inlined `EXPO_PUBLIC_` constant.
+ *
+ * `r2PublicBase()` in lib/api.ts already reads `expoConfig.extra.r2PublicUrl`
+ * as its third fallback — nothing ever set it, so that branch could not fire.
+ * Without a base, `assetUrl` returns null for every `user/…` object key and
+ * every stored photo resolves to nothing: the comcard, the avatar, the
+ * portfolio. Setting it here means a stale Metro cache or a build whose
+ * EXPO_PUBLIC inlining did not pick the var up still resolves images, instead
+ * of failing silently and looking like the photos were never saved.
+ */
+const R2_PUBLIC_URL = (
+  process.env.EXPO_PUBLIC_R2_PUBLIC_URL ??
+  process.env.R2_PUBLIC_URL ??
+  ''
+)
+  .trim()
+  .replace(/\/$/, '');
+
 module.exports = ({ config }) => ({
   ...config,
+  extra: {
+    // Spread first: app.json's extra carries the EAS projectId.
+    ...config.extra,
+    ...(R2_PUBLIC_URL ? { r2PublicUrl: R2_PUBLIC_URL } : {}),
+  },
   plugins: [
     ...(config.plugins ?? []),
     withIosPodProperties,
