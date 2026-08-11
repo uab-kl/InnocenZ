@@ -141,10 +141,28 @@ async function orgFolders(kind: 'agency' | 'outlet'): Promise<Map<string, string
 function planOrgKey(key: string, folders: Map<string, string>): string | null {
   const [kind, folder, ...rest] = key.split('/');
   if (!folder || rest.length === 0) return null;
-  // The current folder is either a full uuid (old) or `<slug>-<id8>` (new).
+  /*
+   * THREE shapes can be in the bucket at once, and all must be recognised:
+   *
+   *   agency/<full-uuid>/…                    original
+   *   agency/<slug>-<id8>/…                   the first naming pass
+   *   agency/<slug>-<full-uuid>/…             current
+   *
+   * Matching only the first and the last is what left the already-renamed
+   * logos out of an earlier plan: they were neither a bare uuid nor yet the
+   * target, so they were written off as orphans and silently skipped.
+   */
+  const head = folder.replace(/-/g, '');
   for (const [id, target] of folders) {
-    const isThis = folder === id || folder === target;
-    if (!isThis) continue;
+    const id8 = id.replace(/-/g, '').slice(0, 8);
+    const owns =
+      folder === id ||
+      folder === target ||
+      folder.endsWith(`-${id}`) ||
+      // `-<id8>` compared on the de-hyphenated tail so a slug ending in hex
+      // cannot collide by accident.
+      head.endsWith(id8);
+    if (!owns) continue;
     if (folder === target) return null; // already correct
     return [kind, target, ...rest].join('/');
   }

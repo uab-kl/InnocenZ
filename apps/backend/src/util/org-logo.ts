@@ -26,7 +26,7 @@
 import path from 'node:path';
 import { sanitizePathSegment } from '@/util/profile-image';
 import { r2Configured, r2PutObject } from '@/util/r2';
-import { idHead, slugifyUsername } from '@/util/user-folder';
+import { slugifyUsername } from '@/util/user-folder';
 
 export type OrgLogoKind = 'agency' | 'outlet';
 
@@ -51,7 +51,9 @@ const MAX_BYTES = 5 * 1024 * 1024;
  */
 export function orgFolder(orgId: string, orgName: string | null | undefined): string {
   const slug = slugifyUsername(orgName);
-  return slug ? `${slug}-${idHead(orgId)}` : orgId;
+  // FULL uuid behind the name, matching the user folders — the folder carries
+  // the whole identity, so a key traces back to its row without a lookup.
+  return slug ? `${slug}-${orgId}` : orgId;
 }
 
 export function orgLogoObjectKey(

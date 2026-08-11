@@ -59,17 +59,6 @@ function idPart(userId: string): string {
   return userId.replace(/-/g, '').slice(0, ID_CHARS);
 }
 
-/**
- * The same uuid head, for named folders outside `user/` (org logos).
- *
- * Exported rather than copied so both conventions move together if ID_CHARS
- * ever changes — a folder whose id length disagreed with the one ownership is
- * checked against is the kind of drift that surfaces months later as a missing
- * photo.
- */
-export function idHead(id: string): string {
-  return idPart(id);
-}
 
 /**
  * ONE folder per user: who they belong to in FRONT, what they do BEHIND, and
@@ -105,16 +94,26 @@ export function composeUserFolder(
   const front = slugifyUsername(orgName) || slugifyUsername(username) || lane;
   // The specific job when known, else the portal lane — a PR's lane IS `pr`.
   const job = slugifyUsername(subRole) || lane;
-  const parts = [front, job, idPart(userId)];
+
+  /*
+   * The job is dropped when it only repeats the lane we are already filed
+   * under: inside `pr/` every folder would end in `-pr`, and inside `admin/`
+   * in `-admin`. It earns its place only when it says something the lane does
+   * not — `owner`, `finance`, `operations_head`.
+   */
+  // The FULL uuid, not the 8-char head: the folder carries the whole identity
+  // so a key can be traced back to its row without a lookup.
+  const words = job === lane ? [front, userId] : [front, job, userId];
 
   /*
    * Never say the same word twice. The admin's username already ends in
-   * "admin" and `role.role_name` is also "admin", which would read
-   * `innocenz-admin-admin-86cef074`.
+   * "admin", which would otherwise read `admin/innocenz-admin-admin-86cef074`.
    */
-  return parts
-    .filter((p, i) => i === 0 || !parts.slice(0, i).join('-').endsWith(p))
+  const leaf = words
+    .filter((p, i) => i === 0 || !words.slice(0, i).join('-').endsWith(p))
     .join('-');
+
+  return `${lane}/${leaf}`;
 }
 
 /** Call after creating or renaming a user so the next key uses the new name. */
@@ -173,7 +172,17 @@ export function isOwnedUserKey(key: string, userId: string): boolean {
    * losing access to their own evidence.
    */
   for (const segment of parts.slice(0, 3)) {
-    if (segment === userId || segment === id || segment.endsWith(`-${id}`)) return true;
+    if (
+      segment === userId ||
+      segment === id ||
+      // Current shape: `<org>-<role>-<full-uuid>`.
+      segment.endsWith(`-${userId}`) ||
+      // Interim shape: `<name>-<id8>`. Objects written under it are still in
+      // the bucket until the migration moves them, so it must keep matching.
+      segment.endsWith(`-${id}`)
+    ) {
+      return true;
+    }
   }
   return false;
 }
