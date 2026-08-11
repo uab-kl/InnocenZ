@@ -2,6 +2,7 @@ import {
 	comcardPreviewFromSlot,
 	PrComcardIdentity,
 } from "@agency-portal/components/agency/PrComcardIdentity";
+import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import { RosterAmountButton } from "@agency-portal/components/agency/RosterAmountButton";
 import {
 	type RosterEarningsSheetKind,
@@ -9,6 +10,7 @@ import {
 } from "@agency-portal/components/agency/RosterShiftEarningsSheets";
 import { formatRM, IzPill } from "@agency-portal/components/iz/ui";
 import { PortalClickableTableRow } from "@agency-portal/components/portal/PortalClickableTableRow";
+import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -422,6 +424,8 @@ export function LiveWorkforceList({
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const shifts = useStore((s) => s.shifts);
 	const prs = useStore((s) => s.prs);
+	// Backend roster on a real login, demo store otherwise — see use-pr-photo.ts.
+	const prPhotoById = usePrPhotoById();
 	const syncLivePrCheckInToRoster = useStore(
 		(s) => s.syncLivePrCheckInToRoster,
 	);
@@ -450,6 +454,8 @@ export function LiveWorkforceList({
 		const seen = new Set<string>();
 		const list: {
 			id: string;
+			/** The PR, not the slot — `id` is the roster slot and cannot join a roster. */
+			prId: string;
 			prName: string;
 			status: LiveWorkforceEntry["status"] | "scheduled";
 		}[] = [];
@@ -467,6 +473,7 @@ export function LiveWorkforceList({
 						: ("scheduled" as const);
 			list.push({
 				id: slot?.id ?? prId,
+				prId,
 				prName: formatPrDisplayName(
 					prId,
 					resolveRosterPrName(prId, slot?.prName ?? pr?.name, agencyPRs),
@@ -491,14 +498,17 @@ export function LiveWorkforceList({
 			agencyPRs,
 		)
 			.filter((w) => outletMatches(w.outlet, outletName))
-			.map((w) => ({
-				id: w.id,
-				prName: formatPrDisplayName(
-					agencyRoster.find((s) => s.id === w.id)?.prId ?? w.id,
-					w.prName,
-				),
-				status: w.status,
-			}));
+			.map((w) => {
+				// Already looked up for the display name — kept, so the row can
+				// carry a face as well as a name rather than a coloured letter.
+				const prId = agencyRoster.find((s) => s.id === w.id)?.prId ?? w.id;
+				return {
+					id: w.id,
+					prId,
+					prName: formatPrDisplayName(prId, w.prName),
+					status: w.status,
+				};
+			});
 	}, [
 		tonightShift?.prs,
 		rosterTonight,
@@ -526,7 +536,11 @@ export function LiveWorkforceList({
 			<ul className="iz-portal-roster-list">
 				{rows.map((w) => (
 					<li key={w.id} className="iz-portal-roster-row">
-						<span className="iz-portal-table-av">{w.prName.trim()[0]}</span>
+						<PrFaceBubble
+							name={w.prName}
+							photo={prPhotoById(w.prId, w.prName)}
+							className="iz-portal-table-av"
+						/>
 						<span className="min-w-0 flex-1 truncate iz-portal-table-name">
 							{w.prName}
 						</span>

@@ -1,7 +1,12 @@
+import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import { formatRM, IzPill } from "@agency-portal/components/iz/ui";
 import { LiveWorkforceTable } from "@agency-portal/components/portal/LiveWorkforceTable";
 import { PortalClickableTableRow } from "@agency-portal/components/portal/PortalClickableTableRow";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
+import {
+	pendingPrPhoto,
+	usePrPhotoById,
+} from "@agency-portal/hooks/use-pr-photo";
 import {
 	ownedByAgency,
 	rosterSlotsForAgency,
@@ -99,6 +104,9 @@ export function AgencyHomeHubTabs({
 	// count — MC/leave included, which this tile used to omit entirely.
 	const approvals = useAgencyApprovalQueue();
 	const { signups, linkRequests, cutlostRequests, leaveRequests } = approvals;
+	// Backend roster, not the demo store — see use-pr-photo.ts. A PV row carries
+	// no prId, so those two match on name; every other tile joins on the id.
+	const prPhotoById = usePrPhotoById();
 	const pendingReview = prPaymentVouchers.filter(
 		(p) => p.status === "PENDING_REVIEW",
 	);
@@ -181,9 +189,11 @@ export function AgencyHomeHubTabs({
 										>
 											<td>
 												<div className="iz-portal-table-pr">
-													<span className="iz-portal-table-av">
-														{p.name.trim()[0]}
-													</span>
+													<PrFaceBubble
+														name={p.name}
+														photo={pendingPrPhoto(p)}
+														className="iz-portal-table-av"
+													/>
 													<span className="iz-portal-table-name">{p.name}</span>
 												</div>
 											</td>
@@ -200,9 +210,11 @@ export function AgencyHomeHubTabs({
 										>
 											<td>
 												<div className="iz-portal-table-pr">
-													<span className="iz-portal-table-av">
-														{l.prName.trim()[0]}
-													</span>
+													<PrFaceBubble
+														name={l.prName}
+														photo={prPhotoById(l.prId, l.prName)}
+														className="iz-portal-table-av"
+													/>
 													<span className="iz-portal-table-name">
 														{l.prName}
 													</span>
@@ -226,9 +238,11 @@ export function AgencyHomeHubTabs({
 											>
 												<td>
 													<div className="iz-portal-table-pr">
-														<span className="iz-portal-table-av">
-															{prName.trim()[0]}
-														</span>
+														<PrFaceBubble
+															name={prName}
+															photo={prPhotoById(req.prId, prName)}
+															className="iz-portal-table-av"
+														/>
 														<span className="iz-portal-table-name">
 															{prName}
 														</span>
@@ -311,9 +325,11 @@ export function AgencyHomeHubTabs({
 										>
 											<td>
 												<div className="iz-portal-table-pr">
-													<span className="iz-portal-table-av">
-														{pv.prName.trim()[0]}
-													</span>
+													<PrFaceBubble
+														name={pv.prName}
+														photo={prPhotoById(null, pv.prName)}
+														className="iz-portal-table-av"
+													/>
 													<span className="iz-portal-table-name">
 														{pv.prName}
 													</span>
@@ -376,9 +392,11 @@ export function AgencyHomeHubTabs({
 										>
 											<td>
 												<div className="iz-portal-table-pr">
-													<span className="iz-portal-table-av">
-														{pv.prName.trim()[0]}
-													</span>
+													<PrFaceBubble
+														name={pv.prName}
+														photo={prPhotoById(null, pv.prName)}
+														className="iz-portal-table-av"
+													/>
 													<span className="iz-portal-table-name">
 														{pv.prName}
 													</span>

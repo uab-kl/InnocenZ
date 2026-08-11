@@ -1,13 +1,9 @@
-import {
-	findAgencyManagedPr,
-	resolveAgencyPrPhoto,
-} from "@agency-portal/lib/agency-demo";
+import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import {
 	GEOFENCE_METERS,
 	type GpsTrackingRow,
 } from "@agency-portal/lib/gps-locations";
-import { useStore } from "@agency-portal/lib/store";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
@@ -92,9 +88,10 @@ export function useAgencyAttendanceFixes(
 	const { logout } = useAuth();
 	const backed = getAgencyIdentity() !== null;
 	// The attendance feed carries prId and prName but no photo. The agency's own
-	// roster already holds the resolved one, so the face costs a lookup rather
-	// than a new backend field.
-	const agencyPRs = useStore((s) => s.agencyPRs);
+	// BACKEND roster already holds the resolved one, so the face costs a lookup
+	// rather than a new backend field — and it must be the backend roster, not
+	// the demo store, which is empty on exactly the sessions this panel serves.
+	const prPhotoById = usePrPhotoById();
 
 	const query = useQuery({
 		queryKey: ["agency", "attendance-fixes", dateIso ?? "today"] as const,
@@ -112,8 +109,7 @@ export function useAgencyAttendanceFixes(
 		const byOutlet = new Map<string, AttendanceOutletGroup>();
 
 		for (const fix of fixes) {
-			const managed = findAgencyManagedPr(agencyPRs, fix.prId, fix.prName);
-			const prPhoto = managed ? resolveAgencyPrPhoto(managed) : null;
+			const prPhoto = prPhotoById(fix.prId, fix.prName);
 			const outlet = fix.outlet.name ?? "Unnamed venue";
 			const radiusM = fix.outlet.radiusM ?? GEOFENCE_METERS;
 			const group = byOutlet.get(outlet) ?? {
@@ -196,5 +192,5 @@ export function useAgencyAttendanceFixes(
 			),
 			hasUnpinnedVenue: groups.some((g) => !g.pinned),
 		};
-	}, [fixes, backed, query.isLoading, agencyPRs]);
+	}, [fixes, backed, query.isLoading, prPhotoById]);
 }

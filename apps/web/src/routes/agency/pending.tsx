@@ -14,12 +14,9 @@ import {
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGalleryPicker";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
+import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
-import {
-	findAgencyManagedPr,
-	nowAgencyDateTime,
-	resolveAgencyPrPhoto,
-} from "@agency-portal/lib/agency-demo";
+import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
@@ -133,30 +130,6 @@ function avatarVariant(id: string) {
 	let hash = 0;
 	for (const c of id) hash = (hash + c.charCodeAt(0)) % AVATAR_VARIANTS.length;
 	return AVATAR_VARIANTS[hash];
-}
-
-/**
- * Look up a PR's own photo by id, for the rows that carry only an id and a name.
- *
- * An MC/leave row is a `shift_assignment` — it has `prId` and `prName` and no
- * photo at all, and an agency-link request is the same shape. The agency's own
- * PR roster is already in the store with the resolved photo on it, so the face
- * is one lookup away rather than a new backend field.
- */
-function usePrPhotoById() {
-	const agencyPRs = useStore((s) => s.agencyPRs);
-	return useMemo(
-		() => (prId: string | null | undefined, prName?: string | null) => {
-			if (!prId && !prName) return null;
-			const pr = findAgencyManagedPr(
-				agencyPRs,
-				prId ?? "",
-				prName ?? undefined,
-			);
-			return pr ? resolveAgencyPrPhoto(pr) : null;
-		},
-		[agencyPRs],
-	);
 }
 
 function ApprovalsAvatar({

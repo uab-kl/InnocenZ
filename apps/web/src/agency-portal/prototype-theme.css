@@ -17806,6 +17806,20 @@ html:has(.iz-pr-app) {
 	box-shadow: inset 0 0 0 1px rgba(183, 157, 245, 0.35);
 }
 
+/* Photo fills the tile; the violet stays as the loading colour and the inset
+   ring survives on top. Initial returns on error — see PrFaceBubble. */
+.iz-portal-table-av.has-photo {
+	overflow: hidden;
+	padding: 0;
+}
+
+.iz-portal-table-av.has-photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
 .iz-portal-table .iz-pill-violet {
 	background: rgba(159, 122, 234, 0.28);
 	color: #dcc8ff;
