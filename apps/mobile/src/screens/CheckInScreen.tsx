@@ -314,12 +314,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // the shift's scheduled end, so these hours are real). Never auto-paid —
   // surfaced below as pending agency approval, outside the payout.
   //
-  // Via overtimeHours rather than subtracting 6 inline: it carries the same
-  // STANDARD_SHIFT_HOURS constant the pay uses, and returns 0 for stamps that
-  // cannot be true (out of order, or longer than a plausible shift) so a
+  // Via overtimeHours rather than subtracting inline: it returns 0 for stamps
+  // that cannot be true (out of order, or longer than a plausible shift) so a
   // clamp that never ran cannot surface a "113.1h" figure to the PR.
+  //
+  // `scheduledMinutes` is passed for the THRESHOLD, not just the rate. Without
+  // it the hours came off a hardcoded six-hour shift while the pay was already
+  // priced on this shift's real window — so a shift booked for eight hours and
+  // worked to its exact end reported two hours of overtime nobody worked, and
+  // one booked for four hid two real ones.
   const otHoursWorked = active?.checkOutAt
-    ? overtimeHours(active.checkInAt, new Date(active.checkOutAt).getTime())
+    ? overtimeHours(
+        active.checkInAt,
+        new Date(active.checkOutAt).getTime(),
+        active.scheduledMinutes,
+      )
     : 0;
   const otPendingAmount = active
     ? overtimePay(
@@ -646,10 +655,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     </Text>
                   </View>
                 </View>
+                {/*
+                  * An ESTIMATE this phone worked out, not a filed claim.
+                  *
+                  * "Pending agency approval" said a request was sitting in
+                  * someone's queue. Nothing is sent — the overtime columns on
+                  * the shift row stay NULL — so a PR who read that would wait
+                  * on an approval that was never going to arrive, and only
+                  * find out when the voucher came without it. Say who
+                  * calculated it and what has to happen next.
+                  */}
                 {otPendingAmount > 0 && (
                   <Text style={styles.otPendingNote}>
-                    Overtime {otHoursWorked.toFixed(1)}h ({formatRM(otPendingAmount)}) — pending
-                    agency approval · not added to payout
+                    Overtime {otHoursWorked.toFixed(1)}h (about {formatRM(otPendingAmount)}) — our
+                    estimate from your stamps · not sent to the agency, not in your payout. Raise
+                    it with them if it should be paid.
                   </Text>
                 )}
                 <ShiftStatusPanel
