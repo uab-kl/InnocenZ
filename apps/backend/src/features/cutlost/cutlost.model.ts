@@ -110,6 +110,8 @@ export type CutlostRequestInsertType = typeof CutlostRequestTable.$inferInsert;
 export type CutlostRequestWithContext = CutlostRequestType & {
   outletId: string;
   outletName: string | null;
+  /** `outlet.logo_image` — the COMPANY logo, not the owner's account avatar. */
+  outletLogo: string | null;
   agencyId: string;
   shiftDate: string;
   slot: string | null;

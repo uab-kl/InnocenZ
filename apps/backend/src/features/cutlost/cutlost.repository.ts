@@ -107,6 +107,11 @@ export class CutlostRepositoryClass {
           request: CutlostRequestTable,
           outletId: ShiftTable.outletId,
           outletName: OutletTable.name,
+          /* The venue's COMPANY logo, read through the join that is already
+             here — not the owner's personal account avatar. Same omission the
+             PR shift cards had: every other outlet column was taken, this one
+             was not, so the agency's worklist could only draw a letter. */
+          outletLogo: OutletTable.logoImage,
           agencyId: ShiftTable.agencyId,
           shiftDate: ShiftTable.shiftDate,
           slot: ShiftTable.slot,
@@ -163,6 +168,7 @@ export class CutlostRepositoryClass {
         ...r.request,
         outletId: r.outletId,
         outletName: r.outletName,
+        outletLogo: r.outletLogo,
         agencyId: r.agencyId,
         shiftDate: r.shiftDate,
         slot: r.slot,

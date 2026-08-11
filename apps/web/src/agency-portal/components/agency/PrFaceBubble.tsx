@@ -3,7 +3,11 @@ import { cn } from "@agency-portal/lib/utils";
 import { useEffect, useState } from "react";
 
 /**
- * A PR's face, with the name's initial as the fallback — one implementation.
+ * A face, with the name's initial as the fallback — one implementation.
+ *
+ * Named for its first job and still mostly used for PRs, but it holds nothing
+ * PR-specific: a venue's logo beside its name is the same problem, and the
+ * agency worklist draws outlets this way too.
  *
  * Several agency surfaces showed a coloured letter where History showed the
  * real photo, so the same person looked like two different records depending

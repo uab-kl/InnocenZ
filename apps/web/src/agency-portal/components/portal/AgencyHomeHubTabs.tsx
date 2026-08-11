@@ -265,9 +265,11 @@ export function AgencyHomeHubTabs({
 										>
 											<td>
 												<div className="iz-portal-table-pr">
-													<span className="iz-portal-table-av">
-														{req.outletName.trim()[0]}
-													</span>
+													<PrFaceBubble
+														name={req.outletName}
+														photo={req.outletLogo}
+														className="iz-portal-table-av"
+													/>
 													<span className="iz-portal-table-name">
 														{req.outletName}
 													</span>
