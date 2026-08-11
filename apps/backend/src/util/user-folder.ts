@@ -100,7 +100,14 @@ export function composeUserFolder(
 
   const org = slugifyUsername(orgName);
   const job = slugifyUsername(subRole);
-  return [org || lane, job, leaf].filter(Boolean).join('/');
+  const parts = [org || lane, job, leaf].filter(Boolean);
+  /*
+   * Never repeat a segment. An admin belongs to no organisation, so the lane
+   * stands in for the org — and `role.role_name` for an admin is also "admin",
+   * which produced `user/admin/admin/innocenz-admin-86cef074/`. One `admin` is
+   * the lane, the other says nothing.
+   */
+  return parts.filter((p, i) => p !== parts[i - 1]).join('/');
 }
 
 /** Call after creating or renaming a user so the next key uses the new name. */
