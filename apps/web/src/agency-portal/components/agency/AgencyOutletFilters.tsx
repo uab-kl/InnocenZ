@@ -1,6 +1,5 @@
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
 import { IzSelect } from "@agency-portal/components/iz/ui";
-import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import {
 	type AgencyOutletFilterState,
 	agencyOutletFiltersActive,
@@ -12,11 +11,21 @@ export function AgencyOutletFilters({
 	filters,
 	onChange,
 	shiftDateIsos,
+	outletNames,
 	inline = false,
 }: {
 	filters: AgencyOutletFilterState;
 	onChange: (patch: Partial<AgencyOutletFilterState>) => void;
 	shiftDateIsos: string[];
+	/**
+	 * The outlets to offer, from the SAME list that renders the cards.
+	 *
+	 * This used to be the hardcoded OUTLET_NAMES demo constant, so a real agency
+	 * login saw "Velvet 23 / Mermate / Bear Lounge / Urban Soul" in the dropdown
+	 * while its actual venues sat in the grid below — picking one filtered
+	 * everything away. Sourcing it from the caller keeps the two in step.
+	 */
+	outletNames: string[];
 	/** Compact pill row — Manage Outlet page layout */
 	inline?: boolean;
 }) {
@@ -32,7 +41,7 @@ export function AgencyOutletFilters({
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
 						<option value="">All outlets</option>
-						{OUTLET_NAMES.map((o) => (
+						{outletNames.map((o) => (
 							<option key={o} value={o}>
 								{o}
 							</option>
@@ -100,7 +109,7 @@ export function AgencyOutletFilters({
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
 						<option value="">All outlets</option>
-						{OUTLET_NAMES.map((o) => (
+						{outletNames.map((o) => (
 							<option key={o} value={o}>
 								{o}
 							</option>

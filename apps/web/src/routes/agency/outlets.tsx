@@ -80,6 +80,14 @@ function AgencyManageOutlets() {
 		[summaries],
 	);
 
+	// The dropdown offers exactly what the grid shows. Derived from `summaries`
+	// rather than a constant so a real agency can never be offered a demo venue
+	// it does not own — picking one filtered the page down to nothing.
+	const outletFilterNames = useMemo(
+		() => [...new Set(summaries.map((s) => s.outlet))].sort(),
+		[summaries],
+	);
+
 	const filtered = useMemo(
 		() => filterAgencyOutletSummaries(summaries, filters),
 		[summaries, filters],
@@ -187,6 +195,7 @@ function AgencyManageOutlets() {
 					filters={filters}
 					onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
 					shiftDateIsos={shiftDateIsos}
+					outletNames={outletFilterNames}
 				/>
 			</IzCard>
 

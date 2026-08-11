@@ -7,7 +7,7 @@ import { OrgScope, isOutletCaller, resolveOrgScope } from '@/util/org-scope';
 import { notify, notifyMany } from '@/features/notification/notify.js';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
-import { PrRepositoryClass } from '@/features/pr/pr.repository';
+import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';

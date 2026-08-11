@@ -785,6 +785,13 @@
       "when": 1788600000000,
       "tag": "0111_user_profile_signature_ink",
       "breakpoints": true
+    },
+    {
+      "idx": 112,
+      "version": "7",
+      "when": 1788700000000,
+      "tag": "0112_shift_assignment_leave_decision",
+      "breakpoints": true
     }
   ]
 }

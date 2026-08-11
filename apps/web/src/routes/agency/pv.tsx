@@ -68,6 +68,7 @@ import {
 	receiptStatusLabel,
 	reconcilePvTotals,
 	resolvePvPayByDue,
+	shiftTodayIso,
 	sortPvsBySales,
 } from "@agency-portal/lib/pr-demo";
 import {
@@ -1193,6 +1194,30 @@ function PvDetail({
 	const financeSigned = Boolean(v.financeHeadSignedAt);
 
 	/**
+	 * A week that has not finished yet is not ready to be closed.
+	 *
+	 * Sending a voucher moves it out of `pending_review`, and `pending_review` is
+	 * the only status the PR can still submit receipts against — so sending
+	 * mid-week silently blocks every receipt they have yet to log for days they
+	 * are still going to work. The backend refuses it outright (409, "…which is
+	 * still running"), so the buttons here would only produce an error message.
+	 *
+	 * Signing is disabled alongside it for the same reason, though the server
+	 * permits it: a signature is the step before sending, and offering it on a
+	 * week that cannot be sent invites exactly the second click this is meant to
+	 * prevent. What actually closes the week is the send, and that is guarded on
+	 * both sides.
+	 *
+	 * Mirrors the backend rule exactly — `today <= weekEnd` is still running, so
+	 * the earliest a voucher may be sent is the day AFTER its week ends. Both
+	 * dates are `YYYY-MM-DD`, so this is a plain string comparison. A voucher
+	 * with no `weekEndIso` (demo rows) keeps the old behaviour.
+	 */
+	const weekStillRunning = Boolean(
+		v.weekEndIso && shiftTodayIso() <= v.weekEndIso,
+	);
+
+	/**
 	 * The signer's own signature on file, if they have recorded one — the ink the
 	 * tap-to-sign button sends. Null means no stored signature OR stored ink that
 	 * will not parse, and both cases fall back to the pad: a one-tap button that
@@ -1502,7 +1527,29 @@ function PvDetail({
 						 * action behind it. The server refuses the send without it (409),
 						 * so the pad is offered here rather than letting the button fail.
 						 */}
-						{!financeSigned && (
+						{/*
+						 * The week is still running. Say so plainly and offer nothing —
+						 * this voucher is deliberately left open so the PR can keep
+						 * logging receipts as they check out each night.
+						 */}
+						{weekStillRunning && (
+							<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] bg-[rgba(232,194,122,.08)] p-3">
+								<p className="iz-sm font-bold">This week is still open</p>
+								<p className="iz-tiny iz-muted2 mt-0.5">
+									{v.weekEndIso
+										? `This voucher covers the week ending ${v.weekEndIso}. `
+										: ""}
+									Signing and sending close the week, and a closed week stops
+									the PR submitting receipts for the shifts they have not worked
+									yet.
+								</p>
+								<p className="iz-tiny iz-muted2 mt-1.5">
+									Both become available the day after the week ends. Until then
+									this page is for reviewing what has accrued so far.
+								</p>
+							</div>
+						)}
+						{!financeSigned && !weekStillRunning && (
 							<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
 								<p className="iz-sm font-bold">Finance signature required</p>
 								<p className="iz-tiny iz-muted2 mt-0.5">
@@ -1582,15 +1629,21 @@ function PvDetail({
 						<button
 							type="button"
 							className="iz-btn iz-btn-primary mt-2 w-full"
-							disabled={!sendGate.allowed || !financeSigned}
+							disabled={!sendGate.allowed || !financeSigned || weekStillRunning}
 							onClick={() => sendToPr(pv.id)}
 						>
 							<Send className="h-4 w-4" /> Send to PR for e-sign
 						</button>
-						{!financeSigned && (
+						{weekStillRunning ? (
 							<p className="iz-tiny iz-muted2 mt-1 text-center">
-								Sign above first — the PR counter-signs your signature.
+								Available once the week has ended.
 							</p>
+						) : (
+							!financeSigned && (
+								<p className="iz-tiny iz-muted2 mt-1 text-center">
+									Sign above first — the PR counter-signs your signature.
+								</p>
+							)
 						)}
 						{/* Only once we know WHY. While the fetch is in flight the button is
 						    disabled with no caption — a reason would be a guess. */}

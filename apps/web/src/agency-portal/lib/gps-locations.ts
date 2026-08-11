@@ -2,7 +2,11 @@ import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
 } from "@agency-portal/lib/agency-demo";
-import { resolveRosterPrName } from "@agency-portal/lib/agency-demo";
+import {
+	findAgencyManagedPr,
+	resolveAgencyPrPhoto,
+	resolveRosterPrName,
+} from "@agency-portal/lib/agency-demo";
 
 export interface GeoCoord {
 	lat: number;
@@ -72,6 +76,12 @@ export interface GpsTrackingRow {
 	slotId: string;
 	prId: string;
 	prName: string;
+	/**
+	 * The PR's own photo, UNRESOLVED — the consumer runs it through
+	 * `prPhotoSrc`. Null when the roster row matches no managed PR, or that PR
+	 * has no photo on file; the panels fall back to the name's initial.
+	 */
+	prPhoto: string | null;
 	outlet: string;
 	status: "on-duty" | "en-route";
 	meters: number;
@@ -397,10 +407,15 @@ export function buildGpsTrackingRows(
 		const gpsFallback =
 			activePrId === slot.prId && prCheckInMeta?.gpsFallback === true;
 
+		// Same record the name already comes from, so the face and the name on a
+		// row can never belong to two different people.
+		const managed = findAgencyManagedPr(agencyPRs, slot.prId, slot.prName);
+
 		return {
 			slotId: slot.id,
 			prId: slot.prId,
 			prName: resolveRosterPrName(slot.prId, slot.prName, agencyPRs),
+			prPhoto: managed ? resolveAgencyPrPhoto(managed) : null,
 			outlet: slot.outlet,
 			status: "on-duty" as const,
 			meters: gpsFallback ? Math.max(meters, 120) : meters,

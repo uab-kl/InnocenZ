@@ -223,6 +223,27 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     };
   }, [displayPortfolio, editing, portfolio, me?.profile.comcardImage]);
 
+  /**
+   * The saved comcard's URL, resolved ONCE — and the two ways it can fail.
+   *
+   * `assetUrl` returns null for an R2 object key when no public base is known
+   * yet (the base is learned from an API envelope's `r2PublicUrl`, so a render
+   * before any call has returned has nothing to join with). The old code
+   * rendered `null` into the frame in that case, which is how a comcard that
+   * was saved correctly — the row is there, the object is there — showed as an
+   * empty box under a green "Saved to profile". Silence read as data loss.
+   *
+   * `loadFailed` covers the other half: a URL that resolves but 404s or times
+   * out, which no amount of null-checking catches.
+   */
+  const comcardSrc = comcardTiles.mode === 'single' ? assetUrl(comcardTiles.src) : null;
+  const [comcardLoadFailed, setComcardLoadFailed] = useState(false);
+  // A new src deserves its own attempt; otherwise one failure sticks for the
+  // life of the screen even after a successful re-save.
+  useEffect(() => setComcardLoadFailed(false), [comcardSrc]);
+  /** Is the saved comcard actually ON SCREEN? Nothing may claim "saved" without this. */
+  const comcardShowing = Boolean(comcardSrc) && !comcardLoadFailed;
+
   // Gallery picking works on BOTH web (file dialog) and the phone (real photo
   // gallery via expo-image-picker) — see lib/photo-file.ts.
   const canPickImages = Boolean(token);
@@ -821,14 +842,26 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
           <View style={styles.comcard}>
             {comcardTiles.mode === 'single' ? (
               <View style={styles.collage}>
-                {assetUrl(comcardTiles.src) ? (
+                {comcardShowing ? (
                   <Image
                     key={comcardTiles.src}
-                    source={{ uri: assetUrl(comcardTiles.src)!, cache: 'reload' }}
+                    source={{ uri: comcardSrc!, cache: 'reload' }}
                     style={StyleSheet.absoluteFillObject}
                     resizeMode="cover"
+                    onError={() => setComcardLoadFailed(true)}
                   />
-                ) : null}
+                ) : (
+                  /*
+                   * NOT an empty frame. The comcard exists — it is saved and the
+                   * button below says so — and rendering nothing here is what
+                   * made a display problem look like the record was gone.
+                   */
+                  <View style={[StyleSheet.absoluteFillObject, styles.collageEmpty]}>
+                    <Text style={styles.collageEmptyText}>
+                      {t.profile.comcardUnavailable}
+                    </Text>
+                  </View>
+                )}
               </View>
             ) : comcardTiles.mode === 'empty' ? (
               <View style={[styles.collage, styles.collageEmpty]}>
@@ -882,12 +915,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 variant="soft"
                 small
               />
+              {/*
+                * "Saved to profile" is only allowed to appear next to a comcard
+                * the PR can SEE. It used to key off `comcardImage` alone, so a
+                * saved row plus an unresolvable URL produced a green tick above
+                * an empty box — the reassurance and the evidence contradicting
+                * each other, with the reassurance winning.
+                */}
               {comcardSavedHint ? (
                 <Text style={styles.comcardSavedHint}>{comcardSavedHint}</Text>
-              ) : me?.profile.comcardImage ? (
+              ) : !me?.profile.comcardImage ? (
+                <Text style={styles.comcardHint}>{t.profile.comcardHint}</Text>
+              ) : comcardShowing ? (
                 <Text style={styles.comcardSavedHint}>{t.profile.savedToProfile}</Text>
               ) : (
-                <Text style={styles.comcardHint}>{t.profile.comcardHint}</Text>
+                <Text style={styles.comcardHint}>{t.profile.comcardUnavailableHint}</Text>
               )}
             </View>
           )}

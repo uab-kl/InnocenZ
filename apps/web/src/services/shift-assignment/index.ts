@@ -52,6 +52,15 @@ export interface ShiftAssignment {
 	 * requested leave; reviewed on the Approvals → MC/Leaves tab.
 	 */
 	leaveProofPhotos?: string[] | null;
+	/**
+	 * The agency's decision on that request (migration 0112). Read these, never
+	 * `status`, to tell approved from rejected: a rejection reverts `status` to
+	 * `assigned`, and the old `[Leave rejected]` note prefix is display text,
+	 * not a record.
+	 */
+	leaveStatus?: "pending" | "approved" | "rejected" | null;
+	leaveDecidedAt?: string | null;
+	leaveDecidedBy?: string | null;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;
@@ -75,6 +84,12 @@ export interface ShiftAssignmentsQueryParams {
 	shiftId?: string;
 	prId?: string;
 	status?: ShiftAssignmentStatus;
+	/**
+	 * MC/leave decision filter — "pending" for the queue, "approved,rejected"
+	 * for history. Not the same axis as `status`: a rejected request reverts to
+	 * `assigned`, so `status` alone can never list rejections.
+	 */
+	leaveStatus?: string;
 	// Admin-only; agency callers are pinned to their own agency server-side.
 	agencyId?: string;
 	page?: number;
@@ -118,6 +133,7 @@ export async function fetchShiftAssignments(
 		shiftId: params.shiftId,
 		prId: params.prId,
 		status: params.status,
+		leaveStatus: params.leaveStatus,
 		agencyId: params.agencyId,
 		page: params.page,
 		pageSize: params.pageSize,

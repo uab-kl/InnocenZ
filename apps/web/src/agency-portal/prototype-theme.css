@@ -803,6 +803,19 @@
 .iz-gmaps-pr-dot.in-range {
 	background: #34a853;
 }
+/* The marker keeps its status colour as the ring — the white border and the
+   in-range/warn background still say where the PR stands — and the photo fills
+   the middle. The initial returns on its own if the image fails. */
+.iz-gmaps-pr-dot.has-photo {
+	overflow: hidden;
+	padding: 0;
+}
+.iz-gmaps-pr-dot.has-photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
 .iz-gmaps-marker-pr.warn .iz-gmaps-pr-dot {
 	background: #fbbc04;
 	color: #202124;
@@ -13301,6 +13314,19 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 }
 
+/* Same rule as the approvals tile: the photo fills the circle, the gradient
+   underneath is the loading colour, and the initial returns on an error. */
+.iz-roster-gps-avatar.has-photo {
+	overflow: hidden;
+}
+
+.iz-roster-gps-avatar.has-photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
 .iz-roster-gps-row-head {
 	display: flex;
 	flex-wrap: wrap;
@@ -13603,6 +13629,24 @@ button.iz-pr-offer-row:hover {
 
 .iz-approvals-avatar--mint {
 	background: linear-gradient(135deg, #34d399, #059669);
+}
+
+/*
+ * The PR's real face. The gradient stays underneath as the loading colour, so
+ * the tile never flashes empty, and the initial comes back on its own if the
+ * <img> errors — the component swaps the child, this only stops the photo
+ * spilling out of the rounded box.
+ */
+.iz-approvals-avatar--photo {
+	overflow: hidden;
+	padding: 0;
+}
+
+.iz-approvals-avatar--photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
 }
 
 .iz-approvals-cutlost-icon {
@@ -17760,6 +17804,20 @@ html:has(.iz-pr-app) {
 	font-weight: 700;
 	flex-shrink: 0;
 	box-shadow: inset 0 0 0 1px rgba(183, 157, 245, 0.35);
+}
+
+/* Photo fills the tile; the violet stays as the loading colour and the inset
+   ring survives on top. Initial returns on error — see PrFaceBubble. */
+.iz-portal-table-av.has-photo {
+	overflow: hidden;
+	padding: 0;
+}
+
+.iz-portal-table-av.has-photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
 }
 
 .iz-portal-table .iz-pill-violet {
