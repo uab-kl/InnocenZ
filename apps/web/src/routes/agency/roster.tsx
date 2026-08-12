@@ -1,6 +1,7 @@
 import { AgencyAttendanceFixPanel } from "@agency-portal/components/agency/AgencyAttendanceFixPanel";
 import { AgencyGpsPanel } from "@agency-portal/components/agency/AgencyGpsPanel";
 import { BackfillPanel } from "@agency-portal/components/agency/BackfillPanel";
+import { RosterAutoAssignBanner } from "@agency-portal/components/agency/RosterAutoAssignBanner";
 import { RosterBackendTimetable } from "@agency-portal/components/agency/RosterBackendTimetable";
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
 import { RosterShiftFilters } from "@agency-portal/components/agency/RosterShiftFilters";
@@ -42,7 +43,6 @@ import {
 	listAvailableShiftsForEarlyReleaseReassign,
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import { listEarlyReleasedPrsForReassign } from "@agency-portal/lib/outlet-demo";
 import type { RosterShiftEarningsContext } from "@agency-portal/lib/outlet-financial-sync";
@@ -63,10 +63,11 @@ import {
 } from "@agency-portal/lib/roster-shift-filters";
 import {
 	dedupeLiveRosterByPr,
-	mondayOfWeek,
+	rosterWeekStart,
 	weekDayIsos,
 } from "@agency-portal/lib/roster-week-plan";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
 	ArrowLeftRight,
@@ -135,7 +136,9 @@ function AgencyRoster() {
 		[backed, backendPRs, allAgencyPRs, activeAgencyId],
 	);
 	const [planningDate, setPlanningDate] = useState(DEFAULT_ROSTER_DATE_ISO);
-	const weekStartIso = mondayOfWeek(planningDate);
+	// Sun–Sat, the payroll week — the same seven days the auto-assign planner
+	// counts for fairness and the PV lane settles.
+	const weekStartIso = rosterWeekStart(planningDate);
 	const weekDays = useMemo(() => weekDayIsos(weekStartIso), [weekStartIso]);
 	// Both views read live backend data. Planning loads the picked week; live
 	// pins to today so the Shifts table + KPIs reflect tonight's real roster —
@@ -160,11 +163,11 @@ function AgencyRoster() {
 	// slots whose id is a shift_assignment UUID, so it silently found nothing
 	// and the button did nothing.
 	const outletSwap = useOutletSwapMutations();
-	const agencySubRole = useStore((s) => s.agencySubRole);
 	const prSwapRequests = useStore((s) => s.prSwapRequests);
 	const approvePrSwapRequest = useStore((s) => s.approvePrSwapRequest);
 	const declinePrSwapRequest = useStore((s) => s.declinePrSwapRequest);
-	const demoAutoAssignPr = useStore((s) => s.demoAutoAssignPr);
+	// `demoAutoAssignPr` is no longer read here — it moved inside
+	// RosterAutoAssignBanner, which only reaches it in a demo session.
 	const assignPrToOutlet = useStore((s) => s.assignPrToOutlet);
 	const syncLivePrCheckInToRoster = useStore(
 		(s) => s.syncLivePrCheckInToRoster,
@@ -178,7 +181,7 @@ function AgencyRoster() {
 	const [editId, setEditId] = useState<string | null>(null);
 	const [approveSwapId, setApproveSwapId] = useState<string | null>(null);
 	const [replacementPick, setReplacementPick] = useState("");
-	const canAssign = agencyCan(agencySubRole, "assignShifts");
+	const canAssign = useAgencyCan()("assignShifts");
 
 	// The by-id write actions hit the backend in BOTH views.
 	//
@@ -565,15 +568,9 @@ function AgencyRoster() {
 
 			{viewMode === "planning" && (
 				<div className="iz-roster-planning">
-					{canAssign && (
-						<button
-							type="button"
-							className="iz-roster-auto-assign"
-							onClick={() => demoAutoAssignPr(planningDate)}
-						>
-							AI auto-assign next free PR · {planningDate}
-						</button>
-					)}
+					{/* Backend plan + confirm sheet, shared with the home card. The demo
+					    store's one-PR action lives on inside it, for demo sessions only. */}
+					{canAssign && <RosterAutoAssignBanner dateIso={planningDate} />}
 					<div className="iz-roster-planning-panel">
 						<RosterTimetableFilters
 							filters={timetableFilters}

@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react";
 import {
 	ArrowRightLeft,
+	CreditCard,
 	FileText,
 	Handshake,
 	LayoutDashboard,
@@ -109,6 +110,16 @@ export const sidebarSections: SidebarSection[] = [
 				title: "Plan Change",
 				href: "/admin/service/plan-changes",
 				icon: ArrowRightLeft,
+				allowedPermission: ["*"],
+			},
+			// Sits under Plan Change on purpose: the same subscription, one screen
+			// later. Plan Change is what an org asked to be on; Plan Payment is
+			// whether it has paid for the periods it was on.
+			{
+				key: "sidebar-service-plan-payment",
+				title: "Plan Payment",
+				href: "/admin/service/plan-payment",
+				icon: CreditCard,
 				allowedPermission: ["*"],
 			},
 			// Hidden on request (30 Jul 2026): Jobs & Special Services no longer

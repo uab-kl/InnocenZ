@@ -1,0 +1,144 @@
+import { and, eq, isNull, ne, sql } from 'drizzle-orm';
+import { db } from '@/db/index.js';
+import { logger } from '@/util/logger.js';
+import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
+import { ShiftTable } from '@/features/shift/shift.model.js';
+import { SubscriptionTable } from './subscription.model.js';
+
+/**
+ * What an org's plan allows, and what it has used — the one place either
+ * question is answered.
+ *
+ * Until this existed the limits were text and habit: `subscription.coverage`
+ * held the string '5 PV/week' and nothing could compare a count against it, so
+ * the agency band was enforced NOWHERE and the outlet's PRs-per-day was enforced
+ * only in the Post Job screen's own React state. Any caller that did not go
+ * through that screen — the API directly, a script, a second UI — was unbounded.
+ *
+ * A LEAF module: it reads tables and imports no repository, so the shift
+ * controller and the scheduler can both use it without closing an import cycle.
+ */
+export type PlanLimit = {
+  /** The plan the org is on now, for the message a refusal carries. */
+  planName: string;
+  /** Max per period, or null when the plan is open-ended (Custom / Premier). */
+  limitAmount: number | null;
+};
+
+/**
+ * The org's live PLAN and its numeric allowance, or null when it has no active
+ * plan at all.
+ *
+ * Add-ons are excluded deliberately: POS integration is held alongside a plan
+ * and is not a capacity product, so joining it here would let an add-on's NULL
+ * limit read as the venue's allowance.
+ *
+ * A null RESULT means "no plan" and a `limitAmount: null` means "unlimited" —
+ * two different facts, and callers must not collapse them. Nothing here decides
+ * what to do about either; that is the caller's rule.
+ */
+export async function resolveActivePlanLimit(params: {
+  subscriberType: 'agency' | 'outlet';
+  subscriberId: string;
+}): Promise<PlanLimit | null> {
+  try {
+    const [row] = await db
+      .select({
+        planName: MemberSubscriptionTable.planName,
+        limitAmount: SubscriptionTable.limitAmount,
+      })
+      .from(MemberSubscriptionTable)
+      .leftJoin(SubscriptionTable, eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id))
+      .where(
+        and(
+          eq(MemberSubscriptionTable.subscriberType, params.subscriberType),
+          eq(MemberSubscriptionTable.subscriberId, params.subscriberId),
+          isNull(MemberSubscriptionTable.endedAt),
+          // A row whose plan is missing from the catalog still counts as a plan;
+          // only a row that IS an add-on is skipped.
+          sql`coalesce(${SubscriptionTable.kind}::text, 'plan') = 'plan'`,
+        ),
+      )
+      .limit(1);
+    if (!row) return null;
+    return { planName: row.planName, limitAmount: row.limitAmount ?? null };
+  } catch (error) {
+    logger.error('[plan-limit.resolveActivePlanLimit] Error:', error);
+    return null;
+  }
+}
+
+/**
+ * How many PRs this venue has already asked for on a calendar day: the sum of
+ * `quantity` across its shifts that date, which is the headcount the venue
+ * declared it needs.
+ *
+ * Counted from the SHIFT rows rather than from assignments on purpose — the plan
+ * governs what a venue may REQUEST, and a shift posted for 8 PRs consumes 8 of
+ * the day's allowance whether or not anyone has been rostered onto it yet.
+ * `excludeShiftId` lets an edit measure the day without its own current value,
+ * so raising a shift from 4 to 5 is checked as 5, not 9.
+ */
+export async function outletDailyPrUsage(params: {
+  outletId: string;
+  shiftDate: string;
+  excludeShiftId?: string;
+}): Promise<number> {
+  try {
+    // Built with the query builder, not a raw template. The first cut spliced
+    // `${excludeShiftId ? sql`...` : sql``}` into `db.execute`, and the EMPTY
+    // fragment made every call throw — which this function then swallowed into
+    // its -1, so the gate silently let everything through. A capacity check that
+    // fails open is worse than none, because the screen still claims a limit.
+    // A DRAFT has not been asked for yet, so it consumes nothing. Everything
+    // else on the day counts. There is deliberately no "cancelled" case: the
+    // shift statuses are draft/open/confirmed/sealed and a withdrawn shift is
+    // DELETED, so a row that exists is demand — an earlier cut filtered on a
+    // status that does not exist, which would have compiled as a no-op idea and
+    // read as a real exclusion.
+    const conditions = [
+      eq(ShiftTable.outletId, params.outletId),
+      eq(ShiftTable.shiftDate, params.shiftDate),
+      ne(ShiftTable.status, 'draft'),
+    ];
+    if (params.excludeShiftId) conditions.push(ne(ShiftTable.id, params.excludeShiftId));
+
+    const [row] = await db
+      .select({ used: sql<number>`coalesce(sum(${ShiftTable.quantity}), 0)::int` })
+      .from(ShiftTable)
+      .where(and(...conditions));
+    return Number(row?.used ?? 0);
+  } catch (error) {
+    logger.error('[plan-limit.outletDailyPrUsage] Error:', error);
+    // A count that FAILED must not read as "nothing used" and wave a write
+    // through. The caller treats -1 as unknown and skips the gate rather than
+    // refusing on a number it does not have.
+    return -1;
+  }
+}
+
+/**
+ * How many payment vouchers an agency issued in a payroll week — the number the
+ * tier bands are written against.
+ *
+ * Keyed on `week_start`, which is Sunday-anchored everywhere in this app, so the
+ * caller must pass the same week string the vouchers carry.
+ */
+export async function agencyWeeklyPvCount(params: {
+  agencyId: string;
+  weekStart: string;
+}): Promise<number> {
+  try {
+    const result = await db.execute(sql`
+      select count(*)::int as issued
+      from main.payment_voucher pv
+      where pv.agency_id = ${params.agencyId}
+        and pv.week_start = ${params.weekStart}
+    `);
+    const row = result.rows[0] as { issued: number } | undefined;
+    return Number(row?.issued ?? 0);
+  } catch (error) {
+    logger.error('[plan-limit.agencyWeeklyPvCount] Error:', error);
+    return -1;
+  }
+}

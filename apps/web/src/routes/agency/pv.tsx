@@ -6,6 +6,7 @@ import {
 import { DisputeQueuePanel } from "@agency-portal/components/agency/DisputeQueuePanel";
 import { OvertimeQueuePanel } from "@agency-portal/components/agency/OvertimeQueuePanel";
 import { PayrollVerifyPanel } from "@agency-portal/components/agency/PayrollVerifyPanel";
+import { UnchargedFeesPanel } from "@agency-portal/components/agency/UnchargedFeesPanel";
 import { PvSummaryView } from "@agency-portal/components/iz/PvSummaryView";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { SignatureInkMark } from "@agency-portal/components/iz/SignatureInkMark";
@@ -43,10 +44,7 @@ import {
 	resolvePvPrLabel,
 	resolvePvPrName,
 } from "@agency-portal/lib/agency-payroll";
-import {
-	AGENCY_SUB_ROLE_LABELS,
-	agencyCan,
-} from "@agency-portal/lib/agency-rbac";
+import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
 import {
 	DEMO_PV_ISSUED_WEEKS_AGO,
 	demoPayrollWeekBoundsForWeeksAgo,
@@ -68,7 +66,6 @@ import {
 	receiptStatusLabel,
 	reconcilePvTotals,
 	resolvePvPayByDue,
-	shiftTodayIso,
 	sortPvsBySales,
 } from "@agency-portal/lib/pr-demo";
 import {
@@ -87,6 +84,7 @@ import {
 	formatPvSignStamp,
 } from "@agency-portal/lib/pv-template";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import {
 	CheckCircle2,
@@ -105,7 +103,12 @@ export const Route = createFileRoute("/agency/pv")({
 	component: AgencyPV,
 	validateSearch: (
 		search: Record<string, unknown>,
-	): { status?: PvStatusFilter; pv?: string } => {
+	): {
+		status?: PvStatusFilter;
+		pv?: string;
+		tab?: PvSubTab;
+		receipt?: string;
+	} => {
 		const status = search.status;
 		const valid: PvStatusFilter[] = [
 			"PENDING_REVIEW",
@@ -125,7 +128,39 @@ export const Route = createFileRoute("/agency/pv")({
 			typeof search.pv === "string" && search.pv.trim()
 				? search.pv.trim()
 				: undefined;
-		return { status: statusFilter, pv };
+		/**
+		 * A specific receipt to land on.
+		 *
+		 * `?tab=receipts` alone was not enough: the receipts list is scoped to the
+		 * selected WEEK, so a link from the home page opened whichever week the
+		 * page defaults to and showed a list the receipt was not in. The id lets
+		 * the page pick the week that actually holds it.
+		 */
+		const receipt =
+			typeof search.receipt === "string" && search.receipt.trim()
+				? search.receipt.trim()
+				: undefined;
+		/**
+		 * Which SUB-tab to open on.
+		 *
+		 * Needed because a dispute is its OWN row, keyed to a day and a component —
+		 * it is not a voucher status. So a link from the agency home cannot aim at
+		 * one with `?status=DISPUTED`: that filters the voucher list by a status the
+		 * voucher does not hold and lands on "No vouchers match these filters" while
+		 * the dispute sits one sub-tab away.
+		 */
+		const validTabs: PvSubTab[] = [
+			"vouchers",
+			"receipts",
+			"disputes",
+			"overtime",
+		];
+		const tab =
+			typeof search.tab === "string" &&
+			validTabs.includes(search.tab as PvSubTab)
+				? (search.tab as PvSubTab)
+				: undefined;
+		return { status: statusFilter, pv, tab, receipt };
 	},
 });
 
@@ -239,11 +274,17 @@ const THIS_WEEK_STATUSES = LAST_WEEK_REVIEW_STATUSES;
 
 function AgencyPV() {
 	const navigate = useNavigate();
-	const { status: statusFromSearch, pv: pvFromSearch } = Route.useSearch();
+	const {
+		status: statusFromSearch,
+		pv: pvFromSearch,
+		tab: tabFromSearch,
+		receipt: receiptFromSearch,
+	} = Route.useSearch();
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
 	const prReceiptScans = useStore((s) => s.prReceiptScans ?? []);
 	const allAgencyPRs = useStore((s) => s.agencyPRs);
 	const agencySubRole = useStore((s) => s.agencySubRole);
+	const can = useAgencyCan();
 	// Tenant scoping — attribute receipts to this agency via its OWNED PRs so a
 	// shared PR (member of both agencies) never drags the other agency's payroll in.
 	const agencyPRs = useMemo(
@@ -417,6 +458,11 @@ function AgencyPV() {
 	);
 
 	useEffect(() => {
+		// An explicit `?tab=` wins over the status branches below, which all assume
+		// the caller meant the voucher list. A dispute link carries no status —
+		// there is no voucher status that means "a dispute exists" — so without
+		// this the link would land on Vouchers and show the wrong thing.
+		if (tabFromSearch) setPvSubTab(tabFromSearch);
 		if (statusFromSearch === ("PAID" as PvStatusFilter)) {
 			void navigate({
 				to: "/agency/history",
@@ -451,7 +497,16 @@ function AgencyPV() {
 		// have not arrived, so the pick above would fall back and stick. Re-running
 		// once they load is what makes it land on the right tab — and it cannot then
 		// fight a manual tab click, because selectPayrollWeekTab clears these params.
-	}, [statusFromSearch, pvFromSearch, navigate, tabHoldingStatus]);
+		// tabFromSearch is a real dependency, not a lint appeasement: the sub-tab
+		// buttons now clear it (see selectPvSubTab), so a re-run cannot fight a
+		// manual click — which is exactly what listing it here would otherwise cause.
+	}, [
+		statusFromSearch,
+		pvFromSearch,
+		tabFromSearch,
+		navigate,
+		tabHoldingStatus,
+	]);
 
 	const latestIssuedMs = useMemo(
 		() => getLatestPvIssuedMs(weekTabPvs),
@@ -464,6 +519,43 @@ function AgencyPV() {
 			: payrollWeekTab === "this_week"
 				? thisWeekBounds
 				: lastWeekBounds;
+
+	/**
+	 * The dispute / overtime counts on the sub-tab labels, scoped to the SELECTED
+	 * week — a dispute by its contested day, a claim by the night it was worked.
+	 *
+	 * These read the same two lists the panels themselves filter, and must use the
+	 * same anchor, or the badge says 1 while the panel below it says none. That
+	 * disagreement is worse than either number alone: it makes the screen look
+	 * broken rather than empty.
+	 */
+	const weekOpenDisputes = useMemo(
+		() =>
+			openDisputes.filter(
+				(d) =>
+					d.disputeDate &&
+					d.disputeDate >= activeWeekBounds.weekStartIso &&
+					d.disputeDate <= activeWeekBounds.weekEndIso,
+			),
+		[openDisputes, activeWeekBounds.weekStartIso, activeWeekBounds.weekEndIso],
+	);
+
+	const weekPendingOtClaims = useMemo(
+		() =>
+			pendingOtClaims.filter((c) => {
+				if (!c.shiftDate) return false;
+				const day = c.shiftDate.slice(0, 10);
+				return (
+					day >= activeWeekBounds.weekStartIso &&
+					day <= activeWeekBounds.weekEndIso
+				);
+			}),
+		[
+			pendingOtClaims,
+			activeWeekBounds.weekStartIso,
+			activeWeekBounds.weekEndIso,
+		],
+	);
 
 	const activeWeekStats = useMemo(() => {
 		const signed = weekTabPvs.filter((p) => p.status === "SIGNED");
@@ -511,6 +603,17 @@ function AgencyPV() {
 		],
 	);
 
+	/**
+	 * Forget where the caller asked us to land. Shared by the week tabs and the
+	 * sub-tabs so there is one rule about when a landing instruction expires —
+	 * having each button decide for itself is how one of them kept re-applying it.
+	 */
+	const clearLandingParams = () => {
+		if (statusFromSearch || pvFromSearch || tabFromSearch) {
+			void navigate({ to: "/agency/pv", search: {}, replace: true });
+		}
+	};
+
 	const selectPayrollWeekTab = (tab: PayrollWeekTab) => {
 		setPayrollWeekTab(tab);
 		setStatusFilter("all");
@@ -523,13 +626,25 @@ function AgencyPV() {
 		) {
 			setPvSubTab("vouchers");
 		}
-		// Drop the incoming ?status/?pv. They are an instruction about where to land,
-		// and once the user has picked a tab themselves that instruction is spent —
-		// leaving it in the URL lets the effect above re-apply it on the next refetch
-		// and pull them off the tab they just chose.
-		if (statusFromSearch || pvFromSearch) {
-			void navigate({ to: "/agency/pv", search: {}, replace: true });
-		}
+		// Drop the incoming ?status/?pv/?tab. They are an instruction about where to
+		// land, and once the user has picked a tab themselves that instruction is
+		// spent — leaving it in the URL lets the effect above re-apply it on the next
+		// refetch and pull them off the tab they just chose.
+		clearLandingParams();
+	};
+
+	/**
+	 * Picking a sub-tab by hand, which also spends the `?tab=` instruction.
+	 *
+	 * The buttons called `setPvSubTab` directly. That was safe only while nothing
+	 * in the URL named a sub-tab; now that a link from the agency home does, a bare
+	 * setter would be undone the next time the landing effect re-runs — and it
+	 * re-runs on every voucher refetch — snapping the user back to Disputes
+	 * seconds after they clicked Receipts.
+	 */
+	const selectPvSubTab = (next: PvSubTab) => {
+		setPvSubTab(next);
+		clearLandingParams();
 	};
 
 	const statusFilteredPvs = useMemo(() => {
@@ -562,6 +677,36 @@ function AgencyPV() {
 		() => statusFiltersForWeek(payrollWeekTab),
 		[payrollWeekTab],
 	);
+
+	/**
+	 * Land on the week that actually CONTAINS the linked receipt.
+	 *
+	 * `?tab=receipts` alone dropped the operator on whichever week the page
+	 * defaults to (Last Week) — so clicking jk's receipt on the home page opened
+	 * a list jk's receipt was not in, and it read as the link being broken.
+	 *
+	 * Anchored on the receipt's own date and matched against the same three week
+	 * ranges the tabs use, so the tab that opens is the tab whose list holds it.
+	 * If it belongs to none of them (older than the payment week) the tab is left
+	 * alone rather than silently showing an unrelated week.
+	 */
+	useEffect(() => {
+		if (!receiptFromSearch) return;
+		const target = backendReceipts.find((r) => r.id === receiptFromSearch);
+		const day = target?.receiptDate?.slice(0, 10);
+		if (!day) return;
+		const inRange = (b: { weekStartIso: string; weekEndIso: string }) =>
+			day >= b.weekStartIso && day <= b.weekEndIso;
+		if (inRange(thisWeekBounds)) setPayrollWeekTab("this_week");
+		else if (inRange(lastWeekBounds)) setPayrollWeekTab("last_week");
+		else if (inRange(lastLastWeekBounds)) setPayrollWeekTab("last_last_week");
+	}, [
+		receiptFromSearch,
+		backendReceipts,
+		thisWeekBounds,
+		lastWeekBounds,
+		lastLastWeekBounds,
+	]);
 
 	useEffect(() => {
 		// "To pay" is offered only on the Payment Week tab; leaving it selected while
@@ -706,51 +851,103 @@ function AgencyPV() {
 				</div>
 			</div>
 
+			{/* Above the tabs, not inside one: an uncollected fee is not scoped to
+			    the voucher/receipt/dispute view someone happens to be on, and
+			    burying it under a tab is how it went unbilled in the first place. */}
+			<div className="mt-2.5">
+				{/* `weekStart`/`weekEnd` follow the tabs, so "record this week's
+				    penalties" seals the week the operator is looking at, not whatever
+				    week today falls in.
+
+				    `canMark` is `raisePv`, NOT `editSettings`: recording and settling
+				    charges is payroll bookkeeping, which the finance head does on this
+				    very screen. `editSettings` is owner-only and made this a list
+				    finance could read but never act on. Writing the fine SCHEDULE
+				    stays owner-only — that is policy, this is bookkeeping. */}
+				<UnchargedFeesPanel
+					canMark={can("raisePv")}
+					weekLabel={
+						payrollWeekTab === "this_week"
+							? "this week"
+							: payrollWeekTab === "last_week"
+								? "last week"
+								: "the payment week"
+					}
+					weekStart={
+						payrollWeekTab === "this_week"
+							? thisWeekBounds.weekStartIso
+							: payrollWeekTab === "last_week"
+								? lastWeekBounds.weekStartIso
+								: lastLastWeekBounds.weekStartIso
+					}
+					weekEnd={
+						payrollWeekTab === "this_week"
+							? thisWeekBounds.weekEndIso
+							: payrollWeekTab === "last_week"
+								? lastWeekBounds.weekEndIso
+								: lastLastWeekBounds.weekEndIso
+					}
+				/>
+			</div>
+
 			<div className="iz-payroll-tabs mt-2.5">
 				<button
 					type="button"
 					className={`iz-payroll-tab${pvSubTab === "vouchers" ? " on" : ""}`}
-					onClick={() => setPvSubTab("vouchers")}
+					onClick={() => selectPvSubTab("vouchers")}
 				>
 					Payment Vouchers ({weekTabPvs.length})
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${pvSubTab === "receipts" ? " on" : ""}`}
-					onClick={() => setPvSubTab("receipts")}
+					onClick={() => selectPvSubTab("receipts")}
 				>
 					Receipts ({activeWeekReceipts.length})
 				</button>
 				{/* Hidden on the PAYMENT week (owner's rule, 3 Aug 2026): by then every
 				    voucher is signed, and a signed voucher's figures are settled — a
 				    dispute or an overtime claim belongs to a week still under review.
-				    ⚠️ These two remain deliberately NOT week-scoped on the other tabs:
-				    a claim blocks whichever week it belongs to, so filtering them to the
-				    selected week would hide the thing stopping a DIFFERENT week from
-				    going out. Hiding here is about the payment week having nothing left
-				    to contest — not about scoping the queues. */}
+				    These two ARE week-scoped now (owner's rule, 11 Aug 2026): *"the
+				    dispute should sit with the week it is disputed at"*. They were not,
+				    and one claim appeared under every week with an identical count while
+				    the Vouchers and Receipts counts beside it moved — which reads as the
+				    filter leaking between weeks. The blocker they used to keep visible
+				    has not been thrown away: each panel counts its off-week open items on
+				    a line of its own, and the agency home lists every open one
+				    regardless of week. */}
 				{payrollWeekTab !== "last_last_week" && (
 					<>
 						<button
 							type="button"
 							className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
-							onClick={() => setPvSubTab("disputes")}
+							onClick={() => selectPvSubTab("disputes")}
 						>
-							Disputes ({openDisputes.length})
+							Disputes ({weekOpenDisputes.length})
 						</button>
 						<button
 							type="button"
 							className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
-							onClick={() => setPvSubTab("overtime")}
+							onClick={() => selectPvSubTab("overtime")}
 						>
-							Overtime ({pendingOtClaims.length})
+							Overtime ({weekPendingOtClaims.length})
 						</button>
 					</>
 				)}
 			</div>
 
-			{pvSubTab === "disputes" && <DisputeQueuePanel />}
-			{pvSubTab === "overtime" && <OvertimeQueuePanel />}
+			{pvSubTab === "disputes" && (
+				<DisputeQueuePanel
+					weekStartIso={activeWeekBounds.weekStartIso}
+					weekEndIso={activeWeekBounds.weekEndIso}
+				/>
+			)}
+			{pvSubTab === "overtime" && (
+				<OvertimeQueuePanel
+					weekStartIso={activeWeekBounds.weekStartIso}
+					weekEndIso={activeWeekBounds.weekEndIso}
+				/>
+			)}
 
 			{pvSubTab === "vouchers" && (
 				<OutletSection title="Payment Vouchers" hint={activeWeekBounds.cycle}>
@@ -941,6 +1138,7 @@ function AgencyPV() {
 				<AgencyReceiptsPanel
 					weekStartIso={activeWeekBounds.weekStartIso}
 					weekEndIso={activeWeekBounds.weekEndIso}
+					focusReceiptId={receiptFromSearch}
 					onOpenPv={(voucherId) => setDetailId(voucherId)}
 				/>
 			)}
@@ -1165,7 +1363,6 @@ function PvDetail({
 	const [signOpen, setSignOpen] = useState(false);
 	const [signError, setSignError] = useState<string | null>(null);
 	const [bankRef, setBankRef] = useState("");
-	const agencySubRole = useStore((s) => s.agencySubRole);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const toast = useStore((s) => s.toast);
 	// The letterhead the printed voucher carries — the signed-in agency, so this
@@ -1182,7 +1379,42 @@ function PvDetail({
 	const [editing, setEditing] = useState(false);
 	const [overrideOpen, setOverrideOpen] = useState(false);
 	const [overrideReason, setOverrideReason] = useState("");
-	const canOverride = agencyCan(agencySubRole, "overrideSignedPv");
+	const can = useAgencyCan();
+	const canOverride = can("overrideSignedPv");
+	/*
+	 * IS THIS VOUCHER ON THE WEEK THAT IS STILL RUNNING?
+	 *
+	 * Owner's rule (12 Aug 2026): a PV under **This Week** carries no signing
+	 * function — it signs from Last Week. The reason is that the figures are not
+	 * final: a shift worked tonight, a receipt logged tomorrow or a penalty
+	 * charged before the send all still change the total, and a finance signature
+	 * is an attestation to a total.
+	 *
+	 * Derived from the VOUCHER's own week, not from which tab happens to be
+	 * selected. The tab is where the user clicked; the week is a property of the
+	 * document, and it is the same answer whether the card was reached from This
+	 * Week, from a `?status=` deep link, or from Payment Week. Gating on the tab
+	 * would leave the pad reachable by the other two routes into this card.
+	 *
+	 * Uses the SAME helper and the SAME three bounds the list uses to sort
+	 * vouchers into tabs, so "is in the This Week list" and "is refused a
+	 * signature" cannot drift apart.
+	 */
+	const { weekStillOpen, thisWeekCycle } = useMemo(() => {
+		const thisWeek = demoPayrollWeekBoundsForWeeksAgo(-1);
+		const lastWeek = demoPayrollWeekBoundsForWeeksAgo(0);
+		const lastLastWeek = demoPayrollWeekBoundsForWeeksAgo(1);
+		return {
+			thisWeekCycle: thisWeek.cycle,
+			weekStillOpen: pvBelongsToPayrollWeek(
+				v,
+				thisWeek.weekStartIso,
+				thisWeek.weekEndIso,
+				lastWeek.weekStartIso,
+				lastLastWeek.weekStartIso,
+			),
+		};
+	}, [v]);
 	const [rows, setRows] = useState<PrPvRow[]>(v.rows);
 	const [deduct, setDeduct] = useState(v.deduct);
 
@@ -1192,30 +1424,6 @@ function PvDetail({
 	 * Send button enabled against a 409.
 	 */
 	const financeSigned = Boolean(v.financeHeadSignedAt);
-
-	/**
-	 * A week that has not finished yet is not ready to be closed.
-	 *
-	 * Sending a voucher moves it out of `pending_review`, and `pending_review` is
-	 * the only status the PR can still submit receipts against — so sending
-	 * mid-week silently blocks every receipt they have yet to log for days they
-	 * are still going to work. The backend refuses it outright (409, "…which is
-	 * still running"), so the buttons here would only produce an error message.
-	 *
-	 * Signing is disabled alongside it for the same reason, though the server
-	 * permits it: a signature is the step before sending, and offering it on a
-	 * week that cannot be sent invites exactly the second click this is meant to
-	 * prevent. What actually closes the week is the send, and that is guarded on
-	 * both sides.
-	 *
-	 * Mirrors the backend rule exactly — `today <= weekEnd` is still running, so
-	 * the earliest a voucher may be sent is the day AFTER its week ends. Both
-	 * dates are `YYYY-MM-DD`, so this is a plain string comparison. A voucher
-	 * with no `weekEndIso` (demo rows) keeps the old behaviour.
-	 */
-	const weekStillRunning = Boolean(
-		v.weekEndIso && shiftTodayIso() <= v.weekEndIso,
-	);
 
 	/**
 	 * The signer's own signature on file, if they have recorded one — the ink the
@@ -1518,143 +1726,144 @@ function PvDetail({
 
 			{/* The day review gates this: the backend refuses a send while any day is
 			    held or undecided, so the button says why instead of 409-ing. */}
-			{pv.status === "PENDING_REVIEW" &&
-				agencyCan(agencySubRole, "raisePv") && (
-					<>
-						{/*
-						 * The agency's own signature, ahead of the send — the rail's
-						 * "Finance sign" step, which until 3 Aug 2026 was a label with no
-						 * action behind it. The server refuses the send without it (409),
-						 * so the pad is offered here rather than letting the button fail.
-						 */}
-						{/*
-						 * The week is still running. Say so plainly and offer nothing —
-						 * this voucher is deliberately left open so the PR can keep
-						 * logging receipts as they check out each night.
-						 */}
-						{weekStillRunning && (
-							<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] bg-[rgba(232,194,122,.08)] p-3">
-								<p className="iz-sm font-bold">This week is still open</p>
-								<p className="iz-tiny iz-muted2 mt-0.5">
-									{v.weekEndIso
-										? `This voucher covers the week ending ${v.weekEndIso}. `
-										: ""}
-									Signing and sending close the week, and a closed week stops
-									the PR submitting receipts for the shifts they have not worked
-									yet.
+			{pv.status === "PENDING_REVIEW" && can("raisePv") && (
+				<>
+					{/*
+					 * The agency's own signature, ahead of the send — the rail's
+					 * "Finance sign" step, which until 3 Aug 2026 was a label with no
+					 * action behind it. The server refuses the send without it (409),
+					 * so the pad is offered here rather than letting the button fail.
+					 */}
+					{!financeSigned && weekStillOpen && (
+						<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
+							<p className="iz-sm font-bold">
+								Signing opens when the week closes
+							</p>
+							<p className="iz-tiny iz-muted2 mt-0.5">
+								This voucher is on the week still in progress ({thisWeekCycle}),
+								so its figures can still move — a shift tonight, a receipt
+								tomorrow, a penalty recorded before the send. A signature
+								attests to a total, and there is no final total to attest to
+								yet. It appears under <b>Last Week</b> once the cycle closes,
+								and signs from there.
+							</p>
+						</div>
+					)}
+
+					{!financeSigned && !weekStillOpen && (
+						<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
+							<p className="iz-sm font-bold">Finance signature required</p>
+							<p className="iz-tiny iz-muted2 mt-0.5">
+								Sign to attest these figures. The PR counter-signs what you sign
+								here, so it comes before the voucher is sent.
+							</p>
+							{signError && (
+								<p className="iz-tiny mt-1.5 text-[var(--iz-red,#c0554f)]">
+									{signError}
 								</p>
-								<p className="iz-tiny iz-muted2 mt-1.5">
-									Both become available the day after the week ends. Until then
-									this page is for reviewing what has accrued so far.
-								</p>
-							</div>
-						)}
-						{!financeSigned && !weekStillRunning && (
-							<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
-								<p className="iz-sm font-bold">Finance signature required</p>
-								<p className="iz-tiny iz-muted2 mt-0.5">
-									Sign to attest these figures. The PR counter-signs what you
-									sign here, so it comes before the voucher is sent.
-								</p>
-								{signError && (
-									<p className="iz-tiny mt-1.5 text-[var(--iz-red,#c0554f)]">
-										{signError}
-									</p>
-								)}
-								{signOpen ? (
-									<div className="mt-2">
-										<PrSignaturePad
-											label="Draw your signature"
-											onConfirm={() => {
-												/* the PNG is not persisted — strokes are */
-											}}
-											onConfirmInk={(ink) => void handleFinanceSign(ink)}
-											onCancel={() => setSignOpen(false)}
+							)}
+							{signOpen ? (
+								<div className="mt-2">
+									<PrSignaturePad
+										label="Draw your signature"
+										onConfirm={() => {
+											/* the PNG is not persisted — strokes are */
+										}}
+										onConfirmInk={(ink) => void handleFinanceSign(ink)}
+										onCancel={() => setSignOpen(false)}
+									/>
+								</div>
+							) : storedSignature ? (
+								/*
+								 * Tap-to-sign. The stored ink is PRE-LOADED, never applied
+								 * automatically: opening the voucher and pressing this is
+								 * still the act of signing, and the preview above the button
+								 * shows exactly which mark is about to go on the document.
+								 * Drawing a fresh one stays available, because a signer must
+								 * be able to sign as themselves today rather than as their
+								 * past self.
+								 */
+								<>
+									<div className="mt-2 flex h-14 items-end rounded-lg border border-[var(--iz-line)] bg-white/95 px-2 py-1">
+										<SignatureInkMark
+											ink={JSON.stringify(storedSignature)}
+											label="Your signature on file"
+											className="h-10 w-full"
 										/>
 									</div>
-								) : storedSignature ? (
-									/*
-									 * Tap-to-sign. The stored ink is PRE-LOADED, never applied
-									 * automatically: opening the voucher and pressing this is
-									 * still the act of signing, and the preview above the button
-									 * shows exactly which mark is about to go on the document.
-									 * Drawing a fresh one stays available, because a signer must
-									 * be able to sign as themselves today rather than as their
-									 * past self.
-									 */
-									<>
-										<div className="mt-2 flex h-14 items-end rounded-lg border border-[var(--iz-line)] bg-white/95 px-2 py-1">
-											<SignatureInkMark
-												ink={JSON.stringify(storedSignature)}
-												label="Your signature on file"
-												className="h-10 w-full"
-											/>
-										</div>
-										<button
-											type="button"
-											className="iz-btn iz-btn-primary mt-2 w-full"
-											disabled={isSigning}
-											onClick={() => void handleFinanceSign(storedSignature)}
-										>
-											<Pencil className="h-4 w-4" />
-											{isSigning ? "Signing…" : "Sign with my signature"}
-										</button>
-										<button
-											type="button"
-											className="iz-btn iz-btn-ghost mt-1.5 w-full"
-											disabled={isSigning}
-											onClick={() => setSignOpen(true)}
-										>
-											Draw a different signature
-										</button>
-									</>
-								) : (
-									<>
-										<button
-											type="button"
-											className="iz-btn iz-btn-primary mt-2 w-full"
-											disabled={isSigning}
-											onClick={() => setSignOpen(true)}
-										>
-											<Pencil className="h-4 w-4" /> Sign this voucher
-										</button>
-										<p className="iz-tiny iz-muted2 mt-1 text-center">
-											Save a signature in Settings to sign with one tap next
-											time.
-										</p>
-									</>
-								)}
-							</div>
-						)}
-						<button
-							type="button"
-							className="iz-btn iz-btn-primary mt-2 w-full"
-							disabled={!sendGate.allowed || !financeSigned || weekStillRunning}
-							onClick={() => sendToPr(pv.id)}
-						>
-							<Send className="h-4 w-4" /> Send to PR for e-sign
-						</button>
-						{weekStillRunning ? (
-							<p className="iz-tiny iz-muted2 mt-1 text-center">
-								Available once the week has ended.
-							</p>
-						) : (
-							!financeSigned && (
+									<button
+										type="button"
+										className="iz-btn iz-btn-primary mt-2 w-full"
+										disabled={isSigning}
+										onClick={() => void handleFinanceSign(storedSignature)}
+									>
+										<Pencil className="h-4 w-4" />
+										{isSigning ? "Signing…" : "Sign with my signature"}
+									</button>
+									<button
+										type="button"
+										className="iz-btn iz-btn-ghost mt-1.5 w-full"
+										disabled={isSigning}
+										onClick={() => setSignOpen(true)}
+									>
+										Draw a different signature
+									</button>
+								</>
+							) : (
+								<>
+									<button
+										type="button"
+										className="iz-btn iz-btn-primary mt-2 w-full"
+										disabled={isSigning}
+										onClick={() => setSignOpen(true)}
+									>
+										<Pencil className="h-4 w-4" /> Sign this voucher
+									</button>
+									<p className="iz-tiny iz-muted2 mt-1 text-center">
+										Save a signature in Settings to sign with one tap next time.
+									</p>
+								</>
+							)}
+						</div>
+					)}
+					{/*
+					 * NOT RENDERED AT ALL on the in-progress week — not merely disabled.
+					 *
+					 * The send cannot happen before the agency signs, and signing cannot
+					 * happen before the week closes, so on a live week this button has no
+					 * reachable path to working. A greyed control still advertises an
+					 * action and invites the reader to hunt for what unlocks it; the
+					 * notice above already says what has to happen and when. The server
+					 * refuses this lane too (409, same rule), so hiding it is the UI
+					 * agreeing with the API rather than being the only thing enforcing it.
+					 */}
+					{!weekStillOpen && (
+						<>
+							<button
+								type="button"
+								className="iz-btn iz-btn-primary mt-2 w-full"
+								disabled={!sendGate.allowed || !financeSigned}
+								onClick={() => sendToPr(pv.id)}
+							>
+								<Send className="h-4 w-4" /> Send to PR for e-sign
+							</button>
+							{!financeSigned && (
 								<p className="iz-tiny iz-muted2 mt-1 text-center">
 									Sign above first — the PR counter-signs your signature.
 								</p>
-							)
-						)}
-						{/* Only once we know WHY. While the fetch is in flight the button is
-						    disabled with no caption — a reason would be a guess. */}
-						{!sendGate.allowed &&
-							sendGate.heldDays.length + sendGate.unreviewedDays.length > 0 && (
-								<p className="iz-tiny iz-muted2 mt-1 text-center">
-									{sendGate.reason} — see Day review below.
-								</p>
 							)}
-					</>
-				)}
+						</>
+					)}
+					{/* Only once we know WHY. While the fetch is in flight the button is
+						    disabled with no caption — a reason would be a guess. */}
+					{!sendGate.allowed &&
+						sendGate.heldDays.length + sendGate.unreviewedDays.length > 0 && (
+							<p className="iz-tiny iz-muted2 mt-1 text-center">
+								{sendGate.reason} — see Day review below.
+							</p>
+						)}
+				</>
+			)}
 
 			{(pv.status === "DISPUTED" || pv.status === "SENT") && (
 				<button
@@ -1687,7 +1896,7 @@ function PvDetail({
 			 * because a transfer can be real without its reference being to hand,
 			 * and blocking the record would lose the more important fact.
 			 */}
-			{pv.status === "SIGNED" && agencyCan(agencySubRole, "raisePv") && (
+			{pv.status === "SIGNED" && can("raisePv") && (
 				<div className="mt-2 rounded-xl border border-[rgba(93,217,160,.35)] p-3">
 					<p className="iz-sm font-bold">Record payment</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">

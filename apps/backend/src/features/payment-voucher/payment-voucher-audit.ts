@@ -326,11 +326,17 @@ function elapsedHours(from: Date | string | null, to: Date | string | null): num
  * The ONE place this choice is made, because it is easy to get wrong in a way
  * nothing catches. Since 0097 `payAmount` is what the shift EARNED and may be
  * pro-rated below the day rate; `dayRateAmount` is the rate it was taken from.
- * Overtime is `daily wage ÷ standard shift × 1.5` — a property of the rate card,
- * not of how much this particular night happened to earn — so pricing it off
- * `payAmount` would cut the OT rate of a PR who arrived late and stayed late by
- * exactly the minutes they were short at the start. That is the one shift where
- * pro-rata and overtime both fire, and it is the case nobody would think to test.
+ * Overtime is `daily wage ÷ THIS SHIFT'S WINDOW × 1.5` (see
+ * `overtimeAmountCents` below) — a property of the booking, not of how much this
+ * particular night happened to earn — so pricing it off `payAmount` would cut
+ * the OT rate of a PR who arrived late and stayed late by exactly the minutes
+ * they were short at the start. That is the one shift where pro-rata and
+ * overtime both fire, and it is the case nobody would think to test.
+ *
+ * ⚠️ This paragraph read "÷ standard shift" until 12 Aug 2026 — the pre-6-Aug
+ * rule, left sitting directly above the implementation that replaced it. The
+ * divisor moved to the shift window; only the FALLBACK, for a shift whose window
+ * is unknown, is still `STANDARD_SHIFT_HOURS`.
  *
  * Falls back to `payAmount` for rows sealed before 0097, where the two were the
  * same number by definition.

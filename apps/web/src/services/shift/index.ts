@@ -34,6 +34,23 @@ export interface Shift {
 	updatedAt: string;
 	createdBy: string;
 	updatedBy: string;
+	/**
+	 * The tier MIX this shift asked for (`shift_pay_tier`), served by both the
+	 * list and getById. Optional because a response cached from before the list
+	 * carried it has none — and an EMPTY array is meaningful in its own right:
+	 * the shift declared no mix, so any tier fits and only `quantity` binds.
+	 */
+	payTiers?: ShiftPayTierDemand[];
+}
+
+/**
+ * One tier's requested headcount on a shift. `tier` is the outlet label
+ * ('Tier I'..'Servant'); commission-only carries null and is keyed on `kind`.
+ */
+export interface ShiftPayTierDemand {
+	kind: "tier" | "commission_only";
+	tier: string | null;
+	prCount: number;
 }
 
 export interface ShiftsQueryParams {

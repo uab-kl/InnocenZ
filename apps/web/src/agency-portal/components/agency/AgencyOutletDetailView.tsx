@@ -1,4 +1,5 @@
 import { AgencyCommissionRulesPanel } from "@agency-portal/components/agency/AgencyCommissionRulesPanel";
+import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { formatOutletHistRm } from "@agency-portal/components/outlet/outlet-history-ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
@@ -32,7 +33,6 @@ import {
 	ChevronDown,
 	ChevronRight,
 	Clock,
-	MapPin,
 	Star,
 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
@@ -42,6 +42,11 @@ type AgencyOutletDetailViewProps = {
 	shifts: AgencyOutletAvailableShift[];
 	dayDemand: AgencyOutletDayDemand[];
 	onBack: () => void;
+	/**
+	 * The venue's `logo_image`, from the same lookup the grid cards use — so the
+	 * mark does not vanish the moment you open the outlet you recognised by it.
+	 */
+	logo?: string | null;
 };
 
 export function AgencyOutletDetailView({
@@ -49,6 +54,7 @@ export function AgencyOutletDetailView({
 	shifts,
 	dayDemand,
 	onBack,
+	logo,
 }: AgencyOutletDetailViewProps) {
 	const shiftGroups = useMemo(
 		() => groupOutletShiftsTodayFuture(shifts, DEFAULT_ROSTER_DATE_ISO),
@@ -79,9 +85,7 @@ export function AgencyOutletDetailView({
 			</button>
 
 			<header className="iz-outlet-detail-head">
-				<div className="iz-outlet-detail-head__icon" aria-hidden>
-					<MapPin className="h-6 w-6" />
-				</div>
+				<OutletLogoTile logo={logo} className="iz-outlet-detail-head__icon" />
 				<div className="min-w-0">
 					<h1 className="iz-outlet-detail-head__title">{summary.outlet}</h1>
 					<p className="iz-outlet-detail-head__meta">

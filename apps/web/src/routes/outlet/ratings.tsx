@@ -7,8 +7,8 @@ import {
 	type OutletRating,
 	useOutletRatings,
 } from "@agency-portal/hooks/use-outlet-ratings";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Star } from "lucide-react";
 import { useMemo, useState } from "react";
@@ -82,7 +82,6 @@ function RatingCard({ rating }: { rating: OutletRating }) {
 }
 
 function RatingsPage() {
-	const outletSubRole = useStore((s) => s.outletSubRole);
 	const outletName = useStore((s) => s.outletWorkspace.outletName);
 	const demoRatings = useStore((s) => s.ratings);
 	const backend = useOutletRatings();
@@ -122,6 +121,7 @@ function RatingsPage() {
 	// Averaged over every rating the outlet holds, not the filtered view — a
 	// filtered average would read as the outlet's overall verdict while silently
 	// describing a subset.
+	const canRate = useOutletCan()("ratePrs");
 	const average = useMemo(() => {
 		if (ratings.length === 0) return null;
 		const total = ratings.reduce((sum, r) => sum + r.stars, 0);
@@ -134,7 +134,7 @@ function RatingsPage() {
 				eyebrow={outletName}
 				title="Ratings"
 				hint={
-					outletCan(outletSubRole, "ratePrs")
+					canRate
 						? "Ratings you have left on PRs. Rate a PR from Today once their shift is sealed."
 						: "Ratings this outlet has left on PRs. Your role can view but not rate."
 				}

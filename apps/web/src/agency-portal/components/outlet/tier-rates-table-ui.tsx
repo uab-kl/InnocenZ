@@ -420,12 +420,40 @@ export function tierTableHeadCell(className?: string, editable?: boolean) {
 	);
 }
 
-export function TierRatesTableLegend() {
+/**
+ * `standardShiftHours` captions the two DERIVED columns.
+ *
+ * RM/HR is `daily wage ÷ standard shift hours` and OT/HR is 1.5× that, so both
+ * are only true for a shift of that length — and the backend prices real
+ * overtime against the shift's OWN booked window, not this figure. Without the
+ * caption an outlet reads "OT/HR RM125" off a 6-hour ladder, books a 2-hour
+ * shift, and is billed RM375/h.
+ *
+ * Pass `null` when the tiers disagree on their standard length: the rule is then
+ * still stated, but no single number is claimed for all of them. The other
+ * columns — daily wage, target sales, drink/tip % — do NOT vary with shift
+ * length, which is why this caption names only these two.
+ */
+export function TierRatesTableLegend({
+	standardShiftHours,
+}: {
+	standardShiftHours?: number | null;
+} = {}) {
 	return (
 		<div className="border-t border-[var(--iz-line)] px-2 py-1.5 text-[10px] leading-snug text-[var(--iz-muted2)]">
 			<span className="text-[var(--iz-gold-l)]/90">Highlighted cells</span> are
 			editable · tap to change ·{" "}
 			<span className="text-[var(--iz-muted)]">dimmed cells</span> are read-only
+			<div className="mt-1">
+				<span className="text-[var(--iz-muted)]">RM/HR</span> and{" "}
+				<span className="text-[var(--iz-muted)]">OT/HR</span> are worked out
+				from the daily wage
+				{standardShiftHours
+					? ` over a ${standardShiftHours}-hour standard shift`
+					: " over each tier's standard shift"}{" "}
+				— OT is 1.5× the hourly rate. Both follow the shift you actually book: a
+				shorter shift makes every hour, and every overtime hour, worth more.
+			</div>
 		</div>
 	);
 }

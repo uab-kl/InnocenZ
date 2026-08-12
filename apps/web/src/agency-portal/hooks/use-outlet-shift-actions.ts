@@ -2,7 +2,26 @@ import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
-import { updateShift } from "@/services/shift";
+import { removeShift, updateShift } from "@/services/shift";
+
+/**
+ * A shift may be withdrawn only while it is still ENTIRELY in the future — from
+ * tomorrow onwards. Today's is off limits even before it starts: PRs have
+ * planned their day around it, and deleting a shift CASCADES to its
+ * `shift_assignment` rows (and from there to swaps and cut-loss requests), so a
+ * same-day delete would cancel people who may already be travelling to the venue.
+ *
+ * Exported and shared with the UI so the button and the server apply one rule —
+ * a client-only version is how a screen ends up offering what the API refuses.
+ * Compared as `YYYY-MM-DD` strings, which sort correctly and carry no timezone
+ * of their own.
+ */
+export function canDeleteShiftOn(
+	shiftDateIso: string,
+	todayIso: string,
+): boolean {
+	return shiftDateIso > todayIso;
+}
 
 export interface UseOutletShiftActions {
 	/** True on a real signed-in outlet session; false falls back to the demo store. */
@@ -10,6 +29,9 @@ export interface UseOutletShiftActions {
 	/** Mark a shift's staffing confirmed on the backend (shift status -> confirmed). */
 	confirmShift: (shiftId: string) => Promise<void>;
 	isConfirming: boolean;
+	/** Withdraw a future shift. Today's and past shifts are refused server-side too. */
+	deleteShift: (shiftId: string) => Promise<void>;
+	isDeleting: boolean;
 }
 
 /**
@@ -40,9 +62,25 @@ export function useOutletShiftActions(): UseOutletShiftActions {
 		},
 	});
 
+	const remove = useMutation({
+		mutationFn: async (shiftId: string) => {
+			await removeShift(shiftId, logout);
+		},
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["outlet"] });
+			queryClient.invalidateQueries({ queryKey: ["roster"] });
+			// The agency's Outlets demand dashboard reads the same shifts under its
+			// own key; without this the withdrawn shift keeps showing there as
+			// unstaffed demand.
+			queryClient.invalidateQueries({ queryKey: ["agency"] });
+		},
+	});
+
 	return {
 		backed,
 		confirmShift: (shiftId) => confirm.mutateAsync(shiftId),
 		isConfirming: confirm.isPending,
+		deleteShift: (shiftId) => remove.mutateAsync(shiftId),
+		isDeleting: remove.isPending,
 	};
 }

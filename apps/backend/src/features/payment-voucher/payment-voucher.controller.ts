@@ -65,6 +65,7 @@ import {
   kindFromComponent,
   lineDisputable,
   refPacksKind,
+  resolveComponent,
 } from './payment-voucher-component.js';
 import {
   type ResolvedDrinkItem,
@@ -110,6 +111,7 @@ import {
   prReceiptSourceValues,
 } from '@/schema/payment-voucher.schema';
 import {
+  PaymentVoucherComponent,
   PaymentVoucherFilter,
   PaymentVoucherStatus,
   PaymentVoucherLineType,
@@ -282,6 +284,21 @@ function catalogueListName(kind: 'drinks' | 'tips'): string {
 type PrReceiptLineDTO = {
   id: string;
   kind: PrReceiptKind;
+  /**
+   * The FINE-GRAINED classification behind `kind`, which is deliberately coarse.
+   *
+   * `kind` has only four PR-facing buckets, so `ot`, `deduction` and `other` all
+   * arrive as 'others' (see KIND_BY_COMPONENT). That flattening is why a day
+   * with RM 30 of overtime and a RM 20 cancellation fee showed a single
+   * `Others: 10.00` cell — two opposite facts netted into one number that
+   * described neither. Sending the column lets the phone split deductions onto
+   * their own row instead of inventing a second classification rule from the
+   * sign of the amount.
+   *
+   * Null for a legacy row carrying neither a column nor a derivable ref:
+   * honestly unclassified, and a reader must not round that up to 'other'.
+   */
+  component: PaymentVoucherComponent | null;
   source: PrReceiptSource;
   item: string;
   quantity: number;
@@ -420,6 +437,9 @@ function toReceiptLineDTO(
   return {
     id: line.id,
     kind,
+    // Column first, ref second — the same precedence `lineKind` uses, in the
+    // one helper both directions of this classification share.
+    component: resolveComponent(line),
     source,
     item: line.description,
     quantity: line.quantity,
@@ -506,6 +526,32 @@ function receiptInfoMap(
  * made this return 0.00 for every generated wage line, so History showed a week's
  * net beside RM 0.00 of wages.
  */
+/**
+ * Is this voucher's week STILL RUNNING?
+ *
+ * Owner's rule (12 Aug 2026): a PV on the in-progress week can neither be
+ * finance-signed nor sent to the PR. Its figures are not final — a shift worked
+ * tonight, a receipt logged tomorrow, a penalty charged before the send all
+ * still move the total — and a signature attests to a total.
+ *
+ * `klToday()`, never `new Date()`: the agency's week closes in Kuala Lumpur, and
+ * on a UTC host the bare date rolls eight hours early, which would open signing
+ * on Saturday evening. Same reason `shiftDayKey` exists on the shift side.
+ *
+ * Both values are `YYYY-MM-DD`, so the string compare is the date compare. The
+ * week is open THROUGH its end date — today === weekEnd is Saturday itself,
+ * still a working night.
+ */
+function voucherWeekStillOpen(weekEnd: string | null | undefined): boolean {
+  if (!weekEnd) return false;
+  return klToday() <= weekEnd;
+}
+
+/** The 409 both the sign and the send lanes answer with, so they cannot drift. */
+const WEEK_STILL_OPEN_MESSAGE =
+  'This week has not closed yet — a voucher can only be signed and sent once its ' +
+  'cycle is over, because its figures can still change until then.';
+
 function sumWages(lines: PaymentVoucherLineType[]): string {
   const total = lines.reduce((sum, line) => {
     const kind = lineKind(line, decodeRef(line.ref).kind);
@@ -1028,8 +1074,11 @@ export class PaymentVoucherControllerClass {
          * earning. Refused up to and including week_end, because the last night
          * of the week is still a working night.
          */
-        const today = klToday();
-        if (existing.weekEnd && today <= existing.weekEnd) {
+        // Shares `voucherWeekStillOpen` with the finance-sign lane rather than
+        // re-inlining the comparison: the two refusals must agree on the day the
+        // week closes, or an agency meets a screen that will sign but not send.
+        // The MESSAGE stays bespoke — this one can name the date to come back on.
+        if (voucherWeekStillOpen(existing.weekEnd)) {
           return res.status(409).json({
             success: false,
             message:
@@ -1452,6 +1501,15 @@ export class PaymentVoucherControllerClass {
             'This voucher has already been sent — the finance signature belongs before it goes to the PR.',
           data: null,
         });
+      }
+
+      // The week must be OVER. Enforced here and not only in the portal: the web
+      // app hides the pad on an in-progress week, but a hidden control is not a
+      // rule — anything holding an agency token could still sign a live week.
+      if (voucherWeekStillOpen(existing.weekEnd)) {
+        return res
+          .status(409)
+          .json({ success: false, message: WEEK_STILL_OPEN_MESSAGE, data: null });
       }
 
       const actor = getActor(req);

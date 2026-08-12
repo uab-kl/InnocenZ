@@ -11,6 +11,11 @@
  * the PR is told why instead of being handed an action that fails.
  */
 import type { PrCurrentWeek, PrReceiptLine, PrWeekDispute } from './api';
+import type { GridBucket } from './week-pay-grid';
+import type { WeeklyDayPay } from './demo-shifts';
+
+/** The grid's own per-day state — see `WeeklyDayPay.status` for what each means. */
+type DayGridStatus = WeeklyDayPay['status'];
 
 /** Lines with a receipt behind them, split by where that receipt sits. */
 export type ReceiptReviewCounts = {
@@ -79,8 +84,11 @@ const DISPUTABLE_KINDS: PrReceiptLine['kind'][] = ['drinks', 'tips'];
  * Do not re-inline the array at a call site; one client-side copy of a
  * server-enforced rule is already one more than ideal.
  */
-export function kindDisputable(kind: PrReceiptLine['kind']): boolean {
-  return DISPUTABLE_KINDS.includes(kind);
+export function kindDisputable(kind: GridBucket): boolean {
+  // Takes a GRID BUCKET, not a kind, so the Deductions row can ask the same
+  // question every other row asks and get a plain no. A fine is argued with the
+  // agency that recorded it, not through a claim against a voucher line.
+  return DISPUTABLE_KINDS.includes(kind as PrReceiptLine['kind']);
 }
 
 /**
@@ -205,7 +213,10 @@ export type ReceiptClaimState = {
 export function receiptClaimState(
   week: PrCurrentWeek | null,
   dateIso: string,
-  component: PrReceiptLine['kind'],
+  // A GRID BUCKET, for the same reason as `kindDisputable`. 'deductions' is
+  // never a dispute's `component`, so it matches nothing and the empty state
+  // falls out of the existing filter rather than needing a special case.
+  component: GridBucket,
 ): ReceiptClaimState {
   const rows = (week?.disputes ?? []).filter(
     (d) => d.disputeDate === dateIso && d.component === component && isLive(d),
@@ -264,7 +275,13 @@ export function openDisputeKeys(week: PrCurrentWeek | null): Set<string> {
  * the PR contested on Wednesday is DISPUTED, not APPROVED, because the approval
  * is exactly what is being argued with.
  */
-export type DayStatusLabel = 'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | '—';
+export type DayStatusLabel =
+  | 'PENDING'
+  | 'APPROVED'
+  | 'DISPUTED'
+  | 'VERIFIED'
+  | 'DEDUCTED'
+  | '—';
 
 /**
  * THIS WEEK tops out at APPROVED — VERIFIED is earned, not granted.
@@ -281,19 +298,26 @@ export type DayStatusLabel = 'PENDING' | 'APPROVED' | 'DISPUTED' | 'VERIFIED' | 
  * gives VERIFIED. The Last-week card keeps the opposite mapping
  * (`approved → verified`), because a closed week's sign-off is final.
  */
-export function thisWeekDayStatus(
-  gridStatus: 'verified' | 'approved' | 'pending' | 'empty',
-): 'verified' | 'approved' | 'pending' | 'empty' {
+export function thisWeekDayStatus(gridStatus: DayGridStatus): DayGridStatus {
+  // 'deducted' passes straight through: it is not a review stage, so there is
+  // no weaker form of it for a live week to fall back to.
   return gridStatus === 'verified' ? 'approved' : gridStatus;
 }
 
 export function dayStatusLabel(
   week: PrCurrentWeek | null,
   dateIso: string,
-  gridStatus: 'verified' | 'approved' | 'pending' | 'empty',
+  gridStatus: DayGridStatus,
   extraOpen = false,
 ): DayStatusLabel {
   if (gridStatus === 'empty') return '—';
+  /*
+   * Before the dispute tests, because a fine is not disputable here and the
+   * charge is already final. Only reached when the day holds nothing BUT
+   * deductions (`buildWeekGridFromLines`), so this cannot silence a claim about
+   * a worked shift sharing the date.
+   */
+  if (gridStatus === 'deducted') return 'DEDUCTED';
   const { open, settled } = disputesForDay(week, dateIso);
   if (open.length > 0 || extraOpen) return 'DISPUTED';
   if (settled.length > 0) return 'VERIFIED';

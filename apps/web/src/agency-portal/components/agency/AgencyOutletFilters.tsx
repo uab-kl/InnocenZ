@@ -24,6 +24,10 @@ export function AgencyOutletFilters({
 	 * login saw "Velvet 23 / Mermate / Bear Lounge / Urban Soul" in the dropdown
 	 * while its actual venues sat in the grid below — picking one filtered
 	 * everything away. Sourcing it from the caller keeps the two in step.
+	 *
+	 * REQUIRED on purpose: an optional prop defaulting to that demo constant is
+	 * how the wrong list got here, and it would put demo venues in front of a
+	 * real agency again the moment a new caller forgot to pass it.
 	 */
 	outletNames: string[];
 	/** Compact pill row — Manage Outlet page layout */

@@ -35,7 +35,6 @@ import {
 	outletPrHeadcountForDate,
 	resolveDressCode,
 } from "@agency-portal/lib/outlet-demo";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { OUTLET_SERVICES_ENABLED } from "@agency-portal/lib/phase-flags";
 import {
 	basePayFromPayTierRows,
@@ -43,6 +42,7 @@ import {
 	totalPrCountFromPayTierRows,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { startOfToday } from "date-fns";
@@ -78,9 +78,8 @@ function PostJobPage() {
 
 	const { tab: searchTab } = Route.useSearch();
 
-	const outletSubRole = useStore((s) => s.outletSubRole);
-
-	const canPostShifts = outletCan(outletSubRole, "postJob");
+	const can = useOutletCan();
+	const canPostShifts = can("postJob");
 
 	// PHASE 2 — the agency add-on "Services" tab is deferred. The flag now lives in
 	// lib/phase-flags.ts so the /outlet/special-service entry point reads the same
@@ -90,7 +89,7 @@ function PostJobPage() {
 	// The role check is kept live alongside it rather than commented out, so
 	// flipping the flag restores the feature already correctly scoped.
 	const canOrderServices =
-		OUTLET_SERVICES_ENABLED && outletCan(outletSubRole, "orderSpecialService");
+		OUTLET_SERVICES_ENABLED && can("orderSpecialService");
 
 	const tab: PostJobTab = useMemo(() => {
 		if (searchTab === "services" && canOrderServices) return "services";
@@ -576,8 +575,7 @@ function PostJobPage() {
 		// sends someone to ask for a role change that would not help. Outlet
 		// finance is exactly that case.
 		const blockedByPhase =
-			!OUTLET_SERVICES_ENABLED &&
-			outletCan(outletSubRole, "orderSpecialService");
+			!OUTLET_SERVICES_ENABLED && can("orderSpecialService");
 
 		return (
 			<div className="iz-screen">

@@ -40,7 +40,32 @@ export function componentFromRef(
   // checked first because it is the more specific fact. 'ot' is a real value of
   // the enum that nothing else writes.
   if (dedupe?.endsWith('-ot')) return 'ot';
+  // Same trick, opposite direction of money: a recorded penalty is also logged
+  // with the coarse kind 'others', so without this marker every fine would read
+  // as 'other' and a voucher's deductions would be indistinguishable from its
+  // odds and ends. `penaltyDedupeRef` in penalty-line.ts writes the suffix.
+  if (dedupe?.endsWith('-pen')) return 'deduction';
   return COMPONENT_BY_KIND[kind];
+}
+
+/**
+ * The line's classification as a READER should see it: the typed column when it
+ * has one, otherwise derived from the ref.
+ *
+ * The column is authoritative — `withDerivedComponent` fills it on insert, so
+ * every line written since it landed carries one. The ref fallback is for rows
+ * predating that, which would otherwise report themselves unclassified and let
+ * a real deduction read as ordinary 'other' money. Null stays null: a line with
+ * neither is honestly unknown, and a caller must not round that up to 'other'.
+ *
+ * Pairs with `withDerivedComponent` (the write side) so the two directions
+ * cannot disagree about what a `-pen` ref means.
+ */
+export function resolveComponent(line: {
+  component?: PaymentVoucherComponent | null;
+  ref?: string | null;
+}): PaymentVoucherComponent | null {
+  return line.component ?? componentFromRef(line.ref) ?? null;
 }
 
 /**

@@ -4,7 +4,6 @@ import {
   paymentVoucherGenerator,
   paymentVoucherRepository,
   prRepository,
-  collectionInvoiceRepository,
   shiftAssignmentRepository,
 } from '@/composition-root.js';
 import { klToday, previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
@@ -277,33 +276,25 @@ export async function runWeeklyPayout(): Promise<void> {
     }
   }
 
-  // Collections: what each outlet owes its agency for the same week. DRAFTS
-  // only — an agency reviews and issues, nothing is put in front of an outlet
-  // automatically, and this app never moves the money either way.
+  // Collections (what an outlet owes its agency) are NOT drafted here any more.
   //
-  // Derived from shift assignments rather than the vouchers just generated: a
-  // voucher snapshots one outlet name, so a PR who worked two venues would bill
-  // whichever came first. Same completed-work rule, different grouping.
-  try {
-    const totals = await collectionInvoiceRepository.weeklyOutletTotals(weekStart, weekEnd);
-    const drafted = await collectionInvoiceRepository.draftForWeek(
-      totals,
-      weekStart,
-      weekEnd,
-      ACTOR,
-    );
-    logger.info(
-      `[weekly-payout] collections: ${totals.length} outlet total(s), ${drafted.length} drafted` +
-        (drafted.length < totals.length
-          ? ` (${totals.length - drafted.length} already existed — re-run, left untouched)`
-          : ''),
-    );
-  } catch (error) {
-    // Vouchers are the payroll obligation and are already committed; a failure
-    // to draft a receivable must not cost the PRs their notification or make
-    // the run look failed.
-    logger.error('[weekly-payout] collections drafting failed:', error);
-  }
+  // Owner's decision, 12 Aug 2026: the outlet and the agency settle that between
+  // themselves, outside this app. Auto-drafting an invoice per outlet every week
+  // put an app-derived figure — `sum(shift_assignment.pay_amount)`, with no
+  // agency margin in it — in front of two parties who are billing each other on
+  // their own terms, and offered a "Mark settled" button for a payment nothing
+  // here can verify.
+  //
+  // Only the WRITE is gone. `collection_invoice`, its API and both portals' read
+  // screens are untouched, so rows already raised still show and can still be
+  // issued/settled by hand. Restoring the automation is putting this block back:
+  // `weeklyOutletTotals(weekStart, weekEnd)` then `draftForWeek(...)`, which is
+  // idempotent per (agency, outlet, week).
+  //
+  // ⚠️ Before ever re-enabling it, read the note on the one Monday-anchored row
+  // (`collection_invoice 57f8cbd2…`, Velvet 23, 20–26 Jul, settled): it does not
+  // collide with either Sun–Sat week it straddles, so a catch-up run over late
+  // July would bill that venue a second time for work already paid for.
 }
 
 export const WEEKLY_PAYOUT_JOB: JobDefinition = {

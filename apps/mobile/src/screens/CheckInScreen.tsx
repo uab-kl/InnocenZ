@@ -13,7 +13,7 @@ import * as Location from 'expo-location';
 import { distanceM } from '../lib/geo';
 import { C, F, GRADIENTS, grad } from '../theme/theme';
 import {
-  CANCELLATION_RULE_SUMMARY,
+  cancellationRuleSummary,
   GEOFENCE_METERS,
   GPS_BYPASS,
   fmtDFriendly,
@@ -717,7 +717,7 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               Agency-assigned shift — cancellation may affect wages.
             </Text>
             <Text style={styles.rulesTitle}>Cancellation rules</Text>
-            {CANCELLATION_RULE_SUMMARY.map((r) => (
+            {cancellationRuleSummary().map((r) => (
               <View key={r.label} style={styles.ruleRow}>
                 <Text style={styles.ruleLabel}>{r.label}</Text>
                 <Text

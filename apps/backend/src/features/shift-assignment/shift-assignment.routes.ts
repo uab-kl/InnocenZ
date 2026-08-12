@@ -41,6 +41,11 @@ router.get('/attendance-fixes', canReadPositions, shiftAssignmentController.list
 // deciding it — but the outlet is left out, as it is for positions: a venue
 // does not review the agency's pay decisions. Must precede '/:id'.
 router.get('/overtime/pending', canWrite, shiftAssignmentController.listPendingOvertime.bind(shiftAssignmentController));
+// What one PR would earn on each of several shifts, before assigning them.
+// `canWrite`, not `canRead`: it answers a question only the people who staff the
+// roster ask, and it discloses the outlet's rate card for a tier. Must precede
+// '/:id', which would otherwise swallow 'wage-preview' as an assignment id.
+router.get('/wage-preview', canWrite, shiftAssignmentController.wagePreview.bind(shiftAssignmentController));
 router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignmentController));
 // Ranked replacement PRs for a released assignment; assigning the pick goes
 // through the normal POST '/' below.

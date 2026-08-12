@@ -6,9 +6,9 @@ import {
 	collectionWeekLabel,
 } from "@agency-portal/lib/collections";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { shouldShowWeeklyReconciliation } from "@agency-portal/lib/reconciliation-weekly";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronDown } from "lucide-react";
@@ -43,14 +43,14 @@ export function OutletReconciliationBanner() {
 const CENT = 0.005;
 
 function BilledVsRecordsBanner() {
-	const outletSubRole = useStore((s) => s.outletSubRole);
+	const can = useOutletCan();
 	const collections = useOutletCollections();
 	const sales = useOutletSalesReport();
 	const [open, setOpen] = useState(false);
 
 	// A billing check, so the same gate the collections statement uses — owner and
 	// finance, not ops.
-	if (!outletCan(outletSubRole, "viewBilling")) return null;
+	if (!can("viewBilling")) return null;
 	if (collections.isLoading || sales.isLoading) return null;
 
 	// The newest statement defines the period. Deriving the week on the client
@@ -138,13 +138,12 @@ function BilledVsRecordsBanner() {
 
 /** The prototype banner, unchanged: outlet sales against the PV total. */
 function DemoReconciliationBanner() {
-	const outletSubRole = useStore((s) => s.outletSubRole);
 	const {
 		agencyReconciliation,
 		confirmOutletReconciliation,
 		setReconciliationVarianceReason,
 	} = useStore();
-	const canConfirm = outletCan(outletSubRole, "confirmDaily");
+	const canConfirm = useOutletCan()("confirmDaily");
 	const [open, setOpen] = useState(false);
 	const [reason, setReason] = useState(
 		agencyReconciliation.varianceReason ?? "",

@@ -1,7 +1,7 @@
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { IzCardTitle } from "@agency-portal/components/iz/ui";
 import {
-	CANCELLATION_RULE_SUMMARY,
+	cancellationRuleSummary,
 	type CancellationEvaluation,
 	type CancellationTier,
 } from "@agency-portal/lib/pr-schedule-cancellation";
@@ -73,7 +73,7 @@ export function PrShiftCancellationSheet({
 					</span>
 				</div>
 				<ul className="iz-pr-schedule-rules-list !mt-0 border-0">
-					{CANCELLATION_RULE_SUMMARY.map((r) => (
+					{cancellationRuleSummary().map((r) => (
 						<li key={r.label} className={`tone-${r.tone}`}>
 							<span className="rule-when">{r.label}</span>
 							<span className="rule-out">{r.outcome}</span>

@@ -28,6 +28,7 @@ import {
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { PR_AGENCY_TIED_OFFERS } from "@agency-portal/lib/pr-features";
+import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
@@ -72,10 +73,37 @@ export function OutletBookings({
 		[shifts, outletWorkspace, agencyRoster, outletCommissionRules],
 	);
 
-	const liveShift =
-		visibleShifts.find(
-			(s) => s.status === "confirmed" && s.date === "Tonight",
-		) ?? visibleShifts.find((s) => s.status === "confirmed");
+	// TODAY MEANS TODAY. This used to match on the human label (`date ===
+	// "Tonight"`) and then fall back to `find(confirmed)` — ANY confirmed shift in
+	// the 14-day window — so with nothing on tonight the home page promoted
+	// tomorrow's, or next week's, and captioned it as the live shift. It now
+	// matches on the real date, and the fallback is gone.
+	//
+	// Rollover needs no special case: a shift dated today stays here until the
+	// DATE itself moves on, at which point tomorrow's shift is today's. Preferring
+	// one that is still running keeps the right card up when a venue runs two in a
+	// day; `hasShiftEnded` is overnight-aware, so a 22:00–04:00 shift is not
+	// "ended" at 01:00 even though the calendar date has changed.
+	const liveShift = useMemo(() => {
+		const todayIso = getLiveTodayIso();
+		const now = new Date();
+		const todays = visibleShifts.filter(
+			(s) =>
+				s.status === "confirmed" &&
+				resolveOutletShiftDateIso(s.date, s.dateIso, todayIso) === todayIso,
+		);
+		return (
+			todays.find(
+				(s) =>
+					!hasShiftEnded(
+						resolveOutletShiftDateIso(s.date, s.dateIso, todayIso),
+						s.shift,
+						now,
+					),
+			) ?? todays[0]
+		);
+	}, [visibleShifts]);
+
 	const futureShifts = liveShift
 		? visibleShifts.filter((s) => s.id !== liveShift.id)
 		: visibleShifts;

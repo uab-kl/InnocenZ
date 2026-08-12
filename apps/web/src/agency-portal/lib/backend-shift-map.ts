@@ -293,8 +293,12 @@ export function shiftRequestFromBackendShift(input: {
 		// Same expression as the roster slot's `shift` — they are joined on it.
 		shift: normalizedSlotLabel(shift.slot) || (shift.eventName ?? ""),
 		quantity: shift.quantity,
-		// Trust the real roster over the shift's own counter when PRs are assigned.
-		filled: staffing.length > 0 ? staffing.length : shift.filled,
+		// The roster IS the count — there is no second opinion to fall back to.
+		// This used to read `staffing.length > 0 ? staffing.length : shift.filled`,
+		// which was never wrong (an empty roster and the dead `shift.filled` are
+		// both 0) but implied that column is a usable backup. Nothing in the
+		// backend has ever incremented it.
+		filled: staffing.length,
 		languages: shift.languages ?? "",
 		event: shift.eventName ?? "Shift",
 		eventKind: shift.eventKind,

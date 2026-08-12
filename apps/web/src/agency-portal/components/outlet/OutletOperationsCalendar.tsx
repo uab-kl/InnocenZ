@@ -9,6 +9,10 @@ import {
 	OutletShiftStatusBadge,
 } from "@agency-portal/components/outlet/OutletShiftDetailPanel";
 import { OutletShiftStaffingSection } from "@agency-portal/components/outlet/OutletShiftStaffingSection";
+import {
+	canDeleteShiftOn,
+	useOutletShiftActions,
+} from "@agency-portal/hooks/use-outlet-shift-actions";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -43,8 +47,9 @@ import {
 	startOfWeek,
 	subMonths,
 } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { toMutationError } from "@/lib/mutation-error";
 
 const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
 
@@ -171,6 +176,21 @@ export function OutletOperationsCalendar({
 		() => dateFromIsoKey(todayIso) ?? new Date(),
 	);
 	const [selectedShiftId, setSelectedShiftId] = useState<string | null>(null);
+	// Two-step: the first press asks, the second withdraws. A one-press delete on a
+	// card the outlet opened to READ is how a night gets cancelled by accident.
+	const [confirmingDelete, setConfirmingDelete] = useState(false);
+	const [deleteError, setDeleteError] = useState<string | null>(null);
+	const {
+		backed: writesBacked,
+		deleteShift,
+		isDeleting,
+	} = useOutletShiftActions();
+
+	const closeSheet = () => {
+		setSelectedShiftId(null);
+		setConfirmingDelete(false);
+		setDeleteError(null);
+	};
 
 	const visibleShifts = useMemo(
 		() =>
@@ -362,7 +382,7 @@ export function OutletOperationsCalendar({
 
 			<IzSheet
 				open={selectedShift !== null}
-				onClose={() => setSelectedShiftId(null)}
+				onClose={isDeleting ? () => {} : closeSheet}
 				variant="dialog"
 				wide
 			>
@@ -423,6 +443,92 @@ export function OutletOperationsCalendar({
 										agencyPrs={agencyPrsOverride}
 									/>
 								</div>
+
+								{/* Withdrawing a posted shift. Only offered on a real session —
+								    a demo shift has no backend row to delete — and only from
+								    TOMORROW onwards: `canDeleteShiftOn` is the same rule the
+								    server enforces, so this button cannot offer what the API
+								    would refuse. Today's shift shows the reason instead of
+								    quietly hiding the control, or the outlet is left wondering
+								    where it went. */}
+								{writesBacked &&
+									(() => {
+										const booked = selectedShift.prs?.length ?? 0;
+										if (!canDeleteShiftOn(dateIso, todayIso)) {
+											return (
+												<div className="mt-3 border-t border-[var(--iz-line)] px-1 pt-3">
+													<p className="iz-tiny iz-muted2">
+														This shift is today or has already passed — it can
+														no longer be withdrawn. Contact the agency to stand
+														the team down.
+													</p>
+												</div>
+											);
+										}
+										return (
+											<div className="mt-3 border-t border-[var(--iz-line)] px-1 pt-3">
+												{deleteError && (
+													<p className="iz-tiny mb-2 text-[var(--iz-danger,#dc2626)]">
+														{deleteError}
+													</p>
+												)}
+												{confirmingDelete ? (
+													<>
+														<p className="iz-tiny iz-muted mb-2 leading-snug">
+															Withdraw this shift?
+															{booked > 0
+																? ` ${booked} booked PR${booked === 1 ? "" : "s"} will lose ${booked === 1 ? "their" : "their"} booking.`
+																: " Nobody is booked on it yet."}{" "}
+															This cannot be undone.
+														</p>
+														<div className="flex gap-2">
+															<button
+																type="button"
+																className="iz-btn iz-btn-soft iz-btn-sm !w-auto"
+																onClick={() => setConfirmingDelete(false)}
+																disabled={isDeleting}
+															>
+																Keep shift
+															</button>
+															<button
+																type="button"
+																className="iz-btn iz-btn-danger iz-btn-sm !w-auto"
+																disabled={isDeleting}
+																onClick={async () => {
+																	setDeleteError(null);
+																	try {
+																		await deleteShift(selectedShift.id);
+																		closeSheet();
+																	} catch (err) {
+																		// Stays open on failure: closing here would
+																		// look exactly like a delete that landed.
+																		setDeleteError(
+																			toMutationError(
+																				err,
+																				"Couldn't withdraw this shift.",
+																			)?.message ??
+																				"Couldn't withdraw this shift.",
+																		);
+																	}
+																}}
+															>
+																{isDeleting ? "Withdrawing…" : "Withdraw shift"}
+															</button>
+														</div>
+													</>
+												) : (
+													<button
+														type="button"
+														className="iz-btn iz-btn-ghost iz-btn-sm !w-auto"
+														onClick={() => setConfirmingDelete(true)}
+													>
+														<Trash2 className="h-3.5 w-3.5" />
+														Withdraw shift
+													</button>
+												)}
+											</div>
+										);
+									})()}
 							</>
 						);
 					})()}

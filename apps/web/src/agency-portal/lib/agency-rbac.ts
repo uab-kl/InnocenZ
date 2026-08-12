@@ -27,6 +27,24 @@ type Permission =
 	| "confirmReconciliation"
 	| "viewHistory"
 	| "viewWorkforce"
+	/**
+	 * Who is on the floor RIGHT NOW — the home page's PR ON DUTY tile and the live
+	 * workforce table under it. Distinct from `viewWorkforce`, which is the roster
+	 * and the PR records.
+	 *
+	 * Split out on 11 Aug 2026. `viewWorkforce` was granting three surfaces at once
+	 * — the live tile, the Roster nav item, and the `/agency/roster` route — so
+	 * there was no way to take the tile off the finance home page (it sat directly
+	 * under "Read-only overview — payroll & PV only") without also removing Roster,
+	 * which the owner wanted kept.
+	 *
+	 * ⚠️ Deliberately has NO entry in `AGENCY_FEATURE_MODULE`. `agencyCan` falls
+	 * back to the matrix below for any permission it cannot map (`if (!map) return
+	 * fallback`), so this stays owner-only no matter what module grants /auth/me
+	 * returns. Mapping it to `workforce:read` would re-grant it to finance and undo
+	 * the whole point of the split.
+	 */
+	| "viewLiveFloor"
 	| "overrideSignedPv";
 
 type ModulePerm = { moduleKey: string; permissionType: string };
@@ -45,8 +63,22 @@ const ROLE_PERMISSIONS: Record<AgencySubRole, Permission[]> = {
 		"confirmReconciliation",
 		"viewHistory",
 		"viewWorkforce",
+		"viewLiveFloor",
 		"overrideSignedPv",
 	],
+	/**
+	 * Finance keeps Roster and the PR records; it does NOT get the live floor.
+	 *
+	 * `viewLiveFloor` is absent, and that is the whole difference (owner's call, 11
+	 * Aug 2026): the PR ON DUTY tile sat on the finance home page directly under
+	 * "Read-only overview — payroll & PV only", showing who is on shift right now —
+	 * which is not a payroll question. `viewWorkforce` stays, so the Roster nav item
+	 * and `/agency/roster` are untouched.
+	 *
+	 * A wage is checked against the SEALED stamps on the voucher, never against who
+	 * happens to be on the floor at this moment, so nothing finance actually does
+	 * loses a source it needed.
+	 */
 	agency_finance: [
 		"viewHome",
 		"viewSettings",

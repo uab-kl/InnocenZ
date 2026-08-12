@@ -1,6 +1,7 @@
 import { AgencyBroadcastSheet } from "@agency-portal/components/agency/AgencyBroadcastSheet";
 import { Comcard3dPreviewVisual } from "@agency-portal/components/agency/Comcard3dPreview";
 import { ManagePrGridCard } from "@agency-portal/components/agency/ManagePrGridCard";
+import { PenaltyRulesEditor } from "@agency-portal/components/agency/PenaltyRulesEditor";
 import { toComcardPreview } from "@agency-portal/components/agency/PrComcardIdentity";
 import { ProfileLanguagePicker } from "@agency-portal/components/iz/ProfileLanguagePicker";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
@@ -19,6 +20,8 @@ import {
 	canGeneratePortfolioComcard,
 	PortfolioGalleryTile,
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
+import { useAgencyPenaltyProposals } from "@agency-portal/hooks/use-agency-penalty-proposals";
+import { useAgencyPenaltyRules } from "@agency-portal/hooks/use-agency-penalty-rules";
 import {
 	shiftOutcomeLabel,
 	useAgencyPrShiftHistory,
@@ -42,7 +45,6 @@ import {
 	RATING_WARN_THRESHOLD,
 	tiedMonthsLabel,
 } from "@agency-portal/lib/agency-pr-flags";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { shiftHistoryForPr } from "@agency-portal/lib/portal-sync";
 import {
 	evaluatePrPenalties,
@@ -62,6 +64,7 @@ import {
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import {
 	AlertTriangle,
@@ -115,18 +118,32 @@ function AgencyManagePRs() {
 	const demoRatings = useStore((s) => s.ratings);
 	const backendRatings = useAgencyRatings();
 	const ratings = backendRatings.backed ? backendRatings.ratings : demoRatings;
-	const agencySubRole = useStore((s) => s.agencySubRole);
 	const requestAgencyPrDetach = useStore((s) => s.requestAgencyPrDetach);
-	const rawPenaltyRules = useStore((s) => s.outletWorkspace.penaltyRules);
+	// Backend rules when signed in for real; the demo store otherwise. A demo
+	// session must never render another agency's fine schedule.
+	const backendPenalties = useAgencyPenaltyRules();
+	const toast = useStore((s) => s.toast);
+	const demoPenaltyRules = useStore((s) => s.agencyPenaltyRules);
+	const saveDemoPenaltyRules = useStore((s) => s.saveAgencyPenaltyRules);
+	const rawPenaltyRules = backendPenalties.backed
+		? backendPenalties.rules
+		: demoPenaltyRules;
+	const can = useAgencyCan();
+	const canEditPenalties = can("editSettings");
+	// Real breaches, evaluated server-side. The demo computation below only ever
+	// worked on demo PRs — `shiftsThisWeek` and friends do not exist on a backend
+	// PR, so every window read empty and this panel always said "No active
+	// penalties this week" no matter what the roster had done.
+	const backendProposals = useAgencyPenaltyProposals();
 	const penalizedPrs = useMemo(() => {
+		// null = the backend rules are still in flight. Falling through to
+		// normalizePenaltyRules(undefined) would evaluate everyone against the
+		// DEFAULT schedule and flash fines this agency may never have written.
+		if (!rawPenaltyRules) return [];
 		const rules = normalizePenaltyRules(rawPenaltyRules);
 		return agencyPRs
 			.map((pr) => {
-				const breaches = evaluatePrPenalties(
-					prPayClass(pr),
-					prAttendanceWindow(pr),
-					rules,
-				);
+				const breaches = evaluatePrPenalties(prAttendanceWindow(pr), rules);
 				return { pr, breaches, total: totalPenaltyFineRm(breaches) };
 			})
 			.filter((x) => x.breaches.length > 0)
@@ -143,6 +160,7 @@ function AgencyManagePRs() {
 	const [selected, setSelected] = useState<Set<string>>(new Set());
 	const [broadcastOpen, setBroadcastOpen] = useState(false);
 	const [penaltiesOpen, setPenaltiesOpen] = useState(false);
+	const [penaltyRulesOpen, setPenaltyRulesOpen] = useState(false);
 
 	useEffect(() => {
 		if (prFromSearch) setDetailId(prFromSearch);
@@ -158,7 +176,7 @@ function AgencyManagePRs() {
 		void navigate({ search: { pr: undefined } });
 	};
 
-	const canManage = agencyCan(agencySubRole, "managePr");
+	const canManage = can("managePr");
 
 	const languages = useMemo(
 		() => collectAgencyPrLanguages(agencyPRs),
@@ -309,14 +327,71 @@ function AgencyManagePRs() {
 					<b className="iz-tiny uppercase tracking-wide text-[var(--iz-red,#e5484d)]">
 						Recent penalties
 					</b>
-					{penalizedPrs.length > 0 && (
-						<span className="iz-tiny iz-muted2">
-							· {penalizedPrs.length} PR{penalizedPrs.length > 1 ? "s" : ""} ·
-							RM {penalizedPrs.reduce((s, x) => s + x.total, 0)} total
-						</span>
-					)}
+					{backendProposals.backed
+						? backendProposals.count > 0 && (
+								<span className="iz-tiny iz-muted2">
+									· {backendProposals.count} breach
+									{backendProposals.count > 1 ? "es" : ""} · RM{" "}
+									{backendProposals.totalRm} total
+								</span>
+							)
+						: penalizedPrs.length > 0 && (
+								<span className="iz-tiny iz-muted2">
+									· {penalizedPrs.length} PR{penalizedPrs.length > 1 ? "s" : ""}{" "}
+									· RM {penalizedPrs.reduce((s, x) => s + x.total, 0)} total
+								</span>
+							)}
 				</button>
+
+				{/* Real session → the backend's evaluation. Demo session → the demo
+				    store's, which is the only place those counters exist. */}
+				{penaltiesOpen && backendProposals.backed && (
+					<div className="mt-2 flex flex-col gap-1.5">
+						{backendProposals.isLoading && (
+							<p className="iz-sm iz-muted2">Loading penalties…</p>
+						)}
+						{backendProposals.isError && (
+							<p className="iz-sm text-[var(--iz-red,#e5484d)]">
+								Could not load penalties — the proposals endpoint failed.
+							</p>
+						)}
+						{!backendProposals.isLoading &&
+							!backendProposals.isError &&
+							backendProposals.count === 0 && (
+								<p className="iz-sm iz-muted2">
+									No active penalties.
+								</p>
+							)}
+						{backendProposals.proposals.map((p) => (
+							<div
+								key={`${p.prId}-${p.ruleType}`}
+								className="rounded-lg border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2"
+							>
+								<div className="flex items-center justify-between gap-2">
+									<b className="iz-sm text-[var(--iz-txt)]">
+										{p.prName ?? "PR"}
+									</b>
+									<span className="iz-sm font-semibold tabular-nums text-[var(--iz-red,#e5484d)]">
+										RM {Number(p.fineRm).toFixed(2)}
+									</span>
+								</div>
+								<div className="iz-tiny iz-muted2">
+									{p.ruleType.replace(/_/g, " ")} · {p.detail}
+								</div>
+								{/* Recorded vs still just a finding — a proposal corrects
+								    itself as the week goes on, a recorded charge does not. */}
+								<div className="iz-tiny iz-muted2">
+									{p.sealed
+										? "recorded as owed — see Payroll & PV"
+										: "not recorded yet · record it on Payroll & PV"}
+								</div>
+							</div>
+						))}
+					</div>
+				)}
+
 				{penaltiesOpen &&
+					!backendProposals.backed &&
 					(penalizedPrs.length === 0 ? (
 						<p className="iz-sm iz-muted2 mt-2">
 							No active penalties this week.
@@ -367,6 +442,56 @@ function AgencyManagePRs() {
 							))}
 						</div>
 					))}
+			</IzCard>
+
+			<IzCard flat className="border-[var(--iz-line2)]">
+				<button
+					type="button"
+					onClick={() => setPenaltyRulesOpen((v) => !v)}
+					aria-expanded={penaltyRulesOpen}
+					className="flex w-full items-center gap-1.5 text-left"
+				>
+					<ChevronDown
+						className={`h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)] transition-transform ${
+							penaltyRulesOpen ? "" : "-rotate-90"
+						}`}
+					/>
+					<b className="iz-tiny uppercase tracking-wide">
+						Attendance and penalty rules
+					</b>
+					<span className="iz-tiny iz-muted2">
+						· Applies to every PR on the roster
+					</span>
+				</button>
+				{penaltyRulesOpen && !rawPenaltyRules && (
+					<p className="iz-sm mt-2 text-[var(--iz-red,#e5484d)]">
+						{backendPenalties.isError
+							? "Could not load penalty rules — the agency penalty-rules endpoint failed."
+							: "Loading penalty rules…"}
+					</p>
+				)}
+				{penaltyRulesOpen && rawPenaltyRules && (
+					<div className="mt-3">
+						<PenaltyRulesEditor
+							rules={rawPenaltyRules}
+							readOnly={!canEditPenalties || backendPenalties.isSaving}
+							onChange={(next) => {
+								if (!canEditPenalties) return;
+								// One editor, two sinks: a real session writes through to
+								// `agency_penalty_rule`, a demo session only touches the
+								// store. Falling back to the store on a real session would
+								// show a saved-looking change the backend never received.
+								if (backendPenalties.backed) {
+									backendPenalties.save(next).catch(() => {
+										toast("Could not save penalty rules", "warn");
+									});
+								} else {
+									saveDemoPenaltyRules(next);
+								}
+							}}
+						/>
+					</div>
+				)}
 			</IzCard>
 
 			<IzCard flat className="iz-pr-manage-filters-card">
@@ -615,10 +740,9 @@ function AgencyPrDetail({
 }) {
 	const toast = useStore((s) => s.toast);
 	const penaltyRules = normalizePenaltyRules(
-		useStore((s) => s.outletWorkspace.penaltyRules),
+		useStore((s) => s.agencyPenaltyRules),
 	);
 	const penaltyBreaches = evaluatePrPenalties(
-		prPayClass(detail),
 		prAttendanceWindow(detail),
 		penaltyRules,
 	);

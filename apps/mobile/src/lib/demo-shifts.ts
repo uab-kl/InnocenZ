@@ -164,11 +164,88 @@ export type TimetableEntry = {
   canLeave: boolean;
 };
 
-export const CANCELLATION_RULE_SUMMARY = [
-  { label: '> 24h before', outcome: 'Free cancel', tone: 'green' as const },
-  { label: '12–24h before', outcome: '−25% wages', tone: 'amber' as const },
-  { label: '< 12h before', outcome: '−50% wages', tone: 'red' as const },
-];
+/**
+ * The cancellation bands the PR is actually charged by.
+ *
+ * These are the AGENCY's, edited on Manage PR and read here through
+ * `GET /pr/mine/penalty-rules`. Both the summary a PR reads and the number on
+ * the Cancel button derive from this one object — they were previously two
+ * hand-written copies that had drifted (the panel advertised a 12h boundary
+ * while the charge used 2h), so a PR cancelling 6 hours out was told -50% and
+ * billed -25%.
+ */
+export type CancellationBands = {
+  enabled: boolean;
+  freeCancelHours: number;
+  shortNoticeHours: number;
+  shortNoticePct: number;
+  lateCancelPct: number;
+};
+
+/**
+ * Used only until the agency's row arrives, and when it has none saved.
+ *
+ * These match what the code charged before the rule became configurable, so a
+ * slow fetch shows the same number the PR would have seen anyway rather than a
+ * placeholder that later jumps.
+ */
+export const DEFAULT_CANCELLATION_BANDS: CancellationBands = {
+  enabled: true,
+  freeCancelHours: 24,
+  shortNoticeHours: 2,
+  shortNoticePct: 25,
+  lateCancelPct: 50,
+};
+
+/** Pull the cancellation bands out of the agency's rule set. */
+export function cancellationBandsFrom(
+  rules: {
+    ruleType: string;
+    enabled: boolean;
+    freeCancelHours: number | null;
+    shortNoticeHours: number | null;
+    shortNoticePct: number | null;
+    lateCancelPct: number | null;
+  }[] | null | undefined,
+): CancellationBands {
+  const row = rules?.find((r) => r.ruleType === 'cancellation');
+  if (!row) return DEFAULT_CANCELLATION_BANDS;
+  const d = DEFAULT_CANCELLATION_BANDS;
+  return {
+    enabled: row.enabled,
+    // `?? default` per field, not per row: a half-filled row must not silently
+    // read as 0 hours' notice, which would price every cancellation at the
+    // late rate.
+    freeCancelHours: row.freeCancelHours ?? d.freeCancelHours,
+    shortNoticeHours: row.shortNoticeHours ?? d.shortNoticeHours,
+    shortNoticePct: row.shortNoticePct ?? d.shortNoticePct,
+    lateCancelPct: row.lateCancelPct ?? d.lateCancelPct,
+  };
+}
+
+/** The three bands as display rows, derived from whatever the agency set. */
+export function cancellationRuleSummary(
+  bands: CancellationBands = DEFAULT_CANCELLATION_BANDS,
+): { label: string; outcome: string; tone: 'green' | 'amber' | 'red' }[] {
+  if (!bands.enabled) {
+    return [
+      { label: 'Any time before shift', outcome: 'Free cancel', tone: 'green' },
+    ];
+  }
+  return [
+    { label: `> ${bands.freeCancelHours}h before`, outcome: 'Free cancel', tone: 'green' },
+    {
+      label: `${bands.shortNoticeHours}–${bands.freeCancelHours}h before`,
+      outcome: `−${bands.shortNoticePct}% wages`,
+      tone: 'amber',
+    },
+    {
+      label: `< ${bands.shortNoticeHours}h before`,
+      outcome: `−${bands.lateCancelPct}% wages`,
+      tone: 'red',
+    },
+  ];
+}
 
 /**
  * Scheduled end of a shift as a Date, from its date + "HH:MM - HH:MM" slot.
@@ -658,11 +735,28 @@ export type WeeklyDayPay = {
   tips: number | null;
   others: number | null;
   /**
+   * Money taken OFF this day — a cancellation fee, a sealed penalty. NEGATIVE,
+   * and on its own row rather than inside `others`: netting a fine against
+   * overtime produces a cell that states neither of them.
+   *
+   * Optional because the demo builders never produce one, and because a backend
+   * that has not restarted sends no `component` for the real grid to split on.
+   */
+  deductions?: number | null;
+  /**
    * 'pending'  — logged, nobody at the agency has looked yet
    * 'approved' — the agency signed this day off in its day review (mid-week)
    * 'verified' — the voucher itself has been processed (sent/signed/paid)
+   * 'deducted' — the day holds NOTHING BUT a charged fine: settled, not waiting
+   *
+   * 'deducted' is not a stage of the other three, it is a different subject.
+   * The rest describe how far the AGENCY has got through reviewing money the PR
+   * logged; a fine is money the agency itself recorded and charged, so there is
+   * no review outstanding and nothing for the PR to wait on. A day that also
+   * holds earnings is NOT this — those earnings still need signing off, and the
+   * earlier stages win.
    */
-  status: 'verified' | 'approved' | 'pending' | 'empty';
+  status: 'verified' | 'approved' | 'pending' | 'empty' | 'deducted';
 };
 
 /** One sealed check-out day — feeds Payment → This week until PV issues Sunday. */
@@ -745,9 +839,34 @@ export function weekPayGridTotal(grid: WeeklyDayPay[]): number {
       d.wages +
       (d.drinks ?? 0) +
       (d.tips ?? 0) +
-      (d.others ?? 0)
+      (d.others ?? 0) +
+      // ADDED, not subtracted: deductions are stored negative. This keeps the
+      // week total identical to what it was when fines still sat in `others`,
+      // which is the point — moving a figure between rows must not move money.
+      (d.deductions ?? 0)
     );
   }, 0);
+}
+
+/**
+ * The same Sun–Sat week as `weekRangeLabel`, as ISO dates for the API.
+ *
+ * Derived here rather than re-anchored at each call site: the label and the
+ * range MUST name the same week, or the screen says "09–15 Aug" above figures
+ * fetched for a different seven days.
+ */
+export function weekRangeIso(
+  weeksAgo: number,
+  baseline = todayYmd(),
+): { weekStart: string; weekEnd: string } {
+  const [y, m, d] = baseline;
+  const sunday = new Date(y, m - 1, d);
+  sunday.setDate(sunday.getDate() - sunday.getDay() - weeksAgo * 7);
+  const end = new Date(sunday);
+  end.setDate(sunday.getDate() + 6);
+  const iso = (x: Date) =>
+    `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`;
+  return { weekStart: iso(sunday), weekEnd: iso(end) };
 }
 
 export function weekRangeLabel(weeksAgo: number, baseline = todayYmd()): string {

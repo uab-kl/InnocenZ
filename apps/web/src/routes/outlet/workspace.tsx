@@ -5,7 +5,6 @@ import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
-import { PenaltyRulesEditor } from "@agency-portal/components/outlet/PenaltyRulesEditor";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import {
@@ -27,8 +26,8 @@ import {
 	sortOutletDrinkMenuByPrice,
 	withOutletMenuNamesResolved,
 } from "@agency-portal/lib/outlet-demo";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
 
@@ -118,11 +117,10 @@ function NumField({
 }
 
 function OutletWorkspacePage() {
-	const outletSubRole = useStore((s) => s.outletSubRole);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const saveOutletWorkspace = useStore((s) => s.saveOutletWorkspace);
 	const toast = useStore((s) => s.toast);
-	const canEdit = outletCan(outletSubRole, "manageWorkspace");
+	const canEdit = useOutletCan()("manageWorkspace");
 	// Real login → backend workspace (rates persist via PUT); demo store otherwise.
 	const backend = useOutletWorkspace();
 	const source =
@@ -299,23 +297,6 @@ function OutletWorkspacePage() {
 						onPatchTier={patchTier}
 						onPatchCommissionOnly={patchCommissionOnly}
 						readOnly={!canEdit}
-					/>
-				</IzCard>
-			</OutletSection>
-
-			<OutletSection
-				title="Attendance and penalty rules"
-				hint="Discipline rules by pay class · Basic and Commission only"
-				collapsible
-				defaultOpen={false}
-			>
-				<IzCard className="!py-3">
-					<PenaltyRulesEditor
-						rules={draft.penaltyRules}
-						readOnly={!canEdit}
-						onChange={
-							canEdit ? (penaltyRules) => patch({ penaltyRules }) : () => {}
-						}
 					/>
 				</IzCard>
 			</OutletSection>

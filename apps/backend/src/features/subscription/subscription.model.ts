@@ -1,5 +1,5 @@
 import { MainSchema } from "@/db/db.schema";
-import { decimal, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
+import { decimal, integer, timestamp, uuid, varchar } from "drizzle-orm/pg-core";
 import { RoleTable } from "@/features/rbac/role/role.model";
 
 export const billingCycleValues = ['weekly', 'monthly', 'annually'] as const;
@@ -35,6 +35,18 @@ export const SubscriptionTable = MainSchema.table('subscription', {
     status: varchar('status').notNull().default('active'),
     // Free-text volume tier shown on the plan (e.g. "11–25 PV/week", "5 PRs/day").
     coverage: varchar('coverage', { length: 100 }),
+    /**
+     * The same band as a NUMBER, so the server can enforce it — agency plans are
+     * PVs per payroll week, outlet plans are PRs per calendar day, the unit
+     * implied by `subscriptionType`.
+     *
+     * NULL is UNLIMITED, which is what the open-ended bands actually mean:
+     * agency Custom ("151+ PV/week") and outlet Premier ("101+ PRs/day") are
+     * floors with no ceiling, and the POS add-on is not a capacity product.
+     * `coverage` above stays the display string; keep the two in step.
+     * Migration 0119.
+     */
+    limitAmount: integer('limit_amount'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

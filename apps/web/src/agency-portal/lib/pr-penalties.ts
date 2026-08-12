@@ -1,4 +1,18 @@
-/** PR pay class + outlet penalty-rule configuration (Phase 1: config surface only). */
+/**
+ * PR pay class + the AGENCY's penalty-rule configuration.
+ *
+ * These rules used to belong to an outlet workspace. They moved to the agency
+ * in migration 0113: the fine lands as a deduction on the agency→PR payment
+ * voucher, which the outlet neither pays nor sees, and two of the three rules
+ * count things no single outlet can observe — shifts across every venue, and MC
+ * that only the agency approves. Per-outlet rules fined a PR once per venue for
+ * one week's conduct.
+ */
+
+import type {
+	AgencyPenaltyRuleRow,
+	SavePenaltyRuleInput,
+} from "@/services/agency-penalty-rules";
 
 /** Employment arrangement — a commissionOnly PR earns no basic wage (RM 0 daily). */
 export type PrPayClass = "basic" | "commissionOnly";
@@ -65,11 +79,16 @@ export function applyPayClassChange(
 	};
 }
 
-/** Shared shape for every penalty rule. */
+/**
+ * Shared shape for every penalty rule.
+ *
+ * No pay-class target: an enabled rule binds EVERY PR on the roster. The
+ * `appliesTo` list it replaces could be emptied, which meant "enforced against
+ * nobody" while the row still read as enabled — an off switch hiding behind an
+ * on one.
+ */
 export interface PenaltyRuleBase {
 	enabled: boolean;
-	/** Which pay classes this rule enforces. */
-	appliesTo: PrPayClass[];
 	/** RM fine per breach — 0 = warning only, no money. */
 	fineRm: number;
 }
@@ -93,87 +112,201 @@ export interface LatePerWeekRule extends PenaltyRuleBase {
 	graceMinutes: number;
 }
 
-export interface OutletPenaltyRules {
+/**
+ * Cancelling a booked shift, charged as a % of THAT shift's daily wage.
+ *
+ * Three bands, defined by two boundaries: at or above `freeCancelHours` notice
+ * is free, at or above `shortNoticeHours` costs `shortNoticePct`, and anything
+ * later costs `lateCancelPct`. Percentages rather than a flat `fineRm` because
+ * the charge scales with the shift being dropped.
+ *
+ * Unlike the other three this is NOT a weekly-window rule — it is charged per
+ * shift at the moment of cancelling, so `evaluatePrPenalties` ignores it.
+ */
+export interface CancellationRule extends PenaltyRuleBase {
+	/** Notice at or above this many hours → free cancel. */
+	freeCancelHours: number;
+	/** Notice at or above this (but under free) → `shortNoticePct`. */
+	shortNoticeHours: number;
+	/** % of daily wage charged in the short-notice band. */
+	shortNoticePct: number;
+	/** % of daily wage charged below `shortNoticeHours`. */
+	lateCancelPct: number;
+}
+
+export interface AgencyPenaltyRules {
 	minShiftsPerWeek: MinShiftsPerWeekRule;
 	maxMcPerMonth: MaxMcPerMonthRule;
 	latePerWeek: LatePerWeekRule;
+	cancellation: CancellationRule;
 }
 
-export const DEFAULT_PENALTY_RULES: OutletPenaltyRules = {
+export const DEFAULT_PENALTY_RULES: AgencyPenaltyRules = {
 	minShiftsPerWeek: {
 		enabled: true,
-		appliesTo: ["commissionOnly"],
 		fineRm: 50,
 		minShiftsPerWeek: 3,
 	},
 	maxMcPerMonth: {
 		enabled: true,
-		appliesTo: ["commissionOnly", "basic"],
 		fineRm: 0,
 		maxMcPerMonth: 2,
 		finePerExcessRm: 80,
 	},
 	latePerWeek: {
 		enabled: true,
-		appliesTo: ["commissionOnly"],
 		fineRm: 30,
 		maxLatePerWeek: 2,
 		graceMinutes: 15,
 	},
+	// 24 / 2 / 25 / 50 — what the cancellation code actually CHARGED before it
+	// became configurable, not the 12h the PR panel used to display. Seeding the
+	// displayed number would have changed everyone's bill.
+	cancellation: {
+		enabled: true,
+		fineRm: 0,
+		freeCancelHours: 24,
+		shortNoticeHours: 2,
+		shortNoticePct: 25,
+		lateCancelPct: 50,
+	},
 };
 
-function normalizeAppliesTo(
-	value: unknown,
-	fallback: PrPayClass[],
-): PrPayClass[] {
-	if (!Array.isArray(value)) return [...fallback];
-	const filtered = value.filter(
-		(v): v is PrPayClass => v === "basic" || v === "commissionOnly",
-	);
-	return filtered.length > 0 ? Array.from(new Set(filtered)) : [...fallback];
-}
-
-/** Merge persisted/partial penalty rules over defaults — back-compat safe. */
+/**
+ * Merge persisted/partial penalty rules over defaults — back-compat safe.
+ *
+ * A pre-0114 persisted blob still carries `appliesTo` on each rule. Spreading
+ * it through is harmless (nothing reads it any more) and stripping it would
+ * cost a pass over every rule for no behavioural gain, so it is left to age
+ * out. What matters is that it can no longer narrow who a rule binds.
+ */
 export function normalizePenaltyRules(
-	rules: Partial<OutletPenaltyRules> | undefined,
-): OutletPenaltyRules {
+	rules: Partial<AgencyPenaltyRules> | undefined,
+): AgencyPenaltyRules {
 	const d = DEFAULT_PENALTY_RULES;
 	return {
-		minShiftsPerWeek: {
-			...d.minShiftsPerWeek,
-			...rules?.minShiftsPerWeek,
-			appliesTo: normalizeAppliesTo(
-				rules?.minShiftsPerWeek?.appliesTo,
-				d.minShiftsPerWeek.appliesTo,
-			),
-		},
-		maxMcPerMonth: {
-			...d.maxMcPerMonth,
-			...rules?.maxMcPerMonth,
-			appliesTo: normalizeAppliesTo(
-				rules?.maxMcPerMonth?.appliesTo,
-				d.maxMcPerMonth.appliesTo,
-			),
-		},
-		latePerWeek: {
-			...d.latePerWeek,
-			...rules?.latePerWeek,
-			appliesTo: normalizeAppliesTo(
-				rules?.latePerWeek?.appliesTo,
-				d.latePerWeek.appliesTo,
-			),
-		},
+		minShiftsPerWeek: { ...d.minShiftsPerWeek, ...rules?.minShiftsPerWeek },
+		maxMcPerMonth: { ...d.maxMcPerMonth, ...rules?.maxMcPerMonth },
+		latePerWeek: { ...d.latePerWeek, ...rules?.latePerWeek },
+		cancellation: { ...d.cancellation, ...rules?.cancellation },
 	};
+}
+
+/**
+ * Backend rows → the keyed object the editor works with.
+ *
+ * Merged over the defaults on purpose: an agency that has saved only a lateness
+ * rule must still render three rows, or the two it never configured would look
+ * deleted rather than unset. A rule the backend does not have therefore comes
+ * back as its default with whatever `enabled` the default carries — it is not
+ * enforced until saved, because `evaluatePrPenalties` only ever runs against
+ * what the server returned.
+ */
+export function penaltyRulesFromBackend(
+	rows: AgencyPenaltyRuleRow[] | null | undefined,
+): AgencyPenaltyRules {
+	const rules = normalizePenaltyRules(undefined);
+	const num = (v: string | null | undefined, fallback: number): number =>
+		v == null || v === "" ? fallback : Number(v);
+
+	for (const row of rows ?? []) {
+		if (row.ruleType === "min_shifts_per_week") {
+			rules.minShiftsPerWeek = {
+				enabled: row.enabled,
+				fineRm: num(row.fineRm, 0),
+				minShiftsPerWeek:
+					row.minShiftsPerWeek ??
+					DEFAULT_PENALTY_RULES.minShiftsPerWeek.minShiftsPerWeek,
+			};
+		} else if (row.ruleType === "max_mc_per_month") {
+			rules.maxMcPerMonth = {
+				enabled: row.enabled,
+				fineRm: num(row.fineRm, 0),
+				maxMcPerMonth:
+					row.maxMcPerMonth ??
+					DEFAULT_PENALTY_RULES.maxMcPerMonth.maxMcPerMonth,
+				finePerExcessRm: num(
+					row.finePerExcessRm,
+					DEFAULT_PENALTY_RULES.maxMcPerMonth.finePerExcessRm,
+				),
+			};
+		} else if (row.ruleType === "late_per_week") {
+			rules.latePerWeek = {
+				enabled: row.enabled,
+				fineRm: num(row.fineRm, 0),
+				maxLatePerWeek:
+					row.maxLatePerWeek ??
+					DEFAULT_PENALTY_RULES.latePerWeek.maxLatePerWeek,
+				graceMinutes:
+					row.graceMinutes ?? DEFAULT_PENALTY_RULES.latePerWeek.graceMinutes,
+			};
+		} else if (row.ruleType === "cancellation") {
+			const d = DEFAULT_PENALTY_RULES.cancellation;
+			rules.cancellation = {
+				enabled: row.enabled,
+				fineRm: num(row.fineRm, 0),
+				freeCancelHours: row.freeCancelHours ?? d.freeCancelHours,
+				shortNoticeHours: row.shortNoticeHours ?? d.shortNoticeHours,
+				shortNoticePct: row.shortNoticePct ?? d.shortNoticePct,
+				lateCancelPct: row.lateCancelPct ?? d.lateCancelPct,
+			};
+		}
+	}
+	return rules;
+}
+
+/** Reverse: the keyed object → the PUT payload (all three rules, always). */
+export function penaltyRulesSaveInput(
+	rules: AgencyPenaltyRules,
+): SavePenaltyRuleInput[] {
+	return [
+		{
+			ruleType: "min_shifts_per_week" as const,
+			enabled: rules.minShiftsPerWeek.enabled,
+			fineRm: rules.minShiftsPerWeek.fineRm,
+			minShiftsPerWeek: rules.minShiftsPerWeek.minShiftsPerWeek,
+		},
+		{
+			ruleType: "max_mc_per_month" as const,
+			enabled: rules.maxMcPerMonth.enabled,
+			fineRm: rules.maxMcPerMonth.fineRm,
+			maxMcPerMonth: rules.maxMcPerMonth.maxMcPerMonth,
+			finePerExcessRm: rules.maxMcPerMonth.finePerExcessRm,
+		},
+		{
+			ruleType: "late_per_week" as const,
+			enabled: rules.latePerWeek.enabled,
+			fineRm: rules.latePerWeek.fineRm,
+			maxLatePerWeek: rules.latePerWeek.maxLatePerWeek,
+			graceMinutes: rules.latePerWeek.graceMinutes,
+		},
+		{
+			ruleType: "cancellation" as const,
+			enabled: rules.cancellation.enabled,
+			fineRm: rules.cancellation.fineRm,
+			freeCancelHours: rules.cancellation.freeCancelHours,
+			shortNoticeHours: rules.cancellation.shortNoticeHours,
+			shortNoticePct: rules.cancellation.shortNoticePct,
+			lateCancelPct: rules.cancellation.lateCancelPct,
+		},
+	];
 }
 
 /** Per-PR attendance signals. undefined = unknown (not treated as a breach). */
 export interface PrAttendanceWindow {
+	/**
+	 * Shifts the AGENCY assigned that week, whatever became of them —
+	 * opportunity, not attendance. Safety net on the minimum-shifts rule.
+	 */
+	assignedThisWeek?: number;
+	/** Assigned shifts the agency EXCUSED (approved MC/leave) — not opportunity. */
+	excusedThisWeek?: number;
 	shiftsThisWeek?: number;
 	lateThisWeek?: number;
 	mcThisMonth?: number;
 }
 
-export type PenaltyRuleId = keyof OutletPenaltyRules;
+export type PenaltyRuleId = keyof AgencyPenaltyRules;
 
 export interface PenaltyBreach {
 	ruleId: PenaltyRuleId;
@@ -185,29 +318,48 @@ export interface PenaltyBreach {
 
 /** Read a PR's demo counters into an evaluation window. */
 export function prAttendanceWindow(pr: {
+	assignedThisWeek?: number;
+	/** Assigned shifts the agency EXCUSED (approved MC/leave) — not opportunity. */
+	excusedThisWeek?: number;
 	shiftsThisWeek?: number;
 	lateThisWeek?: number;
 	mcThisMonth?: number;
 }): PrAttendanceWindow {
 	return {
+		assignedThisWeek: pr.assignedThisWeek,
+		excusedThisWeek: pr.excusedThisWeek,
 		shiftsThisWeek: pr.shiftsThisWeek,
 		lateThisWeek: pr.lateThisWeek,
 		mcThisMonth: pr.mcThisMonth,
 	};
 }
 
-/** Evaluate a PR's attendance window against the outlet's penalty rules. */
+/**
+ * Evaluate a PR's attendance window against their agency's penalty rules.
+ *
+ * Every enabled rule binds every PR — there is no pay-class argument, so a rule
+ * cannot be enabled yet enforced against nobody.
+ */
 export function evaluatePrPenalties(
-	payClass: PrPayClass,
 	window: PrAttendanceWindow,
-	rules: OutletPenaltyRules,
+	rules: AgencyPenaltyRules,
 ): PenaltyBreach[] {
 	const breaches: PenaltyBreach[] = [];
 
 	const min = rules.minShiftsPerWeek;
+	// SAFETY NET: you cannot work shifts you were never given, and you cannot
+	// work the ones you were excused from. Opportunity = assigned MINUS approved
+	// MC/leave. `?? Infinity` on assigned so an UNKNOWN count never silently
+	// excuses a real breach — only a known-too-low one does; `?? 0` on excused
+	// for the same reason in the other direction. Mirrors the backend guard in
+	// pr-penalty.ts; if the two disagree the agency sees one number on screen
+	// and another on the voucher.
+	const opportunity =
+		(window.assignedThisWeek ?? Number.POSITIVE_INFINITY) -
+		(window.excusedThisWeek ?? 0);
 	if (
 		min.enabled &&
-		min.appliesTo.includes(payClass) &&
+		opportunity >= min.minShiftsPerWeek &&
 		window.shiftsThisWeek != null &&
 		window.shiftsThisWeek < min.minShiftsPerWeek
 	) {
@@ -222,7 +374,6 @@ export function evaluatePrPenalties(
 	const mc = rules.maxMcPerMonth;
 	if (
 		mc.enabled &&
-		mc.appliesTo.includes(payClass) &&
 		window.mcThisMonth != null &&
 		window.mcThisMonth > mc.maxMcPerMonth
 	) {
@@ -238,7 +389,6 @@ export function evaluatePrPenalties(
 	const late = rules.latePerWeek;
 	if (
 		late.enabled &&
-		late.appliesTo.includes(payClass) &&
 		window.lateThisWeek != null &&
 		window.lateThisWeek >= late.maxLatePerWeek
 	) {
@@ -261,14 +411,11 @@ export function totalPenaltyFineRm(breaches: PenaltyBreach[]): number {
 /** Total RM to deduct from a PR's next payout for their current penalty breaches. */
 export function penaltyDeductRmForPr(
 	pr: {
-		payClass?: PrPayClass;
 		shiftsThisWeek?: number;
 		lateThisWeek?: number;
 		mcThisMonth?: number;
 	},
-	rules: OutletPenaltyRules,
+	rules: AgencyPenaltyRules,
 ): number {
-	return totalPenaltyFineRm(
-		evaluatePrPenalties(prPayClass(pr), prAttendanceWindow(pr), rules),
-	);
+	return totalPenaltyFineRm(evaluatePrPenalties(prAttendanceWindow(pr), rules));
 }

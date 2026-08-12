@@ -1,9 +1,9 @@
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyOvertime } from "@agency-portal/hooks/use-agency-overtime";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Check, Clock, X } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { toMutationError } from "@/lib/mutation-error";
 import type { PendingOvertimeClaim } from "@/services/shift-assignment";
 
@@ -168,13 +168,60 @@ function OvertimeRow({
  * hold — and finance is one of the two roles allowed to decide overtime. Put
  * here, the person told "this week cannot be sent" is looking at the reason.
  */
-export function OvertimeQueuePanel() {
+/**
+ * Does this claim belong to the week on screen?
+ *
+ * Anchored on `shiftDate` — the night the overtime was actually worked — for the
+ * same reason a dispute is anchored on its contested day: that is the shift a
+ * reviewer has to go and look at. Not `week`, which carries the payroll week the
+ * money would LAND in, and which is therefore the wrong answer for a claim being
+ * decided late.
+ *
+ * Containment on `yyyy-MM-dd` strings, so a date sits in exactly one Sun–Sat week.
+ */
+function claimInWeek(
+	claim: PendingOvertimeClaim,
+	weekStartIso: string,
+	weekEndIso: string,
+): boolean {
+	if (!claim.shiftDate) return false;
+	const day = claim.shiftDate.slice(0, 10);
+	return day >= weekStartIso && day <= weekEndIso;
+}
+
+export function OvertimeQueuePanel({
+	weekStartIso,
+	weekEndIso,
+}: {
+	weekStartIso: string;
+	weekEndIso: string;
+}) {
 	const toast = useStore((s) => s.toast);
-	const agencySubRole = useStore((s) => s.agencySubRole);
-	const { claims, isLoading, decide, isDeciding } = useAgencyOvertime();
+	const {
+		claims: allClaims,
+		isLoading,
+		decide,
+		isDeciding,
+	} = useAgencyOvertime();
+	/**
+	 * The selected week's claims. This panel ignored the week tab entirely, so one
+	 * claim showed up identically under This Week and Last Week, beside voucher and
+	 * receipt counts that did move with the tab.
+	 */
+	const claims = useMemo(
+		() => allClaims.filter((c) => claimInWeek(c, weekStartIso, weekEndIso)),
+		[allClaims, weekStartIso, weekEndIso],
+	);
+	/**
+	 * Undecided claims in OTHER weeks — counted, not listed. An undecided claim is
+	 * why a week refuses to send, so week-scoping must not make one silently
+	 * vanish; naming the number keeps the blocker visible without dragging a
+	 * foreign week's row into this list.
+	 */
+	const pendingElsewhere = allClaims.length - claims.length;
 	// Mirrors the server's `agencyOwnerOrFinance` guard on the PATCH route: the
 	// same set that raises a PV decides the money that goes onto one.
-	const canDecide = agencyCan(agencySubRole, "raisePv");
+	const canDecide = useAgencyCan()("raisePv");
 
 	const handle = async (
 		claim: PendingOvertimeClaim,
@@ -213,8 +260,16 @@ export function OvertimeQueuePanel() {
 
 				{!isLoading && claims.length === 0 && (
 					<p className="iz-tiny iz-muted">
-						No overtime awaiting a decision. A claim is recorded when a PR
-						checks out later than the shift was scheduled to end.
+						No overtime awaiting a decision in this week. A claim is recorded
+						when a PR checks out later than the shift was scheduled to end.
+					</p>
+				)}
+
+				{!isLoading && pendingElsewhere > 0 && (
+					<p className="iz-tiny mt-1 text-[var(--iz-amber)]">
+						{pendingElsewhere} claim{pendingElsewhere === 1 ? "" : "s"} in
+						another week still undecided — switch weeks above to decide{" "}
+						{pendingElsewhere === 1 ? "it" : "them"}.
 					</p>
 				)}
 

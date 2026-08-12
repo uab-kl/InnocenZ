@@ -40,13 +40,7 @@ import {
 	resolveEffectiveShiftPayTierRows,
 	resolveShiftPayTierRows,
 } from "@agency-portal/lib/post-job-pay-tiers";
-import {
-	DEFAULT_PENALTY_RULES,
-	normalizePenaltyRules,
-	type OutletPenaltyRules,
-	type PrPayClass,
-	prPayClass,
-} from "@agency-portal/lib/pr-penalties";
+import { type PrPayClass, prPayClass } from "@agency-portal/lib/pr-penalties";
 
 export type ShiftDestination = "agency" | "marketplace" | "both";
 
@@ -750,7 +744,6 @@ export function normalizeOutletWorkspace(
 		happyHourStart: ws?.happyHourStart ?? merged.happyHourStart ?? "20:00",
 		happyHourEnd: ws?.happyHourEnd ?? merged.happyHourEnd ?? "22:00",
 		happyHourDrinkDiscountPct: resolveHappyHourDrinkDiscountPct(ws),
-		penaltyRules: normalizePenaltyRules(ws?.penaltyRules),
 	};
 }
 
@@ -1114,8 +1107,6 @@ export interface OutletWorkspaceSettings {
 	happyHourEnd: string;
 	/** % discount off menu drink prices during happy hour (e.g. 15 = 15% off). */
 	happyHourDrinkDiscountPct: number;
-	/** Attendance & discipline rules, scoped per pay class. */
-	penaltyRules: OutletPenaltyRules;
 }
 
 export const DEFAULT_HAPPY_HOUR_DRINK_DISCOUNT_PCT = 15;
@@ -1535,7 +1526,6 @@ export const DEFAULT_OUTLET_WORKSPACE: OutletWorkspaceSettings = {
 	happyHourStart: "20:00",
 	happyHourEnd: "22:00",
 	happyHourDrinkDiscountPct: DEFAULT_HAPPY_HOUR_DRINK_DISCOUNT_PCT,
-	penaltyRules: DEFAULT_PENALTY_RULES,
 };
 
 export const DEFAULT_OUTLET_SETTINGS: OutletSettings = {
@@ -1630,7 +1620,6 @@ export const BLANK_OUTLET_WORKSPACE: OutletWorkspaceSettings = {
 	happyHourStart: "20:00",
 	happyHourEnd: "22:00",
 	happyHourDrinkDiscountPct: 0,
-	penaltyRules: DEFAULT_PENALTY_RULES,
 };
 
 export {

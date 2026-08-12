@@ -26,6 +26,7 @@ const KIND_LABEL: Record<CellEvidence['kind'], string> = {
   drinks: 'Drinks',
   tips: 'Tips',
   others: 'OT / Other',
+  deductions: 'Deductions',
 };
 
 const SOURCE_LABEL: Record<string, string> = {

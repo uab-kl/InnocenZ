@@ -9,10 +9,39 @@
  * Shared by PaymentScreen (This/Last week) and PvDetailScreen (voucher doc),
  * so both always show the same numbers for the same voucher.
  */
-import type { PrCurrentWeek, PrReceiptLine } from './api';
+import type { PrCurrentWeek, PrReceiptKind, PrReceiptLine } from './api';
 import type { WeeklyDayPay } from './demo-shifts';
 
 const WEEKDAY_ABBR = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+
+/**
+ * A ROW of the Payment grid: the four earning buckets the server sends, plus
+ * DEDUCTIONS — money taken off, which is not a kind of earning and must not be
+ * netted against one.
+ *
+ * The server flattens `ot` and `deduction` into the same `others` kind, so a
+ * night with RM 30 of overtime and a RM 20 cancellation fee arrived as one
+ * `others: 10.00` cell — a number that is neither figure, under a label
+ * claiming to be about odds and ends. Splitting them is why `component` was
+ * added to the line.
+ */
+export type GridBucket = PrReceiptKind | 'deductions';
+
+/**
+ * Which grid row a line belongs to — THE bucketing rule, in one exported place.
+ *
+ * `cell-evidence.ts` re-derives a single cell to prove it, and its own header
+ * warns that its filter must stay identical to this file's. Two copies of the
+ * rule is precisely how that promise gets broken, so both call this.
+ *
+ * Falls back to `kind` when `component` is absent (a backend that has not
+ * restarted): deductions then stay in Others, which is the behaviour that
+ * shipped before. It never infers a deduction from a NEGATIVE AMOUNT — that
+ * would promote a coincidence of today's data into a rule.
+ */
+export function gridBucket(line: PrReceiptLine): GridBucket {
+  return line.component === 'deduction' ? 'deductions' : line.kind;
+}
 
 /** Statuses that mean the agency has already processed the week's voucher. */
 export const VERIFIED_STATUSES = ['sent', 'awaiting_pr', 'signed', 'paid'];
@@ -53,24 +82,42 @@ export function buildWeekGridFromLines(week: PrCurrentWeek | null): WeeklyDayPay
     d.setUTCDate(start.getUTCDate() + i);
     const iso = d.toISOString().slice(0, 10);
     const dayLines = byIso.get(iso) ?? [];
-    const sumKind = (kind: PrReceiptLine['kind']) =>
-      dayLines.filter((l) => l.kind === kind).reduce((s, l) => s + l.commission, 0);
+    const sumBucket = (bucket: GridBucket) =>
+      dayLines.filter((l) => gridBucket(l) === bucket).reduce((s, l) => s + l.commission, 0);
     days.push({
       day: WEEKDAY_ABBR[d.getUTCDay()],
       date: d.getUTCDate(),
       dateIso: iso,
-      wages: sumKind('wages'),
-      drinks: sumKind('drinks'),
-      tips: sumKind('tips'),
-      others: sumKind('others'),
+      wages: sumBucket('wages'),
+      drinks: sumBucket('drinks'),
+      tips: sumBucket('tips'),
+      others: sumBucket('others'),
+      // Negative, and kept that way — the grid renders the sign. Summing the
+      // magnitude here would make the week total add a fine to the pay.
+      deductions: sumBucket('deductions'),
+      /*
+       * A day holding NOTHING BUT fines is SETTLED, not pending.
+       *
+       * PENDING says "the agency has not looked at this yet", which was flatly
+       * untrue of a cancellation fee: the agency computed it, accepted it and
+       * pressed Charge — the line only exists BECAUSE that happened. So the
+       * screen told a PR to wait on the very people who had already finished,
+       * one panel above a penalties card reading "deducted". Checked before the
+       * review states because it is not a stage of them.
+       *
+       * `every`, not `some`: a day with a worked shift AND a fine still has
+       * earnings awaiting sign-off, and those outrank it.
+       */
       status:
         dayLines.length === 0
           ? 'empty'
-          : verified && !downgraded(iso)
-            ? 'verified'
-            : approvedDays.has(iso)
-              ? 'approved'
-              : 'pending',
+          : dayLines.every((l) => gridBucket(l) === 'deductions')
+            ? 'deducted'
+            : verified && !downgraded(iso)
+              ? 'verified'
+              : approvedDays.has(iso)
+                ? 'approved'
+                : 'pending',
     });
   }
   return days;

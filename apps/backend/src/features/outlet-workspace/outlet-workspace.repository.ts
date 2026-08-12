@@ -4,8 +4,6 @@ import { logger } from '@/util/logger.js';
 import {
   OutletDrinkMenuInsertType,
   OutletDrinkMenuTable,
-  OutletPenaltyRuleInsertType,
-  OutletPenaltyRuleTable,
   OutletTierRateInsertType,
   OutletTierRateTable,
   OutletWorkspace,
@@ -19,7 +17,6 @@ import {
 export type WorkspaceChildren = {
   tierRates: Omit<OutletTierRateInsertType, 'id' | 'workspaceId' | 'outletId'>[];
   drinkMenu: Omit<OutletDrinkMenuInsertType, 'id' | 'workspaceId' | 'outletId'>[];
-  penaltyRules: Omit<OutletPenaltyRuleInsertType, 'id' | 'workspaceId'>[];
 };
 
 // Parent scalar columns only — outletId, actor and timestamps are set by the repo.
@@ -49,7 +46,7 @@ export class OutletWorkspaceRepositoryClass {
   private async assemble(
     parent: OutletWorkspace,
   ): Promise<OutletWorkspaceAggregate> {
-    const [tierRates, drinkMenu, penaltyRules] = await Promise.all([
+    const [tierRates, drinkMenu] = await Promise.all([
       db
         .select()
         .from(OutletTierRateTable)
@@ -60,12 +57,8 @@ export class OutletWorkspaceRepositoryClass {
         .from(OutletDrinkMenuTable)
         .where(eq(OutletDrinkMenuTable.workspaceId, parent.id))
         .orderBy(asc(OutletDrinkMenuTable.sortOrder)),
-      db
-        .select()
-        .from(OutletPenaltyRuleTable)
-        .where(eq(OutletPenaltyRuleTable.workspaceId, parent.id)),
     ]);
-    return { ...parent, tierRates, drinkMenu, penaltyRules };
+    return { ...parent, tierRates, drinkMenu };
   }
 
   // Create-or-replace the outlet's whole workspace atomically: upsert the parent
@@ -98,9 +91,6 @@ export class OutletWorkspaceRepositoryClass {
           await tx
             .delete(OutletDrinkMenuTable)
             .where(eq(OutletDrinkMenuTable.workspaceId, id));
-          await tx
-            .delete(OutletPenaltyRuleTable)
-            .where(eq(OutletPenaltyRuleTable.workspaceId, id));
         } else {
           const [row] = await tx
             .insert(OutletWorkspaceTable)
@@ -121,13 +111,6 @@ export class OutletWorkspaceRepositoryClass {
             .insert(OutletDrinkMenuTable)
             .values(
               children.drinkMenu.map((r) => ({ ...r, workspaceId: id, outletId })),
-            );
-        }
-        if (children.penaltyRules.length > 0) {
-          await tx
-            .insert(OutletPenaltyRuleTable)
-            .values(
-              children.penaltyRules.map((r) => ({ ...r, workspaceId: id })),
             );
         }
       });
