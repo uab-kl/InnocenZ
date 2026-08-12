@@ -10,8 +10,8 @@ import {
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyReceipts } from "@agency-portal/hooks/use-agency-receipts";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import {
 	Check,
 	ChevronDown,
@@ -24,7 +24,7 @@ import {
 	Search,
 	SlidersHorizontal,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
 	AgencyReceipt,
 	PaymentVoucherReceiptStatus,
@@ -67,8 +67,15 @@ const sumLines = (receipt: AgencyReceipt) =>
  * printed receipt date and the logged-at stamp are fallbacks in that order. They
  * genuinely differ — a receipt scanned at 01:00 belongs to the shift that ran
  * past midnight, not to the calendar day it was uploaded on.
+ *
+ * EXPORTED because the home hub used to read `receiptDate` directly and printed
+ * a different day for the same receipt: live rows carry `receipt_date` =
+ * 2026-06-16 against lines dated 2026-08-06 and 2026-08-10. Two surfaces asking
+ * "which day is this receipt for" must not answer it two ways, so both now call
+ * this. It also means a junk `receipt_date` is tolerated rather than displayed —
+ * see TEST_SCRIPT §9 for the self-log form that writes it.
  */
-function workingDayIso(receipt: AgencyReceipt): string {
+export function workingDayIso(receipt: AgencyReceipt): string {
 	const lineDate = receipt.lines.find((line) => line.lineDate)?.lineDate;
 	return lineDate ?? receipt.receiptDate ?? receipt.loggedAt.slice(0, 10);
 }
@@ -371,14 +378,16 @@ export function AgencyReceiptsPanel({
 	weekStartIso,
 	weekEndIso,
 	onOpenPv,
+	focusReceiptId,
 }: {
 	weekStartIso: string;
 	weekEndIso: string;
 	onOpenPv?: (voucherId: string) => void;
+	/** Deep-linked receipt to scroll to — see the effect below. */
+	focusReceiptId?: string;
 }) {
 	const toast = useStore((s) => s.toast);
-	const agencySubRole = useStore((s) => s.agencySubRole);
-	const canReview = agencyCan(agencySubRole, "raisePv");
+	const canReview = useAgencyCan()("raisePv");
 	const {
 		receipts,
 		isLoading,
@@ -387,6 +396,19 @@ export function AgencyReceiptsPanel({
 		isReviewing,
 		reviewError,
 	} = useAgencyReceipts();
+
+	/**
+	 * Bring the deep-linked receipt into view once its row exists.
+	 *
+	 * Deliberately depends on `receipts` as well as the id: the page picks the
+	 * week first and the list renders after the fetch resolves, so scrolling on
+	 * mount alone would aim at an element that is not on the page yet.
+	 */
+	useEffect(() => {
+		if (!focusReceiptId) return;
+		const el = document.getElementById(`receipt-${focusReceiptId}`);
+		el?.scrollIntoView({ behavior: "smooth", block: "center" });
+	}, [focusReceiptId, receipts]);
 
 	const [status, setStatus] = useState<StatusFilter>("all");
 	const [search, setSearch] = useState("");
@@ -697,14 +719,23 @@ export function AgencyReceiptsPanel({
 									</div>
 									<div className="space-y-2">
 										{rows.map((receipt) => (
-											<ReceiptRow
+											<div
 												key={receipt.id}
-												receipt={receipt}
-												canReview={canReview}
-												busy={isReviewing}
-												onReview={(next) => void decide(receipt, next)}
-												onOpenPv={onOpenPv}
-											/>
+												id={`receipt-${receipt.id}`}
+												className={
+													focusReceiptId === receipt.id
+														? "rounded-xl ring-1 ring-[var(--iz-gold)]"
+														: undefined
+												}
+											>
+												<ReceiptRow
+													receipt={receipt}
+													canReview={canReview}
+													busy={isReviewing}
+													onReview={(next) => void decide(receipt, next)}
+													onOpenPv={onOpenPv}
+												/>
+											</div>
 										))}
 									</div>
 								</div>

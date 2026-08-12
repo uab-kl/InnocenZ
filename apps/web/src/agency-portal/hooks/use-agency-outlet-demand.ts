@@ -11,6 +11,7 @@ import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchShifts } from "@/services/shift";
+import { fetchShiftAssignments } from "@/services/shift-assignment";
 import { useAgencyOutlets } from "./use-agency-outlets";
 import { useRosterSlots } from "./use-roster-slots";
 
@@ -55,6 +56,18 @@ export function useAgencyOutletDemand() {
 		staleTime: 30_000,
 	});
 
+	// Raw assignments, because `supplied` is `prs.length` and the mapper needs the
+	// real PR ids per shift. The roster SLOTS below cannot serve this: an
+	// `AgencyRosterSlot` carries no `shiftId`, so a slot cannot be attributed back
+	// to the shift it staffs. Shares the roster query key, so a roster write
+	// invalidates this dashboard too.
+	const assignmentsQuery = useQuery({
+		queryKey: ["roster", "assignments"],
+		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		enabled: backed,
+		staleTime: 30_000,
+	});
+
 	// Roster assignments feed `scheduledTonight` per outlet (already backend-mapped).
 	const roster = useRosterSlots({
 		fromDate: todayIso,
@@ -70,13 +83,14 @@ export function useAgencyOutletDemand() {
 
 	const shifts = useMemo<ShiftRequest[]>(() => {
 		const rows = shiftsQuery.data?.data ?? [];
+		const assignments = assignmentsQuery.data?.data ?? [];
 		return rows.flatMap((s) => {
 			const name = outletNameById.get(s.outletId);
 			// Drop shifts at outlets outside this agency's directory (no card for them).
 			if (!name) return [];
-			return [outletShiftRequestFromBackend(s, name)];
+			return [outletShiftRequestFromBackend(s, name, assignments)];
 		});
-	}, [shiftsQuery.data, outletNameById]);
+	}, [shiftsQuery.data, assignmentsQuery.data, outletNameById]);
 
 	const rosterSlots = roster.slots;
 

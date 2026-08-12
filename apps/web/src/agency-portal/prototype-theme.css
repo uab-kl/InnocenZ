@@ -12437,6 +12437,26 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 	border-radius: 12px;
 }
+
+/*
+ * A venue's own logo, in place of the map pin. Added to whichever tile class the
+ * surface already uses (48px card, 52px detail header), so it inherits that
+ * tile's size, radius and accent tint and only has to say what the image does.
+ *
+ * `contain`, NOT `cover`: a logo is artwork with edges that mean something — a
+ * wordmark cropped to fill a square stops being readable, which is the opposite
+ * of what an identity tile is for. Faces tolerate cropping; brands do not.
+ */
+.iz-outlet-logo-tile {
+	overflow: hidden;
+	padding: 4px;
+}
+.iz-outlet-logo-tile img {
+	display: block;
+	width: 100%;
+	height: 100%;
+	object-fit: contain;
+}
 .iz-outlet-manage-card__name {
 	font-family: var(--font-sora, "Sora", sans-serif);
 	font-size: 22px;
@@ -14207,6 +14227,22 @@ button.iz-pr-offer-row:hover {
 	transform: scale(0.99);
 }
 
+/* Nothing to assign (no open slots, or no free PR) — the banner states why and
+   must not look pressable, or it reads as a button that silently does nothing. */
+.iz-roster-auto-assign:disabled {
+	background: rgba(255, 255, 255, 0.06);
+	color: var(--iz-muted);
+	cursor: default;
+}
+
+.iz-roster-auto-assign:disabled:hover {
+	opacity: 1;
+}
+
+.iz-roster-auto-assign:disabled:active {
+	transform: none;
+}
+
 .iz-roster-planning-panel {
 	border-radius: 12px;
 	border: 1px solid var(--iz-line);
@@ -14675,6 +14711,23 @@ button.iz-pr-offer-row:hover {
 .iz-roster-shift-pick:disabled {
 	opacity: 0.6;
 	cursor: not-allowed;
+}
+
+/* A shift that exists but cannot take THIS PR — fully staffed, or its tier quota
+   is spent. Listed rather than hidden, because a missing card is indistinguishable
+   from a shift nobody posted; greyed hard enough that it never reads as a choice.
+   Deliberately flatter than the :disabled-while-busy rule above: that is a
+   temporary state, this one is a fact about the shift. */
+.iz-roster-shift-pick.is-blocked {
+	opacity: 0.45;
+	cursor: not-allowed;
+	background: transparent;
+	border-style: dashed;
+	filter: saturate(0.35);
+}
+.iz-roster-shift-pick.is-blocked:hover {
+	border-color: var(--iz-line);
+	background: transparent;
 }
 
 .iz-roster-card-meta {
@@ -17844,21 +17897,38 @@ html:has(.iz-pr-app) {
 	font-size: 13px;
 	font-weight: 700;
 	flex-shrink: 0;
+	/* The photo variant puts an <img> in here, and the tile is rounded. */
+	overflow: hidden;
 	box-shadow: inset 0 0 0 1px rgba(183, 157, 245, 0.35);
 }
 
-/* Photo fills the tile; the violet stays as the loading colour and the inset
-   ring survives on top. Initial returns on error — see PrFaceBubble. */
-.iz-portal-table-av.has-photo {
-	overflow: hidden;
-	padding: 0;
-}
-
+/*
+ * The same 36px tile carrying the PR's own photo instead of her initial. The
+ * violet fill stays behind it, so a portrait with transparency still reads as an
+ * avatar rather than a hole in the row.
+ *
+ * TWO selectors because two components draw this tile and each marks the photo
+ * state with its own class: `PortalTableAvatar` adds `--photo`, `PrFaceBubble`
+ * adds `has-photo` (its `photoClassName` default) and LiveWorkforceTable
+ * renders that one with this same base class. Dropping either rule leaves that
+ * component's photo unstyled — a stretched image, not an obvious break — so
+ * both stay.
+ */
+.iz-portal-table-av--photo img,
 .iz-portal-table-av.has-photo img {
+	display: block;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
-	display: block;
+	/* Faces sit high in a portrait, so bias the crop upward. */
+	object-position: 50% 30%;
+}
+
+/* The base tile already clips, but it flex-centres an initial — a photo has to
+   fill it edge to edge. */
+.iz-portal-table-av.has-photo {
+	overflow: hidden;
+	padding: 0;
 }
 
 .iz-portal-table .iz-pill-violet {

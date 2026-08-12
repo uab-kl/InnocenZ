@@ -6,26 +6,24 @@ import {
 	navIsActive,
 } from "@agency-portal/components/Nav";
 import { OpsNotificationBell } from "@agency-portal/components/portal/OpsNotificationBell";
-import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
-import {
-	AGENCY_SUB_ROLE_LABELS,
-	agencyCan,
-} from "@agency-portal/lib/agency-rbac";
+import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
+import { AGENCY_SUB_ROLE_LABELS } from "@agency-portal/lib/agency-rbac";
 import { signOutToWelcome } from "@agency-portal/lib/go-welcome";
 import { iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
-import {
-	OUTLET_SUB_ROLE_LABELS,
-	outletCan,
-} from "@agency-portal/lib/outlet-rbac";
+import { OUTLET_SUB_ROLE_LABELS } from "@agency-portal/lib/outlet-rbac";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
+import {
+	useAgencyCanFor,
+	useOutletCanFor,
+} from "@agency-portal/lib/use-portal-can";
 import { Link, useLocation } from "@tanstack/react-router";
 import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { isOrgProfileOnly } from "@/components/organization/org-status";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
+import { isOrgProfileOnly } from "@/components/organization/org-status";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useProfile } from "@/lib/auth/use-profile";
 
@@ -88,11 +86,17 @@ function portalGreeting() {
 	return "Good evening";
 }
 
+/**
+ * The extras (Workspace / Subscription / Settings) are filtered with the SAME
+ * predicate the route layout builds its nav from — module grants included.
+ * Passing a bare sub-role here is what let the sidebar and the pages behind it
+ * answer differently.
+ */
 function mergeNavItems(
 	portal: PortalKind,
 	base: NavItem[],
-	agencySubRole: ReturnType<typeof useStore.getState>["agencySubRole"],
-	outletSubRole: ReturnType<typeof useStore.getState>["outletSubRole"],
+	canAgency: (permission: string) => boolean,
+	canOutlet: (permission: string) => boolean,
 	orgProfileOnly: boolean,
 ): NavItem[] {
 	const seen = new Set(base.map((i) => i.to));
@@ -101,19 +105,10 @@ function mergeNavItems(
 		if (seen.has(item.to)) return false;
 		// Pending / suspended: only Settings / Profile — no Workspace or Subscription.
 		if (orgProfileOnly) {
-			return (
-				item.to === "/outlet/settings" || item.to === "/agency/profile"
-			);
+			return item.to === "/outlet/settings" || item.to === "/agency/profile";
 		}
-		if (portal === "agency")
-			return agencyCan(
-				agencySubRole,
-				item.permission as Parameters<typeof agencyCan>[1],
-			);
-		return outletCan(
-			outletSubRole,
-			item.permission as Parameters<typeof outletCan>[1],
-		);
+		if (portal === "agency") return canAgency(item.permission);
+		return canOutlet(item.permission);
 	});
 	return [...base, ...filtered];
 }
@@ -351,11 +346,13 @@ export function PortalShell({
 			? isOrgProfileOnly(getAgencyIdentity()?.agencyStatus)
 			: isOrgProfileOnly(getOutletIdentity()?.outletStatus));
 
+	const canAgency = useAgencyCanFor(agencySubRole);
+	const canOutlet = useOutletCanFor(outletSubRole);
 	const sidebarItems = mergeNavItems(
 		portal,
 		navItems,
-		agencySubRole,
-		outletSubRole,
+		canAgency as (permission: string) => boolean,
+		canOutlet as (permission: string) => boolean,
 		orgProfileOnly,
 	);
 

@@ -84,6 +84,77 @@ const CASES: Case[] = [
   },
 ];
 
+/**
+ * THE DATE, checked against the shift it belongs to.
+ *
+ * The fixture that matters is `too far from the shift`: every one of the 12 live
+ * receipts carrying a printed date had read 2026-06-16, and the one with no
+ * lines to date it instead was filed into a June payroll week. `shiftDate` is
+ * what makes that detectable — without it the parser has no way to tell a real
+ * printed date from a confident misread.
+ */
+const DATE_CASES: {
+  label: string;
+  text: string;
+  shiftDate?: string;
+  expect: string | null;
+  expectRejected?: string;
+}[] = [
+  {
+    label: 'printed date matches the shift',
+    text: '16-06-2026   09:45PM',
+    shiftDate: '2026-06-16',
+    expect: '2026-06-16',
+  },
+  {
+    label: 'too far from the shift — dropped',
+    text: 'Order No. ORD1111\n16-06-2026   09:45PM',
+    shiftDate: '2026-08-11',
+    expect: null,
+    expectRejected: '2026-06-16',
+  },
+  {
+    label: 'no shift context — first token, unchanged',
+    text: '16-06-2026   09:45PM',
+    expect: '2026-06-16',
+  },
+  {
+    label: 'overnight shift, printed after midnight',
+    text: '12/08/2026 01:20AM',
+    shiftDate: '2026-08-11',
+    expect: '2026-08-12',
+  },
+  {
+    label: 'a stray date loses to the real one',
+    text: 'PROMO VALID TILL 01/01/2026\nOrder No. ORD1111\n11/08/2026 21:45',
+    shiftDate: '2026-08-11',
+    expect: '2026-08-11',
+  },
+  {
+    // Both parts <= 12, so the paper alone cannot say which is the month.
+    // D/M/Y is the local convention and wins whenever it fits...
+    label: 'ambiguous, local D/M/Y reading fits',
+    text: '08/11/2026',
+    shiftDate: '2026-11-08',
+    expect: '2026-11-08',
+  },
+  {
+    // ...and only loses when the shift says otherwise, which is evidence.
+    label: 'ambiguous, shift says M/D/Y',
+    text: '08/11/2026',
+    shiftDate: '2026-08-11',
+    expect: '2026-08-11',
+  },
+  {
+    label: 'impossible calendar day',
+    text: '31/02/2026',
+    shiftDate: '2026-02-28',
+    expect: null,
+  },
+  { label: 'ISO on the paper', text: '2026-08-11', shiftDate: '2026-08-11', expect: '2026-08-11' },
+  { label: 'no date at all', text: 'Order No. ORD1111\nTable No. S4', expect: null },
+];
+
 /** Lines that must NEVER be read as an item — the short-name guard earning its keep. */
 const MUST_NOT_MATCH = ['this round', 'Shots', 'Table No. S4', 'CASHIER 1', 'Pax(s) : 0', '5 Tops'];
 
@@ -109,6 +180,28 @@ for (const testCase of CASES) {
   for (const n of bad) {
     failures += 1;
     console.log(`        ${n}: expected ×${testCase.expect[n] ?? 0}, got ×${got[n] ?? 0}`);
+  }
+}
+
+for (const c of DATE_CASES) {
+  const parsed = parseReceipt(c.text, MENU, { shiftDate: c.shiftDate });
+  const okDate = parsed.date === c.expect;
+  const okRejected = (parsed.dateRejected?.parsed ?? null) === (c.expectRejected ?? null);
+  const bad = !okDate || !okRejected;
+  if (bad) failures += 1;
+  const drop = parsed.dateRejected
+    ? ` (dropped ${parsed.dateRejected.parsed}, ${parsed.dateRejected.driftDays}d off)`
+    : '';
+  console.log(
+    `${bad ? 'FAIL' : 'ok  '}  date · ${c.label.padEnd(38)} ${parsed.date ?? '(none)'}${drop}`,
+  );
+  if (!okDate) {
+    console.log(`        expected ${c.expect ?? '(none)'}, got ${parsed.date ?? '(none)'}`);
+  }
+  if (!okRejected) {
+    console.log(
+      `        expected dropped ${c.expectRejected ?? '(none)'}, got ${parsed.dateRejected?.parsed ?? '(none)'}`,
+    );
   }
 }
 

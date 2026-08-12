@@ -457,7 +457,36 @@ const isOpenDispute = (d: PaymentVoucherDispute) => !d.outcome;
 
 type DisputeScope = "open" | "resolved" | "all";
 
-export function DisputeQueuePanel() {
+/**
+ * Does this dispute belong to the week the Payroll screen is showing?
+ *
+ * Anchored on `disputeDate` — the CONTESTED DAY — not on the voucher's week and
+ * not on when the claim was raised. Owner's rule (11 Aug 2026): *"the dispute
+ * should sit with the week it is disputed at"*. A claim about Thu 6 Aug belongs
+ * to 02–08 Aug even if the PR raised it on the 11th, because the day is what the
+ * reviewer has to go and check.
+ *
+ * Containment on `yyyy-MM-dd` strings, the same test the voucher rows use, so a
+ * day sits in exactly one Sun–Sat week and no dispute can appear under two.
+ */
+function disputeInWeek(
+	dispute: PaymentVoucherDispute,
+	weekStartIso: string,
+	weekEndIso: string,
+): boolean {
+	if (!dispute.disputeDate) return false;
+	return (
+		dispute.disputeDate >= weekStartIso && dispute.disputeDate <= weekEndIso
+	);
+}
+
+export function DisputeQueuePanel({
+	weekStartIso,
+	weekEndIso,
+}: {
+	weekStartIso: string;
+	weekEndIso: string;
+}) {
 	const toast = useStore((s) => s.toast);
 	/**
 	 * EVERY dispute, not only the open ones.
@@ -478,11 +507,42 @@ export function DisputeQueuePanel() {
 	const [scope, setScope] = useState<DisputeScope>("open");
 	const [search, setSearch] = useState("");
 
-	const openCount = allDisputes.filter(isOpenDispute).length;
-	const resolvedCount = allDisputes.length - openCount;
+	/**
+	 * The selected week's disputes — what every count, chip and empty state below
+	 * reads.
+	 *
+	 * This panel used to ignore the week tab entirely, and the effect was that the
+	 * SAME claim appeared under This Week and Last Week with identical Open (1) /
+	 * Resolved (7) / All (8) chips, sitting beside Payment Vouchers and Receipts
+	 * counts that did move. Two chips in one row obeying the week and two ignoring
+	 * it reads as the filter leaking between weeks.
+	 */
+	const weekDisputes = useMemo(
+		() => allDisputes.filter((d) => disputeInWeek(d, weekStartIso, weekEndIso)),
+		[allDisputes, weekStartIso, weekEndIso],
+	);
+
+	const openCount = weekDisputes.filter(isOpenDispute).length;
+	const resolvedCount = weekDisputes.length - openCount;
+
+	/**
+	 * Open claims for OTHER weeks. Counted, never listed here.
+	 *
+	 * Week-scoping is what the owner asked for, but an undecided claim is why a
+	 * week refuses to send — so scoping it away silently would hide the thing
+	 * blocking a different week. One line naming the number keeps the blocker
+	 * visible without putting a foreign week's row in this list.
+	 */
+	const openElsewhere = useMemo(
+		() =>
+			allDisputes.filter(
+				(d) => isOpenDispute(d) && !disputeInWeek(d, weekStartIso, weekEndIso),
+			).length,
+		[allDisputes, weekStartIso, weekEndIso],
+	);
 
 	const disputes = useMemo(() => {
-		const byScope = allDisputes.filter((d) =>
+		const byScope = weekDisputes.filter((d) =>
 			scope === "all"
 				? true
 				: scope === "open"
@@ -508,7 +568,7 @@ export function DisputeQueuePanel() {
 				.filter(Boolean)
 				.some((field) => String(field).toLowerCase().includes(q)),
 		);
-	}, [allDisputes, scope, search]);
+	}, [weekDisputes, scope, search]);
 	// One query for the whole queue, not one per row — react-query dedupes on the
 	// shared key, and the rows only ever read from it.
 	const { receipts } = useAgencyReceipts();
@@ -541,13 +601,13 @@ export function DisputeQueuePanel() {
 			<IzCard>
 				{isLoading && <p className="iz-tiny iz-muted">Loading disputes…</p>}
 
-				{!isLoading && allDisputes.length > 0 && (
+				{!isLoading && weekDisputes.length > 0 && (
 					<div className="mb-2.5 flex flex-wrap items-center gap-1.5">
 						{(
 							[
 								["open", "Open", openCount],
 								["resolved", "Resolved", resolvedCount],
-								["all", "All", allDisputes.length],
+								["all", "All", weekDisputes.length],
 							] as [DisputeScope, string, number][]
 						).map(([value, label, count]) => (
 							// Same chip as the Payment Vouchers filter above — one filter
@@ -574,14 +634,24 @@ export function DisputeQueuePanel() {
 
 				{/* Three different silences, three different sentences. "No open
 				    disputes" was printed for all of them, so a settled claim and a
-				    week nobody has ever disputed looked identical. */}
-				{!isLoading && allDisputes.length === 0 && (
+				    week nobody has ever disputed looked identical. Now scoped to the
+				    week on screen, so it says nothing was disputed THIS week rather
+				    than nothing was ever disputed — and the off-week line below keeps
+				    a claim in another week from disappearing on the strength of it. */}
+				{!isLoading && weekDisputes.length === 0 && (
 					<p className="iz-tiny iz-muted">
-						No disputes raised. PRs raise these per day and per component from
-						their Payment screen.
+						Nothing disputed in this week. PRs raise these per day and per
+						component from their Payment screen.
 					</p>
 				)}
-				{!isLoading && allDisputes.length > 0 && disputes.length === 0 && (
+				{!isLoading && openElsewhere > 0 && (
+					<p className="iz-tiny mt-1 text-[var(--iz-amber)]">
+						{openElsewhere} open dispute{openElsewhere === 1 ? "" : "s"} in
+						another week — switch weeks above to decide{" "}
+						{openElsewhere === 1 ? "it" : "them"}.
+					</p>
+				)}
+				{!isLoading && weekDisputes.length > 0 && disputes.length === 0 && (
 					<p className="iz-tiny iz-muted">
 						{search.trim()
 							? `Nothing matches "${search.trim()}" in ${scope === "all" ? "any dispute" : `${scope} disputes`}.`

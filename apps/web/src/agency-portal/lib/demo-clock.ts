@@ -10,8 +10,6 @@ import {
 export const DEMO_ANCHOR_DATE_ISO = "2026-06-04";
 /** Payroll week (Sun–Sat) that contained the prototype anchor */
 export const DEMO_ANCHOR_WEEK_SUNDAY_ISO = "2026-05-31";
-/** @deprecated use DEMO_ANCHOR_WEEK_SUNDAY_ISO */
-export const DEMO_ANCHOR_WEEK_MONDAY_ISO = DEMO_ANCHOR_WEEK_SUNDAY_ISO;
 
 export function pad2(n: number) {
 	return String(n).padStart(2, "0");
@@ -35,16 +33,24 @@ export function getShiftToday(): [number, number, number] {
 	return getLiveTodayYmd();
 }
 
+/**
+ * The Sunday starting the payroll week that contains `fromIso`.
+ *
+ * THE week of this product: Sunday–Saturday, on the owner's instruction
+ * (3 Aug 2026). The backend agrees from the other end — `previousCompleteWeek`
+ * and `weekOfDate` in `payment-voucher-week.ts` are Sunday-anchored, the payout
+ * cron fires Sunday 02:00, and `backfill-voucher-due-dates.ts` outright REFUSES
+ * a `week_start` whose `extract(dow …)` is not 0.
+ *
+ * Nothing in the app may derive a week any other way. The roster planned in
+ * Mon–Sun until 12 Aug 2026, which put its grid columns and its "shifts this
+ * week" fairness count on a different seven days from every money screen.
+ */
 export function getPayrollWeekSundayIso(fromIso = getLiveTodayIso()): string {
 	return format(
 		startOfWeek(parseISO(fromIso), { weekStartsOn: 0 }),
 		"yyyy-MM-dd",
 	);
-}
-
-/** @deprecated use getPayrollWeekSundayIso */
-export function getPayrollWeekMondayIso(fromIso = getLiveTodayIso()): string {
-	return getPayrollWeekSundayIso(fromIso);
 }
 
 export function getPreviousWeekSundayIso(fromIso = getLiveTodayIso()): string {

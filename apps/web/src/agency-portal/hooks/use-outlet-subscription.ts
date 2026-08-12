@@ -1,6 +1,7 @@
 import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import {
 	nextRenewalFrom,
+	planChangeRecordFromMember,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
@@ -14,13 +15,20 @@ import {
 	fetchMyPlanChange,
 	fetchMyPosQuote,
 } from "@/services/admin-request";
-import { fetchMemberSubscriptions } from "@/services/member-subscription";
+import {
+	fetchMemberSubscriptions,
+	type MemberSubscription,
+} from "@/services/member-subscription";
 import {
 	fetchMyPaymentMethod,
 	type SavePaymentMethodInput,
 	saveMyPaymentMethod,
 } from "@/services/payment-method";
 import { fetchSubscriptions } from "@/services/subscription";
+import {
+	fetchSubscriptionInvoices,
+	type SubscriptionInvoice,
+} from "@/services/subscription-invoice";
 
 const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -82,13 +90,6 @@ export function useOutletSubscription() {
 		staleTime: 60_000,
 	});
 
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
-		if (!backed) return [];
-		return sortMemberSubscriptions(billingQuery.data?.data ?? []).map((sub) =>
-			subscriptionRecordFromMember(sub, "InnocenZ Outlet"),
-		);
-	}, [backed, billingQuery.data]);
-
 	/**
 	 * The admin-managed plan catalog. Reads are open to any signed-in role, which
 	 * is what lets the venue turn the plan it tapped into the real `subscription`
@@ -124,6 +125,72 @@ export function useOutletSubscription() {
 			),
 		[plansQuery.data],
 	);
+
+	/**
+	 * What this venue is subscribed to RIGHT NOW — its live plan, plus the POS
+	 * add-on when it has one. Deliberately not the whole ledger.
+	 *
+	 * `member_subscription` keeps every row a venue has ever held, and a plan
+	 * switch ends one row and starts another, so a venue that tried a few plans
+	 * had seven rows listed for one subscription. The ended and cancelled ones
+	 * carry no payment state (see the type's docstring), name nothing the venue
+	 * can act on, and read as a bill — so they are dropped here.
+	 *
+	 * Every ACTIVE row is kept rather than just the plan + add-on the pickers
+	 * derive: those two are matched against the plan catalog, and a row the
+	 * catalog cannot classify would otherwise vanish from the one list that is
+	 * supposed to state what the venue is paying for. The plan is listed first —
+	 * sorting by start date put the add-on on top, because POS is bought after
+	 * the plan it attaches to.
+	 */
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(() => {
+		if (!backed) return [];
+		const active = sortMemberSubscriptions(
+			billingQuery.data?.data ?? [],
+		).filter((sub) => sub.status === "active");
+		const isAddon = (sub: MemberSubscription) =>
+			Boolean(sub.subscriptionId && addonPlanIds.has(sub.subscriptionId));
+		return [
+			...active.filter((sub) => !isAddon(sub)),
+			...active.filter(isAddon),
+		].map((sub) => subscriptionRecordFromMember(sub, "InnocenZ Outlet"));
+	}, [backed, billingQuery.data, addonPlanIds]);
+
+	/**
+	 * Everything this venue has been on and is no longer — ended, cancelled, past
+	 * due. Kept out of the list above and shown behind a disclosure, because it is
+	 * reference, not a bill: these rows carry no payment state, so a venue reading
+	 * six priced cards in a column has no way to tell they are history.
+	 */
+	/**
+	 * What this venue has actually been BILLED, period by period — the billing
+	 * ledger, not the subscription ledger.
+	 *
+	 * `member_subscription` cannot answer this: it holds no payment state, which
+	 * is why the history under this screen could only ever be a list of plan
+	 * switches. `subscription_invoice` is one row per MONTHLY period (outlets are
+	 * billed monthly; agencies weekly) carrying a status an InnocenZ admin sets,
+	 * so the venue reads the same fact the admin does. Scoped server-side to this
+	 * outlet — the endpoint overwrites any subscriber filter a client sends.
+	 */
+	const invoicesQuery = useQuery({
+		queryKey: ["subscription-invoice", "outlet", outletId ?? "none"],
+		queryFn: () => fetchSubscriptionInvoices({ pageSize: 60 }, logout),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const paymentHistory = useMemo<SubscriptionInvoice[]>(
+		() => invoicesQuery.data?.data ?? [],
+		[invoicesQuery.data],
+	);
+
+	const pastSubscriptions = useMemo<SubscriptionRecordRow[]>(() => {
+		if (!backed) return [];
+		return sortMemberSubscriptions(billingQuery.data?.data ?? [])
+			.filter((sub) => sub.status !== "active")
+			.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Outlet"));
+	}, [backed, billingQuery.data]);
 
 	const activeSubscription = useMemo(() => {
 		if (!backed) return null;
@@ -366,6 +433,11 @@ export function useOutletSubscription() {
 	return {
 		backed,
 		billingHistory,
+		/** Ended/cancelled subscriptions, behind a disclosure on the screen. */
+		pastSubscriptions,
+		/** Billed periods with their paid/unpaid state — the real payment history. */
+		paymentHistory,
+		isPaymentHistoryLoading: invoicesQuery.isLoading,
 		activePlanName,
 		/** Real next billing date from the ledger; null when nothing is active. */
 		nextRenewalDate,

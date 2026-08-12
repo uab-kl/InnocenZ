@@ -1,6 +1,11 @@
 import { isoKeyFromDate } from "@agency-portal/components/iz/HistDateCalendar";
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import {
+	PastSubscriptionsDisclosure,
+	PaymentHistoryList,
+	SubscriptionRecordCard,
+} from "@agency-portal/components/iz/SubscriptionRecordList";
+import {
 	formatRM,
 	IzCard,
 	IzPageTitle,
@@ -26,18 +31,31 @@ import {
 	type OutletSubscriptionPlanId,
 	outletNamedPrCountForDate,
 } from "@agency-portal/lib/outlet-demo";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import {
 	outletMatches,
 	tonightShiftOutletName,
 } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
 import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
 
 const RENEWAL_DATE = "15 Jul 2026";
+
+/**
+ * Collections (what this venue owes its agency for PR work) is HIDDEN — owner,
+ * 12 Aug 2026.
+ *
+ * Gated rather than deleted, because the section is not broken: since the
+ * weekly job stopped drafting `collection_invoice` rows that same day, and no
+ * API can create one, it can only ever show frozen history beside an empty
+ * total — a creditor screen for money the app neither raises nor moves. The
+ * table, the hook and the markup stay so that turning this back on is one line
+ * if outlet↔agency billing ever comes back into the app.
+ */
+const SHOW_COLLECTIONS = false;
 
 const MONTHLY_PLANS = OUTLET_SUBSCRIPTION_PLANS.filter((p) => !p.renegotiate);
 
@@ -257,7 +275,8 @@ function OutletSubscriptionPage() {
 	);
 	const demoBilling = useStore((s) => s.outletSubscriptionBilling);
 	const toast = useStore((s) => s.toast);
-	const canEdit = outletCan(outletSubRole, "editSettings");
+	const can = useOutletCan();
+	const canEdit = can("editSettings");
 	// Real login → backend billing ledger + real POS-quote create (see the hook).
 	const backend = useOutletSubscription();
 
@@ -266,7 +285,7 @@ function OutletSubscriptionPage() {
 	// because the outlet is the one party with an interest in claiming it paid.
 	const collections = useOutletCollections();
 	const showCollections =
-		collections.backed && outletCan(outletSubRole, "viewBilling");
+		SHOW_COLLECTIONS && collections.backed && can("viewBilling");
 	const [quoteSentLocal, setQuoteSentLocal] = useState(false);
 	// The cancellation's counterpart to the flag above — see `pendingKind`.
 	const [removalSentLocal, setRemovalSentLocal] = useState(false);
@@ -487,7 +506,7 @@ function OutletSubscriptionPage() {
 		);
 	};
 
-	if (!outletCan(outletSubRole, "viewSettings")) {
+	if (!can("viewSettings")) {
 		return (
 			<div className="iz-screen">
 				<header>
@@ -619,13 +638,13 @@ function OutletSubscriptionPage() {
 			</div>
 
 			<IzSectionLabel>
-				{backend.backed ? "Subscription record" : "Billing history"}
+				{backend.backed ? "Current subscription" : "Billing history"}
 			</IzSectionLabel>
 			{backend.backed && (
 				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-					Your plan history with InnocenZ — one row per subscription, not per
-					charge. It records what you subscribed to and when, so it does not say
-					whether a given month was paid.
+					What this venue is subscribed to with InnocenZ today — its plan, plus
+					POS integration if you have added it. It records what you subscribed
+					to and when, so it does not say whether a given month was paid.
 				</p>
 			)}
 			<div className="space-y-2">
@@ -633,35 +652,32 @@ function OutletSubscriptionPage() {
 					<IzCard flat>
 						<p className="iz-tiny iz-muted py-4 text-center">
 							{backend.backed
-								? "No subscription on record for this venue yet."
+								? "No active subscription for this venue."
 								: "No subscription invoices yet."}
 						</p>
 					</IzCard>
 				) : (
 					billingHistory.map((row) => (
-						<IzCard key={row.id} flat>
-							<div className="iz-between gap-2">
-								<div className="flex min-w-0 items-start gap-2">
-									<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
-									<div className="min-w-0">
-										<p className="iz-sm truncate font-semibold">{row.title}</p>
-										<p className="iz-tiny iz-muted">
-											{row.dateLabel}
-											{row.detail ? ` · ${row.detail}` : ""}
-										</p>
-									</div>
-								</div>
-								<div className="shrink-0 text-right">
-									<p className="iz-sm font-bold">{formatRM(row.amountRm)}</p>
-									<IzPill variant={row.tone} className="!mt-1">
-										{row.statusLabel}
-									</IzPill>
-								</div>
-							</div>
-						</IzCard>
+						<SubscriptionRecordCard key={row.id} row={row} />
 					))
 				)}
+				<PastSubscriptionsDisclosure rows={backend.pastSubscriptions} />
 			</div>
+
+			{backend.backed && (
+				<>
+					<IzSectionLabel>Payment history</IzSectionLabel>
+					<p className="iz-tiny iz-muted2 -mt-1 mb-2">
+						One row per billing period — venues are billed monthly, from the day
+						you subscribed. A period stays Unpaid until InnocenZ marks the
+						payment received.
+					</p>
+					<PaymentHistoryList
+						invoices={backend.paymentHistory}
+						isLoading={backend.isPaymentHistoryLoading}
+					/>
+				</>
+			)}
 
 			{showCollections && (
 				<>
@@ -724,8 +740,9 @@ function OutletSubscriptionPage() {
 						) : collections.invoices.length === 0 ? (
 							<IzCard flat>
 								<p className="iz-tiny iz-muted py-4 text-center">
-									No statements yet. Your agency issues these weekly — anything
-									they are still reviewing is not shown here.
+									No statements. Your agency settles this venue's billing with
+									you directly rather than through the app, so nothing new is
+									raised here — past statements stay listed.
 								</p>
 							</IzCard>
 						) : (

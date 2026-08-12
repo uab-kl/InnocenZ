@@ -3,6 +3,7 @@ import type {
 	PrPvRow,
 	PrPvStatus,
 } from "@agency-portal/lib/pr-demo";
+import { formatPvSignStamp } from "@agency-portal/lib/pv-template";
 import type {
 	PaymentVoucher,
 	PaymentVoucherLine,
@@ -32,6 +33,17 @@ const STATUS_TO_BACKEND: Record<PrPvStatus, PaymentVoucherStatus> = {
 
 export function pvStatusToBackend(status: PrPvStatus): PaymentVoucherStatus {
 	return STATUS_TO_BACKEND[status];
+}
+
+// Timestamp columns come back as ISO-8601 UTC (`2026-08-12T03:41:05.810Z`).
+// Every screen, PDF, filter and sort in the portal reads these as the app's
+// display stamp (`12 Aug 2026 · 11:41`, KL time) — `disputeDaysRemaining` and
+// the payment-history sort both regex out `d MMM yyyy` and silently return
+// 0/null on anything else — so the conversion belongs here, at the boundary,
+// not in each consumer. `formatPvSignStamp` returns already-formatted values
+// untouched, which keeps the demo seeds working.
+function stamp(at: string | null | undefined): string {
+	return formatPvSignStamp(at);
 }
 
 // numeric(12,2) columns come back as strings; coerce defensively.
@@ -87,6 +99,10 @@ function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 		prName: pv.prName,
 		// Through the FK, not off the voucher row — see PrPaymentVoucher.prNickname.
 		prNickname: pv.prNickname ?? undefined,
+		// The FK itself. Dropped here before, which left every screen holding a
+		// mapped voucher able to NAME its PR but not to identify her — so joining a
+		// voucher to her own record could only be attempted by name.
+		prId: pv.prId ?? undefined,
 		prIc: pv.prIc ?? undefined,
 		outlet: pv.outlet ?? "",
 		cycle: pv.cycle ?? "",
@@ -98,8 +114,8 @@ function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 		net: num(pv.net),
 		status: STATUS_TO_DEMO[pv.status] ?? "PENDING_REVIEW",
 		financeHeadName: pv.financeHeadName ?? "",
-		financeHeadSignedAt: pv.financeHeadSignedAt ?? "",
-		prSignedAt: pv.prSignedAt ?? undefined,
+		financeHeadSignedAt: stamp(pv.financeHeadSignedAt),
+		prSignedAt: stamp(pv.prSignedAt) || undefined,
 		// The drawn ink. The comment that used to sit here — "backend tracks the
 		// name + timestamp but not the stored e-signature image" — was STALE from
 		// migration 0080 onward, and it is why the printed voucher kept drawing a
@@ -107,12 +123,12 @@ function baseVoucher(pv: PaymentVoucher, rows: PrPvRow[]): PrPaymentVoucher {
 		// the screen had already fetched.
 		financeHeadSignatureInk: pv.financeHeadSignature ?? undefined,
 		prSignatureInk: pv.prSignature ?? undefined,
-		paidAt: pv.paidAt ?? undefined,
+		paidAt: stamp(pv.paidAt) || undefined,
 		bankRef: pv.bankRef ?? undefined,
 		weekStartIso: pv.weekStart ?? undefined,
 		weekEndIso: pv.weekEnd ?? undefined,
 		prDisputeReason: pv.disputeReason ?? undefined,
-		disputedAt: pv.disputedAt ?? undefined,
+		disputedAt: stamp(pv.disputedAt) || undefined,
 		disputeNote: pv.disputeNote ?? undefined,
 	};
 }

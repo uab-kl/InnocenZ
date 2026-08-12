@@ -1,16 +1,29 @@
-/** Cancellation & lateness rules for agency-managed PR shifts */
+/**
+ * Cancellation & lateness rules for agency-managed PR shifts.
+ *
+ * The three notice bands are NO LONGER defined here — they are the agency's
+ * `cancellation` penalty rule (migration 0115), edited on Manage PR. Every
+ * function below takes that rule as an argument rather than reading a module
+ * constant, which is deliberate: the previous constants were duplicated in
+ * three places that had drifted apart, and a PR cancelling 6 hours out was
+ * SHOWN -50% while being CHARGED -25%. A required parameter makes that class of
+ * drift impossible — a caller cannot forget to use the configured value,
+ * because there is nothing else to use.
+ */
+import {
+	type CancellationRule,
+	DEFAULT_PENALTY_RULES,
+} from "@agency-portal/lib/pr-penalties";
 
 export const CANCEL_RULES = {
-	/** ≥ this many hours before start — no pay deduction */
-	safeNoticeHours: 24,
-	/** < this many hours before start — penalty tier */
-	penaltyNoticeHours: 2,
 	/** Arriving more than this many minutes after shift start triggers wage deduction */
 	lateArrivalMinutes: 15,
-	shortNoticeDeductionPct: 25,
-	penaltyDeductionPct: 50,
 	defaultDailyWagesRm: 350,
 } as const;
+
+/** Fallback only, for surfaces that have not loaded the agency's rule yet. */
+export const DEFAULT_CANCELLATION_RULE: CancellationRule =
+	DEFAULT_PENALTY_RULES.cancellation;
 
 export type CancellationTier = "safe" | "short_notice" | "penalty";
 
@@ -42,39 +55,41 @@ export function evaluateShiftCancellation(
 	dateIso: string,
 	shiftStart: string,
 	dailyWagesRm: number = CANCEL_RULES.defaultDailyWagesRm,
+	rule: CancellationRule = DEFAULT_CANCELLATION_RULE,
 ): CancellationEvaluation {
 	const hours = hoursUntilShiftStart(now, dateIso, shiftStart);
 
-	if (hours >= CANCEL_RULES.safeNoticeHours) {
+	// A disabled rule is not "0% everywhere" — it is no cancellation charge at
+	// all, so the PR must not be shown a deduction line they will never be
+	// billed for.
+	if (!rule.enabled || hours >= rule.freeCancelHours) {
 		return {
 			tier: "safe",
 			hoursUntilStart: hours,
 			deductionRm: 0,
 			headline: "On time notice — no pay deduction",
-			detail: `${Math.floor(hours)}h+ before shift · Atlas will reassign coverage.`,
+			detail: rule.enabled
+				? `${Math.floor(hours)}h+ before shift · your agency will reassign coverage.`
+				: "Your agency does not charge for cancellations.",
 		};
 	}
 
-	if (hours >= CANCEL_RULES.penaltyNoticeHours) {
-		const deductionRm = Math.round(
-			(dailyWagesRm * CANCEL_RULES.shortNoticeDeductionPct) / 100,
-		);
+	if (hours >= rule.shortNoticeHours) {
+		const deductionRm = Math.round((dailyWagesRm * rule.shortNoticePct) / 100);
 		return {
 			tier: "short_notice",
 			hoursUntilStart: hours,
 			deductionRm,
 			headline: `Short notice — −RM ${deductionRm} from next PV`,
-			detail: `Less than ${CANCEL_RULES.safeNoticeHours}h but more than ${CANCEL_RULES.penaltyNoticeHours}h before start.`,
+			detail: `Less than ${rule.freeCancelHours}h but more than ${rule.shortNoticeHours}h before start.`,
 		};
 	}
 
-	const deductionRm = Math.round(
-		(dailyWagesRm * CANCEL_RULES.penaltyDeductionPct) / 100,
-	);
+	const deductionRm = Math.round((dailyWagesRm * rule.lateCancelPct) / 100);
 	const lateLabel =
 		hours <= 0
 			? "Shift already started or passed"
-			: `Less than ${CANCEL_RULES.penaltyNoticeHours}h before start`;
+			: `Less than ${rule.shortNoticeHours}h before start`;
 	return {
 		tier: "penalty",
 		hoursUntilStart: hours,
@@ -87,6 +102,7 @@ export function evaluateShiftCancellation(
 export function evaluateLateArrival(
 	minutesLate: number,
 	dailyWagesRm: number = CANCEL_RULES.defaultDailyWagesRm,
+	rule: CancellationRule = DEFAULT_CANCELLATION_RULE,
 ): { applies: boolean; deductionRm: number; headline: string } {
 	if (minutesLate <= CANCEL_RULES.lateArrivalMinutes) {
 		return {
@@ -95,9 +111,10 @@ export function evaluateLateArrival(
 			headline: `Within ${CANCEL_RULES.lateArrivalMinutes} min grace — no deduction`,
 		};
 	}
-	const deductionRm = Math.round(
-		(dailyWagesRm * CANCEL_RULES.penaltyDeductionPct) / 100,
-	);
+	// Arriving very late has always been charged at the late-CANCEL rate: the
+	// shift is as good as dropped. It follows the configured percentage for the
+	// same reason.
+	const deductionRm = Math.round((dailyWagesRm * rule.lateCancelPct) / 100);
 	return {
 		applies: true,
 		deductionRm,
@@ -105,20 +122,40 @@ export function evaluateLateArrival(
 	};
 }
 
-export const CANCELLATION_RULE_SUMMARY = [
-	{
-		label: "24h+ before shift",
-		outcome: "Cancel or mark unavailable — no deduction",
-		tone: "green" as const,
-	},
-	{
-		label: "2h – 24h before",
-		outcome: `−${CANCEL_RULES.shortNoticeDeductionPct}% daily wages on next PV`,
-		tone: "amber" as const,
-	},
-	{
-		label: `<${CANCEL_RULES.penaltyNoticeHours}h before OR ${CANCEL_RULES.lateArrivalMinutes}+ min late`,
-		outcome: `−${CANCEL_RULES.penaltyDeductionPct}% daily wages on next PV`,
-		tone: "red" as const,
-	},
-];
+/**
+ * The three bands as display rows, derived from the agency's rule.
+ *
+ * A function, not a constant: the old constant was a second copy of the numbers
+ * the evaluator used, and the two drifted — which is exactly how the PR panel
+ * came to advertise a 12h boundary that nothing charged against.
+ */
+export function cancellationRuleSummary(
+	rule: CancellationRule = DEFAULT_CANCELLATION_RULE,
+): { label: string; outcome: string; tone: "green" | "amber" | "red" }[] {
+	if (!rule.enabled) {
+		return [
+			{
+				label: "Any time before shift",
+				outcome: "Free cancel — your agency charges no cancellation fee",
+				tone: "green",
+			},
+		];
+	}
+	return [
+		{
+			label: `${rule.freeCancelHours}h+ before shift`,
+			outcome: "Cancel or mark unavailable — no deduction",
+			tone: "green",
+		},
+		{
+			label: `${rule.shortNoticeHours}h – ${rule.freeCancelHours}h before`,
+			outcome: `−${rule.shortNoticePct}% daily wages on next PV`,
+			tone: "amber",
+		},
+		{
+			label: `<${rule.shortNoticeHours}h before OR ${CANCEL_RULES.lateArrivalMinutes}+ min late`,
+			outcome: `−${rule.lateCancelPct}% daily wages on next PV`,
+			tone: "red",
+		},
+	];
+}

@@ -1,0 +1,181 @@
+import { and, asc, eq, isNull } from 'drizzle-orm';
+import { db } from '@/db/index.js';
+import { logger } from '@/util/logger.js';
+import { SYSTEM_ACTOR } from '@/util/actor.js';
+import {
+  adminRequestRepository,
+  memberSubscriptionRepository,
+  subscriptionRepository,
+} from '@/composition-root.js';
+import { applyPlanChangeToLedger } from '@/features/admin-request/apply-plan-change.js';
+import { agencyWeeklyPvCount } from '@/features/subscription/plan-limit.js';
+import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
+import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
+import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
+import type { JobDefinition } from './scheduler.js';
+
+/**
+ * The agency tier rule, RUN BY THE SERVER.
+ *
+ * An agency does not pick its tier — the PVs it issued in a payroll week choose
+ * the band. That rule existed only as a `useEffect` on the agency's own
+ * Subscription screen, so it fired when a human happened to open that page and
+ * never otherwise: an agency whose staff never visited it stayed on whatever
+ * tier it was last left on, however much work it put through. This is that rule
+ * with nobody watching.
+ *
+ * Sunday 03:30 KL, after the 02:00 payout job has issued the week's vouchers and
+ * the 03:00 invoice job has opened the periods — the count has to be final
+ * before it can decide anything.
+ *
+ * It RE-PRICES; it never refuses. A payment voucher is a PR's wage record, so
+ * capping issuance to a billing band would withhold the pay documentation of
+ * people who had already worked. The band moves the price instead, which is what
+ * the product has always claimed it does.
+ */
+const SCHEDULE = '30 3 * * 0';
+
+/**
+ * The band a PV count falls into: the cheapest agency plan whose limit covers
+ * it, and the open-ended plan when nothing does.
+ *
+ * Reads `limit_amount` from the catalog rather than parsing `coverage`'s text,
+ * so the rule and the rate card cannot say different things. A plan with a NULL
+ * limit is the top band by definition (Custom's "151+ PV/week").
+ */
+export function bandFor(
+  plans: { id: string; name: string; limitAmount: number | null }[],
+  count: number,
+): { id: string; name: string; limitAmount: number | null } | null {
+  const bounded = plans
+    .filter((p) => p.limitAmount !== null)
+    .sort((a, b) => (a.limitAmount as number) - (b.limitAmount as number));
+  const fits = bounded.find((p) => count <= (p.limitAmount as number));
+  if (fits) return fits;
+  return plans.find((p) => p.limitAmount === null) ?? null;
+}
+
+async function runAgencyTier(): Promise<void> {
+  const { weekStart, weekEnd } = previousCompleteWeek();
+
+  const plans = await db
+    .select({
+      id: SubscriptionTable.id,
+      name: SubscriptionTable.name,
+      limitAmount: SubscriptionTable.limitAmount,
+    })
+    .from(SubscriptionTable)
+    .where(
+      and(
+        eq(SubscriptionTable.subscriptionType, 'agency'),
+        eq(SubscriptionTable.kind, 'plan'),
+        eq(SubscriptionTable.status, 'active'),
+      ),
+    )
+    .orderBy(asc(SubscriptionTable.price));
+  if (plans.length === 0) {
+    logger.warn('[agency-tier] no agency plans in the catalog; nothing to band against');
+    return;
+  }
+
+  // Only agencies that hold a live PLAN. One with no subscription is a billing
+  // question, not a tier question, and inventing a plan for it here would bill
+  // an org that never subscribed.
+  const live = await db
+    .select({
+      id: MemberSubscriptionTable.id,
+      subscriberId: MemberSubscriptionTable.subscriberId,
+      subscriberName: MemberSubscriptionTable.subscriberName,
+      planName: MemberSubscriptionTable.planName,
+      subscriptionId: MemberSubscriptionTable.subscriptionId,
+    })
+    .from(MemberSubscriptionTable)
+    .where(
+      and(
+        eq(MemberSubscriptionTable.subscriberType, 'agency'),
+        isNull(MemberSubscriptionTable.endedAt),
+      ),
+    );
+
+  let moved = 0;
+  let flagged = 0;
+  for (const row of live) {
+    const current = plans.find((p) => p.id === row.subscriptionId) ?? null;
+
+    /*
+     * ⚠️ CUSTOM IS NEVER MOVED AUTOMATICALLY. A Custom price is a negotiated
+     * agreement between two people; volume is evidence about it, not authority
+     * over it. The web rule carries the same exemption and the same warning — an
+     * earlier auto-reset re-priced an agreed figure four times in two minutes.
+     * Leaving Custom is the agency pressing Reset, or the admin ending it.
+     */
+    if (current && current.limitAmount === null) continue;
+
+    const issued = await agencyWeeklyPvCount({ agencyId: row.subscriberId, weekStart });
+    if (issued < 0) {
+      logger.warn(`[agency-tier] PV count failed for ${row.subscriberName}; left on ${row.planName}`);
+      continue;
+    }
+
+    const banded = bandFor(plans, issued);
+    if (!banded) continue;
+
+    // Past the top bounded band there is no list price to apply — that is the
+    // negotiation the admin has to have. Flagged, not silently switched onto a
+    // plan whose catalog price is a placeholder 0.
+    if (banded.limitAmount === null) {
+      flagged += 1;
+      logger.info(
+        `[agency-tier] ${row.subscriberName} issued ${issued} PV in ${weekStart}..${weekEnd} — past the rate card; needs a Custom price from admin`,
+      );
+      continue;
+    }
+
+    if (banded.id === row.subscriptionId) continue;
+
+    // Filed as the same 'direct' admin_request an agency switch has always
+    // produced, so the move appears on the admin's Plan Change page with its
+    // reason instead of a plan silently changing overnight.
+    const request = await adminRequestRepository.create({
+      type: 'plan_change',
+      subscriberType: 'agency',
+      subscriberId: row.subscriberId,
+      subscriberName: row.subscriberName,
+      currentPlanId: row.subscriptionId ?? null,
+      requestedPlanId: banded.id,
+      status: 'direct',
+      message: `${issued} PV issued in ${weekStart}..${weekEnd} — tier moved from ${row.planName} to ${banded.name} by the weekly volume rule.`,
+      createdBy: SYSTEM_ACTOR,
+      updatedBy: SYSTEM_ACTOR,
+    });
+
+    await applyPlanChangeToLedger({
+      memberSubscriptionRepository,
+      subscriptionRepository,
+      record: {
+        id: request?.id ?? 'agency-tier-job',
+        subscriberType: 'agency',
+        subscriberId: row.subscriberId,
+        subscriberName: row.subscriberName,
+        requestedPlanId: banded.id,
+      },
+      actor: SYSTEM_ACTOR,
+    });
+    moved += 1;
+    logger.info(
+      `[agency-tier] ${row.subscriberName}: ${issued} PV -> ${banded.name} (was ${row.planName})`,
+    );
+  }
+
+  // Logged even at zero: a quiet week is this job's normal outcome, and a silent
+  // job is indistinguishable from one that stopped running.
+  logger.info(
+    `[agency-tier] week ${weekStart}..${weekEnd}: ${live.length} agency subscription(s) checked, ${moved} moved, ${flagged} past the rate card`,
+  );
+}
+
+export const AGENCY_TIER_JOB: JobDefinition = {
+  name: 'agency-tier',
+  schedule: SCHEDULE,
+  run: runAgencyTier,
+};

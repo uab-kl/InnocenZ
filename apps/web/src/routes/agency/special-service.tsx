@@ -1,7 +1,7 @@
 import { SpecialServiceSection } from "@agency-portal/components/agency/SpecialServiceSection";
 import { IzCard, IzPageTitle } from "@agency-portal/components/iz/ui";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/agency/special-service")({
@@ -9,10 +9,10 @@ export const Route = createFileRoute("/agency/special-service")({
 });
 
 function AgencySpecialService() {
-	const agencySubRole = useStore((s) => s.agencySubRole);
+	const can = useAgencyCan();
 	const agencyOwner = useStore((s) => s.agencyOwner);
 
-	if (!agencyCan(agencySubRole, "viewPv")) {
+	if (!can("viewPv")) {
 		return (
 			<div className="iz-screen">
 				<header>
@@ -36,7 +36,7 @@ function AgencySpecialService() {
 				</p>
 			</header>
 
-			<SpecialServiceSection canBook={agencyCan(agencySubRole, "raisePv")} />
+			<SpecialServiceSection canBook={can("raisePv")} />
 		</div>
 	);
 }

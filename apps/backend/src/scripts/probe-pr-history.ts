@@ -12,6 +12,7 @@ import '@/env.js'; // FIRST — the pg pool builds from unset credentials otherw
 import { sql } from 'drizzle-orm';
 import { db } from '@/db/index.js';
 import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/payment-voucher.repository.js';
+import { klToday, weekOfDate } from '@/features/payment-voucher/payment-voucher-week.js';
 
 const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 
@@ -25,14 +26,26 @@ const KIND_BY_COMPONENT: Record<string, string> = {
   other: 'others',
 };
 
-/** Monday of the current week in Asia/Kuala_Lumpur, matching the controller. */
+/**
+ * Sunday starting the current payroll week in Asia/Kuala_Lumpur.
+ *
+ * 🔴 This was a hand-rolled MONDAY (`back = dow === 0 ? 6 : dow - 1`) whose
+ * comment claimed it matched the controller. It did — until the payroll anchor
+ * moved to Sunday on 3 Aug 2026, and a copy cannot follow a change it does not
+ * import. The value is passed straight into `excludeWeekStart`, which compares
+ * against `payment_voucher.week_start` — always a SUNDAY — so the Monday copy
+ * excluded a week that does not exist: the live current-week voucher survived
+ * the filter and the probe would have reported it as history, i.e. claimed the
+ * PR app shows a week it deliberately hides. On a Sunday it went the other way
+ * and excluded the week before.
+ *
+ * Now derived from the same functions the controller uses, so it cannot drift
+ * again.
+ */
 function currentWeekStart(): string {
-  const now = new Date();
-  const kl = new Date(now.getTime() + 8 * 60 * 60 * 1000);
-  const dow = kl.getUTCDay(); // 0=Sun
-  const back = dow === 0 ? 6 : dow - 1;
-  const monday = new Date(kl.getTime() - back * 24 * 60 * 60 * 1000);
-  return monday.toISOString().slice(0, 10);
+  const week = weekOfDate(klToday());
+  if (!week) throw new Error('could not derive the current payroll week');
+  return week.weekStart;
 }
 
 async function main() {

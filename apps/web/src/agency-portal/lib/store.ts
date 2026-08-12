@@ -245,6 +245,7 @@ import {
 	swapTargetOptionsForPr,
 } from "@agency-portal/lib/pr-features";
 import {
+	type AgencyPenaltyRules,
 	applyPayClassChange,
 	normalizePenaltyRules,
 	penaltyDeductRmForPr,
@@ -331,7 +332,12 @@ import {
 } from "@agency-portal/lib/special-service-demo";
 import { writePersistedPrSubRole } from "@agency-portal/lib/use-pr-sub-role";
 import { create } from "zustand";
-import { persist } from "zustand/middleware";
+import { createJSONStorage, persist } from "zustand/middleware";
+import {
+	readTabScoped,
+	removeTabScoped,
+	writeTabScoped,
+} from "@/lib/auth/tab-scoped-storage";
 
 export type Role = "vendor" | "host" | "agency";
 
@@ -821,6 +827,12 @@ interface StoreState {
 		tags?: string[];
 	}[];
 	outletWorkspace: OutletWorkspaceSettings;
+	/**
+	 * Attendance & discipline policy — the AGENCY's, not any outlet's (0113).
+	 * Top-level rather than nested under `outletWorkspace` because it is not an
+	 * outlet fact: the fine it produces is a deduction on the agency→PR voucher.
+	 */
+	agencyPenaltyRules: AgencyPenaltyRules;
 	outletSettings: OutletSettings;
 	outletOwner: OutletOwnerSettings;
 	outletSubscriptionBilling: OutletSubscriptionInvoice[];
@@ -875,6 +887,7 @@ interface StoreState {
 	confirmShift: (shiftId: string) => void;
 	sealShift: (shiftId: string) => void;
 	saveOutletWorkspace: (patch: Partial<OutletWorkspaceSettings>) => void;
+	saveAgencyPenaltyRules: (next: AgencyPenaltyRules) => void;
 	saveOutletSettings: (patch: Partial<OutletSettings>) => void;
 	saveOutletOwner: (patch: Partial<OutletOwnerSettings>) => void;
 	recordOutletSubscriptionPlanChange: (
@@ -2439,7 +2452,7 @@ export const useStore = create<StoreState>()(
 				const penaltyDeductRm = penaltyPr
 					? penaltyDeductRmForPr(
 							penaltyPr,
-							normalizePenaltyRules(st.outletWorkspace.penaltyRules),
+							normalizePenaltyRules(st.agencyPenaltyRules),
 						)
 					: 0;
 				const sentPv = buildSentWeeklyPv({
@@ -5276,6 +5289,7 @@ export const useStore = create<StoreState>()(
 			walletBalance: initialSnapshot.walletBalance,
 			ratings: initialSnapshot.ratings,
 			outletWorkspace: initialSnapshot.outletWorkspace,
+			agencyPenaltyRules: initialSnapshot.agencyPenaltyRules,
 			outletSettings: initialSnapshot.outletSettings,
 			outletOwner: initialSnapshot.outletOwner,
 			outletSubscriptionBilling: syncOutletSubscriptionBilling(
@@ -5573,6 +5587,10 @@ export const useStore = create<StoreState>()(
 					),
 				}));
 				get().toast("Shift removed", "info");
+			},
+			saveAgencyPenaltyRules: (next) => {
+				set({ agencyPenaltyRules: normalizePenaltyRules(next) });
+				get().toast("Penalty rules saved", "success");
 			},
 			saveOutletWorkspace: (patch) => {
 				set((st) => {
@@ -6574,6 +6592,19 @@ export const useStore = create<StoreState>()(
 			ratePr: (prId, stars, note, tags) => {
 				const pr = get().prs.find((p) => p.id === prId);
 				if (!pr) return;
+				// WHICH shift this verdict is about, captured BEFORE the set() below
+				// — that set removes this PR from the prompt and drops the prompt
+				// entirely once it empties, so reading it from the async submit
+				// afterwards would find the shift gone on the last PR rated.
+				//
+				// Only when the prompt actually names this PR: rating someone from
+				// the Ratings screen is not about the shift a prompt happens to be
+				// open for. Absent, the server attributes it to the PR's latest
+				// night at this venue.
+				const openPrompt = get().postSealRatePrompt;
+				const ratedShiftId = openPrompt?.prIds.includes(prId)
+					? openPrompt.shiftId
+					: undefined;
 				const outletName = get().outletWorkspace.outletName || "Velvet 23";
 				const lowShift = stars < RATING_SUSPEND_SHIFT_THRESHOLD;
 				const stamp = new Date().toLocaleDateString("en-MY", {
@@ -6654,6 +6685,11 @@ export const useStore = create<StoreState>()(
 								stars,
 								note,
 								tags: tags ?? [],
+								// Names the rated night, which is what decides which
+								// agency may read this rating — only the one that
+								// staffed it. Omitted when the rating did not come
+								// from a post-seal prompt.
+								shiftId: ratedShiftId,
 							},
 							() => {},
 						);
@@ -6680,6 +6716,23 @@ export const useStore = create<StoreState>()(
 		}),
 		{
 			name: "innocenz-store",
+			/**
+			 * PER-TAB, same contract as the auth tokens and the portal identity
+			 * (`tab-scoped-storage.ts`): sessionStorage, with the shared
+			 * localStorage slot used only to seed a brand-new tab once.
+			 *
+			 * One shared localStorage blob meant two portals open in two tabs wrote
+			 * over each other: the sub-role an agency-finance login persisted was
+			 * the sub-role the owner's tab rehydrated, so the owner got the finance
+			 * permission matrix while their token, nav and module grants all still
+			 * said owner. Identity keys are additionally kept out of the blob
+			 * entirely — see `partialize`.
+			 */
+			storage: createJSONStorage(() => ({
+				getItem: (name) => readTabScoped(name),
+				setItem: (name, value) => writeTabScoped(name, value),
+				removeItem: (name) => removeTabScoped(name),
+			})),
 			onRehydrateStorage: () => (state) => {
 				if (!state?.prSubRole) return;
 				writePersistedPrSubRole(state.prSubRole);
@@ -6699,12 +6752,14 @@ export const useStore = create<StoreState>()(
 					? { ...s.prSessionByRole, [role]: extractPrShiftSession(s) }
 					: s.prSessionByRole;
 				return {
-					role: s.role,
+					// `role`, `agencySubRole`, `outletSubRole`, `user` and
+					// `activeAgencyId` are deliberately NOT persisted. Who you are and
+					// what you may do is derived per tab from the tab-scoped token and
+					// identity (login → startAgency/OutletRealSession, reload → the
+					// portal route's identity re-derive). Storage was the only place
+					// those could disagree with the token, and a stale sub-role read
+					// like a broken permission rather than a stale cache.
 					prSubRole: s.prSubRole,
-					outletSubRole: s.outletSubRole,
-					agencySubRole: s.agencySubRole,
-					activeAgencyId: s.activeAgencyId,
-					user: s.user,
 					shifts: s.shifts,
 					outletPnl: s.outletPnl,
 					outletPnlSyncAt: s.outletPnlSyncAt,
@@ -7209,6 +7264,13 @@ export const useStore = create<StoreState>()(
 					outletWorkspace: normalizeOutletWorkspace(
 						p?.outletWorkspace ?? current.outletWorkspace,
 					),
+					// Persisted blobs written before 0113 carry the rules under
+					// `outletWorkspace.penaltyRules`; normalize() fills the gap from
+					// defaults either way, so an old blob rehydrates rather than
+					// leaving the editor with three undefined rules.
+					agencyPenaltyRules: normalizePenaltyRules(
+						p?.agencyPenaltyRules ?? current.agencyPenaltyRules,
+					),
 					shifts: (() => {
 						const ws = normalizeOutletWorkspace(
 							p?.outletWorkspace ?? current.outletWorkspace,
@@ -7340,6 +7402,15 @@ export const useStore = create<StoreState>()(
 						p?.paymentCardLast4 ?? current.paymentCardLast4 ?? "4242",
 					postSealRatePrompt: p?.postSealRatePrompt ?? null,
 					prSessionByRole: p?.prSessionByRole ?? current.prSessionByRole ?? {},
+					// Identity is never restored from storage. `partialize` stopped
+					// writing these, but a blob written before that change still holds
+					// them and `...p` above would happily re-apply the previous
+					// operator's sub-role. Pin them to the initial state instead.
+					role: current.role,
+					agencySubRole: current.agencySubRole,
+					outletSubRole: current.outletSubRole,
+					user: current.user,
+					activeAgencyId: current.activeAgencyId,
 				};
 				if (merged.prSubRole) {
 					const role = merged.prSubRole;

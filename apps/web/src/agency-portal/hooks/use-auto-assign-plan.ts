@@ -29,29 +29,44 @@ function payrollWeekRange(todayIso: string): { from: string; to: string } {
 }
 
 /**
- * Backs the home "Assign available PR" card: loads the payroll week's shifts,
+ * Which dates the plan should fill.
+ *
+ * `"today"` / `"week"` anchor on the live clock — that is the home card. A
+ * `{ dateIso }` scope anchors on a date the agency picked instead, which is how
+ * the roster's Planning banner asks for the day it is actually looking at
+ * rather than for today.
+ */
+export type AutoAssignScope = "today" | "week" | { dateIso: string };
+
+/**
+ * Backs every auto-assign surface: loads the payroll week's shifts,
  * assignments, PRs and outlets, then proposes who to put on the open slots.
  *
  * The whole week is always loaded because the fairness tie-break counts a PR's
- * shifts across it; `scope` only decides which dates get filled — "today" now,
- * "week" when the agency wants the card to plan the full week.
+ * shifts across it; `scope` picks the anchor date and which of that week's dates
+ * get filled.
  *
  * Read-only until `confirm` runs; the plan is a proposal, never a write.
  */
-export function useAutoAssignPlan(scope: "today" | "week" = "today") {
+export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
 
-	const todayIso = getLiveTodayIso();
-	const week = useMemo(() => payrollWeekRange(todayIso), [todayIso]);
+	// Reduced to primitives before any dependency array: callers pass
+	// `{ dateIso }` inline, so depending on the object itself would rebuild the
+	// plan — and everything memoised below it — on every render.
+	const isWeek = scope === "week";
+	const anchorIso =
+		typeof scope === "string" ? getLiveTodayIso() : scope.dateIso;
+	const week = useMemo(() => payrollWeekRange(anchorIso), [anchorIso]);
 	const targetDates = useMemo(
 		() =>
-			scope === "today"
-				? [todayIso]
-				: Array.from({ length: 7 }, (_, i) => addDaysToIso(week.from, i)),
-		[scope, todayIso, week.from],
+			isWeek
+				? Array.from({ length: 7 }, (_, i) => addDaysToIso(week.from, i))
+				: [anchorIso],
+		[isWeek, anchorIso, week.from],
 	);
 
 	// Query keys mirror useRosterSlots so the roster and this card share one

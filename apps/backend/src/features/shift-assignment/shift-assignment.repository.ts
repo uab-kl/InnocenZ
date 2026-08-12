@@ -10,6 +10,13 @@ import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { DEFAULT_GEOFENCE_RADIUS_M } from './check-in-geofence';
 import {
+  bucketForPrTier,
+  remainingByBucket,
+  seatFor,
+  totalDemand,
+  type DemandRow,
+} from './tier-demand';
+import {
   OutletDrinkMenuTable,
   OutletTierRateTable,
   OutletWorkspaceTable,
@@ -68,17 +75,27 @@ export type ResolvedTierRate = {
   targetSalesRm: string | null;
   happyHourStart: string; // 'HH:MM' or '' when no window set
   happyHourEnd: string;
+  /**
+   * % off MENU DRINK PRICES inside the window — the CUSTOMER's discount, not a
+   * commission rate. An `integer` column, so a number rather than a numeric
+   * string like the percentages around it.
+   *
+   * Distinct from `happyHourDrinkPct` despite the near-identical name: that one
+   * raises the PR's cut of a sale, this one lowers what the guest pays for it.
+   * Both apply inside the same window, to opposite sides of the same drink.
+   */
+  happyHourDrinkDiscountPct: number;
 };
 
 /**
  * A per-shift rate override — the same rate fields as a workspace tier rate but
- * without the happy-hour window (a shift override never moves the window; it
- * always comes from the outlet workspace). Any field null means "not overridden
- * — fall back to the workspace default".
+ * without the happy-hour window or its drink discount (a shift override never
+ * moves either; both always come from the outlet workspace). Any field null
+ * means "not overridden — fall back to the workspace default".
  */
 export type ShiftTierOverride = Omit<
   ResolvedTierRate,
-  'happyHourStart' | 'happyHourEnd'
+  'happyHourStart' | 'happyHourEnd' | 'happyHourDrinkDiscountPct'
 >;
 
 /**
@@ -162,18 +179,235 @@ export type AssignmentShiftFacts = {
   overtimeMinutes: number | null;
 };
 
+/**
+ * A shift already holds its `quantity` headcount, so the seat asked for does not
+ * exist. Thrown rather than returned because it must not be mistakable for a
+ * successful insert by a caller that forgets to check a result flag.
+ */
+export class ShiftFullError extends Error {
+  constructor(
+    readonly shiftId: string,
+    readonly quantity: number,
+    readonly staffed: number,
+  ) {
+    super(`Shift ${shiftId} is fully staffed (${staffed}/${quantity})`);
+    this.name = 'ShiftFullError';
+  }
+}
+
+/** The shift vanished between the caller reading it and the insert. */
+export class ShiftGoneError extends Error {
+  constructor(readonly shiftId: string) {
+    super(`Shift ${shiftId} no longer exists`);
+    this.name = 'ShiftGoneError';
+  }
+}
+
+/**
+ * The shift has room overall but not for THIS tier — the mix the outlet asked
+ * for in `shift_pay_tier` is already satisfied for that bucket. Distinct from
+ * `ShiftFullError` because the remedy is different: this one is fixed by
+ * sending a PR of another tier, not by raising the headcount.
+ */
+export class TierFullError extends Error {
+  constructor(
+    readonly shiftId: string,
+    /** 'Tier I' … or 'commission_only'; null when the tier was never named. */
+    readonly bucket: string | null,
+    readonly asked: number,
+    readonly staffed: number,
+  ) {
+    super(
+      bucket
+        ? `Shift ${shiftId} already has ${staffed}/${asked} ${bucket}`
+        : `Shift ${shiftId} has no unallocated seat left (${staffed}/${asked})`,
+    );
+    this.name = 'TierFullError';
+  }
+}
+
+/**
+ * Staffing headcount on a shift: assignments whose status still fills a seat.
+ *
+ * Takes the db client so the count can be made INSIDE a transaction holding the
+ * shift's row lock — outside one it is a reading, not a decision.
+ */
+async function countStaffing(
+  client: DbTransaction | typeof db,
+  shiftId: string,
+): Promise<number> {
+  const [row] = await client
+    .select({ staffed: sql<number>`count(*)::int` })
+    .from(ShiftAssignmentTable)
+    .where(
+      and(
+        eq(ShiftAssignmentTable.shiftId, shiftId),
+        notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+      ),
+    );
+  return row?.staffed ?? 0;
+}
+
 export class ShiftAssignmentRepositoryClass {
+  /**
+   * Seats a PR on a shift, refusing to exceed the shift's `quantity`.
+   *
+   * The capacity check lives HERE, not in the controller, so every insert path
+   * shares one rule — the web roster, the backfill sheet, the home "AI
+   * suggestion" auto-assign and mobile all reach this one method, and a future
+   * caller cannot forget a guard it never had to remember.
+   *
+   * Correctness rests on the row lock, not on the count: the shift is taken
+   * `FOR UPDATE` first, so two concurrent assigns to the last seat queue and the
+   * second one counts the first. Without it both read the same headcount and
+   * both insert — which is exactly how a 6-slot shift ends up with 7 PRs. Same
+   * shape as `OutletSwapRepository.approve`'s `destination_full` check, which
+   * already guards the other way a PR can land on a shift.
+   *
+   * A row created directly in a NON_STAFFING status (cancelled / no_show /
+   * leave_approved) takes no seat and is never refused — it records someone NOT
+   * working.
+   */
   async create(
     data: Omit<ShiftAssignmentInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     tx?: DbTransaction,
   ): Promise<ShiftAssignmentType> {
     try {
-      const dbClient = tx ?? db;
-      const [assignment] = await dbClient.insert(ShiftAssignmentTable).values(data).returning();
+      const seat = async (client: DbTransaction) => {
+        const takesSeat = !NON_STAFFING_STATUSES.includes(
+          data.status as (typeof NON_STAFFING_STATUSES)[number],
+        );
+        if (takesSeat) {
+          const [shift] = await client
+            .select({ quantity: ShiftTable.quantity })
+            .from(ShiftTable)
+            .where(eq(ShiftTable.id, data.shiftId))
+            .limit(1)
+            .for('update');
+          if (!shift) throw new ShiftGoneError(data.shiftId);
+
+          const staffed = await countStaffing(client, data.shiftId);
+          if (staffed >= shift.quantity) {
+            throw new ShiftFullError(data.shiftId, shift.quantity, staffed);
+          }
+
+          // Total headcount fits — now the MIX. Both reads stay inside the same
+          // lock as the count above, so a concurrent assign to the last Tier I
+          // seat cannot slip between them.
+          const demand = await client
+            .select({
+              kind: ShiftPayTierTable.kind,
+              tier: ShiftPayTierTable.tier,
+              prCount: ShiftPayTierTable.prCount,
+            })
+            .from(ShiftPayTierTable)
+            .where(eq(ShiftPayTierTable.shiftId, data.shiftId));
+
+          if (totalDemand(demand) > 0) {
+            // The tiers of the PRs already staffing this shift. Joined here
+            // rather than carried in by the caller: the tier is a fact about the
+            // PR row, and reading it under the lock is what makes the count a
+            // decision instead of a guess.
+            // ⚠️ Joined on `agency_pr.user_id`, NOT `agency_pr.id`. After 0089
+            // `shift_assignment.pr_id` IS the user id (the column kept its old
+            // name), so joining on `.id` matches nothing: every staffed seat
+            // resolves to a null tier, lands in the "unnamed" bucket, and on a
+            // shift whose demand already sums to `quantity` that refuses EVERY
+            // assignment. Verified against the live DB — 43/43 rows match
+            // `user_id`, 0/43 match `id`.
+            // ⚠️ The agency predicate is part of the JOIN KEY, not a nicety. One
+            // person can hold an `agency_pr` row per agency, so joining on
+            // user_id alone matches every membership they have and counts ONE
+            // assignment as several — seen live as "3/2 Tier I" from a single
+            // extra PR, and as a shift losing seats from two buckets at once.
+            const staffedRows = await client
+              .select({ tier: AgencyPrTable.tier })
+              .from(ShiftAssignmentTable)
+              .leftJoin(
+                AgencyPrTable,
+                and(
+                  eq(ShiftAssignmentTable.prId, AgencyPrTable.userId),
+                  eq(AgencyPrTable.agencyId, ShiftAssignmentTable.agencyId),
+                ),
+              )
+              .where(
+                and(
+                  eq(ShiftAssignmentTable.shiftId, data.shiftId),
+                  notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+                ),
+              );
+            const [incoming] = await client
+              .select({ tier: AgencyPrTable.tier })
+              .from(AgencyPrTable)
+              .where(
+                and(
+                  eq(AgencyPrTable.userId, data.userId ?? data.prId),
+                  // Same reason: a PR in two agencies has two tiers, and reading
+                  // the wrong agency's grade prices the wrong seat.
+                  eq(AgencyPrTable.agencyId, data.agencyId),
+                ),
+              )
+              .limit(1);
+
+            const verdict = seatFor({
+              demand,
+              quantity: shift.quantity,
+              staffedBuckets: staffedRows.map((r) => bucketForPrTier(r.tier)),
+              incomingBucket: bucketForPrTier(incoming?.tier),
+            });
+            if (!verdict.ok) {
+              throw verdict.reason === 'tier_full'
+                ? new TierFullError(data.shiftId, verdict.bucket, verdict.asked, verdict.staffed)
+                : new TierFullError(data.shiftId, null, verdict.leftover, verdict.staffed);
+            }
+          }
+        }
+
+        const [assignment] = await client.insert(ShiftAssignmentTable).values(data).returning();
+        return assignment;
+      };
+
+      // An outer transaction already owns the lock scope; joining it keeps the
+      // check and the insert one atomic unit rather than opening a second.
+      const assignment = tx ? await seat(tx) : await db.transaction(seat);
       logger.info('[ShiftAssignmentRepository.create] Assignment created:', assignment.id);
       return assignment;
     } catch (error) {
+      if (
+        error instanceof ShiftFullError ||
+        error instanceof ShiftGoneError ||
+        error instanceof TierFullError
+      ) {
+        throw error;
+      }
       logger.error('[ShiftAssignmentRepository.create] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Can this shift take one more PR? For the paths that RE-staff an existing row
+   * (a cancelled assignment flipped back to `assigned`) rather than inserting a
+   * new one, where there is no insert to hang the locked check on.
+   *
+   * Weaker than `create`'s guarantee — no row lock, so two simultaneous
+   * re-staffings of the last seat could both pass. That is a rare manual action,
+   * and the alternative (locking the shift on every status PATCH, including
+   * check-in and check-out) would put a write lock on the busiest path in the
+   * system to guard the quietest.
+   */
+  async hasFreeSeat(shiftId: string): Promise<{ free: boolean; quantity: number; staffed: number }> {
+    try {
+      const [shift] = await db
+        .select({ quantity: ShiftTable.quantity })
+        .from(ShiftTable)
+        .where(eq(ShiftTable.id, shiftId))
+        .limit(1);
+      if (!shift) return { free: false, quantity: 0, staffed: 0 };
+      const staffed = await countStaffing(db, shiftId);
+      return { free: staffed < shift.quantity, quantity: shift.quantity, staffed };
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.hasFreeSeat] Error:', error);
       throw error;
     }
   }
@@ -194,6 +428,181 @@ export class ShiftAssignmentRepositoryClass {
       return assignment ?? null;
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.update] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancellation fees this agency has sealed but never collected.
+   *
+   * `cancel_fee_charged_at IS NULL` is the whole definition of "uncharged" —
+   * the question the Finance head could not ask before, because until 0116
+   * nothing recorded that a fee had ever existed.
+   *
+   * `> 0` is part of the filter, not a display concern: a free cancel seals
+   * '0.00' so the row still explains itself, but it is not an outstanding
+   * charge and must never pad a Finance list with nothing.
+   *
+   * Unbounded by date on purpose. A fee that went uncollected for three weeks
+   * is exactly the one worth surfacing, and a week filter would hide it the
+   * moment it aged out of the current cycle.
+   */
+  async listUnchargedCancelFees(agencyId: string) {
+    try {
+      return await db
+        .select({
+          assignmentId: ShiftAssignmentTable.id,
+          prId: ShiftAssignmentTable.prId,
+          userId: ShiftAssignmentTable.userId,
+          prName: UserTable.username,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          outletName: OutletTable.name,
+          dailyWageRm: ShiftAssignmentTable.payAmount,
+          feeRm: ShiftAssignmentTable.cancelFeeRm,
+          feePct: ShiftAssignmentTable.cancelFeePct,
+          noticeHours: ShiftAssignmentTable.cancelNoticeHours,
+          reason: ShiftAssignmentTable.notes,
+          cancelledAt: ShiftAssignmentTable.updatedAt,
+        })
+        .from(ShiftAssignmentTable)
+        .leftJoin(ShiftTable, eq(ShiftTable.id, ShiftAssignmentTable.shiftId))
+        .leftJoin(OutletTable, eq(OutletTable.id, ShiftTable.outletId))
+        .leftJoin(UserTable, eq(UserTable.id, ShiftAssignmentTable.userId))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+            eq(ShiftAssignmentTable.status, 'cancelled'),
+            sql`${ShiftAssignmentTable.cancelFeeRm} IS NOT NULL`,
+            sql`${ShiftAssignmentTable.cancelFeeRm} > 0`,
+            sql`${ShiftAssignmentTable.cancelFeeChargedAt} IS NULL`,
+          ),
+        )
+        .orderBy(asc(ShiftTable.shiftDate));
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listUnchargedCancelFees] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Mark sealed fees as collected, against the voucher that took them.
+   *
+   * Scoped by `agencyId` as well as by id: the ids arrive from a client, and a
+   * bare `inArray(id)` would let one agency stamp another's rows as charged —
+   * quietly erasing a debt it has no claim over. Already-charged rows are
+   * excluded so a double submit cannot re-stamp a fee onto a second voucher.
+   */
+  async markCancelFeesCharged(
+    agencyId: string,
+    assignmentIds: string[],
+    voucherId: string | null,
+    actor: string,
+  ): Promise<number> {
+    if (assignmentIds.length === 0) return 0;
+    try {
+      const rows = await db
+        .update(ShiftAssignmentTable)
+        .set({
+          cancelFeeChargedAt: new Date(),
+          cancelFeeVoucherId: voucherId,
+          updatedBy: actor,
+        })
+        .where(
+          and(
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+            inArray(ShiftAssignmentTable.id, assignmentIds),
+            sql`${ShiftAssignmentTable.cancelFeeChargedAt} IS NULL`,
+            // There must BE a fee to charge. Without these two the endpoint
+            // stamps any assignment id a client sends — and a row marked
+            // charged before a fee was ever sealed onto it would then be
+            // invisible to the uncharged list forever. An uncollected fee has
+            // to resurface, never quietly disappear.
+            sql`${ShiftAssignmentTable.cancelFeeRm} IS NOT NULL`,
+            sql`${ShiftAssignmentTable.cancelFeeRm} > 0`,
+          ),
+        )
+        .returning({ id: ShiftAssignmentTable.id });
+      return rows.length;
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.markCancelFeesCharged] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The `pr_id`s this agency rostered in a week — the set worth evaluating.
+   *
+   * Deliberately keyed on `shift_assignment.pr_id` and NOT on the agency's PR
+   * roster: `agency_pr.id` is the membership row and its `.id` surfaces as the
+   * USER id, which is a different uuid from `pr_id`. Feeding roster ids into
+   * `attendanceWindow` matches nothing, so every window reads all-zero and
+   * every PR looks blameless — a silent no-op that looks like a clean week.
+   *
+   * Complete despite the narrowing: a PR with no assignments at all has
+   * opportunity 0, and the min-shifts safety net already exempts them. The two
+   * remaining weekly rules count things that only exist on assignments.
+   */
+  async listPrIdsForWeek(
+    agencyId: string,
+    weekStart: string,
+    weekEnd: string,
+  ): Promise<string[]> {
+    try {
+      const rows = await db
+        .selectDistinct({ prId: ShiftAssignmentTable.prId })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftTable.id, ShiftAssignmentTable.shiftId))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+            gte(ShiftTable.shiftDate, weekStart),
+            lte(ShiftTable.shiftDate, weekEnd),
+          ),
+        );
+      return rows.map((r) => r.prId).filter((id): id is string => !!id);
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listPrIdsForWeek] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * One PR's own sealed cancellation fees inside a week — for the PR app.
+   *
+   * Includes fees already charged as well as outstanding ones: the worker is
+   * asking "what did this week cost me", and hiding the collected ones would
+   * make the answer shrink after payday, which reads as the record being wrong.
+   * `> 0` still applies — a free cancel seals '0.00' and is not a penalty.
+   */
+  async listCancelFeesForPrWeek(prId: string, weekStart: string, weekEnd: string) {
+    try {
+      return await db
+        .select({
+          assignmentId: ShiftAssignmentTable.id,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          outletName: OutletTable.name,
+          feeRm: ShiftAssignmentTable.cancelFeeRm,
+          feePct: ShiftAssignmentTable.cancelFeePct,
+          noticeHours: ShiftAssignmentTable.cancelNoticeHours,
+          chargedAt: ShiftAssignmentTable.cancelFeeChargedAt,
+        })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftTable.id, ShiftAssignmentTable.shiftId))
+        .leftJoin(OutletTable, eq(OutletTable.id, ShiftTable.outletId))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.prId, prId),
+            gte(ShiftTable.shiftDate, weekStart),
+            lte(ShiftTable.shiftDate, weekEnd),
+            sql`${ShiftAssignmentTable.cancelFeeRm} IS NOT NULL`,
+            sql`${ShiftAssignmentTable.cancelFeeRm} > 0`,
+          ),
+        )
+        .orderBy(asc(ShiftTable.shiftDate));
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.listCancelFeesForPrWeek] Error:', error);
       throw error;
     }
   }
@@ -707,6 +1116,84 @@ export class ShiftAssignmentRepositoryClass {
   }
 
   /**
+   * A shift's remaining per-tier demand — what `seatFor` would still accept.
+   *
+   * Public because the roster, the backfill sheet and the auto-assign planner
+   * all have to OFFER only what the API takes; `capped: false` means the shift
+   * declared no mix and any tier fits.
+   */
+  async remainingDemandForShift(shiftId: string): Promise<{
+    byBucket: Map<string, number>;
+    unnamed: number;
+    capped: boolean;
+  }> {
+    try {
+      const [shift] = await db
+        .select({ quantity: ShiftTable.quantity })
+        .from(ShiftTable)
+        .where(eq(ShiftTable.id, shiftId))
+        .limit(1);
+      if (!shift) return { byBucket: new Map(), unnamed: 0, capped: false };
+
+      const demand: DemandRow[] = await db
+        .select({
+          kind: ShiftPayTierTable.kind,
+          tier: ShiftPayTierTable.tier,
+          prCount: ShiftPayTierTable.prCount,
+        })
+        .from(ShiftPayTierTable)
+        .where(eq(ShiftPayTierTable.shiftId, shiftId));
+
+      // `pr_id` IS the user id after 0089, and the agency predicate keeps one
+      // assignment from matching every membership that person holds — see the
+      // note in `create`.
+      const staffedRows = await db
+        .select({ tier: AgencyPrTable.tier })
+        .from(ShiftAssignmentTable)
+        .leftJoin(
+          AgencyPrTable,
+          and(
+            eq(ShiftAssignmentTable.prId, AgencyPrTable.userId),
+            eq(AgencyPrTable.agencyId, ShiftAssignmentTable.agencyId),
+          ),
+        )
+        .where(
+          and(
+            eq(ShiftAssignmentTable.shiftId, shiftId),
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        );
+
+      return remainingByBucket({
+        demand,
+        quantity: shift.quantity,
+        staffedBuckets: staffedRows.map((r) => bucketForPrTier(r.tier)),
+      });
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.remainingDemandForShift] Error:', error);
+      throw error;
+    }
+  }
+
+  /** Keep only the candidates a shift still has a seat for, by tier. */
+  private async filterByRemainingDemand<T extends { tier: string | null }>(
+    shiftId: string,
+    candidates: T[],
+  ): Promise<T[]> {
+    const remaining = await this.remainingDemandForShift(shiftId);
+    if (!remaining.capped) return candidates;
+    return candidates.filter((c) => {
+      const bucket = bucketForPrTier(c.tier);
+      // A named tier spends its own quota; an unnamed one spends the leftover.
+      // Mirrors `seatFor` exactly — if these two ever disagree the UI starts
+      // offering refusals again, which is the bug this filter exists to prevent.
+      return bucket && remaining.byBucket.has(bucket)
+        ? (remaining.byBucket.get(bucket) ?? 0) > 0
+        : remaining.unnamed > 0;
+    });
+  }
+
+  /**
    * Ranked replacement PRs for a released slot: the agency's active PRs with no
    * staffing assignment on that date (an existing booking — including a pending
    * leave — makes a PR busy). "Nearest" without geodata = the released PR's
@@ -719,6 +1206,13 @@ export class ShiftAssignmentRepositoryClass {
     outletId: string;
     excludePrIds: string[];
     preferTier?: string;
+    /**
+     * The slot being backfilled. Supplied so candidates whose tier the shift has
+     * no remaining demand for are DROPPED rather than offered — the assign call
+     * would refuse them with a 409, and a list that offers a refusal lands on
+     * the agency as a mystery failure one click later.
+     */
+    shiftId?: string;
   }): Promise<ReplacementCandidate[]> {
     try {
       const busyRows = await db
@@ -771,7 +1265,14 @@ export class ShiftAssignmentRepositoryClass {
         .groupBy(ShiftAssignmentTable.prId);
       const timesByPr = new Map(experienceRows.map((r) => [r.prId, r.times]));
 
-      return free
+      // Drop the tiers this shift has no room left for, so the sheet cannot
+      // offer a PR the assign call is going to refuse.
+      const seatable = params.shiftId
+        ? await this.filterByRemainingDemand(params.shiftId, free)
+        : free;
+      if (seatable.length === 0) return [];
+
+      return seatable
         .map((p) => ({
           prId: p.prId,
           userId: p.userId,
@@ -823,6 +1324,7 @@ export class ShiftAssignmentRepositoryClass {
           outletId: OutletWorkspaceTable.outletId,
           happyHourStart: OutletWorkspaceTable.happyHourStart,
           happyHourEnd: OutletWorkspaceTable.happyHourEnd,
+          happyHourDrinkDiscountPct: OutletWorkspaceTable.happyHourDrinkDiscountPct,
           wagePerHour: OutletTierRateTable.wagePerHour,
           drinkPct: OutletTierRateTable.drinkPct,
           happyHourDrinkPct: OutletTierRateTable.happyHourDrinkPct,
@@ -846,6 +1348,7 @@ export class ShiftAssignmentRepositoryClass {
           targetSalesRm: row.targetSalesRm,
           happyHourStart: row.happyHourStart,
           happyHourEnd: row.happyHourEnd,
+          happyHourDrinkDiscountPct: row.happyHourDrinkDiscountPct,
         });
       }
       return result;
@@ -1432,7 +1935,7 @@ export class ShiftAssignmentRepositoryClass {
     weekStart: string;
     weekEnd: string;
     graceMinutes: number;
-  }): Promise<{ shiftsThisWeek: number; lateThisWeek: number; mcThisMonth: number }> {
+  }): Promise<{ assignedThisWeek: number; excusedThisWeek: number; shiftsThisWeek: number; lateThisWeek: number; mcThisMonth: number }> {
     try {
       const { prId, weekStart, weekEnd, graceMinutes } = input;
       const result = await db.execute(sql`
@@ -1453,6 +1956,17 @@ export class ShiftAssignmentRepositoryClass {
                 = date_trunc('month', ${weekStart}::date)
         )
         select
+          -- Every assignment the agency GAVE this PR that week, whatever became
+          -- of it. This is opportunity, not attendance: a PR who was handed two
+          -- shifts cannot be faulted for not working three. Counted across all
+          -- statuses on purpose — a shift the PR themselves cancelled was still
+          -- an opportunity offered (and the cancellation fee answers for that
+          -- separately), so excluding it would let someone dodge the minimum by
+          -- dropping shifts.
+          (select count(*)::int from wk) as assigned_this_week,
+          -- Shifts the AGENCY excused. Approved MC/leave is permission not to
+          -- work, so it cannot then be counted as a shift they failed to work.
+          (select count(*)::int from wk where status = 'leave_approved') as excused_this_week,
           (select count(*)::int from wk where status = 'completed') as shifts_this_week,
           (select count(*)::int from wk
              where status = 'completed'
@@ -1469,6 +1983,8 @@ export class ShiftAssignmentRepositoryClass {
       const rows = (Array.isArray(result)
         ? result
         : ((result as { rows?: unknown[] })?.rows ?? [])) as Array<{
+        assigned_this_week: number;
+        excused_this_week: number;
         shifts_this_week: number;
         late_this_week: number;
         mc_this_month: number;
@@ -1476,6 +1992,8 @@ export class ShiftAssignmentRepositoryClass {
       const row = rows[0];
 
       return {
+        assignedThisWeek: row?.assigned_this_week ?? 0,
+        excusedThisWeek: row?.excused_this_week ?? 0,
         shiftsThisWeek: row?.shifts_this_week ?? 0,
         lateThisWeek: row?.late_this_week ?? 0,
         mcThisMonth: row?.mc_this_month ?? 0,

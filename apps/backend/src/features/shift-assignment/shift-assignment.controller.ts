@@ -3,10 +3,15 @@ import {
   ShiftAssignmentRepositoryClass,
   ResolvedTierRate,
   ShiftTierOverride,
+  ShiftFullError,
+  ShiftGoneError,
+  TierFullError,
+  NON_STAFFING_STATUSES,
 } from './shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
+import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { notify, notifyMany } from '@/features/notification/notify.js';
@@ -27,10 +32,14 @@ import { PaymentVoucherRepositoryClass } from '@/features/payment-voucher/paymen
 import { buildOvertimeLine, overtimeDedupeRef } from '@/features/payment-voucher/overtime-line';
 import { weekOfDate } from '@/features/payment-voucher/payment-voucher-week';
 import { sealCheckOut } from './seal-checkout';
+import { computeCancelFee, type CancelFee } from './cancel-fee';
+import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penalty-rule.repository.js';
 import {
   PR_TIER_TO_OUTLET_LABEL,
   mergeRate,
   resolveTierWages as resolveTierWagesShared,
+  resolveTierWageOutcome,
+  resolveTierWageOutcomesForShifts,
 } from './resolve-tier-wages';
 import { shiftsOverlap } from '@/util/slot-window';
 import {
@@ -97,6 +106,15 @@ export class ShiftAssignmentControllerClass {
     // safe (component classification, the line-date assertion) live in the
     // repository, so going through it is what keeps this path under them.
     private paymentVoucherRepository: PaymentVoucherRepositoryClass,
+    // Cancelling seals a fee priced off the agency's cancellation bands, so
+    // this controller needs to read them at the moment of the cancel — not at
+    // payroll time, when the bands may since have changed.
+    private agencyPenaltyRuleRepository: AgencyPenaltyRuleRepositoryClass,
+    // Assigning a shift needs THIS agency's decision on THIS PR, and only
+    // `agency_pr` holds it. The synthetic PR carries the approval of its PRIMARY
+    // (oldest) membership, which is a different agency's answer whenever the PR
+    // is on more than one roster — so `create` reads the row directly.
+    private agencyPrRepository: AgencyPrRepository,
   ) {}
 
   /**
@@ -495,10 +513,61 @@ export class ShiftAssignmentControllerClass {
       }
 
       const actor = getActor(req);
+
+      // Seal the cancellation fee NOW, against the bands in force at this
+      // moment. The PR was shown this number on the Cancel button; storing it
+      // is what stops an later edit to the agency's bands from restating what
+      // they owe. `payAmount` is still the forecast day rate here — the shift
+      // was never worked, so nothing has sealed it down.
+      let fee: CancelFee = { feeRm: '0.00', pct: 0, noticeHours: '0.00' };
+      try {
+        const shift = await this.shiftRepository.getById(existing.shiftId);
+        const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(existing.agencyId);
+
+        // The basis is the TIER RATE for this outlet, not `pay_amount`.
+        //
+        // `pay_amount` is `clientPayAmount ?? tierRate ?? 0` at assign time, so a
+        // hand-entered figure silently overrides the rate card — live rows carry
+        // 40.00 and 55.00 against Tier I/III cards of 500 and 700. Charging 50%
+        // of those bills RM 20 instead of RM 250. The rate card is what the PR's
+        // tier actually entitles them to, so it is what a percentage of "their
+        // daily wage" has to mean.
+        //
+        // Falls back to `pay_amount` only when no card resolves — a
+        // commission-only PR has no daily wage, and `resolveTierWages` returns
+        // null for them, which correctly yields no fee rather than a wrong one.
+        let basis: string | null = null;
+        if (pr?.tier && shift?.outletId) {
+          // The same resolver check-out and cut-loss seal against — two copies
+          // would be two answers to "what does this shift pay".
+          basis = await this.resolveTierWages(
+            { tier: pr.tier },
+            existing.shiftId,
+            shift.outletId,
+          );
+        }
+
+        fee = computeCancelFee({
+          rule: rules.find((r) => r.ruleType === 'cancellation'),
+          dailyWageRm: basis ?? existing.payAmount,
+          shiftDate: shift?.shiftDate ?? '',
+          slot: shift?.slot ?? null,
+        });
+      } catch (feeError) {
+        // A fee that cannot be priced must not block the PR from cancelling —
+        // they still need out of the shift, and the agency still needs telling.
+        // It stays NULL, which reads as "never sealed", not as "nothing owed".
+        logger.error('[ShiftAssignmentController.cancelMine] cancel fee:', feeError);
+      }
+
       const assignment = await this.shiftAssignmentRepository.update(id, {
         status: 'cancelled',
         notes: reason,
         updatedBy: actor,
+        cancelFeeRm: fee.feeRm,
+        cancelFeePct: fee.pct,
+        cancelNoticeHours: fee.noticeHours,
+        // charged_at stays NULL: sealed, owed, and not yet collected.
       });
       res.status(200).json({ success: true, message: 'Shift cancelled — your agency has been notified', data: assignment });
 
@@ -1234,10 +1303,86 @@ export class ShiftAssignmentControllerClass {
         outletId: shift.outletId,
         excludePrIds: [existing.prId],
         preferTier: releasedPr?.tier,
+        // Drops tiers the shift has no remaining demand for, so the sheet never
+        // offers a PR the assign call would refuse with a 409.
+        shiftId: existing.shiftId,
       });
       res.status(200).json({ success: true, message: 'OK', data: candidates });
     } catch (error) {
       logger.error('[ShiftAssignmentController.listReplacementCandidatesForAssignment] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * What a PR would earn on each of the given shifts, BEFORE anyone assigns them.
+   *
+   * Read-only, and deliberately answered by `resolveTierWageOutcomesForShifts` —
+   * the same resolver `create` gates on and check-out later seals against. The
+   * roster sheet used to show the SHIFT's `pay_per_hour`, one number that did not
+   * move when you picked a different PR, so a Tier I and a Servant read the same
+   * wage on the same card.
+   *
+   * It returns the OUTCOME, not a number, because the three cases must not look
+   * alike: `commission_only` is a PR correctly earning no day rate, while
+   * `unpriced` is a tier this outlet never costed — and `create` REFUSES that one
+   * unless the agency names a payAmount itself. Showing it here turns a mystery
+   * refusal at assign time into a fact on the card before the click.
+   *
+   * Shifts outside the caller's agency are dropped rather than reported, so this
+   * cannot be used to probe for another agency's shift ids.
+   */
+  async wagePreview(req: Request, res: Response) {
+    try {
+      // A day's shifts at one outlet is a handful; the cap only stops a caller
+      // turning one request into an unbounded fan-out.
+      const MAX_SHIFTS = 60;
+      const prId = typeof req.query.prId === 'string' ? req.query.prId.trim() : '';
+      const rawShiftIds = typeof req.query.shiftIds === 'string' ? req.query.shiftIds : '';
+      const shiftIds = [
+        ...new Set(
+          rawShiftIds
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        ),
+      ].slice(0, MAX_SHIFTS);
+
+      if (!prId || shiftIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: 'prId and a non-empty shiftIds list are required',
+          data: null,
+        });
+      }
+
+      const scope = await this.resolveScope(req);
+      if (!scope.isAdmin && !scope.agencyId) {
+        return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+
+      const pr = await this.prRepository.getById(prId);
+      if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!scope.isAdmin && pr.agencyId !== scope.agencyId) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const shifts = (await Promise.all(shiftIds.map((id) => this.shiftRepository.getById(id))))
+        .filter((s): s is NonNullable<typeof s> => s !== null)
+        .filter((s) => scope.isAdmin || s.agencyId === scope.agencyId);
+
+      const outcomes = await resolveTierWageOutcomesForShifts(
+        this.shiftAssignmentRepository,
+        // A PR with no tier resolves to no label, which the resolver reports as
+        // `unpriced` — the honest answer, not a zero.
+        { tier: pr.tier ?? '' },
+        shifts.map((s) => ({ shiftId: s.id, outletId: s.outletId })),
+      );
+
+      const data = [...outcomes.entries()].map(([shiftId, outcome]) => ({ shiftId, ...outcome }));
+      res.status(200).json({ success: true, message: 'OK', data });
+    } catch (error) {
+      logger.error('[ShiftAssignmentController.wagePreview] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
@@ -1303,6 +1448,29 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'PR belongs to a different agency', data: null });
       }
 
+      // The agency must have ACCEPTED this PR before it can sell their night.
+      // Read against `shift.agencyId` rather than `pr.status`: the synthetic PR
+      // reports the approval of its oldest membership, so a PR approved by
+      // agency A and still pending at agency B would otherwise let B roster
+      // someone it has never accepted.
+      //
+      // `ensureOpsBridge` above writes an APPROVED row, so a first-time bridge
+      // still passes — this only ever refuses a membership that exists and says
+      // pending or rejected.
+      const membership = (await this.agencyPrRepository.listByUser(pr.userId)).find(
+        (row) => row.agencyId === shift.agencyId,
+      );
+      if (membership && membership.approveStatus !== 'approved') {
+        return res.status(400).json({
+          success: false,
+          message:
+            membership.approveStatus === 'rejected'
+              ? 'This PR was declined by your agency and cannot be assigned.'
+              : 'This PR is still awaiting your approval — approve them under Approvals before assigning a shift.',
+          data: null,
+        });
+      }
+
       // A PR may work TWO shifts on the same day — but only at different
       // times. Compared on a continuous timeline, so an overnight 22:00–04:00
       // also meets the next morning's 02:00–06:00 — the same-date-only test
@@ -1333,7 +1501,34 @@ export class ShiftAssignmentControllerClass {
       }
 
       const actor = getActor(req);
-      const tierWages = await this.resolveTierWages(pr, shift.id, shift.outletId);
+
+      // The outlet must have PRICED this PR's tier. Nothing checks that the tier
+      // was REQUESTED (shift_pay_tier.pr_count is still read by nobody — that is
+      // its own task); this checks only that assigning them can produce a wage.
+      //
+      // It has to, because the fallback below spends a missing rate as '0.00' and
+      // returns 201: a PR booked onto a tier the outlet never costed worked the
+      // night for nothing and the screen said "PR assigned to shift". A refusal
+      // is the only outcome that reaches anyone in time.
+      //
+      // `commission_only` is NOT unpriced — that PR is correctly on no day rate —
+      // which is why this reads the outcome and not the number.
+      const wageOutcome = await resolveTierWageOutcome(
+        this.shiftAssignmentRepository,
+        pr,
+        shift.id,
+        shift.outletId,
+      );
+      // An explicit payAmount is the agency naming the wage itself, so a missing
+      // rate card is no longer the authority and must not block them.
+      if (wageOutcome.kind === 'unpriced' && parsed.data.payAmount === undefined) {
+        return res.status(409).json({
+          success: false,
+          message: `This outlet has no ${wageOutcome.tierLabel ?? 'rate'} wage for this shift — set the tier's rate in the outlet's workspace, or send an explicit pay amount. Assigning now would book the PR at RM0.00.`,
+          data: null,
+        });
+      }
+      const tierWages = wageOutcome.kind === 'priced' ? wageOutcome.wage : null;
       const assignment = await this.shiftAssignmentRepository.create({
         shiftId: shift.id,
         prId: pr.id,
@@ -1362,6 +1557,31 @@ export class ShiftAssignmentControllerClass {
     } catch (error) {
       if (isUniqueViolation(error)) {
         return res.status(409).json({ success: false, message: 'PR is already assigned to this shift', data: null });
+      }
+      // 409, same family as the duplicate above: the request was well-formed and
+      // authorised, it just lost a race for the last seat. The count is named so
+      // the roster can say WHY without a second round-trip.
+      if (error instanceof ShiftFullError) {
+        return res.status(409).json({
+          success: false,
+          message: `This shift is already fully staffed (${error.staffed}/${error.quantity}) — raise the headcount or pick another shift.`,
+          data: null,
+        });
+      }
+      // Room overall, but not for this TIER. Separate message from the headcount
+      // 409 because the remedy differs: send a different tier, do not raise the
+      // headcount.
+      if (error instanceof TierFullError) {
+        return res.status(409).json({
+          success: false,
+          message: error.bucket
+            ? `This shift already has all ${error.asked} ${error.bucket} it asked for — assign a different tier.`
+            : `This shift's remaining seats are reserved for the tiers it requested — assign one of those tiers.`,
+          data: null,
+        });
+      }
+      if (error instanceof ShiftGoneError) {
+        return res.status(404).json({ success: false, message: 'Shift not found', data: null });
       }
       logger.error('[ShiftAssignmentController.create] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -1503,6 +1723,29 @@ export class ShiftAssignmentControllerClass {
       const scope = await this.resolveScope(req);
       if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      // The OTHER way a shift can end up over its headcount: not an insert, but
+      // an existing row flipped back INTO a staffing status (a cancelled PR
+      // un-cancelled after the slot was backfilled). `create`'s locked check
+      // cannot see this path — there is no insert — so it is checked here.
+      // Transitions between two staffing statuses (assigned -> confirmed, a
+      // check-in, a check-out) took their seat long ago and are never re-tested.
+      const isNonStaffing = (s: ShiftAssignmentStatus | undefined) =>
+        s !== undefined && NON_STAFFING_STATUSES.includes(s as (typeof NON_STAFFING_STATUSES)[number]);
+      const reStaffing =
+        parsed.data.status !== undefined &&
+        isNonStaffing(existing.status) &&
+        !isNonStaffing(parsed.data.status);
+      if (reStaffing) {
+        const seat = await this.shiftAssignmentRepository.hasFreeSeat(existing.shiftId);
+        if (!seat.free) {
+          return res.status(409).json({
+            success: false,
+            message: `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`,
+            data: null,
+          });
+        }
       }
 
       const assignment = await this.shiftAssignmentRepository.update(id, {

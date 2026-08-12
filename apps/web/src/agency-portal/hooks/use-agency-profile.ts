@@ -1,20 +1,21 @@
-import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import {
 	BLANK_AGENCY_FINANCE_HEAD,
 	BLANK_AGENCY_OWNER,
 } from "@agency-portal/lib/agency-demo";
+import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import {
 	EMPTY_ORG_ADDRESS,
 	joinOrgAddress,
+	type OrgAddress,
 	orgAddressFromRow,
 	resolveOrgAddressForSave,
-	type OrgAddress,
 } from "@agency-portal/lib/org-address";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
+import { updateMyDisplayName } from "@/lib/auth/profile-api";
+import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
 import { useAuth } from "@/lib/auth-context";
-import { useProfile } from "@/lib/auth/use-profile";
 import {
 	fetchAgencyById,
 	fetchAgencyMembers,
@@ -154,14 +155,13 @@ export function useAgencyProfile() {
 			clearLogo?: boolean;
 		}) => {
 			if (!agencyId) throw new Error("No real agency session");
-			return updateAgency(
+
+			const agencyPromise = updateAgency(
 				agencyId,
 				{
 					...(payload.orgName ? { name: payload.orgName } : {}),
 					...(payload.ownerName ? { contactName: payload.ownerName } : {}),
-					...(payload.address
-						? resolveOrgAddressForSave(payload.address)
-						: {}),
+					...(payload.address ? resolveOrgAddressForSave(payload.address) : {}),
 					...(payload.clearLogo ? { clearLogo: true } : {}),
 					...(payload.logoDataUrl?.startsWith("data:")
 						? {
@@ -173,10 +173,22 @@ export function useAgencyProfile() {
 				},
 				logout,
 			);
+
+			// Owner name is read back from `user.username` (members join), so the
+			// `agency.contactName` write above alone would never show. Same second
+			// write the outlet Settings screen makes.
+			const ownerPromise =
+				payload.ownerName?.trim() && me?.id
+					? updateMyDisplayName(me.id, payload.ownerName.trim())
+					: Promise.resolve(null);
+
+			const [agencyResult] = await Promise.all([agencyPromise, ownerPromise]);
+			return agencyResult;
 		},
 		onSuccess: () => {
 			queryClient.invalidateQueries({ queryKey: ["agency", "profile"] });
 			queryClient.invalidateQueries({ queryKey: ["agency", "members"] });
+			queryClient.invalidateQueries({ queryKey: profileQueryKey });
 		},
 	});
 

@@ -1,0 +1,15 @@
+-- A penalty rule applies to EVERY PR. The pay-class target is gone.
+--
+-- `applies_to` let a rule bind only `basic`, only `commissionOnly`, or both.
+-- That is being removed rather than defaulted, deliberately: a nullable or
+-- empty-array column that every read has to remember to treat as "everyone" is
+-- the same bug waiting to happen — `[]` currently means "nobody", so a single
+-- bad write would silently switch a live rule off for the whole roster and the
+-- screen would still show it enabled. Deleting the column makes that
+-- unrepresentable.
+--
+-- Nothing is preserved because nothing can be: the concept the data encoded no
+-- longer exists. Live rows before this ran targeted commissionOnly on two of
+-- three rules, so these rules now bite basic PRs too — that is the intended
+-- widening, not a side effect. `enabled` remains the only switch.
+ALTER TABLE "main"."agency_penalty_rule" DROP COLUMN IF EXISTS "applies_to";

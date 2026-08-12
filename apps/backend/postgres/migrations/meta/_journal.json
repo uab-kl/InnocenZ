@@ -792,6 +792,62 @@
       "when": 1788700000000,
       "tag": "0112_shift_assignment_leave_decision",
       "breakpoints": true
+    },
+    {
+      "idx": 113,
+      "version": "7",
+      "when": 1788800000000,
+      "tag": "0113_agency_penalty_rule",
+      "breakpoints": true
+    },
+    {
+      "idx": 114,
+      "version": "7",
+      "when": 1788900000000,
+      "tag": "0114_penalty_rules_apply_to_all",
+      "breakpoints": true
+    },
+    {
+      "idx": 115,
+      "version": "7",
+      "when": 1789000000000,
+      "tag": "0115_penalty_rule_cancellation",
+      "breakpoints": true
+    },
+    {
+      "idx": 116,
+      "version": "7",
+      "when": 1789100000000,
+      "tag": "0116_shift_assignment_cancel_fee",
+      "breakpoints": true
+    },
+    {
+      "idx": 117,
+      "version": "7",
+      "when": 1789200000000,
+      "tag": "0117_penalty_charge",
+      "breakpoints": true
+    },
+    {
+      "idx": 118,
+      "version": "7",
+      "when": 1789300000000,
+      "tag": "0118_subscription_invoice",
+      "breakpoints": true
+    },
+    {
+      "idx": 119,
+      "version": "7",
+      "when": 1789400000000,
+      "tag": "0119_subscription_limit_amount",
+      "breakpoints": true
+    },
+    {
+      "idx": 120,
+      "version": "7",
+      "when": 1789500000000,
+      "tag": "0120_rating_shift_assignment",
+      "breakpoints": true
     }
   ]
 }

@@ -1,7 +1,7 @@
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyPvDayReview } from "@agency-portal/hooks/use-agency-pv-day-review";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Check, Hand, RotateCcw, TriangleAlert } from "lucide-react";
 import { useState } from "react";
 import type { PaymentVoucherDayReview } from "@/services/payment-voucher";
@@ -188,11 +188,10 @@ export function AgencyPvDayReviewPanel({
 	voucherId: string | null;
 }) {
 	const toast = useStore((s) => s.toast);
-	const agencySubRole = useStore((s) => s.agencySubRole);
 	// Mirrors the server's agencyOwnerOrFinance guard on the two write routes.
 	// The READ is deliberately open: seeing what was decided is not the same
 	// authority as deciding it.
-	const canReview = agencyCan(agencySubRole, "raisePv");
+	const canReview = useAgencyCan()("raisePv");
 	const {
 		days,
 		isBacked,

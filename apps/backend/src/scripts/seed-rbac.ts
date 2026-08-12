@@ -74,9 +74,34 @@ const AGENCY_OWNER: MatrixEntry[] = [
   ['collections', RU],
 ];
 
+/**
+ * Kept in step with the portal's own finance matrix
+ * (`ROLE_PERMISSIONS.agency_finance` in apps/web agency-rbac.ts). The two used
+ * to disagree, and now that the portal screens consult these grants the
+ * disagreement reads as a broken screen — these grants WIN over the portal's
+ * matrix, which is only the fallback for when /auth/me returns no agency grants.
+ *
+ * - `payment_voucher` CREATE — finance raises and signs vouchers (`raisePv`), so
+ *   RU let the UI offer a button the server would 403.
+ * - `workforce` READ — the portal gives finance the Roster nav (`viewWorkforce`).
+ *   With no grant here the nav item vanishes for a role that is meant to have it.
+ *   READ only: `managePr` is workforce UPDATE, and that stays owner-only.
+ *
+ * ⚠️ This grant does NOT put the live-floor tile on the finance home page. It
+ * used to, and the owner asked for that tile gone while keeping Roster (11 Aug
+ * 2026) — so the tile moved to its own portal-side permission, `viewLiveFloor`,
+ * which is deliberately absent from `AGENCY_FEATURE_MODULE` and therefore cannot
+ * be re-granted from here. Do not "fix" that by adding a module mapping for it.
+ *
+ * ⚠️ Removing an entry from this list does NOT revoke it on an already-seeded
+ * database: `applyRoleGrants` inserts with `onConflictDoNothing` and never
+ * deletes, so a stale row survives every re-run — and these grants BEAT the
+ * portal's own matrix. Revoking for real means deleting the row.
+ */
 const AGENCY_FINANCE: MatrixEntry[] = [
   ['dashboard', READ],
-  ['payment_voucher', RU],
+  ['workforce', READ],
+  ['payment_voucher', CRU],
   ['history', READ],
   ['settings', READ],
   ['collections', RU],

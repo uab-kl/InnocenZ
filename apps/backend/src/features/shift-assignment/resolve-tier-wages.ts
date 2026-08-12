@@ -5,20 +5,13 @@ import {
 } from './shift-assignment.repository';
 
 /**
- * The `pr.tier` enum maps to the outlet workspace's tier-rate labels. Ranked
- * tiers carry a label (`outlet_tier_rate.kind='tier'`); commission-only is a
- * label-less row (`kind='commission_only'`), so it resolves via the flag, not a
- * label. Keep in step with `prTierValues` and the outlet portal's
- * `OUTLET_PR_TIERS`.
+ * The `pr.tier` -> outlet tier-rate label map now lives in the leaf module
+ * `tier-demand.ts`, so the wage resolver and the per-tier demand counter share
+ * ONE definition. Re-exported here because this was its home and several callers
+ * still import it from this path.
  */
-export const PR_TIER_TO_OUTLET_LABEL: Record<string, string> = {
-  tier_1: 'Tier I',
-  tier_2: 'Tier II',
-  tier_3: 'Tier III',
-  tier_4: 'Tier IV',
-  tier_5: 'Tier V',
-  servant: 'Servant',
-};
+export { PR_TIER_TO_OUTLET_LABEL } from './tier-demand';
+import { PR_TIER_TO_OUTLET_LABEL } from './tier-demand';
 
 /**
  * Effective rate for one assignment: the per-shift override wins field-by-field
@@ -41,6 +34,11 @@ export function mergeRate(
     targetSalesRm: ov?.targetSalesRm ?? ws?.targetSalesRm ?? null,
     happyHourStart: ws?.happyHourStart ?? '',
     happyHourEnd: ws?.happyHourEnd ?? '',
+    // Like the window, the guest-facing drink discount is a WORKSPACE fact: a
+    // per-shift pay-tier override sets what the PR earns, never what the bar
+    // charges a customer. 0 when unset — "no discount", never a null the
+    // pricing helper would have to interpret.
+    happyHourDrinkDiscountPct: ws?.happyHourDrinkDiscountPct ?? 0,
     overridden: !!ov,
   };
 }
@@ -66,15 +64,100 @@ export async function resolveTierWages(
   shiftId: string,
   outletId: string,
 ): Promise<string | null> {
+  const outcome = await resolveTierWageOutcome(repository, pr, shiftId, outletId);
+  return outcome.kind === 'priced' ? outcome.wage : null;
+}
+
+/**
+ * Why there is no wage — the distinction `resolveTierWages`'s `null` cannot make.
+ *
+ * `commission_only` is a PR who is CORRECTLY unpaid a day rate: they earn on
+ * commission and no wages row is supposed to exist. `unpriced` is a PR whose tier
+ * this outlet never put a price on — an accident of configuration.
+ *
+ * Both collapsed to `null`, and the assign path spent that null as `'0.00'`. So a
+ * PR assigned to a tier the outlet never costed was booked at RM0.00 and told
+ * nobody: identical, byte for byte, to a legitimately commission-only booking.
+ * Anything that must refuse one and allow the other has to read THIS, not the
+ * number.
+ */
+export type TierWageOutcome =
+  | { kind: 'priced'; wage: string }
+  | { kind: 'commission_only' }
+  | { kind: 'unpriced'; tierLabel: string | null };
+
+/**
+ * Merged rate -> outcome. Extracted so the single-shift and many-shift entry
+ * points below cannot answer "what does this pay" differently.
+ */
+function outcomeFromRate(
+  rate: ReturnType<typeof mergeRate>,
+  tierLabel: string | null,
+): TierWageOutcome {
+  if (rate?.wagePerHour == null || rate.wagePerHour === '') return { kind: 'unpriced', tierLabel };
+  const n = Number(rate.wagePerHour);
+  // A non-numeric rate is a broken price, not an absent one — but it buys the PR
+  // exactly as little, so it refuses down the same path.
+  return Number.isFinite(n)
+    ? { kind: 'priced', wage: n.toFixed(2) }
+    : { kind: 'unpriced', tierLabel };
+}
+
+export async function resolveTierWageOutcome(
+  repository: ShiftAssignmentRepositoryClass,
+  pr: { tier: string },
+  shiftId: string,
+  outletId: string,
+): Promise<TierWageOutcome> {
+  const outcomes = await resolveTierWageOutcomesForShifts(repository, pr, [{ shiftId, outletId }]);
+  return (
+    outcomes.get(shiftId) ?? { kind: 'unpriced', tierLabel: PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null }
+  );
+}
+
+/**
+ * The same answer for MANY shifts at once, keyed by shiftId.
+ *
+ * Batched on purpose: both repository lookups already take arrays, so asking
+ * about a whole day's shifts costs the same two queries as asking about one.
+ * Looping `resolveTierWageOutcome` would be 2N queries for identical rows.
+ *
+ * This exists so the agency can be SHOWN what a PR will earn before assigning
+ * them, off the same resolver that later seals the wage — a preview computed any
+ * other way would be a second answer, and the one place it could disagree is the
+ * one that matters: `unpriced`, which the assign path spends as '0.00'.
+ */
+export async function resolveTierWageOutcomesForShifts(
+  repository: ShiftAssignmentRepositoryClass,
+  pr: { tier: string },
+  shifts: readonly { shiftId: string; outletId: string }[],
+): Promise<Map<string, TierWageOutcome>> {
+  const out = new Map<string, TierWageOutcome>();
+  if (shifts.length === 0) return out;
+
   const commissionOnly = pr.tier === 'commission_only';
-  if (commissionOnly) return null;
+  if (commissionOnly) {
+    for (const s of shifts) out.set(s.shiftId, { kind: 'commission_only' });
+    return out;
+  }
+
   const tierLabel = PR_TIER_TO_OUTLET_LABEL[pr.tier] ?? null;
   const [rateByOutlet, overrideByShift] = await Promise.all([
-    repository.resolveTierRatesForOutlets({ outletIds: [outletId], tierLabel, commissionOnly }),
-    repository.resolveShiftTierOverrides({ shiftIds: [shiftId], tierLabel, commissionOnly }),
+    repository.resolveTierRatesForOutlets({
+      outletIds: [...new Set(shifts.map((s) => s.outletId))],
+      tierLabel,
+      commissionOnly,
+    }),
+    repository.resolveShiftTierOverrides({
+      shiftIds: shifts.map((s) => s.shiftId),
+      tierLabel,
+      commissionOnly,
+    }),
   ]);
-  const rate = mergeRate(rateByOutlet.get(outletId), overrideByShift.get(shiftId));
-  if (rate?.wagePerHour == null || rate.wagePerHour === '') return null;
-  const n = Number(rate.wagePerHour);
-  return Number.isFinite(n) ? n.toFixed(2) : null;
+
+  for (const s of shifts) {
+    const rate = mergeRate(rateByOutlet.get(s.outletId), overrideByShift.get(s.shiftId));
+    out.set(s.shiftId, outcomeFromRate(rate, tierLabel));
+  }
+  return out;
 }

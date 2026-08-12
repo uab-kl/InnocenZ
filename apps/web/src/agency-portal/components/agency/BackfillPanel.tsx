@@ -167,22 +167,24 @@ function ReplacementSheet({
 						{candidates.map((c) => (
 							<div
 								key={c.prId}
-								className="flex items-center gap-2 rounded-xl border border-[var(--iz-line)] px-3 py-2"
+								className="flex items-center gap-3 rounded-xl border border-[var(--iz-line)] px-3 py-2"
 							>
 								<div className="min-w-0 flex-1">
-									<p className="font-sora text-sm font-bold text-[var(--iz-txt)]">
+									<p className="truncate font-sora text-sm font-bold text-[var(--iz-txt)]">
 										{c.prName}
 									</p>
-									<p className="iz-tiny iz-muted">
+									<p className="iz-tiny iz-muted truncate">
 										{c.tier}
 										{c.timesAtOutlet > 0
 											? ` · worked here ${c.timesAtOutlet}×`
 											: " · new to this outlet"}
 									</p>
 								</div>
+								{/* iz-btn is width:100% globally — without iz-btn-sm/!w-auto the
+								    button takes the whole row and squashes the name beside it. */}
 								<button
 									type="button"
-									className="iz-btn iz-btn-primary shrink-0 !py-1.5 !text-xs"
+									className="iz-btn iz-btn-primary iz-btn-sm shrink-0 !w-auto whitespace-nowrap !py-1.5 !text-xs"
 									disabled={busy}
 									onClick={() => assign(c.prId, c.userId)}
 								>

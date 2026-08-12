@@ -74,17 +74,6 @@ export class OutletWorkspaceControllerClass {
           category: m.category,
           sortOrder: m.sortOrder,
         })),
-        penaltyRules: d.penaltyRules.map((p) => ({
-          ruleType: p.ruleType,
-          enabled: p.enabled,
-          appliesTo: p.appliesTo,
-          fineRm: num(p.fineRm),
-          minShiftsPerWeek: p.minShiftsPerWeek ?? null,
-          maxMcPerMonth: p.maxMcPerMonth ?? null,
-          finePerExcessRm: numOrNull(p.finePerExcessRm),
-          maxLatePerWeek: p.maxLatePerWeek ?? null,
-          graceMinutes: p.graceMinutes ?? null,
-        })),
       };
 
       const record = await this.repository.upsertByOutletId(

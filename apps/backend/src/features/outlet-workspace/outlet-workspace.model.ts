@@ -1,8 +1,6 @@
 import { MainSchema } from '@/db/db.schema';
 import {
-  boolean,
   integer,
-  jsonb,
   numeric,
   timestamp,
   uuid,
@@ -10,8 +8,9 @@ import {
 } from 'drizzle-orm/pg-core';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
 
-// Pay class a penalty rule applies to (mirrors the frontend PrPayClass union).
-export type PayClass = 'basic' | 'commissionOnly';
+// Attendance & discipline rules moved to `agency_penalty_rule` in 0113 — the
+// money they produce is agency→PR, so `PayClass` and the rule enum now live in
+// features/agency/agency-penalty-rule.model.ts.
 
 // A tier-rate row is either a ranked PR tier or the single commission-only default.
 export const tierRateKindValues = ['tier', 'commission_only'] as const;
@@ -19,17 +18,6 @@ export type TierRateKind = (typeof tierRateKindValues)[number];
 export const tierRateKindEnum = MainSchema.enum(
   'outlet_tier_rate_kind',
   tierRateKindValues,
-);
-
-export const penaltyRuleTypeValues = [
-  'min_shifts_per_week',
-  'max_mc_per_month',
-  'late_per_week',
-] as const;
-export type PenaltyRuleType = (typeof penaltyRuleTypeValues)[number];
-export const penaltyRuleTypeEnum = MainSchema.enum(
-  'outlet_penalty_rule_type',
-  penaltyRuleTypeValues,
 );
 
 // One operational workspace per outlet: the pay/commission + happy-hour settings
@@ -121,44 +109,15 @@ export const OutletDrinkMenuTable = MainSchema.table('outlet_drink_menu', {
   updatedBy: varchar('updated_by').notNull().default('system'),
 });
 
-// Attendance & discipline rules, one row per rule type. Rule-specific columns are
-// nullable because each rule type uses a different subset (see the frontend union).
-export const OutletPenaltyRuleTable = MainSchema.table('outlet_penalty_rule', {
-  id: uuid('id').defaultRandom().notNull().primaryKey(),
-  workspaceId: uuid('workspace_id')
-    .notNull()
-    .references(() => OutletWorkspaceTable.id, { onDelete: 'cascade' }),
-  ruleType: penaltyRuleTypeEnum('rule_type').notNull(),
-  enabled: boolean('enabled').notNull().default(true),
-  appliesTo: jsonb('applies_to').$type<PayClass[]>().notNull().default([]),
-  fineRm: numeric('fine_rm', { precision: 12, scale: 2 }).notNull().default('0'),
-  // min_shifts_per_week
-  minShiftsPerWeek: integer('min_shifts_per_week'),
-  // max_mc_per_month
-  maxMcPerMonth: integer('max_mc_per_month'),
-  finePerExcessRm: numeric('fine_per_excess_rm', { precision: 12, scale: 2 }),
-  // late_per_week
-  maxLatePerWeek: integer('max_late_per_week'),
-  graceMinutes: integer('grace_minutes'),
-  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
-  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
-  createdBy: varchar('created_by').notNull().default('system'),
-  updatedBy: varchar('updated_by').notNull().default('system'),
-});
-
 export type OutletWorkspace = typeof OutletWorkspaceTable.$inferSelect;
 export type OutletWorkspaceInsertType = typeof OutletWorkspaceTable.$inferInsert;
 export type OutletTierRate = typeof OutletTierRateTable.$inferSelect;
 export type OutletTierRateInsertType = typeof OutletTierRateTable.$inferInsert;
 export type OutletDrinkMenuItem = typeof OutletDrinkMenuTable.$inferSelect;
 export type OutletDrinkMenuInsertType = typeof OutletDrinkMenuTable.$inferInsert;
-export type OutletPenaltyRule = typeof OutletPenaltyRuleTable.$inferSelect;
-export type OutletPenaltyRuleInsertType =
-  typeof OutletPenaltyRuleTable.$inferInsert;
 
 // The assembled workspace returned by the API: parent row + its children.
 export type OutletWorkspaceAggregate = OutletWorkspace & {
   tierRates: OutletTierRate[];
   drinkMenu: OutletDrinkMenuItem[];
-  penaltyRules: OutletPenaltyRule[];
 };

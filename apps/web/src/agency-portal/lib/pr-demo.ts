@@ -364,6 +364,17 @@ export interface PrPaymentVoucher {
 	 * carry none. Absent means "show the legal name alone", never "invent one".
 	 */
 	prNickname?: string;
+	/**
+	 * The voucher's `pr_id` FK — who this money is for, as an id rather than as a
+	 * spelling of their name.
+	 *
+	 * Optional for the same two reasons as `prNickname`: a voucher may carry no PR
+	 * yet, and demo rows have none. Anything joining a voucher to the PR's own
+	 * record (her photo, her profile) must key on THIS and fall back to a name
+	 * only when it is absent — two PRs can share a name, and a name-keyed match
+	 * then puts one person's face on the other's row.
+	 */
+	prId?: string;
 	prIc?: string;
 	outlet: string;
 	cycle: string;

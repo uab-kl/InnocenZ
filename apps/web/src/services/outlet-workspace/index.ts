@@ -1,11 +1,6 @@
 import { getClient } from "@/lib/axios-v1";
 
 export type TierRateKind = "tier" | "commission_only";
-export type PenaltyRuleType =
-	| "min_shifts_per_week"
-	| "max_mc_per_month"
-	| "late_per_week";
-export type PayClass = "basic" | "commissionOnly";
 
 // Backend `numeric` columns round-trip as strings.
 export interface WorkspaceTierRateRow {
@@ -34,20 +29,6 @@ export interface WorkspaceDrinkMenuRow {
 	sortOrder: number;
 }
 
-export interface WorkspacePenaltyRuleRow {
-	id: string;
-	workspaceId: string;
-	ruleType: PenaltyRuleType;
-	enabled: boolean;
-	appliesTo: PayClass[];
-	fineRm: string;
-	minShiftsPerWeek: number | null;
-	maxMcPerMonth: number | null;
-	finePerExcessRm: string | null;
-	maxLatePerWeek: number | null;
-	graceMinutes: number | null;
-}
-
 export interface OutletWorkspaceRecord {
 	id: string;
 	outletId: string;
@@ -63,7 +44,6 @@ export interface OutletWorkspaceRecord {
 	updatedAt: string;
 	tierRates: WorkspaceTierRateRow[];
 	drinkMenu: WorkspaceDrinkMenuRow[];
-	penaltyRules: WorkspacePenaltyRuleRow[];
 }
 
 export interface OutletWorkspaceApiResponse {
@@ -93,18 +73,6 @@ export interface SaveDrinkMenuInput {
 	sortOrder: number;
 }
 
-export interface SavePenaltyRuleInput {
-	ruleType: PenaltyRuleType;
-	enabled: boolean;
-	appliesTo: PayClass[];
-	fineRm: number;
-	minShiftsPerWeek?: number | null;
-	maxMcPerMonth?: number | null;
-	finePerExcessRm?: number | null;
-	maxLatePerWeek?: number | null;
-	graceMinutes?: number | null;
-}
-
 export interface SaveOutletWorkspaceInput {
 	basePayPerHour: number;
 	drinkPct: number;
@@ -116,7 +84,6 @@ export interface SaveOutletWorkspaceInput {
 	happyHourDrinkDiscountPct: number;
 	tierRates: SaveTierRateInput[];
 	drinkMenu: SaveDrinkMenuInput[];
-	penaltyRules: SavePenaltyRuleInput[];
 }
 
 export async function fetchOutletWorkspace(

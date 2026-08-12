@@ -37,9 +37,9 @@ import {
 	getOutletIdentity,
 	saveOutletIdentity,
 } from "@agency-portal/lib/outlet-identity";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Building2, Mail, Phone, Shield, User, Wrench } from "lucide-react";
 import { useRef, useState } from "react";
@@ -115,7 +115,8 @@ function OutletSettingsPage() {
 	} | null>(null);
 	const [logoCleared, setLogoCleared] = useState(false);
 	const avatarFileRef = useRef<HTMLInputElement>(null);
-	const canEdit = outletCan(outletSubRole, "editSettings");
+	const can = useOutletCan();
+	const canEdit = can("editSettings");
 
 	// Real login → never merge onto Velvet demo defaults (empty API fields used
 	// to leave Chen Wei Jie / Michelle Lim / Bukit Bintang on screen). Demo
@@ -330,7 +331,7 @@ function OutletSettingsPage() {
 		toast("Settings saved", "success");
 	};
 
-	if (!outletCan(outletSubRole, "viewSettings")) {
+	if (!can("viewSettings")) {
 		return (
 			<div className="iz-screen">
 				<header>

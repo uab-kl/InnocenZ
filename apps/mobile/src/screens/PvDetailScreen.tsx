@@ -21,7 +21,7 @@ import {
   type DemoPv,
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
-import { buildWeekGridFromLines } from '../lib/week-pay-grid';
+import { buildWeekGridFromLines, type GridBucket } from '../lib/week-pay-grid';
 import { kindDisputable, openDisputeKeys, receiptClaimState, weekDisputable } from '../lib/receipt-review';
 import { buildCellEvidence } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
@@ -56,6 +56,17 @@ const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
   { key: 'drinks', label: 'Drinks' },
   { key: 'tips', label: 'Tips' },
   { key: 'others', label: 'Others' },
+];
+
+/**
+ * The rows this document DRAWS. Same split as the Payment grid — Deductions is
+ * a fifth row, not a fifth kind of income — and it must stay the same split:
+ * both screens render the SAME voucher, and a PR shown two different
+ * breakdowns of one week has no way to tell which one is their payslip.
+ */
+const GRID_ROWS: { key: GridBucket; label: string }[] = [
+  ...INCOME_ROWS,
+  { key: 'deductions', label: 'Deductions' },
 ];
 
 type LinkedReceipt = {
@@ -105,16 +116,18 @@ function lineDateLabel(iso: string | null): string {
   return `${Number(m[3])} ${MONTH_SHORT[Number(m[2]) - 1]} ${m[1]}`;
 }
 
-function cellAmount(day: WeeklyDayPay, key: IncomeKey): number {
+function cellAmount(day: WeeklyDayPay, key: GridBucket): number {
   if (key === 'wages') return day.wages;
   if (key === 'drinks') return day.drinks ?? 0;
   if (key === 'tips') return day.tips ?? 0;
+  if (key === 'deductions') return day.deductions ?? 0;
   return day.others ?? 0;
 }
 
+/** Zero is nothing to report, a negative is — see the note in PaymentScreen. */
 function formatCell(value: number): string {
-  if (value <= 0) return '—';
-  return value.toFixed(2);
+  if (value === 0) return '—';
+  return value < 0 ? `−${Math.abs(value).toFixed(2)}` : value.toFixed(2);
 }
 
 export function PvDetailScreen({ pvId }: { pvId: string }) {
@@ -279,7 +292,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   /** Which cell's evidence is open — the same sheet the Payment page uses. */
   const [evidenceTarget, setEvidenceTarget] = useState<{
     day: WeeklyDayPay;
-    row: (typeof INCOME_ROWS)[number];
+    row: (typeof GRID_ROWS)[number];
     amount: number;
   } | null>(null);
   const [receiptsOpen, setReceiptsOpen] = useState(true);
@@ -350,7 +363,7 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    * sign — and the red marks on this grid are the server's own open claims.
    */
   /** Any non-empty cell opens its evidence — wages included. */
-  const openEvidence = (day: WeeklyDayPay, row: (typeof INCOME_ROWS)[number]) => {
+  const openEvidence = (day: WeeklyDayPay, row: (typeof GRID_ROWS)[number]) => {
     const amount = cellAmount(day, row.key);
     if (amount <= 0 || day.status === 'empty') return;
     setEvidenceTarget({ day, row, amount });
@@ -443,8 +456,11 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
               </View>
             </View>
 
-            {INCOME_ROWS.map((row) => {
+            {GRID_ROWS.map((row) => {
               const rowTotal = grid.reduce((s, d) => s + cellAmount(d, row.key), 0);
+              const isDeduction = row.key === 'deductions';
+              // No fines that week, no row — same rule as the Payment grid.
+              if (isDeduction && rowTotal === 0) return null;
               return (
                 <View key={row.key} style={styles.gridRow}>
                   <Text style={styles.gridLabel}>{row.label}</Text>
@@ -456,7 +472,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                     // the owner asked to inspect a figure, not only to argue
                     // with one. Whether it can be DISPUTED is decided inside the
                     // sheet, by the same rules the Payment page applies.
-                    const canTap = amount > 0 && d.status !== 'empty';
+                    // `!== 0` so a deduction can be inspected too: "which shift
+                    // was this fine for" is exactly the question it raises.
+                    const canTap = amount !== 0 && d.status !== 'empty';
                     return (
                       <Pressable
                         key={key}
@@ -472,6 +490,8 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                           style={[
                             styles.gridVal,
                             isDisputed && styles.gridValDisputed,
+                            // Only the real figure goes red — see PaymentScreen.
+                            isDeduction && amount !== 0 && styles.gridValDeduction,
                           ]}
                         >
                           {formatCell(amount)}
@@ -507,20 +527,27 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
                 // so the agency's day sign-off is final. Showing APPROVED here
                 // while Payment showed VERIFIED for the same day would be two
                 // words for one fact, one tap apart.
+                // A day of nothing but a charged fine is DEDUCTED — settled, and
+                // never "waiting on the agency" that charged it. Ahead of the
+                // dispute test because a fine is not disputable here; it is only
+                // reached when the day holds no earnings at all.
                 const label =
                   d.status === 'empty'
                     ? '—'
-                    : dayDisputed
-                      ? 'DISPUTED'
-                      : d.status === 'pending'
-                        ? 'PENDING'
-                        : 'VERIFIED';
+                    : d.status === 'deducted'
+                      ? 'DEDUCTED'
+                      : dayDisputed
+                        ? 'DISPUTED'
+                        : d.status === 'pending'
+                          ? 'PENDING'
+                          : 'VERIFIED';
                 return (
                   <View key={`st-${d.dateIso}`} style={styles.gridCol}>
                     <Text
                       style={[
                         styles.statusPill,
                         dayDisputed && styles.statusPillDisputed,
+                        d.status === 'deducted' && styles.gridValDeduction,
                         d.status === 'empty' && { color: C.muted2 },
                       ]}
                     >
@@ -843,6 +870,8 @@ const styles = StyleSheet.create({
   gridDate: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
   gridVal: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
   gridValDisputed: { color: C.red },
+  /** Money going the other way — same red as the Payment grid's Deductions. */
+  gridValDeduction: { color: C.red },
   statusPill: {
     fontFamily: F.sora,
     fontSize: 8,

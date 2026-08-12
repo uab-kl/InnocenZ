@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { agencyController } from '@/composition-root.js';
+import { agencyController, agencyPenaltyRuleController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
 import {
   agencyOwnerOfParam,
@@ -65,6 +65,77 @@ router.get(
   requireAgencySubRoleScoped('id', 'owner', 'finance'),
   agencyController.listAgencyPrs.bind(agencyController),
 );
+// Attendance & discipline policy (0113 moved it off the outlet workspace).
+//
+// Two segments, so both must precede nothing that would swallow them — `/:id`
+// is a single segment and cannot, but keep them beside `/:id/prs` for the same
+// reason that route is scoped: a bare `requireRole('agency')` passes EVERY
+// agency owner for EVERY agency, so without the scoped guard one agency could
+// read and rewrite another's fine schedule.
+//
+// Read allows `finance` alongside `owner` because payroll evaluates breaches
+// when building a voucher. The WRITE stays owner-only: a fine schedule takes
+// pay away from workers, which is the owner's call, not the bookkeeper's.
+router.get(
+  '/:id/penalty-rules',
+  requireRole('admin', 'agency'),
+  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+  agencyPenaltyRuleController.list.bind(agencyPenaltyRuleController),
+);
+router.put(
+  '/:id/penalty-rules',
+  requireRole('admin', 'agency'),
+  agencyOwnerOfParam,
+  agencyPenaltyRuleController.save.bind(agencyPenaltyRuleController),
+);
+
+// Sealed-but-uncollected cancellation fees — the Finance head's reference on
+// Payroll & PV. `finance` is the primary audience here, not an afterthought:
+// this answers "what have I not billed yet?".
+router.get(
+  '/:id/uncharged',
+  requireRole('admin', 'agency'),
+  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+  agencyPenaltyRuleController.listUncharged.bind(agencyPenaltyRuleController),
+);
+// Accepting a week's breaches as owed, and marking them collected.
+//
+// Both are POSTs, never side effects of a read: sealing creates debts, so it
+// must not be something a page does by loading.
+//
+// `finance` alongside `owner`, NOT owner-only. These are payroll bookkeeping —
+// the panel they drive lives on Payroll & PV, which is the finance head's
+// screen, and finance already holds `raisePv`. Owner-only made the list a
+// reference finance could read but never act on: they would see what was owed,
+// be unable to record it, and have to fetch the owner to press a button about
+// their own payroll run.
+//
+// Note this is deliberately NOT the same gate as writing the RULES. Setting the
+// fine schedule stays owner-only (PUT /:id/penalty-rules) — deciding what a
+// breach costs is a policy call; recording that a breach happened at the price
+// already set is bookkeeping.
+const canRecordCharges = [
+  requireRole('admin', 'agency'),
+  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+];
+
+router.get(
+  '/:id/penalty-proposals',
+  requireRole('admin', 'agency'),
+  requireAgencySubRoleScoped('id', 'owner', 'finance'),
+  agencyPenaltyRuleController.listProposals.bind(agencyPenaltyRuleController),
+);
+router.post(
+  '/:id/penalties/seal',
+  ...canRecordCharges,
+  agencyPenaltyRuleController.sealWeek.bind(agencyPenaltyRuleController),
+);
+router.post(
+  '/:id/uncharged/mark-charged',
+  ...canRecordCharges,
+  agencyPenaltyRuleController.markCharged.bind(agencyPenaltyRuleController),
+);
+
 // Approvals write path — membership by user_id (not deprecated pr.id).
 router.patch(
   '/:id/prs/:userId/approval',

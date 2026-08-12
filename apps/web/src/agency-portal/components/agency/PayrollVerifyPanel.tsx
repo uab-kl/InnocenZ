@@ -3,8 +3,7 @@ import { ProofPhotos } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { useAgencyPvReceiptReview } from "@agency-portal/hooks/use-agency-pv-receipt-review";
 import { useAgencyPvEvidence } from "@agency-portal/hooks/use-agency-pvs";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
-import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import {
 	Check,
 	FileWarning,
@@ -284,8 +283,7 @@ export function PayrollVerifyPanel({
 	voucherId: string | null;
 }) {
 	const { voucher, isLoading } = useAgencyPvEvidence(voucherId);
-	const agencySubRole = useStore((s) => s.agencySubRole);
-	const canReview = agencyCan(agencySubRole, "raisePv");
+	const canReview = useAgencyCan()("raisePv");
 	const {
 		pendingCount,
 		reviewReceipt,

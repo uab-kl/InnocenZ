@@ -177,6 +177,31 @@ export const ShiftAssignmentTable = MainSchema.table(
      */
     releasedBy: varchar('released_by'),
     releaseReason: varchar('release_reason', { length: 500 }),
+    /**
+     * The cancellation fee, SEALED when the PR cancelled (migration 0116).
+     *
+     * Not re-derived at payroll time: the agency's bands are editable, so
+     * recomputing later would let a rule change in September restate what was
+     * owed for a shift dropped in August. The PR was shown this figure on the
+     * Cancel button and it is the figure that binds.
+     *
+     * `cancelFeePct` and `cancelNoticeHours` are the evidence behind the amount
+     * — without the band that produced it, RM 27.50 against an RM 55 shift is
+     * unexplainable. NULL on rows cancelled before 0116, and on rows that were
+     * never cancelled at all.
+     */
+    cancelFeeRm: numeric('cancel_fee_rm', { precision: 12, scale: 2 }),
+    cancelFeePct: integer('cancel_fee_pct'),
+    cancelNoticeHours: numeric('cancel_notice_hours', { precision: 6, scale: 2 }),
+    /**
+     * NULL = sealed but NOT YET CHARGED — the agency's Finance head's list.
+     *
+     * A fee only becomes money when a human puts it on a voucher, the same
+     * restraint overtime and penalty proposals already carry: a charge that
+     * takes pay away from a worker gets a signature, never an automatic write.
+     */
+    cancelFeeChargedAt: timestamp('cancel_fee_charged_at', { withTimezone: true }),
+    cancelFeeVoucherId: uuid('cancel_fee_voucher_id'),
     createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
     updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
     createdBy: varchar('created_by').notNull(),

@@ -6,6 +6,7 @@ import {
 } from "@agency-portal/lib/demo-clock";
 import {
 	nextRenewalFrom,
+	planChangeRecordFromMember,
 	type SubscriptionRecordRow,
 	sortMemberSubscriptions,
 	subscriptionRecordFromMember,
@@ -27,6 +28,10 @@ import {
 } from "@/services/payment-method";
 import { fetchPaymentVouchers } from "@/services/payment-voucher";
 import { fetchSubscriptions, type Subscription } from "@/services/subscription";
+import {
+	fetchSubscriptionInvoices,
+	type SubscriptionInvoice,
+} from "@/services/subscription-invoice";
 
 const UUID_RE =
 	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -137,23 +142,72 @@ export function useAgencySubscription() {
 	});
 
 	/**
-	 * Separate from `memberQuery` above rather than widening it. That one filters
-	 * to `status: "active"` and is consumed as `data[0]` to answer "which plan is
-	 * this agency on" — drop the filter and a cancelled row could become the
-	 * current plan.
+	 * What this agency is subscribed to RIGHT NOW — normally one row.
+	 *
+	 * Read off `memberQuery`, which is already scoped to this agency and to
+	 * `status: "active"`. It used to have a query of its own that listed the whole
+	 * ledger, and since every tier change ENDS one row and STARTS another, an
+	 * agency that had moved tier a few times saw seven rows for one subscription:
+	 * six of them ended or cancelled, none carrying any payment state (see the
+	 * type's docstring), all of them reading like bills it still owed. That query
+	 * also passed no `subscriberType`/`subscriberId`, so its page of 50 was
+	 * whatever the endpoint returned rather than this agency's own rows.
+	 */
+	const billingHistory = useMemo<SubscriptionRecordRow[]>(
+		() =>
+			sortMemberSubscriptions(memberQuery.data?.data ?? []).map((sub) =>
+				subscriptionRecordFromMember(sub, "InnocenZ Agency"),
+			),
+		[memberQuery.data],
+	);
+
+	/**
+	 * Everything this agency has been on and is no longer. Its own query, because
+	 * `memberQuery` filters to `status: "active"` server-side and widening it
+	 * would let a cancelled row become the current plan (it is consumed as
+	 * `data[0]`). Scoped to THIS agency — the query this replaced passed neither
+	 * `subscriberType` nor `subscriberId`.
 	 */
 	const historyQuery = useQuery({
 		queryKey: ["agency", "subscription", "history", agencyId ?? "none"],
-		queryFn: () => fetchMemberSubscriptions({ pageSize: 50 }, logout),
+		queryFn: () =>
+			fetchMemberSubscriptions(
+				{
+					subscriberType: "agency",
+					subscriberId: agencyId as string,
+					pageSize: 50,
+				},
+				logout,
+			),
 		enabled: backed,
 		staleTime: 60_000,
 	});
 
-	const billingHistory = useMemo<SubscriptionRecordRow[]>(
+	/**
+	 * What this agency has actually been BILLED, week by week — the billing
+	 * ledger, not the subscription ledger.
+	 *
+	 * Agencies bill WEEKLY (Sun–Sat, the same payroll week the rest of the app
+	 * uses); outlets bill monthly. Both read the same endpoint, which scopes to
+	 * the caller's own org server-side.
+	 */
+	const invoicesQuery = useQuery({
+		queryKey: ["subscription-invoice", "agency", agencyId ?? "none"],
+		queryFn: () => fetchSubscriptionInvoices({ pageSize: 60 }, logout),
+		enabled: backed,
+		staleTime: 60_000,
+	});
+
+	const paymentHistory = useMemo<SubscriptionInvoice[]>(
+		() => invoicesQuery.data?.data ?? [],
+		[invoicesQuery.data],
+	);
+
+	const pastSubscriptions = useMemo<SubscriptionRecordRow[]>(
 		() =>
-			sortMemberSubscriptions(historyQuery.data?.data ?? []).map((sub) =>
-				subscriptionRecordFromMember(sub, "InnocenZ Agency"),
-			),
+			sortMemberSubscriptions(historyQuery.data?.data ?? [])
+				.filter((sub) => sub.status !== "active")
+				.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Agency")),
 		[historyQuery.data],
 	);
 
@@ -326,7 +380,6 @@ export function useAgencySubscription() {
 			void pendingQuery.refetch();
 			void customQuery.refetch();
 			void memberQuery.refetch();
-			void historyQuery.refetch();
 		},
 	});
 
@@ -476,6 +529,11 @@ export function useAgencySubscription() {
 		/** False until the catalog has loaded — no switch can be filed yet. */
 		planCatalogReady: plans.length > 0,
 		isLoading: plansQuery.isLoading || memberQuery.isLoading,
-		isHistoryLoading: historyQuery.isLoading,
+		isHistoryLoading: memberQuery.isLoading,
+		/** Ended/cancelled plans, behind a disclosure on the screen. */
+		pastSubscriptions,
+		/** Billed weeks with their paid/unpaid state — the real payment history. */
+		paymentHistory,
+		isPaymentHistoryLoading: invoicesQuery.isLoading,
 	};
 }

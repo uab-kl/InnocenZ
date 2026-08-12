@@ -247,6 +247,56 @@ export async function fetchReplacementCandidates(
 }
 
 /**
+ * What one PR would earn on a shift, per the server's own wage resolver.
+ *
+ * An OUTCOME rather than a number, because the three cases mean different
+ * things and must not render alike:
+ * - `priced` — a day rate applies; `wage` is it.
+ * - `commission_only` — correctly no day rate; this PR earns on commission.
+ * - `unpriced` — this outlet never costed the PR's tier. Assigning is REFUSED by
+ *   the server unless the agency names a payAmount, so this is a warning, not a
+ *   zero.
+ */
+export interface TierWagePreview {
+	shiftId: string;
+	kind: "priced" | "commission_only" | "unpriced";
+	/** Present only when kind === 'priced'. A DAILY figure, not hourly. */
+	wage?: string;
+	/** Present only when kind === 'unpriced' — the tier label that has no rate. */
+	tierLabel?: string | null;
+}
+
+/**
+ * Wage outcomes for one PR across several shifts, before assigning them.
+ *
+ * Batched into a single call on purpose: the server resolves a whole day in the
+ * same two queries it would spend on one shift.
+ *
+ * Shifts outside the caller's agency are dropped by the server rather than
+ * reported, so a missing shiftId in the reply means "not yours or not found" —
+ * never assume a rate for one that is absent.
+ */
+export async function fetchWagePreview(
+	prId: string,
+	shiftIds: string[],
+	onRefreshFail: () => void,
+): Promise<TierWagePreview[]> {
+	if (!prId || shiftIds.length === 0) return [];
+	const client = getClient(onRefreshFail);
+	const response = await client.get<{
+		success: boolean;
+		message: string;
+		data: TierWagePreview[];
+	}>(
+		`/shift-assignment/wage-preview${buildQueryParams({
+			prId,
+			shiftIds: shiftIds.join(","),
+		})}`,
+	);
+	return response.data.data ?? [];
+}
+
+/**
  * Approve a PR's pending MC/leave request — the PR is excused from the shift
  * with no penalty (status leave_pending -> leave_approved). 400 unless the row
  * is currently leave_pending; agency callers are scoped server-side.

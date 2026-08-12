@@ -72,6 +72,44 @@ export function subscriptionRecordFromMember(
 	};
 }
 
+/**
+ * A row the org is NO LONGER on, described as what it actually is: a plan
+ * CHANGE, not a subscription that was paid for.
+ *
+ * `member_subscription` records what was subscribed to and when — a switch ends
+ * one row and starts another — and it holds no payment state at all. Rendered
+ * with the ordinary builder, an ended row reads *"Tue · 04 Aug 2026 · Monthly
+ * billing · ended Tue · 04 Aug 2026"*: a start date, a billing cycle and an end
+ * date, i.e. every part of a term that was invoiced. Almost none of these were.
+ * Most start and end on the SAME DAY, because they are the trail left by trying
+ * plans out, so this says so in place of a billing cycle the org was never
+ * charged on.
+ */
+export function planChangeRecordFromMember(
+	sub: MemberSubscription,
+	orgLabel: string,
+): SubscriptionRecordRow {
+	const status = MEMBER_STATUS[sub.status] ?? {
+		label: sub.status,
+		tone: "ink" as const,
+	};
+	const startIso = sub.startedAt.slice(0, 10);
+	const endIso = sub.endedAt ? sub.endedAt.slice(0, 10) : null;
+	return {
+		id: sub.id,
+		title: `${sub.subscriberName?.trim() || orgLabel} · ${sub.planName}`,
+		dateLabel: `On ${fmtDateLabelFromIso(startIso)}`,
+		detail: !endIso
+			? ""
+			: endIso === startIso
+				? "switched away the same day"
+				: `until ${fmtDateLabelFromIso(endIso)}`,
+		amountRm: Number(sub.amount) || 0,
+		statusLabel: status.label,
+		tone: status.tone,
+	};
+}
+
 /** Newest subscription first. */
 export function sortMemberSubscriptions(
 	rows: MemberSubscription[],

@@ -1,5 +1,7 @@
 import { scheduler } from './scheduler.js';
 import { WEEKLY_PAYOUT_JOB } from './weekly-payout.job.js';
+import { SUBSCRIPTION_INVOICE_JOB } from './subscription-invoice.job.js';
+import { AGENCY_TIER_JOB } from './agency-tier.job.js';
 
 /**
  * Every background job in the system, in one list.
@@ -17,4 +19,6 @@ export function registerJobs(): void {
   // The scheduler already guards overlap and swallows throws, so a job body only
   // has to do its own work.
   scheduler.register(WEEKLY_PAYOUT_JOB);
+  scheduler.register(SUBSCRIPTION_INVOICE_JOB);
+  scheduler.register(AGENCY_TIER_JOB);
 }

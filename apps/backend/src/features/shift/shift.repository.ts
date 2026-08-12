@@ -78,6 +78,33 @@ export class ShiftRepositoryClass {
   }
 
   /**
+   * Pay-tier rows for a PAGE of shifts, keyed by shift id.
+   *
+   * Batched rather than one call per shift: the list endpoint attaches these so
+   * the roster and the auto-assign planner can see the tier MIX a shift asked
+   * for, and doing that N times per page would put a query per row on the
+   * busiest read in the portal.
+   */
+  async listPayTiersForShifts(shiftIds: string[]): Promise<Map<string, ShiftPayTier[]>> {
+    try {
+      if (shiftIds.length === 0) return new Map();
+      const rows = await db
+        .select()
+        .from(ShiftPayTierTable)
+        .where(inArray(ShiftPayTierTable.shiftId, shiftIds))
+        .orderBy(asc(ShiftPayTierTable.sortOrder));
+      const byShift = new Map<string, ShiftPayTier[]>();
+      for (const row of rows) {
+        byShift.set(row.shiftId, [...(byShift.get(row.shiftId) ?? []), row]);
+      }
+      return byShift;
+    } catch (error) {
+      logger.error('[ShiftRepository.listPayTiersForShifts] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Replace a shift's pay-tier overrides wholesale (delete-then-insert), mirroring
    * how the outlet workspace replaces its child rows. Passing an empty array
    * clears the overrides so the shift falls back to the outlet workspace defaults.

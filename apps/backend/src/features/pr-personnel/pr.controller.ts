@@ -19,9 +19,9 @@ import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { CreatePrSchema, UpdatePrSchema } from '@/schema/pr.schema';
 import { PrFilter, PrStatus, PrTier, type PrWithProfileType } from './pr.model';
-import { OutletWorkspaceRepositoryClass } from '@/features/outlet-workspace/outlet-workspace.repository.js';
+import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penalty-rule.repository.js';
+import { PenaltyChargeRepositoryClass } from '@/features/agency/penalty-charge.repository.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
-import type { PayClass } from '@/features/outlet-workspace/outlet-workspace.model.js';
 import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -146,7 +146,8 @@ export class PrControllerClass {
     private authRepository: AuthRepositoryClass,
     private outletMemberRepository: OutletMemberRepositoryClass,
     private agencyPrRepository: AgencyPrRepository,
-    private outletWorkspaceRepository: OutletWorkspaceRepositoryClass,
+    private agencyPenaltyRuleRepository: AgencyPenaltyRuleRepositoryClass,
+    private penaltyChargeRepository: PenaltyChargeRepositoryClass,
     private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
     private userRepository: UserRepositoryClass,
     private userProfileRepository: UserProfileRepositoryClass,
@@ -267,7 +268,17 @@ export class PrControllerClass {
 
         const status = req.query.status as PrStatus | undefined;
         const tier = req.query.tier as PrTier | undefined;
+        // A membership the agency has not accepted yet is an APPLICATION, and
+        // this endpoint answers "who is on my roster". Without this every
+        // consumer of the shared ["roster","prs"] cache — Manage PR, the roster
+        // grid, the assign dialog, auto-assign, the home hub — listed applicants
+        // as staff, and the web mapper only spells `suspended`/`inactive` as
+        // not-active, so a pending PR even rendered with a green "Active" badge.
+        // Approvals reads GET /agency/:id/pr, so its queue is untouched; a
+        // caller here that wants applicants asks for them by name.
+        const wantsPending = status === 'pending';
         const filtered = prs.filter((pr) => {
+          if (!wantsPending && pr.status === 'pending') return false;
           if (status && pr.status !== status) return false;
           if (tier && pr.tier !== tier) return false;
           return true;
@@ -298,6 +309,10 @@ export class PrControllerClass {
           ? (req.query.agencyId as string | undefined)
           : (scope.agencyId ?? undefined),
         assignedToOutletIds: isOutletCaller ? scope.outletIds : undefined,
+        // Same rule as the agency branch above, for the outlet caller. Admins
+        // keep the unfiltered view — the admin PR screen is where an applicant
+        // stuck in `pending` has to remain visible.
+        excludePending: !scope.isAdmin && req.query.status === undefined,
       };
 
       const { prs, totalCount } = await this.prRepository.listPaginated({ filter, page, pageSize });
@@ -594,31 +609,124 @@ export class PrControllerClass {
   }
 
   /**
+   * The signed-in PR's OWN agency's penalty rules, read-only.
+   *
+   * A PR is charged by these — the cancellation bands decide what the Cancel
+   * button costs — so they have to be readable by the person paying. The
+   * agency-side route cannot serve this: `GET /agency/:id/penalty-rules` is
+   * scoped to that agency's owner/finance, and widening it to the `pr` role
+   * would let any PR read ANY agency's fine schedule by id. This takes no id at
+   * all; the agency is derived from the caller's own membership, so there is
+   * nothing to tamper with.
+   */
+  async getMyPenaltyRules(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const pr = await this.prRepository.getByUserId(userId);
+      if (!pr) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(pr.agencyId);
+      // Empty is a real answer — an agency that has written no rules charges
+      // nothing — so this is 200 with [], never 404.
+      res.status(200).json({ success: true, message: 'OK', data: rules });
+    } catch (error) {
+      logger.error('[PrController.getMyPenaltyRules] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * "Was I penalised this week?" — the signed-in PR's own sealed charges.
+   *
+   * SEALED only. The live proposal endpoint below tells an AGENCY what a week
+   * would cost if they accepted it; showing the same thing to the worker would
+   * announce money they may never actually lose. A PR sees a figure once their
+   * agency has accepted it, and each row says whether it has been billed yet.
+   *
+   * Takes no id — the PR is the caller. Both halves are scoped to their own
+   * `pr.id`, so there is nothing to tamper with.
+   */
+  async getMyPenalties(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+      const weekStart = typeof req.query.weekStart === 'string' ? req.query.weekStart : '';
+      const weekEnd = typeof req.query.weekEnd === 'string' ? req.query.weekEnd : '';
+      const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
+      if (!isDate(weekStart) || !isDate(weekEnd)) {
+        return res.status(400).json({
+          success: false,
+          message: 'weekStart and weekEnd (yyyy-MM-dd) are required',
+          data: null,
+        });
+      }
+
+      const pr = await this.prRepository.getByUserId(userId);
+      if (!pr) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const [penalties, cancellations] = await Promise.all([
+        this.penaltyChargeRepository.listForPrWeek(pr.id, weekStart, weekEnd),
+        this.shiftAssignmentRepository.listCancelFeesForPrWeek(pr.id, weekStart, weekEnd),
+      ]);
+      const sum = (n: number, v: string | null) => n + Number(v ?? 0);
+      const penaltiesRm = penalties.reduce((n, p) => sum(n, p.fineRm), 0);
+      const cancellationsRm = cancellations.reduce((n, c) => sum(n, c.feeRm), 0);
+
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: {
+          penalties,
+          cancellations,
+          penaltiesRm: penaltiesRm.toFixed(2),
+          cancellationsRm: cancellationsRm.toFixed(2),
+          totalRm: (penaltiesRm + cancellationsRm).toFixed(2),
+          count: penalties.length + cancellations.length,
+        },
+      });
+    } catch (error) {
+      logger.error('[PrController.getMyPenalties] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
    * What this PR's attendance WOULD cost them under an outlet's penalty rules.
    *
    * A proposal, not a deduction. Nothing here writes to a voucher: the agency
    * decides, and applies it via PUT /payment-voucher/:id if they agree. Same
    * shape as overtime — computed, shown, not money until a human says so. That
-   * restraint is deliberate: a penalty takes pay away, and only one outlet of
-   * six has any rules configured, so an automatic deduction would quietly
-   * underpay people wherever the rules are half-written.
+   * restraint is deliberate: a penalty takes pay away, and most agencies have
+   * no rules configured, so an automatic deduction would quietly underpay
+   * people wherever the rules are half-written.
    *
-   * `outletId` is required rather than inferred. Rules belong to an outlet
-   * workspace and a PR works at several venues, so picking one for them would be
-   * a guess about whose rules bind. Evaluating every outlet a PR worked that
-   * week is the natural follow-up.
+   * There is no `outletId`. It used to be REQUIRED, because rules hung off an
+   * outlet workspace and a PR works at several venues — so the caller had to
+   * guess whose rules bind, and evaluating each outlet separately would have
+   * fined a PR once per venue for one week's conduct. 0113 moved the rules to
+   * the agency, which is the party that both employs the PR and pays the
+   * voucher, so the week is now counted once, whole, across every outlet.
    */
   async getPenalties(req: Request, res: Response) {
     try {
       const prId = paramId(req.params.id);
-      const outletId = typeof req.query.outletId === 'string' ? req.query.outletId : '';
       const weekStart = typeof req.query.weekStart === 'string' ? req.query.weekStart : '';
       const weekEnd = typeof req.query.weekEnd === 'string' ? req.query.weekEnd : '';
       const isDate = (v: string) => /^\d{4}-\d{2}-\d{2}$/.test(v);
-      if (!outletId || !isDate(weekStart) || !isDate(weekEnd)) {
+      if (!isDate(weekStart) || !isDate(weekEnd)) {
         return res.status(400).json({
           success: false,
-          message: 'outletId, weekStart and weekEnd (yyyy-MM-dd) are required',
+          message: 'weekStart and weekEnd (yyyy-MM-dd) are required',
           data: null,
         });
       }
@@ -626,10 +734,9 @@ export class PrControllerClass {
       const pr = await this.prRepository.getById(prId);
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
-      const workspace = await this.outletWorkspaceRepository.getByOutletId(outletId);
-      const rules = workspace?.penaltyRules ?? [];
+      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(pr.agencyId);
       if (rules.length === 0) {
-        // Not an error: most outlets have written no rules, and "no rules" is a
+        // Not an error: most agencies have written no rules, and "no rules" is a
         // real answer meaning nothing can be charged.
         return res.status(200).json({
           success: true,
@@ -637,10 +744,6 @@ export class PrControllerClass {
           data: { breaches: [], totalFineCents: 0, totalFineRm: '0.00', window: null },
         });
       }
-
-      // The backend has no pay-class column; the tier carries it. Anything that
-      // is not commission-only earns a basic wage.
-      const payClass: PayClass = pr.tier === 'commission_only' ? 'commissionOnly' : 'basic';
 
       // Grace belongs to the late rule; with no late rule there is no lateness
       // concept, and 0 would wrongly make every minute count.
@@ -652,11 +755,11 @@ export class PrControllerClass {
         graceMinutes: grace ?? 0,
       });
 
-      const proposal = evaluatePrPenalties(payClass, window, rules);
+      const proposal = evaluatePrPenalties(window, rules);
       return res.status(200).json({
         success: true,
         message: 'OK',
-        data: { ...proposal, window, payClass },
+        data: { ...proposal, window },
       });
     } catch (error) {
       logger.error('[PrController.getPenalties] Error:', error);

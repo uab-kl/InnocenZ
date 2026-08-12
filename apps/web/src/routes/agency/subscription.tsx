@@ -1,5 +1,10 @@
 import { PaymentMethodCard } from "@agency-portal/components/iz/PaymentMethodCard";
 import {
+	PastSubscriptionsDisclosure,
+	PaymentHistoryList,
+	SubscriptionRecordCard,
+} from "@agency-portal/components/iz/SubscriptionRecordList";
+import {
 	formatRM,
 	IzCard,
 	IzPageTitle,
@@ -20,7 +25,6 @@ import {
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import {
 	COLLECTION_AGING_PILL,
 	collectionAmountRm,
@@ -34,6 +38,7 @@ import {
 } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
 import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-record";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { format, parseISO } from "date-fns";
 import {
@@ -48,6 +53,19 @@ import {
 import { useEffect, useMemo, useRef } from "react";
 
 const CARD_LAST4 = "4242";
+
+/**
+ * Collections (what outlets owe this agency for PR work) is HIDDEN — owner,
+ * 12 Aug 2026.
+ *
+ * Gated rather than deleted, because the section is not broken: since the
+ * weekly job stopped drafting `collection_invoice` rows that same day, and no
+ * API can create one, it can only ever show frozen history beside an empty
+ * Drafts list whose Issue button is unreachable. The table, the hook and the
+ * markup stay so that turning this back on is one line if outlet↔agency billing
+ * ever comes back into the app.
+ */
+const SHOW_COLLECTIONS = false;
 
 export const Route = createFileRoute("/agency/subscription")({
 	component: AgencySubscription,
@@ -70,7 +88,8 @@ function AgencySubscription() {
 	);
 	const saveAgencyOwner = useStore((s) => s.saveAgencyOwner);
 	const toast = useStore((s) => s.toast);
-	const canEdit = agencyCan(agencySubRole, "editSettings");
+	const can = useAgencyCan();
+	const canEdit = can("editSettings");
 
 	const payrollWeekStartIso = getPreviousWeekSundayIso();
 	const payrollWeek = demoPayrollWeekBoundsForWeeksAgo(0);
@@ -234,7 +253,7 @@ function AgencySubscription() {
 		}
 	}, [sub, canEdit, waitingOn, toast]);
 
-	if (!agencyCan(agencySubRole, "viewSettings")) {
+	if (!can("viewSettings")) {
 		return (
 			<div className="iz-screen">
 				<header>
@@ -283,6 +302,26 @@ function AgencySubscription() {
 		: billing.priceLabel;
 
 	/**
+	 * The coverage of the tier this agency IS ON — read from the same place as
+	 * the pill and the price beside it.
+	 *
+	 * It used to print `billing.plan.capacityLabel`, which is the band the week's
+	 * PV COUNT falls into, not the band the agency holds. An agency on Custom
+	 * that had issued 0 PVs therefore read "Custom … 5 PV/Week" — the Starter
+	 * band's coverage under a Custom pill, contradicting the sentence beside it
+	 * that says PV volume does not price Custom at all.
+	 *
+	 * On Custom there is no band to quote: the price is negotiated, so coverage
+	 * is not what it buys. Every other tier takes its real catalog coverage.
+	 */
+	const billedCapacityLabel = sub.backed
+		? sub.onCustom
+			? "Priced per agency"
+			: (sub.plans.find((plan) => plan.label === sub.currentPlanName)
+					?.capacityLabel ?? billing.plan.capacityLabel)
+		: billing.plan.capacityLabel;
+
+	/**
 	 * Leave Custom and go back to the banded rate card.
 	 *
 	 * The ONLY thing an agency can do to its own tier by hand. It is still a
@@ -327,27 +366,16 @@ function AgencySubscription() {
 	// Not `editSettings`: finance is read-only for the card above but is exactly
 	// the role that chases receivables, and it holds both of these.
 	const showCollections =
-		collections.backed && agencyCan(agencySubRole, "viewCollections");
-	const canManageCollections = agencyCan(
-		agencySubRole,
-		"confirmReconciliation",
-	);
+		SHOW_COLLECTIONS && collections.backed && can("viewCollections");
+	const canManageCollections = can("confirmReconciliation");
 
-	// Both report the server's own message. Settling says it records the agency's
+	// Reports the server's own message. Settling says it records the agency's
 	// claim rather than verifying payment, and a friendlier client-side string
 	// would overstate what the app actually saw.
-	const handleIssue = async (id: string, outletName: string) => {
-		try {
-			const res = await collections.issue(id);
-			toast(res.message || `Invoice issued to ${outletName}`, "success");
-		} catch {
-			toast(
-				`Could not issue ${outletName}'s invoice — nothing was sent`,
-				"warn",
-			);
-		}
-	};
-
+	//
+	// `handleIssue` went with the Issue button — the drafts it acted on can no
+	// longer exist. `collections.issue` stays in the hook and `/:id/issue` stays
+	// on the server, so re-enabling drafting brings the action back whole.
 	const handleSettle = async (id: string, outletName: string) => {
 		try {
 			const res = await collections.settle(id);
@@ -393,9 +421,7 @@ function AgencySubscription() {
 						<p className="mt-2 text-lg font-bold text-[var(--iz-gold-l)]">
 							{billedPriceLabel}
 						</p>
-						<p className="iz-tiny iz-muted2 mt-0.5">
-							{billing.plan.capacityLabel}
-						</p>
+						<p className="iz-tiny iz-muted2 mt-0.5">{billedCapacityLabel}</p>
 					</div>
 				</div>
 				<p className="iz-tiny iz-muted2 mt-3 border-t border-[var(--iz-line)] pt-2">
@@ -633,55 +659,52 @@ function AgencySubscription() {
 			</div>
 
 			<IzSectionLabel>
-				{sub.backed ? "Subscription record" : "Billing history"}
+				{sub.backed ? "Current subscription" : "Billing history"}
 			</IzSectionLabel>
 			{sub.backed && (
 				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-					Your plan history with InnocenZ — one row per subscription, not per
-					charge. It records what you subscribed to and when, so it does not say
-					whether a given week was paid.
+					What your agency is subscribed to with InnocenZ today. It records what
+					you subscribed to and when, so it does not say whether a given week
+					was paid.
 				</p>
 			)}
 			<div className="space-y-2">
 				{sub.backed && sub.isHistoryLoading ? (
 					<IzCard flat>
 						<p className="iz-tiny iz-muted text-center py-4">
-							Loading subscription record…
+							Loading your subscription…
 						</p>
 					</IzCard>
 				) : billingHistory.length === 0 ? (
 					<IzCard flat>
 						<p className="iz-tiny iz-muted text-center py-4">
 							{sub.backed
-								? "No subscription on record for this agency yet."
+								? "No active subscription for this agency."
 								: "No subscription invoices yet."}
 						</p>
 					</IzCard>
 				) : (
 					billingHistory.map((row) => (
-						<IzCard key={row.id} flat>
-							<div className="iz-between gap-2">
-								<div className="flex min-w-0 items-start gap-2">
-									<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
-									<div className="min-w-0">
-										<p className="iz-sm font-semibold truncate">{row.title}</p>
-										<p className="iz-tiny iz-muted">
-											{row.dateLabel}
-											{row.detail ? ` · ${row.detail}` : ""}
-										</p>
-									</div>
-								</div>
-								<div className="text-right shrink-0">
-									<p className="iz-sm font-bold">{formatRM(row.amountRm)}</p>
-									<IzPill variant={row.tone} className="!mt-1">
-										{row.statusLabel}
-									</IzPill>
-								</div>
-							</div>
-						</IzCard>
+						<SubscriptionRecordCard key={row.id} row={row} />
 					))
 				)}
+				<PastSubscriptionsDisclosure rows={sub.pastSubscriptions} />
 			</div>
+
+			{sub.backed && (
+				<>
+					<IzSectionLabel>Payment history</IzSectionLabel>
+					<p className="iz-tiny iz-muted2 -mt-1 mb-2">
+						One row per billing period — agencies are billed weekly, Sunday to
+						Saturday, the same week your payroll runs on. A period stays Unpaid
+						until InnocenZ marks the payment received.
+					</p>
+					<PaymentHistoryList
+						invoices={sub.paymentHistory}
+						isLoading={sub.isPaymentHistoryLoading}
+					/>
+				</>
+			)}
 
 			{showCollections && (
 				<>
@@ -751,19 +774,13 @@ function AgencySubscription() {
 												</div>
 											</div>
 											<div className="shrink-0 text-right">
+												{/* No Issue button: nothing drafts collections any more and
+												    the API has no create endpoint, so this list can never
+												    gain a row. A button that cannot be reached is worse
+												    than none — it implies the lane still runs. */}
 												<p className="iz-sm font-bold">
 													{formatRM(collectionAmountRm(inv))}
 												</p>
-												{canManageCollections && (
-													<button
-														type="button"
-														className="iz-btn iz-btn-soft mt-1.5 !py-1 !text-[11px]"
-														disabled={collections.isMutating}
-														onClick={() => handleIssue(inv.id, inv.outletName)}
-													>
-														Issue
-													</button>
-												)}
 											</div>
 										</div>
 									</IzCard>
@@ -782,8 +799,9 @@ function AgencySubscription() {
 						) : collections.invoices.length === 0 ? (
 							<IzCard flat>
 								<p className="iz-tiny iz-muted text-center py-4">
-									No collections yet — the Monday payout job drafts these from
-									the previous week's completed shifts.
+									Nothing here. Outlet billing is settled with the venue
+									directly, so the app no longer raises collections — this list
+									keeps past statements only.
 								</p>
 							</IzCard>
 						) : (
