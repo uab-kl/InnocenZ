@@ -31,7 +31,6 @@ import {
 	saveAgencyIdentity,
 } from "@agency-portal/lib/agency-identity";
 import { getAgencyManagedPvs } from "@agency-portal/lib/agency-payroll";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { getPreviousWeekSundayIso } from "@agency-portal/lib/demo-clock";
 import {
 	EMPTY_ORG_ADDRESS,
@@ -39,6 +38,7 @@ import {
 	resolveOrgAddressForSave,
 } from "@agency-portal/lib/org-address";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Building2, Mail, Phone, Shield, User } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
@@ -86,7 +86,8 @@ function AgencyProfile() {
 	} | null>(null);
 	const [logoCleared, setLogoCleared] = useState(false);
 	const avatarFileRef = useRef<HTMLInputElement>(null);
-	const canEdit = agencyCan(agencySubRole, "editSettings");
+	const can = useAgencyCan();
+	const canEdit = can("editSettings");
 
 	// Real login → never merge onto Atlas demo defaults. Demo sessions keep the
 	// store seed. Editing uses the local draft.
@@ -209,6 +210,10 @@ function AgencyProfile() {
 			toast("Enter organization name", "warn");
 			return;
 		}
+		if (!draft.ownerName.trim() || draft.ownerName.trim().length < 2) {
+			toast("Enter owner name (at least 2 characters)", "warn");
+			return;
+		}
 		if (profile.backed && !addressDraft.addressLine1.trim()) {
 			toast("Enter address line 1", "warn");
 			return;
@@ -225,6 +230,7 @@ function AgencyProfile() {
 					typeof nextLogo === "string" && nextLogo.startsWith("data:");
 				await profile.save({
 					orgName: draft.orgName.trim(),
+					ownerName: draft.ownerName.trim(),
 					address: {
 						...addressDraft,
 						...resolveOrgAddressForSave(addressDraft),
@@ -270,10 +276,6 @@ function AgencyProfile() {
 			toast("Agency profile saved", "success");
 			return;
 		}
-		if (!draft.ownerName.trim()) {
-			toast("Enter owner name", "warn");
-			return;
-		}
 		if (!draft.mobile.trim()) {
 			toast("Enter mobile number", "warn");
 			return;
@@ -306,7 +308,7 @@ function AgencyProfile() {
 		toast("Settings saved", "success");
 	};
 
-	if (!agencyCan(agencySubRole, "viewSettings")) {
+	if (!can("viewSettings")) {
 		return (
 			<div className="iz-screen">
 				<header>
@@ -414,12 +416,7 @@ function AgencyProfile() {
 					label="Owner name"
 					value={owner.ownerName}
 					onChange={(v) => update({ ownerName: v })}
-					mode={profile.backed && editing ? "locked" : fieldMode}
-					hint={
-						profile.backed && editing
-							? "Owner name comes from your login username"
-							: undefined
-					}
+					mode={fieldMode}
 					placeholder="Full name"
 				/>
 				<ProfileSettingsField
