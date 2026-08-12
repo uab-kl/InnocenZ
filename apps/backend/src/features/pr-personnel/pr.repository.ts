@@ -1,4 +1,4 @@
-import { and, asc, eq, exists, ilike, inArray, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
+import { and, asc, eq, exists, ilike, inArray, ne, or, sql, SQL, type SQLWrapper } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -491,6 +491,13 @@ export class PrRepositoryClass {
       if (filter?.name) {
         const term = `%${filter.name}%`;
         conditions.push(or(ilike(UserProfileTable.fullName, term), ilike(UserTable.username, term))!);
+      }
+      // An unapproved membership is an application, not a roster member. Applied
+      // before `status` so an explicit `?status=pending` still resolves to
+      // nothing rather than quietly winning — a caller that wants applicants
+      // must not set this flag in the first place.
+      if (filter?.excludePending) {
+        conditions.push(ne(AgencyPrTable.approveStatus, 'pending'));
       }
       if (filter?.status) {
         // 'suspended' has no backing state anymore (see statusFromApproval) —

@@ -155,4 +155,17 @@ export type PrFilter = {
    * whole roster. An empty array matches nothing.
    */
   assignedToOutletIds?: string[];
+  /**
+   * Drops memberships still awaiting the agency's decision
+   * (`agency_pr.approve_status = 'pending'`).
+   *
+   * A pending row is an APPLICATION, not a roster member — the agency has not
+   * accepted this PR yet. Every non-admin read of this endpoint sets it, because
+   * the roster screens (Manage PR, the roster grid, the assign dialog,
+   * auto-assign) all listed applicants as active staff and offered them for
+   * shifts. The Approvals queue reads `GET /agency/:id/pr` instead, so it is
+   * unaffected; a caller here that genuinely wants applicants asks for them by
+   * name with `?status=pending`.
+   */
+  excludePending?: boolean;
 };

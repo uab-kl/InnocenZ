@@ -280,7 +280,10 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(paymen
 // payment-voucher feature. It goes through the repository so that write is
 // subject to the same component classification and line-date assertion as
 // every other line.
-export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository, agencyPenaltyRuleRepository);
+// Takes agencyPrRepository (declared far above) because assigning a shift must
+// check the agency has APPROVED that PR, and only agency_pr holds that per
+// membership — the synthetic PR reports its oldest agency's answer.
+export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository, agencyPenaltyRuleRepository, agencyPrRepository);
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
 export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);

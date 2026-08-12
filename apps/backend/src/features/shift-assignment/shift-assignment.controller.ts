@@ -11,6 +11,7 @@ import {
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
+import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import { notify, notifyMany } from '@/features/notification/notify.js';
@@ -109,6 +110,11 @@ export class ShiftAssignmentControllerClass {
     // this controller needs to read them at the moment of the cancel — not at
     // payroll time, when the bands may since have changed.
     private agencyPenaltyRuleRepository: AgencyPenaltyRuleRepositoryClass,
+    // Assigning a shift needs THIS agency's decision on THIS PR, and only
+    // `agency_pr` holds it. The synthetic PR carries the approval of its PRIMARY
+    // (oldest) membership, which is a different agency's answer whenever the PR
+    // is on more than one roster — so `create` reads the row directly.
+    private agencyPrRepository: AgencyPrRepository,
   ) {}
 
   /**
@@ -1440,6 +1446,29 @@ export class ShiftAssignmentControllerClass {
       if (!pr) return res.status(404).json({ success: false, message: 'PR not found', data: null });
       if (pr.agencyId !== shift.agencyId) {
         return res.status(400).json({ success: false, message: 'PR belongs to a different agency', data: null });
+      }
+
+      // The agency must have ACCEPTED this PR before it can sell their night.
+      // Read against `shift.agencyId` rather than `pr.status`: the synthetic PR
+      // reports the approval of its oldest membership, so a PR approved by
+      // agency A and still pending at agency B would otherwise let B roster
+      // someone it has never accepted.
+      //
+      // `ensureOpsBridge` above writes an APPROVED row, so a first-time bridge
+      // still passes — this only ever refuses a membership that exists and says
+      // pending or rejected.
+      const membership = (await this.agencyPrRepository.listByUser(pr.userId)).find(
+        (row) => row.agencyId === shift.agencyId,
+      );
+      if (membership && membership.approveStatus !== 'approved') {
+        return res.status(400).json({
+          success: false,
+          message:
+            membership.approveStatus === 'rejected'
+              ? 'This PR was declined by your agency and cannot be assigned.'
+              : 'This PR is still awaiting your approval — approve them under Approvals before assigning a shift.',
+          data: null,
+        });
       }
 
       // A PR may work TWO shifts on the same day — but only at different

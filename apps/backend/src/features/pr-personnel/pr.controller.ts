@@ -268,7 +268,17 @@ export class PrControllerClass {
 
         const status = req.query.status as PrStatus | undefined;
         const tier = req.query.tier as PrTier | undefined;
+        // A membership the agency has not accepted yet is an APPLICATION, and
+        // this endpoint answers "who is on my roster". Without this every
+        // consumer of the shared ["roster","prs"] cache — Manage PR, the roster
+        // grid, the assign dialog, auto-assign, the home hub — listed applicants
+        // as staff, and the web mapper only spells `suspended`/`inactive` as
+        // not-active, so a pending PR even rendered with a green "Active" badge.
+        // Approvals reads GET /agency/:id/pr, so its queue is untouched; a
+        // caller here that wants applicants asks for them by name.
+        const wantsPending = status === 'pending';
         const filtered = prs.filter((pr) => {
+          if (!wantsPending && pr.status === 'pending') return false;
           if (status && pr.status !== status) return false;
           if (tier && pr.tier !== tier) return false;
           return true;
@@ -299,6 +309,10 @@ export class PrControllerClass {
           ? (req.query.agencyId as string | undefined)
           : (scope.agencyId ?? undefined),
         assignedToOutletIds: isOutletCaller ? scope.outletIds : undefined,
+        // Same rule as the agency branch above, for the outlet caller. Admins
+        // keep the unfiltered view — the admin PR screen is where an applicant
+        // stuck in `pending` has to remain visible.
+        excludePending: !scope.isAdmin && req.query.status === undefined,
       };
 
       const { prs, totalCount } = await this.prRepository.listPaginated({ filter, page, pageSize });

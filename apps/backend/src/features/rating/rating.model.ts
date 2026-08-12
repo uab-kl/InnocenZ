@@ -1,6 +1,7 @@
 import { MainSchema } from '@/db/db.schema';
 import { integer, jsonb, timestamp, unique, uuid, varchar } from 'drizzle-orm/pg-core';
 import { OutletTable } from '@/features/outlet/outlet.model.js';
+import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model.js';
 
 // One current outlet→PR rating (upsert keyed by outlet + PR). `prId` is a plain
 // varchar, NOT a FK: an outlet's PR list is not backend-enumerable from the outlet
@@ -14,6 +15,21 @@ export const RatingTable = MainSchema.table(
       .notNull()
       .references(() => OutletTable.id, { onDelete: 'cascade' }),
     prId: varchar('pr_id', { length: 100 }).notNull(),
+    /**
+     * The shift this verdict was written about (0120). The row stays unique on
+     * (outlet, PR) — one current verdict per PR per venue — and this records
+     * WHICH night produced it, which is the only thing that can name the agency
+     * that staffed it.
+     *
+     * Nullable: legacy rows have no honest answer, and `ON DELETE SET NULL`
+     * means removing an assignment cannot delete a venue's opinion. A NULL reads
+     * as "not attributable" and is therefore invisible to every agency rather
+     * than visible to all of them.
+     */
+    shiftAssignmentId: uuid('shift_assignment_id').references(
+      () => ShiftAssignmentTable.id,
+      { onDelete: 'set null' },
+    ),
     prName: varchar('pr_name', { length: 255 }).notNull().default(''),
     stars: integer('stars').notNull().default(0),
     note: varchar('note', { length: 2000 }).notNull().default(''),
@@ -41,4 +57,21 @@ export type RatingFilter = {
    */
   outletIds?: string[];
   prIds?: string[];
+  /**
+   * Confines an agency to the ratings earned on ITS OWN shift: the rating's
+   * `shift_assignment_id` must point at an assignment whose `agency_id` is this
+   * one.
+   *
+   * Two weaker rules came before it, and each leaked. Scoping on `prIds` alone
+   * ("ratings of my PRs") handed agency A every rating the same person earned
+   * through agency B, because a PR holds an `agency_pr` row per agency. Scoping
+   * on "A ever supplied this PR to this venue" still gave the rating to BOTH
+   * once the same PR worked the same venue through two agencies. Only the
+   * assignment behind the verdict names the agency that actually staffed the
+   * rated night.
+   *
+   * A rating with no assignment (legacy rows, `ON DELETE SET NULL`) matches NO
+   * agency — unattributable is read as private, not as public.
+   */
+  agencySuppliedTo?: string;
 };
