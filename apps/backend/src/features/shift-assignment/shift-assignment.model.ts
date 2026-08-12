@@ -41,6 +41,10 @@ export type ShiftAssignmentStatus = (typeof shiftAssignmentStatusValues)[number]
  */
 export const overtimeStatusValues = ['pending', 'approved', 'rejected'] as const;
 export type OvertimeStatus = (typeof overtimeStatusValues)[number];
+
+/** The MC / leave decision (migration 0112) — same three states as overtime. */
+export const leaveStatusValues = ['pending', 'approved', 'rejected'] as const;
+export type LeaveStatus = (typeof leaveStatusValues)[number];
 export const shiftAssignmentStatusEnum = MainSchema.enum(
   'shift_assignment_status',
   shiftAssignmentStatusValues,
@@ -103,6 +107,19 @@ export const ShiftAssignmentTable = MainSchema.table(
     // anything for this one assignment's leave request. Null on every row that
     // never filed leave; survives approve/reject so the decision stays audited.
     leaveProofPhotos: jsonb('leave_proof_photos').$type<string[]>(),
+    /**
+     * The agency's MC / leave decision (migration 0112).
+     *
+     * Before this, a rejection was recorded by reverting `status` to 'assigned'
+     * and prefixing `notes` with '[Leave rejected]', and the approver was read
+     * from the generic `updated_by` — so history was unprovable: the reason text
+     * is PR-editable and any later edit to the row reassigned the approver.
+     * Shaped exactly like the overtime triple below so both decisions on one
+     * assignment are read the same way.
+     */
+    leaveStatus: varchar('leave_status', { length: 20 }).$type<LeaveStatus>(),
+    leaveDecidedAt: timestamp('leave_decided_at', { withTimezone: true }),
+    leaveDecidedBy: varchar('leave_decided_by'),
     /**
      * Overtime, and the agency's decision on it (migration 0077).
      *
@@ -224,6 +241,13 @@ export type ShiftAssignmentFilter = {
   shiftId?: string;
   prId?: string;
   status?: ShiftAssignmentStatus;
+  /**
+   * The MC/leave queue and its history filter on THIS, not on `status`.
+   * A decided request no longer carries a leave_* status — an approval becomes
+   * `leave_approved` but a rejection reverts to `assigned` — so filtering by
+   * `status` can never list rejections. An empty array matches nothing.
+   */
+  leaveStatuses?: LeaveStatus[];
   /**
    * Pins an outlet caller to the venues it belongs to (matched on the joined
    * shift). An empty array matches nothing — never treat it as "no filter".

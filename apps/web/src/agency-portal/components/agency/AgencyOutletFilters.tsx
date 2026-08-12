@@ -1,6 +1,5 @@
 import { RosterPlanningDatePicker } from "@agency-portal/components/agency/RosterPlanningDatePicker";
 import { IzSelect } from "@agency-portal/components/iz/ui";
-import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import {
 	type AgencyOutletFilterState,
 	agencyOutletFiltersActive,
@@ -19,22 +18,22 @@ export function AgencyOutletFilters({
 	onChange: (patch: Partial<AgencyOutletFilterState>) => void;
 	shiftDateIsos: string[];
 	/**
-	 * The venues to offer, which must be the ones the CARDS show — i.e. the
-	 * outlets this agency onboarded, read from the backend registry.
+	 * The outlets to offer, from the SAME list that renders the cards.
 	 *
-	 * This dropdown used `OUTLET_NAMES`, a hardcoded demo constant, while the
-	 * cards beside it came from the backend: on a real login it listed venues the
-	 * agency has never onboarded (two of which no longer exist) and omitted ones
-	 * that were on screen. Picking any of those names matched no card, so the
-	 * page emptied and read as "no outlets" rather than "wrong list". Omitted
-	 * only by a demo session, which has no registry to read.
+	 * This used to be the hardcoded OUTLET_NAMES demo constant, so a real agency
+	 * login saw "Velvet 23 / Mermate / Bear Lounge / Urban Soul" in the dropdown
+	 * while its actual venues sat in the grid below — picking one filtered
+	 * everything away. Sourcing it from the caller keeps the two in step.
+	 *
+	 * REQUIRED on purpose: an optional prop defaulting to that demo constant is
+	 * how the wrong list got here, and it would put demo venues in front of a
+	 * real agency again the moment a new caller forgot to pass it.
 	 */
-	outletNames?: string[];
+	outletNames: string[];
 	/** Compact pill row — Manage Outlet page layout */
 	inline?: boolean;
 }) {
 	const active = agencyOutletFiltersActive(filters);
-	const options = outletNames ?? OUTLET_NAMES;
 
 	if (inline) {
 		return (
@@ -46,7 +45,7 @@ export function AgencyOutletFilters({
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
 						<option value="">All outlets</option>
-						{options.map((o) => (
+						{outletNames.map((o) => (
 							<option key={o} value={o}>
 								{o}
 							</option>
@@ -114,7 +113,7 @@ export function AgencyOutletFilters({
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
 						<option value="">All outlets</option>
-						{options.map((o) => (
+						{outletNames.map((o) => (
 							<option key={o} value={o}>
 								{o}
 							</option>

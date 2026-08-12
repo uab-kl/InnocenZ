@@ -52,16 +52,14 @@ export function prPhotoSrc(ref: string | null | undefined): string | null {
 	if (
 		/^https?:\/\//i.test(ref) ||
 		ref.startsWith("data:") ||
-		// EVERY R2 key prefix `apiAssetUrl` knows, not just the PR one. This listed
-		// `user/` alone while apiAssetUrl has always handled `outlet/` and `agency/`
-		// as well, so an outlet logo — `outlet/<slug>-<uuid>/logo/<file>.png` — fell
-		// through to publicAssetPath and came out as
-		// `http://localhost:3000/outlet/…`, a 404 on the web host. A gate NARROWER
-		// than the resolver behind it silently routes to the wrong owner, which is
-		// the one mistake the comment above this function is about.
+		// All THREE R2 key roots, not just `user/`. `apiAssetUrl` has always
+		// handled agency/ and outlet/ keys; this gate did not list them, so an
+		// outlet logo or an agency logo fell through to `publicAssetPath` and
+		// got the Vite base prefixed onto an object key — the exact wrong URL
+		// this function's docblock warns about, produced by this function.
 		ref.startsWith("user/") ||
-		ref.startsWith("outlet/") ||
 		ref.startsWith("agency/") ||
+		ref.startsWith("outlet/") ||
 		ref.startsWith("/img/") ||
 		ref.startsWith("img/")
 	) {

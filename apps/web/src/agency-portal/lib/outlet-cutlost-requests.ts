@@ -6,6 +6,12 @@ export type PendingCutlostRequest = {
 	id: string;
 	shiftId: string;
 	outletName: string;
+	/**
+	 * The venue's COMPANY logo (`outlet.logo_image`) — not the outlet owner's
+	 * personal account avatar. Optional: demo rows carry none, and an outlet
+	 * that has uploaded nothing has none, so the tile keeps its initial.
+	 */
+	outletLogo?: string | null;
 	shiftEvent: string;
 	shiftLabel: string;
 	dateLabel: string;
@@ -44,6 +50,7 @@ export function toPendingCutlostRequest(live: {
 	declineReason: string | null;
 	createdAt: string;
 	outletName: string | null;
+	outletLogo?: string | null;
 	shiftDate: string;
 	slot: string | null;
 	eventName: string | null;
@@ -53,6 +60,7 @@ export function toPendingCutlostRequest(live: {
 		id: live.id,
 		shiftId: live.shiftId,
 		outletName: live.outletName ?? "Venue",
+		outletLogo: live.outletLogo ?? null,
 		shiftEvent: live.eventName ?? live.slot ?? "Shift",
 		shiftLabel: live.slot ?? "",
 		dateLabel: live.shiftDate,

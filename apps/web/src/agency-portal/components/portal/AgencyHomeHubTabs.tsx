@@ -371,10 +371,14 @@ export function AgencyHomeHubTabs({
 										>
 											<td>
 												<div className="iz-portal-table-pr">
-													{/* An OUTLET, not a PR — no `photo`, because the PR
-													    lookup would be the wrong source for a venue and
-													    this row carries no logo of its own. */}
-													<PortalTableAvatar name={req.outletName} />
+													{/* An OUTLET, not a PR — so NOT `prPhoto`, which would
+													    be the wrong source for a venue. The row carries the
+													    venue's own logo (`outletLogo`), which is the only
+													    picture that can be right here. */}
+													<PortalTableAvatar
+														name={req.outletName}
+														photo={req.outletLogo}
+													/>
 													<span className="iz-portal-table-name">
 														{req.outletName}
 													</span>

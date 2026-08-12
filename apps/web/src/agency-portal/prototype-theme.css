@@ -803,6 +803,19 @@
 .iz-gmaps-pr-dot.in-range {
 	background: #34a853;
 }
+/* The marker keeps its status colour as the ring — the white border and the
+   in-range/warn background still say where the PR stands — and the photo fills
+   the middle. The initial returns on its own if the image fails. */
+.iz-gmaps-pr-dot.has-photo {
+	overflow: hidden;
+	padding: 0;
+}
+.iz-gmaps-pr-dot.has-photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
 .iz-gmaps-marker-pr.warn .iz-gmaps-pr-dot {
 	background: #fbbc04;
 	color: #202124;
@@ -13321,6 +13334,19 @@ button.iz-pr-offer-row:hover {
 	flex-shrink: 0;
 }
 
+/* Same rule as the approvals tile: the photo fills the circle, the gradient
+   underneath is the loading colour, and the initial returns on an error. */
+.iz-roster-gps-avatar.has-photo {
+	overflow: hidden;
+}
+
+.iz-roster-gps-avatar.has-photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
 .iz-roster-gps-row-head {
 	display: flex;
 	flex-wrap: wrap;
@@ -13625,6 +13651,24 @@ button.iz-pr-offer-row:hover {
 	background: linear-gradient(135deg, #34d399, #059669);
 }
 
+/*
+ * The PR's real face. The gradient stays underneath as the loading colour, so
+ * the tile never flashes empty, and the initial comes back on its own if the
+ * <img> errors — the component swaps the child, this only stops the photo
+ * spilling out of the rounded box.
+ */
+.iz-approvals-avatar--photo {
+	overflow: hidden;
+	padding: 0;
+}
+
+.iz-approvals-avatar--photo img {
+	width: 100%;
+	height: 100%;
+	object-fit: cover;
+	display: block;
+}
+
 .iz-approvals-cutlost-icon {
 	display: inline-flex;
 	align-items: center;
@@ -13721,6 +13765,47 @@ button.iz-pr-offer-row:hover {
 	margin-top: 8px;
 	font-size: 12px;
 	color: var(--iz-muted);
+}
+
+/*
+ * The MC/leave sub-filter — Current / Approved / Rejected / All.
+ *
+ * `.iz-chip` sets font-size 15px and wins over `iz-tiny` on source order, so
+ * these rendered as large as primary buttons and read as four actions rather
+ * than one filter under the tab that owns them. Scoped here rather than by
+ * reordering `.iz-chip`, which every other screen depends on.
+ */
+.iz-approvals-subfilter .iz-chip {
+	padding: 4px 9px;
+	border-radius: 8px;
+	font-size: 11px;
+	font-weight: 700;
+	letter-spacing: 0.3px;
+}
+
+/* The event name leads the Shift card — it is the one line that says WHICH
+   night this is, so it reads as a heading rather than another muted detail. */
+.iz-approvals-info-line--lead {
+	flex-wrap: wrap;
+	margin-top: 2px;
+	font-family: "Sora", sans-serif;
+	font-size: 13px;
+	font-weight: 700;
+	color: var(--iz-text, #f0e8ff);
+}
+
+/* Champagne, the same tag the PR app puts on its own shift cards, so one
+   shift does not look like two different things across the two apps. */
+.iz-approvals-event-tag {
+	font-family: "Sora", sans-serif;
+	font-size: 9px;
+	font-weight: 800;
+	letter-spacing: 0.4px;
+	color: #e8c27a;
+	border: 1px solid rgba(232, 194, 122, 0.45);
+	background: rgba(232, 194, 122, 0.1);
+	border-radius: 999px;
+	padding: 1px 6px;
 }
 
 .iz-approvals-docs {
@@ -17821,14 +17906,29 @@ html:has(.iz-pr-app) {
  * The same 36px tile carrying the PR's own photo instead of her initial. The
  * violet fill stays behind it, so a portrait with transparency still reads as an
  * avatar rather than a hole in the row.
+ *
+ * TWO selectors because two components draw this tile and each marks the photo
+ * state with its own class: `PortalTableAvatar` adds `--photo`, `PrFaceBubble`
+ * adds `has-photo` (its `photoClassName` default) and LiveWorkforceTable
+ * renders that one with this same base class. Dropping either rule leaves that
+ * component's photo unstyled — a stretched image, not an obvious break — so
+ * both stay.
  */
-.iz-portal-table-av--photo img {
+.iz-portal-table-av--photo img,
+.iz-portal-table-av.has-photo img {
 	display: block;
 	width: 100%;
 	height: 100%;
 	object-fit: cover;
 	/* Faces sit high in a portrait, so bias the crop upward. */
 	object-position: 50% 30%;
+}
+
+/* The base tile already clips, but it flex-centres an initial — a photo has to
+   fill it edge to edge. */
+.iz-portal-table-av.has-photo {
+	overflow: hidden;
+	padding: 0;
 }
 
 .iz-portal-table .iz-pill-violet {

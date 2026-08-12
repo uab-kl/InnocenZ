@@ -47,7 +47,12 @@ import {
   UpdateShiftAssignmentSchema,
 } from '@/schema/shift-assignment.schema';
 import { describeDeviceFix, verifyWithinGeoFence } from './check-in-geofence';
-import { ShiftAssignmentFilter, ShiftAssignmentStatus } from './shift-assignment.model';
+import {
+  ShiftAssignmentFilter,
+  ShiftAssignmentStatus,
+  LeaveStatus,
+  leaveStatusValues,
+} from './shift-assignment.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 
 const DEFAULT_PAGE_SIZE = 10;
@@ -142,6 +147,17 @@ export class ShiftAssignmentControllerClass {
         shiftId: req.query.shiftId as string | undefined,
         prId: req.query.prId as string | undefined,
         status: req.query.status as ShiftAssignmentStatus | undefined,
+        // `?leaveStatus=pending` for the queue, `?leaveStatus=approved,rejected`
+        // for history. Unknown words are dropped rather than passed to SQL, and
+        // an all-invalid list stays an empty array so it matches nothing.
+        leaveStatuses: req.query.leaveStatus
+          ? String(req.query.leaveStatus)
+              .split(',')
+              .map((s) => s.trim())
+              .filter((s): s is LeaveStatus =>
+                (leaveStatusValues as readonly string[]).includes(s),
+              )
+          : undefined,
         // An outlet caller has no agency of its own — the shifts at its venues
         // belong to whichever agency staffed them.
         agencyId: scope.isAdmin
@@ -659,6 +675,10 @@ export class ShiftAssignmentControllerClass {
         status: 'leave_pending',
         notes: reason,
         leaveProofPhotos: storedProofPhotos,
+        // Awaiting a decision — decidedAt/By stay null because nobody decided.
+        leaveStatus: 'pending',
+        leaveDecidedAt: null,
+        leaveDecidedBy: null,
         updatedBy: getActor(req),
       });
       const actor = getActor(req);
@@ -704,6 +724,10 @@ export class ShiftAssignmentControllerClass {
       const actor = getActor(req);
       const assignment = await this.shiftAssignmentRepository.update(id, {
         status: 'leave_approved',
+        // The decision as DATA, so history can prove who excused this shift.
+        leaveStatus: 'approved',
+        leaveDecidedAt: new Date(),
+        leaveDecidedBy: actor,
         updatedBy: actor,
       });
       res.status(200).json({ success: true, message: 'Leave approved — the PR is excused from this shift', data: assignment });
@@ -757,10 +781,17 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({ success: false, message: 'Only a pending leave request can be rejected', data: null });
       }
 
+      const rejectActor = getActor(req);
       const assignment = await this.shiftAssignmentRepository.update(id, {
         status: 'assigned',
+        // The '[Leave rejected]' prefix is kept for now because the PR app still
+        // reads it, but it is no longer how the rejection is KNOWN — leaveStatus
+        // is. The prefix is display text; this is the record.
         notes: `[Leave rejected] ${existing.notes ?? ''}`.slice(0, 500),
-        updatedBy: getActor(req),
+        leaveStatus: 'rejected',
+        leaveDecidedAt: new Date(),
+        leaveDecidedBy: rejectActor,
+        updatedBy: rejectActor,
       });
       res.status(200).json({ success: true, message: 'Leave rejected — the PR stays on this shift', data: assignment });
 

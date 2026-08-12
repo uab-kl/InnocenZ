@@ -71,7 +71,11 @@ function assignmentToShift(a: ShiftAssignmentRecord): DemoShift {
     date: ymdFromIso(a.shiftDate),
     time: a.slot ?? '—',
     payout: Number(a.payAmount) || 0,
-    logoPath: null,
+    // Was hardcoded null, so the Avatar below could only ever draw the venue's
+    // first letter — the logo was never missing, it was never asked for. The
+    // outlet join has always been in the /mine query; `outlet.logo_image` is
+    // simply the one column it did not select.
+    logoPath: a.outletLogo ?? null,
     status,
   };
 }

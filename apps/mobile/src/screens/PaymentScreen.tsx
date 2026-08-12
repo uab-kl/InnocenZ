@@ -172,10 +172,20 @@ function claimShifts(
       .map((r) => ({
         receiptNo: r.receiptNo as string,
         orderNo: r.orderNo,
+        /*
+         * The night, not just the venue. The agency's own receipt card names
+         * the event and its type, and a claim the PR files about that night
+         * has to be readable beside it — "Emhub Testing, special event" is
+         * what both sides argue about, and the outlet name alone loses which
+         * of two shifts at one venue this was.
+         */
+        eventName: g.shift?.eventName ?? null,
+        eventKind: g.shift?.eventKind ?? null,
         outletName: g.shift?.outletName ?? null,
         slot: g.shift?.slot ?? null,
         checkInAt: g.shift?.checkInAt ?? null,
         checkOutAt: g.shift?.checkOutAt ?? null,
+        overtimeMinutes: g.shift?.overtimeMinutes ?? null,
       })),
   );
 }
@@ -189,6 +199,38 @@ function longDay(iso: string): string {
     d.getUTCMonth()
   ];
   return `${wd} ${d.getUTCDate()} ${mo} ${d.getUTCFullYear()}`;
+}
+
+/**
+ * "6h 30m", with the stored overrun appended when there is one.
+ *
+ * Deliberately NOT `shiftDurationLabel`: that one derives overtime by
+ * subtracting a hardcoded six-hour shift from the elapsed window, and the
+ * window it subtracts from is already CLAMPED to the scheduled end — so the
+ * overrun it reports is invented twice over. A shift's real overrun is stored
+ * on the row as `overtimeMinutes`, and that is the only number quoted here.
+ * Null overtime means none was recorded, which is not the same as zero and is
+ * therefore simply not mentioned.
+ */
+function shiftWindowLabel(
+  checkInAt: string | null,
+  checkOutAt: string | null,
+  overtimeMinutes: number | null,
+): string {
+  if (!checkInAt || !checkOutAt) return 'duration unknown';
+  const start = new Date(checkInAt).getTime();
+  const end = new Date(checkOutAt).getTime();
+  if (Number.isNaN(start) || Number.isNaN(end) || end < start) return 'duration unknown';
+  const mins = Math.round((end - start) / 60_000);
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  const base = m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return overtimeMinutes && overtimeMinutes > 0 ? `${base} · +${overtimeMinutes}m OT` : base;
+}
+
+/** "Special event" / "Normal shift" — the outlet's own toggle, worded as the agency words it. */
+function eventKindLabel(kind: string | null | undefined): string {
+  return kind === 'special' ? 'Special event' : 'Normal shift';
 }
 
 /** "4 Aug, 11:29 am" — the stamp, short enough to sit on a claim row. */
@@ -1402,6 +1444,14 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           Voucher said {formatRM(Number(d.disputedAmount ?? 0))}
                           {d.reason ? ` · ${d.reason}` : ''}
                         </Text>
+                        {/*
+                          * WHEN it was raised. An open claim with no date on it
+                          * gives the PR no way to tell a dispute filed this
+                          * morning from one the agency has been sitting on for
+                          * a week — which is the whole question they open this
+                          * sheet to answer.
+                          */}
+                        <Text style={styles.claimMeta}>Raised {shortStamp(d.raisedAt)}</Text>
 
                         {/*
                           * WHICH SHIFT — resolved from the claim's own
@@ -1429,15 +1479,33 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                         {shifts.length > 0 ? (
                           shifts.map((s) => (
                             <View key={s.receiptNo} style={styles.claimShift}>
-                              <Text style={styles.claimShiftHead}>
-                                {s.orderNo ?? 'No order no'} · {s.receiptNo}
-                              </Text>
+                              {/*
+                                * The night first, the paper second. The agency
+                                * reads this claim beside its own receipt card,
+                                * which leads with the event — so this does too,
+                                * and the venue drops to the line below where it
+                                * belongs. `eventName` is null on shifts the
+                                * outlet never named, and the venue then carries
+                                * the heading on its own.
+                                */}
+                              <View style={styles.claimShiftTitleRow}>
+                                <Text style={styles.claimShiftHead}>
+                                  {s.eventName ?? s.outletName ?? 'Shift'}
+                                </Text>
+                                <Text style={styles.claimEventTag}>
+                                  {eventKindLabel(s.eventKind)}
+                                </Text>
+                              </View>
                               <Text style={styles.claimShiftMeta}>
-                                {s.outletName ? `${s.outletName} · ` : ''}
+                                {s.eventName && s.outletName ? `${s.outletName} · ` : ''}
                                 {s.slot ?? 'shift time unknown'}
                               </Text>
                               <Text style={styles.claimShiftMeta}>
-                                In {shortStamp(s.checkInAt)} · Out {shortStamp(s.checkOutAt)}
+                                In {shortStamp(s.checkInAt)} · Out {shortStamp(s.checkOutAt)} ·{' '}
+                                {shiftWindowLabel(s.checkInAt, s.checkOutAt, s.overtimeMinutes)}
+                              </Text>
+                              <Text style={styles.claimShiftMeta}>
+                                {s.orderNo ?? 'No order no'} · {s.receiptNo}
                               </Text>
                               {/*
                                 * WHAT was claimed, from the snapshot taken when
@@ -2248,7 +2316,24 @@ const styles = StyleSheet.create({
     borderLeftWidth: 2,
     borderLeftColor: C.line2,
   },
+  claimShiftTitleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 },
   claimShiftHead: { fontFamily: F.sora, fontSize: 12, fontWeight: '800', color: C.accentL },
+  /* Champagne, matching the evidence sheet's tag exactly — the PR sees the
+     same event on both surfaces and should not have to check it is the same. */
+  claimEventTag: {
+    fontFamily: F.sora,
+    fontSize: 9,
+    fontWeight: '800',
+    letterSpacing: 0.4,
+    color: '#e8c27a',
+    borderWidth: 1,
+    borderColor: 'rgba(232,194,122,0.45)',
+    backgroundColor: 'rgba(232,194,122,0.1)',
+    borderRadius: 999,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    overflow: 'hidden',
+  },
   claimShiftMeta: { marginTop: 2, fontFamily: F.manrope, fontSize: 11, color: C.prMuted2 },
   claimItem: { marginTop: 3, fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
   claimCancel: {

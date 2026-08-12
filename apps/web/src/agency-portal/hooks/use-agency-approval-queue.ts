@@ -19,8 +19,17 @@ export interface AgencyApprovalQueue {
 	linkRequests: PendingAgencyLink[];
 	/** Outlet cutlost requests awaiting an agency decision. */
 	cutlostRequests: PendingCutlostRequest[];
-	/** PR MC / leave requests parked at `leave_pending`. */
+	/** PR MC / leave requests still awaiting a decision (leave_status=pending). */
 	leaveRequests: ShiftAssignment[];
+	/**
+	 * Decided MC / leave requests — approved AND rejected. Kept separate from
+	 * `leaveRequests` because the queue is work-to-do and this is the record;
+	 * filtered on leave_status, since a rejection reverts `status` to `assigned`
+	 * and so is invisible to a status filter.
+	 */
+	leaveHistory: ShiftAssignment[];
+	/** Only the history query — the tab renders its own loading line. */
+	leaveHistoryIsLoading: boolean;
 	/** Everything the Approvals page's three tabs add up to. */
 	total: number;
 	isLoading: boolean;
@@ -86,7 +95,9 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 	const leaveQuery = useQuery({
 		queryKey: ["roster", "leave-requests"],
 		queryFn: () =>
-			fetchShiftAssignments({ status: "leave_pending", pageSize: 100 }, logout),
+			// leave_status, not status: it is the one field that means "awaiting a
+			// decision" for both a fresh request and a re-filed one.
+			fetchShiftAssignments({ leaveStatus: "pending", pageSize: 100 }, logout),
 		staleTime: 15_000,
 	});
 	const leaveRequests = useMemo(
@@ -94,11 +105,30 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 		[leaveQuery.data],
 	);
 
+	// Decided requests. A rejection reverts `status` to `assigned`, so there is
+	// no status value that would find it — only leave_status can.
+	const leaveHistoryQuery = useQuery({
+		queryKey: ["roster", "leave-history"],
+		queryFn: () =>
+			fetchShiftAssignments(
+				{ leaveStatus: "approved,rejected", pageSize: 200 },
+				logout,
+			),
+		staleTime: 15_000,
+	});
+	const leaveHistory = useMemo(
+		() => leaveHistoryQuery.data?.data ?? [],
+		[leaveHistoryQuery.data],
+	);
+
 	return {
 		signups,
 		linkRequests,
 		cutlostRequests,
 		leaveRequests,
+		leaveHistory,
+		// History is the record, not work-to-do — deliberately NOT in `total`,
+		// which drives the "needs your attention" count.
 		total:
 			signups.length +
 			linkRequests.length +
@@ -106,6 +136,7 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 			leaveRequests.length,
 		isLoading: liveCutlost.isLoading || leaveQuery.isLoading,
 		leaveIsLoading: leaveQuery.isLoading,
+		leaveHistoryIsLoading: leaveHistoryQuery.isLoading,
 		backend,
 		cutlost: liveCutlost,
 	};

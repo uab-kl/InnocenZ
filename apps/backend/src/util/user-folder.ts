@@ -1,11 +1,13 @@
 /**
- * The per-user folder in R2: a role folder plus a named folder, rather than a
- * bare uuid, so the bucket is readable in the Cloudflare dashboard and
- * `user/pr/` holds nothing but PRs.
+ * The per-user folder in R2: ONE named folder rather than a bare uuid, so the
+ * bucket is readable in the Cloudflare dashboard.
  *
- *   user/pr/vicky-93ea08b0/receipts/drinks/scan-….jpg
- *   user/agency/dato-lim-wei-khoon-96cb6034/profile/avatar-….png
- *   user/admin/uab-innocenz-admin-91e1a150/profile/avatar-….png
+ *   user/vicky-pr-93ea08b0/receipts/drinks/scan-….jpg
+ *   user/atlas-agency-owner-96cb6034/profile/avatar-….png
+ *   user/innocenz-admin-86cef074/profile/avatar-….png
+ *
+ * Who they belong to in front, what they do behind, the id last — see
+ * `composeUserFolder`.
  *
  * WHY THE ID SUFFIX IS NOT OPTIONAL: `user.username` has no unique constraint
  * and duplicates already exist in this database (two `jk`, two `Ng Jun Yu`).
@@ -57,18 +59,61 @@ function idPart(userId: string): string {
   return userId.replace(/-/g, '').slice(0, ID_CHARS);
 }
 
+
 /**
- * `pr/vicky-93ea08b0` — TWO segments, so the bucket has one folder per role
- * and `user/pr/` contains only PRs.
+ * ONE folder per user: who they belong to in FRONT, what they do BEHIND, and
+ * the id last.
+ *
+ *   user/atlas-agency-owner-96cb6034/…
+ *   user/emhub-testing-owner-d83bcc1d/…
+ *   user/vicky-pr-93ea08b0/…
+ *   user/innocenz-admin-86cef074/…
+ *
+ * FRONT is the organisation they work for — the agency or the outlet. A PR
+ * belongs to no single organisation (they can be tied to two agencies at
+ * once), so their own nickname stands in front instead, and `pr` is what goes
+ * behind it.
+ *
+ * THE ID IS LAST AND IS NOT OPTIONAL. `user.username` has no unique constraint
+ * and duplicates already exist in this database (two `jk`, two `Ng Jun Yu`) —
+ * and now that the front is the ORG, an agency's two finance staff would
+ * otherwise both be `atlas-agency-finance`, one prefix holding two people,
+ * where one user's proof-photo cleanup deletes the other's evidence. The uuid
+ * head is also what ownership is actually checked against; the org name and
+ * the role are decoration and may change, the id may not.
  */
 export function composeUserFolder(
   userId: string,
   username: string | null | undefined,
   role: UserRoleLabel | null | undefined,
+  orgName?: string | null,
+  subRole?: string | null,
 ): string {
-  const roleDir = slugifyUsername(role) || 'pr';
-  const name = slugifyUsername(username);
-  return `${roleDir}/${name ? `${name}-${idPart(userId)}` : idPart(userId)}`;
+  const lane = slugifyUsername(role) || 'pr';
+  // Org first; a PR (and an admin) has none, so their own name leads.
+  const front = slugifyUsername(orgName) || slugifyUsername(username) || lane;
+  // The specific job when known, else the portal lane — a PR's lane IS `pr`.
+  const job = slugifyUsername(subRole) || lane;
+
+  /*
+   * The job is dropped when it only repeats the lane we are already filed
+   * under: inside `pr/` every folder would end in `-pr`, and inside `admin/`
+   * in `-admin`. It earns its place only when it says something the lane does
+   * not — `owner`, `finance`, `operations_head`.
+   */
+  // The FULL uuid, not the 8-char head: the folder carries the whole identity
+  // so a key can be traced back to its row without a lookup.
+  const words = job === lane ? [front, userId] : [front, job, userId];
+
+  /*
+   * Never say the same word twice. The admin's username already ends in
+   * "admin", which would otherwise read `admin/innocenz-admin-admin-86cef074`.
+   */
+  const leaf = words
+    .filter((p, i) => i === 0 || !words.slice(0, i).join('-').endsWith(p))
+    .join('-');
+
+  return `${lane}/${leaf}`;
 }
 
 /** Call after creating or renaming a user so the next key uses the new name. */
@@ -76,8 +121,10 @@ export function rememberUserFolder(
   userId: string,
   username: string | null | undefined,
   role: UserRoleLabel | null | undefined,
+  orgName?: string | null,
+  subRole?: string | null,
 ): void {
-  cache.set(userId, composeUserFolder(userId, username, role));
+  cache.set(userId, composeUserFolder(userId, username, role, orgName, subRole));
 }
 
 /**
@@ -88,7 +135,7 @@ export function userFolder(userId: string): string {
   return cache.get(userId) ?? userId;
 }
 
-/** `user/pr-vicky-93ea08b0/` — the prefix every key for this user starts with. */
+/** `user/vicky-pr-93ea08b0/` — the prefix every key for this user starts with. */
 export function userFolderPrefix(userId: string): string {
   return `user/${userFolder(userId)}/`;
 }
@@ -106,26 +153,75 @@ export function isOwnedUserKey(key: string, userId: string): boolean {
   if (!key.startsWith('user/')) return false;
   const parts = key.slice('user/'.length).split('/');
   const id = idPart(userId);
-  // Legacy shape puts the owner in segment 1 (`user/<full-uuid>/…`); the
-  // role-foldered shape puts it in segment 2 (`user/pr/<slug>-<id8>/…`).
-  for (const segment of parts.slice(0, 2)) {
-    if (segment === userId || segment === id || segment.endsWith(`-${id}`)) return true;
+  /*
+   * THREE shapes are live at once, and every one of them must match — a key
+   * this rejects is a photo its own owner loses: dropped on carry-forward and
+   * skipped by cleanup.
+   *
+   *   1  user/<full-uuid>/…                    owner in segment 1  (legacy)
+   *   2  user/pr/<slug>-<id8>/…                owner in segment 2  (interim)
+   *   3  user/<org>-<role>-<id8>/…             owner in segment 1  (current)
+   *
+   * Shape 2 existed only briefly but objects written under it are still in the
+   * bucket until the migration moves them, so it is still matched. Scanning
+   * two segments covers all three; it cannot produce a false positive, because
+   * only the id8 tail is ever compared and no org or role slug carries one.
+   *
+   * Matching on the id ALONE — never the name, the org or the role — is what
+   * lets someone be renamed, promoted, or moved between agencies without
+   * losing access to their own evidence.
+   */
+  for (const segment of parts.slice(0, 3)) {
+    if (
+      segment === userId ||
+      segment === id ||
+      // Current shape: `<org>-<role>-<full-uuid>`.
+      segment.endsWith(`-${userId}`) ||
+      // Interim shape: `<name>-<id8>`. Objects written under it are still in
+      // the bucket until the migration moves them, so it must keep matching.
+      segment.endsWith(`-${id}`)
+    ) {
+      return true;
+    }
   }
   return false;
 }
 
-/** id + username + portal code, with 'pr' standing in for "no role row". */
+/**
+ * id + username + portal code + the org they belong to + what they do there.
+ *
+ * `org_name` comes from the tenancy tables (`agency_user` / `outlet_user`), and
+ * `sub_role` from `role.role_name` — the outlet model says so explicitly:
+ * "Portal lane labels are stored on user_role→role, not outlet_user". A user
+ * with no tenancy row yields null and falls back to the portal lane.
+ *
+ * `min()` throughout because a user can hold more than one role row; the folder
+ * needs ONE stable answer, and a name that flickers between two prefixes would
+ * scatter one person's files across both.
+ */
 const FOLDER_SOURCE_SQL = sql`
   select u.id,
          u.username,
-         coalesce(min(po.code), 'pr') as role
+         coalesce(min(po.code), 'pr') as role,
+         min(r.role_name) as sub_role,
+         coalesce(min(ag.name), min(ou.name)) as org_name
     from main."user" u
     left join main.user_role ur on ur.user_id = u.id
     left join main.role r on r.id = ur.role_id
     left join main.portal po on po.id = r.portal_id
+    left join main.agency_user au on au.user_id = u.id
+    left join main.agency ag on ag.id = au.agency_id
+    left join main.outlet_user ou_link on ou_link.user_id = u.id
+    left join main.outlet ou on ou.id = ou_link.outlet_id
    group by u.id, u.username`;
 
-type FolderRow = { id: string; username: string | null; role: string | null };
+type FolderRow = {
+  id: string;
+  username: string | null;
+  role: string | null;
+  sub_role: string | null;
+  org_name: string | null;
+};
 
 /** node-postgres hands back { rows }; some drivers return the array itself. */
 function toRows(result: unknown): FolderRow[] {
@@ -141,7 +237,7 @@ export async function primeUserFolders(): Promise<void> {
   try {
     const rows = toRows(await db.execute(FOLDER_SOURCE_SQL));
     cache.clear();
-    for (const r of rows) rememberUserFolder(r.id, r.username, r.role);
+    for (const r of rows) rememberUserFolder(r.id, r.username, r.role, r.org_name, r.sub_role);
     logger.info(`[user-folder] primed ${cache.size} user folder(s)`);
   } catch (error) {
     logger.warn('[user-folder] prime failed — falling back to uuid folders', error);
@@ -155,7 +251,7 @@ export async function refreshUserFolder(userId: string): Promise<void> {
       await db.execute(sql`${FOLDER_SOURCE_SQL} having u.id = ${userId}`),
     );
     const row = rows.find((r) => r.id === userId);
-    if (row) rememberUserFolder(row.id, row.username, row.role);
+    if (row) rememberUserFolder(row.id, row.username, row.role, row.org_name, row.sub_role);
   } catch {
     // keep whatever is cached — a stale pretty name beats a thrown request
   }

@@ -652,6 +652,10 @@ export class ShiftAssignmentRepositoryClass {
       if (filter?.shiftId) conditions.push(eq(ShiftAssignmentTable.shiftId, filter.shiftId));
       if (filter?.prId) conditions.push(eq(ShiftAssignmentTable.prId, filter.prId));
       if (filter?.status) conditions.push(eq(ShiftAssignmentTable.status, filter.status));
+      if (filter?.leaveStatuses) {
+        if (filter.leaveStatuses.length === 0) return { assignments: [], totalCount: 0 };
+        conditions.push(inArray(ShiftAssignmentTable.leaveStatus, filter.leaveStatuses));
+      }
       // An empty array must match nothing, not everything — guard before inArray.
       if (filter?.outletIds) {
         if (filter.outletIds.length === 0) return { assignments: [], totalCount: 0 };
@@ -680,6 +684,16 @@ export class ShiftAssignmentRepositoryClass {
           // already knows this agency worked for it.
           agencyName: AgencyTable.name,
           shiftDate: ShiftTable.shiftDate,
+          /*
+           * The shift's own window ("22:00 — 04:00"). Every other query in this
+           * file already selects it; this list was the one that did not, so the
+           * agency's MC/leave queue had a date but no time — and its detail
+           * panel printed the VENUE beside a clock icon for want of anything
+           * better to put there.
+           */
+          slot: ShiftTable.slot,
+          eventName: ShiftTable.eventName,
+          eventKind: ShiftTable.eventKind,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
@@ -699,6 +713,9 @@ export class ShiftAssignmentRepositoryClass {
         outletName: row.outletName,
         agencyName: row.agencyName,
         shiftDate: row.shiftDate,
+        slot: row.slot,
+        eventName: row.eventName,
+        eventKind: row.eventKind,
       }));
 
       return { assignments, totalCount };
@@ -729,6 +746,8 @@ export class ShiftAssignmentRepositoryClass {
         payPerHour: string;
         outletId: string;
         outletName: string | null;
+        /** `outlet.logo_image` — the COMPANY logo, not the owner's account avatar. */
+        outletLogo: string | null;
         outletAddress: string | null;
         /** Venue pin off the outlet FK — null until the outlet drops its pin. */
         outletLat: number | null;
@@ -759,6 +778,8 @@ export class ShiftAssignmentRepositoryClass {
         payPerHour: string;
         outletId: string;
         outletName: string | null;
+        /** `outlet.logo_image` — the COMPANY logo, not the owner's account avatar. */
+        outletLogo: string | null;
         outletAddress: string | null;
         outletLat: number | null;
         outletLng: number | null;
@@ -785,6 +806,8 @@ export class ShiftAssignmentRepositoryClass {
         payPerHour: string;
         outletId: string;
         outletName: string | null;
+        /** `outlet.logo_image` — the COMPANY logo, not the owner's account avatar. */
+        outletLogo: string | null;
         outletAddress: string | null;
         outletLat: number | null;
         outletLng: number | null;
@@ -814,6 +837,18 @@ export class ShiftAssignmentRepositoryClass {
           payPerHour: ShiftTable.payPerHour,
           outletId: ShiftTable.outletId,
           outletName: OutletTable.name,
+          /*
+           * The venue's COMPANY logo — `outlet.logo_image`, not the owner's
+           * personal account avatar, which lives on `user.profile_image` and is
+           * a different picture of a different thing.
+           *
+           * Same FK path as the address: read through the join, never copied
+           * onto the assignment. The join was already here and every other
+           * outlet column was being taken; this one simply was not, so the PR
+           * app had nothing to draw and fell back to the first letter of the
+           * venue name on every shift card it has ever shown.
+           */
+          outletLogo: OutletTable.logoImage,
           // Address parts read straight off the FK-joined outlet — never copied
           // onto the assignment. Composed into one display line below.
           outletAddressLine1: OutletTable.addressLine1,
@@ -851,6 +886,7 @@ export class ShiftAssignmentRepositoryClass {
           payPerHour: row.payPerHour,
           outletId: row.outletId,
           outletName: row.outletName,
+          outletLogo: row.outletLogo,
           outletAddress,
           outletLat: row.outletLat === null ? null : Number(row.outletLat),
           outletLng: row.outletLng === null ? null : Number(row.outletLng),

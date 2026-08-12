@@ -32,7 +32,7 @@ import { usePrNav } from '../lib/pr-nav';
 import { useLocale } from '../i18n';
 import { checkInShiftAssignment, checkOutShiftAssignment } from '../lib/api';
 import { getAttendanceFix } from '../lib/device-location';
-import { EmptyDashed, IzButton, Pill } from '../components/ui';
+import { Avatar, EmptyDashed, IzButton, Pill } from '../components/ui';
 import { ShiftStatusPanel } from '../components/ShiftStatusPanel';
 import { ScannedReceiptsCard } from '../components/ScannedReceiptsCard';
 import { MapPin } from '../components/icons';
@@ -314,12 +314,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // the shift's scheduled end, so these hours are real). Never auto-paid —
   // surfaced below as pending agency approval, outside the payout.
   //
-  // Via overtimeHours rather than subtracting 6 inline: it carries the same
-  // STANDARD_SHIFT_HOURS constant the pay uses, and returns 0 for stamps that
-  // cannot be true (out of order, or longer than a plausible shift) so a
+  // Via overtimeHours rather than subtracting inline: it returns 0 for stamps
+  // that cannot be true (out of order, or longer than a plausible shift) so a
   // clamp that never ran cannot surface a "113.1h" figure to the PR.
+  //
+  // `scheduledMinutes` is passed for the THRESHOLD, not just the rate. Without
+  // it the hours came off a hardcoded six-hour shift while the pay was already
+  // priced on this shift's real window — so a shift booked for eight hours and
+  // worked to its exact end reported two hours of overtime nobody worked, and
+  // one booked for four hid two real ones.
   const otHoursWorked = active?.checkOutAt
-    ? overtimeHours(active.checkInAt, new Date(active.checkOutAt).getTime())
+    ? overtimeHours(
+        active.checkInAt,
+        new Date(active.checkOutAt).getTime(),
+        active.scheduledMinutes,
+      )
     : 0;
   const otPendingAmount = active
     ? overtimePay(
@@ -519,9 +528,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   <Text style={styles.event}>{active.eventName ?? 'Shift'}</Text>
                   <Text style={styles.tapHint}>{briefOpen ? 'Tap to collapse' : 'Tap to expand'}</Text>
                 </View>
-                <View style={styles.mark}>
-                  <Text style={styles.markText}>{outletName.trim()[0]?.toUpperCase()}</Text>
-                </View>
+                {/*
+                  * The venue's own logo, with its initial as the fallback —
+                  * the same Avatar the Today card uses, so one shift does not
+                  * look like two different venues across two tabs. `logo`
+                  * gives it the dark plate and slight scale a wordmark needs.
+                  */}
+                <Avatar
+                  size={52}
+                  radius={999}
+                  fontSize={22}
+                  photoPath={active?.outletLogo}
+                  initial={outletName.trim()[0]?.toUpperCase()}
+                  logo
+                  style={styles.mark}
+                />
               </View>
               {briefOpen && (
                 <View style={styles.briefBody}>
@@ -646,10 +667,21 @@ export function CheckInScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     </Text>
                   </View>
                 </View>
+                {/*
+                  * An ESTIMATE this phone worked out, not a filed claim.
+                  *
+                  * "Pending agency approval" said a request was sitting in
+                  * someone's queue. Nothing is sent — the overtime columns on
+                  * the shift row stay NULL — so a PR who read that would wait
+                  * on an approval that was never going to arrive, and only
+                  * find out when the voucher came without it. Say who
+                  * calculated it and what has to happen next.
+                  */}
                 {otPendingAmount > 0 && (
                   <Text style={styles.otPendingNote}>
-                    Overtime {otHoursWorked.toFixed(1)}h ({formatRM(otPendingAmount)}) — pending
-                    agency approval · not added to payout
+                    Overtime {otHoursWorked.toFixed(1)}h (about {formatRM(otPendingAmount)}) — our
+                    estimate from your stamps · not sent to the agency, not in your payout. Raise
+                    it with them if it should be paid.
                   </Text>
                 )}
                 <ShiftStatusPanel
@@ -987,12 +1019,6 @@ const styles = StyleSheet.create({
     borderColor: C.line2,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  markText: {
-    fontFamily: F.sora,
-    fontSize: 22,
-    fontWeight: '800',
-    color: C.txt,
   },
   briefBody: {
     marginTop: 14,

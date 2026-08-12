@@ -247,6 +247,19 @@ export const MAX_PLAUSIBLE_SHIFT_HOURS = 16;
 export function overtimeHours(
   checkInAt: string | null | undefined,
   checkOutMs: number,
+  /**
+   * THIS shift's own scheduled window in minutes (`scheduledMinutes`, sealed at
+   * check-out by migration 0097). When known it wins over the six-hour default,
+   * exactly as it does in `overtimeRate`.
+   *
+   * The two disagreed until now, and both directions were wrong on real
+   * bookings: a four-hour shift worked for six reported NO overtime (6 − 6),
+   * hiding two real hours, while an eight-hour shift worked exactly to its end
+   * reported two hours of overtime (8 − 6) that nobody worked and no server
+   * column records. `overtimeRate` was already pricing against the real window,
+   * so the phone was multiplying invented hours by a correct rate.
+   */
+  scheduledMinutes?: number | null,
 ): number {
   if (!checkInAt) return 0;
   const checkInMs = new Date(checkInAt).getTime();
@@ -255,7 +268,12 @@ export function overtimeHours(
   const elapsed = (checkOutMs - checkInMs) / 3_600_000;
   // Negative means the stamps are out of order — as untrustworthy as too long.
   if (elapsed <= 0 || elapsed > MAX_PLAUSIBLE_SHIFT_HOURS) return 0;
-  return Math.max(0, elapsed - STANDARD_SHIFT_HOURS);
+
+  const threshold =
+    scheduledMinutes != null && scheduledMinutes > 0
+      ? scheduledMinutes / 60
+      : STANDARD_SHIFT_HOURS;
+  return Math.max(0, elapsed - threshold);
 }
 
 /** Overtime is paid at 1.5× the normal hourly rate. */
