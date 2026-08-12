@@ -3,6 +3,7 @@ import { AgencyOutletFilters } from "@agency-portal/components/agency/AgencyOutl
 import { ManageOutletGridCard } from "@agency-portal/components/agency/ManageOutletGridCard";
 import { IzCard, IzPageTitle } from "@agency-portal/components/iz/ui";
 import { useAgencyOutletDemand } from "@agency-portal/hooks/use-agency-outlet-demand";
+import { useAgencyOutletLogos } from "@agency-portal/hooks/use-agency-outlet-logos";
 import { rosterSlotsForAgency } from "@agency-portal/lib/agency-demo";
 import {
 	buildAgencyOutletSummaries,
@@ -11,10 +12,10 @@ import {
 	EMPTY_AGENCY_OUTLET_FILTERS,
 	filterAgencyOutletSummaries,
 } from "@agency-portal/lib/agency-outlet-shifts";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { PR_AGENCY_TIED_OFFERS } from "@agency-portal/lib/pr-features";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MousePointerClick, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -42,7 +43,6 @@ function AgencyManageOutlets() {
 	);
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
-	const agencySubRole = useStore((s) => s.agencySubRole);
 	const [filters, setFilters] = useState(EMPTY_AGENCY_OUTLET_FILTERS);
 	const [detailOutlet, setDetailOutlet] = useState<string | null>(
 		outletFromSearch ?? null,
@@ -54,12 +54,19 @@ function AgencyManageOutlets() {
 		if (outletFromSearch) setDetailOutlet(outletFromSearch);
 	}, [outletFromSearch]);
 
-	const canManage = agencyCan(agencySubRole, "managePr");
+	const canManage = useAgencyCan()("managePr");
 
 	// Real session → backend shift-demand summaries; demo store otherwise.
 	// commissionRules / outletWorkspace have no backend source, so the backed
 	// path keeps them as demo placeholders (they only feed cosmetic pay tiers).
 	const demand = useAgencyOutletDemand();
+	/**
+	 * The venue marks. A separate lookup because the summaries above are built from
+	 * SHIFTS — they identify a venue by name and carry no outlet id, let alone a
+	 * logo — while `logo_image` lives on the outlet registry. Keyed by name for
+	 * that reason, and it refuses rather than guesses when two venues share one.
+	 */
+	const outletLogo = useAgencyOutletLogos();
 
 	const demoSummaries = useMemo(
 		() =>
@@ -132,6 +139,7 @@ function AgencyManageOutlets() {
 				summary={detail}
 				shifts={detailShifts}
 				dayDemand={detailDayDemand}
+				logo={outletLogo(detail.outlet)}
 				onBack={() => setDetailOutlet(null)}
 			/>
 		);
@@ -187,6 +195,10 @@ function AgencyManageOutlets() {
 					filters={filters}
 					onChange={(patch) => setFilters((prev) => ({ ...prev, ...patch }))}
 					shiftDateIsos={shiftDateIsos}
+					// The venues actually on this page. Left to its own default the
+					// dropdown listed a demo constant instead — venues this agency never
+					// onboarded, so picking one emptied the page.
+					outletNames={summaries.map((s) => s.outlet)}
 				/>
 			</IzCard>
 
@@ -231,6 +243,7 @@ function AgencyManageOutlets() {
 						<ManageOutletGridCard
 							key={summary.outlet}
 							summary={summary}
+							logo={outletLogo(summary.outlet)}
 							selectMode={selectMode}
 							picked={selectMode && selected.has(summary.outlet)}
 							onActivate={() => {

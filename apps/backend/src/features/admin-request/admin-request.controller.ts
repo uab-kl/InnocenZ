@@ -13,6 +13,7 @@ import { Error } from '@/error/index.js';
 import { paramId } from '@/util/params.js';
 import { getActor } from '@/util/actor.js';
 import { logger } from '@/util/logger.js';
+import { applyPlanChangeToLedger } from './apply-plan-change.js';
 import { parseDatesQuery } from '@/util/filter-date-format.js';
 
 export class AdminRequestControllerClass {
@@ -39,62 +40,15 @@ export class AdminRequestControllerClass {
    * all.
    */
   private async applyPlanChangeToLedger(record: AdminRequest, actor: string): Promise<void> {
-    try {
-      if (!record.subscriberId || !record.subscriberType || !record.requestedPlanId) {
-        logger.warn(
-          `[AdminRequestController] plan change ${record.id} not reflected in the ledger: ` +
-            `subscriberId=${record.subscriberId} requestedPlanId=${record.requestedPlanId}`,
-        );
-        return;
-      }
-      const plan = await this.subscriptionRepository.getSubscriptionById(record.requestedPlanId);
-      if (!plan) {
-        logger.warn(`[AdminRequestController] plan ${record.requestedPlanId} not found; ledger untouched`);
-        return;
-      }
-
-      // Close whatever PLAN this subscriber is on today — the plan, and only the
-      // plan. An add-on is held ALONGSIDE a plan and outlives a switch: closing
-      // every active line ended a venue's POS integration the moment it moved
-      // between tiers, cancelling an arrangement an admin had priced and the
-      // venue had not asked to drop.
-      const { records: current } = await this.memberSubscriptionRepository.listPaginated({
-        filter: {
-          subscriberType: record.subscriberType,
-          subscriberId: record.subscriberId,
-          status: 'active',
-          kind: 'plan',
-        },
-        page: 1,
-        pageSize: 50,
-      });
-      const endedAt = new Date();
-      for (const row of current) {
-        await this.memberSubscriptionRepository.update(row.id, {
-          status: 'expired',
-          endedAt,
-          updatedBy: actor,
-        });
-      }
-
-      // The negotiated price wins when the admin set one; otherwise the plan's.
-      const amount = record.quotedAmount ?? plan.price;
-      await this.memberSubscriptionRepository.create({
-        subscriberType: record.subscriberType,
-        subscriberId: record.subscriberId,
-        subscriberName: record.subscriberName,
-        subscriptionId: plan.id,
-        planName: plan.name,
-        amount,
-        billingCycle: plan.billingCycle,
-        status: 'active',
-        startedAt: endedAt,
-        createdBy: actor,
-        updatedBy: actor,
-      });
-    } catch (error) {
-      logger.error('[AdminRequestController.applyPlanChangeToLedger] Error:', error);
-    }
+    // The write itself lives in a shared module: the scheduled agency tier job
+    // performs the same switch, and a money rule copied into a cron is a rule
+    // that will eventually disagree with itself.
+    await applyPlanChangeToLedger({
+      memberSubscriptionRepository: this.memberSubscriptionRepository,
+      subscriptionRepository: this.subscriptionRepository,
+      record,
+      actor,
+    });
   }
 
   async list(req: Request, res: Response) {

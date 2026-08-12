@@ -1,0 +1,387 @@
+import { and, desc, eq, gte, ilike, inArray, lte, or, sql, SQL } from 'drizzle-orm';
+import { db } from '@/db/index.js';
+import { logger } from '@/util/logger.js';
+import { DbTransaction } from '@/types/db-transaction.js';
+import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
+import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
+import { klToday } from '@/features/payment-voucher/payment-voucher-week.js';
+import { billingPeriodsFor, klDayOf } from './subscription-period.js';
+import {
+  SubscriptionInvoice,
+  SubscriptionInvoiceFilter,
+  SubscriptionInvoiceInsertType,
+  SubscriptionInvoiceTable,
+  SubscriptionInvoiceWithSubscriber,
+} from './subscription-invoice.model.js';
+
+/** The subscriber columns every read carries, FK-joined rather than duplicated. */
+const SUBSCRIBER_COLUMNS = {
+  subscriberType: MemberSubscriptionTable.subscriberType,
+  subscriberId: MemberSubscriptionTable.subscriberId,
+  subscriberName: MemberSubscriptionTable.subscriberName,
+  planName: MemberSubscriptionTable.planName,
+  billingCycle: MemberSubscriptionTable.billingCycle,
+};
+
+type JoinedRow = {
+  invoice: SubscriptionInvoice;
+  subscriberType: SubscriptionInvoiceWithSubscriber['subscriberType'];
+  subscriberId: string;
+  subscriberName: string;
+  planName: string;
+  billingCycle: string;
+};
+
+function flatten(row: JoinedRow): SubscriptionInvoiceWithSubscriber {
+  return {
+    ...row.invoice,
+    subscriberType: row.subscriberType,
+    subscriberId: row.subscriberId,
+    subscriberName: row.subscriberName,
+    planName: row.planName,
+    billingCycle: row.billingCycle,
+  };
+}
+
+export class SubscriptionInvoiceRepositoryClass {
+  /**
+   * Every condition is expressed against the JOINED pair, because the fields a
+   * caller filters on (who the subscriber is) live on `member_subscription`
+   * while the ones it sorts on live here. Filtering on a copy kept in this table
+   * is exactly the duplication the schema avoids.
+   */
+  private buildConditions(filter?: SubscriptionInvoiceFilter): SQL | undefined {
+    const conditions: SQL[] = [];
+    if (filter?.subscriberType) {
+      conditions.push(eq(MemberSubscriptionTable.subscriberType, filter.subscriberType));
+    }
+    if (filter?.subscriberId) {
+      conditions.push(eq(MemberSubscriptionTable.subscriberId, filter.subscriberId));
+    }
+    if (filter?.memberSubscriptionId) {
+      conditions.push(eq(SubscriptionInvoiceTable.memberSubscriptionId, filter.memberSubscriptionId));
+    }
+    if (filter?.status) {
+      conditions.push(eq(SubscriptionInvoiceTable.status, filter.status));
+    }
+    if (filter?.search) {
+      conditions.push(ilike(MemberSubscriptionTable.subscriberName, `%${filter.search}%`));
+    }
+    if (filter?.dates && filter.dates.length > 0) {
+      const dayClauses = filter.dates.map((day) => eq(SubscriptionInvoiceTable.periodStart, day));
+      const combined = dayClauses.length === 1 ? dayClauses[0] : or(...dayClauses);
+      if (combined) conditions.push(combined);
+    } else {
+      if (filter?.from) conditions.push(gte(SubscriptionInvoiceTable.periodStart, filter.from));
+      if (filter?.to) conditions.push(lte(SubscriptionInvoiceTable.periodStart, filter.to));
+    }
+    return conditions.length > 0 ? and(...conditions) : undefined;
+  }
+
+  async listPaginated(params: {
+    filter?: SubscriptionInvoiceFilter;
+    page: number;
+    pageSize: number;
+  }): Promise<{ records: SubscriptionInvoiceWithSubscriber[]; totalCount: number }> {
+    try {
+      const { filter, page, pageSize } = params;
+      const whereClause = this.buildConditions(filter);
+
+      const [countRow] = await db
+        .select({ value: sql<number>`count(*)::int` })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .where(whereClause);
+      const totalCount = Number(countRow?.value ?? 0);
+
+      const rows = await db
+        .select({ invoice: SubscriptionInvoiceTable, ...SUBSCRIBER_COLUMNS })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .where(whereClause)
+        .orderBy(
+          desc(SubscriptionInvoiceTable.periodStart),
+          desc(SubscriptionInvoiceTable.createdAt),
+        )
+        .limit(pageSize)
+        .offset((page - 1) * pageSize);
+
+      return { records: rows.map(flatten), totalCount };
+    } catch (error) {
+      logger.error('[SubscriptionInvoiceRepository.listPaginated] Error:', error);
+      return { records: [], totalCount: 0 };
+    }
+  }
+
+  async getById(id: string): Promise<SubscriptionInvoiceWithSubscriber | null> {
+    try {
+      const [row] = await db
+        .select({ invoice: SubscriptionInvoiceTable, ...SUBSCRIBER_COLUMNS })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .where(eq(SubscriptionInvoiceTable.id, id))
+        .limit(1);
+      return row ? flatten(row) : null;
+    } catch (error) {
+      logger.error('[SubscriptionInvoiceRepository.getById] Error:', error);
+      return null;
+    }
+  }
+
+  async update(
+    id: string,
+    data: Partial<SubscriptionInvoiceInsertType>,
+    tx?: DbTransaction,
+  ): Promise<SubscriptionInvoice | null> {
+    try {
+      const dbClient = tx ?? db;
+      const [record] = await dbClient
+        .update(SubscriptionInvoiceTable)
+        .set({ ...data, updatedAt: new Date() })
+        .where(eq(SubscriptionInvoiceTable.id, id))
+        .returning();
+      return record ?? null;
+    } catch (error) {
+      logger.error('[SubscriptionInvoiceRepository.update] Error:', error);
+      return null;
+    }
+  }
+
+  /**
+   * Write an invoice row for every billing period that has been reached and does
+   * not have one yet.
+   *
+   * SAFE TO RE-RUN, and that property is load-bearing: the unique index on
+   * (member_subscription_id, period_start) plus `onConflictDoNothing` means a
+   * second run — a cron tick, an admin pressing the button, a restart — inserts
+   * nothing rather than billing a period twice. The weekly payout job's own
+   * generator makes the same promise for the same reason, and the one row this
+   * app has ever double-billed got there because its week key did not line up
+   * with the rule that generated it.
+   *
+   * Reads `member_subscription` directly rather than through its repository: the
+   * only thing needed is the billing columns, and taking that dependency would
+   * add a feature-to-feature edge for nothing.
+   */
+  async generateMissing(params?: {
+    actor?: string;
+    memberSubscriptionIds?: string[];
+    today?: string;
+  }): Promise<{ scanned: number; created: number }> {
+    try {
+      const actor = params?.actor ?? 'system';
+      const today = params?.today ?? klToday();
+
+      const subscriptions = await db
+        .select({
+          id: MemberSubscriptionTable.id,
+          subscriberType: MemberSubscriptionTable.subscriberType,
+          subscriberId: MemberSubscriptionTable.subscriberId,
+          subscriptionId: MemberSubscriptionTable.subscriptionId,
+          kind: SubscriptionTable.kind,
+          amount: MemberSubscriptionTable.amount,
+          currency: MemberSubscriptionTable.currency,
+          billingCycle: MemberSubscriptionTable.billingCycle,
+          startedAt: MemberSubscriptionTable.startedAt,
+          endedAt: MemberSubscriptionTable.endedAt,
+        })
+        .from(MemberSubscriptionTable)
+        .leftJoin(SubscriptionTable, eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id))
+        .where(
+          params?.memberSubscriptionIds && params.memberSubscriptionIds.length > 0
+            ? inArray(MemberSubscriptionTable.id, params.memberSubscriptionIds)
+            : undefined,
+        );
+
+      /**
+       * ONE CHARGE PER ORG PER LANE PER PERIOD.
+       *
+       * Generating straight from subscription rows bills an org once for every
+       * plan it held during a period — the first live run produced FOUR invoices
+       * for Atlas Agency in the week of 2 Aug (Starter, Growth, Starter, Custom)
+       * because it changed tier four times that week. Nobody owes four weekly
+       * fees for one week.
+       *
+       * A "lane" is what is separately payable: the org's PLAN, and each ADD-ON
+       * (the outlet's POS integration) alongside it. POS is billed on top of the
+       * plan by design, so it must survive this collapse — which is why the lane
+       * key carries the add-on's product id instead of lumping every row
+       * together.
+       *
+       * Within a lane the LAST subscription to start in that period wins: the
+       * tier the org settled on, which is also the one its Current subscription
+       * card shows.
+       */
+      type BillableSubscription = (typeof subscriptions)[number];
+      const laneOf = (row: BillableSubscription) =>
+        [
+          row.subscriberType,
+          row.subscriberId,
+          row.kind === 'addon' ? `addon:${row.subscriptionId}` : 'plan',
+        ].join('|');
+
+      // A row that ended on the KL day it started is a plan-switch artefact, not
+      // something anyone held — dropped before it can anchor anything.
+      const lanes = new Map<string, BillableSubscription[]>();
+      for (const subscription of subscriptions) {
+        const startDay = klDayOf(subscription.startedAt);
+        const endDay = subscription.endedAt ? klDayOf(subscription.endedAt) : null;
+        if (endDay !== null && endDay <= startDay) continue;
+        const key = laneOf(subscription);
+        const held = lanes.get(key);
+        if (held) held.push(subscription);
+        else lanes.set(key, [subscription]);
+      }
+
+      const winners = new Map<
+        string,
+        { row: BillableSubscription; period: { periodStart: string; periodEnd: string } }
+      >();
+      for (const [lane, rowsInLane] of lanes) {
+        const ordered = [...rowsInLane].sort(
+          (a, b) => a.startedAt.getTime() - b.startedAt.getTime(),
+        );
+        const anchor = ordered[0];
+        const latest = ordered[ordered.length - 1];
+        if (!anchor || !latest) continue;
+
+        // ONE BILLING CALENDAR PER LANE, anchored on the day the org first
+        // subscribed in it. Anchoring per subscription row instead opened a
+        // SECOND calendar every time a venue switched mid-month: Emhub Testing
+        // came out billed 3 Aug–2 Sep for Scale *and* 4 Aug–3 Sep for
+        // Enterprise, two overlapping months for one venue, with its POS add-on
+        // charged twice over the same days.
+        const stillSubscribed = ordered.some((row) => row.endedAt === null);
+
+        // A LANE THE ORG HAS LEFT IS NOT BILLED. Its periods are history, and
+        // history is not a debt — an agency that dropped a tier in July does not
+        // owe for it now, and every ended row here is the far side of a plan
+        // switch rather than a subscription anyone is still on.
+        if (!stillSubscribed) continue;
+        const lastEnded = stillSubscribed
+          ? null
+          : ordered.reduce<Date | null>(
+              (latestEnd, row) =>
+                row.endedAt && (!latestEnd || row.endedAt > latestEnd) ? row.endedAt : latestEnd,
+              null,
+            );
+
+        const periods = billingPeriodsFor({
+          billingCycle: latest.billingCycle,
+          startedAt: anchor.startedAt,
+          endedAt: lastEnded,
+          today,
+        });
+
+        // ONLY THE PERIOD THAT IS RUNNING NOW.
+        //
+        // The walk above exists to place that period on the org's own calendar
+        // (a month anchored on the 31st has to be stepped from the anchor, not
+        // guessed from today), but only its last entry is billed. Opening every
+        // period back to the subscription's start invented a backlog: an agency
+        // that switched tier three times in July got a column of unpaid weeks
+        // nobody had ever raised, for plans it was no longer on. The ledger
+        // starts when it starts, and grows one period at a time from the daily
+        // job — so history here is what this app actually billed, not a
+        // reconstruction of what it might have.
+        const current = periods[periods.length - 1];
+        if (!current) continue;
+
+        // Priced by the subscription actually LIVE in that period — the last one
+        // to start within it, which is the tier the org settled on and the one
+        // its Current subscription card shows.
+        const live =
+          [...ordered]
+            .reverse()
+            .find(
+              (row) =>
+                klDayOf(row.startedAt) <= current.periodEnd &&
+                (!row.endedAt || klDayOf(row.endedAt) > current.periodStart),
+            ) ?? latest;
+        winners.set(`${lane}|${current.periodStart}`, { row: live, period: current });
+      }
+
+      /**
+       * A period already billed is left exactly as it was.
+       *
+       * The unique index only stops the SAME subscription being billed twice for
+       * a period; it cannot see that a later switch belongs to the same lane. So
+       * a plan changed after the invoice was opened must not add a second charge
+       * for that week — the ledger's first answer for a period stands, and an
+       * admin who disagrees edits it rather than being handed two rows.
+       */
+      const existing = await db
+        .select({
+          subscriberType: MemberSubscriptionTable.subscriberType,
+          subscriberId: MemberSubscriptionTable.subscriberId,
+          subscriptionId: MemberSubscriptionTable.subscriptionId,
+          kind: SubscriptionTable.kind,
+          periodStart: SubscriptionInvoiceTable.periodStart,
+        })
+        .from(SubscriptionInvoiceTable)
+        .innerJoin(
+          MemberSubscriptionTable,
+          eq(SubscriptionInvoiceTable.memberSubscriptionId, MemberSubscriptionTable.id),
+        )
+        .leftJoin(SubscriptionTable, eq(MemberSubscriptionTable.subscriptionId, SubscriptionTable.id));
+      const billed = new Set(
+        existing.map((row) =>
+          [
+            row.subscriberType,
+            row.subscriberId,
+            row.kind === 'addon' ? `addon:${row.subscriptionId}` : 'plan',
+            row.periodStart,
+          ].join('|'),
+        ),
+      );
+
+      const rows: SubscriptionInvoiceInsertType[] = [];
+      for (const [key, winner] of winners) {
+        if (billed.has(key)) continue;
+        rows.push({
+          memberSubscriptionId: winner.row.id,
+          periodStart: winner.period.periodStart,
+          periodEnd: winner.period.periodEnd,
+          amount: winner.row.amount,
+          currency: winner.row.currency,
+          createdBy: actor,
+          updatedBy: actor,
+        });
+      }
+
+      if (rows.length === 0) return { scanned: subscriptions.length, created: 0 };
+
+      // Chunked, because a first run over a long history can be thousands of
+      // rows and node-postgres binds one parameter per column.
+      const CHUNK = 500;
+      let created = 0;
+      for (let index = 0; index < rows.length; index += CHUNK) {
+        const inserted = await db
+          .insert(SubscriptionInvoiceTable)
+          .values(rows.slice(index, index + CHUNK))
+          .onConflictDoNothing({
+            target: [
+              SubscriptionInvoiceTable.memberSubscriptionId,
+              SubscriptionInvoiceTable.periodStart,
+            ],
+          })
+          .returning({ id: SubscriptionInvoiceTable.id });
+        created += inserted.length;
+      }
+
+      return { scanned: subscriptions.length, created };
+    } catch (error) {
+      logger.error('[SubscriptionInvoiceRepository.generateMissing] Error:', error);
+      return { scanned: 0, created: 0 };
+    }
+  }
+}

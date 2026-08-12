@@ -36,6 +36,8 @@ import { PlatformConfigRepositoryClass } from '@/features/platform-config/platfo
 import { PlatformConfigControllerClass } from '@/features/platform-config/platform-config.controller.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { MemberSubscriptionControllerClass } from '@/features/member-subscription/member-subscription.controller.js';
+import { SubscriptionInvoiceRepositoryClass } from '@/features/subscription-invoice/subscription-invoice.repository.js';
+import { SubscriptionInvoiceControllerClass } from '@/features/subscription-invoice/subscription-invoice.controller.js';
 import { PaymentMethodRepositoryClass } from '@/features/payment-method/payment-method.repository.js';
 import { PaymentMethodControllerClass } from '@/features/payment-method/payment-method.controller.js';
 import { OutletTransactionRepositoryClass } from '@/features/outlet-transaction/outlet-transaction.repository.js';
@@ -46,6 +48,9 @@ import { SpecialServiceRepositoryClass } from '@/features/special-service/specia
 import { SpecialServiceControllerClass } from '@/features/special-service/special-service.controller.js';
 import { OutletWorkspaceRepositoryClass } from '@/features/outlet-workspace/outlet-workspace.repository.js';
 import { OutletWorkspaceControllerClass } from '@/features/outlet-workspace/outlet-workspace.controller.js';
+import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penalty-rule.repository.js';
+import { AgencyPenaltyRuleControllerClass } from '@/features/agency/agency-penalty-rule.controller.js';
+import { PenaltyChargeRepositoryClass } from '@/features/agency/penalty-charge.repository.js';
 import { RatingRepositoryClass } from '@/features/rating/rating.repository.js';
 import { RatingControllerClass } from '@/features/rating/rating.controller.js';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository.js';
@@ -89,6 +94,8 @@ export const outletMemberRepository = new OutletMemberRepositoryClass();
 export const orgMemberInviteRepository = new OrgMemberInviteRepositoryClass();
 export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const memberSubscriptionRepository = new MemberSubscriptionRepositoryClass();
+// One row per CHARGE, against member_subscription's one row per SUBSCRIPTION.
+export const subscriptionInvoiceRepository = new SubscriptionInvoiceRepositoryClass();
 export const authController = new AuthControllerClass(
   authRepository,
   jwtController,
@@ -172,6 +179,10 @@ export const orgScopeDeps = {
 
 export const memberSubscriptionController = new MemberSubscriptionControllerClass(memberSubscriptionRepository, orgScopeDeps);
 
+// Same scope resolver as the subscription ledger above — an org must read its
+// own invoices and no one else's.
+export const subscriptionInvoiceController = new SubscriptionInvoiceControllerClass(subscriptionInvoiceRepository, orgScopeDeps);
+
 // The card a venue/agency pays with. Same scope resolver: the owner comes from
 // the session, never from the request body.
 export const paymentMethodRepository = new PaymentMethodRepositoryClass();
@@ -220,11 +231,15 @@ export const specialServiceController = new SpecialServiceControllerClass(
 export const outletWorkspaceRepository = new OutletWorkspaceRepositoryClass();
 export const outletWorkspaceController = new OutletWorkspaceControllerClass(outletWorkspaceRepository);
 
+export const agencyPenaltyRuleRepository = new AgencyPenaltyRuleRepositoryClass();
+
 export const ratingRepository = new RatingRepositoryClass();
 export const ratingController = new RatingControllerClass(ratingRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 // Declared above prController, which needs it for the penalty proposal endpoint.
 // Takes no constructor args, so the move up is free.
 export const shiftAssignmentRepository = new ShiftAssignmentRepositoryClass();
+// Above prController too — it serves the PR their own sealed charges.
+export const penaltyChargeRepository = new PenaltyChargeRepositoryClass();
 
 export const prController = new PrControllerClass(
   prRepository,
@@ -232,7 +247,8 @@ export const prController = new PrControllerClass(
   authRepository,
   outletMemberRepository,
   agencyPrRepository,
-  outletWorkspaceRepository,
+  agencyPenaltyRuleRepository,
+  penaltyChargeRepository,
   shiftAssignmentRepository,
   userRepository,
   userProfileRepository,
@@ -244,6 +260,18 @@ export const shiftRepository = new ShiftRepositoryClass();
 export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository, shiftAssignmentRepository);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
+
+// AFTER shiftAssignmentRepository AND paymentVoucherRepository, not beside its
+// own repository: these are `const`, so reading one before its initialiser has
+// run is a TDZ throw at import time — which takes down the whole server, not
+// just this route.
+export const agencyPenaltyRuleController = new AgencyPenaltyRuleControllerClass(
+  agencyPenaltyRuleRepository,
+  shiftAssignmentRepository,
+  penaltyChargeRepository,
+  paymentVoucherRepository,
+  prRepository,
+);
 export const paymentVoucherDisputeRepository = new PaymentVoucherDisputeRepositoryClass();
 export const paymentVoucherController = new PaymentVoucherControllerClass(paymentVoucherRepository, agencyMemberRepository, authRepository, prRepository, paymentVoucherDisputeRepository, shiftAssignmentRepository);
 
@@ -252,7 +280,7 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(paymen
 // payment-voucher feature. It goes through the repository so that write is
 // subject to the same component classification and line-date assertion as
 // every other line.
-export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository);
+export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository, agencyPenaltyRuleRepository);
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
 export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);

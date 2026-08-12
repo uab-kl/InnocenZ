@@ -12,15 +12,29 @@ export function AgencyOutletFilters({
 	filters,
 	onChange,
 	shiftDateIsos,
+	outletNames,
 	inline = false,
 }: {
 	filters: AgencyOutletFilterState;
 	onChange: (patch: Partial<AgencyOutletFilterState>) => void;
 	shiftDateIsos: string[];
+	/**
+	 * The venues to offer, which must be the ones the CARDS show — i.e. the
+	 * outlets this agency onboarded, read from the backend registry.
+	 *
+	 * This dropdown used `OUTLET_NAMES`, a hardcoded demo constant, while the
+	 * cards beside it came from the backend: on a real login it listed venues the
+	 * agency has never onboarded (two of which no longer exist) and omitted ones
+	 * that were on screen. Picking any of those names matched no card, so the
+	 * page emptied and read as "no outlets" rather than "wrong list". Omitted
+	 * only by a demo session, which has no registry to read.
+	 */
+	outletNames?: string[];
 	/** Compact pill row — Manage Outlet page layout */
 	inline?: boolean;
 }) {
 	const active = agencyOutletFiltersActive(filters);
+	const options = outletNames ?? OUTLET_NAMES;
 
 	if (inline) {
 		return (
@@ -32,7 +46,7 @@ export function AgencyOutletFilters({
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
 						<option value="">All outlets</option>
-						{OUTLET_NAMES.map((o) => (
+						{options.map((o) => (
 							<option key={o} value={o}>
 								{o}
 							</option>
@@ -100,7 +114,7 @@ export function AgencyOutletFilters({
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
 						<option value="">All outlets</option>
-						{OUTLET_NAMES.map((o) => (
+						{options.map((o) => (
 							<option key={o} value={o}>
 								{o}
 							</option>
