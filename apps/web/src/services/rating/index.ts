@@ -32,6 +32,16 @@ export interface SubmitRatingInput {
 	stars: number;
 	note?: string;
 	tags?: string[];
+	/**
+	 * The shift this verdict is about. The server resolves it to that PR's
+	 * assignment on that shift, which is what decides WHICH agency may read the
+	 * rating — only the one that staffed the rated night.
+	 *
+	 * Optional, and an unresolvable value is a miss rather than an error: the
+	 * server falls back to the PR's latest night at this venue, so a rating is
+	 * never lost or left unattributable. Send it whenever the shift is known.
+	 */
+	shiftId?: string;
 }
 
 export async function fetchRatings(

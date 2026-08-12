@@ -6592,6 +6592,19 @@ export const useStore = create<StoreState>()(
 			ratePr: (prId, stars, note, tags) => {
 				const pr = get().prs.find((p) => p.id === prId);
 				if (!pr) return;
+				// WHICH shift this verdict is about, captured BEFORE the set() below
+				// — that set removes this PR from the prompt and drops the prompt
+				// entirely once it empties, so reading it from the async submit
+				// afterwards would find the shift gone on the last PR rated.
+				//
+				// Only when the prompt actually names this PR: rating someone from
+				// the Ratings screen is not about the shift a prompt happens to be
+				// open for. Absent, the server attributes it to the PR's latest
+				// night at this venue.
+				const openPrompt = get().postSealRatePrompt;
+				const ratedShiftId = openPrompt?.prIds.includes(prId)
+					? openPrompt.shiftId
+					: undefined;
 				const outletName = get().outletWorkspace.outletName || "Velvet 23";
 				const lowShift = stars < RATING_SUSPEND_SHIFT_THRESHOLD;
 				const stamp = new Date().toLocaleDateString("en-MY", {
@@ -6672,6 +6685,11 @@ export const useStore = create<StoreState>()(
 								stars,
 								note,
 								tags: tags ?? [],
+								// Names the rated night, which is what decides which
+								// agency may read this rating — only the one that
+								// staffed it. Omitted when the rating did not come
+								// from a post-seal prompt.
+								shiftId: ratedShiftId,
 							},
 							() => {},
 						);
