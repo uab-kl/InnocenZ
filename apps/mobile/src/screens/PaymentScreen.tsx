@@ -19,21 +19,28 @@ import {
   formatRM,
   weekPayGridTotal,
   weekPvIssueDayLabel,
+  weekRangeIso,
   weekRangeLabel,
   type WeeklyDayPay,
 } from '../lib/demo-shifts';
 import { usePrEarnings } from '../lib/pr-earnings';
 import {
   fetchMyLastWeek,
+  getMyPenalties,
   raiseMyDispute,
   withdrawMyDispute,
+  type MyPenaltiesWeek,
   type PrCurrentWeek,
   type PrDisputeState,
   type PrReceiptLine,
 } from '../lib/api';
 import { useSession } from '../lib/session';
 import { useSignedPvs } from '../lib/signed-pv';
-import { buildWeekGridFromLines, VERIFIED_STATUSES } from '../lib/week-pay-grid';
+import {
+  buildWeekGridFromLines,
+  type GridBucket,
+  VERIFIED_STATUSES,
+} from '../lib/week-pay-grid';
 import { buildCellEvidence, receiptDisputable } from '../lib/cell-evidence';
 import { CellEvidenceSheet } from '../components/CellEvidenceSheet';
 import {
@@ -102,16 +109,37 @@ const INCOME_ROWS: { key: IncomeKey; label: string }[] = [
   { key: 'others', label: 'Others' },
 ];
 
-function cellAmount(day: WeeklyDayPay, key: IncomeKey): number {
+/**
+ * Every row the grid DRAWS — the four earning buckets plus Deductions.
+ *
+ * Kept separate from `INCOME_ROWS`, which stays the four things a PR can earn
+ * and contest. Anything asking "was this day's money disputed?" must keep
+ * reading INCOME_ROWS: a deduction is not income and is not disputable.
+ */
+const GRID_ROWS: { key: GridBucket; label: string }[] = [
+  ...INCOME_ROWS,
+  { key: 'deductions', label: 'Deductions' },
+];
+
+function cellAmount(day: WeeklyDayPay, key: GridBucket): number {
   if (key === 'wages') return day.wages;
   if (key === 'drinks') return day.drinks ?? 0;
   if (key === 'tips') return day.tips ?? 0;
+  if (key === 'deductions') return day.deductions ?? 0;
   return day.others ?? 0;
 }
 
+/**
+ * Zero is nothing to report; a NEGATIVE is very much something.
+ *
+ * This used to dash out anything `<= 0`, so a −RM 20 cancellation fee rendered
+ * as an empty cell while still sitting inside the week total: RM 488.00 of
+ * visible figures under a footer reading RM 468.00, with the missing RM 20
+ * nowhere on the screen. The minus sign IS the message, so it gets printed.
+ */
 function formatCell(value: number): string {
-  if (value <= 0) return '—';
-  return value.toFixed(2);
+  if (value === 0) return '—';
+  return value < 0 ? `−${Math.abs(value).toFixed(2)}` : value.toFixed(2);
 }
 
 /**
@@ -270,11 +298,16 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   /** Which cell's evidence is open, and the day/row it came from (to hand on to dispute). */
   const [evidenceTarget, setEvidenceTarget] = useState<{
     dateIso: string;
-    incomeKey: IncomeKey;
+    /**
+     * A GRID BUCKET — the Deductions row opens this sheet too, so a PR can see
+     * WHICH shift a fine came from. `DisputeTarget.incomeKey` stays the narrower
+     * `IncomeKey`, because a claim can only ever be about earnings.
+     */
+    incomeKey: GridBucket;
     amount: number;
     week: WeekTab;
     day: WeeklyDayPay;
-    row: (typeof INCOME_ROWS)[number];
+    row: (typeof GRID_ROWS)[number];
   } | null>(null);
   const [disputePreset, setDisputePreset] = useState<string>(DISPUTE_PRESETS[0]);
   /**
@@ -348,19 +381,35 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
    */
   const openEvidence = (
     day: WeeklyDayPay,
-    row: (typeof INCOME_ROWS)[number],
+    row: (typeof GRID_ROWS)[number],
     week: WeekTab,
   ) => {
     const amount = cellAmount(day, row.key);
-    if (amount <= 0 || day.status === 'empty') return;
+    // `!== 0`, not `> 0`: a deduction is a real figure with real evidence behind
+    // it (which shift was cancelled, and what the fee was a percentage of). The
+    // old `<= 0` test made the one cell a PR would most want to interrogate the
+    // one cell that could not be opened.
+    if (amount === 0 || day.status === 'empty') return;
     setEvidenceTarget({ dateIso: day.dateIso, incomeKey: row.key, amount, week, day, row });
   };
 
   const openDispute = (
     day: WeeklyDayPay,
-    row: (typeof INCOME_ROWS)[number],
+    row: (typeof GRID_ROWS)[number],
     week: WeekTab = 'last',
   ) => {
+    /*
+     * A deduction is never disputed here, so this narrows `row.key` back to an
+     * IncomeKey for everything below — including `DisputeTarget`, whose
+     * `incomeKey` becomes a claim's `component` and must be a real bucket the
+     * server accepts.
+     *
+     * Unreachable in practice: the Dispute button is gated on `kindDisputable`,
+     * which answers no for 'deductions'. It is a return rather than an
+     * assertion because an unreachable path that silently does nothing beats
+     * one that crashes the payslip if it ever turns out to be reachable.
+     */
+    if (row.key === 'deductions') return;
     const weekData = week === 'last' ? lastWeek : current;
     const weekDisputed =
       week === 'last' ? voucherDisputed : current?.status === 'disputed';
@@ -852,6 +901,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
               <Text style={styles.weekCaption}>Last week {lastLabel}</Text>
               <Text style={styles.verified}>Verified days {verifiedDays}/7</Text>
 
+              {/* Last week matters more than this one for penalties: the weekly
+                  rules are evaluated against a COMPLETE week, so a charge
+                  usually appears only once the week has closed. */}
+              <PenaltiesForWeek weeksAgo={1} />
+
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator
@@ -879,8 +933,11 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     </View>
                   </View>
 
-                  {INCOME_ROWS.map((row) => {
+                  {GRID_ROWS.map((row) => {
                     const rowTotal = grid.reduce((s, d) => s + cellAmount(d, row.key), 0);
+                    const isDeduction = row.key === 'deductions';
+                    // Hidden when the week carried no fines — see This week.
+                    if (isDeduction && rowTotal === 0) return null;
                     return (
                       <View key={row.key} style={styles.gridRow}>
                         <Text style={styles.gridLabel}>{row.label}</Text>
@@ -888,7 +945,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                           const amount = cellAmount(d, row.key);
                           const key = `${d.dateIso}-${row.key}`;
                           const isDisputed = disputedCells.has(key);
-                          const canTap = amount > 0 && d.status !== 'empty';
+                          const canTap = amount !== 0 && d.status !== 'empty';
                           return (
                             <Pressable
                               key={key}
@@ -904,6 +961,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 style={[
                                   styles.gridVal,
                                   isDisputed && styles.gridValDisputed,
+                                  // Only the real figure goes red. Colouring the
+                                  // whole row painted the empty days' dashes red
+                                  // too, so a week with one fine looked like six.
+                                  isDeduction && amount !== 0 && styles.gridValDeduction,
                                 ]}
                               >
                                 {formatCell(amount)}
@@ -977,6 +1038,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               styles.statusPill,
                               d.status === 'pending' && styles.statusPillPending,
                               label === 'DISPUTED' && styles.statusPillDisputed,
+                              label === 'DEDUCTED' && styles.statusPillDeducted,
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
                           >
@@ -1121,17 +1183,26 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     </View>
                   </View>
 
-                  {INCOME_ROWS.map((row) => {
+                  {GRID_ROWS.map((row) => {
                     const rowTotal = thisGrid.reduce(
                       (s, d) => s + cellAmount(d, row.key),
                       0,
                     );
+                    const isDeduction = row.key === 'deductions';
+                    /*
+                     * A row of nothing but dashes is noise on a payslip — the
+                     * same reason the penalties card hides itself at RM 0.00.
+                     * Only Deductions gets this: the four earning rows are the
+                     * shape of the week and stay put even when empty, so the
+                     * grid does not change height night to night.
+                     */
+                    if (isDeduction && rowTotal === 0) return null;
                     return (
                       <View key={row.key} style={styles.gridRow}>
                         <Text style={styles.gridLabel}>{row.label}</Text>
                         {thisGrid.map((d) => {
                           const amount = cellAmount(d, row.key);
-                          const canTap = amount > 0 && d.status !== 'empty';
+                          const canTap = amount !== 0 && d.status !== 'empty';
                           return (
                             <Pressable
                               key={`${d.dateIso}-${row.key}`}
@@ -1143,6 +1214,10 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                                 style={[
                                   styles.gridVal,
                                   d.status === 'pending' && amount > 0 && styles.gridValPending,
+                                  // Only the real figure goes red. Colouring the
+                                  // whole row painted the empty days' dashes red
+                                  // too, so a week with one fine looked like six.
+                                  isDeduction && amount !== 0 && styles.gridValDeduction,
                                 ]}
                               >
                                 {formatCell(amount)}
@@ -1220,6 +1295,7 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                               d.status === 'pending' && styles.statusPillPending,
                               label === 'DISPUTED' && styles.statusPillDisputed,
                               label === 'VERIFIED' && styles.statusPillVerified,
+                              label === 'DEDUCTED' && styles.statusPillDeducted,
                               d.status === 'empty' && { color: C.muted2 },
                             ]}
                           >
@@ -1248,6 +1324,8 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 PV on <Text style={styles.footBold}>{issueDay}</Text> · total{' '}
                 <Text style={styles.footTotal}>{formatRM(thisWeekTotal)}</Text>
               </Text>
+
+              <PenaltiesForWeek weeksAgo={0} />
 
               {!hasThisWeekRows && (
                 <Text style={styles.emptyWeekHint}>
@@ -1821,6 +1899,108 @@ export function PaymentScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   );
 }
 
+/**
+ * "Was I penalised this week?" — the PR's own SEALED charges.
+ *
+ * Renders nothing when there is none, which is the common case: a permanent
+ * "Penalties RM 0.00" row on a payslip trains people to stop reading it, and
+ * the one week it is not zero is the week it must be noticed.
+ *
+ * Deliberately shows only what the agency has ACCEPTED. The proposal endpoint
+ * can say a week would cost RM 50 before anyone decides to charge it; putting
+ * that in front of the worker would announce money they may never lose.
+ */
+function PenaltiesForWeek({ weeksAgo }: { weeksAgo: number }) {
+  const { token } = useSession();
+  const [data, setData] = useState<MyPenaltiesWeek | null>(null);
+
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    const { weekStart, weekEnd } = weekRangeIso(weeksAgo);
+    getMyPenalties(token, weekStart, weekEnd)
+      .then((d) => {
+        if (!cancelled) setData(d);
+      })
+      .catch(() => {
+        // A failed read must not invent "no penalties" — leaving `data` null
+        // renders nothing, which is silence, not a false all-clear.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, weeksAgo]);
+
+  if (!data || data.count === 0) return null;
+
+  return (
+    <View style={penaltyStyles.card}>
+      <View style={penaltyStyles.head}>
+        <Text style={penaltyStyles.title}>PENALTIES THIS WEEK</Text>
+        <Text style={penaltyStyles.total}>−{formatRM(Number(data.totalRm))}</Text>
+      </View>
+      {data.penalties.map((p) => (
+        <View key={p.id} style={penaltyStyles.row}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={penaltyStyles.label}>{p.ruleType.replace(/_/g, ' ')}</Text>
+            <Text style={penaltyStyles.detail}>{p.detail}</Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={penaltyStyles.amount}>−{formatRM(Number(p.fineRm))}</Text>
+            <Text style={penaltyStyles.state}>
+              {p.chargedAt ? 'deducted' : 'pending'}
+            </Text>
+          </View>
+        </View>
+      ))}
+      {data.cancellations.map((c) => (
+        <View key={c.assignmentId} style={penaltyStyles.row}>
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text style={penaltyStyles.label}>Cancelled shift</Text>
+            <Text style={penaltyStyles.detail}>
+              {String(c.shiftDate ?? '').slice(0, 10)}
+              {c.outletName ? ` · ${c.outletName}` : ''} · {c.feePct ?? 0}% of daily wage
+            </Text>
+          </View>
+          <View style={{ alignItems: 'flex-end' }}>
+            <Text style={penaltyStyles.amount}>−{formatRM(Number(c.feeRm ?? 0))}</Text>
+            <Text style={penaltyStyles.state}>
+              {c.chargedAt ? 'deducted' : 'pending'}
+            </Text>
+          </View>
+        </View>
+      ))}
+    </View>
+  );
+}
+
+const penaltyStyles = StyleSheet.create({
+  card: {
+    marginTop: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(240,113,113,0.35)',
+    backgroundColor: 'rgba(240,113,113,0.06)',
+    borderRadius: 12,
+    padding: 10,
+  },
+  head: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  title: { color: '#f07171', fontSize: 10, fontWeight: '800', letterSpacing: 0.6 },
+  total: { color: '#f07171', fontSize: 13, fontWeight: '800' },
+  row: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    marginTop: 8,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(255,255,255,0.06)',
+  },
+  label: { color: C.txt, fontSize: 12, fontWeight: '700', textTransform: 'capitalize' },
+  detail: { color: C.muted2, fontSize: 11, marginTop: 1 },
+  amount: { color: '#f07171', fontSize: 12, fontWeight: '800' },
+  state: { color: C.muted2, fontSize: 10, marginTop: 1 },
+});
+
 const styles = StyleSheet.create({
   screen: { paddingTop: 6, paddingHorizontal: 18, paddingBottom: 26 },
   pageHeader: { paddingTop: 2 },
@@ -1947,6 +2127,12 @@ const styles = StyleSheet.create({
   gridVal: { fontFamily: F.sora, fontSize: 12, fontWeight: '700', color: C.txt },
   gridValPending: { color: C.amber },
   gridValDisputed: { color: C.red },
+  // Money going the other way. Red is already the app's colour for "this needs
+  // your attention" (disputed cells, Close buttons), and a fine qualifies.
+  gridValDeduction: { color: C.red },
+  // DEDUCTED is a settled state, not a warning — but it is still money off, so
+  // it keeps the deduction colour rather than borrowing VERIFIED's green.
+  statusPillDeducted: { color: C.red },
   statusPill: {
     fontFamily: F.sora,
     fontSize: 8,

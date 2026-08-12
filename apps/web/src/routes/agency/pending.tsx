@@ -15,7 +15,6 @@ import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGall
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
 import {
 	cutlostRequestDetail,
@@ -24,6 +23,7 @@ import {
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import type { PendingAgencyLink, PendingPR } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -1143,10 +1143,10 @@ function AgencyPending() {
 		approveCutlostRequest,
 		rejectCutlostRequest,
 		invitePendingPR,
-		agencySubRole,
 		approveAgencyLink,
 		rejectAgencyLink,
 	} = useStore();
+	const canApprovePrSignups = useAgencyCan()("approvePrSignups");
 	const { date, time } = nowAgencyDateTime();
 	const [tab, setTab] = useState<Tab>("signups");
 	const [selectedSignupId, setSelectedSignupId] = useState<string | null>(null);
@@ -1231,7 +1231,7 @@ function AgencyPending() {
 	const selectedLeave =
 		leaveRequests.find((r) => r.id === selectedLeaveId) ?? null;
 
-	if (!agencyCan(agencySubRole, "approvePrSignups")) {
+	if (!canApprovePrSignups) {
 		return (
 			<div className="iz-screen iz-approvals-page">
 				<IzCard className="text-center">

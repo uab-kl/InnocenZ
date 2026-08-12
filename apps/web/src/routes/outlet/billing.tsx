@@ -4,8 +4,8 @@ import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/outlet/billing")({
@@ -13,9 +13,8 @@ export const Route = createFileRoute("/outlet/billing")({
 });
 
 function BillingPage() {
-	const outletSubRole = useStore((s) => s.outletSubRole);
 	const outletName = useStore((s) => s.outletWorkspace.outletName);
-	const showSales = outletCan(outletSubRole, "viewSalesDashboard");
+	const showSales = useOutletCan()("viewSalesDashboard");
 
 	return (
 		<OutletPage>

@@ -9,6 +9,17 @@ import { useAuth } from "@/lib/auth-context";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
+import {
+	fetchShiftAssignments,
+	type ShiftAssignmentStatus,
+} from "@/services/shift-assignment";
+
+/** Statuses that free the slot again — mirrors the backend's NON_STAFFING_STATUSES. */
+const NON_STAFFING_ASSIGNMENT_STATUSES: readonly ShiftAssignmentStatus[] = [
+	"cancelled",
+	"no_show",
+	"leave_approved",
+];
 
 interface RosterAssignDialogProps {
 	open: boolean;
@@ -34,8 +45,10 @@ export function RosterAssignDialog({
 	const { logout } = useAuth();
 	const { assign } = useRosterMutations();
 
-	// Same query keys as useRosterSlots / RosterAddShiftDialog, so this reads
-	// from the roster cache the page already populated.
+	// Same query keys as useRosterSlots, so this reads from the roster cache the
+	// page already populated. (It used to name RosterAddShiftDialog too — that
+	// component is gone: only an OUTLET posts shifts, so the agency portal has no
+	// add-shift surface to keep in step.)
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", fromDate, toDate],
 		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
@@ -60,13 +73,36 @@ export function RosterAssignDialog({
 		[outletsQuery.data],
 	);
 
+	// Staffing COUNTED from live assignments, never `shift.filled` — nothing in
+	// the backend increments that column, so it reads 0 on a full shift and this
+	// list offered shifts the API then refused. Same fix as the planning grid's
+	// assign sheet; the two must not disagree about what "open" means.
+	const assignmentsQuery = useQuery({
+		queryKey: ["roster", "assignments"],
+		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		staleTime: 30_000,
+		enabled: open,
+	});
+	const staffedByShift = useMemo(() => {
+		const map = new Map<string, number>();
+		for (const a of assignmentsQuery.data?.data ?? []) {
+			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
+			map.set(a.shiftId, (map.get(a.shiftId) ?? 0) + 1);
+		}
+		return map;
+	}, [assignmentsQuery.data]);
+
 	// Only shifts with remaining capacity; sealed shifts are locked.
 	const openShifts = useMemo(
 		() =>
 			(shiftsQuery.data?.data ?? [])
-				.filter((s) => s.status !== "sealed" && s.filled < s.quantity)
+				.filter(
+					(s) =>
+						s.status !== "sealed" &&
+						(staffedByShift.get(s.id) ?? 0) < s.quantity,
+				)
 				.sort((a, b) => a.shiftDate.localeCompare(b.shiftDate)),
-		[shiftsQuery.data],
+		[shiftsQuery.data, staffedByShift],
 	);
 	const prs = prsQuery.data?.data ?? [];
 
@@ -141,7 +177,8 @@ export function RosterAssignDialog({
 							const label = s.slot || s.eventName || "Shift";
 							return (
 								<option key={s.id} value={s.id}>
-									{outlet} · {s.shiftDate} · {label} · {s.filled}/{s.quantity}
+									{outlet} · {s.shiftDate} · {label} ·{" "}
+									{staffedByShift.get(s.id) ?? 0}/{s.quantity}
 								</option>
 							);
 						})}

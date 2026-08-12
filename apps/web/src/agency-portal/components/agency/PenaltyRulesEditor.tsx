@@ -1,9 +1,4 @@
-import {
-	type OutletPenaltyRules,
-	PR_PAY_CLASS_LABELS,
-	PR_PAY_CLASSES,
-	type PrPayClass,
-} from "@agency-portal/lib/pr-penalties";
+import type { AgencyPenaltyRules } from "@agency-portal/lib/pr-penalties";
 import { cn } from "@agency-portal/lib/utils";
 
 function NumInput({
@@ -64,44 +59,6 @@ function Field({
 			</div>
 			{children}
 		</div>
-	);
-}
-
-function ScopeChips({
-	value,
-	onToggle,
-	readOnly,
-}: {
-	value: PrPayClass[];
-	onToggle: (cls: PrPayClass) => void;
-	readOnly?: boolean;
-}) {
-	return (
-		<Field label="Applies to">
-			<div className="flex gap-1.5">
-				{PR_PAY_CLASSES.map((cls) => {
-					const on = value.includes(cls);
-					return (
-						<button
-							key={cls}
-							type="button"
-							disabled={readOnly}
-							onClick={() => !readOnly && onToggle(cls)}
-							className={cn(
-								"rounded-lg border px-2.5 py-1.5 text-xs font-semibold transition-colors",
-								on
-									? "border-[var(--iz-gold)] bg-[rgba(212,175,110,0.14)] text-[var(--iz-gold-l)]"
-									: "border-[var(--iz-line2)] text-[var(--iz-muted)]",
-								readOnly && "opacity-70",
-							)}
-						>
-							{on ? "✓ " : ""}
-							{PR_PAY_CLASS_LABELS[cls]}
-						</button>
-					);
-				})}
-			</div>
-		</Field>
 	);
 }
 
@@ -170,26 +127,15 @@ export function PenaltyRulesEditor({
 	onChange,
 	readOnly,
 }: {
-	rules: OutletPenaltyRules;
-	onChange: (next: OutletPenaltyRules) => void;
+	rules: AgencyPenaltyRules;
+	onChange: (next: AgencyPenaltyRules) => void;
 	readOnly?: boolean;
 }) {
-	const patch = <K extends keyof OutletPenaltyRules>(
+	const patch = <K extends keyof AgencyPenaltyRules>(
 		key: K,
-		partial: Partial<OutletPenaltyRules[K]>,
+		partial: Partial<AgencyPenaltyRules[K]>,
 	) => {
 		onChange({ ...rules, [key]: { ...rules[key], ...partial } });
-	};
-
-	const toggleScope = <K extends keyof OutletPenaltyRules>(
-		key: K,
-		cls: PrPayClass,
-	) => {
-		const current = rules[key].appliesTo;
-		const next = current.includes(cls)
-			? current.filter((c) => c !== cls)
-			: [...current, cls];
-		patch(key, { appliesTo: next } as Partial<OutletPenaltyRules[K]>);
 	};
 
 	return (
@@ -197,7 +143,7 @@ export function PenaltyRulesEditor({
 			<RuleRow
 				icon="📅"
 				title="Minimum shifts per week"
-				desc="Working fewer than this in a week triggers a penalty."
+				desc="Working fewer than this triggers a penalty — but only if you assigned at least this many."
 				enabled={rules.minShiftsPerWeek.enabled}
 				onToggleEnabled={() =>
 					patch("minShiftsPerWeek", {
@@ -206,11 +152,6 @@ export function PenaltyRulesEditor({
 				}
 				readOnly={readOnly}
 			>
-				<ScopeChips
-					value={rules.minShiftsPerWeek.appliesTo}
-					onToggle={(cls) => toggleScope("minShiftsPerWeek", cls)}
-					readOnly={readOnly}
-				/>
 				<Field label="Min / week">
 					<NumInput
 						value={rules.minShiftsPerWeek.minShiftsPerWeek}
@@ -239,11 +180,6 @@ export function PenaltyRulesEditor({
 				}
 				readOnly={readOnly}
 			>
-				<ScopeChips
-					value={rules.maxMcPerMonth.appliesTo}
-					onToggle={(cls) => toggleScope("maxMcPerMonth", cls)}
-					readOnly={readOnly}
-				/>
 				<Field label="Max / month">
 					<NumInput
 						value={rules.maxMcPerMonth.maxMcPerMonth}
@@ -272,11 +208,6 @@ export function PenaltyRulesEditor({
 				}
 				readOnly={readOnly}
 			>
-				<ScopeChips
-					value={rules.latePerWeek.appliesTo}
-					onToggle={(cls) => toggleScope("latePerWeek", cls)}
-					readOnly={readOnly}
-				/>
 				<Field label="Late / week">
 					<NumInput
 						value={rules.latePerWeek.maxLatePerWeek}
@@ -303,9 +234,78 @@ export function PenaltyRulesEditor({
 				</Field>
 			</RuleRow>
 
+			<RuleRow
+				icon="🚫"
+				title="Shift cancellation"
+				desc="Cancelling a booked shift costs a share of that shift's daily wage."
+				enabled={rules.cancellation.enabled}
+				onToggleEnabled={() =>
+					patch("cancellation", { enabled: !rules.cancellation.enabled })
+				}
+				readOnly={readOnly}
+			>
+				<Field label="Free cancel">
+					<NumInput
+						value={rules.cancellation.freeCancelHours}
+						onChange={(n) => patch("cancellation", { freeCancelHours: n })}
+						prefix="≥"
+						suffix="h before"
+						width="w-10"
+						readOnly={readOnly}
+					/>
+				</Field>
+				<Field label="Short notice">
+					<NumInput
+						value={rules.cancellation.shortNoticeHours}
+						onChange={(n) => patch("cancellation", { shortNoticeHours: n })}
+						prefix="≥"
+						suffix="h before"
+						width="w-10"
+						readOnly={readOnly}
+					/>
+				</Field>
+				<Field label="Short-notice charge">
+					<NumInput
+						value={rules.cancellation.shortNoticePct}
+						onChange={(n) => patch("cancellation", { shortNoticePct: n })}
+						suffix="% wages"
+						width="w-10"
+						readOnly={readOnly}
+					/>
+				</Field>
+				<Field label="Late charge">
+					<NumInput
+						value={rules.cancellation.lateCancelPct}
+						onChange={(n) => patch("cancellation", { lateCancelPct: n })}
+						suffix="% wages"
+						width="w-10"
+						readOnly={readOnly}
+					/>
+				</Field>
+			</RuleRow>
+
+			{/* The three bands spelled out, so the two hour fields above cannot be
+			    read as independent numbers — they are boundaries of one scale, and
+			    setting short notice above free cancel would silently erase a band. */}
 			<p className="iz-tiny text-[var(--iz-muted)]">
-				Fines apply per breach and deduct from the next payment voucher. Set a
-				fine to RM 0 for a warning only.
+				Cancelling ≥ {rules.cancellation.freeCancelHours}h before is free ·{" "}
+				{rules.cancellation.shortNoticeHours}–
+				{rules.cancellation.freeCancelHours}h costs{" "}
+				{rules.cancellation.shortNoticePct}% · under{" "}
+				{rules.cancellation.shortNoticeHours}h costs{" "}
+				{rules.cancellation.lateCancelPct}% of the shift's daily wage.
+			</p>
+			{rules.cancellation.shortNoticeHours >=
+				rules.cancellation.freeCancelHours && (
+				<p className="iz-tiny text-[var(--iz-red,#e5484d)]">
+					Short notice must be fewer hours than free cancel, or the{" "}
+					{rules.cancellation.shortNoticePct}% band never applies.
+				</p>
+			)}
+
+			<p className="iz-tiny text-[var(--iz-muted)]">
+				Every enabled rule applies to all PRs. Fines apply per breach and deduct
+				from the next payment voucher. Set a fine to RM 0 for a warning only.
 			</p>
 		</div>
 	);

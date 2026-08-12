@@ -3,7 +3,7 @@
  * rows. Status follows attendance stamps: On duty (checked in) / Complete
  * (checked out) / Scheduled|Pending (booked).
  */
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { C, F } from '../theme/theme';
 import {
@@ -19,7 +19,10 @@ import {
 import { Pill } from './ui';
 import { PhoneSheet } from './PhoneSheet';
 import {
-  CANCELLATION_RULE_SUMMARY,
+  DEFAULT_CANCELLATION_BANDS,
+  type CancellationBands,
+  cancellationBandsFrom,
+  cancellationRuleSummary,
   DAY_NAMES,
   MONTH_LABELS,
   MONTH_NAMES,
@@ -41,6 +44,7 @@ import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
 import {
   cancelMyShiftAssignment,
+  getMyPenaltyRules,
   requestMyShiftLeave,
   type ShiftAssignmentRecord,
 } from '../lib/api';
@@ -79,18 +83,39 @@ function shiftStartDate(shiftDate: string, slot: string | null): Date {
 }
 
 /**
- * Cancellation penalty (mirrors CANCELLATION_RULE_SUMMARY): 24h+ before → free,
- * 2–24h → −25%, <2h → −50% of the shift's daily wage, charged to the next PV.
+ * Cancellation penalty, computed from CANCELLATION_BANDS — the same numbers
+ * cancellationRuleSummary() renders.
+ *
+ * It previously carried its own literals under a comment claiming to mirror
+ * that summary, and the two had drifted: the summary advertised a 12h boundary
+ * while this charged against 2h. Deriving both from one object is what makes
+ * the claim true instead of aspirational.
  */
-function cancelPenalty(assignment: ShiftAssignmentRecord, now = new Date()): CancelPenalty {
+function cancelPenalty(
+  assignment: ShiftAssignmentRecord,
+  b: CancellationBands = DEFAULT_CANCELLATION_BANDS,
+  now = new Date(),
+): CancelPenalty {
   const dailyWage = Number(assignment.rate?.wagePerHour) || Number(assignment.payAmount) || 0;
   const hoursUntil =
     (shiftStartDate(assignment.shiftDate, assignment.slot).getTime() - now.getTime()) / 3_600_000;
-  if (hoursUntil >= 24) return { pct: 0, amount: 0, tierLabel: '24h+ before — no deduction' };
-  if (hoursUntil >= 2) {
-    return { pct: 25, amount: Math.round(dailyWage * 25) / 100, tierLabel: 'Short notice (2–24h) — 25% of daily wages' };
+  // A disabled rule is no cancellation charge at all — not 0% of the bands.
+  if (!b.enabled) return { pct: 0, amount: 0, tierLabel: 'No cancellation fee' };
+  if (hoursUntil >= b.freeCancelHours) {
+    return { pct: 0, amount: 0, tierLabel: `${b.freeCancelHours}h+ before — no deduction` };
   }
-  return { pct: 50, amount: Math.round(dailyWage * 50) / 100, tierLabel: 'Late cancel (<2h) — 50% of daily wages' };
+  if (hoursUntil >= b.shortNoticeHours) {
+    return {
+      pct: b.shortNoticePct,
+      amount: Math.round(dailyWage * b.shortNoticePct) / 100,
+      tierLabel: `Short notice (${b.shortNoticeHours}–${b.freeCancelHours}h) — ${b.shortNoticePct}% of daily wages`,
+    };
+  }
+  return {
+    pct: b.lateCancelPct,
+    amount: Math.round(dailyWage * b.lateCancelPct) / 100,
+    tierLabel: `Late cancel (<${b.shortNoticeHours}h) — ${b.lateCancelPct}% of daily wages`,
+  };
 }
 
 export function AgencySchedulePanel() {
@@ -100,6 +125,13 @@ export function AgencySchedulePanel() {
   const [viewMonth, setViewMonth] = useState(() => new Date(today[0], today[1] - 1, 1));
   const [blocked, setBlocked] = useState<string[]>([]);
   const [rulesOpen, setRulesOpen] = useState(false);
+  // The agency's cancellation bands. Seeded with the defaults rather than null
+  // so the Cancel button always shows a number — and they are the same numbers
+  // the app charged before this was configurable, so a slow fetch does not make
+  // the price jump once it lands.
+  const [cancelBands, setCancelBands] = useState<CancellationBands>(
+    DEFAULT_CANCELLATION_BANDS,
+  );
   const [cancelledIds, setCancelledIds] = useState<string[]>([]);
   // Cancel-shift confirmation (penalty + required reason → backend, agency notified).
   const [cancelTarget, setCancelTarget] = useState<
@@ -115,6 +147,24 @@ export function AgencySchedulePanel() {
   const [leavePhotos, setLeavePhotos] = useState<string[]>([]);
   const [leaveBusy, setLeaveBusy] = useState(false);
   const [leaveError, setLeaveError] = useState<string | null>(null);
+
+  // Load the agency's cancellation bands. A failure keeps the defaults rather
+  // than blanking the price: the PR still needs to see what cancelling costs,
+  // and the defaults are what the server would charge anyway.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    getMyPenaltyRules(token)
+      .then((rules) => {
+        if (!cancelled) setCancelBands(cancellationBandsFrom(rules));
+      })
+      .catch(() => {
+        /* keep DEFAULT_CANCELLATION_BANDS */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   const openLeave = (entry: TimetableEntry) => {
     // Demo rows have no live assignment to request leave on.
@@ -165,7 +215,7 @@ export function AgencySchedulePanel() {
     }
     setCancelReason('');
     setCancelError(null);
-    setCancelTarget({ entry, penalty: cancelPenalty(assignment) });
+    setCancelTarget({ entry, penalty: cancelPenalty(assignment, cancelBands) });
   };
 
   const confirmCancel = async () => {
@@ -307,7 +357,7 @@ export function AgencySchedulePanel() {
         </Pressable>
         {rulesOpen && (
           <View style={styles.rulesList}>
-            {CANCELLATION_RULE_SUMMARY.map((r) => (
+            {cancellationRuleSummary(cancelBands).map((r) => (
               <View key={r.label} style={styles.ruleRow}>
                 <Text style={styles.ruleWhen}>{r.label}</Text>
                 <Text
@@ -452,7 +502,7 @@ export function AgencySchedulePanel() {
                 <TimetableRow
                   key={entry.id}
                   entry={entry}
-                  penalty={assignment ? cancelPenalty(assignment) : null}
+                  penalty={assignment ? cancelPenalty(assignment, cancelBands) : null}
                   leavePending={assignment?.status === 'leave_pending'}
                   leaveRejected={
                     assignment?.status !== 'leave_pending' &&
@@ -510,7 +560,7 @@ export function AgencySchedulePanel() {
                   <AlertTriangle size={14} color={C.amber} />
                   <Text style={styles.rulesCardTitle}>CANCELLATION RULES</Text>
                 </View>
-                {CANCELLATION_RULE_SUMMARY.map((r) => (
+                {cancellationRuleSummary(cancelBands).map((r) => (
                   <View
                     key={r.label}
                     style={[
@@ -794,9 +844,14 @@ function TimetableRow({
         <View style={styles.actionRow}>
           {entry.canCancel ? (
             <Pressable onPress={onCancel} style={[styles.cancelBtn, styles.actionBtn]}>
-              <Text style={styles.cancelText}>
-                Cancel{penalty && penalty.amount > 0 ? ` (−${formatRM(penalty.amount)})` : ''}
+              <Text style={styles.cancelText} numberOfLines={1}>
+                Cancel
               </Text>
+              {penalty && penalty.amount > 0 ? (
+                <Text style={styles.cancelPenaltyText} numberOfLines={1}>
+                  −{formatRM(penalty.amount)}
+                </Text>
+              ) : null}
             </Pressable>
           ) : null}
           {entry.canLeave ? (
@@ -1058,20 +1113,32 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   actionRow: { marginTop: 12, flexDirection: 'row', gap: 8 },
-  actionBtn: { flex: 1, marginTop: 0 },
+  actionBtn: { flex: 1, minWidth: 0, marginTop: 0, minHeight: 46, justifyContent: 'center' },
   cancelBtn: {
     marginTop: 12,
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(240,138,138,0.4)',
     backgroundColor: 'rgba(240,138,138,0.08)',
   },
   cancelText: { fontFamily: F.sora, fontSize: 14, fontWeight: '700', color: C.red },
+  cancelPenaltyText: {
+    marginTop: 2,
+    fontFamily: F.manrope,
+    fontSize: 11,
+    fontWeight: '700',
+    color: C.red,
+    opacity: 0.85,
+  },
   leaveBtn: {
     alignItems: 'center',
-    paddingVertical: 10,
+    justifyContent: 'center',
+    paddingVertical: 8,
+    paddingHorizontal: 8,
     borderRadius: 10,
     borderWidth: 1,
     borderColor: 'rgba(232,198,106,0.4)',

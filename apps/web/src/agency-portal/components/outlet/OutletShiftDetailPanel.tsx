@@ -42,12 +42,12 @@ import {
 	shiftSpecialEventLabel,
 } from "@agency-portal/lib/outlet-demo";
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { shiftTierStaffingByPayTier } from "@agency-portal/lib/post-job-pay-tiers";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { trafficLevelForRatio } from "@agency-portal/lib/traffic-status";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import {
@@ -101,7 +101,6 @@ export function OutletShiftDetailPanel({
 	roster?: AgencyRosterSlot[];
 	agencyPrs?: AgencyManagedPR[];
 }) {
-	const outletSubRole = useStore((s) => s.outletSubRole);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const storeAgencyPRs = useStore((s) => s.agencyPRs);
 	const storeRoster = useStore((s) => s.agencyRoster);
@@ -129,10 +128,11 @@ export function OutletShiftDetailPanel({
 		}
 	};
 
-	const canLogSales = outletCan(outletSubRole, "logSales");
-	const canConfirm = outletCan(outletSubRole, "confirmShift");
-	// const canSeal = outletCan(outletSubRole, "sealShift");
-	const canStaff = outletCan(outletSubRole, "manageShiftStaffing");
+	const can = useOutletCan();
+	const canLogSales = can("logSales");
+	const canConfirm = can("confirmShift");
+	// const canSeal = can("sealShift");
+	const canStaff = can("manageShiftStaffing");
 
 	// const [sealOpen, setSealOpen] = useState(false);
 

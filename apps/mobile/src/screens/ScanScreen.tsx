@@ -30,6 +30,10 @@ import { useActiveShift } from '../lib/active-shift';
 import {
   commissionFor as rateCommission,
   drinkMenuFromAssignment,
+  effectiveUnitPriceRm,
+  happyHourDiscountPct,
+  isDrinkDiscountActive,
+  lineSalesRm,
   menuForScanCategory,
   receiptKindForItem,
   type MenuDrink,
@@ -38,7 +42,7 @@ import { usePrEarnings } from '../lib/pr-earnings';
 import { usePrNav, type ScanCategory, type ScanMode } from '../lib/pr-nav';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { captureReceiptPhoto, recognizeReceiptText } from '../lib/receipt-ocr';
-import { parseReceipt } from '../lib/receipt-parser';
+import { parseReceipt, type ParsedReceipt } from '../lib/receipt-parser';
 import {
   Camera,
   Check,
@@ -107,6 +111,13 @@ export function ScanScreen({
     const now = new Date();
     return [now.getFullYear(), now.getMonth() + 1, now.getDate()];
   }, [active?.shiftDate]);
+  /**
+   * The shift this receipt belongs to, as YYYY-MM-DD — the yardstick the parser
+   * measures a printed date against. A receipt is printed DURING the shift, so
+   * anything a week or more away was misread, and the parser drops it rather
+   * than filing the receipt into someone else's payroll week.
+   */
+  const shiftDateIso = useMemo(() => ymdToIso(...dateYmd), [dateYmd]);
 
   const [phase, setPhase] = useState<Phase>(() =>
     // A scan-mode edit is a RE-SCAN: it walks the normal camera → OCR flow
@@ -158,6 +169,13 @@ export function ScanScreen({
   // What OCR read off the paper (ORD0389) — sent to the server as orderNo.
   const [receiptNo, setReceiptNo] = useState<string | null>(null);
   const [receiptDate, setReceiptDate] = useState<string | null>(null);
+  /**
+   * A date the paper printed that was thrown away for sitting too far from this
+   * shift. Held separately from `receiptDate` so the screen can say what it saw
+   * — "no date" and "a date two months out" look identical otherwise, and only
+   * one of them is fixed by re-photographing that part of the paper.
+   */
+  const [dateRejected, setDateRejected] = useState<ParsedReceipt['dateRejected']>(null);
   const [receiptTime, setReceiptTime] = useState<string | null>(null);
   // The database-generated running number (RCP-000001) returned on save.
   const [serverReceiptNo, setServerReceiptNo] = useState<string | null>(null);
@@ -236,12 +254,24 @@ export function ScanScreen({
   const commissionForItem = (d: MenuDrink, sales: number) =>
     commissionFor(receiptKindForItem(d) === 'drinks' ? 'drinks' : 'tips', sales);
 
+  /**
+   * What the guest pays for this row — the outlet's happy-hour discount applied
+   * to drinks inside the window. EVERY price on this screen, shown or submitted,
+   * comes through here; a raw `d.priceRm * qty` anywhere would quote the PR one
+   * number and bill the voucher another.
+   */
+  const salesFor = (d: MenuDrink, qty: number) => lineSalesRm(d, qty, rate);
+  const unitPriceFor = (d: MenuDrink) => effectiveUnitPriceRm(d, rate);
+  /** Discount actually in force right now, for the banner and the struck-out prices. */
+  const discountActive = isDrinkDiscountActive(rate);
+  const discountPct = happyHourDiscountPct(rate);
+
   const menuTotal = categoryMenu.reduce(
-    (s, d) => s + d.priceRm * (drinkQtys[d.id] ?? 0),
+    (s, d) => s + salesFor(d, drinkQtys[d.id] ?? 0),
     0,
   );
   const menuCommission = categoryMenu.reduce(
-    (s, d) => s + commissionForItem(d, d.priceRm * (drinkQtys[d.id] ?? 0)),
+    (s, d) => s + commissionForItem(d, salesFor(d, drinkQtys[d.id] ?? 0)),
     0,
   );
 
@@ -251,10 +281,10 @@ export function ScanScreen({
   const drinkIncomplete = proofRequired && !hasItemAmount;
 
   const detected = categoryMenu.filter((d) => detectedIds.includes(d.id));
-  const detectedTotal = detected.reduce((s, d) => s + d.priceRm * (drinkQtys[d.id] ?? 0), 0);
+  const detectedTotal = detected.reduce((s, d) => s + salesFor(d, drinkQtys[d.id] ?? 0), 0);
   const detectedUnits = detected.reduce((s, d) => s + (drinkQtys[d.id] ?? 0), 0);
   const detectedCommission = detected.reduce(
-    (s, d) => s + commissionForItem(d, d.priceRm * (drinkQtys[d.id] ?? 0)),
+    (s, d) => s + commissionForItem(d, salesFor(d, drinkQtys[d.id] ?? 0)),
     0,
   );
 
@@ -331,7 +361,7 @@ export function ScanScreen({
       setPhase('manual');
       return;
     }
-    const parsed = parseReceipt(text, categoryMenu);
+    const parsed = parseReceipt(text, categoryMenu, { shiftDate: shiftDateIso });
     // MERGE with earlier passes: a rescan FILLS what's still missing and never
     // wipes a field an earlier shot already read — so the PR can scan the top
     // half (order no), then the bottom half (date + time), and it adds up.
@@ -341,6 +371,14 @@ export function ScanScreen({
     setReceiptNo(mergedOrderNo);
     setReceiptDate(mergedDate);
     setReceiptTime(mergedTime);
+    // Only carry a rejection while the date is still missing — once any pass
+    // reads a believable one there is nothing left to explain.
+    setDateRejected((prev) => (mergedDate ? null : (parsed.dateRejected ?? prev)));
+    const rejectedNote = mergedDate
+      ? ''
+      : parsed.dateRejected
+        ? ` It did read “${parsed.dateRejected.raw}” (${parsed.dateRejected.parsed}), but that is ${parsed.dateRejected.driftDays} days from this shift on ${shiftDateIso} — too far to be this receipt's date, so it was dropped rather than logged against the wrong week.`
+        : '';
     // Captured BEFORE the early returns below: a scan that found nothing is
     // exactly the one whose text needs looking at.
     setOcrLines(parsed.lines);
@@ -373,7 +411,7 @@ export function ScanScreen({
         .filter(Boolean)
         .join(' and ');
       setScanIssue(
-        `OCR couldn't read the receipt's ${missing} yet — get closer to that part of the paper (flat, no glare) and scan again. Fields already read are kept.`,
+        `OCR couldn't read the receipt's ${missing} yet — get closer to that part of the paper (flat, no glare) and scan again. Fields already read are kept.${rejectedNote}`,
       );
       setPhase('idle');
       return;
@@ -430,7 +468,9 @@ export function ScanScreen({
       .filter((d) => (drinkQtys[d.id] ?? 0) > 0)
       .map((d) => {
         const qty = drinkQtys[d.id] ?? 0;
-        const amt = d.priceRm * qty;
+        // The DISCOUNTED total — what the guest paid, which is what the outlet
+        // banked and what the PR's cut is a percentage of.
+        const amt = salesFor(d, qty);
         return {
           kind: receiptKindForItem(d),
           category: d.category,
@@ -481,7 +521,7 @@ export function ScanScreen({
           if (items.length === 0) throw new Error(`Set a ${itemNoun} quantity first.`);
           const [first, ...rest] = items;
           const firstQty = drinkQtys[first.id] ?? 0;
-          const firstAmt = first.priceRm * firstQty;
+          const firstAmt = salesFor(first, firstQty);
           await editLine(editId, {
             kind: receiptKindForItem(first),
             source: 'manual',
@@ -496,7 +536,7 @@ export function ScanScreen({
           // Any extra items the user added during the edit become new rows.
           for (const d of rest) {
             const qty = drinkQtys[d.id] ?? 0;
-            const amt = d.priceRm * qty;
+            const amt = salesFor(d, qty);
             await logLine({
               kind: receiptKindForItem(d),
               source: 'manual',
@@ -649,9 +689,12 @@ export function ScanScreen({
                       <View style={{ flex: 1 }}>
                         <Text style={styles.drinkName}>{d.name}</Text>
                         <Text style={styles.drinkUnit}>
-                          {formatRM(d.priceRm)} each
+                          {formatRM(unitPriceFor(d))} each
+                          {discountActive && d.category === 'drink'
+                            ? ` (was ${formatRM(d.priceRm)} · HH −${discountPct}%)`
+                            : ''}
                           {qty > 0
-                            ? ` · ${formatRM(d.priceRm)} × ${qty} = ${formatRM(d.priceRm * qty)}`
+                            ? ` · ${formatRM(unitPriceFor(d))} × ${qty} = ${formatRM(salesFor(d, qty))}`
                             : ''}
                         </Text>
                       </View>
@@ -726,6 +769,15 @@ export function ScanScreen({
                         <Text style={styles.ocrHead}>— OCR EXTRACTED —</Text>
                         <Text style={styles.ocrLine}>Order No: {receiptNo ?? '—'}</Text>
                         <Text style={styles.ocrLine}>Date: {receiptDate ?? '—'}</Text>
+                        {/* Why the date is blank when the paper clearly printed
+                            one — otherwise this reads as an OCR failure and the
+                            PR re-photographs a part that was never the problem. */}
+                        {!receiptDate && dateRejected && (
+                          <Text style={styles.ocrLineDropped}>
+                            ignored “{dateRejected.raw}” → {dateRejected.parsed} ·{' '}
+                            {dateRejected.driftDays} days from this shift ({shiftDateIso})
+                          </Text>
+                        )}
                         <Text style={styles.ocrLine}>Time: {receiptTime ?? '—'}</Text>
                         <Text style={styles.ocrLine}>Outlet: {outlet}</Text>
                         {ocrLines.length > 0 && (
@@ -768,7 +820,7 @@ export function ScanScreen({
                             <View style={{ flex: 1 }}>
                               <Text style={styles.drinkName}>{d.name}</Text>
                               <Text style={styles.drinkUnit}>
-                                {formatRM(d.priceRm)} each · OCR did not read this one
+                                {formatRM(unitPriceFor(d))} each · OCR did not read this one
                               </Text>
                             </View>
                             <Pressable
@@ -814,9 +866,12 @@ export function ScanScreen({
                         <View style={{ flex: 1 }}>
                           <Text style={styles.drinkName}>{d.name}</Text>
                           <Text style={styles.drinkUnit}>
-                            {formatRM(d.priceRm)} each
+                            {formatRM(unitPriceFor(d))} each
+                            {discountActive && d.category === 'drink'
+                              ? ` (was ${formatRM(d.priceRm)} · HH −${discountPct}%)`
+                              : ''}
                             {(drinkQtys[d.id] ?? 0) > 0
-                              ? ` · × ${drinkQtys[d.id]} = ${formatRM(d.priceRm * (drinkQtys[d.id] ?? 0))}`
+                              ? ` · × ${drinkQtys[d.id]} = ${formatRM(salesFor(d, drinkQtys[d.id] ?? 0))}`
                               : ''}
                           </Text>
                           {assumedQtyIds.has(d.id) && (
@@ -1169,6 +1224,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     lineHeight: 17,
     color: C.txt,
+  },
+  // A field the paper printed but the shift-date check threw out — muted, since
+  // it is an explanation of the blank above it, not a value.
+  ocrLineDropped: {
+    fontFamily: F.manrope,
+    fontSize: 10,
+    lineHeight: 15,
+    color: C.prMuted,
+    marginTop: 2,
   },
   cardMeta: { marginTop: 10, fontFamily: F.manrope, fontSize: 13, color: C.prMuted },
   primary: {

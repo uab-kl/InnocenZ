@@ -24,7 +24,7 @@ import {
 import type { PrUpcomingShift } from "@agency-portal/lib/pr-features";
 import {
 	CANCEL_RULES,
-	CANCELLATION_RULE_SUMMARY,
+	cancellationRuleSummary,
 	evaluateShiftCancellation,
 } from "@agency-portal/lib/pr-schedule-cancellation";
 import { useStore } from "@agency-portal/lib/store";
@@ -214,7 +214,7 @@ export function PrAgencySchedulePanel({
 				</button>
 				{rulesOpen && (
 					<ul className="iz-pr-schedule-rules-list">
-						{CANCELLATION_RULE_SUMMARY.map((r) => (
+						{cancellationRuleSummary().map((r) => (
 							<li key={r.label} className={`tone-${r.tone}`}>
 								<span className="rule-when">{r.label}</span>
 								<span className="rule-out">{r.outcome}</span>

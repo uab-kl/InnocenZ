@@ -10,7 +10,6 @@ import {
 	DEFAULT_OUTLET_WORKSPACE,
 	type OutletWorkspaceSettings,
 } from "@agency-portal/lib/outlet-demo";
-import type { PrPayClass } from "@agency-portal/lib/pr-penalties";
 import type {
 	OutletWorkspaceRecord,
 	SaveOutletWorkspaceInput,
@@ -63,53 +62,6 @@ export function workspaceSettingsFromBackend(
 			}
 		: { ...DEFAULT_OUTLET_WORKSPACE.commissionOnlyRates };
 
-	const penaltyRules = {
-		minShiftsPerWeek: {
-			...DEFAULT_OUTLET_WORKSPACE.penaltyRules.minShiftsPerWeek,
-		},
-		maxMcPerMonth: { ...DEFAULT_OUTLET_WORKSPACE.penaltyRules.maxMcPerMonth },
-		latePerWeek: { ...DEFAULT_OUTLET_WORKSPACE.penaltyRules.latePerWeek },
-	};
-	for (const row of record.penaltyRules) {
-		const appliesTo = row.appliesTo as PrPayClass[];
-		if (row.ruleType === "min_shifts_per_week") {
-			penaltyRules.minShiftsPerWeek = {
-				enabled: row.enabled,
-				appliesTo,
-				fineRm: num(row.fineRm),
-				minShiftsPerWeek:
-					row.minShiftsPerWeek ??
-					DEFAULT_OUTLET_WORKSPACE.penaltyRules.minShiftsPerWeek
-						.minShiftsPerWeek,
-			};
-		} else if (row.ruleType === "max_mc_per_month") {
-			penaltyRules.maxMcPerMonth = {
-				enabled: row.enabled,
-				appliesTo,
-				fineRm: num(row.fineRm),
-				maxMcPerMonth:
-					row.maxMcPerMonth ??
-					DEFAULT_OUTLET_WORKSPACE.penaltyRules.maxMcPerMonth.maxMcPerMonth,
-				finePerExcessRm: num(
-					row.finePerExcessRm,
-					DEFAULT_OUTLET_WORKSPACE.penaltyRules.maxMcPerMonth.finePerExcessRm,
-				),
-			};
-		} else if (row.ruleType === "late_per_week") {
-			penaltyRules.latePerWeek = {
-				enabled: row.enabled,
-				appliesTo,
-				fineRm: num(row.fineRm),
-				maxLatePerWeek:
-					row.maxLatePerWeek ??
-					DEFAULT_OUTLET_WORKSPACE.penaltyRules.latePerWeek.maxLatePerWeek,
-				graceMinutes:
-					row.graceMinutes ??
-					DEFAULT_OUTLET_WORKSPACE.penaltyRules.latePerWeek.graceMinutes,
-			};
-		}
-	}
-
 	const drinkMenu =
 		record.drinkMenu.length > 0
 			? [...record.drinkMenu]
@@ -144,7 +96,6 @@ export function workspaceSettingsFromBackend(
 		happyHourStart: record.happyHourStart,
 		happyHourEnd: record.happyHourEnd,
 		happyHourDrinkDiscountPct: record.happyHourDrinkDiscountPct,
-		penaltyRules,
 	};
 }
 
@@ -196,30 +147,5 @@ export function saveInputFromWorkspaceSettings(
 				d.category === "drink" ? ("drink" as const) : ("service" as const),
 			sortOrder: i,
 		})),
-		penaltyRules: [
-			{
-				ruleType: "min_shifts_per_week" as const,
-				enabled: ws.penaltyRules.minShiftsPerWeek.enabled,
-				appliesTo: ws.penaltyRules.minShiftsPerWeek.appliesTo,
-				fineRm: ws.penaltyRules.minShiftsPerWeek.fineRm,
-				minShiftsPerWeek: ws.penaltyRules.minShiftsPerWeek.minShiftsPerWeek,
-			},
-			{
-				ruleType: "max_mc_per_month" as const,
-				enabled: ws.penaltyRules.maxMcPerMonth.enabled,
-				appliesTo: ws.penaltyRules.maxMcPerMonth.appliesTo,
-				fineRm: ws.penaltyRules.maxMcPerMonth.fineRm,
-				maxMcPerMonth: ws.penaltyRules.maxMcPerMonth.maxMcPerMonth,
-				finePerExcessRm: ws.penaltyRules.maxMcPerMonth.finePerExcessRm,
-			},
-			{
-				ruleType: "late_per_week" as const,
-				enabled: ws.penaltyRules.latePerWeek.enabled,
-				appliesTo: ws.penaltyRules.latePerWeek.appliesTo,
-				fineRm: ws.penaltyRules.latePerWeek.fineRm,
-				maxLatePerWeek: ws.penaltyRules.latePerWeek.maxLatePerWeek,
-				graceMinutes: ws.penaltyRules.latePerWeek.graceMinutes,
-			},
-		],
 	};
 }

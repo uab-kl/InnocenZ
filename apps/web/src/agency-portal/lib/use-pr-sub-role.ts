@@ -1,6 +1,7 @@
 import type { PrSubRole } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
 import { useLayoutEffect, useState } from "react";
+import { readTabScoped } from "@/lib/auth/tab-scoped-storage";
 
 const STORE_KEY = "innocenz-store";
 const SESSION_ROLE_KEY = "innocenz-pr-sub-role";
@@ -17,7 +18,10 @@ export function readPersistedPrSubRole(): PrSubRole | null {
 		const fromSession = parsePrSubRole(sessionRole);
 		if (fromSession) return fromSession;
 
-		const raw = localStorage.getItem(STORE_KEY);
+		// The persist blob is tab-scoped now (sessionStorage, seeded once from
+		// localStorage) — read it through the same accessor the store writes with,
+		// or this falls back to another tab's snapshot.
+		const raw = readTabScoped(STORE_KEY);
 		if (!raw) return null;
 		const parsed = JSON.parse(raw) as {
 			state?: { prSubRole?: unknown };

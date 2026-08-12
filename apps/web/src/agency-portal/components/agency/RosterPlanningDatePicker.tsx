@@ -1,8 +1,8 @@
 import { Calendar as CalendarUi } from "@agency-portal/components/ui/calendar";
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
 import {
-	mondayOfWeek,
 	parseLocalIso,
+	rosterWeekStart,
 	weekRangeLabel,
 } from "@agency-portal/lib/roster-week-plan";
 import { cn } from "@agency-portal/lib/utils";
@@ -24,7 +24,7 @@ function isoFromDate(date: Date) {
 
 function isInPlanningWeek(date: Date, anchorIso: string): boolean {
 	if (!anchorIso) return false;
-	const weekStart = parseLocalIso(mondayOfWeek(anchorIso));
+	const weekStart = parseLocalIso(rosterWeekStart(anchorIso));
 	const weekEnd = addDays(weekStart, 6);
 	const day = new Date(date.getFullYear(), date.getMonth(), date.getDate());
 	return day >= weekStart && day <= weekEnd;
@@ -46,7 +46,7 @@ export function RosterPlanningDatePicker({
 	placeholder?: string;
 	allowClear?: boolean;
 	hint?: string;
-	/** When true, clicking any day selects Mon–Sun and highlights the full week. */
+	/** When true, clicking any day selects Sun–Sat and highlights the full week. */
 	weekly?: boolean;
 	className?: string;
 }) {
@@ -56,7 +56,7 @@ export function RosterPlanningDatePicker({
 	const rosterDateSet = new Set(rosterDates);
 	const label = value
 		? weekly
-			? weekRangeLabel(mondayOfWeek(value))
+			? weekRangeLabel(rosterWeekStart(value))
 			: fmtDateLabelFromIso(value)
 		: placeholder;
 
@@ -130,9 +130,11 @@ export function RosterPlanningDatePicker({
 						weekly && "iz-roster-planning-week-cal",
 					)}
 				>
+					{/* Always Sunday-first: with a Monday-first grid the highlighted
+					    Sun–Sat band would wrap across two of its rows. */}
 					<CalendarUi
 						mode="single"
-						weekStartsOn={weekly ? 1 : 0}
+						weekStartsOn={0}
 						showOutsideDays
 						selected={selected}
 						defaultMonth={

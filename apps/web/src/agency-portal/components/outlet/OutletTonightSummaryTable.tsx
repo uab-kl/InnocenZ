@@ -7,8 +7,9 @@ import {
 	typicalDrinkPrice,
 } from "@agency-portal/lib/outlet-demo";
 import type { OutletTonightFloorTotals } from "@agency-portal/lib/outlet-financial-sync";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
+import type { OutletSubRole } from "@agency-portal/lib/outlet-rbac";
 import type { ShiftRequest } from "@agency-portal/lib/store";
+import { useOutletCanFor } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 
@@ -20,16 +21,15 @@ export function OutletTonightSummaryTable({
 	variant = "standalone",
 }: {
 	floorTotals: OutletTonightFloorTotals;
-	outletSubRole: Parameters<typeof outletCan>[0];
+	outletSubRole: OutletSubRole | null;
 	drinkMenu?: OutletDrinkPrice[];
 	shift?: ShiftRequest;
 	/** standalone = legacy; embedded = inside expanded live sales; collapsed = live sales header when closed */
 	variant?: "standalone" | "embedded" | "collapsed";
 }) {
 	const grandTotal = floorTotals.totalSalesRm;
-	const canViewReport =
-		outletCan(outletSubRole, "viewBilling") ||
-		outletCan(outletSubRole, "viewSalesDashboard");
+	const can = useOutletCanFor(outletSubRole);
+	const canViewReport = can("viewBilling") || can("viewSalesDashboard");
 	const menu = shift ? effectiveShiftDrinkMenu(shift, drinkMenu) : drinkMenu;
 	const typicalPerDrink = typicalDrinkPrice(menu);
 	const drinksLabel =

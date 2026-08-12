@@ -52,7 +52,16 @@ export function prPhotoSrc(ref: string | null | undefined): string | null {
 	if (
 		/^https?:\/\//i.test(ref) ||
 		ref.startsWith("data:") ||
+		// EVERY R2 key prefix `apiAssetUrl` knows, not just the PR one. This listed
+		// `user/` alone while apiAssetUrl has always handled `outlet/` and `agency/`
+		// as well, so an outlet logo — `outlet/<slug>-<uuid>/logo/<file>.png` — fell
+		// through to publicAssetPath and came out as
+		// `http://localhost:3000/outlet/…`, a 404 on the web host. A gate NARROWER
+		// than the resolver behind it silently routes to the wrong owner, which is
+		// the one mistake the comment above this function is about.
 		ref.startsWith("user/") ||
+		ref.startsWith("outlet/") ||
+		ref.startsWith("agency/") ||
 		ref.startsWith("/img/") ||
 		ref.startsWith("img/")
 	) {

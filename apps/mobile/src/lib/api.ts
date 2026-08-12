@@ -828,6 +828,15 @@ export type ShiftAssignmentRate = {
   /** 'HH:MM' or '' when the outlet set no happy-hour window. */
   happyHourStart: string;
   happyHourEnd: string;
+  /**
+   * % off menu drink prices inside the window — what the GUEST saves, not what
+   * the PR earns. 0 when the outlet set none.
+   *
+   * Compare `happyHourDrinkPct` directly above: one word apart, opposite sides
+   * of the same sale. Read it only through `happyHourDiscountPct()` in
+   * `pr-rate.ts`, which tolerates a backend too old to send it.
+   */
+  happyHourDrinkDiscountPct: number;
   overridden: boolean;
 };
 
@@ -1035,6 +1044,92 @@ export function fetchMyShiftAssignments(accessToken: string): Promise<ShiftAssig
 }
 
 /**
+ * One row of the caller's agency's penalty policy. Only the `cancellation` row
+ * matters to this app — it prices the Cancel button — but the endpoint returns
+ * the whole set, because a PR is entitled to see every rule they are charged by.
+ */
+export type PenaltyRuleRecord = {
+  id: string;
+  agencyId: string;
+  ruleType: 'min_shifts_per_week' | 'max_mc_per_month' | 'late_per_week' | 'cancellation';
+  enabled: boolean;
+  fineRm: string;
+  minShiftsPerWeek: number | null;
+  maxMcPerMonth: number | null;
+  finePerExcessRm: string | null;
+  maxLatePerWeek: number | null;
+  graceMinutes: number | null;
+  freeCancelHours: number | null;
+  shortNoticeHours: number | null;
+  shortNoticePct: number | null;
+  lateCancelPct: number | null;
+};
+
+/**
+ * The rules THIS PR is charged by, from their own agency.
+ *
+ * Takes no agency id — the backend derives it from the caller's membership.
+ * The agency-side route is scoped to owner/finance, so a PR cannot use it, and
+ * widening that one would have let any PR read any agency's fine schedule.
+ */
+export function getMyPenaltyRules(accessToken: string): Promise<PenaltyRuleRecord[]> {
+  return request<PenaltyRuleRecord[]>('/pr/mine/penalty-rules', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/** One weekly penalty the agency has SEALED against this PR. */
+export type MyPenaltyCharge = {
+  id: string;
+  ruleType: string;
+  weekStart: string;
+  weekEnd: string;
+  fineRm: string;
+  detail: string;
+  /** null = accepted as owed, not yet taken off a voucher. */
+  chargedAt: string | null;
+};
+
+/** One sealed cancellation fee on this PR's own shift. */
+export type MyCancelFee = {
+  assignmentId: string;
+  shiftDate: string | null;
+  slot: string | null;
+  outletName: string | null;
+  feeRm: string | null;
+  feePct: number | null;
+  noticeHours: string | null;
+  chargedAt: string | null;
+};
+
+export type MyPenaltiesWeek = {
+  penalties: MyPenaltyCharge[];
+  cancellations: MyCancelFee[];
+  penaltiesRm: string;
+  cancellationsRm: string;
+  totalRm: string;
+  count: number;
+};
+
+/**
+ * What this week actually cost this PR in penalties.
+ *
+ * SEALED charges only — never the agency's live proposals. A proposal is a
+ * figure nobody has accepted and may never charge; showing it here would tell
+ * someone they had lost money they will keep.
+ */
+export function getMyPenalties(
+  accessToken: string,
+  weekStart: string,
+  weekEnd: string,
+): Promise<MyPenaltiesWeek> {
+  return request<MyPenaltiesWeek>(
+    `/pr/mine/penalties?weekStart=${weekStart}&weekEnd=${weekEnd}`,
+    { headers: { Authorization: `Bearer ${accessToken}` } },
+  );
+}
+
+/**
  * Stamp check-in on one of this PR's own assignments (Check-In screen). The
  * backend sets check_in_at server-side and verifies the assignment is the
  * caller's, so the client sends only the assignment id and — when the phone
@@ -1191,9 +1286,32 @@ export function requestMyShiftLeave(
 export type PrReceiptKind = 'wages' | 'drinks' | 'tips' | 'others';
 export type PrReceiptSource = 'scan' | 'manual' | 'checkin';
 
+/**
+ * The server's fine-grained classification of a line — `payment_voucher_line.component`.
+ *
+ * Strictly narrower than `PrReceiptKind`: `ot`, `deduction` and `other` all
+ * collapse into the single PR-facing bucket 'others'. Read THIS, never the sign
+ * of `commission`, when the difference matters — a negative amount happens to
+ * mean a deduction today only because nothing else writes one.
+ */
+export type PrLineComponent =
+  | 'wages'
+  | 'drink_commission'
+  | 'tip_commission'
+  | 'ot'
+  | 'deduction'
+  | 'other';
+
 export type PrReceiptLine = {
   id: string;
   kind: PrReceiptKind;
+  /**
+   * The fine-grained component behind `kind`. Optional so the app keeps working
+   * against a backend that has not restarted yet — absent means the grid cannot
+   * tell overtime from a fine and keeps both in Others, exactly as it did
+   * before. Null is a legacy row the server could not classify at all.
+   */
+  component?: PrLineComponent | null;
   source: PrReceiptSource;
   item: string;
   quantity: number;

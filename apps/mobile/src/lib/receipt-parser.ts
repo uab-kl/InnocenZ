@@ -13,7 +13,23 @@
 import type { MenuDrink } from './pr-rate';
 
 // 1. THE DATE — matches things shaped like 23/07/26, 23-07-2026 or 2026-07-23.
-const DATE_RE = /(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})|(\d{4}-\d{2}-\d{2})/;
+//    GLOBAL on purpose: the first date-shaped token on the paper is not
+//    necessarily the receipt's date (a promo expiry, a printed footer, a table
+//    code that happens to look like one), so every candidate is collected and
+//    the one nearest the shift wins. See `findReceiptDate`.
+const DATE_RE = /(\d{1,2}[\/\-.]\d{1,2}[\/\-.]\d{2,4})|(\d{4}-\d{2}-\d{2})/g;
+
+/**
+ * How far a printed date may sit from the shift's own date before it is junk.
+ *
+ * A receipt is printed DURING the shift, so the true drift is 0 — or 1 for an
+ * overnight shift that runs past midnight. Seven days is deliberately loose: it
+ * still lets an odd but plausible read through while catching the failure this
+ * exists for — all 12 receipts carrying a printed date had read 2026-06-16, two
+ * months from any of their shifts, and one was filed into a June payroll week
+ * because it had no lines to date it instead.
+ */
+export const RECEIPT_DATE_MAX_DRIFT_DAYS = 7;
 
 // 2. THE ORDER NUMBER — the code after "Order No." / "Receipt #" etc. The
 //    capture MUST contain a digit (so "RE-ORDER\nTable" can never win) and the
@@ -110,6 +126,12 @@ const LEADING_QTY_NOSPACE_RE = /^(\d{1,2})(?=[a-z])/i;
 export type ParsedReceipt = {
   /** Receipt date normalised to YYYY-MM-DD, or null when unreadable. */
   date: string | null;
+  /**
+   * Set when a date WAS printed and read but was too far from the shift to be
+   * believable — so the screen can distinguish "unreadable" from "read, and
+   * wrong", which need different things from the PR.
+   */
+  dateRejected: ReceiptDateRead['rejected'];
   /** Receipt time normalised to 24h HH:MM, or null when unreadable. */
   time: string | null;
   /** Order / receipt number, or null when unreadable. */
@@ -351,31 +373,163 @@ function qtyFromLine(
   return { qty: 1, read: false };
 }
 
+/**
+ * YYYY-MM-DD → UTC milliseconds, or null if that day does not exist.
+ *
+ * The round-trip is the calendar check: 2026-02-31 builds a Date that reports
+ * March 3, so the fields come back different and it is rejected. Plain range
+ * tests (`d <= 31`) accept it.
+ */
+function isoToUtcMs(iso: string): number | null {
+  const parts = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!parts) return null;
+  const [y, m, d] = [Number(parts[1]), Number(parts[2]), Number(parts[3])];
+  const ms = Date.UTC(y, m - 1, d);
+  const back = new Date(ms);
+  const real =
+    back.getUTCFullYear() === y && back.getUTCMonth() + 1 === m && back.getUTCDate() === d;
+  return real ? ms : null;
+}
+
+const MS_PER_DAY = 86_400_000;
+
+/** Whole days between two YYYY-MM-DD days, or null if either is unreadable. */
+export function daysBetweenIso(a: string, b: string): number | null {
+  const [ma, mb] = [isoToUtcMs(a), isoToUtcMs(b)];
+  if (ma === null || mb === null) return null;
+  return Math.round(Math.abs(ma - mb) / MS_PER_DAY);
+}
+
+function pad(n: number): string {
+  return String(n).padStart(2, '0');
+}
+
 /** dd/mm/yy(yy) or yyyy-mm-dd → YYYY-MM-DD, or null when nonsense. */
 export function normalizeReceiptDate(raw: string): string | null {
-  const iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(raw);
-  if (iso) return raw;
-  const dmy = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(raw);
-  if (!dmy) return null;
-  const d = Number(dmy[1]);
-  const m = Number(dmy[2]);
-  let y = Number(dmy[3]);
-  if (y < 100) y += 2000;
-  if (m < 1 || m > 12 || d < 1 || d > 31) return null;
-  return `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  return readReceiptDateCandidates(raw)[0] ?? null;
+}
+
+/**
+ * Every way this token could legitimately be read, best guess first.
+ *
+ * Malaysian receipts print D/M/Y, so that stays the first reading and the only
+ * one `normalizeReceiptDate` returns. But a receipt whose parts are BOTH ≤ 12
+ * ("06/07/26") is genuinely ambiguous, and reading it D/M/Y when the printer
+ * meant M/D/Y is silent — no error, just a date a month out. The second reading
+ * is offered so a caller holding the shift date can tell which one is real;
+ * without that context nothing changes, because the first reading still wins.
+ */
+export function readReceiptDateCandidates(raw: string): string[] {
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return isoToUtcMs(raw) ? [raw] : [];
+
+  const parts = /^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})$/.exec(raw);
+  if (!parts) return [];
+  const first = Number(parts[1]);
+  const second = Number(parts[2]);
+  let year = Number(parts[3]);
+  if (year < 100) year += 2000;
+
+  const out: string[] = [];
+  for (const [d, m] of [
+    [first, second], // D/M/Y — the local convention, always preferred
+    [second, first], // M/D/Y — only reachable when a caller can disambiguate
+  ]) {
+    if (m < 1 || m > 12 || d < 1 || d > 31) continue;
+    const iso = `${year}-${pad(m)}-${pad(d)}`;
+    if (isoToUtcMs(iso) === null) continue;
+    if (!out.includes(iso)) out.push(iso);
+  }
+  return out;
+}
+
+export type ReceiptDateRead = {
+  /** The believable date, or null when nothing on the paper was believable. */
+  date: string | null;
+  /**
+   * A date the paper really did print, dropped because it sits too far from the
+   * shift to be this receipt's date. Kept so the screen can say WHAT it threw
+   * away and why — "couldn't read the date" is a different problem from "read a
+   * date two months out", and telling the PR to re-photograph fixes only one.
+   */
+  rejected: { raw: string; parsed: string; driftDays: number } | null;
+};
+
+/**
+ * Read the receipt's date, checked against the shift it belongs to.
+ *
+ * Without `shiftDate` this is the old behaviour exactly: first date-shaped
+ * token, read D/M/Y. With one, every candidate is scored by its distance from
+ * the shift and the nearest within `maxDriftDays` wins — so a stray date
+ * elsewhere on the paper loses to the real one, and a receipt whose only date is
+ * months away yields null rather than a confidently wrong day.
+ *
+ * Ties go to the D/M/Y reading: the swapped reading can only win by being
+ * strictly closer to the shift, which is the one situation where it is evidence
+ * rather than a guess.
+ */
+export function findReceiptDate(
+  text: string,
+  shiftDate?: string | null,
+  maxDriftDays: number = RECEIPT_DATE_MAX_DRIFT_DAYS,
+): ReceiptDateRead {
+  DATE_RE.lastIndex = 0;
+  const raws: string[] = [];
+  let hit: RegExpExecArray | null;
+  while ((hit = DATE_RE.exec(text)) !== null) {
+    if (!raws.includes(hit[0])) raws.push(hit[0]);
+  }
+  if (raws.length === 0) return { date: null, rejected: null };
+
+  const anchor = shiftDate && isoToUtcMs(shiftDate) !== null ? shiftDate : null;
+  if (!anchor) {
+    for (const raw of raws) {
+      const first = readReceiptDateCandidates(raw)[0];
+      if (first) return { date: first, rejected: null };
+    }
+    return { date: null, rejected: null };
+  }
+
+  let best: { raw: string; parsed: string; driftDays: number; rank: number } | null = null;
+  for (const raw of raws) {
+    const candidates = readReceiptDateCandidates(raw);
+    for (let rank = 0; rank < candidates.length; rank++) {
+      const parsed = candidates[rank];
+      const driftDays = daysBetweenIso(parsed, anchor);
+      if (driftDays === null) continue;
+      // Nearest wins; the D/M/Y reading (rank 0) takes every tie.
+      const worse =
+        best !== null &&
+        (driftDays > best.driftDays || (driftDays === best.driftDays && rank >= best.rank));
+      if (worse) continue;
+      best = { raw, parsed, driftDays, rank };
+    }
+  }
+  if (best === null) return { date: null, rejected: null };
+
+  return best.driftDays <= maxDriftDays
+    ? { date: best.parsed, rejected: null }
+    : { date: null, rejected: { raw: best.raw, parsed: best.parsed, driftDays: best.driftDays } };
 }
 
 /**
  * The whole job in one call: OCR text + this outlet's menu (already sliced to
  * the scan category) → date, order number, and the matched menu items.
+ *
+ * Pass `shiftDate` whenever the caller knows which shift the receipt belongs to
+ * (the scan screen always does). It is the only thing that can tell a real
+ * printed date from a plausible misread — see `findReceiptDate`.
  */
-export function parseReceipt(text: string, menu: MenuDrink[]): ParsedReceipt {
+export function parseReceipt(
+  text: string,
+  menu: MenuDrink[],
+  opts?: { shiftDate?: string | null; maxDriftDays?: number },
+): ParsedReceipt {
   const lines = text
     .split(/\r?\n/)
     .map((l) => l.trim())
     .filter(Boolean);
 
-  const dateRaw = DATE_RE.exec(text)?.[0] ?? null;
+  const dateRead = findReceiptDate(text, opts?.shiftDate ?? null, opts?.maxDriftDays);
   const orderNo = findOrderNo(text);
 
   const byId = new Map<string, ReceiptMatch>();
@@ -409,7 +563,8 @@ export function parseReceipt(text: string, menu: MenuDrink[]): ParsedReceipt {
   }
 
   return {
-    date: dateRaw ? normalizeReceiptDate(dateRaw) : null,
+    date: dateRead.date,
+    dateRejected: dateRead.rejected,
     time: findReceiptTime(text),
     orderNo,
     matches: [...byId.values()],

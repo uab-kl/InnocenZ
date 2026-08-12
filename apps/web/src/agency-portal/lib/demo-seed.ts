@@ -84,6 +84,7 @@ import {
 	SEED_PR_SWAP_REQUESTS,
 	SEED_UPCOMING_SHIFTS,
 } from "@agency-portal/lib/pr-features";
+import { normalizePenaltyRules } from "@agency-portal/lib/pr-penalties";
 import { DEFAULT_NOTIFICATION_PREFS } from "@agency-portal/lib/push-notifications";
 import {
 	DEMO_RECONCILIATION_WEEK,
@@ -1448,6 +1449,8 @@ export function buildDemoStoreReset() {
 		pvs: [...DEMO_PVS],
 		walletBalance: 1240,
 		outletWorkspace: { ...DEFAULT_OUTLET_WORKSPACE },
+		// Agency-owned since 0113 — deliberately NOT inside outletWorkspace.
+		agencyPenaltyRules: normalizePenaltyRules(undefined),
 		outletSettings: { ...DEFAULT_OUTLET_SETTINGS },
 		outletOwner: { ...DEFAULT_OUTLET_OWNER },
 		outletFinanceHead: { ...DEFAULT_OUTLET_FINANCE_HEAD },
@@ -1557,6 +1560,8 @@ function explicitBlankSlices() {
 		// BLANK_* — not DEFAULT_* (Velvet/Atlas). Real logins must never show
 		// fixture names, emails, logos, or drink menus.
 		outletWorkspace: { ...BLANK_OUTLET_WORKSPACE },
+		// A real login must never inherit a demo agency's fine schedule.
+		agencyPenaltyRules: normalizePenaltyRules(undefined),
 		outletSettings: { ...BLANK_OUTLET_SETTINGS },
 		outletOwner: { ...BLANK_OUTLET_OWNER },
 		outletFinanceHead: { ...BLANK_OUTLET_FINANCE_HEAD },

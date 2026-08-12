@@ -67,24 +67,33 @@ function AgencyLayout() {
 					if (identity) saveAgencyIdentity(identity);
 				}
 				if (identity) {
-					setOrgStatus(identity.agencyStatus);
-					void import("@agency-portal/lib/agency-demo").then(
-						({ BLANK_AGENCY_OWNER }) => {
-							useStore.setState((st) => ({
-								activeAgencyId: identity.agencyId,
-								agencySubRole: identity.subRole,
-								agencyOwner: {
-									...BLANK_AGENCY_OWNER,
-									orgName: identity.orgName,
-									email: st.agencyOwner.email,
-									ownerName: st.agencyOwner.ownerName,
-									accountActivated: identity.agencyStatus === "active",
-								},
-							}));
-						},
+					const resolved = identity;
+					setOrgStatus(resolved.agencyStatus);
+					// AWAITED, not fire-and-forget: `setMounted(true)` below opens the
+					// gate, and a sub-role applied after that first paint means the
+					// screen renders once against whatever was in memory. That window
+					// is how an owner saw the finance "Access restricted" card.
+					const { BLANK_AGENCY_OWNER } = await import(
+						"@agency-portal/lib/agency-demo"
 					);
+					if (cancelled) return;
+					useStore.setState((st) => ({
+						activeAgencyId: resolved.agencyId,
+						agencySubRole: resolved.subRole,
+						agencyOwner: {
+							...BLANK_AGENCY_OWNER,
+							orgName: resolved.orgName,
+							email: st.agencyOwner.email,
+							ownerName: st.agencyOwner.ownerName,
+							accountActivated: resolved.agencyStatus === "active",
+						},
+					}));
 				} else {
+					// An unresolvable identity is not permission to keep the last one.
+					// Clearing drops the console to the default lane instead of leaving
+					// a sub-role that outlived the session it was derived from.
 					setOrgStatus(null);
+					useStore.setState({ agencySubRole: null });
 				}
 			} else {
 				setOrgStatus(null);

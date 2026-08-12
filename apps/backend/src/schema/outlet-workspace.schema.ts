@@ -1,10 +1,5 @@
 import { z } from 'zod';
-import {
-  penaltyRuleTypeValues,
-  tierRateKindValues,
-} from '@/features/outlet-workspace/outlet-workspace.model.js';
-
-const payClass = z.enum(['basic', 'commissionOnly']);
+import { tierRateKindValues } from '@/features/outlet-workspace/outlet-workspace.model.js';
 
 export const TierRateSchema = z.object({
   kind: z.enum(tierRateKindValues).default('tier'),
@@ -29,18 +24,6 @@ export const DrinkMenuItemSchema = z.object({
   sortOrder: z.coerce.number().int().default(0),
 });
 
-export const PenaltyRuleSchema = z.object({
-  ruleType: z.enum(penaltyRuleTypeValues),
-  enabled: z.boolean().default(true),
-  appliesTo: z.array(payClass).default([]),
-  fineRm: z.coerce.number().default(0),
-  minShiftsPerWeek: z.coerce.number().int().optional().nullable(),
-  maxMcPerMonth: z.coerce.number().int().optional().nullable(),
-  finePerExcessRm: z.coerce.number().optional().nullable(),
-  maxLatePerWeek: z.coerce.number().int().optional().nullable(),
-  graceMinutes: z.coerce.number().int().optional().nullable(),
-});
-
 export const UpsertOutletWorkspaceSchema = z.object({
   basePayPerHour: z.coerce.number().default(0),
   drinkPct: z.coerce.number().default(0),
@@ -52,7 +35,6 @@ export const UpsertOutletWorkspaceSchema = z.object({
   happyHourDrinkDiscountPct: z.coerce.number().int().default(0),
   tierRates: z.array(TierRateSchema).default([]),
   drinkMenu: z.array(DrinkMenuItemSchema).default([]),
-  penaltyRules: z.array(PenaltyRuleSchema).default([]),
 });
 
 export type UpsertOutletWorkspaceInput = z.infer<

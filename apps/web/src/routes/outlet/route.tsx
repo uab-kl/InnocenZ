@@ -67,27 +67,32 @@ function OutletLayout() {
 					if (identity) saveOutletIdentity(identity);
 				}
 				if (identity) {
-					setOrgStatus(identity.outletStatus);
-					useStore.getState().setOutletSubRole(identity.subRole);
-					void import("@agency-portal/lib/outlet-demo").then(
-						({ BLANK_OUTLET_OWNER }) => {
-							useStore.setState((st) => ({
-								outletOwner: {
-									...BLANK_OUTLET_OWNER,
-									orgName: identity.outletName,
-									email: st.outletOwner.email,
-									ownerName: st.outletOwner.ownerName,
-									accountActivated: identity.outletStatus === "active",
-								},
-								outletWorkspace: {
-									...st.outletWorkspace,
-									outletName: identity.outletName,
-								},
-							}));
-						},
+					const resolved = identity;
+					setOrgStatus(resolved.outletStatus);
+					useStore.getState().setOutletSubRole(resolved.subRole);
+					// AWAITED, not fire-and-forget — `setMounted(true)` below opens the
+					// gate, so anything applied after it renders one frame late.
+					const { BLANK_OUTLET_OWNER } = await import(
+						"@agency-portal/lib/outlet-demo"
 					);
+					if (cancelled) return;
+					useStore.setState((st) => ({
+						outletOwner: {
+							...BLANK_OUTLET_OWNER,
+							orgName: resolved.outletName,
+							email: st.outletOwner.email,
+							ownerName: st.outletOwner.ownerName,
+							accountActivated: resolved.outletStatus === "active",
+						},
+						outletWorkspace: {
+							...st.outletWorkspace,
+							outletName: resolved.outletName,
+						},
+					}));
 				} else {
+					// An unresolvable identity is not permission to keep the last one.
 					setOrgStatus(null);
+					useStore.setState({ outletSubRole: null });
 				}
 			} else {
 				setOrgStatus(null);

@@ -382,10 +382,31 @@ check(
 
 console.log('\n--- 11. the overtime DECISION: pricing, the line, and the clamp trap ---');
 
-// 700.00 a day over a 6-hour standard shift = 116.6667/h; overtime is 1.5x that
-// = 175.00/h. Two hours is therefore 350.00.
-check('120 min of OT on a 700.00 day is 350.00', overtimeAmountCents('700.00', 120) === 35_000);
-check('60 min is half that', overtimeAmountCents('700.00', 60) === 17_500);
+// Overtime is 1.5x THIS SHIFT'S ordinary hour — the daily wage over the shift's
+// own window, not over a notional six-hour day (owner's decision, 6 Aug 2026).
+//
+// ⚠️ These checks asserted the pre-6-Aug rule until 12 Aug 2026, and PASSED
+// while doing it: they omitted the window argument, so every call took the
+// `STANDARD_SHIFT_HOURS` fallback and agreed with itself. A green check for a
+// superseded rule is worse than no check — it reads as confirmation. The window
+// is now passed explicitly, and the short-shift case below is the only one that
+// can tell the two rules apart at all.
+//
+// 700.00 over a 6-hour window = 116.6667/h; overtime 1.5x = 175.00/h, so two
+// hours is 350.00. (Only at exactly six hours do the old and new rules agree.)
+check('120 min of OT on a 700.00 day, 6h window, is 350.00', overtimeAmountCents('700.00', 120, 360) === 35_000);
+check('60 min is half that', overtimeAmountCents('700.00', 60, 360) === 17_500);
+// The discriminating case: a 2-hour booking makes the ordinary hour 350.00, so
+// the overtime hour is 525.00. The old `÷ 6` rule prices it at 175.00 — overtime
+// paid at HALF an ordinary hour. Anything asserting 35_000 here is the old rule.
+// 700.00 over a 2-hour window makes the ordinary hour 350.00, so the overtime
+// hour is 525.00 — and 120 minutes is TWO of them, 1050.00. The old `÷ 6` rule
+// prices the same two hours at 350.00, i.e. overtime at half an ordinary hour.
+check('120 min of OT on a 2h window is 1050.00, not 350.00', overtimeAmountCents('700.00', 120, 120) === 105_000);
+check(
+  'an unknown window still falls back to the standard shift',
+  overtimeAmountCents('700.00', 120) === 35_000,
+);
 check('zero minutes is worth nothing', overtimeAmountCents('700.00', 0) === 0);
 check('a commission-only PR (no wage) prices to 0', overtimeAmountCents(null, 120) === 0);
 check('an unreadable wage prices to 0, it does not throw', overtimeAmountCents('abc', 120) === 0);
@@ -477,10 +498,14 @@ check(
 );
 
 console.log('\n--- 12. which week an approved claim is paid on ---');
-check('a Monday shift belongs to its own week', weekOfDate('2026-07-27')?.weekStart === '2026-07-27');
-check('a Sunday shift belongs to the week that STARTED six days earlier', weekOfDate('2026-08-02')?.weekStart === '2026-07-27');
-check('…and that week ends on the Sunday', weekOfDate('2026-08-02')?.weekEnd === '2026-08-02');
-check('a mid-week shift lands on the same Monday', weekOfDate('2026-07-30')?.weekStart === '2026-07-27');
+// ⚠️ These four asserted MONDAY weeks and had been FAILING since the payroll
+// anchor moved to Sunday on 3 Aug 2026 — a probe nobody re-ran, still stating
+// the old rule as if it were the spec. 2026-07-26 and 2026-08-02 are Sundays;
+// 2026-08-01 and 2026-08-08 the Saturdays that close those weeks.
+check('a Monday shift belongs to the week that started the day before', weekOfDate('2026-07-27')?.weekStart === '2026-07-26');
+check('a Sunday shift STARTS its own week', weekOfDate('2026-08-02')?.weekStart === '2026-08-02');
+check('…and that week ends on the Saturday', weekOfDate('2026-08-02')?.weekEnd === '2026-08-08');
+check('a mid-week shift lands on the same Sunday', weekOfDate('2026-07-30')?.weekStart === '2026-07-26');
 check('a malformed date yields null rather than the week of NaN', weekOfDate('not-a-date') === null);
 check('an impossible date is rejected, not rolled over', weekOfDate('2026-02-30') === null);
 

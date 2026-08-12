@@ -362,7 +362,14 @@ export function LiveWorkforceTable({
 										drinkMenu,
 										receiptScans,
 									})
-								: { salesRm: 0, drinkSalesRm: 0, drinkUnits: 0, tipRm: 0 };
+								: {
+										salesRm: 0,
+										drinkSalesRm: 0,
+										drinkUnits: 0,
+										tipRm: 0,
+										// No shift, so no receipts to measure an HH split from.
+										hhDrinkSalesRm: null,
+									};
 							const prId = linkPrProfiles ? prIdBySlotId.get(w.id) : undefined;
 							return (
 								<WorkforceRow

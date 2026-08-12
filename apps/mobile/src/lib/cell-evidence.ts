@@ -15,7 +15,8 @@
  * Pure: no fetching, no hooks, no React. Everything it needs is already in the
  * payload the Payment screen holds.
  */
-import type { PrCurrentWeek, PrReceiptKind, PrReceiptLine, PrWeekShift } from './api';
+import type { PrCurrentWeek, PrReceiptLine, PrWeekShift } from './api';
+import { type GridBucket, gridBucket } from './week-pay-grid';
 
 /** One paper receipt's worth of lines inside a cell. */
 export type EvidenceReceipt = {
@@ -50,7 +51,8 @@ export type EvidenceGroup = {
 };
 
 export type CellEvidence = {
-  kind: PrReceiptKind;
+  /** The grid ROW this cell sits on — including 'deductions', which is not a kind. */
+  kind: GridBucket;
   dateIso: string;
   /** Sum of every line in the cell — must equal the grid cell. */
   total: number;
@@ -70,12 +72,15 @@ function dayOf(line: PrReceiptLine, week: PrCurrentWeek): string {
 export function buildCellEvidence(
   week: PrCurrentWeek | null,
   dateIso: string,
-  kind: PrReceiptKind,
+  kind: GridBucket,
 ): CellEvidence {
   const empty: CellEvidence = { kind, dateIso, total: 0, groups: [], shiftsKnown: false };
   if (!week) return empty;
 
-  const cellLines = week.lines.filter((l) => dayOf(l, week) === dateIso && l.kind === kind);
+  // `gridBucket`, not `l.kind` — the grid's own rule, imported rather than
+  // retyped, because the warning at the top of this file is only true if the
+  // two filters are literally the same code.
+  const cellLines = week.lines.filter((l) => dayOf(l, week) === dateIso && gridBucket(l) === kind);
   if (cellLines.length === 0) return { ...empty, shiftsKnown: Array.isArray(week.shifts) };
 
   const shiftById = new Map((week.shifts ?? []).map((s) => [s.id, s]));

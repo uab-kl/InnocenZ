@@ -46,7 +46,6 @@ import {
 	outletTonightFloorTotals,
 	outletTonightLiveEarningsRows,
 } from "@agency-portal/lib/outlet-financial-sync";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import {
 	getPrAgencyById,
@@ -57,6 +56,7 @@ import type { PrShiftSessionState } from "@agency-portal/lib/pr-session";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import type { PR, ShiftRequest } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -191,7 +191,7 @@ export function OutletTodayOperationPanel({
 	const syncLivePrCheckInToRoster = useStore(
 		(s) => s.syncLivePrCheckInToRoster,
 	);
-	const canRate = outletCan(outletSubRole, "ratePrs");
+	const canRate = useOutletCan()("ratePrs");
 	const [openPr, setOpenPr] = useState<string | null>(null);
 	const [comcardPreviewId, setComcardPreviewId] = useState<string | null>(null);
 	// A comcard at sheet size is too small to read the PR's stats off; tapping it

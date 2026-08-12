@@ -1,7 +1,8 @@
+import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile";
 import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import type { AgencyOutletSummary } from "@agency-portal/lib/agency-outlet-shifts";
 import { cn } from "@agency-portal/lib/utils";
-import { Check, MapPin } from "lucide-react";
+import { Check } from "lucide-react";
 
 const OUTLET_THEME_KEYS = ["violet", "cyan", "pink", "amber", "mint"] as const;
 type OutletThemeKey = (typeof OUTLET_THEME_KEYS)[number];
@@ -58,6 +59,12 @@ type ManageOutletGridCardProps = {
 	selectMode: boolean;
 	picked: boolean;
 	onActivate: () => void;
+	/**
+	 * The venue's `logo_image`, looked up by the page — the summary is built from
+	 * shifts and carries no outlet id or logo of its own. Absent means the map pin,
+	 * which is the right answer for a venue that has uploaded no mark.
+	 */
+	logo?: string | null;
 };
 
 export function ManageOutletGridCard({
@@ -65,6 +72,7 @@ export function ManageOutletGridCard({
 	selectMode,
 	picked,
 	onActivate,
+	logo,
 }: ManageOutletGridCardProps) {
 	const theme = outletThemeKey(summary.outlet);
 	const wage = summary.rule.wagePerHour.toLocaleString("en-MY");
@@ -99,9 +107,7 @@ export function ManageOutletGridCard({
 
 			<div className="iz-outlet-manage-card__head">
 				<div className="iz-outlet-manage-card__identity">
-					<div className="iz-outlet-manage-card__icon" aria-hidden>
-						<MapPin className="h-6 w-6" />
-					</div>
+					<OutletLogoTile logo={logo} className="iz-outlet-manage-card__icon" />
 					<div className="min-w-0">
 						<p className="iz-outlet-manage-card__name">{summary.outlet}</p>
 						<p className="iz-outlet-manage-card__rate">RM {wage}/shift</p>

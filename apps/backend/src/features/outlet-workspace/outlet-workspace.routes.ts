@@ -3,10 +3,14 @@ import { outletWorkspaceController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
 import { outletOwnerOrOpsIfMember } from '@/middlewares/require-sub-role.js';
 
-// Outlet operational workspace (pay/commission rates, drink menu, penalty rules).
+// Outlet operational workspace (pay/commission rates, drink menu).
+//
+// Attendance & penalty rules are NOT here any more — 0113 moved them to
+// `GET|PUT /agency/:id/penalty-rules`, because the fine they produce is a
+// deduction on the agency→PR voucher, which the outlet neither pays nor sees.
 //
 // This router previously carried NO role gate at all, only app auth — which made
-// every rate, drink price and penalty rule writable by any signed-in account,
+// every rate and drink price writable by any signed-in account,
 // including a PR whose own wages are calculated from them. The controller reads
 // :outletId from the path and never consults req.user, so the router is the only
 // place this can be stopped.

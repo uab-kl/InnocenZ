@@ -126,6 +126,83 @@ export function tipCommissionPct(rate: ShiftAssignmentRate | null): number {
   return pctOr(rate.tipPct, FALLBACK_TIP_PCT);
 }
 
+/**
+ * The guest-facing happy-hour discount, clamped to 0–100.
+ *
+ * Defensive despite the field being non-optional on `ShiftAssignmentRate`: a
+ * backend that has not restarted still serves the old payload without it (tsx
+ * watch keeps stale routes alive), and an `undefined` multiplied into a price
+ * yields NaN — which would reach a receipt, a shift_sale row and a voucher as
+ * money nobody can read. Anything non-numeric means "no discount".
+ */
+export function happyHourDiscountPct(rate: ShiftAssignmentRate | null): number {
+  const n = Number(rate?.happyHourDrinkDiscountPct);
+  if (!Number.isFinite(n)) return 0;
+  return Math.min(100, Math.max(0, n));
+}
+
+/**
+ * What a guest actually pays for ONE unit of `item` right now.
+ *
+ * The menu price is the LIST price — `receipt-parser.ts` looks every price up
+ * from the outlet menu and never trusts the paper's arithmetic — so inside the
+ * happy-hour window the list price is NOT what was charged. Logging it there
+ * overstated the outlet's floor sales and, because commission is a percentage
+ * of the sale, overpaid the PR on top of the happy-hour commission bump.
+ *
+ * DRINKS ONLY. `happy_hour_drink_discount_pct` is a bar promotion on drinks;
+ * tips and service entitlements (Havoc, Booking commission) are not menu drinks
+ * and are never discounted — see `receiptKindForItem`, which routes those to the
+ * tips bucket.
+ *
+ * Rounded to the cent HERE, per unit, so the unit price the PR is shown times
+ * the quantity equals the line total exactly. Rounding the line total instead
+ * would print receipts whose own arithmetic does not check out.
+ */
+export function effectiveUnitPriceRm(
+  item: MenuDrink,
+  rate: ShiftAssignmentRate | null,
+  now: Date = new Date(),
+): number {
+  if (item.category !== 'drink') return item.priceRm;
+  if (!rate || !isHappyHourNow(rate.happyHourStart, rate.happyHourEnd, now)) {
+    return item.priceRm;
+  }
+  const pct = happyHourDiscountPct(rate);
+  if (pct <= 0) return item.priceRm;
+  return Math.round(item.priceRm * (1 - pct / 100) * 100) / 100;
+}
+
+/**
+ * The line total a guest pays for `qty` of `item` right now — the ONE place a
+ * logged drink's `sales` figure is computed.
+ *
+ * Every caller must come through here rather than reach for `priceRm * qty`:
+ * the scan screen alone priced items at eight separate sites, and a discount
+ * applied at seven of them is a discount that silently disagrees with itself
+ * between what the PR is shown and what reaches the voucher.
+ */
+export function lineSalesRm(
+  item: MenuDrink,
+  qty: number,
+  rate: ShiftAssignmentRate | null,
+  now: Date = new Date(),
+): number {
+  return Math.round(effectiveUnitPriceRm(item, rate, now) * qty * 100) / 100;
+}
+
+/** Whether a discount is actually in force right now, for UI that says so. */
+export function isDrinkDiscountActive(
+  rate: ShiftAssignmentRate | null,
+  now: Date = new Date(),
+): boolean {
+  if (!rate) return false;
+  return (
+    isHappyHourNow(rate.happyHourStart, rate.happyHourEnd, now) &&
+    happyHourDiscountPct(rate) > 0
+  );
+}
+
 /** Commission (RM) for a sales amount in one category, at the current rate. */
 export function commissionFor(
   category: 'drinks' | 'tips',

@@ -1,7 +1,6 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
-import { outletCan } from "@agency-portal/lib/outlet-rbac";
 import { OUTLET_SERVICES_ENABLED } from "@agency-portal/lib/phase-flags";
-import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Navigate } from "@tanstack/react-router";
 
 export const Route = createFileRoute("/outlet/special-service")({
@@ -17,7 +16,7 @@ export const Route = createFileRoute("/outlet/special-service")({
  * which reads as a permissions problem to a role that holds the permission.
  */
 function OutletSpecialServiceRedirect() {
-	const outletSubRole = useStore((s) => s.outletSubRole);
+	const can = useOutletCan();
 
 	// Phase check BEFORE the role check. Telling someone their role is wrong is
 	// only honest once the feature exists to be denied.
@@ -39,10 +38,7 @@ function OutletSpecialServiceRedirect() {
 		);
 	}
 
-	if (
-		!outletCan(outletSubRole, "orderSpecialService") &&
-		!outletCan(outletSubRole, "postJob")
-	) {
+	if (!can("orderSpecialService") && !can("postJob")) {
 		return (
 			<div className="iz-screen">
 				<header>

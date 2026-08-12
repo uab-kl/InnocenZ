@@ -10,9 +10,9 @@ import {
 	agencyPendingPayoutDeadline,
 	agencyPrToPayTotal,
 } from "@agency-portal/lib/agency-payroll";
-import { agencyCan } from "@agency-portal/lib/agency-rbac";
 import { LIVE_SEED_PR_PVS } from "@agency-portal/lib/pr-demo";
 import { useStore } from "@agency-portal/lib/store";
+import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
 
@@ -55,7 +55,7 @@ function AgencyHub() {
 		? backendOutlets.outlets.length
 		: OUTLET_NAMES.length;
 	const isFinance = agencySubRole === "agency_finance";
-	const showWorkforce = agencyCan(agencySubRole, "viewWorkforce");
+	const showWorkforce = useAgencyCan()("viewWorkforce");
 
 	return (
 		<div className="iz-screen iz-portal-page">
@@ -95,9 +95,17 @@ function AgencyHub() {
 
 			<div className="iz-portal-home-grid">
 				<div className="iz-portal-home-main">
+					{/* Says what finance can DO, not which pages exist for it.
+					    "payroll & PV only" was narrower than the role's actual reach —
+					    finance also reads the roster (owner's call, 11 Aug 2026: keep it)
+					    — so the banner contradicted the Roster item in its own sidebar.
+					    Read-only is the part that matters and is still exactly true: every
+					    write on the roster is gated on `assignShifts`, which finance does
+					    not hold. */}
 					{isFinance && (
 						<p className="iz-tiny iz-muted mb-3 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-							Read-only overview — payroll &amp; PV only
+							Payroll &amp; PV — you can review and sign vouchers. Roster and
+							history are read-only.
 						</p>
 					)}
 

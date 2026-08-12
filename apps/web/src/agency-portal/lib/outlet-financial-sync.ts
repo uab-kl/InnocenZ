@@ -240,8 +240,21 @@ export function outletPrLiveFloorSales(opts: {
 	drinkMenu: OutletDrinkPrice[];
 	receiptScans?: PrReceiptScan[];
 	now?: Date;
+	/**
+	 * The outlet's happy-hour window. Supplied only by callers that need the
+	 * HH/normal split; omitted, `hhDrinkSalesRm` comes back null and the caller
+	 * estimates instead.
+	 */
+	happyHourStart?: string;
+	happyHourEnd?: string;
 }): OutletPrLiveSales {
-	const empty = { salesRm: 0, drinkSalesRm: 0, drinkUnits: 0, tipRm: 0 };
+	const empty = {
+		salesRm: 0,
+		drinkSalesRm: 0,
+		drinkUnits: 0,
+		tipRm: 0,
+		hhDrinkSalesRm: null,
+	};
 	if (
 		!outletShiftFloorSalesStarted(opts.shift, opts.now, {
 			outletName: opts.outletName,
@@ -278,11 +291,56 @@ export function outletPrLiveFloorSales(opts: {
 		);
 		const tipRm = agg.tipRm;
 		const salesRm = shiftSalesLogged(grossScans);
+		/*
+		 * The REAL happy-hour split: every receipt carries its own `scannedAt`, so
+		 * the drinks rung up inside the window can simply be added together.
+		 *
+		 * What this replaces was a guess dressed as a measurement — the caller
+		 * apportioned drink sales by `happyHourWindowHours / shiftHours`, i.e. the
+		 * fraction of the SHIFT the window covers. A PR who sold everything at
+		 * 19:00 still had a slice of it billed at happy-hour rates, and one who
+		 * sold nothing until 21:30 had most of theirs billed at normal rates.
+		 * Sales do not spread themselves evenly across a night; that is the whole
+		 * point of running a happy hour.
+		 *
+		 * Amounts are taken as stored, NOT re-priced from the menu: the phone
+		 * already wrote what the guest actually paid, discount applied. Re-pricing
+		 * here would discount a second time.
+		 */
+		const hasWindow = !!(opts.happyHourStart && opts.happyHourEnd);
+		let hhDrinkSalesRm: number | null = null;
+		if (hasWindow) {
+			let hh = 0;
+			let measurable = true;
+			for (const scan of grossScans) {
+				const at = new Date(scan.scannedAt);
+				// One unreadable stamp makes the whole split a guess again, so say
+				// so rather than quietly under-report the happy-hour half.
+				if (Number.isNaN(at.getTime())) {
+					measurable = false;
+					break;
+				}
+				if (
+					!isWithinHappyHour(
+						at,
+						opts.happyHourStart as string,
+						opts.happyHourEnd as string,
+					)
+				) {
+					continue;
+				}
+				hh += scan.items
+					.filter((item) => item.category === "drinks")
+					.reduce((line, item) => line + item.amount, 0);
+			}
+			hhDrinkSalesRm = measurable ? roundRm(hh) : null;
+		}
 		return {
 			salesRm,
 			drinkSalesRm: drinkSalesRm > 0 ? drinkSalesRm : salesRm,
 			drinkUnits: agg.drinkUnits,
 			tipRm,
+			hhDrinkSalesRm,
 		};
 	}
 
@@ -296,6 +354,14 @@ export function outletPrLiveFloorSales(opts: {
 		drinkSalesRm,
 		drinkUnits,
 		tipRm,
+		/*
+		 * Roster counters are a headcount of drinks with no time attached, so WHEN
+		 * they were sold is genuinely unknown — and a bare unit count priced off
+		 * the menu is a list-price figure regardless. null sends the caller to its
+		 * estimate rather than letting an unmeasured 0 read as "sold nothing in
+		 * happy hour".
+		 */
+		hhDrinkSalesRm: null,
 	};
 }
 
@@ -304,7 +370,46 @@ export type OutletPrLiveSales = {
 	drinkSalesRm: number;
 	drinkUnits: number;
 	tipRm: number;
+	/**
+	 * Of `drinkSalesRm`, how much was rung up INSIDE the happy-hour window,
+	 * measured from each receipt's own `scannedAt`.
+	 *
+	 * `null` means "cannot be measured" — no happy-hour window was supplied, or
+	 * the figure came from roster counters rather than timestamped receipts — and
+	 * callers must then fall back to estimating. Deliberately not 0: zero is a
+	 * real answer ("nothing sold in the window") and must not be confused with
+	 * having no way to tell.
+	 */
+	hhDrinkSalesRm: number | null;
 };
+
+/**
+ * Is `at` inside the outlet's happy-hour window?
+ *
+ * ⚠️ Mirrors `isHappyHourNow` in `apps/mobile/src/lib/pr-rate.ts`, which cannot
+ * be imported across app boundaries. The phone decides the PRICE and the PR's
+ * commission with that copy; this one decides how the agency SPLITS the same
+ * sales. If one changes, change both — a window that disagrees between them
+ * shows the agency a happy-hour figure the PR was never paid on.
+ *
+ * Handles a window crossing midnight (22:00 → 02:00), which night shifts do
+ * routinely. No window, or start === end, is not happy hour.
+ */
+function isWithinHappyHour(at: Date, start: string, end: string): boolean {
+	const toMinutes = (hhmm: string): number | null => {
+		const m = /^(\d{1,2}):(\d{2})$/.exec(hhmm.trim());
+		if (!m) return null;
+		const h = Number(m[1]);
+		const min = Number(m[2]);
+		if (h > 23 || min > 59) return null;
+		return h * 60 + min;
+	};
+	const s = toMinutes(start);
+	const e = toMinutes(end);
+	if (s == null || e == null || s === e) return false;
+	const cur = at.getHours() * 60 + at.getMinutes();
+	return s < e ? cur >= s && cur < e : cur >= s || cur < e;
+}
 
 /** Per-roster-slot floor sales — prefers PR receipt scans, falls back to roster counters. */
 export function rosterSlotLiveFloorSales(opts: {
@@ -323,7 +428,13 @@ export function rosterSlotLiveFloorSales(opts: {
 }): OutletPrLiveSales {
 	const shift = findOutletShiftForRosterSlot(opts.outletShifts, opts.slot);
 	if (!shift) {
-		return { salesRm: 0, drinkSalesRm: 0, drinkUnits: 0, tipRm: 0 };
+		return {
+			salesRm: 0,
+			drinkSalesRm: 0,
+			drinkUnits: 0,
+			tipRm: 0,
+			hhDrinkSalesRm: null,
+		};
 	}
 	return outletPrLiveFloorSales({
 		prId: opts.slot.prId,
@@ -531,12 +642,28 @@ export function outletPrLiveEarningsBreakdown(opts: {
 		slot: opts.slot,
 		drinkMenu: opts.drinkMenu,
 		receiptScans: opts.receiptScans,
+		// Hands the window down so the HH/normal split can be MEASURED off each
+		// receipt's own timestamp rather than apportioned by shift hours.
+		happyHourStart: opts.happyHourStart,
+		happyHourEnd: opts.happyHourEnd,
 	});
 
 	const shiftHours = shiftHoursFromLabel(opts.shift.shift);
+	/*
+	 * MEASURED first, estimated only as a last resort.
+	 *
+	 * `floor.hhDrinkSalesRm` is the real figure, added up from the `scannedAt` on
+	 * each receipt. It is null only when there is nothing to measure — roster
+	 * counters instead of receipts, or a stamp that would not parse — and only
+	 * then does the old hours-proportion guess run. Note `?? null` rather than a
+	 * truthiness test: a measured 0.00 ("nothing sold in the window") is an
+	 * answer, and `|| estimate` would throw it away and guess over it.
+	 */
 	const hhHours = happyHourWindowHours(opts.happyHourStart, opts.happyHourEnd);
 	const hhRatio = shiftHours > 0 ? Math.min(1, hhHours / shiftHours) : 0.25;
-	const hhDrinkSalesRm = roundRm(floor.drinkSalesRm * hhRatio);
+	const measuredHhDrinkSalesRm = floor.hhDrinkSalesRm ?? null;
+	const hhDrinkSalesRm =
+		measuredHhDrinkSalesRm ?? roundRm(floor.drinkSalesRm * hhRatio);
 	const normalDrinkSalesRm = roundRm(floor.drinkSalesRm - hhDrinkSalesRm);
 
 	const hhDrinkPct = effRate.happyHourDrinkPct;

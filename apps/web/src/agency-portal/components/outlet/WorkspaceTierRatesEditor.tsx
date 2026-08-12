@@ -104,6 +104,25 @@ export function WorkspaceTierRatesEditor({
 		tierRates[OUTLET_BASE_TIER]?.otAfterHours,
 	);
 
+	/**
+	 * The standard shift length the derived RM/HR and OT/HR columns are worked
+	 * out over, for the legend.
+	 *
+	 * Read from EVERY tier rather than the base one: `otAfterHours` is per-tier,
+	 * so captioning the whole table from the base tier would announce "a 6-hour
+	 * standard shift" over a ladder where Servant had been set to 4. Null when
+	 * they disagree, which makes the legend state the rule without claiming one
+	 * number for all of them. Cheap enough to run each render — seven tiers.
+	 */
+	const legendStandardShiftHours = (() => {
+		const distinct = new Set(
+			OUTLET_PR_TIERS.map((tier) =>
+				resolveStandardShiftHours(tierRates[tier]?.otAfterHours),
+			),
+		);
+		return distinct.size === 1 ? [...distinct][0] : null;
+	})();
+
 	const showTierStaffing = tierStaffingByPayTier != null;
 
 	const useWorkspaceLayout = !showTierStaffing;
@@ -673,7 +692,11 @@ export function WorkspaceTierRatesEditor({
 						{useWorkspaceLayout ? workspaceCommissionRow : legacyCommissionRow}
 					</div>
 
-					{!readOnly && <TierRatesTableLegend />}
+					{!readOnly && (
+						<TierRatesTableLegend
+							standardShiftHours={legendStandardShiftHours}
+						/>
+					)}
 				</div>
 			</div>
 		</div>
