@@ -33,8 +33,15 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
 import { fetchOutlets } from "@/services/outlet/outlet";
+import {
+	blockedDatesByPr,
+	blockedReasonKey,
+	blockedReasonsByPr,
+	fetchPrAvailability,
+} from "@/services/pr-availability";
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts, type Shift } from "@/services/shift";
 import {
@@ -156,15 +163,44 @@ export function RosterBackendTimetable({
 	const fromDate = days[0] ?? weekStartIso;
 	const toDate = days[days.length - 1] ?? weekStartIso;
 
+	// Days these PRs marked unavailable on their own phone. Same query key as
+	// useRosterSlots, so this reads the already-loaded cache rather than
+	// re-fetching. A failure leaves the map empty and every cell assignable —
+	// the server still refuses the assign with a 409, so the grid can be
+	// optimistic here without letting a booking through.
+	const availabilityQuery = useQuery({
+		queryKey: ["roster", "availability", fromDate, toDate],
+		queryFn: () => fetchPrAvailability({ from: fromDate, to: toDate }, logout),
+		staleTime: 30_000,
+	});
+	const blockedDates = useMemo(
+		() => blockedDatesByPr(availabilityQuery.data ?? []),
+		[availabilityQuery.data],
+	);
+	// The PR's own words for why. Optional — most blocks carry none.
+	const blockedReasons = useMemo(
+		() => blockedReasonsByPr(availabilityQuery.data ?? []),
+		[availabilityQuery.data],
+	);
+
 	// Same query keys as useRosterSlots, so these read the already-loaded cache.
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		// Paged out: the server clamps to 100, and these keys are shared — see
+		// lib/fetch-all-pages.ts. This grid derives `shiftBlockedFor` from the
+		// staffed rows it reads, so a truncated set greys out the wrong cells.
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchPrPersonnel({ page, pageSize: 100 }, logout),
+			),
 		staleTime: 60_000,
 	});
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", fromDate, toDate],
-		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShifts({ fromDate, toDate, page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 	});
 	const outletsQuery = useQuery({
@@ -179,7 +215,10 @@ export function RosterBackendTimetable({
 	// write with "already fully staffed (2/2)".
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 	});
 
@@ -396,6 +435,16 @@ export function RosterBackendTimetable({
 												);
 												const open = openShiftsByDay[dateIso] ?? [];
 												const hasOpen = open.length > 0;
+												// The PR blocked this day. A distinct state from the
+												// "Off" a cancelled assignment paints — that one means
+												// a booking was called off, this one means the person
+												// is not available at all — and the agency has to be
+												// able to tell them apart.
+												const prBlocked =
+													blockedDates.get(pr.id)?.has(dateIso) ?? false;
+												const reason = blockedReasons.get(
+													blockedReasonKey(pr.id, dateIso),
+												);
 												if (daySlots.length > 0) {
 													return (
 														<td key={dateIso} className="iz-roster-week-td">
@@ -423,8 +472,11 @@ export function RosterBackendTimetable({
 																);
 															})}
 															{/* Same day, second shift — allowed at a different
-															    time (the backend refuses overlaps). */}
-															{canAssign && hasOpen && (
+															    time (the backend refuses overlaps). Not offered
+															    when the PR has blocked the day: the shift they
+															    already hold predates the block, but a SECOND one
+															    is a new booking the server would refuse. */}
+															{canAssign && hasOpen && !prBlocked && (
 																<button
 																	type="button"
 																	className="iz-roster-week-cell iz-roster-week-cell--empty"
@@ -438,6 +490,43 @@ export function RosterBackendTimetable({
 																	<Plus className="h-3 w-3" />
 																</button>
 															)}
+														</td>
+													);
+												}
+
+												// The PR is not available. Rendered as a stated
+												// refusal rather than a plain empty cell: a cell that
+												// merely does nothing on click reads as a broken
+												// button, and this is the one thing on the grid the
+												// agency cannot change themselves.
+												if (prBlocked) {
+													return (
+														<td key={dateIso} className="iz-roster-week-td">
+															{/* Not a button: the agency cannot clear this, only
+															    the PR can. The visible "Unavailable" IS the
+															    accessible name — an aria-label on a plain div is
+															    not exposed to assistive tech, so the text has to
+															    carry it.
+
+															    The reason is the PR's own words and is optional,
+															    so the cell must read correctly without it — it is
+															    a second line, never a replacement for the status.
+															    The cell is one column of seven, so a long reason
+															    is clamped to two lines and the `title` carries it
+															    in full on hover. */}
+															<div
+																className="iz-roster-week-cell iz-roster-week-cell--unavailable"
+																title={
+																	reason
+																		? `${pr.name} marked ${dateIso} unavailable — "${reason}"`
+																		: `${pr.name} marked ${dateIso} unavailable on their schedule`
+																}
+															>
+																<span className="status">Unavailable</span>
+																{reason && (
+																	<span className="reason">{reason}</span>
+																)}
+															</div>
 														</td>
 													);
 												}

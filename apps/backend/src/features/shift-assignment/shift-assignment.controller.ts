@@ -6,6 +6,7 @@ import {
   ShiftFullError,
   ShiftGoneError,
   TierFullError,
+  PrUnavailableError,
   NON_STAFFING_STATUSES,
 } from './shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
@@ -1558,6 +1559,16 @@ export class ShiftAssignmentControllerClass {
       if (isUniqueViolation(error)) {
         return res.status(409).json({ success: false, message: 'PR is already assigned to this shift', data: null });
       }
+      // The PR blocked this day on their own schedule. 409 like the two below —
+      // well-formed and authorised, just refused — but the remedy is a different
+      // PERSON, not a bigger headcount or another tier, so it says so plainly.
+      if (error instanceof PrUnavailableError) {
+        return res.status(409).json({
+          success: false,
+          message: `This PR has marked ${error.shiftDate} as unavailable — pick someone else for this shift.`,
+          data: null,
+        });
+      }
       // 409, same family as the duplicate above: the request was well-formed and
       // authorised, it just lost a race for the last seat. The count is named so
       // the roster can say WHY without a second round-trip.
@@ -1737,25 +1748,49 @@ export class ShiftAssignmentControllerClass {
         parsed.data.status !== undefined &&
         isNonStaffing(existing.status) &&
         !isNonStaffing(parsed.data.status);
-      if (reStaffing) {
-        const seat = await this.shiftAssignmentRepository.hasFreeSeat(existing.shiftId);
-        if (!seat.free) {
-          return res.status(409).json({
-            success: false,
-            message: `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`,
-            data: null,
-          });
-        }
-      }
-
-      const assignment = await this.shiftAssignmentRepository.update(id, {
+      const patch = {
         status: parsed.data.status,
         payAmount: parsed.data.payAmount,
         checkInAt: parsed.data.checkInAt ? new Date(parsed.data.checkInAt) : undefined,
         checkOutAt: parsed.data.checkOutAt ? new Date(parsed.data.checkOutAt) : undefined,
         notes: parsed.data.notes,
         updatedBy: getActor(req),
-      });
+      };
+
+      let assignment: Awaited<ReturnType<ShiftAssignmentRepositoryClass['update']>>;
+      if (reStaffing) {
+        // Seat check AND write in ONE transaction, with the shift row locked.
+        // The PR is named so the TIER mix is checked too, not just headcount:
+        // without it, cancelling a Tier I, backfilling with another and then
+        // un-cancelling the first left 3 Tier I on a shift that asked for 2 — a
+        // row `create` would have refused, landing through the PATCH. And
+        // without the shared transaction, two people un-cancelling into the last
+        // seat could both read "free" and both land.
+        const result = await this.shiftAssignmentRepository.updateIfSeatFree(id, patch, {
+          shiftId: existing.shiftId,
+          prId: existing.userId ?? existing.prId,
+          agencyId: existing.agencyId,
+        });
+        if (!result.ok) {
+          const { seat } = result;
+          // Checked before the two capacity refusals: when the PR has blocked
+          // the day, `free` is false even with seats to spare, so falling
+          // through would report "already fully staffed" off a headcount that
+          // is not the reason — and send the agency to raise a quantity that
+          // would not help.
+          const message = seat.prUnavailable
+            ? `This PR has marked ${seat.prUnavailable.shiftDate} as unavailable — they cannot be put back on this shift.`
+            : seat.tierFull
+              ? seat.tierFull.bucket
+                ? `This shift already has all ${seat.tierFull.asked} ${seat.tierFull.bucket} it asked for — that tier was filled after this PR came off it.`
+                : `This shift has no unallocated seat left for that tier (${seat.tierFull.staffed}/${seat.tierFull.asked}) — its remaining seats are reserved for the tiers it named.`
+              : `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`;
+          return res.status(409).json({ success: false, message, data: null });
+        }
+        assignment = result.assignment;
+      } else {
+        assignment = await this.shiftAssignmentRepository.update(id, patch);
+      }
       if (!assignment) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Only on the transition INTO cancelled — re-saving an already-cancelled

@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { C, F } from '../theme/theme';
 import { fmtAttendanceStamp, shiftDurationLabel } from '../lib/shift-session';
 import { evidenceMatchesCell, type CellEvidence, type EvidenceGroup } from '../lib/cell-evidence';
+import type { PrWeekShift } from '../lib/api';
 import { resolveProofPhotoUri } from '../lib/proof-photo';
 import type { ReceiptClaimState } from '../lib/receipt-review';
 
@@ -76,6 +77,31 @@ function longShiftDay(iso: string | null | undefined): string {
   if (!y || !m || !d) return iso;
   const weekday = WEEKDAYS[new Date(Date.UTC(y, m - 1, d)).getUTCDay()];
   return `${weekday} ${d} ${MONTHS[m - 1]} ${y}`;
+}
+
+/** A shift the PR dropped. Its evidence is the cancellation, not attendance. */
+function isCancelled(shift: PrWeekShift): boolean {
+  return shift.status === 'cancelled';
+}
+
+/**
+ * "3 h 32 m before it started" / "40 m AFTER it started".
+ *
+ * The sealed `cancel_notice_hours` is a decimal count of hours and goes NEGATIVE
+ * once the shift has begun, which is precisely the case that costs the most — so
+ * it is spelled out rather than shown as a minus sign the PR has to interpret.
+ * Null (no sealed notice) returns null so the caller can print an em-dash.
+ */
+function noticeLabel(hours: string | null | undefined): string | null {
+  if (hours === null || hours === undefined) return null;
+  const value = Number(hours);
+  if (!Number.isFinite(value)) return null;
+  const late = value < 0;
+  const total = Math.round(Math.abs(value) * 60);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  const span = h > 0 ? `${h} h${m ? ` ${m} m` : ''}` : `${m} m`;
+  return late ? `${span} AFTER it started` : `${span} before it started`;
 }
 
 /** A finished shift — tapped out and sealed. These are the ones that collapse. */
@@ -151,7 +177,17 @@ function ShiftHead({
    * ringing the agency about it must not be reading a card that omits what
    * theirs shows. Silence is not the same statement as "Normal".
    */
-  const eventKindLabel = shift.eventKind === 'special' ? 'Special event' : 'Normal shift';
+  /*
+   * A cancelled shift is tagged CANCELLED, not "Normal shift". The event kind is
+   * still true, but it is not the fact that explains why this card is attached to
+   * a deduction — and printing "Normal shift" above a fee reads as though nothing
+   * happened. One tag, the one that matters here.
+   */
+  const eventKindLabel = isCancelled(shift)
+    ? 'Cancelled'
+    : shift.eventKind === 'special'
+      ? 'Special event'
+      : 'Normal shift';
   const collapsible = typeof expanded === 'boolean' && !!onToggle;
   if (collapsible && !expanded) {
     /*
@@ -234,27 +270,71 @@ function ShiftHead({
           <Text style={s.shiftDay}>{longShiftDay(shift.shiftDate)}</Text>
         </>
       )}
-      <View style={s.stampRow}>
-        <View style={s.stampCol}>
-          <Text style={s.stampK}>CHECK-IN</Text>
-          <Text style={s.stampV}>{fmtAttendanceStamp(shift.checkInAt)}</Text>
-        </View>
-        <View style={s.stampCol}>
-          <Text style={s.stampK}>SHIFT END</Text>
-          <Text style={s.stampV}>
-            {shift.checkOutAt ? fmtAttendanceStamp(shift.checkOutAt) : 'Still on duty'}
-          </Text>
-        </View>
-      </View>
-      <View style={s.stampRow}>
-        <View style={s.stampCol}>
-          <Text style={s.stampK}>DURATION</Text>
-          <Text style={s.stampV}>
-            {shiftDurationLabel(shift.checkInAt, shift.checkOutAt)}
-            {shift.overtimeMinutes ? ` · +${shift.overtimeMinutes}m OT recorded` : ''}
-          </Text>
-        </View>
-      </View>
+      {isCancelled(shift) ? (
+        /*
+         * A CANCELLED shift gets its own stamps, and must NOT get the ordinary
+         * ones. There is no check-in because they cancelled, and `checkOutAt` is
+         * null — which the normal block renders as "Still on duty", a plainly
+         * false statement about a shift the PR dropped. What they need instead
+         * are the three facts behind the money: which shift and when it ran,
+         * when they cancelled it, and the notice that chose the fee band.
+         */
+        <>
+          <View style={s.stampRow}>
+            <View style={s.stampCol}>
+              <Text style={s.stampK}>SHIFT WAS</Text>
+              <Text style={s.stampV}>{shift.slot ?? 'Time not set'}</Text>
+            </View>
+            <View style={s.stampCol}>
+              <Text style={s.stampK}>YOU CANCELLED</Text>
+              {/* Reconstructed from the sealed notice, good to the minute. Null
+                  reads as "Not recorded" — never a guessed time. */}
+              <Text style={s.stampV}>
+                {shift.cancelledAt ? fmtAttendanceStamp(shift.cancelledAt) : 'Not recorded'}
+              </Text>
+            </View>
+          </View>
+          <View style={s.stampRow}>
+            <View style={s.stampCol}>
+              <Text style={s.stampK}>NOTICE GIVEN</Text>
+              <Text style={s.stampV}>{noticeLabel(shift.cancelNoticeHours) ?? '—'}</Text>
+            </View>
+            {shift.cancelFeePct ? (
+              <View style={s.stampCol}>
+                <Text style={s.stampK}>FEE BAND</Text>
+                <Text style={s.stampV}>
+                  {shift.cancelFeePct}% of this shift
+                  {shift.cancelFeeRm ? ` · RM ${shift.cancelFeeRm}` : ''}
+                </Text>
+              </View>
+            ) : null}
+          </View>
+        </>
+      ) : (
+        <>
+          <View style={s.stampRow}>
+            <View style={s.stampCol}>
+              <Text style={s.stampK}>CHECK-IN</Text>
+              <Text style={s.stampV}>{fmtAttendanceStamp(shift.checkInAt)}</Text>
+            </View>
+            <View style={s.stampCol}>
+              <Text style={s.stampK}>SHIFT END</Text>
+              <Text style={s.stampV}>
+                {shift.checkOutAt ? fmtAttendanceStamp(shift.checkOutAt) : 'Still on duty'}
+              </Text>
+            </View>
+          </View>
+          <View style={s.stampRow}>
+            <View style={s.stampCol}>
+              <Text style={s.stampK}>DURATION</Text>
+              <Text style={s.stampV}>
+                {shiftDurationLabel(shift.checkInAt, shift.checkOutAt)}
+                {shift.overtimeMinutes ? ` · +${shift.overtimeMinutes}m OT recorded` : ''}
+              </Text>
+            </View>
+          </View>
+        </>
+      )}
     </View>
   );
 }

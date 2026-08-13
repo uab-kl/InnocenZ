@@ -12,6 +12,7 @@ import paymentVoucherRoutes from '@/features/payment-voucher/payment-voucher.rou
 import paymentVoucherExportRoutes from '@/features/payment-voucher/payment-voucher-export.routes.js';
 import shiftAssignmentRoutes from '@/features/shift-assignment/shift-assignment.routes.js';
 import outletSwapRoutes from '@/features/outlet-swap/outlet-swap.routes.js';
+import prAvailabilityRoutes from '@/features/pr-availability/pr-availability.routes.js';
 import cutlostRoutes from '@/features/cutlost/cutlost.routes.js';
 import shiftSaleRoutes from '@/features/shift-sale/shift-sale.routes.js';
 import outletRoutes from '@/features/outlet/outlet.routes.js';
@@ -69,6 +70,10 @@ v1Router.use('/shift', shiftRoutes);
 v1Router.use('/payment-voucher', paymentVoucherRoutes);
 v1Router.use('/shift-assignment', shiftAssignmentRoutes);
 v1Router.use('/outlet-swap', outletSwapRoutes);
+// A PR's own blocked days. The '/mine' half is scoped by token (every signed-in
+// PR has a calendar); the roster-wide read is agency/admin-gated inside the
+// route file and scoped through `agency_pr` in the repository.
+v1Router.use('/pr-availability', prAvailabilityRoutes);
 v1Router.use('/cutlost', cutlostRoutes);
 v1Router.use('/shift-sale', shiftSaleRoutes);
 v1Router.use('/outlet', outletRoutes);

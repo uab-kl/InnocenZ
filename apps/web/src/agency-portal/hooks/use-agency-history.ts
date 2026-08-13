@@ -8,6 +8,7 @@ import type { ShiftHistoryRow } from "@agency-portal/lib/shift-history-utils";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchShifts } from "@/services/shift";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
 import { useAgencyOutlets } from "./use-agency-outlets";
@@ -68,7 +69,13 @@ export function useAgencyHistory(): AgencyHistoryData {
 	// Shares the roster screen's assignment cache.
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		// Paged out: the server clamps to 100, and this key is shared — see
+		// lib/fetch-all-pages.ts. History reading a truncated set is its own bug:
+		// the oldest 100 rows are exactly the ones history is least about.
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		enabled: backed,
 		staleTime: 30_000,
 	});

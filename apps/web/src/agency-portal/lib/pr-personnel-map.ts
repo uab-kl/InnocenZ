@@ -66,8 +66,10 @@ export function ageFromDob(dob: string | null | undefined): number {
  *     reads, so both screens show one PR the same way
  *   - `comcardImageUrl` ← `user_profile.comcard_image`
  *   - `languages` ← the same user_profile row the PR edits in their own portal
- * The remaining demo-only fields (rating, KPI, penalties, attendance, pay
- * class, …) have no backend yet, so they get neutral placeholders. `rating: 0`
+ *   - `attendancePct` / `totalPaid` / `checkIns` / `noShows` ← `pr.stats`, the
+ *     agency-scoped aggregate over `shift_assignment` + `payment_voucher`
+ * The remaining demo-only fields (rating, KPI score, penalties, pay class, …)
+ * have no backend yet, so they get neutral placeholders. `rating: 0`
  * is one of those placeholders, NOT a score — see lib/pr-rating-summary.ts,
  * which derives the real average from the `rating` table instead. This is the accepted hybrid tradeoff: real where the backend
  * is real, cosmetic placeholders elsewhere.
@@ -82,6 +84,7 @@ export function ageFromDob(dob: string | null | undefined): number {
 export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 	const profile = pr.profile ?? null;
 	const roster = pr.roster ?? null;
+	const stats = pr.stats ?? null;
 	return {
 		id: pr.id,
 		name: pr.nickname?.trim() || pr.name,
@@ -118,11 +121,18 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		payClass: payClassFromBackend(roster?.payClass),
 		rating: 0,
 		trainingLevel: pr.tier ? (TIER_LABEL[pr.tier] ?? pr.tier) : "—",
-		totalPaid: 0,
-		attendancePct: 0,
-		checkIns: 0,
-		checkOuts: 0,
-		noShows: 0,
+		// Real, agency-scoped, derived server-side from this agency's
+		// shift_assignment and payment_voucher rows. These were hardcoded to 0
+		// while the backend already held the evidence, so every real PR's card
+		// read "RM 0 · 0%" however many shifts they had worked — and 0%
+		// specifically accused a brand-new PR of missing shifts nobody had
+		// offered them. `undefined` (an outlet caller, or a backend predating the
+		// aggregate) keeps the neutral placeholders.
+		totalPaid: stats?.totalPaidRm ?? 0,
+		attendancePct: stats?.attendancePct ?? null,
+		checkIns: stats?.completedShifts ?? 0,
+		checkOuts: stats?.completedShifts ?? 0,
+		noShows: stats?.missedShifts ?? 0,
 		kpiScore: 0,
 		suspended: pr.status === "suspended" || pr.status === "inactive",
 		detached: false,

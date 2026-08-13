@@ -160,8 +160,18 @@ export function ManagePrGridCard({
 					</div>
 					<div className="iz-pr-manage-card__metric">
 						<span className="iz-pr-manage-card__metric-label">Att.</span>
-						<span className="iz-pr-manage-card__metric-value">
-							{pr.attendancePct ?? 0}%
+						{/* Null = no concluded shift yet, which is NOT 0%. Printing 0
+						    here told the agency a PR had missed every shift on a
+						    roster they had never been scheduled on. */}
+						<span
+							className="iz-pr-manage-card__metric-value"
+							title={
+								pr.attendancePct === null
+									? "No completed or missed shifts yet"
+									: `${pr.checkIns} kept · ${pr.noShows} missed`
+							}
+						>
+							{pr.attendancePct === null ? "—" : `${pr.attendancePct}%`}
 						</span>
 					</div>
 					<div className="iz-pr-manage-card__metric">

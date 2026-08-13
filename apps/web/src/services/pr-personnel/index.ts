@@ -48,6 +48,25 @@ export interface PrPersonnelRoster {
 	payClass: string | null;
 }
 
+/**
+ * Live performance figures the backend derives from THIS agency's
+ * `shift_assignment` and `payment_voucher` rows — never stored, never editable.
+ *
+ * `attendancePct` is null when the PR has no concluded shift yet, which is a
+ * different fact from 0% and must render as an em-dash: a PR who has never been
+ * scheduled has not missed anything. `totalPaidRm` counts only vouchers actually
+ * marked `paid`, so it is money out the door, not money owed.
+ *
+ * Absent entirely for an outlet caller — a venue may not read agency payroll.
+ */
+export interface PrPersonnelStats {
+	attendancePct: number | null;
+	completedShifts: number;
+	missedShifts: number;
+	excusedShifts: number;
+	totalPaidRm: number;
+}
+
 export interface PrPersonnel {
 	id: string;
 	agencyId: string;
@@ -66,6 +85,8 @@ export interface PrPersonnel {
 	profile?: PrPersonnelProfile | null;
 	/** Present on the read paths only, same as `profile`. */
 	roster?: PrPersonnelRoster | null;
+	/** Present on the LIST path, for agency and admin callers only. */
+	stats?: PrPersonnelStats;
 	createdAt: string;
 	updatedAt: string;
 	createdBy: string;

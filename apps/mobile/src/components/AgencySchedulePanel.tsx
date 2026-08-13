@@ -43,9 +43,12 @@ import { useActiveShift } from '../lib/active-shift';
 import { pickProofPhotos, resolveProofPhotoUri } from '../lib/proof-photo';
 import { useSession } from '../lib/session';
 import {
+  blockMyDay,
   cancelMyShiftAssignment,
+  fetchMyUnavailableDays,
   getMyPenaltyRules,
   requestMyShiftLeave,
+  unblockMyDay,
   type ShiftAssignmentRecord,
 } from '../lib/api';
 
@@ -123,7 +126,20 @@ export function AgencySchedulePanel() {
   const { me, agencies, token } = useSession();
   const { assignments, refresh } = useActiveShift();
   const [viewMonth, setViewMonth] = useState(() => new Date(today[0], today[1] - 1, 1));
+  // Days this PR has marked unavailable, mirroring `main.pr_availability`.
+  // Server-owned, not local UI state: the agency's roster reads the same rows,
+  // and the assign guard refuses a shift on any of them. Held as an array only
+  // because `buildScheduleDays` takes one.
   const [blocked, setBlocked] = useState<string[]>([]);
+  // Which day is mid-flight, so a second tap on the same cell is ignored while
+  // the first is still in the air.
+  const [blockingIso, setBlockingIso] = useState<string | null>(null);
+  const [blockError, setBlockError] = useState<string | null>(null);
+  // The day awaiting a reason, and the text so far. The reason is OPTIONAL —
+  // the sheet's primary action blocks the day either way — but it is what the
+  // agency's roster cell shows, so it is asked for rather than assumed absent.
+  const [reasonTarget, setReasonTarget] = useState<string | null>(null);
+  const [reasonDraft, setReasonDraft] = useState('');
   const [rulesOpen, setRulesOpen] = useState(false);
   // The agency's cancellation bands. Seeded with the defaults rather than null
   // so the Cancel button always shows a number — and they are the same numbers
@@ -160,6 +176,25 @@ export function AgencySchedulePanel() {
       })
       .catch(() => {
         /* keep DEFAULT_CANCELLATION_BANDS */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
+
+  // The days already blocked, from the server. Without this the calendar opens
+  // blank every launch and the PR re-blocks days that are in fact already
+  // blocked — which is exactly what the old local-only state did.
+  useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    fetchMyUnavailableDays(token)
+      .then((rows) => {
+        if (!cancelled) setBlocked(rows.map((r) => r.unavailableDate));
+      })
+      .catch(() => {
+        // Leave the calendar as-is rather than clearing it: showing a day as
+        // open because the fetch failed would invite a duplicate block.
       });
     return () => {
       cancelled = true;
@@ -329,7 +364,17 @@ export function AgencySchedulePanel() {
 
   const years = Array.from({ length: 7 }, (_, i) => year - 3 + i);
 
-  const toggleDay = (iso: string) => {
+  /**
+   * Block or reopen a day, and PERSIST it — this is what the agency reads.
+   *
+   * Optimistic: the cell flips immediately and rolls back if the write fails,
+   * so a refusal cannot leave the calendar claiming a block the server does not
+   * have. The server re-checks the same rule (it refuses a day the PR is
+   * already rostered on), so the guard below is the fast path, not the
+   * guarantee.
+   */
+  const toggleDay = async (iso: string) => {
+    if (!token || blockingIso) return;
     const day = dayByIso.get(iso);
     if (
       !day ||
@@ -340,7 +385,47 @@ export function AgencySchedulePanel() {
     ) {
       return;
     }
-    setBlocked((prev) => (prev.includes(iso) ? prev.filter((x) => x !== iso) : [...prev, iso]));
+    // Reopening is immediate — taking a block back needs no explanation, and a
+    // sheet in the way would make undoing a mistap harder than making it.
+    // Blocking asks for a reason first: the agency has to re-staff the shift,
+    // and "not available" with a why is a different message to plain absence.
+    if (blocked.includes(iso)) {
+      await writeDay(iso, { block: false });
+      return;
+    }
+    setReasonDraft('');
+    setBlockError(null);
+    setReasonTarget(iso);
+  };
+
+  /**
+   * Persist one day's availability — this is what the agency reads.
+   *
+   * Optimistic: the cell flips immediately and rolls back if the write fails,
+   * so a refusal cannot leave the calendar claiming a block the server does not
+   * have. The server re-checks the same rule (it refuses a day the PR is
+   * already rostered on), so the guard in `toggleDay` is the fast path, not the
+   * guarantee.
+   */
+  const writeDay = async (iso: string, opts: { block: boolean; reason?: string }) => {
+    if (!token) return;
+    const { block, reason } = opts;
+    setBlockingIso(iso);
+    setBlockError(null);
+    setBlocked((prev) => (block ? [...prev, iso] : prev.filter((x) => x !== iso)));
+    try {
+      if (block) await blockMyDay(token, iso, reason);
+      else await unblockMyDay(token, iso);
+      setReasonTarget(null);
+    } catch (e) {
+      setBlocked((prev) => (block ? prev.filter((x) => x !== iso) : [...prev, iso]));
+      setBlockError(e instanceof Error ? e.message : 'Could not update that day. Try again.');
+      // Keep the sheet open on failure so the typed reason is not lost — the
+      // commonest refusal here ("you are already rostered that day") is one the
+      // PR reads and then closes deliberately.
+    } finally {
+      setBlockingIso(null);
+    }
   };
 
   return (
@@ -461,9 +546,9 @@ export function AgencySchedulePanel() {
                   { backgroundColor: style.bg, borderColor: style.border },
                   isToday && styles.dayToday,
                 ]}
-                disabled={!canToggle && !missedRows}
+                disabled={(!canToggle && !missedRows) || blockingIso === iso}
                 onPress={() =>
-                  missedRows ? setMissedTarget({ iso, rows: missedRows }) : toggleDay(iso)
+                  missedRows ? setMissedTarget({ iso, rows: missedRows }) : void toggleDay(iso)
                 }
               >
                 <Text style={[styles.dayNum, { color: style.color }]}>{dayNum}</Text>
@@ -480,6 +565,12 @@ export function AgencySchedulePanel() {
           <LegendSwatch color={C.red} label="Not available" />
           <LegendSwatch color="#f07171" label="Missed check-in" />
         </View>
+
+        {/* The server refused the change — most often "you are already rostered
+            that day". Shown here rather than swallowed, because the cell has
+            already rolled back and the PR would otherwise see the tap simply
+            do nothing. */}
+        {blockError && <Text style={styles.blockError}>{blockError}</Text>}
       </View>
 
       <View style={styles.timetable}>
@@ -516,6 +607,65 @@ export function AgencySchedulePanel() {
           </View>
         )}
       </View>
+
+      {/* Mark a day unavailable, with an optional reason. The reason is what the
+          agency's roster cell shows, so it is asked for — but never required:
+          a PR does not owe anyone an explanation for a day they cannot work,
+          and demanding one would just produce junk text. */}
+      <PhoneSheet visible={reasonTarget != null} onRequestClose={() => setReasonTarget(null)}>
+        <Pressable style={styles.cancelBackdrop} onPress={() => setReasonTarget(null)}>
+          <Pressable style={styles.cancelSheet} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.cancelHandle} />
+            <View style={styles.cancelHeaderRow}>
+              <CalendarDays size={20} color={C.goldL} />
+              <Text style={styles.cancelHeaderTitle}>Mark unavailable</Text>
+            </View>
+            {reasonTarget && (
+              <Text style={styles.cancelHeaderSub}>
+                {fmtDFriendly(...isoToYmd(reasonTarget))}
+              </Text>
+            )}
+            <Text style={[styles.cancelNote, { marginTop: 12 }]}>
+              Your agency sees this day blocked on their roster and will not put you on a
+              shift. Adding a reason is optional.
+            </Text>
+            <TextInput
+              style={styles.reasonInput}
+              value={reasonDraft}
+              onChangeText={setReasonDraft}
+              placeholder="Reason (optional) — e.g. family event"
+              placeholderTextColor={C.prMuted2}
+              maxLength={200}
+              multiline
+            />
+            {blockError && <Text style={styles.blockError}>{blockError}</Text>}
+            <View style={styles.reasonActions}>
+              <Pressable
+                style={styles.reasonCancelBtn}
+                onPress={() => setReasonTarget(null)}
+                disabled={blockingIso != null}
+              >
+                <Text style={styles.reasonCancelText}>Cancel</Text>
+              </Pressable>
+              <Pressable
+                style={styles.reasonConfirmBtn}
+                disabled={blockingIso != null}
+                onPress={() =>
+                  reasonTarget &&
+                  void writeDay(reasonTarget, {
+                    block: true,
+                    reason: reasonDraft.trim() || undefined,
+                  })
+                }
+              >
+                <Text style={styles.reasonConfirmText}>
+                  {blockingIso != null ? 'Saving…' : 'Mark unavailable'}
+                </Text>
+              </Pressable>
+            </View>
+          </Pressable>
+        </Pressable>
+      </PhoneSheet>
 
       <PhoneSheet visible={cancelTarget != null} onRequestClose={() => setCancelTarget(null)}>
         <Pressable style={styles.cancelBackdrop} onPress={() => setCancelTarget(null)}>
@@ -973,6 +1123,45 @@ const styles = StyleSheet.create({
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   swatch: { width: 10, height: 10, borderRadius: 999 },
   legendLabel: { fontFamily: F.manrope, fontSize: 11, color: C.prMuted },
+  blockError: {
+    fontFamily: F.manrope,
+    fontSize: C.fsTiny,
+    color: C.red,
+    textAlign: 'center',
+    marginTop: 10,
+  },
+  reasonInput: {
+    marginTop: 12,
+    minHeight: 72,
+    borderWidth: 1,
+    borderColor: C.line,
+    borderRadius: 12,
+    padding: 12,
+    fontFamily: F.manrope,
+    fontSize: C.fsSm,
+    color: C.txt,
+    textAlignVertical: 'top',
+  },
+  reasonActions: { flexDirection: 'row', gap: 10, marginTop: 14, marginBottom: 4 },
+  reasonCancelBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: C.line,
+    alignItems: 'center',
+  },
+  reasonCancelText: { fontFamily: F.sora, fontSize: C.fsSm, color: C.prMuted },
+  reasonConfirmBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
+    backgroundColor: 'rgba(240,138,138,0.16)',
+    borderWidth: 1,
+    borderColor: 'rgba(240,138,138,0.4)',
+    alignItems: 'center',
+  },
+  reasonConfirmText: { fontFamily: F.sora, fontSize: C.fsSm, fontWeight: '600', color: C.red },
   mcPickBtn: {
     flexDirection: 'row',
     alignItems: 'center',

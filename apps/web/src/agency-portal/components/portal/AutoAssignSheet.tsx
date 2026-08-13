@@ -96,8 +96,22 @@ export function AutoAssignSheet({
 					);
 				}
 				if (failed.length > 0) {
+					// The SERVER's own reason, verbatim — "This shift already has all 2
+					// Tier I it asked for". The count-only version ended in "please
+					// retry", which is advice that can never work for a full tier: no
+					// amount of retrying opens a third Tier I seat on a shift that asked
+					// for two, and the one sentence naming the real obstacle was being
+					// thrown away. Distinct messages only, so five identical refusals do
+					// not print five times.
+					const reasons = [
+						...new Set(failed.map((f) => f.message).filter(Boolean)),
+					];
 					toast(
-						`${failed.length} ${plural(failed.length, "assignment")} could not be made — please retry`,
+						`${failed.length} ${plural(failed.length, "assignment")} could not be made — ${
+							reasons.length > 0
+								? reasons.join(" · ")
+								: "the server refused them"
+						}`,
 						"warn",
 					);
 				}
@@ -111,7 +125,7 @@ export function AutoAssignSheet({
 		});
 	};
 
-	const { freePrCount, unfilledCount } = plan;
+	const { freePrCount, unfilledCount, tierBlockedCount } = plan;
 
 	return (
 		<IzSheet open onClose={closeSheet}>
@@ -172,8 +186,31 @@ export function AutoAssignSheet({
 
 			{unfilledCount > 0 && (
 				<p className="iz-tiny iz-muted2 mt-3 leading-snug">
-					{unfilledCount} open {plural(unfilledCount, "slot")} cannot be filled
-					— only {freePrCount} free {plural(freePrCount, "PR")} {scopeLabel}.
+					{/* Two different shortages, two different remedies. Blaming the head
+					    count while PRs sit idle read as a contradiction — "4 slots cannot
+					    be filled, only 10 free PRs" — and pointed the agency at hiring
+					    when the fix was the shift's tier mix. */}
+					{tierBlockedCount > 0 ? (
+						<>
+							{tierBlockedCount} open {plural(tierBlockedCount, "slot")}{" "}
+							{tierBlockedCount === 1 ? "is" : "are"} reserved for tiers no free
+							PR holds {scopeLabel} — change the shift's tier mix to fill{" "}
+							{tierBlockedCount === 1 ? "it" : "them"}.
+							{unfilledCount > tierBlockedCount && (
+								<>
+									{" "}
+									The other {unfilledCount - tierBlockedCount} need more free
+									PRs.
+								</>
+							)}
+						</>
+					) : (
+						<>
+							{unfilledCount} open {plural(unfilledCount, "slot")} cannot be
+							filled — only {freePrCount} free {plural(freePrCount, "PR")}{" "}
+							{scopeLabel}.
+						</>
+					)}
 				</p>
 			)}
 

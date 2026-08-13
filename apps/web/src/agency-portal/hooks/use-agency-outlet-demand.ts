@@ -10,6 +10,7 @@ import type { ShiftRequest } from "@agency-portal/lib/store";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchShifts } from "@/services/shift";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
 import { useAgencyOutlets } from "./use-agency-outlets";
@@ -63,7 +64,12 @@ export function useAgencyOutletDemand() {
 	// invalidates this dashboard too.
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		// Paged out: the server clamps to 100, and this key is shared — see
+		// lib/fetch-all-pages.ts.
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		enabled: backed,
 		staleTime: 30_000,
 	});
