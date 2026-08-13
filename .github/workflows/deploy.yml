@@ -1,8 +1,25 @@
 name: Deploy
 
-# Triggers: manual Run workflow | push tags v* / staging-* / beta-*
+# Builds + pushes Docker images to Docker Hub.
+# Does NOT SSH to the VPS — each server still runs tools/deploy/deploy.sh
+# (or you pull :staging / :production there) with that server's .env.backend.
+#
+# Triggers:
+#   - Manual: Actions → Deploy → Run workflow → pick environment
+#   - Tags:   staging-* / beta-* → staging
+#             v*                 → production
+
 on:
   workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment (image tag + VITE_* secrets)
+        required: true
+        type: choice
+        options:
+          - staging
+          - production
+        default: staging
   push:
     tags:
       - 'v*'
@@ -23,6 +40,7 @@ jobs:
     env:
       DOCKERHUB_NAMESPACE: juneyou
     outputs:
+      environment: ${{ steps.meta.outputs.environment }}
       short_sha: ${{ steps.meta.outputs.short_sha }}
       frontend_tags: ${{ steps.meta.outputs.frontend_tags }}
       backend_tags: ${{ steps.meta.outputs.backend_tags }}
@@ -32,15 +50,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Determine image tags
+      - name: Determine environment + image tags
         id: meta
         shell: bash
         run: |
           set -euo pipefail
           SHORT_SHA="$(git rev-parse --short=7 HEAD)"
           echo "short_sha=${SHORT_SHA}" >> "$GITHUB_OUTPUT"
-          echo "frontend_tags=${DOCKERHUB_NAMESPACE}/innocenz-frontend:staging-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-frontend:staging" >> "$GITHUB_OUTPUT"
-          echo "backend_tags=${DOCKERHUB_NAMESPACE}/innocenz-backend:staging-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-backend:staging" >> "$GITHUB_OUTPUT"
+
+          # Manual run wins; otherwise infer from tag.
+          ENV="${{ github.event.inputs.environment }}"
+          if [ -z "${ENV}" ]; then
+            REF="${GITHUB_REF_NAME}"
+            case "${REF}" in
+              v*) ENV=production ;;
+              staging-*|beta-*) ENV=staging ;;
+              *)
+                echo "Cannot infer environment from ref: ${REF}"
+                exit 1
+                ;;
+            esac
+          fi
+
+          echo "environment=${ENV}" >> "$GITHUB_OUTPUT"
+          echo "frontend_tags=${DOCKERHUB_NAMESPACE}/innocenz-frontend:${ENV}-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-frontend:${ENV}" >> "$GITHUB_OUTPUT"
+          echo "backend_tags=${DOCKERHUB_NAMESPACE}/innocenz-backend:${ENV}-${SHORT_SHA},${DOCKERHUB_NAMESPACE}/innocenz-backend:${ENV}" >> "$GITHUB_OUTPUT"
+          echo "Building for environment=${ENV}"
 
   frontend:
     needs: prepare
@@ -58,6 +93,26 @@ jobs:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
+      - name: Resolve VITE_* for environment
+        id: vite
+        shell: bash
+        run: |
+          set -euo pipefail
+          ENV="${{ needs.prepare.outputs.environment }}"
+          if [ "${ENV}" = "production" ]; then
+            echo "api_url=${{ secrets.VITE_API_URL_PROD }}" >> "$GITHUB_OUTPUT"
+            echo "graphql=${{ secrets.VITE_GRAPHQL_ENDPOINT_PROD }}" >> "$GITHUB_OUTPUT"
+            echo "r2=${{ secrets.VITE_R2_PUBLIC_URL_PROD }}" >> "$GITHUB_OUTPUT"
+            echo "outlet_role=${{ secrets.VITE_OUTLET_ROLE_ID_PROD }}" >> "$GITHUB_OUTPUT"
+            echo "agency_role=${{ secrets.VITE_AGENCY_ROLE_ID_PROD }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "api_url=${{ secrets.VITE_API_URL_STAGING }}" >> "$GITHUB_OUTPUT"
+            echo "graphql=${{ secrets.VITE_GRAPHQL_ENDPOINT_STAGING }}" >> "$GITHUB_OUTPUT"
+            echo "r2=${{ secrets.VITE_R2_PUBLIC_URL_STAGING }}" >> "$GITHUB_OUTPUT"
+            echo "outlet_role=${{ secrets.VITE_OUTLET_ROLE_ID_STAGING }}" >> "$GITHUB_OUTPUT"
+            echo "agency_role=${{ secrets.VITE_AGENCY_ROLE_ID_STAGING }}" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Build and push frontend
         uses: docker/build-push-action@v6
         with:
@@ -65,16 +120,14 @@ jobs:
           file: ./apps/web/Dockerfile
           push: true
           tags: ${{ needs.prepare.outputs.frontend_tags }}
-          # Staging images must bake STAGING API/R2 — never *_PROD (that sent
-          # the staging UI at the production DB/bucket).
           build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL_STAGING }}
-            VITE_GRAPHQL_ENDPOINT=${{ secrets.VITE_GRAPHQL_ENDPOINT_STAGING }}
-            VITE_R2_PUBLIC_URL=${{ secrets.VITE_R2_PUBLIC_URL_STAGING }}
-            VITE_OUTLET_ROLE_ID=${{ secrets.VITE_OUTLET_ROLE_ID_STAGING }}
-            VITE_AGENCY_ROLE_ID=${{ secrets.VITE_AGENCY_ROLE_ID_STAGING }}
-          cache-from: type=gha,scope=frontend
-          cache-to: type=gha,mode=max,scope=frontend
+            VITE_API_URL=${{ steps.vite.outputs.api_url }}
+            VITE_GRAPHQL_ENDPOINT=${{ steps.vite.outputs.graphql }}
+            VITE_R2_PUBLIC_URL=${{ steps.vite.outputs.r2 }}
+            VITE_OUTLET_ROLE_ID=${{ steps.vite.outputs.outlet_role }}
+            VITE_AGENCY_ROLE_ID=${{ steps.vite.outputs.agency_role }}
+          cache-from: type=gha,scope=frontend-${{ needs.prepare.outputs.environment }}
+          cache-to: type=gha,mode=max,scope=frontend-${{ needs.prepare.outputs.environment }}
 
   backend:
     needs: prepare
@@ -99,5 +152,5 @@ jobs:
           file: ./apps/backend/Dockerfile
           push: true
           tags: ${{ needs.prepare.outputs.backend_tags }}
-          cache-from: type=gha,scope=backend
-          cache-to: type=gha,mode=max,scope=backend
+          cache-from: type=gha,scope=backend-${{ needs.prepare.outputs.environment }}
+          cache-to: type=gha,mode=max,scope=backend-${{ needs.prepare.outputs.environment }}
