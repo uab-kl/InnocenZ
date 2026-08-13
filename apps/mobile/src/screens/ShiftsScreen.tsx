@@ -223,6 +223,14 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
   const [overdueAlerted, setOverdueAlerted] = useState(false);
   /** Open by default — a forgotten check-out costs the shift, so it announces itself. */
   const [overdueOpen, setOverdueOpen] = useState(true);
+  /*
+   * Which PV to-do cards are expanded, keyed by todo id — NOT one shared flag.
+   * A PR can be holding more than one unsigned voucher, and one boolean would
+   * fold every card the moment they parked a single one.
+   * Absent = open: an unsigned voucher is money owed, so it announces itself
+   * and the PR chooses to fold it, never the other way round.
+   */
+  const [pvOpen, setPvOpen] = useState<Record<string, boolean>>({});
   useEffect(() => {
     if (overdueCheckout && !overdueAlerted) {
       setOverdueAlerted(true);
@@ -460,23 +468,79 @@ export function ShiftsScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void 
                 <EmptyDashed>Nothing to do</EmptyDashed>
               ) : (
                 <View style={{ gap: 10 }}>
-                  {todoItems.map((todo) => (
-                    <View key={todo.id} style={styles.todoCard}>
-                      <View style={styles.todoIcon}>
-                        <FileText size={16} color={C.goldL} />
+                  {todoItems.map((todo) => {
+                    const cardOpen = pvOpen[todo.id] ?? true;
+                    return (
+                      /*
+                       * A COLUMN, and collapsible — the same treatment the
+                       * overdue-checkout card above already needed, for the
+                       * same reason. As a fixed row the "Review PV" button held
+                       * its width and squeezed everything else into a gutter:
+                       * the title broke over three lines and the outlet, the
+                       * voucher number and the amount ran on for three more.
+                       *
+                       * Collapsing matters because this card cannot be
+                       * dismissed — it stays until the PR signs the voucher.
+                       * Folding it to its title lets them park it without
+                       * losing it. Open by default, so nothing that was on
+                       * screen before disappears behind a tap.
+                       */
+                      <View key={todo.id} style={[styles.todoCard, styles.todoCardStacked]}>
+                        <Pressable
+                          style={styles.overdueHead}
+                          onPress={() =>
+                            setPvOpen((prev) => ({
+                              ...prev,
+                              [todo.id]: !(prev[todo.id] ?? true),
+                            }))
+                          }
+                          accessibilityRole="button"
+                          accessibilityState={{ expanded: cardOpen }}
+                        >
+                          <View style={styles.todoIcon}>
+                            <FileText size={16} color={C.goldL} />
+                          </View>
+                          <Text style={[styles.todoTitle, { flex: 1 }]}>{todo.title}</Text>
+                          <ChevronDown
+                            size={16}
+                            color={C.goldL}
+                            style={cardOpen ? { transform: [{ rotate: '180deg' }] } : undefined}
+                          />
+                        </Pressable>
+                        {cardOpen && (
+                          <>
+                            {/*
+                              * Three facts, three rows — not the one
+                              * dot-separated run `subtitle` carries. The todo
+                              * already holds them apart (`outlet`, `ref`,
+                              * `net`), and the amount is what the PR is being
+                              * asked to attest to, so it gets its own line
+                              * rather than being the tail of a sentence.
+                              */}
+                            <View style={styles.overdueFacts}>
+                              <View style={styles.overdueRow}>
+                                <Text style={styles.overdueKey}>WHERE</Text>
+                                <Text style={styles.overdueVal}>{todo.outlet}</Text>
+                              </View>
+                              <View style={styles.overdueRow}>
+                                <Text style={styles.overdueKey}>VOUCHER</Text>
+                                <Text style={styles.overdueVal}>{todo.ref}</Text>
+                              </View>
+                              <View style={styles.overdueRow}>
+                                <Text style={styles.overdueKey}>NET PAY</Text>
+                                <Text style={styles.overdueVal}>{formatRM(todo.net)}</Text>
+                              </View>
+                            </View>
+                            <IzButton
+                              label={todo.actionLabel}
+                              onPress={() => openPv(todo.pvId)}
+                              style={{ marginTop: 10 }}
+                            />
+                          </>
+                        )}
                       </View>
-                      <View style={styles.todoBody}>
-                        <Text style={styles.todoTitle}>{todo.title}</Text>
-                        <Text style={styles.todoSubtitle}>{todo.subtitle}</Text>
-                      </View>
-                      <IzButton
-                        label={todo.actionLabel}
-                        small
-                        fullWidth={false}
-                        onPress={() => openPv(todo.pvId)}
-                      />
-                    </View>
-                  ))}
+                    );
+                  })}
                 </View>
               )}
             </Section>
@@ -824,6 +888,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: C.line,
   },
+  /** Stacks a todoCard's contents so its button gets the full width, not a gutter. */
+  todoCardStacked: { flexDirection: 'column', alignItems: 'stretch' },
   overdueHead: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   overdueFacts: {
     marginTop: 10,
@@ -879,22 +945,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(232,194,122,0.18)',
   },
-  todoBody: {
-    flex: 1,
-    minWidth: 0,
-  },
+  /*
+   * `todoBody` and `todoSubtitle` lived here for the old fixed-row card. The
+   * card now stacks and prints its facts through `overdueFacts`/`overdueRow`,
+   * so both were dead — left behind, they read as the styling this card still
+   * uses and invite the flattened row to be rebuilt.
+   */
   todoTitle: {
     fontFamily: F.sora,
     fontSize: 18,
     fontWeight: '700',
     color: C.txt,
-  },
-  todoSubtitle: {
-    fontFamily: F.manrope,
-    fontSize: C.fsTiny,
-    lineHeight: C.fsTiny * 1.4,
-    color: C.prMuted,
-    marginTop: 2,
   },
   servicesBlurb: {
     fontFamily: F.manrope,
