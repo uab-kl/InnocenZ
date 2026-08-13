@@ -860,6 +860,8 @@ export class UserControllerClass {
         fullName: profile.fullName,
         displayName: existingUser.username || profile.fullName || 'PR',
         dob: profile.dob,
+        // Age on the card follows the IC, same as everywhere else it is shown.
+        idNo: profile.idNo,
         heightCm: profile.comcardHeightCm,
         weightKg: profile.comcardWeightKg,
         portfolioPhotos: slots,

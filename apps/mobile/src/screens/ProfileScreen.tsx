@@ -249,8 +249,17 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // Server generates the PNG (same layout as the on-screen preview).
   const canSaveComcard = Boolean(token) && !editing;
 
-  const saveComcardToDatabase = async () => {
-    if (!canSaveComcard || comcardTiles.mode === 'empty') return;
+  /**
+   * Re-render and store the comcard PNG.
+   *
+   * Called from `saveEdit` — there is no button any more, because a save is
+   * meant to be enough. It deliberately does NOT test `canSaveComcard`: that
+   * includes `!editing`, and React has not applied `setEditing(false)` by the
+   * time the save runs, so the closure would still read `true` and this would
+   * silently do nothing — which is the shape of the original complaint.
+   */
+  const regenerateSavedComcard = async () => {
+    if (!token || comcardTiles.mode === 'empty') return;
     setSavingComcard(true);
     setError(null);
     setComcardSavedHint(null);
@@ -275,9 +284,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         }
         await uploadComcardImage(blob, 'comcard.png');
       }
-      setComcardSavedHint('Comcard saved');
+      setComcardSavedHint('Comcard updated');
     } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not save comcard');
+      // Reported, never swallowed. The profile itself IS saved by this point,
+      // so this must read as "the card did not follow", not as a failed save —
+      // a silent failure here is how a stale card outlived an edit.
+      setComcardSavedHint('Profile saved, but the comcard could not be re-rendered');
+      setError(e instanceof ApiError ? e.message : 'Could not update the comcard');
     } finally {
       setSavingComcard(false);
     }
@@ -376,16 +389,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       // "has at least one photo": the generator wants four tiles, so a PR with
       // one photo used to fire a call that could only fail — silently, because
       // the failure was swallowed. Now the outcome is reported either way.
-      if (comcardTiles.mode !== 'empty') {
-        try {
-          await generateComcard();
-          setComcardSavedHint('Comcard updated');
-        } catch {
-          // Not fatal to the save — the profile IS stored — but it must not
-          // look like it worked, or the stale card silently outlives the edit.
-          setComcardSavedHint('Profile saved, but the comcard could not be re-rendered');
-        }
-      }
+      // Shares the one routine, so the card produced by saving is byte-for-byte
+      // the one the old button produced — including its web canvas fallback for
+      // when the server generate route is unavailable.
+      await regenerateSavedComcard();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save profile');
     } finally {
@@ -912,23 +919,18 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             )}
           </View>
 
+          {/*
+            * The "Save / Update saved comcard" button lived here. Removed: the
+            * card is re-rendered whenever the profile is saved, so the button
+            * only ever existed to work around that not happening, and leaving
+            * it invited the reading that a save is not enough on its own.
+            *
+            * The STATUS line stays. It is the evidence half, and it still has
+            * three distinct things to say — saved and visible, saved but the
+            * image will not load, or no card yet.
+            */}
           {canSaveComcard && comcardTiles.mode !== 'empty' && (
             <View style={styles.comcardActions}>
-              <IzButton
-                label={
-                  savingComcard
-                    ? t.profile.savingComcard
-                    : me?.profile.comcardImage
-                      ? t.profile.updateComcard
-                      : t.profile.saveComcard
-                }
-                onPress={() => {
-                  void saveComcardToDatabase();
-                }}
-                disabled={savingComcard || saving}
-                variant="soft"
-                small
-              />
               {/*
                 * "Saved to profile" is only allowed to appear next to a comcard
                 * the PR can SEE. It used to key off `comcardImage` alone, so a
