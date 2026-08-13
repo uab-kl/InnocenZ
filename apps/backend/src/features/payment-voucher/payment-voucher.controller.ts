@@ -421,8 +421,22 @@ type ReceiptInfo = {
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 function asAssignmentId(raw: string | null | undefined): string | null {
   if (!raw) return null;
-  // The check-out seal marks its overtime line `<assignment id>-ot`.
-  const bare = raw.replace(/-ot$/i, '');
+  /*
+   * BOTH suffixes an id can wear, not just one.
+   *
+   * The check-out seal marks its overtime line `<assignment id>-ot`, and this
+   * stripped exactly that — but `penaltyDedupeRef` writes `<charge id>-pen`, so
+   * a CANCELLATION FEE (whose charge id IS the shift_assignment id) failed the
+   * UUID test, resolved to null, and the PR's evidence sheet told them the
+   * deduction was "not linked to a shift". It is the one deduction that is
+   * definitionally about a shift — the one they cancelled — and they could not
+   * see which.
+   *
+   * A WEEKLY penalty's charge id is a `penalty_charge.id`, which matches no
+   * assignment, so it resolves to nothing and correctly keeps the "not linked"
+   * note. That is right: a weekly rule is not about a single shift.
+   */
+  const bare = raw.replace(/-(ot|pen)$/i, '');
   return UUID_RE.test(bare) ? bare : null;
 }
 

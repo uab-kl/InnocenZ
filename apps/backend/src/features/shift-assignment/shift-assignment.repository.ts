@@ -16,6 +16,9 @@ import {
   totalDemand,
   type DemandRow,
 } from './tier-demand';
+// Same leaf the cancel seal used to compute the notice. Reconstructing the
+// cancellation moment with any other parser drifts by the server's UTC offset.
+import { shiftStartMs } from './cancel-fee';
 import {
   OutletDrinkMenuTable,
   OutletTierRateTable,
@@ -162,6 +165,29 @@ export type ReplacementCandidate = {
  * a 6 Aug shift serialises as `2026-08-05T16:00:00Z` in UTC+8. Anything
  * comparing it as an instant lands a day early.
  */
+/**
+ * The moment a cancellation was made, recovered from the sealed notice.
+ *
+ * `cancel_notice_hours` was written as `(shiftStart - now) / 3_600_000`, so
+ * `now` is `shiftStart - noticeHours`. Uses `shiftStartMs` — the SAME parser the
+ * seal used — because it builds the start in the server's local zone; any other
+ * reconstruction drifts by the offset and would print a cancellation time that
+ * never happened.
+ *
+ * Null when there is no sealed notice (never cancelled, or cancelled before
+ * migration 0116). A null must render as "not recorded", never as a guess.
+ */
+function cancelledAtFrom(
+  shiftDate: string,
+  slot: string | null,
+  noticeHours: string | null,
+): Date | null {
+  if (noticeHours === null || noticeHours === undefined) return null;
+  const hours = Number(noticeHours);
+  if (!Number.isFinite(hours)) return null;
+  return new Date(shiftStartMs(shiftDate, slot) - hours * 3_600_000);
+}
+
 export type AssignmentShiftFacts = {
   id: string;
   /** The owning PR — callers MUST re-check this against the PR they asked for. */
@@ -177,6 +203,33 @@ export type AssignmentShiftFacts = {
   /** Shift END, clamped — see the warning above. */
   checkOutAt: Date | null;
   overtimeMinutes: number | null;
+  /** Roster lifecycle. `cancelled` is why the cancellation facts below exist. */
+  status: ShiftAssignmentStatus;
+  /**
+   * When the PR cancelled — RECONSTRUCTED, because no column records it.
+   *
+   * `shift_assignment` has no `cancelled_at`: flipping the status only moves
+   * `updated_at`, which any later edit moves again, so it cannot be trusted to
+   * answer "when did they drop this shift". But `cancel_notice_hours` IS sealed
+   * at cancel time as `(shiftStart - now) / 3_600_000`, so the moment is exactly
+   * `shiftStart - noticeHours`, recovered from the sealed evidence rather than
+   * from a mutable timestamp.
+   *
+   * Derived HERE, on the server, using the same `shiftStartMs` the seal used —
+   * that helper builds the start in the server's local zone, so reconstructing
+   * it anywhere else would drift by the offset. Precision is the seal's own 2dp
+   * of an hour (~36 s), so render it to the minute and no finer.
+   *
+   * Null when the row was never cancelled, or was cancelled before 0116 sealed
+   * the notice — which reads as "not recorded", never as a guessed time.
+   */
+  cancelledAt: Date | null;
+  /** RM, sealed at cancel time. Null on rows predating 0116. */
+  cancelFeeRm: string | null;
+  /** The band that applied, e.g. 50. Null on rows predating 0116. */
+  cancelFeePct: number | null;
+  /** Hours of notice given; NEGATIVE when the shift had already started. */
+  cancelNoticeHours: string | null;
 };
 
 /**
@@ -1097,6 +1150,10 @@ export class ShiftAssignmentRepositoryClass {
           // shift row is reached the event TYPE always has a value.
           eventKind: ShiftTable.eventKind,
           outletName: OutletTable.name,
+          status: ShiftAssignmentTable.status,
+          cancelFeeRm: ShiftAssignmentTable.cancelFeeRm,
+          cancelFeePct: ShiftAssignmentTable.cancelFeePct,
+          cancelNoticeHours: ShiftAssignmentTable.cancelNoticeHours,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
@@ -1111,6 +1168,13 @@ export class ShiftAssignmentRepositoryClass {
         eventName: row.eventName,
         eventKind: row.eventKind,
         outletName: row.outletName,
+        status: row.status,
+        cancelFeeRm: row.cancelFeeRm,
+        cancelFeePct: row.cancelFeePct,
+        cancelNoticeHours: row.cancelNoticeHours,
+        // Reconstructed from the SEALED notice, not from `updated_at` — see the
+        // field docs. Requires the same `shiftStartMs` the seal used.
+        cancelledAt: cancelledAtFrom(row.shiftDate, row.slot, row.cancelNoticeHours),
         checkInAt: row.checkInAt,
         checkOutAt: row.checkOutAt,
         overtimeMinutes: row.overtimeMinutes ?? null,

@@ -1458,6 +1458,29 @@ export type PrWeekShift = {
    */
   checkOutAt: string | null;
   overtimeMinutes: number | null;
+  /**
+   * Roster lifecycle — `'cancelled'` is what turns a deduction's shift card into
+   * "you cancelled this one" instead of an unexplained missing check-in.
+   *
+   * Optional: a backend that has not been restarted omits it, and the card then
+   * falls back to its ordinary wording rather than claiming anything false.
+   */
+  status?: string | null;
+  /**
+   * When the PR cancelled, as an ISO timestamp.
+   *
+   * ⚠️ RECONSTRUCTED server-side from the SEALED notice hours, because no column
+   * records it — see `cancelledAtFrom`. Accurate to about the minute, so never
+   * render seconds. Null means "not recorded" (never cancelled, or cancelled
+   * before the notice was sealed); show nothing rather than a guess.
+   */
+  cancelledAt?: string | null;
+  /** RM sealed at cancel time, e.g. "20.00". */
+  cancelFeeRm?: string | null;
+  /** The band that applied, e.g. 50. */
+  cancelFeePct?: number | null;
+  /** Hours of notice given. NEGATIVE when the shift had already started. */
+  cancelNoticeHours?: string | null;
 };
 
 /** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */
