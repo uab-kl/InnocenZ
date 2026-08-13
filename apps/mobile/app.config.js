@@ -66,12 +66,26 @@ const R2_PUBLIC_URL = (
   .trim()
   .replace(/\/$/, '');
 
+/**
+ * Home-screen label. EAS `preview` (APK) / `development` → InnocenZ(beta);
+ * `production` (Play Store AAB) keeps InnocenZ.
+ * Override anytime with EXPO_PUBLIC_APP_DISPLAY_NAME.
+ */
+const EAS_PROFILE = process.env.EAS_BUILD_PROFILE?.trim() || '';
+const DISPLAY_NAME =
+  process.env.EXPO_PUBLIC_APP_DISPLAY_NAME?.trim() ||
+  (EAS_PROFILE === 'preview' || EAS_PROFILE === 'development'
+    ? 'InnocenZ(beta)'
+    : null);
+
 module.exports = ({ config }) => ({
   ...config,
+  ...(DISPLAY_NAME ? { name: DISPLAY_NAME } : {}),
   extra: {
     // Spread first: app.json's extra carries the EAS projectId.
     ...config.extra,
     ...(R2_PUBLIC_URL ? { r2PublicUrl: R2_PUBLIC_URL } : {}),
+    easBuildProfile: EAS_PROFILE || null,
   },
   plugins: [
     ...(config.plugins ?? []),

@@ -107,7 +107,10 @@ function PendingComcardVisual({
 			<StaticComcardVisual src={signup.comcardImageUrl} className={className} />
 		);
 	}
-	if (photos.length >= 4) {
+	// The SHARED gate, not a local count: 3 photos build the tri-layout comcard
+	// (hero left, two stacked right), 4+ the 2×2 — a hand-rolled `>= 4` here is
+	// exactly how this panel kept showing the 3D silhouette after the rule moved.
+	if (canGeneratePortfolioComcard(signup.portfolioPhotos ?? [])) {
 		return (
 			<PortfolioComcardVisual photos={photos} pr={pr} className={className} />
 		);
