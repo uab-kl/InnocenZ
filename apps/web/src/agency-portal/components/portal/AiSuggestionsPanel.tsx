@@ -70,7 +70,14 @@ export function AiSuggestionsPanel() {
 		desc = "Every posted shift is fully staffed";
 	} else if (!canAssign) {
 		title = `${openSlotCount} open ${plural(openSlotCount, "slot")} today`;
-		desc = "No free PRs — everyone is booked or inactive";
+		// "No free PRs" was said even when ten PRs were idle and merely the wrong
+		// tier for what the shift asked for — which sends the agency hunting for
+		// staff it already has. The two situations have opposite remedies, so they
+		// get different sentences.
+		desc =
+			plan.tierBlockedCount > 0
+				? "Free PRs today are not the tiers these shifts asked for"
+				: "No free PRs — everyone is booked or inactive";
 	}
 
 	return (

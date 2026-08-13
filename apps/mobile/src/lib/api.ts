@@ -1053,6 +1053,54 @@ export function fetchMyShiftAssignments(accessToken: string): Promise<ShiftAssig
   });
 }
 
+/** One day this PR has declared themselves unavailable. */
+export type PrAvailabilityRecord = {
+  id: string;
+  userId: string;
+  /** `YYYY-MM-DD`. */
+  unavailableDate: string;
+  reason: string | null;
+};
+
+/**
+ * The days this PR has blocked on their own schedule, scoped server-side to the
+ * token. No window is sent: the calendar can be paged back and forward freely,
+ * and the whole set is a handful of rows.
+ */
+export function fetchMyUnavailableDays(accessToken: string): Promise<PrAvailabilityRecord[]> {
+  return request<PrAvailabilityRecord[]>('/pr-availability/mine', {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
+/**
+ * Mark one day unavailable. The agency's roster reads the same rows, so this is
+ * what makes the block visible to them — and what stops them being offered this
+ * PR for a shift that day.
+ *
+ * 409 when the PR is already rostered that day: the way off a booked shift is to
+ * cancel it or request leave. `request` throws that message verbatim.
+ */
+export function blockMyDay(
+  accessToken: string,
+  date: string,
+  reason?: string,
+): Promise<PrAvailabilityRecord> {
+  return request<PrAvailabilityRecord>('/pr-availability/mine', {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify(reason ? { date, reason } : { date }),
+  });
+}
+
+/** Reopen a day this PR had blocked. */
+export function unblockMyDay(accessToken: string, date: string): Promise<{ date: string }> {
+  return request<{ date: string }>(`/pr-availability/mine/${date}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
 /**
  * One row of the caller's agency's penalty policy. Only the `cancellation` row
  * matters to this app — it prices the Cancel button — but the endpoint returns
@@ -1458,6 +1506,29 @@ export type PrWeekShift = {
    */
   checkOutAt: string | null;
   overtimeMinutes: number | null;
+  /**
+   * Roster lifecycle — `'cancelled'` is what turns a deduction's shift card into
+   * "you cancelled this one" instead of an unexplained missing check-in.
+   *
+   * Optional: a backend that has not been restarted omits it, and the card then
+   * falls back to its ordinary wording rather than claiming anything false.
+   */
+  status?: string | null;
+  /**
+   * When the PR cancelled, as an ISO timestamp.
+   *
+   * ⚠️ RECONSTRUCTED server-side from the SEALED notice hours, because no column
+   * records it — see `cancelledAtFrom`. Accurate to about the minute, so never
+   * render seconds. Null means "not recorded" (never cancelled, or cancelled
+   * before the notice was sealed); show nothing rather than a guess.
+   */
+  cancelledAt?: string | null;
+  /** RM sealed at cancel time, e.g. "20.00". */
+  cancelFeeRm?: string | null;
+  /** The band that applied, e.g. 50. */
+  cancelFeePct?: number | null;
+  /** Hours of notice given. NEGATIVE when the shift had already started. */
+  cancelNoticeHours?: string | null;
 };
 
 /** The PR's live current-week earnings — powers Check-In STATUS + Payment This-week. */

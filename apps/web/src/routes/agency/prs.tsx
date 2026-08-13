@@ -358,9 +358,7 @@ function AgencyManagePRs() {
 						{!backendProposals.isLoading &&
 							!backendProposals.isError &&
 							backendProposals.count === 0 && (
-								<p className="iz-sm iz-muted2">
-									No active penalties.
-								</p>
+								<p className="iz-sm iz-muted2">No active penalties.</p>
 							)}
 						{backendProposals.proposals.map((p) => (
 							<div
@@ -1002,7 +1000,10 @@ function AgencyPrDetail({
 				</div>
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>Attendance</IzKpiLabel>
-					<div className="n">{detail.attendancePct}%</div>
+					{/* Em-dash, not 0% — see AgencyManagedPR.attendancePct. */}
+					<div className="n">
+						{detail.attendancePct === null ? "—" : `${detail.attendancePct}%`}
+					</div>
 				</div>
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>KPI</IzKpiLabel>
@@ -1010,8 +1011,14 @@ function AgencyPrDetail({
 				</div>
 				<div className="iz-outlet-stat-cell">
 					<IzKpiLabel>Paid</IzKpiLabel>
+					{/* Only abbreviate once there are thousands to abbreviate. The
+					    unconditional "/1000 + k" was written against demo figures in
+					    the thousands; a real settled voucher of RM 268.33 rendered as
+					    "0.3k", which reads as almost nothing. */}
 					<div className="n text-[var(--iz-gold-l)]">
-						{(detail.totalPaid / 1000).toFixed(1)}k
+						{detail.totalPaid >= 1000
+							? `${(detail.totalPaid / 1000).toFixed(1)}k`
+							: Math.round(detail.totalPaid).toString()}
 					</div>
 				</div>
 			</div>

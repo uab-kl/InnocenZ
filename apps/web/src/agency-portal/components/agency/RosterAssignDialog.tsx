@@ -6,7 +6,12 @@ import { useQuery } from "@tanstack/react-query";
 import { UserPlus, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchOutlets } from "@/services/outlet/outlet";
+import {
+	blockedDatesByPr,
+	fetchPrAvailability,
+} from "@/services/pr-availability";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
 import {
@@ -51,13 +56,22 @@ export function RosterAssignDialog({
 	// add-shift surface to keep in step.)
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", fromDate, toDate],
-		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
+		// Paged out: the server clamps to 100, and this key is shared — see
+		// lib/fetch-all-pages.ts. A truncated read here offers seats that are
+		// already taken, which is the exact failure this dialog exists to prevent.
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShifts({ fromDate, toDate, page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 		enabled: open,
 	});
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchPrPersonnel({ page, pageSize: 100 }, logout),
+			),
 		staleTime: 60_000,
 		enabled: open,
 	});
@@ -79,7 +93,10 @@ export function RosterAssignDialog({
 	// assign sheet; the two must not disagree about what "open" means.
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 		enabled: open,
 	});
@@ -106,8 +123,33 @@ export function RosterAssignDialog({
 	);
 	const prs = prsQuery.data?.data ?? [];
 
+	// Days the roster's PRs marked unavailable. Shared query key, so this reads
+	// the cache the roster page already filled.
+	const availabilityQuery = useQuery({
+		queryKey: ["roster", "availability", fromDate, toDate],
+		queryFn: () => fetchPrAvailability({ from: fromDate, to: toDate }, logout),
+		staleTime: 30_000,
+		enabled: open,
+	});
+	const blockedDates = useMemo(
+		() => blockedDatesByPr(availabilityQuery.data ?? []),
+		[availabilityQuery.data],
+	);
 	const [shiftId, setShiftId] = useState("");
 	const [prId, setPrId] = useState("");
+
+	// Which PRs cannot take the SELECTED shift, because they blocked its date.
+	// Empty until a shift is picked — with no date there is no question to ask,
+	// and greying the whole list would look like a broken screen.
+	const selectedShiftDate = openShifts.find((s) => s.id === shiftId)?.shiftDate;
+	const blockedPrIds = useMemo(() => {
+		if (!selectedShiftDate) return new Set<string>();
+		const ids = new Set<string>();
+		for (const [blockedPrId, dates] of blockedDates) {
+			if (dates.has(selectedShiftDate)) ids.add(blockedPrId);
+		}
+		return ids;
+	}, [blockedDates, selectedShiftDate]);
 
 	// Reset the form each time the dialog opens.
 	useEffect(() => {
@@ -201,9 +243,14 @@ export function RosterAssignDialog({
 						    option built `${p.name} (${p.nickname})` by hand: brackets on
 						    the wrong half, halves in the wrong order, and a third spelling
 						    of the same person inside one screen. */}
+						{/* A PR who blocked this shift's date is shown but not
+						    selectable — the assign would 409. Shown rather than hidden
+						    so the agency can see WHY someone they expected is missing;
+						    a name that silently vanishes reads as a data fault. */}
 						{prs.map((p) => (
-							<option key={p.id} value={p.id}>
+							<option key={p.id} value={p.id} disabled={blockedPrIds.has(p.id)}>
 								{formatPayeeLabel(p.nickname, p.name)}
+								{blockedPrIds.has(p.id) ? " · unavailable that day" : ""}
 							</option>
 						))}
 					</IzSelect>

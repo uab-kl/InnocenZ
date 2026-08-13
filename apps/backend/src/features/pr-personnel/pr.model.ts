@@ -137,10 +137,28 @@ export type PrRoster = {
   payClass: string | null;
 };
 
+/**
+ * A PR's live performance figures, derived (never stored) from this agency's
+ * `shift_assignment` and `payment_voucher` rows. See `pr-stats.ts` for the
+ * counting rule and why `attendancePct` may be null.
+ *
+ * Present on the LIST read path only, and only for callers entitled to it — an
+ * outlet may not read an agency's payroll, so it never receives this.
+ */
+export type PrStatsType = {
+  attendancePct: number | null;
+  completedShifts: number;
+  missedShifts: number;
+  excusedShifts: number;
+  totalPaidRm: number;
+};
+
 /** A `pr` row with the linked user's comcard profile and roster grading folded in. */
 export type PrWithProfileType = PrType & {
   profile: PrProfile | null;
   roster: PrRoster | null;
+  /** Absent (not zeroed) when the caller is not entitled to it — see PrStatsType. */
+  stats?: PrStatsType;
 };
 
 export type PrFilter = {

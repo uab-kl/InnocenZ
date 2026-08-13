@@ -66,6 +66,8 @@ import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shif
 import { ShiftAssignmentControllerClass } from '@/features/shift-assignment/shift-assignment.controller.js';
 import { OutletSwapRepositoryClass } from '@/features/outlet-swap/outlet-swap.repository.js';
 import { OutletSwapControllerClass } from '@/features/outlet-swap/outlet-swap.controller.js';
+import { PrAvailabilityRepositoryClass } from '@/features/pr-availability/pr-availability.repository.js';
+import { PrAvailabilityControllerClass } from '@/features/pr-availability/pr-availability.controller.js';
 import { CutlostRepositoryClass } from '@/features/cutlost/cutlost.repository.js';
 import { CutlostControllerClass } from '@/features/cutlost/cutlost.controller.js';
 import { PaymentVoucherGeneratorClass } from '@/features/payment-voucher/payment-voucher-generator.js';
@@ -287,6 +289,8 @@ export const shiftAssignmentController = new ShiftAssignmentControllerClass(shif
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
 export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
+export const prAvailabilityRepository = new PrAvailabilityRepositoryClass();
+export const prAvailabilityController = new PrAvailabilityControllerClass(prAvailabilityRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 export const cutlostRepository = new CutlostRepositoryClass();
 export const cutlostController = new CutlostControllerClass(cutlostRepository, shiftRepository, shiftAssignmentRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);
 
