@@ -466,15 +466,116 @@ export class OutletSwapRepositoryClass {
   }
 
   /**
+   * Which of `shiftIds` have no seat left for `prId`'s TIER, keyed by shift id.
+   *
+   * The picker has to offer only what approval will accept, and headcount alone
+   * is not that test: a shift asking Tier III ×2 + Tier I ×2 at quantity 4 with
+   * 3 staffed is headcount-free and still refuses a 3rd Tier III, so the agency
+   * could raise a request that could only ever be refused.
+   *
+   * Three batched queries for the whole list, never one per shift. A shift that
+   * declared no mix (`totalDemand === 0`) is uncapped and never blocked — that
+   * is every pre-composer shift, and capping them would strand the roster.
+   */
+  private async tierBlockedShiftIds(params: {
+    shiftIds: string[];
+    prId: string;
+    agencyId: string;
+  }): Promise<Set<string>> {
+    const blocked = new Set<string>();
+    const shiftIds = [...new Set(params.shiftIds)];
+    if (shiftIds.length === 0) return blocked;
+
+    const [demandRows, staffedRows, incoming] = await Promise.all([
+      db
+        .select({
+          shiftId: ShiftPayTierTable.shiftId,
+          kind: ShiftPayTierTable.kind,
+          tier: ShiftPayTierTable.tier,
+          prCount: ShiftPayTierTable.prCount,
+        })
+        .from(ShiftPayTierTable)
+        .where(inArray(ShiftPayTierTable.shiftId, shiftIds)),
+      // ⚠️ The agency predicate is part of the JOIN KEY, not a filter: one person
+      // holds an `agency_pr` row per agency, so joining on `user_id` alone
+      // resolves every membership they hold and counts one seat several times.
+      // And it joins `user_id`, never `.id` — `shift_assignment.pr_id` IS the
+      // user id after 0089, so `.id` matches nothing and every staffed seat
+      // would fall into the "unnamed" bucket.
+      db
+        .select({
+          shiftId: ShiftAssignmentTable.shiftId,
+          tier: AgencyPrTable.tier,
+        })
+        .from(ShiftAssignmentTable)
+        .leftJoin(
+          AgencyPrTable,
+          and(
+            eq(ShiftAssignmentTable.prId, AgencyPrTable.userId),
+            eq(AgencyPrTable.agencyId, ShiftAssignmentTable.agencyId),
+          ),
+        )
+        .where(
+          and(
+            inArray(ShiftAssignmentTable.shiftId, shiftIds),
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        ),
+      db
+        .select({ tier: AgencyPrTable.tier })
+        .from(AgencyPrTable)
+        .where(
+          and(
+            eq(AgencyPrTable.userId, params.prId),
+            eq(AgencyPrTable.agencyId, params.agencyId),
+          ),
+        )
+        .limit(1),
+    ]);
+
+    const demandByShift = new Map<string, typeof demandRows>();
+    for (const row of demandRows) {
+      demandByShift.set(row.shiftId, [...(demandByShift.get(row.shiftId) ?? []), row]);
+    }
+    const staffedByShift = new Map<string, (string | null)[]>();
+    for (const row of staffedRows) {
+      staffedByShift.set(row.shiftId, [
+        ...(staffedByShift.get(row.shiftId) ?? []),
+        bucketForPrTier(row.tier),
+      ]);
+    }
+    const incomingBucket = bucketForPrTier(incoming[0]?.tier);
+
+    for (const shiftId of shiftIds) {
+      const demand = demandByShift.get(shiftId) ?? [];
+      if (totalDemand(demand) === 0) continue;
+      const verdict = seatFor({
+        demand,
+        // `quantity` only feeds the unnamed-leftover arm, and the caller screens
+        // on headcount separately. Passing the asked total keeps this out of the
+        // shift table for a number it does not otherwise need.
+        quantity: totalDemand(demand),
+        staffedBuckets: staffedByShift.get(shiftId) ?? [],
+        incomingBucket,
+      });
+      if (!verdict.ok) blocked.add(shiftId);
+    }
+    return blocked;
+  }
+
+  /**
    * Candidate destination shifts for a swap: everything else running that night
-   * that the agency could move the PR to, with live headcount so the caller can
-   * mark the full ones. Excludes the PR's current shift (a swap must move them)
-   * and draft/sealed shifts (not staffable).
+   * that the agency could move the PR to, with live headcount AND whether the
+   * PR's tier still fits, so the caller can mark the ones approval would refuse.
+   * Excludes the PR's current shift (a swap must move them) and draft/sealed
+   * shifts (not staffable).
    */
   async listSwapTargets(params: {
     agencyId: string;
     shiftDate: string;
     excludeShiftId: string;
+    /** The PR being moved — needed to answer the tier half of "does this fit". */
+    prId: string;
   }): Promise<
     Array<{
       shiftId: string;
@@ -485,6 +586,8 @@ export class OutletSwapRepositoryClass {
       outletName: string | null;
       quantity: number;
       staffedCount: number;
+      /** True when the shift has room, but not for THIS PR's tier. */
+      tierBlocked: boolean;
     }>
   > {
     try {
@@ -512,8 +615,20 @@ export class OutletSwapRepositoryClass {
       const targets = shifts.filter((s) => s.shiftId !== params.excludeShiftId);
       if (targets.length === 0) return [];
 
-      const counts = await this.countLiveAssignments(targets.map((s) => s.shiftId));
-      return targets.map((s) => ({ ...s, staffedCount: counts.get(s.shiftId) ?? 0 }));
+      const shiftIds = targets.map((s) => s.shiftId);
+      const [counts, tierBlocked] = await Promise.all([
+        this.countLiveAssignments(shiftIds),
+        this.tierBlockedShiftIds({
+          shiftIds,
+          prId: params.prId,
+          agencyId: params.agencyId,
+        }),
+      ]);
+      return targets.map((s) => ({
+        ...s,
+        staffedCount: counts.get(s.shiftId) ?? 0,
+        tierBlocked: tierBlocked.has(s.shiftId),
+      }));
     } catch (error) {
       logger.error('[OutletSwapRepository.listSwapTargets] Error:', error);
       throw error;

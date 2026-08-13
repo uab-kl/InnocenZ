@@ -23,6 +23,14 @@ export interface SwapOutletTarget {
 	 * venue is running but has no room.
 	 */
 	isFull: boolean;
+	/**
+	 * Has room, but not for THIS PR's tier — also refused on approval, and also
+	 * disabled rather than hidden. Kept separate from `isFull` because the two
+	 * read completely differently to an agency: "no room" is about the venue,
+	 * "wrong tier" is about this particular PR, and a disabled option showing 2/4
+	 * with no explanation is how you get asked why the picker is broken.
+	 */
+	tierBlocked: boolean;
 }
 
 export interface UseSwapOutletTargets {
@@ -88,5 +96,8 @@ function toSwapTarget(target: OutletSwapTarget): SwapOutletTarget {
 		quantity: target.quantity,
 		staffedCount: target.staffedCount,
 		isFull: target.staffedCount >= target.quantity,
+		// Absent on an older backend, which reads as "not blocked" — the request
+		// would then be caught by the server's own check instead of by the picker.
+		tierBlocked: target.tierBlocked ?? false,
 	};
 }

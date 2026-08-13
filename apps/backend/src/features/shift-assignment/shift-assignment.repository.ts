@@ -399,15 +399,15 @@ export class ShiftAssignmentRepositoryClass {
    * it and only headcount is checked, which is all a caller with no PR in hand
    * can meaningfully ask.
    *
-   * Weaker than `create`'s guarantee — no row lock, so two simultaneous
-   * re-staffings of the last seat could both pass. That is a rare manual action,
-   * and the alternative (locking the shift on every status PATCH, including
-   * check-in and check-out) would put a write lock on the busiest path in the
-   * system to guard the quietest.
+   * Takes the shift `FOR UPDATE`, exactly as `create` does — see
+   * `updateIfSeatFree`, which is how a re-staffing PATCH gets the check and the
+   * write inside ONE transaction. Reading this alone still leaves a gap between
+   * answer and action; callers that intend to write must use that method.
    */
   async hasFreeSeat(
     shiftId: string,
     pr?: { prId: string; agencyId: string },
+    tx?: DbTransaction,
   ): Promise<{
     free: boolean;
     quantity: number;
@@ -415,14 +415,40 @@ export class ShiftAssignmentRepositoryClass {
     /** Set only when the refusal is about the MIX rather than the headcount. */
     tierFull?: { bucket: string | null; asked: number; staffed: number };
   }> {
+    const run = (client: DbTransaction) => this.seatVerdict(client, shiftId, pr);
     try {
-      const [shift] = await db
+      return tx ? await run(tx) : await db.transaction(run);
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.hasFreeSeat] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The seat rules themselves, against whichever client (and therefore whichever
+   * transaction) the caller supplies. Locks the shift row before counting, so a
+   * concurrent assign to the last seat queues behind it rather than reading the
+   * same headcount and both proceeding.
+   */
+  private async seatVerdict(
+    client: DbTransaction,
+    shiftId: string,
+    pr?: { prId: string; agencyId: string },
+  ): Promise<{
+    free: boolean;
+    quantity: number;
+    staffed: number;
+    tierFull?: { bucket: string | null; asked: number; staffed: number };
+  }> {
+    {
+      const [shift] = await client
         .select({ quantity: ShiftTable.quantity })
         .from(ShiftTable)
         .where(eq(ShiftTable.id, shiftId))
-        .limit(1);
+        .limit(1)
+        .for('update');
       if (!shift) return { free: false, quantity: 0, staffed: 0 };
-      const staffed = await countStaffing(db, shiftId);
+      const staffed = await countStaffing(client, shiftId);
       if (staffed >= shift.quantity) {
         return { free: false, quantity: shift.quantity, staffed };
       }
@@ -430,7 +456,7 @@ export class ShiftAssignmentRepositoryClass {
       // that is all a caller who does not name one can be told.
       if (!pr) return { free: true, quantity: shift.quantity, staffed };
 
-      const demand = await db
+      const demand = await client
         .select({
           kind: ShiftPayTierTable.kind,
           tier: ShiftPayTierTable.tier,
@@ -451,7 +477,7 @@ export class ShiftAssignmentRepositoryClass {
       // IS the user id after 0089, so `.id` matches nothing, every staffed seat
       // falls into the "unnamed" bucket, and a shift whose demand already sums to
       // `quantity` would refuse everyone.
-      const staffedRows = await db
+      const staffedRows = await client
         .select({ tier: AgencyPrTable.tier })
         .from(ShiftAssignmentTable)
         .leftJoin(
@@ -467,7 +493,7 @@ export class ShiftAssignmentRepositoryClass {
             notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
           ),
         );
-      const [incoming] = await db
+      const [incoming] = await client
         .select({ tier: AgencyPrTable.tier })
         .from(AgencyPrTable)
         .where(and(eq(AgencyPrTable.userId, pr.prId), eq(AgencyPrTable.agencyId, pr.agencyId)))
@@ -489,8 +515,43 @@ export class ShiftAssignmentRepositoryClass {
             ? { bucket: verdict.bucket, asked: verdict.asked, staffed: verdict.staffed }
             : { bucket: null, asked: verdict.leftover, staffed: verdict.staffed },
       };
+    }
+  }
+
+  /**
+   * Re-staff an existing row (a cancelled assignment flipped back into a
+   * staffing status) with the seat check and the write in ONE transaction.
+   *
+   * The check and the update used to be two separate statements with no lock
+   * between them, so two people un-cancelling into the last seat could both read
+   * "free" and both land — the same race `create` was given a row lock to close.
+   * `seatVerdict` takes the shift `FOR UPDATE`, and the update runs inside that
+   * same transaction, so the second caller queues and then sees the first.
+   *
+   * Returns the refusal rather than throwing, because the caller has to turn it
+   * into a 409 with the reason attached (headcount vs tier read very
+   * differently to an agency).
+   */
+  async updateIfSeatFree(
+    id: string,
+    data: Partial<ShiftAssignmentInsertType>,
+    params: { shiftId: string; prId: string; agencyId: string },
+  ): Promise<
+    | { ok: true; assignment: ShiftAssignmentType | null }
+    | { ok: false; seat: Awaited<ReturnType<ShiftAssignmentRepositoryClass['hasFreeSeat']>> }
+  > {
+    try {
+      return await db.transaction(async (tx) => {
+        const seat = await this.seatVerdict(tx, params.shiftId, {
+          prId: params.prId,
+          agencyId: params.agencyId,
+        });
+        if (!seat.free) return { ok: false as const, seat };
+        const assignment = await this.update(id, data, tx);
+        return { ok: true as const, assignment };
+      });
     } catch (error) {
-      logger.error('[ShiftAssignmentRepository.hasFreeSeat] Error:', error);
+      logger.error('[ShiftAssignmentRepository.updateIfSeatFree] Error:', error);
       throw error;
     }
   }

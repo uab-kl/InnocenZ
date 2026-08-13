@@ -111,6 +111,10 @@ export class OutletSwapControllerClass {
         agencyId: assignment.agencyId,
         shiftDate: shift.shiftDate,
         excludeShiftId: assignment.shiftId,
+        // The PR being moved. Without it the picker can only screen on
+        // headcount, and would keep offering shifts whose tier quota is already
+        // spent — a request the agency can raise and approval can only refuse.
+        prId: assignment.userId ?? assignment.prId,
       });
       res.status(200).json({ success: true, message: 'OK', data: targets });
     } catch (error) {
@@ -163,11 +167,28 @@ export class OutletSwapControllerClass {
         return res.status(400).json({ success: false, message: 'A swap has to be to a shift on the same date', data: null });
       }
 
-      // Reject a doomed request up front: approval re-checks capacity under a
-      // lock, so this is a courtesy, not the guarantee.
+      // Reject a doomed request up front: approval re-checks BOTH rules under a
+      // lock, so this is a courtesy, not the guarantee. It screens on the same
+      // two things and in the same order — headcount, then the tier mix. Only
+      // headcount was screened here before, so a request whose destination had
+      // room but not for this PR's tier could be raised, sit in the PR's queue,
+      // and then be refused at approval for a reason nobody could have seen.
       const counts = await this.outletSwapRepository.countLiveAssignments([toShiftId]);
       if ((counts.get(toShiftId) ?? 0) >= toShift.quantity) {
         return res.status(409).json({ success: false, message: 'That shift is already fully staffed', data: null });
+      }
+      const targets = await this.outletSwapRepository.listSwapTargets({
+        agencyId: toShift.agencyId,
+        shiftDate: toShift.shiftDate,
+        excludeShiftId: assignment.shiftId,
+        prId: assignment.userId ?? assignment.prId,
+      });
+      if (targets.find((t) => t.shiftId === toShiftId)?.tierBlocked) {
+        return res.status(409).json({
+          success: false,
+          message: 'That shift has room, but not for this PR\'s tier — it already has every PR of that tier it asked for',
+          data: null,
+        });
       }
 
       const actor = getActor(req);

@@ -1737,16 +1737,31 @@ export class ShiftAssignmentControllerClass {
         parsed.data.status !== undefined &&
         isNonStaffing(existing.status) &&
         !isNonStaffing(parsed.data.status);
+      const patch = {
+        status: parsed.data.status,
+        payAmount: parsed.data.payAmount,
+        checkInAt: parsed.data.checkInAt ? new Date(parsed.data.checkInAt) : undefined,
+        checkOutAt: parsed.data.checkOutAt ? new Date(parsed.data.checkOutAt) : undefined,
+        notes: parsed.data.notes,
+        updatedBy: getActor(req),
+      };
+
+      let assignment: Awaited<ReturnType<ShiftAssignmentRepositoryClass['update']>>;
       if (reStaffing) {
-        // The PR is named so the TIER mix is checked too, not just headcount.
-        // Without it, cancelling a Tier I, backfilling with another Tier I and
-        // then un-cancelling the first left 3 Tier I on a shift that asked for 2
-        // — a row `create` would have refused, landing through the PATCH.
-        const seat = await this.shiftAssignmentRepository.hasFreeSeat(existing.shiftId, {
+        // Seat check AND write in ONE transaction, with the shift row locked.
+        // The PR is named so the TIER mix is checked too, not just headcount:
+        // without it, cancelling a Tier I, backfilling with another and then
+        // un-cancelling the first left 3 Tier I on a shift that asked for 2 — a
+        // row `create` would have refused, landing through the PATCH. And
+        // without the shared transaction, two people un-cancelling into the last
+        // seat could both read "free" and both land.
+        const result = await this.shiftAssignmentRepository.updateIfSeatFree(id, patch, {
+          shiftId: existing.shiftId,
           prId: existing.userId ?? existing.prId,
           agencyId: existing.agencyId,
         });
-        if (!seat.free) {
+        if (!result.ok) {
+          const { seat } = result;
           const message = seat.tierFull
             ? seat.tierFull.bucket
               ? `This shift already has all ${seat.tierFull.asked} ${seat.tierFull.bucket} it asked for — that tier was filled after this PR came off it.`
@@ -1754,16 +1769,10 @@ export class ShiftAssignmentControllerClass {
             : `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`;
           return res.status(409).json({ success: false, message, data: null });
         }
+        assignment = result.assignment;
+      } else {
+        assignment = await this.shiftAssignmentRepository.update(id, patch);
       }
-
-      const assignment = await this.shiftAssignmentRepository.update(id, {
-        status: parsed.data.status,
-        payAmount: parsed.data.payAmount,
-        checkInAt: parsed.data.checkInAt ? new Date(parsed.data.checkInAt) : undefined,
-        checkOutAt: parsed.data.checkOutAt ? new Date(parsed.data.checkOutAt) : undefined,
-        notes: parsed.data.notes,
-        updatedBy: getActor(req),
-      });
       if (!assignment) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Only on the transition INTO cancelled — re-saving an already-cancelled

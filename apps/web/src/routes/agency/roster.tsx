@@ -1117,13 +1117,24 @@ function EditRosterModal({
 								    window disambiguates them. Full shifts stay visible but
 								    unselectable: approval refuses them server-side, so
 								    offering one would only produce a doomed request. */}
+								{/* Two separate reasons a shift is unselectable, said separately:
+								    "full" is about the venue, "no seat for this tier" is about
+								    this PR. A tier-blocked shift still shows a headcount like
+								    2/4, so without its own wording a disabled option with room
+								    left reads as a bug. */}
 								{swapTargets.map((t) => (
-									<option key={t.shiftId} value={t.shiftId} disabled={t.isFull}>
+									<option
+										key={t.shiftId}
+										value={t.shiftId}
+										disabled={t.isFull || t.tierBlocked}
+									>
 										{t.outletName}
 										{t.shiftWindow ? ` · ${t.shiftWindow}` : ""}
 										{t.isFull
 											? " — full"
-											: ` (${t.staffedCount}/${t.quantity})`}
+											: t.tierBlocked
+												? ` — no seat for this PR's tier (${t.staffedCount}/${t.quantity})`
+												: ` (${t.staffedCount}/${t.quantity})`}
 									</option>
 								))}
 							</IzSelect>

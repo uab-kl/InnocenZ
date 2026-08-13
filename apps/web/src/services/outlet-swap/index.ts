@@ -64,6 +64,15 @@ export interface OutletSwapTarget {
 	outletName: string | null;
 	quantity: number;
 	staffedCount: number;
+	/**
+	 * The shift has room, but not for THIS PR's tier — approval would refuse it.
+	 *
+	 * A second, independent reason a request cannot succeed, and one headcount
+	 * cannot express: a shift asking Tier III ×2 + Tier I ×2 at quantity 4 with 3
+	 * staffed reads `3 < 4` and still refuses a 3rd Tier III. Optional so an older
+	 * backend reads as "not blocked" rather than blocking every target.
+	 */
+	tierBlocked?: boolean;
 }
 
 export interface CreateOutletSwapInput {
