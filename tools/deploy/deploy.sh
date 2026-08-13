@@ -5,26 +5,37 @@ set -euo pipefail
 cd "$(dirname "$0")"
 
 # === LOAD ENV VARIABLES ===
-# This pulls in FRONTEND_CONTAINER_NAME and BACKEND_CONTAINER_NAME dynamically
+# Image tags + optional DEPLOY_ENV / container names (written by deploy.mjs).
 if [ -f .env ]; then
-  export $(grep -v '^#' .env | xargs)
+  set -a
+  # shellcheck disable=SC1091
+  source .env
+  set +a
 else
   echo "Error: .env file not found!"
   exit 1
 fi
 
+DEPLOY_ENV="${DEPLOY_ENV:-staging}"
+FRONTEND_CONTAINER_NAME="${FRONTEND_CONTAINER_NAME:-innocenz-frontend}"
+BACKEND_CONTAINER_NAME="${BACKEND_CONTAINER_NAME:-innocenz-backend}"
+
 MAX_ATTEMPTS=5
 WAIT_SECONDS=10
 
-# All logs live right inside this single directory
-LOG_DIR="deploy_logs/staging"
+LOG_DIR="deploy_logs/${DEPLOY_ENV}"
 HISTORY_FILE="${LOG_DIR}/history.json"
 
-echo "=== Stopping and removing old staging containers ==="
+if [ ! -f .env.backend ]; then
+  echo "Error: .env.backend missing — backend would boot with no DATABASE_URL / R2."
+  echo "Upload tools/deploy/.env.backend.${DEPLOY_ENV} via deploy, or scp one here."
+  exit 1
+fi
+
+echo "=== Stopping and removing old ${DEPLOY_ENV} containers ==="
 docker compose down --remove-orphans
 
 echo "=== Removing old innocenz images (local cache) ==="
-# Pulls the image configurations directly out of your docker-compose file setup
 FRONTEND_REPO=$(docker compose config --format json | python3 -c "import sys, json; print(json.load(sys.stdin)['services']['frontend']['image'].split(':')[0])")
 BACKEND_REPO=$(docker compose config --format json | python3 -c "import sys, json; print(json.load(sys.stdin)['services']['backend']['image'].split(':')[0])")
 
@@ -44,20 +55,17 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
     docker compose up -d
     docker compose ps
 
-    # === AUTOMATIC JSON LOGGING ===
     echo "=== Logging deployment info ==="
     mkdir -p "$LOG_DIR"
-    
+
     TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-    
-    # Grab the active runtime hashes using your dynamic env container names
+
     FRONTEND_ID=$(docker inspect --format='{{.Image}}' "${FRONTEND_CONTAINER_NAME}" 2>/dev/null || echo "unknown")
     BACKEND_ID=$(docker inspect --format='{{.Image}}' "${BACKEND_CONTAINER_NAME}" 2>/dev/null || echo "unknown")
 
-    # 1. Generate the JSON block for the current deploy
     JSON_OUTPUT=$(cat <<EOF
 {
-  "environment": "staging",
+  "environment": "${DEPLOY_ENV}",
   "timestamp": "$TIMESTAMP",
   "frontend_container": "${FRONTEND_CONTAINER_NAME}",
   "backend_container": "${BACKEND_CONTAINER_NAME}",
@@ -67,10 +75,8 @@ for attempt in $(seq 1 "$MAX_ATTEMPTS"); do
 }
 EOF
 )
-    # Save to current.json
     echo "$JSON_OUTPUT" > "${LOG_DIR}/current.json"
 
-    # 2. Append cleanly to history.json list using native Python
     if [ ! -f "$HISTORY_FILE" ] || [ ! -s "$HISTORY_FILE" ]; then
       echo "[]" > "$HISTORY_FILE"
     fi
@@ -85,13 +91,16 @@ with open('$HISTORY_FILE', 'r+') as f:
     if not isinstance(data, list):
         data = []
     new_log = json.loads(sys.argv[1])
-    data.insert(0, new_log) # Prepends the newest deploy at the top
+    data.insert(0, new_log)
     f.seek(0)
     json.dump(data, f, indent=2)
     f.truncate()
 " "$JSON_OUTPUT"
 
     echo "Saved logs to target folder: ./${LOG_DIR}/"
+    echo "=== Backend runtime check (DB / R2 bucket) ==="
+    docker compose exec -T backend printenv DATABASE_URL R2_BUCKET_NAME R2_PUBLIC_URL 2>/dev/null \
+      | sed 's#://[^@]*@#://***:***@#' || true
     exit 0
   fi
   echo "Pull failed. Retrying in ${WAIT_SECONDS}s..."

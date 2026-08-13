@@ -93,22 +93,31 @@ export function PrComcardPickerThumb({
 						<PortfolioComcardCell key={`${src}-${i}`} src={src} />
 					))}
 				</div>
+				{/* Frosted at the same 0.62 + 8px blur as `.iz-portfolio-comcard__overlay`
+				    and the two PNG generators. The plate is inline rather than the shared
+				    class only because its type scales in `cqw`; the GLASS must not drift. */}
 				<div
-					className="absolute left-1/2 top-1/2 max-w-[70%] -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-white/95 text-center shadow-[0_4px_12px_rgba(0,0,0,0.35)]"
-					style={{ fontSize: "4.4cqw", padding: "0.45em 0.6em" }}
+					className="absolute left-1/2 top-1/2 w-max min-w-[25cqw] max-w-[76%] -translate-x-1/2 -translate-y-1/2 rounded-[2px] bg-white/[0.62] text-center shadow-[0_4px_12px_rgba(0,0,0,0.35)] backdrop-blur-[8px]"
+					// Same geometry as `.iz-portfolio-comcard__overlay`, which in turn
+					// tracks the generated PNG (a 150-wide plate with 32px/21px type on a
+					// 600-wide canvas), so this plate matches a SAVED comcard sitting next
+					// to it in the list. `w-max` with a floor: the plate grows for a long
+					// nickname, never crops it.
+					style={{ fontSize: "5.33cqw", padding: "0.105em 0.501em" }}
 				>
-					<p className="truncate font-sora font-extrabold leading-tight tracking-wide text-[#111]">
+					{/* Not `truncate` — the plate widens for the name instead of cutting it. */}
+					<p className="whitespace-nowrap font-sora font-extrabold leading-tight tracking-wide text-[#111]">
 						{pr.name}
 					</p>
 					<p
-						className="font-semibold leading-tight text-[#222]"
-						style={{ fontSize: "0.8em", marginTop: "0.15em" }}
+						className="whitespace-nowrap font-semibold leading-tight text-[#222]"
+						style={{ fontSize: "0.657em", marginTop: "0.066em" }}
 					>
 						Age {comcardMeasure(pr.age)}
 					</p>
 					<p
 						className="whitespace-nowrap font-semibold leading-tight text-[#222]"
-						style={{ fontSize: "0.8em" }}
+						style={{ fontSize: "0.657em" }}
 					>
 						{comcardMeasure(pr.height, "cm")} ·{" "}
 						{comcardMeasure(pr.weight, "kg")}

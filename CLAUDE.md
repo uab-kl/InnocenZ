@@ -20,13 +20,19 @@
 - DON'T USE for: basic generator syntax (`nx g @nx/react:app`), standard commands, things you already know
 - The `nx-generate` skill handles generator discovery internally - don't call nx_docs just to look up generator syntax
 
-# InnocenZ project memory (synced 30 Jul 2026 — works on ANY device with this repo)
+# InnocenZ project memory (works on ANY device with this repo)
 
-Full session memory is committed at **`docs/claude-memory/*.md`** (verbatim copies of the
-office PC's Claude Code memory). Read `docs/claude-memory/MEMORY.md` first — it indexes the rest.
-On a new machine you may also copy those files into
-`%USERPROFILE%\.claude\projects\C--Users-jinkg-Downloads-InnocenZ-InnocenZ\memory\` to restore
-native memory. After meaningful sessions, update `docs/claude-memory/`.
+Full session memory is committed at **`docs/claude-memory/*.md`** — 22 memories plus
+`MEMORY.md`, which indexes the rest and must be read first. On a new machine, copy those files
+into `%USERPROFILE%\.claude\projects\C--Users-jinkg-Downloads-InnocenZ-InnocenZ\memory\` to
+restore native memory.
+
+⚠️ **Sync runs in BOTH directions** (rule corrected 13 Aug 2026). The mirror and the machine's
+own `memory/` folder are each other's backup, not source and copy: **compare first** (hash every
+`.md` both ways, normalising CRLF), then **union** — never overwrite one side wholesale — and
+regenerate `MEMORY.md` from the union rather than copying it. On a conflict, prefer the file
+whose claims match real code, and check before choosing. A one-way copy is what let the two
+stores drift 13 files apart, hiding 8 standing rules from the second device.
 
 ⚠️ The memory mirror is NO LONGER kept in the workbook (owner's call, 11 Aug 2026).
 `InnocenZ_BuildSteps.xlsx` is now the **flow book** and holds nothing else: one page per role
