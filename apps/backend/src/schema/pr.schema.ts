@@ -38,11 +38,14 @@ export const UpdatePrSchema = CreatePrSchema.partial().extend({
   // --- user_profile (requires the PR to have a linked user account) ---
   race: z.string().max(100, 'Race is too long').optional(),
   languages: z.array(z.string().min(1).max(50)).max(20, 'Too many languages').optional(),
-  /** ISO `YYYY-MM-DD`. The UI edits whole years of age; it sends the resolved DOB. */
-  dob: z
-    .string()
-    .regex(/^\d{4}-\d{2}-\d{2}$/, 'Date of birth must be YYYY-MM-DD')
-    .optional(),
+  // ⚠️ `dob` is deliberately ABSENT, and this comment is the reason it must stay
+  // absent. Age follows the PR's IC (owner's rule): a Malaysian NRIC's first six
+  // digits ARE the birth date, so an editable age is a second, disagreeable copy
+  // of a fact identity already carries — and one live PR's stored `dob` is
+  // already a year off her own NRIC. It is derived on read in `ic-dob.ts`
+  // instead. Zod drops unknown keys silently, so an editor that still sends
+  // `dob` gets a 200 and no change rather than an error; the UI on both sides
+  // renders age read-only so nothing sends it.
   comcardHeightCm: z.number().int().min(140).max(220).optional(),
   comcardWeightKg: z.number().int().min(35).max(120).optional(),
 

@@ -109,8 +109,17 @@ export type PrProfile = {
   profileImage: string | null;
   gender: string | null;
   race: string | null;
-  /** ISO date, `YYYY-MM-DD`. */
+  /**
+   * ISO date, `YYYY-MM-DD`. DERIVED on read: the date encoded in the PR's NRIC
+   * when it has one, else the stored `user_profile.dob`. Not editable through
+   * the PR update route — see `UpdatePrSchema`.
+   */
   dob: string | null;
+  /**
+   * Whole years, counted from `dob` above. Read-only on both portals: age
+   * follows the IC, so there is nothing here for either side to set.
+   */
+  age: number | null;
   nationality: string | null;
   /** Spoken languages the PR set on their own profile, e.g. ['English','Hokkien']. */
   languages: string[] | null;

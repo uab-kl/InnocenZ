@@ -60,6 +60,7 @@ async function main() {
       fullName: UserProfileTable.fullName,
       username: UserTable.username,
       dob: UserProfileTable.dob,
+      idNo: UserProfileTable.idNo,
       heightCm: UserProfileTable.comcardHeightCm,
       weightKg: UserProfileTable.comcardWeightKg,
       portfolioPhotos: UserProfileTable.portfolioPhotos,
@@ -108,6 +109,10 @@ async function main() {
         // rename someone's comcard.
         displayName: row.username || row.fullName || 'PR',
         dob: row.dob,
+        // Without this a rebuild re-bakes the stored DOB's age, which for an
+        // NRIC holder can be a year off what the app shows — the exact drift
+        // this script exists to repair.
+        idNo: row.idNo,
         heightCm: row.heightCm,
         weightKg: row.weightKg,
         portfolioPhotos: slots,

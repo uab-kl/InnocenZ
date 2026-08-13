@@ -116,6 +116,12 @@ export type MeProfile = {
   idType: string | null;
   idNo: string | null;
   dob: string | null;
+  /**
+   * Whole years, DERIVED server-side from the IC (falling back to `dob`).
+   * Read-only — there is no field to send it back in, because age follows the
+   * PR's IC rather than being a thing anyone types.
+   */
+  age: number | null;
   underAgency: boolean | null;
   agencyId: string | null;
   verificationStatus: string | null;

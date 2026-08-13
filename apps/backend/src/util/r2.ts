@@ -1,5 +1,6 @@
 import {
   DeleteObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
 } from '@aws-sdk/client-s3';
@@ -106,6 +107,56 @@ export async function r2DeleteObject(key: string): Promise<void> {
 export async function r2DeleteStoredRef(ref: string | null | undefined): Promise<void> {
   const key = r2KeyFromStoredRef(ref);
   if (key) await r2DeleteObject(key);
+}
+
+/**
+ * Every object under `prefix`, paged to exhaustion (R2 caps a page at 1000).
+ *
+ * Returns [] and logs on failure rather than throwing: callers use this to tidy
+ * up after a successful write, and a listing problem must not fail the write
+ * that already landed.
+ */
+export async function r2ListKeys(prefix: string): Promise<string[]> {
+  const keys: string[] = [];
+  try {
+    let token: string | undefined;
+    do {
+      const page = await getClient().send(
+        new ListObjectsV2Command({
+          Bucket: env.R2_BUCKET_NAME!,
+          Prefix: prefix,
+          ContinuationToken: token,
+        }),
+      );
+      for (const obj of page.Contents ?? []) if (obj.Key) keys.push(obj.Key);
+      token = page.IsTruncated ? page.NextContinuationToken : undefined;
+    } while (token);
+  } catch (error) {
+    logger.warn('[r2] list failed (ignored)', { prefix, error });
+  }
+  return keys;
+}
+
+/**
+ * Leave exactly one object under `prefix`: `keepKey`. Everything else there is
+ * deleted.
+ *
+ * Written because "delete the previous one" was not enough. The comcard key
+ * carries a `Date.now()` so each render is a NEW object, the old one was
+ * removed by looking up the PREVIOUS key in the database, and
+ * `r2DeleteObject` swallows its own failures — so any delete that did not
+ * happen, for any reason, left an orphan nobody could see and nothing would
+ * ever collect. This asks the BUCKET what is there instead of trusting a
+ * column, so it also cleans up orphans it did not create.
+ */
+export async function r2KeepOnly(prefix: string, keepKey: string): Promise<number> {
+  const keys = await r2ListKeys(prefix);
+  const stale = keys.filter((k) => k !== keepKey);
+  for (const key of stale) await r2DeleteObject(key);
+  if (stale.length > 0) {
+    logger.info('[r2] pruned stale objects', { prefix, kept: keepKey, removed: stale.length });
+  }
+  return stale.length;
 }
 
 /** @deprecated Prefer r2DeleteStoredRef. */

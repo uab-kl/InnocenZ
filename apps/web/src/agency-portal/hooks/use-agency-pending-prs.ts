@@ -36,8 +36,12 @@ export interface AgencyPrInvite {
  * against a blank card while that same PR's profile — one row in one table —
  * held her languages, her comcard and her real measurements.
  *
- * Age is DERIVED from `dob` through the same `ageFromDob` Manage PR uses. There
- * is no age column and there must never be one.
+ * Age is READ from the server's derived `age`, never recomputed here. It follows
+ * the PR's IC — a Malaysian NRIC's first six digits ARE the birth date, and they
+ * WIN over the stored `dob`, which on live data can be a year out. Deriving it
+ * locally is what made this screen print an age one lower than the comcard
+ * rendered beside it. `ageFromDob` survives only as the fallback for a backend
+ * that predates the `age` field.
  */
 function pendingPrFromMembership(pr: AgencyPr): PendingPR {
 	// 0 is this codebase's one spelling of "the account does not carry this"; the
@@ -53,7 +57,7 @@ function pendingPrFromMembership(pr: AgencyPr): PendingPR {
 		mobile: pr.phoneNum ?? undefined,
 		email: pr.email ?? undefined,
 		race: pr.race ?? undefined,
-		age: ageFromDob(dob),
+		age: pr.age ?? ageFromDob(dob),
 		height: pr.comcardHeightCm ?? 0,
 		weight: pr.comcardWeightKg ?? 0,
 		// R2 object keys — resolved here so nothing downstream has to remember.

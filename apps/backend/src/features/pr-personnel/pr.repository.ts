@@ -8,6 +8,8 @@ import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { UserRoleTable } from '@/features/rbac/user-role/user-role.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
+// Leaf: age follows the PR's IC, derived once here so both read paths agree.
+import { derivedAge } from './ic-dob';
 import {
   AgencyPrTable,
   type AgencyPrApproveStatus,
@@ -47,9 +49,23 @@ const profileColumns = {
 };
 
 /** Collapses an all-null left-join result (no profile row yet) to `null`. */
-function toProfile(row: PrProfile): PrProfile | null {
-  const hasValue = Object.values(row).some((value) => value !== null && value !== undefined);
-  return hasValue ? row : null;
+/**
+ * @param idNo The PR's ID number. Age FOLLOWS the IC (owner's rule), so the
+ * returned `dob` is the NRIC's when it encodes one and the stored value
+ * otherwise, and `age` is counted from whichever won. Applied here rather than
+ * at each call site so the by-id read and the roster list cannot disagree about
+ * how old someone is — they already disagreed with the mobile screen, which
+ * computed its own with `Math.max(18, thisYear - birthYear)`.
+ */
+function toProfile(row: PrProfile, idNo?: string | null): PrProfile | null {
+  const derived = derivedAge({ idNo, dob: row.dob });
+  const withAge: PrProfile = { ...row, dob: derived.dob, age: derived.age };
+  // `age` is derived, so it must not make an otherwise-empty profile look
+  // populated: a PR with no identity at all still reads as "no profile".
+  const hasValue = Object.entries(withAge).some(
+    ([key, value]) => key !== 'age' && value !== null && value !== undefined,
+  );
+  return hasValue ? withAge : null;
 }
 
 /** Same collapse for agency_pr roster grading (0089). */
@@ -141,7 +157,16 @@ function composePr(params: {
  * return the identity-only PR — `agencyId ''`, status `pending` — so /mine
  * paths keep working.
  */
-async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | null> {
+/**
+ * @param agencyId Resolve the membership for THIS agency. Omit only where the
+ * caller genuinely has no agency in hand (the PR's own `/mine` paths, and the
+ * many call sites that want nothing but a display name) — see
+ * `loadPrimaryMembership` for why omitting it is not a neutral default.
+ */
+async function buildSyntheticPr(
+  userId: string,
+  agencyId?: string,
+): Promise<PrWithProfileType | null> {
   const [account] = await db
     .select({
       username: UserTable.username,
@@ -163,7 +188,12 @@ async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | nul
     .limit(1);
   if (!account) return null;
 
-  const primary = await loadPrimaryMembership(userId);
+  const primary = await loadPrimaryMembership(userId, agencyId);
+  // Asked for a specific agency and this person is not on its roster. Null, not
+  // an oldest-membership fallback: the caller asked "is this PR mine", and
+  // answering with someone else's membership is how a Why We Met owner ended up
+  // holding an Atlas-shaped Alice.
+  if (agencyId && !primary) return null;
 
   const profile = toProfile({
     profileImage: account.profileImage,
@@ -179,7 +209,8 @@ async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | nul
     comcardBustCm: account.comcardBustCm,
     comcardWaistCm: account.comcardWaistCm,
     comcardHipCm: account.comcardHipCm,
-  });
+    age: null, // set by toProfile from the IC
+  }, account.idNo);
 
   return composePr({
     userId,
@@ -198,11 +229,29 @@ async function buildSyntheticPr(userId: string): Promise<PrWithProfileType | nul
 }
 
 /**
- * Oldest `agency_pr` row for the account, or `null` when there is none / the
- * table cannot be read. Never throws — identity resolution must not depend on
- * membership schema being fully migrated.
+ * The account's `agency_pr` membership — for `agencyId` when one is named,
+ * otherwise the OLDEST row. `null` when there is none / the table cannot be
+ * read. Never throws: identity resolution must not depend on membership schema
+ * being fully migrated.
+ *
+ * ⚠️ **Omitting `agencyId` is not a neutral default.** One person holds one
+ * `agency_pr` row PER AGENCY (`agency_pr_agency_id_user_id_unique` is on the
+ * PAIR), so for anyone on two rosters the oldest row belongs to whichever agency
+ * signed them FIRST — which is nobody's idea of "their agency". That fallback
+ * made `PrController.update` compare a Why We Met caller's scope against Alice's
+ * *Atlas* membership and answer 404, so the two PRs on more than one roster were
+ * the only two on a 32-PR page that could not be edited. It also aimed
+ * `remove`'s `removeLink` and `penaltyBreaches`' rule lookup at the wrong
+ * agency for an admin, who skips the scope check entirely.
+ *
+ * Pass the agency wherever the caller has one. The parameterless form is for
+ * the PR's own `/mine` paths (no agency in play) and for the many call sites
+ * that want only a display name.
  */
-async function loadPrimaryMembership(userId: string): Promise<AgencyPrType | null> {
+async function loadPrimaryMembership(
+  userId: string,
+  agencyId?: string,
+): Promise<AgencyPrType | null> {
   try {
     // Core membership columns only (0032 + 0091 + 0093). Roster grading
     // (0089: place / years_exp / kpi_tier / pay_class) is loaded separately so
@@ -221,7 +270,11 @@ async function loadPrimaryMembership(userId: string): Promise<AgencyPrType | nul
         updatedBy: AgencyPrTable.updatedBy,
       })
       .from(AgencyPrTable)
-      .where(eq(AgencyPrTable.userId, userId))
+      .where(
+        agencyId
+          ? and(eq(AgencyPrTable.userId, userId), eq(AgencyPrTable.agencyId, agencyId))
+          : eq(AgencyPrTable.userId, userId),
+      )
       .orderBy(asc(AgencyPrTable.createdAt), asc(AgencyPrTable.id))
       .limit(1);
 
@@ -467,11 +520,38 @@ export class PrRepositoryClass {
 
   /** `id` is `userId` — this is the same lookup as `getByUserId`, kept as its
    * own method because callers want the folded-in comcard profile. */
-  async getById(id: string): Promise<PrWithProfileType | null> {
+  /**
+   * @param agencyId Resolve the PR AS SEEN BY this agency, returning null when
+   * they are not on its roster. Every caller that then compares
+   * `pr.agencyId` against its own scope, or writes through it, must pass this —
+   * see `loadPrimaryMembership` for the oldest-membership trap it avoids.
+   */
+  async getById(id: string, agencyId?: string): Promise<PrWithProfileType | null> {
     try {
-      return await buildSyntheticPr(id);
+      return await buildSyntheticPr(id, agencyId);
     } catch (error) {
       logger.error('[PrRepository.getById] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Every agency this person is on the roster of, oldest first.
+   *
+   * Exists so a write path can tell "one obvious agency" from "ambiguous, ask
+   * which" rather than silently picking one — the admin lane has no scope of
+   * its own to fall back on.
+   */
+  async listMembershipAgencyIds(userId: string): Promise<string[]> {
+    try {
+      const rows = await db
+        .select({ agencyId: AgencyPrTable.agencyId })
+        .from(AgencyPrTable)
+        .where(eq(AgencyPrTable.userId, userId))
+        .orderBy(asc(AgencyPrTable.createdAt), asc(AgencyPrTable.id));
+      return rows.map((r) => r.agencyId);
+    } catch (error) {
+      logger.error('[PrRepository.listMembershipAgencyIds] Error:', error);
       throw error;
     }
   }
@@ -610,7 +690,8 @@ export class PrRepositoryClass {
             comcardBustCm: row.comcardBustCm,
             comcardWaistCm: row.comcardWaistCm,
             comcardHipCm: row.comcardHipCm,
-          }),
+            age: null, // set by toProfile from the IC
+          }, row.idNo),
         }),
       );
       return { prs, totalCount };

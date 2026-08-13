@@ -1,8 +1,16 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import sharp from 'sharp';
-import { isR2ObjectKey, r2Configured, r2PublicUrl, r2PutObject } from '@/util/r2';
+import {
+  isR2ObjectKey,
+  r2Configured,
+  r2KeepOnly,
+  r2PublicUrl,
+  r2PutObject,
+} from '@/util/r2';
 import { normalizePortfolioSlots } from '@/util/portfolio-image';
+// Leaf (imports nothing) — the single age rule, shared with both read paths.
+import { derivedAge } from '@/features/pr-personnel/ic-dob';
 import { userFolder } from '@/util/user-folder';
 
 const W = 600;
@@ -47,15 +55,21 @@ function escapeXml(value: string): string {
     .replace(/"/g, '&quot;');
 }
 
-function ageFromDob(dob: string | Date | null | undefined): number {
-  if (!dob) return 0;
-  const d = typeof dob === 'string' ? new Date(dob) : dob;
-  if (Number.isNaN(d.getTime())) return 0;
-  const now = new Date();
-  let age = now.getFullYear() - d.getFullYear();
-  const m = now.getMonth() - d.getMonth();
-  if (m < 0 || (m === 0 && now.getDate() < d.getDate())) age -= 1;
-  return Math.max(0, age);
+/**
+ * The age PRINTED on the card. Derived from the IC through the same leaf both
+ * portals read, so the number burned into the PNG cannot disagree with the
+ * number beside it on screen.
+ *
+ * This file used to carry its own `ageFromDob` fed the RAW stored `dob`, which
+ * is how the card came to say "Age 30" while the profile said 31: one PR's
+ * NRIC and her stored birth date differ by a year, and only the screen had
+ * learned the IC wins. Deriving here — not at the two call sites — is what
+ * stops the next caller reintroducing it.
+ */
+function comcardAge(input: { idNo?: string | null; dob?: string | Date | null }): number {
+  const dob =
+    input.dob instanceof Date ? input.dob.toISOString().slice(0, 10) : (input.dob ?? null);
+  return derivedAge({ idNo: input.idNo ?? null, dob }).age ?? 0;
 }
 
 async function loadImageBuffer(src: string): Promise<Buffer | null> {
@@ -116,6 +130,12 @@ export async function generateAndStoreComcard(input: {
   fullName: string | null | undefined;
   displayName: string;
   dob: string | Date | null | undefined;
+  /**
+   * The PR's ID number. Age follows it when it is an NRIC, so passing it is
+   * what keeps the printed age equal to the one on screen; omit it and the
+   * card falls back to `dob`, which for an NRIC holder may be a year out.
+   */
+  idNo?: string | null;
   heightCm: number | null | undefined;
   weightKg: number | null | undefined;
   portfolioPhotos: (string | null)[] | null | undefined;
@@ -146,7 +166,7 @@ export async function generateAndStoreComcard(input: {
 
   const rawName = (input.displayName || input.fullName || 'PR').slice(0, 20);
   const name = escapeXml(rawName);
-  const age = ageFromDob(input.dob);
+  const age = comcardAge({ idNo: input.idNo, dob: input.dob });
   const height = input.heightCm && input.heightCm > 0 ? input.heightCm : '—';
   const weight = input.weightKg && input.weightKg > 0 ? input.weightKg : '—';
   const ageLine = `Age ${age}`;
@@ -201,6 +221,22 @@ export async function generateAndStoreComcard(input: {
     .png()
     .toBuffer();
 
-  const key = `user/${userFolder(input.userId)}/comcard/comcard-${Date.now()}.png`;
-  return r2PutObject({ key, body: png, contentType: 'image/png' });
+  // The key stays timestamped ON PURPOSE: the public URL is what the phone and
+  // the portal render, and a stable name would let a cached PNG outlive the
+  // re-render — which is the same "the card still says 30" complaint wearing a
+  // different hat. Uniqueness is the cache-buster.
+  //
+  // The cost of that is an object per render, so the prune below is not
+  // housekeeping, it is the other half of the design. It asks the BUCKET what
+  // is under this PR's comcard prefix rather than trusting the previous value
+  // in the database, so it also collects orphans left by a delete that silently
+  // failed (`r2DeleteObject` swallows its own errors) — which is exactly how a
+  // PR ended up with two.
+  const prefix = `user/${userFolder(input.userId)}/comcard/`;
+  const key = `${prefix}comcard-${Date.now()}.png`;
+  const storedKey = await r2PutObject({ key, body: png, contentType: 'image/png' });
+  // After the write, never before: a prune that ran first would leave the PR
+  // with no comcard at all if the render then failed.
+  await r2KeepOnly(prefix, storedKey);
+  return storedKey;
 }

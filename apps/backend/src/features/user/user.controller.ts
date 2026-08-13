@@ -20,6 +20,7 @@ import {
 } from '@/util/portfolio-image';
 import { deleteComcardImageFile, saveComcardImageFile } from '@/util/comcard-image';
 import { generateAndStoreComcard } from '@/util/comcard-generate';
+import { refreshStoredComcard } from '@/util/comcard-refresh';
 import { saveUserIdDocFile, deleteUserIdDocFile, withUserProfile, withUserProfiles } from '@/util/user-profile-image';
 import { logger } from '@/util/logger';
 import { r2Configured } from '@/util/r2';
@@ -581,6 +582,34 @@ export class UserControllerClass {
           ...(bankAccountNo !== undefined ? { bankAccountNo } : {}),
           updatedBy: actor,
         });
+
+        // Same rule as the agency's `PUT /pr/:id`: anything printed on the card
+        // means the card is now out of date. Done server-side on BOTH writers
+        // so neither client has to remember — the mobile app used to do this
+        // itself, which left the agency's identical write unhandled.
+        if (
+          comcardHeightCm !== undefined ||
+          comcardWeightKg !== undefined ||
+          portfolioPhotos !== undefined
+        ) {
+          const saved = await this.userProfileRepository.getByUserId(id);
+          if (saved) {
+            await refreshStoredComcard({
+              userId: id,
+              fullName: saved.fullName,
+              username: existingUser?.username ?? null,
+              idNo: saved.idNo,
+              dob: saved.dob,
+              heightCm: saved.comcardHeightCm,
+              weightKg: saved.comcardWeightKg,
+              portfolioPhotos: saved.portfolioPhotos,
+              save: (storedKey) =>
+                this.userProfileRepository
+                  .update(id, { comcardImage: storedKey, updatedBy: actor })
+                  .then(() => undefined),
+            });
+          }
+        }
       }
 
       const profile = await this.userProfileRepository.getByUserId(id);
@@ -860,6 +889,8 @@ export class UserControllerClass {
         fullName: profile.fullName,
         displayName: existingUser.username || profile.fullName || 'PR',
         dob: profile.dob,
+        // Age on the card follows the IC, same as everywhere else it is shown.
+        idNo: profile.idNo,
         heightCm: profile.comcardHeightCm,
         weightKg: profile.comcardWeightKg,
         portfolioPhotos: slots,

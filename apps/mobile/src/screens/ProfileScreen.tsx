@@ -24,7 +24,6 @@ import {
   updateMyAgencies,
   type PrAgencyLink,
 } from '../lib/api';
-import { fetchImageBlob, renderComcardPng } from '../lib/render-comcard';
 import {
   PORTFOLIO_SLOTS,
 } from '../lib/demo-shifts';
@@ -82,12 +81,11 @@ const TIER_LABEL: Record<string, string> = {
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
   const { t } = useLocale();
-  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, uploadComcardImage, generateComcard, token } =
+  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, generateComcard, token } =
     useSession();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [savingComcard, setSavingComcard] = useState(false);
   const [comcardSavedHint, setComcardSavedHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { message: toast, variant: toastVariant, showToast } = useToast();
@@ -194,11 +192,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const email = me?.email ?? '—';
   const height = editing ? draft.height : me?.profile.comcardHeightCm ?? 0;
   const weight = editing ? draft.weight : me?.profile.comcardWeightKg ?? 0;
-  const age = editing
-    ? draft.age
-    : me?.profile.dob
-      ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
-      : 0;
+  // Server-derived from the IC. Both arms read the same number, so the card
+  // overlay and the edit sheet cannot disagree — and neither can this screen
+  // and the agency's, which reads the identical field.
+  const age = editing ? draft.age : me?.profile.age ?? 0;
 
   const languages = editing ? draft.languages : me?.profile.languages ?? [];
   const profilePortfolio = portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
@@ -250,39 +247,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // Server generates the PNG (same layout as the on-screen preview).
   const canSaveComcard = Boolean(token) && !editing;
 
-  const saveComcardToDatabase = async () => {
-    if (!canSaveComcard || comcardTiles.mode === 'empty') return;
-    setSavingComcard(true);
-    setError(null);
-    setComcardSavedHint(null);
-    try {
-      // Prefer server generate (works on phone + web). Web can still fall back
-      // to canvas encode if the generate route is unavailable.
-      try {
-        await generateComcard();
-      } catch (genErr) {
-        if (Platform.OS !== 'web') throw genErr;
-        let blob: Blob;
-        if (comcardTiles.mode === 'single') {
-          blob = await fetchImageBlob(comcardTiles.src);
-        } else {
-          blob = await renderComcardPng({
-            paths: comcardTiles.paths,
-            name: displayName,
-            age,
-            heightCm: height,
-            weightKg: weight,
-          });
-        }
-        await uploadComcardImage(blob, 'comcard.png');
-      }
-      setComcardSavedHint('Comcard saved');
-    } catch (e) {
-      setError(e instanceof ApiError ? e.message : 'Could not save comcard');
-    } finally {
-      setSavingComcard(false);
-    }
-  };
+  // `regenerateSavedComcard` lived here — it POSTed to the generate route after
+  // a save, with a web canvas fallback. Deleted, not left unused: the SERVER now
+  // re-renders inside `PUT /user/:id` whenever a printed field moves, so this
+  // was a second render per save, and the two renders each prune every object
+  // but their own — interleaved, they could delete each other's fresh PNG and
+  // leave the profile pointing at a key that no longer exists.
 
   const startEdit = () => {
     // Real agency ids straight off the PR's agency_pr links (pending included).
@@ -298,9 +268,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       bust: me?.profile.comcardBustCm ?? 0,
       waist: me?.profile.comcardWaistCm ?? 0,
       hip: me?.profile.comcardHipCm ?? 0,
-      age: me?.profile.dob
-        ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
-        : 0,
+      // Straight from the server, which derives it from the IC. Not recomputed
+      // here: the old local sum ignored the month and floored at 18, so the
+      // edit sheet could show a different age from the card above it.
+      age: me?.profile.age ?? 0,
       languages: me?.profile.languages ?? [],
       agencyIds,
       portfolio: portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS),
@@ -338,7 +309,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setSaving(true);
     setError(null);
     try {
-      await updateProfile({
+      const before = me?.profile.comcardImage ?? null;
+      const saved = await updateProfile({
         username: name,
         // Legal IC name → user_profile.full_name (the column admin/agency read).
         fullName: draft.icName.trim(),
@@ -365,14 +337,21 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       }
       setEditing(false);
       showToast('Profile saved');
-      // Height / weight / name feed the comcard overlay — refresh saved PNG.
-      if (portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS).some(Boolean)) {
-        try {
-          await generateComcard();
-          setComcardSavedHint('Comcard updated');
-        } catch {
-          /* Non-fatal */
-        }
+
+      // Height, weight and name are printed ON the comcard, so saving them
+      // without re-rendering it leaves the saved PNG stating measurements the
+      // profile no longer claims. Regenerated here so "Update saved comcard"
+      // is never needed to make a save take effect — that button remains only
+      // as a manual retry.
+      //
+      // No second render from here. `PUT /user/:id` re-renders the card inside
+      // that same request whenever a printed field moves, so calling generate
+      // again would render TWICE per save — and worse, the two renders each
+      // prune every object but their own, so interleaved they can delete each
+      // other's fresh PNG and leave the profile pointing at a key that no
+      // longer exists. The response already carries the new image.
+      if (saved.profile.comcardImage && saved.profile.comcardImage !== before) {
+        setComcardSavedHint('Comcard updated');
       }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save profile');
@@ -578,16 +557,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         copy[slot] = null;
         return copy;
       });
-      if (next.some(Boolean)) {
-        try {
-          await generateComcard();
-          setComcardSavedHint('Comcard updated');
-        } catch {
-          /* Non-fatal */
-        }
-      } else {
-        setComcardSavedHint(null);
-      }
+      // No generate call: the `updateProfile` above sent `portfolioPhotos`, and
+      // the server re-renders the card inside that request. Calling it again
+      // would render twice, and each render prunes every object but its own —
+      // interleaved, they can delete each other's fresh PNG.
+      setComcardSavedHint(next.some(Boolean) ? 'Comcard updated' : null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not remove portfolio photo');
     } finally {
@@ -646,16 +620,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       return;
     }
 
+    // Same as the remove path: `updateProfile` already carried the new order and
+    // the server re-rendered inside that request. The card is a rearrangement of
+    // the FIRST FOUR slots, so only a change there moves it.
     const cardChanged = [0, 1, 2, 3].some((i) => prev[i] !== normalized[i]);
     if (cardChanged && normalized.some(Boolean)) {
-      setPortfolioBusy('Updating comcard…');
-      showToast('Updating comcard…', 'info');
-      try {
-        await generateComcard();
-        setComcardSavedHint('Comcard updated');
-      } catch {
-        /* Non-fatal — user can tap Save comcard. */
-      }
+      setComcardSavedHint('Comcard updated');
     }
 
     setPendingOrder(null);
@@ -900,23 +870,18 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
             )}
           </View>
 
+          {/*
+            * The "Save / Update saved comcard" button lived here. Removed: the
+            * card is re-rendered whenever the profile is saved, so the button
+            * only ever existed to work around that not happening, and leaving
+            * it invited the reading that a save is not enough on its own.
+            *
+            * The STATUS line stays. It is the evidence half, and it still has
+            * three distinct things to say — saved and visible, saved but the
+            * image will not load, or no card yet.
+            */}
           {canSaveComcard && comcardTiles.mode !== 'empty' && (
             <View style={styles.comcardActions}>
-              <IzButton
-                label={
-                  savingComcard
-                    ? t.profile.savingComcard
-                    : me?.profile.comcardImage
-                      ? t.profile.updateComcard
-                      : t.profile.saveComcard
-                }
-                onPress={() => {
-                  void saveComcardToDatabase();
-                }}
-                disabled={savingComcard || saving}
-                variant="soft"
-                small
-              />
               {/*
                 * "Saved to profile" is only allowed to appear next to a comcard
                 * the PR can SEE. It used to key off `comcardImage` alone, so a
@@ -956,7 +921,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <View style={styles.measure}>
                   <Text style={styles.measureLabel}>{t.profile.age}</Text>
                   <View style={styles.measureRow}>
-                    <Text style={styles.measureValue}>{me?.profile.dob ? age : '—'}</Text>
+                    {/* Null age = no IC and no stored DOB, which is most of the
+                        roster — an em-dash, never a fabricated number. */}
+                    <Text style={styles.measureValue}>{me?.profile.age ?? '—'}</Text>
                     <Text style={styles.measureSuffix}>y</Text>
                   </View>
                 </View>
@@ -1006,13 +973,15 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     setDraft((d) => ({ ...d, weight: Number(v.replace(/\D/g, '')) || 0 }))
                   }
                 />
+                {/* Age is derived from the PR's IC, so it is shown locked
+                    rather than hidden — a missing field looks like a bug, and
+                    the PR needs to see the number that is on their comcard. */}
                 <MeasureField
                   label={t.profile.age}
                   suffix="y"
                   value={draft.age ? String(draft.age) : ''}
-                  onChange={(v) =>
-                    setDraft((d) => ({ ...d, age: Number(v.replace(/\D/g, '')) || 0 }))
-                  }
+                  onChange={() => {}}
+                  lockedNote={t.profile.ageFollowsIc}
                 />
               </View>
               <View style={styles.measureGrid}>
@@ -1200,12 +1169,52 @@ function MeasureField({
   suffix,
   value,
   onChange,
+  lockedNote,
 }: {
   label: string;
   suffix: string;
   value: string;
   onChange: (v: string) => void;
+  /**
+   * Present = this measurement is not the PR's to change, and this is why.
+   * Shown on tap rather than only as static helper text: a greyed box with no
+   * explanation reads as a bug, and the one question it provokes ("why can't I
+   * fix my age?") is exactly what the note answers.
+   */
+  lockedNote?: string;
 }) {
+  const [noteShown, setNoteShown] = useState(false);
+  const locked = lockedNote != null;
+
+  if (locked) {
+    return (
+      <View style={styles.measure}>
+        <Text style={[styles.measureLabel, styles.measureLabelLocked]}>{label}</Text>
+        <Pressable
+          style={styles.measureRow}
+          onPress={() => setNoteShown((s) => !s)}
+          accessibilityHint={lockedNote}
+        >
+          {/* A disabled TextInput, not a Text: it keeps the box the same size
+              and shape as its editable neighbours, so the row still reads as
+              one control group rather than a field that went missing. */}
+          <TextInput
+            value={value}
+            editable={false}
+            // Android still focuses a non-editable input on tap; without this the
+            // keyboard opens over a field that cannot take a keystroke.
+            pointerEvents="none"
+            style={[styles.measureInput, styles.measureInputLocked]}
+            placeholderTextColor={C.muted2}
+          />
+          <Text style={[styles.measureSuffix, styles.measureLabelLocked]}>{suffix}</Text>
+          <Lock size={11} color={C.muted2} style={{ marginLeft: 2 }} />
+        </Pressable>
+        {noteShown && <Text style={styles.measureLockNote}>{lockedNote}</Text>}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.measure}>
       <Text style={styles.measureLabel}>{label}</Text>
@@ -1538,6 +1547,16 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   measureSuffix: { flexShrink: 0, fontFamily: F.manrope, fontSize: 12, color: C.blue },
+  /** Locked measurement — greyed, but still legible: it is real data, not absent data. */
+  measureLabelLocked: { color: C.muted2 },
+  measureInputLocked: { color: C.muted, opacity: 0.7 },
+  measureLockNote: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 10,
+    lineHeight: 13,
+    color: C.muted2,
+  },
   section: { marginTop: 16 },
   sectionTitleRow: {
     flexDirection: 'row',

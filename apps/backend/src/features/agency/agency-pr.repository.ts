@@ -10,6 +10,8 @@ import {
   type PrTier,
 } from '@/features/pr-personnel/pr.model';
 import { UserTable } from '@/features/user/user.model';
+// Leaf — the single age rule, shared with every other read path.
+import { derivedAge } from '@/features/pr-personnel/ic-dob';
 import { logger } from '@/util/logger';
 
 /**
@@ -61,6 +63,12 @@ export type AgencyPrEnriched = {
   email: string | null;
   phoneNum: string | null;
   idNo: string | null;
+  /**
+   * Whole years, DERIVED from `idNo` (falling back to `dob`) — the same leaf
+   * every other read path uses, so the Approvals screen and the comcard beside
+   * it cannot disagree. Never stored, never settable.
+   */
+  age: number | null;
   createdAt: Date;
   updatedAt: Date;
   createdBy: string;
@@ -201,7 +209,16 @@ export class AgencyPrRepository {
       // `agency_pr` is unique on (agencyId, userId) — one row per user
       // already, no drifted-duplicate `pr` rows to collapse anymore. `prId`
       // is `userId` restated; `prStatus` has no backing state (see the type).
-      return rows.map((row) => ({ ...row, prId: row.userId, prStatus: null }));
+      // `...derivedAge(...)` overwrites `dob` with the IC's date and adds `age`.
+      // This endpoint used to ship the RAW stored dob and no age at all, which
+      // left the Approvals screen deriving its own — the one place in the agency
+      // portal that still printed a different number from the comcard next to it.
+      return rows.map((row) => ({
+        ...row,
+        ...derivedAge({ idNo: row.idNo, dob: row.dob }),
+        prId: row.userId,
+        prStatus: null,
+      }));
     } catch (error) {
       logger.error('[AgencyPrRepository.listByAgency] Error:', error);
       return [];

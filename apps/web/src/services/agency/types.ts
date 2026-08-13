@@ -54,8 +54,18 @@ export interface AgencyPr {
 	profileImage?: string | null;
 	race?: string | null;
 	languages?: string[] | null;
-	/** ISO `YYYY-MM-DD`. Age is DERIVED from this — there is no age column. */
+	/**
+	 * ISO `YYYY-MM-DD`. There is no `dob` column to trust directly: the server
+	 * sends the date the PR's IC encodes when it has one, else the stored value.
+	 */
 	dob?: string | null;
+	/**
+	 * Whole years, DERIVED server-side from the IC. Render this — do NOT compute
+	 * from `dob`. This field's absence is what left the Approvals screen doing
+	 * its own sum and printing a different age from the comcard beside it.
+	 * Optional so an older backend reads as "unknown" rather than 0.
+	 */
+	age?: number | null;
 	portfolioPhotos?: (string | null)[] | null;
 	/** IC scans from sign-up — only sent by the gated, agency-scoped PR route. */
 	idPhotoFront?: string | null;

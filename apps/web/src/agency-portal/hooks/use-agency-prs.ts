@@ -1,6 +1,5 @@
 import type { AgencyManagedPR } from "@agency-portal/lib/agency-demo";
 import {
-	ageFromDob,
 	managedPrFromBackend,
 	payClassToBackend,
 	tierFromLabel,
@@ -39,29 +38,10 @@ type ProfilePatch = Partial<
 	>
 >;
 
-/**
- * The birth date that makes someone `age` today, keeping their existing
- * birthday. The editor edits AGE, but `user_profile` stores a DOB — deriving it
- * from today's date alone would silently move every PR's birthday to whatever
- * day their agency happened to edit them on, so only the year moves.
- */
-function dobForAge(age: number, currentDob: string | null | undefined): string {
-	const now = new Date();
-	const match = (currentDob ?? "").match(/^\d{4}-(\d{2})-(\d{2})$/);
-	const birthYear = now.getFullYear() - age;
-	if (!match) {
-		// No DOB on file: 1 Jan reads as "year known, day not", rather than
-		// inventing today's date as their birthday.
-		return `${birthYear}-01-01`;
-	}
-	const [, month, day] = match;
-	// If their birthday this year has not happened yet they only turn `age` on
-	// the next one, so the birth year is one earlier.
-	const hadBirthday =
-		now.getMonth() + 1 > Number(month) ||
-		(now.getMonth() + 1 === Number(month) && now.getDate() >= Number(day));
-	return `${hadBirthday ? birthYear : birthYear - 1}-${month}-${day}`;
-}
+// `dobForAge` lived here — it turned an edited age back into a birth date,
+// keeping the PR's existing birthday and moving only the year. Deleted rather
+// than left unused: age follows the PR's IC now, so there is no lane in which
+// an agency-typed age should become someone's date of birth.
 
 /**
  * Backend-driven PR roster for the Manage-PR screen. Reads real PRs (mapped into
@@ -84,7 +64,9 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 		// lib/fetch-all-pages.ts. A roster over 100 PRs silently lost its tail,
 		// which on this screen means PRs simply absent from Manage PR.
 		queryFn: () =>
-			fetchAllPages((page) => fetchPrPersonnel({ page, pageSize: 100 }, logout)),
+			fetchAllPages((page) =>
+				fetchPrPersonnel({ page, pageSize: 100 }, logout),
+			),
 		enabled,
 		staleTime: 60_000,
 	});
@@ -129,15 +111,13 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 		if (patch.languages !== undefined) input.languages = patch.languages;
 		if (patch.height !== undefined) input.comcardHeightCm = patch.height;
 		if (patch.weight !== undefined) input.comcardWeightKg = patch.weight;
-		if (patch.age !== undefined) {
-			// Only when the age actually moved: re-deriving an unchanged age would
-			// rewrite a DOB the PR set themselves, for no reason.
-			const current = prsQuery.data?.data.find((p) => p.id === prId);
-			const storedDob = current?.profile?.dob ?? null;
-			if (patch.age !== ageFromDob(storedDob)) {
-				input.dob = dobForAge(patch.age, storedDob);
-			}
-		}
+		// `patch.age` is deliberately IGNORED. Age follows the PR's IC — a
+		// Malaysian NRIC's first six digits ARE the birth date — so it is derived
+		// on read and there is nothing here for an agency to set. The editor
+		// renders it read-only, so nothing should send one; dropping it here as
+		// well means an older client cannot rewrite someone's date of birth
+		// through a field that no longer means anything. The server drops `dob`
+		// from `UpdatePrSchema` too, so this is the second of three gates.
 
 		// agency_pr — this agency's grading
 		if (patch.place !== undefined) input.place = patch.place;

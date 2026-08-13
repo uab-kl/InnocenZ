@@ -1144,6 +1144,48 @@
 	border-color: var(--iz-gold-d);
 	box-shadow: 0 0 0 3px rgba(183, 156, 232, 0.12);
 }
+
+/*
+ * A figure the agency may read but not author — age, which follows the PR's IC.
+ * Greyed and dashed so it is legibly DIFFERENT from an empty editable box: the
+ * value is real data, it is the permission that is missing.
+ */
+.iz-comcard-field--locked {
+	position: relative;
+}
+.iz-comcard-field--locked label {
+	opacity: 0.75;
+}
+.iz-comcard-field--locked input:disabled {
+	background: rgba(255, 255, 255, 0.015);
+	border-style: dashed;
+	color: var(--iz-muted2);
+	cursor: not-allowed;
+	/* Safari greys disabled inputs on its own terms; say it explicitly. */
+	-webkit-text-fill-color: var(--iz-muted2);
+	opacity: 1;
+}
+/*
+ * Transparent hit area over the input. A disabled input emits no pointer
+ * events, so without this both the hover and the click land on nothing and the
+ * explanation never appears.
+ */
+.iz-comcard-field-lockhit {
+	position: absolute;
+	inset: auto 0 0 0;
+	height: 42px;
+	width: 100%;
+	background: none;
+	border: 0;
+	padding: 0;
+	cursor: not-allowed;
+}
+.iz-comcard-field-locknote {
+	margin-top: 6px;
+	font-size: 10px;
+	line-height: 1.35;
+	color: var(--iz-muted2);
+}
 .iz-comcard-3d-preview-stage {
 	position: relative;
 	display: flex;
