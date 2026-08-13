@@ -15,6 +15,10 @@
     "preview": {
       "distribution": "internal",
       "environment": "preview",
+      "env": {
+        "EXPO_PUBLIC_APP_DISPLAY_NAME": "InnocenZ(beta)",
+        "EXPO_PUBLIC_API_URL": "https://api.innocenz.duckdns.org/api"
+      },
       "ios": {
         "simulator": true
       },
