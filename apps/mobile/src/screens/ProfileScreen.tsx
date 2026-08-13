@@ -887,12 +887,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     />
                   );
                 })}
-                <View style={styles.comcardOverlay}>
-                  <Text style={styles.comcardOverlayName}>{displayName}</Text>
-                  <Text style={styles.comcardOverlayStats}>Age {age}</Text>
-                  <Text style={styles.comcardOverlayStats}>
-                    {height}cm {weight}kg
-                  </Text>
+                <View style={styles.comcardOverlayWrap} pointerEvents="none">
+                  <View style={styles.comcardOverlay}>
+                    <Text style={styles.comcardOverlayName}>{displayName}</Text>
+                    <Text style={styles.comcardOverlayStats}>Age {age}</Text>
+                    <Text style={styles.comcardOverlayStats}>
+                      {height}cm {weight}kg
+                    </Text>
+                  </View>
                 </View>
               </View>
             )}
@@ -1442,27 +1444,47 @@ const styles = StyleSheet.create({
     color: C.prMuted,
     textAlign: 'center',
   },
+  /*
+   * Centres the plate without magic offsets. The plate used to be pinned with
+   * `translateX: -56` — half of a hardcoded 112 width — which is why it could
+   * not be allowed to size itself to the nickname: any width change slid it off
+   * centre. Centring in a full-bleed wrapper instead lets the plate grow.
+   */
+  comcardOverlayWrap: {
+    ...StyleSheet.absoluteFillObject,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  /*
+   * Matched to the SAVED comcard's baked plate (comcard-generate.ts): a plate
+   * at least 150 wide with 32px/21px type on a 600-wide canvas, scaled by this
+   * card's 280/600. The old plate was 112 wide with 14px type — 40% of the card
+   * where the baked one is 25% — so a PR who had saved her comcard and one who
+   * had not were looking at two visibly different comcards. `minWidth`, not
+   * `width`: a long nickname widens the plate rather than being cropped.
+   * Translucent for the same reason as the generators; React Native has no
+   * backdrop blur, so here the plate leans on alpha alone.
+   */
   comcardOverlay: {
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
-    transform: [{ translateX: -56 }, { translateY: -36 }],
-    width: 112,
-    backgroundColor: '#fff',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
+    minWidth: 70,
+    backgroundColor: 'rgba(255, 255, 255, 0.62)',
+    paddingVertical: 2,
+    paddingHorizontal: 7,
     alignItems: 'center',
   },
   comcardOverlayName: {
     fontFamily: F.sora,
-    fontSize: 14,
+    fontSize: 15,
+    lineHeight: 18,
     fontWeight: '800',
     color: '#111',
   },
   comcardOverlayStats: {
     fontFamily: F.manrope,
-    fontSize: 11,
-    color: '#333',
+    fontSize: 10,
+    lineHeight: 13,
+    marginTop: 1,
+    color: '#222',
   },
   measureGrid: {
     marginTop: 12,

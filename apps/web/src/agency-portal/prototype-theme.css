@@ -1751,6 +1751,9 @@
 	border-radius: 14px;
 	overflow: hidden;
 	aspect-ratio: 3 / 4;
+	/* The name plate below sizes itself in `cqw` against this frame, so it holds
+	   the generated PNG's proportions at every card size. */
+	container-type: inline-size;
 	box-shadow:
 		0 12px 28px rgba(0, 0, 0, 0.32),
 		inset 0 0 0 1px rgba(255, 255, 255, 0.08);
@@ -1781,29 +1784,54 @@
 	top: 50%;
 	z-index: 2;
 	transform: translate(-50%, -50%);
-	min-width: 108px;
-	max-width: 72%;
-	padding: 10px 12px;
+	/*
+	 * Sized against the CARD, in the proportions the generated PNG uses — a
+	 * 168×88 plate on a 600-wide canvas. This was a fixed `min-width: 108px`
+	 * box, which is why on one Manage PR grid a live collage's plate towered
+	 * over the baked plate of a PR who had SAVED her comcard: the baked one
+	 * shrinks with the card and a pixel value does not.
+	 */
+	/* `max-content` with a floor, never a fixed width: the plate is small by
+	   default and GROWS for a long nickname instead of cropping it. */
+	width: max-content;
+	min-width: 25cqw;
+	max-width: 76%;
+	padding: 0.56cqw 2.67cqw;
 	border-radius: 4px;
-	background: rgba(255, 255, 255, 0.96);
+	/*
+	 * The name plate is frosted glass, not a white sticker. At 0.62 the photos
+	 * read through it; the backdrop blur is what keeps the words legible over a
+	 * face or a high-contrast edge, so the two belong together — dropping the
+	 * alpha on its own puts the text on whatever happens to sit behind it.
+	 * The same values are baked into the generated PNGs (comcard-generate.ts,
+	 * render-comcard.ts) so a SAVED comcard and a live collage look alike.
+	 */
+	background: rgba(255, 255, 255, 0.62);
+	backdrop-filter: blur(8px) saturate(1.05);
+	-webkit-backdrop-filter: blur(8px) saturate(1.05);
 	color: #111;
-	text-align: left;
-	box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+	/* Centred, like the baked plate — it read left-aligned next to a saved one. */
+	text-align: center;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.32);
 }
 .iz-portfolio-comcard__name {
 	margin: 0;
 	font-family: "Sora", sans-serif;
-	font-size: 14px;
+	font-size: 5.33cqw;
 	font-weight: 800;
 	line-height: 1.2;
 	letter-spacing: 0.02em;
+	/* One line — but never truncated. The plate widens to fit the nickname
+	   (see `width: max-content` above); no ellipsis eats a PR's name. */
+	white-space: nowrap;
 }
 .iz-portfolio-comcard__line {
-	margin: 3px 0 0;
-	font-size: 12px;
+	margin: 0.35cqw 0 0;
+	font-size: 3.5cqw;
 	font-weight: 600;
 	line-height: 1.35;
 	color: #222;
+	white-space: nowrap;
 }
 .iz-portfolio-comcard__badge {
 	position: absolute;
@@ -12190,15 +12218,12 @@ button.iz-pr-offer-row:hover {
 	border-radius: 0;
 	aspect-ratio: 5 / 6;
 }
-.iz-pr-manage-card__visual .iz-portfolio-comcard__overlay {
-	padding: 8px 10px 10px;
-}
-.iz-pr-manage-card__visual .iz-portfolio-comcard__name {
-	font-size: 11px;
-}
-.iz-pr-manage-card__visual .iz-portfolio-comcard__line {
-	font-size: 9px;
-}
+/*
+ * The three px overrides that used to sit here (overlay padding, name 11px,
+ * line 9px) are gone: the plate now sizes itself in `cqw` against the frame, so
+ * it shrinks with the grid card on its own. Re-adding a pixel size here would
+ * pull the live plate back out of step with the baked one beside it.
+ */
 .iz-pr-manage-card__gradient {
 	width: 100%;
 	aspect-ratio: 4 / 3;
