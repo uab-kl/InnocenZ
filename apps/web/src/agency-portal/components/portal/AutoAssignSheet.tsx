@@ -108,7 +108,9 @@ export function AutoAssignSheet({
 					];
 					toast(
 						`${failed.length} ${plural(failed.length, "assignment")} could not be made — ${
-							reasons.length > 0 ? reasons.join(" · ") : "the server refused them"
+							reasons.length > 0
+								? reasons.join(" · ")
+								: "the server refused them"
 						}`,
 						"warn",
 					);
@@ -191,8 +193,8 @@ export function AutoAssignSheet({
 					{tierBlockedCount > 0 ? (
 						<>
 							{tierBlockedCount} open {plural(tierBlockedCount, "slot")}{" "}
-							{tierBlockedCount === 1 ? "is" : "are"} reserved for tiers no
-							free PR holds {scopeLabel} — change the shift's tier mix to fill{" "}
+							{tierBlockedCount === 1 ? "is" : "are"} reserved for tiers no free
+							PR holds {scopeLabel} — change the shift's tier mix to fill{" "}
 							{tierBlockedCount === 1 ? "it" : "them"}.
 							{unfilledCount > tierBlockedCount && (
 								<>
