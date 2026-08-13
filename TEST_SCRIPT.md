@@ -322,6 +322,43 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
+### ▶ 🔴 A cancellation fee says "Not linked to a shift" — ONE LINE, diagnosed 13 Aug 2026
+
+The PR's Deductions evidence sheet shows *"Not linked to a shift — this was logged without
+an open shift, so there is no check-in to show"* on a **cancelled-shift fee**, which is the
+one deduction that is definitionally ABOUT a shift. The PR cannot see which shift they were
+charged for.
+
+**Root cause — a fix named after its symptom that missed its sibling.**
+`asAssignmentId` (`payment-voucher.controller.ts:422`) strips exactly one suffix:
+
+```ts
+const bare = raw.replace(/-ot$/i, '');      // the check-out seal marks overtime `<id>-ot`
+return UUID_RE.test(bare) ? bare : null;
+```
+
+But `penaltyDedupeRef` (`penalty-line.ts:34`) writes `` `${chargeId}-pen` ``. So `<uuid>-pen`
+fails the UUID test → `shiftAssignmentId: null` → `weekShifts` (`:1244`) never asks for the id
+→ `buildCellEvidence` groups it under `''` → `group.shift` is null → that wording.
+
+**Proven on the live row** (the one in the owner's screenshot). `payment_voucher_line` where
+`ref like '%-pen%'`: *"Cancelled shift — 50% of RM 40.00"*, −20.00, 2026-08-11,
+`component=deduction`, dedupe `ea520f72-…-pen`. Today `asAssignmentId` → **null**. Stripping
+`-pen` as well → `ea520f72-…`, which **resolves to a real assignment: "Tues" @ Emhub Testing,
+2026-08-11, status=`cancelled`**.
+
+**The rest of the chain already works** — checked, not assumed: `listByIdsForPrs`
+(`shift-assignment.repository.ts:1082`) filters on **id + prId only, with NO status filter**,
+so a `cancelled` assignment resolves fine.
+
+**Fix:** `raw.replace(/-(ot|pen)$/i, '')`. Safe for the other penalty source too — a WEEKLY
+charge's `chargeId` is a `penalty_charge.id`, which matches no assignment, so it resolves to
+nothing and correctly keeps the honest "not linked" note (a weekly penalty genuinely is not
+about one shift). Worth a second look at the sheet's copy afterwards: for a cancellation the
+line *"there is no check-in to show"* is true but beside the point — there is no check-in
+BECAUSE they cancelled.
+
+
 ### ▶ TIER-SLOT RULE — ALL 4 FIXED 13 Aug 2026 (commit 740c0fc) — kept for the reasoning
 
 **Closed the same day they were opened.** See the §10 row for what shipped and how it
