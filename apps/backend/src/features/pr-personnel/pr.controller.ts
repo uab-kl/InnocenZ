@@ -23,6 +23,7 @@ import { AgencyPenaltyRuleRepositoryClass } from '@/features/agency/agency-penal
 import { PenaltyChargeRepositoryClass } from '@/features/agency/penalty-charge.repository.js';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
+import { EMPTY_PR_STATS, loadPrStats } from './pr-stats.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -286,10 +287,16 @@ export class PrControllerClass {
         const totalCount = filtered.length;
         const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
         const pageRows = filtered.slice((page - 1) * pageSize, page * pageSize);
+        // Attendance + paid, for THIS agency only. Computed over the page rows,
+        // so the two aggregates stay two queries however large the roster grows.
+        const stats = await loadPrStats({
+          prIds: pageRows.map((pr) => pr.id),
+          agencyId: scope.agencyId,
+        });
         return res.status(200).json({
           success: true,
           message: 'OK',
-          data: pageRows,
+          data: pageRows.map((pr) => ({ ...pr, stats: stats.get(pr.id) ?? EMPTY_PR_STATS })),
           pagination: {
             page,
             pageSize,
@@ -317,10 +324,18 @@ export class PrControllerClass {
 
       const { prs, totalCount } = await this.prRepository.listPaginated({ filter, page, pageSize });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
+      // An OUTLET caller never gets these. Attendance is arguably its business
+      // for its own venues, but `totalPaidRm` is agency→PR payroll and a venue
+      // has no claim on it — so the whole block is withheld rather than half of
+      // it leaked. Admins get it scoped to whichever agency they filtered by,
+      // or across all agencies when they filtered by none.
+      const stats = isOutletCaller
+        ? null
+        : await loadPrStats({ prIds: prs.map((pr) => pr.id), agencyId: filter.agencyId ?? null });
       res.status(200).json({
         success: true,
         message: 'OK',
-        data: prs,
+        data: stats ? prs.map((pr) => ({ ...pr, stats: stats.get(pr.id) ?? EMPTY_PR_STATS })) : prs,
         pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
       });
     } catch (error) {

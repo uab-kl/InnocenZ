@@ -1105,7 +1105,13 @@ export interface AgencyManagedPR {
 	rating: number;
 	trainingLevel: string;
 	totalPaid: number;
-	attendancePct: number;
+	/**
+	 * Kept shifts ÷ concluded shifts, or `null` when the PR has no concluded
+	 * shift yet. Null is NOT 0 — a PR who has never been scheduled has missed
+	 * nothing, and every render site must show an em-dash rather than "0%",
+	 * which reads as a PR who no-showed everything they were given.
+	 */
+	attendancePct: number | null;
 	checkIns: number;
 	checkOuts: number;
 	noShows: number;
