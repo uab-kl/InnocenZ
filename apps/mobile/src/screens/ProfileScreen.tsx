@@ -194,11 +194,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const email = me?.email ?? '—';
   const height = editing ? draft.height : me?.profile.comcardHeightCm ?? 0;
   const weight = editing ? draft.weight : me?.profile.comcardWeightKg ?? 0;
-  const age = editing
-    ? draft.age
-    : me?.profile.dob
-      ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
-      : 0;
+  // Server-derived from the IC. Both arms read the same number, so the card
+  // overlay and the edit sheet cannot disagree — and neither can this screen
+  // and the agency's, which reads the identical field.
+  const age = editing ? draft.age : me?.profile.age ?? 0;
 
   const languages = editing ? draft.languages : me?.profile.languages ?? [];
   const profilePortfolio = portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS);
@@ -298,9 +297,10 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       bust: me?.profile.comcardBustCm ?? 0,
       waist: me?.profile.comcardWaistCm ?? 0,
       hip: me?.profile.comcardHipCm ?? 0,
-      age: me?.profile.dob
-        ? Math.max(18, new Date().getFullYear() - new Date(me.profile.dob).getFullYear())
-        : 0,
+      // Straight from the server, which derives it from the IC. Not recomputed
+      // here: the old local sum ignored the month and floored at 18, so the
+      // edit sheet could show a different age from the card above it.
+      age: me?.profile.age ?? 0,
       languages: me?.profile.languages ?? [],
       agencyIds,
       portfolio: portfolioSlotsFromProfile(me?.profile.portfolioPhotos, PORTFOLIO_SLOTS),
@@ -365,13 +365,25 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       }
       setEditing(false);
       showToast('Profile saved');
-      // Height / weight / name feed the comcard overlay — refresh saved PNG.
-      if (portfolioSlotsFromProfile(draft.portfolio, PORTFOLIO_SLOTS).some(Boolean)) {
+
+      // Height, weight and name are printed ON the comcard, so saving them
+      // without re-rendering it leaves the saved PNG stating measurements the
+      // profile no longer claims. Regenerated here so "Update saved comcard"
+      // is never needed to make a save take effect — that button remains only
+      // as a manual retry.
+      //
+      // Gated on what the card actually needs (`comcardTiles.mode`), not on
+      // "has at least one photo": the generator wants four tiles, so a PR with
+      // one photo used to fire a call that could only fail — silently, because
+      // the failure was swallowed. Now the outcome is reported either way.
+      if (comcardTiles.mode !== 'empty') {
         try {
           await generateComcard();
           setComcardSavedHint('Comcard updated');
         } catch {
-          /* Non-fatal */
+          // Not fatal to the save — the profile IS stored — but it must not
+          // look like it worked, or the stale card silently outlives the edit.
+          setComcardSavedHint('Profile saved, but the comcard could not be re-rendered');
         }
       }
     } catch (e) {
@@ -956,7 +968,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 <View style={styles.measure}>
                   <Text style={styles.measureLabel}>{t.profile.age}</Text>
                   <View style={styles.measureRow}>
-                    <Text style={styles.measureValue}>{me?.profile.dob ? age : '—'}</Text>
+                    {/* Null age = no IC and no stored DOB, which is most of the
+                        roster — an em-dash, never a fabricated number. */}
+                    <Text style={styles.measureValue}>{me?.profile.age ?? '—'}</Text>
                     <Text style={styles.measureSuffix}>y</Text>
                   </View>
                 </View>
@@ -1006,13 +1020,15 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     setDraft((d) => ({ ...d, weight: Number(v.replace(/\D/g, '')) || 0 }))
                   }
                 />
+                {/* Age is derived from the PR's IC, so it is shown locked
+                    rather than hidden — a missing field looks like a bug, and
+                    the PR needs to see the number that is on their comcard. */}
                 <MeasureField
                   label={t.profile.age}
                   suffix="y"
                   value={draft.age ? String(draft.age) : ''}
-                  onChange={(v) =>
-                    setDraft((d) => ({ ...d, age: Number(v.replace(/\D/g, '')) || 0 }))
-                  }
+                  onChange={() => {}}
+                  lockedNote={t.profile.ageFollowsIc}
                 />
               </View>
               <View style={styles.measureGrid}>
@@ -1200,12 +1216,52 @@ function MeasureField({
   suffix,
   value,
   onChange,
+  lockedNote,
 }: {
   label: string;
   suffix: string;
   value: string;
   onChange: (v: string) => void;
+  /**
+   * Present = this measurement is not the PR's to change, and this is why.
+   * Shown on tap rather than only as static helper text: a greyed box with no
+   * explanation reads as a bug, and the one question it provokes ("why can't I
+   * fix my age?") is exactly what the note answers.
+   */
+  lockedNote?: string;
 }) {
+  const [noteShown, setNoteShown] = useState(false);
+  const locked = lockedNote != null;
+
+  if (locked) {
+    return (
+      <View style={styles.measure}>
+        <Text style={[styles.measureLabel, styles.measureLabelLocked]}>{label}</Text>
+        <Pressable
+          style={styles.measureRow}
+          onPress={() => setNoteShown((s) => !s)}
+          accessibilityHint={lockedNote}
+        >
+          {/* A disabled TextInput, not a Text: it keeps the box the same size
+              and shape as its editable neighbours, so the row still reads as
+              one control group rather than a field that went missing. */}
+          <TextInput
+            value={value}
+            editable={false}
+            // Android still focuses a non-editable input on tap; without this the
+            // keyboard opens over a field that cannot take a keystroke.
+            pointerEvents="none"
+            style={[styles.measureInput, styles.measureInputLocked]}
+            placeholderTextColor={C.muted2}
+          />
+          <Text style={[styles.measureSuffix, styles.measureLabelLocked]}>{suffix}</Text>
+          <Lock size={11} color={C.muted2} style={{ marginLeft: 2 }} />
+        </Pressable>
+        {noteShown && <Text style={styles.measureLockNote}>{lockedNote}</Text>}
+      </View>
+    );
+  }
+
   return (
     <View style={styles.measure}>
       <Text style={styles.measureLabel}>{label}</Text>
@@ -1538,6 +1594,16 @@ const styles = StyleSheet.create({
     padding: 0,
   },
   measureSuffix: { flexShrink: 0, fontFamily: F.manrope, fontSize: 12, color: C.blue },
+  /** Locked measurement — greyed, but still legible: it is real data, not absent data. */
+  measureLabelLocked: { color: C.muted2 },
+  measureInputLocked: { color: C.muted, opacity: 0.7 },
+  measureLockNote: {
+    marginTop: 6,
+    fontFamily: F.manrope,
+    fontSize: 10,
+    lineHeight: 13,
+    color: C.muted2,
+  },
   section: { marginTop: 16 },
   sectionTitleRow: {
     flexDirection: 'row',

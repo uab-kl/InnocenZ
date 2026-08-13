@@ -70,6 +70,7 @@ import {
 	AlertTriangle,
 	ChevronDown,
 	Filter,
+	Lock,
 	Megaphone,
 	MousePointerClick,
 	Pencil,
@@ -1093,11 +1094,16 @@ function AgencyPrDetail({
 							blankZero
 							onChange={(n) => setDraft((p) => ({ ...p, weight: n }))}
 						/>
+						{/* Age follows the PR's IC, so it is shown locked rather than
+						    hidden — the agency still needs to read it off the comcard,
+						    they just cannot author it. The hook drops any `age` in the
+						    patch and the server has no `dob` field to receive one. */}
 						<AgencyComcardInput
 							label="Age"
 							value={draft.age}
 							blankZero
-							onChange={(n) => setDraft((p) => ({ ...p, age: n }))}
+							onChange={() => {}}
+							lockedNote="Age follows the PR's IC — it updates from their identity, not here."
 						/>
 					</div>
 				) : (
@@ -1613,6 +1619,7 @@ function AgencyComcardInput({
 	value,
 	onChange,
 	blankZero,
+	lockedNote,
 }: {
 	label: string;
 	value: number;
@@ -1623,9 +1630,72 @@ function AgencyComcardInput({
 	 * experience is NOT one of these — 0 years is a real answer.
 	 */
 	blankZero?: boolean;
+	/**
+	 * Present = this figure is not the agency's to change, and this is why.
+	 * Shown on hover AND on click, because the two questions differ: hover asks
+	 * "is this broken", click asks "why can't I". A greyed box that answers
+	 * neither reads as a bug in the page.
+	 */
+	lockedNote?: string;
 }) {
+	const [noteShown, setNoteShown] = useState(false);
 	const shown =
 		Number.isFinite(value) && !(blankZero && value === 0) ? value : "";
+
+	if (lockedNote) {
+		// Real association, not just proximity: the whole point of this branch is
+		// that a sighted user sees a greyed box and a screen-reader user hears
+		// "Age, dimmed" — both need the label tied to the control to get the
+		// explanation, which rides on aria-describedby below.
+		const fieldId = `comcard-locked-${label.replace(/\W+/g, "-").toLowerCase()}`;
+		return (
+			<div className="iz-comcard-field iz-comcard-field--locked">
+				<label htmlFor={fieldId}>
+					{label}
+					<Lock
+						className="ml-1 inline h-3 w-3 align-[-1px] opacity-70"
+						aria-hidden
+					/>
+				</label>
+				{/* Kept as a disabled input rather than swapped for text, so the
+				    field keeps its size and the row still reads as one form. */}
+				<input
+					id={fieldId}
+					type="number"
+					inputMode="numeric"
+					value={shown}
+					disabled
+					readOnly
+					title={lockedNote}
+					aria-describedby={`${fieldId}-note`}
+				/>
+				{/* The overlay carries the pointer handlers: a disabled input fires
+				    no mouse events of its own, so hover and click on the control
+				    itself would both go unheard. */}
+				<button
+					type="button"
+					className="iz-comcard-field-lockhit"
+					onMouseEnter={() => setNoteShown(true)}
+					onMouseLeave={() => setNoteShown(false)}
+					onFocus={() => setNoteShown(true)}
+					onBlur={() => setNoteShown(false)}
+					onClick={() => setNoteShown((s) => !s)}
+					aria-label={`${label} — ${lockedNote}`}
+				/>
+				{/* Always in the DOM so `aria-describedby` always resolves; hidden
+				    visually until hover/click, which is a SIGHTED affordance. A
+				    screen reader gets the reason with the field either way. */}
+				<p
+					className="iz-comcard-field-locknote"
+					id={`${fieldId}-note`}
+					hidden={!noteShown}
+				>
+					{lockedNote}
+				</p>
+			</div>
+		);
+	}
+
 	return (
 		<div className="iz-comcard-field">
 			<label>{label}</label>

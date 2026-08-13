@@ -24,6 +24,7 @@ import { PenaltyChargeRepositoryClass } from '@/features/agency/penalty-charge.r
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository.js';
 import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 import { EMPTY_PR_STATS, loadPrStats } from './pr-stats.js';
+import { derivedAge } from './ic-dob.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -83,7 +84,13 @@ function rosterRowFromMembership(row: AgencyPrEnriched): PrWithProfileType | nul
           profileImage: row.profileImage,
           gender: row.gender,
           race: row.race,
-          dob: row.dob != null ? String(row.dob).slice(0, 10) : null,
+          // Age follows the IC: the NRIC's date wins over the stored one, and
+          // both fields come from the one derivation so this projection cannot
+          // disagree with the repository's.
+          ...derivedAge({
+            idNo: row.idNo,
+            dob: row.dob != null ? String(row.dob).slice(0, 10) : null,
+          }),
           nationality: row.nationality,
           languages: row.languages,
           portfolioPhotos: row.portfolioPhotos,
@@ -344,18 +351,84 @@ export class PrControllerClass {
     }
   }
 
+  /**
+   * The PR as seen by the CALLER'S agency, or a written response and null.
+   *
+   * One person holds one `agency_pr` row per agency, so "which membership" is a
+   * question every by-id path has to answer deliberately. Answering it by age —
+   * which `getById` does when handed no agency — resolved a Why We Met caller's
+   * Alice to her *Atlas* membership, so the scope compare failed and the two PRs
+   * on more than one roster were the only two of 32 that could not be edited.
+   *
+   * `forWrite` is what separates the two lanes for an ADMIN, who has no agency
+   * scope of their own: a read may fall back to the oldest membership (it can
+   * corrupt nothing), but a write must not guess — it either names the agency
+   * or is refused. Non-admins are always pinned to their own scope.
+   */
+  private async resolvePrForCaller(
+    req: Request,
+    res: Response,
+    id: string,
+    opts: { forWrite: boolean },
+  ): Promise<{ pr: PrWithProfileType; agencyId: string } | null> {
+    const notFound = () => {
+      res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      return null;
+    };
+
+    const scope = await this.resolveScope(req);
+    if (!scope.isAdmin) {
+      if (!scope.agencyId) return notFound();
+      const pr = await this.prRepository.getById(id, scope.agencyId);
+      // Null here means "not on YOUR roster" — 404, not 403, so a caller cannot
+      // probe which PR ids exist outside their agency.
+      if (!pr) return notFound();
+      return { pr, agencyId: scope.agencyId };
+    }
+
+    // Admin. An explicitly named agency always wins, in either lane.
+    const named =
+      (typeof req.body?.agencyId === 'string' ? req.body.agencyId : undefined) ??
+      (typeof req.query.agencyId === 'string' ? req.query.agencyId : undefined);
+    if (named) {
+      const pr = await this.prRepository.getById(id, named);
+      if (!pr) return notFound();
+      return { pr, agencyId: named };
+    }
+
+    if (opts.forWrite) {
+      const agencyIds = await this.prRepository.listMembershipAgencyIds(id);
+      if (agencyIds.length === 0) return notFound();
+      // More than one roster and nobody said which. Refuse rather than pick:
+      // the silent pick wrote a PR's tier, place and KPI onto whichever agency
+      // signed them first, and detached them from that agency on remove.
+      if (agencyIds.length > 1) {
+        res.status(409).json({
+          success: false,
+          message:
+            'This PR is on more than one agency roster — pass agencyId to say which membership to change',
+          data: null,
+        });
+        return null;
+      }
+      const pr = await this.prRepository.getById(id, agencyIds[0]);
+      if (!pr) return notFound();
+      return { pr, agencyId: agencyIds[0] };
+    }
+
+    // Admin read, no agency named: oldest-membership view, as before.
+    const pr = await this.prRepository.getById(id);
+    if (!pr) return notFound();
+    return { pr, agencyId: pr.agencyId };
+  }
+
   async getById(req: Request, res: Response) {
     try {
-      const pr = await this.prRepository.getById(paramId(req.params.id));
-      if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-
-      const scope = await this.resolveScope(req);
-      // Hide existence of records outside the caller's agency (404, not 403).
-      if (!scope.isAdmin && pr.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      }
-
-      res.status(200).json({ success: true, message: 'OK', data: pr });
+      const resolved = await this.resolvePrForCaller(req, res, paramId(req.params.id), {
+        forWrite: false,
+      });
+      if (!resolved) return;
+      res.status(200).json({ success: true, message: 'OK', data: resolved.pr });
     } catch (error) {
       logger.error('[PrController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -476,14 +549,15 @@ export class PrControllerClass {
         return res.status(400).json({ success: false, message: parsed.error.issues[0]?.message, data: null });
       }
 
-      const existing = await this.prRepository.getById(id);
-      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // Resolved AS THIS CALLER'S AGENCY, so `existing.agencyId` is the
+      // membership being edited rather than the oldest one this person holds.
+      // That is what the two multi-roster PRs needed: the 404 fired before any
+      // field was looked at, so nothing on them could be saved at all.
+      const resolved = await this.resolvePrForCaller(req, res, id, { forWrite: true });
+      if (!resolved) return;
+      const existing = resolved.pr;
 
       const scope = await this.resolveScope(req);
-      if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      }
-
       const data = { ...parsed.data };
       if (!scope.isAdmin) delete data.agencyId;
       const actor = getActor(req);
@@ -491,9 +565,12 @@ export class PrControllerClass {
       // Editor fields live in three tables. Peel non-identity / non-membership
       // keys off before `prRepository.update` — those columns are not on the
       // synthetic PrInsertType.
-      const { race, languages, dob, comcardHeightCm, comcardWeightKg, ...rest } = data;
+      // No `dob` — age follows the PR's IC and is derived on read, so neither
+      // the agency nor the PR sends one. `UpdatePrSchema` has already dropped
+      // any that arrives.
+      const { race, languages, comcardHeightCm, comcardWeightKg, ...rest } = data;
       const { place, yearsExp, kpiTier, payClass, ...prColumns } = rest;
-      const profilePatch = pickDefined({ race, languages, dob, comcardHeightCm, comcardWeightKg });
+      const profilePatch = pickDefined({ race, languages, comcardHeightCm, comcardWeightKg });
       const rosterPatch = pickDefined({ place, yearsExp, kpiTier, payClass });
 
       // Person facts → user / user_profile; membership tier/approval → agency_pr.
@@ -526,7 +603,9 @@ export class PrControllerClass {
                   ? ('pending' as const)
                   : undefined;
           await this.agencyPrRepository.updateMembership(
-            existing.agencyId,
+            // The membership the CALLER named, never the oldest one this person
+            // holds — this is the write that used to land on another agency's row.
+            resolved.agencyId,
             existing.userId,
             {
               ...(data.tier ? { tier: data.tier } : {}),
@@ -563,9 +642,13 @@ export class PrControllerClass {
       }
 
       // Roster grading on agency_pr (0089) — keyed by userId (pr table is gone).
-      if (Object.keys(rosterPatch).length > 0 && pr.agencyId) {
+      // Grading (place / years / KPI / pay class) is per-membership by design —
+      // a PR on two rosters can be graded differently by each — so it MUST be
+      // written against the caller's agency, not `pr.agencyId` (which comes back
+      // from an unscoped re-read and would be the oldest membership again).
+      if (Object.keys(rosterPatch).length > 0) {
         await this.agencyPrRepository.upsertRosterProfile(
-          pr.agencyId,
+          resolved.agencyId,
           pr.userId,
           rosterPatch,
           actor,
@@ -583,12 +666,19 @@ export class PrControllerClass {
           body: accepted
             ? 'You can now be scheduled for shifts.'
             : (pr.rejectReason ?? undefined),
-          payload: { prId: pr.id, agencyId: pr.agencyId, userId: pr.userId, status: data.status },
+          payload: {
+            prId: pr.id,
+            agencyId: resolved.agencyId,
+            userId: pr.userId,
+            status: data.status,
+          },
           actor,
         });
       }
 
-      const withProfile = await this.prRepository.getById(pr.id);
+      // Read back through the SAME agency, so the response describes the
+      // membership just written rather than another agency's view of them.
+      const withProfile = await this.prRepository.getById(pr.id, resolved.agencyId);
       res.status(200).json({ success: true, message: 'PR updated', data: withProfile ?? pr });
     } catch (error) {
       logger.error('[PrController.update] Error:', error);
@@ -600,17 +690,16 @@ export class PrControllerClass {
     try {
       const id = paramId(req.params.id);
 
-      const existing = await this.prRepository.getById(id);
-      if (!existing) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-
-      const scope = await this.resolveScope(req);
-      if (!scope.isAdmin && existing.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      }
+      // Same resolution as update, and for a sharper reason: `removeLink` takes
+      // an agency id, so an oldest-membership answer here detaches the PR from
+      // the wrong agency — for an admin, one that was never asked about.
+      const resolved = await this.resolvePrForCaller(req, res, id, { forWrite: true });
+      if (!resolved) return;
+      const existing = resolved.pr;
 
       // Detach membership — keep ops history on pr / assignment rows.
       if (existing.userId) {
-        await this.agencyPrRepository.removeLink(existing.agencyId, existing.userId);
+        await this.agencyPrRepository.removeLink(resolved.agencyId, existing.userId);
       }
       await this.prRepository.update(id, {
         status: 'inactive',
@@ -746,10 +835,15 @@ export class PrControllerClass {
         });
       }
 
-      const pr = await this.prRepository.getById(prId);
-      if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      // Read, but a consequential one: these rules price a fine. Resolved to the
+      // caller's agency so a PR on several rosters is judged by the rules of the
+      // agency actually asking — the oldest-membership answer charged Alice by
+      // Atlas's bands no matter who was looking.
+      const resolved = await this.resolvePrForCaller(req, res, prId, { forWrite: false });
+      if (!resolved) return;
+      const pr = resolved.pr;
 
-      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(pr.agencyId);
+      const rules = await this.agencyPenaltyRuleRepository.listByAgencyId(resolved.agencyId);
       if (rules.length === 0) {
         // Not an error: most agencies have written no rules, and "no rules" is a
         // real answer meaning nothing can be charged.

@@ -92,7 +92,11 @@ export function managedPrFromBackend(pr: PrPersonnel): AgencyManagedPR {
 		ic: pr.icNo ?? "",
 		mobile: pr.phone ?? "",
 		email: pr.email ?? "",
-		age: ageFromDob(profile?.dob),
+		// Server-derived from the IC. `ageFromDob` stays only as the fallback for
+		// a backend that does not send `age` yet — computing it here as a rule
+		// would let this screen disagree with the PR's own app, which reads the
+		// server's number.
+		age: profile?.age ?? ageFromDob(profile?.dob),
 		height: profile?.comcardHeightCm ?? 0,
 		weight: profile?.comcardWeightKg ?? 0,
 		race: profile?.race ?? "",

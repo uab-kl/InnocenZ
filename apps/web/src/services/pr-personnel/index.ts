@@ -22,8 +22,17 @@ export interface PrPersonnelProfile {
 	profileImage: string | null;
 	gender: string | null;
 	race: string | null;
-	/** ISO date, `YYYY-MM-DD`. */
+	/**
+	 * ISO date, `YYYY-MM-DD`. DERIVED server-side — the date encoded in the PR's
+	 * NRIC when it has one, else the stored profile value.
+	 */
 	dob: string | null;
+	/**
+	 * Whole years, derived from `dob` above. READ-ONLY: age follows the PR's IC,
+	 * so there is no field to send it back in and the editor renders it locked.
+	 * Optional so an older backend reads as "unknown" rather than 0.
+	 */
+	age?: number | null;
 	nationality: string | null;
 	/** Spoken languages the PR set on their own profile, e.g. ['English','Hokkien']. */
 	languages: string[] | null;
@@ -141,8 +150,11 @@ export interface UpdatePrPersonnelInput {
 	// in their own portal. 409s if the PR has no linked user account.
 	race?: string;
 	languages?: string[];
-	/** ISO `YYYY-MM-DD`. */
-	dob?: string;
+	// No `dob`. Age follows the PR's IC, so it is derived on read and the server
+	// has dropped the field from `UpdatePrSchema` — leaving it here would let a
+	// caller believe a birth date can be sent and get a silent 200 (zod discards
+	// unknown keys) with nothing changed. Third of three gates, and the one that
+	// makes the other two visible in the type.
 	comcardHeightCm?: number;
 	comcardWeightKg?: number;
 

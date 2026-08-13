@@ -98,6 +98,8 @@ export type AppTranslations = {
     height: string;
     weight: string;
     age: string;
+    /** Why the age box is locked — age is derived from the PR's IC. */
+    ageFollowsIc: string;
     bust: string;
     waist: string;
     hip: string;
@@ -290,6 +292,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       height: 'HEIGHT',
       weight: 'WEIGHT',
       age: 'AGE',
+      ageFollowsIc: 'Age follows your IC and cannot be edited.',
       bust: 'BUST',
       waist: 'WAIST',
       hip: 'HIP',
@@ -488,6 +491,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       height: '身高',
       weight: '体重',
       age: '年龄',
+      ageFollowsIc: '年龄根据您的身份证自动计算，无法修改。',
       bust: '胸围',
       waist: '腰围',
       hip: '臀围',
@@ -685,6 +689,7 @@ export const translations: Record<AppLocale, AppTranslations> = {
       height: '身高',
       weight: '體重',
       age: '年齡',
+      ageFollowsIc: '年齡根據您的身份證自動計算，無法修改。',
       bust: '胸圍',
       waist: '腰圍',
       hip: '臀圍',

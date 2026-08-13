@@ -1,6 +1,8 @@
 import { date, integer, jsonb, text, timestamp, uuid, varchar } from 'drizzle-orm/pg-core';
 import { MainSchema } from '@/db/db.schema';
 import { UserTable } from '@/features/user/user.model';
+// Leaf (no feature imports of its own) — safe to reach for from a model file.
+import { derivedAge } from '@/features/pr-personnel/ic-dob';
 
 export const idTypeValues = ['NRIC', 'Passport', 'Work permit'] as const;
 export type IdType = (typeof idTypeValues)[number];
@@ -108,6 +110,14 @@ export type UserProfileResponse = {
   idType: IdType | null;
   idNo: string | null;
   dob: string | null;
+  /**
+   * Whole years, DERIVED from the IC (falling back to `dob`) — never stored and
+   * never settable. Served here so the PR's own app and the agency portal
+   * render one number rather than each computing its own; the mobile profile
+   * used to do `Math.max(18, thisYear - birthYear)`, which ignored the month
+   * and invented 18 for anyone younger. See `features/pr-personnel/ic-dob.ts`.
+   */
+  age: number | null;
   addressLine1: string | null;
   addressLine2: string | null;
   city: string | null;
@@ -138,6 +148,8 @@ export function emptyUserProfileResponse(userId: string): UserProfileResponse {
     languages: null,
     portfolioPhotos: null,
     comcardImage: null,
+    // No identity yet, so no age to derive.
+    age: null,
     comcardHeightCm: null,
     comcardWeightKg: null,
     comcardBustCm: null,
@@ -184,7 +196,9 @@ export function toUserProfileResponse(profile: UserProfileType): UserProfileResp
     comcardHipCm: profile.comcardHipCm,
     idType: profile.idType,
     idNo: profile.idNo,
-    dob: profile.dob,
+    // The IC's date wins over the stored one — same rule, same helper, as the
+    // agency-facing read.
+    ...derivedAge({ idNo: profile.idNo, dob: profile.dob }),
     addressLine1: profile.addressLine1,
     addressLine2: profile.addressLine2,
     city: profile.city,
