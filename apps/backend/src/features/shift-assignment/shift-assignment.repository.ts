@@ -6,6 +6,10 @@ import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
+// The TABLE, not PrAvailabilityRepository: that repository imports
+// NON_STAFFING_STATUSES from this file, so reaching for it here would close an
+// import cycle. The model is a leaf (db.schema + user.model only).
+import { PrAvailabilityTable } from '@/features/pr-availability/pr-availability.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import { DEFAULT_GEOFENCE_RADIUS_M } from './check-in-geofence';
@@ -248,6 +252,25 @@ export class ShiftFullError extends Error {
   }
 }
 
+/**
+ * The PR has declared this day unavailable on their own schedule, so they may
+ * not be rostered on it — see `main.pr_availability`.
+ *
+ * A separate error from the two capacity ones because it is about the PERSON,
+ * not the shift: the seat exists and the tier fits, this particular PR just
+ * cannot take it. Sending a different PR fixes it; raising the headcount or
+ * changing the tier mix does not.
+ */
+export class PrUnavailableError extends Error {
+  constructor(
+    readonly prId: string,
+    readonly shiftDate: string,
+  ) {
+    super(`PR ${prId} has marked ${shiftDate} unavailable`);
+    this.name = 'PrUnavailableError';
+  }
+}
+
 /** The shift vanished between the caller reading it and the insert. */
 export class ShiftGoneError extends Error {
   constructor(readonly shiftId: string) {
@@ -332,12 +355,39 @@ export class ShiftAssignmentRepositoryClass {
         );
         if (takesSeat) {
           const [shift] = await client
-            .select({ quantity: ShiftTable.quantity })
+            .select({ quantity: ShiftTable.quantity, shiftDate: ShiftTable.shiftDate })
             .from(ShiftTable)
             .where(eq(ShiftTable.id, data.shiftId))
             .limit(1)
             .for('update');
           if (!shift) throw new ShiftGoneError(data.shiftId);
+
+          // Has this PR blocked the day on their own schedule? Checked FIRST,
+          // before either capacity rule: "they are not available" is a truer
+          // answer than "the shift is full", and it stays true no matter what
+          // the roster does next.
+          //
+          // Read inside the same lock as the counts below, from the leaf model
+          // rather than through PrAvailabilityRepository — importing that
+          // repository here would close an import cycle, since it reaches back
+          // for NON_STAFFING_STATUSES.
+          //
+          // `pr_id` IS the user id post-0089, but `data.userId` is preferred
+          // when the caller set it — the same coalesce every other query here
+          // uses. Comparing two `date` strings, never timestamps: a blocked day
+          // is a calendar day, and a server-timezone instant would shift it.
+          const assigneeId = data.userId ?? data.prId;
+          const [blocked] = await client
+            .select({ id: PrAvailabilityTable.id })
+            .from(PrAvailabilityTable)
+            .where(
+              and(
+                eq(PrAvailabilityTable.userId, assigneeId),
+                eq(PrAvailabilityTable.unavailableDate, shift.shiftDate),
+              ),
+            )
+            .limit(1);
+          if (blocked) throw new PrUnavailableError(assigneeId, shift.shiftDate);
 
           const staffed = await countStaffing(client, data.shiftId);
           if (staffed >= shift.quantity) {
@@ -429,7 +479,8 @@ export class ShiftAssignmentRepositoryClass {
       if (
         error instanceof ShiftFullError ||
         error instanceof ShiftGoneError ||
-        error instanceof TierFullError
+        error instanceof TierFullError ||
+        error instanceof PrUnavailableError
       ) {
         throw error;
       }
@@ -467,6 +518,12 @@ export class ShiftAssignmentRepositoryClass {
     staffed: number;
     /** Set only when the refusal is about the MIX rather than the headcount. */
     tierFull?: { bucket: string | null; asked: number; staffed: number };
+    /**
+     * Set only when the refusal is about the PR rather than the shift — they
+     * marked this day unavailable. `free` is false with seats to spare, so a
+     * caller that reports "full" from `staffed`/`quantity` alone would be wrong.
+     */
+    prUnavailable?: { shiftDate: string };
   }> {
     const run = (client: DbTransaction) => this.seatVerdict(client, shiftId, pr);
     try {
@@ -492,16 +549,45 @@ export class ShiftAssignmentRepositoryClass {
     quantity: number;
     staffed: number;
     tierFull?: { bucket: string | null; asked: number; staffed: number };
+    prUnavailable?: { shiftDate: string };
   }> {
     {
       const [shift] = await client
-        .select({ quantity: ShiftTable.quantity })
+        .select({ quantity: ShiftTable.quantity, shiftDate: ShiftTable.shiftDate })
         .from(ShiftTable)
         .where(eq(ShiftTable.id, shiftId))
         .limit(1)
         .for('update');
       if (!shift) return { free: false, quantity: 0, staffed: 0 };
       const staffed = await countStaffing(client, shiftId);
+
+      // The PR blocked this day on their own schedule. Checked ahead of both
+      // capacity rules, same as `create`: an unavailable PR is not a seat
+      // problem, and reporting "the shift is full" instead would send the
+      // agency off to raise the headcount for a refusal that would survive it.
+      // Only askable when a PR is named — a caller with none in hand can only
+      // ask about the seat.
+      if (pr) {
+        const [blocked] = await client
+          .select({ id: PrAvailabilityTable.id })
+          .from(PrAvailabilityTable)
+          .where(
+            and(
+              eq(PrAvailabilityTable.userId, pr.prId),
+              eq(PrAvailabilityTable.unavailableDate, shift.shiftDate),
+            ),
+          )
+          .limit(1);
+        if (blocked) {
+          return {
+            free: false,
+            quantity: shift.quantity,
+            staffed,
+            prUnavailable: { shiftDate: shift.shiftDate },
+          };
+        }
+      }
+
       if (staffed >= shift.quantity) {
         return { free: false, quantity: shift.quantity, staffed };
       }
@@ -1433,8 +1519,20 @@ export class ShiftAssignmentRepositoryClass {
             notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
           ),
         );
+      // PRs who have declared the day off on their own schedule. Folded into
+      // the SAME set as the already-booked ones because the picker's question
+      // is "who can work this shift", and both answers are no — but they are
+      // different facts, so this is a separate query rather than a widening of
+      // the busy one: `pr_availability` rows exist for days with no assignment
+      // at all, which is the whole point of them.
+      const blockedRows = await db
+        .select({ userId: PrAvailabilityTable.userId })
+        .from(PrAvailabilityTable)
+        .where(eq(PrAvailabilityTable.unavailableDate, params.shiftDate));
+
       const unavailable = new Set([
         ...busyRows.map((r) => r.prId),
+        ...blockedRows.map((r) => r.userId),
         ...params.excludePrIds,
       ]);
 

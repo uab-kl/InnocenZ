@@ -17,6 +17,10 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchOutlets } from "@/services/outlet";
+import {
+	blockedDatesByPr,
+	fetchPrAvailability,
+} from "@/services/pr-availability";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
 import {
@@ -121,6 +125,17 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		staleTime: 60_000,
 	});
 
+	// Days the roster's PRs blocked themselves. Shares the roster's query key, so
+	// the grid and the planner cannot disagree about who is available — the same
+	// shared-key discipline the shifts/assignments reads already follow.
+	const availabilityQuery = useQuery({
+		queryKey: ["roster", "availability", week.from, week.to],
+		queryFn: () =>
+			fetchPrAvailability({ from: week.from, to: week.to }, logout),
+		enabled: backed,
+		staleTime: 30_000,
+	});
+
 	const plan = useMemo<AutoAssignPlan>(() => {
 		if (!backed) return EMPTY_AUTO_ASSIGN_PLAN;
 		const outlets = outletsQuery.data?.data ?? [];
@@ -130,6 +145,10 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 			prs: prsQuery.data?.data ?? [],
 			outletNameById: new Map(outlets.map((o) => [o.id, o.name])),
 			targetDates,
+			// Without this the planner proposes PRs on days they have blocked, and
+			// every one of those pairings 409s at Confirm — a preview that promises
+			// what the write cannot deliver.
+			blockedDatesByPr: blockedDatesByPr(availabilityQuery.data ?? []),
 		});
 	}, [
 		backed,
@@ -137,6 +156,7 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 		assignmentsQuery.data,
 		prsQuery.data,
 		outletsQuery.data,
+		availabilityQuery.data,
 		targetDates,
 	]);
 

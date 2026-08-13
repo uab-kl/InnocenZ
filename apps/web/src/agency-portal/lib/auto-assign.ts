@@ -253,9 +253,22 @@ export function buildAutoAssignPlan(params: {
 	prs: PrPersonnel[];
 	outletNameById: Map<string, string>;
 	targetDates: readonly string[];
+	/**
+	 * `prId -> Set<'YYYY-MM-DD'>` the PR marked unavailable on their own
+	 * schedule. Optional so a caller that has not loaded it plans as before
+	 * rather than crashing — but the planner is then proposing shifts the
+	 * server will refuse, so every real caller passes it.
+	 */
+	blockedDatesByPr?: Map<string, Set<string>>;
 }): AutoAssignPlan {
-	const { weekShifts, weekAssignments, prs, outletNameById, targetDates } =
-		params;
+	const {
+		weekShifts,
+		weekAssignments,
+		prs,
+		outletNameById,
+		targetDates,
+		blockedDatesByPr,
+	} = params;
 
 	const openShifts = findOpenShifts({
 		shifts: weekShifts,
@@ -279,6 +292,26 @@ export function buildAutoAssignPlan(params: {
 		dates.add(date);
 		busyDatesByPr.set(a.prId, dates);
 		weekCountByPr.set(a.prId, (weekCountByPr.get(a.prId) ?? 0) + 1);
+	}
+
+	// A day the PR blocked counts as busy for planning: the question every use
+	// of `busyDatesByPr` below asks is "can this PR take a shift that date", and
+	// the answer is no either way. Folded in here rather than added as a fourth
+	// filter so the three consumers — the free-PR count, the pick, and the
+	// anyFreeToday test that decides whether a shortfall is people or tier mix —
+	// cannot drift apart. They did not all learn about tiers at the same time
+	// once already.
+	//
+	// NOT counted into `weekCountByPr`: that drives the fairness tie-break, and
+	// a PR who blocked Saturday has not worked a shift. Charging them one would
+	// push them DOWN the queue for the days they are in fact available.
+	if (blockedDatesByPr) {
+		for (const [prId, dates] of blockedDatesByPr) {
+			if (dates.size === 0) continue;
+			const busy = busyDatesByPr.get(prId) ?? new Set<string>();
+			for (const d of dates) busy.add(d);
+			busyDatesByPr.set(prId, busy);
+		}
 	}
 
 	const activePrs = prs.filter((p) => p.status === "active");

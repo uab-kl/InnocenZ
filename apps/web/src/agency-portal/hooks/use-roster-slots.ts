@@ -5,6 +5,10 @@ import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchOutlets } from "@/services/outlet/outlet";
+import {
+	blockedDatesByPr,
+	fetchPrAvailability,
+} from "@/services/pr-availability";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
 import { fetchShiftAssignments } from "@/services/shift-assignment";
@@ -51,7 +55,9 @@ export function useRosterSlots(params: {
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
 		queryFn: () =>
-			fetchAllPages((page) => fetchPrPersonnel({ page, pageSize: 100 }, logout)),
+			fetchAllPages((page) =>
+				fetchPrPersonnel({ page, pageSize: 100 }, logout),
+			),
 		enabled,
 		staleTime: 60_000,
 	});
@@ -60,6 +66,21 @@ export function useRosterSlots(params: {
 		queryFn: () => fetchOutlets({ pageSize: 500 }, logout),
 		enabled,
 		staleTime: 60_000,
+	});
+	// Days the roster's PRs have blocked on their own schedule. Keyed on the week
+	// like the shifts query — a PR can block any day, so this is the only query
+	// here whose answer genuinely differs per window.
+	//
+	// Not paged: this returns one row per blocked day per PR over seven days, and
+	// the endpoint applies no clamp of its own. If that ever changes, page it to
+	// exhaustion like the shifts above — a truncated page here would silently
+	// re-open blocked days on the grid.
+	const availabilityQuery = useQuery({
+		queryKey: ["roster", "availability", fromDate, toDate],
+		queryFn: () => fetchPrAvailability({ from: fromDate, to: toDate }, logout),
+		enabled,
+		placeholderData: keepPreviousData,
+		staleTime: 30_000,
 	});
 
 	const slots = useMemo<AgencyRosterSlot[]>(() => {
@@ -90,8 +111,21 @@ export function useRosterSlots(params: {
 		outletsQuery.data,
 	]);
 
+	/**
+	 * `prId -> Set<'YYYY-MM-DD'>` for the week. Deliberately NOT folded into
+	 * `slots`: a blocked day usually has no shift and therefore no slot to hang
+	 * itself on, which is precisely why the PR's block was invisible to the
+	 * agency before — the grid could only draw what an assignment row already
+	 * described. It travels as its own map so an empty cell can say something.
+	 */
+	const blockedDates = useMemo(
+		() => blockedDatesByPr(availabilityQuery.data ?? []),
+		[availabilityQuery.data],
+	);
+
 	return {
 		slots,
+		blockedDates,
 		isLoading:
 			shiftsQuery.isLoading ||
 			assignmentsQuery.isLoading ||
@@ -101,7 +135,12 @@ export function useRosterSlots(params: {
 			shiftsQuery.isFetching ||
 			assignmentsQuery.isFetching ||
 			prsQuery.isFetching ||
-			outletsQuery.isFetching,
+			outletsQuery.isFetching ||
+			availabilityQuery.isFetching,
+		// Availability is deliberately absent: it is ADDITIVE information, and a
+		// failed fetch must not blank a roster that is otherwise fine. The server
+		// still refuses an assign on a blocked day, so the worst case is a cell
+		// that looks free and 409s on click — never a silently-allowed booking.
 		isError:
 			shiftsQuery.isError ||
 			assignmentsQuery.isError ||

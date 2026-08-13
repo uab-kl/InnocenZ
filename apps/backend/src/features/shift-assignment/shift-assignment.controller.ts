@@ -6,6 +6,7 @@ import {
   ShiftFullError,
   ShiftGoneError,
   TierFullError,
+  PrUnavailableError,
   NON_STAFFING_STATUSES,
 } from './shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
@@ -1558,6 +1559,16 @@ export class ShiftAssignmentControllerClass {
       if (isUniqueViolation(error)) {
         return res.status(409).json({ success: false, message: 'PR is already assigned to this shift', data: null });
       }
+      // The PR blocked this day on their own schedule. 409 like the two below —
+      // well-formed and authorised, just refused — but the remedy is a different
+      // PERSON, not a bigger headcount or another tier, so it says so plainly.
+      if (error instanceof PrUnavailableError) {
+        return res.status(409).json({
+          success: false,
+          message: `This PR has marked ${error.shiftDate} as unavailable — pick someone else for this shift.`,
+          data: null,
+        });
+      }
       // 409, same family as the duplicate above: the request was well-formed and
       // authorised, it just lost a race for the last seat. The count is named so
       // the roster can say WHY without a second round-trip.
@@ -1762,11 +1773,18 @@ export class ShiftAssignmentControllerClass {
         });
         if (!result.ok) {
           const { seat } = result;
-          const message = seat.tierFull
-            ? seat.tierFull.bucket
-              ? `This shift already has all ${seat.tierFull.asked} ${seat.tierFull.bucket} it asked for — that tier was filled after this PR came off it.`
-              : `This shift has no unallocated seat left for that tier (${seat.tierFull.staffed}/${seat.tierFull.asked}) — its remaining seats are reserved for the tiers it named.`
-            : `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`;
+          // Checked before the two capacity refusals: when the PR has blocked
+          // the day, `free` is false even with seats to spare, so falling
+          // through would report "already fully staffed" off a headcount that
+          // is not the reason — and send the agency to raise a quantity that
+          // would not help.
+          const message = seat.prUnavailable
+            ? `This PR has marked ${seat.prUnavailable.shiftDate} as unavailable — they cannot be put back on this shift.`
+            : seat.tierFull
+              ? seat.tierFull.bucket
+                ? `This shift already has all ${seat.tierFull.asked} ${seat.tierFull.bucket} it asked for — that tier was filled after this PR came off it.`
+                : `This shift has no unallocated seat left for that tier (${seat.tierFull.staffed}/${seat.tierFull.asked}) — its remaining seats are reserved for the tiers it named.`
+              : `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`;
           return res.status(409).json({ success: false, message, data: null });
         }
         assignment = result.assignment;
