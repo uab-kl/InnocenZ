@@ -13,7 +13,12 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
       args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-https://api.innocenz.duckdns.org/api}
+        # Must match apps/web/Dockerfile ARG names (Vite, not NEXT_PUBLIC_*).
+        VITE_API_URL: ${VITE_API_URL:-https://api.innocenz.duckdns.org/api}
+        VITE_GRAPHQL_ENDPOINT: ${VITE_GRAPHQL_ENDPOINT:-}
+        VITE_R2_PUBLIC_URL: ${VITE_R2_PUBLIC_URL:-}
+        VITE_OUTLET_ROLE_ID: ${VITE_OUTLET_ROLE_ID:-}
+        VITE_AGENCY_ROLE_ID: ${VITE_AGENCY_ROLE_ID:-}
     image: ${FRONTEND_IMAGE:-juneyou/innocenz-frontend:latest}
     restart: unless-stopped
     ports:

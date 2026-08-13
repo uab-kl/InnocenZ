@@ -32,7 +32,7 @@ function requireEnv(name) {
   if (!value) {
     throw new Error(
       `Missing ${name}. Set it in ${envFileName} (copy ${envFileName}.example to get started), e.g.\n` +
-        `  DEPLOY_HOST=your.server.ip\n  DEPLOY_USER=deploy\n  DEPLOY_DOMAIN=your.domain\n`
+        `  DEPLOY_HOST=your.server.ip\n  DEPLOY_USER=deploy\n  DEPLOY_DOMAIN=your.domain\n`,
     );
   }
   return value;
@@ -47,10 +47,14 @@ const FRONTEND_IMAGE =
   process.env.FRONTEND_IMAGE?.trim() || `juneyou/innocenz-frontend:${envName}`;
 const BACKEND_IMAGE = process.env.BACKEND_IMAGE?.trim() || `juneyou/innocenz-backend:${envName}`;
 const NETWORK_NAME = `innocenz-${envName}-network`;
-// NEXT_PUBLIC_* vars are inlined into the web client bundle at build time,
-// so this must already be the backend's public URL, not a container-internal one.
-const NEXT_PUBLIC_API_URL =
-  process.env.NEXT_PUBLIC_API_URL?.trim() || `https://api.${DEPLOY_DOMAIN}/api`;
+// VITE_* are inlined into the web client at image build time.
+const VITE_API_URL =
+  process.env.VITE_API_URL?.trim() || `https://api.${DEPLOY_DOMAIN}/api`;
+const VITE_GRAPHQL_ENDPOINT =
+  process.env.VITE_GRAPHQL_ENDPOINT?.trim() || VITE_API_URL.replace(/\/api\/?$/, '/graphql');
+const VITE_R2_PUBLIC_URL = process.env.VITE_R2_PUBLIC_URL?.trim() || '';
+const VITE_OUTLET_ROLE_ID = process.env.VITE_OUTLET_ROLE_ID?.trim() || '';
+const VITE_AGENCY_ROLE_ID = process.env.VITE_AGENCY_ROLE_ID?.trim() || '';
 
 const deployDir = path.join(root, 'tools/deploy');
 const sshTarget = `${DEPLOY_USER}@${DEPLOY_HOST}`;
@@ -67,14 +71,17 @@ function versionTagFor(image) {
 const FRONTEND_VERSION_IMAGE = versionTagFor(FRONTEND_IMAGE);
 const BACKEND_VERSION_IMAGE = versionTagFor(BACKEND_IMAGE);
 
-// tools/deploy/.env.(frontend|backend).<env> hold real values/secrets and are
-// git-ignored; fall back to the committed .example templates on first deploy.
-function resolveDeployFile(baseName) {
+/**
+ * Real secret files only — never the committed `.example` templates.
+ * Prefer `tools/deploy/.env.backend.<env>` then `tools/deploy/.env.backend`.
+ * If neither exists, return null and leave the server file untouched.
+ */
+function resolveSecretFile(baseName) {
   const scoped = path.join(deployDir, `${baseName}.${envName}`);
   if (fs.existsSync(scoped)) return scoped;
   const shared = path.join(deployDir, baseName);
   if (fs.existsSync(shared)) return shared;
-  return path.join(deployDir, `${baseName}.example`);
+  return null;
 }
 
 function run(command, args, options = {}) {
@@ -82,9 +89,31 @@ function run(command, args, options = {}) {
   execFileSync(command, args, { cwd: root, stdio: 'inherit', ...options });
 }
 
-run('docker', ['compose', 'build'], {
-  env: { ...process.env, NEXT_PUBLIC_API_URL, FRONTEND_IMAGE, BACKEND_IMAGE },
-});
+const buildEnv = {
+  ...process.env,
+  FRONTEND_IMAGE,
+  BACKEND_IMAGE,
+  VITE_API_URL,
+  VITE_GRAPHQL_ENDPOINT,
+  VITE_R2_PUBLIC_URL,
+  VITE_OUTLET_ROLE_ID,
+  VITE_AGENCY_ROLE_ID,
+  // Clear host secrets so Docker build cannot accidentally inherit a local
+  // production DATABASE_URL / R2_* into the image layer environment.
+  DATABASE_URL: '',
+  POSTGRES_HOST: '',
+  POSTGRES_DB: '',
+  POSTGRES_USER: '',
+  POSTGRES_PASSWORD: '',
+  R2_BUCKET_NAME: '',
+  R2_PUBLIC_URL: '',
+  R2_ACCESS_KEY_ID: '',
+  R2_SECRET_ACCESS_KEY: '',
+  R2_ENDPOINT: '',
+  R2_ACCOUNT_ID: '',
+};
+
+run('docker', ['compose', 'build'], { env: buildEnv });
 
 run('docker', ['tag', FRONTEND_IMAGE, FRONTEND_VERSION_IMAGE]);
 run('docker', ['tag', BACKEND_IMAGE, BACKEND_VERSION_IMAGE]);
@@ -94,7 +123,14 @@ run('docker', ['push', FRONTEND_VERSION_IMAGE]);
 run('docker', ['push', BACKEND_IMAGE]);
 run('docker', ['push', BACKEND_VERSION_IMAGE]);
 
-const generatedEnvContent = `FRONTEND_IMAGE=${FRONTEND_IMAGE}\nBACKEND_IMAGE=${BACKEND_IMAGE}\n`;
+const generatedEnvContent = [
+  `DEPLOY_ENV=${envName}`,
+  `FRONTEND_IMAGE=${FRONTEND_IMAGE}`,
+  `BACKEND_IMAGE=${BACKEND_IMAGE}`,
+  `FRONTEND_CONTAINER_NAME=innocenz-frontend`,
+  `BACKEND_CONTAINER_NAME=innocenz-backend`,
+  '',
+].join('\n');
 const generatedEnvPath = path.join(os.tmpdir(), `innocenz-deploy-${envName}.env`);
 fs.writeFileSync(generatedEnvPath, generatedEnvContent);
 
@@ -104,22 +140,64 @@ const caddyfileContent =
 const generatedCaddyfilePath = path.join(os.tmpdir(), `innocenz-Caddyfile-${envName}`);
 fs.writeFileSync(generatedCaddyfilePath, caddyfileContent);
 
+const backendEnvLocal = resolveSecretFile('.env.backend');
+const frontendEnvLocal = resolveSecretFile('.env.frontend');
+
+if (!backendEnvLocal) {
+  console.warn(
+    `\n⚠️  No tools/deploy/.env.backend.${envName} (or .env.backend) found.\n` +
+      `   Server ~/…/.env.backend will NOT be overwritten (keeps existing DB/R2).\n` +
+      `   To manage secrets from this PC: copy tools/deploy/.env.backend.example →\n` +
+      `   tools/deploy/.env.backend.${envName} and fill staging/production values.\n`,
+  );
+}
+
 try {
   run('ssh', ['-p', DEPLOY_SSH_PORT, sshTarget, `mkdir -p ${DEPLOY_REMOTE_DIR}`]);
 
+  /** Always shipped (non-secret). */
   const files = [
     [path.join(deployDir, 'docker-compose.yml'), 'docker-compose.yml'],
     [generatedCaddyfilePath, 'Caddyfile'],
     [path.join(deployDir, 'deploy.sh'), 'deploy.sh'],
     [generatedEnvPath, '.env'],
-    [resolveDeployFile('.env.frontend'), '.env.frontend'],
-    [resolveDeployFile('.env.backend'), '.env.backend'],
   ];
+
+  // Secrets: upload only when a real local file exists — never the .example.
+  if (frontendEnvLocal) {
+    files.push([frontendEnvLocal, '.env.frontend']);
+    console.log(`Using frontend env: ${path.relative(root, frontendEnvLocal)}`);
+  } else {
+    console.warn('Skipping .env.frontend upload (no local secret file) — keeping server copy.');
+  }
+  if (backendEnvLocal) {
+    files.push([backendEnvLocal, '.env.backend']);
+    console.log(`Using backend env: ${path.relative(root, backendEnvLocal)}`);
+  } else {
+    console.warn('Skipping .env.backend upload (no local secret file) — keeping server copy.');
+  }
+
   for (const [local, remoteName] of files) {
     run('scp', ['-P', DEPLOY_SSH_PORT, local, `${sshTarget}:${DEPLOY_REMOTE_DIR}/${remoteName}`]);
   }
 
+  // Refuse to start if the server still has no backend secrets.
+  const ensureBackendEnv = [
+    `cd ${DEPLOY_REMOTE_DIR}`,
+    `if [ ! -f .env.backend ]; then`,
+    `  echo "ERROR: ${DEPLOY_REMOTE_DIR}/.env.backend is missing.";`,
+    `  echo "Create tools/deploy/.env.backend.${envName} locally and redeploy,";`,
+    `  echo "or scp a filled .env.backend to the server once.";`,
+    `  exit 1;`,
+    `fi`,
+    `if ! grep -q '^DATABASE_URL=.' .env.backend; then`,
+    `  echo "ERROR: .env.backend has no DATABASE_URL — refusing to start.";`,
+    `  exit 1;`,
+    `fi`,
+  ].join('\n');
+
   const remoteCommand = [
+    ensureBackendEnv,
     `docker network inspect ${NETWORK_NAME} >/dev/null 2>&1 || docker network create ${NETWORK_NAME}`,
     `cd ${DEPLOY_REMOTE_DIR}`,
     `chmod +x deploy.sh`,
@@ -129,7 +207,7 @@ try {
   run('ssh', ['-p', DEPLOY_SSH_PORT, sshTarget, remoteCommand]);
 
   console.log(
-    `\nDeployed [${envName}] @ ${GIT_SHA}.\n  web     https://${DEPLOY_DOMAIN}\n  backend https://api.${DEPLOY_DOMAIN}/api\n  images  ${FRONTEND_VERSION_IMAGE}, ${BACKEND_VERSION_IMAGE}`
+    `\nDeployed [${envName}] @ ${GIT_SHA}.\n  web     https://${DEPLOY_DOMAIN}\n  backend https://api.${DEPLOY_DOMAIN}/api\n  images  ${FRONTEND_VERSION_IMAGE}, ${BACKEND_VERSION_IMAGE}`,
   );
 } finally {
   fs.rmSync(generatedEnvPath, { force: true });

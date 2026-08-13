@@ -7,3 +7,10 @@ node_modules
 .nx/workspace-data
 tmp
 *.log
+
+# Never bake laptop secrets into images (Vite / Node would pick them up on COPY).
+.env
+.env.*
+!.env.example
+!**/.env.example
+!**/.env.*.example

@@ -65,10 +65,12 @@ jobs:
           file: ./apps/web/Dockerfile
           push: true
           tags: ${{ needs.prepare.outputs.frontend_tags }}
-          # VITE_* baked at image build — uses *_PROD secrets (not VPS .env.frontend).
+          # Staging images must bake STAGING API/R2 — never *_PROD (that sent
+          # the staging UI at the production DB/bucket).
           build-args: |
-            VITE_API_URL=${{ secrets.VITE_API_URL_PROD }}
-            VITE_GRAPHQL_ENDPOINT=${{ secrets.VITE_GRAPHQL_ENDPOINT_PROD }}
+            VITE_API_URL=${{ secrets.VITE_API_URL_STAGING }}
+            VITE_GRAPHQL_ENDPOINT=${{ secrets.VITE_GRAPHQL_ENDPOINT_STAGING }}
+            VITE_R2_PUBLIC_URL=${{ secrets.VITE_R2_PUBLIC_URL_STAGING }}
             VITE_OUTLET_ROLE_ID=${{ secrets.VITE_OUTLET_ROLE_ID_STAGING }}
             VITE_AGENCY_ROLE_ID=${{ secrets.VITE_AGENCY_ROLE_ID_STAGING }}
           cache-from: type=gha,scope=frontend

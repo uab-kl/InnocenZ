@@ -30,13 +30,15 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY --from=deps /app/apps/web/node_modules ./apps/web/node_modules
 COPY . .
 # VITE_* vars are inlined into the client bundle at build time, so the
-# backend's public URL must be known here, not just at container run time.
+# backend's public URL / R2 public base must be known here, not at run time.
 ARG VITE_API_URL
 ARG VITE_GRAPHQL_ENDPOINT
+ARG VITE_R2_PUBLIC_URL
 ARG VITE_OUTLET_ROLE_ID
 ARG VITE_AGENCY_ROLE_ID
 ENV VITE_API_URL=$VITE_API_URL
 ENV VITE_GRAPHQL_ENDPOINT=$VITE_GRAPHQL_ENDPOINT
+ENV VITE_R2_PUBLIC_URL=$VITE_R2_PUBLIC_URL
 ENV VITE_OUTLET_ROLE_ID=$VITE_OUTLET_ROLE_ID
 ENV VITE_AGENCY_ROLE_ID=$VITE_AGENCY_ROLE_ID
 RUN pnpm --filter innocenz-admin run build

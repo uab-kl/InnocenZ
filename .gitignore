@@ -51,9 +51,11 @@ Thumbs.db
 /tools/deploy/.env.frontend
 /tools/deploy/.env.frontend.*
 !/tools/deploy/.env.frontend.example
+!/tools/deploy/.env.frontend.*.example
 /tools/deploy/.env.backend
 /tools/deploy/.env.backend.*
 !/tools/deploy/.env.backend.example
+!/tools/deploy/.env.backend.*.example
 
 .nx/cache
 .nx/workspace-data
