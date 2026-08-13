@@ -102,7 +102,8 @@ async function run(): Promise<void> {
     // Owner's rule: every nickname LEADS with a capital letter — "Angie",
     // "CharlotteII", "Ip17pm". The folder may be lowercase; the name may not.
     const username = nickname.charAt(0).toUpperCase() + nickname.slice(1);
-    const email = `pr.${nickname.toLowerCase()}@whywemet.demo`;
+    // "Janice II" → pr.janiceii@… — an email local part cannot carry spaces.
+    const email = `pr.${nickname.toLowerCase().replace(/[^a-z0-9]+/g, '')}@whywemet.demo`;
     let [user] = await db
       .select({ id: UserTable.id, profileImage: UserTable.profileImage })
       .from(UserTable)

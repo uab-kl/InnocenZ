@@ -1767,6 +1767,12 @@
 	height: 100%;
 	gap: 2px;
 }
+/* 3-photo comcard: the first photo is the hero and takes the whole left
+   column, the other two stack on the right — the layout of a real printed
+   comcard. The details plate stays centred on top, same as the 2×2. */
+.iz-portfolio-comcard__grid--tri > .iz-portfolio-comcard__cell:first-child {
+	grid-row: span 2;
+}
 .iz-portfolio-comcard__cell {
 	overflow: hidden;
 	background: rgba(255, 255, 255, 0.04);

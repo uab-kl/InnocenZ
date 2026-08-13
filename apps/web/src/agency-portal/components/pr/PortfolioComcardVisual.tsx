@@ -24,10 +24,24 @@ export function portfolioPhotosForComcard(
 	return portfolio.filter((src): src is string => Boolean(src)).slice(0, 4);
 }
 
+/**
+ * 3 photos are enough (owner's rule, 13 Aug 2026): a tri-layout comcard —
+ * one big photo left, two stacked right, details plate centred as usual —
+ * matches how real printed comcards are laid out. Below 3 there is no grid
+ * worth building, so the caller falls back to its avatar/silhouette.
+ */
 export function canGeneratePortfolioComcard(
 	portfolio: (string | null)[],
 ): boolean {
-	return portfolioPhotosForComcard(portfolio).length >= 4;
+	return portfolioPhotosForComcard(portfolio).length >= 3;
+}
+
+/** The 3-photo card gets the tri layout; 4+ keeps the 2×2 grid. */
+export function portfolioComcardGridClass(count: number): string {
+	return cn(
+		"iz-portfolio-comcard__grid",
+		count === 3 && "iz-portfolio-comcard__grid--tri",
+	);
 }
 
 export function StaticComcardVisual({
@@ -73,6 +87,7 @@ export function PrComcardPickerThumb({
 	// generated from four portfolio photos. Only handling the saved case made every
 	// PR who had never exported a comcard look like a PR with no photos at all.
 	const portfolio = pr?.portfolioPhotos ?? [];
+	const gridPhotos = portfolioPhotosForComcard(portfolio);
 	if (pr && canGeneratePortfolioComcard(portfolio)) {
 		// Deliberately NOT <PortfolioComcardVisual/> — its overlay and "Photo
 		// Comcard" badge are sized for a full-width card, and at picker size they
@@ -88,8 +103,8 @@ export function PrComcardPickerThumb({
 				// generated card's caption dwarfed the saved one's at picker size.
 				style={{ containerType: "inline-size" }}
 			>
-				<div className="iz-portfolio-comcard__grid">
-					{portfolioPhotosForComcard(portfolio).map((src, i) => (
+				<div className={portfolioComcardGridClass(gridPhotos.length)}>
+					{gridPhotos.map((src, i) => (
 						<PortfolioComcardCell key={`${src}-${i}`} src={src} />
 					))}
 				</div>
@@ -176,7 +191,10 @@ export function PortfolioComcardVisual({
 	return (
 		<div className={cn("iz-portfolio-comcard", className)}>
 			<div className="iz-portfolio-comcard__frame">
-				<div className="iz-portfolio-comcard__grid" aria-hidden={false}>
+				<div
+					className={portfolioComcardGridClass(grid.length)}
+					aria-hidden={false}
+				>
 					{grid.map((src, i) => (
 						<PortfolioComcardCell key={`${src}-${i}`} src={src} />
 					))}
