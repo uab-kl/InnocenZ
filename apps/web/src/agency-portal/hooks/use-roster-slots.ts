@@ -3,6 +3,7 @@ import { rosterSlotsFromBackend } from "@agency-portal/lib/backend-shift-map";
 import { keepPreviousData, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
@@ -24,22 +25,33 @@ export function useRosterSlots(params: {
 	const { fromDate, toDate, enabled = true } = params;
 	const { logout } = useAuth();
 
+	// ⚠️ Paged to exhaustion, not `pageSize: 500`. The server clamps every list to
+	// 100 and returns the short page with no error, so the roster silently
+	// rendered a truncated week — and because these keys are SHARED with the
+	// auto-assign planner, whichever hook fetched first decided what the other saw.
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", fromDate, toDate],
-		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShifts({ fromDate, toDate, page, pageSize: 100 }, logout),
+			),
 		enabled,
 		placeholderData: keepPreviousData,
 		staleTime: 30_000,
 	});
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		enabled,
 		staleTime: 30_000,
 	});
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) => fetchPrPersonnel({ page, pageSize: 100 }, logout)),
 		enabled,
 		staleTime: 60_000,
 	});

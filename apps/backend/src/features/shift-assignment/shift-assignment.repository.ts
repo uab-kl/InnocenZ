@@ -390,13 +390,31 @@ export class ShiftAssignmentRepositoryClass {
    * (a cancelled assignment flipped back to `assigned`) rather than inserting a
    * new one, where there is no insert to hang the locked check on.
    *
+   * Applies BOTH rules `create` applies, in the same order: total headcount,
+   * then the tier mix. It used to stop after headcount, which let a re-staffing
+   * put a 3rd Tier I on a shift that asked for 2 — cancel a Tier I, backfill the
+   * seat with another Tier I, then un-cancel the original: `staffed 3 < quantity
+   * 4` passed, and the row `POST /shift-assignment` would have refused went in
+   * through the side door. Pass `pr` so the incoming tier can be resolved; omit
+   * it and only headcount is checked, which is all a caller with no PR in hand
+   * can meaningfully ask.
+   *
    * Weaker than `create`'s guarantee — no row lock, so two simultaneous
    * re-staffings of the last seat could both pass. That is a rare manual action,
    * and the alternative (locking the shift on every status PATCH, including
    * check-in and check-out) would put a write lock on the busiest path in the
    * system to guard the quietest.
    */
-  async hasFreeSeat(shiftId: string): Promise<{ free: boolean; quantity: number; staffed: number }> {
+  async hasFreeSeat(
+    shiftId: string,
+    pr?: { prId: string; agencyId: string },
+  ): Promise<{
+    free: boolean;
+    quantity: number;
+    staffed: number;
+    /** Set only when the refusal is about the MIX rather than the headcount. */
+    tierFull?: { bucket: string | null; asked: number; staffed: number };
+  }> {
     try {
       const [shift] = await db
         .select({ quantity: ShiftTable.quantity })
@@ -405,7 +423,72 @@ export class ShiftAssignmentRepositoryClass {
         .limit(1);
       if (!shift) return { free: false, quantity: 0, staffed: 0 };
       const staffed = await countStaffing(db, shiftId);
-      return { free: staffed < shift.quantity, quantity: shift.quantity, staffed };
+      if (staffed >= shift.quantity) {
+        return { free: false, quantity: shift.quantity, staffed };
+      }
+      // Headcount fits. Without a PR to price there is no mix question to ask —
+      // that is all a caller who does not name one can be told.
+      if (!pr) return { free: true, quantity: shift.quantity, staffed };
+
+      const demand = await db
+        .select({
+          kind: ShiftPayTierTable.kind,
+          tier: ShiftPayTierTable.tier,
+          prCount: ShiftPayTierTable.prCount,
+        })
+        .from(ShiftPayTierTable)
+        .where(eq(ShiftPayTierTable.shiftId, shiftId));
+      // No mix declared — only headcount binds. Every pre-composer shift is that
+      // shape and must stay re-staffable.
+      if (totalDemand(demand) === 0) {
+        return { free: true, quantity: shift.quantity, staffed };
+      }
+
+      // ⚠️ The agency predicate is part of the JOIN KEY, not a nicety: one person
+      // holds an `agency_pr` row PER AGENCY, so joining on `user_id` alone
+      // resolves every membership they hold and counts one assignment as several.
+      // And it must join `agency_pr.user_id`, never `.id` — `shift_assignment.pr_id`
+      // IS the user id after 0089, so `.id` matches nothing, every staffed seat
+      // falls into the "unnamed" bucket, and a shift whose demand already sums to
+      // `quantity` would refuse everyone.
+      const staffedRows = await db
+        .select({ tier: AgencyPrTable.tier })
+        .from(ShiftAssignmentTable)
+        .leftJoin(
+          AgencyPrTable,
+          and(
+            eq(ShiftAssignmentTable.prId, AgencyPrTable.userId),
+            eq(AgencyPrTable.agencyId, ShiftAssignmentTable.agencyId),
+          ),
+        )
+        .where(
+          and(
+            eq(ShiftAssignmentTable.shiftId, shiftId),
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        );
+      const [incoming] = await db
+        .select({ tier: AgencyPrTable.tier })
+        .from(AgencyPrTable)
+        .where(and(eq(AgencyPrTable.userId, pr.prId), eq(AgencyPrTable.agencyId, pr.agencyId)))
+        .limit(1);
+
+      const verdict = seatFor({
+        demand,
+        quantity: shift.quantity,
+        staffedBuckets: staffedRows.map((r) => bucketForPrTier(r.tier)),
+        incomingBucket: bucketForPrTier(incoming?.tier),
+      });
+      if (verdict.ok) return { free: true, quantity: shift.quantity, staffed };
+      return {
+        free: false,
+        quantity: shift.quantity,
+        staffed,
+        tierFull:
+          verdict.reason === 'tier_full'
+            ? { bucket: verdict.bucket, asked: verdict.asked, staffed: verdict.staffed }
+            : { bucket: null, asked: verdict.leftover, staffed: verdict.staffed },
+      };
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.hasFreeSeat] Error:', error);
       throw error;

@@ -26,6 +26,11 @@ const REJECTION_MESSAGES: Record<OutletSwapApprovalRejection, string> = {
   not_found: Error.NOT_FOUND,
   not_pending: 'This swap request has already been answered',
   destination_full: 'That shift is now fully staffed — the swap cannot go ahead',
+  // Deliberately not "fully staffed": the shift has a seat, it just is not for
+  // this PR's grade, so "try again later" would be false hope — no cancellation
+  // opens a Tier III seat on a shift that only ever wanted two.
+  destination_tier_full:
+    'That shift has no seat left for your tier — ask your agency to re-send it for another shift',
   date_mismatch: 'The shifts are no longer on the same date — ask your agency to re-send it',
   already_assigned: 'You are already on that shift',
 };

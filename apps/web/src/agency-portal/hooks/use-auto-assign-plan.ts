@@ -1,3 +1,4 @@
+import { writeFailureMessage } from "@agency-portal/hooks/write-failure-message";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
 import {
 	type AutoAssignPair,
@@ -14,6 +15,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchOutlets } from "@/services/outlet";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
@@ -71,25 +73,44 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 
 	// Query keys mirror useRosterSlots so the roster and this card share one
 	// cache, and a write from either invalidates both.
+	//
+	// ⚠️ ALL THREE PAGE TO EXHAUSTION. They used to ask for `pageSize: 200`/`500`
+	// and read the single response — but every controller clamps to 100, so the
+	// planner silently saw a TRUNCATED world. The assignments query is the one
+	// that bites: it has no date filter and orders `created_at` ASCENDING, so it
+	// returned the agency's oldest 100 assignment rows ever. Past 101 lifetime
+	// rows, this week's all fall outside it, `staffedByShift` comes back empty,
+	// and every shift reads fully unstaffed — tier quotas look free,
+	// already-booked PRs get proposed, and `validateAutoAssignPairs` refetches
+	// with the same truncated query so it drops none of them. Every pair then
+	// 409s. Never swap these back for one big `pageSize`.
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", week.from, week.to],
 		queryFn: () =>
-			fetchShifts(
-				{ fromDate: week.from, toDate: week.to, pageSize: 200 },
-				logout,
+			fetchAllPages((page) =>
+				fetchShifts(
+					{ fromDate: week.from, toDate: week.to, page, pageSize: 100 },
+					logout,
+				),
 			),
 		enabled: backed,
 		staleTime: 30_000,
 	});
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		enabled: backed,
 		staleTime: 30_000,
 	});
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchPrPersonnel({ page, pageSize: 100 }, logout),
+			),
 		enabled: backed,
 		staleTime: 60_000,
 	});
@@ -122,26 +143,43 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 	/**
 	 * Writes the confirmed pairings one at a time.
 	 *
-	 * The plan came from cached queries, and `POST /shift-assignment` enforces
-	 * only agency ownership — it will happily overstaff a shift past its
-	 * `quantity` or double-book a PR. So the rows are refetched and the plan
-	 * re-checked here, at the last possible moment, and anything now stale is
-	 * dropped instead of written. A pair the API still rejects is collected
-	 * rather than aborting the batch, so one bad row cannot strand the rest.
+	 * The plan came from cached queries, so a seat can be taken from the roster
+	 * grid (or by another agency user) while the preview sheet sits open. The
+	 * server DOES refuse an overstaffed shift, an over-quota tier and a clashing
+	 * PR — but only one row at a time, as a 409 per pair, which reaches the user
+	 * as a failure count rather than as a plan. So the rows are refetched and the
+	 * plan re-checked here, at the last possible moment, and anything now stale is
+	 * dropped with a reason instead of written. A pair the API still rejects is
+	 * collected rather than aborting the batch, so one bad row cannot strand the
+	 * rest — and its server message is kept, because "please retry" is useless
+	 * advice for a tier that is full.
+	 *
+	 * The refetch pages to exhaustion for the same reason the plan queries do: a
+	 * revalidation reading a truncated set silently approves everything.
 	 */
 	const confirm = useMutation({
 		mutationFn: async (pairs: AutoAssignPair[]) => {
-			const [freshShifts, freshAssignments] = await Promise.all([
-				fetchShifts(
-					{ fromDate: week.from, toDate: week.to, pageSize: 200 },
-					logout,
+			const [freshShifts, freshAssignments, freshPrs] = await Promise.all([
+				fetchAllPages((page) =>
+					fetchShifts(
+						{ fromDate: week.from, toDate: week.to, page, pageSize: 100 },
+						logout,
+					),
 				),
-				fetchShiftAssignments({ pageSize: 500 }, logout),
+				fetchAllPages((page) =>
+					fetchShiftAssignments({ page, pageSize: 100 }, logout),
+				),
+				fetchAllPages((page) =>
+					fetchPrPersonnel({ page, pageSize: 100 }, logout),
+				),
 			]);
 			const { valid, dropped } = validateAutoAssignPairs({
 				pairs,
 				shifts: freshShifts.data,
 				assignments: freshAssignments.data,
+				// Needed to bucket each STAFFED seat by tier — without it the
+				// re-check cannot tell a full Tier I quota from a free one.
+				tierByPrId: new Map(freshPrs.data.map((p) => [p.id, p.tier])),
 			});
 
 			const failed: { pair: AutoAssignPair; message: string }[] = [];
@@ -160,7 +198,13 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 				} catch (error) {
 					failed.push({
 						pair,
-						message: error instanceof Error ? error.message : "Assign failed",
+						// The SERVER's own sentence — "This shift already has all 2 Tier I
+						// it asked for" — not axios's "Request failed with status code
+						// 409". The raw error used to be kept here and then thrown away by
+						// the sheet, so a tier-full refusal surfaced as "please retry",
+						// which is advice that can never work: no cancellation opens a
+						// third Tier I seat on a shift that asked for two.
+						message: writeFailureMessage(error) ?? "Assign failed",
 					});
 				}
 			}

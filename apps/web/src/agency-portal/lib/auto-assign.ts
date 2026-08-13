@@ -116,6 +116,18 @@ export interface AutoAssignPlan {
 	freePrCount: number;
 	/** Open slots the plan cannot cover — more slots than free PRs. */
 	unfilledCount: number;
+	/**
+	 * Open slots no free PR can take because their TIER is spoken for.
+	 *
+	 * Split out from `unfilledCount` because the two have opposite remedies and
+	 * the card conflated them: it read "N open slots — no free PRs, everyone is
+	 * booked or inactive" at a venue with ten idle Tier IIIs, simply because the
+	 * shift had asked for Tier I. "Nobody is free" is fixed by freeing somebody;
+	 * "the free PRs are the wrong tier" is fixed by editing the shift's mix, and
+	 * telling an agency the first when it is the second sends them hunting for
+	 * staff they already have.
+	 */
+	tierBlockedCount: number;
 }
 
 export const EMPTY_AUTO_ASSIGN_PLAN: AutoAssignPlan = {
@@ -123,6 +135,7 @@ export const EMPTY_AUTO_ASSIGN_PLAN: AutoAssignPlan = {
 	openSlotCount: 0,
 	freePrCount: 0,
 	unfilledCount: 0,
+	tierBlockedCount: 0,
 };
 
 /** PR display name: working nickname when set, else legal name (backend rule). */
@@ -281,6 +294,7 @@ export function buildAutoAssignPlan(params: {
 	// Dates are still worked in calendar order.
 	const plannedByPr = new Map<string, number>();
 	const pairs: AutoAssignPair[] = [];
+	let tierBlockedCount = 0;
 	const dates = [...new Set(openShifts.map((s) => s.shiftDate))].sort();
 
 	for (const date of dates) {
@@ -368,6 +382,15 @@ export function buildAutoAssignPlan(params: {
 				const exhausted = remainingByShift.get(target.shiftId) ?? 0;
 				remainingByShift.set(target.shiftId, 0);
 				if (exhausted === 0) break;
+				// Those seats are open but unreachable. Counted separately from a
+				// plain shortage of people: if any PR is free today and still none
+				// fits, what blocks the seat is the tier mix, not the headcount.
+				// The agency needs to hear the difference — one is solved by finding
+				// staff, the other by editing the shift.
+				const anyFreeToday = activePrs.some(
+					(p) => !takenToday.has(p.id) && !busyDatesByPr.get(p.id)?.has(date),
+				);
+				if (anyFreeToday) tierBlockedCount += exhausted;
 				continue;
 			}
 
@@ -411,11 +434,12 @@ export function buildAutoAssignPlan(params: {
 		openSlotCount,
 		freePrCount,
 		unfilledCount: openSlotCount - pairs.length,
+		tierBlockedCount,
 	};
 }
 
 /** Why a proposed pair was dropped at confirm time. */
-export type DropReason = "shift-gone" | "shift-full" | "pr-busy";
+export type DropReason = "shift-gone" | "shift-full" | "pr-busy" | "tier-full";
 
 export interface ValidatedPairs {
 	valid: AutoAssignPair[];
@@ -430,31 +454,48 @@ export function dropReasonLabel(reason: DropReason): string {
 			return "shift already fully staffed";
 		case "pr-busy":
 			return "PR booked elsewhere";
+		case "tier-full":
+			return "that tier is already full on this shift";
 	}
 }
 
 /**
  * Re-checks a plan against freshly fetched rows, immediately before writing.
  *
- * The plan is built from cached queries, so a slot can be filled from the roster
- * (or another agency user) while the preview sheet sits open. The backend does
- * NOT enforce a shift's `quantity` or reject a double-booked PR — it only checks
- * agency ownership — so without this pass a stale plan would silently overstaff
- * a shift. Anything no longer valid is dropped and reported, never written.
+ * The plan is built from cached queries, so a seat can be taken from the roster
+ * (or by another agency user) while the preview sheet sits open. The server DOES
+ * refuse an overstaffed shift, an over-quota tier and a clashing PR — but one row
+ * at a time, as a 409 per pair, which reaches the user as a count of failures
+ * rather than as a plan. This pass turns those into reasons BEFORE anything is
+ * written, so the agency reads "that tier is already full" instead of watching
+ * four assignments fail.
+ *
+ * Checks the same two rules the API checks, in the same order: total headcount,
+ * then the tier mix. The tier half needs `tierByPrId` to know which BUCKET each
+ * staffed seat consumed; without it the mix is skipped and only headcount binds
+ * — which is what this function did for its whole life, and why a stale plan
+ * could still send a pair straight into a `TierFullError`.
  */
 export function validateAutoAssignPairs(params: {
 	pairs: readonly AutoAssignPair[];
 	shifts: Shift[];
 	assignments: ShiftAssignment[];
+	/** PR tier by id. Omit and the tier mix is not re-checked. */
+	tierByPrId?: Map<string, string | null>;
 }): ValidatedPairs {
-	const { pairs, shifts, assignments } = params;
+	const { pairs, shifts, assignments, tierByPrId } = params;
 
 	const shiftById = new Map(shifts.map((s) => [s.id, s]));
 	const staffedByShift = new Map<string, number>();
+	const staffedBucketsByShift = new Map<string, (string | null)[]>();
 	const busyDatesByPr = new Map<string, Set<string>>();
 	for (const a of assignments) {
 		if (NON_STAFFING_STATUSES.includes(a.status)) continue;
 		staffedByShift.set(a.shiftId, (staffedByShift.get(a.shiftId) ?? 0) + 1);
+		staffedBucketsByShift.set(a.shiftId, [
+			...(staffedBucketsByShift.get(a.shiftId) ?? []),
+			bucketForPrTier(tierByPrId?.get(a.prId) ?? null),
+		]);
 		const date = shiftById.get(a.shiftId)?.shiftDate ?? a.shiftDate;
 		if (!date) continue;
 		const dates = busyDatesByPr.get(a.prId) ?? new Set<string>();
@@ -479,10 +520,31 @@ export function validateAutoAssignPairs(params: {
 			dropped.push({ pair, reason: "pr-busy" });
 			continue;
 		}
+		// The mix, by the same rule the API applies. `shiftBlockedFor` is the one
+		// implementation of it — sharing it is what keeps this pass and the assign
+		// grid from disagreeing about the same shift.
+		if (tierByPrId) {
+			const blocked = shiftBlockedFor({
+				shift,
+				staffed: staffedByShift.get(shift.id) ?? 0,
+				staffedTiers: staffedBucketsByShift.get(shift.id) ?? [],
+				prTier: pair.prTier,
+			});
+			if (blocked?.kind === "tier-full") {
+				dropped.push({ pair, reason: "tier-full" });
+				continue;
+			}
+		}
 
-		// Count the pair as taken so the rest of this batch sees it.
+		// Count the pair as taken so the rest of this batch sees it — the seat and
+		// the BUCKET both, or two proposals could claim the last Tier I between
+		// them and the second would only fail at the API.
 		valid.push(pair);
 		staffedByShift.set(shift.id, (staffedByShift.get(shift.id) ?? 0) + 1);
+		staffedBucketsByShift.set(shift.id, [
+			...(staffedBucketsByShift.get(shift.id) ?? []),
+			bucketForPrTier(pair.prTier),
+		]);
 		const dates = busyDatesByPr.get(pair.prId) ?? new Set<string>();
 		dates.add(shift.shiftDate);
 		busyDatesByPr.set(pair.prId, dates);

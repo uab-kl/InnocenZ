@@ -1738,13 +1738,21 @@ export class ShiftAssignmentControllerClass {
         isNonStaffing(existing.status) &&
         !isNonStaffing(parsed.data.status);
       if (reStaffing) {
-        const seat = await this.shiftAssignmentRepository.hasFreeSeat(existing.shiftId);
+        // The PR is named so the TIER mix is checked too, not just headcount.
+        // Without it, cancelling a Tier I, backfilling with another Tier I and
+        // then un-cancelling the first left 3 Tier I on a shift that asked for 2
+        // — a row `create` would have refused, landing through the PATCH.
+        const seat = await this.shiftAssignmentRepository.hasFreeSeat(existing.shiftId, {
+          prId: existing.userId ?? existing.prId,
+          agencyId: existing.agencyId,
+        });
         if (!seat.free) {
-          return res.status(409).json({
-            success: false,
-            message: `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`,
-            data: null,
-          });
+          const message = seat.tierFull
+            ? seat.tierFull.bucket
+              ? `This shift already has all ${seat.tierFull.asked} ${seat.tierFull.bucket} it asked for — that tier was filled after this PR came off it.`
+              : `This shift has no unallocated seat left for that tier (${seat.tierFull.staffed}/${seat.tierFull.asked}) — its remaining seats are reserved for the tiers it named.`
+            : `This shift is already fully staffed (${seat.staffed}/${seat.quantity}) — the slot was filled after this PR came off it.`;
+          return res.status(409).json({ success: false, message, data: null });
         }
       }
 

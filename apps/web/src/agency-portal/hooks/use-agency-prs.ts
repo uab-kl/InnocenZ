@@ -8,6 +8,7 @@ import {
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import {
 	fetchPrPersonnel,
 	removePrPersonnel,
@@ -79,7 +80,11 @@ export function useAgencyPrs(params: { enabled?: boolean } = {}) {
 
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		// Paged out: the server clamps to 100, and this key is shared — see
+		// lib/fetch-all-pages.ts. A roster over 100 PRs silently lost its tail,
+		// which on this screen means PRs simply absent from Manage PR.
+		queryFn: () =>
+			fetchAllPages((page) => fetchPrPersonnel({ page, pageSize: 100 }, logout)),
 		enabled,
 		staleTime: 60_000,
 	});

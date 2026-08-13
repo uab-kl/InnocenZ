@@ -358,9 +358,7 @@ function AgencyManagePRs() {
 						{!backendProposals.isLoading &&
 							!backendProposals.isError &&
 							backendProposals.count === 0 && (
-								<p className="iz-sm iz-muted2">
-									No active penalties.
-								</p>
+								<p className="iz-sm iz-muted2">No active penalties.</p>
 							)}
 						{backendProposals.proposals.map((p) => (
 							<div

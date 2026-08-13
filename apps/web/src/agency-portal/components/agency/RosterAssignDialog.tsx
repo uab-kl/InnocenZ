@@ -6,6 +6,7 @@ import { useQuery } from "@tanstack/react-query";
 import { UserPlus, X } from "lucide-react";
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import { fetchPrPersonnel } from "@/services/pr-personnel";
 import { fetchShifts } from "@/services/shift";
@@ -51,13 +52,20 @@ export function RosterAssignDialog({
 	// add-shift surface to keep in step.)
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", fromDate, toDate],
-		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
+		// Paged out: the server clamps to 100, and this key is shared — see
+		// lib/fetch-all-pages.ts. A truncated read here offers seats that are
+		// already taken, which is the exact failure this dialog exists to prevent.
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShifts({ fromDate, toDate, page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 		enabled: open,
 	});
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) => fetchPrPersonnel({ page, pageSize: 100 }, logout)),
 		staleTime: 60_000,
 		enabled: open,
 	});
@@ -79,7 +87,10 @@ export function RosterAssignDialog({
 	// assign sheet; the two must not disagree about what "open" means.
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 		enabled: open,
 	});

@@ -33,6 +33,7 @@ import { useQuery } from "@tanstack/react-query";
 import { ChevronLeft, ChevronRight, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import { fetchPrPersonnel, type PrPersonnel } from "@/services/pr-personnel";
@@ -159,12 +160,19 @@ export function RosterBackendTimetable({
 	// Same query keys as useRosterSlots, so these read the already-loaded cache.
 	const prsQuery = useQuery({
 		queryKey: ["roster", "prs"],
-		queryFn: () => fetchPrPersonnel({ pageSize: 500 }, logout),
+		// Paged out: the server clamps to 100, and these keys are shared — see
+		// lib/fetch-all-pages.ts. This grid derives `shiftBlockedFor` from the
+		// staffed rows it reads, so a truncated set greys out the wrong cells.
+		queryFn: () =>
+			fetchAllPages((page) => fetchPrPersonnel({ page, pageSize: 100 }, logout)),
 		staleTime: 60_000,
 	});
 	const shiftsQuery = useQuery({
 		queryKey: ["roster", "shifts", fromDate, toDate],
-		queryFn: () => fetchShifts({ fromDate, toDate, pageSize: 200 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShifts({ fromDate, toDate, page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 	});
 	const outletsQuery = useQuery({
@@ -179,7 +187,10 @@ export function RosterBackendTimetable({
 	// write with "already fully staffed (2/2)".
 	const assignmentsQuery = useQuery({
 		queryKey: ["roster", "assignments"],
-		queryFn: () => fetchShiftAssignments({ pageSize: 500 }, logout),
+		queryFn: () =>
+			fetchAllPages((page) =>
+				fetchShiftAssignments({ page, pageSize: 100 }, logout),
+			),
 		staleTime: 30_000,
 	});
 

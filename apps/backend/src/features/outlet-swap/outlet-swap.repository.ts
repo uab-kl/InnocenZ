@@ -5,9 +5,18 @@ import { logger } from '@/util/logger';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
-import { ShiftTable } from '@/features/shift/shift.model';
+import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
+import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { NON_STAFFING_STATUSES } from '@/features/shift-assignment/shift-assignment.repository';
+// The tier-mix rule itself lives in a LEAF module shared with
+// `ShiftAssignmentRepository.create`, so a swap and a direct assign cannot
+// drift into two different definitions of "does this PR fit".
+import {
+  bucketForPrTier,
+  seatFor,
+  totalDemand,
+} from '@/features/shift-assignment/tier-demand';
 import {
   OutletSwapFilter,
   OutletSwapRequestInsertType,
@@ -44,6 +53,11 @@ export type OutletSwapApprovalRejection =
   | 'not_found'
   | 'not_pending'
   | 'destination_full'
+  // Distinct from `destination_full` on purpose: the shift has a free seat,
+  // just not one for THIS PR's tier. The two need different words — "come back
+  // later, someone may drop out" is wrong advice when the shift will never want
+  // another Tier III no matter who cancels.
+  | 'destination_tier_full'
   | 'date_mismatch'
   | 'already_assigned';
 
@@ -168,6 +182,14 @@ export class OutletSwapRepositoryClass {
    * shifts and wave them into full ones. "Live" excludes cancelled / no-show /
    * leave-approved, matching listBackfillSlots' definition of staffed.
    *
+   * Capacity is TWO gates, not one: total headcount (`destination_full`) and
+   * then the per-tier mix the shift asked for (`destination_tier_full`), the
+   * latter delegated to the same `tier-demand` leaf module that
+   * `ShiftAssignmentRepository.create` uses. Without the second gate a swap can
+   * write a roster that `POST /shift-assignment` would have refused — a third
+   * Tier III on a shift that asked for two, plus a Tier I seat nobody can ever
+   * fill.
+   *
    * `agency_id` moves with `shift_id` because shift_assignment denormalises it
    * from the shift; updating only shift_id leaves the row claiming an agency
    * that does not run the shift it now points at, which silently corrupts every
@@ -244,6 +266,98 @@ export class OutletSwapRepositoryClass {
 
         if (existing.length >= toShift.quantity) {
           return { ok: false, reason: 'destination_full' };
+        }
+
+        // Total headcount fits — now the MIX. Headcount alone is not the rule:
+        // a shift asking Tier III x2 + Tier I x2 at quantity 4 with 3 staffed
+        // has a free seat, but not a THIRD Tier III one, and letting a swap
+        // take it strands the Tier I seat forever. `POST /shift-assignment`
+        // refuses that exact row, so approving it here would let the swap lane
+        // write a state the assign lane calls illegal.
+        //
+        // Both reads stay inside the transaction that already holds
+        // `FOR UPDATE` on the destination shift, so a concurrent assign to the
+        // last Tier I seat cannot slip between the count and the decision.
+        const demand = await tx
+          .select({
+            kind: ShiftPayTierTable.kind,
+            tier: ShiftPayTierTable.tier,
+            prCount: ShiftPayTierTable.prCount,
+          })
+          .from(ShiftPayTierTable)
+          .where(eq(ShiftPayTierTable.shiftId, request.toShiftId));
+
+        // `totalDemand === 0` means the shift never declared a mix at all — no
+        // `shift_pay_tier` rows, or rows that all ask for zero. Such a shift is
+        // UNCAPPED per tier: every seat is unnamed, so only `quantity` binds
+        // and that is the check just above. Skipping here is exactly what keeps
+        // the pre-composer shifts (posted before the tier composer existed, and
+        // therefore carrying no demand rows) swappable without a backfill —
+        // treating "no mix declared" as "zero seats for every tier" would
+        // refuse every swap into them.
+        if (totalDemand(demand) > 0) {
+          // The tiers of the PRs currently staffing the destination. Read as
+          // its own query rather than folded into `existing` above: that
+          // query's ROW COUNT *is* the headcount check, and any join that could
+          // multiply a row would silently inflate it.
+          //
+          // ⚠️ Joined on `agency_pr.user_id`, NOT `agency_pr.id`. After
+          // migration 0089 `shift_assignment.pr_id` IS the user id (the column
+          // kept its old name), so joining on `.id` matches nothing: every
+          // staffed seat resolves to a null tier, lands in the "unnamed"
+          // bucket, and on a shift whose demand sums to `quantity` that refuses
+          // every swap.
+          //
+          // ⚠️ The agency predicate is part of the JOIN KEY, not tidiness. One
+          // person holds one `agency_pr` row PER AGENCY (see the
+          // `agency_pr_agency_id_user_id_unique` constraint — unique on the
+          // PAIR, not on user alone), so joining on user_id alone matches every
+          // membership that person holds and counts ONE assignment several
+          // times. A single dual-agency PR then reads as "3/2 Tier I" and the
+          // swap is refused a seat that is genuinely free. With the agency in
+          // the key the join yields at most one row per assignment.
+          const staffedRows = await tx
+            .select({ tier: AgencyPrTable.tier })
+            .from(ShiftAssignmentTable)
+            .leftJoin(
+              AgencyPrTable,
+              and(
+                eq(ShiftAssignmentTable.prId, AgencyPrTable.userId),
+                eq(AgencyPrTable.agencyId, ShiftAssignmentTable.agencyId),
+              ),
+            )
+            .where(
+              and(
+                eq(ShiftAssignmentTable.shiftId, request.toShiftId),
+                notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+              ),
+            );
+
+          // The mover's grade under the agency that runs the DESTINATION —
+          // the same agency the assignment's `agency_id` is about to become,
+          // a few lines below. Same reason as the join key: a PR in two
+          // agencies has two tiers, and the other agency's grade would test
+          // the wrong bucket.
+          const [incoming] = await tx
+            .select({ tier: AgencyPrTable.tier })
+            .from(AgencyPrTable)
+            .where(
+              and(
+                eq(AgencyPrTable.userId, assignment.userId ?? assignment.prId),
+                eq(AgencyPrTable.agencyId, toShift.agencyId),
+              ),
+            )
+            .limit(1);
+
+          const verdict = seatFor({
+            demand,
+            quantity: toShift.quantity,
+            staffedBuckets: staffedRows.map((r) => bucketForPrTier(r.tier)),
+            incomingBucket: bucketForPrTier(incoming?.tier),
+          });
+          if (!verdict.ok) {
+            return { ok: false, reason: 'destination_tier_full' };
+          }
         }
 
         const now = new Date();
