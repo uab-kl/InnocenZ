@@ -86,7 +86,7 @@ type SessionState = {
     password: string,
   ) => Promise<{ user: Me; accessToken: string }>;
   signOut: () => void;
-  updateProfile: (patch: ProfileUpdate) => Promise<void>;
+  updateProfile: (patch: ProfileUpdate) => Promise<Me>;
   uploadAvatar: (file: Blob, filename?: string) => Promise<void>;
   uploadPortfolioPhoto: (slot: number, file: Blob, filename?: string) => Promise<Me>;
   uploadComcardImage: (file: Blob, filename?: string) => Promise<Me>;
@@ -194,6 +194,11 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
       if (!token || !me) throw new ApiError('Not signed in', 401);
       const updated = await updateUserProfile(token, me.id, patch);
       setMe(updated);
+      // Returned as well as stored: the server re-renders the comcard inside
+      // this same request when a printed field moves, so the caller needs the
+      // fresh row to tell whether the card actually changed. Reading `me`
+      // afterwards would see the stale closure value.
+      return updated;
     },
     [token, me],
   );

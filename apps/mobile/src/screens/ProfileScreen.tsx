@@ -24,7 +24,6 @@ import {
   updateMyAgencies,
   type PrAgencyLink,
 } from '../lib/api';
-import { fetchImageBlob, renderComcardPng } from '../lib/render-comcard';
 import {
   PORTFOLIO_SLOTS,
 } from '../lib/demo-shifts';
@@ -82,12 +81,11 @@ const TIER_LABEL: Record<string, string> = {
 export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void }) {
   const { openSecurity } = usePrNav();
   const { t } = useLocale();
-  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, uploadComcardImage, generateComcard, token } =
+  const { me, agencies: memberships, signOut, updateProfile, uploadAvatar, uploadPortfolioPhoto, generateComcard, token } =
     useSession();
 
   const [editing, setEditing] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [savingComcard, setSavingComcard] = useState(false);
   const [comcardSavedHint, setComcardSavedHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const { message: toast, variant: toastVariant, showToast } = useToast();
@@ -249,52 +247,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // Server generates the PNG (same layout as the on-screen preview).
   const canSaveComcard = Boolean(token) && !editing;
 
-  /**
-   * Re-render and store the comcard PNG.
-   *
-   * Called from `saveEdit` — there is no button any more, because a save is
-   * meant to be enough. It deliberately does NOT test `canSaveComcard`: that
-   * includes `!editing`, and React has not applied `setEditing(false)` by the
-   * time the save runs, so the closure would still read `true` and this would
-   * silently do nothing — which is the shape of the original complaint.
-   */
-  const regenerateSavedComcard = async () => {
-    if (!token || comcardTiles.mode === 'empty') return;
-    setSavingComcard(true);
-    setError(null);
-    setComcardSavedHint(null);
-    try {
-      // Prefer server generate (works on phone + web). Web can still fall back
-      // to canvas encode if the generate route is unavailable.
-      try {
-        await generateComcard();
-      } catch (genErr) {
-        if (Platform.OS !== 'web') throw genErr;
-        let blob: Blob;
-        if (comcardTiles.mode === 'single') {
-          blob = await fetchImageBlob(comcardTiles.src);
-        } else {
-          blob = await renderComcardPng({
-            paths: comcardTiles.paths,
-            name: displayName,
-            age,
-            heightCm: height,
-            weightKg: weight,
-          });
-        }
-        await uploadComcardImage(blob, 'comcard.png');
-      }
-      setComcardSavedHint('Comcard updated');
-    } catch (e) {
-      // Reported, never swallowed. The profile itself IS saved by this point,
-      // so this must read as "the card did not follow", not as a failed save —
-      // a silent failure here is how a stale card outlived an edit.
-      setComcardSavedHint('Profile saved, but the comcard could not be re-rendered');
-      setError(e instanceof ApiError ? e.message : 'Could not update the comcard');
-    } finally {
-      setSavingComcard(false);
-    }
-  };
+  // `regenerateSavedComcard` lived here — it POSTed to the generate route after
+  // a save, with a web canvas fallback. Deleted, not left unused: the SERVER now
+  // re-renders inside `PUT /user/:id` whenever a printed field moves, so this
+  // was a second render per save, and the two renders each prune every object
+  // but their own — interleaved, they could delete each other's fresh PNG and
+  // leave the profile pointing at a key that no longer exists.
 
   const startEdit = () => {
     // Real agency ids straight off the PR's agency_pr links (pending included).
@@ -351,7 +309,8 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setSaving(true);
     setError(null);
     try {
-      await updateProfile({
+      const before = me?.profile.comcardImage ?? null;
+      const saved = await updateProfile({
         username: name,
         // Legal IC name → user_profile.full_name (the column admin/agency read).
         fullName: draft.icName.trim(),
@@ -385,14 +344,15 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       // is never needed to make a save take effect — that button remains only
       // as a manual retry.
       //
-      // Gated on what the card actually needs (`comcardTiles.mode`), not on
-      // "has at least one photo": the generator wants four tiles, so a PR with
-      // one photo used to fire a call that could only fail — silently, because
-      // the failure was swallowed. Now the outcome is reported either way.
-      // Shares the one routine, so the card produced by saving is byte-for-byte
-      // the one the old button produced — including its web canvas fallback for
-      // when the server generate route is unavailable.
-      await regenerateSavedComcard();
+      // No second render from here. `PUT /user/:id` re-renders the card inside
+      // that same request whenever a printed field moves, so calling generate
+      // again would render TWICE per save — and worse, the two renders each
+      // prune every object but their own, so interleaved they can delete each
+      // other's fresh PNG and leave the profile pointing at a key that no
+      // longer exists. The response already carries the new image.
+      if (saved.profile.comcardImage && saved.profile.comcardImage !== before) {
+        setComcardSavedHint('Comcard updated');
+      }
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save profile');
     } finally {
@@ -597,16 +557,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
         copy[slot] = null;
         return copy;
       });
-      if (next.some(Boolean)) {
-        try {
-          await generateComcard();
-          setComcardSavedHint('Comcard updated');
-        } catch {
-          /* Non-fatal */
-        }
-      } else {
-        setComcardSavedHint(null);
-      }
+      // No generate call: the `updateProfile` above sent `portfolioPhotos`, and
+      // the server re-renders the card inside that request. Calling it again
+      // would render twice, and each render prunes every object but its own —
+      // interleaved, they can delete each other's fresh PNG.
+      setComcardSavedHint(next.some(Boolean) ? 'Comcard updated' : null);
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not remove portfolio photo');
     } finally {
@@ -665,16 +620,12 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       return;
     }
 
+    // Same as the remove path: `updateProfile` already carried the new order and
+    // the server re-rendered inside that request. The card is a rearrangement of
+    // the FIRST FOUR slots, so only a change there moves it.
     const cardChanged = [0, 1, 2, 3].some((i) => prev[i] !== normalized[i]);
     if (cardChanged && normalized.some(Boolean)) {
-      setPortfolioBusy('Updating comcard…');
-      showToast('Updating comcard…', 'info');
-      try {
-        await generateComcard();
-        setComcardSavedHint('Comcard updated');
-      } catch {
-        /* Non-fatal — user can tap Save comcard. */
-      }
+      setComcardSavedHint('Comcard updated');
     }
 
     setPendingOrder(null);

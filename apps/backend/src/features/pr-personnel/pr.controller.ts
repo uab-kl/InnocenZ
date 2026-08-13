@@ -25,6 +25,7 @@ import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shif
 import { evaluatePrPenalties, graceMinutesFor } from './pr-penalty.js';
 import { EMPTY_PR_STATS, loadPrStats } from './pr-stats.js';
 import { derivedAge } from './ic-dob.js';
+import { refreshStoredComcard, touchesComcard } from '@/util/comcard-refresh.js';
 
 const DEFAULT_PAGE_SIZE = 10;
 const MAX_PAGE_SIZE = 100;
@@ -639,6 +640,35 @@ export class PrControllerClass {
         const existingProfile = await this.userProfileRepository.getByUserId(pr.userId);
         if (!existingProfile) await this.userProfileRepository.createEmpty(pr.userId, actor);
         await this.userProfileRepository.update(pr.userId, { ...profilePatch, updatedBy: actor });
+      }
+
+      // Height, weight and the display name are PRINTED on the comcard, so a
+      // write that moves any of them leaves the saved PNG claiming the old
+      // numbers. The agency edits the same `user_profile` columns the PR's own
+      // app does, and only the app re-rendered — so an agency changing height
+      // 155 → 160 produced a profile and a card that disagreed.
+      //
+      // Read back AFTER the writes above so the card is rendered from what was
+      // actually stored, not from the patch we hoped landed.
+      if (pr.userId && (touchesComcard(profilePatch) || data.name !== undefined || data.nickname !== undefined)) {
+        const saved = await this.userProfileRepository.getByUserId(pr.userId);
+        const account = await this.userRepository.getUserById(pr.userId);
+        if (saved) {
+          await refreshStoredComcard({
+            userId: pr.userId,
+            fullName: saved.fullName,
+            username: account?.username ?? null,
+            idNo: saved.idNo,
+            dob: saved.dob,
+            heightCm: saved.comcardHeightCm,
+            weightKg: saved.comcardWeightKg,
+            portfolioPhotos: saved.portfolioPhotos,
+            save: (storedKey) =>
+              this.userProfileRepository
+                .update(pr.userId!, { comcardImage: storedKey, updatedBy: actor })
+                .then(() => undefined),
+          });
+        }
       }
 
       // Roster grading on agency_pr (0089) — keyed by userId (pr table is gone).
