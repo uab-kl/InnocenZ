@@ -107,6 +107,30 @@ const AGENCY_FINANCE: MatrixEntry[] = [
   ['collections', RU],
 ];
 
+/**
+ * VIEW ONLY — the read half of `AGENCY_OWNER`, and nothing else.
+ *
+ * `approvals` and `roster` are present as READ so the Approvals and Roster
+ * screens stay reachable: both are gated on an UPDATE permission in the portal
+ * matrix, so without a read grant a Director would lose the pages outright
+ * rather than see them read-only.
+ *
+ * `payment_voucher` READ matters most. A Director may read the payroll it is
+ * there to oversee and cannot raise, sign or override one — those are CREATE
+ * and UPDATE, which is exactly the line the owner drew between this role and
+ * the Guarantor.
+ */
+const AGENCY_DIRECTOR: MatrixEntry[] = [
+  ['dashboard', READ],
+  ['roster', READ],
+  ['approvals', READ],
+  ['payment_voucher', READ],
+  ['history', READ],
+  ['settings', READ],
+  ['workforce', READ],
+  ['collections', READ],
+];
+
 const OUTLET_OWNER: MatrixEntry[] = [
   ['dashboard', READ],
   ['booking', CRU],
@@ -140,14 +164,49 @@ const OUTLET_OPS: MatrixEntry[] = [
   ['special_service', CRU],
 ];
 
+/**
+ * VIEW ONLY — and the read half of `OUTLET_OWNER` is exactly what that means:
+ * every outlet module the owner can see, with none of the writes.
+ *
+ * `special_service` is absent deliberately. Its only outlet permission is CREATE
+ * (`orderSpecialService`), so a read grant would put a nav item in front of a
+ * role that can do nothing on the page behind it; the owner's call was to hide
+ * it outright for a Director.
+ *
+ * Nothing here grants account self-service, and nothing needs to: changing your
+ * own password, contact details or MFA is not an outlet module — every
+ * signed-in user holds it whatever their role.
+ */
+const OUTLET_DIRECTOR: MatrixEntry[] = [
+  ['dashboard', READ],
+  ['booking', READ],
+  ['rating', READ],
+  ['history', READ],
+  ['billing', READ],
+  ['sales', READ],
+  ['workspace', READ],
+  ['settings', READ],
+];
+
 /** Permission matrices for every seeded role (init-roles must run first). */
 const ROLE_GRANTS: RoleGrant[] = [
   { roleName: portalRoleName.ADMIN, portal: 'admin', grant: '*' },
   { roleName: portalRoleName.OWNER, portal: 'agency', grant: AGENCY_OWNER },
   { roleName: portalRoleName.FINANCE, portal: 'agency', grant: AGENCY_FINANCE },
+  { roleName: portalRoleName.DIRECTOR, portal: 'agency', grant: AGENCY_DIRECTOR },
+  // Owner-equal, sharing the owner's matrix BY REFERENCE rather than copying
+  // it — the same rule as the outlet Guarantor. On this portal that is what
+  // carries `payment_voucher` CREATE, i.e. the ability to pay PRs when the
+  // owner is unavailable, which is the entire point of the role.
+  { roleName: portalRoleName.GUARANTOR, portal: 'agency', grant: AGENCY_OWNER },
   { roleName: portalRoleName.OWNER, portal: 'outlet', grant: OUTLET_OWNER },
   { roleName: portalRoleName.FINANCE, portal: 'outlet', grant: OUTLET_FINANCE },
   { roleName: portalRoleName.OPS_HEAD, portal: 'outlet', grant: OUTLET_OPS },
+  { roleName: portalRoleName.DIRECTOR, portal: 'outlet', grant: OUTLET_DIRECTOR },
+  // Owner-equal, and it shares the owner's matrix BY REFERENCE rather than
+  // copying it — a guarantor stands in for an absent owner, so the two must not
+  // be able to drift. A copy is how "same level" quietly stops being true.
+  { roleName: portalRoleName.GUARANTOR, portal: 'outlet', grant: OUTLET_OWNER },
   { roleName: portalRoleName.PR, portal: null, grant: [] },
 ];
 

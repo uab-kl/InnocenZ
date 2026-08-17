@@ -4,7 +4,13 @@ export type OutletStatus =
 	| "inactive"
 	| "suspended";
 
-export type OutletMemberSubRole = "owner" | "finance" | "operations_head";
+/** `director` is view-only; `guarantor` stands in for the owner, at owner level. */
+export type OutletMemberSubRole =
+	| "owner"
+	| "finance"
+	| "operations_head"
+	| "director"
+	| "guarantor";
 
 export interface Outlet {
 	id: string;

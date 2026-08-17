@@ -13,8 +13,13 @@ import { laneFromRoleHints } from '@/features/rbac/portal-role-map.js';
  * Org ACL: portal lane from user_role → role; membership for tenancy only.
  */
 
-export type AgencySubRole = 'owner' | 'finance';
-export type OutletSubRole = 'owner' | 'finance' | 'operations_head';
+export type AgencySubRole = 'owner' | 'finance' | 'director' | 'guarantor';
+export type OutletSubRole =
+  | 'owner'
+  | 'finance'
+  | 'operations_head'
+  | 'director'
+  | 'guarantor';
 
 const forbidden = (allowed: readonly string[]) =>
   'Forbidden — requires role: ' + allowed.join(' or ');
@@ -44,8 +49,27 @@ async function holdsAgencyLane(
     'agency',
     roles.map((r) => ({ portalCode: r.portalCode, roleName: r.roleName })),
   );
-  const agencyLane: AgencySubRole = lane === 'operations_head' ? 'finance' : lane;
-  return allowed.includes(agencyLane);
+  /**
+   * The lane, used as it is. NOTHING folds here any more.
+   *
+   * This used to read `lane === 'owner' ? 'owner' : 'finance'`, which was
+   * harmless while an agency had exactly two lanes and became an escalation the
+   * moment it had four: a view-only Director would have been handed the FINANCE
+   * lane, and agency finance raises and signs payment vouchers
+   * (`payment_voucher` CRU). The role defined to change nothing would have been
+   * able to pay PRs.
+   *
+   * `laneFromRoleHints('agency', …)` is typed to the lanes an agency issues, so
+   * there is no outlet lane left to fold — the compiler now rejects the attempt.
+   */
+  if (allowed.includes(lane)) return true;
+  /**
+   * A guarantor passes wherever an owner passes — resolved here, once, exactly
+   * as on the outlet side. Adding 'guarantor' to each `requireAgencySubRole(
+   * 'owner', …)` call site instead would fail closed on the one that got
+   * missed, refusing the stand-in at the only moment the role exists for.
+   */
+  return lane === 'guarantor' && allowed.includes('owner');
 }
 
 async function holdsOutletLane(
@@ -69,7 +93,18 @@ async function holdsOutletLane(
     'outlet',
     roles.map((r) => ({ portalCode: r.portalCode, roleName: r.roleName })),
   );
-  return allowed.includes(lane);
+  if (allowed.includes(lane)) return true;
+  /**
+   * A guarantor passes anywhere an owner passes.
+   *
+   * Resolved HERE, once, rather than by adding 'guarantor' to every
+   * `requireOutletSubRole('owner', …)` in the route files. Those call sites are
+   * spread across the outlet routes, and the one that gets missed fails closed —
+   * the stand-in is refused at the moment the owner is unavailable, which is the
+   * only moment this role exists for. A guarantor IS an owner for access
+   * purposes; keeping the lane distinct is for labelling and audit, not power.
+   */
+  return lane === 'guarantor' && allowed.includes('owner');
 }
 
 function guard(

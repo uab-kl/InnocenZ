@@ -1674,6 +1674,121 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **17 Aug 2026 — THE SAME TWO ROLES ON THE AGENCY PORTAL.**
+>
+> Owner: *"director (role)(view only) only that under by the agency owner, only can edit their personal
+> credential like login and security, then the rest functions just only view under the same
+> organisation"* and *"Guarantor... same level with agency owner"*. Seeded per portal, so
+> `Director@agency` is a distinct role row from `Director@outlet`. **No migration** (same reason as the
+> outlet pass — `sub_role` is an unconstrained `varchar(50)`).
+>
+> On this portal Guarantor finally means what the owner described: `payment_voucher` CREATE, i.e. it can
+> pay PRs when the owner is away. Seed counts — `Director@agency: 8`, `Guarantor@agency: 19` (identical
+> to Agency Owner).
+>
+> **The escalation this pass turned on.** `holdsAgencyLane` read
+> `lane === 'owner' ? 'owner' : 'finance'`. Harmless while an agency had two lanes; the moment it had
+> four, a view-only Director was handed the FINANCE lane — and agency finance raises and signs payment
+> vouchers. The role defined to change nothing would have been able to pay PRs. Three more permissive
+> tails were closed the same way (`agencySubRoleFromBackend` and the persisted-identity parser both
+> resolved *anything not "finance"* to `agency_owner`, the second one on every page refresh).
+>
+> A 7-agent sweep over the agency surface produced 202 findings; it independently reproduced the Team
+> picker bug the owner spotted mid-session.
+>
+> **The Team picker bug (owner-reported).** `OrgMembersPanel` listed only the old lanes, so a Director
+> and a Guarantor both *rendered* as "Finance" — a `<select>` shows its first option when the real value
+> is absent — and touching it would have silently demoted them. The file already warned about exactly
+> this hazard for Owner at `:170-182`. Fixed on both kinds, plus that file's own `inferSubRole` tail
+> (which lands on a write lane) and `outlet-details-sheet.tsx`, where an unlisted lane made the member
+> **vanish** from the admin's team view rather than merely mislabel.
+>
+> **Invites.** Guarantor now joins Owner as un-invitable on both portals: it holds the owner's matrix,
+> so an emailed link into it hands whoever opens it the top lane. The existing escape hatch still
+> applies — invite lower, then promote from the Team picker, which is an act by a signed-in owner.
+>
+> Approvals was gated solely on `approvals:update`, so a view-only role lost the screen; new
+> `viewApprovals` → `approvals:read` keeps it readable (same shape as the outlet's `viewBookings`).
+> `/agency/prs` and `/agency/outlets` widened to `managePr || viewWorkforce`.
+>
+> Both agency logins **verified live**: Director — full read nav incl. Approvals, payroll with no
+> raise/penalty action (13 buttons), no Edit profile, no invite box, Team reads 4, and its Login &
+> security sheet shows **its own** address with all 3 actions live. Guarantor — same payroll page WITH
+> "Record penalties for last week" (15 buttons) and Edit profile present.
+>
+> ```
+> pnpm tsx --tsconfig tsconfig.json src/scripts/seed-atlas-agency-role-accounts.ts
+> ```
+>
+> ⚠️ **Pre-existing, NOT fixed here — they affect existing roles equally and are their own piece of
+> work.** Written up in §9.
+> 1. `auth.repository.ts:102` `ensurePortalRolesFromMembership` grants **Owner** to any active
+>    membership with no role row for that portal, on every `/auth/me`. Seeded roles are safe (they have
+>    a row), but **revoking** a role promotes that user to Owner on their next request.
+> 2. `auth.repository.ts:252` `userHasPermission` matches module+type with **no portal filter**, and
+>    `settings`/`dashboard`/`history` exist on both portals — so an agency grant can satisfy an outlet
+>    guard.
+> 3. ~11 agency-reachable routes are guarded only by `requireRole('admin','agency')` with no module
+>    permission (leave approve/reject, PR create/update/delete, collection issue/settle, cutlost
+>    decision, outlet-swap, workspace rate card, payment method, `POST /agency`). A Director is blocked
+>    in the UI but not by those endpoints.
+
+> **17 Aug 2026 — TWO NEW OUTLET ROLES: DIRECTOR (VIEW ONLY) AND GUARANTOR (OWNER-EQUAL).**
+>
+> Owner: *"director (role)(view only) only that under by the outlet owner, only can edit their personal
+> credential like login and security, then the rest functions just only view from the same organisation"*
+> and *"just make the guarantor same level as the owner"*. Both are **outlet** roles (the owner corrected
+> an earlier "AGENCY Guarantor"); outlets never pay PRs, so a Guarantor stands in for the owner on the
+> venue's own functions.
+>
+> **No migration.** `sub_role` is `varchar(50)` with no CHECK and no enum (`0102_org_member_invite.sql:28`),
+> and roles are seeded rows rather than schema — so 0123 was not needed and was not created.
+>
+> The system funnelled every role through three lanes (`owner | finance | operations_head`), so the work
+> was widening that vocabulary end to end. **Three separate fallbacks would each have handed a Director
+> full rights**, and all three now match it first:
+>
+> | fallback | would have given a Director |
+> |---|---|
+> | `portalRoleNameForSubRole` ends on `Owner` | the Owner role outright |
+> | `inferMembershipSubRole` ends on `operations_head` | a write lane — able to post jobs |
+> | `outletSubRoleFromBackend` ends on `outlet_owner` | full venue rights **on every page refresh** — the persisted-identity parser was a ternary chain naming only two lanes, now a `Set` that cannot silently miss one |
+>
+> Guarantor is owner-equal **by sharing, not copying**: it points at `OUTLET_OWNER` in the seed matrix and
+> at `OUTLET_OWNER_PERMISSIONS` in the portal matrix, and `holdsOutletLane` resolves guarantor→owner in
+> ONE place instead of adding it to every `requireOutletSubRole('owner', …)` call site — a missed one
+> fails closed, refusing the stand-in at the only moment the role exists for.
+>
+> Two bugs found on the way, both pre-dating this work and both hitting existing roles:
+> - **Login & security was gated on the ORG permission** (`settings:update`), so every read-only outlet
+>   role was locked out of its own password. Finance was already in that position.
+> - **The security sheet showed the OWNER's email** to whoever opened it, reading `owner.email` (the
+>   organisation's owner record) instead of the signed-in user. The OTP flow acts on the session's own
+>   account, so the screen named one address and would have changed another. Now `useCurrentUser()`.
+>
+> Post Job renders for a Director inside a native `<fieldset disabled>` rather than threading a `readOnly`
+> prop through the ~1500-line editor, so a field added later is inert by default. Special Service is
+> hidden outright — its only outlet permission is CREATE, so a read grant would be a nav item in front of
+> a dead page.
+>
+> **Verified live** on `localhost:3000` against the test DB, both logins. Director — Post Job visible with
+> **98/98 controls disabled** and no post bar, `/outlet/special-service` redirects away, Settings
+> read-only with all three personal credential actions live, Team list renders Owner / Director (you) /
+> Guarantor. Guarantor — the same Post Job page with **79 live controls** and the post bar, plus "Edit
+> profile" on Settings. Seeds reported `Director@outlet: 8 permissions`, `Guarantor@outlet: 21`
+> (identical to Owner).
+>
+> ```
+> pnpm tsx --tsconfig tsconfig.json src/scripts/init-roles.ts
+> pnpm tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts
+> pnpm tsx --tsconfig tsconfig.json src/scripts/seed-emhub-role-accounts.ts
+> ```
+>
+> ⚠️ Still open: `seed-outlet-emhub.ts` grants the **deprecated, unseeded** bare `outlet` role, so it warns
+> and grants nothing. Not touched here — noted in §9.
+
+| 2026-08-17 | **Two workbooks became one — the MVP is retired.** Owner's question, and it was the right one: *"why have the flow book and the mvp workbook."* There was no good reason left. The MVP came first (23 Jul); the flow book was built later and quietly superseded it, and by today **~10 of the MVP's 14 tabs were a staler second copy of a page already in the flow book** — Overview↔START HERE, E2E Flow↔the six flow pages, Backend—API↔The API, Data Model↔Database, Money Model↔Money model, RBAC+Role Matrix↔Who may do what, To-Do↔What to build next, Modules 1-12+Build Plan+Prototype Parity↔Build tracker, and Daily Test Script+Changelog↔**this file**, where the rules already say dated history belongs. That duplication was not harmless: it is exactly what bit us this morning, when the MVP's Overview said sub-roles were done while its own E2E Flow still said they were not. **It also broke the owner's own database rule at the document level — one fact, one place.** So: `InnocenZ_BuildSteps.xlsx` is now the ONE book. **14 tabs, numbered, colour-coded into three parts** — 🔵 *Understand it* (1 START HERE · 2 The Week—money · 3 Money model · 4 PR—phone · 5 Outlet—venue · 6 Agency—web · 7 Admin—web · 8 Shared rails) · 🟠 *Judge it* (9 Who may do what · 10 Where it stops · 11 What to build next · 12 Build tracker) · ⚫ *Look it up* (13 The API · 14 Database + Services). The MVP's **one** non-duplicated tab, its services-and-hooks inventory, is folded in as the second half of tab 14: **71 services and hooks**, each with the endpoint it calls, under generalised headers (`Table / service` · `Owned by` · `Cols · status` · `Joins to · calls` · `What it is for`) and a note telling the reader the columns shift meaning for that half. MVP renamed to `InnocenZ_MVP_v4_RealApp.ARCHIVED-20260817.xlsx`; the stale `InnocenZ_BuildSteps.new.xlsx` duplicate deleted. `CLAUDE.md` rule rewritten accordingly — **never create a second workbook** — and it now also records that `12 Build tracker` and `10 Where it stops` are pure arithmetic over the flow pages and must be regenerated with them, never hand-edited, because leaving them behind is precisely how the book started lying (tracker said 493 steps against 545 on the pages; "Where it stops" described 106 gaps against 141). | The one book · `CLAUDE.md` · `docs/claude-memory/sync-memory-mirrors.md` | ✅ Read back after writing: **14 sheets, every tab carrying its part colour** (8 blue / 4 amber / 2 grey), contents page rendering as the three parts in order, and tab 14 showing both halves with 8 section banners. ✅ Every tab name under Excel's 31-char limit. ✅ Memory mirrors re-verified **identical both directions, 23 files**, CRLF-normalised. ⚠️ Nothing was carried over from the MVP except the services inventory — if a number is wanted from one of its retired tabs, it is in the ARCHIVED file, not lost. |
+
 | 2026-08-17 | **The flow book re-read from code, four pages added — and the re-read turned up two live security holes.** The six flow pages had been read on **11 Aug**, before migrations 0113-0121; **366 of the 493 steps were re-opened against source**, 110 corrected, 57 added, and **21 left deliberately untouched and listed as unverified** rather than guessed at. New count: **545 steps = 404 built / 89 half / 52 none (74%)**, recomputed by arithmetic over the pages, never typed. Agency — web took the most work (55 corrections) as expected. **Four new pages, same grammar:** *Money model* (the rate card → one night → the week → what the venue is billed → the platform's own money → what nobody checks), *Who may do what* (7 seeded roles × the capabilities that matter, each with the guard in code that decides it), *The API* (all 28 mounts, the 4 public-before-JWT ones and why each is public, the `/mine` ordering rule), *What to build next* (the gaps ranked, phase 1 vs phase 2). **`Where it stops` had to be rewritten too** — it described 106 gaps while the corrected pages carried 141; it is now 118 lines (33 stop · 54 leak · 31 rough) with **15 old lines dropped as genuinely fixed**, the duplicates merged where one failure shows on two screens. Book is now 14 tabs, reordered so it reads story → gaps → what to do → score → reference. ⚠️ **TWO REAL BUGS, both verified in source, neither a workbook problem.** **(1) `POST /api/v1/auth/forgot-password` returns the reset token in its own 200 body** — `auth.controller.ts:1050`, `data: { resetUrl, token }`, no env guard, and `/auth` mounts *before* `authenticateJWT` (`router/v1.ts:39`). Anyone knowing an active email takes over that account, admin included; `resetPassword` only checks the token exists and has not expired. The same handler carefully returns `data: null` for unknown emails to stop enumeration — and then the differing response shape defeats it. Line 1045 logs the full reset URL as well. **(2) `middlewares/redact-identity-docs.ts:40` is dead code** — it gates on `roleNames.includes('outlet')`, but `outlet` is `@deprecated Not seeded` in `types/rbac-constant.ts`; real venue staff hold `Owner`/`Finance`/`Ops Head`, so the flag is ALWAYS false and PR ICs, DOB, address and both ID photos are **not** redacted for venue logins — the opposite of the owner decision in that file's own header (30 Jul). Fix is to gate on `portalCode`, the pattern `require-sub-role.ts` already uses; same root cause suspected behind Post Job 403ing an outlet Owner. | The whole book · `auth` · `redact-identity-docs` | ✅ Workbook verified on read-back: 14 sheets, every one keeping autofilter + frozen panes, contents list matching tab order exactly, 0 malformed rows across 8 agent output files. ✅ Tracker headline re-derived from the pages themselves (545/404/89/52). ✅ Both bugs confirmed by opening the source, not inferred — `draftForWeek`'s zero callers likewise confirmed by grep. ⚠️ **21 flow steps were NOT re-verified** and keep their 11 Aug status; they are listed per page in the audit files. ⚠️ Nothing in this slice was click-tested — it is a documentation pass plus source reading. ⚠️ The two bugs are **reported, not fixed**. |
 
 | 2026-08-17 | **The MVP workbook's 9 stale sheets brought in line — and the file itself recovered from the Recycle Bin.** `InnocenZ_MVP_v4_RealApp.xlsx` was missing from disk; it and four intermediate backups had been deleted in one sweep at 02:06, nine minutes after the morning's edits. Restored the 102,994-byte version (mtime 09:57) carrying all five rounds of that morning's corrections, verified intact before touching it, and left the backup clutter in the bin. Then **552 cell edits + 144 appended rows** across **RBAC Matrix · Role Matrix · Money Model · Modules 1-12 · Build Plan · Backend — API · Functions — Services & Hooks · To-Do · Daily Test Script**, validated for sheet-name, row-collision and clone-style-range before writing (0 clashes). **RBAC Matrix was the worst sheet and is rebuilt**: it claimed "12 modules × 4 roles × CRUD" and that sub-roles were frontend-only — all wrong. Now **19 module keys × 7 roles × C/R/U with zero surviving D grants**, read from `seed-rbac.ts`. ❗**Corrected my own error from that morning**: the seeded role names are **`Owner`, `Finance`, `Ops Head`**, repeated per portal and told apart by `portal_id` — NOT `agency_owner`/`outlet_ops` as I had written into Overview D75; agency has no Ops Head, and bare `agency`/`outlet` are deprecated and unseeded. ❗**Also corrected D74**: the outlet invoice not only bills wages only, it **can no longer be raised at all** — the weekly job stopped drafting `collection_invoice` on 12 Aug (owner's call, settle outside the app), `draftForWeek` has no caller, and the API exposes only `/:id/issue` and `/:id/settle`, so the table is read-only history. Added two traps the agent missed: `applyRoleGrants` uses `onConflictDoNothing` and never deletes, so removing a grant from the seed does **not** revoke it on a seeded database (and seeded grants beat the portal's own matrix); and the dead redaction guard above. | MVP workbook, all 14 tabs | ✅ Applied through `apply-edits.mjs`, which reported **formatting preserved** (fills, autofilters, freeze panes). ✅ Pre-flight validation passed: every sheet name matched exactly, every append row sat below its sheet's last row, every `cloneStyleFromRow` in range. ✅ RBAC Matrix re-read after writing: title, 10-column header, grid sample and both added rows all correct; **0 cells still granting D**. ⚠️ The 5 sheets corrected earlier that morning (Overview, Data Model, E2E Flow, Prototype Parity, Changelog) were left alone apart from the two D74/D75 fixes. |

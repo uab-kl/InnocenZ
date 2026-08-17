@@ -6,17 +6,32 @@ import {
 	canModule,
 } from "@/lib/auth/module-permissions";
 
-/** Module 9 · Agency Owner vs Agency Finance */
-export type AgencySubRole = "agency_owner" | "agency_finance";
+/** Module 9 · Agency Owner, Finance, Director, Guarantor */
+export type AgencySubRole =
+	| "agency_owner"
+	| "agency_finance"
+	| "agency_director"
+	| "agency_guarantor";
 
 export const AGENCY_SUB_ROLE_LABELS: Record<AgencySubRole, string> = {
 	agency_owner: "Agency Owner",
 	agency_finance: "Agency Finance",
+	agency_director: "Agency Director",
+	agency_guarantor: "Agency Guarantor",
 };
 
 type Permission =
 	| "viewHome"
 	| "approvePrSignups"
+	/**
+	 * SEE the Approvals queue without being able to answer it.
+	 *
+	 * Split from `approvePrSignups` on 17 Aug 2026 for the Director. Approvals
+	 * was gated solely on `approvals:update`, so a view-only role lost the whole
+	 * screen rather than seeing it read-only — the same shape as the outlet's
+	 * Post Job needing `viewBookings`.
+	 */
+	| "viewApprovals"
 	| "assignShifts"
 	| "managePr"
 	| "viewSettings"
@@ -49,22 +64,59 @@ type Permission =
 
 type ModulePerm = { moduleKey: string; permissionType: string };
 
+const AGENCY_OWNER_PERMISSIONS: Permission[] = [
+	"viewHome",
+	"approvePrSignups",
+	"viewApprovals",
+	"assignShifts",
+	"managePr",
+	"viewSettings",
+	"editSettings",
+	"viewPv",
+	"raisePv",
+	"viewCollections",
+	"confirmReconciliation",
+	"viewHistory",
+	"viewWorkforce",
+	"viewLiveFloor",
+	"overrideSignedPv",
+];
+
 const ROLE_PERMISSIONS: Record<AgencySubRole, Permission[]> = {
-	agency_owner: [
+	agency_owner: AGENCY_OWNER_PERMISSIONS,
+	/**
+	 * The owner's stand-in, at the owner's level — SHARING the owner's list
+	 * rather than restating it, so the two cannot drift. On this portal that is
+	 * what carries `raisePv` and `overrideSignedPv`: paying PRs while the owner
+	 * is unavailable is the reason the role was asked for.
+	 */
+	agency_guarantor: AGENCY_OWNER_PERMISSIONS,
+	/**
+	 * VIEW ONLY. Every agency screen readable, nothing writable.
+	 *
+	 * Reads the payroll it exists to oversee (`viewPv`) and cannot raise, sign or
+	 * override a voucher — `raisePv` and `overrideSignedPv` are absent, and that
+	 * is precisely the line between this role and the Guarantor.
+	 *
+	 * `viewLiveFloor` IS granted, unlike finance. That permission is matrix-only
+	 * by design (it has no `AGENCY_FEATURE_MODULE` entry, so no module grant can
+	 * confer it), and it was taken off finance on 11 Aug 2026 because a payroll
+	 * role has no business with who is on the floor right now. A Director's
+	 * business is precisely oversight of the organisation, so it is included —
+	 * say the word if that tile should come off this role too.
+	 *
+	 * Its own login and security is not here and needs no entry: changing your
+	 * own password, email or mobile is not an agency permission.
+	 */
+	agency_director: [
 		"viewHome",
-		"approvePrSignups",
-		"assignShifts",
-		"managePr",
-		"viewSettings",
-		"editSettings",
+		"viewApprovals",
 		"viewPv",
-		"raisePv",
 		"viewCollections",
-		"confirmReconciliation",
 		"viewHistory",
 		"viewWorkforce",
 		"viewLiveFloor",
-		"overrideSignedPv",
+		"viewSettings",
 	],
 	/**
 	 * Finance keeps Roster and the PR records; it does NOT get the live floor.
@@ -146,8 +198,10 @@ const ALL_NAV: AgencyNavItem[] = [
 	{
 		to: "/agency/pending",
 		label: "Approvals",
+		// `viewApprovals`, not `approvePrSignups` — an owner holds both, and this
+		// is what keeps the queue visible to a role that may read but not answer.
 		icon: iconForNav("Approvals"),
-		permission: "approvePrSignups",
+		permission: "viewApprovals",
 	},
 	{
 		to: "/agency/pv",
@@ -205,9 +259,16 @@ export function canAccessAgencyPath(
 	if (pathname.startsWith("/agency/special-service")) return can("viewPv");
 	if (pathname.startsWith("/agency/history")) return can("viewHistory");
 	if (pathname.startsWith("/agency/subscription")) return can("viewSettings");
-	if (pathname.startsWith("/agency/pending")) return can("approvePrSignups");
-	if (pathname.startsWith("/agency/prs")) return can("managePr");
-	if (pathname.startsWith("/agency/outlets")) return can("managePr");
+	if (pathname.startsWith("/agency/pending")) return can("viewApprovals");
+	// `viewWorkforce` alongside `managePr`: these are the PR and outlet RECORDS,
+	// and gating them on the update permission alone hid them from a role whose
+	// whole definition is reading the organisation.
+	if (pathname.startsWith("/agency/prs")) {
+		return can("managePr") || can("viewWorkforce");
+	}
+	if (pathname.startsWith("/agency/outlets")) {
+		return can("managePr") || can("viewWorkforce");
+	}
 	if (pathname.startsWith("/agency/profile")) return can("viewSettings");
 	if (pathname.startsWith("/agency/live")) return can("viewWorkforce");
 	return true;

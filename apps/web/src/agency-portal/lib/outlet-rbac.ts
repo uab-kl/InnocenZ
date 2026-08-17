@@ -6,17 +6,33 @@ import {
 	OUTLET_FEATURE_MODULE,
 } from "@/lib/auth/module-permissions";
 
-/** Matches Module 10 outlet columns: Owner, Finance, Ops Head */
-export type OutletSubRole = "outlet_owner" | "outlet_finance" | "outlet_ops";
+/** Matches Module 10 outlet columns: Owner, Finance, Ops Head, Director, Guarantor */
+export type OutletSubRole =
+	| "outlet_owner"
+	| "outlet_finance"
+	| "outlet_ops"
+	| "outlet_director"
+	| "outlet_guarantor";
 
 export const OUTLET_SUB_ROLE_LABELS: Record<OutletSubRole, string> = {
 	outlet_owner: "Outlet Owner",
 	outlet_finance: "Outlet Finance",
 	outlet_ops: "Outlet Ops Head",
+	outlet_director: "Outlet Director",
+	outlet_guarantor: "Outlet Guarantor",
 };
 
 type Permission =
 	| "postJob"
+	/**
+	 * SEE the Post Job screen without being able to post.
+	 *
+	 * Split from `postJob` on 17 Aug 2026 for the Director role, which the owner
+	 * asked to keep on that page read-only. One permission cannot express that:
+	 * `postJob` is `booking:create`, so gating both the page and its buttons on it
+	 * meant a role that could not post could not look either.
+	 */
+	| "viewBookings"
 	| "viewLiveDashboard"
 	| "logSales"
 	| "sealShift"
@@ -35,24 +51,56 @@ type Permission =
 
 type ModulePerm = { moduleKey: string; permissionType: string };
 
+const OUTLET_OWNER_PERMISSIONS: Permission[] = [
+	"postJob",
+	"viewBookings",
+	"viewLiveDashboard",
+	"logSales",
+	"sealShift",
+	"confirmShift",
+	"confirmDaily",
+	"viewBilling",
+	"viewSalesDashboard",
+	"ratePrs",
+	"manageShiftStaffing",
+	"viewHistory",
+	"viewWorkspace",
+	"manageWorkspace",
+	"viewSettings",
+	"editSettings",
+	"orderSpecialService",
+];
+
 const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
-	outlet_owner: [
-		"postJob",
+	outlet_owner: OUTLET_OWNER_PERMISSIONS,
+	/**
+	 * The owner's stand-in, at the owner's level — so it SHARES the owner's list
+	 * rather than restating it. Two copies is how "same level as the owner" stops
+	 * being true the first time one of them is edited, and this role is used
+	 * precisely when the owner is not around to notice.
+	 */
+	outlet_guarantor: OUTLET_OWNER_PERMISSIONS,
+	/**
+	 * VIEW ONLY. Every screen the owner sees, no write anywhere on the venue.
+	 *
+	 * `viewSettings` without `editSettings` is what the owner asked for: a
+	 * Director reaches Settings, reads it, and edits only its own login and
+	 * security — which is not an outlet permission at all (every signed-in user
+	 * may change their own password, contact details and MFA), so it needs no
+	 * entry here.
+	 *
+	 * `orderSpecialService` is absent, and that HIDES the nav item and the route
+	 * rather than disabling them — the owner's call, since ordering is the only
+	 * thing that page does.
+	 */
+	outlet_director: [
+		"viewBookings",
 		"viewLiveDashboard",
-		"logSales",
-		"sealShift",
-		"confirmShift",
-		"confirmDaily",
 		"viewBilling",
 		"viewSalesDashboard",
-		"ratePrs",
-		"manageShiftStaffing",
 		"viewHistory",
 		"viewWorkspace",
-		"manageWorkspace",
 		"viewSettings",
-		"editSettings",
-		"orderSpecialService",
 	],
 	outlet_finance: [
 		"viewLiveDashboard",
@@ -66,6 +114,7 @@ const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
 	],
 	outlet_ops: [
 		"postJob",
+		"viewBookings",
 		"viewLiveDashboard",
 		"logSales",
 		"sealShift",
@@ -73,7 +122,6 @@ const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
 		"ratePrs",
 		"manageShiftStaffing",
 		"viewWorkspace",
-		"manageWorkspace",
 		"viewSettings",
 		"orderSpecialService",
 	],
@@ -166,8 +214,11 @@ export function getOutletNavItems(
 	const r = role ?? "outlet_owner";
 	return ALL_NAV.filter((item) => {
 		if (item.to === "/outlet/bookings") {
+			// `viewBookings` is here so a Director keeps the page and loses only the
+			// buttons on it — the owner asked for Post Job read-only rather than gone.
 			return (
 				outletCan(r, "postJob", modulePermissions) ||
+				outletCan(r, "viewBookings", modulePermissions) ||
 				outletCan(r, "orderSpecialService", modulePermissions)
 			);
 		}
@@ -201,8 +252,11 @@ export function canAccessOutletPath(
 		return can("viewLiveDashboard");
 	}
 	if (pathname.startsWith("/outlet/bookings")) {
-		return can("postJob") || can("orderSpecialService");
+		return can("postJob") || can("viewBookings") || can("orderSpecialService");
 	}
+	// Deliberately NOT widened to `viewBookings`: ordering is the only thing this
+	// page does, so a role that cannot order has no read to do here. That is what
+	// keeps Special Service hidden outright for a Director while Post Job stays.
 	if (pathname.startsWith("/outlet/special-service")) {
 		return can("orderSpecialService") || can("postJob");
 	}

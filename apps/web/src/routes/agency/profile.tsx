@@ -46,6 +46,7 @@ import {
 	isOrgPendingReview,
 	isOrgSuspended,
 } from "@/components/organization/org-status";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 
 export const Route = createFileRoute("/agency/profile")({
 	component: AgencyProfile,
@@ -88,6 +89,8 @@ function AgencyProfile() {
 	const avatarFileRef = useRef<HTMLInputElement>(null);
 	const can = useAgencyCan();
 	const canEdit = can("editSettings");
+	/** Whoever is signed in — used for Login & security, which is personal. */
+	const { user: currentUser } = useCurrentUser();
 
 	// Real login → never merge onto Atlas demo defaults. Demo sessions keep the
 	// store seed. Editing uses the local draft.
@@ -552,9 +555,23 @@ function AgencyProfile() {
 				open={securityOpen}
 				onClose={() => setSecurityOpen(false)}
 				sheetVariant="side"
-				email={owner.email}
-				mobile={owner.mobile}
-				canEdit={canEdit}
+				/*
+				 * The SIGNED-IN person's own address and number, not `owner.*` —
+				 * that is the organisation's owner record, identical for everyone at
+				 * the agency. A Director opening Login & security saw the OWNER's
+				 * email as the one it was about to change, while the OTP flow acted
+				 * on its own account: the screen named one address and would have
+				 * changed another.
+				 */
+				email={currentUser?.email ?? owner.email}
+				mobile={currentUser?.contactNo ?? owner.mobile}
+				/*
+				 * NOT `canEdit` — that is `settings:update` on the ORGANISATION, and
+				 * this sheet is purely personal. Gating it on the org permission
+				 * locked every read-only agency role out of its own password, which
+				 * for a Director is the only thing it may change at all.
+				 */
+				canEdit
 				onUpdateEmail={(email) => {
 					if (!profile.backed) saveAgencyOwner({ email });
 				}}
