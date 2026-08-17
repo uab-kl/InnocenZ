@@ -47,6 +47,7 @@ import {
 	isOrgPendingReview,
 	isOrgSuspended,
 } from "@/components/organization/org-status";
+import { useCurrentUser } from "@/lib/auth/use-current-user";
 
 export const Route = createFileRoute("/outlet/settings")({
 	component: OutletSettingsPage,
@@ -117,6 +118,8 @@ function OutletSettingsPage() {
 	const avatarFileRef = useRef<HTMLInputElement>(null);
 	const can = useOutletCan();
 	const canEdit = can("editSettings");
+	/** Whoever is signed in — used for Login & security, which is personal. */
+	const { user: currentUser } = useCurrentUser();
 
 	// Real login → never merge onto Velvet demo defaults (empty API fields used
 	// to leave Chen Wei Jie / Michelle Lim / Bukit Bintang on screen). Demo
@@ -600,9 +603,30 @@ function OutletSettingsPage() {
 				open={securityOpen}
 				onClose={() => setSecurityOpen(false)}
 				sheetVariant="side"
-				email={owner.email}
-				mobile={owner.mobile}
-				canEdit={canEdit}
+				/*
+				 * The SIGNED-IN person's own address and number, not `owner.*` —
+				 * that is the organisation's owner record, which is the same for
+				 * everyone at the venue. A Director opening Login & security was
+				 * shown the OWNER's email as the one it was about to change.
+				 * Harmless only by luck: the OTP flow acts on the session's own
+				 * account, so the screen named one address and would have changed
+				 * another.
+				 */
+				email={currentUser?.email ?? owner.email}
+				mobile={currentUser?.contactNo ?? owner.mobile}
+				/*
+				 * NOT `canEdit` — that is `settings:update` on the ORGANISATION, and
+				 * this sheet is the signed-in person's own account: change password,
+				 * change email by OTP, change mobile by OTP. Nothing in it touches
+				 * the venue.
+				 *
+				 * Gating it on the org permission locked every read-only outlet role
+				 * out of its own password. That is the entire editable surface a
+				 * Director is meant to have (owner's rule, 17 Aug 2026), so the role
+				 * would have had none — and Finance was already quietly in the same
+				 * position.
+				 */
+				canEdit
 				onUpdateEmail={(email) => {
 					if (!profile.backed) saveOutletOwner({ email });
 				}}

@@ -7,8 +7,20 @@ export const outletStatusValues = ['pending_review', 'active', 'inactive', 'susp
 export type OutletStatus = (typeof outletStatusValues)[number];
 export const outletStatusEnum = MainSchema.enum('outlet_status', outletStatusValues);
 
-/** Portal lane labels (API / UI). Stored on `user_role`→`role`, not `outlet_user`. */
-export const outletUserSubRoleValues = ['owner', 'finance', 'operations_head'] as const;
+/**
+ * Portal lane labels (API / UI). Stored on `user_role`→`role`, not `outlet_user`.
+ *
+ * `director` is view-only, `guarantor` is owner-equal — see `portalRoleName`.
+ * The lane is persisted as a plain `varchar(50)` with no CHECK constraint and no
+ * enum, so adding one needs no migration.
+ */
+export const outletUserSubRoleValues = [
+  'owner',
+  'finance',
+  'operations_head',
+  'director',
+  'guarantor',
+] as const;
 export type OutletUserSubRole = (typeof outletUserSubRoleValues)[number];
 
 export const OutletTable = MainSchema.table('outlet', {

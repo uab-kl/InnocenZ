@@ -8,7 +8,8 @@ export type AgencyStatus =
  * Sub-roles of an agency portal operator. `pr` is deliberately absent — PRs are
  * not portal users, and their agency links live on agency_pr (see PrAgencyLink).
  */
-export type AgencyUserSubRole = "owner" | "finance";
+/** `director` is view-only; `guarantor` stands in for the owner, at owner level. */
+export type AgencyUserSubRole = "owner" | "finance" | "director" | "guarantor";
 
 export type AgencyPrApproveStatus = "pending" | "approved" | "rejected";
 

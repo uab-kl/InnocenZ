@@ -609,17 +609,24 @@ export class OutletControllerClass {
         });
       }
 
-      // No invitation may grant Owner — see listInviteRoles. Checked on BOTH the
-      // lane and the role, since either one alone reaches the top lane: subRole
-      // is what `outletOwnerOfParam` reads, roleId is what accept grants.
+      // No invitation may grant the top lane — see listInviteRoles. Checked on
+      // BOTH the lane and the role, since either one alone reaches it: subRole is
+      // what `outletOwnerOfParam` reads, roleId is what accept grants.
+      //
+      // GUARANTOR counts as the top lane: it holds the owner's matrix outright,
+      // so an emailed invitation straight into it would hand whoever opens the
+      // link full control of the venue. Invite lower and promote from the Team
+      // picker — an act by a signed-in owner, not by anyone holding a link.
+      const invitedLane = inferMembershipSubRole('outlet', role.roleName);
+      const TOP_LANES = ['owner', 'guarantor'] as const;
       if (
-        subRole === 'owner' ||
-        inferMembershipSubRole('outlet', role.roleName) === 'owner'
+        TOP_LANES.includes(subRole as (typeof TOP_LANES)[number]) ||
+        TOP_LANES.includes(invitedLane as (typeof TOP_LANES)[number])
       ) {
         return res.status(400).json({
           success: false,
           message:
-            'Owner cannot be invited — invite them as Finance or Ops Head, then change their role once they have joined',
+            'Owner and Guarantor cannot be invited — invite them as Finance, Ops Head or Director, then change their role once they have joined',
           data: null,
         });
       }

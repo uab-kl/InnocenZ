@@ -77,8 +77,9 @@ async function agencyLanesByUserIds(
       portalCode: r.portalCode,
       roleName: r.roleName ?? 'Owner',
     }));
-    const lane = laneFromRoleHints('agency', hints);
-    map.set(userId, lane === 'operations_head' ? 'finance' : lane);
+    // No ops-head fold here any more: `laneFromRoleHints('agency', …)` is now
+    // typed to the two lanes an agency actually issues, so it was unreachable.
+    map.set(userId, laneFromRoleHints('agency', hints));
   }
   return map;
 }

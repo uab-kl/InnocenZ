@@ -34,6 +34,25 @@ export const portalRoleName = {
   FINANCE: 'Finance',
   OPS_HEAD: 'Ops Head',
   /**
+   * VIEW ONLY, under the owner. Seeded for BOTH the outlet and the agency —
+   * roles are unique per (name, portal), so those are two distinct rows.
+   *
+   * Changes nothing about the organisation. Its one write is to its own account
+   * — password, contact, MFA — which every signed-in user holds whatever their
+   * role, so it needs no grant here. Everything else it reads and only reads.
+   */
+  DIRECTOR: 'Director',
+  /**
+   * EQUAL TO OWNER, on both portals. The stand-in for an owner who is
+   * unavailable, so it is deliberately not a reduced owner: same grants, same
+   * guards. Anywhere it is treated as less than an owner it fails at exactly
+   * the moment it exists for.
+   *
+   * On the AGENCY side that includes paying PRs — raising and signing payment
+   * vouchers — which is the whole reason the owner asked for the role.
+   */
+  GUARANTOR: 'Guarantor',
+  /**
    * @deprecated Not seeded. Kept for legacy user_role rows / requireRole expand
    * until migration remaps them onto Owner.
    */
@@ -52,9 +71,13 @@ export const SEEDED_PORTAL_ROLES: ReadonlyArray<{
   { roleName: portalRoleName.ADMIN, portal: 'admin' },
   { roleName: portalRoleName.OWNER, portal: 'agency' },
   { roleName: portalRoleName.FINANCE, portal: 'agency' },
+  { roleName: portalRoleName.DIRECTOR, portal: 'agency' },
+  { roleName: portalRoleName.GUARANTOR, portal: 'agency' },
   { roleName: portalRoleName.OWNER, portal: 'outlet' },
   { roleName: portalRoleName.FINANCE, portal: 'outlet' },
   { roleName: portalRoleName.OPS_HEAD, portal: 'outlet' },
+  { roleName: portalRoleName.DIRECTOR, portal: 'outlet' },
+  { roleName: portalRoleName.GUARANTOR, portal: 'outlet' },
   { roleName: portalRoleName.PR, portal: null },
 ];
 

@@ -568,7 +568,22 @@ function PostJobPage() {
 
 	const showTabs = canPostShifts && canOrderServices;
 
-	if (!canPostShifts && !canOrderServices) {
+	/**
+	 * A role that may SEE this page without posting on it — the Director.
+	 *
+	 * The composer still renders, because the owner asked for Post Job read-only
+	 * rather than hidden: a screen describing what a shift posting involves is
+	 * worth reading even when you cannot file one. What changes is that every
+	 * control in it is disabled and the post/cart bar is gone.
+	 *
+	 * The client is not the guarantee. Posting is `booking:create` server-side,
+	 * which a Director does not hold, so anything that slips past the `fieldset`
+	 * is refused by the API rather than quietly accepted. This is the label, not
+	 * the lock.
+	 */
+	const viewOnly = !canPostShifts && can("viewBookings");
+
+	if (!canPostShifts && !canOrderServices && !viewOnly) {
 		// A role that CAN order services and only lacks shift posting is not
 		// restricted — the services flow is switched off for phase 2. Saying
 		// "your role cannot" there blames a permission for a product decision and
@@ -607,9 +622,11 @@ function PostJobPage() {
 				eyebrow={outletName}
 				title="Post Job"
 				hint={
-					tab === "shifts"
-						? "Build your shift, then post when ready"
-						: `${outletName} · agency add-ons`
+					viewOnly
+						? "View only — your role can read shift postings but not create them"
+						: tab === "shifts"
+							? "Build your shift, then post when ready"
+							: `${outletName} · agency add-ons`
 				}
 			/>
 
@@ -641,99 +658,127 @@ function PostJobPage() {
 				</div>
 			)}
 
-			{tab === "shifts" && canPostShifts ? (
+			{tab === "shifts" && (canPostShifts || viewOnly) ? (
 				<section className="pt-1">
-					<div className="iz-post-job-layout">
-						<div className="iz-post-job-layout__main">
-							<DraftShiftEditor
-								shift={composer}
-								onChange={(patch) => setComposer((c) => ({ ...c, ...patch }))}
-								title="Shift details"
-								shiftIndex={1}
-								shiftTotal={Math.max(1, draftShifts.length + 1)}
-								namedPrsOnDate={composerNamedPrsOnDate}
-								peopleRemaining={composerPeopleRemaining}
-								prCandidates={prPool.backed ? prPool.prs : undefined}
-								prEmptyHint={prPoolEmptyHint}
-								workspaceMenu={workspaceMenu}
-								workspaceRates={effectiveWorkspace}
-							/>
+					{viewOnly && (
+						<p className="iz-tiny iz-muted mt-1 mb-3 rounded-xl border border-dashed border-[var(--iz-line)] px-3 py-2">
+							Read-only. You can see how shifts are posted at this venue, but
+							only an Owner, Guarantor or Ops Head can post one.
+						</p>
+					)}
+					{/*
+					 * A native disabled fieldset, rather than a `readOnly` prop threaded
+					 * through DraftShiftEditor: it turns off every input, select and
+					 * button beneath it in one place, including inside components that
+					 * know nothing about roles — so a field added later is inert by
+					 * default instead of quietly editable.
+					 */}
+					<fieldset
+						disabled={viewOnly}
+						className={
+							viewOnly ? "m-0 border-0 p-0 opacity-70" : "m-0 border-0 p-0"
+						}
+					>
+						<div className="iz-post-job-layout">
+							<div className="iz-post-job-layout__main">
+								<DraftShiftEditor
+									shift={composer}
+									onChange={(patch) => setComposer((c) => ({ ...c, ...patch }))}
+									title="Shift details"
+									shiftIndex={1}
+									shiftTotal={Math.max(1, draftShifts.length + 1)}
+									namedPrsOnDate={composerNamedPrsOnDate}
+									peopleRemaining={composerPeopleRemaining}
+									prCandidates={prPool.backed ? prPool.prs : undefined}
+									prEmptyHint={prPoolEmptyHint}
+									workspaceMenu={workspaceMenu}
+									workspaceRates={effectiveWorkspace}
+								/>
 
-							{draftShifts.length > 0 && (
-								<>
-									<div className="mt-4 flex items-center justify-between">
-										<IzSectionLabel>
-											Shifts for {sectionDate.toLowerCase()}
-										</IzSectionLabel>
-										<span className="text-[10px] text-[var(--iz-muted)]">
-											{draftShifts.length} slot
-											{draftShifts.length !== 1 ? "s" : ""}
-										</span>
-									</div>
+								{draftShifts.length > 0 && (
+									<>
+										<div className="mt-4 flex items-center justify-between">
+											<IzSectionLabel>
+												Shifts for {sectionDate.toLowerCase()}
+											</IzSectionLabel>
+											<span className="text-[10px] text-[var(--iz-muted)]">
+												{draftShifts.length} slot
+												{draftShifts.length !== 1 ? "s" : ""}
+											</span>
+										</div>
 
-									<div className="mt-3 flex flex-col gap-4">
-										{draftShifts.map((s, i) =>
-											editingShiftId === s.id ? (
-												<DraftShiftEditor
-													key={s.id}
-													shift={s}
-													onChange={(patch) => updateDraftShift(s.id, patch)}
-													onRemove={() => removeDraftShift(s.id)}
-													showRemove
-													title="Shift details"
-													shiftIndex={i + 1}
-													shiftTotal={draftShifts.length}
-													onDone={() => setEditingShiftId(null)}
-													namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
-													peopleRemaining={peopleRemainingForShift(s, s.id)}
-													prCandidates={prPool.backed ? prPool.prs : undefined}
-													prEmptyHint={prPoolEmptyHint}
-													workspaceMenu={workspaceMenu}
-													workspaceRates={effectiveWorkspace}
-												/>
-											) : (
-												<DraftShiftSummary
-													key={s.id}
-													shift={s}
-													title={`Shift ${i + 1}`}
-													onEdit={() => setEditingShiftId(s.id)}
-													onRemove={() => removeDraftShift(s.id)}
-													showRemove
-													workspaceMenu={workspaceMenu}
-												/>
-											),
-										)}
-									</div>
-								</>
+										<div className="mt-3 flex flex-col gap-4">
+											{draftShifts.map((s, i) =>
+												editingShiftId === s.id ? (
+													<DraftShiftEditor
+														key={s.id}
+														shift={s}
+														onChange={(patch) => updateDraftShift(s.id, patch)}
+														onRemove={() => removeDraftShift(s.id)}
+														showRemove
+														title="Shift details"
+														shiftIndex={i + 1}
+														shiftTotal={draftShifts.length}
+														onDone={() => setEditingShiftId(null)}
+														namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
+														peopleRemaining={peopleRemainingForShift(s, s.id)}
+														prCandidates={
+															prPool.backed ? prPool.prs : undefined
+														}
+														prEmptyHint={prPoolEmptyHint}
+														workspaceMenu={workspaceMenu}
+														workspaceRates={effectiveWorkspace}
+													/>
+												) : (
+													<DraftShiftSummary
+														key={s.id}
+														shift={s}
+														title={`Shift ${i + 1}`}
+														onEdit={() => setEditingShiftId(s.id)}
+														onRemove={() => removeDraftShift(s.id)}
+														showRemove
+														workspaceMenu={workspaceMenu}
+													/>
+												),
+											)}
+										</div>
+									</>
+								)}
+							</div>
+
+							{/* Not merely disabled — a post/cart bar offers an action this
+						    role does not have, so it is absent rather than greyed out. */}
+							{!viewOnly && (
+								<aside className="iz-post-job-layout__aside">
+									<PostJobActionPanel
+										headcount={totalHeadcount}
+										cost={totalCost}
+										shiftCount={shiftCountForPost}
+										onAddShift={addDraftShift}
+										onSubmit={submitNew}
+										submitDisabled={totalHeadcount <= 0 || isPosting}
+									/>
+								</aside>
 							)}
 						</div>
 
-						<aside className="iz-post-job-layout__aside">
-							<PostJobActionPanel
-								headcount={totalHeadcount}
-								cost={totalCost}
-								shiftCount={shiftCountForPost}
-								onAddShift={addDraftShift}
-								onSubmit={submitNew}
-								submitDisabled={totalHeadcount <= 0 || isPosting}
-							/>
-						</aside>
-					</div>
-
-					<div
-						className="iz-post-job-mobile-dock"
-						aria-label="Shift summary and post actions"
-					>
-						<PostJobActionPanel
-							headcount={totalHeadcount}
-							cost={totalCost}
-							shiftCount={shiftCountForPost}
-							onAddShift={addDraftShift}
-							onSubmit={submitNew}
-							submitDisabled={totalHeadcount <= 0}
-							compact
-						/>
-					</div>
+						{!viewOnly && (
+							<div
+								className="iz-post-job-mobile-dock"
+								aria-label="Shift summary and post actions"
+							>
+								<PostJobActionPanel
+									headcount={totalHeadcount}
+									cost={totalCost}
+									shiftCount={shiftCountForPost}
+									onAddShift={addDraftShift}
+									onSubmit={submitNew}
+									submitDisabled={totalHeadcount <= 0}
+									compact
+								/>
+							</div>
+						)}
+					</fieldset>
 				</section>
 			) : canOrderServices ? (
 				<OutletServicePostSection />

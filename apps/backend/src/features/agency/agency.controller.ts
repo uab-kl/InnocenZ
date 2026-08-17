@@ -556,10 +556,9 @@ export class AgencyControllerClass {
             data: null,
           });
         }
-        const inferred = inferMembershipSubRole('agency', role.roleName);
-        subRole =
-          subRole ??
-          (inferred === 'operations_head' ? 'finance' : inferred);
+        // `inferMembershipSubRole('agency', …)` is now typed to the two lanes an
+        // agency issues, so the ops-head fold that stood here was unreachable.
+        subRole = subRole ?? inferMembershipSubRole('agency', role.roleName);
       } else {
         const roleName = portalRoleNameForSubRole('agency', subRole!);
         role = await this.roleRepository.findByNameAndPortalCode(roleName, 'agency');
@@ -580,17 +579,26 @@ export class AgencyControllerClass {
         });
       }
 
-      // No invitation may grant Owner — see listInviteRoles. Checked on BOTH the
-      // lane and the role, since either one alone reaches the top lane: subRole
-      // is what `agencyOwnerOfParam` reads, roleId is what accept grants.
+      // No invitation may grant the top lane — see listInviteRoles. Checked on
+      // BOTH the lane and the role, since either one alone reaches it: subRole is
+      // what `agencyOwnerOfParam` reads, roleId is what accept grants.
+      //
+      // GUARANTOR counts as the top lane. It holds the owner's matrix outright,
+      // including `payment_voucher` CREATE, so an emailed invitation straight
+      // into it would hand whoever opens that link the ability to pay PRs. The
+      // existing escape hatch covers it: invite them lower, then move them up
+      // from the Team picker, which is an act by a signed-in owner rather than
+      // by anyone holding a link.
+      const invitedLane = inferMembershipSubRole('agency', role.roleName);
+      const TOP_LANES = ['owner', 'guarantor'] as const;
       if (
-        subRole === 'owner' ||
-        inferMembershipSubRole('agency', role.roleName) === 'owner'
+        TOP_LANES.includes(subRole as (typeof TOP_LANES)[number]) ||
+        TOP_LANES.includes(invitedLane as (typeof TOP_LANES)[number])
       ) {
         return res.status(400).json({
           success: false,
           message:
-            'Owner cannot be invited — invite them as Finance, then change their role once they have joined',
+            'Owner and Guarantor cannot be invited — invite them as Finance or Director, then change their role once they have joined',
           data: null,
         });
       }
