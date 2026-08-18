@@ -1674,6 +1674,128 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 
 ## 10. Changelog (what changed / what's done — append newest at top)
 
+> **18 Aug 2026 — LEAVING AN AGENCY IS A REQUEST, AND THE LEDGER ANSWERS IT.** (commit `bff0977`)
+>
+> Owner: *"make the pr can untick the agency once that the pv under that the specific agency is
+> already paid , and no shift assgined or any plan bundle with the agency. only everything
+> relating pr and agency is resolved then only can untick this agency"* + *"at the agency
+> approval page , make like the mc/leave section … need differentiate that the approve is
+> approving under the agency or approve for cancel under this agency"*.
+>
+> **Before this, the gate would have been decorative:** the phone's profile save HARD-DELETED
+> unpicked `agency_pr` rows — approved memberships included — so a PR could walk out on unpaid
+> vouchers by unticking a box. Three escape hatches closed (replace-set save, repository sync,
+> owner re-invite stomping a filed departure).
+>
+> Lifecycle on the SAME row (migration **0125**, applied to innocenz-test, enum verified):
+> `approved → leave_pending → left` (row KEPT as history; re-join flips it back to `pending`).
+> Departure rejected → back to `approved` with `[Leave rejected] `-prefixed reason.
+> Settlement gate = vouchers not `paid` (named per paper) · open disputes · upcoming/unfinished
+> shifts (MYT "today") — matched on BOTH `user_id` and legacy `pr_id`, run on request AND re-run
+> on approve, fails closed. The 409 lists the blockers in words; the phone shows them verbatim.
+>
+> Approvals · Agency-Tied now has the MC/Leaves chips (Current/Approved/Rejected/All), Join vs
+> Leave labels on every card, "Approve departure" wording, mandatory reason on a departure
+> reject, read-only history, and the server's own sentence toasted on every decision.
+>
+> ⚠️ **RESTART THE BACKEND** (tsx watch serves stale routes — the new
+> `POST /pr/mine/agencies/:agencyId/leave` 404s until then), reload web + phone.
+> Known gap (accepted, in §9): a completed shift whose weekly PV has not been issued yet passes
+> the gate — a PR can file a departure between check-out and the Sunday PV job; the re-check on
+> approve catches it once the voucher exists.
+
+> **17 Aug 2026 — ROLE STABILITY ACROSS DEVICES AND URLs, AND THE UNGATED WRITE ROUTES.**
+>
+> Owner: *"if the user login as the agency or the outlet what ever in different devices, different website
+> link url, never ever can suddenly change the role cauz i got saw that bugs"*, then the exact repro:
+> *"i got copy the link http://localhost:3000/en/admin/dashboard to another browser but i goes in to the
+> agency pages"*.
+>
+> **Why the role appeared to change.** Identity is tab-scoped, so a different device — or a different URL
+> origin — starts with none, and EVERY unknown-role path defaulted to the OWNER:
+>
+> | site | was | now |
+> |---|---|---|
+> | `resolveAgencySubRole` / `outletCan` fallbacks | `agency_owner` / `outlet_owner` | `AGENCY_LEAST_PRIVILEGE` / `OUTLET_LEAST_PRIVILEGE` (Director) |
+> | `agencySubRoleFromBackend` | anything not "finance" → owner | each lane named; unknown → least privilege |
+> | persisted-identity parsers | unlisted → owner | unlisted → least privilege |
+> | `startAgencyRealSession` / `startOutletRealSession` failure branch | **documented** as "fall back to owner / full nav" | least privilege |
+> | `ensurePortalRolesFromMembership` (server, every `/auth/me`) | granted **Owner** to a membership with no role row | grants Director |
+>
+> That last one meant REVOKING a role promoted the account: strip a Director and their next request handed
+> them the owner console. Signup grants its own role explicitly (`signup-roles.ts`), so nothing needed it.
+>
+> An unresolved role is now a question, never a promotion. The trade is deliberate: a real owner on a cold
+> cache is briefly under-privileged instead of a Director being briefly an owner.
+>
+> **The admin-link repro.** `ensureAuthenticated` threw `redirect({ to: "/login" })` with no destination, and
+> `/login`'s `validateSearch` accepted only the literals `/agency` and `/outlet` — `/admin/...` was rejected
+> outright and every deep path discarded. So the link died at the door and login sent you to your default
+> portal home, which for an agency account is `/agency`. Now the attempted path rides along as `next`
+> (locale-stripped, same-origin only — `//evil.com` and full URLs refused), and it is honoured ONLY when the
+> account holds that portal. **Verified live:** a fresh browser on `/en/admin/dashboard` lands on
+> `/en/login?next=/admin/dashboard`, and signing in there as the agency Director still goes to `/en/agency`.
+> An admin now reaches the page they asked for.
+>
+> The same holds for EVERY portal and every lane, because the mechanism is role-agnostic — the guard
+> captures whatever path was asked for, and login honours it only for a portal the account holds.
+> Verified on four combinations:
+>
+> | link opened in a fresh browser | signed in as | lands on |
+> |---|---|---|
+> | `/en/admin/dashboard` | agency Director | `/en/agency` — refused, correct |
+> | `/en/outlet/settings` | outlet Owner | `/en/outlet/settings`, with Edit profile |
+> | `/en/outlet/settings` | outlet Director | `/en/outlet/settings`, **no** Edit profile |
+> | `/en/admin/dashboard` | admin | the admin page itself |
+>
+> The last two rows are the point: the destination is kept AND the lane is kept. A Director opening a
+> deep link arrives as a Director, not as an owner.
+>
+> **And when the other browser is signed in as a DIFFERENT account**, the portal gate used to bounce it to
+> that account's own home — silently. Correct, but it is precisely what reads as the role changing by
+> itself: a page you never asked for and nothing saying why. All four gate sites (`ensurePortal`,
+> `ensureAdminPortal`, `guardPortalClient`) now send it to `/no-access?needs=<portal>&link=<path>`, which
+> NAMES the account you are actually in, names the portal the link needs, shows the link, and offers one
+> button: sign out and switch. Verified as the outlet Director opening `/agency/pv` —
+> *"You are signed in as director@emhub.test, which does not have access to the Agency portal. Your role has
+> not changed — this browser is simply signed in to a different account."* The correct link for that same
+> session still opens normally, still as a Director.
+>
+> ⛔ **What was NOT built, deliberately.** A link cannot carry a sign-in to a browser that never
+> authenticated. Doing so means putting the token in the URL, and URLs live in history, server logs,
+> referrers and chat apps — anyone who ever saw the link would become that account. A different device
+> logs in once; from then on the copied link opens the right page in the right role.
+>
+> **`userHasPermission` was portal-blind.** It matched module key + type only, and `settings` / `dashboard` /
+> `history` exist on both portals, so an agency grant answered an outlet guard. Now the role carrying the
+> grant must belong to the module's portal — with two exceptions found by querying the live table rather
+> than assuming: **16 of 182 grants are cross-portal and every one is legitimate** (`admin` spans portals;
+> the portal-less mobile `pr` role reads across all three). A plain equality would have locked out every
+> admin and every PR.
+>
+> **13 write routes that a Director could still call over the API.** An 11-agent audit proposed guards; an
+> adversarial pass refuted two and confirmed the rest. Applied: leave approve/reject (`approvals:update`),
+> PR create/update/delete (`workforce:update`), invoice issue/settle (`collections:update` — `create` would
+> have 403'd everyone, `collections` is RU), swap create/cancel (`roster:update`), cut-loss decision
+> (`approvals:update`), cut-loss create (a LANE guard, because outlet Finance holds no `booking` grant at
+> all), payment method + admin-request (`settings:update`). One anchor also hit a **GET** on outlet-swap and
+> was reverted — a read route must not need a write grant.
+>
+> `OutletCutLossActions` had no permission check and neither render site applied one, so its button showed
+> for every outlet role; new matrix-only `requestCutLoss` hides it from a Director rather than letting the
+> new guard turn it into a 403 on click.
+>
+> **Verified end to end** — `POST /pr`: Director **403**, Guarantor **400**, Owner **400**. The Guarantor and
+> the Owner are indistinguishable to the server; the Director is refused before validation.
+>
+> ⚠️ **Refuted, deliberately NOT applied** (the proposed guard did not close the hole): `outlet-workspace`
+> `PUT /:outletId` and `shift-sale` `POST /`. Both proposals leaned on a new `requireAgencySubRoleIfMember`
+> that no-ops for a DEACTIVATED member, and `PUT /outlet-workspace/:outletId` has **no tenant scope at all** —
+> any agency owner can replace any outlet's rate card and drink menu by id. That is the bigger bug and wants
+> its own ticket. Also unresolved: `org-scope.ts` `?? memberships[0]` gives a deactivated member full scope,
+> and `POST /admin-request` still takes `subscriberId` off the body, so an outlet owner can switch another
+> agency's plan. Guard added, scope still open.
+
 > **17 Aug 2026 — THE SAME TWO ROLES ON THE AGENCY PORTAL.**
 >
 > Owner: *"director (role)(view only) only that under by the agency owner, only can edit their personal
