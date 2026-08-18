@@ -2,9 +2,19 @@ import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile"
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
 import { cn } from "@agency-portal/lib/utils";
-import { Calendar, Check, FileText, MapPin, X } from "lucide-react";
+import {
+	Ban,
+	Calendar,
+	Check,
+	FileText,
+	Handshake,
+	History,
+	MapPin,
+	X,
+} from "lucide-react";
 import { useState } from "react";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	AgencyOutletApproveStatus,
@@ -38,9 +48,37 @@ const STATUS_LABEL: Record<
 	pending: (t) => t.approvals.linkPending,
 	approved: (t) => t.approvals.linkApproved,
 	rejected: (t) => t.approvals.linkRejected,
+	ended: (t) => t.approvals.linkEnded,
 };
 
-const FILTERS = ["pending", "approved", "rejected"] as const;
+/**
+ * `ended` earns its own tab rather than hiding inside `rejected`.
+ *
+ * They are opposite facts wearing similar words: rejected means this agency
+ * never agreed, ended means it did and the arrangement is over. Filing a former
+ * partner under "declined" would misrepresent the agency's own history back to
+ * it — and this is the tab someone opens to answer "who did we used to work
+ * with".
+ */
+const FILTERS = ["pending", "approved", "rejected", "ended"] as const;
+
+/**
+ * Colour for the status pill on the detail pane.
+ *
+ * `ended` is INK, deliberately not red: red is the colour this portal uses for
+ * something wrong or refused, and a partnership that simply ran its course is
+ * neither. Sharing `rejected`'s red would tell an agency it had turned away a
+ * venue it actually worked with for months.
+ */
+const STATUS_PILL_VARIANT: Record<
+	AgencyOutletApproveStatus,
+	"amber" | "green" | "red" | "ink"
+> = {
+	pending: "amber",
+	approved: "green",
+	rejected: "red",
+	ended: "ink",
+};
 
 /**
  * The venue's postal address on one line, skipping whatever is missing.
@@ -76,7 +114,15 @@ function formatRequestedOn(iso: string): string | null {
 	});
 }
 
-/** One labelled fact. Renders nothing at all when the venue has no value for it. */
+/**
+ * One labelled fact inside an info card. Renders nothing at all when the venue
+ * has no value for it.
+ *
+ * Skipping rather than printing "—" is what lets the two cards below carry a
+ * different number of rows each without either looking broken: on the live
+ * registry most of these fields are empty, and six labelled dashes tell the
+ * agency less about a venue than two lines that actually say something.
+ */
 function DetailRow({
 	icon: Icon,
 	label,
@@ -88,12 +134,79 @@ function DetailRow({
 }) {
 	if (!value?.trim()) return null;
 	return (
-		<div className="flex items-start gap-2">
-			<Icon className="iz-muted mt-0.5 h-4 w-4 shrink-0" />
+		<div className="mt-2 flex items-start gap-2 first-of-type:mt-0">
+			<Icon className="iz-muted mt-0.5 h-3.5 w-3.5 shrink-0" />
 			<div className="min-w-0">
-				<dt className="iz-tiny iz-muted">{label}</dt>
-				<dd className="text-sm">{value}</dd>
+				<div className="iz-tiny iz-muted leading-tight">{label}</div>
+				<div className="text-sm leading-snug break-words">{value}</div>
 			</div>
+		</div>
+	);
+}
+
+/**
+ * "We have worked together before" — the fact that turns a hard decision into
+ * an easy one.
+ *
+ * A venue whose partnership was ended and then requested again arrives in the
+ * pending queue as an ordinary row, identical to a stranger's. The information
+ * that settles it already exists in `agency_outlet_event`; the only reason the
+ * decision was hard is that nobody was shown it.
+ *
+ * Renders nothing when there is no ending to report, so a genuinely new request
+ * stays clean. The two branches matter: a partnership that RAN gets its dates,
+ * while a request withdrawn before anyone answered has no dates to give and
+ * should not be dressed up as a working relationship.
+ */
+function ReturningPartnerNote({
+	link,
+	variant = "line",
+}: {
+	link: AgencyOutletLink;
+	/**
+	 * `line` is the one-line version for a list row, where it competes with the
+	 * venue name and must stay quiet. `callout` is the detail-pane version,
+	 * where this is the fact that changes the decision and truncating it would
+	 * hide the half that matters.
+	 */
+	variant?: "line" | "callout";
+}) {
+	const { t } = usePortalLocale();
+	if (!link.endedAt) return null;
+
+	const endedOn = formatRequestedOn(link.endedAt);
+	if (!endedOn) return null;
+
+	const by =
+		link.endedBySide === "agency"
+			? t.approvals.returningEndedByYou
+			: link.endedBySide === "outlet"
+				? t.approvals.returningEndedByOutlet
+				: null;
+
+	const worked = link.firstApprovedAt
+		? fill(t.approvals.returningWorkedWith, {
+				from: formatRequestedOn(link.firstApprovedAt) ?? "",
+				to: endedOn,
+			})
+		: fill(t.approvals.returningAskedBefore, { date: endedOn });
+
+	if (variant === "callout") {
+		return (
+			<div className="flex items-start gap-2 rounded-xl border border-[var(--iz-gold)]/25 bg-[var(--iz-gold)]/[0.06] px-3.5 py-2.5">
+				<History className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-gold)]" />
+				<div className="min-w-0">
+					<div className="text-sm font-semibold leading-snug">{worked}</div>
+					{by && <div className="iz-tiny iz-muted mt-0.5">{by}</div>}
+				</div>
+			</div>
+		);
+	}
+
+	return (
+		<div className="iz-tiny iz-muted mt-0.5 flex items-center gap-1">
+			<History className="h-3 w-3 shrink-0" />
+			<span className="truncate">{by ? `${worked} · ${by}` : worked}</span>
 		</div>
 	);
 }
@@ -148,7 +261,9 @@ export function OutletLinkingList({
 						? t.approvals.noOutletsPending
 						: filter === "approved"
 							? t.approvals.noOutletsApproved
-							: t.approvals.noOutletsRejected}
+							: filter === "ended"
+								? t.approvals.noOutletsEnded
+								: t.approvals.noOutletsRejected}
 				</p>
 			) : (
 				queue.links.map((link) => (
@@ -170,6 +285,7 @@ export function OutletLinkingList({
 						<div className="min-w-0 flex-1 text-left">
 							<div className="truncate font-semibold">{link.outletName}</div>
 							<OutletPlace link={link} />
+							<ReturningPartnerNote link={link} />
 						</div>
 					</button>
 				))
@@ -192,6 +308,13 @@ export function OutletLinkingDetail({
 	const { t } = usePortalLocale();
 	const queue = useAgencyOutletLinks(filter);
 	const [rejecting, setRejecting] = useState(false);
+	/**
+	 * Ending is behind its own confirm step, like declining — and for a stronger
+	 * reason. Declining answers a question that is already open; ending closes a
+	 * working relationship that nobody asked about, and the venue finds out by
+	 * discovering it can no longer post.
+	 */
+	const [ending, setEnding] = useState(false);
 	const [reason, setReason] = useState("");
 
 	const link = queue.links.find((l) => l.outletId === selectedOutletId) ?? null;
@@ -217,10 +340,22 @@ export function OutletLinkingDetail({
 		onDecided();
 	};
 
+	const endPartnership = async () => {
+		await queue.end({
+			outletId: link.outletId,
+			reason: reason.trim() || undefined,
+		});
+		setEnding(false);
+		setReason("");
+		// Same reason as `decide`: the row has moved from "Working with you" to
+		// "Ended" and is no longer in this filter's results.
+		onDecided();
+	};
+
 	return (
 		<div className="flex flex-col gap-4">
 			<div className="iz-approvals-detail-head">
-				<div className="flex items-start gap-3">
+				<div className="iz-approvals-detail-profile">
 					{/* The venue's REAL logo. `logoImage` is an R2 object key, so it goes
 					    through the shared tile rather than into a bare <img> — that
 					    component owns the resolver and the map-pin fallback for the
@@ -245,25 +380,71 @@ export function OutletLinkingDetail({
 						)}
 					</div>
 				</div>
+				{/* WHICH STATE this link is in, stated on the detail rather than left
+				    to be inferred from which tab happens to be selected. The pane is
+				    deep-linkable and the tab strip is off to the left; a screen whose
+				    only answer to "are we working with them?" is a highlighted chip
+				    somewhere else is a screen that gets misread. */}
+				<div className="iz-approvals-detail-actions">
+					<IzPill variant={STATUS_PILL_VARIANT[link.approveStatus]}>
+						{STATUS_LABEL[link.approveStatus](t)}
+					</IzPill>
+				</div>
 			</div>
 
-			<dl className="flex flex-col gap-2">
-				<DetailRow
-					icon={MapPin}
-					label={t.approvals.address}
-					value={formatOutletAddress(link)}
-				/>
-				<DetailRow
-					icon={FileText}
-					label={t.approvals.companyRegistration}
-					value={link.ssmNo ?? link.businessLicense}
-				/>
-				<DetailRow
-					icon={Calendar}
-					label={t.approvals.requestedOn}
-					value={formatRequestedOn(link.createdAt)}
-				/>
-			</dl>
+			{/* Full width and boxed, not a caption under the name. This is the fact
+			    that changes the decision, so it gets the weight of a finding rather
+			    than the weight of a timestamp. */}
+			<ReturningPartnerNote link={link} variant="callout" />
+
+			<div className="iz-approvals-info-grid">
+				<div className="iz-approvals-info-card">
+					<div className="iz-approvals-info-title">
+						{t.approvals.detailVenueTitle}
+					</div>
+					<DetailRow
+						icon={MapPin}
+						label={t.approvals.address}
+						value={formatOutletAddress(link)}
+					/>
+					<DetailRow
+						icon={FileText}
+						label={t.approvals.companyRegistration}
+						value={link.ssmNo ?? link.businessLicense}
+					/>
+				</div>
+
+				{/* The RELATIONSHIP, kept apart from the venue's own particulars.
+				    They answer different questions — "who are these people" versus
+				    "what is our history with them" — and one flat list of six rows
+				    made the reader do that sorting themselves. */}
+				<div className="iz-approvals-info-card">
+					<div className="iz-approvals-info-title">
+						{t.approvals.detailPartnershipTitle}
+					</div>
+					<DetailRow
+						icon={Calendar}
+						label={t.approvals.requestedOn}
+						value={formatRequestedOn(link.createdAt)}
+					/>
+					{/* Both render nothing when null, so a brand-new request shows one
+					    line here instead of two empty labelled slots. */}
+					<DetailRow
+						icon={Handshake}
+						label={t.approvals.partnerSince}
+						value={
+							link.firstApprovedAt
+								? formatRequestedOn(link.firstApprovedAt)
+								: null
+						}
+					/>
+					<DetailRow
+						icon={Ban}
+						label={t.approvals.endedOn}
+						value={link.endedAt ? formatRequestedOn(link.endedAt) : null}
+					/>
+				</div>
+			</div>
 
 			{link.approveStatus === "rejected" && link.rejectReason && (
 				<p className="iz-tiny rounded-lg border border-rose-400/30 bg-rose-400/5 px-3 py-2 text-rose-400">
@@ -324,6 +505,76 @@ export function OutletLinkingDetail({
 						</button>
 					</div>
 				))}
+
+			{/* The agency's own way out of a partnership it accepted.
+			    Only on an APPROVED link: there is nothing to end while a request is
+			    still open (decline it), and nothing to end on one already declined
+			    or ended.
+			    Its own titled, rose-bordered section rather than a lone chip. The
+			    first cut was a small ghost button floating under the address and
+			    nobody could find it — but the answer is not a big red button either,
+			    since that would read as the main thing to do on a page where the
+			    main thing is usually nothing. A labelled section is findable by
+			    someone looking for it and ignorable by someone who is not. */}
+			{link.approveStatus === "approved" && (
+				<div className="mt-1 rounded-xl border border-rose-400/25 bg-rose-400/[0.04] px-4 py-3">
+					<div className="iz-approvals-info-title !mb-1.5 text-rose-300/80">
+						{t.approvals.endSectionTitle}
+					</div>
+					<p className="iz-tiny iz-muted">
+						{t.approvals.endPartnershipWarning}
+					</p>
+
+					{ending ? (
+						<div className="mt-2.5 flex flex-col gap-2">
+							<textarea
+								className="iz-field-input w-full !text-sm"
+								rows={3}
+								placeholder={t.approvals.endReasonHint}
+								value={reason}
+								onChange={(e) => setReason(e.target.value)}
+							/>
+							<div className="flex gap-2">
+								<button
+									type="button"
+									className="iz-btn iz-btn-ghost flex-1"
+									onClick={() => {
+										setEnding(false);
+										setReason("");
+									}}
+								>
+									{t.common.cancel}
+								</button>
+								{/* The confirm is the ONLY thing on this screen wearing solid
+								    rose. It appears one deliberate click in, so by the time it
+								    is on screen the operator has already said what they want
+								    and the colour is confirmation, not decoration. */}
+								<button
+									type="button"
+									className="iz-btn !w-auto flex-1 !border-rose-400/50 !bg-rose-500/90 !text-white hover:!bg-rose-500 disabled:opacity-40"
+									disabled={queue.isEnding}
+									onClick={() => void endPartnership()}
+								>
+									<Ban className="mr-1 h-4 w-4" />
+									{queue.isEnding
+										? t.common.saving
+										: t.approvals.confirmEndPartnership}
+								</button>
+							</div>
+						</div>
+					) : (
+						<button
+							type="button"
+							className="iz-btn !mt-2.5 !w-auto !border-rose-400/40 !bg-transparent !text-rose-300 hover:!border-rose-400/70 hover:!bg-rose-400/10 disabled:opacity-40"
+							disabled={queue.isEnding}
+							onClick={() => setEnding(true)}
+						>
+							<Ban className="mr-1 h-4 w-4" />
+							{t.approvals.endPartnership}
+						</button>
+					)}
+				</div>
+			)}
 		</div>
 	);
 }

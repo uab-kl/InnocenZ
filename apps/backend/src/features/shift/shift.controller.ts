@@ -226,11 +226,23 @@ export class ShiftControllerClass {
       const payTiersByShift = await this.shiftRepository.listPayTiersForShifts(
         shifts.map((s) => s.id),
       );
+      // HOW FULL THE SHIFT IS, across every agency it was posted to (0124). The
+      // roster cannot compute this for itself: `GET /shift-assignment` is scoped to
+      // the caller's own agency, so a client counting the rows it can see reports its
+      // own contribution and offers seats another agency has already filled.
+      const staffedByShift = await this.shiftRepository.countStaffedForShifts(
+        shifts.map((s) => s.id),
+      );
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));
       res.status(200).json({
         success: true,
         message: 'OK',
-        data: shifts.map((s) => ({ ...s, payTiers: payTiersByShift.get(s.id) ?? [] })),
+        data: shifts.map((s) => ({
+          ...s,
+          payTiers: payTiersByShift.get(s.id) ?? [],
+          staffedCount: staffedByShift.get(s.id)?.total ?? 0,
+          staffedBuckets: staffedByShift.get(s.id)?.byBucket ?? {},
+        })),
         pagination: { page, pageSize, totalCount, totalPages, hasNextPage: page < totalPages, hasPrevPage: page > 1 },
       });
     } catch (error) {
@@ -250,9 +262,17 @@ export class ShiftControllerClass {
       const scope = await this.resolveScope(req);
       // Hide existence of records outside the caller's scope (404, not 403).
       // An outlet caller is matched on the shift's outlet rather than its agency.
+      //
+      // The agency arm goes through `shift_agency` (0124), NOT `shift.agency_id`
+      // — that column is only the ANCHOR, so comparing it here 404'd the shift
+      // for every invited agency except the first. The LIST query already
+      // resolved through `shift_agency`, which made the failure maximally
+      // confusing: the shift sat right there in the roster, and opening it said
+      // it did not exist.
       const visible =
         scope.isAdmin ||
-        (scope.agencyId !== null && shift.agencyId === scope.agencyId) ||
+        (scope.agencyId !== null &&
+          (await this.shiftRepository.isAgencyInvited(shift.id, scope.agencyId))) ||
         scope.outletIds.includes(shift.outletId);
       if (!visible) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
@@ -261,7 +281,17 @@ export class ShiftControllerClass {
       // Fold in the per-shift pay-tier overrides so the outlet portal can render
       // and re-edit exactly what it posted (empty when it uses workspace defaults).
       const payTiers = await this.shiftRepository.listPayTiersForShift(shift.id);
-      res.status(200).json({ success: true, message: 'OK', data: { ...shift, payTiers } });
+      const staffed = (await this.shiftRepository.countStaffedForShifts([shift.id])).get(shift.id);
+      res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: {
+          ...shift,
+          payTiers,
+          staffedCount: staffed?.total ?? 0,
+          staffedBuckets: staffed?.byBucket ?? {},
+        },
+      });
     } catch (error) {
       logger.error('[ShiftController.getById] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -588,10 +618,29 @@ export class ShiftControllerClass {
       });
     }
 
-    const members = await this.agencyMemberRepository.listByAgency(shift.agencyId);
-    const agencyRecipients = members
-      .filter((m) => m.status === 'active')
-      .map((m) => m.userId);
+    // EVERY invited agency, not just the anchor (0124).
+    //
+    // The PRs above are notified from `shift_assignment`, so they already hear
+    // about this correctly. Reading `shift.agencyId` here meant that on a shared
+    // shift the other agencies' PRs were told their booking had gone while the
+    // agencies that rostered them were told nothing — the worst possible split,
+    // because the first the agency learns of it is a PR asking why.
+    const invited =
+      (await this.shiftRepository.listAgencyIdsForShifts([shift.id])).get(shift.id) ??
+      [shift.agencyId];
+    const memberLists = await Promise.all(
+      invited.map((agencyId) => this.agencyMemberRepository.listByAgency(agencyId)),
+    );
+    // Deduped: one person can hold a membership at more than one of the invited
+    // agencies, and they should not get the same withdrawal twice.
+    const agencyRecipients = [
+      ...new Set(
+        memberLists
+          .flat()
+          .filter((m) => m.status === 'active')
+          .map((m) => m.userId),
+      ),
+    ];
     if (agencyRecipients.length === 0) return;
     await notifyMany(agencyRecipients, {
       kind: 'shift_cancelled',

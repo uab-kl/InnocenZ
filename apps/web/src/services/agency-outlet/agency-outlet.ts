@@ -5,6 +5,8 @@ import type {
 	AgencyDirectoryEntry,
 	AgencyOutletApproveStatus,
 	AgencyOutletLink,
+	AgencyOutletLinkEvent,
+	AgencyOutletLinkEventsApiResponse,
 	AgencyOutletLinksApiResponse,
 	OutletAgencyLink,
 	OutletAgencyLinksApiResponse,
@@ -81,13 +83,45 @@ export async function decideOutletLink(
 	});
 }
 
-/** Agency drops a venue it had accepted. Posted shifts are untouched. */
+/**
+ * Agency ends a partnership it had accepted.
+ *
+ * ENDS the link rather than deleting it (0127). Shifts already posted are
+ * untouched, and this agency keeps sight of the venue until the last of them
+ * has passed — the venue simply cannot send it new work.
+ *
+ * DELETE by verb because from the caller's side this is "remove my link"; the
+ * server decides that honouring it means ending, not erasing. `reason` is
+ * optional and lands on the event, never on the link row.
+ */
 export async function unlinkOutlet(
 	outletId: string,
 	onRefreshFail: () => void,
+	reason?: string,
 ): Promise<void> {
 	const client = getClient(onRefreshFail);
-	await client.delete(`/agency-outlet/links/${outletId}`);
+	// Axios wants a DELETE body under `data`. Passing `{ reason }` as the second
+	// argument would send it as the request CONFIG instead and drop it silently.
+	await client.delete(`/agency-outlet/links/${outletId}`, {
+		data: { reason },
+	});
+}
+
+/**
+ * One partnership's whole timeline, newest first.
+ *
+ * Agency lane only — the outlet has no screen for its own history yet, and an
+ * endpoint with no caller is a gate nobody remembers to check.
+ */
+export async function fetchOutletLinkHistory(
+	outletId: string,
+	onRefreshFail: () => void,
+): Promise<AgencyOutletLinkEvent[]> {
+	const client = getClient(onRefreshFail);
+	const response = await client.get<AgencyOutletLinkEventsApiResponse>(
+		`/agency-outlet/links/${outletId}/history`,
+	);
+	return response.data.data ?? [];
 }
 
 /**

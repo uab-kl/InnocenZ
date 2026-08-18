@@ -6,6 +6,7 @@ import {
 	type AgencyOutletLink,
 	decideOutletLink,
 	fetchAgencyOutletLinks,
+	unlinkOutlet,
 } from "@/services/agency-outlet";
 
 /**
@@ -36,12 +37,30 @@ export interface AgencyOutletLinkQueue {
 		rejectReason?: string;
 	}) => Promise<void>;
 	isDeciding: boolean;
+	/**
+	 * End a partnership this agency had accepted.
+	 *
+	 * Separate from `decide` because it is not a verdict on a request: rejecting
+	 * says "we never agreed", ending says "we did, and it is over". They reach
+	 * different endpoints and mean opposite things about the shared history, so
+	 * folding them into one call would invite a screen to send the wrong one.
+	 */
+	end: (input: { outletId: string; reason?: string }) => Promise<void>;
+	isEnding: boolean;
 }
 
 /**
  * A link carried over by migration 0123's backfill is a long-standing partner,
  * not a new request. Counting those as work-to-do would badge this tab over
  * settled relationships nobody needs to act on.
+ *
+ * ⚠️ `fromOnboarding` stops being true the moment the venue actually asks — the
+ * server derives it from the EVENT LOG, not from `created_by` alone. It used to
+ * read that origin column by itself, which never changes, so a backfilled
+ * partnership that was ended and then genuinely re-requested came back flagged
+ * as "not a real request" and was filtered out of this list AND out of the
+ * count: the venue was shown "Awaiting approval" while the agency was shown
+ * nothing to approve. Do not re-derive this flag client-side.
  */
 function isRealRequest(link: AgencyOutletLink): boolean {
 	return !link.fromOnboarding;
@@ -89,6 +108,19 @@ export function useAgencyOutletLinks(
 		},
 	});
 
+	const endMutation = useMutation({
+		mutationFn: (input: { outletId: string; reason?: string }) =>
+			unlinkOutlet(input.outletId, kickToLogin, input.reason),
+		onSuccess: () => {
+			queryClient.invalidateQueries({ queryKey: ["agency-outlet", "links"] });
+			// The venue drops out of this agency's outlet list — unless it still has
+			// shifts to finish, in which case 0127 deliberately keeps it there. Either
+			// way the list changes, and a stale one would show a former partner as a
+			// current one.
+			queryClient.invalidateQueries({ queryKey: ["agency", "outlets"] });
+		},
+	});
+
 	const links = useMemo(() => {
 		const rows = listQuery.data ?? [];
 		return filter === "pending" ? rows.filter(isRealRequest) : rows;
@@ -108,5 +140,9 @@ export function useAgencyOutletLinks(
 			await decideMutation.mutateAsync(input);
 		},
 		isDeciding: decideMutation.isPending,
+		end: async (input) => {
+			await endMutation.mutateAsync(input);
+		},
+		isEnding: endMutation.isPending,
 	};
 }

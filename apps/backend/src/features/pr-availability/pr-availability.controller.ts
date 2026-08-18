@@ -142,13 +142,59 @@ export class PrAvailabilityControllerClass {
       if (!agencyId) {
         return res.status(200).json({ success: true, message: 'OK', data: [] });
       }
-      const rows = await this.prAvailabilityRepository.listForAgency({
-        agencyId,
-        from: parsed.data.from,
-        to: parsed.data.to,
-        userId: req.query.prId as string | undefined,
-      });
-      res.status(200).json({ success: true, message: 'OK', data: rows });
+      const [rows, committedElsewhere] = await Promise.all([
+        this.prAvailabilityRepository.listForAgency({
+          agencyId,
+          from: parsed.data.from,
+          to: parsed.data.to,
+          userId: req.query.prId as string | undefined,
+        }),
+        // THE DAY BELONGS TO THE PR. A day this PR already works for another agency is
+        // unavailable to this one, and it arrives here as an ordinary block so the
+        // picker greys it with the wording it already has — see the repository note on
+        // why the two must stay indistinguishable.
+        this.prAvailabilityRepository.listCommittedElsewhere({
+          agencyId,
+          from: parsed.data.from,
+          to: parsed.data.to,
+          userId: req.query.prId as string | undefined,
+        }),
+      ]);
+
+      // A day already blocked by hand wins: it is a real row with the PR's own reason,
+      // and replacing it with a derived stand-in would throw those words away.
+      //
+      // ⚠️ THE FIELD IS `unavailableDate`, NOT `date` — both halves of this merge
+      // had it wrong, and the mistake was invisible twice over. The `as {...}`
+      // casts asserted a shape the row does not have, so `tsc` had nothing to
+      // object to; and the runtime failure is silent, because a derived entry
+      // arrived carrying `unavailableDate: undefined`, `blockedDatesByPr` added
+      // `undefined` to the set, and no calendar day ever matched it. The whole
+      // committed-elsewhere feature was wired end to end and greyed nothing.
+      const declared = new Set(rows.map((r) => `${r.userId}|${r.unavailableDate}`));
+      const derived = committedElsewhere
+        .filter((c) => !declared.has(`${c.userId}|${c.date}`))
+        .map((c) => ({
+          id: `derived-${String(c.userId)}-${String(c.date)}`,
+          userId: String(c.userId),
+          // The repository returns this column as `date`; the WIRE name is
+          // `unavailableDate`, because that is what a real `pr_availability` row
+          // is called and a derived block has to be indistinguishable from one.
+          unavailableDate: String(c.date),
+          // No reason, deliberately: a self-declared block often carries none either,
+          // so silence here is not a tell.
+          reason: null,
+          // Shaped like a real row rather than a partial one. A consumer reading
+          // any of these off a genuine block and finding them missing here would
+          // have a second way to tell the two apart.
+          prName: null,
+          createdAt: null,
+          updatedAt: null,
+          createdBy: null,
+          updatedBy: null,
+        }));
+
+      res.status(200).json({ success: true, message: 'OK', data: [...rows, ...derived] });
     } catch (error) {
       logger.error('[PrAvailabilityController.listForAgency] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

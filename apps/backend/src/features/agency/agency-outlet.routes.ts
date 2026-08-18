@@ -57,11 +57,21 @@ router.get(
   canDecideLinks,
   agencyOutletController.listForMyAgency.bind(agencyOutletController),
 );
+// Declared BEFORE `/links/:outletId` — Express matches in declaration order, so
+// a bare `:outletId` listed first would happily swallow the literal segment
+// "history" as an outlet id and 404 with nothing to explain why.
+router.get(
+  '/links/:outletId/history',
+  canDecideLinks,
+  agencyOutletController.history.bind(agencyOutletController),
+);
 router.patch(
   '/links/:outletId',
   canDecideLinks,
   agencyOutletController.decide.bind(agencyOutletController),
 );
+// DELETE by verb, `ended` by effect (0127): the row survives, carrying the
+// history of a partnership that really happened. See the controller.
 router.delete(
   '/links/:outletId',
   canDecideLinks,

@@ -70,8 +70,18 @@ const PR_TIER_TO_OUTLET_LABEL: Readonly<Record<string, string>> = {
 };
 const COMMISSION_ONLY_BUCKET = "commission_only";
 
-/** Which demand bucket a PR counts against; null = a tier the shift never named. */
-function bucketForPrTier(tier: string | null): string | null {
+/**
+ * Which demand bucket a PR counts against; null = a tier the shift never named.
+ *
+ * A PR's raw membership tier (`'tier_1'`) as the OUTLET BUCKET it fills (`'Tier I'`).
+ *
+ * Exported because every count of "which seats are taken" must speak the same
+ * vocabulary as the demand: `shift_pay_tier.tier` and the server's
+ * `staffedBuckets` are both outlet labels, while `agency_pr.tier` is the raw
+ * enum. Comparing the two directly matches nothing, silently — no error, no
+ * zero, just a tier that never fills up.
+ */
+export function bucketForPrTier(tier: string | null): string | null {
 	if (!tier) return null;
 	if (tier === COMMISSION_ONLY_BUCKET) return COMMISSION_ONLY_BUCKET;
 	return PR_TIER_TO_OUTLET_LABEL[tier] ?? null;
@@ -162,9 +172,10 @@ function prDisplayName(pr: PrPersonnel): string {
  * Shared by the planner and `shiftBlockedFor` because those two disagreeing about
  * one shift is precisely how the grid comes to offer a pairing the API refuses.
  */
-function askedByBucket(
-	payTiers: ShiftPayTierDemand[] | undefined,
-): { asked: Map<string, number>; totalAsked: number } {
+function askedByBucket(payTiers: ShiftPayTierDemand[] | undefined): {
+	asked: Map<string, number>;
+	totalAsked: number;
+} {
 	const asked = new Map<string, number>();
 	let totalAsked = 0;
 	for (const row of payTiers ?? []) {

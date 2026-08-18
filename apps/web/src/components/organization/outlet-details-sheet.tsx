@@ -95,12 +95,19 @@ const LINK_STATUS_LABEL: Record<AgencyOutletApproveStatus, string> = {
 	approved: "Working with this venue",
 	pending: "Awaiting the agency's decision",
 	rejected: "Declined by the agency",
+	// Past tense, and kept distinct from "declined": ended means the two DID
+	// work together and the arrangement is over. An admin reading a support
+	// ticket has to tell those apart — "they never accepted us" and "we stopped
+	// working together" lead to completely different next questions.
+	ended: "Worked together — partnership ended",
 };
 
 const LINK_STATUS_CLASS: Record<AgencyOutletApproveStatus, string> = {
 	approved: "text-emerald-600 dark:text-emerald-400",
 	pending: "text-amber-600 dark:text-amber-400",
 	rejected: "text-rose-600 dark:text-rose-400",
+	// Grey, not red — nothing went wrong here.
+	ended: "text-muted-foreground",
 };
 
 /**

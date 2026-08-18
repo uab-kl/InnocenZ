@@ -1,6 +1,25 @@
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
+import {
+	AlertDialog,
+	AlertDialogAction,
+	AlertDialogCancel,
+	AlertDialogContent,
+	AlertDialogDescription,
+	AlertDialogFooter,
+	AlertDialogHeader,
+	AlertDialogTitle,
+} from "@agency-portal/components/ui/alert-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, Clock, Plus, Trash2, X } from "lucide-react";
+import {
+	Ban,
+	Building2,
+	Check,
+	Clock,
+	Plus,
+	RotateCcw,
+	Trash2,
+	X,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
@@ -23,8 +42,10 @@ import {
  * approved once, then used freely — which is why the status vocabulary here is
  * deliberately identical.
  *
- * Removing a link only stops future work. Shifts already posted to that agency
- * keep their own record and are untouched.
+ * Removing a link ENDS it rather than erasing it (0127). Shifts already posted
+ * to that agency keep their own record and are untouched, the row stays with
+ * its history, and asking again is a request like any other — approved once
+ * more before any new work can be sent.
  */
 
 const STATUS_META: Record<
@@ -50,7 +71,30 @@ const STATUS_META: Record<
 		className: "text-rose-400 border-rose-400/30 bg-rose-400/10",
 		Icon: X,
 	},
+	// Deliberately NOT sharing `rejected`'s red. Declined means they never
+	// agreed; ended means they did and it is over. Collapsing the two into one
+	// badge would tell a venue its long-standing partner had refused it.
+	ended: {
+		label: (t) => t.agencyLinks.statusEnded,
+		className: "iz-muted border-[var(--iz-line)]",
+		Icon: Ban,
+	},
 };
+
+/**
+ * A day, not a timestamp — "ended on 12 Aug 2026" is the whole useful fact, and
+ * the minute it happened only adds noise to a line about a business decision.
+ *
+ * `en-GB` matches the rest of the outlet portal (see `outlet-date-popover`);
+ * the surrounding sentence is translated, the date format is house style.
+ */
+function formatEndedOn(iso: string): string {
+	return new Date(iso).toLocaleDateString("en-GB", {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+	});
+}
 
 function StatusBadge({ status }: { status: AgencyOutletApproveStatus }) {
 	const { t } = usePortalLocale();
@@ -95,11 +139,34 @@ export function AgencyLinksPanel({
 		[linksQuery.data],
 	);
 
-	/** Only agencies not already linked — re-requesting an existing link is a no-op. */
+	/**
+	 * Only agencies with no link row at all.
+	 *
+	 * An ENDED partnership is still a row, so it stays out of this picker and is
+	 * re-requested from its own list entry instead. Offering it here as if it
+	 * were a stranger would throw away the one thing the row knows — that these
+	 * two have worked together before.
+	 */
 	const addable = useMemo(() => {
 		const taken = new Set(links.map((l) => l.agencyId));
 		return (directoryQuery.data ?? []).filter((a) => !taken.has(a.id));
 	}, [directoryQuery.data, links]);
+
+	/**
+	 * The agencies this venue is asking to work with RIGHT NOW — the list the
+	 * save endpoint wants.
+	 *
+	 * Ended links are excluded, which is what makes every action below a
+	 * one-line set operation: ending an agency is this list minus one, and
+	 * reviving one is this list plus one. Building the payload from `links`
+	 * instead would silently revive EVERY ended partnership on the screen,
+	 * because the server reads an id's presence as "I want this".
+	 */
+	const activeAgencyIds = useMemo(
+		() =>
+			links.filter((l) => l.approveStatus !== "ended").map((l) => l.agencyId),
+		[links],
+	);
 
 	const save = useMutation({
 		// The endpoint takes the WHOLE desired list, not a delta. Agencies that
@@ -122,18 +189,47 @@ export function AgencyLinksPanel({
 
 	const requestLink = () => {
 		if (!picked) return;
-		save.mutate([...links.map((l) => l.agencyId), picked]);
+		save.mutate([...activeAgencyIds, picked]);
 	};
 
-	const removeLink = (agencyId: string) => {
-		save.mutate(
-			links.filter((l) => l.agencyId !== agencyId).map((l) => l.agencyId),
-		);
+	/**
+	 * Ask an ended partnership to start again.
+	 *
+	 * Goes back to AWAITING APPROVAL, never straight to approved — including
+	 * when this venue is the side that ended it. The case that forces the rule
+	 * is the other one: if the agency ended it, restoring on the venue's say-so
+	 * would undo the agency's own decision without telling anyone. A rule that
+	 * depended on who ended it would be invisible here and would fail quietly,
+	 * so coming back always needs a yes.
+	 */
+	const requestAgain = (agencyId: string) => {
+		save.mutate([...activeAgencyIds, agencyId]);
+	};
+
+	/**
+	 * The link the operator has asked to end, held until they confirm.
+	 *
+	 * Ending is consequential in a way a bin icon does not suggest: an APPROVED
+	 * link took a human decision at the agency to obtain, ending it stops all
+	 * new work, and the only route back is to ask again and wait. One misplaced
+	 * click should not be able to do that.
+	 */
+	const [pendingRemoval, setPendingRemoval] = useState<OutletAgencyLink | null>(
+		null,
+	);
+
+	const endLink = (agencyId: string) => {
+		save.mutate(activeAgencyIds.filter((id) => id !== agencyId));
+		setPendingRemoval(null);
 	};
 
 	const approvedCount = links.filter(
 		(l) => l.approveStatus === "approved",
 	).length;
+	// Whether anyone is actually still deciding. Without this, a venue whose
+	// links have all ENDED would be told it is "waiting for an agency to
+	// accept" — waiting on nobody, with no hint that the next move is its own.
+	const hasPending = links.some((l) => l.approveStatus === "pending");
 
 	return (
 		<>
@@ -173,26 +269,69 @@ export function AgencyLinksPanel({
 											{link.rejectReason}
 										</div>
 									)}
+									{/* WHO ended it, not just that it ended. "You ended this"
+									    and "they ended this" are the same status and entirely
+									    different news — one is a decision to reconsider, the
+									    other is a refusal to respect. `system` and `admin`
+									    endings fall through to neither line rather than being
+									    attributed to a side that did not act. */}
+									{link.approveStatus === "ended" && link.endedAt && (
+										<div className="iz-tiny iz-muted mt-1">
+											{link.endedBySide === "outlet"
+												? fill(t.agencyLinks.endedByYou, {
+														date: formatEndedOn(link.endedAt),
+													})
+												: link.endedBySide === "agency"
+													? fill(t.agencyLinks.endedByThem, {
+															name: link.agencyName,
+															date: formatEndedOn(link.endedAt),
+														})
+													: null}
+										</div>
+									)}
 								</div>
 
 								<StatusBadge status={link.approveStatus} />
 
-								{canManage && (
+								{canManage && link.approveStatus === "ended" && (
+									/* Reviving is the one action an ended row offers, and it is
+									   spelled out rather than left as an icon: nothing else on
+									   this screen restarts a relationship, so there is no
+									   established meaning for the operator to lean on. */
+									<button
+										type="button"
+										title={t.agencyLinks.requestAgainHint}
+										className="iz-tiny inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--iz-line)] px-2.5 py-1.5 transition-colors hover:border-[var(--iz-gold)]/50 hover:text-[var(--iz-gold)] disabled:opacity-40"
+										disabled={save.isPending}
+										onClick={() => requestAgain(link.agencyId)}
+									>
+										<RotateCcw className="h-3.5 w-3.5" />
+										{t.agencyLinks.requestAgain}
+									</button>
+								)}
+
+								{canManage && link.approveStatus !== "ended" && (
 									/* Deliberately NOT `iz-btn`: that class is `width: 100%`
 									   with 14px padding — a full-width CTA. Using it for an icon
 									   made the button swallow the row and collapse the name to
 									   zero width, which is why the agency looked nameless. */
 									<button
 										type="button"
-										aria-label={fill(t.agencyLinks.removeNamed, {
-											name: link.agencyName,
-										})}
-										title={fill(t.agencyLinks.removeNamed, {
-											name: link.agencyName,
-										})}
+										aria-label={fill(
+											link.approveStatus === "approved"
+												? t.agencyLinks.endNamed
+												: t.agencyLinks.withdrawNamed,
+											{ name: link.agencyName },
+										)}
+										title={fill(
+											link.approveStatus === "approved"
+												? t.agencyLinks.endNamed
+												: t.agencyLinks.withdrawNamed,
+											{ name: link.agencyName },
+										)}
 										className="grid h-8 w-8 shrink-0 place-items-center rounded-lg border border-[var(--iz-line)] iz-muted transition-colors hover:border-rose-400/40 hover:text-rose-400 disabled:opacity-40"
 										disabled={save.isPending}
-										onClick={() => removeLink(link.agencyId)}
+										onClick={() => setPendingRemoval(link)}
 									>
 										<Trash2 className="h-4 w-4" />
 									</button>
@@ -246,10 +385,50 @@ export function AgencyLinksPanel({
 					</p>
 				)}
 
-				{approvedCount === 0 && links.length > 0 && (
+				{approvedCount === 0 && hasPending && (
 					<p className="iz-tiny iz-muted mt-2">{t.agencyLinks.noApprovedYet}</p>
 				)}
 			</IzCard>
+
+			{/* Names what is actually lost, not just "are you sure". The two branches
+			    are two different acts wearing the same button: ENDING a partnership
+			    the agency agreed to, versus WITHDRAWING a request nobody has
+			    answered. Only the first costs anything, and giving the second the
+			    same grave warning would train people to click through both. */}
+			<AlertDialog
+				open={pendingRemoval !== null}
+				onOpenChange={(open) => {
+					if (!open) setPendingRemoval(null);
+				}}
+			>
+				<AlertDialogContent>
+					<AlertDialogHeader>
+						<AlertDialogTitle>
+							{fill(
+								pendingRemoval?.approveStatus === "approved"
+									? t.agencyLinks.endApprovedTitle
+									: t.agencyLinks.withdrawPendingTitle,
+								{ name: pendingRemoval?.agencyName ?? "" },
+							)}
+						</AlertDialogTitle>
+						<AlertDialogDescription>
+							{pendingRemoval?.approveStatus === "approved"
+								? t.agencyLinks.removeApprovedWarning
+								: t.agencyLinks.removePendingWarning}
+						</AlertDialogDescription>
+					</AlertDialogHeader>
+					<AlertDialogFooter>
+						<AlertDialogCancel>{t.common.cancel}</AlertDialogCancel>
+						<AlertDialogAction
+							onClick={() => pendingRemoval && endLink(pendingRemoval.agencyId)}
+						>
+							{pendingRemoval?.approveStatus === "approved"
+								? t.agencyLinks.confirmEnd
+								: t.agencyLinks.confirmWithdraw}
+						</AlertDialogAction>
+					</AlertDialogFooter>
+				</AlertDialogContent>
+			</AlertDialog>
 		</>
 	);
 }

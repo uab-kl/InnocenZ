@@ -77,9 +77,15 @@ export class ShiftSaleControllerClass {
 
       const scope = await this.resolveScope(req);
       // Ownership: the caller must own the shift the sale belongs to.
+      //
+      // Through `shift_agency` (0124), NOT `shift.agency_id` — the anchor. Same
+      // family as the assign gate: on a shared shift only the first agency
+      // addressed could record a sale, and the second was told the shift did not
+      // exist while its own PRs were working it.
       const owns =
         scope.isAdmin ||
-        (scope.agencyId !== null && shift.agencyId === scope.agencyId) ||
+        (scope.agencyId !== null &&
+          (await this.shiftRepository.isAgencyInvited(shift.id, scope.agencyId))) ||
         (isOutletCaller(scope) && scope.outletIds.includes(shift.outletId));
       if (!owns) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
@@ -122,7 +128,12 @@ export class ShiftSaleControllerClass {
         userId: pr.userId ?? parsed.data.userId ?? undefined,
         // Derived from the shift — authoritative, cannot be forged by the client.
         outletId: shift.outletId,
-        agencyId: shift.agencyId,
+        // WHOSE SALE THIS IS — the caller, not the shift's anchor. Same reason
+        // `shift_assignment.agency_id` records the supplier: on a shared shift
+        // this credited every agency's floor sales to whichever one the outlet
+        // happened to address first, and commission is computed off this column.
+        // Admin and outlet callers have no agency, so they keep the anchor.
+        agencyId: scope.agencyId ?? shift.agencyId,
         soldOn: shift.shiftDate,
         drinkUnits: parsed.data.drinkUnits ?? 0,
         drinkSalesRm: money(drinkSalesRm),

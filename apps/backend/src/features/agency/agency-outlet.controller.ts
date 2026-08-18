@@ -6,6 +6,7 @@ import type { AuthRepositoryClass } from '@/features/auth/auth.repository';
 import type { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import {
   DecideOutletLinkSchema,
+  EndOutletLinkSchema,
   ListAgencyOutletLinksQuerySchema,
   SyncOutletAgenciesSchema,
 } from '@/schema/agency-outlet.schema';
@@ -267,13 +268,65 @@ export class AgencyOutletControllerClass {
   }
 
   /**
-   * Agency drops a venue it had accepted.
+   * Agency ends a partnership it had accepted.
    *
-   * Removes only the link row. Shifts already posted to this agency hold their
-   * own FK and are untouched — this means "send me no more work from here", not
-   * "erase what we did together".
+   * ENDS the link (0127) rather than deleting it. Shifts already posted to this
+   * agency hold their own FK and are untouched, and the venue stays visible to
+   * this agency for as long as any of them is still to come — this means "send
+   * me no more work from here", not "erase what we did together", and not
+   * "abandon the PRs I already rostered".
+   *
+   * Still a DELETE verb: from the caller's side this is "remove my link with
+   * that venue", and ending is how the server honours it without losing the
+   * record. Renaming the route would break the agency portal for no gain.
    */
   async unlink(req: Request, res: Response) {
+    try {
+      const parsed = EndOutletLinkSchema.safeParse(req.body ?? {});
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+
+      const scope = await this.resolveScope(req);
+      if (!scope.agencyId) {
+        return res
+          .status(403)
+          .json({ success: false, message: 'No agency associated with this account', data: null });
+      }
+
+      const ended = await this.agencyOutletRepository.endLink(
+        scope.agencyId,
+        this.param(req, 'outletId'),
+        getActor(req),
+        // Hard-coded, never taken from the request. WHICH SIDE ended a
+        // partnership is the single fact the returning-partner copy turns on,
+        // and a client able to name it could blame the other side.
+        'agency',
+        parsed.data.reason,
+      );
+      if (!ended) {
+        return res
+          .status(404)
+          .json({ success: false, message: 'No active link with this outlet', data: null });
+      }
+      return res.json({ success: true, message: 'Partnership ended', data: null });
+    } catch (error) {
+      logger.error('[AgencyOutletController.unlink] Error:', error);
+      return res.status(500).json({ success: false, message: 'Failed to unlink', data: null });
+    }
+  }
+
+  /**
+   * Outlet-Linking tab — one partnership's whole timeline.
+   *
+   * The agency lane only. An outlet reading its own history is a fair ask, but
+   * no screen wants it yet, and an endpoint with no caller is a gate nobody
+   * remembers to check — the exact shape of the logged P0 on the agency router.
+   * Add the outlet lane when a screen needs it.
+   */
+  async history(req: Request, res: Response) {
     try {
       const scope = await this.resolveScope(req);
       if (!scope.agencyId) {
@@ -282,17 +335,16 @@ export class AgencyOutletControllerClass {
           .json({ success: false, message: 'No agency associated with this account', data: null });
       }
 
-      const removed = await this.agencyOutletRepository.removeLink(
+      const events = await this.agencyOutletRepository.listEvents(
         scope.agencyId,
         this.param(req, 'outletId'),
       );
-      if (!removed) {
-        return res.status(404).json({ success: false, message: 'Link not found', data: null });
-      }
-      return res.json({ success: true, message: 'Outlet unlinked', data: null });
+      return res.json({ success: true, message: 'Link history', data: events });
     } catch (error) {
-      logger.error('[AgencyOutletController.unlink] Error:', error);
-      return res.status(500).json({ success: false, message: 'Failed to unlink', data: null });
+      logger.error('[AgencyOutletController.history] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: 'Failed to load link history', data: null });
     }
   }
 }

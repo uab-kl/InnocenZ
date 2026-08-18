@@ -1,6 +1,15 @@
-import { and, asc, eq, gte, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, ne, notInArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
+import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
+// The SAME status set the roster and the capacity guard use — a private copy here
+// would let "who counts as staffed" drift between the count and the rule. Taken
+// from the MODEL, never the repository: repo-to-repo is how a cycle gets closed.
+import {
+  NON_STAFFING_STATUSES,
+  ShiftAssignmentTable,
+} from '@/features/shift-assignment/shift-assignment.model';
+import { bucketForPrTier } from '@/features/shift-assignment/tier-demand';
 import { DbTransaction } from '@/types/db-transaction';
 import {
   ShiftTable,
@@ -113,6 +122,129 @@ export class ShiftRepositoryClass {
         .where(and(...conditions));
     } catch (error) {
       logger.error('[ShiftRepository.listByOutletAroundDate] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * HOW FULL EACH SHIFT ACTUALLY IS, counting every agency.
+   *
+   * ⚠️ This exists because `GET /shift-assignment` is scoped to the caller's own
+   * agency — correctly, since one agency must not read another's roster. But a
+   * shift shared through `shift_agency` (0124) is filled BY BOTH, so a client
+   * counting the rows it can see reports its own contribution as the occupancy:
+   * agency A sees "0/2 · 2 open" on the very shift agency B has already half
+   * filled. Both then offer the same seats, and the second one to assign gets a
+   * 409 from the capacity guard with no way to have known.
+   *
+   * The fix is to share the COUNT and not the rows: this returns aggregates only,
+   * so nothing here can leak who the other agency sent.
+   *
+   * Buckets are keyed the way the assign guard keys them (`bucketForPrTier`),
+   * because the per-tier quota has the same split-brain problem as the headcount.
+   * The tier is read from `agency_pr` joined on BOTH `user_id` and `agency_id` —
+   * one person holds a row per agency and their tier can differ between them, so
+   * joining on the user alone would price a seat at the wrong agency's grade.
+   */
+  async countStaffedForShifts(
+    shiftIds: string[],
+  ): Promise<Map<string, { total: number; byBucket: Record<string, number> }>> {
+    const byShift = new Map<string, { total: number; byBucket: Record<string, number> }>();
+    if (shiftIds.length === 0) return byShift;
+    try {
+      const rows = await db
+        .select({
+          shiftId: ShiftAssignmentTable.shiftId,
+          tier: AgencyPrTable.tier,
+        })
+        .from(ShiftAssignmentTable)
+        .leftJoin(
+          AgencyPrTable,
+          and(
+            eq(AgencyPrTable.userId, ShiftAssignmentTable.prId),
+            eq(AgencyPrTable.agencyId, ShiftAssignmentTable.agencyId),
+          ),
+        )
+        .where(
+          and(
+            inArray(ShiftAssignmentTable.shiftId, shiftIds),
+            notInArray(ShiftAssignmentTable.status, [...NON_STAFFING_STATUSES]),
+          ),
+        );
+
+      for (const row of rows) {
+        const entry = byShift.get(row.shiftId) ?? { total: 0, byBucket: {} };
+        entry.total += 1;
+        const bucket = bucketForPrTier(row.tier);
+        if (bucket) entry.byBucket[bucket] = (entry.byBucket[bucket] ?? 0) + 1;
+        byShift.set(row.shiftId, entry);
+      }
+      return byShift;
+    } catch (error) {
+      logger.error('[ShiftRepository.countStaffedForShifts] Error:', error);
+      // A count that FAILED must not read as "nobody is on it" and invite an
+      // overfill. Throwing keeps the caller honest: it omits the field, and every
+      // consumer falls back to what it did before rather than to zero.
+      throw error;
+    }
+  }
+
+  /**
+   * Is this agency invited to this shift? THE SCOPE CHECK for a single shift.
+   *
+   * Its own method rather than `listAgencyIdsForShifts([id]).get(id)?.includes()`
+   * because that chain reads as a lookup rather than a permission test — and the
+   * thing it replaces, `shift.agencyId === scope.agencyId`, is a one-liner. A
+   * correct rule has to be as easy to write as the wrong one, or the wrong one
+   * comes back.
+   *
+   * Never compare `shift.agency_id` to the caller. That column is only the
+   * ANCHOR (0124) — the first agency the outlet addressed — so on a shift shared
+   * between two agencies the check passes for exactly one of them and 404s the
+   * other, which looks like a venue's roster vanishing with no error anywhere.
+   */
+  async isAgencyInvited(shiftId: string, agencyId: string): Promise<boolean> {
+    try {
+      const [row] = await db
+        .select({ shiftId: ShiftAgencyTable.shiftId })
+        .from(ShiftAgencyTable)
+        .where(
+          and(
+            eq(ShiftAgencyTable.shiftId, shiftId),
+            eq(ShiftAgencyTable.agencyId, agencyId),
+          ),
+        )
+        .limit(1);
+      return Boolean(row);
+    } catch (error) {
+      logger.error('[ShiftRepository.isAgencyInvited] Error:', error);
+      // A failed lookup must REFUSE, never wave through — this is a scope check.
+      return false;
+    }
+  }
+
+  /**
+   * Which agencies each shift was posted to (0124), keyed by shift id.
+   *
+   * Anything asking "may this agency see / price / staff this shift" reads THIS.
+   * `shift.agency_id` is only the ANCHOR — the first agency the outlet addressed —
+   * and scoping by it silently hides a shared shift from every other invited agency,
+   * with no error to notice.
+   */
+  async listAgencyIdsForShifts(shiftIds: string[]): Promise<Map<string, string[]>> {
+    const byShift = new Map<string, string[]>();
+    if (shiftIds.length === 0) return byShift;
+    try {
+      const rows = await db
+        .select({ shiftId: ShiftAgencyTable.shiftId, agencyId: ShiftAgencyTable.agencyId })
+        .from(ShiftAgencyTable)
+        .where(inArray(ShiftAgencyTable.shiftId, shiftIds));
+      for (const row of rows) {
+        byShift.set(row.shiftId, [...(byShift.get(row.shiftId) ?? []), row.agencyId]);
+      }
+      return byShift;
+    } catch (error) {
+      logger.error('[ShiftRepository.listAgencyIdsForShifts] Error:', error);
       throw error;
     }
   }
