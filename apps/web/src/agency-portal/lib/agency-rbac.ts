@@ -144,11 +144,23 @@ const ROLE_PERMISSIONS: Record<AgencySubRole, Permission[]> = {
 	],
 };
 
+/**
+ * What an agency operator is treated as when we do not KNOW what they are.
+ *
+ * Director — view only. Never the owner. An unresolved role is a question, not
+ * a promotion: a real session whose membership has not loaded yet (a fresh
+ * device, a different URL origin, a cold cache, a failed fetch) used to be
+ * handed the owner's full console until the answer arrived, and stayed there
+ * if it never did. Under-privileging for a moment is recoverable; granting the
+ * top lane for a moment is not.
+ */
+export const AGENCY_LEAST_PRIVILEGE: AgencySubRole = "agency_director";
+
 function resolveAgencySubRole(
 	role: AgencySubRole | null | undefined,
 ): AgencySubRole {
 	if (role && role in ROLE_PERMISSIONS) return role;
-	return "agency_owner";
+	return AGENCY_LEAST_PRIVILEGE;
 }
 
 /** Prefer module C/R/U from /auth/me when present; else fall back to sub-role matrix. */

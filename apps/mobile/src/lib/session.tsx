@@ -116,7 +116,10 @@ export function SessionProvider({ children }: { children: React.ReactNode }) {
         if (cancelled) return;
         setAgencies(
           rows
-            .filter((r) => r.approveStatus === 'approved')
+            // A PR awaiting DEPARTURE approval is still under the agency —
+            // shifts, vouchers and notifications keep flowing until the
+            // agency says yes. Only 'left' / 'rejected' / 'pending' are out.
+            .filter((r) => r.approveStatus === 'approved' || r.approveStatus === 'leave_pending')
             .map((r) => ({
               membershipId: `${r.agencyId}:${r.userId}`,
               userId: r.userId,

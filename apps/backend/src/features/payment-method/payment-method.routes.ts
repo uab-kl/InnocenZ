@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { requirePermission } from '@/middlewares/require-permission.js';
 import { paymentMethodController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
 
@@ -18,6 +19,11 @@ router.get(
 router.put(
   '/mine',
   requireRole('outlet', 'agency', 'admin'),
+  // The org billing card is a settings write. requireRole alone admitted any
+  // member of either portal, so a view-only Director could replace it. The
+  // module is seeded on BOTH portals and userHasPermission resolves each
+  // caller against their own, so one guard covers agency and outlet correctly.
+  requirePermission('settings', 'update'),
   paymentMethodController.upsertMine.bind(paymentMethodController),
 );
 

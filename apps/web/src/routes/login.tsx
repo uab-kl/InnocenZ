@@ -1,7 +1,15 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import axios from "axios";
-import { AlertCircle, ArrowLeft, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import {
+	AlertCircle,
+	ArrowLeft,
+	Eye,
+	EyeOff,
+	Loader2,
+	Lock,
+	Mail,
+} from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/landing/BrandLogo";
@@ -19,9 +27,9 @@ import {
 	InputGroupButton,
 	InputGroupInput,
 } from "@/components/ui/input-group";
+import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
-import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { hardNavigate } from "@/lib/hard-navigate";
 
 const ROLE_DASHBOARD: Record<string, string> = {
@@ -31,7 +39,9 @@ const ROLE_DASHBOARD: Record<string, string> = {
 };
 
 export const Route = createFileRoute("/login")({
-	validateSearch: (search: Record<string, unknown>): {
+	validateSearch: (
+		search: Record<string, unknown>,
+	): {
 		email?: string;
 		next?: string;
 	} => {
@@ -39,8 +49,22 @@ export const Route = createFileRoute("/login")({
 			typeof search.email === "string" ? search.email.trim() : undefined;
 		const nextRaw =
 			typeof search.next === "string" ? search.next.trim() : undefined;
+		/**
+		 * ANY same-origin app path, not just the two portal roots.
+		 *
+		 * This used to accept literally "/agency" or "/outlet" and discard
+		 * everything else, so a deep link — `/admin/dashboard` above all — was
+		 * thrown away and the visitor landed on their default portal home. Copying
+		 * an admin URL into another browser therefore opened the AGENCY console,
+		 * which reads as the account's role changing by itself.
+		 *
+		 * Still refused: anything not starting with a single "/". A "//evil.com" or
+		 * a full URL here would be an open redirect carrying a fresh session.
+		 */
 		const next =
-			nextRaw === "/agency" || nextRaw === "/outlet"
+			nextRaw?.startsWith("/") &&
+			!nextRaw.startsWith("//") &&
+			!nextRaw.startsWith("/login")
 				? nextRaw
 				: undefined;
 		return {
@@ -67,7 +91,7 @@ const formSchema = z.object({
 
 function RouteComponent() {
 	const { login } = useAuthActions();
-	const { email: prefillEmail } = Route.useSearch();
+	const { email: prefillEmail, next: requestedNext } = Route.useSearch();
 	const [error, setError] = useState("");
 	const [showPassword, setShowPassword] = useState(false);
 
@@ -131,6 +155,28 @@ function RouteComponent() {
 				const profile = await fetchProfile();
 				const home = pickHomePortal(profile.portals, profile.roles);
 
+				/**
+				 * Where the visitor was actually heading before being asked to sign
+				 * in, honoured only when this account holds that portal.
+				 *
+				 * The portal test is what keeps this from being a privilege change:
+				 * an agency user who opens an `/admin` link still lands on `/agency`,
+				 * exactly as before. What changes is that an ADMIN opening that same
+				 * link now arrives at the admin page they asked for, instead of being
+				 * dropped on a portal home that looks like the wrong role.
+				 */
+				const portalOfNext = requestedNext?.startsWith("/admin")
+					? "admin"
+					: requestedNext?.startsWith("/agency")
+						? "agency"
+						: requestedNext?.startsWith("/outlet")
+							? "outlet"
+							: null;
+				const nextAllowed =
+					requestedNext && portalOfNext !== null && home === portalOfNext
+						? requestedNext
+						: null;
+
 				if (home === "agency") {
 					await startAgencyRealSession({
 						id: profile.id,
@@ -151,7 +197,7 @@ function RouteComponent() {
 					hardNavigate(
 						isOrgProfileOnly(identity?.agencyStatus)
 							? AGENCY_PENDING_PROFILE_PATH
-							: "/agency",
+							: (nextAllowed ?? "/agency"),
 					);
 					return;
 				}
@@ -175,12 +221,13 @@ function RouteComponent() {
 					hardNavigate(
 						isOrgProfileOnly(identity?.outletStatus)
 							? OUTLET_PENDING_PROFILE_PATH
-							: "/outlet",
+							: (nextAllowed ?? "/outlet"),
 					);
 					return;
 				}
 				if (home === "admin") {
-					hardNavigate("/admin/dashboard");
+					// The admin deep link the visitor opened, when they hold admin.
+					hardNavigate(nextAllowed ?? "/admin/dashboard");
 					return;
 				}
 

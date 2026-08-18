@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { outletSwapController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
+import { requirePermission } from '@/middlewares/require-permission.js';
 
 const router = Router();
 
@@ -20,7 +21,7 @@ router.post('/mine/:id/decline', outletSwapController.declineMine.bind(outletSwa
 router.get('/targets', canManage, outletSwapController.listTargets.bind(outletSwapController));
 
 router.get('/', canManage, outletSwapController.list.bind(outletSwapController));
-router.post('/', canManage, outletSwapController.create.bind(outletSwapController));
-router.post('/:id/cancel', canManage, outletSwapController.cancel.bind(outletSwapController));
+router.post('/', canManage, requirePermission('roster', 'update'), outletSwapController.create.bind(outletSwapController));
+router.post('/:id/cancel', canManage, requirePermission('roster', 'update'), outletSwapController.cancel.bind(outletSwapController));
 
 export default router;

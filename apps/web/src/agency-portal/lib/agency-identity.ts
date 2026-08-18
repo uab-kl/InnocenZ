@@ -1,4 +1,7 @@
-import type { AgencySubRole } from "@agency-portal/lib/agency-rbac";
+import {
+	AGENCY_LEAST_PRIVILEGE,
+	type AgencySubRole,
+} from "@agency-portal/lib/agency-rbac";
 import {
 	readTabScoped,
 	removeTabScoped,
@@ -45,7 +48,8 @@ export function agencySubRoleFromBackend(
 	if (subRole === "finance") return "agency_finance";
 	if (subRole === "director") return "agency_director";
 	if (subRole === "guarantor") return "agency_guarantor";
-	return "agency_owner";
+	// An unrecognised lane is NOT an owner — see AGENCY_LEAST_PRIVILEGE.
+	return AGENCY_LEAST_PRIVILEGE;
 }
 
 /**
@@ -108,7 +112,7 @@ export function getAgencyIdentity(): AgencySessionIdentity | null {
 			// Director would have come back from a page refresh able to pay PRs.
 			subRole: KNOWN_AGENCY_SUB_ROLES.has(parsed.subRole as AgencySubRole)
 				? (parsed.subRole as AgencySubRole)
-				: "agency_owner",
+				: AGENCY_LEAST_PRIVILEGE,
 			agencyStatus:
 				typeof parsed.agencyStatus === "string"
 					? parsed.agencyStatus

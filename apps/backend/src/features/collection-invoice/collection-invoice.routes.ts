@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { collectionInvoiceController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
+import { requirePermission } from '@/middlewares/require-permission.js';
 
 const router = Router();
 
@@ -22,7 +23,7 @@ router.get(
  */
 const canManage = requireRole('admin', 'agency');
 
-router.post('/:id/issue', canManage, collectionInvoiceController.issue.bind(collectionInvoiceController));
-router.post('/:id/settle', canManage, collectionInvoiceController.settle.bind(collectionInvoiceController));
+router.post('/:id/issue', canManage, requirePermission('collections', 'update'), collectionInvoiceController.issue.bind(collectionInvoiceController));
+router.post('/:id/settle', canManage, requirePermission('collections', 'update'), collectionInvoiceController.settle.bind(collectionInvoiceController));
 
 export default router;

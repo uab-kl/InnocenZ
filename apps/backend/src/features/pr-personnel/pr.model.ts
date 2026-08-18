@@ -62,7 +62,31 @@ export type PrInsertType = Omit<PrType, 'createdAt' | 'updatedAt'> & {
   updatedAt?: Date;
 };
 
-export const agencyPrApproveStatusValues = ['pending', 'approved', 'rejected'] as const;
+/**
+ * Membership lifecycle (0125 added the two departure states — same shape 0049
+ * gave shift_assignment its MC/leave flow):
+ *   pending       -> PR asked to join; agency must approve.
+ *   approved      -> under the agency.
+ *   rejected      -> join declined (reject_reason says why).
+ *   leave_pending -> an APPROVED PR asked to LEAVE and awaits the agency's
+ *                    approval. Only reachable once everything between the two
+ *                    is settled — vouchers paid, disputes closed, no upcoming
+ *                    or unfinished shifts (listLeaveBlockers, re-checked on
+ *                    the agency's approve).
+ *   left          -> departure approved. The row is KEPT, never deleted: the
+ *                    approvals page reads it as history, and the unique
+ *                    (agency_id, user_id) key means a re-join flips this same
+ *                    row back to 'pending' instead of inserting.
+ * A REJECTED departure returns the row to 'approved' with reject_reason
+ * prefixed '[Leave rejected] ' — there is no third value for it.
+ */
+export const agencyPrApproveStatusValues = [
+  'pending',
+  'approved',
+  'rejected',
+  'leave_pending',
+  'left',
+] as const;
 export type AgencyPrApproveStatus = (typeof agencyPrApproveStatusValues)[number];
 export const agencyPrApproveStatusEnum = MainSchema.enum('agency_pr_approve_status', agencyPrApproveStatusValues);
 

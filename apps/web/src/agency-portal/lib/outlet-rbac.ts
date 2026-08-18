@@ -47,7 +47,20 @@ type Permission =
 	| "manageWorkspace"
 	| "viewSettings"
 	| "editSettings"
-	| "orderSpecialService";
+	| "orderSpecialService"
+	/**
+	 * Raise a cut-loss request — reducing booked slots on a live shift.
+	 *
+	 * Mirrors the backend guard on `POST /cutlost`, which admits the owner,
+	 * finance and ops lanes but not a Director. Matrix-only on purpose (no
+	 * `OUTLET_FEATURE_MODULE` entry): the server gates it by LANE rather than by a
+	 * module grant, because outlet Finance holds no `booking` permission at all
+	 * and a `booking:create` mapping here would disagree with the server.
+	 *
+	 * Without this the button rendered for everyone — the component had no
+	 * permission check at all — so a Director could click it and collect a 403.
+	 */
+	| "requestCutLoss";
 
 type ModulePerm = { moduleKey: string; permissionType: string };
 
@@ -69,6 +82,7 @@ const OUTLET_OWNER_PERMISSIONS: Permission[] = [
 	"viewSettings",
 	"editSettings",
 	"orderSpecialService",
+	"requestCutLoss",
 ];
 
 const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
@@ -111,6 +125,7 @@ const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
 		"viewWorkspace",
 		"viewSettings",
 		"orderSpecialService",
+		"requestCutLoss",
 	],
 	outlet_ops: [
 		"postJob",
@@ -124,15 +139,28 @@ const ROLE_PERMISSIONS: Record<OutletSubRole, Permission[]> = {
 		"viewWorkspace",
 		"viewSettings",
 		"orderSpecialService",
+		"requestCutLoss",
 	],
 };
+
+/**
+ * What an outlet operator is treated as when we do not KNOW what they are.
+ *
+ * Director — view only. Never the owner. An unresolved role is a question, not
+ * a promotion: a real session whose membership has not loaded yet (a fresh
+ * device, a different URL origin, a cold cache, a failed fetch) used to be
+ * handed the owner's full console until the answer arrived, and stayed there
+ * if it never did. Under-privileging for a moment is recoverable; granting the
+ * top lane for a moment is not.
+ */
+export const OUTLET_LEAST_PRIVILEGE: OutletSubRole = "outlet_director";
 
 export function outletCan(
 	role: OutletSubRole | null | undefined,
 	permission: Permission,
 	modulePermissions?: ModulePerm[] | null,
 ): boolean {
-	const r = role ?? "outlet_owner";
+	const r = role ?? OUTLET_LEAST_PRIVILEGE;
 	const fallback = ROLE_PERMISSIONS[r].includes(permission);
 	if (!modulePermissions?.length) return fallback;
 
@@ -211,7 +239,7 @@ export function getOutletNavItems(
 	modulePermissions?: ModulePerm[] | null,
 ): OutletNavItem[] {
 	if (isOrgProfileOnly(orgStatus)) return [];
-	const r = role ?? "outlet_owner";
+	const r = role ?? OUTLET_LEAST_PRIVILEGE;
 	return ALL_NAV.filter((item) => {
 		if (item.to === "/outlet/bookings") {
 			// `viewBookings` is here so a Director keeps the page and loses only the
@@ -246,7 +274,7 @@ export function canAccessOutletPath(
 	if (isOrgProfileOnly(orgStatus)) {
 		return isOutletPendingProfilePath(pathname);
 	}
-	const r = role ?? "outlet_owner";
+	const r = role ?? OUTLET_LEAST_PRIVILEGE;
 	const can = (p: Permission) => outletCan(r, p, modulePermissions);
 	if (pathname === "/outlet" || pathname === "/outlet/") {
 		return can("viewLiveDashboard");
