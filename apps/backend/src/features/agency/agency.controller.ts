@@ -157,12 +157,91 @@ export class AgencyControllerClass {
         typeof req.body?.rejectReason === 'string' ? req.body.rejectReason : undefined;
 
       const actor = getActor(req);
+
+      // The row's CURRENT status decides what this decision MEANS. The payload
+      // contract is unchanged (approved | rejected) — but on a `leave_pending`
+      // row "approved" approves the DEPARTURE and "rejected" refuses it. The
+      // web sends the same shape either way; this branch is the single source
+      // of the join-vs-leave distinction.
+      const currentLinks = await this.agencyPrRepository.listByUser(userId);
+      const currentLink = currentLinks.find((l) => l.agencyId === agencyId);
+      if (!currentLink) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      if (currentLink.approveStatus === 'leave_pending') {
+        if (approveStatus === 'approved') {
+          // Approving the departure RE-RUNS the settlement gate: money can
+          // re-open between the PR's request and this decision (a new shift
+          // assigned, a voucher issued), and 'left' must never be granted
+          // over an open ledger.
+          const blockers = await this.agencyPrRepository.listLeaveBlockers(agencyId, userId);
+          if (blockers.length > 0) {
+            return res.status(409).json({
+              success: false,
+              message: `The departure cannot be approved yet: ${blockers.join('; ')}.`,
+              data: { blockers },
+            });
+          }
+          const leftRow = await this.agencyPrRepository.setApproveStatus(agencyId, userId, 'left', actor);
+          if (!leftRow) {
+            return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+          }
+          // Reuses the join-resolution kind — notification_kind is a PG enum
+          // and a departure-specific value would cost another migration; the
+          // title carries the meaning.
+          await notify({
+            userId,
+            kind: 'agency_join_resolved',
+            title: 'Your departure from the agency was approved',
+            body: 'You are no longer under this agency.',
+            payload: { agencyId, userId, approveStatus: 'left' },
+            actor,
+          });
+          return res.status(200).json({ success: true, message: 'Departure approved', data: leftRow });
+        }
+
+        // Refusing a departure: the membership CONTINUES, and the PR is owed
+        // the why — the reason is mandatory and lands on the row prefixed so
+        // the history chip can tell a refused departure from a refused join.
+        const reason = rejectReason?.trim();
+        if (!reason) {
+          return res.status(400).json({
+            success: false,
+            message: 'A reason is required to reject a departure — it is sent to the PR.',
+            data: null,
+          });
+        }
+        const keptRow = await this.agencyPrRepository.setApproveStatus(
+          agencyId,
+          userId,
+          'approved',
+          actor,
+          `[Leave rejected] ${reason}`,
+        );
+        if (!keptRow) {
+          return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        }
+        await notify({
+          userId,
+          kind: 'agency_join_resolved',
+          title: 'Your departure request was declined',
+          body: reason,
+          payload: { agencyId, userId, approveStatus: 'approved' },
+          actor,
+        });
+        return res.status(200).json({ success: true, message: 'Departure rejected', data: keptRow });
+      }
+
+      // Join semantics, unchanged: a reason only ever lands on a REJECT.
+      // (setApproveStatus now honours an explicit reason for any status — that
+      // is for the departure branch above; here the old rule holds.)
       const row = await this.agencyPrRepository.setApproveStatus(
         agencyId,
         userId,
         approveStatus,
         actor,
-        rejectReason,
+        approveStatus === 'rejected' ? rejectReason : undefined,
       );
       if (!row) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });

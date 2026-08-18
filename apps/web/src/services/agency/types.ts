@@ -11,7 +11,18 @@ export type AgencyStatus =
 /** `director` is view-only; `guarantor` stands in for the owner, at owner level. */
 export type AgencyUserSubRole = "owner" | "finance" | "director" | "guarantor";
 
-export type AgencyPrApproveStatus = "pending" | "approved" | "rejected";
+/**
+ * Membership lifecycle (0125 added the departure states):
+ * `leave_pending` = an approved PR asked to leave and awaits the agency;
+ * `left` = departure approved — the row is kept as history. A REJECTED
+ * departure returns to `approved` with rejectReason prefixed "[Leave rejected] ".
+ */
+export type AgencyPrApproveStatus =
+	| "pending"
+	| "approved"
+	| "rejected"
+	| "leave_pending"
+	| "left";
 
 /** Which agency a PR user account is under — one row per (agency, user). */
 export interface PrAgencyLink {

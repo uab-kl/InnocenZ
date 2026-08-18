@@ -17,6 +17,7 @@ import {
 import { C, F } from '../theme/theme';
 import {
   ApiError,
+  requestAgencyLeave,
   assetUrl,
   fetchMyAgencyLinks,
   fetchPublicAgencies,
@@ -90,6 +91,13 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const [error, setError] = useState<string | null>(null);
   const { message: toast, variant: toastVariant, showToast } = useToast();
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
+  /**
+   * The agency the PR just unticked, awaiting an explicit confirm. Inline
+   * two-tap rather than Alert.alert — this app also runs on react-native-web
+   * (localhost:8081), where Alert's buttons are a silent no-op and the leave
+   * request would fire on the first, accidental tap.
+   */
+  const [leaveTarget, setLeaveTarget] = useState<{ id: string; name: string } | null>(null);
   /** Portfolio gallery accordion — closed by default; count + chevron still show. */
   const [portfolioOpen, setPortfolioOpen] = useState(false);
   /** Real agencies from the backend — the checkbox list the PR picks from. */
@@ -185,8 +193,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   const pendingAgencyNames = myLinks
     .filter((l) => l.approveStatus === 'pending')
     .map((l) => l.agencyName);
-  /** While the agency has a request open, the PR's selection is frozen. */
-  const agencyLocked = pendingAgencyNames.length > 0;
+  /** Departures the agency has not decided yet — a different wait from a join. */
+  const departingAgencyNames = myLinks
+    .filter((l) => l.approveStatus === 'leave_pending')
+    .map((l) => l.agencyName);
+  /** While the agency has a request open — join OR departure — the selection is frozen. */
+  const agencyLocked = pendingAgencyNames.length > 0 || departingAgencyNames.length > 0;
+  /** Status per agency id, so the picker knows an untick means "request to leave". */
+  const linkStatusById = new Map(myLinks.map((l) => [l.agencyId, l.approveStatus]));
   const ic = me?.profile.idNo ?? '—';
   const mobile = me?.phoneNum ?? '—';
   const email = me?.email ?? '—';
@@ -255,9 +269,14 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
   // leave the profile pointing at a key that no longer exists.
 
   const startEdit = () => {
-    // Real agency ids straight off the PR's agency_pr links (pending included).
+    // Real agency ids straight off the PR's agency_pr links. LIVE ties only —
+    // pending, approved, or awaiting departure. 'left' and 'rejected' rows
+    // seed UNTICKED so re-ticking them is a fresh join request; seeding them
+    // ticked would resurrect an ended membership on an unrelated save.
     const agencyIds = myLinks.length
-      ? myLinks.map((l) => l.agencyId)
+      ? myLinks
+          .filter((l) => ['pending', 'approved', 'leave_pending'].includes(l.approveStatus))
+          .map((l) => l.agencyId)
       : memberships.map((m) => m.agencyId).filter(Boolean);
     setDraft({
       displayName: me?.username ?? '',
@@ -285,6 +304,28 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
     setEditing(false);
     setError(null);
     setAgencyMenuOpen(false);
+    setLeaveTarget(null);
+  };
+
+  /**
+   * File the departure request the confirm block asked about. The server is
+   * the judge: it refuses with a 409 listing, in words, everything still
+   * unsettled with that agency — vouchers unpaid, disputes open, shifts still
+   * to work — and that message renders VERBATIM on the existing error line.
+   */
+  const confirmLeave = async () => {
+    if (!token || !leaveTarget) return;
+    const name = leaveTarget.name;
+    setLeaveTarget(null);
+    setError(null);
+    try {
+      await requestAgencyLeave(token, leaveTarget.id);
+      setAgencyMenuOpen(false);
+      await reloadMyLinks();
+      showToast(`Departure requested — waiting for ${name} to approve`);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : 'Could not request the departure');
+    }
   };
 
   const saveEdit = async () => {
@@ -329,10 +370,24 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
       // saved as pending join requests for the agency to approve. Skip the
       // call entirely when the selection is locked or unchanged, so saving
       // the rest of the profile never trips the "awaiting approval" guard.
-      const currentIds = [...myLinks.map((l) => l.agencyId)].sort().join(',');
-      const nextIds = [...draft.agencyIds].sort().join(',');
+      //
+      // The sent set UNIONS every approved / departing membership: leaving is
+      // a REQUEST (the leave option on the agency row), never a side effect
+      // of this replace-set save. Without the union, a stale draft could ask
+      // the server to drop an approved agency and trip its 409 guard with a
+      // confusing error mid-save.
+      const liveIds = myLinks
+        .filter((l) => l.approveStatus === 'approved' || l.approveStatus === 'leave_pending')
+        .map((l) => l.agencyId);
+      const sendIds = [...new Set([...draft.agencyIds, ...liveIds])];
+      const currentIds = myLinks
+        .filter((l) => ['pending', 'approved', 'leave_pending'].includes(l.approveStatus))
+        .map((l) => l.agencyId)
+        .sort()
+        .join(',');
+      const nextIds = [...sendIds].sort().join(',');
       if (token && !agencyLocked && currentIds !== nextIds) {
-        await updateMyAgencies(token, draft.agencyIds);
+        await updateMyAgencies(token, sendIds);
         await reloadMyLinks();
       }
       setEditing(false);
@@ -731,6 +786,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                   Awaiting approval · {pendingAgencyNames.join(', ')}
                 </Text>
               )}
+              {!editing && departingAgencyNames.length > 0 && (
+                <Text style={styles.metaPending}>
+                  Departure waiting for {departingAgencyNames.join(', ')} to approve
+                </Text>
+              )}
               <Text style={styles.metaIc}>IC {ic}</Text>
             </View>
 
@@ -753,8 +813,9 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                 </Pressable>
                 {agencyLocked && (
                   <Text style={styles.metaPending}>
-                    Waiting for {pendingAgencyNames.join(', ')} to approve — you cannot
-                    change agencies until they approve or reject.
+                    {pendingAgencyNames.length > 0
+                      ? `Waiting for ${pendingAgencyNames.join(', ')} to approve — you cannot change agencies until they approve or reject.`
+                      : `Departure waiting for ${departingAgencyNames.join(', ')} to approve — you cannot change agencies until it is decided.`}
                   </Text>
                 )}
                 {agencyMenuOpen && (
@@ -778,28 +839,62 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     )}
                     {agencyOptions.map((a) => {
                       const on = draft.agencyIds.includes(a.id);
+                      const status = linkStatusById.get(a.id);
                       return (
                         <Pressable
                           key={a.id}
                           style={styles.agencyRow}
-                          onPress={() =>
+                          onPress={() => {
+                            // Unticking an APPROVED agency is a departure
+                            // request, never a draft edit — the confirm block
+                            // below takes over, and the server judges whether
+                            // everything is settled. A pending join or a fresh
+                            // pick still just toggles the draft.
+                            if (on && status === 'approved') {
+                              setLeaveTarget({ id: a.id, name: a.name });
+                              return;
+                            }
+                            if (on && status === 'leave_pending') return;
                             setDraft((d) => ({
                               ...d,
                               agencyIds: on
                                 ? d.agencyIds.filter((id) => id !== a.id)
                                 : [...d.agencyIds, a.id],
-                            }))
-                          }
+                            }));
+                          }}
                         >
                           <View style={[styles.check, on && styles.checkOn]}>
                             {on && <Check size={12} color="#241a08" />}
                           </View>
                           <Text style={[styles.agencyRowText, on && { color: C.goldL }]}>
                             {a.name}
+                            {status === 'leave_pending' ? ' · departure pending' : ''}
                           </Text>
                         </Pressable>
                       );
                     })}
+                    {leaveTarget && (
+                      <View style={styles.agencyLeaveConfirm}>
+                        <Text style={styles.metaPending}>
+                          Leave {leaveTarget.name}? Everything with them must be
+                          settled — vouchers paid, disputes closed, no shifts
+                          left — and they must approve your departure.
+                        </Text>
+                        <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
+                          <IzButton
+                            label="Request to leave"
+                            small
+                            onPress={() => void confirmLeave()}
+                          />
+                          <IzButton
+                            label="Keep"
+                            variant="soft"
+                            small
+                            onPress={() => setLeaveTarget(null)}
+                          />
+                        </View>
+                      </View>
+                    )}
                   </View>
                 )}
               </View>
@@ -1383,6 +1478,11 @@ const styles = StyleSheet.create({
     borderColor: C.line,
     backgroundColor: C.bg2,
     overflow: 'hidden',
+  },
+  agencyLeaveConfirm: {
+    borderTopWidth: 1,
+    borderTopColor: C.line,
+    padding: 10,
   },
   agencyRow: {
     flexDirection: 'row',

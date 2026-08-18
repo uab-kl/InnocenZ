@@ -746,6 +746,11 @@ function SignupDetailPanel({
 		"ic" | "selfie" | "gallery" | "comcard" | null
 	>(null);
 	const [docTab, setDocTab] = useState<DocTab>("ic");
+	// Which WAY the request runs, and whether it is history. Approving a join
+	// takes the PR under the agency; approving a leave lets them go — the
+	// button must say which, or an exit gets approved as an entry.
+	const isLeave = signup.requestKind === "leave";
+	const decided = signup.status !== "pending";
 	const galleryCount = portfolioFilledCount(signup.portfolioPhotos ?? []);
 	const gallerySlots = (signup.portfolioPhotos ?? []).filter(
 		Boolean,
@@ -785,24 +790,43 @@ function SignupDetailPanel({
 								Owner invite
 							</IzPill>
 						)}
+						<IzPill variant={isLeave ? "amber" : "violet"} className="mt-1.5">
+							{isLeave ? "Leave request" : "Join request"}
+						</IzPill>
+						{decided && (
+							<p className="iz-approvals-detail-meta mt-1">
+								{signup.status === "approved"
+									? isLeave
+										? "Departure approved — no longer under this agency"
+										: "Membership approved"
+									: isLeave
+										? "Departure rejected — membership continues"
+										: "Join rejected"}
+								{signup.rejectReason ? ` · ${signup.rejectReason}` : ""}
+							</p>
+						)}
 					</div>
 				</div>
-				<div className="iz-approvals-detail-actions">
-					<button
-						type="button"
-						className="iz-btn iz-btn-primary !py-2 !text-xs"
-						onClick={onApprove}
-					>
-						Approve
-					</button>
-					<button
-						type="button"
-						className="iz-btn iz-btn-soft !py-2 !text-xs"
-						onClick={() => setRejectOpen(true)}
-					>
-						Reject
-					</button>
-				</div>
+				{/* History is the record — it gets no buttons. Re-deciding a decided
+				    request happens through a fresh request, not by editing history. */}
+				{!decided && (
+					<div className="iz-approvals-detail-actions">
+						<button
+							type="button"
+							className="iz-btn iz-btn-primary !py-2 !text-xs"
+							onClick={onApprove}
+						>
+							{isLeave ? "Approve departure" : "Approve"}
+						</button>
+						<button
+							type="button"
+							className="iz-btn iz-btn-soft !py-2 !text-xs"
+							onClick={() => setRejectOpen(true)}
+						>
+							Reject
+						</button>
+					</div>
+				)}
 			</div>
 
 			<div className="iz-approvals-info-grid">
@@ -873,8 +897,16 @@ function SignupDetailPanel({
 
 			<RejectSheet
 				open={rejectOpen}
-				title={`Reject ${pendingFloorNickname(signup)}`}
-				subtitle="Reason is sent to PR (mandatory)"
+				title={
+					isLeave
+						? `Reject ${pendingFloorNickname(signup)}'s departure`
+						: `Reject ${pendingFloorNickname(signup)}`
+				}
+				subtitle={
+					isLeave
+						? "Reason is sent to PR — required to reject a departure. The membership continues."
+						: "Reason is sent to PR (mandatory)"
+				}
 				placeholder="e.g. Incomplete IC verification…"
 				confirmLabel="Confirm reject"
 				onClose={() => setRejectOpen(false)}
@@ -1265,6 +1297,10 @@ function AgencyPending() {
 		approveAgencyLink,
 		rejectAgencyLink,
 	} = useStore();
+	// Decisions must SAY what happened — the server's own sentence, success or
+	// the settlement gate's 409. Silence reads as failure and invites a second,
+	// harmful click.
+	const toast = useStore((s) => s.toast);
 	const canApprovePrSignups = useAgencyCan()("approvePrSignups");
 	const { date, time } = nowAgencyDateTime();
 	const prPhotoById = usePrPhotoById();
@@ -1324,6 +1360,33 @@ function AgencyPending() {
 	const [leaveFilter, setLeaveFilter] = useState<
 		"pending" | "approved" | "rejected" | "all"
 	>("pending");
+
+	/**
+	 * The Agency-Tied chips, mirroring the MC/Leaves tuple-map below. "pending"
+	 * is the work queue (Current); the rest is the record. Cards carry a
+	 * COMPOSITE key: the same membership row can legitimately sit in Approved
+	 * history as its approved JOIN and in Rejected history as its refused
+	 * DEPARTURE — two decisions about one row — so `userId` alone would
+	 * collide under "All".
+	 */
+	const [tiedFilter, setTiedFilter] = useState<
+		"pending" | "approved" | "rejected" | "all"
+	>("pending");
+	const tiedList = useMemo(() => {
+		const withKeys = (list: PendingPR[]) =>
+			list.map((p) => ({
+				...p,
+				cardKey: `${p.id}:${p.status}:${p.requestKind ?? "join"}`,
+			}));
+		if (tiedFilter === "pending") return withKeys(signups);
+		if (tiedFilter === "approved") return withKeys(backend.approvedHistory);
+		if (tiedFilter === "rejected") return withKeys(backend.rejectedHistory);
+		return withKeys([
+			...signups,
+			...backend.approvedHistory,
+			...backend.rejectedHistory,
+		]);
+	}, [tiedFilter, signups, backend.approvedHistory, backend.rejectedHistory]);
 	const leaveList = useMemo(() => {
 		// Newest decision first — history is read backwards.
 		const decided = [...leaveHistory].sort((a, b) =>
@@ -1356,8 +1419,10 @@ function AgencyPending() {
 	useEffect(() => {
 		if (tab === "signups") {
 			setSelectedSignupId((id) => {
+				// Selection is by CARD KEY (id:status:kind), not bare userId — one
+				// row can appear twice under "All" as two different decisions.
 				const ids = [
-					...signups.map((s) => s.id),
+					...tiedList.map((s) => s.cardKey),
 					...agencyLinkRequests.map((l) => l.id),
 				];
 				return id && ids.includes(id) ? id : (ids[0] ?? null);
@@ -1375,9 +1440,10 @@ function AgencyPending() {
 					: (leaveList[0]?.id ?? null),
 			);
 		}
-	}, [tab, signups, agencyLinkRequests, cutlostRequests, leaveList]);
+	}, [tab, tiedList, agencyLinkRequests, cutlostRequests, leaveList]);
 
-	const selectedSignup = signups.find((s) => s.id === selectedSignupId) ?? null;
+	const selectedSignup =
+		tiedList.find((s) => s.cardKey === selectedSignupId) ?? null;
 	const selectedLink =
 		agencyLinkRequests.find((l) => l.id === selectedSignupId) ?? null;
 	const selectedCutlost =
@@ -1452,96 +1518,165 @@ function AgencyPending() {
 
 					<div className="iz-approvals-list">
 						{tab === "signups" ? (
-							signups.length === 0 && agencyLinkRequests.length === 0 ? (
-								<p className="iz-tiny iz-muted px-1 py-4 text-center">
-									No pending sign-ups
-								</p>
-							) : (
-								<>
-									{signups.map((p) => {
-										const galleryCount = portfolioFilledCount(
-											p.portfolioPhotos ?? [],
-										);
-										const comcardReady = comcardTabMeta(p).ready;
-										const floorName = pendingFloorNickname(p);
-										const legalName = pendingLegalIcName(p);
-										return (
-											<button
-												key={p.id}
-												type="button"
-												className={cn(
-													"iz-approvals-list-item",
-													selectedSignupId === p.id && "on",
-												)}
-												onClick={() => setSelectedSignupId(p.id)}
-											>
-												<ApprovalsAvatar
-													name={floorName}
-													id={p.id}
-													photo={pendingPrPhoto(p)}
-													size="sm"
-												/>
-												<div className="min-w-0 flex-1">
-													<span className="name">{floorName}</span>
-													<span className="sub">
-														{legalName ? `Legal · ${legalName} · ` : ""}
-														{p.languages}
-													</span>
-													<span className="badges">
-														<VerificationBadge
-															ok={!!p.hasIcPhotos}
-															label="IC"
-														/>
-														<VerificationBadge
-															ok={!!p.hasSelfie}
-															label="Profile picture"
-														/>
-														<VerificationBadge
-															ok={galleryCount > 0}
-															label="Gallery"
-															count={galleryCount}
-														/>
-														<VerificationBadge
-															ok={comcardReady}
-															label="Comcard"
-															variant="comcard"
-														/>
-													</span>
-												</div>
-											</button>
-										);
-									})}
-									{agencyLinkRequests.map((l) => (
+							<>
+								{/* Same tuple-map as the MC/Leaves chips below — Current is
+								    the work queue, the rest is the record. */}
+								<div className="iz-approvals-subfilter mb-2 flex flex-wrap gap-1">
+									{(
+										[
+											[
+												"pending",
+												`Current (${signups.length + agencyLinkRequests.length})`,
+											],
+											[
+												"approved",
+												`Approved (${backend.approvedHistory.length})`,
+											],
+											[
+												"rejected",
+												`Rejected (${backend.rejectedHistory.length})`,
+											],
+											[
+												"all",
+												`All (${signups.length + agencyLinkRequests.length + backend.approvedHistory.length + backend.rejectedHistory.length})`,
+											],
+										] as const
+									).map(([value, label]) => (
 										<button
-											key={l.id}
+											key={value}
 											type="button"
 											className={cn(
-												"iz-approvals-list-item",
-												selectedSignupId === l.id && "on",
+												"iz-chip iz-tiny",
+												tiedFilter === value && "on",
 											)}
-											onClick={() => setSelectedSignupId(l.id)}
+											onClick={() => setTiedFilter(value)}
 										>
-											<ApprovalsAvatar
-												name={l.prName}
-												id={l.id}
-												photo={prPhotoById(l.prId, l.prName)}
-												size="sm"
-											/>
-											<div className="min-w-0 flex-1">
-												<span className="name">{l.prName}</span>
-												<span className="sub">
-													Wants to link · {l.requestedAt}
-												</span>
-												<span className="badges">
-													<span className="iz-approvals-verify-badge gallery">
-														Link request
-													</span>
-												</span>
-											</div>
+											{label}
 										</button>
 									))}
-								</>
-							)
+								</div>
+								{tiedList.length === 0 &&
+								((tiedFilter !== "pending" && tiedFilter !== "all") ||
+									agencyLinkRequests.length === 0) ? (
+									<p className="iz-tiny iz-muted px-1 py-4 text-center">
+										{tiedFilter === "pending"
+											? "No pending sign-ups"
+											: "No records here"}
+									</p>
+								) : (
+									<>
+										{tiedList.map((p) => {
+											const galleryCount = portfolioFilledCount(
+												p.portfolioPhotos ?? [],
+											);
+											const comcardReady = comcardTabMeta(p).ready;
+											const floorName = pendingFloorNickname(p);
+											const legalName = pendingLegalIcName(p);
+											return (
+												<button
+													key={p.cardKey}
+													type="button"
+													className={cn(
+														"iz-approvals-list-item",
+														selectedSignupId === p.cardKey && "on",
+													)}
+													onClick={() => setSelectedSignupId(p.cardKey)}
+												>
+													<ApprovalsAvatar
+														name={floorName}
+														id={p.id}
+														photo={pendingPrPhoto(p)}
+														size="sm"
+													/>
+													<div className="min-w-0 flex-1">
+														<span className="name">{floorName}</span>
+														<span className="sub">
+															{legalName ? `Legal · ${legalName} · ` : ""}
+															{p.languages}
+														</span>
+														<span className="badges">
+															{/* WHICH WAY the request runs — approving a
+														    join takes the PR under the agency;
+														    approving a leave lets them go. The two
+														    must never look alike. */}
+															<span
+																className={cn(
+																	"iz-approvals-verify-badge",
+																	p.requestKind === "leave"
+																		? "missing"
+																		: "gallery",
+																)}
+															>
+																{p.requestKind === "leave"
+																	? p.status === "approved"
+																		? "Departure approved"
+																		: p.status === "rejected"
+																			? "Departure rejected"
+																			: "Leave request"
+																	: p.status === "approved"
+																		? "Member"
+																		: p.status === "rejected"
+																			? "Join rejected"
+																			: "Join request"}
+															</span>
+															<VerificationBadge
+																ok={!!p.hasIcPhotos}
+																label="IC"
+															/>
+															<VerificationBadge
+																ok={!!p.hasSelfie}
+																label="Profile picture"
+															/>
+															<VerificationBadge
+																ok={galleryCount > 0}
+																label="Gallery"
+																count={galleryCount}
+															/>
+															<VerificationBadge
+																ok={comcardReady}
+																label="Comcard"
+																variant="comcard"
+															/>
+														</span>
+													</div>
+												</button>
+											);
+										})}
+										{/* Demo link requests are CURRENT work (join semantics, no
+										    leave analog) — they have no place under history chips. */}
+										{(tiedFilter === "pending" || tiedFilter === "all") &&
+											agencyLinkRequests.map((l) => (
+												<button
+													key={l.id}
+													type="button"
+													className={cn(
+														"iz-approvals-list-item",
+														selectedSignupId === l.id && "on",
+													)}
+													onClick={() => setSelectedSignupId(l.id)}
+												>
+													<ApprovalsAvatar
+														name={l.prName}
+														id={l.id}
+														photo={prPhotoById(l.prId, l.prName)}
+														size="sm"
+													/>
+													<div className="min-w-0 flex-1">
+														<span className="name">{l.prName}</span>
+														<span className="sub">
+															Wants to link · {l.requestedAt}
+														</span>
+														<span className="badges">
+															<span className="iz-approvals-verify-badge gallery">
+																Link request
+															</span>
+														</span>
+													</div>
+												</button>
+											))}
+									</>
+								)}
+							</>
 						) : tab === "leaves" ? (
 							<>
 								{/* Current vs history. Counts come from the two queries, so
@@ -1683,12 +1818,21 @@ function AgencyPending() {
 								signup={selectedSignup}
 								onApprove={() =>
 									backend.backed
-										? backend.approve(selectedSignup.id)
+										? backend.approve(selectedSignup.id, {
+												// The server's OWN sentence, both ways — "Departure
+												// approved", or the settlement gate's 409 listing
+												// what is still unsettled. Never silence.
+												onSuccess: (m) => toast(m, "success"),
+												onError: (m) => toast(m, "warn"),
+											})
 										: approvePendingPR(selectedSignup.id)
 								}
 								onReject={(reason) =>
 									backend.backed
-										? backend.reject(selectedSignup.id, reason)
+										? backend.reject(selectedSignup.id, reason, {
+												onSuccess: (m) => toast(m, "success"),
+												onError: (m) => toast(m, "warn"),
+											})
 										: rejectPendingPR(selectedSignup.id, reason)
 								}
 							/>

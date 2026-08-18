@@ -1,6 +1,12 @@
-import { and, eq, ilike, inArray, or, sql } from 'drizzle-orm';
+import { and, eq, gte, ilike, inArray, isNull, ne, or, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { AgencyTable } from '@/features/agency/agency.model';
+import {
+  PaymentVoucherDisputeTable,
+  PaymentVoucherTable,
+} from '@/features/payment-voucher/payment-voucher.model';
+import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
+import { ShiftTable } from '@/features/shift/shift.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
 import {
   AgencyPrTable,
@@ -295,8 +301,117 @@ export class AgencyPrRepository {
   }
 
   /**
+   * Everything still unsettled between one PR and one agency — the reasons a
+   * departure request must be refused, as plain-word sentences the phone shows
+   * VERBATIM. Empty array = clear to leave.
+   *
+   * Three classes, per the owner's rule ("only everything relating pr and
+   * agency is resolved then only can untick this agency"):
+   *   1. Vouchers not fully PAID — 'paid' is the only terminal status; sent
+   *      and even signed money is still owed.
+   *   2. Open disputes (outcome NULL) on that agency's vouchers.
+   *   3. Upcoming or unfinished shifts with this agency — shift_date today or
+   *      later, or checked-in without checked-out, in an active staffing
+   *      status. Cancelled / excused / completed rows do not block.
+   *
+   * Payee is matched on BOTH user_id and the legacy pr_id: they are equal
+   * post-0089, but old rows may carry only one, and a gate scoped to a single
+   * column would let a money-owed PR leave through the other.
+   */
+  async listLeaveBlockers(agencyId: string, userId: string): Promise<string[]> {
+    const blockers: string[] = [];
+    try {
+      const payee = or(
+        eq(PaymentVoucherTable.userId, userId),
+        eq(PaymentVoucherTable.prId, userId),
+      );
+
+      const unpaid = await db
+        .select({ voucherNo: PaymentVoucherTable.voucherNo, status: PaymentVoucherTable.status })
+        .from(PaymentVoucherTable)
+        .where(and(eq(PaymentVoucherTable.agencyId, agencyId), payee, ne(PaymentVoucherTable.status, 'paid')));
+      if (unpaid.length > 0) {
+        // Name the papers — "2 vouchers unpaid" alone sends the PR hunting.
+        const named = unpaid
+          .slice(0, 3)
+          .map((v) => `${v.voucherNo ?? 'unnumbered'} — ${v.status}`)
+          .join(', ');
+        blockers.push(
+          `${unpaid.length} payment voucher${unpaid.length === 1 ? ' is' : 's are'} not fully paid yet (${named}${unpaid.length > 3 ? ', …' : ''})`,
+        );
+      }
+
+      const [openDisputes] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(PaymentVoucherDisputeTable)
+        .innerJoin(PaymentVoucherTable, eq(PaymentVoucherDisputeTable.voucherId, PaymentVoucherTable.id))
+        .where(
+          and(eq(PaymentVoucherTable.agencyId, agencyId), payee, isNull(PaymentVoucherDisputeTable.outcome)),
+        );
+      if ((openDisputes?.count ?? 0) > 0) {
+        blockers.push(
+          `${openDisputes.count} dispute${openDisputes.count === 1 ? ' is' : 's are'} still open on those vouchers`,
+        );
+      }
+
+      // "Today" in the outlets' own timezone. UTC would roll the date back
+      // before 8am MYT and misjudge tonight's shift.
+      const todayIso = new Date().toLocaleDateString('en-CA', { timeZone: 'Asia/Kuala_Lumpur' });
+      const [activeShifts] = await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(ShiftAssignmentTable)
+        .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
+        .where(
+          and(
+            eq(ShiftAssignmentTable.agencyId, agencyId),
+            or(
+              eq(ShiftAssignmentTable.userId, userId),
+              eq(ShiftAssignmentTable.prId, userId),
+            ),
+            inArray(ShiftAssignmentTable.status, ['assigned', 'confirmed', 'leave_pending']),
+            or(
+              gte(ShiftTable.shiftDate, todayIso),
+              and(
+                sql`${ShiftAssignmentTable.checkInAt} IS NOT NULL`,
+                isNull(ShiftAssignmentTable.checkOutAt),
+              ),
+            ),
+          ),
+        );
+      if ((activeShifts?.count ?? 0) > 0) {
+        blockers.push(
+          `${activeShifts.count} upcoming or unfinished shift${activeShifts.count === 1 ? '' : 's'} with this agency`,
+        );
+      }
+
+      return blockers;
+    } catch (error) {
+      logger.error('[AgencyPrRepository.listLeaveBlockers] Error:', error);
+      // Fail CLOSED: an unreadable ledger blocks the departure rather than
+      // waving it through.
+      return ['the settlement check could not be completed — try again'];
+    }
+  }
+
+  /**
    * Point this user's agency links at exactly `agencyIds`.
    * New links are `pending` — agency must approve.
+   *
+   * ⚠️ THE DELETE IS SCOPED. This used to hard-delete every unpicked row —
+   * APPROVED MEMBERSHIPS INCLUDED — which was a live escape hatch around the
+   * settlement gate: unticking an agency on the phone walked out on unpaid
+   * vouchers with zero checks. Now:
+   *   - 'pending' / 'rejected' unpicked -> deleted (withdrawing a join
+   *     request, or clearing a refusal — nothing is owed either way).
+   *   - 'approved' / 'leave_pending' unpicked -> RETAINED. Leaving goes
+   *     through requestAgencyLeave and the agency's approval, never through
+   *     this replace-set save (the controller 409s first with the words; this
+   *     is the belt to that braces).
+   *   - 'left' unpicked -> RETAINED (history the approvals page reads).
+   *   - 'left' / 'rejected' RE-picked -> flipped back to 'pending' (the
+   *     unique (agency_id,user_id) key makes re-join an UPDATE, not an
+   *     insert; the old code silently skipped these, so re-joining an agency
+   *     you once left was a no-op that looked like a bug).
    */
   async syncLinksForUser(userId: string, agencyIds: string[], actor: string): Promise<void> {
     const wanted = [...new Set(agencyIds)];
@@ -308,10 +423,33 @@ export class AgencyPrRepository {
           .where(eq(AgencyPrTable.userId, userId));
 
         const stale = existing
-          .filter((row) => !wanted.includes(row.agencyId))
+          .filter(
+            (row) =>
+              !wanted.includes(row.agencyId) &&
+              (row.approveStatus === 'pending' || row.approveStatus === 'rejected'),
+          )
           .map((row) => row.id);
         if (stale.length > 0) {
           await tx.delete(AgencyPrTable).where(inArray(AgencyPrTable.id, stale));
+        }
+
+        const rejoin = existing
+          .filter(
+            (row) =>
+              wanted.includes(row.agencyId) &&
+              (row.approveStatus === 'left' || row.approveStatus === 'rejected'),
+          )
+          .map((row) => row.id);
+        if (rejoin.length > 0) {
+          await tx
+            .update(AgencyPrTable)
+            .set({
+              approveStatus: 'pending',
+              rejectReason: null,
+              updatedAt: new Date(),
+              updatedBy: actor,
+            })
+            .where(inArray(AgencyPrTable.id, rejoin));
         }
 
         const known = new Set(existing.map((row) => row.agencyId));
@@ -384,7 +522,12 @@ export class AgencyPrRepository {
         .onConflictDoUpdate({
           target: [AgencyPrTable.agencyId, AgencyPrTable.userId],
           set: {
-            approveStatus: data.approveStatus,
+            // Never stomp a pending DEPARTURE. An owner re-inviting a PR whose
+            // leave request is open would otherwise flip leave_pending back to
+            // 'approved' — silently cancelling a request the PR filed and the
+            // approvals queue is showing. The departure is decided on the
+            // approvals page, not by an invite racing it.
+            approveStatus: sql`CASE WHEN ${AgencyPrTable.approveStatus} = 'leave_pending' THEN ${AgencyPrTable.approveStatus} ELSE ${data.approveStatus}::main.agency_pr_approve_status END`,
             ...(data.tier ? { tier: data.tier } : {}),
             rejectReason: data.approveStatus === 'approved' ? null : undefined,
             updatedAt: new Date(),
@@ -437,7 +580,15 @@ export class AgencyPrRepository {
     }
   }
 
-  /** Approvals screen — accept / decline a membership request. */
+  /**
+   * Approvals screen — accept / decline a membership OR departure request.
+   *
+   * An explicitly-passed `rejectReason` is honoured for ANY status: a refused
+   * departure returns the row to 'approved' carrying '[Leave rejected] …',
+   * and the old "null it unless rejected" rule would have erased that note in
+   * the same write that was meant to record it. Omit the param and the old
+   * behaviour holds exactly.
+   */
   async setApproveStatus(
     agencyId: string,
     userId: string,
@@ -451,7 +602,7 @@ export class AgencyPrRepository {
         .set({
           approveStatus,
           rejectReason:
-            approveStatus === 'rejected' ? (rejectReason?.trim() || null) : null,
+            rejectReason !== undefined ? (rejectReason?.trim() || null) : null,
           updatedAt: new Date(),
           updatedBy: actor,
         })

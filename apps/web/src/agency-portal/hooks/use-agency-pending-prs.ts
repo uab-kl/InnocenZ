@@ -6,6 +6,7 @@ import type { PendingPR } from "@agency-portal/lib/store";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { toMutationError } from "@/lib/mutation-error";
 import {
 	type AgencyPr,
 	fetchAgencyPrs,
@@ -81,8 +82,27 @@ function pendingPrFromMembership(pr: AgencyPr): PendingPR {
 			? fmtDateLabelFromIso(String(pr.createdAt).slice(0, 10))
 			: undefined,
 		status: "pending",
+		rejectReason: pr.rejectReason ?? undefined,
 		agencyId: pr.agencyId,
 	};
+}
+
+/** The one marker a REFUSED departure leaves behind (the row stays approved). */
+const LEAVE_REJECTED_PREFIX = "[Leave rejected]";
+
+/**
+ * One membership row -> one card, stamped with what the row IS in the list
+ * being built: its chip status and its direction. The same approved row can
+ * legitimately appear twice — once in Approved history as its approved JOIN,
+ * and once in Rejected history as its refused DEPARTURE — because those are
+ * two different decisions about one membership.
+ */
+function asCard(
+	pr: AgencyPr,
+	status: PendingPR["status"],
+	requestKind: "join" | "leave",
+): PendingPR {
+	return { ...pendingPrFromMembership(pr), status, requestKind };
 }
 
 /**
@@ -98,16 +118,65 @@ export function useAgencyPendingPrs() {
 
 	const query = useQuery({
 		queryKey: ["agency", "pending-prs", agencyId],
-		queryFn: () =>
-			fetchAgencyPrs(agencyId, { approveStatus: "pending" }, logout),
+		// UNFILTERED — the endpoint accepts at most ONE approveStatus, and the
+		// four chips (Current / Approved / Rejected / All) need every state.
+		// One fetch, split client-side.
+		queryFn: () => fetchAgencyPrs(agencyId, {}, logout),
 		enabled: backed && Boolean(agencyId),
 		staleTime: 30_000,
 	});
 
-	const signups = useMemo<PendingPR[]>(
-		() => (query.data?.data ?? []).map(pendingPrFromMembership),
-		[query.data],
-	);
+	/**
+	 * Current = what needs a DECISION: pending joins and pending departures.
+	 * `signups` keeps this meaning on purpose — the Today-hub tile counts it
+	 * as "approvals waiting", and both directions are genuinely waiting.
+	 */
+	const signups = useMemo<PendingPR[]>(() => {
+		const rows = query.data?.data ?? [];
+		return [
+			...rows
+				.filter((r) => r.approveStatus === "pending")
+				.map((r) => asCard(r, "pending", "join")),
+			...rows
+				.filter((r) => r.approveStatus === "leave_pending")
+				.map((r) => asCard(r, "pending", "leave")),
+		];
+	}, [query.data]);
+
+	/** Members (approved joins) + completed departures ('left' rows). */
+	const approvedHistory = useMemo<PendingPR[]>(() => {
+		const rows = query.data?.data ?? [];
+		return [
+			...rows
+				.filter((r) => r.approveStatus === "approved")
+				.map((r) => asCard(r, "approved", "join")),
+			...rows
+				.filter((r) => r.approveStatus === "left")
+				.map((r) => asCard(r, "approved", "leave")),
+		];
+	}, [query.data]);
+
+	/**
+	 * Refused joins + refused departures. A refused departure lives ONLY as
+	 * the "[Leave rejected]" prefix on an approved row's rejectReason — the
+	 * membership itself continues, so the row is approved AND its departure
+	 * was rejected. Same best-effort convention as the MC/leave notes prefix.
+	 */
+	const rejectedHistory = useMemo<PendingPR[]>(() => {
+		const rows = query.data?.data ?? [];
+		return [
+			...rows
+				.filter((r) => r.approveStatus === "rejected")
+				.map((r) => asCard(r, "rejected", "join")),
+			...rows
+				.filter(
+					(r) =>
+						r.approveStatus === "approved" &&
+						r.rejectReason?.startsWith(LEAVE_REJECTED_PREFIX),
+				)
+				.map((r) => asCard(r, "rejected", "leave")),
+		];
+	}, [query.data]);
 
 	const invalidate = () => {
 		queryClient.invalidateQueries({ queryKey: ["agency", "pending-prs"] });
@@ -140,16 +209,58 @@ export function useAgencyPendingPrs() {
 	return {
 		backed,
 		signups,
+		approvedHistory,
+		rejectedHistory,
 		isLoading: query.isLoading,
-		/** `id` is the pending member's userId. */
-		approve: (userId: string) =>
-			statusMut.mutate({ userId, approveStatus: "approved" }),
-		reject: (userId: string, reason?: string) =>
-			statusMut.mutate({
-				userId,
-				approveStatus: "rejected",
-				rejectReason: reason,
-			}),
+		/**
+		 * `id` is the member's userId. On a `leave_pending` row the SERVER reads
+		 * "approved" as approve-the-DEPARTURE and re-runs the settlement gate —
+		 * its 409 lists what is still unsettled, in words. The callbacks exist
+		 * so the page can show that sentence and the success confirmation: a
+		 * silent refusal here reads as a decision that happened, and invites a
+		 * second, harmful click.
+		 */
+		approve: (
+			userId: string,
+			opts?: {
+				onSuccess?: (message: string) => void;
+				onError?: (message: string) => void;
+			},
+		) =>
+			statusMut.mutate(
+				{ userId, approveStatus: "approved" },
+				{
+					onSuccess: (data) => opts?.onSuccess?.(data.message || "Approved"),
+					onError: (e) =>
+						opts?.onError?.(
+							toMutationError(e, "Could not save the decision")?.message ??
+								"Could not save the decision",
+						),
+				},
+			),
+		reject: (
+			userId: string,
+			reason?: string,
+			opts?: {
+				onSuccess?: (message: string) => void;
+				onError?: (message: string) => void;
+			},
+		) =>
+			statusMut.mutate(
+				{
+					userId,
+					approveStatus: "rejected",
+					rejectReason: reason,
+				},
+				{
+					onSuccess: (data) => opts?.onSuccess?.(data.message || "Rejected"),
+					onError: (e) =>
+						opts?.onError?.(
+							toMutationError(e, "Could not save the decision")?.message ??
+								"Could not save the decision",
+						),
+				},
+			),
 		invite: (input: AgencyPrInvite) =>
 			createMut.mutate({
 				name: input.name,
