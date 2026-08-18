@@ -1,5 +1,6 @@
 import { redirect } from "@tanstack/react-router";
 import { clearAuthTokens, getAccessToken } from "@/lib/auth/auth-storage";
+import { readTabScoped } from "@/lib/auth/tab-scoped-storage";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { getClient } from "@/lib/axios-v1";
 import { hardNavigate } from "@/lib/hard-navigate";
@@ -10,12 +11,48 @@ const AGENCY_DEMO_EMAIL = "demo@atlas-agency.invalid";
 const OUTLET_DEMO_EMAIL = "demo@velvet23.invalid";
 const SESSION_KIND_KEY = "iz-session-kind";
 
+/**
+ * THIS TAB's session kind — via the same per-tab pin the tokens use, never
+ * the shared localStorage seed. The shared read was the last jump vector
+ * left: a DEMO tab beside a fresh REAL login read the other tab's "real",
+ * skipped the demo-portal path, sent its unsigned demo token to /auth/me and
+ * got bounced to login — "suddenly signed out" by an action in another tab.
+ * (tab-scoped-storage is a leaf module; the circular-import concern above is
+ * about agency-demo-session itself, not this.)
+ */
 function sessionKind(): string | null {
+	return readTabScoped(SESSION_KIND_KEY);
+}
+
+/**
+ * The path the visitor actually asked for, to hand to /login as `next`.
+ *
+ * Without it a deep link is simply lost: opening `/en/admin/dashboard` in a
+ * browser with no session bounced to /login and then on to whatever portal home
+ * the account defaults to — so an ADMIN link opened in a second browser landed
+ * on the agency console, which reads as the role having changed by itself.
+ *
+ * Locale prefix stripped, because the router matches de-localized paths.
+ */
+function attemptedPath(): string | undefined {
 	try {
-		return localStorage.getItem(SESSION_KIND_KEY);
+		const path = deLocalizeHref(
+			window.location.pathname + window.location.search,
+		);
+		// Same-origin app paths only. A value starting "//" or a full URL would
+		// turn this into an open redirect that bounces the visitor off-site.
+		if (!path.startsWith("/") || path.startsWith("//")) return undefined;
+		if (path === "/login" || path.startsWith("/login?")) return undefined;
+		return path;
 	} catch {
-		return null;
+		return undefined;
 	}
+}
+
+/** `/login` with the attempted path attached, for hard navigations. */
+function loginHrefWithNext(): string {
+	const next = attemptedPath();
+	return next ? `/login?next=${encodeURIComponent(next)}` : "/login";
 }
 
 export function ensureAuthenticated() {
@@ -23,7 +60,8 @@ export function ensureAuthenticated() {
 
 	if (!getAccessToken()) {
 		clearAuthTokens();
-		throw redirect({ to: "/login" });
+		const next = attemptedPath();
+		throw redirect({ to: "/login", search: next ? { next } : {} });
 	}
 }
 
@@ -35,8 +73,11 @@ interface MeRole {
 
 type PortalCode = "admin" | "agency" | "outlet";
 
-let portalCache: { token: string; portals: PortalCode[]; names: string[] } | null =
-	null;
+let portalCache: {
+	token: string;
+	portals: PortalCode[];
+	names: string[];
+} | null = null;
 
 export function clearPortalCache() {
 	portalCache = null;
@@ -104,7 +145,9 @@ async function signedInPortals(): Promise<{
 	const names = roles.map((r) => (r.roleName ?? "").toLowerCase());
 	const fromRolePortal = roles
 		.map((r) => r.portalCode)
-		.filter((p): p is PortalCode => p === "admin" || p === "agency" || p === "outlet");
+		.filter(
+			(p): p is PortalCode => p === "admin" || p === "agency" || p === "outlet",
+		);
 	const fromRoles = names
 		.map(portalFromRoleName)
 		.filter((p): p is PortalCode => p != null);
@@ -115,11 +158,35 @@ async function signedInPortals(): Promise<{
 	const portals = [...new Set([...fromRolePortal, ...fromApi, ...fromRoles])];
 	// Admin portal requires the canonical admin role — never via a stray portalCode.
 	const hasAdminRole = names.some((n) => n === "admin");
-	const gated = hasAdminRole
-		? portals
-		: portals.filter((p) => p !== "admin");
+	const gated = hasAdminRole ? portals : portals.filter((p) => p !== "admin");
 	portalCache = { token, portals: gated, names };
 	return { portals: gated, names };
+}
+
+/**
+ * Where to send a signed-in visitor who opened a link for a portal their account
+ * does not hold — a link copied from someone else's browser, or from their own
+ * other account.
+ *
+ * NOT `homePath`. Silently relocating them to their own portal is what reads as
+ * "the role changed by itself": the address bar shows a page they did not ask
+ * for and nothing says why. This carries the attempted link and the portal it
+ * needs, so /no-access can name both and offer a sign-out.
+ */
+function wrongPortalSearch(portal: PortalCode): {
+	needs: PortalCode;
+	link?: string;
+} {
+	const link = attemptedPath();
+	return link ? { needs: portal, link } : { needs: portal };
+}
+
+/** Same destination as a raw href, for hardNavigate (which takes a string). */
+function wrongPortalHref(portal: PortalCode): string {
+	const s = wrongPortalSearch(portal);
+	const q = new URLSearchParams({ needs: s.needs });
+	if (s.link) q.set("link", s.link);
+	return `/no-access?${q.toString()}`;
 }
 
 function homePath(portals: PortalCode[], names: string[]): string {
@@ -142,10 +209,10 @@ function homePath(portals: PortalCode[], names: string[]): string {
 export async function ensurePortal(portal: PortalCode) {
 	if (typeof window === "undefined") return;
 	ensureAuthenticated();
-	const { portals, names } = await signedInPortals();
+	const { portals } = await signedInPortals();
 	if (portals.includes(portal)) return;
 
-	throw redirect({ to: homePath(portals, names) });
+	throw redirect({ to: "/no-access", search: wrongPortalSearch(portal) });
 }
 
 /** Admin tree: canonical `admin` role only. Demo sessions never qualify. */
@@ -156,9 +223,9 @@ export async function ensureAdminPortal() {
 		const { portals, names } = await signedInPortals();
 		throw redirect({ to: homePath(portals, names) });
 	}
-	const { portals, names } = await signedInPortals();
+	const { names } = await signedInPortals();
 	if (names.some((n) => n === "admin")) return;
-	throw redirect({ to: homePath(portals, names) });
+	throw redirect({ to: "/no-access", search: wrongPortalSearch("admin") });
 }
 
 /**
@@ -172,7 +239,7 @@ export async function guardPortalClient(
 	if (!getAccessToken()) {
 		clearPortalCache();
 		clearAuthTokens();
-		hardNavigate("/login");
+		hardNavigate(loginHrefWithNext());
 		return false;
 	}
 	try {
@@ -182,12 +249,12 @@ export async function guardPortalClient(
 		} else if (portals.includes(portal)) {
 			return true;
 		}
-		hardNavigate(homePath(portals, names));
+		hardNavigate(wrongPortalHref(portal));
 		return false;
 	} catch {
 		clearPortalCache();
 		clearAuthTokens();
-		hardNavigate("/login");
+		hardNavigate(loginHrefWithNext());
 		return false;
 	}
 }
@@ -203,5 +270,5 @@ export function kickToLogin() {
 	if (deLocalizeHref(window.location.pathname) === "/login") return;
 	if (kickToLoginInFlight) return;
 	kickToLoginInFlight = true;
-	hardNavigate("/login");
+	hardNavigate(loginHrefWithNext());
 }
