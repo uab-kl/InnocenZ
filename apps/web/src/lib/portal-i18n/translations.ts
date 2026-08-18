@@ -281,6 +281,8 @@ const en = {
 		colCommission: "Commission",
 		noWages: "No wages",
 		optional: "Optional",
+		/** A tier whose rates were edited while its headcount stayed at zero. */
+		ratedNoneRequested: "Rate set · none requested",
 		tapEditWages: "Tap to edit wages for this PR tier",
 		tapEditDrinksTips: "Tap to edit drinks and tips commission",
 		howToReadThisForm: "How to read this form",
@@ -343,6 +345,17 @@ const en = {
 			"You already have a shift {other} — raise that shift's headcount instead of posting a second one for the same time",
 		overlapShift:
 			"This clashes with your shift {other} — your shifts cannot overlap, so change this time or move that one first",
+		tapEditDrinksCommission: "Tap to edit drinks commission",
+		noApprovedAgencyYet:
+			"No approved agency yet. Add one in Settings and wait for them to accept — until then there is nobody to send this job to.",
+		atLeastOneAgency: "A shift has to go to at least one agency.",
+		dontSendTo: "Don’t send to {name}",
+		alsoSendTo: "Also send to {name}",
+		dcBlackElegant: "Black elegant",
+		dcCocktailAttire: "Cocktail attire",
+		dcBrandUniform: "Brand uniform",
+		dcSmartCasual: "Smart casual",
+		dcFormalGown: "Formal gown",
 	},
 	/**
 	 * Agency → Payroll & PV. The agency's money screen.
@@ -740,7 +753,7 @@ const en = {
 			"Could not load penalties — the proposals endpoint failed.",
 		noActivePenaltiesThisWeek: "No active penalties this week.",
 		pendingDeduction: "Pending deduction",
-		broadcastShiftMessage: "Broadcast shift / message ({n})",
+		broadcastMessage: "Broadcast message ({n})",
 		recentPenalties: "Recent penalties",
 		attendanceAndPenaltyRules: "Attendance and penalty rules",
 		appliesToEveryPr: "· Applies to every PR on the roster",
@@ -2323,6 +2336,7 @@ const zh: PortalTranslations = {
 		colCommission: "抽成",
 		noWages: "无工资",
 		optional: "可选",
+		ratedNoneRequested: "已设费率 · 未请人",
 		tapEditWages: "点击编辑该 PR 等级的工资",
 		tapEditDrinksTips: "点击编辑酒水与小费抽成",
 		howToReadThisForm: "如何阅读此表单",
@@ -2379,6 +2393,17 @@ const zh: PortalTranslations = {
 			"你在 {other} 已经有一个班次 —— 请提高该班次的人数，而不是为同一时段再发一个",
 		overlapShift:
 			"这与你 {other} 的班次冲突 —— 班次之间不能重叠，请改动此时间或先调整那一个",
+		tapEditDrinksCommission: "点击编辑酒水抽成",
+		noApprovedAgencyYet:
+			"还没有已批准的经纪公司。请在设置中添加并等待对方接受 —— 在此之前没有可以派送此职位的对象。",
+		atLeastOneAgency: "班次至少要发送给一家经纪公司。",
+		dontSendTo: "不要发送给 {name}",
+		alsoSendTo: "同时发送给 {name}",
+		dcBlackElegant: "黑色优雅",
+		dcCocktailAttire: "鸡尾酒会着装",
+		dcBrandUniform: "品牌制服",
+		dcSmartCasual: "商务休闲",
+		dcFormalGown: "正式礼服",
 	},
 	payroll: {
 		title: "薪资与付款单",
@@ -2723,7 +2748,7 @@ const zh: PortalTranslations = {
 		penaltiesLoadFailed: "无法加载处罚记录 —— 处罚提案接口请求失败。",
 		noActivePenaltiesThisWeek: "本周没有生效中的处罚。",
 		pendingDeduction: "待扣款",
-		broadcastShiftMessage: "群发班次 / 消息（{n}）",
+		broadcastMessage: "群发消息（{n}）",
 		recentPenalties: "近期处罚",
 		attendanceAndPenaltyRules: "出勤与处罚规则",
 		appliesToEveryPr: "· 适用于所有在册 PR",

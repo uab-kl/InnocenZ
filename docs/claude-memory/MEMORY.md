@@ -23,6 +23,8 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 - [InnocenZ tier rate card](innocenz-tier-rate-card.md) — 7-tier payroll rate model (base/RM-HR/HH+NH drinks/tips/OT), per-outlet defaults + per-shift override, outlet/agency/PR role boundaries
 - [Tier is per-membership](innocenz-tier-is-per-membership.md) — tier lives only in agency_pr.tier and is per-agency; the phone's tier_5 was a hardcoded string, never a database fact
 
+- [A zero-count pay tier is a price, not a quota](zero-count-tier-is-a-price.md) — Post Job discarded a rate typed for a tier with 0 requested; persisting it alone would have made that tier unstaffable (`0 >= 0` reads as full)
+
 ### Access, scope and identity
 
 - [Org scope guards](innocenz-org-scope-guards.md) — 🔴 a role guard that never checks the ORGANISATION is not a scope check; also: a zero result is evidence about the instrument, not proof of safety
