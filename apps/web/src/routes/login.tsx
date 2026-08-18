@@ -1,7 +1,15 @@
 import { useForm } from "@tanstack/react-form";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import axios from "axios";
-import { AlertCircle, ArrowLeft, Eye, EyeOff, Loader2, Lock, Mail } from "lucide-react";
+import {
+	AlertCircle,
+	ArrowLeft,
+	Eye,
+	EyeOff,
+	Loader2,
+	Lock,
+	Mail,
+} from "lucide-react";
 import { useState } from "react";
 import { z } from "zod";
 import { BrandLogo } from "@/components/landing/BrandLogo";
@@ -19,9 +27,9 @@ import {
 	InputGroupButton,
 	InputGroupInput,
 } from "@/components/ui/input-group";
+import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { useAuthActions } from "@/lib/auth/use-auth-actions";
 import { fetchProfile } from "@/lib/auth/use-profile";
-import { pickHomePortal } from "@/lib/auth/pick-home-portal";
 import { hardNavigate } from "@/lib/hard-navigate";
 
 const ROLE_DASHBOARD: Record<string, string> = {
@@ -31,7 +39,9 @@ const ROLE_DASHBOARD: Record<string, string> = {
 };
 
 export const Route = createFileRoute("/login")({
-	validateSearch: (search: Record<string, unknown>): {
+	validateSearch: (
+		search: Record<string, unknown>,
+	): {
 		email?: string;
 		next?: string;
 	} => {
@@ -40,9 +50,7 @@ export const Route = createFileRoute("/login")({
 		const nextRaw =
 			typeof search.next === "string" ? search.next.trim() : undefined;
 		const next =
-			nextRaw === "/agency" || nextRaw === "/outlet"
-				? nextRaw
-				: undefined;
+			nextRaw === "/agency" || nextRaw === "/outlet" ? nextRaw : undefined;
 		return {
 			...(email ? { email } : {}),
 			...(next ? { next } : {}),
@@ -335,12 +343,26 @@ function RouteComponent() {
 										const errorId = `${field.name}-error`;
 										return (
 											<Field data-invalid={isInvalid}>
-												<FieldLabel
-													htmlFor={field.name}
-													className="login-field-label"
-												>
-													Password
-												</FieldLabel>
+												<div className="flex flex-wrap items-baseline justify-between gap-x-4">
+													<FieldLabel
+														htmlFor={field.name}
+														className="login-field-label"
+													>
+														Password
+													</FieldLabel>
+													{/* Carries whatever is already typed in the email
+													    field so the reset page starts prefilled. */}
+													<Link
+														to="/forgot-password"
+														search={() => {
+															const typed = form.state.values.email.trim();
+															return typed ? { email: typed } : {};
+														}}
+														className="login-support text-gold-bright underline underline-offset-4 hover:text-gold"
+													>
+														Forgot password?
+													</Link>
+												</div>
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
 														<Lock
