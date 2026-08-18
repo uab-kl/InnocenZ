@@ -875,10 +875,11 @@ export function ProfileScreen({ onNavigate }: { onNavigate: (tab: PrTab) => void
                     })}
                     {leaveTarget && (
                       <View style={styles.agencyLeaveConfirm}>
+                        {/* Brief on purpose — if anything is still unsettled,
+                            the server's refusal lists it in full right here. */}
                         <Text style={styles.metaPending}>
-                          Leave {leaveTarget.name}? Everything with them must be
-                          settled — vouchers paid, disputes closed, no shifts
-                          left — and they must approve your departure.
+                          Leave {leaveTarget.name}? Pay and shifts must be
+                          settled, and they must approve.
                         </Text>
                         <View style={{ flexDirection: 'row', gap: 8, marginTop: 8 }}>
                           <IzButton
