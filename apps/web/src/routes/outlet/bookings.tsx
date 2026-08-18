@@ -25,6 +25,7 @@ import {
 	workspaceTierRatesSignature,
 } from "@agency-portal/components/outlet/post-job-fields";
 import { PostJobActionPanel } from "@agency-portal/components/outlet/post-job-shift-ui";
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
 import { useOutletPrPool } from "@agency-portal/hooks/use-outlet-pr-pool";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
@@ -50,7 +51,7 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { startOfToday } from "date-fns";
 import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
@@ -176,6 +177,9 @@ function PostJobPage() {
 	 * question a dozen times. Seeded by the picker itself to "all approved".
 	 */
 	const [postAgencyIds, setPostAgencyIds] = useState<string[]>([]);
+	// Whether this venue may post at all. Same hook the "Send to" picker reads, so
+	// the button and the picker cannot disagree about it.
+	const agencyLinks = useOutletAgencyLinks();
 
 	const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
 
@@ -680,6 +684,35 @@ function PostJobPage() {
 				}
 			/>
 
+			{/* A venue with no APPROVED agency cannot post — the server refuses it.
+			    Said here, at the top, rather than only in the "Send to" card: the
+			    composer is long, and finding out after filling in a whole shift that
+			    there is nobody to send it to is the worst possible moment. The two
+			    states are kept apart because the next action differs — one is "go
+			    link an agency", the other is "wait for them". */}
+			{backed && !agencyLinks.isLoading && !agencyLinks.canPost && (
+				<div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
+					<p className="text-sm font-semibold text-amber-300">
+						{agencyLinks.awaitingApproval
+							? "Waiting for an agency to accept you"
+							: "Link an agency before posting"}
+					</p>
+					<p className="iz-tiny iz-muted mt-1">
+						{agencyLinks.awaitingApproval
+							? "You have asked to work with an agency and they have not decided yet. Once one accepts, you can post shifts to them."
+							: "Shifts are filled by PR agencies, so this venue needs at least one. Add one in Settings — they choose whether to accept."}
+					</p>
+					{!agencyLinks.awaitingApproval && (
+						<Link
+							to="/outlet/settings"
+							className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
+						>
+							Go to Settings → Agencies
+						</Link>
+					)}
+				</div>
+			)}
+
 			{showTabs && (
 				<div className="mt-3 flex gap-1 rounded-xl border border-[var(--iz-line)] bg-white/[0.02] p-1">
 					<button
@@ -817,7 +850,11 @@ function PostJobPage() {
 								shiftCount={shiftCountForPost}
 								onAddShift={addDraftShift}
 								onSubmit={submitNew}
-								submitDisabled={totalHeadcount <= 0 || isPosting}
+								submitDisabled={
+									totalHeadcount <= 0 ||
+									isPosting ||
+									(backed && !agencyLinks.canPost)
+								}
 							/>
 						</aside>
 					</div>
@@ -832,7 +869,9 @@ function PostJobPage() {
 							shiftCount={shiftCountForPost}
 							onAddShift={addDraftShift}
 							onSubmit={submitNew}
-							submitDisabled={totalHeadcount <= 0}
+							submitDisabled={
+								totalHeadcount <= 0 || (backed && !agencyLinks.canPost)
+							}
 							compact
 						/>
 					</div>

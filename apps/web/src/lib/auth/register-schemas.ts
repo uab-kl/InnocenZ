@@ -76,7 +76,6 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 			 * agency signup, required for an outlet (enforced in the superRefine
 			 * below so agencies are not blocked by a field they never see).
 			 */
-			onboardedByAgencyId: optionalText(64),
 			logoFile: imageFileSchema(messages),
 			ackPersonalInfo: z.boolean().refine((value) => value, {
 				message: messages.ackPersonalInfo,
@@ -94,19 +93,9 @@ export function createSignupSchema(messages: SignupTranslations["validation"]) {
 		.refine((data) => data.password === data.confirmPassword, {
 			message: messages.passwordsMismatch,
 			path: ["confirmPassword"],
-		})
-		.superRefine((data, ctx) => {
-			// A venue with no onboarding agency cannot post a single shift, so the
-			// picker is required — but only for outlets; an agency has none.
-			if (data.accountType !== "outlet") return;
-			if (!data.onboardedByAgencyId.trim()) {
-				ctx.addIssue({
-					code: "custom",
-					message: messages.onboardingAgencyRequired,
-					path: ["onboardedByAgencyId"],
-				});
-			}
 		});
+	// The outlet-must-name-an-agency rule was removed with the multi-agency
+	// cutover: a venue links its agencies in Settings and each one approves.
 }
 
 export type SignupInput = z.infer<ReturnType<typeof createSignupSchema>>;

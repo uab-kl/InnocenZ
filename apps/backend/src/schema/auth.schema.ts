@@ -13,9 +13,15 @@ const LoginSchema = z
     path: ['email'],
   });
 
+/**
+ * Web portal (outlet + agency) forgot-password. Email is REQUIRED and must
+ * parse — the old `z.string().optional()` let `{}` through, and the handler
+ * then looked the account up by the empty string.
+ *
+ * PRs reset by WhatsApp OTP instead — see ResetPasswordWithOtpSchema.
+ */
 const ForgotPasswordSchema = z.object({
-  email: z.string().optional(),
-  phoneNum: z.string().optional(),
+  email: z.email('Enter a valid email address'),
 });
 
 const ResetPasswordSchema = z.object({
@@ -111,14 +117,12 @@ const registerOrgFields = {
   /** Landing-page package id (e.g. `outlet-basic`) — not a catalog UUID yet. */
   /** Catalog plan id (`main.subscription.id`) chosen at Package enrollment. */
   packageId: z.string().uuid().optional(),
-  /**
-   * Outlet signup only — the agency that onboarded this venue, written to
-   * `outlet.onboarded_by_agency_id` (the column POST /shift routes a posted job
-   * through). Ids come from the public GET /auth/agencies list; the controller
-   * re-checks the agency is ACTIVE before writing it, and the venue still lands
-   * as `pending_review` for an admin to confirm or repoint.
-   */
-  onboardedByAgencyId: z.string().uuid('Select the agency that onboarded you').optional(),
+  // `onboardedByAgencyId` was here until the multi-agency cutover (0123/0124).
+  // A venue now works with SEVERAL agencies, each one approved by that agency,
+  // so naming a single one at sign-up asked the wrong question — and answered
+  // it with a value no agency had agreed to. The venue picks its agencies in
+  // outlet Settings and each agency accepts or declines; sign-up no longer
+  // touches `outlet.onboarded_by_agency_id` at all.
   ackPersonalInfo: z.boolean().optional(),
   ackDeclarationOfTruth: z.boolean().optional(),
   ackInformationSharing: z.boolean().optional(),
@@ -187,17 +191,12 @@ const RegisterSchema = z
         ctx.addIssue({ code: 'custom', message, path: [key] });
       }
     }
-    // Outlet only. An agency signing up has no onboarding agency of its own,
-    // and a venue without one cannot post a single shift (ShiftController.create
-    // reads `onboarded_by_agency_id`), so ask for it at sign-up rather than
-    // leaving every self-registered outlet inert until an admin notices.
-    if (data.accountType === 'outlet' && !data.onboardedByAgencyId) {
-      ctx.addIssue({
-        code: 'custom',
-        message: 'Select the agency that onboarded you',
-        path: ['onboardedByAgencyId'],
-      });
-    }
+    // The outlet-must-name-an-agency rule lived here. It existed because
+    // `ShiftController.create` used to read `onboarded_by_agency_id`, so a venue
+    // without one was inert. That is no longer true: posting resolves the
+    // agencies from APPROVED `agency_outlet` links, and a venue with none gets a
+    // clear refusal telling it to link one in Settings. Requiring a choice at
+    // sign-up would now record a partnership the agency has not agreed to.
     if (
       data.ackPersonalInfo !== true ||
       data.ackDeclarationOfTruth !== true ||

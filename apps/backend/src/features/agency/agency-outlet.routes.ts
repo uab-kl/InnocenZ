@@ -36,6 +36,16 @@ router.get(
 router.get('/mine', canManageOwnLinks, agencyOutletController.listMine.bind(agencyOutletController));
 router.put('/mine', canManageOwnLinks, agencyOutletController.syncMine.bind(agencyOutletController));
 
+// ── ADMIN LANE ───────────────────────────────────────────────────────────────
+// Reads ANY venue's links by id, so it is admin-only. Mounted before the agency
+// lane's `/links/:outletId` purely for readability — the two prefixes (`/outlet`
+// vs `/links`) cannot shadow each other.
+router.get(
+  '/outlet/:outletId',
+  requireRole('admin'),
+  agencyOutletController.listForOutlet.bind(agencyOutletController),
+);
+
 // ── AGENCY LANE ──────────────────────────────────────────────────────────────
 // `agency` only. An outlet must not read this: it would enumerate which OTHER
 // venues an agency serves — the agency's commercial information, and none of

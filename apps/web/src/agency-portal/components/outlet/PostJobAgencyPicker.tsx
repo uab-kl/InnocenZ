@@ -1,9 +1,7 @@
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { cn } from "@agency-portal/lib/utils";
-import { useQuery } from "@tanstack/react-query";
 import { Building2, Check } from "lucide-react";
 import { useMemo } from "react";
-import { kickToLogin } from "@/lib/auth/guards";
-import { fetchMyAgencyLinks } from "@/services/agency-outlet";
 
 /**
  * Which agencies this job goes to (`shift_agency`, migration 0124).
@@ -27,16 +25,10 @@ export function PostJobAgencyPicker({
 	value: string[];
 	onChange: (agencyIds: string[]) => void;
 }) {
-	const linksQuery = useQuery({
-		queryKey: ["agency-outlet", "mine", outletId ?? "self"],
-		queryFn: () => fetchMyAgencyLinks(kickToLogin, outletId ?? undefined),
-		staleTime: 30_000,
-	});
-
-	const approved = useMemo(
-		() => (linksQuery.data ?? []).filter((l) => l.approveStatus === "approved"),
-		[linksQuery.data],
-	);
+	// The SHARED hook, not a private query: the Post button and the Today banner
+	// gate on the same thing, and three copies of "is there an approved agency"
+	// is three chances for them to disagree.
+	const { approved, isLoading } = useOutletAgencyLinks(outletId);
 
 	/**
 	 * What is actually selected, DERIVED rather than synced into state.
@@ -56,7 +48,7 @@ export function PostJobAgencyPicker({
 		return value.length === 0 ? ids : value.filter((id) => ids.includes(id));
 	}, [approved, value]);
 
-	if (linksQuery.isLoading) {
+	if (isLoading) {
 		return <p className="iz-tiny iz-muted">Loading agencies…</p>;
 	}
 

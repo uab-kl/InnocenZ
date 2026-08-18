@@ -99,6 +99,29 @@ export class AgencyOutletControllerClass {
     }
   }
 
+  /**
+   * ADMIN — every agency one named venue is linked to.
+   *
+   * Its own route rather than relaxing `/mine`: that one answers "my venue" from
+   * the caller's outlet memberships, and an admin has none. The admin Outlet
+   * Details panel shows this list in place of the old single "onboarded by"
+   * field, because a venue now works with several agencies and naming one of
+   * them was never the same question as naming all of them.
+   */
+  async listForOutlet(req: Request, res: Response) {
+    try {
+      const links = await this.agencyOutletRepository.listByOutlet(
+        this.param(req, 'outletId'),
+      );
+      return res.json({ success: true, message: 'Agency links', data: links });
+    } catch (error) {
+      logger.error('[AgencyOutletController.listForOutlet] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: 'Failed to load agency links', data: null });
+    }
+  }
+
   /** Outlet Settings — every agency this venue is linked to, in any state. */
   async listMine(req: Request, res: Response) {
     try {

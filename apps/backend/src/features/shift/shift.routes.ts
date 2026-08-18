@@ -11,8 +11,9 @@ const router = Router();
 // here never widens the data an outlet can see or touch.
 //
 // Creating AND EDITING a shift is OUTLET-only (plus admin): the venue owns its
-// own demand. It posts the job to the agency named by `onboarded_by_agency_id`,
-// and the agency RECEIVES it — it does not author it, and does not get to
+// own demand. It posts the job to the agencies it picked from its APPROVED
+// `agency_outlet` links (0123/0124) — never to `onboarded_by_agency_id`, which
+// is provenance now — and each agency RECEIVES it: it does not author it, and does not get to
 // rewrite the headcount or the hours afterwards. Agencies still read shifts and
 // staff them; staffing is `shift-assignment`, a different resource.
 //

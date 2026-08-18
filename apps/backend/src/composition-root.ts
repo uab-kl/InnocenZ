@@ -129,7 +129,7 @@ export const authController = new AuthControllerClass(
   outletMemberRepository,
   subscriptionRepository,
   memberSubscriptionRepository,
-  agencyOutletRepository,
+
 );
 export const healthController = new HealthControllerClass();
 

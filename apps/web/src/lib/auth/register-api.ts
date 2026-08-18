@@ -91,7 +91,6 @@ export async function registerUser(
 	// Outlet only → `outlet.onboarded_by_agency_id`. An agency has no onboarding
 	// agency of its own, and the server rejects an id that is not an ACTIVE one.
 	if (input.accountType === "outlet") {
-		payload.onboardedByAgencyId = optionalField(input.onboardedByAgencyId);
 	}
 
 	payload.logoFileName = input.logoFile.name;

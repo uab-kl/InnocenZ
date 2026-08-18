@@ -67,7 +67,6 @@ export class OutletRepositoryClass {
       if (filter?.id) conditions.push(eq(OutletTable.id, filter.id));
       if (filter?.status) conditions.push(eq(OutletTable.status, filter.status));
       if (filter?.name) conditions.push(ilike(OutletTable.name, `%${filter.name}%`));
-      if (filter?.onboardedByAgencyId) conditions.push(eq(OutletTable.onboardedByAgencyId, filter.onboardedByAgencyId));
       // THE AGENCY PORTAL'S VISIBILITY RULE (0123). A subquery rather than a
       // join, so a venue linked to several agencies still yields exactly ONE
       // outlet row — a join here would duplicate it once per link and silently

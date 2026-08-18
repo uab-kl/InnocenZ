@@ -22,6 +22,12 @@ export interface Outlet {
 	lng: string | null;
 	geoFenceRadius: number | null;
 	status: OutletStatus;
+	/**
+	 * ⚠️ HISTORY ONLY — present because the API still returns the column, not
+	 * because anything should read it. Null for every venue registered after the
+	 * multi-agency cutover. "Which agencies may staff this venue" is
+	 * `fetchOutletAgencyLinks` / `fetchMyAgencyLinks`.
+	 */
 	onboardedByAgencyId: string | null;
 	createdAt: string;
 	updatedAt: string;
@@ -146,12 +152,10 @@ export interface GeoFencePayload {
 export interface OutletsQueryParams {
 	name?: string;
 	status?: OutletStatus;
-	/** PROVENANCE — who onboarded the venue. Admin screens only. */
-	onboardedByAgencyId?: string;
 	/**
 	 * VISIBILITY — venues this agency is APPROVED to staff (`agency_outlet`).
-	 * The agency portal must use this; `onboardedByAgencyId` returns only the
-	 * one venue the agency originally signed up.
+	 * The agency portal uses this. The old `onboardedByAgencyId` filter is gone —
+	 * it could only ever return the one venue an agency originally signed up.
 	 */
 	linkedToAgencyId?: string;
 	page?: number;

@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { AgencyOutletTable } from '@/features/agency/agency-outlet.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { RoleTable } from '@/features/rbac/role/role.model';
@@ -70,8 +71,31 @@ async function onboardingAgencyId(): Promise<string | null> {
 }
 
 /** Upsert by name so a re-run refreshes the address instead of adding a twin. */
-async function upsertOutlet(agencyId: string): Promise<{ id: string; created: boolean } | null> {
-  const values = { ...OUTLET, onboardedByAgencyId: agencyId, status: 'active' } as const;
+/**
+ * The venue's agency, as a LINK (0123).
+ *
+ * `approved`, because a seed exists to produce a working fixture: a `pending`
+ * link would leave this outlet unable to post until somebody clicked Approve in
+ * the agency portal.
+ */
+async function linkOutletToAgency(outletId: string, agencyId: string): Promise<void> {
+  await db
+    .insert(AgencyOutletTable)
+    .values({
+      agencyId,
+      outletId,
+      approveStatus: 'approved',
+      createdBy: ACTOR,
+      updatedBy: ACTOR,
+    })
+    .onConflictDoNothing();
+}
+
+async function upsertOutlet(): Promise<{ id: string; created: boolean } | null> {
+  // `onboarded_by_agency_id` is NOT set — it is history now and nothing reads
+  // it. The venue's agency is the `agency_outlet` link written above; without
+  // one this seeded outlet could not post a single shift.
+  const values = { ...OUTLET, status: 'active' } as const;
 
   const [existing] = await db
     .select({ id: OutletTable.id })
@@ -196,11 +220,14 @@ export async function seedOutletEmhub(): Promise<void> {
     return;
   }
 
-  const outlet = await upsertOutlet(agencyId);
+  const outlet = await upsertOutlet();
   if (!outlet) {
     logger.error('[seed-outlet-emhub] Could not upsert the outlet');
     return;
   }
+  // Separate from the upsert on purpose: the link lives in its own table now,
+  // and a re-run must refresh the venue without duplicating the link.
+  await linkOutletToAgency(outlet.id, agencyId);
 
   const user = await upsertOwnerUser(await hashPassword(OWNER_PASSWORD));
   if (!user) {

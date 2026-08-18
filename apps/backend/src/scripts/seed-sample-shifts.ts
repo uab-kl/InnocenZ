@@ -1,9 +1,10 @@
 import 'dotenv/config';
 
-import { eq } from 'drizzle-orm';
+import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
+import { AgencyOutletTable } from '@/features/agency/agency-outlet.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
-import { ShiftTable, type ShiftStatus } from '@/features/shift/shift.model';
+import { ShiftAgencyTable, ShiftTable, type ShiftStatus } from '@/features/shift/shift.model';
 import { logger } from '@/util/logger';
 
 // Seeds the `shift` table so the outlet Today / History screens and the agency
@@ -43,18 +44,37 @@ function money(value: number): string {
 }
 
 export async function seedSampleShifts(): Promise<void> {
+  // The agency comes from an APPROVED `agency_outlet` link (0123), not from
+  // `onboarded_by_agency_id` — that column is history and is null on every
+  // venue created since the cutover, so sourcing from it would seed zero shifts.
+  //
+  // An outlet linked to several agencies yields several rows; `staffed` keeps
+  // the first per outlet, so each seeded shift is anchored to one agency and
+  // then invited to it through `shift_agency` below.
   const outlets = await db
     .select({
       id: OutletTable.id,
       name: OutletTable.name,
-      agencyId: OutletTable.onboardedByAgencyId,
+      agencyId: AgencyOutletTable.agencyId,
     })
-    .from(OutletTable);
+    .from(OutletTable)
+    .innerJoin(
+      AgencyOutletTable,
+      and(
+        eq(AgencyOutletTable.outletId, OutletTable.id),
+        eq(AgencyOutletTable.approveStatus, 'approved'),
+      ),
+    );
 
-  const staffed = outlets.filter((o) => o.agencyId !== null);
+  const seen = new Set<string>();
+  const staffed = outlets.filter((o) => {
+    if (o.agencyId === null || seen.has(o.id)) return false;
+    seen.add(o.id);
+    return true;
+  });
   if (staffed.length === 0) {
     logger.warn(
-      '[seed-sample-shifts] No outlets with an onboarding agency — run seed-sample-orgs first',
+      '[seed-sample-shifts] No outlets with an approved agency link — run seed-sample-orgs first',
     );
     return;
   }
@@ -95,7 +115,28 @@ export async function seedSampleShifts(): Promise<void> {
     }
   }
 
-  await db.insert(ShiftTable).values(rows);
+  const inserted = await db.insert(ShiftTable).values(rows).returning({
+    id: ShiftTable.id,
+    agencyId: ShiftTable.agencyId,
+  });
+
+  // WITHOUT THIS THE SEEDED SHIFTS ARE INVISIBLE (0124). Every agency-side read
+  // resolves through `shift_agency`, not `shift.agency_id` — that column is only
+  // the originating agency now — so shifts inserted without a link row would
+  // exist in the table and appear on no roster at all.
+  if (inserted.length > 0) {
+    await db
+      .insert(ShiftAgencyTable)
+      .values(
+        inserted.map((shift) => ({
+          shiftId: shift.id,
+          agencyId: shift.agencyId,
+          createdBy: ACTOR,
+          updatedBy: ACTOR,
+        })),
+      )
+      .onConflictDoNothing();
+  }
 
   logger.info(
     `[seed-sample-shifts] Done. ${rows.length} shifts across ${staffed.length} outlet(s), ${isoDate(SCHEDULE[0].offsetDays)} → ${isoDate(SCHEDULE[SCHEDULE.length - 1].offsetDays)}.`,
