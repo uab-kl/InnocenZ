@@ -1,7 +1,7 @@
 import { and, desc, eq, inArray, sql } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
-import { ShiftTable } from '@/features/shift/shift.model';
+import { ShiftAgencyTable, ShiftTable } from '@/features/shift/shift.model';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { UserTable } from '@/features/user/user.model';
@@ -94,7 +94,18 @@ export class CutlostRepositoryClass {
     try {
       const where = [
         filter.id ? eq(CutlostRequestTable.id, filter.id) : undefined,
-        filter.agencyId ? eq(ShiftTable.agencyId, filter.agencyId) : undefined,
+        // Via `shift_agency`, not `ShiftTable.agencyId` (0124) — that column is
+        // only the FIRST agency invited, so an equality test here would hide
+        // every cutloss request on a shared shift from all but one agency.
+        filter.agencyId
+          ? inArray(
+              ShiftTable.id,
+              db
+                .select({ shiftId: ShiftAgencyTable.shiftId })
+                .from(ShiftAgencyTable)
+                .where(eq(ShiftAgencyTable.agencyId, filter.agencyId)),
+            )
+          : undefined,
         // An empty array matches NOTHING — never treat it as "no filter", or an
         // outlet member with no venues would read every venue's requests.
         filter.outletIds ? inArray(ShiftTable.outletId, filter.outletIds) : undefined,

@@ -21,6 +21,8 @@ import { useAgencyCanFor } from "@agency-portal/lib/use-portal-can";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type HubTab =
 	| "on-duty"
@@ -46,13 +48,26 @@ const HUB_TAB_ALERT_COLOR: Record<HubTab, string> = {
 	overtime: "text-[var(--iz-amber)]",
 };
 
-/** The PR app's own words for each bucket, so both sides read the same. */
-const DISPUTE_COMPONENT_LABEL: Record<string, string> = {
-	wages: "Daily wages",
-	drinks: "Drinks",
-	tips: "Tips",
-	others: "Others",
-};
+/**
+ * The PR app's own words for each bucket, so both sides read the same.
+ *
+ * Maps to dictionary KEYS rather than finished strings: the component name
+ * (`wages`, `drinks`, …) is what the API sends and must not be translated, but
+ * what the reviewer reads must be. An unknown component still falls through to
+ * its raw name rather than rendering blank.
+ */
+const DISPUTE_COMPONENT_KEY: Record<string, keyof PortalTranslations["money"]> =
+	{
+		wages: "dailyWages",
+		drinks: "drinks",
+		tips: "tips",
+		others: "others",
+	};
+
+function disputeComponentLabel(component: string, t: PortalTranslations) {
+	const key = DISPUTE_COMPONENT_KEY[component];
+	return key ? t.money[key] : component;
+}
 
 /** "2026-08-06" -> "Thu 6 Aug", the day the PR is contesting. */
 function formatDisputeDay(iso: string): string {
@@ -167,22 +182,25 @@ export function AgencyHomeHubTabs({
 	 */
 	const prPhoto = useAgencyPrPhotos({ enabled: can("viewWorkforce") });
 
+	const { t } = usePortalLocale();
+
 	const tabs = useMemo(() => {
 		const list: { id: HubTab; label: string }[] = [];
-		if (showWorkforce) list.push({ id: "on-duty", label: "PR ON DUTY" });
+		if (showWorkforce)
+			list.push({ id: "on-duty", label: t.agencyHome.prOnDuty });
 		if (showApprovals)
-			list.push({ id: "approvals", label: "PENDING APPROVALS" });
+			list.push({ id: "approvals", label: t.agencyHome.pendingApprovals });
 		if (showPayroll) {
-			list.push({ id: "review", label: "PENDING AGENCY REVIEW" });
-			list.push({ id: "disputes", label: "DISPUTES" });
+			list.push({ id: "review", label: t.agencyHome.pendingAgencyReview });
+			list.push({ id: "disputes", label: t.agencyHome.disputes });
 			// Both gate a week from going out — a pending receipt blocks its voucher
 			// from being sent, an undecided overtime claim holds its whole payroll
 			// week — so both belong on the screen that says what needs doing today.
-			list.push({ id: "receipts", label: "PENDING RECEIPTS" });
-			list.push({ id: "overtime", label: "PENDING OVERTIME" });
+			list.push({ id: "receipts", label: t.agencyHome.pendingReceipts });
+			list.push({ id: "overtime", label: t.agencyHome.pendingOvertime });
 		}
 		return list;
-	}, [showWorkforce, showApprovals, showPayroll]);
+	}, [showWorkforce, showApprovals, showPayroll, t]);
 
 	const defaultTab = tabs[0]?.id ?? "on-duty";
 	const [tab, setTab] = useState<HubTab>(defaultTab);
@@ -203,7 +221,13 @@ export function AgencyHomeHubTabs({
 	// to a page listing real work. All four terms below are what its three tabs
 	// count — MC/leave included, which this tile used to omit entirely.
 	const approvals = useAgencyApprovalQueue();
-	const { signups, linkRequests, cutlostRequests, leaveRequests } = approvals;
+	const {
+		signups,
+		linkRequests,
+		cutlostRequests,
+		leaveRequests,
+		outletLinkRequests,
+	} = approvals;
 	const pendingReview = prPaymentVouchers.filter(
 		(p) => p.status === "PENDING_REVIEW",
 	);
@@ -263,23 +287,28 @@ export function AgencyHomeHubTabs({
 			{activeTab === "approvals" && showApprovals && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">Pending approvals</h3>
-						<HubPanelLink to="/agency/pending" label="Open approvals" />
+						<h3 className="font-sora text-base font-bold">
+							{t.agencyHub.pendingApprovalsTitle}
+						</h3>
+						<HubPanelLink
+							to="/agency/pending"
+							label={t.agencyHub.openApprovals}
+						/>
 					</div>
 					{approvals.total === 0 ? (
 						<p className="iz-tiny iz-muted px-4 py-6 text-center">
 							{approvals.isLoading
-								? "Loading approvals…"
-								: "Nothing awaiting approval."}
+								? t.agencyHub.loadingApprovals
+								: t.agencyHub.nothingAwaitingApproval}
 						</p>
 					) : (
 						<div className="iz-portal-table-wrap">
 							<table className="iz-portal-table">
 								<thead>
 									<tr>
-										<th>Outlet / PR</th>
-										<th>Type</th>
-										<th>Details</th>
+										<th>{t.table.outletOrPr}</th>
+										<th>{t.table.type}</th>
+										<th>{t.table.details}</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -305,7 +334,9 @@ export function AgencyHomeHubTabs({
 													<span className="iz-portal-table-name">{p.name}</span>
 												</div>
 											</td>
-											<td className="iz-portal-table-meta">New signup</td>
+											<td className="iz-portal-table-meta">
+												{t.agencyHub.newSignup}
+											</td>
 											<td className="iz-portal-table-meta">
 												{p.languages || p.mobile}
 											</td>
@@ -327,9 +358,11 @@ export function AgencyHomeHubTabs({
 													</span>
 												</div>
 											</td>
-											<td className="iz-portal-table-meta">Link request</td>
 											<td className="iz-portal-table-meta">
-												Wants to link · {l.requestedAt}
+												{t.agencyHub.linkRequest}
+											</td>
+											<td className="iz-portal-table-meta">
+												{t.agencyHub.wantsToLink} · {l.requestedAt}
 											</td>
 										</PortalClickableTableRow>
 									))}
@@ -354,9 +387,12 @@ export function AgencyHomeHubTabs({
 														</span>
 													</div>
 												</td>
-												<td className="iz-portal-table-meta">MC / leave</td>
 												<td className="iz-portal-table-meta">
-													{req.outletName ?? "Outlet"} · {req.shiftDate ?? "—"}
+													{t.agencyHub.mcLeave}
+												</td>
+												<td className="iz-portal-table-meta">
+													{req.outletName ?? t.table.outlet} ·{" "}
+													{req.shiftDate ?? "—"}
 												</td>
 											</PortalClickableTableRow>
 										);
@@ -384,12 +420,49 @@ export function AgencyHomeHubTabs({
 													</span>
 												</div>
 											</td>
-											<td className="iz-portal-table-meta">Cutlost request</td>
+											<td className="iz-portal-table-meta">
+												{t.agencyHub.cutlostRequest}
+											</td>
 											<td className="iz-portal-table-meta">
 												{cutlostRequestTitle(req)} · ~RM{" "}
 												{Math.round(req.estimatedSavings).toLocaleString(
 													"en-MY",
 												)}
+											</td>
+										</PortalClickableTableRow>
+									))}
+									{/* Venues asking to be let in (0123). Added alongside the
+									    count in `total`, never on its own — a tile that counts a
+									    row it does not render is worse than one that ignores it,
+									    because the operator can see there is work and cannot see
+									    what it is. Deep-links straight to the right tab. */}
+									{outletLinkRequests.map((link) => (
+										<PortalClickableTableRow
+											key={link.id}
+											target={{
+												to: "/agency/pending",
+												search: { tab: "outlet-linking" },
+											}}
+										>
+											<td>
+												<div className="iz-portal-table-pr">
+													{/* A venue, so its own logo — the same reasoning as
+													    the cutlost rows above. */}
+													<PortalTableAvatar
+														name={link.outletName}
+														photo={link.logoImage}
+													/>
+													<span className="iz-portal-table-name">
+														{link.outletName}
+													</span>
+												</div>
+											</td>
+											<td className="iz-portal-table-meta">
+												{t.agencyHub.outletLinkRequest}
+											</td>
+											<td className="iz-portal-table-meta">
+												{[link.city, link.state].filter(Boolean).join(", ") ||
+													"—"}
 											</td>
 										</PortalClickableTableRow>
 									))}
@@ -403,26 +476,28 @@ export function AgencyHomeHubTabs({
 			{activeTab === "review" && showPayroll && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">PV pending review</h3>
+						<h3 className="font-sora text-base font-bold">
+							{t.agencyHub.pvPendingReviewTitle}
+						</h3>
 						<HubPanelLink
 							to="/agency/pv"
 							search={{ status: "PENDING_REVIEW" }}
-							label="Open payroll"
+							label={t.agencyHub.openPayroll}
 						/>
 					</div>
 					{pendingReview.length === 0 ? (
 						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							No PVs awaiting review.
+							{t.agencyHub.noPvsAwaitingReview}
 						</p>
 					) : (
 						<div className="iz-portal-table-wrap">
 							<table className="iz-portal-table">
 								<thead>
 									<tr>
-										<th>PR</th>
-										<th>Outlet</th>
-										<th>Net</th>
-										<th>Status</th>
+										<th>{t.table.pr}</th>
+										<th>{t.table.outlet}</th>
+										<th>{t.table.net}</th>
+										<th>{t.table.status}</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -454,7 +529,7 @@ export function AgencyHomeHubTabs({
 													variant={pvStatusPillVariant(pv.status)}
 													className="!py-0.5 !text-[9px]"
 												>
-													{agencyPvStatusLabel(pv.status)}
+													{agencyPvStatusLabel(pv.status, t)}
 												</IzPill>
 											</td>
 										</PortalClickableTableRow>
@@ -469,7 +544,9 @@ export function AgencyHomeHubTabs({
 			{activeTab === "disputes" && showPayroll && (
 				<>
 					<div className="iz-portal-panel-head">
-						<h3 className="font-sora text-base font-bold">Open disputes</h3>
+						<h3 className="font-sora text-base font-bold">
+							{t.agencyHub.openDisputesTitle}
+						</h3>
 						{/* `?tab=disputes`, NOT `?status=DISPUTED`. The claim's voucher is
 						    usually still SENT, so a status link filtered the voucher list to
 						    nothing and told the agency there was no dispute — on the very
@@ -477,25 +554,27 @@ export function AgencyHomeHubTabs({
 						<HubPanelLink
 							to="/agency/pv"
 							search={{ tab: "disputes" }}
-							label="Open payroll"
+							label={t.agencyHub.openPayroll}
 						/>
 					</div>
 					{openDisputes.length === 0 ? (
 						<p className="iz-tiny iz-muted px-4 py-6 text-center">
-							{disputesLoading ? "Loading disputes…" : "No open disputes."}
+							{disputesLoading
+								? t.agencyHub.loadingDisputes
+								: t.agencyHub.noOpenDisputes}
 						</p>
 					) : (
 						<div className="iz-portal-table-wrap">
 							<table className="iz-portal-table">
 								<thead>
 									<tr>
-										<th>PR</th>
+										<th>{t.table.pr}</th>
 										{/* The day and the bucket, because that is what a dispute IS
 										    — one claim about one component of one day. A voucher-level
 										    row could not say which. */}
-										<th>Day</th>
-										<th>Component</th>
-										<th>Voucher says</th>
+										<th>{t.table.day}</th>
+										<th>{t.table.component}</th>
+										<th>{t.table.voucherSays}</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -527,7 +606,7 @@ export function AgencyHomeHubTabs({
 													{formatDisputeDay(d.disputeDate)}
 												</td>
 												<td className="iz-portal-table-meta">
-													{DISPUTE_COMPONENT_LABEL[d.component] ?? d.component}
+													{disputeComponentLabel(d.component, t)}
 												</td>
 												<td className="iz-portal-table-meta">
 													{formatRM(Number(d.disputedAmount ?? 0))}
@@ -546,29 +625,29 @@ export function AgencyHomeHubTabs({
 				<>
 					<div className="iz-portal-panel-head">
 						<h3 className="font-sora text-base font-bold">
-							Receipts waiting on you
+							{t.agencyHub.receiptsWaitingTitle}
 						</h3>
 						<HubPanelLink
 							to="/agency/pv"
 							search={{ tab: "receipts" }}
-							label="Open payroll"
+							label={t.agencyHub.openPayroll}
 						/>
 					</div>
 					{pendingReceipts.length === 0 ? (
 						<p className="iz-tiny iz-muted px-4 py-6 text-center">
 							{receiptsLoading
-								? "Loading receipts…"
-								: "No receipts awaiting approval."}
+								? t.agencyHub.loadingReceipts
+								: t.agencyHub.noReceiptsAwaiting}
 						</p>
 					) : (
 						<div className="iz-portal-table-wrap">
 							<table className="iz-portal-table">
 								<thead>
 									<tr>
-										<th>PR</th>
-										<th>Receipt</th>
-										<th>Shift day</th>
-										<th>Logged</th>
+										<th>{t.table.pr}</th>
+										<th>{t.table.receipt}</th>
+										<th>{t.table.shiftDay}</th>
+										<th>{t.table.logged}</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -618,7 +697,9 @@ export function AgencyHomeHubTabs({
 														variant="amber"
 														className="!py-0.5 !text-[9px]"
 													>
-														{r.source === "manual" ? "Self-log" : "Scanned"}
+														{r.source === "manual"
+															? t.agencyHub.selfLog
+															: t.agencyHub.scanned}
 													</IzPill>
 												</td>
 											</PortalClickableTableRow>
@@ -635,32 +716,32 @@ export function AgencyHomeHubTabs({
 				<>
 					<div className="iz-portal-panel-head">
 						<h3 className="font-sora text-base font-bold">
-							Overtime awaiting a decision
+							{t.agencyHub.overtimeAwaitingTitle}
 						</h3>
 						<HubPanelLink
 							to="/agency/pv"
 							search={{ tab: "overtime" }}
-							label="Open payroll"
+							label={t.agencyHub.openPayroll}
 						/>
 					</div>
 					{pendingOvertime.length === 0 ? (
 						<p className="iz-tiny iz-muted px-4 py-6 text-center">
 							{overtimeLoading
-								? "Loading overtime claims…"
-								: "No overtime awaiting a decision."}
+								? t.agencyHub.loadingOvertime
+								: t.agencyHub.noOvertimeAwaiting}
 						</p>
 					) : (
 						<div className="iz-portal-table-wrap">
 							<table className="iz-portal-table">
 								<thead>
 									<tr>
-										<th>PR</th>
-										<th>Outlet</th>
-										<th>Shift day</th>
+										<th>{t.table.pr}</th>
+										<th>{t.table.outlet}</th>
+										<th>{t.table.shiftDay}</th>
 										{/* Priced server-side. Never recomputed from the minutes, or
 										    the tile could name one figure while another lands on
 										    the voucher. */}
-										<th>Pays</th>
+										<th>{t.table.pays}</th>
 									</tr>
 								</thead>
 								<tbody>
@@ -686,7 +767,7 @@ export function AgencyHomeHubTabs({
 													</div>
 												</td>
 												<td className="iz-portal-table-meta">
-													{c.outletName ?? "Outlet"}
+													{c.outletName ?? t.table.outlet}
 												</td>
 												<td className="iz-portal-table-meta">
 													{c.shiftDate

@@ -3,6 +3,7 @@ import { SecuritySettingsSheets } from "@agency-portal/components/auth/SecurityS
 import { IzCard, IzSectionLabel } from "@agency-portal/components/iz/ui";
 import { OrgMembersPanel } from "@agency-portal/components/org/OrgMembersPanel";
 import { SignatureOnFileCard } from "@agency-portal/components/org/SignatureOnFileCard";
+import { AgencyLinksPanel } from "@agency-portal/components/outlet/AgencyLinksPanel";
 import { GeoFenceCard } from "@agency-portal/components/outlet/GeoFenceCard";
 import {
 	OutletPage,
@@ -47,6 +48,7 @@ import {
 	isOrgPendingReview,
 	isOrgSuspended,
 } from "@/components/organization/org-status";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export const Route = createFileRoute("/outlet/settings")({
 	component: OutletSettingsPage,
@@ -85,6 +87,7 @@ function ToggleRow({
 }
 
 function OutletSettingsPage() {
+	const { t } = usePortalLocale();
 	const outletOwner = useStore((s) => s.outletOwner);
 	const outletFinanceHead = useStore((s) => s.outletFinanceHead);
 	const outletOpsHead = useStore((s) => s.outletOpsHead);
@@ -217,11 +220,11 @@ function OutletSettingsPage() {
 		e.target.value = "";
 		if (!file || !editing) return;
 		if (!file.type.startsWith("image/")) {
-			toast("Please choose an image file", "warn");
+			toast(t.profile.chooseImageFile, "warn");
 			return;
 		}
 		if (file.size > 5 * 1024 * 1024) {
-			toast("Image must be under 5 MB", "warn");
+			toast(t.profile.imageUnder5Mb, "warn");
 			return;
 		}
 		const reader = new FileReader();
@@ -232,22 +235,22 @@ function OutletSettingsPage() {
 				contentType: file.type || "image/png",
 			});
 			setLogoCleared(false);
-			toast("Logo selected — tap Save to upload", "success");
+			toast(t.profile.logoSelected, "success");
 		};
 		reader.readAsDataURL(file);
 	};
 
 	const saveEdit = async () => {
 		if (!draft.orgName.trim()) {
-			toast("Enter outlet name", "warn");
+			toast(t.outletSettings.enterOutletName, "warn");
 			return;
 		}
 		if (!draft.ownerName.trim() || draft.ownerName.trim().length < 2) {
-			toast("Enter owner name (at least 2 characters)", "warn");
+			toast(t.profile.enterOwnerName, "warn");
 			return;
 		}
 		if (!addressDraft.addressLine1.trim()) {
-			toast("Enter address line 1", "warn");
+			toast(t.profile.enterAddressLine1, "warn");
 			return;
 		}
 		// Real session: outlet owner may change outlet name, owner display name
@@ -255,7 +258,7 @@ function OutletSettingsPage() {
 		// Login & security.
 		if (profile.backed) {
 			if (!canEdit) {
-				toast("Only the outlet owner can edit this profile", "warn");
+				toast(t.outletSettings.onlyOwnerCanEdit, "warn");
 				return;
 			}
 			setSaving(true);
@@ -297,10 +300,7 @@ function OutletSettingsPage() {
 						: err instanceof Error
 							? err.message
 							: "";
-				toast(
-					msg.trim() || "Could not save — the server refused the change",
-					"warn",
-				);
+				toast(msg.trim() || t.profile.couldNotSave, "warn");
 				setSaving(false);
 				return;
 			}
@@ -308,11 +308,11 @@ function OutletSettingsPage() {
 			setLogoMeta(null);
 			setLogoCleared(false);
 			setEditing(false);
-			toast("Owner information saved", "success");
+			toast(t.outletSettings.ownerInfoSaved, "success");
 			return;
 		}
 		if (!draft.mobile.trim()) {
-			toast("Enter mobile number", "warn");
+			toast(t.profile.enterMobile, "warn");
 			return;
 		}
 		saveOutletProfileSettings({
@@ -328,7 +328,7 @@ function OutletSettingsPage() {
 			location: joinOrgAddress(addressDraft),
 		});
 		setEditing(false);
-		toast("Settings saved", "success");
+		toast(t.profile.settingsSaved, "success");
 	};
 
 	if (!can("viewSettings")) {
@@ -336,13 +336,11 @@ function OutletSettingsPage() {
 			<div className="iz-screen">
 				<header>
 					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						Access restricted
+						{t.outletSettings.accessRestricted}
 					</h2>
 				</header>
 				<IzCard className="text-center">
-					<p className="iz-sm iz-muted">
-						You do not have access to outlet settings.
-					</p>
+					<p className="iz-sm iz-muted">{t.outletSettings.noAccess}</p>
 				</IzCard>
 			</div>
 		);
@@ -354,16 +352,22 @@ function OutletSettingsPage() {
 
 	return (
 		<OutletPage>
-			<OutletPageHeader title="Settings" hint={owner.orgName} />
+			<OutletPageHeader
+				title={t.nav.settings}
+				iconKey="Settings"
+				hint={owner.orgName}
+			/>
 			<PendingReviewBanner orgStatus={orgStatus} kind="outlet" />
 			{profile.backed && profile.isLoading && (
-				<p className="iz-tiny iz-muted mb-3">Loading your outlet profile…</p>
+				<p className="iz-tiny iz-muted mb-3">
+					{t.outletSettings.loadingProfile}
+				</p>
 			)}
 			{isSubRoleReadOnly && !editing && (
 				<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
 					{outletSubRole === "outlet_finance"
-						? "Finance view — read-only. Only the outlet owner can edit owner information."
-						: "Ops view — read-only. Only the outlet owner can edit owner information."}
+						? t.outletSettings.financeReadOnly
+						: t.outletSettings.opsReadOnly}
 				</p>
 			)}
 
@@ -406,12 +410,12 @@ function OutletSettingsPage() {
 				>
 					<Shield className="h-3 w-3" />
 					{isOrgSuspended(orgStatus)
-						? "Suspended · profile only"
+						? t.profile.suspendedProfileOnly
 						: owner.accountActivated
-							? "Verified · outlet active"
+							? t.outletSettings.verifiedOutletActive
 							: profile.backed || isOrgPendingReview(orgStatus)
-								? "Pending admin approval"
-								: "Pending OTP activation"}
+								? t.profile.pendingAdminApproval
+								: t.profile.pendingOtpActivation}
 				</div>
 				{editing && canEdit ? (
 					<ProfilePhotoActions
@@ -432,42 +436,42 @@ function OutletSettingsPage() {
 				)}
 			</div>
 
-			<IzSectionLabel>Owner information</IzSectionLabel>
+			<IzSectionLabel>{t.outletSettings.ownerInformation}</IzSectionLabel>
 			<ProfileSectionCard editing={editing && canEdit}>
 				<ProfileSettingsField
 					icon={Building2}
-					label="Outlet name"
+					label={t.outletSettings.outletName}
 					value={owner.orgName}
 					onChange={(v) => update({ orgName: v })}
 					mode={fieldMode}
-					placeholder="Venue / outlet name"
+					placeholder={t.outletSettings.venueOutletName}
 				/>
 				<ProfileSettingsField
 					icon={User}
-					label="Owner name"
+					label={t.outletSettings.ownerName}
 					value={owner.ownerName}
 					onChange={(v) => update({ ownerName: v })}
 					mode={fieldMode}
-					placeholder="Display name"
+					placeholder={t.outletSettings.displayName}
 				/>
 				<ProfileSettingsField
 					icon={Phone}
-					label="Mobile"
+					label={t.outletSettings.mobile}
 					value={owner.mobile}
 					mode="locked"
-					hint="Change in Login & security"
+					hint={t.outletSettings.changeInLoginSecurity}
 				/>
 				<ProfileSettingsField
 					icon={Mail}
-					label="Email"
+					label={t.outletSettings.email}
 					value={owner.email}
 					mode="locked"
-					hint="Change in Login & security"
+					hint={t.outletSettings.changeInLoginSecurity}
 				/>
 				{!profile.backed && (
 					<ProfileSettingsField
 						icon={Shield}
-						label="IC (for PV)"
+						label={t.outletSettings.icForPv}
 						value={owner.ic}
 						onChange={(v) => update({ ic: v })}
 						mode={fieldMode}
@@ -494,67 +498,67 @@ function OutletSettingsPage() {
 			{/* Demo-only Finance/Ops cards — real staff live in OrgMembersPanel. */}
 			{!profile.backed && (
 				<>
-					<IzSectionLabel>Finance Head</IzSectionLabel>
+					<IzSectionLabel>{t.outletSettings.financeHead}</IzSectionLabel>
 					<ProfileSectionCard editing={editing && canEdit}>
 						<p className="iz-tiny iz-muted mb-1 pt-2">
-							Weekly reconciliation · due Sundays · billing sign-off
+							{t.outletSettings.financeHeadHint}
 						</p>
 						<ProfileSettingsField
 							icon={User}
-							label="Name"
+							label={t.outletSettings.name}
 							value={finance.name}
 							onChange={(v) => updateFinance({ name: v })}
 							mode={fieldMode}
 						/>
 						<ProfileSettingsField
 							icon={Shield}
-							label="IC"
+							label={t.outletSettings.ic}
 							value={finance.ic}
 							onChange={(v) => updateFinance({ ic: v })}
 							mode={fieldMode}
 						/>
 						<ProfileSettingsField
 							icon={Mail}
-							label="Email"
+							label={t.outletSettings.email}
 							value={finance.email}
 							onChange={(v) => updateFinance({ email: v })}
 							mode={fieldMode}
 						/>
 					</ProfileSectionCard>
 
-					<IzSectionLabel>Ops Head</IzSectionLabel>
+					<IzSectionLabel>{t.outletSettings.opsHead}</IzSectionLabel>
 					<ProfileSectionCard editing={editing && canEdit}>
 						<p className="iz-tiny iz-muted mb-1 pt-2">
-							Floor operations · shift staffing · sales logging
+							{t.outletSettings.opsHeadHint}
 						</p>
 						<ProfileSettingsField
 							icon={Wrench}
-							label="Name"
+							label={t.outletSettings.name}
 							value={ops.name}
 							onChange={(v) => updateOps({ name: v })}
 							mode={fieldMode}
 						/>
 						<ProfileSettingsField
 							icon={Shield}
-							label="IC"
+							label={t.outletSettings.ic}
 							value={ops.ic}
 							onChange={(v) => updateOps({ ic: v })}
 							mode={fieldMode}
 						/>
 						<ProfileSettingsField
 							icon={Mail}
-							label="Email"
+							label={t.outletSettings.email}
 							value={ops.email}
 							onChange={(v) => updateOps({ email: v })}
 							mode={fieldMode}
 						/>
 					</ProfileSectionCard>
 
-					<IzSectionLabel>Notifications</IzSectionLabel>
+					<IzSectionLabel>{t.outletSettings.notifications}</IzSectionLabel>
 					<IzCard className="mt-2 !py-0 px-4">
 						<ToggleRow
-							label="Shift updates"
-							desc="PR accept/decline · roster changes"
+							label={t.outletSettings.shiftUpdates}
+							desc={t.outletSettings.shiftUpdatesHint}
 							on={outletSettings.notifyShiftUpdates}
 							onChange={(v) => saveOutletSettings({ notifyShiftUpdates: v })}
 						/>
@@ -571,6 +575,13 @@ function OutletSettingsPage() {
 				/>
 			)}
 
+			{/* Which agencies may staff this venue (0123). Sits after the team
+			    panel because it is the other half of "who works here": staff
+			    inside, agencies outside. */}
+			{!editing && (
+				<AgencyLinksPanel outletId={profile.outletId} canManage={canEdit} />
+			)}
+
 			{/* Sits with Login & security, not with the demo Finance/Ops cards
 			    above: this is the signed-in person's own signature, whoever they
 			    are, and it is real. */}
@@ -578,19 +589,16 @@ function OutletSettingsPage() {
 
 			{!editing && (
 				<>
-					<IzSectionLabel>Login &amp; security</IzSectionLabel>
+					<IzSectionLabel>{t.outletSettings.loginSecurity}</IzSectionLabel>
 					<IzCard>
 						<AccountAvatarCard />
-						<p className="iz-tiny iz-muted mb-3">
-							Update password anytime. Email and mobile changes require OTP
-							verification.
-						</p>
+						<p className="iz-tiny iz-muted mb-3">{t.profile.passwordOtpHint}</p>
 						<button
 							type="button"
 							className="iz-btn iz-btn-primary w-full"
 							onClick={() => setSecurityOpen(true)}
 						>
-							Security settings
+							{t.profile.securitySettings}
 						</button>
 					</IzCard>
 				</>

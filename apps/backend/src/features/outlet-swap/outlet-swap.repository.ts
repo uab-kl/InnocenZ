@@ -5,7 +5,7 @@ import { logger } from '@/util/logger';
 import { OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
 import { UserProfileTable } from '@/features/user/user-profile/user-profile.model';
-import { ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
+import { ShiftAgencyTable, ShiftTable, ShiftPayTierTable } from '@/features/shift/shift.model';
 import { AgencyPrTable } from '@/features/pr-personnel/pr.model';
 import { ShiftAssignmentTable } from '@/features/shift-assignment/shift-assignment.model';
 import { NON_STAFFING_STATUSES } from '@/features/shift-assignment/shift-assignment.repository';
@@ -605,7 +605,15 @@ export class OutletSwapRepositoryClass {
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
         .where(
           and(
-            eq(ShiftTable.agencyId, params.agencyId),
+            // Via `shift_agency` (0124): an agency may reassign an early-released
+            // PR into any shift it was INVITED to, not only ones it originated.
+            inArray(
+              ShiftTable.id,
+              db
+                .select({ shiftId: ShiftAgencyTable.shiftId })
+                .from(ShiftAgencyTable)
+                .where(eq(ShiftAgencyTable.agencyId, params.agencyId)),
+            ),
             eq(ShiftTable.shiftDate, params.shiftDate),
             inArray(ShiftTable.status, ['open', 'confirmed']),
           ),

@@ -855,6 +855,27 @@
       "when": 1789600000000,
       "tag": "0121_pr_availability",
       "breakpoints": true
+    },
+    {
+      "idx": 122,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0122_user_preferred_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1789800000000,
+      "tag": "0123_agency_outlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0124_shift_agency",
+      "breakpoints": true
     }
   ]
 }

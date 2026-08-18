@@ -5,6 +5,7 @@ import { whatsappRoutes } from '@/features/whatsapp/index.js';
 import userRoutes from '@/features/user/user.routes.js';
 import { rbacRoutes } from '@/features/rbac/index.js';
 import subscriptionRoutes from '@/features/subscription/subscription.routes.js';
+import agencyOutletRoutes from '@/features/agency/agency-outlet.routes.js';
 import agencyRoutes from '@/features/agency/agency.routes.js';
 import prRoutes from '@/features/pr-personnel/pr.routes.js';
 import shiftRoutes from '@/features/shift/shift.routes.js';
@@ -65,6 +66,10 @@ v1Router.use('/user', userRoutes);
 v1Router.use('/rbac', requireAdmin, rbacRoutes);
 v1Router.use('/subscription', subscriptionRoutes);
 v1Router.use('/agency', agencyRoutes);
+// Its own mount, NOT more paths under /agency: every route inside derives the
+// caller's org from the session, so it must not sit behind a prefix whose
+// routes take an org id in the URL.
+v1Router.use('/agency-outlet', agencyOutletRoutes);
 v1Router.use('/pr', prRoutes);
 v1Router.use('/shift', shiftRoutes);
 v1Router.use('/payment-voucher', paymentVoucherRoutes);

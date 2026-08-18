@@ -93,6 +93,18 @@ export interface ShiftPayTierInput {
 
 export interface CreateShiftInput {
 	agencyId?: string;
+	/**
+	 * Which of the outlet's APPROVED agencies this job goes to (0124).
+	 *
+	 * Shared fulfilment: every listed agency may send PRs to the same shift
+	 * until the headcount is met. Omit or leave empty to reach all approved
+	 * agencies — which is what the old single-agency behaviour meant back when a
+	 * venue could only have one.
+	 *
+	 * Advisory: the server intersects this with the outlet's approved links, so
+	 * naming an unapproved agency cannot create an invitation.
+	 */
+	agencyIds?: string[];
 	outletId: string;
 	shiftDate: string;
 	slot?: string;

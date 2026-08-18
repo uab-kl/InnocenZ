@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { ShiftRepositoryClass } from './shift.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository';
 import { OutletRepositoryClass } from '@/features/outlet/outlet.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -13,7 +14,7 @@ import { CreateShiftSchema, UpdateShiftSchema } from '@/schema/shift.schema';
 import { ShiftFilter, ShiftStatus, ShiftEventKind } from './shift.model';
 import { OrgScope, resolveOrgScope, isOutletCaller } from '@/util/org-scope';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
-import { shiftsOverlap, shiftDayKey } from '@/util/slot-window';
+import { shiftsOverlap, shiftDayKey, slotsAreSameWindow } from '@/util/slot-window';
 import {
   outletDailyPrUsage,
   resolveActivePlanLimit,
@@ -111,11 +112,81 @@ export class ShiftControllerClass {
     // time is the mirror of assigning into a clash, so both ends need to see
     // the same assignments.
     private shiftAssignmentRepository: ShiftAssignmentRepositoryClass,
+    /** Resolves which agencies a venue may post to — replaces the old
+     * `outlet.onboarded_by_agency_id` lookup (0123). */
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
 
   /** True when the caller is an outlet operator (no admin/agency scope, ≥1 outlet). */
   private isOutletCaller(scope: OrgScope): boolean {
     return isOutletCaller(scope);
+  }
+
+  /**
+   * A venue's own shifts must not collide in time — as a refusal message, or null.
+   *
+   * OWNER'S RULE (17 Aug 2026): "I don't want an outlet to have clashing time for
+   * their shifts." ANY overlap is refused, not merely an exact repeat.
+   *
+   * ⚠️ BACK-TO-BACK IS DELIBERATELY ALLOWED — it was blocked here for one revision and
+   * that was the wrong place for the rule. A venue running 11:00–12:00 and 12:00–13:00
+   * is posting two shifts it may well staff with two different people, which is its
+   * business and harms nobody. The real constraint is on the PERSON who would have to
+   * be in two places, and that is the assign-time travel gap; enforcing it here would
+   * have stopped a legitimate roster while still not stopping what actually goes wrong.
+   *
+   * Nothing before this looked at the clock at all. `create` checked the tier mix
+   * and the plan's daily headcount, and both of those measure a DAY — a day's demand
+   * is ADDITIVE, so 2 + 3 reads as a legitimate 5 whether that is two shifts or one
+   * shift said twice.
+   *
+   * Two tests, because they carry different advice and because `shiftsOverlap` needs
+   * a parseable window at both ends — two label-only slots ("Late night" twice on one
+   * date) are invisible to it and are caught by name instead.
+   *
+   * Returns null when the shift carries no slot: with no time given there is
+   * nothing to compare, and refusing on that would block a venue that posts
+   * untimed shifts on purpose.
+   */
+  private async shiftClashRefusal(params: {
+    outletId: string;
+    shiftDate: string;
+    slot: string | null | undefined;
+    excludeShiftId?: string;
+  }): Promise<string | null> {
+    if (!params.slot?.trim()) return null;
+
+    const nearby = await this.shiftRepository.listByOutletAroundDate({
+      outletId: params.outletId,
+      shiftDate: params.shiftDate,
+      excludeShiftId: params.excludeShiftId,
+    });
+
+    const sameDayAs = (other: string) =>
+      shiftDayKey(other) === shiftDayKey(params.shiftDate);
+    const clash = nearby.find(
+      (s) =>
+        shiftsOverlap(params.shiftDate, params.slot, s.shiftDate, s.slot) ||
+        (sameDayAs(s.shiftDate) && slotsAreSameWindow(s.slot, params.slot)),
+    );
+    if (!clash) return null;
+
+    const named = clash.eventName ? ` ("${clash.eventName}")` : '';
+    const where = `${clash.slot} on ${String(clash.shiftDate).slice(0, 10)}${named}`;
+
+    // Two shapes, two remedies — and a refusal that names the wrong one is barely
+    // better than no message: the same time twice wants a bigger headcount, an
+    // overlap wants a different clock.
+    if (slotsAreSameWindow(clash.slot, params.slot) && sameDayAs(clash.shiftDate)) {
+      return (
+        `You already have a shift at ${where}. Raise that shift's headcount instead of ` +
+        `posting a second one for the same time.`
+      );
+    }
+    return (
+      `This clashes with your shift at ${where} — an outlet's shifts cannot overlap. ` +
+      `Change this shift's time, or move the other one first.`
+    );
   }
 
   private resolveScope(req: Request): Promise<OrgScope> {
@@ -206,6 +277,10 @@ export class ShiftControllerClass {
 
       const scope = await this.resolveScope(req);
       let agencyId: string;
+      // Every agency invited to staff this shift (0124). Defaults to just the
+      // resolved `agencyId` so the admin path, which posts to one agency, keeps
+      // producing exactly the fan-out it always implied.
+      let selectedAgencyIds: string[] = [];
       let outletId = parsed.data.outletId;
       // An outlet posting a job is committing to run it, so it goes straight to
       // `confirmed` — it shows up immediately as tonight's live shift (Today) and
@@ -241,11 +316,37 @@ export class ShiftControllerClass {
         if (!scope.outletIds.includes(outletId)) {
           return res.status(403).json({ success: false, message: 'You can only create shifts for your own outlet', data: null });
         }
-        const outlet = await this.outletRepository.getById(outletId);
-        if (!outlet?.onboardedByAgencyId) {
-          return res.status(400).json({ success: false, message: 'This outlet has no onboarding agency to request PR from', data: null });
+        // WHICH AGENCIES THIS JOB GOES TO (0123 + 0124).
+        //
+        // Resolved from the outlet's APPROVED links, never from
+        // `onboarded_by_agency_id` — that column is provenance now, and reading
+        // it here is exactly what limited a venue to a single agency. It also
+        // meant a self-signed-up outlet (null column) could never post at all.
+        //
+        // The client's selection is FILTERED against the approved set rather
+        // than trusted: a forged agencyId must not become an invitation.
+        const approved = await this.agencyOutletRepository.listApprovedAgencyIdsForOutlet(outletId);
+        if (approved.length === 0) {
+          return res.status(400).json({
+            success: false,
+            message: 'No approved agency to request PR from — link an agency in Settings first',
+            data: null,
+          });
         }
-        agencyId = outlet.onboardedByAgencyId;
+
+        const requested = parsed.data.agencyIds?.length ? parsed.data.agencyIds : approved;
+        selectedAgencyIds = requested.filter((id) => approved.includes(id));
+        if (selectedAgencyIds.length === 0) {
+          return res.status(403).json({
+            success: false,
+            message: 'None of the selected agencies are approved for this outlet',
+            data: null,
+          });
+        }
+        // The anchor is the first SELECTED agency, so `shift.agency_id` always
+        // names an agency that was genuinely invited. Scoping still goes via
+        // `shift_agency` — see the column comment in shift.model.ts.
+        agencyId = selectedAgencyIds[0];
         postedStatus = 'confirmed';
       } else {
         return res.status(403).json({ success: false, message: 'No organization associated with this account', data: null });
@@ -259,6 +360,19 @@ export class ShiftControllerClass {
       const overAsked = demandExceedsQuantity(payTiers, shiftData.quantity);
       if (overAsked) {
         return res.status(400).json({ success: false, message: overAsked, data: null });
+      }
+
+      // A VENUE'S SHIFTS MUST NOT COLLIDE. Checked before the plan gate on purpose:
+      // a clash usually also pushes the day's total up, and answering it with "you
+      // are over your plan" sends the venue to upgrade a plan that is not the
+      // problem. The more specific cause wins.
+      const clash = await this.shiftClashRefusal({
+        outletId: shiftData.outletId,
+        shiftDate: shiftData.shiftDate,
+        slot: shiftData.slot,
+      });
+      if (clash) {
+        return res.status(409).json({ success: false, message: clash, data: null });
       }
 
       // THE VENUE'S PLAN, enforced. Until now this cap lived only in the Post
@@ -283,6 +397,9 @@ export class ShiftControllerClass {
         },
         payTiers,
         actor,
+        // Server-resolved and already filtered against the outlet's approved
+        // links — never the raw client list.
+        selectedAgencyIds,
       );
       res.status(201).json({ success: true, message: 'Shift created', data: shift });
     } catch (error) {
@@ -331,6 +448,38 @@ export class ShiftControllerClass {
         return res.status(400).json({ success: false, message: overAsked, data: null });
       }
 
+      // What this edit makes the shift's timing. Computed here rather than beside
+      // the double-booking loop below because BOTH timing guards need it, and the
+      // duplicate check has to run before the plan gate for the same reason it does
+      // on create — the specific cause beats the incidental one.
+      const nextSlot = data.slot === undefined ? existing.slot : data.slot;
+      const nextDate = data.shiftDate === undefined ? existing.shiftDate : data.shiftDate;
+      const timingChanged =
+        (data.slot !== undefined && data.slot !== existing.slot) ||
+        (data.shiftDate !== undefined &&
+          shiftDayKey(nextDate) !== shiftDayKey(existing.shiftDate));
+
+      // An edit is the other way two shifts end up on top of each other: post 11:00
+      // and 15:00, then drag the second onto 12:00. Refusing that on create alone
+      // would leave the hole open through the back door.
+      //
+      // Gated on `timingChanged` deliberately. A row that already clashed before this
+      // guard existed must stay editable — otherwise the venue can neither change its
+      // headcount nor move it out of the way, which is the only fix available.
+      if (timingChanged) {
+        // Named apart from the `clash` inside the PR double-booking loop below —
+        // that one is about one PERSON's other shifts, this one about this VENUE's.
+        const venueClash = await this.shiftClashRefusal({
+          outletId: existing.outletId,
+          shiftDate: String(nextDate).slice(0, 10),
+          slot: nextSlot,
+          excludeShiftId: id,
+        });
+        if (venueClash) {
+          return res.status(409).json({ success: false, message: venueClash, data: null });
+        }
+      }
+
       // The same plan gate as create, measured against the day WITHOUT this
       // shift's current headcount — otherwise raising a shift from 4 to 5 would
       // be checked as 9 and refused for a day that has room.
@@ -354,13 +503,8 @@ export class ShiftControllerClass {
       // stopped an edit from dragging this shift on top of another one the same
       // PR already works — same outcome, opposite direction, and it lands
       // silently because nobody is assigning anything at that moment.
-      const nextSlot = data.slot === undefined ? existing.slot : data.slot;
-      const nextDate = data.shiftDate === undefined ? existing.shiftDate : data.shiftDate;
-      const timingChanged =
-        (data.slot !== undefined && data.slot !== existing.slot) ||
-        (data.shiftDate !== undefined &&
-          shiftDayKey(nextDate) !== shiftDayKey(existing.shiftDate));
-
+      // `nextSlot` / `nextDate` / `timingChanged` are computed above, alongside the
+      // duplicate-slot guard that reads the same three values.
       if (timingChanged) {
         const assigned = await this.shiftAssignmentRepository.listByShift(id);
         const live = assigned.filter(

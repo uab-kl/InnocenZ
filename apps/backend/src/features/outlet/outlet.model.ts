@@ -56,5 +56,16 @@ export type OutletFilter = {
   id?: string;
   name?: string;
   status?: OutletStatus;
+  /**
+   * PROVENANCE ONLY — who onboarded this venue (0123 demoted this column).
+   * Do NOT use it to decide what an agency may see; that is `linkedToAgencyId`.
+   * Kept for the admin Outlet Details panel, which reports the historical fact.
+   */
   onboardedByAgencyId?: string;
+  /**
+   * VISIBILITY — venues this agency is APPROVED to staff, via `agency_outlet`.
+   * This is the agency portal's outlet list. It replaces the filter above,
+   * which could only ever return the one venue an agency originally onboarded.
+   */
+  linkedToAgencyId?: string;
 };

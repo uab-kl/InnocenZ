@@ -524,6 +524,12 @@
 	transition: 0.18s;
 	color: #fff;
 	letter-spacing: 0.2px;
+	/* Chinese has no word boundaries, so a label may break between ANY two
+	   characters: "驳回" split into two stacked lines inside a narrow Reject
+	   button while the English "Reject" — one unbreakable word — did not. Every
+	   short CJK label on a fixed-width button has the same problem, so it is
+	   fixed once here rather than per button. */
+	white-space: nowrap;
 }
 .iz-btn:active {
 	transform: scale(0.975);
@@ -4963,7 +4969,11 @@
 }
 @media (min-width: 900px) {
 	.iz-post-job-layout {
-		grid-template-columns: minmax(0, 1fr) 260px;
+		/* 300, not 260: the "Send to" card lists agency names in this column, and
+		   at 260 a real one ("Why We Met Agency") truncated to "Why We Met Ag…" —
+		   an operator choosing between two agencies has to be able to read which
+		   is which. The extra 40px comes out of the composer, which is fluid. */
+		grid-template-columns: minmax(0, 1fr) 300px;
 	}
 }
 .iz-post-job-layout__aside {
@@ -4991,12 +5001,29 @@
 	padding: 0;
 	border-radius: 0;
 }
+/* Post Job "Send to", narrow-screen copy.
+ *
+ * The desktop control lives inside `.iz-post-job-layout__aside`, above the
+ * summary. That aside is hidden below 900px, so this second copy carries the
+ * picker on phones. Both are driven by the same state and exactly one is ever
+ * visible — the breakpoint below is the SAME 900px the aside uses, and the two
+ * must stay in step or the picker either disappears or renders twice.
+ */
+.iz-post-job-sendto--mobile {
+	display: none;
+}
+
 .iz-post-job-mobile-dock {
 	display: none;
 }
 @media (max-width: 899px) {
 	.iz-post-job-layout__aside {
 		display: none;
+	}
+	/* …so the picker's narrow-screen copy takes over here. Same breakpoint as
+	   the aside above, deliberately — see the class definition. */
+	.iz-post-job-sendto--mobile {
+		display: block;
 	}
 	.iz-post-job-layout__main {
 		padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));

@@ -1,4 +1,4 @@
-import { and, asc, eq, gte, inArray, lte, sql, SQL } from 'drizzle-orm';
+import { and, asc, eq, gte, inArray, lte, ne, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
@@ -7,6 +7,7 @@ import {
   ShiftInsertType,
   ShiftType,
   ShiftFilter,
+  ShiftAgencyTable,
   ShiftPayTierTable,
   ShiftPayTier,
 } from './shift.model';
@@ -59,6 +60,59 @@ export class ShiftRepositoryClass {
       return shift ?? null;
     } catch (error) {
       logger.error('[ShiftRepository.getById] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The outlet's other shifts that could COLLIDE with one on `shiftDate` — that
+   * day, plus the day either side. Slim on purpose: only what a refusal has to name.
+   *
+   * ⚠️ The ±1 day is not padding. A 22:00–04:00 shift on the 17th runs into the
+   * 18th, so a new 02:00–06:00 on the 18th genuinely overlaps a row filed under a
+   * DIFFERENT `shift_date` — an exact-date read would never compare them, and
+   * overnight is the normal shape in this business. `shiftsOverlap` does the real
+   * test on a continuous timeline; this only has to get the row into the room.
+   *
+   * A DRAFT has not been asked for yet and so cannot clash with anything, which is
+   * the same call `outletDailyPrUsage` makes. `shift_date` is a plain `date` column
+   * (since 0023), so these bounds are plain 'YYYY-MM-DD' comparisons.
+   */
+  async listByOutletAroundDate(params: {
+    outletId: string;
+    shiftDate: string;
+    excludeShiftId?: string;
+  }): Promise<
+    { id: string; shiftDate: string; slot: string | null; eventName: string | null }[]
+  > {
+    try {
+      const day = String(params.shiftDate).slice(0, 10);
+      // Date.UTC normalises the overflow, so this is correct across month and year
+      // ends without a calendar library.
+      const dayOffsetBy = (days: number): string => {
+        const [y, m, d] = day.split('-').map(Number);
+        return new Date(Date.UTC(y, m - 1, d + days)).toISOString().slice(0, 10);
+      };
+
+      const conditions: SQL[] = [
+        eq(ShiftTable.outletId, params.outletId),
+        gte(ShiftTable.shiftDate, dayOffsetBy(-1)),
+        lte(ShiftTable.shiftDate, dayOffsetBy(1)),
+        ne(ShiftTable.status, 'draft'),
+      ];
+      if (params.excludeShiftId) conditions.push(ne(ShiftTable.id, params.excludeShiftId));
+
+      return await db
+        .select({
+          id: ShiftTable.id,
+          shiftDate: ShiftTable.shiftDate,
+          slot: ShiftTable.slot,
+          eventName: ShiftTable.eventName,
+        })
+        .from(ShiftTable)
+        .where(and(...conditions));
+    } catch (error) {
+      logger.error('[ShiftRepository.listByOutletAroundDate] Error:', error);
       throw error;
     }
   }
@@ -124,15 +178,39 @@ export class ShiftRepositoryClass {
     }
   }
 
-  /** Create a shift and (optionally) its pay-tier overrides atomically. */
+  /**
+   * Create a shift, its agency fan-out and (optionally) its pay-tier overrides
+   * atomically.
+   *
+   * `agencyIds` is the set of agencies the outlet posted to (0124). It is
+   * written in the SAME transaction as the shift on purpose: a shift with no
+   * `shift_agency` rows is invisible to every agency, so a partial commit would
+   * leave a job nobody can see and nobody can explain. The caller has already
+   * checked each id against the outlet's APPROVED links.
+   */
   async createWithPayTiers(
     data: Omit<ShiftInsertType, 'id' | 'createdAt' | 'updatedAt'>,
     payTiers: ShiftPayTierInput[] | undefined,
     actor: string,
+    agencyIds?: string[],
   ): Promise<ShiftType> {
     try {
       return await db.transaction(async (tx) => {
         const shift = await this.create(data, tx);
+        // Always at least the originating agency, so a caller that passes
+        // nothing still produces a visible shift rather than an orphan.
+        const invited = [...new Set([data.agencyId, ...(agencyIds ?? [])])];
+        await tx
+          .insert(ShiftAgencyTable)
+          .values(
+            invited.map((agencyId) => ({
+              shiftId: shift.id,
+              agencyId,
+              createdBy: actor,
+              updatedBy: actor,
+            })),
+          )
+          .onConflictDoNothing();
         if (payTiers) await this.replacePayTiers(shift.id, payTiers, actor, tx);
         return shift;
       });
@@ -173,7 +251,24 @@ export class ShiftRepositoryClass {
       const { filter, page, pageSize } = params;
       const conditions: SQL[] = [];
       if (filter?.id) conditions.push(eq(ShiftTable.id, filter.id));
-      if (filter?.agencyId) conditions.push(eq(ShiftTable.agencyId, filter.agencyId));
+      // THROUGH `shift_agency`, never `ShiftTable.agencyId` (0124). That column
+      // is only the FIRST agency the outlet addressed; an equality filter on it
+      // would hide a shared shift from every other invited agency, silently.
+      //
+      // A subquery rather than a join, so a shift invited to three agencies
+      // still yields ONE row — a join would triple it and inflate `totalCount`,
+      // which is the paginator's own input.
+      if (filter?.agencyId) {
+        conditions.push(
+          inArray(
+            ShiftTable.id,
+            db
+              .select({ shiftId: ShiftAgencyTable.shiftId })
+              .from(ShiftAgencyTable)
+              .where(eq(ShiftAgencyTable.agencyId, filter.agencyId)),
+          ),
+        );
+      }
       if (filter?.outletId) conditions.push(eq(ShiftTable.outletId, filter.outletId));
       // An empty array must match nothing, not everything — guard before inArray.
       if (filter?.outletIds) {

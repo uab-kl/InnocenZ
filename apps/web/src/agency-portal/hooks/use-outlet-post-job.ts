@@ -1,5 +1,6 @@
 import {
 	createShiftInputFromPost,
+	normalizedSlotLabel,
 	type OutletShiftPostItem,
 } from "@agency-portal/lib/backend-shift-map";
 import { addDaysToIso, getLiveTodayIso } from "@agency-portal/lib/demo-clock";
@@ -32,13 +33,30 @@ export interface OutletBookedShift {
 	dateIso: string;
 	quantity: number;
 	requestedPrIds: string[];
+	/**
+	 * The booked slot, normalized to "HH:MM - HH:MM" when it parses. Carried so the
+	 * composer's clash check can compare a new shift's time against what is already
+	 * booked — the daily caps only ever needed the date, which is exactly why two
+	 * shifts at the SAME time passed every check this hook fed.
+	 */
+	shift: string;
+	/** Display only — what a clash warning calls the shift it collided with. */
+	event: string;
 }
 
 export interface UseOutletPostJob {
 	/** True on a real signed-in outlet session; false falls back to the demo store. */
 	backed: boolean;
-	/** Post one or more shifts to the backend. Rejects if any shift fails. */
-	postShifts: (items: OutletShiftPostItem[]) => Promise<void>;
+	/**
+	 * Post one or more shifts to the backend. Rejects if any shift fails.
+	 *
+	 * `agencyIds` names which of the venue's approved agencies receive the job
+	 * (0124); omit to reach all of them.
+	 */
+	postShifts: (
+		items: OutletShiftPostItem[],
+		agencyIds?: string[],
+	) => Promise<void>;
 	isPosting: boolean;
 	/**
 	 * The outlet's already-booked shifts over the cap horizon, for daily
@@ -97,6 +115,10 @@ export function useOutletPostJob(): UseOutletPostJob {
 			outletName,
 			dateIso: shift.shiftDate,
 			quantity: shift.quantity,
+			// Same expression the Today/Calendar cards render, so a warning names the
+			// other shift exactly as the operator sees it listed.
+			shift: normalizedSlotLabel(shift.slot),
+			event: shift.eventName ?? "",
 			// Cancelled / no-show PRs no longer count against the day's named cap.
 			requestedPrIds: assignments
 				.filter(
@@ -110,13 +132,16 @@ export function useOutletPostJob(): UseOutletPostJob {
 	}, [backed, outletName, shiftsQuery.data, assignmentsQuery.data]);
 
 	const mutation = useMutation({
-		mutationFn: async (items: OutletShiftPostItem[]) => {
+		mutationFn: async (input: {
+			items: OutletShiftPostItem[];
+			agencyIds?: string[];
+		}) => {
 			if (!identity) throw new Error("No outlet session");
 			// Post sequentially so a mid-batch failure stops rather than firing the
 			// rest — the outlet can retry the remainder from the still-populated form.
-			for (const item of items) {
+			for (const item of input.items) {
 				await createShift(
-					createShiftInputFromPost(item, identity.outletId),
+					createShiftInputFromPost(item, identity.outletId, input.agencyIds),
 					logout,
 				);
 			}
@@ -131,7 +156,8 @@ export function useOutletPostJob(): UseOutletPostJob {
 
 	return {
 		backed,
-		postShifts: (items) => mutation.mutateAsync(items),
+		postShifts: (items, agencyIds) =>
+			mutation.mutateAsync({ items, agencyIds }),
 		isPosting: mutation.isPending,
 		bookedShifts,
 	};

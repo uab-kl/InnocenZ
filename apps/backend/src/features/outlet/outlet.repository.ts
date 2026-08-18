@@ -1,5 +1,8 @@
-import { and, eq, ilike, sql, SQL } from 'drizzle-orm';
+import { and, eq, ilike, inArray, sql, SQL } from 'drizzle-orm';
 import { db } from '@/db/index';
+// Leaf model — safe to import here. `agency-outlet.model` imports `outlet.model`
+// (not this repository), so nothing loops back.
+import { AgencyOutletTable } from '@/features/agency/agency-outlet.model';
 import { logger } from '@/util/logger';
 import { DbTransaction } from '@/types/db-transaction';
 import { OutletTable, OutletInsertType, OutletType, OutletFilter } from './outlet.model';
@@ -65,6 +68,28 @@ export class OutletRepositoryClass {
       if (filter?.status) conditions.push(eq(OutletTable.status, filter.status));
       if (filter?.name) conditions.push(ilike(OutletTable.name, `%${filter.name}%`));
       if (filter?.onboardedByAgencyId) conditions.push(eq(OutletTable.onboardedByAgencyId, filter.onboardedByAgencyId));
+      // THE AGENCY PORTAL'S VISIBILITY RULE (0123). A subquery rather than a
+      // join, so a venue linked to several agencies still yields exactly ONE
+      // outlet row — a join here would duplicate it once per link and silently
+      // inflate `totalCount`, which is the paginator's own input.
+      //
+      // `approved` only: a pending request is not permission.
+      if (filter?.linkedToAgencyId) {
+        conditions.push(
+          inArray(
+            OutletTable.id,
+            db
+              .select({ outletId: AgencyOutletTable.outletId })
+              .from(AgencyOutletTable)
+              .where(
+                and(
+                  eq(AgencyOutletTable.agencyId, filter.linkedToAgencyId),
+                  eq(AgencyOutletTable.approveStatus, 'approved'),
+                ),
+              ),
+          ),
+        );
+      }
 
       const whereClause = conditions.length > 0 ? and(...conditions) : undefined;
 

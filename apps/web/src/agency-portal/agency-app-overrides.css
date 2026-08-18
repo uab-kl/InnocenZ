@@ -56,9 +56,19 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 }
 
 /* Round handle on the sidebar's right edge, vertically centered and half
- * sticking out. `left` tracks the sidebar width, so it follows collapse/
- * expand; it stays centered in the viewport as you scroll. Hidden on mobile
- * (no sidebar there). */
+ * sticking out. `left` tracks the sidebar width, so it follows collapse/expand.
+ * Hidden on mobile (no sidebar there).
+ *
+ * FIXED, not absolute. It was `position: absolute` inside `.iz-portal`, so
+ * `top: 50%` resolved against the whole DOCUMENT rather than the viewport — on
+ * a long page like Post Job the handle sat far down the scroll, nowhere near
+ * the sidebar's visible middle, and scrolled out of reach. (The comment that
+ * used to sit here claimed it stayed centered as you scroll; it did not.)
+ *
+ * `fixed` makes `top: 50%` the viewport's middle, which IS the sidebar's middle
+ * — `.iz-portal-sidebar` is `position: sticky; top: 0; height: 100dvh`, so it
+ * always spans exactly the viewport. `left` stays correct because that sidebar
+ * begins at viewport x=0. */
 .iz-portal-collapse-toggle {
 	display: none;
 }
@@ -67,7 +77,7 @@ body:has(.iz-portal) a[aria-label="Contact us on WhatsApp"] {
 		display: flex;
 		align-items: center;
 		justify-content: center;
-		position: absolute;
+		position: fixed;
 		left: var(--iz-portal-sidebar-w);
 		top: 50%;
 		transform: translate(-50%, -50%);

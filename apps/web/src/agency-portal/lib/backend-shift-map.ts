@@ -374,14 +374,20 @@ export function shiftPayTiersFromRows(
 
 /**
  * A Post Job composer item -> the backend `CreateShiftInput`. `outletId` comes
- * from the signed-in outlet's identity, never the item. No `agencyId` is sent:
- * the backend routes the PR request to the outlet's onboarding agency, which is
- * authoritative and cannot be forged. A brand-new posted shift starts with no
- * live sales, so `liveSales` is always 0.
+ * from the signed-in outlet's identity, never the item. A brand-new posted
+ * shift starts with no live sales, so `liveSales` is always 0.
+ *
+ * `agencyIds` names which of the venue's APPROVED agencies should receive this
+ * job (0124) — several may staff one shift. Still no singular `agencyId`: the
+ * server resolves the fan-out from the outlet's approved links and intersects
+ * this list with them, so nothing here can forge an invitation. Omitting it
+ * means "every approved agency", which is exactly what the old single-agency
+ * routing meant back when a venue could only have one.
  */
 export function createShiftInputFromPost(
 	item: OutletShiftPostItem,
 	outletId: string,
+	agencyIds?: string[],
 ): CreateShiftInput {
 	// Persist the composer's per-tier overrides when it built any; omit the field
 	// entirely otherwise, so the shift keeps the outlet's workspace rate card.
@@ -401,5 +407,10 @@ export function createShiftInputFromPost(
 		estimatedCost: nonNegative(item.estimatedCost),
 		liveSales: 0,
 		...(payTiers && payTiers.length ? { payTiers } : {}),
+		// Omitted rather than sent empty when nothing was chosen — an empty array
+		// and an absent field mean the same thing to the server ("all approved"),
+		// and sending the field only when it carries a real choice keeps the
+		// request honest about whether the operator picked.
+		...(agencyIds && agencyIds.length ? { agencyIds } : {}),
 	};
 }

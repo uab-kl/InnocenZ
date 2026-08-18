@@ -146,7 +146,14 @@ export interface GeoFencePayload {
 export interface OutletsQueryParams {
 	name?: string;
 	status?: OutletStatus;
+	/** PROVENANCE — who onboarded the venue. Admin screens only. */
 	onboardedByAgencyId?: string;
+	/**
+	 * VISIBILITY — venues this agency is APPROVED to staff (`agency_outlet`).
+	 * The agency portal must use this; `onboardedByAgencyId` returns only the
+	 * one venue the agency originally signed up.
+	 */
+	linkedToAgencyId?: string;
 	page?: number;
 	pageSize?: number;
 }

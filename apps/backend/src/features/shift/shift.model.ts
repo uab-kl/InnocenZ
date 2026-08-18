@@ -21,6 +21,19 @@ export const shiftEventKindEnum = MainSchema.enum('shift_event_kind', shiftEvent
  */
 export const ShiftTable = MainSchema.table('shift', {
   id: uuid('id').defaultRandom().notNull().primaryKey(),
+  /**
+   * ⚠️ THE ORIGINATING AGENCY ONLY — not "the agency of this shift" (0124).
+   *
+   * Since an outlet can post one shift to several agencies at once, the set of
+   * agencies staffing a shift lives in `shift_agency`. This column holds the
+   * first agency the outlet addressed, which is still a true fact and is what
+   * keeps the column NOT NULL without a `string | null` ripple through every
+   * consumer.
+   *
+   * NEVER SCOPE BY THIS. Filtering `agency_id = $me` hides the shift from every
+   * invited agency except the first, and the symptom — "the other agency just
+   * doesn't see it" — comes with no error anywhere. Use `shift_agency`.
+   */
   agencyId: uuid('agency_id')
     .notNull()
     .references(() => AgencyTable.id, { onDelete: 'cascade' }),
@@ -47,6 +60,34 @@ export const ShiftTable = MainSchema.table('shift', {
 
 export type ShiftType = typeof ShiftTable.$inferSelect;
 export type ShiftInsertType = typeof ShiftTable.$inferInsert;
+
+/**
+ * Which agencies a shift was posted to (migration 0124).
+ *
+ * THE authoritative answer to "who may staff this shift" — `shift.agency_id` is
+ * only the first agency addressed. Shared fulfilment means several rows here
+ * for one shift, and each invited agency may send PRs until the headcount is
+ * met; who actually supplied each PR is `shift_assignment.agency_id`.
+ *
+ * A child table rather than an array column so it can be joined, indexed and
+ * FK-constrained — and so an agency losing its invitation is a DELETE, not a
+ * read-modify-write of a list.
+ */
+export const ShiftAgencyTable = MainSchema.table('shift_agency', {
+  id: uuid('id').defaultRandom().notNull().primaryKey(),
+  shiftId: uuid('shift_id')
+    .notNull()
+    .references(() => ShiftTable.id, { onDelete: 'cascade' }),
+  agencyId: uuid('agency_id')
+    .notNull()
+    .references(() => AgencyTable.id, { onDelete: 'cascade' }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+  createdBy: varchar('created_by').notNull().default('system'),
+  updatedBy: varchar('updated_by').notNull().default('system'),
+});
+
+export type ShiftAgencyType = typeof ShiftAgencyTable.$inferSelect;
 
 /**
  * Per-shift pay-tier override. When an outlet posts a shift it may override its

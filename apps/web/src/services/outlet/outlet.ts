@@ -21,6 +21,7 @@ export async function fetchOutlets(
 		name: params.name,
 		status: params.status,
 		onboardedByAgencyId: params.onboardedByAgencyId,
+		linkedToAgencyId: params.linkedToAgencyId,
 		page: params.page,
 		pageSize: params.pageSize,
 	});

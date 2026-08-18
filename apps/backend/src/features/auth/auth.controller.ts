@@ -36,6 +36,7 @@ import {
   normalizePhoneDigits,
   PhoneVerificationRepositoryClass,
 } from './phone-verification.repository.js';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
@@ -61,6 +62,8 @@ export class AuthControllerClass {
     private outletMemberRepository: OutletMemberRepositoryClass,
     private subscriptionRepository: SubscriptionRepositoryClass,
     private memberSubscriptionRepository: MemberSubscriptionRepositoryClass,
+    /** Outlet sign-up's agency pick becomes a pending link request (0123). */
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
 
   /** Wrong attempts before the account locks. */
@@ -530,6 +533,25 @@ export class AuthControllerClass {
       createdBy: actor,
       updatedBy: actor,
     });
+    // The sign-up pick is also the venue's FIRST LINK REQUEST (0123).
+    //
+    // Without this a venue registered after the multi-agency cutover would have
+    // its provenance column set and zero `agency_outlet` rows — so it could not
+    // post a shift to anyone, and would be invisible to the very agency it just
+    // named. The 0123 backfill only converted the outlets that existed when it
+    // ran; it cannot cover anyone signing up afterwards. This is that cover.
+    //
+    // `pending`, not `approved`: naming an agency is asking to work with them,
+    // and the agency decides. Identical to a PR's first membership, and it
+    // lands in that agency's Outlet-Linking queue the same way.
+    if (body.onboardedByAgencyId) {
+      await this.agencyOutletRepository.ensureLink(
+        outlet.id,
+        body.onboardedByAgencyId,
+        actor,
+        'pending',
+      );
+    }
     await this.enrollSignupPackage({
       accountType: 'outlet',
       orgId: outlet.id,
@@ -1101,6 +1123,66 @@ export class AuthControllerClass {
       });
     } catch (error) {
       logger.error('[AuthController.me] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * Save the caller's UI language (migration 0122).
+   *
+   * Self-only by construction: the id comes from the verified token, never from
+   * the body or the path, so there is no route shape in which one account can
+   * set another's language. That is why this carries no role guard — every
+   * signed-in role (admin, agency, outlet, PR) may set their own.
+   *
+   * The allow-list IS the validation. A varchar(16) column would happily store
+   * junk, and a locale no dictionary answers to renders a portal full of
+   * `undefined` — so an unknown tag is a 400, not a silent write.
+   */
+  async updateLocale(req: Request, res: Response) {
+    /** `zh` = Simplified. Mirrors apps/mobile/src/i18n/locale-prefs.ts. */
+    const SUPPORTED_LOCALES = ['en', 'zh'] as const;
+
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const parsed = z.object({ locale: z.enum(SUPPORTED_LOCALES) }).safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: `locale must be one of: ${SUPPORTED_LOCALES.join(', ')}`,
+          data: null,
+        });
+      }
+
+      const updated = await this.userRepository.updateUser(
+        { preferredLocale: parsed.data.locale, updatedBy: user.id },
+        user.id,
+      );
+
+      if (!updated) {
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: { preferredLocale: updated.preferredLocale },
+      });
+    } catch (error) {
+      logger.error('[AuthController.updateLocale] Error:', error);
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,

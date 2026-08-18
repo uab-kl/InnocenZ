@@ -58,6 +58,10 @@ export class OutletControllerClass {
         name: req.query.name as string | undefined,
         status: req.query.status as OutletStatus | undefined,
         onboardedByAgencyId: req.query.onboardedByAgencyId as string | undefined,
+        // The agency portal passes THIS, not `onboardedByAgencyId` — a venue an
+        // agency was approved to staff is not necessarily one it onboarded, and
+        // after 0123 it usually isn't.
+        linkedToAgencyId: req.query.linkedToAgencyId as string | undefined,
       };
       const { outlets, totalCount } = await this.outletRepository.listPaginated({ filter, page, pageSize });
       const totalPages = Math.max(1, Math.ceil(totalCount / pageSize));

@@ -1,3 +1,4 @@
+import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
 import { useAgencyPendingPrs } from "@agency-portal/hooks/use-agency-pending-prs";
 import { useCutlostRequests } from "@agency-portal/hooks/use-cutlost-requests";
 import type { PendingCutlostRequest } from "@agency-portal/lib/outlet-cutlost-requests";
@@ -7,6 +8,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import type { AgencyOutletLink } from "@/services/agency-outlet";
 import {
 	fetchShiftAssignments,
 	type ShiftAssignment,
@@ -30,7 +32,9 @@ export interface AgencyApprovalQueue {
 	leaveHistory: ShiftAssignment[];
 	/** Only the history query — the tab renders its own loading line. */
 	leaveHistoryIsLoading: boolean;
-	/** Everything the Approvals page's three tabs add up to. */
+	/** Venues asking to link to this agency (`agency_outlet`, 0123). */
+	outletLinkRequests: AgencyOutletLink[];
+	/** Everything the Approvals page's tabs add up to. */
 	total: number;
 	isLoading: boolean;
 	/** Only the MC/leave query — the Approvals page shows its own loading line. */
@@ -121,6 +125,10 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 		[leaveHistoryQuery.data],
 	);
 
+	// Venues waiting to be let in. Same hook the Outlet-Linking tab uses, so the
+	// tile and the tab share one react-query entry and cannot disagree.
+	const outletLinks = useAgencyOutletLinks("pending");
+
 	return {
 		signups,
 		linkRequests,
@@ -129,11 +137,17 @@ export function useAgencyApprovalQueue(): AgencyApprovalQueue {
 		leaveHistory,
 		// History is the record, not work-to-do — deliberately NOT in `total`,
 		// which drives the "needs your attention" count.
+		outletLinkRequests: outletLinks.links,
+		// A venue waiting to be let in IS work awaiting this agency, so it belongs
+		// in the same total the Today tile reads. Leaving it out is why that tile
+		// said "Nothing awaiting approval" while the Approvals page had a venue
+		// sitting in its queue — the identical drift this hook was created to end.
 		total:
 			signups.length +
 			linkRequests.length +
 			cutlostRequests.length +
-			leaveRequests.length,
+			leaveRequests.length +
+			outletLinks.links.length,
 		isLoading: liveCutlost.isLoading || leaveQuery.isLoading,
 		leaveIsLoading: leaveQuery.isLoading,
 		leaveHistoryIsLoading: leaveHistoryQuery.isLoading,
