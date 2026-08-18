@@ -126,7 +126,13 @@ function PendingComcardVisual({
 	);
 }
 
-type Tab = "signups" | "cutlost" | "leaves";
+/**
+ * "signups" is JOIN requests only; "cancel" is DEPARTURE requests — a PR
+ * asking OUT of the agency, where Approve means approve-the-cancel. They were
+ * one mixed tab, and the owner asked how to tell the two approvals apart; the
+ * answer is that they should never share a list.
+ */
+type Tab = "signups" | "cancel" | "cutlost" | "leaves";
 
 const AVATAR_VARIANTS = ["rose", "sky", "violet", "amber", "mint"] as const;
 
@@ -1282,7 +1288,9 @@ export const Route = createFileRoute("/agency/pending")({
 				? "cutlost"
 				: search.tab === "leaves"
 					? "leaves"
-					: undefined,
+					: search.tab === "cancel"
+						? "cancel"
+						: undefined,
 	}),
 });
 
@@ -1362,31 +1370,53 @@ function AgencyPending() {
 	>("pending");
 
 	/**
-	 * The Agency-Tied chips, mirroring the MC/Leaves tuple-map below. "pending"
-	 * is the work queue (Current); the rest is the record. Cards carry a
-	 * COMPOSITE key: the same membership row can legitimately sit in Approved
+	 * The Agency-Tied / Cancel Agency chips, mirroring the MC/Leaves tuple-map
+	 * below. "pending" is the work queue (Current); the rest is the record.
+	 * The two TABS split by direction — Agency-Tied lists joins, Cancel Agency
+	 * lists departures — so the list itself answers which approval this is.
+	 * Cards keep a COMPOSITE key: one membership row can sit in Approved
 	 * history as its approved JOIN and in Rejected history as its refused
-	 * DEPARTURE — two decisions about one row — so `userId` alone would
-	 * collide under "All".
+	 * DEPARTURE, so `userId` alone would collide.
 	 */
 	const [tiedFilter, setTiedFilter] = useState<
 		"pending" | "approved" | "rejected" | "all"
 	>("pending");
+	const kindOf = (p: PendingPR) => p.requestKind ?? "join";
+	const tiedKind: "join" | "leave" = tab === "cancel" ? "leave" : "join";
+	const tiedCounts = useMemo(
+		() => ({
+			joinCurrent: signups.filter((p) => kindOf(p) === "join").length,
+			leaveCurrent: signups.filter((p) => kindOf(p) === "leave").length,
+			approved: backend.approvedHistory.filter((p) => kindOf(p) === tiedKind)
+				.length,
+			rejected: backend.rejectedHistory.filter((p) => kindOf(p) === tiedKind)
+				.length,
+		}),
+		[signups, backend.approvedHistory, backend.rejectedHistory, tiedKind],
+	);
 	const tiedList = useMemo(() => {
-		const withKeys = (list: PendingPR[]) =>
-			list.map((p) => ({
-				...p,
-				cardKey: `${p.id}:${p.status}:${p.requestKind ?? "join"}`,
-			}));
-		if (tiedFilter === "pending") return withKeys(signups);
-		if (tiedFilter === "approved") return withKeys(backend.approvedHistory);
-		if (tiedFilter === "rejected") return withKeys(backend.rejectedHistory);
-		return withKeys([
+		const only = (list: PendingPR[]) =>
+			list
+				.filter((p) => kindOf(p) === tiedKind)
+				.map((p) => ({
+					...p,
+					cardKey: `${p.id}:${p.status}:${p.requestKind ?? "join"}`,
+				}));
+		if (tiedFilter === "pending") return only(signups);
+		if (tiedFilter === "approved") return only(backend.approvedHistory);
+		if (tiedFilter === "rejected") return only(backend.rejectedHistory);
+		return only([
 			...signups,
 			...backend.approvedHistory,
 			...backend.rejectedHistory,
 		]);
-	}, [tiedFilter, signups, backend.approvedHistory, backend.rejectedHistory]);
+	}, [
+		tiedFilter,
+		tiedKind,
+		signups,
+		backend.approvedHistory,
+		backend.rejectedHistory,
+	]);
 	const leaveList = useMemo(() => {
 		// Newest decision first — history is read backwards.
 		const decided = [...leaveHistory].sort((a, b) =>
@@ -1417,13 +1447,14 @@ function AgencyPending() {
 		rosterMut.approveLeave.isPending || rosterMut.rejectLeave.isPending;
 
 	useEffect(() => {
-		if (tab === "signups") {
+		if (tab === "signups" || tab === "cancel") {
 			setSelectedSignupId((id) => {
 				// Selection is by CARD KEY (id:status:kind), not bare userId — one
 				// row can appear twice under "All" as two different decisions.
+				// Link requests exist on the join tab only.
 				const ids = [
 					...tiedList.map((s) => s.cardKey),
-					...agencyLinkRequests.map((l) => l.id),
+					...(tab === "signups" ? agencyLinkRequests.map((l) => l.id) : []),
 				];
 				return id && ids.includes(id) ? id : (ids[0] ?? null);
 			});
@@ -1484,7 +1515,16 @@ function AgencyPending() {
 							className={cn("iz-approvals-tab", tab === "signups" && "on")}
 							onClick={() => setTab("signups")}
 						>
-							Agency-Tied ({signups.length + agencyLinkRequests.length})
+							Agency-Tied ({tiedCounts.joinCurrent + agencyLinkRequests.length})
+						</button>
+						<button
+							type="button"
+							className={cn("iz-approvals-tab", tab === "cancel" && "on")}
+							onClick={() => setTab("cancel")}
+						>
+							{/* Departures live on their OWN tab so approving one can never
+							    be mistaken for accepting a PR under the agency. */}
+							Cancel Agency ({tiedCounts.leaveCurrent})
 						</button>
 						<button
 							type="button"
@@ -1517,28 +1557,36 @@ function AgencyPending() {
 					)}
 
 					<div className="iz-approvals-list">
-						{tab === "signups" ? (
+						{tab === "signups" || tab === "cancel" ? (
 							<>
 								{/* Same tuple-map as the MC/Leaves chips below — Current is
-								    the work queue, the rest is the record. */}
+								    the work queue, the rest is the record. Counts are scoped
+								    to THIS tab's direction. */}
 								<div className="iz-approvals-subfilter mb-2 flex flex-wrap gap-1">
 									{(
 										[
 											[
 												"pending",
-												`Current (${signups.length + agencyLinkRequests.length})`,
+												`Current (${
+													tab === "cancel"
+														? tiedCounts.leaveCurrent
+														: tiedCounts.joinCurrent + agencyLinkRequests.length
+												})`,
 											],
-											[
-												"approved",
-												`Approved (${backend.approvedHistory.length})`,
-											],
-											[
-												"rejected",
-												`Rejected (${backend.rejectedHistory.length})`,
-											],
+											["approved", `Approved (${tiedCounts.approved})`],
+											["rejected", `Rejected (${tiedCounts.rejected})`],
 											[
 												"all",
-												`All (${signups.length + agencyLinkRequests.length + backend.approvedHistory.length + backend.rejectedHistory.length})`,
+												`All (${
+													(
+														tab === "cancel"
+															? tiedCounts.leaveCurrent
+															: tiedCounts.joinCurrent +
+																agencyLinkRequests.length
+													) +
+													tiedCounts.approved +
+													tiedCounts.rejected
+												})`,
 											],
 										] as const
 									).map(([value, label]) => (
@@ -1556,12 +1604,15 @@ function AgencyPending() {
 									))}
 								</div>
 								{tiedList.length === 0 &&
-								((tiedFilter !== "pending" && tiedFilter !== "all") ||
+								(tab === "cancel" ||
+									(tiedFilter !== "pending" && tiedFilter !== "all") ||
 									agencyLinkRequests.length === 0) ? (
 									<p className="iz-tiny iz-muted px-1 py-4 text-center">
-										{tiedFilter === "pending"
-											? "No pending sign-ups"
-											: "No records here"}
+										{tiedFilter !== "pending"
+											? "No records here"
+											: tab === "cancel"
+												? "No departure requests waiting"
+												: "No pending sign-ups"}
 									</p>
 								) : (
 									<>
@@ -1643,8 +1694,9 @@ function AgencyPending() {
 											);
 										})}
 										{/* Demo link requests are CURRENT work (join semantics, no
-										    leave analog) — they have no place under history chips. */}
-										{(tiedFilter === "pending" || tiedFilter === "all") &&
+										    leave analog) — join tab only, never under history chips. */}
+										{tab === "signups" &&
+											(tiedFilter === "pending" || tiedFilter === "all") &&
 											agencyLinkRequests.map((l) => (
 												<button
 													key={l.id}
@@ -1812,7 +1864,7 @@ function AgencyPending() {
 				</aside>
 
 				<main className="iz-approvals-detail">
-					{tab === "signups" ? (
+					{tab === "signups" || tab === "cancel" ? (
 						selectedSignup ? (
 							<SignupDetailPanel
 								signup={selectedSignup}
@@ -1844,7 +1896,11 @@ function AgencyPending() {
 							/>
 						) : (
 							<div className="iz-approvals-empty">
-								<p className="iz-sm iz-muted">Select a sign-up to review</p>
+								<p className="iz-sm iz-muted">
+									{tab === "cancel"
+										? "Select a departure request to review"
+										: "Select a sign-up to review"}
+								</p>
 							</div>
 						)
 					) : tab === "leaves" ? (
