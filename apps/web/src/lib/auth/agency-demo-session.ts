@@ -1,5 +1,7 @@
 import type { AgencySessionIdentity } from "@agency-portal/lib/agency-identity";
+import { AGENCY_LEAST_PRIVILEGE } from "@agency-portal/lib/agency-rbac";
 import type { OutletSessionIdentity } from "@agency-portal/lib/outlet-identity";
+import { OUTLET_LEAST_PRIVILEGE } from "@agency-portal/lib/outlet-rbac";
 import {
 	resolveAgencyIdentityForUser,
 	resolveOutletIdentityForUser,
@@ -176,7 +178,11 @@ export async function startAgencyRealSession(profile: {
 		}));
 	} else {
 		identityLib.clearAgencyIdentity();
-		store.setAgencySubRole("agency_owner");
+		// NOT the owner. A failed resolution means we do not KNOW what this
+		// operator is — a cold cache on a new device, a different URL origin, a
+		// network blip. Granting the top lane on no evidence is how a Director
+		// became an owner just by signing in somewhere else.
+		store.setAgencySubRole(AGENCY_LEAST_PRIVILEGE);
 	}
 }
 
@@ -244,6 +250,7 @@ export async function startOutletRealSession(profile: {
 		}));
 	} else {
 		identityLib.clearOutletIdentity();
-		store.setOutletSubRole("outlet_owner");
+		// NOT the owner — same reason as the agency path above.
+		store.setOutletSubRole(OUTLET_LEAST_PRIVILEGE);
 	}
 }

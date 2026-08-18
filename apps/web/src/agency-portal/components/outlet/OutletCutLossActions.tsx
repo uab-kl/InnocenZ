@@ -19,6 +19,7 @@ import {
 } from "@agency-portal/lib/outlet-demo";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
+import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Clock, Sparkles, TrendingDown, UserMinus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -45,6 +46,14 @@ export function OutletCutLossActions({
 	/** DOM id for scroll targets — unique per shift when inline in a list. */
 	sectionId?: string;
 }) {
+	/*
+	 * Cut-loss reduces booked slots on a live shift — a write, and the server
+	 * refuses it for a view-only Director. This component had NO permission check
+	 * of its own and neither render site applied one, so the button was visible to
+	 * every outlet role; without this gate the backend guard turns it into a 403
+	 * on click rather than an action that was never offered.
+	 */
+	const canRequestCutLoss = useOutletCan()("requestCutLoss");
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const pendingCutlostRequests = useStore((s) => s.pendingCutlostRequests);
@@ -204,6 +213,10 @@ export function OutletCutLossActions({
 			: savedCredited > 0
 				? `No underfill · ${formatRm(savedCredited)} best-effort save (${bestEffortPct}% of ${formatRm(unusedWages)} unused)`
 				: "Cut open slots or release PRs early (best effort)";
+
+	// Hidden outright rather than disabled: the whole section exists to perform
+	// one action, so a role that cannot perform it has nothing to read here.
+	if (!canRequestCutLoss) return null;
 
 	return (
 		<>

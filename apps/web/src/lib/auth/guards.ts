@@ -1,7 +1,7 @@
 import { redirect } from "@tanstack/react-router";
 import { clearAuthTokens, getAccessToken } from "@/lib/auth/auth-storage";
-import { readTabScoped } from "@/lib/auth/tab-scoped-storage";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
+import { readTabScoped } from "@/lib/auth/tab-scoped-storage";
 import { getClient } from "@/lib/axios-v1";
 import { hardNavigate } from "@/lib/hard-navigate";
 import { deLocalizeHref } from "@/paraglide/runtime";

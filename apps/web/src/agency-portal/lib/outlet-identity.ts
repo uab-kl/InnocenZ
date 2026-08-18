@@ -1,4 +1,7 @@
-import type { OutletSubRole } from "@agency-portal/lib/outlet-rbac";
+import {
+	OUTLET_LEAST_PRIVILEGE,
+	type OutletSubRole,
+} from "@agency-portal/lib/outlet-rbac";
 import {
 	readTabScoped,
 	removeTabScoped,
@@ -44,7 +47,8 @@ export function outletSubRoleFromBackend(
 	// would be able to write everything it is defined not to.
 	if (subRole === "director") return "outlet_director";
 	if (subRole === "guarantor") return "outlet_guarantor";
-	return "outlet_owner";
+	// An unrecognised lane is NOT an owner — see OUTLET_LEAST_PRIVILEGE.
+	return OUTLET_LEAST_PRIVILEGE;
 }
 
 /**
@@ -111,7 +115,7 @@ export function getOutletIdentity(): OutletSessionIdentity | null {
 			// a role cannot silently miss it.
 			subRole: KNOWN_SUB_ROLES.has(parsed.subRole as OutletSubRole)
 				? (parsed.subRole as OutletSubRole)
-				: "outlet_owner",
+				: OUTLET_LEAST_PRIVILEGE,
 			outletStatus:
 				typeof parsed.outletStatus === "string"
 					? parsed.outletStatus
