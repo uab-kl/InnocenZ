@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
 import { kickToLogin } from "@/lib/auth/guards";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	type CreateModuleInput,
@@ -54,6 +55,7 @@ export function ModuleFormSheet({
 	isSubmitting,
 	error,
 }: ModuleFormSheetProps) {
+	const { t } = usePortalLocale();
 	const portalsQuery = useQuery({
 		queryKey: ["rbac-portals"],
 		queryFn: () => fetchPortals(kickToLogin),
@@ -112,12 +114,10 @@ export function ModuleFormSheet({
 						</div>
 						<div className="space-y-1">
 							<SheetTitle className="text-xl">
-								{isEdit ? "Edit Module" : "Create Module"}
+								{isEdit ? t.rbac.editModule : t.rbac.createModule}
 							</SheetTitle>
 							<SheetDescription>
-								{isEdit
-									? "Update module details, key, portal, and status."
-									: "Add a portal-scoped module for C/R/U permission grouping."}
+								{isEdit ? t.rbac.editModuleHint : t.rbac.createModuleHint}
 							</SheetDescription>
 						</div>
 					</div>
@@ -139,10 +139,12 @@ export function ModuleFormSheet({
 
 								return (
 									<Field data-invalid={isInvalid}>
-										<FieldLabel htmlFor="module-name">Module Name</FieldLabel>
+										<FieldLabel htmlFor="module-name">
+											{t.rbac.moduleName}
+										</FieldLabel>
 										<Input
 											id="module-name"
-											placeholder="Enter module name"
+											placeholder={t.rbac.enterModuleName}
 											value={field.state.value}
 											onBlur={field.handleBlur}
 											onChange={(event) => {
@@ -173,7 +175,9 @@ export function ModuleFormSheet({
 									field.state.meta.isTouched && !field.state.meta.isValid;
 								return (
 									<Field data-invalid={isInvalid}>
-										<FieldLabel htmlFor="module-key">Module Key</FieldLabel>
+										<FieldLabel htmlFor="module-key">
+											{t.rbac.moduleKey}
+										</FieldLabel>
 										<Input
 											id="module-key"
 											placeholder="e.g. payment_voucher"
@@ -196,14 +200,16 @@ export function ModuleFormSheet({
 						<form.Field name="portalId">
 							{(field) => (
 								<Field>
-									<FieldLabel htmlFor="module-portal">Portal</FieldLabel>
+									<FieldLabel htmlFor="module-portal">
+										{t.rbac.colPortal}
+									</FieldLabel>
 									<Select
 										value={field.state.value || undefined}
 										onValueChange={(v) => field.handleChange(v)}
 										disabled={isSubmitting || portalsQuery.isLoading}
 									>
 										<SelectTrigger id="module-portal" className="w-full">
-											<SelectValue placeholder="Select portal" />
+											<SelectValue placeholder={t.rbac.selectPortal} />
 										</SelectTrigger>
 										<SelectContent>
 											{(portalsQuery.data ?? []).map((p) => (
@@ -223,7 +229,7 @@ export function ModuleFormSheet({
 									<div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
 										<div className="space-y-1">
 											<FieldLabel htmlFor="module-status">
-												Active Status
+												{t.rbac.activeStatus}
 											</FieldLabel>
 											<p className="text-sm text-muted-foreground">
 												Set module as active or inactive.
@@ -236,7 +242,7 @@ export function ModuleFormSheet({
 												field.handleChange(checked ? "active" : "inactive")
 											}
 											disabled={isSubmitting}
-											aria-label="Toggle module active status"
+											aria-label={t.rbac.toggleModuleActive}
 										/>
 									</div>
 								</Field>
@@ -261,18 +267,18 @@ export function ModuleFormSheet({
 							onClick={() => handleOpenChange(false)}
 							disabled={isSubmitting}
 						>
-							Cancel
+							{t.rbac.cancel}
 						</Button>
 						<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									{isEdit ? "Saving..." : "Creating..."}
+									{isEdit ? t.rbac.saving : t.rbac.creating}
 								</>
 							) : isEdit ? (
-								"Save Changes"
+								t.rbac.saveChanges
 							) : (
-								"Create Module"
+								t.rbac.createModule
 							)}
 						</Button>
 					</SheetFooter>

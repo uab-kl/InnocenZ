@@ -14,6 +14,9 @@ import {
 import { PageHeader, PageShell } from "@/components/admin/page-header";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import {
 	type AdminRequest,
@@ -53,17 +56,21 @@ type PendingRow = {
 	href: PendingHref;
 };
 
-const REQUEST_TYPE_LABELS: Record<AdminRequest["type"], string> = {
-	pos_integration_quote: "POS quote",
-	custom_renegotiation: "Custom",
-	plan_change: "Plan change",
-	contact: "Contact",
-	other: "Other",
+const REQUEST_TYPE_LABELS: Record<
+	AdminRequest["type"],
+	(t: PortalTranslations) => string
+> = {
+	pos_integration_quote: (t) => t.admin.reqPosQuote,
+	custom_renegotiation: (t) => t.admin.reqCustom,
+	plan_change: (t) => t.admin.reqPlanChange,
+	contact: (t) => t.admin.reqContact,
+	other: (t) => t.admin.reqOther,
 };
 
 const PAGE_SIZE = 20;
 
 function PendingApprovalsPage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 
 	const agenciesQuery = useQuery({
@@ -126,10 +133,10 @@ function PendingApprovalsPage() {
 				id: `agency-${a.id}`,
 				rawId: a.id,
 				kind: "agency",
-				typeLabel: "PR Agency",
+				typeLabel: t.rbac.typePrAgency,
 				icon: Building2,
 				name: a.name,
-				detail: `Code ${a.agencyCode}`,
+				detail: fill(t.rbac.codePrefix, { code: a.agencyCode }),
 				date: formatDate(a.createdAt),
 				createdAt: a.createdAt,
 				href: "/admin/user-management/agency",
@@ -140,10 +147,10 @@ function PendingApprovalsPage() {
 				id: `outlet-${o.id}`,
 				rawId: o.id,
 				kind: "outlet",
-				typeLabel: "Outlet",
+				typeLabel: t.rbac.typeOutlet,
 				icon: Store,
 				name: o.name,
-				detail: o.ssmNo ? `SSM ${o.ssmNo}` : "Venue signup",
+				detail: o.ssmNo ? `SSM ${o.ssmNo}` : t.rbac.venueSignup,
 				date: formatDate(o.createdAt),
 				createdAt: o.createdAt,
 				href: "/admin/user-management/outlet",
@@ -154,10 +161,13 @@ function PendingApprovalsPage() {
 				id: `request-${r.id}`,
 				rawId: r.id,
 				kind: "request",
-				typeLabel: r.type === "plan_change" ? "Plan change" : "Plan request",
+				typeLabel:
+					r.type === "plan_change"
+						? t.rbac.typePlanChange
+						: t.rbac.typePlanRequest,
 				icon: Handshake,
 				name: r.subscriberName,
-				detail: REQUEST_TYPE_LABELS[r.type],
+				detail: REQUEST_TYPE_LABELS[r.type](t),
 				date: formatDate(r.createdAt),
 				createdAt: r.createdAt,
 				// The Plan Request inbox filters to its own two types, so a
@@ -173,10 +183,10 @@ function PendingApprovalsPage() {
 				id: `job-${j.id}`,
 				rawId: j.id,
 				kind: "job",
-				typeLabel: "Job posting",
+				typeLabel: t.rbac.typeJobPosting,
 				icon: LayoutGrid,
 				name: j.title,
-				detail: `${j.postingAgencyName || "Agency"} · ${j.category}`,
+				detail: `${j.postingAgencyName || t.rbac.agencyFallback} · ${j.category}`,
 				date: formatDate(j.createdAt),
 				createdAt: j.createdAt,
 				href: "/admin/service/other",
@@ -199,8 +209,8 @@ function PendingApprovalsPage() {
 		<PageShell>
 			<PageHeader
 				icon={Clock}
-				title="Pending Approvals"
-				description="Everything across the platform waiting on an admin decision."
+				title={t.rbac.pendingTitle}
+				description={t.rbac.pendingSubtitle}
 			/>
 
 			<section className="overflow-hidden rounded-2xl border bg-card">
@@ -208,40 +218,37 @@ function PendingApprovalsPage() {
 					<div className="flex flex-wrap items-center gap-3 border-b bg-destructive/10 px-6 py-3 text-sm">
 						<AlertCircle className="h-4 w-4 text-destructive" />
 						<span className="font-medium text-destructive">
-							Some pending items could not be loaded — this list is incomplete.
+							{t.rbac.pendingIncomplete}
 						</span>
 						<span className="text-xs text-muted-foreground">
 							{getErrorMessage(loadError)}
 						</span>
 						<Button variant="outline" size="sm" onClick={refetchAll}>
 							<RefreshCw className="mr-2 h-4 w-4" />
-							Try Again
+							{t.rbac.tryAgainCaps}
 						</Button>
 					</div>
 				)}
 
 				<div className="hidden grid-cols-[2fr_1.1fr_1fr_96px] gap-3 border-b px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground md:grid">
-					<span>Item</span>
-					<span>Type</span>
-					<span>Submitted</span>
-					<span className="text-right">Action</span>
+					<span>{t.rbac.colItem}</span>
+					<span>{t.rbac.colType}</span>
+					<span>{t.rbac.colSubmitted}</span>
+					<span className="text-right">{t.rbac.colAction}</span>
 				</div>
 
 				{isLoading ? (
 					<div className="flex items-center gap-2 px-6 py-12 text-sm text-muted-foreground">
 						<Loader2 className="h-4 w-4 animate-spin" />
-						Loading pending items…
+						{t.rbac.loadingPending}
 					</div>
 				) : rows.length === 0 && !loadError ? (
 					<div className="flex flex-col items-center justify-center gap-2 px-6 py-16 text-center text-muted-foreground">
 						<CheckCircle2 className="h-8 w-8 text-[color:var(--signal-live)]/80" />
 						<p className="text-sm font-medium text-foreground">
-							Nothing pending
+							{t.rbac.nothingPending}
 						</p>
-						<p className="max-w-sm text-xs">
-							New agency and outlet signups, plan requests, and agency job posts
-							will appear here for review.
-						</p>
+						<p className="max-w-sm text-xs">{t.rbac.nothingPendingHint}</p>
 					</div>
 				) : (
 					rows.map((row) => (
@@ -275,7 +282,7 @@ function PendingApprovalsPage() {
 										search={{ focus: row.rawId }}
 										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
 									>
-										Review →
+										{t.rbac.review} →
 									</Link>
 								) : row.kind === "outlet" ? (
 									<Link
@@ -283,14 +290,14 @@ function PendingApprovalsPage() {
 										search={{ focus: row.rawId }}
 										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
 									>
-										Review →
+										{t.rbac.review} →
 									</Link>
 								) : (
 									<Link
 										to={row.href}
 										className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
 									>
-										Review →
+										{t.rbac.review} →
 									</Link>
 								)}
 							</div>
@@ -300,9 +307,11 @@ function PendingApprovalsPage() {
 
 				{truncated && (
 					<div className="border-t px-6 py-3 text-xs text-muted-foreground">
-						Showing the {rows.length} most recent of {totalPending} pending
-						items (first {PAGE_SIZE} per category). Open the category pages to
-						see the rest.
+						{fill(t.rbac.pendingTruncated, {
+							shown: rows.length,
+							total: totalPending,
+							perCategory: PAGE_SIZE,
+						})}
 					</div>
 				)}
 			</section>

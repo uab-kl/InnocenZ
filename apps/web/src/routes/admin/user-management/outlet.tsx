@@ -17,6 +17,11 @@ import { getUserTypeByKey } from "@/constants/user-types";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import {
+	adminNavLabel,
+	userTypeDescription,
+} from "@/lib/portal-i18n/admin-nav-label";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import {
 	approveOutlet,
 	fetchOutletById,
 	fetchOutlets,
@@ -28,6 +33,14 @@ export const Route = createFileRoute("/admin/user-management/outlet")({
 	component: OutletOrgsPage,
 	validateSearch: (search: Record<string, unknown>): { focus?: string } =>
 		typeof search.focus === "string" ? { focus: search.focus } : {},
+	/*
+	 * Document title stays ENGLISH. `head()` is route metadata, evaluated
+	 * outside React, so it cannot read the locale context — and reading the
+	 * stored preference directly would be wrong as often as right, because the
+	 * account's `preferred_locale` overrides the local value after hydration.
+	 * A browser-tab title in the wrong language is worse than one consistently
+	 * in English.
+	 */
 	head: () => ({
 		meta: [{ title: "Outlet Organizations — Innocenz Admin" }],
 	}),
@@ -36,6 +49,7 @@ export const Route = createFileRoute("/admin/user-management/outlet")({
 const PAGE_SIZE = 10;
 
 function OutletOrgsPage() {
+	const { t } = usePortalLocale();
 	const type = getUserTypeByKey("outlet")!;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
@@ -88,12 +102,12 @@ function OutletOrgsPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["outlets"] });
 			queryClient.invalidateQueries({ queryKey: ["outlet-by-id"] });
-			toast.success(response.message || "Outlet approved");
+			toast.success(response.message || t.admin.outletApproved);
 		},
 		onError: (err) => {
 			toast.error(
-				toMutationError(err, "Failed to approve outlet")?.message ??
-					"Failed to approve outlet",
+				toMutationError(err, t.admin.outletApproveFailed)?.message ??
+					t.admin.outletApproveFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -105,12 +119,12 @@ function OutletOrgsPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["outlets"] });
 			queryClient.invalidateQueries({ queryKey: ["outlet-by-id"] });
-			toast.success(response.message || "Outlet suspended");
+			toast.success(response.message || t.admin.outletSuspended);
 		},
 		onError: (err) => {
 			toast.error(
-				toMutationError(err, "Failed to suspend outlet")?.message ??
-					"Failed to suspend outlet",
+				toMutationError(err, t.admin.outletSuspendFailed)?.message ??
+					t.admin.outletSuspendFailed,
 			);
 		},
 		onSettled: () => setActionId(null),
@@ -120,8 +134,8 @@ function OutletOrgsPage() {
 		<PageShell>
 			<PageHeader
 				icon={type.icon}
-				title={type.title}
-				description={type.description}
+				title={adminNavLabel(`sidebar-user-${type.key}`, type.title, t)}
+				description={userTypeDescription(type.key, type.description, t)}
 			/>
 
 			<OutletsTable

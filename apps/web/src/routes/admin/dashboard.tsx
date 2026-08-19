@@ -19,6 +19,9 @@ import { Button } from "@/components/ui/button";
 import { DonutChart, type DonutSlice } from "@/components/ui/donut-chart";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { formatDate, formatNumber, getErrorMessage } from "@/lib/utils";
 import {
 	type AdminRequest,
@@ -42,12 +45,15 @@ export const Route = createFileRoute("/admin/dashboard")({
 	}),
 });
 
-const REQUEST_TYPE_LABELS: Record<AdminRequest["type"], string> = {
-	pos_integration_quote: "POS quote",
-	custom_renegotiation: "Custom",
-	plan_change: "Plan change",
-	contact: "Contact",
-	other: "Other",
+const REQUEST_TYPE_LABELS: Record<
+	AdminRequest["type"],
+	(t: PortalTranslations) => string
+> = {
+	pos_integration_quote: (t) => t.admin.reqPosQuote,
+	custom_renegotiation: (t) => t.admin.reqCustom,
+	plan_change: (t) => t.admin.reqPlanChange,
+	contact: (t) => t.admin.reqContact,
+	other: (t) => t.admin.reqOther,
 };
 
 type TodoHref =
@@ -75,11 +81,14 @@ const TONE_CHIP: Record<Tone, string> = {
 	danger: "bg-destructive/15 text-destructive",
 };
 
-const STATUS_META: Record<string, { label: string; tone: Tone }> = {
-	pending_review: { label: "Pending", tone: "warn" },
-	active: { label: "Active", tone: "live" },
-	inactive: { label: "Inactive", tone: "muted" },
-	suspended: { label: "Suspended", tone: "danger" },
+const STATUS_META: Record<
+	string,
+	{ label: (t: PortalTranslations) => string; tone: Tone }
+> = {
+	pending_review: { label: (t) => t.admin.statusPending, tone: "warn" },
+	active: { label: (t) => t.admin.statusActive, tone: "live" },
+	inactive: { label: (t) => t.admin.statusInactive, tone: "muted" },
+	suspended: { label: (t) => t.admin.statusSuspended, tone: "danger" },
 };
 
 // Breakdown-donut colours, keyed to design tokens (light/dark aware).
@@ -92,14 +101,30 @@ const ORG_STATUS_COLOR = {
 
 const JOB_STATUS_META: {
 	key: SpecialServiceStatus;
-	label: string;
+	label: (t: PortalTranslations) => string;
 	color: string;
 }[] = [
-	{ key: "open", label: "Open", color: "var(--lavender)" },
-	{ key: "assigned", label: "Assigned", color: "var(--chart-3)" },
-	{ key: "in_progress", label: "In progress", color: "var(--signal-warn)" },
-	{ key: "completed", label: "Completed", color: "var(--signal-live)" },
-	{ key: "cancelled", label: "Cancelled", color: "var(--muted-foreground)" },
+	{ key: "open", label: (t) => t.admin.jobOpen, color: "var(--lavender)" },
+	{
+		key: "assigned",
+		label: (t) => t.admin.jobAssigned,
+		color: "var(--chart-3)",
+	},
+	{
+		key: "in_progress",
+		label: (t) => t.admin.jobInProgress,
+		color: "var(--signal-warn)",
+	},
+	{
+		key: "completed",
+		label: (t) => t.admin.jobCompleted,
+		color: "var(--signal-live)",
+	},
+	{
+		key: "cancelled",
+		label: (t) => t.admin.jobCancelled,
+		color: "var(--muted-foreground)",
+	},
 ];
 
 type RegRow = {
@@ -121,43 +146,60 @@ function initialsOf(name: string): string {
 	return (parts[0][0] + parts[1][0]).toUpperCase();
 }
 
-function timeAgo(iso: string): string {
+/*
+ * Singular and plural are SPELT OUT as separate keys rather than derived by
+ * appending "s". Chinese has no plural form at all, so the English suffix
+ * trick would produce "3 小时s ago" the moment the dictionary is swapped.
+ */
+function timeAgo(iso: string, t: PortalTranslations): string {
 	const then = new Date(iso).getTime();
 	if (Number.isNaN(then)) return "";
 	const secs = Math.floor((Date.now() - then) / 1000);
-	if (secs < 60) return "just now";
+	if (secs < 60) return t.admin.dashJustNow;
 	const mins = Math.floor(secs / 60);
-	if (mins < 60) return `${mins} min ago`;
+	if (mins < 60) return fill(t.admin.dashMinAgo, { n: mins });
 	const hrs = Math.floor(mins / 60);
-	if (hrs < 24) return `${hrs} hr${hrs === 1 ? "" : "s"} ago`;
+	if (hrs < 24)
+		return fill(hrs === 1 ? t.admin.dashHrAgo : t.admin.dashHrsAgo, { n: hrs });
 	const days = Math.floor(hrs / 24);
-	if (days < 7) return `${days} day${days === 1 ? "" : "s"} ago`;
+	if (days < 7)
+		return fill(days === 1 ? t.admin.dashDayAgo : t.admin.dashDaysAgo, {
+			n: days,
+		});
 	return formatDate(iso);
 }
 
-const ACTION_VERBS: Record<string, string> = {
-	CREATE: "created",
-	UPDATE: "updated",
-	DELETE: "deleted",
-	APPROVE: "approved",
-	REJECT: "rejected",
-	SUSPEND: "suspended",
-	LOGIN: "signed in",
-	LOGOUT: "signed out",
+const ACTION_VERBS: Record<string, (t: PortalTranslations) => string> = {
+	CREATE: (t) => t.admin.dashVerbCreated,
+	UPDATE: (t) => t.admin.dashVerbUpdated,
+	DELETE: (t) => t.admin.dashVerbDeleted,
+	APPROVE: (t) => t.admin.dashVerbApproved,
+	REJECT: (t) => t.admin.dashVerbRejected,
+	SUSPEND: (t) => t.admin.dashVerbSuspended,
+	LOGIN: (t) => t.admin.dashVerbSignedIn,
+	LOGOUT: (t) => t.admin.dashVerbSignedOut,
 };
 
-function describeActivity(log: AuditLog): {
+function describeActivity(
+	log: AuditLog,
+	t: PortalTranslations,
+): {
 	who: string;
 	what: string;
 	Icon: typeof CheckCircle2;
 	tone: Tone;
 } {
 	const action = (log.action ?? "").toUpperCase();
-	const verb = ACTION_VERBS[action] ?? log.action?.toLowerCase() ?? "changed";
+	const verb =
+		ACTION_VERBS[action]?.(t) ??
+		log.action?.toLowerCase() ??
+		t.admin.dashVerbChanged;
 	const entityLabel = (log.entity ?? "record").replace(/_/g, " ");
 	const who =
 		log.username ||
-		(log.role ? log.role[0].toUpperCase() + log.role.slice(1) : "System");
+		(log.role
+			? log.role[0].toUpperCase() + log.role.slice(1)
+			: t.admin.dashSystem);
 
 	let Icon = FileText;
 	let tone: Tone = "lavender";
@@ -180,6 +222,7 @@ function describeActivity(log: AuditLog): {
 }
 
 function DashboardComponent() {
+	const { t } = usePortalLocale();
 	const { user } = useCurrentUser();
 	const { logout } = useAuth();
 	const [regFilter, setRegFilter] = useState<"all" | "agency" | "outlet">(
@@ -318,25 +361,25 @@ function DashboardComponent() {
 	const agencyBreakdown: DonutSlice[] = [
 		{
 			key: "active",
-			label: "Active",
+			label: t.admin.statusActive,
 			value: activeAgencyCount,
 			color: ORG_STATUS_COLOR.active,
 		},
 		{
 			key: "pending",
-			label: "Pending",
+			label: t.admin.statusPending,
 			value: agencyCount,
 			color: ORG_STATUS_COLOR.pending,
 		},
 		{
 			key: "suspended",
-			label: "Suspended",
+			label: t.admin.statusSuspended,
 			value: suspendedAgencyCount,
 			color: ORG_STATUS_COLOR.suspended,
 		},
 		{
 			key: "inactive",
-			label: "Inactive",
+			label: t.admin.statusInactive,
 			value: inactiveAgencyCount,
 			color: ORG_STATUS_COLOR.inactive,
 		},
@@ -344,25 +387,25 @@ function DashboardComponent() {
 	const outletBreakdown: DonutSlice[] = [
 		{
 			key: "active",
-			label: "Active",
+			label: t.admin.statusActive,
 			value: activeOutletCount,
 			color: ORG_STATUS_COLOR.active,
 		},
 		{
 			key: "pending",
-			label: "Pending",
+			label: t.admin.statusPending,
 			value: outletCount,
 			color: ORG_STATUS_COLOR.pending,
 		},
 		{
 			key: "suspended",
-			label: "Suspended",
+			label: t.admin.statusSuspended,
 			value: suspendedOutletCount,
 			color: ORG_STATUS_COLOR.suspended,
 		},
 		{
 			key: "inactive",
-			label: "Inactive",
+			label: t.admin.statusInactive,
 			value: inactiveOutletCount,
 			color: ORG_STATUS_COLOR.inactive,
 		},
@@ -370,7 +413,7 @@ function DashboardComponent() {
 	const jobsByStatus = jobsSummaryQuery.data?.data;
 	const jobsBreakdown: DonutSlice[] = JOB_STATUS_META.map((meta) => ({
 		key: meta.key,
-		label: meta.label,
+		label: meta.label(t),
 		value: jobsByStatus?.[meta.key] ?? 0,
 		color: meta.color,
 	}));
@@ -395,23 +438,23 @@ function DashboardComponent() {
 	}[] = [
 		{
 			id: "agencies",
-			title: "PR Agencies by status",
+			title: t.admin.dashAgenciesByStatus,
 			slices: agencyBreakdown,
-			centerLabel: "agencies",
+			centerLabel: t.admin.dashCenterAgencies,
 			isLoading: agencyBreakdownLoading,
 		},
 		{
 			id: "outlets",
-			title: "Outlets by status",
+			title: t.admin.dashOutletsByStatus,
 			slices: outletBreakdown,
-			centerLabel: "outlets",
+			centerLabel: t.admin.dashCenterOutlets,
 			isLoading: outletBreakdownLoading,
 		},
 		{
 			id: "jobs",
-			title: "Jobs by status",
+			title: t.admin.dashJobsByStatus,
 			slices: jobsBreakdown,
-			centerLabel: "jobs",
+			centerLabel: t.admin.dashCenterJobs,
 			isLoading: jobsSummaryQuery.isLoading,
 		},
 	];
@@ -426,64 +469,64 @@ function DashboardComponent() {
 	const cards: KpiCardProps[] = [
 		{
 			id: "agencies",
-			title: "Pending PR Agencies",
-			description: "Signups awaiting approval",
+			title: t.admin.kpiPendingAgencies,
+			description: t.admin.kpiPendingAgenciesHint,
 			href: "/admin/user-management/agency",
 			icon: Building2,
 			count: agencyCount,
 			numberTone: agencyCount > 0 ? "foreground" : "muted",
 			signal:
 				agencyCount > 0
-					? { label: "Needs approval", tone: "warn" }
-					: { label: "All clear", tone: "lavender" },
+					? { label: t.admin.kpiNeedsApproval, tone: "warn" }
+					: { label: t.admin.dashAllClear, tone: "lavender" },
 			isLoading: pendingAgenciesQuery.isLoading,
 			isError: pendingAgenciesQuery.isError,
 			error: pendingAgenciesQuery.error,
 		},
 		{
 			id: "outlets",
-			title: "Pending Outlets",
-			description: "Venues awaiting approval",
+			title: t.admin.kpiPendingOutlets,
+			description: t.admin.kpiPendingOutletsHint,
 			href: "/admin/user-management/outlet",
 			icon: Store,
 			count: outletCount,
 			numberTone: outletCount > 0 ? "foreground" : "muted",
 			signal:
 				outletCount > 0
-					? { label: "Needs approval", tone: "warn" }
-					: { label: "All clear", tone: "lavender" },
+					? { label: t.admin.kpiNeedsApproval, tone: "warn" }
+					: { label: t.admin.dashAllClear, tone: "lavender" },
 			isLoading: pendingOutletsQuery.isLoading,
 			isError: pendingOutletsQuery.isError,
 			error: pendingOutletsQuery.error,
 		},
 		{
 			id: "requests",
-			title: "Plan requests",
-			description: "POS quotes & plan changes",
+			title: t.admin.kpiPlanRequests,
+			description: t.admin.kpiPlanRequestsHint,
 			href: "/admin/service/requests",
 			icon: Handshake,
 			count: requestCount,
 			numberTone: requestCount > 0 ? "gold" : "muted",
 			signal:
 				requestCount > 0
-					? { label: "Needs quote", tone: "warn" }
-					: { label: "All clear", tone: "lavender" },
+					? { label: t.admin.kpiNeedsQuote, tone: "warn" }
+					: { label: t.admin.dashAllClear, tone: "lavender" },
 			isLoading: pendingRequestsCountQuery.isLoading,
 			isError: pendingRequestsCountQuery.isError,
 			error: pendingRequestsCountQuery.error,
 		},
 		{
 			id: "jobs",
-			title: "Job postings",
-			description: "Agency jobs to review",
+			title: t.admin.kpiJobPostings,
+			description: t.admin.kpiJobPostingsHint,
 			href: "/admin/service/other",
 			icon: LayoutGrid,
 			count: jobCount,
 			numberTone: jobCount > 0 ? "foreground" : "muted",
 			signal:
 				jobCount > 0
-					? { label: "Needs review", tone: "warn" }
-					: { label: "All clear", tone: "lavender" },
+					? { label: t.admin.kpiNeedsReview, tone: "warn" }
+					: { label: t.admin.dashAllClear, tone: "lavender" },
 			isLoading: pendingJobsQuery.isLoading,
 			isError: pendingJobsQuery.isError,
 			error: pendingJobsQuery.error,
@@ -501,9 +544,12 @@ function DashboardComponent() {
 		...(pendingAgenciesQuery.data?.data ?? []).map(
 			(agency: Agency): TodoItem => ({
 				id: `agency-${agency.id}`,
-				title: `Approve PR Agency: ${agency.name}`,
-				detail: `Code ${agency.agencyCode} · submitted ${formatDate(agency.createdAt)}`,
-				badge: "Org approval",
+				title: fill(t.admin.todoApproveAgency, { name: agency.name }),
+				detail: fill(t.admin.todoApproveAgencyDetail, {
+					code: agency.agencyCode,
+					date: formatDate(agency.createdAt),
+				}),
+				badge: t.admin.badgeOrgApproval,
 				href: "/admin/user-management/agency",
 				priority: "high",
 			}),
@@ -511,9 +557,11 @@ function DashboardComponent() {
 		...(pendingOutletsQuery.data?.data ?? []).map(
 			(outlet: Outlet): TodoItem => ({
 				id: `outlet-${outlet.id}`,
-				title: `Approve Outlet: ${outlet.name}`,
-				detail: `Submitted ${formatDate(outlet.createdAt)}`,
-				badge: "Org approval",
+				title: fill(t.admin.todoApproveOutlet, { name: outlet.name }),
+				detail: fill(t.admin.todoApproveOutletDetail, {
+					date: formatDate(outlet.createdAt),
+				}),
+				badge: t.admin.badgeOrgApproval,
 				href: "/admin/user-management/outlet",
 				priority: "high",
 			}),
@@ -521,9 +569,12 @@ function DashboardComponent() {
 		...(openRequestsQuery.data?.data ?? []).map(
 			(request: AdminRequest): TodoItem => ({
 				id: `request-${request.id}`,
-				title: `Quote for ${request.subscriberName}`,
-				detail: `${REQUEST_TYPE_LABELS[request.type]} · pending · ${formatDate(request.createdAt)}`,
-				badge: "Plan request",
+				title: fill(t.admin.todoQuoteFor, { name: request.subscriberName }),
+				detail: fill(t.admin.todoQuoteDetail, {
+					type: REQUEST_TYPE_LABELS[request.type](t),
+					date: formatDate(request.createdAt),
+				}),
+				badge: t.admin.badgePlanRequest,
 				href: "/admin/service/requests",
 				priority: "high",
 			}),
@@ -531,9 +582,11 @@ function DashboardComponent() {
 		...(contactedRequestsQuery.data?.data ?? []).map(
 			(request: AdminRequest): TodoItem => ({
 				id: `request-contacted-${request.id}`,
-				title: `Finish quote: ${request.subscriberName}`,
-				detail: `${REQUEST_TYPE_LABELS[request.type]} · contacted — set negotiated price`,
-				badge: "Reminder",
+				title: fill(t.admin.todoFinishQuote, { name: request.subscriberName }),
+				detail: fill(t.admin.todoFinishQuoteDetail, {
+					type: REQUEST_TYPE_LABELS[request.type](t),
+				}),
+				badge: t.admin.badgeReminder,
 				href: "/admin/service/requests",
 				priority: "medium",
 			}),
@@ -541,9 +594,9 @@ function DashboardComponent() {
 		...(pendingJobsQuery.data?.data ?? []).map(
 			(job: SpecialService): TodoItem => ({
 				id: `job-${job.id}`,
-				title: `Review job: ${job.title}`,
-				detail: `${job.postingAgencyName || "Agency"} · ${job.category}`,
-				badge: "Job posting",
+				title: fill(t.admin.todoReviewJob, { title: job.title }),
+				detail: `${job.postingAgencyName || t.admin.todoAgencyFallback} · ${job.category}`,
+				badge: t.admin.badgeJobPosting,
 				href: "/admin/service/other",
 				priority: "high",
 			}),
@@ -557,11 +610,36 @@ function DashboardComponent() {
 		jobCount +
 		(contactedRequestsQuery.data?.pagination.totalCount ?? 0);
 
-	const snapshot: { value: number; label: string; tone: Tone }[] = [
-		{ value: agencyCount, label: "Agencies pending", tone: "lavender" },
-		{ value: outletCount, label: "Outlets pending", tone: "lavender" },
-		{ value: activeAgencyCount, label: "Active agencies", tone: "live" },
-		{ value: activeOutletCount, label: "Active outlets", tone: "live" },
+	const snapshot: {
+		id: string;
+		value: number;
+		label: string;
+		tone: Tone;
+	}[] = [
+		{
+			id: "agencies-pending",
+			value: agencyCount,
+			label: t.admin.dashAgenciesPending,
+			tone: "lavender",
+		},
+		{
+			id: "outlets-pending",
+			value: outletCount,
+			label: t.admin.dashOutletsPending,
+			tone: "lavender",
+		},
+		{
+			id: "active-agencies",
+			value: activeAgencyCount,
+			label: t.admin.dashActiveAgencies,
+			tone: "live",
+		},
+		{
+			id: "active-outlets",
+			value: activeOutletCount,
+			label: t.admin.dashActiveOutlets,
+			tone: "live",
+		},
 	];
 	const snapshotLoading =
 		pendingAgenciesQuery.isLoading ||
@@ -576,7 +654,7 @@ function DashboardComponent() {
 				name: a.name,
 				code: a.agencyCode,
 				kind: "agency",
-				typeLabel: "PR Agency",
+				typeLabel: t.admin.navPrAgency,
 				typeTone: "lavender",
 				status: a.status,
 				date: formatDate(a.createdAt),
@@ -587,9 +665,9 @@ function DashboardComponent() {
 			(o: Outlet): RegRow => ({
 				id: `outlet-${o.id}`,
 				name: o.name,
-				code: o.ssmNo ? `SSM ${o.ssmNo}` : "Outlet",
+				code: o.ssmNo ? `SSM ${o.ssmNo}` : t.admin.navOutlet,
 				kind: "outlet",
-				typeLabel: "Outlet",
+				typeLabel: t.admin.navOutlet,
 				typeTone: "live",
 				status: o.status,
 				date: formatDate(o.createdAt),
@@ -629,21 +707,24 @@ function DashboardComponent() {
 							}}
 							aria-hidden
 						/>
-						{systemOk ? "System operational" : "Checking services"}
+						{systemOk
+							? t.admin.dashSystemOperational
+							: t.admin.dashCheckingServices}
 					</div>
 					<h1 className="text-3xl font-extrabold tracking-tight md:text-4xl">
-						Dashboard
+						{t.admin.navDashboard}
 					</h1>
 					<p className="mt-1.5 text-[15px] text-muted-foreground">
-						Welcome back{user?.displayName ? `, ${user.displayName}` : ""} —
-						here's what needs your attention today.
+						{user?.displayName
+							? fill(t.admin.dashWelcomeNamed, { name: user.displayName })
+							: t.admin.dashWelcome}
 					</p>
 				</div>
 				<div className="flex flex-wrap gap-3">
 					<Button asChild variant="outline" size="lg" className="h-11 px-4">
 						<Link to="/admin/settings">
 							<Settings className="opacity-80" />
-							Settings
+							{t.admin.navSettings}
 						</Link>
 					</Button>
 					<Button
@@ -657,7 +738,7 @@ function DashboardComponent() {
 							rel="noopener noreferrer"
 							className="!text-[#1a1726] no-underline hover:!text-[#1a1726]"
 						>
-							Open prototype
+							{t.admin.dashOpenPrototype}
 							<ExternalLink className="opacity-80" />
 						</a>
 					</Button>
@@ -674,9 +755,11 @@ function DashboardComponent() {
 			{/* Platform breakdown — status distribution donuts */}
 			<section className="overflow-hidden rounded-2xl border bg-card">
 				<div className="border-b px-6 py-5">
-					<h2 className="text-lg font-extrabold">Platform breakdown</h2>
+					<h2 className="text-lg font-extrabold">
+						{t.admin.dashPlatformBreakdown}
+					</h2>
 					<p className="mt-0.5 text-[13px] text-muted-foreground">
-						Live status distribution across organizations and jobs.
+						{t.admin.dashPlatformBreakdownHint}
 					</p>
 				</div>
 				<div className="grid grid-cols-1 divide-y lg:grid-cols-3 lg:divide-x lg:divide-y-0">
@@ -688,7 +771,7 @@ function DashboardComponent() {
 							{b.isLoading ? (
 								<div className="flex h-[168px] items-center gap-2 text-sm text-muted-foreground">
 									<Loader2 className="h-4 w-4 animate-spin" />
-									Loading…
+									{t.admin.dashLoading}
 								</div>
 							) : (
 								<DonutChart slices={b.slices} centerLabel={b.centerLabel} />
@@ -704,9 +787,11 @@ function DashboardComponent() {
 				<section className="overflow-hidden rounded-2xl border bg-card xl:col-start-1 xl:row-start-1">
 					<div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-5">
 						<div>
-							<h2 className="text-lg font-extrabold">Today's action items</h2>
+							<h2 className="text-lg font-extrabold">
+								{t.admin.dashActionItems}
+							</h2>
 							<p className="mt-0.5 text-[13px] text-muted-foreground">
-								Approvals, quotes & job reviews — click any row to handle it.
+								{t.admin.dashActionItemsHint}
 							</p>
 						</div>
 						{!todosLoading && (
@@ -716,8 +801,10 @@ function DashboardComponent() {
 								}`}
 							>
 								{attentionCount > 0
-									? `${formatNumber(attentionCount)} need attention`
-									: "All clear"}
+									? fill(t.admin.dashNeedAttention, {
+											n: formatNumber(attentionCount),
+										})
+									: t.admin.dashAllClear}
 							</span>
 						)}
 					</div>
@@ -725,17 +812,16 @@ function DashboardComponent() {
 					{todosLoading ? (
 						<div className="flex items-center gap-2 px-6 py-10 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
-							Loading today's reminders…
+							{t.admin.dashLoadingReminders}
 						</div>
 					) : todos.length === 0 ? (
 						<div className="flex flex-col items-center justify-center gap-2 px-6 py-14 text-center text-muted-foreground">
 							<CheckCircle2 className="h-8 w-8 text-[color:var(--signal-live)]/80" />
 							<p className="text-sm font-medium text-foreground">
-								Nothing urgent right now
+								{t.admin.dashNothingUrgent}
 							</p>
 							<p className="max-w-sm text-xs">
-								New signup approvals, negotiate-price requests, and agency job
-								posts will show up here.
+								{t.admin.dashNothingUrgentHint}
 							</p>
 						</div>
 					) : (
@@ -768,7 +854,7 @@ function DashboardComponent() {
 										</p>
 									</div>
 									<span className="inline-flex shrink-0 items-center gap-1 text-[13px] font-bold text-lavender">
-										Open
+										{t.admin.dashOpen}
 										<ArrowRight className="h-3.5 w-3.5" />
 									</span>
 								</Link>
@@ -780,15 +866,17 @@ function DashboardComponent() {
 				{/* Platform snapshot — right column, row 1 */}
 				<section className="rounded-2xl border bg-[linear-gradient(160deg,var(--secondary),var(--card))] p-5 xl:col-start-2 xl:row-start-1">
 					<div className="mb-4 flex items-center justify-between">
-						<h3 className="text-[15px] font-extrabold">Platform snapshot</h3>
+						<h3 className="text-[15px] font-extrabold">
+							{t.admin.dashPlatformSnapshot}
+						</h3>
 						<span className="text-[11.5px] text-muted-foreground">
-							Live totals
+							{t.admin.dashLiveTotals}
 						</span>
 					</div>
 					<div className="grid grid-cols-2 gap-3">
 						{snapshot.map((stat) => (
 							<div
-								key={stat.label}
+								key={stat.id}
 								className="rounded-xl border bg-background/50 p-3.5"
 							>
 								<div
@@ -808,32 +896,34 @@ function DashboardComponent() {
 				{/* Recent activity — right column, row 2 */}
 				<section className="rounded-2xl border bg-card p-5 xl:col-start-2 xl:row-start-2">
 					<div className="mb-4 flex items-center justify-between">
-						<h3 className="text-[15px] font-extrabold">Recent activity</h3>
+						<h3 className="text-[15px] font-extrabold">
+							{t.admin.dashRecentActivity}
+						</h3>
 						<Link
 							to="/admin/audit-log"
 							className="text-xs font-semibold text-lavender no-underline"
 						>
-							View all
+							{t.admin.dashViewAll}
 						</Link>
 					</div>
 
 					{activityQuery.isLoading ? (
 						<div className="flex items-center gap-2 py-4 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
-							Loading activity…
+							{t.admin.dashLoadingActivity}
 						</div>
 					) : activityQuery.isError ? (
 						<p className="py-2 text-xs text-muted-foreground">
-							Activity feed unavailable right now.
+							{t.admin.dashActivityUnavailable}
 						</p>
 					) : activityItems.length === 0 ? (
 						<p className="py-2 text-xs text-muted-foreground">
-							No recent activity yet.
+							{t.admin.dashNoActivity}
 						</p>
 					) : (
 						<div className="flex flex-col">
 							{activityItems.map((log, index) => {
-								const v = describeActivity(log);
+								const v = describeActivity(log, t);
 								const last = index === activityItems.length - 1;
 								return (
 									<div key={log.auditLogId} className="flex gap-3">
@@ -853,7 +943,7 @@ function DashboardComponent() {
 												<span className="text-muted-foreground">{v.what}</span>
 											</div>
 											<div className="mt-0.5 text-[11.5px] text-muted-foreground">
-												{timeAgo(log.createdAt)}
+												{timeAgo(log.createdAt, t)}
 											</div>
 										</div>
 									</div>
@@ -867,17 +957,19 @@ function DashboardComponent() {
 				<section className="overflow-hidden rounded-2xl border bg-card xl:col-start-1 xl:row-start-2">
 					<div className="flex flex-wrap items-center justify-between gap-3 border-b px-6 py-5">
 						<div>
-							<h2 className="text-lg font-extrabold">Latest registrations</h2>
+							<h2 className="text-lg font-extrabold">
+								{t.admin.dashLatestRegistrations}
+							</h2>
 							<p className="mt-0.5 text-[13px] text-muted-foreground">
-								New organizations awaiting review.
+								{t.admin.dashLatestRegistrationsHint}
 							</p>
 						</div>
 						<div className="flex gap-2">
 							{(
 								[
-									{ key: "all", label: "All" },
-									{ key: "agency", label: "PR Agency" },
-									{ key: "outlet", label: "Outlet" },
+									{ key: "all", label: t.admin.dashFilterAll },
+									{ key: "agency", label: t.admin.navPrAgency },
+									{ key: "outlet", label: t.admin.navOutlet },
 								] as const
 							).map((f) => {
 								const active = regFilter === f.key;
@@ -900,27 +992,30 @@ function DashboardComponent() {
 					</div>
 
 					<div className="hidden grid-cols-[2fr_1.1fr_1.1fr_1fr_96px] gap-3 border-b px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-muted-foreground md:grid">
-						<span>Organization</span>
-						<span>Type</span>
-						<span>Submitted</span>
-						<span>Status</span>
-						<span className="text-right">Action</span>
+						<span>{t.admin.colOrganization}</span>
+						<span>{t.admin.colType}</span>
+						<span>{t.admin.colSubmitted}</span>
+						<span>{t.admin.colStatus}</span>
+						<span className="text-right">{t.admin.colAction}</span>
 					</div>
 
 					{registrationsLoading ? (
 						<div className="flex items-center gap-2 px-6 py-10 text-sm text-muted-foreground">
 							<Loader2 className="h-4 w-4 animate-spin" />
-							Loading registrations…
+							{t.admin.dashLoadingRegistrations}
 						</div>
 					) : registrations.length === 0 ? (
 						<div className="px-6 py-10 text-center text-sm text-muted-foreground">
-							No registrations to show.
+							{t.admin.dashNoRegistrations}
 						</div>
 					) : (
 						registrations.map((r) => {
-							const status = STATUS_META[r.status] ?? {
-								label: r.status,
-								tone: "muted" as Tone,
+							const meta = STATUS_META[r.status];
+							const status = {
+								// An unmapped status falls through as its RAW stored value —
+								// better a visible `pending_xyz` than a blank badge.
+								label: meta ? meta.label(t) : r.status,
+								tone: meta?.tone ?? ("muted" as Tone),
 							};
 							const href: TodoHref =
 								r.kind === "agency"
@@ -965,7 +1060,7 @@ function DashboardComponent() {
 											to={href}
 											className="text-[12.5px] font-bold text-[color:var(--royal-gold)] no-underline"
 										>
-											Review →
+											{t.admin.dashReview} →
 										</Link>
 									</div>
 								</div>
@@ -1017,6 +1112,7 @@ function KpiCard({
 	isError,
 	error,
 }: KpiCardProps) {
+	const { t } = usePortalLocale();
 	const numberColor =
 		numberTone === "gold"
 			? "text-[color:var(--royal-gold)]"
@@ -1060,7 +1156,7 @@ function KpiCard({
 					</div>
 				)}
 				<span className="inline-flex items-center gap-1 text-[12.5px] font-semibold text-lavender">
-					Review
+					{t.admin.dashReview}
 					<ArrowRight className="h-3.5 w-3.5" />
 				</span>
 			</div>

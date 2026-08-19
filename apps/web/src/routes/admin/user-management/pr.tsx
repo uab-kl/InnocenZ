@@ -6,6 +6,7 @@ import { PrDetailsSheet, type PrStatusFilter, PrsTable } from "@/components/pr";
 import { getUserTypeByKey } from "@/constants/user-types";
 import { useAccountActions } from "@/hooks/use-account-actions";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fetchAgencies } from "@/services/agency";
 import {
 	fetchPrUsers,
@@ -32,6 +33,7 @@ const toTarget = (user: PrUser) => ({
 });
 
 function PrUsersPage() {
+	const { t } = usePortalLocale();
 	const type = getUserTypeByKey("pr")!;
 	const { logout } = useAuth();
 	const [statusFilter, setStatusFilter] = useState<PrStatusFilter>("all");
@@ -84,7 +86,7 @@ function PrUsersPage() {
 	 */
 	const accountActions = useAccountActions({
 		roleName: "pr",
-		roleLabel: "PR access",
+		roleLabel: t.admin.rolePrAccess,
 		queryKeys: ["pr-users", "legacy-members"],
 	});
 

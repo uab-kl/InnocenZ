@@ -8,6 +8,8 @@ import { Clock } from "lucide-react";
 import { AdminNotFoundPage } from "@/components/layout/admin-not-found";
 import { rbacSections } from "@/constants/rbac-sections";
 import { useSidebarBadges } from "@/hooks/use-sidebar-badges";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { rbacSectionLabel } from "@/lib/portal-i18n/rbac-label";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/admin/rbac")({
@@ -30,6 +32,7 @@ const TAB_BASE =
 const TAB_ACTIVE = "bg-[color:var(--lavender-soft)] !text-lavender";
 
 function RbacLayout() {
+	const { t } = usePortalLocale();
 	const badges = useSidebarBadges();
 	// The Pending list shows ALL pending admin-requests, so the tab total has to
 	// add plan changes back — the requests badge excludes them by design (the
@@ -53,7 +56,7 @@ function RbacLayout() {
 						activeProps={{ className: cn(TAB_BASE, TAB_ACTIVE) }}
 					>
 						<section.icon className="h-4 w-4" />
-						{section.title}
+						{rbacSectionLabel(section.key, section.title, t)}
 					</Link>
 				))}
 				<Link
@@ -63,7 +66,7 @@ function RbacLayout() {
 					activeProps={{ className: cn(TAB_BASE, TAB_ACTIVE) }}
 				>
 					<Clock className="h-4 w-4" />
-					Pending
+					{t.rbac.tabPending}
 					{pendingTotal > 0 && (
 						<span className="ml-0.5 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[color:var(--signal-warn-soft)] px-1.5 text-[11px] font-bold text-[color:var(--signal-warn)]">
 							{pendingTotal}

@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	fetchPlatformConfig,
 	type UpdatePlatformConfigInput,
@@ -30,25 +32,24 @@ export const Route = createFileRoute("/admin/settings")({
 });
 
 function SettingsComponent() {
+	const { t } = usePortalLocale();
 	return (
 		<PageShell>
 			<PageHeader
-				title="Settings"
-				description="Configure application preferences and master data."
+				title={t.admin.navSettings}
+				description={t.admin.setSubtitle}
 			/>
 
 			<PlatformConfigCard />
 
 			<Card>
 				<CardHeader>
-					<CardTitle>Environment</CardTitle>
-					<CardDescription>
-						API configuration loaded from environment variables.
-					</CardDescription>
+					<CardTitle>{t.admin.setEnvironment}</CardTitle>
+					<CardDescription>{t.admin.setEnvironmentHint}</CardDescription>
 				</CardHeader>
 				<CardContent className="space-y-2 text-sm">
 					<div className="flex justify-between gap-4 border-b pb-2">
-						<span className="text-muted-foreground">API URL</span>
+						<span className="text-muted-foreground">{t.admin.setApiUrl}</span>
 						<code>{import.meta.env.VITE_API_URL}</code>
 					</div>
 					<div className="flex justify-between gap-4">
@@ -85,18 +86,23 @@ const NUMERIC_FIELDS = [
 // non-numeric one posts NaN, which JSON turns into null and z.coerce.number()
 // then coerces to 0 — so the fee is silently overwritten with 0.00 on a 200.
 // Range/integer limits stay server-side (platform-config.controller.ts).
-function validateForm(form: typeof EMPTY_FORM): FormErrors {
+function validateForm(
+	form: typeof EMPTY_FORM,
+	t: PortalTranslations,
+): FormErrors {
 	const errors: FormErrors = {};
 	for (const key of NUMERIC_FIELDS) {
 		const raw = form[key].trim();
-		if (raw === "") errors[key] = "Required";
-		else if (!Number.isFinite(Number(raw))) errors[key] = "Enter a number";
+		if (raw === "") errors[key] = t.admin.setRequired;
+		else if (!Number.isFinite(Number(raw)))
+			errors[key] = t.admin.setEnterNumber;
 	}
-	if (form.currency.trim() === "") errors.currency = "Required";
+	if (form.currency.trim() === "") errors.currency = t.admin.setRequired;
 	return errors;
 }
 
 function PlatformConfigCard() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -127,18 +133,18 @@ function PlatformConfigCard() {
 			updatePlatformConfig(input, logout),
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["platform-config"] });
-			toast.success(response.message || "Platform configuration updated");
+			toast.success(response.message || t.admin.setUpdated);
 		},
 	});
 
 	const mutationError = toMutationError(
 		updateMutation.error,
-		"Failed to update platform configuration",
+		t.admin.setUpdateFailed,
 	);
 
 	function handleSubmit(event: FormEvent) {
 		event.preventDefault();
-		const nextErrors = validateForm(form);
+		const nextErrors = validateForm(form, t);
 		setErrors(nextErrors);
 		if (Object.keys(nextErrors).length > 0) return;
 		updateMutation.mutate({
@@ -158,28 +164,25 @@ function PlatformConfigCard() {
 	return (
 		<Card>
 			<CardHeader>
-				<CardTitle>System configuration</CardTitle>
-				<CardDescription>
-					Platform-wide defaults used across payments, geofencing, and
-					subscriptions.
-				</CardDescription>
+				<CardTitle>{t.admin.setSystemConfig}</CardTitle>
+				<CardDescription>{t.admin.setSystemConfigHint}</CardDescription>
 			</CardHeader>
 			<CardContent>
 				{configQuery.isLoading ? (
 					<div className="flex items-center gap-2 text-muted-foreground text-sm py-4">
 						<Loader2 className="h-4 w-4 animate-spin" />
-						Loading configuration…
+						{t.admin.setLoadingConfig}
 					</div>
 				) : configQuery.isError ? (
 					<p className="text-destructive text-sm py-4">
-						Could not load platform configuration.
+						{t.admin.setLoadFailed}
 					</p>
 				) : (
 					<form onSubmit={handleSubmit} className="space-y-4 max-w-xl">
 						<div className="grid gap-4 sm:grid-cols-2">
 							<ConfigField
 								id="platformFeePercent"
-								label="Platform fee (%)"
+								label={t.admin.setPlatformFee}
 								type="number"
 								step="0.01"
 								value={form.platformFeePercent}
@@ -188,7 +191,7 @@ function PlatformConfigCard() {
 							/>
 							<ConfigField
 								id="geofenceRadiusMeters"
-								label="Geofence radius (m)"
+								label={t.admin.setGeofenceRadius}
 								type="number"
 								value={form.geofenceRadiusMeters}
 								onChange={setField("geofenceRadiusMeters")}
@@ -196,7 +199,7 @@ function PlatformConfigCard() {
 							/>
 							<ConfigField
 								id="subscriptionMonthlyFee"
-								label="Subscription fee / month"
+								label={t.admin.setSubscriptionFee}
 								type="number"
 								step="0.01"
 								value={form.subscriptionMonthlyFee}
@@ -205,7 +208,7 @@ function PlatformConfigCard() {
 							/>
 							<ConfigField
 								id="duplicatePaymentWindowHours"
-								label="Duplicate-payment window (h)"
+								label={t.admin.setDuplicateWindow}
 								type="number"
 								value={form.duplicatePaymentWindowHours}
 								onChange={setField("duplicatePaymentWindowHours")}
@@ -213,7 +216,7 @@ function PlatformConfigCard() {
 							/>
 							<ConfigField
 								id="currency"
-								label="Currency"
+								label={t.admin.setCurrency}
 								value={form.currency}
 								onChange={setField("currency")}
 								error={errors.currency}
@@ -230,7 +233,7 @@ function PlatformConfigCard() {
 							{updateMutation.isPending && (
 								<Loader2 className="h-4 w-4 animate-spin" />
 							)}
-							Save changes
+							{t.admin.setSaveChanges}
 						</Button>
 					</form>
 				)}

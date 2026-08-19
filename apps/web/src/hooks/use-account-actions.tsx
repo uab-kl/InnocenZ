@@ -4,6 +4,8 @@ import { toast } from "sonner";
 import { ConfirmDialog } from "@/components/rbac";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { revokeUserRole, setUserStatus } from "@/services/admin";
 
 /**
@@ -36,7 +38,11 @@ type Pending = {
 interface UseAccountActionsOptions {
 	/** The role a "remove access" takes back, e.g. "admin" or "pr". */
 	roleName: string;
-	/** How that role reads mid-sentence: "admin access", "PR access". */
+	/**
+	 * How that role reads mid-sentence: "admin access", "PR access".
+	 * ALREADY TRANSLATED by the caller — it is dropped into a sentence this
+	 * hook builds, so it has to arrive in the reader's language.
+	 */
 	roleLabel: string;
 	/** List queries invalidated after a successful write. */
 	queryKeys: string[];
@@ -47,6 +53,7 @@ export function useAccountActions({
 	roleLabel,
 	queryKeys,
 }: UseAccountActionsOptions) {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 
@@ -84,14 +91,14 @@ export function useAccountActions({
 	const statusMutation = useMutation({
 		mutationFn: (vars: { id: string; next: "active" | "inactive" }) =>
 			setUserStatus(vars.id, vars.next, logout),
-		onSuccess: (r) => settle(r.message || "Account updated"),
-		onError: (err) => refuse(err, "Could not change that account"),
+		onSuccess: (r) => settle(r.message || t.admin.accountUpdated),
+		onError: (err) => refuse(err, t.admin.accountChangeFailed),
 	});
 
 	const revokeMutation = useMutation({
 		mutationFn: (id: string) => revokeUserRole(id, roleName, logout),
-		onSuccess: (r) => settle(r.message || "Role removed"),
-		onError: (err) => refuse(err, "Could not remove that role"),
+		onSuccess: (r) => settle(r.message || t.admin.roleRemoved),
+		onError: (err) => refuse(err, t.admin.roleRemoveFailed),
 	});
 
 	const busyUserId = statusMutation.isPending
@@ -108,21 +115,26 @@ export function useAccountActions({
 			}}
 			title={
 				shown?.kind === "revoke"
-					? `Remove ${roleLabel}?`
+					? fill(t.admin.removeRoleTitle, { role: roleLabel })
 					: shown?.next === "inactive"
-						? "Disable this account?"
-						: "Re-enable this account?"
+						? t.admin.disableAccountTitle
+						: t.admin.enableAccountTitle
 			}
 			description={
 				!shown
 					? ""
 					: shown.kind === "revoke"
-						? `${shown.target.name} keeps their account but loses ${roleLabel}. Roles can be granted again afterwards.`
+						? fill(t.admin.revokeRoleBody, {
+								name: shown.target.name,
+								role: roleLabel,
+							})
 						: shown.next === "inactive"
-							? `${shown.target.name} will be signed out on their next request and cannot sign in again until this is undone. Nothing is deleted.`
-							: `${shown.target.name} will be able to sign in again.`
+							? fill(t.admin.disableAccountBody, { name: shown.target.name })
+							: fill(t.admin.enableAccountBody, { name: shown.target.name })
 			}
-			confirmLabel={shown?.kind === "revoke" ? "Remove access" : "Confirm"}
+			confirmLabel={
+				shown?.kind === "revoke" ? t.admin.removeAccess : t.admin.confirm
+			}
 			isPending={statusMutation.isPending || revokeMutation.isPending}
 			onConfirm={() => {
 				if (!pending) return;

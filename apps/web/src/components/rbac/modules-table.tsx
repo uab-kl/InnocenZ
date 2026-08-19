@@ -42,6 +42,12 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import {
+	portalCodeLabel,
+	recordStatusLabel,
+} from "@/lib/portal-i18n/rbac-label";
 import { formatDate, getErrorMessage, statusColors } from "@/lib/utils";
 import type { RbacModule, RbacPagination } from "@/services/rbac";
 
@@ -86,6 +92,7 @@ export function ModulesTable({
 	onEditClick,
 	onDeactivateClick,
 }: ModulesTableProps) {
+	const { t } = usePortalLocale();
 	const showLoading = isLoading && modules.length === 0;
 
 	return (
@@ -94,14 +101,12 @@ export function ModulesTable({
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
 						<CardTitle className="flex items-center gap-2">
-							Modules
+							{t.rbac.sectionModulesTitle}
 							{isFetching && (
 								<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 							)}
 						</CardTitle>
-						<CardDescription>
-							Portal-scoped modules with stable keys. Creating a module also creates its C · R · U permissions for the role matrix.
-						</CardDescription>
+						<CardDescription>{t.rbac.modulesCardHint}</CardDescription>
 					</div>
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:flex-wrap">
 						<div className="relative sm:w-56">
@@ -109,9 +114,9 @@ export function ModulesTable({
 							<Input
 								value={search}
 								onChange={(e) => onSearchChange(e.target.value)}
-								placeholder="Search modules…"
+								placeholder={t.rbac.searchModules}
 								className="pl-8"
-								aria-label="Search modules by name"
+								aria-label={t.rbac.searchModulesAria}
 							/>
 						</div>
 						<Select
@@ -120,18 +125,23 @@ export function ModulesTable({
 								onStatusFilterChange(value as ModuleStatusFilter)
 							}
 						>
-							<SelectTrigger className="sm:w-40" aria-label="Filter by status">
-								<SelectValue placeholder="Filter by status" />
+							<SelectTrigger
+								className="sm:w-40"
+								aria-label={t.rbac.filterByStatus}
+							>
+								<SelectValue placeholder={t.rbac.filterByStatus} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">All Status</SelectItem>
-								<SelectItem value="active">Active</SelectItem>
-								<SelectItem value="inactive">Inactive</SelectItem>
+								<SelectItem value="all">{t.rbac.allStatusCaps}</SelectItem>
+								<SelectItem value="active">{t.rbac.statusActive}</SelectItem>
+								<SelectItem value="inactive">
+									{t.rbac.statusInactive}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 						<Button onClick={onCreateClick} className="shrink-0">
 							<Plus className="mr-2 h-4 w-4" />
-							Create Module
+							{t.rbac.createModule}
 						</Button>
 					</div>
 				</div>
@@ -142,11 +152,11 @@ export function ModulesTable({
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Module</TableHead>
-								<TableHead className="w-[140px]">Key</TableHead>
-								<TableHead className="w-[100px]">Portal</TableHead>
-								<TableHead className="w-[120px]">Status</TableHead>
-								<TableHead className="w-[180px]">Created</TableHead>
+								<TableHead>{t.rbac.colModule}</TableHead>
+								<TableHead className="w-[140px]">{t.rbac.colKey}</TableHead>
+								<TableHead className="w-[100px]">{t.rbac.colPortal}</TableHead>
+								<TableHead className="w-[120px]">{t.rbac.colStatus}</TableHead>
+								<TableHead className="w-[180px]">{t.rbac.colCreated}</TableHead>
 								<TableHead className="w-[60px]" />
 							</TableRow>
 						</TableHeader>
@@ -156,7 +166,7 @@ export function ModulesTable({
 									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
-											<span>Loading modules...</span>
+											<span>{t.rbac.loadingModules}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -166,14 +176,14 @@ export function ModulesTable({
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
-												Failed to load modules
+												{t.rbac.modulesLoadFailed}
 											</p>
 											<p className="text-sm text-muted-foreground">
 												{getErrorMessage(error)}
 											</p>
 											<Button variant="outline" size="sm" onClick={onRetry}>
 												<RefreshCw className="mr-2 h-4 w-4" />
-												Try Again
+												{t.rbac.tryAgainCaps}
 											</Button>
 										</div>
 									</TableCell>
@@ -183,7 +193,7 @@ export function ModulesTable({
 									<TableCell colSpan={6} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<LayoutGrid className="h-6 w-6" />
-											<span>No modules found</span>
+											<span>{t.rbac.noModulesFound}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -196,8 +206,10 @@ export function ModulesTable({
 										<TableCell className="font-mono text-xs text-muted-foreground">
 											{module.moduleKey}
 										</TableCell>
-										<TableCell className="capitalize text-sm">
-											{module.portalCode ?? "—"}
+										<TableCell className="text-sm">
+											{module.portalCode
+												? portalCodeLabel(module.portalCode, t)
+												: "—"}
 										</TableCell>
 										<TableCell>
 											<Badge
@@ -209,7 +221,7 @@ export function ModulesTable({
 												) : (
 													<XCircle className="h-3 w-3" />
 												)}
-												{module.status}
+												{recordStatusLabel(module.status, t)}
 											</Badge>
 										</TableCell>
 										<TableCell className="text-muted-foreground text-sm">
@@ -222,7 +234,9 @@ export function ModulesTable({
 														variant="ghost"
 														size="icon"
 														className="h-8 w-8"
-														aria-label={`Actions for ${module.moduleName}`}
+														aria-label={fill(t.rbac.actionsFor, {
+															name: module.moduleName,
+														})}
 													>
 														<MoreHorizontal className="h-4 w-4" />
 													</Button>
@@ -230,7 +244,7 @@ export function ModulesTable({
 												<DropdownMenuContent align="end">
 													<DropdownMenuItem onClick={() => onEditClick(module)}>
 														<Pencil className="mr-2 h-4 w-4" />
-														Edit
+														{t.rbac.edit}
 													</DropdownMenuItem>
 													{module.status === "active" && (
 														<DropdownMenuItem
@@ -238,7 +252,7 @@ export function ModulesTable({
 															onClick={() => onDeactivateClick(module)}
 														>
 															<Trash2 className="mr-2 h-4 w-4" />
-															Deactivate
+															{t.rbac.deactivate}
 														</DropdownMenuItem>
 													)}
 												</DropdownMenuContent>
@@ -254,16 +268,11 @@ export function ModulesTable({
 				{pagination && pagination.totalCount > 0 && (
 					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
 						<div>
-							Showing{" "}
-							<span className="font-medium">
-								{(pagination.page - 1) * pageSize + 1}
-							</span>{" "}
-							-{" "}
-							<span className="font-medium">
-								{Math.min(pagination.page * pageSize, pagination.totalCount)}
-							</span>{" "}
-							of <span className="font-medium">{pagination.totalCount}</span>{" "}
-							modules
+							{fill(t.rbac.showingModules, {
+								from: (pagination.page - 1) * pageSize + 1,
+								to: Math.min(pagination.page * pageSize, pagination.totalCount),
+								total: pagination.totalCount,
+							})}
 						</div>
 						<div className="flex items-center gap-2">
 							<Button
@@ -272,10 +281,13 @@ export function ModulesTable({
 								disabled={!pagination.hasPrevPage || isFetching}
 								onClick={() => onPageChange(page - 1)}
 							>
-								Previous
+								{t.rbac.previous}
 							</Button>
 							<span>
-								Page {pagination.page} of {pagination.totalPages}
+								{fill(t.rbac.pageOf, {
+									page: pagination.page,
+									total: pagination.totalPages,
+								})}
 							</span>
 							<Button
 								variant="outline"
@@ -283,7 +295,7 @@ export function ModulesTable({
 								disabled={!pagination.hasNextPage || isFetching}
 								onClick={() => onPageChange(page + 1)}
 							>
-								Next
+								{t.rbac.next}
 							</Button>
 						</div>
 					</div>

@@ -31,6 +31,9 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { recordStatusLabel } from "@/lib/portal-i18n/rbac-label";
 import { formatDate, getErrorMessage, statusColors } from "@/lib/utils";
 import type { AdminPagination, AdminUser } from "@/services/admin";
 
@@ -82,6 +85,7 @@ export function AdminsTable({
 	onRetry,
 	onCreateClick,
 }: AdminsTableProps) {
+	const { t } = usePortalLocale();
 	const showLoading = isLoading && admins.length === 0;
 
 	return (
@@ -90,14 +94,12 @@ export function AdminsTable({
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
 						<CardTitle className="flex items-center gap-2">
-							Admin Users
+							{t.admin.adminUsers}
 							{isFetching && !showLoading && (
 								<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 							)}
 						</CardTitle>
-						<CardDescription>
-							Manage administrators in the admin table
-						</CardDescription>
+						<CardDescription>{t.admin.adminUsersHint}</CardDescription>
 					</div>
 
 					<div className="flex flex-col gap-2 sm:flex-row sm:items-center">
@@ -107,19 +109,24 @@ export function AdminsTable({
 								onStatusFilterChange(value as AdminStatusFilter)
 							}
 						>
-							<SelectTrigger className="sm:w-40" aria-label="Filter by status">
-								<SelectValue placeholder="Filter by status" />
+							<SelectTrigger
+								className="sm:w-40"
+								aria-label={t.admin.filterByStatus}
+							>
+								<SelectValue placeholder={t.admin.filterByStatus} />
 							</SelectTrigger>
 							<SelectContent>
-								<SelectItem value="all">All Status</SelectItem>
-								<SelectItem value="active">Active</SelectItem>
-								<SelectItem value="inactive">Inactive</SelectItem>
+								<SelectItem value="all">{t.admin.allStatus}</SelectItem>
+								<SelectItem value="active">{t.admin.statusActive}</SelectItem>
+								<SelectItem value="inactive">
+									{t.admin.statusInactive}
+								</SelectItem>
 							</SelectContent>
 						</Select>
 
 						<Button onClick={onCreateClick} className="shrink-0">
 							<Plus className="mr-2 h-4 w-4" />
-							Create Admin
+							{t.admin.createAdmin}
 						</Button>
 					</div>
 				</div>
@@ -130,11 +137,15 @@ export function AdminsTable({
 					<Table>
 						<TableHeader>
 							<TableRow>
-								<TableHead>Display Name</TableHead>
-								<TableHead>Email</TableHead>
-								<TableHead className="w-[120px]">Status</TableHead>
-								<TableHead className="w-[180px]">Created</TableHead>
-								<TableHead className="w-[200px] text-right">Actions</TableHead>
+								<TableHead>{t.admin.colDisplayName}</TableHead>
+								<TableHead>{t.admin.colEmail}</TableHead>
+								<TableHead className="w-[120px]">{t.admin.colStatus}</TableHead>
+								<TableHead className="w-[180px]">
+									{t.admin.colCreated}
+								</TableHead>
+								<TableHead className="w-[200px] text-right">
+									{t.admin.colActions}
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -143,7 +154,7 @@ export function AdminsTable({
 									<TableCell colSpan={5} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
-											<span>Loading admin users...</span>
+											<span>{t.admin.loadingAdmins}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -153,14 +164,14 @@ export function AdminsTable({
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
-												Failed to load admin users
+												{t.admin.adminsLoadFailed}
 											</p>
 											<p className="text-sm text-muted-foreground">
 												{getErrorMessage(error)}
 											</p>
 											<Button variant="outline" size="sm" onClick={onRetry}>
 												<RefreshCw className="mr-2 h-4 w-4" />
-												Try Again
+												{t.admin.tryAgain}
 											</Button>
 										</div>
 									</TableCell>
@@ -170,7 +181,7 @@ export function AdminsTable({
 									<TableCell colSpan={5} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Shield className="h-6 w-6" />
-											<span>No admin users found</span>
+											<span>{t.admin.noAdminsFound}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -191,7 +202,7 @@ export function AdminsTable({
 												) : (
 													<XCircle className="h-3 w-3" />
 												)}
-												{admin.status}
+												{recordStatusLabel(admin.status, t)}
 											</Badge>
 										</TableCell>
 										<TableCell className="text-muted-foreground text-sm">
@@ -200,7 +211,7 @@ export function AdminsTable({
 										<TableCell className="text-right">
 											{admin.id === currentUserId ? (
 												<span className="text-muted-foreground text-xs">
-													This is you
+													{t.admin.thisIsYou}
 												</span>
 											) : (
 												<div className="flex justify-end gap-2">
@@ -217,7 +228,9 @@ export function AdminsTable({
 															)
 														}
 													>
-														{admin.status === "active" ? "Disable" : "Enable"}
+														{admin.status === "active"
+															? t.admin.disable
+															: t.admin.enable}
 													</Button>
 													<Button
 														variant="outline"
@@ -226,7 +239,7 @@ export function AdminsTable({
 														disabled={busyUserId === admin.id}
 														onClick={() => onRevokeAdmin?.(admin)}
 													>
-														Remove admin
+														{t.admin.removeAdmin}
 													</Button>
 												</div>
 											)}
@@ -241,16 +254,11 @@ export function AdminsTable({
 				{pagination && pagination.totalCount > 0 && (
 					<div className="mt-4 flex items-center justify-between text-xs text-muted-foreground">
 						<div>
-							Showing{" "}
-							<span className="font-medium">
-								{(pagination.page - 1) * pageSize + 1}
-							</span>{" "}
-							-{" "}
-							<span className="font-medium">
-								{Math.min(pagination.page * pageSize, pagination.totalCount)}
-							</span>{" "}
-							of <span className="font-medium">{pagination.totalCount}</span>{" "}
-							admins
+							{fill(t.admin.showingAdmins, {
+								from: (pagination.page - 1) * pageSize + 1,
+								to: Math.min(pagination.page * pageSize, pagination.totalCount),
+								total: pagination.totalCount,
+							})}
 						</div>
 						<div className="flex items-center gap-2">
 							<Button
@@ -259,10 +267,13 @@ export function AdminsTable({
 								disabled={!pagination.hasPrevPage || isFetching}
 								onClick={() => onPageChange(page - 1)}
 							>
-								Previous
+								{t.admin.previous}
 							</Button>
 							<span>
-								Page {pagination.page} of {pagination.totalPages}
+								{fill(t.admin.pageOf, {
+									page: pagination.page,
+									total: pagination.totalPages,
+								})}
 							</span>
 							<Button
 								variant="outline"
@@ -270,7 +281,7 @@ export function AdminsTable({
 								disabled={!pagination.hasNextPage || isFetching}
 								onClick={() => onPageChange(page + 1)}
 							>
-								Next
+								{t.admin.next}
 							</Button>
 						</div>
 					</div>

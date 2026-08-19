@@ -8,6 +8,7 @@ import {
 	DialogHeader,
 	DialogTitle,
 } from "@/components/ui/dialog";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 interface ConfirmDialogProps {
 	open: boolean;
@@ -24,10 +25,11 @@ export function ConfirmDialog({
 	onOpenChange,
 	title,
 	description,
-	confirmLabel = "Confirm",
+	confirmLabel,
 	onConfirm,
 	isPending = false,
 }: ConfirmDialogProps) {
+	const { t } = usePortalLocale();
 	return (
 		<Dialog open={open} onOpenChange={onOpenChange}>
 			<DialogContent className="sm:max-w-md">
@@ -42,7 +44,7 @@ export function ConfirmDialog({
 						onClick={() => onOpenChange(false)}
 						disabled={isPending}
 					>
-						Cancel
+						{t.rbac.cancel}
 					</Button>
 					<Button
 						type="button"
@@ -53,10 +55,10 @@ export function ConfirmDialog({
 						{isPending ? (
 							<>
 								<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-								Processing...
+								{t.rbac.processing}
 							</>
 						) : (
-							confirmLabel
+							(confirmLabel ?? t.rbac.confirm)
 						)}
 					</Button>
 				</DialogFooter>
