@@ -51,11 +51,15 @@ const FALLBACK_SUB_ROLES: Record<
 	agency: [
 		{ value: "owner", label: (t) => t.profile.roleOwner },
 		{ value: "finance", label: (t) => t.profile.roleFinance },
+		{ value: "director", label: (t) => t.profile.roleDirector },
+		{ value: "guarantor", label: (t) => t.profile.roleGuarantor },
 	],
 	outlet: [
 		{ value: "owner", label: (t) => t.profile.roleOwner },
 		{ value: "finance", label: (t) => t.profile.roleFinance },
 		{ value: "operations_head", label: (t) => t.profile.roleOps },
+		{ value: "director", label: (t) => t.profile.roleDirector },
+		{ value: "guarantor", label: (t) => t.profile.roleGuarantor },
 	],
 };
 
@@ -64,6 +68,13 @@ function inferSubRole(kind: OrgKind, roleName: string): string {
 		.trim()
 		.toLowerCase()
 		.replace(/[_\s]+/g, " ");
+	// Ahead of the owner test, and of the fallback below — which lands on a WRITE
+	// lane on either portal (finance for an agency, ops head for an outlet). A
+	// Director falling through here is what made the Team picker label a
+	// view-only member "Finance", and picking from that select would have
+	// silently promoted them.
+	if (n.includes("director")) return "director";
+	if (n.includes("guarantor")) return "guarantor";
 	if (
 		n === "owner" ||
 		n.includes("owner") ||
@@ -133,9 +144,14 @@ export function OrgMembersPanel({
 	 * filter is what keeps a stale roles response from showing a dead option.
 	 */
 	const inviteOptions = useMemo(() => {
-		const invitable = portalRoles.filter(
-			(r) => inferSubRole(kind, r.roleName) !== "owner",
-		);
+		// Guarantor is excluded alongside Owner: it holds the owner's matrix, so an
+		// emailed invitation into it hands whoever opens the link the top lane.
+		// The server refuses both (see addMember) — this only keeps the dropdown
+		// from offering something that would 400.
+		const invitable = portalRoles.filter((r) => {
+			const lane = inferSubRole(kind, r.roleName);
+			return lane !== "owner" && lane !== "guarantor";
+		});
 		if (invitable.length === 0) {
 			return FALLBACK_SUB_ROLES[kind]
 				.filter((r) => r.value !== "owner")

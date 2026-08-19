@@ -532,6 +532,21 @@ export function updateMyAgencies(
   });
 }
 
+/**
+ * Ask to LEAVE one approved agency. Unticking is a REQUEST, not a removal:
+ * the membership goes `leave_pending` and the agency approves the departure.
+ *
+ * The server refuses with a 409 whose message lists, in plain words, what is
+ * still unsettled (unpaid vouchers, open disputes, upcoming shifts). That
+ * message reaches callers as `ApiError.message` — show it VERBATIM.
+ */
+export function requestAgencyLeave(accessToken: string, agencyId: string): Promise<unknown> {
+  return request<unknown>(`/pr/mine/agencies/${agencyId}/leave`, {
+    method: 'POST',
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+}
+
 /** Agencies this PR belongs to — same rows the admin PR list joins on. */
 export function fetchMemberships(accessToken: string, userId: string): Promise<AgencyMembership[]> {
   const query = new URLSearchParams({ userIds: userId, subRole: 'pr' }).toString();

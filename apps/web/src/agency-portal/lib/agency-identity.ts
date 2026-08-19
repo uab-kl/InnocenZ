@@ -1,4 +1,7 @@
-import type { AgencySubRole } from "@agency-portal/lib/agency-rbac";
+import {
+	AGENCY_LEAST_PRIVILEGE,
+	type AgencySubRole,
+} from "@agency-portal/lib/agency-rbac";
 import {
 	readTabScoped,
 	removeTabScoped,
@@ -22,6 +25,15 @@ export interface AgencySessionIdentity {
 
 const IDENTITY_KEY = "iz-agency-identity";
 
+/** Lanes a persisted identity may name — see `getAgencyIdentity` for why. */
+const KNOWN_AGENCY_SUB_ROLES: ReadonlySet<AgencySubRole> =
+	new Set<AgencySubRole>([
+		"agency_owner",
+		"agency_finance",
+		"agency_director",
+		"agency_guarantor",
+	]);
+
 /**
  * Backend agency-member sub-role → portal sub-role (drives nav + the agencyCan
  * permission matrix). A `pr` never signs into the agency console as an operator,
@@ -30,7 +42,14 @@ const IDENTITY_KEY = "iz-agency-identity";
 export function agencySubRoleFromBackend(
 	subRole: AgencyUserSubRole,
 ): AgencySubRole {
-	return subRole === "finance" ? "agency_finance" : "agency_owner";
+	// Every lane must be named. This function ENDS on "agency_owner", so a lane
+	// it does not recognise is handed the owner's rights — a view-only Director
+	// arriving as `director` would have been able to raise payment vouchers.
+	if (subRole === "finance") return "agency_finance";
+	if (subRole === "director") return "agency_director";
+	if (subRole === "guarantor") return "agency_guarantor";
+	// An unrecognised lane is NOT an owner — see AGENCY_LEAST_PRIVILEGE.
+	return AGENCY_LEAST_PRIVILEGE;
 }
 
 /**
@@ -47,7 +66,9 @@ export function pickPrimaryMembership(
 	const pool = active.length > 0 ? active : memberships;
 	return (
 		pool.find((m) => m.subRole === "owner") ??
+		pool.find((m) => m.subRole === "guarantor") ??
 		pool.find((m) => m.subRole === "finance") ??
+		pool.find((m) => m.subRole === "director") ??
 		pool[0]
 	);
 }
@@ -86,8 +107,12 @@ export function getAgencyIdentity(): AgencySessionIdentity | null {
 			orgName: parsed.orgName,
 			agencyCode:
 				typeof parsed.agencyCode === "string" ? parsed.agencyCode : "",
-			subRole:
-				parsed.subRole === "agency_finance" ? "agency_finance" : "agency_owner",
+			// A set, not a ternary chain: this expression ends on "agency_owner",
+			// so anything unlisted is restored from storage as a full owner. A
+			// Director would have come back from a page refresh able to pay PRs.
+			subRole: KNOWN_AGENCY_SUB_ROLES.has(parsed.subRole as AgencySubRole)
+				? (parsed.subRole as AgencySubRole)
+				: AGENCY_LEAST_PRIVILEGE,
 			agencyStatus:
 				typeof parsed.agencyStatus === "string"
 					? parsed.agencyStatus

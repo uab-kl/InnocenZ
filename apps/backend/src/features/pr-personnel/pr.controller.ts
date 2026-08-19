@@ -195,12 +195,37 @@ export class PrControllerClass {
 
       // A request already on the agency's desk locks the selection: the PR
       // cannot add or drop agencies until it is approved or rejected.
-      const current = await this.agencyPrRepository.listByUser(userId);
+      const current = await this.agencyPrRepository.listLinksByUserIds([userId]);
       const pendingLink = current.find((link) => link.approveStatus === 'pending');
       if (pendingLink) {
         return res.status(409).json({
           success: false,
           message: 'An agency request is awaiting approval. You cannot change agencies until it is approved or rejected.',
+          data: null,
+        });
+      }
+      const departingLink = current.find((link) => link.approveStatus === 'leave_pending');
+      if (departingLink) {
+        return res.status(409).json({
+          success: false,
+          message: `A departure request is awaiting ${departingLink.agencyName}'s approval. You cannot change agencies until it is decided.`,
+          data: null,
+        });
+      }
+
+      // Dropping an APPROVED agency never happens through this replace-set
+      // save. It goes through the departure request — settlement gate, then
+      // the agency's approval. This endpoint is reachable by any client, so
+      // without this guard the replace semantics would still be the old
+      // silent-walk-out delete path.
+      const droppedApproved = current.filter(
+        (link) => link.approveStatus === 'approved' && !agencyIds.includes(link.agencyId),
+      );
+      if (droppedApproved.length > 0) {
+        const names = droppedApproved.map((l) => l.agencyName).join(', ');
+        return res.status(409).json({
+          success: false,
+          message: `To leave ${names} you must request a departure — everything with them (payment vouchers, disputes, shifts) has to be settled and the agency must approve. Use the leave option on that agency.`,
           data: null,
         });
       }
@@ -221,6 +246,65 @@ export class PrControllerClass {
       res.status(200).json({ success: true, message: 'Agencies updated', data: links });
     } catch (error) {
       logger.error('[PrController.updateMyAgencies] Error:', error);
+      res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
+  /**
+   * The signed-in PR asks to LEAVE one approved agency.
+   *
+   * Refused with the reasons IN WORDS unless everything between the two is
+   * settled — every payment voucher paid, every dispute closed, no upcoming
+   * or unfinished shift. The phone shows the 409 message verbatim, so it must
+   * read as sentences, not codes. On success the membership goes
+   * `leave_pending`; the agency decides it on the approvals page, where the
+   * gate is re-checked (money can re-open between request and decision).
+   */
+  async requestAgencyLeave(req: Request, res: Response) {
+    try {
+      const userId = req.user?.id;
+      if (!userId) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+      const agencyId = paramId(req.params.agencyId);
+
+      const links = await this.agencyPrRepository.listLinksByUserIds([userId]);
+      const link = links.find((l) => l.agencyId === agencyId);
+      if (!link) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+      if (link.approveStatus === 'leave_pending') {
+        return res.status(409).json({
+          success: false,
+          message: `Departure already requested — waiting for ${link.agencyName} to approve.`,
+          data: null,
+        });
+      }
+      if (link.approveStatus !== 'approved') {
+        return res.status(409).json({
+          success: false,
+          message: `Your membership with ${link.agencyName} is not approved, so there is nothing to leave.`,
+          data: null,
+        });
+      }
+
+      const blockers = await this.agencyPrRepository.listLeaveBlockers(agencyId, userId);
+      if (blockers.length > 0) {
+        return res.status(409).json({
+          success: false,
+          message: `You cannot leave ${link.agencyName} yet: ${blockers.join('; ')}.`,
+          data: { blockers },
+        });
+      }
+
+      await this.agencyPrRepository.setApproveStatus(agencyId, userId, 'leave_pending', getActor(req));
+      res.status(200).json({
+        success: true,
+        message: `Departure requested — waiting for ${link.agencyName} to approve.`,
+        data: null,
+      });
+    } catch (error) {
+      logger.error('[PrController.requestAgencyLeave] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
     }
   }
@@ -727,9 +811,18 @@ export class PrControllerClass {
       if (!resolved) return;
       const existing = resolved.pr;
 
-      // Detach membership — keep ops history on pr / assignment rows.
+      // Detach membership — 'left', never a hard delete. The agency may always
+      // let go of its own PR (no settlement gate on this side), but deleting
+      // the row erased the very history the approvals page's Approved chip
+      // now reads, and made a later re-join an insert instead of the
+      // flip-back-to-pending the unique key is there for.
       if (existing.userId) {
-        await this.agencyPrRepository.removeLink(resolved.agencyId, existing.userId);
+        await this.agencyPrRepository.setApproveStatus(
+          resolved.agencyId,
+          existing.userId,
+          'left',
+          getActor(req),
+        );
       }
       await this.prRepository.update(id, {
         status: 'inactive',

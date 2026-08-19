@@ -1,4 +1,7 @@
-import type { OutletSubRole } from "@agency-portal/lib/outlet-rbac";
+import {
+	OUTLET_LEAST_PRIVILEGE,
+	type OutletSubRole,
+} from "@agency-portal/lib/outlet-rbac";
 import {
 	readTabScoped,
 	removeTabScoped,
@@ -21,6 +24,15 @@ export interface OutletSessionIdentity {
 
 const IDENTITY_KEY = "iz-outlet-identity";
 
+/** Lanes a persisted identity may name — see `getOutletIdentity` for why. */
+const KNOWN_SUB_ROLES: ReadonlySet<OutletSubRole> = new Set<OutletSubRole>([
+	"outlet_owner",
+	"outlet_finance",
+	"outlet_ops",
+	"outlet_director",
+	"outlet_guarantor",
+]);
+
 /**
  * Backend outlet-member sub-role → portal sub-role (drives nav + the outletCan
  * permission matrix).
@@ -30,12 +42,22 @@ export function outletSubRoleFromBackend(
 ): OutletSubRole {
 	if (subRole === "finance") return "outlet_finance";
 	if (subRole === "operations_head") return "outlet_ops";
-	return "outlet_owner";
+	// Ahead of the fallback, which is "outlet_owner": a lane this function does
+	// not recognise is handed full venue rights. A Director dropping through here
+	// would be able to write everything it is defined not to.
+	if (subRole === "director") return "outlet_director";
+	if (subRole === "guarantor") return "outlet_guarantor";
+	// An unrecognised lane is NOT an owner — see OUTLET_LEAST_PRIVILEGE.
+	return OUTLET_LEAST_PRIVILEGE;
 }
 
 /**
  * Choose the membership that should drive the portal: prefer an active owner,
- * then active finance, then active ops, then any active row, then the first row.
+ * then guarantor, finance, ops, director, then any active row, then the first.
+ *
+ * Ordered by power, so someone holding two memberships lands on the stronger.
+ * Director is last for the same reason it is the weakest — it should never
+ * shadow a lane that can actually act.
  */
 export function pickPrimaryMembership(
 	memberships: OutletMembership[],
@@ -47,8 +69,10 @@ export function pickPrimaryMembership(
 	const pool = active.length > 0 ? active : memberships;
 	return (
 		pool.find((m) => m.subRole === "owner") ??
+		pool.find((m) => m.subRole === "guarantor") ??
 		pool.find((m) => m.subRole === "finance") ??
 		pool.find((m) => m.subRole === "operations_head") ??
+		pool.find((m) => m.subRole === "director") ??
 		pool[0]
 	);
 }
@@ -84,12 +108,14 @@ export function getOutletIdentity(): OutletSessionIdentity | null {
 		return {
 			outletId: parsed.outletId,
 			outletName: parsed.outletName,
-			subRole:
-				parsed.subRole === "outlet_finance"
-					? "outlet_finance"
-					: parsed.subRole === "outlet_ops"
-						? "outlet_ops"
-						: "outlet_owner",
+			// Every non-owner lane must be named here. This expression ends on
+			// "outlet_owner", so anything unlisted is restored from storage as a
+			// full owner — before this, a Director came back from a page refresh
+			// able to write. A set beats a ternary chain precisely because adding
+			// a role cannot silently miss it.
+			subRole: KNOWN_SUB_ROLES.has(parsed.subRole as OutletSubRole)
+				? (parsed.subRole as OutletSubRole)
+				: OUTLET_LEAST_PRIVILEGE,
 			outletStatus:
 				typeof parsed.outletStatus === "string"
 					? parsed.outletStatus

@@ -200,6 +200,11 @@ const en = {
 	postJob: {
 		title: "Post Job",
 		buildHint: "Build your shift, then post when ready",
+		/** Shown instead of buildHint to a role that may read postings, not create them. */
+		viewOnlyHint:
+			"View only — your role can read shift postings but not create them",
+		readOnlyNotice:
+			"Read-only. You can see how shifts are posted at this venue, but only an Owner, Guarantor or Ops Head can post one.",
 		agencyAddOns: "agency add-ons",
 		prShift: "PR Shift",
 		services: "Services",
@@ -2454,9 +2459,13 @@ const en = {
 	roles: {
 		agencyOwner: "Agency Owner",
 		agencyFinance: "Agency Finance",
+		agencyDirector: "Agency Director",
+		agencyGuarantor: "Agency Guarantor",
 		outletOwner: "Outlet Owner",
 		outletFinance: "Outlet Finance",
 		outletOps: "Outlet Ops Head",
+		outletDirector: "Outlet Director",
+		outletGuarantor: "Outlet Guarantor",
 	},
 	/** Agency → Payroll → Receipts sub-tab. */
 	receipts: {
@@ -2595,6 +2604,25 @@ const en = {
 		addPr: "Add PR",
 		adding: "Adding…",
 		current: "Current",
+		/* Departures — a PR asking OUT of the agency. Kept apart from the join
+		   wording on purpose: approving a join takes someone under the agency and
+		   approving a leave lets them go, so the two must never read alike. */
+		cancelAgency: "Cancel Agency",
+		joinRequest: "Join request",
+		joinRejected: "Join rejected",
+		member: "Member",
+		leaveRequest: "Leave request",
+		departureApproved: "Departure approved",
+		departureRejected: "Departure rejected",
+		approveDeparture: "Approve departure",
+		rejectDepartureNamed: "Reject {name}'s departure",
+		departureReasonSentToPr:
+			"Reason is sent to PR — required to reject a departure. The membership continues.",
+		selectDepartureToReview: "Select a departure request to review",
+		noDepartureRequests: "No departure requests waiting",
+		noPendingSignups: "No pending sign-ups",
+		noRecordsHere: "No records here",
+		wantsToLink: "Wants to link",
 	},
 	/**
 	 * Column headings shared by every portal table. Deliberately its own section
@@ -2859,6 +2887,9 @@ const zh: PortalTranslations = {
 	postJob: {
 		title: "发布职位",
 		buildHint: "设置班次内容，准备好后即可发布",
+		viewOnlyHint: "仅可查看 — 您的角色可以查看班次发布，但不能创建。",
+		readOnlyNotice:
+			"仅可查看。您可以看到本门店如何发布班次，但只有东主、担保人或运营主管才能发布。",
 		agencyAddOns: "经纪公司增值服务",
 		prShift: "PR 班次",
 		services: "增值服务",
@@ -4915,9 +4946,13 @@ const zh: PortalTranslations = {
 	roles: {
 		agencyOwner: "经纪公司东主",
 		agencyFinance: "经纪公司财务",
+		agencyDirector: "经纪公司总监",
+		agencyGuarantor: "经纪公司担保人",
 		outletOwner: "门店东主",
 		outletFinance: "门店财务",
 		outletOps: "门店运营主管",
+		outletDirector: "门店总监",
+		outletGuarantor: "门店担保人",
 	},
 	receipts: {
 		receipts: "收据",
@@ -5046,6 +5081,22 @@ const zh: PortalTranslations = {
 		addPr: "添加 PR",
 		adding: "添加中…",
 		current: "待处理",
+		cancelAgency: "解约申请",
+		joinRequest: "加入申请",
+		joinRejected: "加入已拒绝",
+		member: "已加入",
+		leaveRequest: "解约申请",
+		departureApproved: "解约已批准",
+		departureRejected: "解约已拒绝",
+		approveDeparture: "批准解约",
+		rejectDepartureNamed: "拒绝 {name} 的解约申请",
+		departureReasonSentToPr:
+			"理由会发送给 PR — 拒绝解约必须填写。合作关系将继续。",
+		selectDepartureToReview: "请选择要审核的解约申请",
+		noDepartureRequests: "暂无待处理的解约申请",
+		noPendingSignups: "暂无待处理的注册申请",
+		noRecordsHere: "此处暂无记录",
+		wantsToLink: "申请关联",
 	},
 	table: {
 		pr: "PR",

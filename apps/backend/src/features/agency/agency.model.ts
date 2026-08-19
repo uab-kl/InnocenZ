@@ -10,7 +10,14 @@ export const agencyStatusEnum = MainSchema.enum('agency_status', agencyStatusVal
  * Sub-roles of a portal operator (API / UI labels). Stored on `user_role`→`role`,
  * not on `agency_user` — membership is tenancy only.
  */
-export const agencyUserSubRoleValues = ['owner', 'finance'] as const;
+export const agencyUserSubRoleValues = [
+  'owner',
+  'finance',
+  /** View only, under the owner. */
+  'director',
+  /** Stands in for the owner, at owner level — including paying PRs. */
+  'guarantor',
+] as const;
 export type AgencyUserSubRole = (typeof agencyUserSubRoleValues)[number];
 
 export const AgencyTable = MainSchema.table('agency', {

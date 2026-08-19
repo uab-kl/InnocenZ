@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { shiftAssignmentController } from '@/composition-root.js';
 import { requireRole } from '@/middlewares/require-role.js';
 import { agencyOwnerOnly, agencyOwnerOrFinance } from '@/middlewares/require-sub-role.js';
+import { requirePermission } from '@/middlewares/require-permission.js';
 
 const router = Router();
 
@@ -52,8 +53,8 @@ router.get('/:id', canRead, shiftAssignmentController.getById.bind(shiftAssignme
 router.get('/:id/replacement-candidates', canWrite, shiftAssignmentController.listReplacementCandidatesForAssignment.bind(shiftAssignmentController));
 // Agency decision on a pending MC/leave request (scoped to its own rows in the
 // controller): approve excuses the PR, reject puts the row back to assigned.
-router.post('/:id/leave/approve', canWrite, shiftAssignmentController.approveLeave.bind(shiftAssignmentController));
-router.post('/:id/leave/reject', canWrite, shiftAssignmentController.rejectLeave.bind(shiftAssignmentController));
+router.post('/:id/leave/approve', canWrite, requirePermission('approvals', 'update'), shiftAssignmentController.approveLeave.bind(shiftAssignmentController));
+router.post('/:id/leave/reject', canWrite, requirePermission('approvals', 'update'), shiftAssignmentController.rejectLeave.bind(shiftAssignmentController));
 // Deciding overtime IS raising money onto a payment voucher, so it takes the
 // same sub-role as the rest of the PV attestation surface — agencyCan('raisePv')
 // = owner + finance — rather than `agencyOwnerOnly`, which would shut finance

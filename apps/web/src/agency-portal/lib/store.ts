@@ -493,6 +493,12 @@ export interface PendingPR {
 	targetPrId?: string;
 	source?: "self-signup" | "owner-invite";
 	status: "pending" | "approved" | "rejected";
+	/**
+	 * Which DIRECTION the request runs. "join" = the PR wants under this
+	 * agency; "leave" = an approved PR wants OUT and the agency approves the
+	 * departure. Optional so demo-store rows (all joins) compile untouched.
+	 */
+	requestKind?: "join" | "leave";
 	rejectReason?: string;
 	/** Operating agency this sign-up belongs to — scopes the Approvals queue per tenant. Absent = Atlas. */
 	agencyId?: string;

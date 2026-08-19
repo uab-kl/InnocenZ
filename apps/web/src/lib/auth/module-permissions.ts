@@ -24,6 +24,8 @@ export const AGENCY_FEATURE_MODULE: Record<
 > = {
 	viewHome: { key: "dashboard", type: "read" },
 	approvePrSignups: { key: "approvals", type: "update" },
+	/** Seeing the Approvals queue, as against answering it (Director). */
+	viewApprovals: { key: "approvals", type: "read" },
 	assignShifts: { key: "roster", type: "update" },
 	managePr: { key: "workforce", type: "update" },
 	viewSettings: { key: "settings", type: "read" },
@@ -42,6 +44,8 @@ export const OUTLET_FEATURE_MODULE: Record<
 	{ key: string; type: CruType }
 > = {
 	postJob: { key: "booking", type: "create" },
+	/** Seeing the Post Job screen, as against posting on it (Director). */
+	viewBookings: { key: "booking", type: "read" },
 	viewLiveDashboard: { key: "dashboard", type: "read" },
 	logSales: { key: "sales", type: "create" },
 	sealShift: { key: "booking", type: "update" },

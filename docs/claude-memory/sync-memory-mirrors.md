@@ -14,7 +14,9 @@ The user works on multiple devices (office PC + house PC, same Claude account) �
 - `CLAUDE.md` = RULES ONLY — update ONLY when a rule changes ("got new rules only renew at the claude.md"), never as routine session sync.
 - `TEST_SCRIPT.md` = the Memory.md role — the LIVING session record; renew it on EVERY work slice (§8 done / §9 to-do next / §10 changelog). ENFORCED by the repo's Stop hook `.claude/hooks/renew-test-script.js` (registered in project `.claude/settings.json` hooks.Stop): it blocks ending a turn while apps/packages/tools changes aren't reflected by a renewed TEST_SCRIPT.md.
 - `docs/claude-memory/*.md` = the Learning/Wiki layer — **the only** full memory mirror for other devices.
-- `InnocenZ_BuildSteps.xlsx` = the owner's **flow book** — flows, where each flow stops, and the live schema. **Not a memory mirror and not a log.**
+- `InnocenZ_BuildSteps.xlsx` = the owner's **one and only book** — 14 numbered tabs in three colour-coded parts (blue *Understand it* 1-8 · amber *Judge it* 9-12 · grey *Look it up* 13-14). **Not a memory mirror and not a log.**
+
+⚠️ **THE MVP WORKBOOK IS RETIRED (owner's call, 2026-08-17).** `InnocenZ_MVP_v4_RealApp.xlsx` became `…ARCHIVED-20260817.xlsx`. About 10 of its 14 tabs were a staler second copy of a page already in the flow book, and the two had begun contradicting each other — its Overview said sub-roles were done while its own E2E Flow said they were not. Only its services-and-hooks inventory was unique; that is folded into tab `14 Database + Services`. **Do not create a second workbook.** One fact, one place — see [[innocenz-database-rules]], the same rule applied to documents.
 
 ⚠️ **SUPERSEDED 2026-08-11 (owner's call):** the Excel **"Claude Code Memory" tab is gone and must NOT be regenerated.** The workbook was rewritten as a flow-only book; its "Next Steps Priority", "Overall + Implementation" and "Build Steps" pages were deleted with it because they had become dated session logs. Anything dated belongs in `TEST_SCRIPT.md` §8/§10; the "why" belongs here in `docs/claude-memory/`.
 

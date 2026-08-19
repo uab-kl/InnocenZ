@@ -8,9 +8,21 @@ export type AgencyStatus =
  * Sub-roles of an agency portal operator. `pr` is deliberately absent — PRs are
  * not portal users, and their agency links live on agency_pr (see PrAgencyLink).
  */
-export type AgencyUserSubRole = "owner" | "finance";
+/** `director` is view-only; `guarantor` stands in for the owner, at owner level. */
+export type AgencyUserSubRole = "owner" | "finance" | "director" | "guarantor";
 
-export type AgencyPrApproveStatus = "pending" | "approved" | "rejected";
+/**
+ * Membership lifecycle (0125 added the departure states):
+ * `leave_pending` = an approved PR asked to leave and awaits the agency;
+ * `left` = departure approved — the row is kept as history. A REJECTED
+ * departure returns to `approved` with rejectReason prefixed "[Leave rejected] ".
+ */
+export type AgencyPrApproveStatus =
+	| "pending"
+	| "approved"
+	| "rejected"
+	| "leave_pending"
+	| "left";
 
 /**
  * Result of a roster broadcast. `sent` and `requested` are always equal on a

@@ -16,7 +16,7 @@ import { RolePermissionGroupType } from '@/schema/rbac.schema.js';
 import { ResetPasswordTokenTable, ResetPasswordTokenType } from './auth.model.js';
 import { AgencyUserTable } from '@/features/agency/agency.model.js';
 import { OutletUserTable } from '@/features/outlet/outlet.model.js';
-import { portalRoleNameForSubRole } from '@/features/rbac/portal-role-map.js';
+import { portalRoleName } from '@/types/rbac-constant.js';
 import { SYSTEM_ACTOR } from '@/util/actor.js';
 export class AuthRepositoryClass {
   constructor(
@@ -69,7 +69,14 @@ export class AuthRepositoryClass {
   }
 
   /**
-   * Backfill: active membership without a portal role gets Owner.
+   * Backfill: an active membership with NO role row for that portal gets the
+   * VIEW-ONLY lane (Director), so the account can sign in and see its
+   * organisation.
+   *
+   * It used to grant OWNER. Nothing needs that — a public sign-up is given its
+   * role explicitly by signup-roles.ts — and it meant REVOKING a role silently
+   * promoted the account: strip a Director, and their very next /auth/me handed
+   * them the owner console. A heal must never be an escalation.
    * Lane is never read from agency_user / outlet_user (column dropped).
    */
   async ensurePortalRolesFromMembership(userId: string): Promise<void> {
@@ -99,13 +106,13 @@ export class AuthRepositoryClass {
       const grants: Array<{ roleName: string; portal: 'agency' | 'outlet' }> = [];
       if (agencyMem && !havePortal.has('agency')) {
         grants.push({
-          roleName: portalRoleNameForSubRole('agency', 'owner'),
+          roleName: portalRoleName.DIRECTOR,
           portal: 'agency',
         });
       }
       if (outletMem && !havePortal.has('outlet')) {
         grants.push({
-          roleName: portalRoleNameForSubRole('outlet', 'owner'),
+          roleName: portalRoleName.DIRECTOR,
           portal: 'outlet',
         });
       }
@@ -249,16 +256,70 @@ export class AuthRepositoryClass {
     }
   }
 
-  /** True if the user holds create|read|update on the given module_key (any portal). */
+  /**
+   * True if the user holds create|read|update on the given module_key, WITHIN
+   * the portal that module belongs to.
+   *
+   * The portal test is the point. Module keys are not unique across portals —
+   * `settings`, `dashboard` and `history` exist on both — so matching on key
+   * and type alone let a grant from one console satisfy a guard on the other:
+   * an agency `settings:update` answered an outlet `settings:update` check.
+   *
+   * A role is only ever granted permissions on modules of its own portal (see
+   * seed-rbac), so requiring role.portal = module.portal costs a correctly
+   * seeded account nothing and closes the cross-portal hole.
+   */
   async userHasPermission(
     userId: string,
     moduleKey: string,
     permissionType: 'create' | 'read' | 'update',
   ): Promise<boolean> {
-    const perms = await this.getUserPermissions(userId);
-    return perms.some(
-      (p) => p.moduleKey === moduleKey && p.permissionType === permissionType,
-    );
+    try {
+      const [row] = await db
+        .select({ id: RolePermissionTable.id })
+        .from(UserRoleTable)
+        .innerJoin(RoleTable, eq(UserRoleTable.roleId, RoleTable.id))
+        .innerJoin(RolePermissionTable, eq(UserRoleTable.roleId, RolePermissionTable.roleId))
+        .innerJoin(PermissionTable, eq(RolePermissionTable.permissionId, PermissionTable.id))
+        .innerJoin(ModuleTable, eq(PermissionTable.moduleId, ModuleTable.id))
+        .where(
+          and(
+            eq(UserRoleTable.userId, userId),
+            eq(RoleTable.status, 'active'),
+            eq(PermissionTable.status, 'active'),
+            eq(ModuleTable.status, 'active'),
+            eq(ModuleTable.moduleKey, moduleKey),
+            eq(PermissionTable.permissionType, permissionType),
+            /*
+             * The role carrying the grant must belong to the module portal —
+             * with two deliberate exceptions, both verified against the live
+             * grant table (16 of 182 rows are cross-portal and every one of
+             * them is one of these):
+             *
+             *  - ADMIN spans portals by design: the admin role holds booking
+             *    and rating on outlet modules, roster and payment_voucher on
+             *    agency ones.
+             *  - The mobile PR role has NO portal at all and reads dashboard,
+             *    rating, roster and payment_voucher across all three.
+             *
+             * A plain equality here would have locked out every admin and
+             * every PR. What it must block is an AGENCY grant answering an
+             * OUTLET guard on a module key the two portals share (settings,
+             * dashboard, history) — and it still does.
+             */
+            sql`(${RoleTable.portalId} = ${ModuleTable.portalId}
+                 or ${RoleTable.portalId} is null
+                 or exists (select 1 from "main"."portal" ap
+                             where ap.id = ${RoleTable.portalId} and ap.code = 'admin'))`,
+          ),
+        )
+        .limit(1);
+      return Boolean(row);
+    } catch (error) {
+      // Never soften to true: an unreadable grant table is not permission.
+      logger.error('[AuthRepository.userHasPermission] Error:', error);
+      return false;
+    }
   }
 
   /** True if any of the user's roles belong to the given portal code. */

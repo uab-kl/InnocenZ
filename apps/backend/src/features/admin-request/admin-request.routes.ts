@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import { adminRequestController } from '@/composition-root.js';
 import { requireAdmin, requireRole } from '@/middlewares/require-role.js';
+import { requirePermission } from '@/middlewares/require-permission.js';
 
 const router = Router();
 
 // Outlets/agencies submit requests; only admin can list/action the inbox.
-router.post('/', adminRequestController.create.bind(adminRequestController));
+router.post('/', requirePermission('settings', 'update'), adminRequestController.create.bind(adminRequestController));
 
 /**
  * A subscriber's OWN outstanding plan change. Deliberately NOT behind

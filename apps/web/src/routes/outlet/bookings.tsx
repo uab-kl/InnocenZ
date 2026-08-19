@@ -657,7 +657,22 @@ function PostJobPage() {
 
 	const showTabs = canPostShifts && canOrderServices;
 
-	if (!canPostShifts && !canOrderServices) {
+	/**
+	 * A role that may SEE this page without posting on it — the Director.
+	 *
+	 * The composer still renders, because the owner asked for Post Job read-only
+	 * rather than hidden: a screen describing what a shift posting involves is
+	 * worth reading even when you cannot file one. What changes is that every
+	 * control in it is disabled and the post/cart bar is gone.
+	 *
+	 * The client is not the guarantee. Posting is `booking:create` server-side,
+	 * which a Director does not hold, so anything that slips past the `fieldset`
+	 * is refused by the API rather than quietly accepted. This is the label, not
+	 * the lock.
+	 */
+	const viewOnly = !canPostShifts && can("viewBookings");
+
+	if (!canPostShifts && !canOrderServices && !viewOnly) {
 		// A role that CAN order services and only lacks shift posting is not
 		// restricted — the services flow is switched off for phase 2. Saying
 		// "your role cannot" there blames a permission for a product decision and
@@ -698,9 +713,11 @@ function PostJobPage() {
 				eyebrow={outletName}
 				title={t.postJob.title}
 				hint={
-					tab === "shifts"
-						? t.postJob.buildHint
-						: `${outletName} · ${t.postJob.agencyAddOns}`
+					viewOnly
+						? t.postJob.viewOnlyHint
+						: tab === "shifts"
+							? t.postJob.buildHint
+							: `${outletName} · ${t.postJob.agencyAddOns}`
 				}
 			/>
 
@@ -761,104 +778,100 @@ function PostJobPage() {
 				</div>
 			)}
 
-			{tab === "shifts" && canPostShifts ? (
+			{tab === "shifts" && (canPostShifts || viewOnly) ? (
 				<section className="pt-1">
-					<div className="iz-post-job-layout">
-						<div className="iz-post-job-layout__main">
-							<DraftShiftEditor
-								shift={composer}
-								onChange={(patch) => setComposer((c) => ({ ...c, ...patch }))}
-								title={t.postJob.shiftDetails}
-								shiftIndex={1}
-								shiftTotal={Math.max(1, draftShifts.length + 1)}
-								namedPrsOnDate={composerNamedPrsOnDate}
-								peopleRemaining={composerPeopleRemaining}
-								prCandidates={prPool.backed ? prPool.prs : undefined}
-								prEmptyHint={prPoolEmptyHint}
-								workspaceMenu={workspaceMenu}
-								workspaceRates={effectiveWorkspace}
-							/>
-
-							{draftShifts.length > 0 && (
-								<>
-									<div className="mt-4 flex items-center justify-between">
-										<IzSectionLabel>
-											Shifts for {sectionDate.toLowerCase()}
-										</IzSectionLabel>
-										<span className="text-[10px] text-[var(--iz-muted)]">
-											{draftShifts.length} slot
-											{draftShifts.length !== 1 ? "s" : ""}
-										</span>
-									</div>
-
-									<div className="mt-3 flex flex-col gap-4">
-										{draftShifts.map((s, i) =>
-											editingShiftId === s.id ? (
-												<DraftShiftEditor
-													key={s.id}
-													shift={s}
-													onChange={(patch) => updateDraftShift(s.id, patch)}
-													onRemove={() => removeDraftShift(s.id)}
-													showRemove
-													title={t.postJob.shiftDetails}
-													shiftIndex={i + 1}
-													shiftTotal={draftShifts.length}
-													onDone={() => setEditingShiftId(null)}
-													namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
-													peopleRemaining={peopleRemainingForShift(s, s.id)}
-													prCandidates={prPool.backed ? prPool.prs : undefined}
-													prEmptyHint={prPoolEmptyHint}
-													workspaceMenu={workspaceMenu}
-													workspaceRates={effectiveWorkspace}
-												/>
-											) : (
-												<DraftShiftSummary
-													key={s.id}
-													shift={s}
-													title={fill(t.postJob.shiftN, { n: i + 1 })}
-													onEdit={() => setEditingShiftId(s.id)}
-													onRemove={() => removeDraftShift(s.id)}
-													showRemove
-													workspaceMenu={workspaceMenu}
-												/>
-											),
-										)}
-									</div>
-								</>
-							)}
-						</div>
-
-						{/* NARROW SCREENS ONLY. The aside below is `display:none` under
-						    900px, so without this copy the picker would vanish on a phone
-						    and the venue would post to every agency without being asked.
-						    Both copies are driven by the same state; only one is ever
-						    visible. Real sessions only — a demo session has no links. */}
-						{backed && (
-							<div className="iz-post-job-sendto--mobile iz-post-job-summary-card mt-3">
-								<p className="iz-post-job-summary-card__title">
-									{t.postJob.sendTo}
-								</p>
-								<PostJobAgencyPicker
-									value={postAgencyIds}
-									onChange={setPostAgencyIds}
+					{viewOnly && (
+						<p className="iz-tiny iz-muted mt-1 mb-3 rounded-xl border border-dashed border-[var(--iz-line)] px-3 py-2">
+							{t.postJob.readOnlyNotice}
+						</p>
+					)}
+					{/*
+					 * A native disabled fieldset, rather than a `readOnly` prop threaded
+					 * through DraftShiftEditor: it turns off every input, select and
+					 * button beneath it in one place, including inside components that
+					 * know nothing about roles — so a field added later is inert by
+					 * default instead of quietly editable.
+					 */}
+					<fieldset
+						disabled={viewOnly}
+						className={
+							viewOnly ? "m-0 border-0 p-0 opacity-70" : "m-0 border-0 p-0"
+						}
+					>
+						<div className="iz-post-job-layout">
+							<div className="iz-post-job-layout__main">
+								<DraftShiftEditor
+									shift={composer}
+									onChange={(patch) => setComposer((c) => ({ ...c, ...patch }))}
+									title={t.postJob.shiftDetails}
+									shiftIndex={1}
+									shiftTotal={Math.max(1, draftShifts.length + 1)}
+									namedPrsOnDate={composerNamedPrsOnDate}
+									peopleRemaining={composerPeopleRemaining}
+									prCandidates={prPool.backed ? prPool.prs : undefined}
+									prEmptyHint={prPoolEmptyHint}
+									workspaceMenu={workspaceMenu}
+									workspaceRates={effectiveWorkspace}
 								/>
+
+								{draftShifts.length > 0 && (
+									<>
+										<div className="mt-4 flex items-center justify-between">
+											<IzSectionLabel>
+												Shifts for {sectionDate.toLowerCase()}
+											</IzSectionLabel>
+											<span className="text-[10px] text-[var(--iz-muted)]">
+												{draftShifts.length} slot
+												{draftShifts.length !== 1 ? "s" : ""}
+											</span>
+										</div>
+										=======
+										<div className="mt-3 flex flex-col gap-4">
+											{draftShifts.map((s, i) =>
+												editingShiftId === s.id ? (
+													<DraftShiftEditor
+														key={s.id}
+														shift={s}
+														onChange={(patch) => updateDraftShift(s.id, patch)}
+														onRemove={() => removeDraftShift(s.id)}
+														showRemove
+														title={t.postJob.shiftDetails}
+														shiftIndex={i + 1}
+														shiftTotal={draftShifts.length}
+														onDone={() => setEditingShiftId(null)}
+														namedPrsOnDate={namedPrsOnDateForShift(s, s.id)}
+														peopleRemaining={peopleRemainingForShift(s, s.id)}
+														prCandidates={
+															prPool.backed ? prPool.prs : undefined
+														}
+														prEmptyHint={prPoolEmptyHint}
+														workspaceMenu={workspaceMenu}
+														workspaceRates={effectiveWorkspace}
+													/>
+												) : (
+													<DraftShiftSummary
+														key={s.id}
+														shift={s}
+														title={fill(t.postJob.shiftN, { n: i + 1 })}
+														onEdit={() => setEditingShiftId(s.id)}
+														onRemove={() => removeDraftShift(s.id)}
+														showRemove
+														workspaceMenu={workspaceMenu}
+													/>
+												),
+											)}
+										</div>
+									</>
+								)}
 							</div>
-						)}
-						{/* `iz-post-job-layout` is a two-column grid, so this aside MUST be
-					    the second child — an extra element between it and the composer
-					    takes the right column and pushes the summary down into the left
-					    one, which is exactly how the summary ended up full-width under
-					    the form. "Send to" therefore lives INSIDE the aside, above the
-					    summary, rather than beside it. */}
-						<aside className="iz-post-job-layout__aside">
+
+							{/* NARROW SCREENS ONLY. The aside below is `display:none` under
+							    900px, so without this copy the picker would vanish on a phone
+							    and the venue would post to every agency without being asked.
+							    Both copies are driven by the same state; only one is ever
+							    visible. Real sessions only — a demo session has no links. */}
 							{backed && (
-								/* The SAME card as the Summary directly below it, reusing that
-								   component's own classes rather than a hand-rolled border, so
-								   the two cannot drift apart. They are stacked siblings in one
-								   narrow column, and a bare heading beside a bordered panel
-								   read as a floating label rather than the first of two
-								   blocks. */
-								<div className="iz-post-job-summary-card mb-3">
+								<div className="iz-post-job-sendto--mobile iz-post-job-summary-card mt-3">
 									<p className="iz-post-job-summary-card__title">
 										{t.postJob.sendTo}
 									</p>
@@ -868,37 +881,62 @@ function PostJobPage() {
 									/>
 								</div>
 							)}
-							<PostJobActionPanel
-								headcount={totalHeadcount}
-								cost={totalCost}
-								shiftCount={shiftCountForPost}
-								onAddShift={addDraftShift}
-								onSubmit={submitNew}
-								submitDisabled={
-									totalHeadcount <= 0 ||
-									isPosting ||
-									(backed && !agencyLinks.canPost)
-								}
-							/>
-						</aside>
-					</div>
+							{/* `iz-post-job-layout` is a two-column grid, so this aside MUST be
+							    the second child — an extra element between it and the composer
+							    takes the right column and pushes the summary down into the left
+							    one. "Send to" therefore lives INSIDE the aside, above the
+							    summary, rather than beside it. */}
+							<aside className="iz-post-job-layout__aside">
+								{backed && (
+									/* The SAME card as the Summary below it, reusing that component's
+									   own classes rather than a hand-rolled border, so the two cannot
+									   drift apart. */
+									<div className="iz-post-job-summary-card mb-3">
+										<p className="iz-post-job-summary-card__title">
+											{t.postJob.sendTo}
+										</p>
+										<PostJobAgencyPicker
+											value={postAgencyIds}
+											onChange={setPostAgencyIds}
+										/>
+									</div>
+								)}
+								{!viewOnly && (
+									<PostJobActionPanel
+										headcount={totalHeadcount}
+										cost={totalCost}
+										shiftCount={shiftCountForPost}
+										onAddShift={addDraftShift}
+										onSubmit={submitNew}
+										submitDisabled={
+											totalHeadcount <= 0 ||
+											isPosting ||
+											(backed && !agencyLinks.canPost)
+										}
+									/>
+								)}
+							</aside>
+						</div>
 
-					<div
-						className="iz-post-job-mobile-dock"
-						aria-label={t.postJob.shiftSummaryActions}
-					>
-						<PostJobActionPanel
-							headcount={totalHeadcount}
-							cost={totalCost}
-							shiftCount={shiftCountForPost}
-							onAddShift={addDraftShift}
-							onSubmit={submitNew}
-							submitDisabled={
-								totalHeadcount <= 0 || (backed && !agencyLinks.canPost)
-							}
-							compact
-						/>
-					</div>
+						{!viewOnly && (
+							<div
+								className="iz-post-job-mobile-dock"
+								aria-label={t.postJob.shiftSummaryActions}
+							>
+								<PostJobActionPanel
+									headcount={totalHeadcount}
+									cost={totalCost}
+									shiftCount={shiftCountForPost}
+									onAddShift={addDraftShift}
+									onSubmit={submitNew}
+									submitDisabled={
+										totalHeadcount <= 0 || (backed && !agencyLinks.canPost)
+									}
+									compact
+								/>
+							</div>
+						)}
+					</fieldset>
 				</section>
 			) : canOrderServices ? (
 				<OutletServicePostSection />

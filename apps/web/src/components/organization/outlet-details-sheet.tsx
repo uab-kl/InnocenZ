@@ -61,6 +61,20 @@ const TEAM_GROUPS: {
 		title: "Ops Head",
 		description: "Floor operations · shift staffing · sales logging",
 	},
+	// A member whose lane is missing from this list is grouped nowhere and so
+	// vanishes from the sheet — this is the admin's view of who is at the venue,
+	// not a legend.
+	{
+		subRole: "guarantor",
+		title: "Guarantor",
+		description:
+			"Stands in for the owner · same rights while the owner is away",
+	},
+	{
+		subRole: "director",
+		title: "Director",
+		description: "View only · reads every screen, changes nothing",
+	},
 ];
 
 function MemberCard({ member }: { member: OutletMember }) {

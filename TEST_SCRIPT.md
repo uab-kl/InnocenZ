@@ -493,6 +493,55 @@ not loosening the rule.
    22:00–04:00 is invisible to it. The server still refuses it (it reads ±1 day) and the toast shows
    the server's own sentence, so the venue gets the right answer one round trip later rather than
    instantly. Widening the composer's fetch to `today − 1` would close it.
+### ▶ 🔴 SECURITY, FOUND 17 Aug 2026 — do these before anything is publicly reachable
+
+Both found while re-auditing the flow book, both confirmed by opening the source. They are ranked
+#2 and #3 on the *What to build next* page of the flow book.
+
+> ⚠️ **RE-CHECKED AT THE `main` → `SL` MERGE (19 Aug 2026). #1 IS FIXED, #2 IS NOT.**
+> `grep resetUrl apps/backend/src/features/auth/auth.controller.ts` now returns nothing — the
+> branch's own `a853e78 feat(auth): … add forgot-password` rewrote that handler, so the token no
+> longer rides in the response body. **#2 is still live word for word:**
+> `redact-identity-docs.ts:40` still reads `!privileged && roleNames.includes('outlet')`, and
+> `outlet` is still the unseeded deprecated role — so the flag is still always false and a PR's IC,
+> DOB, address and both ID photos still reach outlet portal users unredacted. Fix it on
+> `portalCode`, as written below, and verify with a real outlet login rather than a typecheck.
+
+**1. `forgot-password` hands out the reset token — unauthenticated account takeover.**
+`apps/backend/src/features/auth/auth.controller.ts:1047-1051` replies:
+
+```ts
+return res.status(200).json({
+  success: true,
+  message: 'Reset password link will be sent.',
+  data: { resetUrl, token },      // <-- the secret, in the response body
+});
+```
+
+`/auth` is mounted **before** `authenticateJWT` (`router/v1.ts:39`), so this is public, and
+there is **no environment guard** — it behaves this way in production. Anyone who knows an
+active user's email can POST here, read `data.token`, POST it to `reset-password` (which only
+checks the token exists and has not expired, ~line 1126) and own the account — an admin's
+included. Note the irony: lines 1031-1037 deliberately return `data: null` for an unknown
+email to prevent account enumeration, and the differing response shape then leaks exactly
+that. Line 1045 also logs the whole reset URL.
+**Fix:** return `data: null` with the same neutral message on *both* branches; send the link
+by email through the existing `features/mailing` or `features/brevo` rather than a new
+transport; drop the token from the log. Then grep for any other public handler returning a
+`token` inside `data:`.
+
+**2. The identity-document redaction never fires — venues can read PR ICs.**
+`apps/backend/src/middlewares/redact-identity-docs.ts:40` sets its flag from
+`roleNames.includes('outlet')`. `outlet` is marked `@deprecated Not seeded` in
+`types/rbac-constant.ts`; real venue staff hold `Owner` / `Finance` / `Ops Head`, told apart
+by `portal_id`. So `req.redactIdentityDocs` is **always false** and a PR's IC number, date of
+birth, home address and both sides of their ID photo are served unredacted to outlet portal
+users — the exact opposite of the OWNER DECISION written in that file's own header (30 Jul 2026).
+**Fix:** gate on `portalCode`, the pattern `require-sub-role.ts` already uses
+(`roles.some((r) => r.portalCode === 'agency')`). Keep the existing behaviour that holding
+admin or agency clears the flag even alongside an outlet role — the header warns that
+over-broad matching blanks names on two live screens. **Verify with a real outlet login, not
+a typecheck.** Suspected same root cause: Post Job 403s an outlet Owner.
 
 ### ▶ ✅ FIXED 13 Aug 2026 — cancellation fee said "Not linked to a shift" (see §10)
 
@@ -1867,6 +1916,246 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 | 2026-08-18 | **An outlet now works with MANY agencies, by approval, and one shift can be staffed by several of them. `onboarded_by_agency_id` is demoted to provenance.** That column was quietly doing THREE jobs — routing (`POST /shift` stamped `shift.agency_id` from it), visibility (the agency portal's whole outlet list was `GET /outlet?onboardedByAgencyId=`) and provenance (who signed the venue up). Only the third is a property of the outlet; the other two describe a RELATIONSHIP, and a relationship that can have many rows does not belong in a column on one side of it. **New `agency_outlet` (0123)** mirrors `agency_pr` field for field — same `pending/approved/rejected` enum, same `reject_reason` — because a venue asking to work with an agency is the same act as a PR asking to join one: approved once, then used freely. **New `shift_agency` (0124)** is the fan-out; the owner chose SHARED fulfilment, so several agencies each send PRs to the same shift until the headcount is met (`shift_assignment.agency_id` already recorded who supplied each PR, so that half needed no change). **`shift.agency_id` is NOT nullable and NOT dropped** — it is REDEFINED as the ORIGINATING agency, which is still true, because making it nullable ripples `string \| null` through every `ShiftType` consumer in backend and web and needs an unclaimed state on every agency surface; that is a separate, separately-verifiable change. ⚠️ **Nothing may scope by `shift.agency_id` again** — all three equality filters moved to `shift_agency` (`shift.repository`, `cutlost.repository`, `outlet-swap.repository`), each as a SUBQUERY not a join, because a join returns one row per link and would inflate `totalCount`, which is the paginator's own input. **Signup now writes BOTH** the provenance column and a `pending` link: the 0123 backfill is a one-time snapshot, so without this every outlet registered afterwards would have zero links — unable to post to anyone and invisible to the agency it just named. New `GET /agency-outlet/directory` gives outlets a three-column agency list rather than opening `GET /agency` (admin/agency-gated on purpose — outlets must not enumerate full agency records). Its own router, with no org id in any URL: every route derives the caller's org from the session, so there is no `:agencyId` to forget to scope-check. Three screens: outlet Settings → Agencies picker with status badges; Post Job → "Send to" multi-select over APPROVED links only; agency Approvals → 4th "Outlet-Linking" tab (self-contained — the existing ternary chain ends in a cutlost `else`, so the list and detail panes are `hidden` for it rather than left to fall through). | Outlet → Settings (Agencies) · Outlet → Post Job ("Send to") · Agency → Approvals (Outlet-Linking) · `GET/PUT /agency-outlet/mine` · `GET /agency-outlet/directory` · `GET/PATCH/DELETE /agency-outlet/links` · `POST /shift` | ✅ **Both migrations applied to the live shared DB and both backfills proven EXACT, not assumed**: `agency_outlet` = 4 rows, all `approved`, all `created_by='migration_0123'`, against exactly **4** outlets holding an onboarding agency; `shift_agency` = **44 rows vs 44 shifts** with **0 shifts holding zero invited agencies** — the two numbers that prove no portal goes blank and no shift became invisible. ✅ backend tsc **0** (re-run after each stage). ✅ `apps/web` tsc — **0 errors in any file I created or modified**; the 2 hits in `agency-outlet-shifts.ts` are pre-existing and `git diff` confirms I never touched that file. ✅ biome clean on all new modules. ✅ Cutover swept: `grep ShiftTable.agencyId` leaves only two SELECT projections and two comments — **zero equality filters**; the `onboardedByAgencyId` readers that remain are signup and the admin Outlet Details panel, both correctly provenance. ⚠️ **NOT clicked through in a browser** — no screen has been rendered against the live DB; proven to the compile and the schema, not the pixel. Four taps close it: outlet Settings → add an agency (expect "Awaiting approval"), agency Approvals → Outlet-Linking → Approve, outlet Post Job → confirm the agency appears under "Send to", post and confirm it reaches that agency's roster. ⚠️ **Backend MUST be restarted** — tsx watch serves stale routers and every one of these routes is new. ⚠️ A newly registered outlet now **cannot post until an agency approves it**; that is the requested gate, but the signup confirmation screen does not yet say so. ⚠️ `agency.list()`'s `pageSize` clamp was avoided in the new code (`filterExistingAgencyIds` instead), but `use-agency-outlets.ts` still asks for `pageSize: 200` and will silently receive 100 — pre-existing, and harmless only while no agency holds >100 venues. |
 
 | 2026-08-17 | **An outlet could post the SAME shift twice — two 11:00–12:00 "Friday lounge" rows, 2 PRs and 3 PRs, both accepted. Refused now on the server, warned in the composer.** Nothing anywhere compared two shifts' TIMES. `POST /shift` ran schema → org scope → `demandExceedsQuantity` → `planCapacityRefusal` → insert, and the Post Job composer checked the special-event name, the dress code, the named-PR cap and the daily headcount — **every one of those measures a DAY, and a day's demand is ADDITIVE**, so one night said twice as 2 + 3 read as a perfectly legal 5. That is also why the screen said *"5 PRs/day limit reached for Tonight"*: the plan cap was the only thing that bounded the second post, and it counted the pair correctly. `shiftsOverlap` did already exist and is correct — but its only two callers ask *"is this PR double-booked?"* (assign, and the shift-timing edit), never *"do two shifts at this venue collide?"*. **THE RULE, after three revisions in one slice: an outlet's shifts may never OVERLAP. Back-to-back is allowed.** The first cut refused only the exact repeat and warned on a partial overlap, reasoning that two concurrent blocks (different event, different tier mix) might be deliberate — answered with *"this should be restricted as well as i don't want an outlet to have clashing time for their shifts"*, so overlap became a refusal. Adjacency was then blocked too (*"block back-to-back shifts too"*) and **then unblocked again**, by the owner's own reasoning once the real question surfaced: *"if the outlet post a 11-12 and 12.01-1.01 shift can the PR who is already there be assigned to there?"* — **the thing that actually goes wrong is one PERSON being booked in two places with no time to travel, and that is an assign-time rule, not a posting rule.** A venue posting 11:00–12:00 and 12:00–13:00 may well staff them with two different people; refusing that stopped a legitimate roster while still not stopping the real fault. So `shiftsTouch` was written, used, and **deleted rather than left as dead code**. Two kinds are told apart, because the REMEDY differs and a refusal naming the wrong one is barely better than no message: the same time twice wants a bigger headcount on the shift that exists, an overlap wants a different clock. Server: new `slotsAreSameWindow` (`util/slot-window.ts`) compares **windows as windows**, so `"10:00 PM - 4:00 AM"` and `"22:00 - 04:00"` are one slot — `slot` is free text and the composer's format has changed before, so string equality alone would wave a re-typed duplicate through; a label-only slot compares as words, a window never equals a label, and an **absent slot matches nothing** (no time given cannot be judged a duplicate). New `ShiftRepository.listByOutletAroundDate` reads the day **plus the day either side**, and that ±1 is not padding: a 22:00–04:00 shift on the 17th runs into the 18th, so a new 02:00–06:00 on the 18th genuinely overlaps a row filed under a **different `shift_date`** and an exact-date read would never compare them. `shiftsOverlap` then does the real test on a continuous timeline. `status != 'draft'` is `outletDailyPrUsage`'s own call, kept so the two gates agree about which rows are demand. Wired into `create` **before** the plan gate on purpose: a duplicate usually also pushes the day's total up, and answering it with "you are over your plan" sends the venue to upgrade a plan that is not the problem. **`update` is gated too, and that is not scope creep** — post 11:00 and 13:00, then drag the second onto 11:00, and a create-only fix leaves the hole open through the back door; it fires **only when the timing actually changed**, so a row that was already a duplicate before this guard stays editable (otherwise the venue could neither change its headcount nor fix the duplicate). Client: new leaf `lib/shift-slot-clash.ts` classifies `duplicate` vs `overlap` on an **absolute-minute timeline**, the same shape the backend rewrite adopted, so an overnight 22:00–04:00 meets the next morning's 02:00–06:00 — a same-date test never compares them and overnight is the normal shape here. It compares the batch against what is already booked **and against itself**, because "Add another shift" twice is two separate POSTs and neither request could ever see the other. **Both kinds are refused locally**, each with the advice its own remedy needs — warning and letting it through would only trade a clear message for a 409 (the acknowledge-once ref the first cut needed is gone, and so is the `slotClashSignature` helper that fed it, rather than left as dead code). `canonicalOutletName` was exported rather than re-written so the clash check narrows the shift list to the venue **the same way the daily caps do**. | Outlet → Post Job (compose + "Add another shift") · `POST /shift` · `PUT /shift/:id` | ✅ **Probe over the REAL imported modules — 27/27 PASS** (`slotsAreSameWindow` 11, `findSlotClashes` 13, plus batch-vs-itself, a consecutive-drafts control and severity ranking). **The negative controls are the point, and they are what stop this from being a guard that just says no**: **back-to-back posts** (both orders), three consecutive drafts post as one batch, a one-minute gap posts, the same time on a different DAY is not a clash, and a window vs a label is not a match. Overnight is proven both ways: 22:00–04:00 on the 17th vs 02:00–06:00 on the 18th → **overlap**, vs 04:00–08:00 on the 18th → **nothing** (they touch, which is legal). Ranking proven too: a shift that both duplicates one row and crosses another reports the **duplicate**, the more useful advice. ✅ **Every shift-authoring path is covered, checked rather than assumed**: `shiftRepository.create*`/`update*` has exactly two API callers (`shift.controller.ts` create + update, both gated), cut-loss's `update` only lowers `quantity` and cannot move a time, and the remaining writer is `scripts/seed-sample-shifts.ts`. ✅ backend tsc **0**, instrument validated with `--listFiles` (all 3 edited files compiled, not an empty run); `apps/web` tsc **0 new** — the single hit in a touched file is the pre-existing unused import at `outlet-demo.ts:41`, and `git diff` confirms my only change there is the `export` keyword; biome **clean on the new module, 0 new findings** on the other three. ⚠️ **NOT clicked through in the browser** — reaching Post Job needs a password typed into a login form, which I do not do, so this is proven to the module boundary and the compile. Three taps close it, and the LAST is the control that separates a working guard from one that simply refuses everything: post a second 11:00–12:00 shift for a date that already has one (expect *"You already have a shift 11:00 - 12:00 on …"*), a 12:00–14:00 against an 11:00–13:00 (expect *"cannot overlap"*) — then a **12:00–13:00 against that same 11:00–12:00, which MUST still post**. ⚠️ **The backend must be RESTARTED** — tsx watch has served stale routers before, and both refusals are new code on existing routes. ⚠️ **The two live duplicate rows are NOT cleaned up** — nothing was written or deleted on the shared DB. They still exist, and `PUT` will not refuse an edit to them unless it moves their time, by design. |
+> **18 Aug 2026 — LEAVING AN AGENCY IS A REQUEST, AND THE LEDGER ANSWERS IT.** (commit `bff0977`)
+>
+> Owner: *"make the pr can untick the agency once that the pv under that the specific agency is
+> already paid , and no shift assgined or any plan bundle with the agency. only everything
+> relating pr and agency is resolved then only can untick this agency"* + *"at the agency
+> approval page , make like the mc/leave section … need differentiate that the approve is
+> approving under the agency or approve for cancel under this agency"*.
+>
+> **Before this, the gate would have been decorative:** the phone's profile save HARD-DELETED
+> unpicked `agency_pr` rows — approved memberships included — so a PR could walk out on unpaid
+> vouchers by unticking a box. Three escape hatches closed (replace-set save, repository sync,
+> owner re-invite stomping a filed departure).
+>
+> Lifecycle on the SAME row (migration **0125**, applied to innocenz-test, enum verified):
+> `approved → leave_pending → left` (row KEPT as history; re-join flips it back to `pending`).
+> Departure rejected → back to `approved` with `[Leave rejected] `-prefixed reason.
+> Settlement gate = vouchers not `paid` (named per paper) · open disputes · upcoming/unfinished
+> shifts (MYT "today") — matched on BOTH `user_id` and legacy `pr_id`, run on request AND re-run
+> on approve, fails closed. The 409 lists the blockers in words; the phone shows them verbatim.
+>
+> Approvals · Agency-Tied now has the MC/Leaves chips (Current/Approved/Rejected/All), Join vs
+> Leave labels on every card, "Approve departure" wording, mandatory reason on a departure
+> reject, read-only history, and the server's own sentence toasted on every decision.
+>
+> ⚠️ **RESTART THE BACKEND** (tsx watch serves stale routes — the new
+> `POST /pr/mine/agencies/:agencyId/leave` 404s until then), reload web + phone.
+> Known gap (accepted, in §9): a completed shift whose weekly PV has not been issued yet passes
+> the gate — a PR can file a departure between check-out and the Sunday PV job; the re-check on
+> approve catches it once the voucher exists.
+
+> **17 Aug 2026 — ROLE STABILITY ACROSS DEVICES AND URLs, AND THE UNGATED WRITE ROUTES.**
+>
+> Owner: *"if the user login as the agency or the outlet what ever in different devices, different website
+> link url, never ever can suddenly change the role cauz i got saw that bugs"*, then the exact repro:
+> *"i got copy the link http://localhost:3000/en/admin/dashboard to another browser but i goes in to the
+> agency pages"*.
+>
+> **Why the role appeared to change.** Identity is tab-scoped, so a different device — or a different URL
+> origin — starts with none, and EVERY unknown-role path defaulted to the OWNER:
+>
+> | site | was | now |
+> |---|---|---|
+> | `resolveAgencySubRole` / `outletCan` fallbacks | `agency_owner` / `outlet_owner` | `AGENCY_LEAST_PRIVILEGE` / `OUTLET_LEAST_PRIVILEGE` (Director) |
+> | `agencySubRoleFromBackend` | anything not "finance" → owner | each lane named; unknown → least privilege |
+> | persisted-identity parsers | unlisted → owner | unlisted → least privilege |
+> | `startAgencyRealSession` / `startOutletRealSession` failure branch | **documented** as "fall back to owner / full nav" | least privilege |
+> | `ensurePortalRolesFromMembership` (server, every `/auth/me`) | granted **Owner** to a membership with no role row | grants Director |
+>
+> That last one meant REVOKING a role promoted the account: strip a Director and their next request handed
+> them the owner console. Signup grants its own role explicitly (`signup-roles.ts`), so nothing needed it.
+>
+> An unresolved role is now a question, never a promotion. The trade is deliberate: a real owner on a cold
+> cache is briefly under-privileged instead of a Director being briefly an owner.
+>
+> **The admin-link repro.** `ensureAuthenticated` threw `redirect({ to: "/login" })` with no destination, and
+> `/login`'s `validateSearch` accepted only the literals `/agency` and `/outlet` — `/admin/...` was rejected
+> outright and every deep path discarded. So the link died at the door and login sent you to your default
+> portal home, which for an agency account is `/agency`. Now the attempted path rides along as `next`
+> (locale-stripped, same-origin only — `//evil.com` and full URLs refused), and it is honoured ONLY when the
+> account holds that portal. **Verified live:** a fresh browser on `/en/admin/dashboard` lands on
+> `/en/login?next=/admin/dashboard`, and signing in there as the agency Director still goes to `/en/agency`.
+> An admin now reaches the page they asked for.
+>
+> The same holds for EVERY portal and every lane, because the mechanism is role-agnostic — the guard
+> captures whatever path was asked for, and login honours it only for a portal the account holds.
+> Verified on four combinations:
+>
+> | link opened in a fresh browser | signed in as | lands on |
+> |---|---|---|
+> | `/en/admin/dashboard` | agency Director | `/en/agency` — refused, correct |
+> | `/en/outlet/settings` | outlet Owner | `/en/outlet/settings`, with Edit profile |
+> | `/en/outlet/settings` | outlet Director | `/en/outlet/settings`, **no** Edit profile |
+> | `/en/admin/dashboard` | admin | the admin page itself |
+>
+> The last two rows are the point: the destination is kept AND the lane is kept. A Director opening a
+> deep link arrives as a Director, not as an owner.
+>
+> **And when the other browser is signed in as a DIFFERENT account**, the portal gate used to bounce it to
+> that account's own home — silently. Correct, but it is precisely what reads as the role changing by
+> itself: a page you never asked for and nothing saying why. All four gate sites (`ensurePortal`,
+> `ensureAdminPortal`, `guardPortalClient`) now send it to `/no-access?needs=<portal>&link=<path>`, which
+> NAMES the account you are actually in, names the portal the link needs, shows the link, and offers one
+> button: sign out and switch. Verified as the outlet Director opening `/agency/pv` —
+> *"You are signed in as director@emhub.test, which does not have access to the Agency portal. Your role has
+> not changed — this browser is simply signed in to a different account."* The correct link for that same
+> session still opens normally, still as a Director.
+>
+> ⛔ **What was NOT built, deliberately.** A link cannot carry a sign-in to a browser that never
+> authenticated. Doing so means putting the token in the URL, and URLs live in history, server logs,
+> referrers and chat apps — anyone who ever saw the link would become that account. A different device
+> logs in once; from then on the copied link opens the right page in the right role.
+>
+> **`userHasPermission` was portal-blind.** It matched module key + type only, and `settings` / `dashboard` /
+> `history` exist on both portals, so an agency grant answered an outlet guard. Now the role carrying the
+> grant must belong to the module's portal — with two exceptions found by querying the live table rather
+> than assuming: **16 of 182 grants are cross-portal and every one is legitimate** (`admin` spans portals;
+> the portal-less mobile `pr` role reads across all three). A plain equality would have locked out every
+> admin and every PR.
+>
+> **13 write routes that a Director could still call over the API.** An 11-agent audit proposed guards; an
+> adversarial pass refuted two and confirmed the rest. Applied: leave approve/reject (`approvals:update`),
+> PR create/update/delete (`workforce:update`), invoice issue/settle (`collections:update` — `create` would
+> have 403'd everyone, `collections` is RU), swap create/cancel (`roster:update`), cut-loss decision
+> (`approvals:update`), cut-loss create (a LANE guard, because outlet Finance holds no `booking` grant at
+> all), payment method + admin-request (`settings:update`). One anchor also hit a **GET** on outlet-swap and
+> was reverted — a read route must not need a write grant.
+>
+> `OutletCutLossActions` had no permission check and neither render site applied one, so its button showed
+> for every outlet role; new matrix-only `requestCutLoss` hides it from a Director rather than letting the
+> new guard turn it into a 403 on click.
+>
+> **Verified end to end** — `POST /pr`: Director **403**, Guarantor **400**, Owner **400**. The Guarantor and
+> the Owner are indistinguishable to the server; the Director is refused before validation.
+>
+> ⚠️ **Refuted, deliberately NOT applied** (the proposed guard did not close the hole): `outlet-workspace`
+> `PUT /:outletId` and `shift-sale` `POST /`. Both proposals leaned on a new `requireAgencySubRoleIfMember`
+> that no-ops for a DEACTIVATED member, and `PUT /outlet-workspace/:outletId` has **no tenant scope at all** —
+> any agency owner can replace any outlet's rate card and drink menu by id. That is the bigger bug and wants
+> its own ticket. Also unresolved: `org-scope.ts` `?? memberships[0]` gives a deactivated member full scope,
+> and `POST /admin-request` still takes `subscriberId` off the body, so an outlet owner can switch another
+> agency's plan. Guard added, scope still open.
+
+> **17 Aug 2026 — THE SAME TWO ROLES ON THE AGENCY PORTAL.**
+>
+> Owner: *"director (role)(view only) only that under by the agency owner, only can edit their personal
+> credential like login and security, then the rest functions just only view under the same
+> organisation"* and *"Guarantor... same level with agency owner"*. Seeded per portal, so
+> `Director@agency` is a distinct role row from `Director@outlet`. **No migration** (same reason as the
+> outlet pass — `sub_role` is an unconstrained `varchar(50)`).
+>
+> On this portal Guarantor finally means what the owner described: `payment_voucher` CREATE, i.e. it can
+> pay PRs when the owner is away. Seed counts — `Director@agency: 8`, `Guarantor@agency: 19` (identical
+> to Agency Owner).
+>
+> **The escalation this pass turned on.** `holdsAgencyLane` read
+> `lane === 'owner' ? 'owner' : 'finance'`. Harmless while an agency had two lanes; the moment it had
+> four, a view-only Director was handed the FINANCE lane — and agency finance raises and signs payment
+> vouchers. The role defined to change nothing would have been able to pay PRs. Three more permissive
+> tails were closed the same way (`agencySubRoleFromBackend` and the persisted-identity parser both
+> resolved *anything not "finance"* to `agency_owner`, the second one on every page refresh).
+>
+> A 7-agent sweep over the agency surface produced 202 findings; it independently reproduced the Team
+> picker bug the owner spotted mid-session.
+>
+> **The Team picker bug (owner-reported).** `OrgMembersPanel` listed only the old lanes, so a Director
+> and a Guarantor both *rendered* as "Finance" — a `<select>` shows its first option when the real value
+> is absent — and touching it would have silently demoted them. The file already warned about exactly
+> this hazard for Owner at `:170-182`. Fixed on both kinds, plus that file's own `inferSubRole` tail
+> (which lands on a write lane) and `outlet-details-sheet.tsx`, where an unlisted lane made the member
+> **vanish** from the admin's team view rather than merely mislabel.
+>
+> **Invites.** Guarantor now joins Owner as un-invitable on both portals: it holds the owner's matrix,
+> so an emailed link into it hands whoever opens it the top lane. The existing escape hatch still
+> applies — invite lower, then promote from the Team picker, which is an act by a signed-in owner.
+>
+> Approvals was gated solely on `approvals:update`, so a view-only role lost the screen; new
+> `viewApprovals` → `approvals:read` keeps it readable (same shape as the outlet's `viewBookings`).
+> `/agency/prs` and `/agency/outlets` widened to `managePr || viewWorkforce`.
+>
+> Both agency logins **verified live**: Director — full read nav incl. Approvals, payroll with no
+> raise/penalty action (13 buttons), no Edit profile, no invite box, Team reads 4, and its Login &
+> security sheet shows **its own** address with all 3 actions live. Guarantor — same payroll page WITH
+> "Record penalties for last week" (15 buttons) and Edit profile present.
+>
+> ```
+> pnpm tsx --tsconfig tsconfig.json src/scripts/seed-atlas-agency-role-accounts.ts
+> ```
+>
+> ⚠️ **Pre-existing, NOT fixed here — they affect existing roles equally and are their own piece of
+> work.** Written up in §9.
+> 1. `auth.repository.ts:102` `ensurePortalRolesFromMembership` grants **Owner** to any active
+>    membership with no role row for that portal, on every `/auth/me`. Seeded roles are safe (they have
+>    a row), but **revoking** a role promotes that user to Owner on their next request.
+> 2. `auth.repository.ts:252` `userHasPermission` matches module+type with **no portal filter**, and
+>    `settings`/`dashboard`/`history` exist on both portals — so an agency grant can satisfy an outlet
+>    guard.
+> 3. ~11 agency-reachable routes are guarded only by `requireRole('admin','agency')` with no module
+>    permission (leave approve/reject, PR create/update/delete, collection issue/settle, cutlost
+>    decision, outlet-swap, workspace rate card, payment method, `POST /agency`). A Director is blocked
+>    in the UI but not by those endpoints.
+
+> **17 Aug 2026 — TWO NEW OUTLET ROLES: DIRECTOR (VIEW ONLY) AND GUARANTOR (OWNER-EQUAL).**
+>
+> Owner: *"director (role)(view only) only that under by the outlet owner, only can edit their personal
+> credential like login and security, then the rest functions just only view from the same organisation"*
+> and *"just make the guarantor same level as the owner"*. Both are **outlet** roles (the owner corrected
+> an earlier "AGENCY Guarantor"); outlets never pay PRs, so a Guarantor stands in for the owner on the
+> venue's own functions.
+>
+> **No migration.** `sub_role` is `varchar(50)` with no CHECK and no enum (`0102_org_member_invite.sql:28`),
+> and roles are seeded rows rather than schema — so 0123 was not needed and was not created.
+>
+> The system funnelled every role through three lanes (`owner | finance | operations_head`), so the work
+> was widening that vocabulary end to end. **Three separate fallbacks would each have handed a Director
+> full rights**, and all three now match it first:
+>
+> | fallback | would have given a Director |
+> |---|---|
+> | `portalRoleNameForSubRole` ends on `Owner` | the Owner role outright |
+> | `inferMembershipSubRole` ends on `operations_head` | a write lane — able to post jobs |
+> | `outletSubRoleFromBackend` ends on `outlet_owner` | full venue rights **on every page refresh** — the persisted-identity parser was a ternary chain naming only two lanes, now a `Set` that cannot silently miss one |
+>
+> Guarantor is owner-equal **by sharing, not copying**: it points at `OUTLET_OWNER` in the seed matrix and
+> at `OUTLET_OWNER_PERMISSIONS` in the portal matrix, and `holdsOutletLane` resolves guarantor→owner in
+> ONE place instead of adding it to every `requireOutletSubRole('owner', …)` call site — a missed one
+> fails closed, refusing the stand-in at the only moment the role exists for.
+>
+> Two bugs found on the way, both pre-dating this work and both hitting existing roles:
+> - **Login & security was gated on the ORG permission** (`settings:update`), so every read-only outlet
+>   role was locked out of its own password. Finance was already in that position.
+> - **The security sheet showed the OWNER's email** to whoever opened it, reading `owner.email` (the
+>   organisation's owner record) instead of the signed-in user. The OTP flow acts on the session's own
+>   account, so the screen named one address and would have changed another. Now `useCurrentUser()`.
+>
+> Post Job renders for a Director inside a native `<fieldset disabled>` rather than threading a `readOnly`
+> prop through the ~1500-line editor, so a field added later is inert by default. Special Service is
+> hidden outright — its only outlet permission is CREATE, so a read grant would be a nav item in front of
+> a dead page.
+>
+> **Verified live** on `localhost:3000` against the test DB, both logins. Director — Post Job visible with
+> **98/98 controls disabled** and no post bar, `/outlet/special-service` redirects away, Settings
+> read-only with all three personal credential actions live, Team list renders Owner / Director (you) /
+> Guarantor. Guarantor — the same Post Job page with **79 live controls** and the post bar, plus "Edit
+> profile" on Settings. Seeds reported `Director@outlet: 8 permissions`, `Guarantor@outlet: 21`
+> (identical to Owner).
+>
+> ```
+> pnpm tsx --tsconfig tsconfig.json src/scripts/init-roles.ts
+> pnpm tsx --tsconfig tsconfig.json src/scripts/seed-rbac.ts
+> pnpm tsx --tsconfig tsconfig.json src/scripts/seed-emhub-role-accounts.ts
+> ```
+>
+> ⚠️ Still open: `seed-outlet-emhub.ts` grants the **deprecated, unseeded** bare `outlet` role, so it warns
+> and grants nothing. Not touched here — noted in §9.
+
+| 2026-08-17 | **Two workbooks became one — the MVP is retired.** Owner's question, and it was the right one: *"why have the flow book and the mvp workbook."* There was no good reason left. The MVP came first (23 Jul); the flow book was built later and quietly superseded it, and by today **~10 of the MVP's 14 tabs were a staler second copy of a page already in the flow book** — Overview↔START HERE, E2E Flow↔the six flow pages, Backend—API↔The API, Data Model↔Database, Money Model↔Money model, RBAC+Role Matrix↔Who may do what, To-Do↔What to build next, Modules 1-12+Build Plan+Prototype Parity↔Build tracker, and Daily Test Script+Changelog↔**this file**, where the rules already say dated history belongs. That duplication was not harmless: it is exactly what bit us this morning, when the MVP's Overview said sub-roles were done while its own E2E Flow still said they were not. **It also broke the owner's own database rule at the document level — one fact, one place.** So: `InnocenZ_BuildSteps.xlsx` is now the ONE book. **14 tabs, numbered, colour-coded into three parts** — 🔵 *Understand it* (1 START HERE · 2 The Week—money · 3 Money model · 4 PR—phone · 5 Outlet—venue · 6 Agency—web · 7 Admin—web · 8 Shared rails) · 🟠 *Judge it* (9 Who may do what · 10 Where it stops · 11 What to build next · 12 Build tracker) · ⚫ *Look it up* (13 The API · 14 Database + Services). The MVP's **one** non-duplicated tab, its services-and-hooks inventory, is folded in as the second half of tab 14: **71 services and hooks**, each with the endpoint it calls, under generalised headers (`Table / service` · `Owned by` · `Cols · status` · `Joins to · calls` · `What it is for`) and a note telling the reader the columns shift meaning for that half. MVP renamed to `InnocenZ_MVP_v4_RealApp.ARCHIVED-20260817.xlsx`; the stale `InnocenZ_BuildSteps.new.xlsx` duplicate deleted. `CLAUDE.md` rule rewritten accordingly — **never create a second workbook** — and it now also records that `12 Build tracker` and `10 Where it stops` are pure arithmetic over the flow pages and must be regenerated with them, never hand-edited, because leaving them behind is precisely how the book started lying (tracker said 493 steps against 545 on the pages; "Where it stops" described 106 gaps against 141). | The one book · `CLAUDE.md` · `docs/claude-memory/sync-memory-mirrors.md` | ✅ Read back after writing: **14 sheets, every tab carrying its part colour** (8 blue / 4 amber / 2 grey), contents page rendering as the three parts in order, and tab 14 showing both halves with 8 section banners. ✅ Every tab name under Excel's 31-char limit. ✅ Memory mirrors re-verified **identical both directions, 23 files**, CRLF-normalised. ⚠️ Nothing was carried over from the MVP except the services inventory — if a number is wanted from one of its retired tabs, it is in the ARCHIVED file, not lost. |
+
+| 2026-08-17 | **The flow book re-read from code, four pages added — and the re-read turned up two live security holes.** The six flow pages had been read on **11 Aug**, before migrations 0113-0121; **366 of the 493 steps were re-opened against source**, 110 corrected, 57 added, and **21 left deliberately untouched and listed as unverified** rather than guessed at. New count: **545 steps = 404 built / 89 half / 52 none (74%)**, recomputed by arithmetic over the pages, never typed. Agency — web took the most work (55 corrections) as expected. **Four new pages, same grammar:** *Money model* (the rate card → one night → the week → what the venue is billed → the platform's own money → what nobody checks), *Who may do what* (7 seeded roles × the capabilities that matter, each with the guard in code that decides it), *The API* (all 28 mounts, the 4 public-before-JWT ones and why each is public, the `/mine` ordering rule), *What to build next* (the gaps ranked, phase 1 vs phase 2). **`Where it stops` had to be rewritten too** — it described 106 gaps while the corrected pages carried 141; it is now 118 lines (33 stop · 54 leak · 31 rough) with **15 old lines dropped as genuinely fixed**, the duplicates merged where one failure shows on two screens. Book is now 14 tabs, reordered so it reads story → gaps → what to do → score → reference. ⚠️ **TWO REAL BUGS, both verified in source, neither a workbook problem.** **(1) `POST /api/v1/auth/forgot-password` returns the reset token in its own 200 body** — `auth.controller.ts:1050`, `data: { resetUrl, token }`, no env guard, and `/auth` mounts *before* `authenticateJWT` (`router/v1.ts:39`). Anyone knowing an active email takes over that account, admin included; `resetPassword` only checks the token exists and has not expired. The same handler carefully returns `data: null` for unknown emails to stop enumeration — and then the differing response shape defeats it. Line 1045 logs the full reset URL as well. **(2) `middlewares/redact-identity-docs.ts:40` is dead code** — it gates on `roleNames.includes('outlet')`, but `outlet` is `@deprecated Not seeded` in `types/rbac-constant.ts`; real venue staff hold `Owner`/`Finance`/`Ops Head`, so the flag is ALWAYS false and PR ICs, DOB, address and both ID photos are **not** redacted for venue logins — the opposite of the owner decision in that file's own header (30 Jul). Fix is to gate on `portalCode`, the pattern `require-sub-role.ts` already uses; same root cause suspected behind Post Job 403ing an outlet Owner. | The whole book · `auth` · `redact-identity-docs` | ✅ Workbook verified on read-back: 14 sheets, every one keeping autofilter + frozen panes, contents list matching tab order exactly, 0 malformed rows across 8 agent output files. ✅ Tracker headline re-derived from the pages themselves (545/404/89/52). ✅ Both bugs confirmed by opening the source, not inferred — `draftForWeek`'s zero callers likewise confirmed by grep. ⚠️ **21 flow steps were NOT re-verified** and keep their 11 Aug status; they are listed per page in the audit files. ⚠️ Nothing in this slice was click-tested — it is a documentation pass plus source reading. ⚠️ The two bugs are **reported, not fixed**. |
+
+| 2026-08-17 | **The MVP workbook's 9 stale sheets brought in line — and the file itself recovered from the Recycle Bin.** `InnocenZ_MVP_v4_RealApp.xlsx` was missing from disk; it and four intermediate backups had been deleted in one sweep at 02:06, nine minutes after the morning's edits. Restored the 102,994-byte version (mtime 09:57) carrying all five rounds of that morning's corrections, verified intact before touching it, and left the backup clutter in the bin. Then **552 cell edits + 144 appended rows** across **RBAC Matrix · Role Matrix · Money Model · Modules 1-12 · Build Plan · Backend — API · Functions — Services & Hooks · To-Do · Daily Test Script**, validated for sheet-name, row-collision and clone-style-range before writing (0 clashes). **RBAC Matrix was the worst sheet and is rebuilt**: it claimed "12 modules × 4 roles × CRUD" and that sub-roles were frontend-only — all wrong. Now **19 module keys × 7 roles × C/R/U with zero surviving D grants**, read from `seed-rbac.ts`. ❗**Corrected my own error from that morning**: the seeded role names are **`Owner`, `Finance`, `Ops Head`**, repeated per portal and told apart by `portal_id` — NOT `agency_owner`/`outlet_ops` as I had written into Overview D75; agency has no Ops Head, and bare `agency`/`outlet` are deprecated and unseeded. ❗**Also corrected D74**: the outlet invoice not only bills wages only, it **can no longer be raised at all** — the weekly job stopped drafting `collection_invoice` on 12 Aug (owner's call, settle outside the app), `draftForWeek` has no caller, and the API exposes only `/:id/issue` and `/:id/settle`, so the table is read-only history. Added two traps the agent missed: `applyRoleGrants` uses `onConflictDoNothing` and never deletes, so removing a grant from the seed does **not** revoke it on a seeded database (and seeded grants beat the portal's own matrix); and the dead redaction guard above. | MVP workbook, all 14 tabs | ✅ Applied through `apply-edits.mjs`, which reported **formatting preserved** (fills, autofilters, freeze panes). ✅ Pre-flight validation passed: every sheet name matched exactly, every append row sat below its sheet's last row, every `cloneStyleFromRow` in range. ✅ RBAC Matrix re-read after writing: title, 10-column header, grid sample and both added rows all correct; **0 cells still granting D**. ⚠️ The 5 sheets corrected earlier that morning (Overview, Data Model, E2E Flow, Prototype Parity, Changelog) were left alone apart from the two D74/D75 fixes. |
 
 | 2026-08-13 | **An agency edit did not re-render the comcard, and one last screen still computed its own age. Both closed — and the age question was settled by sweeping ALL of it rather than patching a fifth site.** **(1) The comcard now re-renders SERVER-side, on both writers.** Height/weight/name are printed on the card, and the PR edits those columns through `PATCH /user/:id` while the agency edits the SAME columns through `PUT /pr/:id`. Only the mobile client re-rendered, so an agency changing height 155 → 160 left a PNG still saying 155. New `util/comcard-refresh.ts` (`refreshStoredComcard` + `touchesComcard`) is called from BOTH controllers after the write and **never throws** — a profile save that landed must not be reported as failed because the picture could not be redrawn. It reads the profile back AFTER the write, so the card renders from what was stored rather than from the patch we hoped landed. **(2) The mobile client's own regeneration was then REMOVED, and this was not tidying.** With the server rendering inside the same request, the client's extra call meant two renders per save — and since each render prunes every object but its own, two interleaved renders can **delete each other's fresh PNG and leave the profile pointing at a key that no longer exists**. Three client call sites went (profile save, portfolio remove, portfolio rearrange); the two that follow `uploadPortfolioPhoto` **stay**, because that is a different route the refresh does not cover. `updateProfile` now returns the updated `Me` so the screen can tell whether the card actually moved instead of claiming it did. **(3) The age sweep.** Four rounds of "fix the one I can see" had already missed the two read paths, the PNG generator and then the portal, so instead of a fifth patch a multi-agent sweep examined **115 candidate sites across all three apps**, verified 29 adversarially, and confirmed exactly **ONE** real remaining bug: `use-agency-pending-prs.ts:56` computed `ageFromDob(dob)` because `GET /agency/:id/prs` shipped the RAW stored dob and **no `age` at all**. Fixed at the source — `agency-pr.repository.ts` now spreads `derivedAge` into every row (correcting `dob` too) — plus the web type and the hook's fallback. The sweep also **corrected my own diagnosis**: the Manage PR panel in the screenshot was served by a backend process that predated the fix, not by a bug in that panel. | Agency → Manage PR + Approvals · PR app → Profile · `PUT /pr/:id` · `PATCH /user/:id` · `GET /agency/:id/prs` | ✅ **Agency-side re-render proven live**: an agency `PUT` of `comcardHeightCm` alone, with no client and no generate call, moved the stored key `…468712.png` → `…879374.png`, and the height was restored afterwards. ✅ **PR-side proven the same way** through `PATCH /user/:id` with no client generate call: `…905869.png` → `…228725.png`. ✅ **The prune held across SIX regenerations this session — still exactly 1 object** under Vicky's prefix. ✅ **`GET /agency/:id/prs` now carries it**: 47 rows, every one with an `age` key, Vicky `age=31 dob=1995-03-12 ic=950312-14-8821`. ✅ backend tsc **0**; mobile **10 = baseline, 0 in touched files**; web **110 = baseline** (the one `agency-pr-comcards.ts` error is the pre-existing `trainingLevel` one); biome clean on every touched file. ⚠️ **NOT eyeballed** — proven by API round-trips and bucket listings, not by reading pixels. ⚠️ **6 live `agency_pr` rows sit at `approve_status='pending'`** and were aged the wrong way until now; Vicky herself is approved on all three of her rosters, so she was not on that screen today. ⚠️ `use-agency-pending-prs.ts:45` still does `String(pr.dob).slice(0,10)`, a latent UTC off-by-one if that endpoint ever serves `dob` as a timestamp rather than a `date` string — harmless today, left as-is. |
 
