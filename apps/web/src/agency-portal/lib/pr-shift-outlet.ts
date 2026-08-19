@@ -78,8 +78,8 @@ const OUTLET_META: Record<
  *
  * Empty, not substituted. `getPrShiftOutletBrief` has NO callers today — this is
  * defusing a landmine in code that is not wired, not fixing a live screen. The
- * real decision is the same one `RosterAssignDialog` is waiting on: wire it
- * against the outlet registry, or delete it.
+ * real decision is whether to wire it against the outlet registry or delete it,
+ * the way `RosterAssignDialog` was deleted on 19 Aug 2026.
  */
 const DEFAULT_META = {
 	gradient: "linear-gradient(145deg,#1f2937 0%,#0f1419 50%,#374151 100%)",

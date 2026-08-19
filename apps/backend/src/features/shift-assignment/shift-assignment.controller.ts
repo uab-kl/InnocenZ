@@ -45,6 +45,7 @@ import {
   resolveTierWageOutcomesForShifts,
 } from './resolve-tier-wages';
 import { shiftDayKey, shiftsOverlap } from '@/util/slot-window';
+import { assignmentHistoryReason } from './assignment-history-guard';
 import { travelWarningFor } from './travel-gap';
 import {
   CheckInMineSchema,
@@ -2140,10 +2141,18 @@ export class ShiftAssignmentControllerClass {
       // the shift rule is: on a UTC host `new Date()` rolls the date eight hours
       // early, which would reopen yesterday for a Kuala Lumpur agency at 08:00.
       // Admin is exempt — support has to be able to clean up a bad row.
+      // The rule itself lives in `assignment-history-guard.ts` so it can be
+      // tested without firing this endpoint: a bug in it does not return 409
+      // here, it deletes a real row and takes the attendance and the sealed
+      // wage with it. Same function guards the swap lane.
       if (!scope.isAdmin) {
-        const todayIso = shiftDayKey(new Date());
-        const shiftIso = shift ? String(shift.shiftDate).slice(0, 10) : null;
-        if (shiftIso && shiftIso < todayIso) {
+        const reason = assignmentHistoryReason({
+          shiftDate: shift ? String(shift.shiftDate) : null,
+          checkInAt: existing.checkInAt,
+          checkOutAt: existing.checkOutAt,
+          todayIso: shiftDayKey(new Date()),
+        });
+        if (reason === 'past-shift') {
           return res.status(409).json({
             success: false,
             message:
@@ -2151,7 +2160,7 @@ export class ShiftAssignmentControllerClass {
             data: null,
           });
         }
-        if (existing.checkInAt || existing.checkOutAt) {
+        if (reason === 'attendance-stamped') {
           return res.status(409).json({
             success: false,
             message:

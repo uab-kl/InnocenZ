@@ -12,6 +12,7 @@ import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { OrgScope, resolveOrgScope } from '@/util/org-scope';
 import { shiftDayKey } from '@/util/slot-window';
+import { assignmentHistoryReason } from '@/features/shift-assignment/assignment-history-guard';
 import { CreateOutletSwapSchema, RespondOutletSwapSchema } from '@/schema/outlet-swap.schema';
 import { OutletSwapApprovalRejection, OutletSwapRepositoryClass } from './outlet-swap.repository';
 import { OutletSwapStatus } from './outlet-swap.model';
@@ -193,16 +194,24 @@ export class OutletSwapControllerClass {
       // floor is not relocatable, and until now only a check-OUT stopped this —
       // the UI's `releasedEarly` gate — which left the whole middle of a shift
       // open to a swap request.
+      // Same tested rule as the unassign lane — see assignment-history-guard.ts.
+      // Both shifts are on one date (checked just above), so testing `from`
+      // tests both.
       if (!scope.isAdmin) {
-        const todayIso = shiftDayKey(new Date());
-        if (String(fromShift.shiftDate).slice(0, 10) < todayIso) {
+        const reason = assignmentHistoryReason({
+          shiftDate: String(fromShift.shiftDate),
+          checkInAt: assignment.checkInAt,
+          checkOutAt: assignment.checkOutAt,
+          todayIso: shiftDayKey(new Date()),
+        });
+        if (reason === 'past-shift') {
           return res.status(409).json({
             success: false,
             message: 'That shift has already passed — there is nothing left to swap.',
             data: null,
           });
         }
-        if (assignment.checkInAt || assignment.checkOutAt) {
+        if (reason === 'attendance-stamped') {
           return res.status(409).json({
             success: false,
             message: 'This PR has already clocked in on that shift — they can no longer be moved to another venue.',
