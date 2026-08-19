@@ -8,6 +8,8 @@ import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ChevronDown, Minus, ScanLine, Wine } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 type OutletShiftSalesPanelProps = {
 	shiftId: string;
@@ -24,6 +26,7 @@ export function OutletShiftSalesPanel({
 	compact = false,
 	collapsible = false,
 }: OutletShiftSalesPanelProps) {
+	const { t } = usePortalLocale();
 	const shift = useStore((s) => s.shifts.find((sh) => sh.id === shiftId));
 	const workspaceMenu = useStore((s) => s.outletWorkspace.drinkMenu ?? []);
 	const drinkMenu = shift
@@ -43,7 +46,7 @@ export function OutletShiftSalesPanel({
 			<p
 				className={`text-[10px] text-[var(--iz-muted)] ${compact ? "mt-2" : "mt-3"}`}
 			>
-				Sales locked after seal.
+				{t.today.salesLockedAfterSeal}
 			</p>
 		);
 	}
@@ -52,10 +55,12 @@ export function OutletShiftSalesPanel({
 		<>
 			<div className="space-y-2">
 				<div className="text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-					Drinks
+					{t.today.drinks}
 				</div>
 				{drinkMenu.length === 0 ? (
-					<p className="iz-tiny iz-muted">Add drink prices in Workspace.</p>
+					<p className="iz-tiny iz-muted">
+						{t.today.addDrinkPricesInWorkspace}
+					</p>
 				) : (
 					<div className="flex flex-wrap gap-1.5">
 						{drinkMenu.map((drink) => {
@@ -70,7 +75,9 @@ export function OutletShiftSalesPanel({
 										onClick={() => adjustOutletDrinkSale(shiftId, drink.id, -1)}
 										disabled={qty === 0}
 										className="iz-chip flex h-7 w-7 shrink-0 items-center justify-center !p-0 disabled:opacity-40"
-										aria-label={`Remove ${drink.name}`}
+										aria-label={fill(t.today.removeNamedItem, {
+											name: drink.name,
+										})}
 									>
 										<Minus className="h-3 w-3" />
 									</button>
@@ -95,18 +102,18 @@ export function OutletShiftSalesPanel({
 			<div className="mt-2 flex gap-2">
 				<button
 					type="button"
-					onClick={() => toast("Barcode scan · sale logged", "success")}
+					onClick={() => toast(t.today.barcodeLogged, "success")}
 					className="iz-chip flex-1 justify-center text-[11px]"
-					aria-label="Scan barcode"
+					aria-label={t.today.scanBarcode}
 				>
-					<ScanLine className="h-3.5 w-3.5" /> Scan
+					<ScanLine className="h-3.5 w-3.5" /> {t.today.scan}
 				</button>
 				<Link
 					to="/outlet/workspace"
 					hash={OUTLET_SERVICE_ENTITLEMENT_SECTION_ID}
 					className="iz-chip flex-1 justify-center text-[11px]"
 				>
-					Service Entitlement
+					{t.today.serviceEntitlement}
 				</Link>
 			</div>
 		</>
@@ -121,7 +128,7 @@ export function OutletShiftSalesPanel({
 					className="flex w-full items-center gap-2 px-2.5 py-2 text-left"
 				>
 					<span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-						{label ?? "Log sales"}
+						{label ?? t.today.logSales}
 					</span>
 					<span className="font-sora ml-auto text-xs font-bold text-[var(--iz-green)]">
 						RM {liveSales.toLocaleString()}
@@ -152,7 +159,7 @@ export function OutletShiftSalesPanel({
 		>
 			<div className="flex items-center gap-2">
 				<span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-					{label ?? "Log sales"}
+					{label ?? t.today.logSales}
 				</span>
 				<span className="font-sora ml-auto text-sm font-bold text-[var(--iz-green)]">
 					RM {liveSales.toLocaleString()}

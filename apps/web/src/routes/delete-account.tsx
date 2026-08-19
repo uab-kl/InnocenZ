@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { DeleteAccountPage } from "@/components/legal/DeleteAccountPage"
+import { createFileRoute } from "@tanstack/react-router";
+import { DeleteAccountPage } from "@/components/legal/DeleteAccountPage";
 
 export const Route = createFileRoute("/delete-account")({
 	head: () => ({
@@ -19,4 +19,4 @@ export const Route = createFileRoute("/delete-account")({
 		],
 	}),
 	component: DeleteAccountPage,
-})
+});

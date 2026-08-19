@@ -14,6 +14,19 @@ export interface ShiftPagination {
 }
 
 export interface Shift {
+	/**
+	 * Seats taken across EVERY agency the shift was posted to, counted server-side.
+	 *
+	 * ⚠️ Prefer this over counting `/shift-assignment` rows. That list is scoped to
+	 * the caller's own agency — correctly, one agency must not read another's
+	 * roster — so counting it on a shift shared through `shift_agency` reports this
+	 * agency's own contribution as the occupancy, and offers seats the other agency
+	 * already filled. Optional so an older backend or a cached response degrades to
+	 * the previous behaviour rather than reading as an empty shift.
+	 */
+	staffedCount?: number;
+	/** The same count split by tier bucket — the per-tier quota has the same split-brain. */
+	staffedBuckets?: Record<string, number>;
 	id: string;
 	agencyId: string;
 	outletId: string;
@@ -51,6 +64,16 @@ export interface ShiftPayTierDemand {
 	kind: "tier" | "commission_only";
 	tier: string | null;
 	prCount: number;
+	/**
+	 * The RATES the shift declared for this tier. The backend has always sent these
+	 * — the type simply stopped at the demand, so every outlet screen fell back to a
+	 * synthesised rate ladder and drew percentages the shift never asked for.
+	 * Optional because a shift with no overrides has no rows at all.
+	 */
+	wagePerHour?: string | number | null;
+	drinkPct?: string | number | null;
+	tipPct?: string | number | null;
+	targetSalesRm?: string | number | null;
 }
 
 export interface ShiftsQueryParams {
@@ -93,6 +116,18 @@ export interface ShiftPayTierInput {
 
 export interface CreateShiftInput {
 	agencyId?: string;
+	/**
+	 * Which of the outlet's APPROVED agencies this job goes to (0124).
+	 *
+	 * Shared fulfilment: every listed agency may send PRs to the same shift
+	 * until the headcount is met. Omit or leave empty to reach all approved
+	 * agencies — which is what the old single-agency behaviour meant back when a
+	 * venue could only have one.
+	 *
+	 * Advisory: the server intersects this with the outlet's approved links, so
+	 * naming an unapproved agency cannot create an invitation.
+	 */
+	agencyIds?: string[];
 	outletId: string;
 	shiftDate: string;
 	slot?: string;

@@ -20,6 +20,7 @@ import {
 	workforceStatusLabel,
 	workforceStatusVariant,
 } from "@agency-portal/components/portal/LiveWorkforceTable";
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -60,6 +61,8 @@ import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Star } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 type FloorDisplayStatus = "on-duty" | "en-route" | "scheduled" | "checked-out";
 
@@ -170,6 +173,7 @@ export function OutletTodayOperationPanel({
 	roster?: AgencyRosterSlot[];
 	agencyPrs?: AgencyManagedPR[];
 }) {
+	const { t } = usePortalLocale();
 	const outletSubRole = useStore((s) => s.outletSubRole);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const prReceiptScans = useStore((s) => s.prReceiptScans ?? []);
@@ -201,6 +205,30 @@ export function OutletTodayOperationPanel({
 	const [liveSalesPrId, setLiveSalesPrId] = useState<string | null>(null);
 	const [prTonightOpen, setPrTonightOpen] = useState(false);
 	const [liveSalesOpen, setLiveSalesOpen] = useState(false);
+
+	/**
+	 * Real agency names for this venue, keyed by id — the only honest source for
+	 * "who supplied this PR" on an outlet screen.
+	 *
+	 * These are the venue's own `agency_outlet` links, so the lookup covers
+	 * exactly the agencies that can staff it and leaks nothing about any other.
+	 * Shares its query key with Settings and the Post Job picker, so it costs no
+	 * extra request.
+	 */
+	const { links: agencyLinks } = useOutletAgencyLinks();
+	const agencyNameById = useMemo(
+		() => new Map(agencyLinks.map((l) => [l.agencyId, l.agencyName])),
+		[agencyLinks],
+	);
+	/**
+	 * Holding real links is what makes this a real session.
+	 *
+	 * Deliberately NOT a demo-store check: the demo store boots blank, so
+	 * "has demo data" is false on both paths early on, and this decides whether a
+	 * demo agency NAME may be printed to a real venue. Links come from the
+	 * backend and a demo session has none.
+	 */
+	const isRealSession = agencyLinks.length > 0;
 	const [stars, setStars] = useState<1 | 2 | 3 | 4 | 5>(5);
 	const [note, setNote] = useState("");
 	const [tags, setTags] = useState<string[]>([]);
@@ -510,14 +538,20 @@ export function OutletTodayOperationPanel({
 
 	const staffHint =
 		staffTonight.length === 0
-			? "No PRs yet"
+			? t.outletHome.noPrsYet
 			: [
-					statusCounts.onDuty > 0 ? `${statusCounts.onDuty} on duty` : null,
-					statusCounts.enRoute > 0 ? `${statusCounts.enRoute} en route` : null,
-					statusCounts.checkedOut > 0
-						? `${statusCounts.checkedOut} checked out`
+					statusCounts.onDuty > 0
+						? `${statusCounts.onDuty} ${t.outletHome.onDuty}`
 						: null,
-					statusCounts.booked > 0 ? `${statusCounts.booked} booked` : null,
+					statusCounts.enRoute > 0
+						? `${statusCounts.enRoute} ${t.outletHome.enRoute}`
+						: null,
+					statusCounts.checkedOut > 0
+						? `${statusCounts.checkedOut} ${t.outletHome.checkedOut}`
+						: null,
+					statusCounts.booked > 0
+						? `${statusCounts.booked} ${t.outletHome.booked}`
+						: null,
 				]
 					.filter(Boolean)
 					.join(" · ");
@@ -537,14 +571,15 @@ export function OutletTodayOperationPanel({
 						className="iz-chip text-[10px]"
 						onClick={() => clearPostSealRatePrompt()}
 					>
-						Dismiss
+						{t.today.dismiss}
 					</button>
 				</div>
 			)}
 
 			<OutletSection
 				id={OUTLET_PR_TONIGHT_SECTION_ID}
-				title="PR tonight"
+				title={t.outletHome.prTonight}
+				iconKey={t.today.prTonight}
 				hint={staffHint}
 				collapsible
 				open={prTonightOpen}
@@ -553,7 +588,7 @@ export function OutletTodayOperationPanel({
 			>
 				{staffTonight.length === 0 ? (
 					<p className="iz-tiny iz-muted rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
-						No PRs assigned for tonight yet.
+						{t.today.noPrsTonight}
 					</p>
 				) : (
 					<div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
@@ -566,15 +601,38 @@ export function OutletTodayOperationPanel({
 								? languagesFromPr(agencyProfile)
 								: pr.languages;
 							const drinkUnits = liveDrinkUnitsByPrId.get(pr.id);
-							// Agency label: prefer the shift's assigning agency (slot), else fall back to the
-							// PR's own owning agency — so a Delta PR (e.g. Sofia) reads "Delta Agency" here,
-							// not the Atlas default, even when the slot carries no explicit agency tag.
+							// WHICH AGENCY SUPPLIED THIS PR.
+							//
+							// ⚠️ On a real session this printed "Atlas Agency" for every PR,
+							// whoever actually supplied them. Not a wrong lookup — a demo
+							// literal: `rosterSlotAgencyName`'s own default parameter is
+							// `DEFAULT_PR_AGENCY_NAME = "Atlas Agency"`, and passing an
+							// `undefined` fallback is precisely what triggers a default
+							// parameter. Its middle arm reads `AGENCY_OWNERS_BY_ID`, a DEMO
+							// table keyed by demo ids, so a real uuid never matches and the
+							// chain runs all the way to that literal. The venue was told a
+							// specific, real, wrong agency with complete confidence.
+							//
+							// Resolved instead from this venue's OWN links (id -> name):
+							// real data the outlet is entitled to, and exactly the set of
+							// agencies that can supply it. The slot's `agencyId` is
+							// `shift_assignment.agency_id` — who actually supplied this PR,
+							// not who the person is otherwise registered with.
 							const ownerAgencyName = agencyProfile
 								? getPrAgencyById(agencyIdOf(agencyProfile))?.name
 								: undefined;
-							const agencyLabel = slot
-								? rosterSlotAgencyName(slot, ownerAgencyName)
-								: ownerAgencyName;
+							const realAgencyName = slot?.agencyId
+								? agencyNameById.get(slot.agencyId)
+								: undefined;
+							// A venue holding real links is a real session, so the demo chain
+							// is off the table: an id we cannot name renders NOTHING. A
+							// missing label is a gap someone asks about; a confidently wrong
+							// one is a gap nobody knows to ask about.
+							const agencyLabel = isRealSession
+								? (realAgencyName ?? null)
+								: slot
+									? rosterSlotAgencyName(slot, ownerAgencyName)
+									: ownerAgencyName;
 							const opsLine = [
 								// A stamp renders LOCAL time. A backend slot carries the full
 								// UTC ISO string, so this line read
@@ -582,9 +640,16 @@ export function OutletTodayOperationPanel({
 								displayStatus === "on-duty" && slot?.checkedInAt
 									? `In ${formatAttendanceStamp(slot.checkedInAt, slot.dateIso)}`
 									: displayStatus === "checked-out" && slot?.checkedOutAt
-										? `Out ${formatAttendanceStamp(slot.checkedOutAt, slot.dateIso)}`
+										? fill(t.today.outAt, {
+												time: formatAttendanceStamp(
+													slot.checkedOutAt,
+													slot.dateIso,
+												),
+											})
 										: null,
-								drinkUnits ? `${drinkUnits} drinks` : null,
+								drinkUnits
+									? fill(t.today.drinksCount, { n: drinkUnits })
+									: null,
 								agencyLabel ?? null,
 							]
 								.filter(Boolean)
@@ -598,7 +663,7 @@ export function OutletTodayOperationPanel({
 									<button
 										type="button"
 										className="iz-comcard-3d-preview-btn relative w-full text-left"
-										aria-label={`View comcard for ${pr.name}`}
+										aria-label={fill(t.today.viewComcardFor, { name: pr.name })}
 										onClick={() => setComcardPreviewId(pr.id)}
 									>
 										<IzPill
@@ -633,7 +698,7 @@ export function OutletTodayOperationPanel({
 										onClick={() => setLiveSalesPrId(pr.id)}
 										className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
 									>
-										<TitleWithIcon>Live sales</TitleWithIcon>
+										<TitleWithIcon>{t.today.liveSales}</TitleWithIcon>
 									</button>
 
 									<button
@@ -641,7 +706,7 @@ export function OutletTodayOperationPanel({
 										onClick={() => setHistoryPrId(pr.id)}
 										className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
 									>
-										<TitleWithIcon>Shift history</TitleWithIcon>
+										<TitleWithIcon>{t.today.shiftHistory}</TitleWithIcon>
 									</button>
 
 									{displayStatus === "checked-out" && (
@@ -650,7 +715,7 @@ export function OutletTodayOperationPanel({
 											onClick={() => setOpenPr(pr.id)}
 											className="iz-btn iz-btn-soft iz-btn-sm iz-outlet-pr-tonight-card__btn w-full"
 										>
-											<TitleWithIcon>Rate</TitleWithIcon>
+											<TitleWithIcon>{t.today.rate}</TitleWithIcon>
 										</button>
 									)}
 								</div>
@@ -660,7 +725,7 @@ export function OutletTodayOperationPanel({
 				)}
 				<OutletSection
 					id={OUTLET_LIVE_SALES_SECTION_ID}
-					title="Live sales"
+					title={t.today.liveSales}
 					collapsible
 					open={liveSalesOpen}
 					onOpenChange={setLiveSalesOpen}
@@ -722,7 +787,7 @@ export function OutletTodayOperationPanel({
 							type="button"
 							className="block w-full cursor-zoom-in"
 							onClick={() => setComcardZoomOpen(true)}
-							aria-label="Enlarge comcard"
+							aria-label={t.today.enlargeComcard}
 						>
 							<Comcard3dPreviewVisual
 								pr={comcardPreviewPr}
@@ -732,7 +797,9 @@ export function OutletTodayOperationPanel({
 						</button>
 						{comcardZoomOpen && (
 							<PhotoLightbox
-								alt={`${comcardPreviewPr.name} · comcard`}
+								alt={fill(t.today.comcardTitle, {
+									name: comcardPreviewPr.name,
+								})}
 								onClose={() => setComcardZoomOpen(false)}
 							>
 								<Comcard3dPreviewVisual pr={comcardPreviewPr} />
@@ -847,7 +914,7 @@ export function OutletTodayOperationPanel({
 							}}
 							className="iz-btn iz-btn-primary mt-4 w-full"
 						>
-							Submit
+							{t.today.submit}
 						</button>
 					</div>
 				</IzSheet>

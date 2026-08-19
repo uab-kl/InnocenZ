@@ -336,9 +336,14 @@ export class PrRepositoryClass {
    * existence + enrichment check on `user`). `null` only if the account
    * itself is gone.
    */
-  async getByUserId(userId: string): Promise<PrType | null> {
+  async getByUserId(userId: string, agencyId?: string): Promise<PrType | null> {
     try {
-      return await buildSyntheticPr(userId);
+      // `agencyId` decides WHICH membership the returned `pr` speaks for, and
+      // omitting it is not a neutral default: `loadPrimaryMembership` then takes
+      // the OLDEST `agency_pr` row. A person on four rosters has four tiers, and
+      // the oldest agency's tier was pricing shifts sold by the other three.
+      // Pass the agency that is acting whenever one is known.
+      return await buildSyntheticPr(userId, agencyId);
     } catch (error) {
       logger.error('[PrRepository.getByUserId] Error:', error);
       return null;

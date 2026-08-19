@@ -213,6 +213,17 @@ export const ShiftAssignmentTable = MainSchema.table(
   }),
 );
 
+/**
+ * Statuses where the PR is NOT on the shift — they never consume a seat.
+ *
+ * Lives on the MODEL, not the repository, on purpose: the roster, the capacity
+ * guard, the travel check and the cross-agency occupancy count all need it, and a
+ * repository-to-repository import to reach a constant is how this codebase closed
+ * an import cycle once already. The repository re-exports it, so every existing
+ * importer keeps working.
+ */
+export const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
+
 export type ShiftAssignmentType = typeof ShiftAssignmentTable.$inferSelect;
 export type ShiftAssignmentInsertType = typeof ShiftAssignmentTable.$inferInsert;
 

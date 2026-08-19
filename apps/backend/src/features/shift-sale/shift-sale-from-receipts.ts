@@ -77,10 +77,11 @@ interface RecomputeRow {
 /**
  * Re-derives the (shift, PR) floor-sales row that `assignmentId` belongs to.
  *
- * Scoped by SHIFT + PR rather than by the assignment itself: a PR can hold more
- * than one assignment on the same shift, and shift_sale is unique on
- * (shift_id, pr_id) — summing one assignment's receipts alone would write a row
- * that contradicts its own key.
+ * Scoped by SHIFT + PR rather than by the assignment itself, because that is the
+ * grain shift_sale is unique on — summing one assignment's receipts alone would
+ * write a row that contradicts its own key. (Today the two grains coincide:
+ * `shift_assignment` is itself UNIQUE (shift_id, pr_id). Keying on the pair
+ * survives that constraint being relaxed; keying on the assignment would not.)
  *
  * Never throws: failing to mirror revenue must not fail the PR's receipt.
  */
@@ -111,6 +112,12 @@ export async function recomputeShiftSaleForAssignment(
  * Writes a ZERO row rather than skipping when every receipt has been deleted or
  * un-approved — otherwise the last non-zero total would linger as the outlet's
  * revenue for a night that no longer has any.
+ *
+ * The `limit 1` on the outer select is safe because `shift_assignment` carries
+ * `UNIQUE (shift_id, pr_id)` (0025, verified live) — one assignment per pair, so
+ * there is nothing to choose between. That constraint is what makes reading
+ * `sa.agency_id` deterministic; if it were ever dropped, this query would pick a
+ * supplier agency at random and the commission would follow it.
  */
 export async function recomputeShiftSale(key: ShiftPrKey, actor: string): Promise<boolean> {
   try {
@@ -133,7 +140,19 @@ export async function recomputeShiftSale(key: ShiftPrKey, actor: string): Promis
              (select u.id from main."user" u
                where u.id = coalesce(sa.user_id, sa.pr_id) limit 1) as user_id,
              s.outlet_id,
-             s.agency_id,
+             -- The agency that SUPPLIED this PR, never s.agency_id. The shift's
+             -- column is only the ANCHOR — the first agency the outlet addressed
+             -- (0124) — so on a shift shared between agencies it names whoever was
+             -- asked first, not whoever sent the person these sales belong to.
+             -- Commission is computed off this column, and the manual create path
+             -- already stamps the caller: leaving the anchor here would let the two
+             -- writers of one row disagree, and since the upsert is keyed on
+             -- (shift_id, pr_id) whichever inserted FIRST would stand forever.
+             -- Live: JK House 2026-08-18 is anchored to Atlas while Alice is
+             -- supplied by Why We Met, so the anchor would bill Atlas for her floor.
+             -- (No backticks in here: this comment sits inside a JS template
+             -- literal, and one would end the query mid-select.)
+             sa.agency_id,
              s.shift_date,
              coalesce((select sum(units) from lines where bucket = 'drink'), 0)::int as drink_units,
              coalesce((select sum(gross) from lines where bucket = 'drink'), 0)::numeric(12,2)::text as drink_rm,

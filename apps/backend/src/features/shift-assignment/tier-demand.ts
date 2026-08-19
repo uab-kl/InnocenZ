@@ -13,6 +13,12 @@
  *  - No tier rows, or rows summing to 0, means no per-tier cap at all: only
  *    `quantity` binds. That is what keeps the 9 pre-composer shifts assignable
  *    without a migration.
+ *  - A row asking for ZERO is a PRICE, not a quota (18 Aug 2026). The composer
+ *    lets a venue set a tier's rates while requesting none of that tier, and
+ *    those rows are now persisted so the rate survives the round trip. Counting
+ *    one as demand would name the tier with a quota of nought — `have >= want`
+ *    is `0 >= 0` — and no PR of that tier could ever be assigned. Skipped in
+ *    ONE place, `askedByBucket`, which every rule below reads through.
  *  - `commission_only` is its own bucket, keyed on `kind` — never on a label.
  */
 
@@ -73,6 +79,11 @@ function askedByBucket(demand: DemandRow[]): { asked: Map<string, number>; total
   const asked = new Map<string, number>();
   let totalAsked = 0;
   for (const row of demand) {
+    // A priced row with no headcount declares a RATE, not a seat — see the
+    // module note. It must not enter `asked`: merely HAVING the key is what
+    // `seatFor` reads as "this tier was named", and a named tier wanting 0 is
+    // full before anyone is on it.
+    if (row.prCount <= 0) continue;
     const bucket = bucketForDemandRow(row);
     if (!bucket) continue;
     asked.set(bucket, (asked.get(bucket) ?? 0) + row.prCount);

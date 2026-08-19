@@ -5,6 +5,8 @@ import { shiftHoursFromLabel } from "@agency-portal/lib/outlet-demo";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 import { useStore } from "@agency-portal/lib/store";
 import { useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function OutletSealReview({
 	shift,
@@ -17,6 +19,7 @@ export function OutletSealReview({
 	onClose: () => void;
 	onConfirm: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const agencyRoster = useStore((s) => s.agencyRoster);
 
@@ -57,7 +60,7 @@ export function OutletSealReview({
 
 	return (
 		<IzSheet open={open} onClose={onClose}>
-			<IzCardTitle>Seal shift · per-PR review</IzCardTitle>
+			<IzCardTitle>{t.today.sealPerPrReview}</IzCardTitle>
 			{shift && (
 				<p className="iz-tiny iz-muted mt-1">
 					{shift.event} · {shift.date} · {shift.shift}
@@ -80,7 +83,7 @@ export function OutletSealReview({
 			</div>
 			{rows.length > 0 && (
 				<div className="iz-v-sum tot mt-3">
-					<span className="font-sora font-bold">Total payroll</span>
+					<span className="font-sora font-bold">{t.today.totalPayroll}</span>
 					<span className="iz-ledger text-[var(--iz-gold)]">
 						{formatRM(total)}
 					</span>
@@ -91,14 +94,14 @@ export function OutletSealReview({
 				className="iz-btn iz-btn-primary mt-3 w-full"
 				onClick={onConfirm}
 			>
-				Seal & generate PVs
+				{t.today.sealAndGeneratePvs}
 			</button>
 			<button
 				type="button"
 				className="iz-btn iz-btn-soft mt-2 w-full"
 				onClick={onClose}
 			>
-				Back
+				{t.today.back}
 			</button>
 		</IzSheet>
 	);

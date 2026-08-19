@@ -5,6 +5,7 @@ import {
 	canModule,
 	OUTLET_FEATURE_MODULE,
 } from "@/lib/auth/module-permissions";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /** Matches Module 10 outlet columns: Owner, Finance, Ops Head, Director, Guarantor */
 export type OutletSubRole =
@@ -14,12 +15,22 @@ export type OutletSubRole =
 	| "outlet_director"
 	| "outlet_guarantor";
 
-export const OUTLET_SUB_ROLE_LABELS: Record<OutletSubRole, string> = {
-	outlet_owner: "Outlet Owner",
-	outlet_finance: "Outlet Finance",
-	outlet_ops: "Outlet Ops Head",
-	outlet_director: "Outlet Director",
-	outlet_guarantor: "Outlet Guarantor",
+/**
+ * Resolvers, not strings — and not dictionary keys either. A key is itself a
+ * `string`, so rendering the map value directly type-checks and ships the key
+ * name to screen. See AGENCY_SUB_ROLE_LABELS for the bug that taught us this.
+ *
+ * Record keys stay the API sub-role values used by the matrix below.
+ */
+export const OUTLET_SUB_ROLE_LABELS: Record<
+	OutletSubRole,
+	(t: PortalTranslations) => string
+> = {
+	outlet_owner: (t) => t.roles.outletOwner,
+	outlet_finance: (t) => t.roles.outletFinance,
+	outlet_ops: (t) => t.roles.outletOps,
+	outlet_director: (t) => t.roles.outletDirector,
+	outlet_guarantor: (t) => t.roles.outletGuarantor,
 };
 
 type Permission =
@@ -203,12 +214,21 @@ const ALL_NAV: OutletNavItem[] = [
 		icon: iconForNav("Calendar page"),
 		permission: "viewLiveDashboard",
 	},
-	{
-		to: "/outlet/ratings",
-		label: "Ratings",
-		icon: iconForNav("Ratings"),
-		permission: "viewLiveDashboard",
-	},
+	/*
+	 * HIDDEN — owner's call. The screen is not broken; it is simply not in
+	 * use, so it is commented out rather than deleted. Turning it back on is
+	 * this block plus the path check in `canAccessOutletPath` and the tab in
+	 * `nav-back.ts` — all three, or the link returns without the route.
+	 *
+	 * Rating a PR from Today is UNAFFECTED: that action lives on the shift
+	 * card, not here.
+	 */
+	// {
+	// 	to: "/outlet/ratings",
+	// 	label: "Ratings",
+	// 	icon: iconForNav("Ratings"),
+	// 	permission: "viewLiveDashboard",
+	// },
 	{
 		to: "/outlet/history",
 		label: "History",
@@ -290,7 +310,9 @@ export function canAccessOutletPath(
 	}
 	if (pathname.startsWith("/outlet/history")) return can("viewHistory");
 	if (pathname.startsWith("/outlet/calendar")) return can("viewLiveDashboard");
-	if (pathname.startsWith("/outlet/ratings")) return can("viewLiveDashboard");
+	// Hidden with the nav entry above — falls through to `return false`, so
+	// typing the URL redirects to the default route instead of rendering.
+	// if (pathname.startsWith("/outlet/ratings")) return can("viewLiveDashboard");
 	if (pathname.startsWith("/outlet/billing")) {
 		return can("viewBilling") || can("viewSalesDashboard");
 	}

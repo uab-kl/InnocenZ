@@ -92,6 +92,43 @@ export function shiftWindowInstants(
   };
 }
 
+/** A free-text slot reduced to a comparable label: no case, no stray spacing. */
+function slotLabelKey(slot: string | null | undefined): string {
+  return (slot ?? '').trim().replace(/\s+/g, ' ').toLowerCase();
+}
+
+/**
+ * Do two slots name the SAME time — not merely an overlapping one?
+ *
+ * The narrow half of this family. `slotWindowsOverlap` asks whether two shifts
+ * touch at all; this asks whether one shift has been said twice. Both are refused
+ * for a venue's own shifts (`shiftClashRefusal`) — this one exists to pick the
+ * MESSAGE, since the same time asked for twice wants a bigger headcount while a
+ * partial overlap wants a different clock. It also catches what `shiftsOverlap`
+ * structurally cannot: two label-only slots, which carry no window to intersect.
+ *
+ * Windows compare as WINDOWS, so "10:00 PM - 4:00 AM" and "22:00 - 04:00" are the
+ * same slot. `slot` is free text and the composer's format has changed before, so
+ * string equality alone would wave a duplicate through on a re-typed time.
+ *
+ * Three cases deliberately do NOT match:
+ *   • an absent slot — a shift with no time given cannot be judged a duplicate.
+ *   • a window against a label — "22:00 - 04:00" and "Late night" may well mean
+ *     the same night, but nothing here can know that.
+ *   • two label-only slots whose words differ, even by one.
+ */
+export function slotsAreSameWindow(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const wa = slotMinutes(a);
+  const wb = slotMinutes(b);
+  if (wa && wb) return wa.start === wb.start && wa.end === wb.end;
+  if (wa || wb) return false;
+  const la = slotLabelKey(a);
+  return la !== '' && la === slotLabelKey(b);
+}
+
 /** Label-only slots ("Late night") carry no window — nothing to clash with. */
 export function slotWindowsOverlap(
   a: string | null | undefined,

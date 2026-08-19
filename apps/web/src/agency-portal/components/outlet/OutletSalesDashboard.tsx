@@ -73,6 +73,9 @@ import {
 	XAxis,
 	YAxis,
 } from "recharts";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type ExpandedMetric = "floor" | "pr" | null;
 
@@ -206,11 +209,25 @@ function weekdayLabel(dateIso: string): string {
 	return d.toLocaleDateString("en-GB", { weekday: "short" });
 }
 
-const chartConfig = {
-	earned: { label: "Outlet earned", color: "#b79ce8" },
-	sales: { label: "Floor sales", color: "#7c6bff" },
-	prCost: { label: "PR spend", color: "#f59e0b" },
-};
+/**
+ * Series names for the nightly chart.
+ *
+ * Built inside the component rather than at module scope: `ChartContainer`
+ * types `label` as a string, so the resolver-function trick used elsewhere in
+ * this work does not fit — the config has to be rebuilt when the language
+ * changes instead.
+ */
+function useChartConfig() {
+	const { t } = usePortalLocale();
+	return useMemo(
+		() => ({
+			earned: { label: t.reports.outletEarned, color: "#b79ce8" },
+			sales: { label: t.reports.floorSales, color: "#7c6bff" },
+			prCost: { label: t.reports.prSpend, color: "#f59e0b" },
+		}),
+		[t],
+	);
+}
 
 type DayRow = {
 	dateIso: string;
@@ -230,6 +247,7 @@ function EarningsTooltip({
 	active?: boolean;
 	payload?: { payload: DayRow }[];
 }) {
+	const { t } = usePortalLocale();
 	if (!active || !payload?.[0]?.payload) return null;
 	const row = payload[0].payload;
 	return (
@@ -241,7 +259,7 @@ function EarningsTooltip({
 				{formatRM(row.earned)}
 			</p>
 			<p className="mt-1 text-[10px] text-[var(--iz-muted2)]">
-				Full breakdown below
+				{t.reports.fullBreakdownBelow}
 			</p>
 		</div>
 	);
@@ -301,13 +319,19 @@ function loadReport(
 	return getOutletReportForWeek(outletName, effectiveWeekSundayIso(prefs));
 }
 
-const REPORT_TABS: { id: OutletReportTab; label: string }[] = [
-	{ id: "this_week", label: "This week" },
-	{ id: "last_week", label: "Last week" },
-	{ id: "custom", label: "Custom range" },
+/* Resolvers, not strings — the `id` is what drives the tab state and stays. */
+const REPORT_TABS: {
+	id: OutletReportTab;
+	label: (t: PortalTranslations) => string;
+}[] = [
+	{ id: "this_week", label: (t) => t.reports.thisWeek },
+	{ id: "last_week", label: (t) => t.reports.lastWeek },
+	{ id: "custom", label: (t) => t.reports.customRange },
 ];
 
 export function OutletSalesDashboard() {
+	const { t } = usePortalLocale();
+	const chartConfig = useChartConfig();
 	const { shifts, shiftHistory, outletOwner, outletWorkspace } = useStore();
 	// On a real outlet session, Reports read live floor-sales + PR-cost from the
 	// backend; the demo store (velvet week) is used only in unauthenticated demo
@@ -565,8 +589,7 @@ export function OutletSalesDashboard() {
 					<ReportPeriodBadge prefs={prefs} className="mt-1" />
 				)}
 				<p className="iz-sm iz-muted mt-4 rounded-2xl border border-dashed border-[var(--iz-line)] px-4 py-8 text-center">
-					No PR-attributed earnings for this period — try another week or date
-					range.
+					{t.reports.noPrAttributed}
 				</p>
 			</div>
 		);
@@ -626,14 +649,18 @@ export function OutletSalesDashboard() {
 						<div className="iz-outlet-report-hero__head">
 							<div className="min-w-0">
 								<p className="iz-outlet-report-hero__label">
-									{isCurrentWeek ? "Net sales so far" : "Net sales this period"}
+									{isCurrentWeek
+										? t.reports.netSalesSoFar
+										: t.reports.netSalesThisPeriod}
 								</p>
 								<p className="iz-outlet-report-hero__value">
 									{formatRM(margin)}
 								</p>
 								<p className="iz-outlet-report-hero__formula">
-									{formatRM(totalSales)} floor sales − {formatRM(totalCost)} PR
-									wages &amp; commission
+									{fill(t.reports.formula, {
+										sales: formatRM(totalSales),
+										cost: formatRM(totalCost),
+									})}
 								</p>
 							</div>
 							<div className="iz-outlet-report-hero__badges">
@@ -654,22 +681,23 @@ export function OutletSalesDashboard() {
 											) : (
 												<TrendingDown className="h-3 w-3" />
 											)}
-											{growthUp ? "+" : ""}
-											{wowGrowthPct}% vs prior
+											{fill(t.reports.vsPrior, {
+												pct: (growthUp ? "+" : "") + wowGrowthPct,
+											})}
 										</>
 									) : (
-										"No prior data"
+										t.reports.noPriorData
 									)}
 								</span>
 								<span className="iz-outlet-report-badge iz-outlet-report-badge--margin">
-									{marginPct}% margin
+									{fill(t.reports.marginPct, { pct: marginPct })}
 								</span>
 							</div>
 						</div>
 
 						<div className="iz-outlet-report-metrics">
 							<MetricCard
-								label="Floor sales"
+								label={t.reports.floorSales}
 								value={formatRM(totalSales)}
 								icon={<Trophy className="h-3.5 w-3.5" />}
 								variant="floor"
@@ -677,7 +705,7 @@ export function OutletSalesDashboard() {
 								onClick={() => toggleMetric("floor")}
 							/>
 							<MetricCard
-								label="PR spend"
+								label={t.reports.prSpend}
 								value={formatRM(totalCost)}
 								icon={<Users className="h-3.5 w-3.5" />}
 								variant="pr"
@@ -685,7 +713,7 @@ export function OutletSalesDashboard() {
 								onClick={() => toggleMetric("pr")}
 							/>
 							<MetricCard
-								label="Avg / night"
+								label={t.reports.avgPerNight}
 								value={formatRM(avgEarnedPerNight)}
 								icon={<Clock className="h-3.5 w-3.5" />}
 								variant="avg"
@@ -698,7 +726,7 @@ export function OutletSalesDashboard() {
 								<div className="grid grid-cols-3 gap-2">
 									<div className="iz-outlet-report-expand__tile">
 										<p className="iz-outlet-report-expand__tile-label">
-											Drink sales
+											{t.reports.drinkSales}
 										</p>
 										<p className="iz-outlet-report-expand__tile-value">
 											{formatRM(floorBreakdown.drinkSales)}
@@ -706,7 +734,7 @@ export function OutletSalesDashboard() {
 									</div>
 									<div className="iz-outlet-report-expand__tile">
 										<p className="iz-outlet-report-expand__tile-label">
-											Tips sales
+											{t.reports.tipsSales}
 										</p>
 										<p className="iz-outlet-report-expand__tile-value">
 											{formatRM(floorBreakdown.tipsSales)}
@@ -717,7 +745,7 @@ export function OutletSalesDashboard() {
 									    misstate the split on a money screen. */}
 									<div className="iz-outlet-report-expand__tile">
 										<p className="iz-outlet-report-expand__tile-label">
-											Service sales
+											{t.reports.serviceSales}
 										</p>
 										<p className="iz-outlet-report-expand__tile-value">
 											{formatRM(floorBreakdown.serviceSales)}
@@ -725,20 +753,22 @@ export function OutletSalesDashboard() {
 									</div>
 								</div>
 								<p className="iz-tiny iz-muted2 mt-2">
-									Drink sales = logged units × RM {perDrinkRm} · Tips = floor
-									tips logged per shift · Services = entitlements on approved
-									receipts
+									{fill(t.reports.floorFormulaHint, { perDrink: perDrinkRm })}
 								</p>
 								{floorTableDays.length > 0 ? (
 									<div className="mt-3 overflow-x-auto">
 										<div className="min-w-[28rem]">
 											<div className="grid grid-cols-[3rem_1fr_5.5rem_5.5rem_5.5rem_6rem] gap-2 px-1 pb-1 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)]">
-												<span>Day</span>
-												<span>Date</span>
-												<span className="text-right">Drinks</span>
-												<span className="text-right">Tips</span>
-												<span className="text-right">Services</span>
-												<span className="text-right">Total</span>
+												<span>{t.reports.colDay}</span>
+												<span>{t.reports.colDate}</span>
+												<span className="text-right">
+													{t.reports.colDrinks}
+												</span>
+												<span className="text-right">{t.reports.colTips}</span>
+												<span className="text-right">
+													{t.reports.colServices}
+												</span>
+												<span className="text-right">{t.reports.colTotal}</span>
 											</div>
 											<div className="space-y-1">
 												{floorTableDays.map((row) => (
@@ -771,7 +801,7 @@ export function OutletSalesDashboard() {
 									</div>
 								) : (
 									<p className="iz-tiny iz-muted mt-3 text-center">
-										No drink or tips sales logged for this period.
+										{t.reports.noDrinkOrTips}
 									</p>
 								)}
 							</div>
@@ -781,14 +811,14 @@ export function OutletSalesDashboard() {
 							<div className="iz-outlet-report-expand">
 								<div className="flex flex-wrap items-center justify-between gap-2">
 									<p className="iz-outlet-report-expand__tile-label">
-										PR spend by person
+										{t.reports.prSpendByPerson}
 									</p>
 									<button
 										type="button"
 										className="iz-btn iz-btn-sm iz-btn-ghost !py-1 !text-[10px]"
 										onClick={scrollToTopPrs}
 									>
-										View in Top performing PRs
+										{t.reports.viewInTopPrs}
 									</button>
 								</div>
 								{prSpendRows.length > 0 ? (
@@ -814,14 +844,16 @@ export function OutletSalesDashboard() {
 									</div>
 								) : (
 									<p className="iz-tiny iz-muted mt-3 text-center">
-										No PR spend recorded for this period.
+										{t.reports.noPrSpend}
 									</p>
 								)}
 							</div>
 						)}
 
 						<div className="iz-outlet-report-pnl">
-							<p className="iz-outlet-report-pnl__label">P&amp;L split</p>
+							<p className="iz-outlet-report-pnl__label">
+								{t.reports.pnlSplit}
+							</p>
 							<div className="iz-outlet-report-pnl__bar">
 								<div
 									className="iz-outlet-report-pnl__keep"
@@ -839,15 +871,16 @@ export function OutletSalesDashboard() {
 							<div className="iz-outlet-report-pnl__legend">
 								<span>
 									<i className="iz-outlet-report-pnl__dot iz-outlet-report-pnl__dot--keep" />
-									You keep {marginPct}%
+									{fill(t.reports.youKeep, { pct: marginPct })}
 								</span>
 								<span>
 									<i className="iz-outlet-report-pnl__dot iz-outlet-report-pnl__dot--spend" />
-									PR spend{" "}
-									{totalSales > 0
-										? Math.round((totalCost / totalSales) * 100)
-										: 0}
-									%
+									{fill(t.reports.prSpendPct, {
+										pct:
+											totalSales > 0
+												? Math.round((totalCost / totalSales) * 100)
+												: 0,
+									})}
 								</span>
 							</div>
 						</div>
@@ -855,13 +888,23 @@ export function OutletSalesDashboard() {
 						<div className="iz-outlet-report-chart">
 							<div className="iz-outlet-report-chart__head">
 								<p className="iz-outlet-report-chart__title">
-									Net earned by night
+									{t.reports.netEarnedByNight}
 								</p>
 								<p className="iz-outlet-report-chart__hint">
-									Bar height = net you keep ·{" "}
+									{t.reports.barHeightHint}
 									{isCurrentWeek
-										? `${sealedDayCount} night${sealedDayCount === 1 ? "" : "s"} sealed this week`
-										: `${dayRows.length} day${dayRows.length === 1 ? "" : "s"} in period`}
+										? fill(
+												sealedDayCount === 1
+													? t.reports.nightsSealedOne
+													: t.reports.nightsSealedMany,
+												{ n: sealedDayCount },
+											)
+										: fill(
+												dayRows.length === 1
+													? t.reports.daysInPeriodOne
+													: t.reports.daysInPeriodMany,
+												{ n: dayRows.length },
+											)}
 								</p>
 							</div>
 							<ChartContainer
@@ -914,18 +957,24 @@ export function OutletSalesDashboard() {
 
 					<div className="iz-outlet-report-breakdown">
 						<OutletSection
-							title="Daily breakdown"
-							hint={`${dayRows.length} day${dayRows.length === 1 ? "" : "s"} · ${weekLabel}`}
+							title={t.reports.dailyBreakdown}
+							iconKey="Daily breakdown"
+							hint={fill(
+								dayRows.length === 1
+									? t.reports.daysSummaryOne
+									: t.reports.daysSummaryMany,
+								{ n: dayRows.length, week: weekLabel },
+							)}
 							collapsible
 							defaultOpen={false}
 							className="!mt-0"
 						>
 							<div className="hidden gap-2 px-3 text-[9px] font-bold uppercase tracking-wide text-[var(--iz-muted2)] sm:grid sm:grid-cols-[3rem_1fr_6.5rem_6.5rem_6.5rem]">
-								<span>Day</span>
+								<span>{t.reports.colDay}</span>
 								<span />
-								<span className="text-right">Sales</span>
-								<span className="text-right">PR spend</span>
-								<span className="text-right">Net</span>
+								<span className="text-right">{t.reports.colSales}</span>
+								<span className="text-right">{t.reports.colPrSpend}</span>
+								<span className="text-right">{t.reports.colNet}</span>
 							</div>
 							<div className="space-y-1.5">
 								{(isCurrentWeek
@@ -967,8 +1016,11 @@ export function OutletSalesDashboard() {
 											{formatRM(row.earned)}
 										</span>
 										<span className="col-span-full text-[10px] text-[var(--iz-muted2)] sm:hidden">
-											{formatRM(row.sales)} sales · −{formatRM(row.prCost)} PR ·{" "}
-											{row.marginPct}% margin
+											{fill(t.reports.rowMobileSummary, {
+												sales: formatRM(row.sales),
+												cost: formatRM(row.prCost),
+												pct: row.marginPct,
+											})}
 										</span>
 									</div>
 								))}
@@ -984,16 +1036,16 @@ export function OutletSalesDashboard() {
 				>
 					<div className="iz-outlet-report-sidebar__head">
 						<h3 className="iz-outlet-report-sidebar__title">
-							Top performing PRs
+							{t.reports.topPerformingPrs}
 						</h3>
 						<span className="iz-outlet-report-sidebar__badge">
-							{topPrs.length} ranked
+							{fill(t.reports.rankedCount, { n: topPrs.length })}
 						</span>
 					</div>
 					<div className="iz-outlet-report-sidebar__list">
 						{topPrs.length === 0 ? (
 							<p className="iz-tiny iz-muted py-6 text-center">
-								No PR shifts in this period.
+								{t.reports.noPrShifts}
 							</p>
 						) : (
 							topPrs.map((p, i) => (
@@ -1010,7 +1062,10 @@ export function OutletSalesDashboard() {
 					</div>
 					{totalPrEarned > 0 && (
 						<p className="iz-outlet-report-sidebar__foot">
-							{weekLabel} · {formatRM(totalPrEarned)} total payouts
+							{fill(t.reports.totalPayouts, {
+								week: weekLabel,
+								total: formatRM(totalPrEarned),
+							})}
 						</p>
 					)}
 				</aside>
@@ -1026,6 +1081,7 @@ function ReportTabs({
 	prefs: OutletReportPrefs;
 	onChange: (patch: Partial<OutletReportPrefs>) => void;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-outlet-report-tabs">
 			{REPORT_TABS.map((tab) => (
@@ -1046,7 +1102,7 @@ function ReportTabs({
 						prefs.tab === tab.id && "iz-outlet-report-tabs__btn--active",
 					)}
 				>
-					{tab.label}
+					{tab.label(t)}
 				</button>
 			))}
 		</div>
@@ -1088,6 +1144,7 @@ function CustomRangePanel({
 	onChange: (patch: Partial<OutletReportPrefs>) => void;
 	reportableDateIsos: string[];
 }) {
+	const { t } = usePortalLocale();
 	const reportableSet = useMemo(
 		() => new Set(reportableDateIsos),
 		[reportableDateIsos],
@@ -1126,7 +1183,7 @@ function CustomRangePanel({
 					selectedIsos={selectedDateIsos}
 					onChange={applySelectedDates}
 					disabled={isDateDisabled}
-					formatLabel={() => formatJobDates(selectedDateIsos)}
+					formatLabel={() => formatJobDates(selectedDateIsos, t)}
 					compact
 					quickSpans={{
 						spans: [
@@ -1148,25 +1205,17 @@ function CustomRangePanel({
 				/>
 				{selectedDateIsos.length > 1 && (
 					<span className="iz-tiny iz-muted2 whitespace-nowrap px-0.5">
-						{selectedDateIsos.length} days
+						{fill(t.reports.daysCount, { n: selectedDateIsos.length })}
 					</span>
 				)}
 			</div>
-			<p className="iz-tiny iz-muted2">
-				Only nights with floor sales &amp; PR shifts · tap to add or remove ·
-				double-tap one day to select only that date
-			</p>
+			<p className="iz-tiny iz-muted2">{t.reports.onlyNightsHint}</p>
 			<p className="iz-tiny iz-muted">
-				{selectedDateIsos.length > 0 ? (
-					<>
-						Showing {formatJobDates(selectedDateIsos)} · synced chart, breakdown
-						&amp; top PRs
-					</>
-				) : (
-					<>
-						No sealed nights with sales yet — pick dates once shifts are logged.
-					</>
-				)}
+				{selectedDateIsos.length > 0
+					? fill(t.reports.showingDates, {
+							dates: formatJobDates(selectedDateIsos, t),
+						})
+					: t.reports.noSealedNights}
 			</p>
 		</IzCard>
 	);

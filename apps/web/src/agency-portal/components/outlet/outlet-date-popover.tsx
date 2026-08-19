@@ -21,6 +21,8 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { DateRange } from "react-day-picker";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function formatOutletDateLabel(value: Date | string): string {
 	const d = typeof value === "string" ? dateFromIsoKey(value) : value;
@@ -67,12 +69,15 @@ function RangeSelectionLegend({
 	end: Date | null;
 	pickingEnd: boolean;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-outlet-report-range-legend" aria-live="polite">
 			<div className="iz-outlet-report-range-legend-item is-start">
 				<span className="iz-outlet-report-range-legend-badge">S</span>
 				<div className="min-w-0">
-					<span className="iz-outlet-report-range-legend-label">Start</span>
+					<span className="iz-outlet-report-range-legend-label">
+						{t.datePicker.start}
+					</span>
 					<span className="iz-outlet-report-range-legend-value">
 						{formatOutletDateLabel(start)}
 					</span>
@@ -89,9 +94,11 @@ function RangeSelectionLegend({
 			>
 				<span className="iz-outlet-report-range-legend-badge">E</span>
 				<div className="min-w-0">
-					<span className="iz-outlet-report-range-legend-label">End</span>
+					<span className="iz-outlet-report-range-legend-label">
+						{t.datePicker.end}
+					</span>
 					<span className="iz-outlet-report-range-legend-value">
-						{end ? formatOutletDateLabel(end) : "Tap a day"}
+						{end ? formatOutletDateLabel(end) : t.datePicker.tapADay}
 					</span>
 				</div>
 			</div>
@@ -157,7 +164,7 @@ export function OutletDateRangePopover({
 	endMonth,
 	formatRangeLabel,
 	className,
-	fieldLabel = "Date range",
+	fieldLabel,
 	compact,
 }: {
 	from: Date;
@@ -171,6 +178,10 @@ export function OutletDateRangePopover({
 	fieldLabel?: string;
 	compact?: boolean;
 }) {
+	const { t } = usePortalLocale();
+	// Resolved here, not in the parameter list: a default parameter is
+	// evaluated before hooks run and cannot read the dictionary.
+	const rangeFieldLabel = fieldLabel ?? t.datePicker.dateRange;
 	const [open, setOpen] = useState(false);
 	const [draftStart, setDraftStart] = useState<Date | null>(null);
 	const [awaitingEnd, setAwaitingEnd] = useState(false);
@@ -241,7 +252,7 @@ export function OutletDateRangePopover({
 									className,
 								),
 					)}
-					aria-label="Choose date range"
+					aria-label={t.datePicker.chooseDateRange}
 				>
 					{compact ? (
 						<>
@@ -254,7 +265,7 @@ export function OutletDateRangePopover({
 					) : (
 						<>
 							<span className="iz-outlet-report-range-target-label">
-								{fieldLabel}
+								{rangeFieldLabel}
 							</span>
 							<span className="iz-outlet-report-range-target-value">
 								{formatRangeLabel(from, to)}
@@ -276,9 +287,7 @@ export function OutletDateRangePopover({
 				/>
 				<div className="mb-2 mt-2 flex flex-wrap items-center gap-2 px-0.5">
 					<p className="iz-tiny iz-muted2">
-						{awaitingEnd
-							? "Step 2 · tap end date (same day = single shift)"
-							: "Step 1 · tap your start date"}
+						{awaitingEnd ? t.datePicker.step2 : t.datePicker.step1}
 					</p>
 					{awaitingEnd && draftStart && (
 						<button
@@ -286,7 +295,7 @@ export function OutletDateRangePopover({
 							className="iz-chip ml-auto px-2 py-0.5 text-[10px] font-semibold text-[var(--iz-gold-l)]"
 							onClick={() => commitRange(draftStart, draftStart)}
 						>
-							Single day
+							{t.datePicker.singleDay}
 						</button>
 					)}
 				</div>
@@ -371,6 +380,7 @@ function MultiDateSelectionLegend({
 	selectedIsos: string[];
 	summary: string;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div
 			className="iz-outlet-report-range-legend !grid-cols-1"
@@ -379,11 +389,18 @@ function MultiDateSelectionLegend({
 			<div className="iz-outlet-report-range-legend-item is-start !col-span-1">
 				<span className="iz-outlet-report-range-legend-badge">✓</span>
 				<div className="min-w-0">
-					<span className="iz-outlet-report-range-legend-label">Selected</span>
+					<span className="iz-outlet-report-range-legend-label">
+						{t.datePicker.selected}
+					</span>
 					<span className="iz-outlet-report-range-legend-value">
 						{selectedIsos.length === 0
-							? "No dates yet"
-							: `${selectedIsos.length} date${selectedIsos.length !== 1 ? "s" : ""}`}
+							? t.datePicker.noDatesYet
+							: fill(
+									selectedIsos.length === 1
+										? t.datePicker.datesCountOne
+										: t.datePicker.datesCountMany,
+									{ n: selectedIsos.length },
+								)}
 					</span>
 					{summary && (
 						<span className="iz-tiny iz-muted2 mt-0.5 block leading-snug">
@@ -420,13 +437,14 @@ function MultiCalendarHeader({
 	quickSpans?: MultiDateQuickSpanHandlers;
 	spanAnchor: Date;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-multi-cal-header mb-1">
 			<div className="flex items-center gap-1">
 				<button
 					type="button"
 					className="iz-multi-cal-nav-btn"
-					aria-label="Previous month"
+					aria-label={t.datePicker.previousMonth}
 					onClick={() => onMonthChange(subMonths(month, 1))}
 				>
 					<ChevronLeft className="h-4 w-4" />
@@ -434,7 +452,7 @@ function MultiCalendarHeader({
 				<button
 					type="button"
 					className="iz-multi-cal-nav-btn"
-					aria-label="Next month"
+					aria-label={t.datePicker.nextMonth}
 					onClick={() => onMonthChange(addMonths(month, 1))}
 				>
 					<ChevronRight className="h-4 w-4" />
@@ -586,6 +604,7 @@ export function OutletMultiDatePopover({
 	compact?: boolean;
 	quickSpans?: MultiDateQuickSpanHandlers;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const sortedIsos = useMemo(() => [...selectedIsos].sort(), [selectedIsos]);
 	const selectedDates = useMemo(
@@ -644,7 +663,7 @@ export function OutletMultiDatePopover({
 									open && "is-active",
 								),
 					)}
-					aria-label="Choose dates"
+					aria-label={t.datePicker.chooseDates}
 				>
 					{compact ? (
 						<>
@@ -654,7 +673,9 @@ export function OutletMultiDatePopover({
 						</>
 					) : (
 						<>
-							<span className="iz-outlet-report-range-target-label">Dates</span>
+							<span className="iz-outlet-report-range-target-label">
+								{t.datePicker.dates}
+							</span>
 							<span className="iz-outlet-report-range-target-value">
 								{label}
 							</span>
@@ -669,7 +690,7 @@ export function OutletMultiDatePopover({
 			>
 				<MultiDateSelectionLegend selectedIsos={sortedIsos} summary={summary} />
 				<p className="iz-tiny iz-muted2 mb-2 mt-2 px-0.5 leading-snug">
-					Tap to add or remove · double-tap one day to select only that date
+					{t.datePicker.tapToAddRemove}
 				</p>
 				<OutletCompactMultiCalendar
 					selected={selectedDates}
@@ -709,6 +730,7 @@ export function OutletDatePopoverField({
 	align?: "start" | "end" | "center";
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const shown = displayLabel ?? formatOutletDateLabel(value);
 
@@ -722,7 +744,9 @@ export function OutletDatePopoverField({
 						open && "is-active",
 						className,
 					)}
-					aria-label={`Choose ${label.toLowerCase()} date`}
+					aria-label={fill(t.datePicker.chooseNamedDate, {
+						label: label.toLowerCase(),
+					})}
 				>
 					<span className="iz-outlet-report-range-target-label">{label}</span>
 					<span className="iz-outlet-report-range-target-value">{shown}</span>

@@ -59,6 +59,7 @@ import {
 	Wine,
 	Zap,
 } from "lucide-react";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /** Normalize a label for lookup (lowercase, collapsed spaces). */
 export function normalizeLabelKey(text: string): string {
@@ -287,21 +288,26 @@ export type ShiftMetricKind = "received" | "payout";
 
 export const SHIFT_METRIC_DEFS: {
 	id: ShiftMetricKind;
-	label: string;
+	/** Resolvers, not strings — this list is built before any hook can run. */
+	label: (t: PortalTranslations) => string;
+	/** The "Total …" wording, spelled out rather than composed from `label`. */
+	totalLabel: (t: PortalTranslations) => string;
 	Icon: LucideIcon;
-	hint: string;
+	hint: (t: PortalTranslations) => string;
 }[] = [
 	{
 		id: "received",
-		label: "Received",
+		label: (t) => t.history.metricReceived,
+		totalLabel: (t) => t.history.metricTotalReceived,
 		Icon: iconForNav("Received"),
-		hint: "Full drink sales + tips the PR generated for the outlet (before commission %).",
+		hint: (t) => t.history.metricReceivedHint,
 	},
 	{
 		id: "payout",
-		label: "Payout",
+		label: (t) => t.history.metricPayout,
+		totalLabel: (t) => t.history.metricTotalPayout,
 		Icon: iconForNav("Earned"),
-		hint: "What the PR takes home — wages, OT, and commissions from Workspace rates.",
+		hint: (t) => t.history.metricPayoutHint,
 	},
 ];
 

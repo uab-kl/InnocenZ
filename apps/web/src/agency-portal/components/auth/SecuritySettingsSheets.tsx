@@ -12,6 +12,9 @@ import {
 	X,
 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { changeMyPassword } from "@/lib/auth/password-api";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 type SecurityView = "menu" | "password" | "email" | "phone";
 type OtpPending = { field: "email" | "phone"; value: string } | null;
@@ -25,6 +28,7 @@ function SheetHead({
 	onBack?: () => void;
 	onClose: () => void;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-sheet-head">
 			{onBack ? (
@@ -32,7 +36,7 @@ function SheetHead({
 					type="button"
 					className="iz-sheet-back"
 					onClick={onBack}
-					aria-label="Back"
+					aria-label={t.profile.back}
 				>
 					<ChevronLeft className="h-4 w-4" />
 				</button>
@@ -44,7 +48,7 @@ function SheetHead({
 				type="button"
 				className="iz-sheet-close"
 				onClick={onClose}
-				aria-label="Close"
+				aria-label={t.profile.close}
 			>
 				<X className="h-4 w-4" />
 			</button>
@@ -96,6 +100,7 @@ export function SecuritySettingsSheets({
 	onUpdateEmail: (email: string) => void;
 	onUpdateMobile: (mobile: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 
 	const [view, setView] = useState<SecurityView>("menu");
@@ -106,6 +111,7 @@ export function SecuritySettingsSheets({
 	const [showCurrent, setShowCurrent] = useState(false);
 	const [showNew, setShowNew] = useState(false);
 	const [showConfirm, setShowConfirm] = useState(false);
+	const [savingPassword, setSavingPassword] = useState(false);
 
 	const [newEmail, setNewEmail] = useState("");
 	const [newPhone, setNewPhone] = useState("");
@@ -137,53 +143,71 @@ export function SecuritySettingsSheets({
 		setOtp("");
 	};
 
-	const changePassword = (e: React.FormEvent) => {
+	/**
+	 * Shared by BOTH portals (outlet Settings and agency Profile mount this
+	 * same component), so this one call site is the whole web change-password
+	 * feature. It used to validate, toast "Password updated" and stop — the
+	 * server never heard about it.
+	 */
+	const changePassword = async (e: React.FormEvent) => {
 		e.preventDefault();
-		if (!canEdit) return;
+		if (savingPassword) return;
 		if (!currentPassword.trim()) {
-			toast("Enter your current password", "warn");
+			toast(t.profile.enterCurrentPassword, "warn");
 			return;
 		}
 		if (!newPassword.trim()) {
-			toast("Enter a new password", "warn");
+			toast(t.profile.enterANewPassword, "warn");
 			return;
 		}
 		if (newPassword.length < 6) {
-			toast("New password must be at least 6 characters", "warn");
+			toast(t.profile.PasswordMinLength, "warn");
 			return;
 		}
 		if (newPassword !== confirmPassword) {
-			toast("New passwords do not match", "warn");
+			toast(t.profile.passwordsDoNotMatch, "warn");
 			return;
 		}
 		if (newPassword === currentPassword) {
-			toast(
-				"New password must be different from your current password",
-				"warn",
-			);
+			toast(t.profile.passwordMustDiffer, "warn");
 			return;
 		}
-		toast("Password updated successfully", "success");
-		setCurrentPassword("");
-		setNewPassword("");
-		setConfirmPassword("");
-		backToMenu();
+		setSavingPassword(true);
+		try {
+			await changeMyPassword({ currentPassword, newPassword });
+			toast(t.profile.passwordUpdated, "success");
+			setCurrentPassword("");
+			setNewPassword("");
+			setConfirmPassword("");
+			backToMenu();
+		} catch (error) {
+			// Server messages here are already user-facing ("Current password is
+			// incorrect"), so show them rather than a generic failure.
+			toast(
+				error instanceof Error && error.message
+					? error.message
+					: t.profile.passwordUpdateFailed,
+				"warn",
+			);
+		} finally {
+			setSavingPassword(false);
+		}
 	};
 
 	const requestEmailOtp = () => {
 		if (!canEdit) return;
 		const next = newEmail.trim();
 		if (!next || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(next)) {
-			toast("Enter a valid email address", "warn");
+			toast(t.profile.enterValidEmail, "warn");
 			return;
 		}
 		if (next === email.trim()) {
-			toast("New email must be different from your current email", "warn");
+			toast(t.profile.emailMustDiffer, "warn");
 			return;
 		}
 		setOtpPending({ field: "email", value: next });
 		setOtp("");
-		toast(`OTP sent to ${next}`, "info");
+		toast(fill(t.profile.otpSentTo, { target: next }), "info");
 		setOtpOpen(true);
 	};
 
@@ -191,23 +215,23 @@ export function SecuritySettingsSheets({
 		if (!canEdit) return;
 		const next = newPhone.trim();
 		if (!next) {
-			toast("Enter a mobile number", "warn");
+			toast(t.profile.enterMobileNumber, "warn");
 			return;
 		}
 		if (next === mobile.trim()) {
-			toast("New mobile must be different from your current number", "warn");
+			toast(t.profile.mobileMustDiffer, "warn");
 			return;
 		}
 		setOtpPending({ field: "phone", value: next });
 		setOtp("");
-		toast(`OTP sent to ${next}`, "info");
+		toast(fill(t.profile.otpSentTo, { target: next }), "info");
 		setOtpOpen(true);
 	};
 
 	const verifyContactOtp = () => {
 		if (!otpPending) return;
 		if (!verifyDemoOtp(otp)) {
-			toast("Invalid OTP — try 123456 for demo", "warn");
+			toast(t.profile.invalidOtp, "warn");
 			return;
 		}
 		if (otpPending.field === "email") {
@@ -225,11 +249,13 @@ export function SecuritySettingsSheets({
 
 	const resendOtp = () => {
 		if (!otpPending) return;
-		toast(`OTP resent to ${otpPending.value}`, "info");
+		toast(fill(t.profile.otpResentTo, { target: otpPending.value }), "info");
 	};
 
 	const otpTitle =
-		otpPending?.field === "email" ? "Verify new email" : "Verify new mobile";
+		otpPending?.field === "email"
+			? t.profile.verifyNewEmail
+			: t.profile.verifyNewMobile;
 
 	return (
 		<>
@@ -238,23 +264,23 @@ export function SecuritySettingsSheets({
 				onClose={closeAll}
 				variant={sheetVariant}
 			>
-				<SheetHead title="Security settings" onClose={closeAll} />
-				<p className="iz-tiny iz-muted mb-3">Choose what you want to update.</p>
+				<SheetHead title={t.profile.securitySettingsTitle} onClose={closeAll} />
+				<p className="iz-tiny iz-muted mb-3">{t.profile.chooseWhatToUpdate}</p>
 				<div className="iz-security-menu">
 					<SecurityMenuRow
 						icon={KeyRound}
-						label="Change password"
+						label={t.profile.changePassword}
 						onClick={() => setView("password")}
 					/>
 					<SecurityMenuRow
 						icon={Phone}
-						label="Change phone"
+						label={t.profile.changePhone}
 						meta={mobile || undefined}
 						onClick={() => setView("phone")}
 					/>
 					<SecurityMenuRow
 						icon={Mail}
-						label="Change email"
+						label={t.profile.changeEmail}
 						meta={email || undefined}
 						onClick={() => setView("email")}
 					/>
@@ -267,51 +293,57 @@ export function SecuritySettingsSheets({
 				variant={sheetVariant}
 			>
 				<SheetHead
-					title="Change password"
+					title={t.profile.changePassword}
 					onBack={backToMenu}
 					onClose={closeAll}
 				/>
-				{canEdit ? (
-					<form onSubmit={changePassword} className="iz-security-form">
-						<PasswordField
-							label="Current password"
-							placeholder="Enter your current password"
-							value={currentPassword}
-							onChange={setCurrentPassword}
-							show={showCurrent}
-							onToggleShow={() => setShowCurrent((v) => !v)}
-							autoComplete="current-password"
-						/>
-						<PasswordField
-							label="New password"
-							placeholder="Enter your new password"
-							value={newPassword}
-							onChange={setNewPassword}
-							show={showNew}
-							onToggleShow={() => setShowNew((v) => !v)}
-							autoComplete="new-password"
-						/>
-						<PasswordField
-							label="Confirm new password"
-							placeholder="Confirm your new password"
-							value={confirmPassword}
-							onChange={setConfirmPassword}
-							show={showConfirm}
-							onToggleShow={() => setShowConfirm((v) => !v)}
-							autoComplete="new-password"
-						/>
-						<button
-							type="submit"
-							className="iz-btn iz-btn-primary iz-security-form__submit"
-						>
-							Save password
-						</button>
-					</form>
-				) : (
-					<p className="iz-tiny iz-muted">
-						You do not have permission to change the password.
-					</p>
-				)}
+				{/*
+				 * Deliberately NOT gated on `canEdit`. That prop is the org's
+				 * `editSettings` permission — it governs the venue's own record
+				 * (name, address, owner contact), which is what the email and
+				 * phone lanes below write. Your OWN password is not the
+				 * organisation's property: a Finance or Ops member has no say
+				 * over outlet settings and still must be able to rotate their
+				 * own credentials. The server agrees — `POST /auth/password/change`
+				 * carries no role guard and takes the user id from the verified
+				 * token, so it was only ever the UI refusing.
+				 */}
+				<form onSubmit={changePassword} className="iz-security-form">
+					<PasswordField
+						label={t.profile.currentPassword}
+						placeholder={t.profile.enterCurrentPassword}
+						value={currentPassword}
+						onChange={setCurrentPassword}
+						show={showCurrent}
+						onToggleShow={() => setShowCurrent((v) => !v)}
+						autoComplete="current-password"
+					/>
+					<PasswordField
+						label={t.profile.newPassword}
+						placeholder={t.profile.enterNewPassword}
+						value={newPassword}
+						onChange={setNewPassword}
+						show={showNew}
+						onToggleShow={() => setShowNew((v) => !v)}
+						autoComplete="new-password"
+					/>
+					<PasswordField
+						label={t.profile.confirmNewPassword}
+						placeholder={t.profile.confirmYourNewPassword}
+						value={confirmPassword}
+						onChange={setConfirmPassword}
+						show={showConfirm}
+						onToggleShow={() => setShowConfirm((v) => !v)}
+						autoComplete="new-password"
+					/>
+					<button
+						type="submit"
+						className="iz-btn iz-btn-primary iz-security-form__submit"
+						disabled={savingPassword}
+					>
+						{savingPassword ? t.profile.savingPassword : t.profile.savePassword}
+					</button>
+				</form>
 			</IzSheet>
 
 			<IzSheet
@@ -320,15 +352,17 @@ export function SecuritySettingsSheets({
 				variant={sheetVariant}
 			>
 				<SheetHead
-					title="Change email"
+					title={t.profile.changeEmail}
 					onBack={backToMenu}
 					onClose={closeAll}
 				/>
-				<p className="iz-tiny iz-muted mb-2">Current email</p>
+				<p className="iz-tiny iz-muted mb-2">{t.profile.currentEmail}</p>
 				<p className="iz-account-security__current mb-4">{email || "—"}</p>
 				{canEdit ? (
 					<>
-						<label className="iz-tiny iz-muted">New email address</label>
+						<label className="iz-tiny iz-muted">
+							{t.profile.newEmailAddress}
+						</label>
 						<input
 							type="email"
 							className="iz-account-security__input mt-1"
@@ -342,11 +376,11 @@ export function SecuritySettingsSheets({
 							className="iz-btn iz-btn-primary mt-4 w-full"
 							onClick={requestEmailOtp}
 						>
-							Send OTP &amp; update
+							{t.profile.sendOtpAndUpdate}
 						</button>
 					</>
 				) : (
-					<p className="iz-tiny iz-muted">Read-only for your role.</p>
+					<p className="iz-tiny iz-muted">{t.profile.readOnlyForRole}</p>
 				)}
 			</IzSheet>
 
@@ -356,15 +390,17 @@ export function SecuritySettingsSheets({
 				variant={sheetVariant}
 			>
 				<SheetHead
-					title="Change phone"
+					title={t.profile.changePhone}
 					onBack={backToMenu}
 					onClose={closeAll}
 				/>
-				<p className="iz-tiny iz-muted mb-2">Current mobile</p>
+				<p className="iz-tiny iz-muted mb-2">{t.profile.currentMobile}</p>
 				<p className="iz-account-security__current mb-4">{mobile || "—"}</p>
 				{canEdit ? (
 					<>
-						<label className="iz-tiny iz-muted">New mobile number</label>
+						<label className="iz-tiny iz-muted">
+							{t.profile.newMobileNumber}
+						</label>
 						<input
 							type="tel"
 							className="iz-account-security__input mt-1"
@@ -378,11 +414,11 @@ export function SecuritySettingsSheets({
 							className="iz-btn iz-btn-primary mt-4 w-full"
 							onClick={requestPhoneOtp}
 						>
-							Send OTP &amp; update
+							{t.profile.sendOtpAndUpdate}
 						</button>
 					</>
 				) : (
-					<p className="iz-tiny iz-muted">Read-only for your role.</p>
+					<p className="iz-tiny iz-muted">{t.profile.readOnlyForRole}</p>
 				)}
 			</IzSheet>
 
@@ -398,7 +434,7 @@ export function SecuritySettingsSheets({
 				description={
 					otpPending ? (
 						<>
-							Enter the 6-digit code sent to{" "}
+							{t.profile.enterSixDigitCode}{" "}
 							<b className="text-[var(--iz-txt)]">{otpPending.value}</b>
 						</>
 					) : (
@@ -409,7 +445,7 @@ export function SecuritySettingsSheets({
 				onOtpChange={setOtp}
 				onVerify={verifyContactOtp}
 				onResend={resendOtp}
-				verifyLabel="Verify & save"
+				verifyLabel={t.profile.verifyAndSave}
 			/>
 		</>
 	);

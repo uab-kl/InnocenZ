@@ -9,9 +9,11 @@ import {
   PrUnavailableError,
   NON_STAFFING_STATUSES,
 } from './shift-assignment.repository';
+import { ASSIGNABLE_SHIFT_STATUSES, type ShiftStatus } from '@/features/shift/shift.model';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -42,7 +44,8 @@ import {
   resolveTierWageOutcome,
   resolveTierWageOutcomesForShifts,
 } from './resolve-tier-wages';
-import { shiftsOverlap } from '@/util/slot-window';
+import { shiftDayKey, shiftsOverlap } from '@/util/slot-window';
+import { travelWarningFor } from './travel-gap';
 import {
   CheckInMineSchema,
   CreateShiftAssignmentSchema,
@@ -83,6 +86,24 @@ function isUniqueViolation(error: unknown): boolean {
   return e?.code === PG_UNIQUE_VIOLATION || e?.cause?.code === PG_UNIQUE_VIOLATION;
 }
 
+/**
+ * Why this shift cannot take anybody, or null when it can — the ONE place both
+ * seating lanes ask, so `create` and the re-staffing `update` cannot drift into
+ * two different ideas of which statuses are open for business.
+ *
+ * Says which state it is in and what would change it, because "cannot assign" on
+ * its own leaves the agency with nowhere to go: a draft is the OUTLET's to
+ * publish, and a sealed shift is nobody's to reopen.
+ */
+function shiftNotAssignableReason(status: ShiftStatus): string | null {
+  if (ASSIGNABLE_SHIFT_STATUSES.includes(status as (typeof ASSIGNABLE_SHIFT_STATUSES)[number])) {
+    return null;
+  }
+  return status === 'draft'
+    ? 'This shift is still a draft — the outlet has to publish it before anyone can be put on it.'
+    : 'This shift is sealed: its payroll is closed, so no one can be added to it now.';
+}
+
 /** Mine ownership: prefer assignment.user_id, fall back to legacy pr.id. */
 function ownsMineAssignment(
   existing: { prId: string; userId?: string | null },
@@ -116,6 +137,11 @@ export class ShiftAssignmentControllerClass {
     // (oldest) membership, which is a different agency's answer whenever the PR
     // is on more than one roster — so `create` reads the row directly.
     private agencyPrRepository: AgencyPrRepository,
+    // Assigning is a NEW commitment at a venue, so it needs the partnership to
+    // still be live — a question only `agency_outlet` answers. `shift_agency`
+    // says who was invited when the shift was posted and is never revoked, by
+    // design, so it cannot be asked this.
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
 
   /**
@@ -1362,15 +1388,43 @@ export class ShiftAssignmentControllerClass {
         return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
       }
 
-      const pr = await this.prRepository.getById(prId);
+      // Priced FOR the asking agency, and gated on that agency's own roster.
+      //
+      // ⚠️ This carried the same `pr.agencyId !== scope.agencyId` test that
+      // `create` had, and it is wrong for the same reason: `pr.agencyId` is one
+      // value on a person who holds an `agency_pr` row PER AGENCY, so it names
+      // whichever agency signed them first. The preview therefore 404'd for
+      // exactly the multi-roster PRs that assigning now accepts — the roster
+      // rendered that 404 as "rate unavailable" on a PR it was about to book.
+      //
+      // `agency_pr` is the authority, as it is in `create`: a person is on this
+      // agency's roster or they are not, and the tier that prices the shift is
+      // the one THIS agency grades them at.
+      const pr = await this.prRepository.getById(prId, scope.agencyId ?? undefined);
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      if (!scope.isAdmin && pr.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!scope.isAdmin) {
+        const onOurRoster = (await this.agencyPrRepository.listByUser(pr.userId)).some(
+          (row) => row.agencyId === scope.agencyId,
+        );
+        if (!onOurRoster) {
+          return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        }
       }
 
+      // ⚠️ NOT `s.agencyId === scope.agencyId`. That column is the shift's ANCHOR —
+      // the first agency the outlet addressed — and since 0124 a shift can be posted
+      // to several. Scoping by it meant every agency EXCEPT the anchor got no wage
+      // back for a shared shift, and the roster rendered that silence as
+      // "rate unavailable" on a shift whose rate card is perfectly well defined.
+      // Visibility belongs to `shift_agency`, exactly as the migration warns.
+      const invited = await this.shiftRepository.listAgencyIdsForShifts(shiftIds);
       const shifts = (await Promise.all(shiftIds.map((id) => this.shiftRepository.getById(id))))
         .filter((s): s is NonNullable<typeof s> => s !== null)
-        .filter((s) => scope.isAdmin || s.agencyId === scope.agencyId);
+        .filter(
+          (s) =>
+            scope.isAdmin ||
+            (scope.agencyId !== null && (invited.get(s.id) ?? []).includes(scope.agencyId)),
+        );
 
       const outcomes = await resolveTierWageOutcomesForShifts(
         this.shiftAssignmentRepository,
@@ -1424,50 +1478,183 @@ export class ShiftAssignmentControllerClass {
         return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
       }
 
-      // The shift is the authority for the assignment's agency; verify the caller owns it.
       const shift = await this.shiftRepository.getById(parsed.data.shiftId);
       if (!shift) return res.status(404).json({ success: false, message: 'Shift not found', data: null });
-      if (!scope.isAdmin && shift.agencyId !== scope.agencyId) {
+      // MAY THIS CALLER STAFF THIS SHIFT — asked of `shift_agency`, never of
+      // `shift.agency_id`.
+      //
+      // This was `shift.agencyId !== scope.agencyId`, which is the ANCHOR (0124):
+      // the first agency the outlet addressed. On a shift posted to two agencies
+      // that passes for exactly one of them, so the second agency saw the open
+      // shift in its own planner — the list query goes through `shift_agency`
+      // correctly — clicked it, and got "Shift not found" on a shift it had
+      // genuinely been invited to.
+      if (
+        !scope.isAdmin &&
+        (!scope.agencyId ||
+          !(await this.shiftRepository.isAgencyInvited(shift.id, scope.agencyId)))
+      ) {
         return res.status(404).json({ success: false, message: 'Shift not found', data: null });
       }
 
+      // IS THIS SHIFT OPEN FOR BUSINESS AT ALL? Asked before anything about the
+      // caller, because it is a fact about the shift and cheap to answer.
+      //
+      // ⚠️ Nothing here tested `shift.status` before, so a `draft` — a shift the
+      // outlet has not published and is still editing — took assignments, and so
+      // did a `sealed` one whose payroll had already closed. Both clients had
+      // guessed at a rule and guessed differently; the server, which is the only
+      // one that decides anything, had no rule at all.
+      const notAssignable = shiftNotAssignableReason(shift.status);
+      if (notAssignable) {
+        return res.status(400).json({ success: false, message: notAssignable, data: null });
+      }
+
+      /**
+       * WHO IS DOING THE ASSIGNING — the caller, not the shift's anchor.
+       *
+       * Everything below asks about the ACTING agency: which agency an ops
+       * bridge belongs to, whose PR this is, who accepted them, and which of a
+       * PR's other bookings count as "someone else's". All four read
+       * `shift.agencyId`, so on a shared shift they silently answered for the
+       * anchor. Only the final INSERT had been corrected — which is exactly how
+       * a fix named after its symptom leaves its siblings in place.
+       *
+       * Admin and outlet callers have no agency of their own and keep the
+       * anchor: for them it is the only agency the shift names.
+       */
+      const actingAgencyId = scope.agencyId ?? shift.agencyId;
+
+      // IS THE PARTNERSHIP STILL LIVE? Being invited to the shift is not enough.
+      //
+      // `shift_agency` records who was invited when the shift was POSTED, and it
+      // is deliberately never revoked — that is what lets an agency finish PRs it
+      // already rostered after a venue ends the link (0127). But finishing
+      // existing work and taking on NEW work are different acts, and only the
+      // first survives the ending. Without this an ended partnership still let
+      // the agency staff fresh seats indefinitely, which made "ended" mean
+      // nothing on the one screen where it costs money.
+      //
+      // This is the caller `listApprovedOutletIdsForAgency` was written for and
+      // never had: `outlet.repository`'s own note says anything making a NEW
+      // commitment must read it, and until now nothing did.
+      if (scope.agencyId) {
+        const staffable =
+          await this.agencyOutletRepository.listApprovedOutletIdsForAgency(scope.agencyId);
+        if (!staffable.includes(shift.outletId)) {
+          // ⚠️ ONE EXCEPTION, and it is the whole point of the design: a shift
+          // this agency is ALREADY staffing stays fillable. Otherwise the guard
+          // would strand the very work it exists to protect — a PR no-shows on a
+          // shift the agency already holds, and the agency cannot put anyone in
+          // their place because the venue ended the link that morning. Backfilling
+          // a seat you already own is finishing, not starting.
+          //
+          // Scoped to THIS agency's rows: another agency's presence on a shared
+          // shift is not a licence for this one.
+          const ours = (await this.shiftAssignmentRepository.listByShift(shift.id)).some(
+            (row) =>
+              row.agencyId === scope.agencyId &&
+              !NON_STAFFING_STATUSES.includes(
+                row.status as (typeof NON_STAFFING_STATUSES)[number],
+              ),
+          );
+          if (!ours) {
+            return res.status(400).json({
+              success: false,
+              message:
+                'This venue is no longer partnered with your agency — you can finish shifts you are already staffing, but not take on new ones.',
+              data: null,
+            });
+          }
+        }
+      }
+
       // Resolve ops identity: prefer userId (ensure temporary pr bridge), else prId.
+      //
+      // ⚠️ RESOLVED FOR THE ACTING AGENCY. Without it both lookups fall back to
+      // the person's OLDEST `agency_pr` row, so `pr.tier` belonged to whichever
+      // agency signed them up first — and that same `pr` is handed to
+      // `resolveTierWageOutcome`, whose answer becomes `payAmount`. The SEAT was
+      // taken from the acting agency's tier while the WAGE was priced off a
+      // different agency's grade for the same person. Alice is tier_2 at Atlas
+      // and tier_1 at three others: every shift those three sold her was priced
+      // at Atlas's grade.
       let pr = parsed.data.prId
-        ? await this.prRepository.getById(parsed.data.prId)
+        ? await this.prRepository.getById(parsed.data.prId, actingAgencyId)
         : parsed.data.userId
-          ? await this.prRepository.getByUserId(parsed.data.userId)
+          ? await this.prRepository.getByUserId(parsed.data.userId, actingAgencyId)
           : null;
       if (!pr && parsed.data.userId) {
         pr = await this.prRepository.ensureOpsBridge({
           userId: parsed.data.userId,
-          agencyId: shift.agencyId,
+          agencyId: actingAgencyId,
           actor: getActor(req),
         });
       }
       if (!pr) return res.status(404).json({ success: false, message: 'PR not found', data: null });
-      if (pr.agencyId !== shift.agencyId) {
-        return res.status(400).json({ success: false, message: 'PR belongs to a different agency', data: null });
-      }
 
-      // The agency must have ACCEPTED this PR before it can sell their night.
-      // Read against `shift.agencyId` rather than `pr.status`: the synthetic PR
-      // reports the approval of its oldest membership, so a PR approved by
-      // agency A and still pending at agency B would otherwise let B roster
-      // someone it has never accepted.
-      //
-      // `ensureOpsBridge` above writes an APPROVED row, so a first-time bridge
-      // still passes — this only ever refuses a membership that exists and says
-      // pending or rejected.
+      /**
+       * IS THIS PERSON ON THE ACTING AGENCY'S ROSTER, AND ACCEPTED?
+       *
+       * ⚠️ There used to be a `pr.agencyId !== actingAgencyId` test above this,
+       * and it was wrong by construction, not by a wrong operand: `pr.agencyId`
+       * is ONE value on a person who holds an `agency_pr` row per agency, and it
+       * resolves to a single membership. A PR legitimately on two rosters
+       * therefore failed for whichever agency was not the one it resolved to —
+       * so agency B, acting entirely within its rights, was refused for a PR
+       * sitting in its own planner.
+       *
+       * `agency_pr` is the only thing that can answer this, because it is the
+       * only place the relationship is stored per agency. That makes this check
+       * the single authority, which also closes a hole the old pair left: the
+       * membership test was `if (membership && …)`, so someone with NO
+       * membership at the acting agency fell straight through it.
+       *
+       * `ensureOpsBridge` above writes an APPROVED row, so a first-time bridge
+       * still passes.
+       */
       const membership = (await this.agencyPrRepository.listByUser(pr.userId)).find(
-        (row) => row.agencyId === shift.agencyId,
+        (row) => row.agencyId === actingAgencyId,
       );
-      if (membership && membership.approveStatus !== 'approved') {
+      if (!membership) {
+        return res.status(400).json({
+          success: false,
+          // ⚠️ SAYS NOTHING ABOUT ANY OTHER AGENCY, deliberately. "PR belongs to
+          // a different agency" — the old wording — told agency B that this
+          // person is on somebody else's roster, which is a rival's commercial
+          // information and none of B's business. Worse, it made this endpoint a
+          // probe: fire it at a list of people and the error message sorts them
+          // into "unknown" and "signed elsewhere".
+          //
+          // This is the same rule the day-guard follows, where the refusal for
+          // "booked by another agency" reuses the self-declared-block wording
+          // word for word so the two cannot be told apart.
+          message: 'This PR is not on your roster — add them under Manage PR first.',
+          data: null,
+        });
+      }
+      // Their status WITH THIS AGENCY is the agency's own fact, so it can be
+      // stated plainly — unlike anything about the rosters they are on.
+      if (membership.approveStatus !== 'approved') {
+        // ⚠️ The live `agency_pr_approve_status` enum has FIVE labels —
+        // pending, approved, rejected, leave_pending, left — while the model
+        // declares three, so TypeScript sees this as exhaustive when it is not.
+        // Everything that was not 'rejected' fell through to "awaiting your
+        // approval", which told an operator that a PR who had LEFT the agency
+        // was sitting in a queue, and sent them to Approvals to look for someone
+        // who will never appear there. Each state now says what is actually true
+        // and where the remedy is.
+        const status = membership.approveStatus as string;
         return res.status(400).json({
           success: false,
           message:
-            membership.approveStatus === 'rejected'
+            status === 'rejected'
               ? 'This PR was declined by your agency and cannot be assigned.'
-              : 'This PR is still awaiting your approval — approve them under Approvals before assigning a shift.',
+              : status === 'left'
+                ? 'This PR has left your agency — re-add them under Manage PR before assigning a shift.'
+                : status === 'leave_pending'
+                  ? 'This PR has asked to leave your agency — settle that under Approvals before assigning a shift.'
+                  : 'This PR is still awaiting your approval — approve them under Approvals before assigning a shift.',
           data: null,
         });
       }
@@ -1497,6 +1684,41 @@ export class ShiftAssignmentControllerClass {
         return res.status(400).json({
           success: false,
           message: `This PR already works ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day — pick a time that does not overlap.`,
+          data: null,
+        });
+      }
+
+      // THE DAY BELONGS TO THE PR (owner's rule, 18 Aug 2026).
+      //
+      // A confirmed assignment at ANY agency takes that calendar day off the market
+      // for every OTHER agency. Two agencies can hold the same PR on their rosters,
+      // and without this both can book her for the same night — the overlap guard
+      // above only catches shifts that actually collide, so an afternoon at A and a
+      // night at B sail through and the PR discovers the double-booking herself.
+      //
+      // ⚠️ The refusal deliberately reuses the SELF-DECLARED BLOCK wording, word for
+      // word. Agency B must not be able to tell "she took the day off" from "she is
+      // booked by someone else": both are true statements about her availability and
+      // neither mentions an agency. A distinguishable message would turn this guard
+      // into a probe for reading a rival's roster one day at a time.
+      //
+      // Same-agency doubles still work — the rule is about what OTHER agencies may
+      // do, and an agency already knows its own bookings.
+      const dayKey = shiftDayKey(shift.shiftDate);
+      const committedElsewhere = others.find(
+        (a) =>
+          a.shiftId !== shift.id &&
+          // "Booked by SOMEONE ELSE" means an agency other than the one acting.
+          // Against the anchor, an agency sharing a shift measured its own other
+          // bookings as a rival's and refused its own PR.
+          a.agencyId !== actingAgencyId &&
+          !NON_STAFFING_STATUSES.includes(a.status as (typeof NON_STAFFING_STATUSES)[number]) &&
+          shiftDayKey(a.shiftDate) === dayKey,
+      );
+      if (committedElsewhere) {
+        return res.status(400).json({
+          success: false,
+          message: `This PR has marked ${dayKey} as unavailable — pick someone else for this shift.`,
           data: null,
         });
       }
@@ -1535,7 +1757,14 @@ export class ShiftAssignmentControllerClass {
         prId: pr.id,
         // Dual-write (0087) — ops will key on user_id after pr is dropped.
         userId: pr.userId ?? undefined,
-        agencyId: shift.agencyId, // authoritative — derived from the shift
+        // WHICH AGENCY SUPPLIED THIS PR — the caller, not the shift.
+        //
+        // `shift.agency_id` is only the ANCHOR (0124): the first agency the outlet
+        // addressed. Stamping it here meant that when a second invited agency supplied
+        // a PR, the delivery was recorded as the anchor's — and this column is what
+        // per-agency fulfilment AND the money chain read, since vouchers derive from
+        // `shift_assignment`.
+        agencyId: actingAgencyId,
         status: parsed.data.status ?? 'assigned',
         // Client override wins; otherwise Post Job / workspace tier wages.
         payAmount: parsed.data.payAmount ?? tierWages ?? '0.00',
@@ -1554,7 +1783,30 @@ export class ShiftAssignmentControllerClass {
         actor,
       });
 
-      res.status(201).json({ success: true, message: 'PR assigned to shift', data: assignment });
+      // CAN THEY GET THERE? The guard above refuses a strict overlap, so a PR could
+      // be booked 11:00–12:00 at one venue and 12:01–13:01 at another across the city
+      // and every check passed — nothing measured the space BETWEEN two shifts.
+      //
+      // A WARNING, not a refusal (owner's rule): the agency knows things this model
+      // does not, so it may assign anyway. Computed AFTER the write and wrapped, so a
+      // failure to advise can never undo an assignment that already succeeded — a 500
+      // here would report a completed booking as a failed one.
+      const travelWarning = await travelWarningFor({
+        shift,
+        prId: pr.id,
+        excludeShiftId: shift.id,
+        loadPin: (outletId) => this.shiftAssignmentRepository.getOutletPin(outletId),
+        loadAssignments: (prId) => this.shiftAssignmentRepository.listForPr(prId),
+        onError: (error) =>
+          logger.error('[ShiftAssignmentController.create] travel-gap check failed:', error),
+      });
+
+      res.status(201).json({
+        success: true,
+        message: 'PR assigned to shift',
+        data: assignment,
+        warning: travelWarning,
+      });
     } catch (error) {
       if (isUniqueViolation(error)) {
         return res.status(409).json({ success: false, message: 'PR is already assigned to this shift', data: null });
@@ -1757,8 +2009,22 @@ export class ShiftAssignmentControllerClass {
         updatedBy: getActor(req),
       };
 
+      // The shift this row is going back onto, read ONCE: the status gate just
+      // below and the travel warning further down both want it, and it is the same
+      // row in the same request. Null when nobody is being seated.
+      const seatedShift = reStaffing ? await this.shiftRepository.getById(existing.shiftId) : null;
+
       let assignment: Awaited<ReturnType<ShiftAssignmentRepositoryClass['update']>>;
       if (reStaffing) {
+        // The same shift-status rule `create` applies, for the same reason: this
+        // branch puts a person back onto a shift, so it is a seating lane and has
+        // to refuse a draft or a sealed shift too. Asked ONLY when re-staffing —
+        // a note edit or a check-out stamp moves nobody, and on a sealed shift
+        // those are exactly the edits that legitimately still happen.
+        const blocked = seatedShift ? shiftNotAssignableReason(seatedShift.status) : null;
+        if (blocked) {
+          return res.status(400).json({ success: false, message: blocked, data: null });
+        }
         // Seat check AND write in ONE transaction, with the shift row locked.
         // The PR is named so the TIER mix is checked too, not just headcount:
         // without it, cancelling a Tier I, backfilling with another and then
@@ -1807,7 +2073,32 @@ export class ShiftAssignmentControllerClass {
         });
       }
 
-      res.status(200).json({ success: true, message: 'Assignment updated', data: assignment });
+      // RE-STAFFING IS A SEATING TOO. Putting a cancelled row back can make the
+      // same impossible trip a fresh assignment would have been warned about — the
+      // roster has moved on since that PR came off it. Asked only when the row is
+      // actually going back on: a note edit or a check-out stamp changes nothing
+      // about where anyone has to be.
+      let travelWarning: string | null = null;
+      if (reStaffing) {
+        if (seatedShift) {
+          travelWarning = await travelWarningFor({
+            shift: seatedShift,
+            prId: existing.userId ?? existing.prId,
+            excludeShiftId: existing.shiftId,
+            loadPin: (outletId) => this.shiftAssignmentRepository.getOutletPin(outletId),
+            loadAssignments: (prId) => this.shiftAssignmentRepository.listForPr(prId),
+            onError: (error) =>
+              logger.error('[ShiftAssignmentController.update] travel-gap check failed:', error),
+          });
+        }
+      }
+
+      res.status(200).json({
+        success: true,
+        message: 'Assignment updated',
+        data: assignment,
+        warning: travelWarning,
+      });
     } catch (error) {
       logger.error('[ShiftAssignmentController.update] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
@@ -1826,12 +2117,55 @@ export class ShiftAssignmentControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      // Read the shift BEFORE the delete — the date it happened on is the whole
+      // question below, and the notify step at the bottom needs it either way.
+      const shift = await this.shiftRepository.getById(existing.shiftId);
+
+      // ── AN ASSIGNMENT ON A FINISHED SHIFT IS A RECORD, NOT A BOOKING ───────
+      // The row carries the attendance stamps and the wage sealed at check-out,
+      // and the weekly voucher job reads `shift_assignment` — so deleting one
+      // erases a shift somebody actually worked from the only place the money
+      // chain looks, with nothing left to rebuild it from. The counterpart rule
+      // already exists one layer up: an outlet cannot withdraw a posted shift
+      // once its date has arrived (shift.controller.ts remove).
+      //
+      // Two separate refusals, because they protect different things:
+      //   · a PAST date — the day is over, so there is no booking left to undo.
+      //   · an attendance STAMP on ANY date — someone clocked in, so the honest
+      //     correction is `cancelled` / `no_show`, which keeps the row and its
+      //     history instead of deleting the evidence.
+      // Undoing a mis-assignment stays available all through the shift's own day.
+      //
+      // Compared in the VENUE's timezone, not the server's, for the same reason
+      // the shift rule is: on a UTC host `new Date()` rolls the date eight hours
+      // early, which would reopen yesterday for a Kuala Lumpur agency at 08:00.
+      // Admin is exempt — support has to be able to clean up a bad row.
+      if (!scope.isAdmin) {
+        const todayIso = shiftDayKey(new Date());
+        const shiftIso = shift ? String(shift.shiftDate).slice(0, 10) : null;
+        if (shiftIso && shiftIso < todayIso) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'That shift has already passed — the assignment on it is the record of who worked, not a booking to undo. Mark it cancelled or no-show instead.',
+            data: null,
+          });
+        }
+        if (existing.checkInAt || existing.checkOutAt) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'This PR has already clocked in on this shift — the assignment carries their attendance and their pay. Mark it cancelled or no-show instead.',
+            data: null,
+          });
+        }
+      }
+
       const removed = await this.shiftAssignmentRepository.remove(id);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Unassigning is a cancellation from the PR's side — the shift is simply
       // gone from their app, and until now nothing said so.
-      const shift = await this.shiftRepository.getById(existing.shiftId);
       await this.notifyPr({
         prId: existing.prId,
         kind: 'shift_cancelled',

@@ -25,6 +25,28 @@ export const UpdateAgencySchema = CreateAgencySchema.partial().extend({
   clearLogo: z.boolean().optional(),
 });
 
+/**
+ * An agency broadcasting a free-text notice to PRs on its own roster.
+ *
+ * `title` is capped at 200 to match `notification.title` varchar(200) — the
+ * column would otherwise decide it, and a DB truncation error surfaces as a 500
+ * on a request that was merely too long. `body` is capped well under the text
+ * column so one caller cannot fan a megabyte out across 200 rows.
+ *
+ * MAX_BROADCAST_RECIPIENTS bounds the fan-out: notifyMany writes sequentially,
+ * so an unbounded list is an unbounded request.
+ */
+export const MAX_BROADCAST_RECIPIENTS = 200;
+
+export const BroadcastToPrsSchema = z.object({
+  prIds: z
+    .array(z.string().uuid('Invalid PR user ID'))
+    .min(1, 'Select at least one PR')
+    .max(MAX_BROADCAST_RECIPIENTS, `Select at most ${MAX_BROADCAST_RECIPIENTS} PRs`),
+  title: z.string().trim().min(1, 'Subject is required').max(200, 'Subject is too long'),
+  body: z.string().trim().min(1, 'Message is required').max(4000, 'Message is too long'),
+});
+
 export const AddAgencyMemberSchema = z.object({
   /** Preferred — invite by email; invitee sets up account on accept if new. */
   email: z.string().email('Invalid email').optional(),

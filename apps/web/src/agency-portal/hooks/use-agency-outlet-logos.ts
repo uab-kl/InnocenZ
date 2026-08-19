@@ -13,7 +13,7 @@ export type AgencyOutletLogoLookup = (
  * from posted shifts and rostered slots, and it identifies its venue as
  * `outlet: string` — there is no outlet id anywhere on it. The logo lives on the
  * outlet registry (`outlet.logo_image`), which `useAgencyOutlets` already reads
- * and scopes to this agency by `onboardedByAgencyId`.
+ * and scopes to this agency's APPROVED venues via `agency_outlet` (0123).
  *
  * A name two of this agency's outlets share resolves to nothing rather than to
  * whichever row came back first: one venue's mark on another venue's card is

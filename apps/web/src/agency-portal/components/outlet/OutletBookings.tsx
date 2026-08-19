@@ -33,6 +33,7 @@ import { specialServicesForOutlet } from "@agency-portal/lib/special-service-act
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
 import { useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function OutletBookings({
 	variant = "home",
@@ -51,6 +52,7 @@ export function OutletBookings({
 	roster?: AgencyRosterSlot[];
 	agencyPrs?: AgencyManagedPR[];
 }) {
+	const { t } = usePortalLocale();
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const storeRoster = useStore((s) => s.agencyRoster);
@@ -183,6 +185,7 @@ export function OutletBookings({
 								<IzPill variant="gold" className="shrink-0 !py-0.5 !text-[9px]">
 									{shiftSpecialEventLabel(
 										s.specialEventType,
+										t,
 										s.customSpecialEventName,
 									)}
 								</IzPill>

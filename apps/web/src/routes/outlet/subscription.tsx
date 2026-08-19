@@ -22,12 +22,12 @@ import {
 	collectionWeekLabel,
 } from "@agency-portal/lib/collections";
 import {
-	formatOutletPlanPrPickerRule,
 	getOutletSubscriptionPlan,
 	maxDailyOutletNamedPrCount,
 	OUTLET_SUBSCRIPTION_ADDONS,
 	OUTLET_SUBSCRIPTION_PLANS,
 	type OutletSubscriptionAddon,
+	type OutletSubscriptionPlan,
 	type OutletSubscriptionPlanId,
 	outletNamedPrCountForDate,
 } from "@agency-portal/lib/outlet-demo";
@@ -41,6 +41,14 @@ import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { Calendar, Check, Plug, Receipt, Sparkles, Users } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import {
+	addonCopy,
+	planCapacityLabel,
+	planDescription,
+} from "@/lib/portal-i18n/plan-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const RENEWAL_DATE = "15 Jul 2026";
 
@@ -60,10 +68,30 @@ const SHOW_COLLECTIONS = false;
 const MONTHLY_PLANS = OUTLET_SUBSCRIPTION_PLANS.filter((p) => !p.renegotiate);
 
 const POS_FEATURES = [
-	"Real-time drink & table sales from your POS",
-	"Custom setup for your venue layout",
-	"Pricing quoted by InnocenZ admin",
+	(t: PortalTranslations) => t.outletSubscription.posFeatureRealtime,
+	(t: PortalTranslations) => t.outletSubscription.posFeatureSetup,
+	(t: PortalTranslations) => t.outletSubscription.posFeatureQuoted,
 ] as const;
+
+/**
+ * Translated twin of `formatOutletPlanPrPickerRule`, built from the plan's
+ * own numbers rather than its prose.
+ *
+ * The shared helper stays as it is: Post Job composes its result into a longer
+ * sentence and translating it here would change that screen too, unverified.
+ */
+function outletPickerRule(
+	plan: OutletSubscriptionPlan,
+	t: PortalTranslations,
+): string {
+	if (plan.renegotiate)
+		return planDescription("outlet", plan.id, plan.description, t);
+	if (plan.id === "premier") return t.outletSubscription.pickerRulePremier;
+	return fill(t.outletSubscription.pickerRule, {
+		select: plan.prSelectMax,
+		pool: plan.prPoolSize,
+	});
+}
 
 export const Route = createFileRoute("/outlet/subscription")({
 	component: OutletSubscriptionPage,
@@ -110,6 +138,8 @@ function PosIntegrationAddonCard({
 	onRequestQuote: () => void;
 	onCancelQuote: () => void;
 }) {
+	const { t } = usePortalLocale();
+	const copy = addonCopy(addon.id, addon, t);
 	return (
 		<div className="iz-outlet-pos-addon col-span-2">
 			<div className="iz-outlet-pos-addon__glow" aria-hidden />
@@ -120,13 +150,13 @@ function PosIntegrationAddonCard({
 					</div>
 					<div className="min-w-0 flex-1">
 						<div className="flex flex-wrap items-center gap-2">
-							<p className="iz-outlet-pos-addon__title">{addon.label}</p>
+							<p className="iz-outlet-pos-addon__title">{copy.label}</p>
 							<IzPill variant="violet" className="!py-0.5 !text-[10px]">
-								Add-on
+								{t.outletSubscription.addOn}
 							</IzPill>
 							{activeAddonPriceRm !== null && (
 								<IzPill variant="green" className="!py-0.5 !text-[10px]">
-									Active
+									{t.outletSubscription.active}
 								</IzPill>
 							)}
 							{/*
@@ -139,29 +169,35 @@ function PosIntegrationAddonCard({
 							{quotePending && (
 								<IzPill variant="amber" className="!py-0.5 !text-[10px]">
 									{pendingKind === "cancel"
-										? "Cancel · pending admin"
+										? t.outletSubscription.cancelPendingAdmin
 										: activeAddonPriceRm !== null
-											? "New price · pending admin"
-											: "Request sent · pending admin"}
+											? t.outletSubscription.newPricePendingAdmin
+											: t.outletSubscription.requestSentPendingAdmin}
 								</IzPill>
 							)}
 						</div>
 						<p className="iz-outlet-pos-addon__subtitle">
 							{activeAddonPriceRm !== null
-								? `${addon.capacityLabel} · ${formatRM(activeAddonPriceRm)} / month · agreed with InnocenZ admin`
-								: `${addon.capacityLabel} · ${addon.priceLabel}`}
+								? fill(t.outletSubscription.addonActiveSubtitle, {
+										capacity: copy.capacityLabel,
+										price: formatRM(activeAddonPriceRm),
+									})
+								: fill(t.outletSubscription.addonOfferSubtitle, {
+										capacity: copy.capacityLabel,
+										price: copy.priceLabel,
+									})}
 						</p>
 					</div>
 					<Sparkles className="h-5 w-5 shrink-0 text-[var(--iz-violet-l)] opacity-80" />
 				</div>
 
-				<p className="iz-outlet-pos-addon__lead">{addon.description}</p>
+				<p className="iz-outlet-pos-addon__lead">{copy.description}</p>
 
 				<ul className="iz-outlet-pos-addon__features">
 					{POS_FEATURES.map((feature) => (
-						<li key={feature}>
+						<li key={feature(t)}>
 							<Check className="h-4 w-4 shrink-0 text-[var(--iz-green)]" />
-							<span>{feature}</span>
+							<span>{feature(t)}</span>
 						</li>
 					))}
 				</ul>
@@ -169,11 +205,12 @@ function PosIntegrationAddonCard({
 				{activeAddonPriceRm !== null ? (
 					<div className="iz-outlet-pos-addon__sent">
 						<p className="iz-outlet-pos-addon__sent-title">
-							POS integration active
+							{t.outletSubscription.posActive}
 						</p>
 						<p className="iz-outlet-pos-addon__sent-body">
-							InnocenZ admin agreed {formatRM(activeAddonPriceRm)} / month for
-							your venue. This is billed on top of your plan.
+							{fill(t.outletSubscription.posActiveBody, {
+								price: formatRM(activeAddonPriceRm),
+							})}
 						</p>
 						{/*
 						 * Two ways out, and BOTH go to the admin: the venue can ask for the
@@ -186,8 +223,8 @@ function PosIntegrationAddonCard({
 								{quotePending && (
 									<p className="iz-outlet-pos-addon__sent-body">
 										{pendingKind === "cancel"
-											? "Your request to cancel POS is with InnocenZ admin — the charge stands until they answer."
-											: "Your request for a new price is with InnocenZ admin — the current price applies until they answer."}
+											? t.outletSubscription.cancelPendingBody
+											: t.outletSubscription.requotePendingBody}
 									</p>
 								)}
 								{/*
@@ -205,8 +242,8 @@ function PosIntegrationAddonCard({
 										onClick={onRequestQuote}
 									>
 										{pendingKind === "requote"
-											? "New price · requested"
-											: "Ask for a new price"}
+											? t.outletSubscription.newPriceRequested
+											: t.outletSubscription.askForNewPrice}
 									</button>
 									<button
 										type="button"
@@ -215,8 +252,8 @@ function PosIntegrationAddonCard({
 										onClick={onRemoveAddon}
 									>
 										{pendingKind === "cancel"
-											? "Cancel POS · requested"
-											: "Cancel POS · plan only"}
+											? t.outletSubscription.cancelPosRequested
+											: t.outletSubscription.cancelPosPlanOnly}
 									</button>
 								</div>
 							</>
@@ -224,10 +261,13 @@ function PosIntegrationAddonCard({
 					</div>
 				) : quotePending ? (
 					<div className="iz-outlet-pos-addon__sent">
-						<p className="iz-outlet-pos-addon__sent-title">Admin notified</p>
+						<p className="iz-outlet-pos-addon__sent-title">
+							{t.outletSubscription.adminNotified}
+						</p>
 						<p className="iz-outlet-pos-addon__sent-body">
-							InnocenZ admin received your request and will contact{" "}
-							{contactLine} to negotiate pricing.
+							{fill(t.outletSubscription.adminNotifiedBody, {
+								contact: contactLine,
+							})}
 						</p>
 						{canEdit && canCancel && (
 							<button
@@ -235,7 +275,7 @@ function PosIntegrationAddonCard({
 								className="iz-btn iz-btn-soft iz-outlet-pos-addon__cancel"
 								onClick={onCancelQuote}
 							>
-								Cancel request
+								{t.outletSubscription.cancelRequest}
 							</button>
 						)}
 					</div>
@@ -246,7 +286,7 @@ function PosIntegrationAddonCard({
 							className="iz-btn iz-btn-primary iz-outlet-pos-addon__cta"
 							onClick={onRequestQuote}
 						>
-							Request admin quote
+							{t.outletSubscription.requestAdminQuote}
 						</button>
 					)
 				)}
@@ -256,6 +296,7 @@ function PosIntegrationAddonCard({
 }
 
 function OutletSubscriptionPage() {
+	const { t } = usePortalLocale();
 	const outletSubRole = useStore((s) => s.outletSubRole);
 	const outletOwner = useStore((s) => s.outletOwner);
 	const shifts = useStore((s) => s.shifts);
@@ -316,10 +357,11 @@ function OutletSubscriptionPage() {
 			detail: inv.detail,
 			dateLabel: inv.issueDate,
 			amountRm: inv.amount,
-			statusLabel: inv.status === "SETTLED" ? "Paid" : inv.status,
+			statusLabel:
+				inv.status === "SETTLED" ? t.outletSubscription.paid : inv.status,
 			tone: inv.status === "SETTLED" ? "green" : "amber",
 		}));
-	}, [backend.backed, backend.billingHistory, demoBilling]);
+	}, [backend.backed, backend.billingHistory, demoBilling, t]);
 
 	const outletName = tonightShiftOutletName(shifts);
 	/**
@@ -399,12 +441,12 @@ function OutletSubscriptionPage() {
 					setQuoteSentLocal(true);
 					toast(
 						backend.addonAmountRm !== null
-							? "New price requested — InnocenZ admin will re-quote your POS integration"
-							: "POS integration request sent to admin",
+							? t.outletSubscription.newPriceRequestedToast
+							: t.outletSubscription.posRequestSent,
 						"success",
 					);
 				})
-				.catch(() => toast("Could not send request — try again", "warn"));
+				.catch(() => toast(t.outletSubscription.couldNotSendRequest, "warn"));
 			return;
 		}
 		requestPosIntegrationQuote();
@@ -425,12 +467,12 @@ function OutletSubscriptionPage() {
 				if (filed) setRemovalSentLocal(true);
 				toast(
 					filed
-						? "Request to remove POS integration sent to InnocenZ admin"
-						: "Could not send the request — try again",
+						? t.outletSubscription.posRemovalSent
+						: t.outletSubscription.couldNotSendTheRequest,
 					filed ? "success" : "warn",
 				);
 			})
-			.catch(() => toast("Could not send the request — try again", "warn"));
+			.catch(() => toast(t.outletSubscription.couldNotSendTheRequest, "warn"));
 	};
 
 	const handleCancelQuote = () => {
@@ -438,7 +480,7 @@ function OutletSubscriptionPage() {
 			// Admin still holds the request (no outlet delete route); clear the
 			// local indicator only.
 			setQuoteSentLocal(false);
-			toast("POS integration request withdrawn", "info");
+			toast(t.outletSubscription.posRequestWithdrawn, "info");
 			return;
 		}
 		cancelPosIntegrationQuoteRequest();
@@ -460,7 +502,11 @@ function OutletSubscriptionPage() {
 		if (next.renegotiate) return;
 		if (peakDailyNamedPrs > next.prPerDayMax) {
 			toast(
-				`Peak day has ${peakDailyNamedPrs} requested PRs — reduce to ${next.prPerDayMax}/day before downgrading to ${next.label}`,
+				fill(t.outletSubscription.peakDayReduce, {
+					peak: peakDailyNamedPrs,
+					max: next.prPerDayMax,
+					plan: next.label,
+				}),
 				"warn",
 			);
 			return;
@@ -470,7 +516,7 @@ function OutletSubscriptionPage() {
 		// what writes the billing ledger. Only the demo store flips instantly.
 		if (backend.backed) {
 			if (!backend.planCatalogReady) {
-				toast("Plan list still loading — try again in a moment", "warn");
+				toast(t.outletSubscription.planListLoading, "warn");
 				return;
 			}
 			backend
@@ -485,14 +531,14 @@ function OutletSubscriptionPage() {
 						// Essential — no switch needed" tells the venue what to do;
 						// "try again" told it nothing and it kept retrying.
 						toast(
-							result.reason ?? "Could not send the switch — try again",
+							result.reason ?? t.outletSubscription.couldNotSendSwitch,
 							"warn",
 						);
 						return;
 					}
 					setPlanChangeRequestedLocal(next.label);
 					toast(
-						`Switch to ${next.label} sent to InnocenZ admin for approval`,
+						fill(t.outletSubscription.switchSentToAdmin, { plan: next.label }),
 						"success",
 					);
 				});
@@ -501,7 +547,12 @@ function OutletSubscriptionPage() {
 		saveOutletOwner({ subscriptionPlanId: planId });
 		recordOutletSubscriptionPlanChange(planId);
 		toast(
-			`Switched to ${next.label} · ${formatRM(next.monthlyRm)}/mo · ${next.capacityLabel} · ${formatOutletPlanPrPickerRule(next)}`,
+			fill(t.outletSubscription.switchedTo, {
+				plan: next.label,
+				price: formatRM(next.monthlyRm),
+				capacity: planCapacityLabel("outlet", next.id, next.capacityLabel, t),
+				rule: outletPickerRule(next, t),
+			}),
 			"success",
 		);
 	};
@@ -510,11 +561,11 @@ function OutletSubscriptionPage() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>Access restricted</IzPageTitle>
+					<IzPageTitle>{t.outletSettings.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
-						You do not have access to subscription billing.
+						{t.outletSubscription.noAccessBilling}
 					</p>
 				</IzCard>
 			</div>
@@ -526,19 +577,21 @@ function OutletSubscriptionPage() {
 	return (
 		<div className="iz-screen">
 			<header>
-				<IzPageTitle>Subscription</IzPageTitle>
+				<IzPageTitle>{t.nav.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{outletOwner.orgName}</p>
 				{isFinanceReadOnly && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						Finance view — read-only · contact owner to change plan or card
+						{t.outletSubscription.financeReadOnly}
 					</p>
 				)}
 			</header>
 
-			<IzSectionLabel>Plans · monthly</IzSectionLabel>
+			<IzSectionLabel>{t.outletSubscription.plansMonthly}</IzSectionLabel>
 			<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-				PR limit = max specific PRs you name per day (agency fill does not
-				count) · {namedPrsToday} requested today · peak day {peakDailyNamedPrs}
+				{fill(t.outletSubscription.prLimitHint, {
+					today: namedPrsToday,
+					peak: peakDailyNamedPrs,
+				})}
 			</p>
 			<div className="grid grid-cols-2 gap-2">
 				{MONTHLY_PLANS.map((plan) => {
@@ -557,19 +610,27 @@ function OutletSubscriptionPage() {
 								<div className="min-w-0">
 									<div className="flex flex-wrap items-center gap-2">
 										<p className="font-sora text-sm font-bold">{plan.label}</p>
-										{isCurrent && <IzPill variant="green">Current</IzPill>}
+										{isCurrent && (
+											<IzPill variant="green">
+												{t.outletSubscription.current}
+											</IzPill>
+										)}
 										{planChangeRequested === plan.label && !isCurrent && (
-											<IzPill variant="violet">Awaiting admin</IzPill>
+											<IzPill variant="violet">
+												{t.outletSubscription.awaitingAdmin}
+											</IzPill>
 										)}
 										{atCapacity && !isCurrent && (
-											<IzPill variant="amber">At daily limit</IzPill>
+											<IzPill variant="amber">
+												{t.outletSubscription.atDailyLimit}
+											</IzPill>
 										)}
 									</div>
 									<p className="mt-1 text-lg font-bold text-[var(--iz-gold-l)]">
 										{formatRM(plan.monthlyRm)}
 										<span className="iz-tiny iz-muted font-normal">
 											{" "}
-											/ month
+											{t.outletSubscription.perMonth}
 										</span>
 									</p>
 								</div>
@@ -577,27 +638,41 @@ function OutletSubscriptionPage() {
 									<div className="flex items-center gap-1.5 text-[var(--iz-txt)] sm:justify-end">
 										<Users className="h-4 w-4 text-[var(--iz-gold)]" />
 										<span className="font-sora text-sm font-bold">
-											{plan.capacityLabel}
+											{planCapacityLabel(
+												"outlet",
+												plan.id,
+												plan.capacityLabel,
+												t,
+											)}
 										</span>
 									</div>
 									<p className="iz-tiny iz-muted mt-0.5">
-										{formatOutletPlanPrPickerRule(plan)}
+										{outletPickerRule(plan, t)}
 									</p>
 								</div>
 							</div>
 							{isCurrent ? (
 								<p className="iz-tiny iz-muted2 mt-2">
-									{renewalLabel ? `Renewal ${renewalLabel} · ` : ""}
-									{namedPrsToday} / {plan.prPerDayMax} requested PRs today ·
-									pool of {plan.prPoolSize}
+									{renewalLabel
+										? fill(t.outletSubscription.renewalPrefix, {
+												date: renewalLabel,
+											})
+										: ""}
+									{fill(t.outletSubscription.requestedTodayPool, {
+										today: namedPrsToday,
+										max: plan.prPerDayMax,
+										pool: plan.prPoolSize,
+									})}
 								</p>
 							) : (
 								canEdit &&
 								(planChangeRequested === plan.label ? (
 									<p className="iz-tiny iz-muted2 mt-3">
-										Sent to InnocenZ admin — you stay on{" "}
-										{currentPlan?.label ?? "your current plan"} until it is
-										approved.
+										{fill(t.outletSubscription.sentToAdmin, {
+											plan:
+												currentPlan?.label ??
+												t.outletSubscription.yourCurrentPlan,
+										})}
 									</p>
 								) : (
 									<button
@@ -612,7 +687,11 @@ function OutletSubscriptionPage() {
 										}
 										onClick={() => selectPlan(plan.id)}
 									>
-										{backend.isLoading ? "Loading…" : `Switch to ${plan.label}`}
+										{backend.isLoading
+											? t.common.loading
+											: fill(t.outletSubscription.switchTo, {
+													plan: plan.label,
+												})}
 									</button>
 								))
 							)}
@@ -638,13 +717,13 @@ function OutletSubscriptionPage() {
 			</div>
 
 			<IzSectionLabel>
-				{backend.backed ? "Current subscription" : "Billing history"}
+				{backend.backed
+					? t.subscription.currentSubscription
+					: t.subscription.billingHistoryTitle}
 			</IzSectionLabel>
 			{backend.backed && (
 				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-					What this venue is subscribed to with InnocenZ today — its plan, plus
-					POS integration if you have added it. It records what you subscribed
-					to and when, so it does not say whether a given month was paid.
+					{t.outletSubscription.whatVenueSubscribedTo}
 				</p>
 			)}
 			<div className="space-y-2">
@@ -652,8 +731,8 @@ function OutletSubscriptionPage() {
 					<IzCard flat>
 						<p className="iz-tiny iz-muted py-4 text-center">
 							{backend.backed
-								? "No active subscription for this venue."
-								: "No subscription invoices yet."}
+								? t.outletSubscription.noActiveSubscription
+								: t.subscription.noSubscriptionInvoices}
 						</p>
 					</IzCard>
 				) : (
@@ -666,11 +745,9 @@ function OutletSubscriptionPage() {
 
 			{backend.backed && (
 				<>
-					<IzSectionLabel>Payment history</IzSectionLabel>
+					<IzSectionLabel>{t.outletSubscription.paymentHistory}</IzSectionLabel>
 					<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-						One row per billing period — venues are billed monthly, from the day
-						you subscribed. A period stays Unpaid until InnocenZ marks the
-						payment received.
+						{t.outletSubscription.oneRowPerPeriod}
 					</p>
 					<PaymentHistoryList
 						invoices={backend.paymentHistory}
@@ -681,24 +758,25 @@ function OutletSubscriptionPage() {
 
 			{showCollections && (
 				<>
-					<IzSectionLabel>PR work · owed to your agency</IzSectionLabel>
+					<IzSectionLabel>{t.outletSubscription.prWorkOwed}</IzSectionLabel>
 					<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-						Separate from the InnocenZ subscription above — one statement per
-						week, built from shifts your venue actually completed. InnocenZ does
-						not take this payment; you settle it with your agency directly, and
-						they mark it received.
+						{t.outletSubscription.prWorkOwedBody}
 					</p>
 
 					<IzCard>
 						<div className="grid grid-cols-3 gap-2 text-center">
 							<div>
-								<p className="iz-tiny iz-muted2">Owed now</p>
+								<p className="iz-tiny iz-muted2">
+									{t.outletSubscription.owedNow}
+								</p>
 								<p className="mt-1 font-sora text-base font-bold text-[var(--iz-gold-l)]">
 									{formatRM(collections.totals.owedRm)}
 								</p>
 							</div>
 							<div>
-								<p className="iz-tiny iz-muted2">Overdue</p>
+								<p className="iz-tiny iz-muted2">
+									{t.outletSubscription.overdue}
+								</p>
 								<p
 									className={`mt-1 font-sora text-base font-bold ${
 										collections.totals.overdueRm > 0
@@ -710,7 +788,7 @@ function OutletSubscriptionPage() {
 								</p>
 							</div>
 							<div>
-								<p className="iz-tiny iz-muted2">Paid</p>
+								<p className="iz-tiny iz-muted2">{t.outletSubscription.paid}</p>
 								<p className="mt-1 font-sora text-base font-bold">
 									{formatRM(collections.totals.settledRm)}
 								</p>
@@ -718,14 +796,12 @@ function OutletSubscriptionPage() {
 						</div>
 						{collections.totals.overdueRm > 0 && (
 							<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
-								Overdue is part of what you owe, not on top of it
+								{t.outletSubscription.overduePartOfOwed}
 							</p>
 						)}
 						{collections.hasMultipleAgencies && (
 							<p className="iz-tiny iz-muted mt-2">
-								More than one agency bills this venue. A statement records which
-								agency raised it, but not their name, so the rows below cannot
-								say who each one is from.
+								{t.outletSubscription.multipleAgencies}
 							</p>
 						)}
 					</IzCard>
@@ -734,15 +810,13 @@ function OutletSubscriptionPage() {
 						{collections.isLoading ? (
 							<IzCard flat>
 								<p className="iz-tiny iz-muted py-4 text-center">
-									Loading statements…
+									{t.outletSubscription.loadingStatements}
 								</p>
 							</IzCard>
 						) : collections.invoices.length === 0 ? (
 							<IzCard flat>
 								<p className="iz-tiny iz-muted py-4 text-center">
-									No statements. Your agency settles this venue's billing with
-									you directly rather than through the app, so nothing new is
-									raised here — past statements stay listed.
+									{t.outletSubscription.noStatements}
 								</p>
 							</IzCard>
 						) : (
@@ -757,16 +831,28 @@ function OutletSubscriptionPage() {
 												<Receipt className="mt-0.5 h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
 												<div className="min-w-0">
 													<p className="iz-sm truncate font-semibold">
-														PR work ·{" "}
-														{collectionWeekLabel(inv.weekStart, inv.weekEnd)}
+														{fill(t.outletSubscription.prWorkWeek, {
+															week: collectionWeekLabel(
+																inv.weekStart,
+																inv.weekEnd,
+															),
+														})}
 													</p>
 													<p className="iz-tiny iz-muted">
-														{inv.sourceAssignmentIds.length} completed shift
-														{inv.sourceAssignmentIds.length === 1 ? "" : "s"}
+														{fill(
+															inv.sourceAssignmentIds.length === 1
+																? t.outletSubscription.completedShiftOne
+																: t.outletSubscription.completedShiftMany,
+															{ n: inv.sourceAssignmentIds.length },
+														)}
 														{inv.settledAt
-															? ` · marked received ${collectionStampLabel(inv.settledAt)}`
+															? fill(t.outletSubscription.markedReceived, {
+																	date: collectionStampLabel(inv.settledAt),
+																})
 															: inv.issuedAt
-																? ` · issued ${collectionStampLabel(inv.issuedAt)}`
+																? fill(t.outletSubscription.issuedOn, {
+																		date: collectionStampLabel(inv.issuedAt),
+																	})
 																: ""}
 													</p>
 												</div>
@@ -777,7 +863,7 @@ function OutletSubscriptionPage() {
 												</p>
 												{inv.status === "settled" ? (
 													<IzPill variant="green" className="!mt-1">
-														Received
+														{t.outletSubscription.received}
 													</IzPill>
 												) : aging ? (
 													<IzPill variant={aging.variant} className="!mt-1">
@@ -799,13 +885,25 @@ function OutletSubscriptionPage() {
 			)}
 
 			<OutletSection
-				title="Payment method"
+				title={t.agencyMisc.paymentMethod}
 				hint={
 					backend.backed
 						? backend.card
-							? `${backend.card.brand} ···· ${backend.card.last4}${renewalLabel ? ` · renewal ${renewalLabel}` : ""}`
-							: "No card saved yet"
-						: `Visa ···· ${paymentCardLast4} · renewal ${RENEWAL_DATE}`
+							? renewalLabel
+								? fill(t.outletSubscription.cardHintRenewal, {
+										brand: backend.card.brand,
+										last4: backend.card.last4,
+										date: renewalLabel,
+									})
+								: fill(t.outletSubscription.cardHint, {
+										brand: backend.card.brand,
+										last4: backend.card.last4,
+									})
+							: t.subscription.noCardSavedYet
+						: fill(t.outletSubscription.demoCardHint, {
+								last4: paymentCardLast4,
+								date: RENEWAL_DATE,
+							})
 				}
 				collapsible
 				defaultOpen={false}
@@ -820,15 +918,17 @@ function OutletSubscriptionPage() {
 					isSaving={backend.isSavingCard}
 					billedLabel={
 						currentPlan
-							? `Billed monthly · ${formatRM(currentPlan.monthlyRm)}`
+							? fill(t.outletSubscription.billedMonthly, {
+									price: formatRM(currentPlan.monthlyRm),
+								})
 							: "—"
 					}
 					onSave={async (input) => {
 						const result = await backend.saveCard(input);
 						toast(
 							result.ok
-								? "Card saved for subscription billing"
-								: (result.reason ?? "Could not save the card — try again"),
+								? t.outletSubscription.cardSaved
+								: (result.reason ?? t.outletSubscription.couldNotSaveCard),
 							result.ok ? "success" : "warn",
 						);
 						return result.ok;
@@ -838,8 +938,8 @@ function OutletSubscriptionPage() {
 				<div className="iz-tiny iz-muted mt-2 flex items-center gap-2">
 					<Calendar className="h-3.5 w-3.5" />
 					{renewalLabel
-						? `Next renewal ${renewalLabel}`
-						: "No active subscription — nothing to renew"}
+						? fill(t.outletSubscription.nextRenewal, { date: renewalLabel })
+						: t.outletSubscription.nothingToRenew}
 				</div>
 			</OutletSection>
 		</div>

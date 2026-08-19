@@ -17,6 +17,7 @@ import { cn } from "@agency-portal/lib/utils";
 import { startOfToday } from "date-fns";
 import { Pencil, X } from "lucide-react";
 import { useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export type JobPostingDraft = {
 	selectedDateIsos: string[];
@@ -327,6 +328,7 @@ export function JobQueueTable({
 	onRemove: (id: string) => void;
 	queueCostEstimate?: (row: QueuedJobPosting) => number | undefined;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<JobPostingTable>
 			<JobTableHead />
@@ -341,7 +343,7 @@ export function JobQueueTable({
 						<tr key={row.id} className={index % 2 === 1 ? "is-alt" : undefined}>
 							<td className="iz-job-posting-col-date whitespace-nowrap">
 								<div className="flex items-start justify-between gap-2">
-									<span>{formatJobDates(row.selectedDateIsos)}</span>
+									<span>{formatJobDates(row.selectedDateIsos, t)}</span>
 									<div className="flex shrink-0 items-center gap-0.5">
 										<button
 											type="button"

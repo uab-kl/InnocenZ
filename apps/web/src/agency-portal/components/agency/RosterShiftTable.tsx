@@ -21,6 +21,7 @@ import {
 	rosterSlotAgencyName,
 } from "@agency-portal/lib/agency-demo";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
+import { formatAttendanceStamp } from "@agency-portal/lib/attendance-stamp";
 import {
 	findOutletShiftForRosterSlot,
 	type OutletDrinkPrice,
@@ -45,6 +46,8 @@ import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { ArrowLeftRight, Pencil } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type OutletShiftTierRef = {
 	outletName: string;
@@ -163,6 +166,7 @@ function RosterPrNameCell({
 	agencyPRs?: AgencyManagedPR[];
 	viewingAgencyId?: string;
 }) {
+	const { t } = usePortalLocale();
 	const displayName = rosterPrLabel(slot, profile, agencyPRs);
 	const agencyLabel = viewingAgencyId
 		? agencyPortalLabel(viewingAgencyId)
@@ -186,7 +190,9 @@ function RosterPrNameCell({
 				</div>
 			</div>
 			{prSwap && (
-				<p className="iz-roster-swap-note mt-1">Swap → {prSwap.targetOutlet}</p>
+				<p className="iz-roster-swap-note mt-1">
+					{t.rosterGrid.swapArrow} → {prSwap.targetOutlet}
+				</p>
 			)}
 		</>
 	);
@@ -209,6 +215,7 @@ function RosterPrNameLink({
 	label: string;
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<Link
 			to="/agency/prs"
@@ -220,25 +227,47 @@ function RosterPrNameLink({
 			// The row itself has no click action, but the comcard thumb beside this
 			// does — keep a tap on the name from reaching anything else.
 			onClick={(e) => e.stopPropagation()}
-			title={`Open ${label} in Manage PR`}
+			title={`${t.rosterGrid.openInManagePrPrefix} ${label} ${t.rosterGrid.openInManagePrSuffix}`.trim()}
 		>
 			{label}
 		</Link>
 	);
 }
 
+/**
+ * RESOLVERS, not strings and not dictionary keys.
+ *
+ * This map spans two dictionary sections, and a key is itself a `string` — so
+ * rendering the map value directly type-checks and ships the key name to the
+ * screen, which is exactly how "statusSent" reached the payroll filter chips.
+ * A function cannot be rendered by accident.
+ *
+ * Record keys stay the API's slot-status values.
+ */
 const STATUS_LABEL: Record<
 	RosterSlotStatus,
-	{ label: string; variant: "green" | "amber" | "red" | "violet" | "ink" }
+	{
+		label: (t: PortalTranslations) => string;
+		variant: "green" | "amber" | "red" | "violet" | "ink";
+	}
 > = {
-	"on-duty": { label: "On duty", variant: "green" },
-	"en-route": { label: "Scheduled", variant: "ink" },
-	scheduled: { label: "Scheduled", variant: "ink" },
-	unavailable: { label: "Unavailable", variant: "red" },
-	"swap-pending": { label: "Swap pending", variant: "violet" },
-	"assignment-pending": { label: "Awaiting PR", variant: "amber" },
-	"outlet-request-pending": { label: "Outlet request", variant: "amber" },
-	"outlet-pending": { label: "Awaiting outlet", variant: "amber" },
+	"on-duty": { label: (t) => t.roster.onDuty, variant: "green" },
+	"en-route": { label: (t) => t.roster.scheduled, variant: "ink" },
+	scheduled: { label: (t) => t.roster.scheduled, variant: "ink" },
+	unavailable: { label: (t) => t.roster.unavailable, variant: "red" },
+	"swap-pending": { label: (t) => t.rosterGrid.swapPending, variant: "violet" },
+	"assignment-pending": {
+		label: (t) => t.rosterGrid.awaitingPr,
+		variant: "amber",
+	},
+	"outlet-request-pending": {
+		label: (t) => t.rosterGrid.outletRequest,
+		variant: "amber",
+	},
+	"outlet-pending": {
+		label: (t) => t.rosterGrid.awaitingOutlet,
+		variant: "amber",
+	},
 };
 
 export function RosterShiftTable({
@@ -283,6 +312,7 @@ export function RosterShiftTable({
 	onFlagNoShow: (id: string) => void;
 	onCancelPrSwap: (swapId: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const [earningsSheet, setEarningsSheet] = useState<{
 		kind: RosterEarningsSheetKind;
 		slot: AgencyRosterSlot;
@@ -325,9 +355,7 @@ export function RosterShiftTable({
 	if (slots.length === 0) {
 		return (
 			<IzCard className="text-center">
-				<p className="iz-sm iz-muted">
-					No shifts match your filters — try clearing or widening the search.
-				</p>
+				<p className="iz-sm iz-muted">{t.filters.noShiftsMatch}</p>
 			</IzCard>
 		);
 	}
@@ -339,12 +367,14 @@ export function RosterShiftTable({
 			<p className="iz-tiny iz-muted2 mb-2 hidden md:block">
 				Tap a <strong className="text-[var(--iz-gold-l)]">comcard</strong> to
 				identify PRs ·{" "}
-				<strong className="text-[var(--iz-gold-l)]">Drinks</strong>,{" "}
-				<strong className="text-[var(--iz-gold-l)]">Tips</strong>, or{" "}
-				<strong className="text-[var(--iz-gold-l)]">Est. payout</strong> for
-				shift breakdown ·{" "}
-				<strong className="text-[var(--iz-gold-l)]">Edit</strong> to change
-				status, shift times, or request outlet swap.
+				<strong className="text-[var(--iz-gold-l)]">{t.money.drinks}</strong>,{" "}
+				<strong className="text-[var(--iz-gold-l)]">{t.money.tips}</strong>, or{" "}
+				<strong className="text-[var(--iz-gold-l)]">
+					{t.rosterGrid.estPayout}
+				</strong>{" "}
+				for shift breakdown ·{" "}
+				<strong className="text-[var(--iz-gold-l)]">{t.common.edit}</strong> to
+				change status, shift times, or request outlet swap.
 			</p>
 
 			<div className="iz-roster-table-wrap hidden md:block">
@@ -352,15 +382,15 @@ export function RosterShiftTable({
 					<thead>
 						<tr>
 							<th>PR</th>
-							<th>Agency</th>
-							<th>Outlet</th>
-							<th>Shift</th>
-							<th>Check-in</th>
-							<th>Status</th>
-							<th>Drinks</th>
-							<th>Tips</th>
-							<th>Est. payout</th>
-							{canAssign && <th aria-label="Actions" />}
+							<th>{t.rosterGrid.agency}</th>
+							<th>{t.filters.outlet}</th>
+							<th>{t.rosterGrid.shift}</th>
+							<th>{t.rosterGrid.checkIn}</th>
+							<th>{t.filters.status}</th>
+							<th>{t.money.drinks}</th>
+							<th>{t.money.tips}</th>
+							<th>{t.rosterGrid.estPayout}</th>
+							{canAssign && <th aria-label={t.rosterGrid.actions} />}
 						</tr>
 					</thead>
 					<tbody>
@@ -458,21 +488,24 @@ export function RosterShiftTable({
 }
 
 function StatusPills({ slot }: { slot: AgencyRosterSlot }) {
+	const { t } = usePortalLocale();
 	if (slot.checkedOutAt) {
 		return (
 			<div className="flex flex-wrap gap-1">
-				{slot.lateFlag && <IzPill variant="amber">Late</IzPill>}
-				{slot.noShowFlag && <IzPill variant="red">No-show</IzPill>}
-				<IzPill variant="ink">Released early</IzPill>
+				{slot.lateFlag && <IzPill variant="amber">{t.rosterGrid.late}</IzPill>}
+				{slot.noShowFlag && (
+					<IzPill variant="red">{t.rosterGrid.noShow}</IzPill>
+				)}
+				<IzPill variant="ink">{t.rosterGrid.releasedEarly}</IzPill>
 			</div>
 		);
 	}
 	const st = STATUS_LABEL[rosterPageDisplayStatus(slot.status)];
 	return (
 		<div className="flex flex-wrap gap-1">
-			{slot.lateFlag && <IzPill variant="amber">Late</IzPill>}
-			{slot.noShowFlag && <IzPill variant="red">No-show</IzPill>}
-			<IzPill variant={st.variant}>{st.label}</IzPill>
+			{slot.lateFlag && <IzPill variant="amber">{t.rosterGrid.late}</IzPill>}
+			{slot.noShowFlag && <IzPill variant="red">{t.rosterGrid.noShow}</IzPill>}
+			<IzPill variant={st.variant}>{st.label(t)}</IzPill>
 		</div>
 	);
 }
@@ -509,6 +542,7 @@ function RosterTableRow({
 		slot: AgencyRosterSlot,
 	) => void;
 }) {
+	const { t } = usePortalLocale();
 	const releasedEarly = Boolean(slot.checkedOutAt);
 	const showFlags =
 		canAssign &&
@@ -558,7 +592,7 @@ function RosterTableRow({
 			<td className="iz-portal-table-meta">
 				{onOpenEarningsSheet ? (
 					<RosterAmountButton
-						label="drinks"
+						label={t.rosterGrid.drinks}
 						onClick={() => onOpenEarningsSheet("drinks", slot)}
 					>
 						{formatRosterSlotDrinks(floor)}
@@ -570,7 +604,7 @@ function RosterTableRow({
 			<td className="iz-portal-table-meta">
 				{onOpenEarningsSheet ? (
 					<RosterAmountButton
-						label="tips"
+						label={t.rosterGrid.tips}
 						onClick={() => onOpenEarningsSheet("tips", slot)}
 					>
 						{formatRosterSlotTips(floor)}
@@ -582,7 +616,7 @@ function RosterTableRow({
 			<td className="text-[var(--iz-gold-l)] font-semibold">
 				{onOpenEarningsSheet ? (
 					<RosterAmountButton
-						label="estimated payout"
+						label={t.rosterGrid.estimatedPayout}
 						className="iz-roster-amount-btn--gold"
 						onClick={() => onOpenEarningsSheet("payout", slot)}
 					>
@@ -600,9 +634,9 @@ function RosterTableRow({
 								type="button"
 								className="iz-roster-mini-btn on"
 								onClick={() => onEdit(slot.id)}
-								title="Reassign to open shift"
+								title={t.rosterGrid.reassignToOpenShift}
 							>
-								Reassign
+								{t.roster.reassign}
 							</button>
 						)}
 						{showEdit && (
@@ -610,7 +644,7 @@ function RosterTableRow({
 								type="button"
 								className="iz-roster-icon-btn"
 								onClick={() => onEdit(slot.id)}
-								title="Edit"
+								title={t.common.edit}
 							>
 								<Pencil className="h-3.5 w-3.5" />
 							</button>
@@ -622,14 +656,14 @@ function RosterTableRow({
 									className={`iz-roster-mini-btn${slot.lateFlag ? " on" : ""}`}
 									onClick={() => onFlagLate(slot.id)}
 								>
-									Late
+									{t.rosterGrid.late}
 								</button>
 								<button
 									type="button"
 									className={`iz-roster-mini-btn${slot.noShowFlag ? " on" : ""}`}
 									onClick={() => onFlagNoShow(slot.id)}
 								>
-									No-show
+									{t.rosterGrid.noShow}
 								</button>
 							</>
 						)}
@@ -639,7 +673,7 @@ function RosterTableRow({
 								className="iz-roster-mini-btn"
 								onClick={() => onCancelPrSwap(prSwap.id)}
 							>
-								Cancel
+								{t.common.cancel}
 							</button>
 						)}
 					</div>
@@ -681,6 +715,7 @@ function RosterShiftCard({
 		slot: AgencyRosterSlot,
 	) => void;
 }) {
+	const { t } = usePortalLocale();
 	const displayName = rosterPrLabel(slot, profile, agencyPRs);
 	const agencyLabel = viewingAgencyId
 		? agencyPortalLabel(viewingAgencyId)
@@ -722,7 +757,7 @@ function RosterShiftCard({
 					Drinks{" "}
 					{onOpenEarningsSheet ? (
 						<RosterAmountButton
-							label="drinks"
+							label={t.rosterGrid.drinks}
 							onClick={() => onOpenEarningsSheet("drinks", slot)}
 						>
 							{formatRosterSlotDrinks(floor)}
@@ -735,7 +770,7 @@ function RosterShiftCard({
 					Tips{" "}
 					{onOpenEarningsSheet ? (
 						<RosterAmountButton
-							label="tips"
+							label={t.rosterGrid.tips}
 							onClick={() => onOpenEarningsSheet("tips", slot)}
 						>
 							{formatRosterSlotTips(floor)}
@@ -746,7 +781,7 @@ function RosterShiftCard({
 				</span>
 				{onOpenEarningsSheet ? (
 					<RosterAmountButton
-						label="estimated payout"
+						label={t.rosterGrid.estimatedPayout}
 						className="iz-roster-amount-btn--gold"
 						onClick={() => onOpenEarningsSheet("payout", slot)}
 					>
@@ -767,7 +802,7 @@ function RosterShiftCard({
 						className="iz-btn iz-btn-soft mt-2 w-full !py-1.5 !text-xs"
 						onClick={() => onCancelPrSwap(prSwap.id)}
 					>
-						Decline swap
+						{t.rosterGrid.declineSwap}
 					</button>
 				</div>
 			)}
@@ -780,7 +815,7 @@ function RosterShiftCard({
 								className="iz-btn iz-btn-soft iz-roster-action-btn"
 								onClick={() => onEdit(slot.id)}
 							>
-								<Pencil className="h-3 w-3" /> Edit
+								<Pencil className="h-3 w-3" /> {t.common.edit}
 							</button>
 						)}
 					{!slot.checkedInAt &&
@@ -792,14 +827,16 @@ function RosterShiftCard({
 									className={`iz-btn iz-roster-action-btn !text-xs ${slot.lateFlag ? "iz-btn-primary" : "iz-btn-ghost"}`}
 									onClick={() => onFlagLate(slot.id)}
 								>
-									{slot.lateFlag ? "Late ✓" : "Late"}
+									{slot.lateFlag ? t.rosterGrid.lateDone : t.rosterGrid.late}
 								</button>
 								<button
 									type="button"
 									className={`iz-btn iz-roster-action-btn !text-xs ${slot.noShowFlag ? "iz-btn-primary" : "iz-btn-ghost"}`}
 									onClick={() => onFlagNoShow(slot.id)}
 								>
-									{slot.noShowFlag ? "No-show ✓" : "No-show"}
+									{slot.noShowFlag
+										? t.rosterGrid.noShowDone
+										: t.rosterGrid.noShow}
 								</button>
 							</>
 						)}

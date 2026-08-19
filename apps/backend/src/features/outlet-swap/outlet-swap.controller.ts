@@ -1,4 +1,5 @@
 import { Request, Response } from 'express';
+import { travelWarningFor } from '@/features/shift-assignment/travel-gap';
 import { ShiftAssignmentRepositoryClass } from '@/features/shift-assignment/shift-assignment.repository';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
@@ -10,6 +11,7 @@ import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { OrgScope, resolveOrgScope } from '@/util/org-scope';
+import { shiftDayKey } from '@/util/slot-window';
 import { CreateOutletSwapSchema, RespondOutletSwapSchema } from '@/schema/outlet-swap.schema';
 import { OutletSwapApprovalRejection, OutletSwapRepositoryClass } from './outlet-swap.repository';
 import { OutletSwapStatus } from './outlet-swap.model';
@@ -160,11 +162,53 @@ export class OutletSwapControllerClass {
       if (!fromShift || !toShift) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
-      if (!scope.isAdmin && toShift.agencyId !== scope.agencyId) {
+      // `shift.agency_id` is the ANCHOR — the first agency the outlet addressed
+      // (0124) — so `toShift.agencyId !== scope.agencyId` refused every OTHER
+      // invited agency, and the picker had just offered them the shift:
+      // `listSwapTargets` resolves candidates through `shift_agency`. Live proof
+      // — JK House 2026-08-18 is anchored to Atlas but also invited to Why We
+      // Met, so Why We Met saw it in the picker and got a bare 404 on send.
+      // Ask the membership table, which is what "may this agency staff it" means.
+      if (
+        !scope.isAdmin &&
+        (!scope.agencyId || !(await this.shiftRepository.isAgencyInvited(toShiftId, scope.agencyId)))
+      ) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
       if (fromShift.shiftDate !== toShift.shiftDate) {
         return res.status(400).json({ success: false, message: 'A swap has to be to a shift on the same date', data: null });
+      }
+
+      // ── A SWAP IS A PLAN FOR A NIGHT THAT HAS NOT HAPPENED YET ─────────────
+      // It relocates a PR to another venue that same night, and only once THEY
+      // approve. On a date that is gone, that request asks someone to agree to a
+      // move that already did or did not happen, and approving it would rewrite
+      // where a worked shift was worked — the attendance stamps and the sealed
+      // wage stay on the assignment, so the two would then disagree about the
+      // venue. Both shifts are on one date (checked above), so testing `from` is
+      // testing both. Venue timezone, as everywhere a shift date is compared to
+      // "now" — a UTC host rolls the day over eight hours early.
+      //
+      // The check-in stamp is its own refusal on any date: a PR standing on the
+      // floor is not relocatable, and until now only a check-OUT stopped this —
+      // the UI's `releasedEarly` gate — which left the whole middle of a shift
+      // open to a swap request.
+      if (!scope.isAdmin) {
+        const todayIso = shiftDayKey(new Date());
+        if (String(fromShift.shiftDate).slice(0, 10) < todayIso) {
+          return res.status(409).json({
+            success: false,
+            message: 'That shift has already passed — there is nothing left to swap.',
+            data: null,
+          });
+        }
+        if (assignment.checkInAt || assignment.checkOutAt) {
+          return res.status(409).json({
+            success: false,
+            message: 'This PR has already clocked in on that shift — they can no longer be moved to another venue.',
+            data: null,
+          });
+        }
       }
 
       // Reject a doomed request up front: approval re-checks BOTH rules under a
@@ -178,7 +222,14 @@ export class OutletSwapControllerClass {
         return res.status(409).json({ success: false, message: 'That shift is already fully staffed', data: null });
       }
       const targets = await this.outletSwapRepository.listSwapTargets({
-        agencyId: toShift.agencyId,
+        // The agency doing the swap — the SAME argument `listTargets` passes, so
+        // the picker and this screen see one list. `toShift.agencyId` is the
+        // anchor again, and here it is worse than a wrong row set: the tier
+        // screen reads the PR's grade from `agency_pr` for THIS agency id, and
+        // one person holds a row per agency. Alice is tier_1 at Why We Met and
+        // tier_2 at Atlas — grading Why We Met's own PR under the anchor's
+        // membership answers the seat question about a different person.
+        agencyId: assignment.agencyId,
         shiftDate: toShift.shiftDate,
         excludeShiftId: assignment.shiftId,
         prId: assignment.userId ?? assignment.prId,
@@ -282,7 +333,34 @@ export class OutletSwapControllerClass {
         const status = result.reason === 'not_found' ? 404 : 409;
         return res.status(status).json({ success: false, message: REJECTION_MESSAGES[result.reason], data: null });
       }
-      res.status(200).json({ success: true, message: 'Swap approved — your shift has been moved', data: result.request });
+      // THE SWAP IS THE THIRD WAY A PERSON ENDS UP SOMEWHERE. The roster has moved,
+      // so ask the same question the assign lanes ask: can they get to the venue they
+      // just took on? Read AFTER the move, which is the only moment the answer is
+      // about the roster that now exists. A warning, never a refusal — and it rides
+      // on the success response, because the swap HAPPENED.
+      // The swap row names the assignment, not the person — the PR is on the
+      // assignment, and the move changed its shift, never its owner.
+      const moved = await this.shiftAssignmentRepository.getById(owned.assignmentId);
+      const toShift = await this.shiftRepository.getById(owned.toShiftId);
+      const travelWarning =
+        toShift && moved
+        ? await travelWarningFor({
+            shift: toShift,
+            prId: moved.userId ?? moved.prId,
+            excludeShiftId: owned.toShiftId,
+            loadPin: (outletId) => this.shiftAssignmentRepository.getOutletPin(outletId),
+            loadAssignments: (prId) => this.shiftAssignmentRepository.listForPr(prId),
+            onError: (error) =>
+              logger.error('[OutletSwapController.approveMine] travel-gap check failed:', error),
+          })
+        : null;
+
+      res.status(200).json({
+        success: true,
+        message: 'Swap approved — your shift has been moved',
+        data: result.request,
+        warning: travelWarning,
+      });
     } catch (error) {
       logger.error('[OutletSwapController.approveMine] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

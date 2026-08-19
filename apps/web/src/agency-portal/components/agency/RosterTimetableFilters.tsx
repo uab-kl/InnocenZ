@@ -3,6 +3,8 @@ import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import type { RosterTimetableFilterState } from "@agency-portal/lib/roster-shift-filters";
 import { rosterTimetableFiltersActive } from "@agency-portal/lib/roster-shift-filters";
 import { RotateCcw, Search } from "lucide-react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function RosterTimetableFilters({
 	filters,
@@ -19,28 +21,53 @@ export function RosterTimetableFilters({
 	shiftCount: number;
 	totalShifts: number;
 }) {
+	const { t } = usePortalLocale();
 	const active = rosterTimetableFiltersActive(filters);
 
 	return (
 		<div className="iz-roster-shift-filters iz-roster-timetable-filters iz-roster-timetable-filters--compact">
 			<div className="iz-roster-shift-filters-head">
-				<span className="iz-roster-timetable-filters-title">Filters</span>
+				<span className="iz-roster-timetable-filters-title">
+					{t.filters.filters}
+				</span>
 				<span className="iz-roster-timetable-filters-stats">
-					{prCount} PR{prCount === 1 ? "" : "s"} · {shiftCount} shift
-					{shiftCount === 1 ? "" : "s"}
-					{active ? ` (of ${totalPrs} · ${totalShifts})` : ""}
+					{/*
+					 * Counts go through the dictionary rather than an inline "s" ternary:
+					 * that ternary IS the English plural rule, and it left "shift" on a
+					 * Chinese screen where no sweep looking for whole words could see it.
+					 */}
+					{fill(t.rosterGrid.prsAndShifts, {
+						prs: fill(
+							prCount === 1
+								? t.rosterGrid.prCountOne
+								: t.rosterGrid.prCountMany,
+							{ n: prCount },
+						),
+						shifts: fill(
+							shiftCount === 1
+								? t.rosterGrid.shiftCountOne
+								: t.rosterGrid.shiftCountMany,
+							{ n: shiftCount },
+						),
+					})}
+					{active
+						? fill(t.rosterGrid.ofTotals, {
+								prs: totalPrs,
+								shifts: totalShifts,
+							})
+						: ""}
 				</span>
 			</div>
 
 			<div className="iz-roster-timetable-filters-primary">
 				<label className="iz-roster-filter-field iz-roster-filter-field--search">
-					<span className="iz-roster-filter-label">Name</span>
+					<span className="iz-roster-filter-label">{t.filters.name}</span>
 					<span className="iz-roster-filter-input-wrap">
 						<Search className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
 						<input
 							type="search"
 							className="iz-roster-filter-input"
-							placeholder="Search"
+							placeholder={t.filters.search}
 							value={filters.nameQuery}
 							onChange={(e) => onChange({ nameQuery: e.target.value })}
 						/>
@@ -48,7 +75,7 @@ export function RosterTimetableFilters({
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">PR type</span>
+					<span className="iz-roster-filter-label">{t.filters.prType}</span>
 					<IzSelect
 						block
 						value={filters.prType}
@@ -58,13 +85,13 @@ export function RosterTimetableFilters({
 							})
 						}
 					>
-						<option value="">All PRs</option>
-						<option value="agency">Agency-tied only</option>
+						<option value="">{t.filters.allPrs}</option>
+						<option value="agency">{t.filters.agencyTiedOnly}</option>
 					</IzSelect>
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Show PRs</span>
+					<span className="iz-roster-filter-label">{t.filters.showPrs}</span>
 					<IzSelect
 						block
 						value={filters.showPrs}
@@ -75,20 +102,20 @@ export function RosterTimetableFilters({
 							})
 						}
 					>
-						<option value="">Everyone</option>
-						<option value="scheduled">With shifts</option>
-						<option value="free">Free some days</option>
+						<option value="">{t.filters.everyone}</option>
+						<option value="scheduled">{t.filters.withShifts}</option>
+						<option value="free">{t.filters.freeSomeDays}</option>
 					</IzSelect>
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Outlet</span>
+					<span className="iz-roster-filter-label">{t.filters.outlet}</span>
 					<IzSelect
 						block
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
-						<option value="">All outlets</option>
+						<option value="">{t.filters.allOutlets}</option>
 						{OUTLET_NAMES.map((o) => (
 							<option key={o} value={o}>
 								{o}
@@ -98,7 +125,9 @@ export function RosterTimetableFilters({
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Shift status</span>
+					<span className="iz-roster-filter-label">
+						{t.filters.shiftStatus}
+					</span>
 					<IzSelect
 						block
 						value={filters.status}
@@ -108,39 +137,43 @@ export function RosterTimetableFilters({
 							})
 						}
 					>
-						<option value="">Any status</option>
-						<option value="scheduled">Scheduled</option>
-						<option value="assignment-pending">Awaiting PR</option>
-						<option value="outlet-request-pending">Outlet request</option>
-						<option value="on-duty">On duty</option>
-						<option value="swap-pending">Swap pending</option>
-						<option value="unavailable">Unavailable</option>
+						<option value="">{t.filters.anyStatus}</option>
+						<option value="scheduled">{t.roster.scheduled}</option>
+						<option value="assignment-pending">
+							{t.rosterGrid.awaitingPr}
+						</option>
+						<option value="outlet-request-pending">
+							{t.rosterGrid.outletRequest}
+						</option>
+						<option value="on-duty">{t.roster.onDuty}</option>
+						<option value="swap-pending">{t.rosterGrid.swapPending}</option>
+						<option value="unavailable">{t.roster.unavailable}</option>
 					</IzSelect>
 				</label>
 			</div>
 
 			<div className="iz-roster-timetable-filters-secondary">
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Start from</span>
+					<span className="iz-roster-filter-label">{t.filters.startFrom}</span>
 					<IzTimeInput
 						value={filters.startTime}
 						onChange={(v) => onChange({ startTime: v })}
 						showIcon={false}
-						placeholder="Start Time"
+						placeholder={t.filters.startTime}
 						className="iz-roster-filter-time"
-						aria-label="Shift start from"
+						aria-label={t.filters.shiftStartFrom}
 					/>
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">End by</span>
+					<span className="iz-roster-filter-label">{t.filters.endBy}</span>
 					<IzTimeInput
 						value={filters.endTime}
 						onChange={(v) => onChange({ endTime: v })}
 						showIcon={false}
-						placeholder="End Time"
+						placeholder={t.filters.endTime}
 						className="iz-roster-filter-time"
-						aria-label="Shift end by"
+						aria-label={t.filters.shiftEndBy}
 					/>
 				</label>
 			</div>
@@ -152,7 +185,7 @@ export function RosterTimetableFilters({
 					onClick={() => onChange({ ...EMPTY_TIMETABLE_CLEAR })}
 				>
 					<RotateCcw className="h-3 w-3" />
-					Clear filters
+					{t.rosterGrid.clearFilters}
 				</button>
 			)}
 		</div>

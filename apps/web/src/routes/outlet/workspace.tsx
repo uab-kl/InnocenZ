@@ -30,6 +30,8 @@ import { useStore } from "@agency-portal/lib/store";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useRef, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/outlet/workspace")({
 	component: OutletWorkspacePage,
@@ -117,6 +119,7 @@ function NumField({
 }
 
 function OutletWorkspacePage() {
+	const { t } = usePortalLocale();
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const saveOutletWorkspace = useStore((s) => s.saveOutletWorkspace);
 	const toast = useStore((s) => s.toast);
@@ -275,17 +278,19 @@ function OutletWorkspacePage() {
 	return (
 		<OutletPage>
 			<OutletPageHeader
-				title="Workspace"
-				hint={`Rates for new shifts · ${draft.outletName}`}
+				title={t.nav.workspace}
+				iconKey="Workspace"
+				hint={fill(t.workspace.ratesForNewShifts, { outlet: draft.outletName })}
 			/>
 			{!canEdit && (
 				<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-					Read-only (Finance)
+					{t.workspace.readOnlyFinance}
 				</p>
 			)}
 
 			<OutletSection
-				title="Rates by PR tier"
+				title={t.workspace.ratesByPrTier}
+				iconKey="Rates by PR tier"
 				className="!mt-4"
 				collapsible
 				defaultOpen={false}
@@ -303,11 +308,16 @@ function OutletWorkspacePage() {
 
 			<OutletSection
 				id={OUTLET_DRINKS_PRICE_SECTION_ID}
-				title="Drinks Price"
+				title={t.workspace.drinksPrice}
+				iconKey="Drinks Price"
 				hint={
 					drinkItems.length
-						? `${drinkItems.length} drinks · RM ${drinkPriceRange.min}–${drinkPriceRange.max}`
-						: "Add drinks below"
+						? fill(t.workspace.drinksSummary, {
+								n: drinkItems.length,
+								min: drinkPriceRange.min,
+								max: drinkPriceRange.max,
+							})
+						: t.workspace.addDrinksBelow
 				}
 				collapsible
 				open={drinksOpen}
@@ -317,7 +327,7 @@ function OutletWorkspacePage() {
 					<OutletDrinkMenuEditor
 						drinks={drinkItems}
 						category="drink"
-						itemLabel="Drink"
+						itemLabel={t.workspace.drink}
 						readOnly={!canEdit}
 						onChange={
 							canEdit
@@ -327,18 +337,23 @@ function OutletWorkspacePage() {
 						onMoveItem={
 							canEdit ? (id) => moveMenuItem(id, "service") : undefined
 						}
-						moveHint="Move to Services"
+						moveHint={t.workspace.moveToServices}
 					/>
 				</IzCard>
 			</OutletSection>
 
 			<OutletSection
 				id={OUTLET_SERVICE_ENTITLEMENT_SECTION_ID}
-				title="Service Entitlement"
+				title={t.workspace.serviceEntitlement}
+				iconKey="Service Entitlement"
 				hint={
 					serviceItems.length
-						? `${serviceItems.length} services · RM ${serviceRange.min}–${serviceRange.max}`
-						: "Add services below"
+						? fill(t.workspace.servicesSummary, {
+								n: serviceItems.length,
+								min: serviceRange.min,
+								max: serviceRange.max,
+							})
+						: t.workspace.addServicesBelow
 				}
 				collapsible
 				open={servicesOpen}
@@ -348,7 +363,7 @@ function OutletWorkspacePage() {
 					<OutletDrinkMenuEditor
 						drinks={serviceItems}
 						category="service"
-						itemLabel="Service"
+						itemLabel={t.workspace.service}
 						readOnly={!canEdit}
 						onChange={
 							canEdit
@@ -356,21 +371,26 @@ function OutletWorkspacePage() {
 								: () => {}
 						}
 						onMoveItem={canEdit ? (id) => moveMenuItem(id, "drink") : undefined}
-						moveHint="Move to Drinks"
+						moveHint={t.workspace.moveToDrinks}
 					/>
 				</IzCard>
 			</OutletSection>
 
 			<OutletSection
-				title="Happy hour"
-				hint={`${draft.happyHourStart}–${draft.happyHourEnd} · ${draft.happyHourDrinkDiscountPct}% off drinks`}
+				title={t.workspace.happyHour}
+				iconKey="Happy hour"
+				hint={fill(t.workspace.happyHourSummary, {
+					start: draft.happyHourStart,
+					end: draft.happyHourEnd,
+					pct: draft.happyHourDrinkDiscountPct,
+				})}
 				collapsible
 				defaultOpen={false}
 			>
 				<IzCard className="!py-3">
 					<div className="flex gap-3">
 						<TimeField
-							label="Start"
+							label={t.workspace.start}
 							value={draft.happyHourStart}
 							readOnly={!canEdit}
 							onChange={
@@ -378,13 +398,13 @@ function OutletWorkspacePage() {
 							}
 						/>
 						<TimeField
-							label="End"
+							label={t.workspace.end}
 							value={draft.happyHourEnd}
 							readOnly={!canEdit}
 							onChange={canEdit ? (v) => patch({ happyHourEnd: v }) : undefined}
 						/>
 						<NumField
-							label="Drink discount"
+							label={t.workspace.drinkDiscount}
 							value={draft.happyHourDrinkDiscountPct}
 							suffix="%"
 							readOnly={!canEdit}
@@ -419,17 +439,15 @@ function OutletWorkspacePage() {
 						if (backend.backed) {
 							backend
 								.save(toSave)
-								.then(() => toast("Workspace saved", "success"))
-								.catch(() =>
-									toast("Could not save workspace — try again", "warn"),
-								);
+								.then(() => toast(t.workspace.workspaceSaved, "success"))
+								.catch(() => toast(t.workspace.couldNotSaveWorkspace, "warn"));
 						} else {
 							saveOutletWorkspace(toSave);
 						}
 						draftDirtyRef.current = false;
 					}}
 				>
-					Save workspace
+					{t.workspace.saveWorkspace}
 				</button>
 			)}
 		</OutletPage>

@@ -5,6 +5,8 @@ import {
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
 import { useState } from "react";
+import { COMCARD_LOCALE } from "@/lib/portal-i18n/comcard-locale";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /**
  * A comcard photo is a stored R2 OBJECT KEY, a demo /public path, or a data
@@ -128,7 +130,9 @@ export function PrComcardPickerThumb({
 						className="whitespace-nowrap font-semibold leading-tight text-[#222]"
 						style={{ fontSize: "0.657em", marginTop: "0.066em" }}
 					>
-						Age {comcardMeasure(pr.age)}
+						{fill(COMCARD_LOCALE.managePr.ageLabel, {
+							n: comcardMeasure(pr.age),
+						})}
 					</p>
 					<p
 						className="whitespace-nowrap font-semibold leading-tight text-[#222]"
@@ -202,7 +206,9 @@ export function PortfolioComcardVisual({
 				<div className="iz-portfolio-comcard__overlay">
 					<p className="iz-portfolio-comcard__name">{pr.name}</p>
 					<p className="iz-portfolio-comcard__line">
-						Age {comcardMeasure(pr.age)}
+						{fill(COMCARD_LOCALE.managePr.ageLabel, {
+							n: comcardMeasure(pr.age),
+						})}
 					</p>
 					<p className="iz-portfolio-comcard__line">
 						{comcardMeasure(pr.height, "cm")} ·{" "}
@@ -210,7 +216,9 @@ export function PortfolioComcardVisual({
 					</p>
 				</div>
 				{showBadge && (
-					<span className="iz-portfolio-comcard__badge">Photo Comcard</span>
+					<span className="iz-portfolio-comcard__badge">
+						{COMCARD_LOCALE.managePr.photoComcard}
+					</span>
 				)}
 			</div>
 		</div>

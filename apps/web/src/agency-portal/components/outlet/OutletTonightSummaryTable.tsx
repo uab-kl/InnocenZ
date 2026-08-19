@@ -12,6 +12,8 @@ import type { ShiftRequest } from "@agency-portal/lib/store";
 import { useOutletCanFor } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function OutletTonightSummaryTable({
 	floorTotals,
@@ -27,6 +29,7 @@ export function OutletTonightSummaryTable({
 	/** standalone = legacy; embedded = inside expanded live sales; collapsed = live sales header when closed */
 	variant?: "standalone" | "embedded" | "collapsed";
 }) {
+	const { t } = usePortalLocale();
 	const grandTotal = floorTotals.totalSalesRm;
 	const can = useOutletCanFor(outletSubRole);
 	const canViewReport = can("viewBilling") || can("viewSalesDashboard");
@@ -38,7 +41,7 @@ export function OutletTonightSummaryTable({
 			: formatRM(floorTotals.totalDrinksRm);
 	const drinksHint =
 		floorTotals.drinkUnits > 0 && typicalPerDrink > 0
-			? `~${formatRM(typicalPerDrink)} avg`
+			? fill(t.today.avgPerDrink, { amount: formatRM(typicalPerDrink) })
 			: null;
 
 	return (
@@ -53,7 +56,7 @@ export function OutletTonightSummaryTable({
 		>
 			<table
 				className="iz-outlet-tonight-summary-table"
-				aria-label="Tonight floor summary"
+				aria-label={t.today.tonightFloorSummary}
 			>
 				<thead>
 					<tr>
@@ -62,20 +65,20 @@ export function OutletTonightSummaryTable({
 							className="iz-outlet-tonight-summary-table__today-col"
 						/>
 						<th scope="col">
-							<LiveEarningsLabel label="Total Sales Report" />
+							<LiveEarningsLabel label={t.today.totalSalesReport} />
 						</th>
 						<th scope="col">
-							<LiveEarningsLabel label="Total Drinks" />
+							<LiveEarningsLabel label={t.today.totalDrinks} />
 						</th>
 						<th scope="col">
-							<LiveEarningsLabel label="Total Tips" />
+							<LiveEarningsLabel label={t.today.totalTips} />
 						</th>
 					</tr>
 				</thead>
 				<tbody>
 					<tr>
 						<th scope="row" className="iz-outlet-tonight-summary-table__today">
-							Today:
+							{t.today.todayColon}
 						</th>
 						<td>
 							{canViewReport ? (
@@ -105,12 +108,12 @@ export function OutletTonightSummaryTable({
 			</table>
 			{!variant || variant === "standalone" ? (
 				<p className="iz-outlet-tonight-summary-table__hint">
-					Totals from tonight&apos;s PR floor sales
+					{t.today.totalsFromTonight}
 				</p>
 			) : null}
 			{variant === "embedded" && (
 				<p className="iz-outlet-tonight-summary-table__hint">
-					Breakdown by PR below
+					{t.today.breakdownByPr}
 				</p>
 			)}
 		</div>

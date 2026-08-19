@@ -1,6 +1,8 @@
 import type { LucideIcon } from "lucide-react";
 import { Camera, Check, Lock, Pencil, X } from "lucide-react";
 import type { ReactNode } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /** View = read-only display · edit = editable input · locked = shown but not editable here. */
 export type ProfileFieldMode = "view" | "edit" | "locked";
@@ -22,6 +24,7 @@ export function ProfileSettingsField({
 	hint?: string;
 	placeholder?: string;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div
 			className={`iz-profile-field${mode === "edit" ? " iz-profile-field--edit" : ""}${mode === "locked" ? " iz-profile-field--locked" : ""}`}
@@ -30,7 +33,10 @@ export function ProfileSettingsField({
 				<Icon className="h-3.5 w-3.5 shrink-0" aria-hidden />
 				<span>{label}</span>
 				{mode === "locked" && (
-					<span className="iz-profile-field__lock" title="Not editable here">
+					<span
+						className="iz-profile-field__lock"
+						title={t.profile.notEditableHere}
+					>
 						<Lock className="h-3 w-3" aria-hidden />
 					</span>
 				)}
@@ -61,14 +67,14 @@ export function ProfileEditingBanner({
 	/** What actually persists on Save (real sessions often only save the org name). */
 	editableHint?: string;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-profile-edit-banner" role="status">
 			<div className="iz-profile-edit-banner__dot" aria-hidden />
 			<div>
 				<p className="iz-profile-edit-banner__title">Editing {what}</p>
 				<p className="iz-profile-edit-banner__body">
-					{editableHint ??
-						"Highlighted fields can be changed. Use Save below when you are done."}
+					{editableHint ?? t.profile.highlightedFieldsHint}
 				</p>
 			</div>
 		</div>
@@ -85,8 +91,13 @@ export function ProfileEditDock({
 	onCancel: () => void;
 	saving?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	return (
-		<div className="iz-profile-edit-dock" role="toolbar" aria-label="Save profile">
+		<div
+			className="iz-profile-edit-dock"
+			role="toolbar"
+			aria-label={t.profile.saveProfile}
+		>
 			<button
 				type="button"
 				className="iz-btn iz-btn-soft iz-profile-edit-dock__cancel"
@@ -103,7 +114,7 @@ export function ProfileEditDock({
 				disabled={saving}
 			>
 				<Check className="h-4 w-4" />
-				{saving ? "Saving…" : "Save changes"}
+				{saving ? t.profile.saving : t.profile.saveChanges}
 			</button>
 		</div>
 	);
@@ -112,11 +123,16 @@ export function ProfileEditDock({
 /** Primary Edit CTA in the hero (not buried at the page bottom). */
 export function ProfileEditTrigger({
 	onClick,
-	label = "Edit profile",
+	label,
 }: {
 	onClick: () => void;
 	label?: string;
 }) {
+	const { t } = usePortalLocale();
+	// Resolved in the body, not as a default PARAMETER: a default arg is evaluated
+	// before any hook can run, so it cannot read the dictionary — that is how the
+	// date picker and language picker hints stayed English through three passes.
+	const text = label ?? t.profile.editProfile;
 	return (
 		<button
 			type="button"
@@ -124,7 +140,7 @@ export function ProfileEditTrigger({
 			onClick={onClick}
 		>
 			<Pencil className="h-4 w-4" />
-			{label}
+			{text}
 		</button>
 	);
 }
@@ -139,6 +155,7 @@ export function ProfilePhotoActions({
 	onRemovePhoto?: () => void;
 	hasPhoto: boolean;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-profile-photo-actions">
 			<button
@@ -147,7 +164,7 @@ export function ProfilePhotoActions({
 				onClick={onChangePhoto}
 			>
 				<Camera className="h-4 w-4" />
-				{hasPhoto ? "Change photo" : "Add photo"}
+				{hasPhoto ? t.profile.changePhoto : t.profile.addPhoto}
 			</button>
 			{hasPhoto && onRemovePhoto && (
 				<button
@@ -170,7 +187,9 @@ export function ProfileSectionCard({
 	children: ReactNode;
 }) {
 	return (
-		<div className={`iz-profile-section${editing ? " iz-profile-section--editing" : ""}`}>
+		<div
+			className={`iz-profile-section${editing ? " iz-profile-section--editing" : ""}`}
+		>
 			{children}
 		</div>
 	);

@@ -23,6 +23,7 @@ import { PortalGateLoading } from "@/components/layout/portal-gate-loading";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { ensurePortal, guardPortalClient } from "@/lib/auth/guards";
 import { useProfile } from "@/lib/auth/use-profile";
+import { PortalLocaleProvider } from "@/lib/portal-i18n/context";
 import "@agency-portal/prototype-theme.css";
 import "@agency-portal/agency-app-overrides.css";
 
@@ -145,8 +146,13 @@ function OutletLayout() {
 	}
 
 	return (
-		<PortalShell portal="outlet" navItems={navItems} overlay={<Toasts />}>
-			<Outlet />
-		</PortalShell>
+		// Outside PortalShell so the shell's own chrome — sidebar, greeting, and
+		// the switcher in the sidebar foot — reads the same locale as the pages
+		// rendered inside it.
+		<PortalLocaleProvider accountLocale={profile?.preferredLocale}>
+			<PortalShell portal="outlet" navItems={navItems} overlay={<Toasts />}>
+				<Outlet />
+			</PortalShell>
+		</PortalLocaleProvider>
 	);
 }

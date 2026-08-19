@@ -9,6 +9,7 @@
  * one week's conduct.
  */
 
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	AgencyPenaltyRuleRow,
 	SavePenaltyRuleInput,
@@ -22,9 +23,17 @@ export const PR_PAY_CLASSES: readonly PrPayClass[] = [
 	"commissionOnly",
 ] as const;
 
-export const PR_PAY_CLASS_LABELS: Record<PrPayClass, string> = {
-	basic: "Basic",
-	commissionOnly: "Commission only",
+/**
+ * Display label per pay class. Resolver functions, not strings and not keys —
+ * a dictionary key is itself a `string`, so rendering one type-checks and ships
+ * the key name to screen. The record KEYS stay the `PrPayClass` enum.
+ */
+export const PR_PAY_CLASS_LABELS: Record<
+	PrPayClass,
+	(t: PortalTranslations) => string
+> = {
+	basic: (t) => t.managePr.payClassBasic,
+	commissionOnly: (t) => t.managePr.payClassCommissionOnly,
 };
 
 /** One entry in a PR's pay-class audit trail — the class takes effect from `fromIso`. */

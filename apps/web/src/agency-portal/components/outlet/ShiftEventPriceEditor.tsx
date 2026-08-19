@@ -7,11 +7,28 @@ import {
 	sortOutletDrinkMenuByPrice,
 } from "@agency-portal/lib/outlet-demo";
 import type { ReactNode } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
-function priceListHint(items: OutletDrinkPrice[], noun: string): string {
-	if (items.length === 0) return `Add ${noun}s below`;
+/*
+ * Both sentences are passed in whole rather than composed here. The old
+ * version built `${n} ${noun}s` and `Add ${noun}s below` from an English noun,
+ * which is grammar this helper has no business owning — `workspace` already
+ * carries one empty state and one summary per kind.
+ */
+function priceListHint(
+	items: OutletDrinkPrice[],
+	emptyHint: string,
+	summary: string,
+): string {
+	if (items.length === 0) return emptyHint;
 	const range = drinkMenuPriceRange(items);
-	return `${items.length} ${noun}${items.length === 1 ? "" : "s"} · RM ${range.min}–${range.max}`;
+	return fill(summary, {
+		n: items.length,
+		min: range.min,
+		max: range.max,
+	});
 }
 
 function ShiftEventPriceGroup({
@@ -23,6 +40,7 @@ function ShiftEventPriceGroup({
 	hint: string;
 	children: ReactNode;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="rounded-2xl border border-[var(--iz-line)] bg-[rgba(255,255,255,0.02)] p-2.5">
 			<div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-2 gap-y-0.5">
@@ -48,6 +66,7 @@ export function ShiftEventPriceEditor({
 	menu: OutletDrinkPrice[];
 	onChange: (next: OutletDrinkPrice[]) => void;
 }) {
+	const { t } = usePortalLocale();
 	const drinkItems = menu.filter((d) => outletDrinkCategory(d) === "drink");
 	const serviceItems = menu.filter((d) => outletDrinkCategory(d) === "service");
 
@@ -71,30 +90,38 @@ export function ShiftEventPriceEditor({
 	return (
 		<div className="space-y-2.5">
 			<ShiftEventPriceGroup
-				title="Drinks Price"
-				hint={priceListHint(drinkItems, "drink")}
+				title={t.workspace.drinksPrice}
+				hint={priceListHint(
+					drinkItems,
+					t.workspace.addDrinksBelow,
+					t.workspace.drinksSummary,
+				)}
 			>
 				<OutletDrinkMenuEditor
 					drinks={drinkItems}
 					category="drink"
-					itemLabel="Drink"
+					itemLabel={t.workspace.drink}
 					onChange={(edited) => commitSlice(edited, serviceItems)}
 					onMoveItem={(id) => moveItem(id, "service")}
-					moveHint="Move to Services"
+					moveHint={t.workspace.moveToServices}
 				/>
 			</ShiftEventPriceGroup>
 
 			<ShiftEventPriceGroup
-				title="Service Entitlement"
-				hint={priceListHint(serviceItems, "service")}
+				title={t.workspace.serviceEntitlement}
+				hint={priceListHint(
+					serviceItems,
+					t.workspace.addServicesBelow,
+					t.workspace.servicesSummary,
+				)}
 			>
 				<OutletDrinkMenuEditor
 					drinks={serviceItems}
 					category="service"
-					itemLabel="Service"
+					itemLabel={t.workspace.service}
 					onChange={(edited) => commitSlice(edited, drinkItems)}
 					onMoveItem={(id) => moveItem(id, "drink")}
-					moveHint="Move to Drinks"
+					moveHint={t.workspace.moveToDrinks}
 				/>
 			</ShiftEventPriceGroup>
 		</div>

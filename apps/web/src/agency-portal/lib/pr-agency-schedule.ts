@@ -1,4 +1,5 @@
 ﻿import type { AgencyRosterSlot } from "@agency-portal/lib/agency-demo";
+import { rosterSlotAgencyName } from "@agency-portal/lib/agency-demo";
 import {
 	addDaysToIso,
 	getLiveTodayIso,
@@ -299,10 +300,11 @@ function dedupeTimetableEntries(entries: TimetableEntry[]): TimetableEntry[] {
 
 function resolveSlotEntry(slot: AgencyRosterSlot): TimetableEntry {
 	const [y, m, d] = slot.dateIso.split("-").map(Number);
-	const agency =
-		slot.agencyAssignment?.agencyName ??
-		slot.outletSwap?.agencyName ??
-		DEFAULT_PR_AGENCY_NAME;
+	// The third copy of `rosterSlotAgencyName`'s chain, and like the other two it
+	// omitted the `agencyId` arm — so a real backend slot, which carries only an
+	// id, fell to the demo literal and labelled the PR's own shift "Atlas Agency"
+	// no matter who actually booked them.
+	const agency = rosterSlotAgencyName(slot);
 
 	if (slot.status === "assignment-pending") {
 		const outletRequested = slot.agencyAssignment?.requestedByOutlet;

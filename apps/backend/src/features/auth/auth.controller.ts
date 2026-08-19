@@ -44,6 +44,12 @@ import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.rep
 import { SubscriptionRepositoryClass } from '@/features/subscription/subscription.repository.js';
 import { MemberSubscriptionRepositoryClass } from '@/features/member-subscription/member-subscription.repository.js';
 import { SYSTEM_ACTOR } from '@/util/actor';
+import { sendPasswordResetEmail } from '@/features/mailing/mailing.repository.js';
+import { env } from '@/env.js';
+
+/** Reset-link lifetime. Keep the label in step with the number. */
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+const RESET_TOKEN_TTL_LABEL = '1 hour';
 
 export class AuthControllerClass {
   constructor(
@@ -446,8 +452,6 @@ export class AuthControllerClass {
       email?: string;
       phoneNum: string;
       packageId?: string;
-      /** Outlet only — already validated as an ACTIVE agency by registerUser. */
-      onboardedByAgencyId?: string;
     },
     actor: string,
   ): Promise<{ kind: 'agency' | 'outlet'; id: string; name: string }> {
@@ -515,11 +519,11 @@ export class AuthControllerClass {
       businessLicense: body.companyRegistrationOld ?? null,
       ssmNo,
       status: 'pending_review',
-      // The agency the venue named at sign-up. Same column the admin Outlet
-      // Details panel reads and PATCH :id/onboarding-agency writes — this is a
-      // DECLARATION, not a self-grant: the outlet stays `pending_review` until
-      // an admin approves, and the admin can repoint it there.
-      onboardedByAgencyId: body.onboardedByAgencyId ?? null,
+      // `onboarded_by_agency_id` is deliberately NOT set. Sign-up no longer
+      // names an agency: a venue works with as many as accept it, and each one
+      // decides for itself (`agency_outlet`, 0123). The column keeps its
+      // historical values for venues registered before the cutover and stays
+      // null from here on.
       createdBy: actor,
       updatedBy: actor,
     });
@@ -530,6 +534,12 @@ export class AuthControllerClass {
       createdBy: actor,
       updatedBy: actor,
     });
+    // No `agency_outlet` link is created here, because sign-up no longer asks
+    // which agency. A new venue therefore starts with NONE and cannot post until
+    // it links one in Settings and that agency approves — which is the intended
+    // flow, not a gap: an agency partnership is the agency's to accept, and
+    // manufacturing one from a dropdown the venue picked would record a
+    // relationship nobody on the other side agreed to.
     await this.enrollSignupPackage({
       accountType: 'outlet',
       orgId: outlet.id,
@@ -541,7 +551,7 @@ export class AuthControllerClass {
       outletId: outlet.id,
       userId,
       packageId: body.packageId ?? null,
-      onboardedByAgencyId: outlet.onboardedByAgencyId ?? null,
+
     });
     return { kind: 'outlet', id: outlet.id, name: outlet.name };
   }
@@ -733,24 +743,6 @@ export class AuthControllerClass {
       // Name the offending field. Both of these used to return the same bare
       // USER_ALREADY_EXISTS on the last step of a 6-step form, for a value typed
       // back on step 1 — leaving no way to tell which field to change.
-      // Outlet sign-up names its onboarding agency. Re-check it here rather than
-      // trusting the id: the list is public, so a hand-rolled POST could name a
-      // suspended / non-existent agency and the FK would only catch the latter.
-      // Checked BEFORE createUserWithRole so a rejection leaves no half account.
-      if (parsedBody.accountType === 'outlet' && parsedBody.onboardedByAgencyId) {
-        const agency = await this.agencyRepository.getById(parsedBody.onboardedByAgencyId);
-        if (!agency || agency.status !== 'active') {
-          logger.warn('[AuthController.register] Rejecting unknown onboarding agency', {
-            onboardedByAgencyId: parsedBody.onboardedByAgencyId,
-            found: Boolean(agency),
-          });
-          return res.status(400).json({
-            success: false,
-            message: 'That onboarding agency is not available — pick one from the list',
-            data: null,
-          });
-        }
-      }
 
       if (parsedBody.email) {
         const existingEmail = await this.userRepository.getUserByLoginMethod('email', parsedBody.email);
@@ -1025,30 +1017,56 @@ export class AuthControllerClass {
         });
       }
 
-      const { email } = parseResult.data;
-      const user = await this.userRepository.getUserByLoginMethod('email', email ?? '');
+      const email = parseResult.data.email.trim();
 
+      /**
+       * One answer for every outcome — unknown address, disabled account, or a
+       * link actually sent. A response that differs between them turns this
+       * endpoint into an account-existence oracle for the whole platform.
+       */
+      const neutral = {
+        success: true,
+        message: 'If that email is registered, a reset link is on its way.',
+        data: null,
+      };
+
+      const user = await this.userRepository.getUserByLoginMethod('email', email);
       if (!user || user.status.toLowerCase() !== 'active') {
-        return res.status(200).json({
-          success: true,
-          message: 'If that email exists, a reset link has been sent.',
-          data: null,
-        });
+        logger.info('[AuthController.forgotPassword] No active account for that email');
+        return res.status(200).json(neutral);
       }
 
       const token = crypto.randomBytes(32).toString('hex');
-      const expiresAt = new Date(Date.now() + 60 * 60 * 1000);
+      const expiresAt = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
+      // Replaces any earlier token for this user (the repository deletes first),
+      // so an old link stops working the moment a new one is requested.
       await this.authRepository.createResetPasswordToken(user.id, token, expiresAt);
 
-      const resetUrl = `${process.env.FRONTEND_URL}/reset-password?token=${token}`;
-      logger.info('[AuthController.forgotPassword] Reset link generated:', resetUrl);
+      const base = env.FRONTEND_URL.replace(/\/$/, '');
+      const resetPasswordLink = `${base}/reset-password?token=${encodeURIComponent(token)}`;
 
-      return res.status(200).json({
-        success: true,
-        message: 'Reset password link will be sent.',
-        data: { resetUrl, token },
-      });
+      try {
+        const sent = await sendPasswordResetEmail({
+          recipientEmail: user.email ?? email,
+          name: user.username?.trim() || 'there',
+          resetPasswordLink,
+          expiryLabel: RESET_TOKEN_TTL_LABEL,
+        });
+        if (!sent) {
+          // SMTP is not configured. The link is deliberately NOT returned to
+          // the caller — log it so a dev can still finish the flow locally.
+          logger.warn(
+            '[AuthController.forgotPassword] Email not configured — reset link only logged:',
+            resetPasswordLink,
+          );
+        }
+      } catch (mailError) {
+        // A dead mailbox must not tell the caller whether the account exists.
+        logger.error('[AuthController.forgotPassword] Could not send reset email:', mailError);
+      }
+
+      return res.status(200).json(neutral);
     } catch (error) {
       logger.error('[AuthController.forgotPassword] Error:', error);
       return res.status(500).json({
@@ -1101,6 +1119,66 @@ export class AuthControllerClass {
       });
     } catch (error) {
       logger.error('[AuthController.me] Error:', error);
+      return res.status(500).json({
+        success: false,
+        message: Error.INTERNAL_SERVER_ERROR,
+        data: null,
+      });
+    }
+  }
+
+  /**
+   * Save the caller's UI language (migration 0122).
+   *
+   * Self-only by construction: the id comes from the verified token, never from
+   * the body or the path, so there is no route shape in which one account can
+   * set another's language. That is why this carries no role guard — every
+   * signed-in role (admin, agency, outlet, PR) may set their own.
+   *
+   * The allow-list IS the validation. A varchar(16) column would happily store
+   * junk, and a locale no dictionary answers to renders a portal full of
+   * `undefined` — so an unknown tag is a 400, not a silent write.
+   */
+  async updateLocale(req: Request, res: Response) {
+    /** `zh` = Simplified. Mirrors apps/mobile/src/i18n/locale-prefs.ts. */
+    const SUPPORTED_LOCALES = ['en', 'zh'] as const;
+
+    try {
+      const user = req.user;
+      if (!user) {
+        return res.status(401).json({ success: false, message: Error.UNAUTHORIZED, data: null });
+      }
+
+      const parsed = z.object({ locale: z.enum(SUPPORTED_LOCALES) }).safeParse(req.body);
+
+      if (!parsed.success) {
+        return res.status(400).json({
+          success: false,
+          message: `locale must be one of: ${SUPPORTED_LOCALES.join(', ')}`,
+          data: null,
+        });
+      }
+
+      const updated = await this.userRepository.updateUser(
+        { preferredLocale: parsed.data.locale, updatedBy: user.id },
+        user.id,
+      );
+
+      if (!updated) {
+        return res.status(500).json({
+          success: false,
+          message: Error.INTERNAL_SERVER_ERROR,
+          data: null,
+        });
+      }
+
+      return res.status(200).json({
+        success: true,
+        message: 'OK',
+        data: { preferredLocale: updated.preferredLocale },
+      });
+    } catch (error) {
+      logger.error('[AuthController.updateLocale] Error:', error);
       return res.status(500).json({
         success: false,
         message: Error.INTERNAL_SERVER_ERROR,
@@ -1238,7 +1316,11 @@ export class AuthControllerClass {
 
       const ok = await comparePassword(parsed.data.currentPassword, user.passwordHash);
       if (!ok) {
-        return res.status(401).json({
+        // 400, NOT 401. The caller IS authenticated — their token is fine, the
+        // typed password is wrong. A 401 here is indistinguishable from an
+        // expired session to the web client, whose axios interceptor signs the
+        // user out on any 401: one typo would boot them to /login.
+        return res.status(400).json({
           success: false,
           message: 'Current password is incorrect',
           data: null,

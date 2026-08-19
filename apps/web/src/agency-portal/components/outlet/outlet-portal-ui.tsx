@@ -20,6 +20,8 @@ import {
 	X,
 } from "lucide-react";
 import type { ComponentType, ReactNode } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 const TIER_ICONS = [Star, Medal, Award, Award, Crown] as const;
 
@@ -93,11 +95,18 @@ export function OutletPage({
 export function OutletPageHeader({
 	eyebrow,
 	title,
+	iconKey,
 	hint,
 	trailing,
 }: {
 	eyebrow?: string;
 	title: string;
+	/**
+	 * The ENGLISH title to resolve the page icon from, when `title` is
+	 * translated. `iconForNav` matches on the text, so a localised title alone
+	 * silently drops the icon. Mirrors the same prop on `OutletSection`.
+	 */
+	iconKey?: string;
 	hint?: string;
 	trailing?: ReactNode;
 }) {
@@ -115,7 +124,9 @@ export function OutletPageHeader({
 					</p>
 				)}
 				<h2 className="font-sora text-lg font-extrabold leading-snug text-[var(--iz-txt)]">
-					<TitleWithIcon icon={iconForNav(title)}>{title}</TitleWithIcon>
+					<TitleWithIcon icon={iconForNav(iconKey ?? title)}>
+						{title}
+					</TitleWithIcon>
 				</h2>
 				{hint && <p className="iz-outlet-page-hint">{hint}</p>}
 			</div>
@@ -171,18 +182,27 @@ export function OutletTargetActualCard({
 	lowerIsBetter?: boolean;
 	onClick?: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const level = performanceLevel(actual, target, lowerIsBetter);
 	const gap = actual - target;
 	const gapLabel =
 		gap === 0
-			? "On target"
+			? t.today.onTarget
 			: lowerIsBetter
 				? gap < 0
-					? `${formatOutletShiftMetricAmount(Math.abs(gap))} under`
-					: `+${formatOutletShiftMetricAmount(gap)} over`
+					? fill(t.today.amountUnder, {
+							amount: formatOutletShiftMetricAmount(Math.abs(gap)),
+						})
+					: fill(t.today.amountOver, {
+							amount: formatOutletShiftMetricAmount(gap),
+						})
 				: gap > 0
-					? `+${formatOutletShiftMetricAmount(gap)} above`
-					: `${formatOutletShiftMetricAmount(Math.abs(gap))} below`;
+					? fill(t.today.amountAbove, {
+							amount: formatOutletShiftMetricAmount(gap),
+						})
+					: fill(t.today.amountBelow, {
+							amount: formatOutletShiftMetricAmount(Math.abs(gap)),
+						});
 
 	const className = cn(
 		"iz-outlet-ta-card",
@@ -194,23 +214,23 @@ export function OutletTargetActualCard({
 				<span className="iz-outlet-ta-card__label">{label}</span>
 				<TrafficPill level={level} hideIcon className="!py-0.5 !text-[9px]">
 					{level === "green"
-						? "On track"
+						? t.today.onTrack
 						: level === "yellow"
-							? "Watch"
-							: "Attention"}
+							? t.today.watch
+							: t.today.attention}
 				</TrafficPill>
 			</div>
 			<div className="iz-outlet-ta-card__rows">
 				<div className="iz-outlet-ta-card__row">
 					<span className="iz-outlet-ta-card__kind iz-outlet-ta-card__kind--target">
-						Target
+						{t.today.target}
 					</span>
 					<span className="iz-outlet-ta-card__value iz-outlet-ta-card__value--target">
 						{formatOutletShiftMetricAmount(target)}
 					</span>
 				</div>
 				<div className="iz-outlet-ta-card__row">
-					<span className="iz-outlet-ta-card__kind">Actual</span>
+					<span className="iz-outlet-ta-card__kind">{t.today.actual}</span>
 					<span
 						className={cn(
 							"iz-outlet-ta-card__value",
@@ -329,6 +349,7 @@ export function OutletApplicantRow({
 	onAccept: () => void;
 	onDecline: () => void;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-outlet-applicant-row">
 			<div className="min-w-0 flex-1">
@@ -336,14 +357,16 @@ export function OutletApplicantRow({
 				<div className="mt-0.5 flex flex-wrap items-center gap-1">{meta}</div>
 			</div>
 			<div className="flex shrink-0 flex-col items-end gap-1">
-				<span className="iz-outlet-applicant-row__label">Tap to respond</span>
+				<span className="iz-outlet-applicant-row__label">
+					{t.today.tapToRespond}
+				</span>
 				<div className="flex gap-1.5">
 					<button
 						type="button"
 						onClick={onAccept}
 						className="iz-outlet-applicant-btn iz-outlet-applicant-btn--accept"
-						aria-label={`Accept ${name}`}
-						title="Accept — add to shift"
+						aria-label={fill(t.today.acceptNamed, { name })}
+						title={t.today.acceptHint}
 					>
 						<Check className="h-4 w-4" strokeWidth={2.5} />
 					</button>
@@ -351,8 +374,8 @@ export function OutletApplicantRow({
 						type="button"
 						onClick={onDecline}
 						className="iz-outlet-applicant-btn iz-outlet-applicant-btn--decline"
-						aria-label={`Decline ${name}`}
-						title="Decline — remove application"
+						aria-label={fill(t.today.declineNamed, { name })}
+						title={t.today.declineHint}
 					>
 						<X className="h-4 w-4" strokeWidth={2.5} />
 					</button>
@@ -400,6 +423,7 @@ export function OutletCardHeader({
 }
 
 export function OutletLockedRow({ children }: { children: ReactNode }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-job-posting-control">
 			<div className="iz-post-job-locked-row w-full">
@@ -408,7 +432,7 @@ export function OutletLockedRow({ children }: { children: ReactNode }) {
 				</span>
 				<span className="iz-post-job-locked-badge">
 					<Lock className="h-3 w-3" aria-hidden />
-					Locked
+					{t.today.lockedRow}
 				</span>
 			</div>
 		</div>

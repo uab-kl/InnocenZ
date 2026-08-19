@@ -1,10 +1,10 @@
 import {
 	lazy,
+	type ReactNode,
 	Suspense,
 	useEffect,
 	useRef,
 	useState,
-	type ReactNode,
 } from "react";
 import { LandingLocaleProvider } from "@/lib/landing-i18n";
 import { HandoffHero } from "./HandoffHero";
@@ -15,10 +15,14 @@ const HandoffChallenges = lazy(() =>
 	import("./HandoffChallenges").then((m) => ({ default: m.HandoffChallenges })),
 );
 const HandoffSolutionFlow = lazy(() =>
-	import("./HandoffChallenges").then((m) => ({ default: m.HandoffSolutionFlow })),
+	import("./HandoffChallenges").then((m) => ({
+		default: m.HandoffSolutionFlow,
+	})),
 );
 const HandoffPlatformModules = lazy(() =>
-	import("./HandoffPlatform").then((m) => ({ default: m.HandoffPlatformModules })),
+	import("./HandoffPlatform").then((m) => ({
+		default: m.HandoffPlatformModules,
+	})),
 );
 const HandoffAIFeatures = lazy(() =>
 	import("./HandoffPlatform").then((m) => ({ default: m.HandoffAIFeatures })),

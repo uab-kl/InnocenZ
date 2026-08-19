@@ -26,6 +26,7 @@ import {
 	Wallet,
 } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 function kindIcon(kind: OpsNotificationKind) {
 	if (kind === "sos") return AlertTriangle;
@@ -48,6 +49,7 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 	const markOpsNotificationRead = useStore((s) => s.markOpsNotificationRead);
 	const [open, setOpen] = useState(false);
 	const [sosDetailId, setSosDetailId] = useState<string | null>(null);
+	const { t } = usePortalLocale();
 	const navigate = useNavigate();
 
 	// A real session reads the `notification` table; demo sessions keep the demo
@@ -97,8 +99,8 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 			<button
 				type="button"
 				className="iz-topbar-action relative"
-				title="Notifications"
-				aria-label={`Notifications${unread ? `, ${unread} unread` : ""}`}
+				title={t.notifications.title}
+				aria-label={`${t.notifications.title}${unread ? `, ${unread} ${t.notifications.unreadSuffix}` : ""}`}
 				onClick={() => setOpen(true)}
 			>
 				<Bell className="h-3.5 w-3.5" />
@@ -110,13 +112,12 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 			</button>
 
 			<IzSheet open={open && !sosDetailId} onClose={() => setOpen(false)}>
-				<IzCardTitle>Notifications</IzCardTitle>
-				<p className="iz-tiny iz-muted mb-3">
-					Shift updates, check-ins, PVs, disputes, ratings, SOS, and reports —
-					tap to open.
-				</p>
+				<IzCardTitle>{t.notifications.title}</IzCardTitle>
+				<p className="iz-tiny iz-muted mb-3">{t.notifications.hint}</p>
 				{notifications.length === 0 ? (
-					<p className="iz-sm iz-muted py-6 text-center">No notifications</p>
+					<p className="iz-sm iz-muted py-6 text-center">
+						{t.notifications.empty}
+					</p>
 				) : (
 					<div className="space-y-2">
 						{notifications.map((n) => {
@@ -149,12 +150,24 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 												{n.title}
 											</span>
 											{!n.read && (
-												<IzPill variant={urgent ? "red" : "amber"}>New</IzPill>
+												<IzPill variant={urgent ? "red" : "amber"}>
+													{t.notifications.isNew}
+												</IzPill>
 											)}
 										</div>
 										<p className="iz-tiny iz-muted mt-1">{n.body}</p>
 										<p className="iz-tiny iz-muted2 mt-1">
-											{OPS_KIND_LABEL[n.kind]} · {n.at}
+											{/*
+											 * Optional-called on purpose. As a plain string map an
+											 * unmapped backend kind rendered empty and nobody died;
+											 * as resolver functions the same miss would be
+											 * `undefined(t)`, which throws and white-screens the
+											 * portal — the exact failure `kindIcon` above is
+											 * guarded against. Falling back to the "Update" label
+											 * keeps an unknown kind readable.
+											 */}
+											{(OPS_KIND_LABEL[n.kind] ?? OPS_KIND_LABEL.unknown)(t)} ·{" "}
+											{n.at}
 										</p>
 									</IzCard>
 								</button>
@@ -168,7 +181,7 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 						className="iz-btn iz-btn-soft mt-3"
 						onClick={() => setOpen(false)}
 					>
-						Open Live Roster
+						{t.notifications.openLiveRoster}
 					</Link>
 				)}
 				{portal === "outlet" && (
@@ -177,7 +190,7 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 						className="iz-btn iz-btn-soft mt-3"
 						onClick={() => setOpen(false)}
 					>
-						Open Floor
+						{t.notifications.openFloor}
 					</Link>
 				)}
 			</IzSheet>
@@ -186,7 +199,7 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 				{sosDetail && (
 					<>
 						<IzCardTitle className="text-[var(--iz-red)] flex items-center gap-2">
-							SOS incident
+							{t.notifications.sosIncident}
 						</IzCardTitle>
 						<IzCard
 							flat
@@ -197,24 +210,26 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 								{prTypeLabel(sosDetail.prType)} · IC {sosDetail.prIc}
 							</p>
 							<p className="iz-tiny iz-muted mt-1">
-								Outlet: <b>{sosDetail.outlet}</b> · Agency:{" "}
-								{sosDetail.agencyName}
+								{t.notifications.outletLabel}: <b>{sosDetail.outlet}</b> ·{" "}
+								{t.notifications.agencyLabel}: {sosDetail.agencyName}
 							</p>
 							<p className="iz-tiny mt-2 flex items-start gap-1 font-semibold text-[var(--iz-gold-l)]">
 								<MapPin className="mt-0.5 h-3 w-3 shrink-0" />
 								{sosDetail.locationLabel} · {sosDetail.lat.toFixed(4)},{" "}
 								{sosDetail.lng.toFixed(4)}
 							</p>
-							<p className="iz-tiny iz-muted2 mt-2">Reported {sosDetail.at}</p>
+							<p className="iz-tiny iz-muted2 mt-2">
+								{t.notifications.reported} {sosDetail.at}
+							</p>
 						</IzCard>
-						<label className="iz-tiny iz-muted2 mt-3 block tracking-wide">
-							INCIDENT NOTE
+						<label className="iz-tiny iz-muted2 mt-3 block uppercase tracking-wide">
+							{t.notifications.incidentNote}
 						</label>
 						<p className="iz-sm mt-1 whitespace-pre-wrap">{sosDetail.note}</p>
 						{sosDetail.photoDataUrl && (
 							<img
 								src={sosDetail.photoDataUrl}
-								alt="SOS evidence"
+								alt={t.notifications.sosEvidence}
 								className="mt-3 max-h-40 w-full rounded-lg object-cover"
 							/>
 						)}
@@ -223,7 +238,7 @@ export function OpsNotificationBell({ portal }: { portal: OpsPortal }) {
 							className="iz-btn iz-btn-soft mt-4"
 							onClick={closeSosDetail}
 						>
-							Close
+							{t.common.close}
 						</button>
 					</>
 				)}

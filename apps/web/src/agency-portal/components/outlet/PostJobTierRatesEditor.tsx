@@ -15,6 +15,7 @@ import {
 	ensureAllPayTierRows,
 	isCommissionOnlyPayTier,
 	isServantPayTier,
+	newPostJobPayTierRow,
 	outletTierForPostJobPayTier,
 	type PostJobPayTierId,
 	type PostJobPayTierRow,
@@ -25,6 +26,8 @@ import {
 import { cn } from "@agency-portal/lib/utils";
 import { Award, Crown, Medal, Percent, Star, UserRound } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 const TIER_COLUMN_ICONS = [Star, Medal, Award, Award, Crown] as const;
 
@@ -54,6 +57,40 @@ function formatCommissionHint(row: PostJobPayTierRow): string {
 	return `+ ${parts.join(" & ")}`;
 }
 
+/**
+ * A tier the venue PRICED but asked for nobody of.
+ *
+ * The composer shows every tier whether or not the shift books one, so a rate typed
+ * into a column with a count of zero looks exactly like a column nobody touched.
+ * That rate is kept now (18 Aug 2026 — it used to be dropped on save), which makes
+ * the silence worse, not better: the number is real, it is simply not buying anyone
+ * on this shift. Say so.
+ *
+ * "Untouched" is measured against a FRESHLY BUILT row rather than against the
+ * workspace card directly, because that is the same constructor `ensureAllPayTierRows`
+ * uses to fill these columns in — including `snapTierWage`'s rounding. Comparing to
+ * the raw card would flag a column the outlet never opened, and a note that cries
+ * wolf on all six untouched tiers is worse than no note.
+ */
+function isPricedButUnrequested(
+	row: PostJobPayTierRow,
+	workspaceTierRates: Record<OutletPrTier, OutletTierRateSettings>,
+	commissionOnlyRates?: CommissionOnlyRateSettings,
+): boolean {
+	if (row.prCount > 0) return false;
+	const fresh = newPostJobPayTierRow(
+		{ payTierId: row.payTierId, prCount: 0 },
+		workspaceTierRates,
+		commissionOnlyRates,
+	);
+	return (
+		row.wagePerHour !== fresh.wagePerHour ||
+		row.drinkPct !== fresh.drinkPct ||
+		row.tipPct !== fresh.tipPct ||
+		(row.targetSalesRm ?? null) !== (fresh.targetSalesRm ?? null)
+	);
+}
+
 export function PostJobTierRatesEditor({
 	rows,
 	workspaceTierRates,
@@ -70,6 +107,7 @@ export function PostJobTierRatesEditor({
 	onChange: (rows: PostJobPayTierRow[]) => void;
 	planHint?: ReactNode;
 }) {
+	const { t } = usePortalLocale();
 	const allRows = ensureAllPayTierRows(
 		rows,
 		workspaceTierRates,
@@ -98,8 +136,19 @@ export function PostJobTierRatesEditor({
 	};
 
 	const rowLabels = commissionExpanded
-		? (["Wages", "Drinks", "Tips", "Target", "PR count"] as const)
-		: (["Wages", "Commission", "Target", "PR count"] as const);
+		? ([
+				t.postJob.colWages,
+				t.postJob.colDrinks,
+				t.postJob.colTips,
+				t.postJob.colTarget,
+				t.postJob.colPrCount,
+			] as const)
+		: ([
+				t.postJob.colWages,
+				t.postJob.colCommission,
+				t.postJob.colTarget,
+				t.postJob.colPrCount,
+			] as const);
 
 	const commissionRowIndex = 1;
 	const drinksRowIndex = 1;
@@ -111,8 +160,12 @@ export function PostJobTierRatesEditor({
 		<div className="space-y-2">
 			{maxPrTotal != null && maxPrTotal > 0 && (
 				<p className="text-[10px] text-[var(--iz-muted)]">
-					{allocatedTotal} of {maxPrTotal} PR{maxPrTotal === 1 ? "" : "s"}{" "}
-					allocated across tiers
+					{fill(
+						maxPrTotal === 1
+							? t.postJob.allocatedAcrossTiers
+							: t.postJob.allocatedAcrossTiersMany,
+						{ used: allocatedTotal, total: maxPrTotal },
+					)}
 				</p>
 			)}
 			<div className="-mx-1 overflow-x-auto pb-1">
@@ -146,6 +199,15 @@ export function PostJobTierRatesEditor({
 									<div className="iz-post-job-tier-col-head__label">
 										{tierLabel}
 									</div>
+									{isPricedButUnrequested(
+										row,
+										workspaceTierRates,
+										commissionOnlyRates,
+									) && (
+										<div className="text-center text-[9px] leading-tight text-[var(--iz-amber)]">
+											{t.postJob.ratedNoneRequested}
+										</div>
+									)}
 								</div>
 							);
 						})}
@@ -168,11 +230,11 @@ export function PostJobTierRatesEditor({
 											<div
 												key={`${row.id}-pay`}
 												className="iz-post-job-tier-pay-cell"
-												title="Tap to edit wages for this PR tier"
+												title={t.postJob.tapEditWages}
 											>
 												{commissionOnly ? (
 													<span className="text-xs font-medium text-[var(--iz-muted)]">
-														No wages
+														{t.postJob.noWages}
 													</span>
 												) : (
 													<>
@@ -205,7 +267,7 @@ export function PostJobTierRatesEditor({
 													hint === "—" && "iz-post-job-tier-comm-cell--none",
 												)}
 												onClick={() => setCommissionExpanded(true)}
-												title="Tap to edit drinks and tips commission"
+												title={t.postJob.tapEditDrinksTips}
 											>
 												{hint}
 											</button>
@@ -217,7 +279,7 @@ export function PostJobTierRatesEditor({
 											<div
 												key={`${row.id}-drinks`}
 												className="iz-post-job-tier-comm-edit-cell"
-												title="Tap to edit drinks commission"
+												title={t.postJob.tapEditDrinksCommission}
 											>
 												<span className="text-[9px] font-semibold text-[var(--iz-muted)]">
 													Dr
@@ -237,7 +299,7 @@ export function PostJobTierRatesEditor({
 											<div
 												key={`${row.id}-tips`}
 												className="iz-post-job-tier-comm-edit-cell"
-												title="Tap to edit tips commission"
+												title={t.workspace.tapEditTipsCommission}
 											>
 												<span className="text-[9px] font-semibold text-[var(--iz-muted)]">
 													Tip
@@ -255,14 +317,14 @@ export function PostJobTierRatesEditor({
 											<div
 												key={`${row.id}-target`}
 												className="iz-post-job-tier-pay-cell"
-												title="Tap to set target sales (optional)"
+												title={t.workspace.tapSetTargetSales}
 											>
 												<span className="text-[10px] font-semibold text-[var(--iz-muted)]">
 													RM
 												</span>
 												<TierMoneyInput
 													value={row.targetSalesRm}
-													placeholder="Optional"
+													placeholder={t.postJob.optional}
 													onChange={(targetSalesRm) =>
 														patchRow(row.id, { targetSalesRm })
 													}

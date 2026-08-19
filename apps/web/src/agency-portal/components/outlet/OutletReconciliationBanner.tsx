@@ -13,6 +13,8 @@ import { cn } from "@agency-portal/lib/utils";
 import { Link } from "@tanstack/react-router";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /**
  * Weekly reconciliation on outlet Today.
@@ -43,6 +45,7 @@ export function OutletReconciliationBanner() {
 const CENT = 0.005;
 
 function BilledVsRecordsBanner() {
+	const { t } = usePortalLocale();
 	const can = useOutletCan();
 	const collections = useOutletCollections();
 	const sales = useOutletSalesReport();
@@ -77,8 +80,10 @@ function BilledVsRecordsBanner() {
 
 	const overBilled = variance > 0;
 	const summary = overBilled
-		? `Billed ${formatRM(variance)} above your shift records`
-		: `Your records show ${formatRM(Math.abs(variance))} more than billed`;
+		? fill(t.today.billedAbove, { amount: formatRM(variance) })
+		: fill(t.today.recordsShowMore, {
+				amount: formatRM(Math.abs(variance)),
+			});
 
 	return (
 		<div className="mt-4 overflow-hidden rounded-2xl border border-[rgba(232,194,122,.28)] bg-[rgba(232,194,122,.06)]">
@@ -90,7 +95,7 @@ function BilledVsRecordsBanner() {
 				<AlertTriangle className="h-4 w-4 shrink-0 text-[var(--iz-amber)]" />
 				<div className="min-w-0 flex-1">
 					<p className="text-xs font-semibold text-[var(--iz-txt)]">
-						Weekly reconciliation
+						{t.today.weeklyReconciliation}
 					</p>
 					<p className="iz-tiny iz-muted truncate">{summary}</p>
 				</div>
@@ -114,16 +119,14 @@ function BilledVsRecordsBanner() {
               cost side of the sales report excludes just cancelled and no-show.
               A shift that ran and was never marked completed lands here. */}
 					<p className="iz-tiny iz-muted2 mt-1.5">
-						A statement counts completed shifts only, while this total also
-						includes shifts that ran but were never marked completed — so a gap
-						here is worth checking rather than a billing error.
+						{t.today.reconciliationHint}
 					</p>
 					<div className="mt-2.5 flex flex-wrap gap-2">
 						<Link to="/outlet/subscription" className="iz-chip text-[11px]">
-							Statement
+							{t.today.statement}
 						</Link>
 						<Link to="/outlet/billing" className="iz-chip text-[11px]">
-							Reports
+							{t.today.reports}
 						</Link>
 					</div>
 					{/* No Confirm here on purpose. Nothing persists an outlet
@@ -138,6 +141,7 @@ function BilledVsRecordsBanner() {
 
 /** The prototype banner, unchanged: outlet sales against the PV total. */
 function DemoReconciliationBanner() {
+	const { t } = usePortalLocale();
 	const {
 		agencyReconciliation,
 		confirmOutletReconciliation,
@@ -159,10 +163,14 @@ function DemoReconciliationBanner() {
 
 	const hasVariance = agencyReconciliation.variance !== 0;
 	const summary = hasVariance
-		? `Variance ${formatRM(agencyReconciliation.variance)} · action needed`
+		? fill(t.today.varianceActionNeeded, {
+				amount: formatRM(agencyReconciliation.variance),
+			})
 		: agencyReconciliation.outletConfirmed
-			? "Awaiting agency confirm"
-			: `Confirm week · ${agencyReconciliation.dateLabel}`;
+			? t.today.awaitingAgencyConfirm
+			: fill(t.today.confirmWeek, {
+					date: agencyReconciliation.dateLabel,
+				});
 
 	return (
 		<div className="mt-4 overflow-hidden rounded-2xl border border-[rgba(232,194,122,.28)] bg-[rgba(232,194,122,.06)]">
@@ -174,7 +182,7 @@ function DemoReconciliationBanner() {
 				<AlertTriangle className="h-4 w-4 shrink-0 text-[var(--iz-amber)]" />
 				<div className="min-w-0 flex-1">
 					<p className="text-xs font-semibold text-[var(--iz-txt)]">
-						Weekly reconciliation
+						{t.today.weeklyReconciliation}
 					</p>
 					<p className="iz-tiny iz-muted truncate">{summary}</p>
 				</div>
@@ -198,7 +206,7 @@ function DemoReconciliationBanner() {
 							value={reason}
 							onChange={(e) => setReason(e.target.value)}
 							onBlur={() => setReconciliationVarianceReason(reason)}
-							placeholder="Variance reason"
+							placeholder={t.today.varianceReason}
 							className="mt-2 w-full rounded-xl border border-[var(--iz-line2)] bg-white/[0.03] px-3 py-2 text-xs outline-none"
 						/>
 					)}
@@ -213,11 +221,11 @@ function DemoReconciliationBanner() {
 								}}
 								className="iz-btn iz-btn-primary iz-btn-sm"
 							>
-								Confirm
+								{t.today.confirm}
 							</button>
 						)}
 						<Link to="/outlet/billing" className="iz-chip text-[11px]">
-							Reports
+							{t.today.reports}
 						</Link>
 					</div>
 				</div>

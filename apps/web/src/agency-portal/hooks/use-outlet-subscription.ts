@@ -9,6 +9,7 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type CreateAdminRequestInput,
 	createAdminRequest,
@@ -70,6 +71,7 @@ export interface PlanChangeResult {
  * indicator stays an optimistic local flag in the store.
  */
 export function useOutletSubscription() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const identity = useMemo(() => getOutletIdentity(), []);
 	const backed = identity !== null;
@@ -153,8 +155,8 @@ export function useOutletSubscription() {
 		return [
 			...active.filter((sub) => !isAddon(sub)),
 			...active.filter(isAddon),
-		].map((sub) => subscriptionRecordFromMember(sub, "InnocenZ Outlet"));
-	}, [backed, billingQuery.data, addonPlanIds]);
+		].map((sub) => subscriptionRecordFromMember(sub, "InnocenZ Outlet", t));
+	}, [backed, billingQuery.data, addonPlanIds, t]);
 
 	/**
 	 * Everything this venue has been on and is no longer — ended, cancelled, past
@@ -189,8 +191,8 @@ export function useOutletSubscription() {
 		if (!backed) return [];
 		return sortMemberSubscriptions(billingQuery.data?.data ?? [])
 			.filter((sub) => sub.status !== "active")
-			.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Outlet"));
-	}, [backed, billingQuery.data]);
+			.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Outlet", t));
+	}, [backed, billingQuery.data, t]);
 
 	const activeSubscription = useMemo(() => {
 		if (!backed) return null;

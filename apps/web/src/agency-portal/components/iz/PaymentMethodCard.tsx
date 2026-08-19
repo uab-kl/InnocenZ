@@ -1,6 +1,8 @@
 import { IzCard } from "@agency-portal/components/iz/ui";
 import { CreditCard } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import {
 	cardBrandFromNumber,
 	isPlausibleCardNumber,
@@ -41,6 +43,7 @@ export function PaymentMethodCard({
 	billedLabel: string;
 	onSave: (input: Omit<SavePaymentMethodInput, "outletId">) => Promise<boolean>;
 }) {
+	const { t } = usePortalLocale();
 	const [editing, setEditing] = useState(false);
 	const [number, setNumber] = useState("");
 	const [holder, setHolder] = useState("");
@@ -67,19 +70,19 @@ export function PaymentMethodCard({
 	const submit = async () => {
 		const digits = number.replace(/\D/g, "");
 		if (!isPlausibleCardNumber(digits)) {
-			setError("That card number does not look right — check the digits");
+			setError(t.subscription.cardNumberInvalid);
 			return;
 		}
 		const match = expiry.match(/^(\d{1,2})\s*\/\s*(\d{2}|\d{4})$/);
 		if (!match) {
-			setError("Expiry must be MM/YY");
+			setError(t.subscription.expiryFormat);
 			return;
 		}
 		const month = Number(match[1]);
 		const year =
 			match[2].length === 2 ? 2000 + Number(match[2]) : Number(match[2]);
 		if (month < 1 || month > 12) {
-			setError("Expiry month must be 01–12");
+			setError(t.subscription.expiryMonthRange);
 			return;
 		}
 		const now = new Date();
@@ -87,7 +90,7 @@ export function PaymentMethodCard({
 			year < now.getFullYear() ||
 			(year === now.getFullYear() && month < now.getMonth() + 1)
 		) {
-			setError("That card has already expired");
+			setError(t.subscription.cardExpired);
 			return;
 		}
 		setError(null);
@@ -108,7 +111,7 @@ export function PaymentMethodCard({
 	const summary = backed
 		? card
 			? `${card.brand} ···· ${card.last4}`
-			: "No card saved"
+			: t.subscription.noCardSaved
 		: `Visa ···· ${demoLast4}`;
 
 	return (
@@ -117,14 +120,14 @@ export function PaymentMethodCard({
 				<CreditCard className="h-4 w-4 text-[var(--iz-muted)]" />
 				<div className="min-w-0">
 					<p className="iz-sm font-semibold">
-						{isLoading ? "Loading card…" : summary}
+						{isLoading ? t.subscription.loadingCard : summary}
 					</p>
 					<p className="iz-tiny iz-muted">
 						{backed && card
 							? `${billedLabel} · expires ${String(card.expMonth).padStart(2, "0")}/${String(card.expYear).slice(-2)}${card.holderName ? ` · ${card.holderName}` : ""}`
 							: backed
-								? `${billedLabel} · add a card so billing has somewhere to go`
-								: `${billedLabel} · auto-pay enabled`}
+								? fill(t.subscription.addACard, { billed: billedLabel })
+								: fill(t.subscription.autoPayEnabled, { billed: billedLabel })}
 					</p>
 				</div>
 			</div>
@@ -135,14 +138,14 @@ export function PaymentMethodCard({
 					className="iz-btn iz-btn-soft mt-3 w-full"
 					onClick={openForm}
 				>
-					{backed && card ? "Edit card" : "Add card"}
+					{backed && card ? t.subscription.editCard : t.subscription.addCard}
 				</button>
 			)}
 
 			{canEdit && editing && (
 				<div className="mt-3 space-y-2 border-t border-[var(--iz-line)] pt-3">
 					<div className="iz-field">
-						<label htmlFor="pm-number">Card number</label>
+						<label htmlFor="pm-number">{t.subscription.cardNumber}</label>
 						<input
 							id="pm-number"
 							inputMode="numeric"
@@ -154,7 +157,7 @@ export function PaymentMethodCard({
 					</div>
 					<div className="grid grid-cols-2 gap-2">
 						<div className="iz-field">
-							<label htmlFor="pm-exp">Expiry (MM/YY)</label>
+							<label htmlFor="pm-exp">{t.subscription.expiry}</label>
 							<input
 								id="pm-exp"
 								inputMode="numeric"
@@ -165,18 +168,20 @@ export function PaymentMethodCard({
 							/>
 						</div>
 						<div className="iz-field">
-							<label htmlFor="pm-holder">Name on card</label>
+							<label htmlFor="pm-holder">{t.subscription.nameOnCard}</label>
 							<input
 								id="pm-holder"
 								autoComplete="cc-name"
-								placeholder="As printed"
+								placeholder={t.subscription.asPrinted}
 								value={holder}
 								onChange={(e) => setHolder(e.target.value)}
 							/>
 						</div>
 					</div>
 					<div className="iz-field">
-						<label htmlFor="pm-email">Billing email (optional)</label>
+						<label htmlFor="pm-email">
+							{t.subscription.billingEmailOptional}
+						</label>
 						<input
 							id="pm-email"
 							type="email"
@@ -216,7 +221,7 @@ export function PaymentMethodCard({
 							disabled={isSaving}
 							onClick={submit}
 						>
-							{isSaving ? "Saving…" : "Save card"}
+							{isSaving ? t.subscription.savingCard : t.subscription.saveCard}
 						</button>
 					</div>
 				</div>

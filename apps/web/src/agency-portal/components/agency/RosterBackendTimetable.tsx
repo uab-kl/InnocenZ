@@ -10,6 +10,8 @@ import type {
 } from "@agency-portal/lib/agency-demo";
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
+	bucketForPrTier,
+	mergeCrossAgencyStaffing,
 	type ShiftBlockReason,
 	shiftBlockedFor,
 	tierLabel,
@@ -27,6 +29,10 @@ import {
 	weekDayIsos,
 	weekRangeLabel,
 } from "@agency-portal/lib/roster-week-plan";
+import {
+	shiftBlockLong,
+	shiftBlockShort,
+} from "@agency-portal/lib/shift-block-label";
 import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -35,6 +41,9 @@ import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
 import { fetchAllPages } from "@/lib/fetch-all-pages";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import {
 	blockedDatesByPr,
@@ -65,22 +74,28 @@ function wageLabel(
 	loading: boolean,
 	tierUnwanted: boolean,
 	prTier: string | null,
+	// Required, not optional-with-an-English-default: an optional `t` would let a
+	// future call site compile while quietly rendering English.
+	t: PortalTranslations,
 ): string {
 	// The shift declared a mix with no place for this tier, so the resolver's
 	// fallback — the OUTLET's list price for it — is a number this shift can
 	// never pay: the assign is refused on the tier rule before money is reached.
 	// Quoting RM700 for a shift posted at RM40 was true of the rate card and
 	// false of the shift, which is the most convincing kind of wrong.
-	if (tierUnwanted) return `${tierLabel(prTier)} not on this shift`;
-	if (loading) return "checking rate…";
-	if (!wage) return "rate unavailable";
+	if (tierUnwanted)
+		return fill(t.rosterGrid.tierNotOnShift, { tier: tierLabel(prTier) });
+	if (loading) return t.rosterGrid.checkingRate;
+	if (!wage) return t.rosterGrid.rateUnavailable;
 	switch (wage.kind) {
 		case "commission_only":
-			return "Commission only · no day rate";
+			return t.rosterGrid.commissionOnlyNoDayRate;
 		case "unpriced":
-			return `No rate set for ${wage.tierLabel ?? "this tier"}`;
+			return fill(t.rosterGrid.noRateSetFor, {
+				tier: wage.tierLabel ?? t.rosterGrid.thisTier,
+			});
 		default:
-			return `${formatRM(Number(wage.wage))}/day`;
+			return fill(t.rosterGrid.perDay, { amount: formatRM(Number(wage.wage)) });
 	}
 }
 
@@ -91,23 +106,28 @@ const NON_STAFFING_ASSIGNMENT_STATUSES: readonly ShiftAssignmentStatus[] = [
 	"leave_approved",
 ];
 
-const STATUS_CELL: Record<string, { className: string; label: string }> = {
+// Dictionary KEYS — module scope, no hook available. Record keys stay the
+// API's slot-status values.
+const STATUS_CELL: Record<
+	string,
+	{ className: string; label: keyof PortalTranslations["rosterGrid"] }
+> = {
 	scheduled: {
 		className: "iz-roster-week-cell--scheduled",
-		label: "Scheduled",
+		label: "scheduled",
 	},
 	"assignment-pending": {
 		className: "iz-roster-week-cell--scheduled",
-		label: "Pending",
+		label: "pending",
 	},
-	unavailable: { className: "iz-roster-week-cell--off", label: "Off" },
+	unavailable: { className: "iz-roster-week-cell--off", label: "off" },
 };
 
 function toneFor(status: RosterSlotStatus) {
 	return (
 		STATUS_CELL[status] ?? {
 			className: "iz-roster-week-cell--scheduled",
-			label: "Scheduled",
+			label: "scheduled" as const,
 		}
 	);
 }
@@ -153,6 +173,7 @@ export function RosterBackendTimetable({
 	onAssign,
 	todayIso,
 }: RosterBackendTimetableProps) {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const [assignTarget, setAssignTarget] = useState<{
 		pr: PrPersonnel;
@@ -255,17 +276,64 @@ export function RosterBackendTimetable({
 	const staffingByShift = useMemo(() => {
 		const map = new Map<
 			string,
-			{ staffed: number; tiers: (string | null)[] }
+			{ staffed: number; tiers: (string | null)[]; unknown?: number }
 		>();
 		for (const a of assignmentsQuery.data?.data ?? []) {
 			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
 			const entry = map.get(a.shiftId) ?? { staffed: 0, tiers: [] };
 			entry.staffed += 1;
-			entry.tiers.push(tierByPrId.get(a.prId) ?? null);
+			// ⚠️ CONVERTED TO THE OUTLET BUCKET, not the raw membership tier.
+			//
+			// `agency_pr.tier` is `'tier_1'`; the demand (`shift_pay_tier.tier`) and
+			// the server's `staffedBuckets` both speak `'Tier I'`. Pushing the raw
+			// value made an agency's OWN filled seats match nothing, so the tier
+			// they had just filled still read as open — while seats filled by
+			// ANOTHER agency, which arrive already bucketed from the server, capped
+			// correctly. The agency that supplied the PR was the one that could
+			// double-book the tier, and every other agency saw the cap work, which
+			// is why this looked like a sharing bug rather than a units bug.
+			//
+			// `auto-assign.ts` already converted at both of its own call sites; this
+			// one was simply missed.
+			entry.tiers.push(bucketForPrTier(tierByPrId.get(a.prId) ?? null));
 			map.set(a.shiftId, entry);
 		}
+		// A SHIFT SHARED WITH ANOTHER AGENCY (0124) is filled by both, and the loop
+		// above can only see our own rows — `/shift-assignment` is scoped to us, as
+		// it must be. Counting it alone reports our contribution as the occupancy,
+		// which is how this sheet came to offer seats the other agency had filled.
+		//
+		// The server's count REPLACES ours rather than adding to it: it already
+		// includes the rows we just counted.
+		//
+		// The tier list keeps ours and is topped up with the other agency's seats as
+		// anonymous entries — the quota needs to know a Tier I seat is gone, and must
+		// NOT learn who took it.
+		// ONE merge, shared with the auto-assign planner and the manual assign
+		// dialog. This used to be an inlined copy, and for a while there were
+		// three — which is exactly how the tier vocabularies drifted: one copy
+		// pushed the raw `tier_1` while the demand and the server buckets speak
+		// `Tier I`, so the agency that supplied a PR could double-book its own
+		// tier while every other agency saw the cap work. Three screens answering
+		// "how full is this shift, per tier" have to answer with one function.
+		for (const shift of shiftsQuery.data?.data ?? []) {
+			const entry = map.get(shift.id) ?? { staffed: 0, tiers: [] };
+			const merged = mergeCrossAgencyStaffing(shift, entry.tiers);
+			map.set(shift.id, {
+				staffed: merged.staffed,
+				tiers: merged.buckets,
+				// SEATS WE KNOW ARE TAKEN BUT CANNOT NAME A TIER FOR. Carried rather
+				// than dropped because dropping it is what made the failure silent:
+				// with no tier split the anonymous seats land in the "tiers the shift
+				// never named" bucket, every named quota reads open, and the grid goes
+				// on greying rows out with exactly the same confidence it has when it
+				// really knows. Nothing here refuses on it — the server decides — but
+				// the sheet says so instead of quietly promising a seat.
+				unknown: merged.unknownBuckets,
+			});
+		}
 		return map;
-	}, [assignmentsQuery.data, tierByPrId]);
+	}, [assignmentsQuery.data, tierByPrId, shiftsQuery.data]);
 
 	// Backend shifts for the day: not sealed, and NOT already finished. The
 	// grouping key is a DATE, so a shift stayed assignable for the rest of the day
@@ -336,23 +404,23 @@ export function RosterBackendTimetable({
 					<button
 						type="button"
 						className="iz-roster-week-nav"
-						aria-label="Previous week"
+						aria-label={t.rosterGrid.previousWeek}
 						onClick={() => onWeekChange(shiftWeekAnchor(weekStartIso, -1))}
 					>
 						<ChevronLeft className="h-4 w-4" />
 					</button>
 					<div className="min-w-0 text-center">
 						<p className="font-sora text-sm font-bold text-[var(--iz-txt)]">
-							Week · {weekLabel}
+							{fill(t.rosterGrid.weekOf, { label: weekLabel })}
 						</p>
 						<p className="iz-tiny iz-muted2">
-							Live backend roster · tap a free cell to assign a PR
+							{t.rosterGrid.liveBackendRoster}
 						</p>
 					</div>
 					<button
 						type="button"
 						className="iz-roster-week-nav"
-						aria-label="Next week"
+						aria-label={t.rosterGrid.nextWeek}
 						onClick={() => onWeekChange(shiftWeekAnchor(weekStartIso, 1))}
 					>
 						<ChevronRight className="h-4 w-4" />
@@ -393,8 +461,8 @@ export function RosterBackendTimetable({
 										className="iz-roster-week-empty"
 									>
 										{loading
-											? "Loading roster…"
-											: "No PRs yet · add a PR to start assigning shifts"}
+											? t.rosterGrid.loadingRoster
+											: t.rosterGrid.noPrsYet}
 									</td>
 								</tr>
 							) : (
@@ -459,15 +527,24 @@ export function RosterBackendTimetable({
 																			canAssign && onEditSlot(slot.id)
 																		}
 																		disabled={!canAssign}
-																		aria-label={`${pr.name} at ${slot.outlet} on ${dateIso}`}
+																		aria-label={fill(
+																			t.rosterGrid.prAtOutletOn,
+																			{
+																				name: pr.name,
+																				outlet: slot.outlet,
+																				date: dateIso,
+																			},
+																		)}
 																	>
 																		<span className="outlet">
 																			{slot.outlet}
 																		</span>
 																		<span className="shift">
-																			{slot.shift || "Shift"}
+																			{slot.shift || t.rosterGrid.shift}
 																		</span>
-																		<span className="status">{tone.label}</span>
+																		<span className="status">
+																			{t.rosterGrid[tone.label]}
+																		</span>
 																	</button>
 																);
 															})}
@@ -484,8 +561,11 @@ export function RosterBackendTimetable({
 																	onClick={() =>
 																		setAssignTarget({ pr, dateIso })
 																	}
-																	aria-label={`Assign ${pr.name} another shift on ${dateIso}`}
-																	title="Add another shift this day (different time)"
+																	aria-label={fill(
+																		t.rosterGrid.assignAnotherShift,
+																		{ name: pr.name, date: dateIso },
+																	)}
+																	title={t.rosterGrid.addAnotherShiftThisDay}
 																>
 																	<Plus className="h-3 w-3" />
 																</button>
@@ -503,7 +583,7 @@ export function RosterBackendTimetable({
 													return (
 														<td key={dateIso} className="iz-roster-week-td">
 															{/* Not a button: the agency cannot clear this, only
-															    the PR can. The visible "Unavailable" IS the
+															    the PR can. The visible t.roster.unavailable IS the
 															    accessible name — an aria-label on a plain div is
 															    not exposed to assistive tech, so the text has to
 															    carry it.
@@ -518,11 +598,23 @@ export function RosterBackendTimetable({
 																className="iz-roster-week-cell iz-roster-week-cell--unavailable"
 																title={
 																	reason
-																		? `${pr.name} marked ${dateIso} unavailable — "${reason}"`
-																		: `${pr.name} marked ${dateIso} unavailable on their schedule`
+																		? fill(
+																				t.rosterGrid.markedUnavailableReason,
+																				{
+																					name: pr.name,
+																					date: dateIso,
+																					reason,
+																				},
+																			)
+																		: fill(t.rosterGrid.markedUnavailable, {
+																				name: pr.name,
+																				date: dateIso,
+																			})
 																}
 															>
-																<span className="status">Unavailable</span>
+																<span className="status">
+																	{t.roster.unavailable}
+																</span>
 																{reason && (
 																	<span className="reason">{reason}</span>
 																)}
@@ -540,10 +632,13 @@ export function RosterBackendTimetable({
 															onClick={() =>
 																canAssign && setAssignTarget({ pr, dateIso })
 															}
-															aria-label={`Assign ${pr.name} on ${dateIso}`}
+															aria-label={fill(t.rosterGrid.assignPrOn, {
+																name: pr.name,
+																date: dateIso,
+															})}
 															title={
 																canAssign && !hasOpen
-																	? "No open shifts this day"
+																	? t.rosterGrid.noOpenShiftsThisDay
 																	: undefined
 															}
 														>
@@ -586,8 +681,9 @@ function shiftWeekAnchor(weekStartIso: string, delta: number): string {
 	return `${next.getFullYear()}-${String(next.getMonth() + 1).padStart(2, "0")}-${String(next.getDate()).padStart(2, "0")}`;
 }
 
-function shiftLabel(s: Shift): string {
-	return s.slot || s.eventName || "Shift";
+// Plain helper, not a component — takes `t` rather than reading it itself.
+function shiftLabel(s: Shift, t: PortalTranslations): string {
+	return s.slot || s.eventName || t.rosterGrid.shift;
 }
 
 function AssignBackendCellSheet({
@@ -602,7 +698,10 @@ function AssignBackendCellSheet({
 	pr: PrPersonnel;
 	dateIso: string;
 	shifts: Shift[];
-	staffingByShift: Map<string, { staffed: number; tiers: (string | null)[] }>;
+	staffingByShift: Map<
+		string,
+		{ staffed: number; tiers: (string | null)[]; unknown?: number }
+	>;
 	outletNameById: Map<string, string>;
 	onAssign: (
 		shiftId: string,
@@ -611,6 +710,7 @@ function AssignBackendCellSheet({
 	) => Promise<unknown>;
 	onClose: () => void;
 }) {
+	const { t } = usePortalLocale();
 	// Why each shift can or cannot take THIS PR — the same two rules the API
 	// applies, in the same order, so nothing selectable here can be refused there.
 	const blockedById = useMemo(() => {
@@ -702,8 +802,8 @@ function AssignBackendCellSheet({
 			onClose();
 		} catch (err) {
 			setError(
-				toMutationError(err, "Couldn't assign the PR.")?.message ??
-					"Couldn't assign the PR.",
+				toMutationError(err, t.rosterGrid.couldNotAssignPr)?.message ??
+					t.rosterGrid.couldNotAssignPr,
 			);
 			setBusy(false);
 		}
@@ -714,18 +814,22 @@ function AssignBackendCellSheet({
 			<div className="iz-sheet-head">
 				<div>
 					<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-						Planning · {dateIso}
+						{fill(t.rosterGrid.planningOn, { date: dateIso })}
 					</p>
 					{/* Same spelling as the row that opened this sheet, and as the
 					    voucher that eventually pays the shift — see formatPayeeLabel. */}
-					<h3>Assign {formatPayeeLabel(pr.nickname, pr.name)}</h3>
+					<h3>
+						{fill(t.rosterGrid.assignName, {
+							name: formatPayeeLabel(pr.nickname, pr.name),
+						})}
+					</h3>
 				</div>
 				<button
 					type="button"
 					className="iz-sheet-close"
 					onClick={onClose}
 					disabled={busy}
-					aria-label="Close"
+					aria-label={t.common.close}
 				>
 					<X className="h-4 w-4" />
 				</button>
@@ -736,11 +840,13 @@ function AssignBackendCellSheet({
 					{/* No "add a shift" instruction: posting shifts is the OUTLET's
 					    job, so telling the agency to do it sends them somewhere they
 					    cannot act. */}
-					No shifts posted for this day.
+					{t.rosterGrid.noShiftsPostedThisDay}
 				</p>
 			) : (
 				<>
-					<p className="iz-field-label mt-3">Open shifts · {shifts.length}</p>
+					<p className="iz-field-label mt-3">
+						{fill(t.rosterGrid.openShiftsCount, { n: shifts.length })}
+					</p>
 					<div className="iz-roster-shift-pick-scroll mt-1.5">
 						<div className="iz-roster-shift-pick-list">
 							{shifts.map((shift) => {
@@ -761,13 +867,7 @@ function AssignBackendCellSheet({
 										onClick={() => !blocked && setPickId(shift.id)}
 										disabled={busy || Boolean(blocked)}
 										aria-disabled={Boolean(blocked)}
-										title={
-											blocked?.kind === "full"
-												? `Fully staffed (${blocked.staffed}/${blocked.quantity})`
-												: blocked
-													? `No ${blocked.bucket} seat left (${blocked.asked} requested)`
-													: undefined
-										}
+										title={blocked ? shiftBlockLong(blocked, t) : undefined}
 									>
 										<div className="min-w-0 flex-1 text-left">
 											<div className="flex flex-wrap items-center gap-1.5">
@@ -775,7 +875,7 @@ function AssignBackendCellSheet({
 													{outlet}
 												</span>
 												<span className="iz-tiny iz-muted">
-													{shiftLabel(shift)}
+													{shiftLabel(shift, t)}
 												</span>
 											</div>
 											{/*
@@ -788,10 +888,10 @@ function AssignBackendCellSheet({
 												rather than leaving a gap that reads as a load failure.
 											*/}
 											<p className="iz-tiny iz-muted2 mt-0.5 truncate">
-												{shift.eventName?.trim() || "No event name"} ·{" "}
+												{shift.eventName?.trim() || t.rosterGrid.noEventName} ·{" "}
 												{shift.eventKind === "special"
-													? "Special event"
-													: "Normal shift"}
+													? t.rosterGrid.specialEvent
+													: t.rosterGrid.normalShift}
 											</p>
 											<p
 												className={cn(
@@ -799,11 +899,11 @@ function AssignBackendCellSheet({
 													blocked ? "iz-muted2" : "text-[var(--iz-gold-l)]",
 												)}
 											>
-												{blocked?.kind === "full"
-													? "Fully staffed"
-													: blocked
-														? `No ${blocked.bucket} seat left`
-														: `${shift.quantity - staffed} open`}{" "}
+												{blocked
+													? shiftBlockShort(blocked, t)
+													: fill(t.rosterGrid.openCount, {
+															n: shift.quantity - staffed,
+														})}{" "}
 												·{" "}
 												{/* NOT `shift.payPerHour`: that is the shift's own
 												    figure and does not move when you pick a different
@@ -825,6 +925,7 @@ function AssignBackendCellSheet({
 														wageQuery.isLoading,
 														tierUnwantedById.get(shift.id) ?? false,
 														pr.tier,
+														t,
 													)}
 												</span>
 											</p>
@@ -841,6 +942,26 @@ function AssignBackendCellSheet({
 					{error && (
 						<p className="iz-tiny mt-3 text-[var(--iz-danger,#dc2626)]">
 							{error}
+						</p>
+					)}
+
+					{/* THE TIER CHECK COULD NOT RUN ON THIS SHIFT — said out loud rather
+					    than assumed away.
+
+					    Every greyed card above is a promise that the ones left are
+					    assignable, and that promise rests on knowing which tier each
+					    taken seat consumed. When the server's split does not account for
+					    a cross-agency seat, the anonymous seats fall into the "tiers the
+					    shift never named" bucket, the named quotas read fully open, and
+					    the sheet goes on greying rows out with exactly the confidence it
+					    has when it really knows. Nothing is refused on it — the server
+					    is the authority and will 409 — but "we could not check" and "we
+					    checked and it is fine" must not look identical. */}
+					{(staffingByShift.get(picked?.id ?? "")?.unknown ?? 0) > 0 && (
+						<p className="iz-tiny iz-muted2 mt-3 leading-snug">
+							{fill(t.rosterGrid.tierSplitUnavailable, {
+								n: staffingByShift.get(picked?.id ?? "")?.unknown ?? 0,
+							})}
 						</p>
 					)}
 
@@ -861,7 +982,7 @@ function AssignBackendCellSheet({
 						disabled={busy || !picked}
 						onClick={confirm}
 					>
-						{busy ? "Assigning…" : "Schedule PR"}
+						{busy ? t.rosterGrid.assigning : t.rosterGrid.schedulePr}
 					</button>
 				</>
 			)}

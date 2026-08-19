@@ -866,6 +866,20 @@ export interface AgencyRosterSlot {
 	outletSwap?: OutletSwapRequest;
 	/** Operating agency that owns this roster slot (defaults to "atlas" when unset). */
 	agencyId?: string;
+	/**
+	 * That agency's NAME, when the builder was given a way to resolve it.
+	 *
+	 * Backend slots carry only `agencyId` — a uuid — and the demo lookup table
+	 * that used to translate ids to names knows nothing about real orgs. So on a
+	 * real session there was no honest name to show, and the label chain ran all
+	 * the way to the demo literal "Atlas Agency", crediting every PR to a real
+	 * company that had nothing to do with them.
+	 *
+	 * Populating this is what lets `rosterSlotAgencyName` return the TRUTH rather
+	 * than choosing between a lie and a blank. Optional because demo slots resolve
+	 * through their own table and never need it.
+	 */
+	agencyName?: string;
 	/** Pay-tier column this assignment fills — gates commission-only vs basic eligibility. */
 	payTierId?: PostJobPayTierId;
 	/**
@@ -906,16 +920,50 @@ export interface OutletSwapRequest {
  * On agency portals, prefer {@link agencyPortalLabel} for the viewing agency so dual-tied
  * PRs show that portal's name.
  */
+/**
+ * Is this a REAL agency id (a backend uuid) rather than a demo key?
+ *
+ * Demo data uses short readable keys — `"atlas"`, `"delta"` — while a slot built
+ * by `rosterSlotsFromBackend` carries `shift_assignment.agency_id`, a uuid. That
+ * shape difference is a local, dependency-free way to tell a real row from a
+ * demo one, which is what the label rules below need: it takes no session
+ * plumbing and cannot go stale the way a "demo mode" flag does.
+ *
+ * Deliberately shape-based rather than a lookup miss: an id that is simply
+ * absent from `AGENCY_OWNERS_BY_ID` could be either, and guessing wrong is how
+ * a demo name reaches a real screen.
+ */
+const REAL_AGENCY_ID_RE =
+	/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isRealAgencyId(agencyId: string | null | undefined): boolean {
+	return Boolean(agencyId && REAL_AGENCY_ID_RE.test(agencyId));
+}
+
 export function rosterSlotAgencyName(
 	slot: AgencyRosterSlot,
 	fallback = DEFAULT_PR_AGENCY_NAME,
 ): string {
-	return (
+	// `agencyName` FIRST: it is the only arm that can speak for a real agency.
+	// The two below it are demo-authored and the id lookup after them reads a
+	// demo table, so before this existed a backend slot had no truthful path at
+	// all — every route led either to a demo company's name or to nothing.
+	const named =
+		slot.agencyName ??
 		slot.agencyAssignment?.agencyName ??
-		slot.outletSwap?.agencyName ??
-		(slot.agencyId ? AGENCY_OWNERS_BY_ID[slot.agencyId]?.orgName : undefined) ??
-		fallback
-	);
+		slot.outletSwap?.agencyName;
+	if (named) return named;
+	if (slot.agencyId) {
+		const demoName = AGENCY_OWNERS_BY_ID[slot.agencyId]?.orgName;
+		if (demoName) return demoName;
+		// ⚠️ A REAL agency id we cannot name resolves to NOTHING, never to the demo
+		// literal. `DEFAULT_PR_AGENCY_NAME` is "Atlas Agency" — an actual company
+		// on this platform — so reaching it here printed a specific, wrong supplier
+		// with complete confidence on every real session. Note that `fallback`
+		// itself defaults to that literal, so merely passing `undefined` reaches it.
+		if (isRealAgencyId(slot.agencyId)) return "";
+	}
+	return fallback;
 }
 
 /** Agency label for a managed PR row — roster assignment, payroll link, or default tied agency. */
@@ -1325,9 +1373,17 @@ export function rosterSlotsForAgency(
 	});
 }
 
-/** Org label for the agency portal currently being viewed. */
+/**
+ * Org label for the agency portal currently being viewed.
+ *
+ * Same rule as `rosterSlotAgencyName`: a real agency id with no known name
+ * yields nothing. This one is worse if it lies — it labels the viewer's OWN
+ * organisation, so the demo literal told a real agency owner they were Atlas.
+ */
 export function agencyPortalLabel(agencyId: string): string {
-	return AGENCY_OWNERS_BY_ID[agencyId]?.orgName ?? DEFAULT_PR_AGENCY_NAME;
+	const demoName = AGENCY_OWNERS_BY_ID[agencyId]?.orgName;
+	if (demoName) return demoName;
+	return isRealAgencyId(agencyId) ? "" : DEFAULT_PR_AGENCY_NAME;
 }
 
 /**
@@ -1475,6 +1531,8 @@ export function collectAgencyPrLanguages(
 }
 
 import { demoPlaceholderImage } from "@agency-portal/lib/demo-placeholder-image";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 function seedPendingDocuments(
 	floorName: string,
@@ -1802,17 +1860,31 @@ export function resolveAgencySubscriptionPlanForWeeklyPv(
 /** Human-readable weekly subscription price for a plan tier. */
 export function agencyWeeklyPlanPriceLabel(
 	plan: AgencySubscriptionPlan,
+	// Required, not optional-with-an-English-default: an optional `t` would let a
+	// new call site compile while quietly rendering English.
+	t: PortalTranslations,
 ): string {
-	if (plan.priceLabel) return plan.priceLabel;
-	if (plan.weeklyRm == null) return "Renegotiate Price";
-	return `RM ${plan.weeklyRm.toLocaleString("en-MY", {
-		minimumFractionDigits: 2,
-		maximumFractionDigits: 2,
-	})}/Week`;
+	/*
+	 * `weeklyRm == null` IS the renegotiated plan, and it is the only plan that
+	 * carries a `priceLabel` — so one branch covers both. `plan.priceLabel`
+	 * stays on the record (it is data, and the admin tooling reads it); it is
+	 * simply no longer the display source, because English prose baked into a
+	 * data constant cannot be translated at the call site.
+	 */
+	if (plan.weeklyRm == null) return t.subscription.priceRenegotiate;
+	return fill(t.subscription.perWeekPrice, {
+		amount: plan.weeklyRm.toLocaleString("en-MY", {
+			minimumFractionDigits: 2,
+			maximumFractionDigits: 2,
+		}),
+	});
 }
 
 /** Resolve billed tier and weekly charge from PVs issued in a payroll week. */
-export function agencySubscriptionBillingForWeeklyPv(weeklyPv: number): {
+export function agencySubscriptionBillingForWeeklyPv(
+	weeklyPv: number,
+	t: PortalTranslations,
+): {
 	plan: AgencySubscriptionPlan;
 	weeklyPv: number;
 	priceLabel: string;
@@ -1821,7 +1893,7 @@ export function agencySubscriptionBillingForWeeklyPv(weeklyPv: number): {
 	return {
 		plan,
 		weeklyPv,
-		priceLabel: agencyWeeklyPlanPriceLabel(plan),
+		priceLabel: agencyWeeklyPlanPriceLabel(plan, t),
 	};
 }
 

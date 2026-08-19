@@ -62,6 +62,14 @@ export type AgencyOutletAvailableShift = {
 	quantity: number;
 	/** Outlet-configured tier × PR count rows */
 	payTierRows?: PostJobPayTierRow[];
+	/**
+	 * Seats taken per tier, counted by the SERVER across every agency the shift
+	 * was posted to. An agency cannot work this out for a shift another agency
+	 * helped fill — it can neither see those assignments nor read the tier those
+	 * PRs hold at their own agency — so without this the per-tier Supplied column
+	 * sat at 0 while a PR was plainly on the shift. Absent on demo rows.
+	 */
+	suppliedByTierBucket?: Record<string, number>;
 	/** Posted shift id when this row mirrors an outlet job board post */
 	linkedShiftId?: string;
 };
@@ -153,48 +161,9 @@ function normalizeShiftTime(time: string) {
 	return time.replace(/\s+/g, " ").trim();
 }
 
-const MINUTES_PER_DAY = 24 * 60;
-
-/** Minutes past midnight for "22:00" / "10:00 PM"; null when unreadable. */
-function minutesOfDay(label: string): number | null {
-	const m = label.trim().match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/i);
-	if (!m) return null;
-	let hours = Number(m[1]);
-	const minutes = Number(m[2] ?? 0);
-	const meridiem = m[3]?.toLowerCase();
-	if (meridiem === "pm" && hours < 12) hours += 12;
-	if (meridiem === "am" && hours === 12) hours = 0;
-	if (hours > 23 || minutes > 59) return null;
-	return hours * 60 + minutes;
-}
-
-/**
- * When the shift ends, as minutes from the START of its own calendar day, so an
- * overnight window keeps counting past midnight: 22:00-04:00 ends at 1680, not
- * 240, and therefore never reads as "already over" on the night it begins.
- *
- * Deliberately local rather than imported from `portal-sync`'s
- * `parseShiftWindow` — portal-sync already imports this module, so reaching
- * back would close an import cycle.
- */
-function shiftEndMinutes(label?: string): number | null {
-	if (!label) return null;
-	const [rawStart, rawEnd] = normalizeShiftTime(label)
-		.split(/[—–-]/)
-		.map((part) => part.trim());
-	if (!rawEnd) return null;
-	const start = minutesOfDay(rawStart ?? "");
-	const end = minutesOfDay(rawEnd);
-	if (end === null) return null;
-	// end <= start means the window crosses midnight.
-	return start !== null && end <= start ? end + MINUTES_PER_DAY : end;
-}
-
-/** Wall-clock minutes past midnight, right now. */
-function liveMinutesOfDay(): number {
-	const now = new Date();
-	return now.getHours() * 60 + now.getMinutes();
-}
+// The clock helpers that used to live here — `minutesOfDay`, `shiftEndMinutes`,
+// `liveMinutesOfDay` — are gone with the end-of-window rule they served. This
+// board is judged by DATE now; see isOutletShiftOnOrAfterToday for why.
 
 /**
  * An outlet job post the agency should see. `confirmed` counts: the backend
@@ -382,43 +351,60 @@ function shiftsFromPosted(
 	ctx: TierRatesContext,
 	todayIso: string,
 ): AgencyOutletAvailableShift[] {
-	return (
-		posted
-			.filter((s) => s.outletName === outlet && isAgencyVisiblePostedShift(s))
-			.map((s) => {
-				const { demand, supplied, openSlots } = outletShiftDemandSupplied(s);
-				const tierRates = s.tierRates ?? outletDefaultTierRates(outlet, ctx);
-				return {
-					id: `posted-${s.id}`,
-					source: "posted" as const,
-					outlet,
-					date: s.date,
-					dateIso:
-						s.dateIso ?? resolveOutletShiftDateIso(s.date, s.date, todayIso),
-					shift: s.shift,
-					event: s.event,
-					demandSlots: demand,
-					suppliedSlots: supplied,
-					openSlots,
-					payEstimate: s.estimatedCost,
-					languages: s.languages,
-					destination: s.destination,
+	return posted
+		.filter((s) => s.outletName === outlet && isAgencyVisiblePostedShift(s))
+		.map((s) => {
+			const { demand, supplied, openSlots } = outletShiftDemandSupplied(s);
+			const tierRates = s.tierRates ?? outletDefaultTierRates(outlet, ctx);
+			return {
+				id: `posted-${s.id}`,
+				source: "posted" as const,
+				outlet,
+				date: s.date,
+				dateIso:
+					s.dateIso ?? resolveOutletShiftDateIso(s.date, s.date, todayIso),
+				shift: s.shift,
+				event: s.event,
+				demandSlots: demand,
+				suppliedSlots: supplied,
+				openSlots,
+				payEstimate: s.estimatedCost,
+				languages: s.languages,
+				destination: s.destination,
+				tierRates,
+				quantity: s.quantity,
+				payTierRows: resolveAgencyPayTierRows(
 					tierRates,
-					quantity: s.quantity,
-					payTierRows: resolveAgencyPayTierRows(
-						tierRates,
-						s.quantity,
-						s.payTierRows,
-						s.id,
-					),
-					briefing: postedShiftBriefing(s),
-					...postedShiftEventFields(s),
-				};
-			})
-			// The upcoming/ended check is applied once, over all three sources, in
-			// buildAgencyOutletSummaries — so it reads the clock a single time.
-			.filter((s) => s.openSlots > 0)
-	);
+					s.quantity,
+					s.payTierRows,
+					s.id,
+				),
+				// Carried, never recomputed: only the server can count seats taken by
+				// another agency's PRs, and only it knows what tier THAT agency
+				// grades them at.
+				suppliedByTierBucket: s.suppliedByTierBucket,
+				briefing: postedShiftBriefing(s),
+				...postedShiftEventFields(s),
+			};
+		});
+	// ⚠️ NO `openSlots > 0` FILTER HERE, and do not put one back.
+	//
+	// A shift used to vanish from Manage Outlet the moment its last seat was
+	// taken, which answers "what still needs people" but silently refuses the
+	// other half of the question this screen exists for: DID WE FILL IT? The
+	// agency was left unable to tell a venue it had fully staffed from a venue
+	// that had never asked, because both showed nothing.
+	//
+	// It got worse the moment supplied started counting every agency: a shift the
+	// other agency finished disappeared here too, so an outlet with one job on
+	// tonight read "0 listings · No shifts match" — the screen going blank was the
+	// only news of a job being done. Absence cannot carry two opposite meanings.
+	//
+	// Fully-staffed rows now stay, reading 2/2 · Fully staffed. What still NEEDS
+	// people is a different figure and has its own: `openShiftCount` /
+	// `totalOpenSlots`, which count only the shifts with a seat left. The date
+	// check is applied once, over all three sources, in
+	// buildAgencyOutletSummaries — today's shifts stay all day, past dates go.
 }
 
 function shiftsFromTied(
@@ -523,16 +509,14 @@ export function buildAgencyOutletSummaries(input: {
 	roster: AgencyRosterSlot[];
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
-	/** Wall-clock minutes past midnight; injected so tests need no frozen clock. */
-	nowMinutes?: number;
 	commissionRules?: OutletCommissionRule[];
 	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
 }): AgencyOutletSummary[] {
 	const outlets = input.outlets ?? OUTLET_NAMES;
 	const tied = input.tiedOffers ?? PR_AGENCY_TIED_OFFERS;
 	const todayIso = input.todayIso ?? DEFAULT_ROSTER_DATE_ISO;
-	// Read once, so every outlet in this pass is judged against the same instant.
-	const nowMinutes = input.nowMinutes ?? liveMinutesOfDay();
+	// No wall clock anymore: the board keeps a shift for its whole DATE, so the
+	// only thing it has to agree on across outlets is which day it is.
 	const commissionRules = input.commissionRules ?? [];
 	const tierCtx: TierRatesContext = {
 		commissionRules,
@@ -549,7 +533,7 @@ export function buildAgencyOutletSummaries(input: {
 				...shiftsFromPosted(outlet, input.shifts, tierCtx, todayIso),
 				...shiftsFromTied(outlet, tied, tierCtx, todayIso, input.shifts),
 				...shiftsFromRoster(outlet, input.roster, tierCtx),
-			].filter((shift) => isUpcomingOutletShift(shift, todayIso, nowMinutes)),
+			].filter((shift) => isOutletShiftOnOrAfterToday(shift, todayIso)),
 			todayIso,
 		);
 		const scheduledTonight = input.roster.filter(
@@ -571,7 +555,12 @@ export function buildAgencyOutletSummaries(input: {
 		return {
 			outlet,
 			rule,
-			openShiftCount: shifts.length,
+			// Shifts that still NEED somebody — not the length of `shifts`, which
+			// now also carries the fully-staffed ones so the detail list can show
+			// demand being met. The grid card calls this "open shifts", and a card
+			// reading "1 open shift" for a venue with nothing left to fill would be
+			// the same lie in the other direction.
+			openShiftCount: shifts.filter((s) => s.openSlots > 0).length,
 			totalOpenSlots: shifts.reduce((sum, s) => sum + s.openSlots, 0),
 			totalDemand: shifts.reduce((sum, s) => sum + s.demandSlots, 0),
 			totalSupplied: shifts.reduce((sum, s) => sum + s.suppliedSlots, 0),
@@ -651,34 +640,35 @@ function resolveShiftDateIso(shift: AgencyOutletAvailableShift): string {
 }
 
 /**
- * A shift is upcoming while its END is still ahead — a shift already running
- * has not passed. Today's date alone is not enough: a 10:00-12:00 slot is over
- * by mid-afternoon and must drop off the board.
+ * Is this shift TODAY or later? The Manage Outlet board's date rule.
  *
- * `nowMinutes` is injected rather than read inside, so the rule is testable
- * without freezing a clock. Pass a time label only when one is known — callers
- * holding just a date keep the date-only behaviour rather than guessing.
+ * It used to be `isUpcomingOutletShift`, and it also required the shift's END to
+ * be ahead: a 10:00–12:00 slot dropped off by mid-afternoon. That was right
+ * while the board meant only "what can we still staff" — a finished shift cannot
+ * be staffed. It is wrong now the board also answers "did we fill today's
+ * demand?", because a shift that ended two hours ago is still today's demand,
+ * and it was disappearing mid-afternoon under a heading that says "today and
+ * future". A screen cannot answer both questions if one of them makes rows
+ * vanish.
+ *
+ * Past DATES still go: those belong to History, and the roster's own read-only
+ * rules govern them. Whether a shift still NEEDS anyone is `openSlots`, which
+ * every card and group header shows — that is the figure to filter on, never
+ * the row's presence.
  */
-export function isUpcomingOutletShift(
+export function isOutletShiftOnOrAfterToday(
 	shift: Pick<AgencyOutletAvailableShift, "date" | "dateIso"> & {
 		shift?: string;
 	},
 	todayIso: string = DEFAULT_ROSTER_DATE_ISO,
-	nowMinutes: number = liveMinutesOfDay(),
 ): boolean {
 	const dateIso = resolveOutletShiftDateIso(
 		shift.date,
 		shift.dateIso,
 		todayIso,
 	);
-	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso) || dateIso < todayIso) return false;
-	// A later date is upcoming whatever the clock says.
-	if (dateIso > todayIso) return true;
-	const endMinutes = shiftEndMinutes(shift.shift);
-	// Unparseable or absent window — fall back to the date-only answer rather
-	// than hiding a shift we simply could not read.
-	if (endMinutes === null) return true;
-	return endMinutes > nowMinutes;
+	if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) return false;
+	return dateIso >= todayIso;
 }
 
 /**
@@ -882,7 +872,7 @@ export function groupOutletShiftsByDay(
 			shift.dateIso,
 			todayIso,
 		);
-		if (!isUpcomingOutletShift(shift, todayIso)) continue;
+		if (!isOutletShiftOnOrAfterToday(shift, todayIso)) continue;
 		const list = groups.get(dateIso) ?? [];
 		list.push(shift);
 		groups.set(dateIso, list);
@@ -966,7 +956,9 @@ export function filterAgencyOutletSummaries(
 			return {
 				...summary,
 				shifts,
-				openShiftCount: shifts.length,
+				// Same distinction as the builder: `shifts` is what the list shows,
+				// `openShiftCount` is what still needs people.
+				openShiftCount: shifts.filter((s) => s.openSlots > 0).length,
 				totalOpenSlots: shifts.reduce((n, s) => n + s.openSlots, 0),
 				totalDemand: shifts.reduce((n, s) => n + s.demandSlots, 0),
 				totalSupplied: shifts.reduce((n, s) => n + s.suppliedSlots, 0),
@@ -1013,16 +1005,18 @@ export function outletShiftEventTypeLabel(
 		AgencyOutletAvailableShift,
 		"eventKind" | "specialEventType" | "customSpecialEventName" | "vip"
 	>,
+	t: PortalTranslations,
 ): string {
 	if (shift.eventKind === "special") {
 		return formatShiftEventTypeSummary(
 			"special",
+			t,
 			shift.specialEventType,
 			shift.customSpecialEventName,
 		);
 	}
-	if (shift.vip) return formatShiftEventTypeSummary("special", "vip");
-	return formatShiftEventTypeSummary("normal");
+	if (shift.vip) return formatShiftEventTypeSummary("special", t, "vip");
+	return formatShiftEventTypeSummary("normal", t);
 }
 
 export function outletShiftIsSpecialEvent(
@@ -1089,7 +1083,7 @@ export function outletHomeShiftRequests(input: {
 			if (agencyPostedIds.has(shift.id)) return true;
 			return (
 				shift.status === "confirmed" &&
-				isUpcomingOutletShift({ date: shift.date }, todayIso)
+				isOutletShiftOnOrAfterToday({ date: shift.date }, todayIso)
 			);
 		})
 		.sort((a, b) => {

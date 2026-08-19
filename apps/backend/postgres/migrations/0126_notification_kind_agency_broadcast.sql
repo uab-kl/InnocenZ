@@ -1,0 +1,20 @@
+-- An agency sends a free-text notice to PRs it picked off its own roster
+-- (Manage PRs -> Select -> Broadcast).
+--
+-- The screen has existed for a while and did nothing: "Send" wrote into the
+-- agency's own browser store and raised a green "Message broadcast to 2 PRs"
+-- toast, while the PR app reads its inbox from `main.notification`. Every
+-- broadcast ever sent was delivered to the sender. This kind is the missing
+-- half — the producer lands with it, per the rule in notification.model.ts
+-- that a kind with no writer reads like a feature that exists.
+--
+-- Deliberately its own kind rather than reuse:
+--   * `shift_assigned` would be a lie — nobody is on a shift, and the PR app
+--     routes that kind at a real assignment id it would not find.
+--   * `agency_join_resolved` is an answer to something the PR asked for.
+-- A broadcast is unsolicited and carries no object but its own text, so it
+-- routes to the inbox and nowhere else.
+--
+-- Additive and idempotent; ALTER TYPE ... ADD VALUE cannot be rolled back
+-- inside a transaction, so a re-run must be a no-op.
+ALTER TYPE "main"."notification_kind" ADD VALUE IF NOT EXISTS 'agency_broadcast';

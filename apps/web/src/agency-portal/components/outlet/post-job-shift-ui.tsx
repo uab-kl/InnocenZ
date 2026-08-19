@@ -2,25 +2,28 @@ import { JobPostingMicroLabel } from "@agency-portal/components/special-service/
 import { cn } from "@agency-portal/lib/utils";
 import { Calendar, ChevronRight, Info, Lock, Pencil, Plus } from "lucide-react";
 import type { ReactNode } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function PostJobFormLegend() {
+	const { t } = usePortalLocale();
 	return (
 		<details className="iz-post-job-legend">
 			<summary className="iz-post-job-legend__title cursor-pointer select-none">
-				How to read this form
+				{t.postJob.howToReadThisForm}
 			</summary>
 			<ul className="iz-post-job-legend__list">
 				<li>
 					<span className="iz-post-job-legend__swatch iz-post-job-legend__swatch--violet" />
-					Violet = editable · tap gold cells to set pay
+					{t.postJob.legendViolet}
 				</li>
 				<li>
 					<span className="iz-post-job-legend__swatch iz-post-job-legend__swatch--gold" />
-					Gold = payment / cost values
+					{t.postJob.legendGold}
 				</li>
 				<li>
 					<Lock className="iz-post-job-legend__lock" aria-hidden />
-					Locked = pulled from Workspace · not editable here
+					{t.postJob.legendLocked}
 				</li>
 			</ul>
 		</details>
@@ -67,6 +70,7 @@ export function PostJobShiftCardHeader({
 	shiftTotal?: number;
 	trailing?: ReactNode;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-post-job-shift-head">
 			<div className="flex min-w-0 items-center gap-2">
@@ -80,7 +84,7 @@ export function PostJobShiftCardHeader({
 			<div className="flex shrink-0 items-center gap-2">
 				{shiftIndex != null && shiftTotal != null && (
 					<span className="iz-post-job-shift-head__badge">
-						Shift {shiftIndex} of {shiftTotal}
+						{fill(t.postJob.shiftNofM, { n: shiftIndex, m: shiftTotal })}
 					</span>
 				)}
 				{trailing}
@@ -96,6 +100,7 @@ export function PostJobLockedValue({
 	children: ReactNode;
 	locked?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-post-job-locked-row">
 			<span className="min-w-0 flex-1 text-sm font-semibold text-[var(--iz-txt)]">
@@ -104,7 +109,7 @@ export function PostJobLockedValue({
 			{locked && (
 				<span className="iz-post-job-locked-badge">
 					<Lock className="h-3 w-3" aria-hidden />
-					Locked
+					{t.postJob.locked}
 				</span>
 			)}
 		</div>
@@ -130,6 +135,7 @@ export function PostJobEditableInputShell({
 }
 
 export function PostJobTierSectionHeader() {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-post-job-tier-head">
 			<span
@@ -140,11 +146,10 @@ export function PostJobTierSectionHeader() {
 			</span>
 			<div className="min-w-0">
 				<p className="font-sora text-sm font-extrabold text-[var(--iz-txt)]">
-					Pay by PR tier
+					{t.postJob.payByPrTier}
 				</p>
 				<p className="mt-0.5 text-xs leading-snug text-[var(--iz-muted2)]">
-					Tap a gold cell to set pay · tap + drinks &amp; tips to set commission
-					· set PR count per tier
+					{t.postJob.payByPrTierHint}· set PR count per tier
 				</p>
 			</div>
 		</div>
@@ -160,16 +165,21 @@ export function PostJobSummaryCard({
 	cost: number;
 	compact?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	if (compact) {
 		return (
 			<div className="iz-post-job-dock-stats">
 				<div className="iz-post-job-dock-stats__item">
-					<span className="iz-post-job-dock-stats__label">Headcount</span>
+					<span className="iz-post-job-dock-stats__label">
+						{t.postJob.headcount}
+					</span>
 					<span className="iz-post-job-dock-stats__value">{headcount}</span>
 				</div>
 				<div className="iz-post-job-dock-stats__divider" aria-hidden />
 				<div className="iz-post-job-dock-stats__item">
-					<span className="iz-post-job-dock-stats__label">Est. cost</span>
+					<span className="iz-post-job-dock-stats__label">
+						{t.postJob.estCost}
+					</span>
 					<span className="iz-post-job-dock-stats__value iz-post-job-dock-stats__value--gold">
 						RM&nbsp;{cost.toLocaleString("en-MY")}
 					</span>
@@ -180,15 +190,19 @@ export function PostJobSummaryCard({
 
 	return (
 		<div className="iz-post-job-summary-card">
-			<p className="iz-post-job-summary-card__title">Summary</p>
+			<p className="iz-post-job-summary-card__title">{t.postJob.summary}</p>
 			<div className="iz-post-job-summary-card__row">
-				<span className="iz-post-job-summary-card__label">Total headcount</span>
+				<span className="iz-post-job-summary-card__label">
+					{t.postJob.totalHeadcount}
+				</span>
 				<span className="iz-post-job-summary-card__value iz-post-job-summary-card__value--headcount">
 					{headcount}
 				</span>
 			</div>
 			<div className="iz-post-job-summary-card__cost-box">
-				<span className="iz-post-job-summary-card__label">Estimated cost</span>
+				<span className="iz-post-job-summary-card__label">
+					{t.postJob.estimatedCost}
+				</span>
 				<span className="iz-post-job-summary-card__value iz-post-job-summary-card__value--gold">
 					RM&nbsp;{cost.toLocaleString("en-MY")}
 				</span>
@@ -214,7 +228,11 @@ export function PostJobActionPanel({
 	submitDisabled?: boolean;
 	compact?: boolean;
 }) {
-	const shiftLabel = `Post ${shiftCount} shift${shiftCount !== 1 ? "s" : ""}`;
+	const { t } = usePortalLocale();
+	const shiftLabel = fill(
+		shiftCount === 1 ? t.postJob.postShiftOne : t.postJob.postShiftMany,
+		{ n: shiftCount },
+	);
 
 	if (compact) {
 		return (
@@ -225,8 +243,8 @@ export function PostJobActionPanel({
 						type="button"
 						onClick={onAddShift}
 						className="iz-post-job-dock-add"
-						aria-label="Add another shift"
-						title="Add another shift"
+						aria-label={t.postJob.addAnotherShift}
+						title={t.postJob.addAnotherShift}
 					>
 						<Plus className="h-4 w-4" />
 					</button>
@@ -253,7 +271,7 @@ export function PostJobActionPanel({
 				className="iz-post-job-aside-btn mt-3 w-full"
 			>
 				<Plus className="h-4 w-4" />
-				Add another shift
+				{t.postJob.addAnotherShift}
 			</button>
 			<button
 				type="button"
@@ -265,7 +283,10 @@ export function PostJobActionPanel({
 				<ChevronRight className="h-4 w-4" />
 			</button>
 			<p className="iz-post-job-submit-hint">
-				<span className="iz-post-job-submit-hint__green">Green</span> creates
+				<span className="iz-post-job-submit-hint__green">
+					{t.postJob.greenWord}
+				</span>
+				{t.postJob.greenExplains}
 				the job and notifies your linked agencies instantly.
 			</p>
 		</div>

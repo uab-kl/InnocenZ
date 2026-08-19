@@ -2,6 +2,10 @@ import {
 	Comcard3dPreviewVisual,
 	type ComcardPreviewData,
 } from "@agency-portal/components/agency/Comcard3dPreview";
+import {
+	OutletLinkingDetail,
+	OutletLinkingList,
+} from "@agency-portal/components/agency/OutletLinkingPanel";
 import { PrFaceBubble } from "@agency-portal/components/agency/PrFaceBubble";
 import { PhotoLightbox } from "@agency-portal/components/agency/ProofPhotoViewer";
 import { IzSheet } from "@agency-portal/components/iz/Sheet";
@@ -14,6 +18,7 @@ import {
 } from "@agency-portal/components/pr/PortfolioComcardVisual";
 import { portfolioFilledCount } from "@agency-portal/components/pr/PortfolioGalleryPicker";
 import { useAgencyApprovalQueue } from "@agency-portal/hooks/use-agency-approval-queue";
+import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
 import { usePrPhotoById } from "@agency-portal/hooks/use-pr-photo";
 import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
@@ -47,7 +52,11 @@ import {
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { resolveProofPhotoUrl } from "@/lib/proof-photo";
+import type { AgencyOutletApproveStatus } from "@/services/agency-outlet";
 import { fetchOutlets } from "@/services/outlet/outlet";
 import type { ShiftAssignment } from "@/services/shift-assignment";
 
@@ -80,12 +89,13 @@ function pendingPRToComcardPreview(signup: PendingPR): ComcardPreviewData {
 	};
 }
 
-function comcardTabMeta(signup: PendingPR) {
-	if (signup.comcardImageUrl) return { ready: true, label: "Photo comcard" };
+function comcardTabMeta(signup: PendingPR, t: PortalTranslations) {
+	if (signup.comcardImageUrl)
+		return { ready: true, label: t.approvals.photoComcard };
 	if (canGeneratePortfolioComcard(signup.portfolioPhotos ?? []))
-		return { ready: true, label: "Photo comcard" };
+		return { ready: true, label: t.approvals.photoComcard };
 	if (signup.name) return { ready: true, label: "3D preview" };
-	return { ready: false, label: "Empty" };
+	return { ready: false, label: t.approvals.empty };
 }
 
 function PendingComcardVisual({
@@ -132,7 +142,7 @@ function PendingComcardVisual({
  * one mixed tab, and the owner asked how to tell the two approvals apart; the
  * answer is that they should never share a list.
  */
-type Tab = "signups" | "cancel" | "cutlost" | "leaves";
+type Tab = "signups" | "cancel" | "cutlost" | "leaves" | "outlet-linking";
 
 const AVATAR_VARIANTS = ["rose", "sky", "violet", "amber", "mint"] as const;
 
@@ -220,8 +230,13 @@ function leaveDayLabel(iso: string | null | undefined): string {
 }
 
 /** "Special event" / "Normal shift" — the outlet's toggle, worded as the PR app words it. */
-function leaveEventKindLabel(kind: string | null | undefined): string {
-	return kind === "special" ? "Special event" : "Normal shift";
+function leaveEventKindLabel(
+	kind: string | null | undefined,
+	t: PortalTranslations,
+): string {
+	return kind === "special"
+		? t.approvals.specialEvent
+		: t.approvals.normalShift;
 }
 
 function pendingFloorNickname(signup: PendingPR) {
@@ -280,6 +295,7 @@ function RejectSheet({
 	onClose: () => void;
 	onConfirm: (reason: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const [reason, setReason] = useState("");
 	useEffect(() => {
 		if (open) setReason("");
@@ -305,7 +321,7 @@ function RejectSheet({
 					type="button"
 					className="iz-sheet-close"
 					onClick={onClose}
-					aria-label="Close"
+					aria-label={t.common.close}
 				>
 					<X className="h-4 w-4" />
 				</button>
@@ -345,6 +361,7 @@ function DocPreviewSheet({
 	gallerySlots: string[];
 	onClose: () => void;
 }) {
+	const { t } = usePortalLocale();
 	// An IC scan at thumbnail size is not readable, which is the whole point of
 	// this panel — tap any document to open it in the shared PhotoLightbox, the
 	// same zoom-and-pan viewer the proof photos use. The comcard is a composed
@@ -383,12 +400,12 @@ function DocPreviewSheet({
 	);
 	const title =
 		preview === "ic"
-			? "IC photos"
+			? t.approvals.icPhotos
 			: preview === "selfie"
-				? "Profile picture"
+				? t.approvals.profilePicture
 				: preview === "comcard"
-					? "Comcard"
-					: "Portfolio gallery";
+					? t.approvals.comcard
+					: t.approvals.portfolioGallery;
 
 	return (
 		<IzSheet open onClose={onClose}>
@@ -407,7 +424,7 @@ function DocPreviewSheet({
 					type="button"
 					className="iz-sheet-close"
 					onClick={onClose}
-					aria-label="Close"
+					aria-label={t.common.close}
 				>
 					<X className="h-4 w-4" />
 				</button>
@@ -416,8 +433,8 @@ function DocPreviewSheet({
 				<div className="grid grid-cols-2 gap-3 px-4 pb-4">
 					{(
 						[
-							{ side: "Front", src: icPhotoFront },
-							{ side: "Back", src: icPhotoBack },
+							{ side: t.approvals.front, src: icPhotoFront },
+							{ side: t.approvals.back, src: icPhotoBack },
 						] as const
 					).map(({ side, src }) => (
 						<div key={side} className="space-y-1">
@@ -440,7 +457,7 @@ function DocPreviewSheet({
 					{selfiePhoto ? (
 						zoomable(
 							selfiePhoto,
-							"Profile picture",
+							t.approvals.profilePicture,
 							"aspect-[3/4] w-full rounded-xl border border-[var(--iz-line)] object-cover",
 							"mx-auto max-w-[220px]",
 						)
@@ -472,7 +489,7 @@ function DocPreviewSheet({
 						type="button"
 						className="block w-full cursor-zoom-in"
 						onClick={() => openZoom({ kind: "comcard", from: preview })}
-						aria-label="Enlarge comcard"
+						aria-label={t.approvals.enlargeComcard}
 					>
 						<PendingComcardVisual signup={signup} className="mx-auto" />
 					</button>
@@ -521,11 +538,12 @@ function DocumentTabs({
 	galleryCount: number;
 	comcardMeta: { ready: boolean; label: string };
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div
 			className="iz-approvals-doc-tabs"
 			role="tablist"
-			aria-label="Document types"
+			aria-label={t.approvals.documentTypes}
 		>
 			<button
 				type="button"
@@ -543,8 +561,10 @@ function DocumentTabs({
 				) : (
 					<Camera className="h-4 w-4 text-[var(--iz-muted)]" />
 				)}
-				<span className="t">IC photos</span>
-				<span className="s">{hasIcPhotos ? "Verified" : "Missing"}</span>
+				<span className="t">{t.approvals.icPhotos}</span>
+				<span className="s">
+					{hasIcPhotos ? t.approvals.verified : t.approvals.missing}
+				</span>
 			</button>
 			<button
 				type="button"
@@ -562,8 +582,10 @@ function DocumentTabs({
 				) : (
 					<Camera className="h-4 w-4 text-[var(--iz-muted)]" />
 				)}
-				<span className="t">Profile picture</span>
-				<span className="s">{hasSelfie ? "Verified" : "Missing"}</span>
+				<span className="t">{t.approvals.profilePicture}</span>
+				<span className="s">
+					{hasSelfie ? t.approvals.verified : t.approvals.missing}
+				</span>
 			</button>
 			<button
 				type="button"
@@ -577,9 +599,11 @@ function DocumentTabs({
 				onClick={() => onTabChange("gallery")}
 			>
 				<Image className="h-4 w-4" />
-				<span className="t">Gallery</span>
+				<span className="t">{t.approvals.gallery}</span>
 				<span className="s">
-					{galleryCount > 0 ? `${galleryCount} photos` : "Empty"}
+					{galleryCount > 0
+						? fill(t.approvals.photoCount, { n: galleryCount })
+						: t.approvals.empty}
 				</span>
 			</button>
 			<button
@@ -594,7 +618,7 @@ function DocumentTabs({
 				onClick={() => onTabChange("comcard")}
 			>
 				<Contact className="h-4 w-4" />
-				<span className="t">Comcard</span>
+				<span className="t">{t.approvals.comcard}</span>
 				<span className="s">{comcardMeta.label}</span>
 			</button>
 		</div>
@@ -622,6 +646,7 @@ function DocumentPreviewStack({
 	gallerySlots: string[];
 	onPreview: (kind: "ic" | "selfie" | "gallery" | "comcard") => void;
 }) {
+	const { t } = usePortalLocale();
 	const galleryPlaceholders = gallerySlots.length > 0 ? 0 : 4;
 
 	const icCell = (label: string, src: string | undefined, aria: string) => (
@@ -648,8 +673,12 @@ function DocumentPreviewStack({
 				<div className="iz-approvals-doc-row iz-approvals-doc-row--ic">
 					{hasIcPhotos ? (
 						<>
-							{icCell("IC · Front", icPhotoFront, "IC front")}
-							{icCell("IC · Back", icPhotoBack, "IC back")}
+							{icCell(
+								t.approvals.icFrontLabel,
+								icPhotoFront,
+								t.approvals.icFront,
+							)}
+							{icCell(t.approvals.icBackLabel, icPhotoBack, t.approvals.icBack)}
 						</>
 					) : (
 						<>
@@ -671,9 +700,9 @@ function DocumentPreviewStack({
 							type="button"
 							className="iz-approvals-doc-cell verified selfie"
 							onClick={() => onPreview("selfie")}
-							aria-label="Profile picture"
+							aria-label={t.approvals.profilePicture}
 						>
-							<span className="cell-label">Profile picture</span>
+							<span className="cell-label">{t.approvals.profilePicture}</span>
 							<div className="cell-media">
 								{selfiePhoto ? (
 									<img src={docImageSrc(selfiePhoto)} alt={signup.name} />
@@ -718,12 +747,12 @@ function DocumentPreviewStack({
 
 			{activeTab === "comcard" && (
 				<div className="iz-approvals-doc-row iz-approvals-doc-row--comcard">
-					{comcardTabMeta(signup).ready ? (
+					{comcardTabMeta(signup, t).ready ? (
 						<button
 							type="button"
 							className="iz-approvals-doc-cell comcard-preview"
 							onClick={() => onPreview("comcard")}
-							aria-label="View comcard"
+							aria-label={t.approvals.viewComcard}
 						>
 							<PendingComcardVisual signup={signup} compact />
 						</button>
@@ -747,6 +776,7 @@ function SignupDetailPanel({
 	onApprove: () => void;
 	onReject: (reason: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const [rejectOpen, setRejectOpen] = useState(false);
 	const [preview, setPreview] = useState<
 		"ic" | "selfie" | "gallery" | "comcard" | null
@@ -761,7 +791,7 @@ function SignupDetailPanel({
 	const gallerySlots = (signup.portfolioPhotos ?? []).filter(
 		Boolean,
 	) as string[];
-	const comcardMeta = comcardTabMeta(signup);
+	const comcardMeta = comcardTabMeta(signup, t);
 
 	useEffect(() => {
 		setDocTab("ic");
@@ -789,7 +819,9 @@ function SignupDetailPanel({
 						)}
 						<p className="iz-approvals-detail-meta">
 							{signup.languages}
-							{signup.submittedAt ? ` · Applied ${signup.submittedAt}` : ""}
+							{signup.submittedAt
+								? fill(t.approvals.appliedOn, { date: signup.submittedAt })
+								: ""}
 						</p>
 						{signup.source === "owner-invite" && (
 							<IzPill variant="amber" className="mt-1.5">
@@ -822,14 +854,14 @@ function SignupDetailPanel({
 							className="iz-btn iz-btn-primary !py-2 !text-xs"
 							onClick={onApprove}
 						>
-							{isLeave ? "Approve departure" : "Approve"}
+							{isLeave ? t.approvals.approveDeparture : t.common.approve}
 						</button>
 						<button
 							type="button"
 							className="iz-btn iz-btn-soft !py-2 !text-xs"
 							onClick={() => setRejectOpen(true)}
 						>
-							Reject
+							{t.common.reject}
 						</button>
 					</div>
 				)}
@@ -837,7 +869,9 @@ function SignupDetailPanel({
 
 			<div className="iz-approvals-info-grid">
 				<div className="iz-approvals-info-card">
-					<h3 className="iz-approvals-info-title">Personal info</h3>
+					<h3 className="iz-approvals-info-title">
+						{t.approvals.personalInfo}
+					</h3>
 					<div className="iz-approvals-info-chips">
 						{signup.race && <IzPill variant="violet">{signup.race}</IzPill>}
 						{signup.age && <IzPill variant="violet">Age {signup.age}</IzPill>}
@@ -862,7 +896,7 @@ function SignupDetailPanel({
 					)}
 				</div>
 				<div className="iz-approvals-info-card">
-					<h3 className="iz-approvals-info-title">Contact</h3>
+					<h3 className="iz-approvals-info-title">{t.approvals.contact}</h3>
 					{signup.email && (
 						<p className="iz-approvals-info-line">
 							<Mail className="h-3.5 w-3.5 shrink-0" />
@@ -879,7 +913,7 @@ function SignupDetailPanel({
 			</div>
 
 			<section className="iz-approvals-docs">
-				<h3 className="iz-approvals-info-title">Documents</h3>
+				<h3 className="iz-approvals-info-title">{t.approvals.documents}</h3>
 				<DocumentTabs
 					activeTab={docTab}
 					onTabChange={setDocTab}
@@ -905,16 +939,18 @@ function SignupDetailPanel({
 				open={rejectOpen}
 				title={
 					isLeave
-						? `Reject ${pendingFloorNickname(signup)}'s departure`
-						: `Reject ${pendingFloorNickname(signup)}`
+						? fill(t.approvals.rejectDepartureNamed, {
+								name: pendingFloorNickname(signup),
+							})
+						: `${t.common.rejectNamed} ${pendingFloorNickname(signup)}`
 				}
 				subtitle={
 					isLeave
-						? "Reason is sent to PR — required to reject a departure. The membership continues."
-						: "Reason is sent to PR (mandatory)"
+						? t.approvals.departureReasonSentToPr
+						: t.approvals.reasonSentToPr
 				}
-				placeholder="e.g. Incomplete IC verification…"
-				confirmLabel="Confirm reject"
+				placeholder={t.approvals.rejectReasonPlaceholder}
+				confirmLabel={t.approvals.confirmReject}
 				onClose={() => setRejectOpen(false)}
 				onConfirm={(reason) => {
 					onReject(reason);
@@ -943,6 +979,7 @@ function CutlostDetailPanel({
 	onApprove: () => void;
 	onReject: (reason: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const [rejectOpen, setRejectOpen] = useState(false);
 	const Icon =
 		req.kind === "best_effort"
@@ -973,14 +1010,14 @@ function CutlostDetailPanel({
 						className="iz-btn iz-btn-primary !py-2 !text-xs"
 						onClick={onApprove}
 					>
-						Approve
+						{t.common.approve}
 					</button>
 					<button
 						type="button"
 						className="iz-btn iz-btn-soft !py-2 !text-xs"
 						onClick={() => setRejectOpen(true)}
 					>
-						Decline
+						{t.common.decline}
 					</button>
 				</div>
 			</div>
@@ -1001,7 +1038,7 @@ function CutlostDetailPanel({
 				<IzPill variant="violet">{req.dateLabel}</IzPill>
 				<IzPill variant="violet">{req.shiftLabel}</IzPill>
 				{req.model === "best_effort" && (
-					<IzPill variant="violet">Best effort</IzPill>
+					<IzPill variant="violet">{t.approvals.bestEffort}</IzPill>
 				)}
 				<IzPill variant="red">
 					Cutlost RM {Math.round(req.cutlostBefore).toLocaleString("en-MY")}
@@ -1013,7 +1050,7 @@ function CutlostDetailPanel({
 
 			{req.releasedPrNames?.length ? (
 				<div className="iz-approvals-info-card mt-3">
-					<h3 className="iz-approvals-info-title">PRs affected</h3>
+					<h3 className="iz-approvals-info-title">{t.approvals.prsAffected}</h3>
 					<p className="iz-tiny iz-muted">{req.releasedPrNames.join(", ")}</p>
 					<p className="iz-tiny iz-muted2 mt-2">
 						On approve: paid for hours worked + commissions. They are sent home
@@ -1024,7 +1061,7 @@ function CutlostDetailPanel({
 
 			{req.rationale?.length ? (
 				<div className="iz-approvals-info-card mt-3">
-					<h3 className="iz-approvals-info-title">Rationale</h3>
+					<h3 className="iz-approvals-info-title">{t.approvals.rationale}</h3>
 					<ul className="iz-approvals-rationale">
 						{req.rationale.map((line) => (
 							<li key={line}>{line}</li>
@@ -1035,10 +1072,10 @@ function CutlostDetailPanel({
 
 			<RejectSheet
 				open={rejectOpen}
-				title="Decline cutlost request"
+				title={t.approvals.declineCutlostRequest}
 				subtitle={`${req.outletName} · ${cutlostRequestTitle(req)}`}
-				placeholder="Reason for declining…"
-				confirmLabel="Confirm decline"
+				placeholder={t.approvals.declineReasonPlaceholder}
+				confirmLabel={t.approvals.confirmDecline}
 				onClose={() => setRejectOpen(false)}
 				onConfirm={(reason) => {
 					onReject(reason);
@@ -1058,6 +1095,7 @@ function LinkRequestDetailPanel({
 	onApprove: () => void;
 	onReject: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const prPhoto = usePrPhotoById()(link.prId, link.prName);
 	return (
 		<>
@@ -1092,14 +1130,14 @@ function LinkRequestDetailPanel({
 						className="iz-btn iz-btn-soft !py-2 !text-xs"
 						onClick={onReject}
 					>
-						Reject
+						{t.common.reject}
 					</button>
 				</div>
 			</div>
 
 			<div className="iz-approvals-info-grid">
 				<div className="iz-approvals-info-card">
-					<h3 className="iz-approvals-info-title">Link request</h3>
+					<h3 className="iz-approvals-info-title">{t.approvals.linkRequest}</h3>
 					<p className="iz-approvals-info-line">
 						<UserPlus className="h-3.5 w-3.5 shrink-0" />
 						{link.prName} is asking to join {link.agencyName}.
@@ -1134,6 +1172,7 @@ function LeaveDetailPanel({
 	onApprove: () => void;
 	onReject: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const prName = req.prName ?? "PR";
 	const mcPhotos = req.leaveProofPhotos ?? [];
 	const prPhoto = usePrPhotoById()(req.prId, req.prName);
@@ -1159,13 +1198,15 @@ function LeaveDetailPanel({
 					</div>
 				</div>
 				{/* Decided requests are the RECORD, not work: the backend rejects a
-				    second decision ("Only a pending leave request can be…"), so
+				    second decision (t.approvals.onlyPendingLeaveCanBe), so
 				    offering the buttons here would only produce an error. Show what
 				    was decided, and when, instead. */}
 				{req.leaveStatus && req.leaveStatus !== "pending" ? (
 					<div className="iz-approvals-detail-actions">
 						<IzPill variant={req.leaveStatus === "approved" ? "green" : "red"}>
-							{req.leaveStatus === "approved" ? "Approved" : "Rejected"}
+							{req.leaveStatus === "approved"
+								? t.approvals.approved
+								: t.approvals.rejected}
 							{req.leaveDecidedAt
 								? ` · ${new Date(req.leaveDecidedAt).toLocaleString(undefined, {
 										day: "2-digit",
@@ -1193,7 +1234,7 @@ function LeaveDetailPanel({
 							disabled={busy}
 							onClick={onReject}
 						>
-							Reject
+							{t.common.reject}
 						</button>
 					</div>
 				)}
@@ -1202,7 +1243,9 @@ function LeaveDetailPanel({
 			{/* The MC picture the PR uploaded — the thing this decision rests on,
 			    so it sits above the fold, full width. Click opens the original. */}
 			<div className="iz-approvals-info-card mb-3">
-				<h3 className="iz-approvals-info-title">MC / supporting document</h3>
+				<h3 className="iz-approvals-info-title">
+					{t.approvals.mcSupportingDocument}
+				</h3>
 				{mcPhotos.length === 0 ? (
 					<p className="iz-tiny iz-muted2">
 						No photo attached — this request predates the MC-photo rule.
@@ -1215,7 +1258,7 @@ function LeaveDetailPanel({
 								href={resolveProofPhotoUrl(src)}
 								target="_blank"
 								rel="noreferrer"
-								title="Open full size"
+								title={t.approvals.openFullSize}
 							>
 								<img
 									src={resolveProofPhotoUrl(src)}
@@ -1230,17 +1273,17 @@ function LeaveDetailPanel({
 
 			<div className="iz-approvals-info-grid">
 				<div className="iz-approvals-info-card">
-					<h3 className="iz-approvals-info-title">Reason given</h3>
+					<h3 className="iz-approvals-info-title">{t.approvals.reasonGiven}</h3>
 					<p className="iz-tiny iz-muted">
 						{req.notes?.trim() ? (
 							<>&ldquo;{req.notes.trim()}&rdquo;</>
 						) : (
-							"No reason given."
+							t.approvals.noReasonGiven
 						)}
 					</p>
 				</div>
 				<div className="iz-approvals-info-card">
-					<h3 className="iz-approvals-info-title">Shift</h3>
+					<h3 className="iz-approvals-info-title">{t.approvals.shift}</h3>
 					{/*
 					 * The night the agency is deciding about: which event, when it runs,
 					 * and where. The venue used to sit behind the CLOCK icon — a place
@@ -1251,7 +1294,7 @@ function LeaveDetailPanel({
 						<p className="iz-approvals-info-line iz-approvals-info-line--lead">
 							{req.eventName.trim()}
 							<span className="iz-approvals-event-tag">
-								{leaveEventKindLabel(req.eventKind)}
+								{leaveEventKindLabel(req.eventKind, t)}
 							</span>
 						</p>
 					)}
@@ -1262,8 +1305,8 @@ function LeaveDetailPanel({
 					<p className="iz-approvals-info-line">
 						<Clock className="h-3.5 w-3.5 shrink-0" />
 						{/* Null when the shift records no window — said plainly rather than
-						    left blank, which reads as "still loading". */}
-						{req.slot?.trim() || "Shift time not recorded"}
+						    left blank, which reads as t.approvals.stillLoading. */}
+						{req.slot?.trim() || t.approvals.shiftTimeNotRecorded}
 					</p>
 					<p className="iz-approvals-info-line">
 						<Store className="h-3.5 w-3.5 shrink-0" />
@@ -1290,11 +1333,14 @@ export const Route = createFileRoute("/agency/pending")({
 					? "leaves"
 					: search.tab === "cancel"
 						? "cancel"
-						: undefined,
+						: search.tab === "outlet-linking"
+							? "outlet-linking"
+							: undefined,
 	}),
 });
 
 function AgencyPending() {
+	const { t } = usePortalLocale();
 	const { tab: tabFromSearch } = Route.useSearch();
 	const {
 		approvePendingPR,
@@ -1313,6 +1359,16 @@ function AgencyPending() {
 	const { date, time } = nowAgencyDateTime();
 	const prPhotoById = usePrPhotoById();
 	const [tab, setTab] = useState<Tab>("signups");
+	// Outlet-Linking is master/detail like the other tabs, so its filter and
+	// selection live here rather than inside the panel — the list and the detail
+	// render into two different containers and must agree on both.
+	const [outletLinkFilter, setOutletLinkFilter] =
+		useState<AgencyOutletApproveStatus>("pending");
+	const [selectedOutletLinkId, setSelectedOutletLinkId] = useState<
+		string | null
+	>(null);
+	// Same hook the list and detail use, so the badge cannot disagree with them.
+	const outletLinks = useAgencyOutletLinks(outletLinkFilter);
 	const [selectedSignupId, setSelectedSignupId] = useState<string | null>(null);
 	const [selectedCutlostId, setSelectedCutlostId] = useState<string | null>(
 		null,
@@ -1503,7 +1559,7 @@ function AgencyPending() {
 			<div className="iz-approvals-layout">
 				<aside className="iz-approvals-sidebar">
 					<header className="iz-approvals-sidebar-head">
-						<h1 className="iz-approvals-title">Approvals</h1>
+						<h1 className="iz-approvals-title">{t.approvals.title}</h1>
 						<p className="iz-tiny iz-muted2 mt-0.5">
 							{date} · {time}
 						</p>
@@ -1515,7 +1571,8 @@ function AgencyPending() {
 							className={cn("iz-approvals-tab", tab === "signups" && "on")}
 							onClick={() => setTab("signups")}
 						>
-							Agency-Tied ({tiedCounts.joinCurrent + agencyLinkRequests.length})
+							{t.approvals.agencyTied} (
+							{tiedCounts.joinCurrent + agencyLinkRequests.length})
 						</button>
 						<button
 							type="button"
@@ -1524,14 +1581,14 @@ function AgencyPending() {
 						>
 							{/* Departures live on their OWN tab so approving one can never
 							    be mistaken for accepting a PR under the agency. */}
-							Cancel Agency ({tiedCounts.leaveCurrent})
+							{t.approvals.cancelAgency} ({tiedCounts.leaveCurrent})
 						</button>
 						<button
 							type="button"
 							className={cn("iz-approvals-tab", tab === "cutlost" && "on")}
 							onClick={() => setTab("cutlost")}
 						>
-							Cutlost ({cutlostRequests.length})
+							{t.approvals.cutlost} ({cutlostRequests.length})
 						</button>
 						<button
 							type="button"
@@ -1541,7 +1598,24 @@ function AgencyPending() {
 							{/* "(0)" while the query is still in flight reads as "there are
 							    none", which is a different claim from "not known yet" — and
 							    it is the claim that made a pending request look deleted. */}
-							MC/Leaves ({queue.leaveIsLoading ? "…" : leaveRequests.length})
+							{t.approvals.mcLeaves} (
+							{queue.leaveIsLoading ? "…" : leaveRequests.length})
+						</button>
+						{/* Venues asking to work with this agency (0123). Counted like every
+						    other tab — an uncounted tab reads as "there is nothing here",
+						    which is a different claim from "not known yet". "…" while
+						    loading for that same reason: a premature "(0)" says there is no
+						    work when there may be plenty. */}
+						<button
+							type="button"
+							className={cn(
+								"iz-approvals-tab",
+								tab === "outlet-linking" && "on",
+							)}
+							onClick={() => setTab("outlet-linking")}
+						>
+							{t.approvals.outletLinking} (
+							{outletLinks.pendingIsLoading ? "…" : outletLinks.pendingCount})
 						</button>
 					</div>
 
@@ -1552,11 +1626,31 @@ function AgencyPending() {
 							onClick={() => setAddOpen(true)}
 						>
 							<UserPlus className="h-3.5 w-3.5" />
-							Add PR
+							{t.approvals.addPr}
 						</button>
 					)}
 
-					<div className="iz-approvals-list">
+					{/* Hidden for outlet-linking: the chain below ends in a cutlost
+					    `else`, so an unhandled tab would silently render the cutlost
+					    queue under an Outlet-Linking heading. */}
+					{tab === "outlet-linking" && (
+						<div className="iz-approvals-list">
+							<OutletLinkingList
+								filter={outletLinkFilter}
+								onFilterChange={(next) => {
+									setOutletLinkFilter(next);
+									// The selected venue almost certainly is not in the new
+									// filter, and a detail pane showing a row the list no longer
+									// contains is how a screen starts lying about its own state.
+									setSelectedOutletLinkId(null);
+								}}
+								selectedOutletId={selectedOutletLinkId}
+								onSelect={setSelectedOutletLinkId}
+							/>
+						</div>
+					)}
+
+					<div className="iz-approvals-list" hidden={tab === "outlet-linking"}>
 						{tab === "signups" || tab === "cancel" ? (
 							<>
 								{/* Same tuple-map as the MC/Leaves chips below — Current is
@@ -1567,17 +1661,23 @@ function AgencyPending() {
 										[
 											[
 												"pending",
-												`Current (${
+												`${t.approvals.current} (${
 													tab === "cancel"
 														? tiedCounts.leaveCurrent
 														: tiedCounts.joinCurrent + agencyLinkRequests.length
 												})`,
 											],
-											["approved", `Approved (${tiedCounts.approved})`],
-											["rejected", `Rejected (${tiedCounts.rejected})`],
+											[
+												"approved",
+												`${t.approvals.approved} (${tiedCounts.approved})`,
+											],
+											[
+												"rejected",
+												`${t.approvals.rejected} (${tiedCounts.rejected})`,
+											],
 											[
 												"all",
-												`All (${
+												`${t.common.all} (${
 													(
 														tab === "cancel"
 															? tiedCounts.leaveCurrent
@@ -1609,10 +1709,10 @@ function AgencyPending() {
 									agencyLinkRequests.length === 0) ? (
 									<p className="iz-tiny iz-muted px-1 py-4 text-center">
 										{tiedFilter !== "pending"
-											? "No records here"
+											? t.approvals.noRecordsHere
 											: tab === "cancel"
-												? "No departure requests waiting"
-												: "No pending sign-ups"}
+												? t.approvals.noDepartureRequests
+												: t.approvals.noPendingSignups}
 									</p>
 								) : (
 									<>
@@ -1620,7 +1720,7 @@ function AgencyPending() {
 											const galleryCount = portfolioFilledCount(
 												p.portfolioPhotos ?? [],
 											);
-											const comcardReady = comcardTabMeta(p).ready;
+											const comcardReady = comcardTabMeta(p, t).ready;
 											const floorName = pendingFloorNickname(p);
 											const legalName = pendingLegalIcName(p);
 											return (
@@ -1660,15 +1760,15 @@ function AgencyPending() {
 															>
 																{p.requestKind === "leave"
 																	? p.status === "approved"
-																		? "Departure approved"
+																		? t.approvals.departureApproved
 																		: p.status === "rejected"
-																			? "Departure rejected"
-																			: "Leave request"
+																			? t.approvals.departureRejected
+																			: t.approvals.leaveRequest
 																	: p.status === "approved"
-																		? "Member"
+																		? t.approvals.member
 																		: p.status === "rejected"
-																			? "Join rejected"
-																			: "Join request"}
+																			? t.approvals.joinRejected
+																			: t.approvals.joinRequest}
 															</span>
 															<VerificationBadge
 																ok={!!p.hasIcPhotos}
@@ -1676,16 +1776,16 @@ function AgencyPending() {
 															/>
 															<VerificationBadge
 																ok={!!p.hasSelfie}
-																label="Profile picture"
+																label={t.approvals.profilePicture}
 															/>
 															<VerificationBadge
 																ok={galleryCount > 0}
-																label="Gallery"
+																label={t.approvals.gallery}
 																count={galleryCount}
 															/>
 															<VerificationBadge
 																ok={comcardReady}
-																label="Comcard"
+																label={t.approvals.comcard}
 																variant="comcard"
 															/>
 														</span>
@@ -1716,11 +1816,11 @@ function AgencyPending() {
 													<div className="min-w-0 flex-1">
 														<span className="name">{l.prName}</span>
 														<span className="sub">
-															Wants to link · {l.requestedAt}
+															{t.approvals.wantsToLink} · {l.requestedAt}
 														</span>
 														<span className="badges">
 															<span className="iz-approvals-verify-badge gallery">
-																Link request
+																{t.approvals.linkRequest}
 															</span>
 														</span>
 													</div>
@@ -1736,12 +1836,21 @@ function AgencyPending() {
 								<div className="iz-approvals-subfilter mb-2 flex flex-wrap gap-1">
 									{(
 										[
-											["pending", `Current (${leaveRequests.length})`],
-											["approved", `Approved (${approvedCount})`],
-											["rejected", `Rejected (${rejectedCount})`],
+											[
+												"pending",
+												`${t.approvals.current} (${leaveRequests.length})`,
+											],
+											[
+												"approved",
+												`${t.approvals.approved} (${approvedCount})`,
+											],
+											[
+												"rejected",
+												`${t.approvals.rejected} (${rejectedCount})`,
+											],
 											[
 												"all",
-												`All (${leaveRequests.length + leaveHistory.length})`,
+												`${t.common.all} (${leaveRequests.length + leaveHistory.length})`,
 											],
 										] as const
 									).map(([value, label]) => (
@@ -1765,8 +1874,8 @@ function AgencyPending() {
 								) : leaveList.length === 0 ? (
 									<p className="iz-tiny iz-muted px-1 py-4 text-center">
 										{leaveFilter === "pending"
-											? "No MC / leave requests waiting"
-											: "No MC / leave records here"}
+											? t.approvals.noLeaveRequestsWaiting
+											: t.approvals.noLeaveRecordsHere}
 									</p>
 								) : (
 									leaveList.map((req) => (
@@ -1802,10 +1911,10 @@ function AgencyPending() {
 														)}
 													>
 														{req.leaveStatus === "approved"
-															? "Approved"
+															? t.approvals.approved
 															: req.leaveStatus === "rejected"
-																? "Rejected"
-																: "Awaiting decision"}
+																? t.approvals.rejected
+																: t.approvals.awaitingDecision}
 													</span>
 													{req.leaveDecidedAt ? (
 														<span className="iz-tiny iz-muted">
@@ -1863,7 +1972,20 @@ function AgencyPending() {
 					</div>
 				</aside>
 
-				<main className="iz-approvals-detail">
+				{/* Same reason as the list above — this chain also ends in a cutlost
+				    `else`, so it must be hidden rather than left to fall through. The
+				    Outlet-Linking panel carries its own detail inline. */}
+				{tab === "outlet-linking" && (
+					<main className="iz-approvals-detail">
+						<OutletLinkingDetail
+							filter={outletLinkFilter}
+							selectedOutletId={selectedOutletLinkId}
+							onDecided={() => setSelectedOutletLinkId(null)}
+						/>
+					</main>
+				)}
+
+				<main className="iz-approvals-detail" hidden={tab === "outlet-linking"}>
 					{tab === "signups" || tab === "cancel" ? (
 						selectedSignup ? (
 							<SignupDetailPanel
@@ -1898,8 +2020,8 @@ function AgencyPending() {
 							<div className="iz-approvals-empty">
 								<p className="iz-sm iz-muted">
 									{tab === "cancel"
-										? "Select a departure request to review"
-										: "Select a sign-up to review"}
+										? t.approvals.selectDepartureToReview
+										: t.approvals.selectSignupToReview}
 								</p>
 							</div>
 						)
@@ -1970,13 +2092,13 @@ function AgencyPending() {
 							>
 								← Back
 							</button>
-							<h3>Owner-initiated onboarding</h3>
+							<h3>{t.approvals.ownerInitiatedOnboarding}</h3>
 						</div>
 						<button
 							type="button"
 							className="iz-sheet-close"
 							onClick={() => setAddOpen(false)}
-							aria-label="Close"
+							aria-label={t.common.close}
 						>
 							<X className="h-4 w-4" />
 						</button>

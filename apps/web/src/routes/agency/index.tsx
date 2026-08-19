@@ -15,6 +15,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export const Route = createFileRoute("/agency/")({
 	component: AgencyHub,
@@ -56,16 +57,17 @@ function AgencyHub() {
 		: OUTLET_NAMES.length;
 	const isFinance = agencySubRole === "agency_finance";
 	const showWorkforce = useAgencyCan()("viewWorkforce");
+	const { t } = usePortalLocale();
 
 	return (
 		<div className="iz-screen iz-portal-page">
 			<div className="iz-portal-kpi-grid iz-portal-desktop-only">
 				<div className="iz-portal-kpi">
-					<div className="l">Total PR</div>
+					<div className="l">{t.agencyHome.totalPr}</div>
 					<div className="n">{totalPrs}</div>
 				</div>
 				<div className="iz-portal-kpi">
-					<div className="l">Total outlets</div>
+					<div className="l">{t.agencyHome.totalOutlets}</div>
 					<div className="n">{totalOutlets}</div>
 				</div>
 				<Link
@@ -73,7 +75,7 @@ function AgencyHub() {
 					search={{ status: "TO_PAY" }}
 					className="iz-portal-kpi iz-portal-kpi-payout no-underline"
 				>
-					<div className="l">Pending payout</div>
+					<div className="l">{t.agencyHome.pendingPayout}</div>
 					<div className="n">{formatRM(prToPayTotal)}</div>
 					{payoutDeadline && prToPayTotal > 0 && (
 						<p
@@ -83,10 +85,12 @@ function AgencyHub() {
 									: "text-[var(--iz-muted2)]"
 							}`}
 						>
-							{payoutDeadline.isOverdue ? "Overdue · " : "Pay by "}
+							{payoutDeadline.isOverdue
+								? `${t.agencyHome.overdue} · `
+								: `${t.agencyHome.payBy} `}
 							{payoutDeadline.payByLabel}
 							{payoutDeadline.pvCount > 1
-								? ` · ${payoutDeadline.pvCount} PVs`
+								? ` · ${payoutDeadline.pvCount} ${t.agencyHome.pvs}`
 								: ""}
 						</p>
 					)}
@@ -104,8 +108,7 @@ function AgencyHub() {
 					    not hold. */}
 					{isFinance && (
 						<p className="iz-tiny iz-muted mb-3 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-							Payroll &amp; PV — you can review and sign vouchers. Roster and
-							history are read-only.
+							{t.agencyHome.financeScopeBanner}
 						</p>
 					)}
 

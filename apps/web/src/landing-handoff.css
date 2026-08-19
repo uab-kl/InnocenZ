@@ -1,25 +1,25 @@
 /* InnocenZ landing — design handoff tokens & primitives */
 
 .landing-page {
-  --hz-bg: #07070a;
-  --hz-bg-2: #0c0b12;
-  --hz-ink: #f6efe1;
-  --hz-ink-dim: #a89e8c;
-  --hz-ink-mute: #6b6558;
-  --hz-gold: #f2c66b;
-  --hz-gold-2: #d99a44;
-  --hz-gold-3: #8a5a1e;
-  --hz-violet: #b67cff;
-  --hz-violet-2: #7a3dff;
-  --hz-line: rgba(242, 198, 107, 0.14);
-  --hz-line-strong: rgba(242, 198, 107, 0.28);
-  --hz-success: #4ade80;
-  --hz-font-display: "Fraunces", Georgia, serif;
-  --hz-font-sans: "Inter", system-ui, -apple-system, sans-serif;
-  --hz-font-mono: "JetBrains Mono", ui-monospace, monospace;
-  --hz-radius: 20px;
-  --hz-radius-lg: 28px;
-  --hz-glass-blur: 8px;
+	--hz-bg: #07070a;
+	--hz-bg-2: #0c0b12;
+	--hz-ink: #f6efe1;
+	--hz-ink-dim: #a89e8c;
+	--hz-ink-mute: #6b6558;
+	--hz-gold: #f2c66b;
+	--hz-gold-2: #d99a44;
+	--hz-gold-3: #8a5a1e;
+	--hz-violet: #b67cff;
+	--hz-violet-2: #7a3dff;
+	--hz-line: rgba(242, 198, 107, 0.14);
+	--hz-line-strong: rgba(242, 198, 107, 0.28);
+	--hz-success: #4ade80;
+	--hz-font-display: "Fraunces", Georgia, serif;
+	--hz-font-sans: "Inter", system-ui, -apple-system, sans-serif;
+	--hz-font-mono: "JetBrains Mono", ui-monospace, monospace;
+	--hz-radius: 20px;
+	--hz-radius-lg: 28px;
+	--hz-glass-blur: 8px;
 
 	background: var(--hz-bg);
 	color: var(--hz-ink);
@@ -85,15 +85,15 @@
 }
 
 .landing-page .hz-section {
-  position: relative;
-  padding: 120px 0;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 720px;
+	position: relative;
+	padding: 120px 0;
+	content-visibility: auto;
+	contain-intrinsic-size: auto 720px;
 }
 
 .landing-page .hz-hero.hz-section {
-  content-visibility: visible;
-  contain-intrinsic-size: unset;
+	content-visibility: visible;
+	contain-intrinsic-size: unset;
 }
 
 @media (max-width: 820px) {
@@ -103,30 +103,34 @@
 }
 
 .landing-page .hz-glass {
-  background: linear-gradient(
-    180deg,
-    rgba(16, 15, 22, 0.96),
-    rgba(10, 10, 14, 0.98)
-  );
-  border: 1px solid var(--hz-line);
-  /* No backdrop-filter on cards — 50+ blur layers caused scroll jank.
+	background: linear-gradient(
+		180deg,
+		rgba(16, 15, 22, 0.96),
+		rgba(10, 10, 14, 0.98)
+	);
+	border: 1px solid var(--hz-line);
+	/* No backdrop-filter on cards — 50+ blur layers caused scroll jank.
      Nav keeps a single blur via .hz-nav-bar.hz-glass below. */
-  border-radius: var(--hz-radius);
-  position: relative;
-  overflow: hidden;
+	border-radius: var(--hz-radius);
+	position: relative;
+	overflow: hidden;
 }
 
 .landing-page .hz-glass::before {
-  content: none;
+	content: none;
 }
 
 .landing-page .hz-glass::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  pointer-events: none;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.05), transparent 30%);
+	content: "";
+	position: absolute;
+	inset: 0;
+	border-radius: inherit;
+	pointer-events: none;
+	background: linear-gradient(
+		180deg,
+		rgba(255, 255, 255, 0.05),
+		transparent 30%
+	);
 }
 
 .landing-page .hz-btn {
@@ -339,32 +343,40 @@
 
 .landing-page .hz-aurora::before,
 .landing-page .hz-aurora::after {
-  content: "";
-  position: absolute;
-  border-radius: 50%;
-  /* Soft radial gradients instead of expensive filter: blur() */
+	content: "";
+	position: absolute;
+	border-radius: 50%;
+	/* Soft radial gradients instead of expensive filter: blur() */
 }
 
 .landing-page .hz-aurora::before {
-  width: 900px;
-  height: 900px;
-  left: -260px;
-  top: -200px;
-  background: radial-gradient(circle, rgba(122, 61, 255, 0.45) 0%, transparent 68%);
-  opacity: 0.7;
+	width: 900px;
+	height: 900px;
+	left: -260px;
+	top: -200px;
+	background: radial-gradient(
+		circle,
+		rgba(122, 61, 255, 0.45) 0%,
+		transparent 68%
+	);
+	opacity: 0.7;
 }
 
 .landing-page .hz-aurora::after {
-  width: 1000px;
-  height: 1000px;
-  right: -300px;
-  top: 20%;
-  background: radial-gradient(circle, rgba(217, 154, 68, 0.32) 0%, transparent 68%);
-  opacity: 0.55;
+	width: 1000px;
+	height: 1000px;
+	right: -300px;
+	top: 20%;
+	background: radial-gradient(
+		circle,
+		rgba(217, 154, 68, 0.32) 0%,
+		transparent 68%
+	);
+	opacity: 0.55;
 }
 
 .landing-page .hz-aurora-3 {
-  display: none;
+	display: none;
 }
 
 @keyframes hz-aur1 {
@@ -386,11 +398,11 @@
 }
 
 .landing-page .hz-spotlight {
-  display: none;
+	display: none;
 }
 
 .landing-page .hz-grain {
-  display: none;
+	display: none;
 }
 
 /* Nav */
@@ -418,8 +430,8 @@
 }
 
 .landing-page .hz-nav-bar.hz-glass {
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
+	backdrop-filter: blur(12px);
+	-webkit-backdrop-filter: blur(12px);
 }
 
 .landing-page .hz-nav-links {
@@ -837,29 +849,29 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .landing-page .hz-aurora::before,
-  .landing-page .hz-aurora::after,
-  .landing-page .hz-aurora-3,
-  .landing-page .hz-ticker-track,
-  .landing-page .hz-tri-link,
-  .landing-page .hz-logo-float,
-  .landing-page .hz-pulse-ring {
-    animation: none !important;
-  }
+	.landing-page .hz-aurora::before,
+	.landing-page .hz-aurora::after,
+	.landing-page .hz-aurora-3,
+	.landing-page .hz-ticker-track,
+	.landing-page .hz-tri-link,
+	.landing-page .hz-logo-float,
+	.landing-page .hz-pulse-ring {
+		animation: none !important;
+	}
 
-  .landing-page .hz-spotlight {
-    display: none;
-  }
+	.landing-page .hz-spotlight {
+		display: none;
+	}
 }
 
 @media (max-width: 820px) {
-  .landing-page .hz-aurora::before,
-  .landing-page .hz-aurora::after,
-  .landing-page .hz-aurora-3 {
-    animation: none;
-  }
+	.landing-page .hz-aurora::before,
+	.landing-page .hz-aurora::after,
+	.landing-page .hz-aurora-3 {
+		animation: none;
+	}
 
-  .landing-page .hz-spotlight {
-    display: none;
-  }
+	.landing-page .hz-spotlight {
+		display: none;
+	}
 }

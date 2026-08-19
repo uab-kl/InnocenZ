@@ -21,7 +21,8 @@ const OUTLET_MAIN_TABS = [
 	"/outlet/bookings",
 	"/outlet/history",
 	"/outlet/calendar",
-	"/outlet/ratings",
+	// Hidden — see OUTLET_NAV_ITEMS in outlet-rbac.ts.
+	// "/outlet/ratings",
 	"/outlet/billing",
 ] as const;
 

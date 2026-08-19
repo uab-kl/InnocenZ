@@ -21,6 +21,11 @@ import {
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
 import {
+	adminNavLabel,
+	userTypeDescription,
+} from "@/lib/portal-i18n/admin-nav-label";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import {
 	type AdminsQueryParams,
 	type AdminUser,
 	type CreateAdminInput,
@@ -44,6 +49,7 @@ const toTarget = (admin: AdminUser): AccountTarget => ({
 });
 
 function AdminUsersPage() {
+	const { t } = usePortalLocale();
 	const type = getUserTypeByKey("admin")!;
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
@@ -70,7 +76,7 @@ function AdminUsersPage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["admin-users"] });
 			setCreateOpen(false);
-			toast.success(response.message || "Admin user created successfully");
+			toast.success(response.message || t.admin.adminCreated);
 		},
 	});
 
@@ -89,7 +95,7 @@ function AdminUsersPage() {
 	 */
 	const accountActions = useAccountActions({
 		roleName: "admin",
-		roleLabel: "admin access",
+		roleLabel: t.admin.roleAdminAccess,
 		queryKeys: ["admin-users"],
 	});
 
@@ -104,15 +110,15 @@ function AdminUsersPage() {
 
 	const createError = toMutationError(
 		createMutation.error,
-		"Failed to create admin user",
+		t.admin.adminCreateFailed,
 	);
 
 	return (
 		<PageShell>
 			<PageHeader
 				icon={type.icon}
-				title={type.title}
-				description={type.description}
+				title={adminNavLabel(`sidebar-user-${type.key}`, type.title, t)}
+				description={userTypeDescription(type.key, type.description, t)}
 			/>
 
 			<AdminsTable

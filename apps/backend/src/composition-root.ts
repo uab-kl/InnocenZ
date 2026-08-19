@@ -30,6 +30,8 @@ import { OrgMemberInviteControllerClass } from '@/features/auth/org-member-invit
 import { OrgMemberInviteRepositoryClass } from '@/features/org-member-invite/org-member-invite.repository.js';
 import { AgencyRepositoryClass } from '@/features/agency/agency.repository.js';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository.js';
+import { AgencyOutletControllerClass } from '@/features/agency/agency-outlet.controller.js';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository.js';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository.js';
 import { AgencyControllerClass } from '@/features/agency/agency.controller.js';
 import { PlatformConfigRepositoryClass } from '@/features/platform-config/platform-config.repository.js';
@@ -89,10 +91,24 @@ export const otpController = new OtpControllerClass(phoneVerificationRepository,
 // Declared before authController — PR register writes agency_pr by user_id;
 // outlet/agency web register creates the org + owner membership.
 export const agencyPrRepository = new AgencyPrRepository();
+// Agency ↔ outlet linking (0123). Replaces `outlet.onboarded_by_agency_id` as
+// the answer to "may this agency staff this venue"; that column is provenance
+// only from here on.
+export const agencyOutletRepository = new AgencyOutletRepository();
 export const agencyRepository = new AgencyRepositoryClass();
 export const agencyMemberRepository = new AgencyMemberRepositoryClass();
 export const outletRepository = new OutletRepositoryClass();
 export const outletMemberRepository = new OutletMemberRepositoryClass();
+// Declared here rather than beside the other controllers because it needs only
+// repositories that already exist by this line — auth (83), agency-member,
+// agency-pr and outlet-member — and `resolveOrgScope` requires that exact trio.
+export const agencyOutletController = new AgencyOutletControllerClass(
+  agencyOutletRepository,
+  agencyPrRepository,
+  authRepository,
+  agencyMemberRepository,
+  outletMemberRepository,
+);
 export const orgMemberInviteRepository = new OrgMemberInviteRepositoryClass();
 export const subscriptionRepository = new SubscriptionRepositoryClass();
 export const memberSubscriptionRepository = new MemberSubscriptionRepositoryClass();
@@ -113,6 +129,7 @@ export const authController = new AuthControllerClass(
   outletMemberRepository,
   subscriptionRepository,
   memberSubscriptionRepository,
+
 );
 export const healthController = new HealthControllerClass();
 
@@ -259,7 +276,7 @@ export const prController = new PrControllerClass(
 );
 
 export const shiftRepository = new ShiftRepositoryClass();
-export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository, shiftAssignmentRepository);
+export const shiftController = new ShiftControllerClass(shiftRepository, agencyMemberRepository, authRepository, outletMemberRepository, outletRepository, shiftAssignmentRepository, agencyOutletRepository);
 
 export const paymentVoucherRepository = new PaymentVoucherRepositoryClass();
 
@@ -285,7 +302,7 @@ export const paymentVoucherController = new PaymentVoucherControllerClass(paymen
 // Takes agencyPrRepository (declared far above) because assigning a shift must
 // check the agency has APPROVED that PR, and only agency_pr holds that per
 // membership — the synthetic PR reports its oldest agency's answer.
-export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository, agencyPenaltyRuleRepository, agencyPrRepository);
+export const shiftAssignmentController = new ShiftAssignmentControllerClass(shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository, paymentVoucherRepository, agencyPenaltyRuleRepository, agencyPrRepository, agencyOutletRepository);
 
 export const outletSwapRepository = new OutletSwapRepositoryClass();
 export const outletSwapController = new OutletSwapControllerClass(outletSwapRepository, shiftAssignmentRepository, shiftRepository, prRepository, agencyMemberRepository, authRepository, outletMemberRepository);

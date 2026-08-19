@@ -6,7 +6,16 @@ import { fetchOutlets, type Outlet } from "@/services/outlet";
 
 /**
  * The agency's own outlets from the backend registry, scoped by
- * `onboardedByAgencyId`. Gated on a real session (`getAgencyIdentity()`); demo
+ * `linkedToAgencyId` — the venues this agency is APPROVED to staff, per
+ * `agency_outlet` (0123).
+ *
+ * Was `onboardedByAgencyId` until the multi-agency cutover. That column only
+ * ever named the single agency that originally signed a venue up, so once a
+ * venue could work with several agencies it returned the wrong set for all but
+ * one of them. This filter IS the portal's visibility rule — it is
+ * `approved`-only on the server and cannot be relaxed from here.
+ *
+ * Gated on a real session (`getAgencyIdentity()`); demo
  * sessions get `backed: false` + empty, so callers fall back to their demo
  * source. Supplies the real outlet directory (name/address/status) and the
  * "total outlets" count — NOT the shift-demand dashboard content, which is
@@ -22,7 +31,7 @@ export function useAgencyOutlets() {
 		queryKey: ["agency", "outlets", agencyId ?? "none"],
 		queryFn: () =>
 			fetchOutlets(
-				{ onboardedByAgencyId: agencyId as string, pageSize: 200 },
+				{ linkedToAgencyId: agencyId as string, pageSize: 200 },
 				logout,
 			),
 		enabled: backed,

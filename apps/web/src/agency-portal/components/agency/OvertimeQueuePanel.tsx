@@ -5,6 +5,7 @@ import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { Check, Clock, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import type { PendingOvertimeClaim } from "@/services/shift-assignment";
 
 /** yyyy-MM-dd -> "Tue 21 Jul", matching how the roster names the same day. */
@@ -60,6 +61,7 @@ function OvertimeRow({
 	busy: boolean;
 	onDecide: (decision: "approve" | "reject") => Promise<void> | void;
 }) {
+	const { t } = usePortalLocale();
 	const [confirming, setConfirming] = useState<"approve" | "reject" | null>(
 		null,
 	);
@@ -78,7 +80,8 @@ function OvertimeRow({
 			<div className="flex flex-wrap items-start justify-between gap-2">
 				<div>
 					<div className="text-sm font-semibold">
-						{claim.prName ?? "Unknown PR"} · {claim.outletName ?? "Outlet"}
+						{claim.prName ?? "Unknown PR"} ·{" "}
+						{claim.outletName ?? t.table.outlet}
 					</div>
 					<p className="iz-tiny iz-muted mt-0.5">
 						{formatDay(claim.shiftDate)}
@@ -92,7 +95,9 @@ function OvertimeRow({
 
 			<div className="mt-2 flex flex-wrap gap-4 text-sm">
 				<span>
-					<span className="iz-tiny iz-muted block">Overtime worked</span>
+					<span className="iz-tiny iz-muted block">
+						{t.payroll.overtimeWorked}
+					</span>
 					<span className="font-mono">
 						{formatMinutes(claim.overtimeMinutes)}
 					</span>
@@ -103,7 +108,9 @@ function OvertimeRow({
 					<span className="font-mono">RM {claim.amount}</span>
 				</span>
 				<span>
-					<span className="iz-tiny iz-muted block">Onto the week of</span>
+					<span className="iz-tiny iz-muted block">
+						{t.payroll.ontoTheWeekOf}
+					</span>
 					<span className="font-mono">
 						{claim.week ? claim.week.weekStart : "—"}
 					</span>
@@ -129,7 +136,7 @@ function OvertimeRow({
 							<Check className="h-4 w-4" />
 							{confirming === "approve"
 								? `Confirm · pay RM ${claim.amount}`
-								: "Approve"}
+								: t.common.approve}
 						</button>
 						<button
 							type="button"
@@ -138,14 +145,14 @@ function OvertimeRow({
 							onClick={() => act("reject")}
 						>
 							<X className="h-4 w-4" />
-							{confirming === "reject" ? "Confirm · pay nothing" : "Reject"}
+							{confirming === "reject" ? t.payroll.confirmPayNothing : "Reject"}
 						</button>
 					</div>
 					{confirming && (
 						<p className="iz-tiny iz-muted2 mt-1">
 							{confirming === "approve"
 								? `RM ${claim.amount} is added to ${claim.prName ?? "the PR"}'s voucher. This cannot be undone.`
-								: "No money is added and the PR is told. This cannot be undone."}
+								: t.payroll.noMoneyAddedWarning}
 						</p>
 					)}
 				</>
@@ -196,6 +203,7 @@ export function OvertimeQueuePanel({
 	weekStartIso: string;
 	weekEndIso: string;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const {
 		claims: allClaims,
@@ -242,9 +250,9 @@ export function OvertimeQueuePanel({
 			// generic failure message would send the agency looking for a bug.
 			const message = toMutationError(
 				error,
-				"Could not record that decision",
+				t.receipts.couldNotRecordDecision,
 			)?.message;
-			toast(message ?? "Could not record that decision", "warn");
+			toast(message ?? t.receipts.couldNotRecordDecision, "warn");
 		}
 	};
 
@@ -255,14 +263,11 @@ export function OvertimeQueuePanel({
 			</IzSectionLabel>
 			<IzCard>
 				{isLoading && (
-					<p className="iz-tiny iz-muted">Loading overtime claims…</p>
+					<p className="iz-tiny iz-muted">{t.agencyHub.loadingOvertime}</p>
 				)}
 
 				{!isLoading && claims.length === 0 && (
-					<p className="iz-tiny iz-muted">
-						No overtime awaiting a decision in this week. A claim is recorded
-						when a PR checks out later than the shift was scheduled to end.
-					</p>
+					<p className="iz-tiny iz-muted">{t.payroll.noOvertimeThisWeek}</p>
 				)}
 
 				{!isLoading && pendingElsewhere > 0 && (

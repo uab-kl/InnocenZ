@@ -59,10 +59,6 @@ import {
 	SelectValue,
 } from "@/components/ui/select";
 import {
-	fetchSignupAgencies,
-	type SignupAgencyOption,
-} from "@/constants/signup-agencies";
-import {
 	fetchSignupPackages,
 	type SignupPackageOption,
 } from "@/constants/signup-packages";
@@ -125,10 +121,6 @@ export function SignupForm() {
 	const [packagesLoading, setPackagesLoading] = useState(true);
 	const [packagesError, setPackagesError] = useState<string | null>(null);
 	const [packagesTick, setPackagesTick] = useState(0);
-	const [agencies, setAgencies] = useState<SignupAgencyOption[]>([]);
-	const [agenciesLoading, setAgenciesLoading] = useState(false);
-	const [agenciesError, setAgenciesError] = useState<string | null>(null);
-	const [agenciesTick, setAgenciesTick] = useState(0);
 
 	const goToLogin = () => {
 		setSuccessOpen(false);
@@ -154,7 +146,6 @@ export function SignupForm() {
 			password: "",
 			confirmPassword: "",
 			packageId: "",
-			onboardedByAgencyId: "",
 			logoFile: null as File | null,
 			ackPersonalInfo: false,
 			ackDeclarationOfTruth: false,
@@ -256,51 +247,6 @@ export function SignupForm() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps -- reload on account / retry only
 	}, [accountType, packagesTick]);
 
-	// Active agencies for "Onboarded by agency" — outlets only. Public list
-	// (`GET /auth/agencies`); a signing-up venue has no token yet.
-	useEffect(() => {
-		if (accountType !== "outlet") {
-			setAgencies([]);
-			setAgenciesError(null);
-			setAgenciesLoading(false);
-			form.setFieldValue("onboardedByAgencyId", "");
-			return;
-		}
-		let cancelled = false;
-		setAgenciesLoading(true);
-		setAgenciesError(null);
-		fetchSignupAgencies()
-			.then((list) => {
-				if (cancelled) return;
-				setAgencies(list);
-				// Drop a stale pick that is no longer an active agency.
-				const current = form.getFieldValue("onboardedByAgencyId");
-				if (current && !list.some((agency) => agency.id === current)) {
-					form.setFieldValue("onboardedByAgencyId", "");
-				}
-			})
-			.catch((err) => {
-				if (cancelled) return;
-				setAgencies([]);
-				form.setFieldValue("onboardedByAgencyId", "");
-				const message = axios.isAxiosError(err)
-					? ((err.response?.data as { message?: string })?.message ??
-						err.message)
-					: err instanceof Error
-						? err.message
-						: copy.fields.onboardingAgency.loadFailed;
-				setAgenciesError(message);
-			})
-			.finally(() => {
-				if (!cancelled) setAgenciesLoading(false);
-			});
-		return () => {
-			cancelled = true;
-		};
-		// form is a stable tanstack form API; agenciesTick forces manual retry.
-		// eslint-disable-next-line react-hooks/exhaustive-deps -- reload on account / retry only
-	}, [accountType, agenciesTick]);
-
 	return (
 		<>
 			<form
@@ -338,7 +284,6 @@ export function SignupForm() {
 												field.handleChange(type.key);
 												setAccountType(type.key);
 												form.setFieldValue("packageId", "");
-												form.setFieldValue("onboardedByAgencyId", "");
 											}}
 											className={cn(
 												"flex flex-col items-start gap-2 rounded-xl border px-4 py-4 text-left transition-all",
@@ -535,97 +480,6 @@ export function SignupForm() {
 								}}
 							</form.Field>
 						</div>
-
-						{/*
-						 * Outlet only — writes `outlet.onboarded_by_agency_id`, the same
-						 * column the admin Outlet Details panel shows as "Onboarded by
-						 * agency" and that POST /shift routes a posted job through.
-						 */}
-						<form.Subscribe selector={(state) => state.values.accountType}>
-							{(selectedAccountType) =>
-								selectedAccountType !== "outlet" ? null : (
-									<form.Field name="onboardedByAgencyId">
-										{(field) => {
-											const isInvalid =
-												field.state.meta.isDirty && !field.state.meta.isValid;
-											const empty =
-												!agenciesLoading &&
-												!agenciesError &&
-												agencies.length === 0;
-
-											return (
-												<Field data-invalid={isInvalid}>
-													<FieldLabel
-														htmlFor={field.name}
-														className="login-field-label"
-													>
-														{fields.onboardingAgency.label}
-														<RequiredMark />
-													</FieldLabel>
-													<Select
-														value={field.state.value || undefined}
-														onValueChange={field.handleChange}
-														disabled={
-															form.state.isSubmitting ||
-															agenciesLoading ||
-															agencies.length === 0
-														}
-													>
-														<SelectTrigger
-															id={field.name}
-															className="login-input-group h-auto w-full border-royal-gold/20 bg-background/60 py-3"
-															aria-invalid={isInvalid}
-														>
-															<SelectValue
-																placeholder={
-																	agenciesLoading
-																		? fields.onboardingAgency.loading
-																		: fields.onboardingAgency.placeholder
-																}
-															/>
-														</SelectTrigger>
-														<SelectContent className="signup-package-select-content">
-															{agencies.map((agency) => (
-																<SelectItem
-																	key={agency.id}
-																	value={agency.id}
-																	className="signup-package-item py-3 text-[1.5rem] leading-snug"
-																>
-																	{agency.name}
-																</SelectItem>
-															))}
-														</SelectContent>
-													</Select>
-													{agenciesError && (
-														<FieldDescription className="signup-helper flex flex-wrap items-center gap-2 text-destructive">
-															<span>
-																{fields.onboardingAgency.loadFailed}:{" "}
-																{agenciesError}
-															</span>
-															<button
-																type="button"
-																className="underline underline-offset-2"
-																onClick={() => setAgenciesTick((n) => n + 1)}
-															>
-																{fields.onboardingAgency.retry}
-															</button>
-														</FieldDescription>
-													)}
-													{empty && (
-														<FieldDescription className="signup-helper text-muted-foreground">
-															{fields.onboardingAgency.empty}
-														</FieldDescription>
-													)}
-													<FieldDescription className="signup-helper text-muted-foreground">
-														{fields.onboardingAgency.description}
-													</FieldDescription>
-												</Field>
-											);
-										}}
-									</form.Field>
-								)
-							}
-						</form.Subscribe>
 					</section>
 
 					<section className="space-y-6">

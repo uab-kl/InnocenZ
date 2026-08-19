@@ -49,6 +49,12 @@ export type OrgApprovedNotificationVariables = MailBrandVariables & {
   loginLink: string;
 };
 
+export type PasswordResetEmailVariables = MailBrandVariables & {
+  name: string;
+  resetPasswordLink: string;
+  expiryLabel: string;
+};
+
 export type OrgMemberInviteEmailVariables = MailBrandVariables & {
   orgName: string;
   orgKindLabel: string;

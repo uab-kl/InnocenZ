@@ -150,6 +150,15 @@ export function shiftTierStaffingByPayTier(opts: {
 	tierRates: Record<OutletPrTier, OutletTierRateSettings>;
 	bookedPrIds?: string[];
 	agencyPRs?: { id: string; trainingLevel?: string }[];
+	/**
+	 * Seats taken per tier, counted by the SERVER across every agency on the shift.
+	 *
+	 * Wins over the local count when present. The local one derives each booked PR's
+	 * tier from `agencyPRs` — a list the outlet portal does not have on a real
+	 * session, which is why this column read 0 with a PR plainly on the shift. Tier is
+	 * a fact about a PR's membership of an AGENCY, so the outlet can never compute it.
+	 */
+	suppliedByTierBucket?: Record<string, number>;
 }): Partial<Record<PostJobPayTierId, ShiftTierStaffing>> {
 	const demandRows = resolveEffectiveShiftPayTierRows({
 		payTierRows: opts.payTierRows,
@@ -165,12 +174,43 @@ export function shiftTierStaffingByPayTier(opts: {
 		opts.agencyPRs ?? [],
 	);
 	const suppliedMap = suppliedByPayTierDemand(demandRows, booked);
+	// Server buckets are OUTLET labels ("Tier I"); the composer keys rows by its own
+	// pay-tier id. Convert once here rather than at each read.
+	const serverSupplied: Record<string, number> | null =
+		opts.suppliedByTierBucket
+			? Object.fromEntries(
+					Object.entries(opts.suppliedByTierBucket).map(([bucket, count]) => [
+						bucket === "commission_only"
+							? "commission_only"
+							: postJobPayTierIdForOutletTier(bucket as OutletPrTier),
+						count,
+					]),
+				)
+			: null;
 	const out: Partial<Record<PostJobPayTierId, ShiftTierStaffing>> = {};
 	for (const option of POST_JOB_PAY_TIER_OPTIONS) {
 		const demandRow = demandRows.find((row) => row.payTierId === option.id);
 		out[option.id] = {
 			demand: demandRow?.prCount ?? 0,
-			supplied: suppliedMap[option.id] ?? 0,
+			// ⚠️ ALL-OR-NOTHING, never per key.
+			//
+			// This was `serverSupplied?.[option.id] ?? suppliedMap[option.id] ?? 0`,
+			// which reads as "prefer the server" and is not: the server sends only
+			// the tiers that actually have someone on them, so every OTHER tier
+			// missed the map and fell through to the local guess. One booked PR was
+			// then counted twice — once by the server under the tier her SUPPLYING
+			// agency grades her, and again locally under the tier a DIFFERENT
+			// agency grades her, because `agencyPRs` carries one tier per person
+			// and a person's tier differs per agency. Tier I and Tier II each read
+			// 1 supplied against a single booked PR, while the headline (the
+			// server's `total`) correctly said 1.
+			//
+			// An absent key in a server map that COUNTS OCCUPANCY means zero, not
+			// "unknown, go and guess". Per-key fallback is only ever right when
+			// absence means "not measured".
+			supplied: serverSupplied
+				? (serverSupplied[option.id] ?? 0)
+				: (suppliedMap[option.id] ?? 0),
 		};
 	}
 	return out;

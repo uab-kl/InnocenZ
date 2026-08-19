@@ -79,6 +79,17 @@ export type PrInsertType = Omit<PrType, 'createdAt' | 'updatedAt'> & {
  *                    row back to 'pending' instead of inserting.
  * A REJECTED departure returns the row to 'approved' with reject_reason
  * prefixed '[Leave rejected] ' — there is no third value for it.
+ *
+ * ⚠️ THIS UNION MUST MATCH THE LIVE ENUM, and for a while it did not: it
+ * declared three labels while the database already carried five. The drift was
+ * not harmless — it made TypeScript treat
+ * `status === 'rejected' ? … : 'awaiting approval'` as exhaustive, so a PR who
+ * had LEFT an agency was reported as "still awaiting your approval" and the
+ * operator was sent to a queue that could never contain them. A union narrower
+ * than the database is not a safe default: it turns a missing case into a
+ * confident wrong answer instead of a type error.
+ *
+ * Order mirrors the Postgres enum's own sort order.
  */
 export const agencyPrApproveStatusValues = [
   'pending',

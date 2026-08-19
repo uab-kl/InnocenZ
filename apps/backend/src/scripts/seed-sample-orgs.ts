@@ -4,6 +4,7 @@ import { and, eq } from 'drizzle-orm';
 import { db } from '@/db/index';
 import { SubscriptionTable } from '@/features/subscription/subscription.model';
 import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model';
+import { AgencyOutletTable } from '@/features/agency/agency-outlet.model';
 import { AgencyTable } from '@/features/agency/agency.model';
 import { OutletUserTable, OutletTable } from '@/features/outlet/outlet.model';
 import { UserTable } from '@/features/user/user.model';
@@ -106,13 +107,33 @@ export async function seedSampleOrgs(): Promise<void> {
         state: o.state,
         country: 'Malaysia',
         status: 'active',
-        onboardedByAgencyId: agencyIdByName.get(o.onboardedBy) ?? null,
         createdBy: ACTOR,
         updatedBy: ACTOR,
       })
       .returning({ id: OutletTable.id });
     if (row) {
       outletIdByName.set(o.name, row.id);
+      // A LINK, not `onboarded_by_agency_id` (0123/0124).
+      //
+      // That column is history now and nothing reads it, so a seeded outlet
+      // carrying only it would have no agency at all: Post Job would refuse
+      // every attempt and the agency portal would not list the venue. Seeded as
+      // `approved` because a seed exists to produce a WORKING fixture — leaving
+      // it `pending` would mean every fresh dev database starts with venues that
+      // cannot post until somebody clicks Approve.
+      const linkedAgencyId = agencyIdByName.get(o.onboardedBy);
+      if (linkedAgencyId) {
+        await db
+          .insert(AgencyOutletTable)
+          .values({
+            agencyId: linkedAgencyId,
+            outletId: row.id,
+            approveStatus: 'approved',
+            createdBy: ACTOR,
+            updatedBy: ACTOR,
+          })
+          .onConflictDoNothing();
+      }
       // The outlet's plan lives on member_subscription, not on the outlet row
       // (outlet.subscription_id was dropped in migration 0034).
       const planId = await outletPlanId(o.planName);

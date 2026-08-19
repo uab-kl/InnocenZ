@@ -6,6 +6,7 @@ import {
 	EMPTY_AGENCY_OUTLET_FILTERS,
 } from "@agency-portal/lib/agency-outlet-shifts";
 import { RotateCcw } from "lucide-react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function AgencyOutletFilters({
 	filters,
@@ -33,6 +34,7 @@ export function AgencyOutletFilters({
 	/** Compact pill row — Manage Outlet page layout */
 	inline?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const active = agencyOutletFiltersActive(filters);
 
 	if (inline) {
@@ -44,7 +46,7 @@ export function AgencyOutletFilters({
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
-						<option value="">All outlets</option>
+						<option value="">{t.filters.allOutlets}</option>
 						{outletNames.map((o) => (
 							<option key={o} value={o}>
 								{o}
@@ -57,9 +59,9 @@ export function AgencyOutletFilters({
 						value={filters.date}
 						onChange={(date) => onChange({ date })}
 						rosterDates={shiftDateIsos}
-						placeholder="All dates"
+						placeholder={t.filters.allDates}
 						allowClear
-						hint="Dots mark days with open shifts."
+						hint={t.manageOutlet.dotsMarkOpenShifts}
 						className="iz-outlet-manage-filter-date iz-outlet-manage-filter-date--inline"
 					/>
 				</label>
@@ -73,16 +75,18 @@ export function AgencyOutletFilters({
 							})
 						}
 					>
-						<option value="">Any source</option>
-						<option value="posted">Posted shift</option>
-						<option value="assignment-pending">Awaiting PR</option>
+						<option value="">{t.manageOutlet.anySource}</option>
+						<option value="posted">{t.manageOutlet.postedShift}</option>
+						<option value="assignment-pending">
+							{t.manageOutlet.awaitingPr}
+						</option>
 					</IzSelect>
 				</label>
 				<label className="iz-outlet-manage-filter-chip">
 					<input
 						type="number"
 						min={1}
-						placeholder="Min open slots"
+						placeholder={t.manageOutlet.minOpenSlots}
 						className="iz-roster-filter-input iz-roster-filter-input--plain"
 						value={filters.minOpenSlots}
 						onChange={(e) => onChange({ minOpenSlots: e.target.value })}
@@ -105,14 +109,14 @@ export function AgencyOutletFilters({
 		<div className="iz-outlet-manage-filters">
 			<div className="iz-outlet-manage-filters-grid">
 				<label className="iz-outlet-manage-filter-field">
-					<span className="iz-roster-filter-label">Outlet</span>
+					<span className="iz-roster-filter-label">{t.filters.outlet}</span>
 					<IzSelect
 						block
 						className="!text-sm"
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
-						<option value="">All outlets</option>
+						<option value="">{t.filters.allOutlets}</option>
 						{outletNames.map((o) => (
 							<option key={o} value={o}>
 								{o}
@@ -122,14 +126,14 @@ export function AgencyOutletFilters({
 				</label>
 
 				<label className="iz-outlet-manage-filter-field">
-					<span className="iz-roster-filter-label">Date</span>
+					<span className="iz-roster-filter-label">{t.filters.date}</span>
 					<RosterPlanningDatePicker
 						value={filters.date}
 						onChange={(date) => onChange({ date })}
 						rosterDates={shiftDateIsos}
-						placeholder="All dates"
+						placeholder={t.filters.allDates}
 						allowClear
-						hint="Dots mark days with open shifts."
+						hint={t.manageOutlet.dotsMarkOpenShifts}
 						className="iz-outlet-manage-filter-date"
 					/>
 				</label>
@@ -146,18 +150,22 @@ export function AgencyOutletFilters({
 							})
 						}
 					>
-						<option value="">Any source</option>
-						<option value="posted">Posted shift</option>
-						<option value="assignment-pending">Awaiting PR</option>
+						<option value="">{t.manageOutlet.anySource}</option>
+						<option value="posted">{t.manageOutlet.postedShift}</option>
+						<option value="assignment-pending">
+							{t.manageOutlet.awaitingPr}
+						</option>
 					</IzSelect>
 				</label>
 
 				<label className="iz-outlet-manage-filter-field">
-					<span className="iz-roster-filter-label">Min open slots</span>
+					<span className="iz-roster-filter-label">
+						{t.manageOutlet.minOpenSlots}
+					</span>
 					<input
 						type="number"
 						min={1}
-						placeholder="e.g. 2"
+						placeholder={t.manageOutlet.egTwo}
 						className="iz-roster-filter-input iz-roster-filter-input--plain"
 						value={filters.minOpenSlots}
 						onChange={(e) => onChange({ minOpenSlots: e.target.value })}

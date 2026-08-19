@@ -67,15 +67,6 @@ router.delete(
   outletOwnerOfParam,
   outletController.clearGeoFence.bind(outletController),
 );
-// Admin-only, and deliberately NOT part of PUT /:id: the venue's own owner can
-// reach that route, and which agency fulfils its PR requests is not theirs to
-// choose. This is the only write path for `onboarded_by_agency_id` — without it
-// a signed-up outlet can never post a shift (see ShiftController.create).
-router.patch(
-  '/:id/onboarding-agency',
-  requireAdmin,
-  outletController.setOnboardingAgency.bind(outletController),
-);
 router.patch('/:id/approve', requireAdmin, outletController.approve.bind(outletController));
 router.patch('/:id/suspend', requireAdmin, outletController.suspend.bind(outletController));
 

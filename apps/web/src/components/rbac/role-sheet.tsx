@@ -13,7 +13,6 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import {
 	Select,
 	SelectContent,
@@ -21,6 +20,7 @@ import {
 	SelectTrigger,
 	SelectValue,
 } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import {
 	Sheet,
 	SheetContent,
@@ -38,6 +38,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { getErrorMessage } from "@/lib/utils";
 import {
 	type CreateRoleInput,
@@ -81,6 +83,7 @@ export function RoleSheet({
 	error,
 	onRefreshFail,
 }: RoleSheetProps) {
+	const { t } = usePortalLocale();
 	const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
 	const [portalId, setPortalId] = useState("");
 	const matrixIdsRef = useRef({
@@ -277,12 +280,10 @@ export function RoleSheet({
 						</div>
 						<div className="space-y-1">
 							<SheetTitle className="text-xl">
-								{isManage ? "Manage Role" : "Create Role"}
+								{isManage ? t.rbac.manageRole : t.rbac.createRole}
 							</SheetTitle>
 							<SheetDescription>
-								{isManage
-									? "Bind this role to one portal and set module C / R / U."
-									: "Each role belongs to exactly one master portal."}
+								{isManage ? t.rbac.manageRoleHint : t.rbac.createRoleHint}
 							</SheetDescription>
 						</div>
 					</div>
@@ -304,10 +305,12 @@ export function RoleSheet({
 										field.state.meta.isTouched && !field.state.meta.isValid;
 									return (
 										<Field data-invalid={isInvalid}>
-											<FieldLabel htmlFor="role-name">Role Name</FieldLabel>
+											<FieldLabel htmlFor="role-name">
+												{t.rbac.roleName}
+											</FieldLabel>
 											<Input
 												id="role-name"
-												placeholder="Enter role name"
+												placeholder={t.rbac.enterRoleName}
 												value={field.state.value}
 												onBlur={field.handleBlur}
 												onChange={(event) =>
@@ -327,14 +330,16 @@ export function RoleSheet({
 							<form.Field name="portalId">
 								{(field) => (
 									<Field>
-										<FieldLabel htmlFor="role-portal">Portal</FieldLabel>
+										<FieldLabel htmlFor="role-portal">
+											{t.rbac.colPortal}
+										</FieldLabel>
 										<Select
 											value={field.state.value || portalId || undefined}
 											onValueChange={handlePortalChange}
 											disabled={isBusy || portalsQuery.isLoading}
 										>
 											<SelectTrigger id="role-portal" className="w-full">
-												<SelectValue placeholder="Select portal" />
+												<SelectValue placeholder={t.rbac.selectPortal} />
 											</SelectTrigger>
 											<SelectContent>
 												{(portalsQuery.data ?? []).map((p) => (
@@ -353,9 +358,11 @@ export function RoleSheet({
 									<Field>
 										<div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
 											<div className="space-y-1">
-												<FieldLabel htmlFor="role-status">Active</FieldLabel>
+												<FieldLabel htmlFor="role-status">
+													{t.rbac.statusActive}
+												</FieldLabel>
 												<p className="text-sm text-muted-foreground">
-													Inactive roles grant no access.
+													{t.rbac.inactiveNoAccess}
 												</p>
 											</div>
 											<Switch
@@ -379,20 +386,20 @@ export function RoleSheet({
 											<div className="flex items-center gap-2">
 												<Key className="h-4 w-4 text-emerald-500" />
 												<h3 className="text-sm font-semibold">
-													Module permissions
+													{t.rbac.modulePermissions}
 												</h3>
 											</div>
 											<div className="flex gap-1.5 text-xs text-muted-foreground">
-												<Badge variant="outline">C create</Badge>
-												<Badge variant="outline">R read</Badge>
-												<Badge variant="outline">U update</Badge>
+												<Badge variant="outline">{t.rbac.cCreate}</Badge>
+												<Badge variant="outline">{t.rbac.rRead}</Badge>
+												<Badge variant="outline">{t.rbac.uUpdate}</Badge>
 											</div>
 										</div>
 
 										{permissionsLoading ? (
 											<div className="flex min-h-32 flex-col items-center justify-center gap-2 text-muted-foreground">
 												<Loader2 className="h-5 w-5 animate-spin" />
-												<span className="text-sm">Loading matrix…</span>
+												<span className="text-sm">{t.rbac.loadingMatrix}</span>
 											</div>
 										) : permissionsError ? (
 											<div className="flex min-h-32 flex-col items-center justify-center gap-2 text-destructive">
@@ -403,11 +410,11 @@ export function RoleSheet({
 											</div>
 										) : !effectivePortalId && !effectivePortalCode ? (
 											<p className="text-sm text-muted-foreground">
-												Select a portal to see its modules.
+												{t.rbac.selectPortalToSeeModules}
 											</p>
 										) : portalModules.length === 0 ? (
 											<p className="text-sm text-muted-foreground">
-												No modules for this portal. Create modules first.
+												{t.rbac.noModulesForPortal}
 											</p>
 										) : (
 											<div className="overflow-x-auto rounded-lg border border-border">
@@ -415,26 +422,25 @@ export function RoleSheet({
 													<TableHeader>
 														<TableRow>
 															<TableHead className="min-w-40">
-																Module
+																{t.rbac.colModule}
 															</TableHead>
-															{CRU.map((t) => (
+															{CRU.map((type) => (
 																<TableHead
-																	key={t}
+																	key={type}
 																	className="w-16 text-center"
 																>
-																	{CRU_LABEL[t]}
+																	{CRU_LABEL[type]}
 																</TableHead>
 															))}
 															<TableHead className="w-16 text-center">
-																All
+																{t.rbac.all}
 															</TableHead>
 														</TableRow>
 													</TableHeader>
 													<TableBody>
 														{portalModules.map((mod) => {
 															const types =
-																permByModuleType.get(mod.moduleId) ??
-																new Map();
+																permByModuleType.get(mod.moduleId) ?? new Map();
 															const ids = [...types.values()].map(
 																(p) => p.permissionId,
 															);
@@ -451,11 +457,11 @@ export function RoleSheet({
 																			{mod.moduleKey}
 																		</div>
 																	</TableCell>
-																	{CRU.map((t) => {
-																		const perm = types.get(t);
+																	{CRU.map((type) => {
+																		const perm = types.get(type);
 																		return (
 																			<TableCell
-																				key={t}
+																				key={type}
 																				className="text-center"
 																			>
 																				{perm ? (
@@ -464,7 +470,9 @@ export function RoleSheet({
 																							perm.permissionId,
 																						)}
 																						onCheckedChange={(
-																							checked: boolean | "indeterminate",
+																							checked:
+																								| boolean
+																								| "indeterminate",
 																						) =>
 																							togglePermission(
 																								perm.permissionId,
@@ -494,7 +502,9 @@ export function RoleSheet({
 																				)
 																			}
 																			disabled={isBusy || ids.length === 0}
-																			aria-label={`All for ${mod.moduleName}`}
+																			aria-label={fill(t.rbac.allFor, {
+																				name: mod.moduleName,
+																			})}
 																		/>
 																	</TableCell>
 																</TableRow>
@@ -527,7 +537,7 @@ export function RoleSheet({
 							onClick={() => handleOpenChange(false)}
 							disabled={isBusy}
 						>
-							Close
+							{t.rbac.close}
 						</Button>
 						<Button
 							type="submit"
@@ -536,12 +546,12 @@ export function RoleSheet({
 							{isSubmitting ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									Saving…
+									{t.rbac.savingEllipsis}
 								</>
 							) : isManage ? (
-								"Save"
+								t.rbac.save
 							) : (
-								"Create"
+								t.rbac.create
 							)}
 						</Button>
 					</SheetFooter>

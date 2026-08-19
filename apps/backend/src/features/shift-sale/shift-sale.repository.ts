@@ -46,6 +46,20 @@ export class ShiftSaleRepositoryClass {
           target: [ShiftSaleTable.shiftId, ShiftSaleTable.prId],
           set: {
             userId: data.userId,
+            // ⚠️ AGENCY IS UPDATED, NOT INSERT-ONLY.
+            //
+            // Omitting it froze whichever writer reached the row FIRST. That was
+            // invisible while both agreed, and became permanent the moment one
+            // of them stamped the shift's anchor: a venue logging its floor
+            // numbers before the PR's receipt was approved locked the sale to
+            // the wrong agency, and every later recompute silently left it.
+            //
+            // Safe to update precisely because both writers now derive this from
+            // `shift_assignment.agency_id` — the supplier — so a later write can
+            // only restate or REPAIR it, never hand the row to a third party. If
+            // a writer ever appears that does not, this line becomes a race and
+            // must be revisited.
+            agencyId: data.agencyId,
             drinkUnits: data.drinkUnits,
             drinkSalesRm: data.drinkSalesRm,
             tipUnits: data.tipUnits,

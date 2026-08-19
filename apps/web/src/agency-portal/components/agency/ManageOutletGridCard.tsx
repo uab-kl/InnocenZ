@@ -3,6 +3,8 @@ import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import type { AgencyOutletSummary } from "@agency-portal/lib/agency-outlet-shifts";
 import { cn } from "@agency-portal/lib/utils";
 import { Check } from "lucide-react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 const OUTLET_THEME_KEYS = ["violet", "cyan", "pink", "amber", "mint"] as const;
 type OutletThemeKey = (typeof OUTLET_THEME_KEYS)[number];
@@ -65,6 +67,17 @@ type ManageOutletGridCardProps = {
 	 * which is the right answer for a venue that has uploaded no mark.
 	 */
 	logo?: string | null;
+	/**
+	 * This partnership is OVER, and the venue is only still here because it has
+	 * shifts left to finish (0127).
+	 *
+	 * Looked up by the page for the same reason as `logo`: the summary is built
+	 * from shifts and carries no outlet id. Without it the grid shows a former
+	 * partner exactly like a current one — the agency keeps the access it needs
+	 * to work the remaining shifts, with nothing on screen saying the
+	 * relationship has ended.
+	 */
+	ended?: boolean;
 };
 
 export function ManageOutletGridCard({
@@ -73,7 +86,9 @@ export function ManageOutletGridCard({
 	picked,
 	onActivate,
 	logo,
+	ended,
 }: ManageOutletGridCardProps) {
+	const { t } = usePortalLocale();
 	const theme = outletThemeKey(summary.outlet);
 	const wage = summary.rule.wagePerHour.toLocaleString("en-MY");
 
@@ -110,24 +125,40 @@ export function ManageOutletGridCard({
 					<OutletLogoTile logo={logo} className="iz-outlet-manage-card__icon" />
 					<div className="min-w-0">
 						<p className="iz-outlet-manage-card__name">{summary.outlet}</p>
-						<p className="iz-outlet-manage-card__rate">RM {wage}/shift</p>
+						{/* Under the name, not over the card: the venue is still workable
+						    and the shifts on it are still yours to fill, so this states a
+						    fact rather than greying out work that must still be done.
+						    Grey, never red — the partnership ran its course, nothing
+						    failed. */}
+						{ended && (
+							<p className="iz-tiny iz-muted2 mt-0.5">
+								{t.manageOutlet.endedFinishing}
+							</p>
+						)}
+						<p className="iz-outlet-manage-card__rate">
+							{fill(t.manageOutlet.perShift, { wage })}
+						</p>
 					</div>
 				</div>
 				<span className="iz-outlet-manage-card__events">
-					{summary.openShiftCount} Event
-					{summary.openShiftCount !== 1 ? "s" : ""}
+					{fill(
+						summary.openShiftCount === 1
+							? t.manageOutlet.eventCountOne
+							: t.manageOutlet.eventCountMany,
+						{ n: summary.openShiftCount },
+					)}
 				</span>
 			</div>
 
 			<div className="iz-outlet-manage-card__kpi">
 				<DemandKpi
-					label="Today"
+					label={t.manageOutlet.today}
 					demand={summary.todayDemand}
 					supplied={summary.todaySupplied}
 					highlight
 				/>
 				<DemandKpi
-					label="Future"
+					label={t.manageOutlet.future}
 					demand={summary.futureDemand}
 					supplied={summary.futureSupplied}
 				/>
@@ -135,10 +166,14 @@ export function ManageOutletGridCard({
 
 			<div className="iz-outlet-manage-card__foot">
 				<p className="iz-outlet-manage-card__meta">
-					Drinks {summary.rule.drinkPct}% · Tips{" "}
-					{formatOutletTipRange(summary.rule.wagePerHour)}
+					{fill(t.manageOutlet.drinksAndTips, {
+						pct: summary.rule.drinkPct,
+						range: formatOutletTipRange(summary.rule.wagePerHour),
+					})}
 				</p>
-				<span className="iz-outlet-manage-card__legend">Demand / Supplied</span>
+				<span className="iz-outlet-manage-card__legend">
+					{t.manageOutlet.demandSupplied}
+				</span>
 			</div>
 		</article>
 	);

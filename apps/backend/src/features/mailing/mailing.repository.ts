@@ -16,6 +16,7 @@ import type {
   MailingEmail,
   OrgApprovedNotificationVariables,
   OrgMemberInviteEmailVariables,
+  PasswordResetEmailVariables,
   SendEmailInput,
   SendEmailResult,
 } from '@/features/mailing/mailing.model.js';
@@ -160,6 +161,55 @@ export async function sendOrgApprovedNotificationEmail(input: {
     `Your ${orgKindLabel} portal is now active.`,
     '',
     `Open portal: ${loginLink}`,
+  ].join('\n');
+
+  return brevoSendEmail({
+    to: input.recipientEmail,
+    subject,
+    text,
+    html,
+  });
+}
+
+/**
+ * Forgot-password reset link.
+ *
+ * Returns `null` when SMTP is not configured so the caller can still answer
+ * neutrally — but the caller MUST NOT hand the link back over HTTP in that
+ * case: a reset link in an API response is an account takeover for anyone who
+ * knows an email address.
+ */
+export async function sendPasswordResetEmail(input: {
+  recipientEmail: string;
+  name: string;
+  resetPasswordLink: string;
+  expiryLabel: string;
+}): Promise<SendEmailResult | null> {
+  if (!emailConfigured()) {
+    logger.warn(
+      '[mailing] Email not configured — skipped password reset email',
+      { to: input.recipientEmail },
+    );
+    return null;
+  }
+
+  const variables: PasswordResetEmailVariables = {
+    ...brandDefaults(input.recipientEmail),
+    name: input.name,
+    resetPasswordLink: input.resetPasswordLink,
+    expiryLabel: input.expiryLabel,
+  };
+  const html = renderTemplate('password_reset.html', variables);
+  const subject = '[InnocenZ] Reset your password';
+  const text = [
+    `Hello ${input.name},`,
+    '',
+    'We received a request to reset the password for your InnocenZ account.',
+    'Open this link to choose a new one:',
+    input.resetPasswordLink,
+    '',
+    `This link expires in ${input.expiryLabel}.`,
+    'If you did not ask for this, ignore this email — your password stays unchanged.',
   ].join('\n');
 
   return brevoSendEmail({

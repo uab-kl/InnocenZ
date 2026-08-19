@@ -9,13 +9,10 @@ import { Shield } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
 import { PageHeader, PageShell } from "@/components/admin/page-header";
-import {
-	type RoleStatusFilter,
-	RoleSheet,
-	RolesGrid,
-} from "@/components/rbac";
+import { RoleSheet, type RoleStatusFilter, RolesGrid } from "@/components/rbac";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	type CreateRoleInput,
 	createRole,
@@ -36,6 +33,7 @@ export const Route = createFileRoute("/admin/rbac/role")({
 const PAGE_SIZE = 50;
 
 function RolePage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const [statusFilter, setStatusFilter] = useState<RoleStatusFilter>("all");
@@ -63,7 +61,7 @@ function RolePage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["rbac-roles"] });
 			closeSheet();
-			toast.success(response.message || "Role created");
+			toast.success(response.message || t.rbac.roleCreated);
 		},
 	});
 
@@ -89,7 +87,7 @@ function RolePage() {
 			queryClient.invalidateQueries({ queryKey: ["rbac-roles"] });
 			queryClient.invalidateQueries({ queryKey: ["rbac-role-permissions"] });
 			closeSheet();
-			toast.success(permissionsResponse.message || "Role matrix saved");
+			toast.success(permissionsResponse.message || t.rbac.roleMatrixSaved);
 		},
 	});
 
@@ -102,12 +100,12 @@ function RolePage() {
 
 	const sheetError = toMutationError(
 		sheetMode === "manage" ? saveManageMutation.error : createMutation.error,
-		sheetMode === "manage" ? "Failed to update role" : "Failed to create role",
+		sheetMode === "manage" ? t.rbac.roleUpdateFailed : t.rbac.roleCreateFailed,
 	);
 
 	return (
 		<PageShell>
-			<PageHeader icon={Shield} title="RBAC" />
+			<PageHeader icon={Shield} title={t.rbac.sectionRbacTitle} />
 
 			<RolesGrid
 				roles={data?.data ?? []}

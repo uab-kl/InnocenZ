@@ -2,6 +2,7 @@ import { AgencyOutletDetailView } from "@agency-portal/components/agency/AgencyO
 import { AgencyOutletFilters } from "@agency-portal/components/agency/AgencyOutletFilters";
 import { ManageOutletGridCard } from "@agency-portal/components/agency/ManageOutletGridCard";
 import { IzCard, IzPageTitle } from "@agency-portal/components/iz/ui";
+import { useAgencyEndedOutlets } from "@agency-portal/hooks/use-agency-ended-outlets";
 import { useAgencyOutletDemand } from "@agency-portal/hooks/use-agency-outlet-demand";
 import { useAgencyOutletLogos } from "@agency-portal/hooks/use-agency-outlet-logos";
 import { rosterSlotsForAgency } from "@agency-portal/lib/agency-demo";
@@ -19,6 +20,8 @@ import { useAgencyCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { MousePointerClick, Users } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/agency/outlets")({
 	component: AgencyManageOutlets,
@@ -31,6 +34,7 @@ export const Route = createFileRoute("/agency/outlets")({
 });
 
 function AgencyManageOutlets() {
+	const { t } = usePortalLocale();
 	const { outlet: outletFromSearch } = Route.useSearch();
 	const shifts = useStore((s) => s.shifts);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
@@ -67,6 +71,8 @@ function AgencyManageOutlets() {
 	 * that reason, and it refuses rather than guesses when two venues share one.
 	 */
 	const outletLogo = useAgencyOutletLogos();
+	// Which of these venues are ENDED partnerships still finishing their shifts.
+	const outletEnded = useAgencyEndedOutlets();
 
 	const demoSummaries = useMemo(
 		() =>
@@ -132,10 +138,12 @@ function AgencyManageOutlets() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>Access restricted</IzPageTitle>
+					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
-					<p className="iz-sm iz-muted">Finance role cannot manage outlets.</p>
+					<p className="iz-sm iz-muted">
+						{t.managePr.financeCannotManageOutlets}
+					</p>
 				</IzCard>
 			</div>
 		);
@@ -169,10 +177,8 @@ function AgencyManageOutlets() {
 		<div className="iz-screen iz-outlet-manage-page">
 			<header className="iz-pr-manage-header">
 				<div className="min-w-0">
-					<IzPageTitle>Manage Outlet</IzPageTitle>
-					<p className="iz-tiny iz-muted mt-0.5">
-						Browse venues · open shifts · assign from roster
-					</p>
+					<IzPageTitle>{t.managePr.manageOutletTitle}</IzPageTitle>
+					<p className="iz-tiny iz-muted mt-0.5">{t.manageOutlet.subtitle}</p>
 				</div>
 				<div className="iz-pr-manage-header__actions">
 					<button
@@ -184,16 +190,18 @@ function AgencyManageOutlets() {
 						}}
 					>
 						<MousePointerClick className="h-4 w-4" />
-						{selectMode ? "Cancel" : "Select"}
+						{selectMode ? t.common.cancel : t.managePr.select}
 					</button>
 				</div>
 			</header>
 
 			<IzCard flat className="border-[var(--iz-line2)]">
 				<p className="iz-tiny iz-muted2 leading-relaxed">
-					Outlets post shifts and request PRs through your agency. Assignments
-					stay <b className="text-[var(--iz-amber)]">awaiting PR</b> until the
-					PR approves on their portal.
+					{t.manageOutlet.explainerBefore}{" "}
+					<b className="text-[var(--iz-amber)]">
+						{t.manageOutlet.explainerAwaiting}
+					</b>{" "}
+					{t.manageOutlet.explainerAfter}
 				</p>
 			</IzCard>
 
@@ -220,9 +228,15 @@ function AgencyManageOutlets() {
 
 				{selectMode && (
 					<p className="iz-tiny iz-muted2 mb-2">
+						{/* Both branches translated. The second was left as a hardcoded
+						    template while the first was converted, so this one element
+						    flipped from Chinese to English the instant a venue was
+						    picked — a half-converted ternary is worse than an
+						    unconverted one, because it reads as correct until the state
+						    changes. `nSelected` already existed for exactly this. */}
 						{selected.size === 0
-							? "Tap outlet cards to multi-select"
-							: `${selected.size} selected`}
+							? t.managePr.tapOutletCardsToMultiSelect
+							: fill(t.managePr.nSelected, { n: selected.size })}
 						{selected.size > 0 && (
 							<>
 								{" · "}
@@ -253,6 +267,7 @@ function AgencyManageOutlets() {
 							key={summary.outlet}
 							summary={summary}
 							logo={outletLogo(summary.outlet)}
+							ended={outletEnded(summary.outlet)}
 							selectMode={selectMode}
 							picked={selectMode && selected.has(summary.outlet)}
 							onActivate={() => {

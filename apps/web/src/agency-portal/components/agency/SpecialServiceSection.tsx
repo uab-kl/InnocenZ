@@ -30,10 +30,12 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { ChevronRight, Plus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 const DEFAULT_OUTLET = OUTLET_NAMES[0] ?? "Velvet 23";
 
 export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
+	const { t } = usePortalLocale();
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const records = useStore((s) => s.specialServiceOrders);
@@ -142,7 +144,7 @@ export function SpecialServiceSection({ canBook }: { canBook: boolean }) {
 		const pr = prOptions[0];
 		if (!pr) return;
 
-		const raisedBy = AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"];
+		const raisedBy = AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t);
 
 		for (const job of queuedJobs) {
 			const parsed = parseJobPostingDraft(job);

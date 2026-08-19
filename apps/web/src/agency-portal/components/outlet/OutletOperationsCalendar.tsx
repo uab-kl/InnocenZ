@@ -32,6 +32,7 @@ import {
 	buildShiftStaffRows,
 	formatShiftTimeRange,
 	shiftStaffingSummary,
+	staffingFallbackAgencyName,
 } from "@agency-portal/lib/outlet-shift-staffing";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
@@ -50,14 +51,47 @@ import {
 import { ChevronLeft, ChevronRight, Trash2 } from "lucide-react";
 import { useMemo, useState } from "react";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
-const WEEKDAYS = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
+/*
+ * Column heads, Sunday-first. Resolvers rather than a date formatter: the
+ * grid's column ORDER is fixed by the layout, so deriving these from a locale
+ * would let the labels and the columns disagree.
+ */
+const WEEKDAYS: ((t: PortalTranslations) => string)[] = [
+	(t) => t.calendar.wdSun,
+	(t) => t.calendar.wdMon,
+	(t) => t.calendar.wdTue,
+	(t) => t.calendar.wdWed,
+	(t) => t.calendar.wdThu,
+	(t) => t.calendar.wdFri,
+	(t) => t.calendar.wdSat,
+];
 
+/* `key` is the status enum and stays; only the label resolves. */
 const CAL_LEGEND = [
-	{ key: "live", label: "Live", className: "live" },
-	{ key: "confirmed", label: "Confirmed", className: "confirmed" },
-	{ key: "open", label: "Open", className: "open" },
-	{ key: "draft", label: "Draft", className: "draft" },
+	{
+		key: "live",
+		label: (t: PortalTranslations) => t.calendar.legendLive,
+		className: "live",
+	},
+	{
+		key: "confirmed",
+		label: (t: PortalTranslations) => t.calendar.legendConfirmed,
+		className: "confirmed",
+	},
+	{
+		key: "open",
+		label: (t: PortalTranslations) => t.calendar.legendOpen,
+		className: "open",
+	},
+	{
+		key: "draft",
+		label: (t: PortalTranslations) => t.calendar.legendDraft,
+		className: "draft",
+	},
 ] as const;
 
 type CalendarEvent = {
@@ -78,6 +112,10 @@ function buildCalendarEvents(
 	agencyPRs: AgencyManagedPR[],
 	shiftApplicants: ShiftApplicant[],
 	todayIso: string,
+	/** Name to use when no roster slot names the agency — empty on a real
+	 * session, the demo company on a demo one. See `staffingFallbackAgencyName`. */
+	fallbackAgency: string,
+	t: PortalTranslations,
 ): CalendarEvent[] {
 	return shifts
 		.map((shift) => {
@@ -86,7 +124,12 @@ function buildCalendarEvents(
 				shift.dateIso,
 				todayIso,
 			);
-			const agencyName = agencyNameForShift(shift, roster, dateIso);
+			const agencyName = agencyNameForShift(
+				shift,
+				roster,
+				dateIso,
+				fallbackAgency,
+			);
 			const { demand, supplied, pendingCount } = shiftStaffingSummary(
 				shift,
 				shiftApplicants,
@@ -101,7 +144,7 @@ function buildCalendarEvents(
 			});
 			const bookedNames =
 				booked.length === 0
-					? "No PRs booked"
+					? t.calendar.noPrsBooked
 					: booked.map((r) => r.name).join(", ");
 
 			return {
@@ -110,6 +153,7 @@ function buildCalendarEvents(
 				timeRange: formatShiftTimeRange(shift.shift),
 				eventType: formatShiftEventTypeSummary(
 					shift.eventKind ?? "normal",
+					t,
 					shift.specialEventType,
 					shift.customSpecialEventName,
 				),
@@ -162,6 +206,7 @@ export function OutletOperationsCalendar({
 	roster?: AgencyRosterSlot[];
 	agencyPrs?: AgencyManagedPR[];
 } = {}) {
+	const { t } = usePortalLocale();
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const storeRoster = useStore((s) => s.agencyRoster);
 	const storeAgencyPRs = useStore((s) => s.agencyPRs);
@@ -170,6 +215,12 @@ export function OutletOperationsCalendar({
 	const shifts = shiftsOverride ?? storeShifts;
 	const agencyRoster = rosterOverride ?? storeRoster;
 	const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
+	// A backend roster arrives ONLY on a real outlet session (see the prop doc
+	// above), and that is exactly the session that must never be told a demo
+	// company supplied its staff. Demo sessions keep naming the demo agency.
+	const fallbackAgency = staffingFallbackAgencyName(
+		rosterOverride !== undefined,
+	);
 
 	const todayIso = getLiveTodayIso();
 	const [viewMonth, setViewMonth] = useState(
@@ -210,8 +261,18 @@ export function OutletOperationsCalendar({
 				agencyPRs,
 				shiftApplicants,
 				todayIso,
+				fallbackAgency,
+				t,
 			),
-		[visibleShifts, agencyRoster, agencyPRs, shiftApplicants, todayIso],
+		[
+			visibleShifts,
+			agencyRoster,
+			agencyPRs,
+			shiftApplicants,
+			todayIso,
+			fallbackAgency,
+			t,
+		],
 	);
 
 	const eventsByDate = useMemo(() => {
@@ -237,7 +298,7 @@ export function OutletOperationsCalendar({
 	if (visibleShifts.length === 0) {
 		return (
 			<p className="iz-tiny iz-muted rounded-2xl border border-dashed border-[var(--iz-line)] px-4 py-8 text-center">
-				No upcoming shifts — use Post Job to create one.
+				{t.calendar.noUpcomingShifts}
 			</p>
 		);
 	}
@@ -254,13 +315,13 @@ export function OutletOperationsCalendar({
 								setViewMonth(dateFromIsoKey(todayIso) ?? new Date())
 							}
 						>
-							Today
+							{t.calendar.today}
 						</button>
 						<div className="iz-outlet-ops-cal-nav">
 							<button
 								type="button"
 								className="iz-outlet-ops-cal-nav-btn"
-								aria-label="Previous month"
+								aria-label={t.calendar.previousMonth}
 								onClick={() => setViewMonth((m) => subMonths(m, 1))}
 							>
 								<ChevronLeft className="h-4 w-4" />
@@ -268,7 +329,7 @@ export function OutletOperationsCalendar({
 							<button
 								type="button"
 								className="iz-outlet-ops-cal-nav-btn"
-								aria-label="Next month"
+								aria-label={t.calendar.nextMonth}
 								onClick={() => setViewMonth((m) => addMonths(m, 1))}
 							>
 								<ChevronRight className="h-4 w-4" />
@@ -282,7 +343,7 @@ export function OutletOperationsCalendar({
 
 					<div
 						className="iz-outlet-ops-cal-legend iz-outlet-ops-cal-legend--toolbar"
-						aria-label="Shift status legend"
+						aria-label={t.calendar.statusLegend}
 					>
 						{CAL_LEGEND.map((item) => (
 							<span key={item.key} className="iz-outlet-ops-cal-legend__item">
@@ -293,7 +354,7 @@ export function OutletOperationsCalendar({
 									)}
 									aria-hidden
 								/>
-								{item.label}
+								{item.label(t)}
 							</span>
 						))}
 					</div>
@@ -301,8 +362,8 @@ export function OutletOperationsCalendar({
 
 				<div className="iz-outlet-ops-cal-weekdays">
 					{WEEKDAYS.map((d) => (
-						<div key={d} className="iz-outlet-ops-cal-weekday">
-							{d}
+						<div key={d(t)} className="iz-outlet-ops-cal-weekday">
+							{d(t)}
 						</div>
 					))}
 				</div>
@@ -354,10 +415,13 @@ export function OutletOperationsCalendar({
 											</span>
 											<div
 												className="iz-outlet-ops-cal-event-stats"
-												aria-label={`${ev.demand} demand, ${ev.supplied} supplied`}
+												aria-label={fill(t.calendar.demandSuppliedAria, {
+													demand: ev.demand,
+													supplied: ev.supplied,
+												})}
 											>
 												<span className="iz-outlet-ops-cal-event-stats__label">
-													Demand / supplied
+													{t.calendar.demandSupplied}
 												</span>
 												<span className="iz-outlet-ops-cal-event-stats__nums">
 													<span className="iz-outlet-ops-cal-event-stats__demand">
@@ -397,6 +461,7 @@ export function OutletOperationsCalendar({
 							selectedShift,
 							agencyRoster,
 							dateIso,
+							fallbackAgency,
 						);
 						return (
 							<>
@@ -413,6 +478,7 @@ export function OutletOperationsCalendar({
 												>
 													{shiftSpecialEventLabel(
 														selectedShift.specialEventType,
+														t,
 														selectedShift.customSpecialEventName,
 													)}
 												</IzPill>
@@ -423,16 +489,25 @@ export function OutletOperationsCalendar({
 											{selectedShift.date} ·{" "}
 											{formatShiftTimeRange(selectedShift.shift)}
 										</p>
-										<p className="iz-tiny iz-muted2 mt-0.5">
-											Agency · {linkedAgency}
-										</p>
+										{/* The whole line goes when the agency has no name —
+										    it read "Agency · " with nothing after it on
+										    every real session, since an unassigned shift
+										    has no roster slot to name a supplier. */}
+										{linkedAgency && (
+											<p className="iz-tiny iz-muted2 mt-0.5">
+												Agency · {linkedAgency}
+											</p>
+										)}
 									</div>
 								</div>
 								<OutletShiftDetailPanel
 									shift={selectedShift}
 									variant="future"
 									hideLogSales
-									staffingAgency={linkedAgency}
+									// `undefined`, not "": the panel's prop means "we know the
+									// agency", and an empty string would only work there by
+									// accident of being falsy.
+									staffingAgency={linkedAgency || undefined}
 									roster={rosterOverride}
 									agencyPrs={agencyPrsOverride}
 								/>
@@ -458,9 +533,7 @@ export function OutletOperationsCalendar({
 											return (
 												<div className="mt-3 border-t border-[var(--iz-line)] px-1 pt-3">
 													<p className="iz-tiny iz-muted2">
-														This shift is today or has already passed — it can
-														no longer be withdrawn. Contact the agency to stand
-														the team down.
+														{t.calendar.cannotWithdraw}
 													</p>
 												</div>
 											);
@@ -475,11 +548,16 @@ export function OutletOperationsCalendar({
 												{confirmingDelete ? (
 													<>
 														<p className="iz-tiny iz-muted mb-2 leading-snug">
-															Withdraw this shift?
+															{t.calendar.withdrawThisShift}
 															{booked > 0
-																? ` ${booked} booked PR${booked === 1 ? "" : "s"} will lose ${booked === 1 ? "their" : "their"} booking.`
-																: " Nobody is booked on it yet."}{" "}
-															This cannot be undone.
+																? fill(
+																		booked === 1
+																			? t.calendar.withdrawLosesOne
+																			: t.calendar.withdrawLosesMany,
+																		{ n: booked },
+																	)
+																: t.calendar.withdrawNobodyBooked}{" "}
+															{t.calendar.withdrawCannotUndo}
 														</p>
 														<div className="flex gap-2">
 															<button
@@ -488,7 +566,7 @@ export function OutletOperationsCalendar({
 																onClick={() => setConfirmingDelete(false)}
 																disabled={isDeleting}
 															>
-																Keep shift
+																{t.calendar.keepShift}
 															</button>
 															<button
 																type="button"
@@ -505,14 +583,15 @@ export function OutletOperationsCalendar({
 																		setDeleteError(
 																			toMutationError(
 																				err,
-																				"Couldn't withdraw this shift.",
-																			)?.message ??
-																				"Couldn't withdraw this shift.",
+																				t.calendar.couldNotWithdraw,
+																			)?.message ?? t.calendar.couldNotWithdraw,
 																		);
 																	}
 																}}
 															>
-																{isDeleting ? "Withdrawing…" : "Withdraw shift"}
+																{isDeleting
+																	? t.calendar.withdrawing
+																	: t.calendar.withdrawShift}
 															</button>
 														</div>
 													</>
@@ -523,7 +602,7 @@ export function OutletOperationsCalendar({
 														onClick={() => setConfirmingDelete(true)}
 													>
 														<Trash2 className="h-3.5 w-3.5" />
-														Withdraw shift
+														{t.calendar.withdrawShift}
 													</button>
 												)}
 											</div>

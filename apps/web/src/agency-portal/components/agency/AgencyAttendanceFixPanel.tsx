@@ -11,6 +11,8 @@ import {
 import { cn } from "@agency-portal/lib/utils";
 import { ExternalLink } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 const OUTLET_MAP_HEIGHT = 168;
 
@@ -40,6 +42,7 @@ function stampTime(iso: string): string {
  * standing now, which this data cannot support.
  */
 export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
+	const { t } = usePortalLocale();
 	const {
 		groups,
 		isLoading,
@@ -53,9 +56,13 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 
 	if (isLoading) {
 		return (
-			<OutletSection title="Check-in locations" hint="Loading" collapsible>
+			<OutletSection
+				title={t.rosterGrid.checkInLocations}
+				hint={t.rosterGrid.loading}
+				collapsible
+			>
 				<p className="iz-tiny iz-muted rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
-					Reading today's attendance stamps…
+					{t.rosterGrid.readingAttendanceStamps}
 				</p>
 			</OutletSection>
 		);
@@ -64,14 +71,13 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 	if (rostered === 0) {
 		return (
 			<OutletSection
-				title="Check-in locations"
-				hint="Nobody rostered"
+				title={t.rosterGrid.checkInLocations}
+				hint={t.rosterGrid.nobodyRostered}
 				collapsible
 				defaultOpen={false}
 			>
 				<p className="iz-tiny iz-muted rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
-					No PRs are rostered for this date, so there are no attendance stamps
-					to show.
+					{t.rosterGrid.noPrsRosteredForDate}
 				</p>
 			</OutletSection>
 		);
@@ -81,24 +87,26 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 	// fact about records, whereas "12 on duty" would be a claim about right now.
 	const hint = (
 		<span className="inline-flex items-center gap-1.5">
-			{`${stamped}/${rostered} stamped · ${inRange}/${withFix} within fence`}
+			{fill(t.rosterGrid.stampCoverage, {
+				stamped,
+				rostered,
+				inRange,
+				withFix,
+			})}
 		</span>
 	);
 
 	return (
 		<OutletSection
-			title="Check-in locations"
+			title={t.rosterGrid.checkInLocations}
 			hint={hint}
 			className="iz-roster-gps-section"
 			collapsible
 			defaultOpen={false}
 		>
 			<p className="iz-tiny iz-muted mb-3">
-				Positions are recorded at check-in and check-out only — this is not live
-				tracking, and each time below is when that fix was taken.
-				{hasUnpinnedVenue
-					? " Venues with no saved pin accept every check-in without a location check."
-					: ""}
+				{t.rosterGrid.positionsNote}
+				{hasUnpinnedVenue ? t.rosterGrid.unpinnedVenueNote : ""}
 			</p>
 
 			<div className="iz-roster-gps-grid">
@@ -138,10 +146,17 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 														// 69 m against a 50 m pin with ±22 m was the live case that
 														// caught this — printing the radius claimed a precision the
 														// test does not use. Exact figures are on each row.
-														`${group.mapped.filter((r) => r.inRange).length}/${group.mapped.length} within fence · ${group.radiusM} m pin`
-													: "No map pin — check-ins here are not location-checked"}
+														fill(t.rosterGrid.withinFencePin, {
+															inRange: group.mapped.filter((r) => r.inRange)
+																.length,
+															total: group.mapped.length,
+															radius: group.radiusM,
+														})
+													: t.rosterGrid.noMapPin}
 												{group.latestStampAt
-													? ` · latest ${stampTime(group.latestStampAt)}`
+													? fill(t.rosterGrid.latestStamp, {
+															time: stampTime(group.latestStampAt),
+														})
 													: ""}
 											</span>
 										</div>
@@ -153,7 +168,7 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 												className="iz-roster-gps-maps-link"
 											>
 												<ExternalLink className="h-3 w-3" />
-												Maps
+												{t.rosterGrid.maps}
 											</a>
 										)}
 									</div>
@@ -195,10 +210,10 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 																	className="iz-roster-gps-row-pill"
 																>
 																	{row.outletUnpinned
-																		? "Not fenced"
+																		? t.rosterGrid.notFenced
 																		: row.inRange
-																			? "Within fence"
-																			: "Outside"}
+																			? t.rosterGrid.withinFence
+																			: t.rosterGrid.outsideFence}
 																</IzPill>
 															</div>
 															<span className="iz-roster-gps-row-meta">
@@ -235,11 +250,13 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 																variant="ink"
 																className="iz-roster-gps-row-pill"
 															>
-																No location
+																{t.rosterGrid.noLocation}
 															</IzPill>
 														</div>
 														<span className="iz-roster-gps-row-meta">
-															{`Checked in ${stampTime(row.at)} · no position recorded`}
+															{fill(t.rosterGrid.checkedInNoPosition, {
+																time: stampTime(row.at),
+															})}
 														</span>
 													</div>
 												</div>
@@ -263,11 +280,15 @@ export function AgencyAttendanceFixPanel({ dateIso }: { dateIso?: string }) {
 																variant="ink"
 																className="iz-roster-gps-row-pill"
 															>
-																Not checked in
+																{t.rosterGrid.notCheckedIn}
 															</IzPill>
 														</div>
 														<span className="iz-roster-gps-row-meta">
-															{row.slot ? `Rostered · ${row.slot}` : "Rostered"}
+															{row.slot
+																? fill(t.rosterGrid.rosteredSlot, {
+																		slot: row.slot,
+																	})
+																: t.rosterGrid.rostered}
 														</span>
 													</div>
 												</div>

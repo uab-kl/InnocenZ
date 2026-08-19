@@ -6,6 +6,8 @@ import { resolveOutletTierRates } from "@agency-portal/lib/outlet-agency-sync";
 import { drinkMenuPriceRange } from "@agency-portal/lib/outlet-demo";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { useStore } from "@agency-portal/lib/store";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function AgencyCommissionRulesPanel({
 	outlet,
@@ -14,6 +16,7 @@ export function AgencyCommissionRulesPanel({
 	outlet: string;
 	tableOnly?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const demoWorkspace = useStore((s) => s.outletWorkspace);
 	// Real agency session → the rates this outlet actually saved from its own
@@ -29,8 +32,8 @@ export function AgencyCommissionRulesPanel({
 		return (
 			<p className="iz-tiny iz-muted2">
 				{backend.isLoading
-					? "Loading rates…"
-					: "This outlet has not saved its workspace rates yet."}
+					? t.outletDetail.loadingRates
+					: t.outletDetail.noWorkspaceRates}
 			</p>
 		);
 	}
@@ -41,7 +44,9 @@ export function AgencyCommissionRulesPanel({
 		workspace,
 	);
 	const syncedFromWorkspace = outletMatches(outlet, workspace.outletName);
-	const tierHint = `${formatTierWageRange(tierRates)} · synced from outlet workspace`;
+	const tierHint = fill(t.outletDetail.syncedFromWorkspace, {
+		range: formatTierWageRange(tierRates),
+	});
 	const drinkMenu = workspace.drinkMenu ?? [];
 	const drinkRange =
 		drinkMenu.length > 0 ? drinkMenuPriceRange(drinkMenu) : null;

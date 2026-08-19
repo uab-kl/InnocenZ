@@ -1,11 +1,12 @@
 import {
 	AutoAssignSheet,
 	dayLabel,
-	plural,
 } from "@agency-portal/components/portal/AutoAssignSheet";
 import { useAutoAssignPlan } from "@agency-portal/hooks/use-auto-assign-plan";
 import { useStore } from "@agency-portal/lib/store";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /**
  * The roster Planning tab's auto-assign banner.
@@ -30,6 +31,7 @@ export function RosterAutoAssignBanner({ dateIso }: { dateIso: string }) {
 		dateIso,
 	});
 	const [open, setOpen] = useState(false);
+	const { t } = usePortalLocale();
 
 	if (!backed) {
 		return (
@@ -38,7 +40,7 @@ export function RosterAutoAssignBanner({ dateIso }: { dateIso: string }) {
 				className="iz-roster-auto-assign"
 				onClick={() => demoAutoAssignPr(dateIso)}
 			>
-				AI auto-assign next free PR · {dateIso}
+				{fill(t.rosterGrid.autoAssignNextFreeDate, { date: dateIso })}
 			</button>
 		);
 	}
@@ -47,15 +49,32 @@ export function RosterAutoAssignBanner({ dateIso }: { dateIso: string }) {
 	const day = dayLabel(dateIso);
 	const canAssign = plan.pairs.length > 0;
 
-	let label = `AI auto-assign · ${plan.pairs.length} ${plural(plan.pairs.length, "PR")} for ${openSlotCount} open ${plural(openSlotCount, "slot")} · ${day}`;
+	// Counted nouns resolve first, then drop into the sentence template. Going
+	// through the dictionary for the noun as well as the sentence is what lets
+	// Chinese put the day in front and use a measure word, which no amount of
+	// gluing English fragments could express.
+	const prs = fill(
+		plan.pairs.length === 1
+			? t.rosterGrid.prCountOne
+			: t.rosterGrid.prCountMany,
+		{ n: plan.pairs.length },
+	);
+	const slots = fill(
+		openSlotCount === 1
+			? t.rosterGrid.slotCountOne
+			: t.rosterGrid.slotCountMany,
+		{ n: openSlotCount },
+	);
+
+	let label = fill(t.rosterGrid.autoAssignPlan, { prs, slots, day });
 	if (isLoading) {
-		label = `Checking the roster for ${day}…`;
+		label = fill(t.rosterGrid.autoAssignChecking, { day });
 	} else if (isError) {
-		label = "Roster unavailable — could not load shifts";
+		label = t.rosterGrid.autoAssignError;
 	} else if (openSlotCount === 0) {
-		label = `No open slots on ${day} — every shift is fully staffed`;
+		label = fill(t.rosterGrid.autoAssignNoOpenSlots, { day });
 	} else if (!canAssign) {
-		label = `${openSlotCount} open ${plural(openSlotCount, "slot")} on ${day} — no free PRs`;
+		label = fill(t.rosterGrid.autoAssignNoFreePrs, { slots, day });
 	}
 
 	return (

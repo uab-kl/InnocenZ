@@ -77,9 +77,15 @@ export class ShiftSaleControllerClass {
 
       const scope = await this.resolveScope(req);
       // Ownership: the caller must own the shift the sale belongs to.
+      //
+      // Through `shift_agency` (0124), NOT `shift.agency_id` — the anchor. Same
+      // family as the assign gate: on a shared shift only the first agency
+      // addressed could record a sale, and the second was told the shift did not
+      // exist while its own PRs were working it.
       const owns =
         scope.isAdmin ||
-        (scope.agencyId !== null && shift.agencyId === scope.agencyId) ||
+        (scope.agencyId !== null &&
+          (await this.shiftRepository.isAgencyInvited(shift.id, scope.agencyId))) ||
         (isOutletCaller(scope) && scope.outletIds.includes(shift.outletId));
       if (!owns) {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
@@ -122,7 +128,21 @@ export class ShiftSaleControllerClass {
         userId: pr.userId ?? parsed.data.userId ?? undefined,
         // Derived from the shift — authoritative, cannot be forged by the client.
         outletId: shift.outletId,
-        agencyId: shift.agencyId,
+        // WHOSE SALE THIS IS — the agency that actually SUPPLIED this PR.
+        //
+        // Read off the assignment, the only record of the delivery (0124). The
+        // caller is not a safe stand-in: an OUTLET or ADMIN caller has no agency
+        // of its own, so the old fallback handed the sale to the shift's ANCHOR
+        // — and on a shared shift a venue logging its own floor numbers credited
+        // them to whichever agency it happened to address first.
+        //
+        // It must also agree with the receipt-driven recompute, which derives
+        // this same column from `sa.agency_id`. Two writers of one row that
+        // disagree is a coin toss settled by whichever ran first.
+        agencyId:
+          assignments.find((a) => a.prId === pr.id)?.agencyId ??
+          scope.agencyId ??
+          shift.agencyId,
         soldOn: shift.shiftDate,
         drinkUnits: parsed.data.drinkUnits ?? 0,
         drinkSalesRm: money(drinkSalesRm),

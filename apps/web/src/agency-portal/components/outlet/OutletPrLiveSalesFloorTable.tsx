@@ -3,6 +3,8 @@ import { LiveEarningsLabel } from "@agency-portal/components/outlet/outlet-live-
 import type { OutletPrLiveEarningsBreakdown } from "@agency-portal/lib/outlet-financial-sync";
 import { roundRm } from "@agency-portal/lib/outlet-financial-sync";
 import { cn } from "@agency-portal/lib/utils";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function FormulaCell({
 	baseLabel,
@@ -31,6 +33,7 @@ function EarningsRow({
 	row: OutletPrLiveEarningsBreakdown;
 	onClick?: () => void;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<tr
 			className={cn(
@@ -96,6 +99,7 @@ export function OutletPrLiveSalesFloorTable({
 	onRowClick?: (prId: string) => void;
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	const totals = rows.reduce(
 		(acc, row) => ({
 			wages: acc.wages + row.dailyWagesRm,
@@ -125,28 +129,28 @@ export function OutletPrLiveSalesFloorTable({
 				<thead>
 					<tr>
 						<th>
-							<LiveEarningsLabel label="PR Name" />
+							<LiveEarningsLabel label={t.today.colPrName} />
 						</th>
 						<th>
-							<LiveEarningsLabel label="PR ID" />
+							<LiveEarningsLabel label={t.today.colPrId} />
 						</th>
 						<th>
-							<LiveEarningsLabel label="Daily wages" />
+							<LiveEarningsLabel label={t.today.colDailyWages} />
 						</th>
 						<th>
 							<LiveEarningsLabel label="HH" />
 						</th>
 						<th>
-							<LiveEarningsLabel label="Normal" />
+							<LiveEarningsLabel label={t.today.colNormal} />
 						</th>
 						<th>
-							<LiveEarningsLabel label="Tips" />
+							<LiveEarningsLabel label={t.reports.colTips} />
 						</th>
 						<th>
 							<LiveEarningsLabel label="OT" />
 						</th>
 						<th>
-							<LiveEarningsLabel label="Total earn" />
+							<LiveEarningsLabel label={t.today.colTotalEarn} />
 						</th>
 					</tr>
 				</thead>
@@ -154,7 +158,7 @@ export function OutletPrLiveSalesFloorTable({
 					{rows.length === 0 ? (
 						<tr>
 							<td colSpan={8} className="iz-outlet-live-earnings-table__empty">
-								No PR floor sales logged tonight yet.
+								{t.today.noFloorSalesTonight}
 							</td>
 						</tr>
 					) : (
@@ -171,7 +175,7 @@ export function OutletPrLiveSalesFloorTable({
 					<tfoot>
 						<tr className="iz-outlet-live-earnings-table__foot">
 							<th scope="row" colSpan={2}>
-								<LiveEarningsLabel label="Tonight total" />
+								<LiveEarningsLabel label={t.today.tonightTotal} />
 							</th>
 							<td>{formatRM(roundRm(totals.wages))}</td>
 							<td>{formatRM(roundRm(totals.hh))}</td>

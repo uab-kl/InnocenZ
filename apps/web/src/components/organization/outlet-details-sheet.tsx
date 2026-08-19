@@ -1,4 +1,4 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import {
 	Building2,
 	CalendarDays,
@@ -13,17 +13,7 @@ import {
 	User,
 	Users,
 } from "lucide-react";
-import { useEffect, useState } from "react";
-import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import {
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
-} from "@/components/ui/select";
 import {
 	Sheet,
 	SheetContent,
@@ -34,12 +24,13 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/lib/auth-context";
 import { formatDate, getErrorMessage } from "@/lib/utils";
-import { fetchAgencies, fetchAgencyById } from "@/services/agency";
-import type { Outlet, OutletMember } from "@/services/outlet";
+
 import {
-	fetchOutletMembers,
-	setOutletOnboardingAgency,
-} from "@/services/outlet";
+	type AgencyOutletApproveStatus,
+	fetchOutletAgencyLinks,
+} from "@/services/agency-outlet";
+import type { Outlet, OutletMember } from "@/services/outlet";
+import { fetchOutletMembers } from "@/services/outlet";
 import {
 	ApprovalStatusCard,
 	apiAssetUrl,
@@ -114,97 +105,105 @@ function MemberCard({ member }: { member: OutletMember }) {
 	);
 }
 
-const UNLINKED = "__none__";
+const LINK_STATUS_LABEL: Record<AgencyOutletApproveStatus, string> = {
+	approved: "Working with this venue",
+	pending: "Awaiting the agency's decision",
+	rejected: "Declined by the agency",
+	// Past tense, and kept distinct from "declined": ended means the two DID
+	// work together and the arrangement is over. An admin reading a support
+	// ticket has to tell those apart — "they never accepted us" and "we stopped
+	// working together" lead to completely different next questions.
+	ended: "Worked together — partnership ended",
+};
+
+const LINK_STATUS_CLASS: Record<AgencyOutletApproveStatus, string> = {
+	approved: "text-emerald-600 dark:text-emerald-400",
+	pending: "text-amber-600 dark:text-amber-400",
+	rejected: "text-rose-600 dark:text-rose-400",
+	// Grey, not red — nothing went wrong here.
+	ended: "text-muted-foreground",
+};
 
 /**
- * The venue's PR-fulfilment agency — the ONLY place `onboarded_by_agency_id`
- * is set anywhere in the product.
+ * Every agency this venue works with (`agency_outlet`, 0123).
  *
- * It is not cosmetic: `POST /shift` routes an outlet's posted job to this
- * agency and refuses the post outright when it is null, so an unlinked venue
- * sees "Could not post shifts" forever. Signup leaves it null and approval does
- * not fill it in, which is why seeded dev outlets could post and real
- * signed-up ones could not.
+ * Replaces the old single "PR fulfilment agency" picker, which set
+ * `onboarded_by_agency_id` — the column `POST /shift` used to route through.
+ * That is no longer how routing works: a venue links as many agencies as it
+ * likes in outlet Settings, each accepts or declines for itself, and a posted
+ * job goes to whichever of them the outlet selected. One agency here could only
+ * ever have shown one of several, and editing it granted nothing.
+ *
+ * READ-ONLY on purpose. An admin setting a link would be agreeing to a
+ * partnership on the agency's behalf, which is precisely the consent this table
+ * exists to record. The venue asks; the agency answers.
  */
-function OnboardingAgencyCard({ outlet }: { outlet: Outlet }) {
+function LinkedAgenciesCard({ outlet }: { outlet: Outlet }) {
 	const { logout } = useAuth();
-	const queryClient = useQueryClient();
-	const [selected, setSelected] = useState(
-		outlet.onboardedByAgencyId ?? UNLINKED,
-	);
 
-	// Re-sync when the sheet is pointed at a different venue, or after a save
-	// refetches the row — otherwise the picker keeps the previous outlet's value.
-	useEffect(() => {
-		setSelected(outlet.onboardedByAgencyId ?? UNLINKED);
-	}, [outlet.onboardedByAgencyId]);
-
-	const agenciesQuery = useQuery({
-		queryKey: ["agencies", "active", "picker"],
-		queryFn: () => fetchAgencies({ status: "active", pageSize: 200 }, logout),
-		staleTime: 60_000,
+	const linksQuery = useQuery({
+		queryKey: ["agency-outlet", "outlet", outlet.id],
+		queryFn: () => fetchOutletAgencyLinks(outlet.id, logout),
+		staleTime: 30_000,
 	});
 
-	const mutation = useMutation({
-		mutationFn: (agencyId: string | null) =>
-			setOutletOnboardingAgency(outlet.id, agencyId, logout),
-		onSuccess: (response) => {
-			queryClient.invalidateQueries({ queryKey: ["outlets"] });
-			queryClient.invalidateQueries({ queryKey: ["outlet-by-id"] });
-			toast.success(response.message || "Onboarding agency updated");
-		},
-		onError: (err) => {
-			toast.error(getErrorMessage(err) || "Failed to update onboarding agency");
-		},
-	});
-
-	const agencies = agenciesQuery.data?.data ?? [];
-	const current = outlet.onboardedByAgencyId ?? UNLINKED;
-	const dirty = selected !== current;
+	const links = linksQuery.data ?? [];
+	const approved = links.filter((l) => l.approveStatus === "approved").length;
 
 	return (
 		<DetailSection
-			title="PR fulfilment agency"
-			description="The agency this venue's posted jobs are routed to. Until one is set, the outlet cannot post a shift."
+			title="Linked agencies"
+			description="The agencies this venue works with. The outlet requests a link in its Settings and each agency accepts or declines — an admin does not set this."
 		>
 			<div className="space-y-2 sm:col-span-2">
-				<Select value={selected} onValueChange={setSelected}>
-					<SelectTrigger className="w-full">
-						<SelectValue placeholder="Select an agency" />
-					</SelectTrigger>
-					<SelectContent>
-						<SelectItem value={UNLINKED}>Not linked</SelectItem>
-						{agencies.map((agency) => (
-							<SelectItem key={agency.id} value={agency.id}>
-								{agency.name}
-							</SelectItem>
-						))}
-					</SelectContent>
-				</Select>
-
-				{!outlet.onboardedByAgencyId && (
+				{linksQuery.isLoading ? (
+					<p className="text-sm text-muted-foreground">Loading agencies…</p>
+				) : linksQuery.isError ? (
 					<p className="text-sm text-destructive">
-						Not linked — every Post Job attempt from this outlet is rejected
-						with “This outlet has no onboarding agency to request PR from”.
+						{getErrorMessage(linksQuery.error)}
 					</p>
-				)}
-
-				{agenciesQuery.isError && (
-					<p className="text-sm text-destructive">
-						{getErrorMessage(agenciesQuery.error)}
+				) : links.length === 0 ? (
+					<p className="text-sm text-muted-foreground">
+						No agencies linked. This venue cannot post a shift until it links
+						one in Settings and that agency approves it.
 					</p>
+				) : (
+					<>
+						<ul className="divide-y rounded-md border">
+							{links.map((link) => (
+								<li
+									key={link.id}
+									className="flex items-center justify-between gap-3 px-3 py-2"
+								>
+									<div className="min-w-0">
+										<div className="truncate text-sm font-medium">
+											{link.agencyName}
+										</div>
+										<div className="truncate text-xs text-muted-foreground">
+											{link.agencyCode}
+										</div>
+										{link.approveStatus === "rejected" && link.rejectReason && (
+											<div className="text-xs text-rose-500">
+												{link.rejectReason}
+											</div>
+										)}
+									</div>
+									<span
+										className={`shrink-0 text-xs ${LINK_STATUS_CLASS[link.approveStatus]}`}
+									>
+										{LINK_STATUS_LABEL[link.approveStatus]}
+									</span>
+								</li>
+							))}
+						</ul>
+						{approved === 0 && (
+							<p className="text-sm text-amber-600 dark:text-amber-400">
+								No agency has approved yet — every Post Job attempt from this
+								venue is refused until one does.
+							</p>
+						)}
+					</>
 				)}
-
-				<Button
-					size="sm"
-					disabled={!dirty || mutation.isPending}
-					onClick={() =>
-						mutation.mutate(selected === UNLINKED ? null : selected)
-					}
-				>
-					{mutation.isPending && <Loader2 className="h-4 w-4 animate-spin" />}
-					Save agency
-				</Button>
 			</div>
 		</DetailSection>
 	);
@@ -234,13 +233,6 @@ export function OutletDetailsSheet({
 		queryFn: () => fetchOutletMembers(outlet!.id, logout),
 		enabled: open && Boolean(outlet),
 		staleTime: 30_000,
-	});
-
-	const agencyQuery = useQuery({
-		queryKey: ["agency-by-id", outlet?.onboardedByAgencyId],
-		queryFn: () => fetchAgencyById(outlet!.onboardedByAgencyId!, logout),
-		enabled: open && Boolean(outlet?.onboardedByAgencyId),
-		staleTime: 60_000,
 	});
 
 	const members = membersQuery.data?.data ?? [];
@@ -300,23 +292,13 @@ export function OutletDetailsSheet({
 										value={outlet.businessLicense}
 									/>
 									<DetailField
-										icon={Building2}
-										label="Onboarded by agency"
-										value={
-											outlet.onboardedByAgencyId
-												? (agencyQuery.data?.data?.name ??
-													`${outlet.onboardedByAgencyId.slice(0, 8)}…`)
-												: "Direct signup"
-										}
-									/>
-									<DetailField
 										icon={CalendarDays}
 										label="Created"
 										value={formatDate(outlet.createdAt)}
 									/>
 								</DetailSection>
 
-								<OnboardingAgencyCard outlet={outlet} />
+								<LinkedAgenciesCard outlet={outlet} />
 							</TabsContent>
 
 							<TabsContent value="location" className="space-y-3 pt-2">

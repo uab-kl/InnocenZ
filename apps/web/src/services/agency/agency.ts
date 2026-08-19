@@ -9,6 +9,7 @@ import type {
 	AgencyMembershipsApiResponse,
 	AgencyMembersQueryParams,
 	AgencyPr,
+	BroadcastToPrsApiResponse,
 	PrAgencyLink,
 } from "./types";
 
@@ -98,6 +99,27 @@ export async function suspendAgency(
 	const client = getClient(onRefreshFail);
 	const response = await client.patch<AgencyApiResponse>(
 		`/agency/${id}/suspend`,
+	);
+	return response.data;
+}
+
+/**
+ * Send one free-text notice to PRs on this agency's roster.
+ *
+ * `prIds` are USER ids — `AgencyManagedPR.id`, which the backend list path
+ * already sets to `user_id` (pr.controller maps `id: row.userId`). The server
+ * refuses the whole request unless every one of them is an approved member of
+ * `agencyId`, so a partial send is not a state this can return.
+ */
+export async function broadcastToPrs(
+	agencyId: string,
+	input: { prIds: string[]; title: string; body: string },
+	onRefreshFail: () => void,
+): Promise<BroadcastToPrsApiResponse> {
+	const client = getClient(onRefreshFail);
+	const response = await client.post<BroadcastToPrsApiResponse>(
+		`/agency/${agencyId}/broadcast`,
+		input,
 	);
 	return response.data;
 }

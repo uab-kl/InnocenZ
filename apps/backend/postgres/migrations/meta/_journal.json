@@ -857,10 +857,45 @@
       "breakpoints": true
     },
     {
+      "idx": 122,
+      "version": "7",
+      "when": 1789700000000,
+      "tag": "0122_user_preferred_locale",
+      "breakpoints": true
+    },
+    {
+      "idx": 123,
+      "version": "7",
+      "when": 1789800000000,
+      "tag": "0123_agency_outlet",
+      "breakpoints": true
+    },
+    {
+      "idx": 124,
+      "version": "7",
+      "when": 1789900000000,
+      "tag": "0124_shift_agency",
+      "breakpoints": true
+    },
+    {
       "idx": 125,
       "version": "7",
       "when": 1790000000000,
       "tag": "0125_agency_pr_leave_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 126,
+      "version": "7",
+      "when": 1790100000000,
+      "tag": "0126_notification_kind_agency_broadcast",
+      "breakpoints": true
+    },
+    {
+      "idx": 127,
+      "version": "7",
+      "when": 1790200000000,
+      "tag": "0127_agency_outlet_ended_and_event",
       "breakpoints": true
     }
   ]

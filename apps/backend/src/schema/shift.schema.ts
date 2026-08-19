@@ -46,6 +46,17 @@ const ShiftPayTierSchema = z.object({
 export const CreateShiftSchema = z.object({
   // Optional: derived from the caller's agency for agency users; required for admin.
   agencyId: z.string().uuid('Invalid agency ID').optional(),
+  /**
+   * Which of the outlet's APPROVED agencies this job goes to (0124).
+   *
+   * Omitted or empty means "all of them" — the same thing the old single-agency
+   * behaviour meant when a venue had one link, so an existing client that never
+   * sends this keeps working unchanged.
+   *
+   * Advisory, not authoritative: the controller intersects it with the outlet's
+   * approved links, so naming an unapproved agency cannot create an invitation.
+   */
+  agencyIds: z.array(z.string().uuid('Invalid agency ID')).max(20).optional(),
   outletId: z.string().uuid('Invalid outlet ID'),
   shiftDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Date must be yyyy-MM-dd'),
   slot: z.string().max(100, 'Slot is too long').optional(),

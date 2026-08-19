@@ -46,6 +46,20 @@ export const env = createEnv({
      * Example: https://preview.example.com
      */
     CORS_ALLOWED_ORIGINS: z.string().optional(),
+    /**
+     * Express `trust proxy`. UNSET = today's behaviour exactly (no trust), so
+     * this changes nothing until a deployment opts in.
+     *
+     * Set it wherever the API sits behind a reverse proxy or CDN, or the rate
+     * limiter sees the PROXY's address on every request and throttles the whole
+     * platform as a single caller. Prefer the narrowest value that works — the
+     * hop count (`1`) or the proxy's address — over `true`, which trusts any
+     * `X-Forwarded-For` a client cares to invent and hands an attacker an
+     * unlimited supply of fresh rate-limit buckets.
+     *
+     * Accepts: `1` (hops) · `true` · `loopback` · a comma-separated IP/CIDR list.
+     */
+    TRUST_PROXY: z.string().optional(),
     // SERVER key for the Geocoding API (address -> pin on the outlet form).
     // Optional: without it the lookup endpoint returns a plain "not configured"
     // message and the operator drops the pin by hand. NOT the same key as the

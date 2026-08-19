@@ -24,6 +24,18 @@ export type AgencyPrApproveStatus =
 	| "leave_pending"
 	| "left";
 
+/**
+ * Result of a roster broadcast. `sent` and `requested` are always equal on a
+ * 2xx — the server refuses partial sends rather than reporting them — but both
+ * are carried so a caller can show the count it actually delivered instead of
+ * the count it hoped for.
+ */
+export interface BroadcastToPrsApiResponse {
+	success: boolean;
+	message: string;
+	data: { sent: number; requested: number } | null;
+}
+
 /** Which agency a PR user account is under — one row per (agency, user). */
 export interface PrAgencyLink {
 	/** Operational pr row when present; null if account-only membership. */

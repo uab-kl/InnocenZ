@@ -41,6 +41,8 @@ import {
 	resolveShiftPayTierRows,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { type PrPayClass, prPayClass } from "@agency-portal/lib/pr-penalties";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type ShiftDestination = "agency" | "marketplace" | "both";
 
@@ -87,21 +89,30 @@ export function resolveDressCode(
 
 export type ShiftEventKind = "normal" | "special";
 
-export const SHIFT_EVENT_KIND_LABELS: Record<ShiftEventKind, string> = {
-	normal: "Normal event",
-	special: "Special event",
+export const SHIFT_EVENT_KIND_LABELS: Record<
+	ShiftEventKind,
+	(t: PortalTranslations) => string
+> = {
+	normal: (t) => t.postJob.evNormal,
+	special: (t) => t.postJob.evSpecial,
 };
 
 /** Sub-types when posting a special-event shift */
 export const SHIFT_SPECIAL_EVENT_OTHER_ID = "other";
 
 export const SHIFT_SPECIAL_EVENT_OPTIONS = [
-	{ id: "vip", label: "VIP" },
-	{ id: "launch", label: "Product launch" },
-	{ id: "private_table", label: "Private table buyout" },
-	{ id: "brand_activation", label: "Brand activation" },
-	{ id: "corporate", label: "Corporate" },
-	{ id: "other", label: "Other" },
+	{ id: "vip", label: (t: PortalTranslations) => t.postJob.evVip },
+	{ id: "launch", label: (t: PortalTranslations) => t.postJob.evLaunch },
+	{
+		id: "private_table",
+		label: (t: PortalTranslations) => t.postJob.evPrivateTable,
+	},
+	{
+		id: "brand_activation",
+		label: (t: PortalTranslations) => t.postJob.evBrandActivation,
+	},
+	{ id: "corporate", label: (t: PortalTranslations) => t.postJob.evCorporate },
+	{ id: "other", label: (t: PortalTranslations) => t.postJob.evOther },
 ] as const;
 
 export type ShiftSpecialEventType =
@@ -113,27 +124,35 @@ export function isOtherSpecialEvent(type: string | undefined): boolean {
 
 export function shiftSpecialEventLabel(
 	type: string | undefined,
+	t: PortalTranslations,
 	customName?: string,
 ): string {
 	if (isOtherSpecialEvent(type)) {
 		const name = customName?.trim();
-		return name || "Other";
+		return name || t.postJob.evOther;
 	}
-	return (
-		SHIFT_SPECIAL_EVENT_OPTIONS.find((o) => o.id === type)?.label ?? type ?? ""
-	);
+	const hit = SHIFT_SPECIAL_EVENT_OPTIONS.find((o) => o.id === type);
+	return hit ? hit.label(t) : (type ?? "");
 }
 
 export function formatShiftEventTypeSummary(
 	eventKind: ShiftEventKind,
+	t: PortalTranslations,
 	specialEventType?: string,
 	customSpecialEventName?: string,
 ): string {
-	if (eventKind === "normal") return SHIFT_EVENT_KIND_LABELS.normal;
-	const sub = shiftSpecialEventLabel(specialEventType, customSpecialEventName);
+	if (eventKind === "normal") return SHIFT_EVENT_KIND_LABELS.normal(t);
+	const sub = shiftSpecialEventLabel(
+		specialEventType,
+		t,
+		customSpecialEventName,
+	);
 	return sub
-		? `${SHIFT_EVENT_KIND_LABELS.special} · ${sub}`
-		: SHIFT_EVENT_KIND_LABELS.special;
+		? fill(t.postJob.evSpecialWithSub, {
+				kind: SHIFT_EVENT_KIND_LABELS.special(t),
+				sub,
+			})
+		: SHIFT_EVENT_KIND_LABELS.special(t);
 }
 
 export function formatOutletPriceRm(amount: number): string {
@@ -143,18 +162,31 @@ export function formatOutletPriceRm(amount: number): string {
 export function formatShiftDrinkPricingSummary(
 	shift: { eventKind?: ShiftEventKind; eventDrinkMenu?: OutletDrinkPrice[] },
 	workspaceMenu: OutletDrinkPrice[] = [],
+	t?: PortalTranslations,
 ): string {
 	if (shift.eventKind !== "special") {
 		const menu =
 			workspaceMenu.length > 0 ? workspaceMenu : DEFAULT_OUTLET_DRINK_MENU;
 		const range = drinkMenuPriceRange(menu);
-		return `Workspace · RM ${formatOutletPriceRm(range.min)}–${formatOutletPriceRm(range.max)}`;
+		return t
+			? fill(t.postJob.pricesWorkspace, {
+					min: formatOutletPriceRm(range.min),
+					max: formatOutletPriceRm(range.max),
+				})
+			: `Workspace · RM ${formatOutletPriceRm(range.min)}–${formatOutletPriceRm(range.max)}`;
 	}
 	const menu = effectiveShiftDrinkMenu(shift, workspaceMenu);
 	const range = drinkMenuPriceRange(menu);
+	if (!t)
+		return menu.length > 0
+			? `Event-specific · RM ${formatOutletPriceRm(range.min)}–${formatOutletPriceRm(range.max)}`
+			: "Event-specific";
 	return menu.length > 0
-		? `Event-specific · RM ${formatOutletPriceRm(range.min)}–${formatOutletPriceRm(range.max)}`
-		: "Event-specific";
+		? fill(t.postJob.pricesEventSpecific, {
+				min: formatOutletPriceRm(range.min),
+				max: formatOutletPriceRm(range.max),
+			})
+		: t.postJob.pricesEventSpecificBare;
 }
 
 export type ShiftDrinkMenuLine = {
@@ -765,10 +797,46 @@ function mergeShiftTierRatesWithWorkspace(
 export function resolveShiftTierRates(
 	shift: {
 		tierRates?: Record<OutletPrTier, OutletTierRateSettings>;
+		/**
+		 * What a BACKEND shift carries. A posted shift stores its rates as
+		 * `shift_pay_tier` rows, never as a `tierRates` map — so without this a real
+		 * shift took the synthetic branch below, and the screen showed a ladder the
+		 * outlet never set.
+		 */
+		payTierRows?: {
+			payTierId: string;
+			wagePerHour: number;
+			drinkPct: number;
+			tipPct: number;
+			targetSalesRm?: number;
+		}[];
 		payPerHour: number;
 	},
 	workspace: Pick<OutletWorkspaceSettings, "tierRates">,
 ): Record<OutletPrTier, OutletTierRateSettings> {
+	// THE SHIFT'S OWN DECLARED ROWS WIN — over the venue card, over any guess.
+	//
+	// The venue's rate card is the baseline: it is real, and it is what the tiers
+	// this shift did not name are actually worth. The shift's own rows then override
+	// the tiers it DID name. Guessing a ladder (below) is the last resort, for a demo
+	// shift that has neither.
+	if (!shift.tierRates && shift.payTierRows?.length) {
+		const out = cloneTierRates(workspace.tierRates);
+		for (const row of shift.payTierRows) {
+			const tier = outletTierForPostJobPayTier(row.payTierId as never);
+			if (!tier || !out[tier]) continue;
+			out[tier] = {
+				...out[tier],
+				wagePerHour: row.wagePerHour,
+				drinkPct: row.drinkPct,
+				tipPct: row.tipPct,
+				...(row.targetSalesRm != null
+					? { targetSalesRm: row.targetSalesRm }
+					: {}),
+			};
+		}
+		return out;
+	}
 	if (!shift.tierRates) {
 		const baseTier = workspace.tierRates[OUTLET_BASE_TIER];
 		return buildDefaultTierRates({
@@ -1307,7 +1375,13 @@ export function formatOutletPlanDailyHeadcountHint(
 	return `${plan.label} plan · ${band} PRs/day · ${remaining} available on ${dateLabel}`;
 }
 
-function canonicalOutletName(name: string): string {
+/**
+ * Exported because the Post Job clash check has to narrow the SAME list of shifts
+ * to the SAME outlet as the daily-cap counters below. A second definition of
+ * "is this the same venue" is how two checks reading one list start disagreeing
+ * about whose shifts they are looking at.
+ */
+export function canonicalOutletName(name: string): string {
 	return name.trim().toLowerCase();
 }
 
@@ -2258,16 +2332,33 @@ export function outletShiftEffectiveDemand(
 	return Math.max(0, shift.quantity - (shift.demandCut ?? 0));
 }
 
-/** PRs still on shift (excludes early releases). */
+/**
+ * PRs still on shift (excludes early releases).
+ *
+ * `suppliedTotal` WINS when the server sent one. It is the count across every
+ * agency the shift was posted to, while `prs` holds only the ids the caller is
+ * allowed to see — so on a shift two agencies are filling, counting `prs` gives
+ * each of them its own contribution and calls it the shift's staffing. That is
+ * how one agency's Manage Outlet said "2 open" on a shift the other had already
+ * half-filled, and offered a seat that was gone. Early releases are a demo-only
+ * concept with no backend column, so there is nothing to subtract from the
+ * server's figure.
+ */
 export function outletShiftSuppliedCount(shift: {
 	prs?: string[];
 	releasedEarlyPrIds?: string[];
+	suppliedTotal?: number;
 }): number {
+	if (shift.suppliedTotal !== undefined) return shift.suppliedTotal;
 	return outletShiftActivePrIds(shift).length;
 }
 
 export function outletShiftDemandSupplied(
-	shift: OutletCutLossShiftSlice & { prs?: string[] },
+	shift: OutletCutLossShiftSlice & {
+		prs?: string[];
+		/** Server-counted staffing across every agency — see outletShiftSuppliedCount. */
+		suppliedTotal?: number;
+	},
 ) {
 	// Align with cut-slot apply path: early releases already leave the fillable demand.
 	const demand = outletShiftSalesTargetHeadcount(shift);

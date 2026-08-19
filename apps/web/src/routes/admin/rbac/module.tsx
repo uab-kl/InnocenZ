@@ -17,6 +17,8 @@ import {
 } from "@/components/rbac";
 import { useAuth } from "@/lib/auth-context";
 import { toMutationError } from "@/lib/mutation-error";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import {
 	type CreateModuleInput,
 	createModule,
@@ -37,6 +39,7 @@ export const Route = createFileRoute("/admin/rbac/module")({
 const PAGE_SIZE = 10;
 
 function ModulePage() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const queryClient = useQueryClient();
 	const [statusFilter, setStatusFilter] = useState<ModuleStatusFilter>("all");
@@ -76,7 +79,7 @@ function ModulePage() {
 		onSuccess: (response) => {
 			queryClient.invalidateQueries({ queryKey: ["rbac-modules"] });
 			setFormOpen(false);
-			toast.success(response.message || "Module created successfully");
+			toast.success(response.message || t.rbac.moduleCreated);
 		},
 	});
 
@@ -92,7 +95,7 @@ function ModulePage() {
 			queryClient.invalidateQueries({ queryKey: ["rbac-modules"] });
 			setFormOpen(false);
 			setSelectedModule(null);
-			toast.success(response.message || "Module updated successfully");
+			toast.success(response.message || t.rbac.moduleUpdated);
 		},
 	});
 
@@ -102,7 +105,7 @@ function ModulePage() {
 			queryClient.invalidateQueries({ queryKey: ["rbac-modules"] });
 			setDeactivateOpen(false);
 			setSelectedModule(null);
-			toast.success(response.message || "Module deactivated successfully");
+			toast.success(response.message || t.rbac.moduleDeactivated);
 		},
 	});
 
@@ -116,15 +119,15 @@ function ModulePage() {
 
 	const formError = toMutationError(
 		formMode === "edit" ? updateMutation.error : createMutation.error,
-		formMode === "edit" ? "Failed to update module" : "Failed to create module",
+		formMode === "edit" ? t.rbac.moduleUpdateFailed : t.rbac.moduleCreateFailed,
 	);
 
 	return (
 		<PageShell>
 			<PageHeader
 				icon={LayoutGrid}
-				title="Modules"
-				description="Portal-scoped feature areas with stable keys for C/R/U checks"
+				title={t.rbac.sectionModulesTitle}
+				description={t.rbac.modulesSubtitle}
 			/>
 
 			<ModulesTable
@@ -187,9 +190,11 @@ function ModulePage() {
 						setSelectedModule(null);
 					}
 				}}
-				title="Deactivate module"
-				description={`Are you sure you want to deactivate "${selectedModule?.moduleName}"?`}
-				confirmLabel="Deactivate"
+				title={t.rbac.deactivateModule}
+				description={fill(t.rbac.deactivateConfirm, {
+					name: selectedModule?.moduleName ?? "",
+				})}
+				confirmLabel={t.rbac.deactivate}
 				onConfirm={() => {
 					if (selectedModule) {
 						deactivateMutation.mutate(selectedModule.moduleId);

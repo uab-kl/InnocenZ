@@ -5,10 +5,13 @@ import {
 	OutletPage,
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
 import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { useStore } from "@agency-portal/lib/store";
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/outlet/")({
 	component: OutletHome,
@@ -21,20 +24,52 @@ function OutletHome() {
 	// A real session shows tonight's booked shift from the backend; demo sessions
 	// keep the demo store.
 	const backend = useOutletToday();
+	// Same hook Post Job gates on, so Today and Post Job cannot disagree about
+	// whether this venue has an agency.
+	const agencyLinks = useOutletAgencyLinks();
+	const { t } = usePortalLocale();
 
 	return (
 		<OutletPage>
 			{isFinance && (
 				<p className="iz-tiny iz-muted rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-					Read-only overview
+					{t.outletHome.readOnlyOverview}
 				</p>
 			)}
 
 			<OutletPageHeader
-				eyebrow="Today"
+				eyebrow={t.common.today}
 				title={`${date} · ${time}`}
-				hint="Live shift · tap card to expand details and actions"
+				hint={t.outletHome.liveShiftHint}
 			/>
+
+			{/* A venue with no APPROVED agency cannot post a shift, and Today is the
+			    screen it lands on. Without this it sees an empty board with no
+			    explanation and no idea the next step is in Settings. Split in two
+			    because the action differs: link one, or wait for the one already
+			    asked. */}
+			{backend.backed && !agencyLinks.isLoading && !agencyLinks.canPost && (
+				<div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
+					<p className="text-sm font-semibold text-amber-300">
+						{agencyLinks.awaitingApproval
+							? t.postJob.waitingForAgency
+							: t.today.noAgencyYet}
+					</p>
+					<p className="iz-tiny iz-muted mt-1">
+						{agencyLinks.awaitingApproval
+							? t.today.requestWithAgency
+							: t.today.agenciesFillShifts}
+					</p>
+					{!agencyLinks.awaitingApproval && (
+						<Link
+							to="/outlet/settings"
+							className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
+						>
+							{t.postJob.goToSettingsAgencies}
+						</Link>
+					)}
+				</div>
+			)}
 
 			<OutletBookings
 				shifts={backend.backed ? backend.shifts : undefined}

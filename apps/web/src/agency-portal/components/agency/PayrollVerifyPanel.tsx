@@ -13,6 +13,8 @@ import {
 	ScanLine,
 } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	PaymentVoucherComponent,
 	PaymentVoucherLine,
@@ -20,13 +22,18 @@ import type {
 	PaymentVoucherReceiptStatus,
 } from "@/services/payment-voucher";
 
-const COMPONENT_LABELS: Record<PaymentVoucherComponent, string> = {
-	wages: "Wages",
-	drink_commission: "Drinks commission",
-	tip_commission: "Tips commission",
-	ot: "Overtime",
-	deduction: "Deductions",
-	other: "Other",
+// Dictionary KEYS — module scope, where the locale hook cannot run. Record keys
+// stay the API's component values; NEEDS_EVIDENCE filters on those.
+const COMPONENT_LABELS: Record<
+	PaymentVoucherComponent,
+	keyof PortalTranslations["payroll"]
+> = {
+	wages: "wagesShort",
+	drink_commission: "drinksCommission",
+	tip_commission: "tipsCommission",
+	ot: "overtimeShort",
+	deduction: "deductions",
+	other: "other",
 };
 
 /** Commission is earned per receipt, so only these two need evidence. */
@@ -39,16 +46,22 @@ const money = (n: number) => `RM ${n.toFixed(2)}`;
 const sum = (lines: PaymentVoucherLine[]) =>
 	lines.reduce((total, line) => total + Number(line.amount || 0), 0);
 
-function sourceLabel(source: PaymentVoucherReceipt["source"]): string {
-	if (source === "scan") return "Scanned";
-	if (source === "manual") return "Self-logged";
-	return "Check-in";
+function sourceLabel(
+	source: PaymentVoucherReceipt["source"],
+	t: PortalTranslations,
+): string {
+	if (source === "scan") return t.receipts.scanned;
+	if (source === "manual") return t.receipts.selfLogged;
+	return t.receipts.checkIn;
 }
 
-const STATUS_LABEL: Record<PaymentVoucherReceiptStatus, string> = {
-	pending: "Waiting on you",
-	approved: "Approved",
-	verified: "Verified",
+const STATUS_LABEL: Record<
+	PaymentVoucherReceiptStatus,
+	keyof PortalTranslations["receipts"]
+> = {
+	pending: "waitingOnYou",
+	approved: "approved",
+	verified: "verified",
 };
 
 const STATUS_PILL: Record<PaymentVoucherReceiptStatus, string> = {
@@ -111,6 +124,7 @@ function ReceiptRow({
 	onApprove: () => void;
 	onWithdraw: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const [editing, setEditing] = useState(false);
 
 	const proofPhotos = receipt.proofPhotos ?? [];
@@ -134,12 +148,12 @@ function ReceiptRow({
 					<span
 						className={`iz-pill !text-[10px] ${receipt.source === "scan" ? "iz-pill-green" : "iz-pill-amber"}`}
 					>
-						{sourceLabel(receipt.source)}
+						{sourceLabel(receipt.source, t)}
 					</span>
 					<span
 						className={`iz-pill !text-[10px] ${STATUS_PILL[receipt.status]}`}
 					>
-						{STATUS_LABEL[receipt.status]}
+						{t.receipts[STATUS_LABEL[receipt.status]]}
 					</span>
 				</div>
 				<span className="font-medium">{money(sum(lines))}</span>
@@ -162,7 +176,7 @@ function ReceiptRow({
 
 			{receipt.note && (
 				<p className="iz-tiny mt-1">
-					<span className="iz-muted2">PR's note:</span> {receipt.note}
+					<span className="iz-muted2">{t.receipts.prsNote}</span> {receipt.note}
 				</p>
 			)}
 
@@ -233,7 +247,7 @@ function ReceiptRow({
 							aria-expanded={editing}
 						>
 							<Pencil className="mr-1 h-3 w-3" />{" "}
-							{editing ? "Close editor" : "Edit"}
+							{editing ? t.receipts.closeEditor : "Edit"}
 						</button>
 					</div>
 
@@ -282,6 +296,7 @@ export function PayrollVerifyPanel({
 }: {
 	voucherId: string | null;
 }) {
+	const { t } = usePortalLocale();
 	const { voucher, isLoading } = useAgencyPvEvidence(voucherId);
 	const canReview = useAgencyCan()("raisePv");
 	const {
@@ -295,9 +310,9 @@ export function PayrollVerifyPanel({
 	if (isLoading) {
 		return (
 			<>
-				<IzSectionLabel>Verify</IzSectionLabel>
+				<IzSectionLabel>{t.payroll.verify}</IzSectionLabel>
 				<IzCard>
-					<p className="iz-tiny iz-muted">Loading receipts…</p>
+					<p className="iz-tiny iz-muted">{t.agencyHub.loadingReceipts}</p>
 				</IzCard>
 			</>
 		);
@@ -323,7 +338,7 @@ export function PayrollVerifyPanel({
 
 	return (
 		<>
-			<IzSectionLabel>Verify</IzSectionLabel>
+			<IzSectionLabel>{t.payroll.verify}</IzSectionLabel>
 
 			{unbacked.length > 0 ? (
 				<IzCard className="border-[rgba(217,185,122,.35)]">
@@ -354,13 +369,15 @@ export function PayrollVerifyPanel({
 					<p className="iz-tiny iz-muted">
 						{commissionLines.length > 0
 							? "Every commission line on this voucher is backed by a receipt."
-							: "This voucher has no commission lines to verify."}
+							: t.payroll.noCommissionLinesToVerify}
 					</p>
 				</IzCard>
 			)}
 
 			<IzCard>
-				<div className="text-sm font-semibold">This week by component</div>
+				<div className="text-sm font-semibold">
+					{t.payroll.thisWeekByComponent}
+				</div>
 				<div className="mt-2">
 					{[...groups.entries()].map(([key, groupLines]) => (
 						<div
@@ -370,7 +387,7 @@ export function PayrollVerifyPanel({
 							<div>
 								<div className="text-sm">
 									{key === "unclassified"
-										? "Unclassified"
+										? t.payroll.unclassified
 										: COMPONENT_LABELS[key as PaymentVoucherComponent]}
 								</div>
 								<div className="iz-tiny iz-muted2">

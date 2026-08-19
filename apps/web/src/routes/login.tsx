@@ -382,12 +382,26 @@ function RouteComponent() {
 										const errorId = `${field.name}-error`;
 										return (
 											<Field data-invalid={isInvalid}>
-												<FieldLabel
-													htmlFor={field.name}
-													className="login-field-label"
-												>
-													Password
-												</FieldLabel>
+												<div className="flex flex-wrap items-baseline justify-between gap-x-4">
+													<FieldLabel
+														htmlFor={field.name}
+														className="login-field-label"
+													>
+														Password
+													</FieldLabel>
+													{/* Carries whatever is already typed in the email
+													    field so the reset page starts prefilled. */}
+													<Link
+														to="/forgot-password"
+														search={() => {
+															const typed = form.state.values.email.trim();
+															return typed ? { email: typed } : {};
+														}}
+														className="login-support text-gold-bright underline underline-offset-4 hover:text-gold"
+													>
+														Forgot password?
+													</Link>
+												</div>
 												<InputGroup className="login-input-group h-auto border-royal-gold/20 bg-background/60">
 													<InputGroupAddon align="inline-start">
 														<Lock

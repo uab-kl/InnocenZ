@@ -32,9 +32,7 @@ export async function fetchRoles(
 		fetchPortals(onRefreshFail).catch(() => []),
 	]);
 
-	const portalCodeById = new Map(
-		portals.map((p) => [p.id, p.code] as const),
-	);
+	const portalCodeById = new Map(portals.map((p) => [p.id, p.code] as const));
 
 	return {
 		success: response.data.success,

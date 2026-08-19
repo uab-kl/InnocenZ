@@ -90,6 +90,26 @@ const corsOptions: cors.CorsOptions = {
   optionsSuccessStatus: 200,
 };
 
+/**
+ * Trust the reverse proxy ONLY when a deployment says to. Unset = Express's
+ * default (trust nothing), so this is a no-op locally and in any environment
+ * that has not opted in.
+ *
+ * Without it, behind a proxy every request reports the proxy's address and the
+ * auth rate limiter would count the whole platform as one caller. With it set
+ * too broadly (`true`), a client can forge `X-Forwarded-For` and mint a fresh
+ * rate-limit bucket per request — which is why the narrow forms are documented
+ * first in env.ts.
+ */
+if (env.TRUST_PROXY) {
+  const raw = env.TRUST_PROXY.trim();
+  const hops = Number(raw);
+  const setting: boolean | number | string =
+    raw === 'true' ? true : Number.isInteger(hops) && raw !== '' ? hops : raw;
+  app.set('trust proxy', setting);
+  logger.info(`[startup] trust proxy = ${String(setting)}`);
+}
+
 app.use(cors(corsOptions));
 app.use(
   helmet({

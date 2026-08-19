@@ -7,6 +7,8 @@ import {
 	type OutletTierRateSettings,
 } from "@agency-portal/lib/agency-demo";
 import { cn } from "@agency-portal/lib/utils";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function formatTargetAmount(targetSalesRm: number): string {
 	if (targetSalesRm >= 1000) {
@@ -26,6 +28,7 @@ export function TierSalesTargetChip({
 	className?: string;
 	compact?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	if (targetSalesRm <= 0) return null;
 	return (
 		<div
@@ -48,7 +51,7 @@ export function TierSalesTargetChip({
 						: "text-[8px] tracking-[0.12em]",
 				)}
 			>
-				{compact ? "Target" : "Sales target"}
+				{compact ? t.today.target : t.today.salesTarget}
 			</span>
 			<span
 				className={cn(
@@ -79,6 +82,7 @@ export function TierRatePill({
 	multiplier?: number;
 	onClick?: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const roman = tier.replace("Tier ", "");
 	const isBase = tier === OUTLET_BASE_TIER;
 	const hasTarget = (salesTarget ?? 0) > 0;
@@ -120,7 +124,7 @@ export function TierRatePill({
 				</span>
 			</div>
 			<span className="mt-0.5 shrink-0 text-[8px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-				Pay / shift
+				{t.today.payPerShift}
 			</span>
 			<span
 				className={cn(
@@ -153,6 +157,7 @@ export function ShiftTierWagesStrip({
 	tiers?: OutletPrTier[];
 	compact?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const visibleTiers = tiers?.length ? tiers : OUTLET_PR_TIERS;
 	const hasSalesTargets = visibleTiers.some(
 		(t) => (tierRates[t].targetSalesRm ?? 0) > 0,
@@ -167,8 +172,8 @@ export function ShiftTierWagesStrip({
 				)}
 			>
 				{hasSalesTargets
-					? "Target pay & sales by tier"
-					: "Pay per shift by tier"}
+					? t.today.targetPayAndSales
+					: t.today.payPerShiftByTier}
 			</p>
 			<div
 				className={cn("grid items-stretch gap-px", compact ? "" : "gap-0.5")}

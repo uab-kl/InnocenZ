@@ -1,6 +1,6 @@
-import { getClient } from "@/lib/axios-v1";
 import { kickToLogin } from "@/lib/auth/guards";
 import { pickHomePortal } from "@/lib/auth/pick-home-portal";
+import { getClient } from "@/lib/axios-v1";
 
 interface MeRole {
 	id: string;

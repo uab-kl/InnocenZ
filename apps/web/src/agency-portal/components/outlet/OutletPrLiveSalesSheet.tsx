@@ -2,8 +2,11 @@ import { IzSheet } from "@agency-portal/components/iz/Sheet";
 import { formatRM, IzCardTitle } from "@agency-portal/components/iz/ui";
 import { LiveEarningsLabel } from "@agency-portal/components/outlet/outlet-live-sales-ui";
 import type { OutletPrLiveEarningsBreakdown } from "@agency-portal/lib/outlet-financial-sync";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function EarningsRow({ label, amount }: { label: string; amount: number }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-outlet-pr-earnings-sheet__row">
 			<dt>
@@ -25,6 +28,7 @@ export function OutletPrLiveSalesSheet({
 	shiftEvent: string;
 	breakdown: OutletPrLiveEarningsBreakdown;
 }) {
+	const { t } = usePortalLocale();
 	const noFloorSales =
 		breakdown.hhDrinkSalesRm === 0 &&
 		breakdown.normalDrinkSalesRm === 0 &&
@@ -44,22 +48,31 @@ export function OutletPrLiveSalesSheet({
 				</div>
 
 				<dl className="iz-outlet-pr-earnings-sheet__rows">
-					<EarningsRow label="Daily wages" amount={breakdown.dailyWagesRm} />
+					<EarningsRow
+						label={t.today.colDailyWages}
+						amount={breakdown.dailyWagesRm}
+					/>
 					<EarningsRow label="HH" amount={breakdown.hhCommissionRm} />
-					<EarningsRow label="Normal" amount={breakdown.normalCommissionRm} />
-					<EarningsRow label="Tips" amount={breakdown.tipSalesRm} />
+					<EarningsRow
+						label={t.today.colNormal}
+						amount={breakdown.normalCommissionRm}
+					/>
+					<EarningsRow
+						label={t.reports.colTips}
+						amount={breakdown.tipSalesRm}
+					/>
 					<EarningsRow label="OT" amount={breakdown.otPayRm} />
 				</dl>
 
 				<div className="iz-outlet-pr-earnings-sheet__total">
-					<LiveEarningsLabel label="Total earn" />
+					<LiveEarningsLabel label={t.today.colTotalEarn} />
 					<span>{formatRM(breakdown.totalEarnRm)}</span>
 				</div>
 			</div>
 
 			{noFloorSales && (
 				<p className="iz-sm iz-muted2 mt-4 text-center">
-					No floor sales logged for this PR yet tonight.
+					{t.today.noFloorSalesForPr}
 				</p>
 			)}
 
@@ -68,7 +81,7 @@ export function OutletPrLiveSalesSheet({
 				className="iz-btn iz-btn-soft mt-4 w-full"
 				onClick={onClose}
 			>
-				Close
+				{t.common.close}
 			</button>
 		</IzSheet>
 	);

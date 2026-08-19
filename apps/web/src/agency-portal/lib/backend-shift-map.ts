@@ -1,5 +1,6 @@
 import type {
 	AgencyRosterSlot,
+	OutletPrTier,
 	RosterSlotStatus,
 } from "@agency-portal/lib/agency-demo";
 import { formatOutletDayLabel } from "@agency-portal/lib/agency-outlet-shifts";
@@ -7,14 +8,17 @@ import { parseShiftWindow } from "@agency-portal/lib/portal-sync";
 import {
 	isCommissionOnlyPayTier,
 	outletTierForPostJobPayTier,
+	type PostJobPayTierId,
 	type PostJobPayTierRow,
 	payTierDisplayOrder,
+	postJobPayTierIdForOutletTier,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 import type {
 	CreateShiftInput,
 	Shift,
 	ShiftEventKind,
+	ShiftPayTierDemand,
 	ShiftPayTierInput,
 } from "@/services/shift";
 import type {
@@ -207,9 +211,29 @@ export function rosterSlotsFromBackend(input: {
 		string,
 		{ lat: string | null; lng: string | null; geoFenceRadius: number | null }
 	>;
+	/**
+	 * Agency id -> name, so each slot can say WHO supplied its PR.
+	 *
+	 * Without it a slot carries only `shift_assignment.agency_id`, a uuid nothing
+	 * on the client can translate — the portal's only id-to-name table is demo
+	 * data. Every label therefore fell through to the demo literal "Atlas
+	 * Agency", telling a venue that a real company, possibly one it has never
+	 * worked with, had staffed its floor.
+	 *
+	 * Optional: a caller that cannot resolve names omits it, and a slot with no
+	 * name renders none — the honest answer, and the one `rosterSlotAgencyName`
+	 * now gives instead of reaching for the demo literal.
+	 */
+	agencyNameById?: Map<string, string>;
 }): AgencyRosterSlot[] {
-	const { shifts, assignments, prNameById, outletNameById, outletGeoById } =
-		input;
+	const {
+		shifts,
+		assignments,
+		prNameById,
+		outletNameById,
+		outletGeoById,
+		agencyNameById,
+	} = input;
 	const shiftById = new Map(shifts.map((s) => [s.id, s]));
 
 	const slots: AgencyRosterSlot[] = [];
@@ -250,6 +274,10 @@ export function rosterSlotsFromBackend(input: {
 			noShowFlag: a.status === "no_show" ? true : undefined,
 			cancelledAt: a.status === "cancelled" ? a.updatedAt : undefined,
 			agencyId: a.agencyId,
+			// The SUPPLIER of this PR, named. Resolved only when the caller could
+			// supply the map; otherwise left undefined so the label renders nothing
+			// rather than a demo company.
+			agencyName: a.agencyId ? agencyNameById?.get(a.agencyId) : undefined,
 		});
 	}
 	return slots;
@@ -308,6 +336,14 @@ export function shiftRequestFromBackendShift(input: {
 		status: shift.status,
 		prs: staffing.map((a) => a.prId),
 		payPerHour: num(shift.payPerHour),
+		// What the shift ASKED for, per tier. Without this every outlet screen fell
+		// back to a synthesised ladder — see `payTierRowsFromShiftPayTiers`.
+		payTierRows: payTierRowsFromShiftPayTiers(shift.payTiers),
+		// Seats taken per tier, counted across every agency the shift was posted to.
+		// The outlet cannot work this out for itself: it would have to know each
+		// booked PR's tier, and a tier is a fact about that PR's membership of an
+		// AGENCY — which is why this column read 0 while a PR was plainly on the shift.
+		suppliedByTierBucket: shift.staffedBuckets,
 	};
 }
 
@@ -344,44 +380,105 @@ function nonNegative(value: number): number {
 }
 
 /**
- * Post Job pay-tier rows -> the backend `payTiers` overrides. Only rows actually
- * staffing the shift (prCount > 0) are persisted. `tier` carries the outlet
- * label the PR rate resolver matches on ('Tier I'..'Servant'); commission-only
- * has no label. The composer doesn't collect a per-shift happy-hour % or OT
- * rate, so those are left unset and fall back to the outlet workspace defaults.
+ * Backend `shift_pay_tier` rows -> the composer rows every outlet screen reads.
+ *
+ * ⚠️ THE MISSING HALF. `shiftPayTiersFromRows` has always written these rows to the
+ * backend; nothing ever read them back, so a shift fetched from the API arrived with
+ * no `payTierRows`. Downstream that is not a blank — it is an INVENTION:
+ * `resolveShiftTierRates` sees no rates and synthesises a ladder from a base tier,
+ * which is why the shift panel showed drink/tip percentages (0, 1, 2, 3, 4) matching
+ * neither the shift nor the venue's rate card, and a per-tier "requested" split the
+ * shift never asked for — one row asking for 2 × Tier I drawn as seven tiers with
+ * ones scattered across them.
+ *
+ * Only rows the shift actually declared come back. A shift with no overrides still
+ * returns undefined, and the workspace card remains the honest fallback for it.
+ */
+export function payTierRowsFromShiftPayTiers(
+	payTiers: ShiftPayTierDemand[] | undefined,
+): PostJobPayTierRow[] | undefined {
+	if (!payTiers?.length) return undefined;
+	return payTiers.map((row, index) => {
+		const commissionOnly = row.kind === "commission_only";
+		// `commission_only` has no tier of its own; the composer keys it by its own
+		// bucket id, which `postJobPayTierIdForOutletTier` cannot produce from a null.
+		const payTierId = (
+			commissionOnly
+				? "commission_only"
+				: postJobPayTierIdForOutletTier(row.tier as OutletPrTier)
+		) as PostJobPayTierId;
+		return {
+			id: `${payTierId}-${index}`,
+			payTierId,
+			wagePerHour: Number(row.wagePerHour ?? 0),
+			targetSalesRm:
+				row.targetSalesRm === null || row.targetSalesRm === undefined
+					? undefined
+					: Number(row.targetSalesRm),
+			drinkPct: Number(row.drinkPct ?? 0),
+			tipPct: Number(row.tipPct ?? 0),
+			prCount: row.prCount ?? 0,
+		};
+	});
+}
+
+/**
+ * Post Job pay-tier rows -> the backend `payTiers` overrides. `tier` carries the
+ * outlet label the PR rate resolver matches on ('Tier I'..'Servant');
+ * commission-only has no label. The composer doesn't collect a per-shift
+ * happy-hour % or OT rate, so those are left unset and fall back to the outlet
+ * workspace defaults.
+ *
+ * EVERY composer row is persisted, including the ones asking for nobody
+ * (18 Aug 2026). This used to filter `prCount > 0`, which quietly threw away a
+ * rate the venue had typed: price Tier III at RM 750 while requesting none of
+ * them, and the row never reached the database, so the panel later drew the
+ * WORKSPACE rate and nothing said the number had gone. A zero row is a price the
+ * shift declares for a tier it did not book — worth keeping, because it is what
+ * that tier is worth if one is ever added.
+ *
+ * ⚠️ This is only safe alongside the demand rule it depends on: `askedByBucket`,
+ * on both sides, ignores rows with `prCount <= 0`. Without that, a persisted zero
+ * NAMES the tier with a quota of nought and no PR of it could ever be assigned —
+ * a dropped rate traded for an unstaffable tier. Do not restore this filter
+ * without also revisiting that rule.
  */
 export function shiftPayTiersFromRows(
 	rows: PostJobPayTierRow[],
 ): ShiftPayTierInput[] {
-	return rows
-		.filter((row) => row.prCount > 0)
-		.map((row) => {
-			const commissionOnly = isCommissionOnlyPayTier(row.payTierId);
-			return {
-				kind: commissionOnly ? "commission_only" : "tier",
-				tier: outletTierForPostJobPayTier(row.payTierId),
-				wagePerHour: commissionOnly ? null : row.wagePerHour,
-				drinkPct: row.drinkPct,
-				happyHourDrinkPct: null,
-				tipPct: row.tipPct,
-				otAfterHours: null,
-				targetSalesRm: row.targetSalesRm ?? null,
-				prCount: row.prCount,
-				sortOrder: payTierDisplayOrder(row.payTierId),
-			};
-		});
+	return rows.map((row) => {
+		const commissionOnly = isCommissionOnlyPayTier(row.payTierId);
+		return {
+			kind: commissionOnly ? "commission_only" : "tier",
+			tier: outletTierForPostJobPayTier(row.payTierId),
+			wagePerHour: commissionOnly ? null : row.wagePerHour,
+			drinkPct: row.drinkPct,
+			happyHourDrinkPct: null,
+			tipPct: row.tipPct,
+			otAfterHours: null,
+			targetSalesRm: row.targetSalesRm ?? null,
+			prCount: row.prCount,
+			sortOrder: payTierDisplayOrder(row.payTierId),
+		};
+	});
 }
 
 /**
  * A Post Job composer item -> the backend `CreateShiftInput`. `outletId` comes
- * from the signed-in outlet's identity, never the item. No `agencyId` is sent:
- * the backend routes the PR request to the outlet's onboarding agency, which is
- * authoritative and cannot be forged. A brand-new posted shift starts with no
- * live sales, so `liveSales` is always 0.
+ * from the signed-in outlet's identity, never the item. A brand-new posted
+ * shift starts with no live sales, so `liveSales` is always 0.
+ *
+ * `agencyIds` names which of the venue's APPROVED agencies should receive this
+ * job (0124) — several may staff one shift. Still no singular `agencyId`: the
+ * server resolves the fan-out from the outlet's approved links and intersects
+ * this list with them, so nothing here can forge an invitation. Omitting it
+ * means "every approved agency", which is exactly what the old single-agency
+ * routing meant back when a venue could only have one.
  */
 export function createShiftInputFromPost(
 	item: OutletShiftPostItem,
 	outletId: string,
+	agencyIds?: string[],
 ): CreateShiftInput {
 	// Persist the composer's per-tier overrides when it built any; omit the field
 	// entirely otherwise, so the shift keeps the outlet's workspace rate card.
@@ -401,5 +498,10 @@ export function createShiftInputFromPost(
 		estimatedCost: nonNegative(item.estimatedCost),
 		liveSales: 0,
 		...(payTiers && payTiers.length ? { payTiers } : {}),
+		// Omitted rather than sent empty when nothing was chosen — an empty array
+		// and an absent field mean the same thing to the server ("all approved"),
+		// and sending the field only when it carries a real choice keeps the
+		// request honest about whether the operator picked.
+		...(agencyIds && agencyIds.length ? { agencyIds } : {}),
 	};
 }

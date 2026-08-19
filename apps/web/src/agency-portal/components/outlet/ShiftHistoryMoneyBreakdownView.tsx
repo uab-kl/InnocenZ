@@ -1,33 +1,47 @@
 import { formatRM } from "@agency-portal/components/iz/ui";
 import type { ShiftHistoryMoneyBreakdown } from "@agency-portal/lib/shift-history-amounts";
 import { cn } from "@agency-portal/lib/utils";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type HistoryMoneyKind = "received" | "payout";
 
 type BreakdownLine = { label: string; value: number; hint?: string };
 
-function receivedLines(b: ShiftHistoryMoneyBreakdown): BreakdownLine[] {
+function receivedLines(
+	b: ShiftHistoryMoneyBreakdown,
+	t: PortalTranslations,
+): BreakdownLine[] {
 	return [
 		{
-			label: "Drink sales",
+			label: t.today.drinkSales,
 			value: b.drinkSalesRm,
 			hint:
 				b.drinkUnits > 0
-					? `${b.drinkUnits} unit${b.drinkUnits !== 1 ? "s" : ""}`
+					? fill(
+							b.drinkUnits === 1 ? t.today.unitCountOne : t.today.unitCountMany,
+							{ n: b.drinkUnits },
+						)
 					: undefined,
 		},
-		{ label: "Tips", value: b.tipSalesRm },
+		{ label: t.reports.colTips, value: b.tipSalesRm },
 	];
 }
 
-function payoutLines(b: ShiftHistoryMoneyBreakdown): BreakdownLine[] {
+function payoutLines(
+	b: ShiftHistoryMoneyBreakdown,
+	t: PortalTranslations,
+): BreakdownLine[] {
 	const lines = [
-		{ label: "Wages", value: b.wagesRm },
+		{ label: t.today.wages, value: b.wagesRm },
 		{ label: "OT", value: b.otRm },
-		{ label: "Drink commission", value: b.drinkCommissionRm },
-		{ label: "Tip commission", value: b.tipCommissionRm },
+		{ label: t.today.drinkCommission, value: b.drinkCommissionRm },
+		{ label: t.today.tipCommission, value: b.tipCommissionRm },
 	].filter((l) => l.value > 0);
-	return lines.length > 0 ? lines : [{ label: "Payout", value: b.totalPayout }];
+	return lines.length > 0
+		? lines
+		: [{ label: t.today.payout, value: b.totalPayout }];
 }
 
 /** Line items for one money kind — styled like History shift-log cards. */
@@ -40,11 +54,15 @@ export function ShiftHistoryMoneyBreakdownView({
 	kind: HistoryMoneyKind;
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	const lines =
-		kind === "received" ? receivedLines(breakdown) : payoutLines(breakdown);
+		kind === "received"
+			? receivedLines(breakdown, t)
+			: payoutLines(breakdown, t);
 	const total =
 		kind === "received" ? breakdown.totalReceived : breakdown.totalPayout;
-	const title = kind === "received" ? "Received breakdown" : "Payout breakdown";
+	const title =
+		kind === "received" ? t.today.receivedBreakdown : t.today.payoutBreakdown;
 
 	return (
 		<div
@@ -65,7 +83,9 @@ export function ShiftHistoryMoneyBreakdownView({
 					<p className="iz-hist-money-breakdown__card-total">
 						{formatRM(total)}
 					</p>
-					<p className="iz-hist-money-breakdown__card-total-hint">Total</p>
+					<p className="iz-hist-money-breakdown__card-total-hint">
+						{t.today.total}
+					</p>
 				</div>
 			</div>
 			<div

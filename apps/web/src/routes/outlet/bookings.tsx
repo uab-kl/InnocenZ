@@ -5,6 +5,7 @@ import {
 	OutletPageHeader,
 } from "@agency-portal/components/outlet/outlet-portal-ui";
 import { OutletServicePostSection } from "@agency-portal/components/outlet/outlet-service-post";
+import { PostJobAgencyPicker } from "@agency-portal/components/outlet/PostJobAgencyPicker";
 import {
 	applyWorkspaceRatesToDraftShift,
 	buildLanguagesLabel,
@@ -24,10 +25,12 @@ import {
 	workspaceTierRatesSignature,
 } from "@agency-portal/components/outlet/post-job-fields";
 import { PostJobActionPanel } from "@agency-portal/components/outlet/post-job-shift-ui";
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import { useOutletPostJob } from "@agency-portal/hooks/use-outlet-post-job";
 import { useOutletPrPool } from "@agency-portal/hooks/use-outlet-pr-pool";
 import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import {
+	canonicalOutletName,
 	getOutletSubscriptionPlan,
 	isOtherDressCode,
 	isOtherSpecialEvent,
@@ -41,14 +44,20 @@ import {
 	clonePostJobPayTierRow,
 	totalPrCountFromPayTierRows,
 } from "@agency-portal/lib/post-job-pay-tiers";
+import {
+	describeClashShift,
+	findSlotClashes,
+} from "@agency-portal/lib/shift-slot-clash";
 import { useStore } from "@agency-portal/lib/store";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { cn } from "@agency-portal/lib/utils";
-import { createFileRoute, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { startOfToday } from "date-fns";
 import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 type PostJobTab = "shifts" | "services";
 
@@ -58,11 +67,15 @@ type PostJobTab = "shifts" | "services";
  * role granted, re-activate the membership) and none of them are fixed by
  * retrying, so the message has to reach the screen.
  */
-function postShiftErrorMessage(err: unknown): string {
+function postShiftErrorMessage(err: unknown, fallback: string): string {
 	const message = (
 		err as { response?: { data?: { message?: string } } } | undefined
 	)?.response?.data?.message;
-	return message?.trim() || "Could not post shifts — please try again";
+	// The server's own message wins when it has one — it names the actual cause
+	// (no subscription, membership inactive) and is not something the client can
+	// reconstruct. It arrives in English; translating it belongs on the backend,
+	// not here. The `fallback` is the part this screen owns, so it is localised.
+	return message?.trim() || fallback;
 }
 
 export const Route = createFileRoute("/outlet/bookings")({
@@ -75,6 +88,7 @@ export const Route = createFileRoute("/outlet/bookings")({
 
 function PostJobPage() {
 	const navigate = useNavigate({ from: Route.fullPath });
+	const { t } = usePortalLocale();
 
 	const { tab: searchTab } = Route.useSearch();
 
@@ -144,8 +158,8 @@ function PostJobPage() {
 	const prPoolEmptyHint = !prPool.backed
 		? undefined
 		: prPool.isLoading
-			? "Loading your PRs…"
-			: "No PRs to name yet — you can only request PRs who have worked a shift at your venue. Post the shift without naming anyone and the agency will staff it.";
+			? t.postJob.loadingYourPrs
+			: t.postJob.noPrsToNameYet;
 
 	const subscriptionPlan = getOutletSubscriptionPlan(
 		outletOwner.subscriptionPlanId,
@@ -157,6 +171,16 @@ function PostJobPage() {
 	);
 
 	const [draftShifts, setDraftShifts] = useState<DraftShift[]>([]);
+	/**
+	 * Which approved agencies this post goes to (0124). Applies to the WHOLE
+	 * batch, not per draft: an operator composing a week of shifts is choosing a
+	 * staffing partner for that week, and a per-row picker would ask the same
+	 * question a dozen times. Seeded by the picker itself to "all approved".
+	 */
+	const [postAgencyIds, setPostAgencyIds] = useState<string[]>([]);
+	// Whether this venue may post at all. Same hook the "Send to" picker reads, so
+	// the button and the picker cannot disagree about it.
+	const agencyLinks = useOutletAgencyLinks();
 
 	const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
 
@@ -265,17 +289,17 @@ function PostJobPage() {
 
 	const addDraftShift = () => {
 		if (composerPeopleRemaining <= 0) {
-			toast("Daily PR limit reached for the selected date(s)", "warn");
+			toast(t.postJob.dailyLimitReached, "warn");
 			return;
 		}
 
 		if (totalPrCountFromPayTierRows(composer.payTierRows) <= 0) {
-			toast("Set PR count per tier before adding a shift", "warn");
+			toast(t.postJob.setPrCountPerTier, "warn");
 			return;
 		}
 
 		if (composer.quantity <= 0) {
-			toast("Set people needed before adding a shift", "warn");
+			toast(t.postJob.setPeopleNeeded, "warn");
 			return;
 		}
 
@@ -284,7 +308,7 @@ function PostJobPage() {
 			isOtherSpecialEvent(composer.specialEventType) &&
 			!composer.customSpecialEventName?.trim()
 		) {
-			toast("Name your special event type", "warn");
+			toast(t.postJob.nameEventType, "warn");
 			return;
 		}
 
@@ -292,7 +316,7 @@ function PostJobPage() {
 			isOtherDressCode(composer.dressCode) &&
 			!composer.customDressCode?.trim()
 		) {
-			toast("Name your dress code", "warn");
+			toast(t.postJob.nameDressCode, "warn");
 			return;
 		}
 
@@ -373,8 +397,8 @@ function PostJobPage() {
 
 	const sectionDate =
 		draftShifts.length > 0
-			? formatJobDates(draftShifts[0].selectedDateIsos)
-			: formatJobDates(composer.selectedDateIsos);
+			? formatJobDates(draftShifts[0].selectedDateIsos, t)
+			: formatJobDates(composer.selectedDateIsos, t);
 
 	const totalHeadcount =
 		draftShifts.reduce((sum, s) => sum + s.quantity, 0) +
@@ -403,11 +427,11 @@ function PostJobPage() {
 				isOtherSpecialEvent(s.specialEventType) &&
 				!s.customSpecialEventName?.trim()
 			) {
-				toast("Name your special event type before posting", "warn");
+				toast(t.postJob.nameEventTypeBeforePosting, "warn");
 				return;
 			}
 			if (isOtherDressCode(s.dressCode) && !s.customDressCode?.trim()) {
-				toast("Name your dress code before posting", "warn");
+				toast(t.postJob.nameDressCodeBeforePosting, "warn");
 				return;
 			}
 		}
@@ -424,14 +448,21 @@ function PostJobPage() {
 		for (const s of expandedShifts) {
 			if (s.prIds.length > subscriptionPlan.prSelectMax) {
 				toast(
-					`Shift exceeds your plan — max ${subscriptionPlan.prSelectMax} named PRs per shift (${formatJobDate(s.jobDate)})`,
+					fill(t.postJob.shiftExceedsPlan, {
+						max: subscriptionPlan.prSelectMax,
+						date: formatJobDate(s.jobDate, t),
+					}),
 					"warn",
 				);
 				return;
 			}
 			if (s.quantity > subscriptionPlan.prPerDayMax) {
 				toast(
-					`People needed exceeds your ${subscriptionPlan.label} plan (${subscriptionPlan.prPerDayMax}/day) for ${formatJobDate(s.jobDate)}`,
+					fill(t.postJob.peopleExceedsPlan, {
+						plan: subscriptionPlan.label,
+						max: subscriptionPlan.prPerDayMax,
+						date: formatJobDate(s.jobDate, t),
+					}),
 					"warn",
 				);
 				return;
@@ -446,7 +477,12 @@ function PostJobPage() {
 			const existing = outletNamedPrCountForDate(capShifts, outletName, iso);
 			if (existing + total > subscriptionPlan.prPerDayMax) {
 				toast(
-					`Daily named-PR limit is ${subscriptionPlan.prPerDayMax} — ${existing} already named on ${iso}, cannot add ${total} more`,
+					fill(t.postJob.dailyNamedLimit, {
+						max: subscriptionPlan.prPerDayMax,
+						existing,
+						date: iso,
+						total,
+					}),
 					"warn",
 				);
 				return;
@@ -456,17 +492,68 @@ function PostJobPage() {
 			const existing = outletPrHeadcountForDate(capShifts, outletName, iso);
 			if (existing + total > subscriptionPlan.prPerDayMax) {
 				toast(
-					`Daily PR headcount limit is ${subscriptionPlan.prPerDayMax} — ${existing} already booked on ${iso}, cannot add ${total} more`,
+					fill(t.postJob.dailyHeadcountLimit, {
+						max: subscriptionPlan.prPerDayMax,
+						existing,
+						date: iso,
+						total,
+					}),
 					"warn",
 				);
 				return;
 			}
 		}
 
+		// TWO SHIFTS AT THE SAME TIME. Every check above measures a DAY — the tier
+		// mix, the named-PR cap, the headcount — and a day's demand is additive, so
+		// one night posted twice as 2 + 3 PRs reads as a legal 5 and nothing looked
+		// at the clock. `capShifts` is the same list the caps count, narrowed to this
+		// venue the same way they narrow it.
+		const canonOutlet = canonicalOutletName(outletName);
+		// Widened to the fields this check reads, which is also what lets the two
+		// shapes behind `capShifts` (backend bookings / demo store rows) be walked as
+		// one list — a union of array types has no callable `filter`.
+		const bookedRows: {
+			outletName: string;
+			dateIso?: string;
+			shift?: string;
+			event?: string;
+		}[] = capShifts;
+		const clash = findSlotClashes(
+			expandedShifts.map((s) => ({
+				dateIso: isoFromJobDate(s.jobDate),
+				shift: s.shiftTime,
+				event: resolveDraftEventName(s),
+			})),
+			bookedRows
+				.filter((s) => canonicalOutletName(s.outletName) === canonOutlet)
+				.map((s) => ({
+					dateIso: s.dateIso ?? "",
+					shift: s.shift ?? "",
+					event: s.event ?? "",
+				})),
+		)[0];
+
+		// BOTH kinds are refused — the venue's rule is that its own shifts never overlap
+		// (17 Aug 2026), and the backend refuses both with a 409, so warning and letting
+		// it through would only trade a clear message for a failed post. They still read
+		// differently because the remedies differ, and a refusal naming the wrong remedy
+		// is barely better than none. Back-to-back is NOT refused: that constraint lives
+		// on the PR who would have to travel, not on the venue.
+		if (clash) {
+			const other = describeClashShift(clash.against);
+			const refusal: Record<typeof clash.kind, string> = {
+				duplicate: fill(t.postJob.duplicateShift, { other }),
+				overlap: fill(t.postJob.overlapShift, { other }),
+			};
+			toast(refusal[clash.kind], "warn");
+			return;
+		}
+
 		const postItems = expandedShifts.map((s) => ({
 			outletName,
 
-			date: formatJobDate(s.jobDate),
+			date: formatJobDate(s.jobDate, t),
 
 			dateIso: isoFromJobDate(s.jobDate),
 
@@ -530,10 +617,15 @@ function PostJobPage() {
 		// overrides; the remaining demo-only fields in postItems (drink menus,
 		// dress code, star tiers, named PRs) are dropped by the mapper.
 		if (backed) {
-			postShifts(postItems)
+			postShifts(postItems, postAgencyIds)
 				.then(() => {
 					toast(
-						`Posted ${postItems.length} shift${postItems.length !== 1 ? "s" : ""}`,
+						fill(
+							postItems.length === 1
+								? t.postJob.postedShiftOne
+								: t.postJob.postedShiftMany,
+							{ n: postItems.length },
+						),
 						"success",
 					);
 					resetForm();
@@ -545,7 +637,7 @@ function PostJobPage() {
 					// no amount of retrying fixes and which reads on screen as the post
 					// having silently vanished.
 					console.error("[PostJob] POST /shift failed", err);
-					toast(postShiftErrorMessage(err), "warn");
+					toast(postShiftErrorMessage(err, t.postJob.couldNotPost), "warn");
 				});
 			return;
 		}
@@ -554,10 +646,7 @@ function PostJobPage() {
 		// demo store: it would list the shift as posted while nothing reached the
 		// database, and the row would evaporate on the next refresh.
 		if (getPortalSessionKind() === "real") {
-			toast(
-				"Your outlet session has expired — sign out and sign in again before posting",
-				"warn",
-			);
+			toast(t.postJob.sessionExpired, "warn");
 			return;
 		}
 
@@ -596,14 +685,16 @@ function PostJobPage() {
 			<div className="iz-screen">
 				<header className="pt-1">
 					<h2 className="font-sora text-lg font-extrabold text-[var(--iz-txt)]">
-						{blockedByPhase ? "Not available yet" : "Access restricted"}
+						{blockedByPhase
+							? t.postJob.notAvailableYet
+							: t.postJob.accessRestricted}
 					</h2>
 				</header>
 
 				<p className="iz-tiny iz-muted mt-3 rounded-2xl border border-dashed border-[var(--iz-line)] px-4 py-8 text-center">
 					{blockedByPhase
-						? "Ordering agency services is coming in a later release. Your role will have access when it does — nothing needs changing on your account."
-						: "Your outlet role cannot post shifts or order services."}
+						? t.postJob.servicesComingLater
+						: t.postJob.roleCannotPost}
 				</p>
 			</div>
 		);
@@ -614,21 +705,50 @@ function PostJobPage() {
 			{editingShiftId && tab === "shifts" && (
 				<AppTopbar
 					onBack={() => setEditingShiftId(null)}
-					backLabel="Shift list"
+					backLabel={t.postJob.shiftList}
 				/>
 			)}
 
 			<OutletPageHeader
 				eyebrow={outletName}
-				title="Post Job"
+				title={t.postJob.title}
 				hint={
 					viewOnly
-						? "View only — your role can read shift postings but not create them"
+						? t.postJob.viewOnlyHint
 						: tab === "shifts"
-							? "Build your shift, then post when ready"
-							: `${outletName} · agency add-ons`
+							? t.postJob.buildHint
+							: `${outletName} · ${t.postJob.agencyAddOns}`
 				}
 			/>
+
+			{/* A venue with no APPROVED agency cannot post — the server refuses it.
+			    Said here, at the top, rather than only in the "Send to" card: the
+			    composer is long, and finding out after filling in a whole shift that
+			    there is nobody to send it to is the worst possible moment. The two
+			    states are kept apart because the next action differs — one is "go
+			    link an agency", the other is "wait for them". */}
+			{backed && !agencyLinks.isLoading && !agencyLinks.canPost && (
+				<div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
+					<p className="text-sm font-semibold text-amber-300">
+						{agencyLinks.awaitingApproval
+							? t.postJob.waitingForAgency
+							: t.postJob.linkAgencyBeforePosting}
+					</p>
+					<p className="iz-tiny iz-muted mt-1">
+						{agencyLinks.awaitingApproval
+							? "You have asked to work with an agency and they have not decided yet. Once one accepts, you can post shifts to them."
+							: "Shifts are filled by PR agencies, so this venue needs at least one. Add one in Settings — they choose whether to accept."}
+					</p>
+					{!agencyLinks.awaitingApproval && (
+						<Link
+							to="/outlet/settings"
+							className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
+						>
+							{t.postJob.goToSettingsAgencies}
+						</Link>
+					)}
+				</div>
+			)}
 
 			{showTabs && (
 				<div className="mt-3 flex gap-1 rounded-xl border border-[var(--iz-line)] bg-white/[0.02] p-1">
@@ -641,7 +761,7 @@ function PostJobPage() {
 							tab === "shifts" ? "iz-btn-primary" : "iz-btn-ghost",
 						)}
 					>
-						PR Shift
+						{t.postJob.prShift}
 					</button>
 
 					<button
@@ -653,7 +773,7 @@ function PostJobPage() {
 							tab === "services" ? "iz-btn-primary" : "iz-btn-ghost",
 						)}
 					>
-						<Sparkles className="h-3.5 w-3.5" /> Services
+						<Sparkles className="h-3.5 w-3.5" /> {t.postJob.services}
 					</button>
 				</div>
 			)}
@@ -662,8 +782,7 @@ function PostJobPage() {
 				<section className="pt-1">
 					{viewOnly && (
 						<p className="iz-tiny iz-muted mt-1 mb-3 rounded-xl border border-dashed border-[var(--iz-line)] px-3 py-2">
-							Read-only. You can see how shifts are posted at this venue, but
-							only an Owner, Guarantor or Ops Head can post one.
+							{t.postJob.readOnlyNotice}
 						</p>
 					)}
 					{/*
@@ -684,7 +803,7 @@ function PostJobPage() {
 								<DraftShiftEditor
 									shift={composer}
 									onChange={(patch) => setComposer((c) => ({ ...c, ...patch }))}
-									title="Shift details"
+									title={t.postJob.shiftDetails}
 									shiftIndex={1}
 									shiftTotal={Math.max(1, draftShifts.length + 1)}
 									namedPrsOnDate={composerNamedPrsOnDate}
@@ -706,7 +825,7 @@ function PostJobPage() {
 												{draftShifts.length !== 1 ? "s" : ""}
 											</span>
 										</div>
-
+										=======
 										<div className="mt-3 flex flex-col gap-4">
 											{draftShifts.map((s, i) =>
 												editingShiftId === s.id ? (
@@ -716,7 +835,7 @@ function PostJobPage() {
 														onChange={(patch) => updateDraftShift(s.id, patch)}
 														onRemove={() => removeDraftShift(s.id)}
 														showRemove
-														title="Shift details"
+														title={t.postJob.shiftDetails}
 														shiftIndex={i + 1}
 														shiftTotal={draftShifts.length}
 														onDone={() => setEditingShiftId(null)}
@@ -733,7 +852,7 @@ function PostJobPage() {
 													<DraftShiftSummary
 														key={s.id}
 														shift={s}
-														title={`Shift ${i + 1}`}
+														title={fill(t.postJob.shiftN, { n: i + 1 })}
 														onEdit={() => setEditingShiftId(s.id)}
 														onRemove={() => removeDraftShift(s.id)}
 														showRemove
@@ -746,26 +865,63 @@ function PostJobPage() {
 								)}
 							</div>
 
-							{/* Not merely disabled — a post/cart bar offers an action this
-						    role does not have, so it is absent rather than greyed out. */}
-							{!viewOnly && (
-								<aside className="iz-post-job-layout__aside">
+							{/* NARROW SCREENS ONLY. The aside below is `display:none` under
+							    900px, so without this copy the picker would vanish on a phone
+							    and the venue would post to every agency without being asked.
+							    Both copies are driven by the same state; only one is ever
+							    visible. Real sessions only — a demo session has no links. */}
+							{backed && (
+								<div className="iz-post-job-sendto--mobile iz-post-job-summary-card mt-3">
+									<p className="iz-post-job-summary-card__title">
+										{t.postJob.sendTo}
+									</p>
+									<PostJobAgencyPicker
+										value={postAgencyIds}
+										onChange={setPostAgencyIds}
+									/>
+								</div>
+							)}
+							{/* `iz-post-job-layout` is a two-column grid, so this aside MUST be
+							    the second child — an extra element between it and the composer
+							    takes the right column and pushes the summary down into the left
+							    one. "Send to" therefore lives INSIDE the aside, above the
+							    summary, rather than beside it. */}
+							<aside className="iz-post-job-layout__aside">
+								{backed && (
+									/* The SAME card as the Summary below it, reusing that component's
+									   own classes rather than a hand-rolled border, so the two cannot
+									   drift apart. */
+									<div className="iz-post-job-summary-card mb-3">
+										<p className="iz-post-job-summary-card__title">
+											{t.postJob.sendTo}
+										</p>
+										<PostJobAgencyPicker
+											value={postAgencyIds}
+											onChange={setPostAgencyIds}
+										/>
+									</div>
+								)}
+								{!viewOnly && (
 									<PostJobActionPanel
 										headcount={totalHeadcount}
 										cost={totalCost}
 										shiftCount={shiftCountForPost}
 										onAddShift={addDraftShift}
 										onSubmit={submitNew}
-										submitDisabled={totalHeadcount <= 0 || isPosting}
+										submitDisabled={
+											totalHeadcount <= 0 ||
+											isPosting ||
+											(backed && !agencyLinks.canPost)
+										}
 									/>
-								</aside>
-							)}
+								)}
+							</aside>
 						</div>
 
 						{!viewOnly && (
 							<div
 								className="iz-post-job-mobile-dock"
-								aria-label="Shift summary and post actions"
+								aria-label={t.postJob.shiftSummaryActions}
 							>
 								<PostJobActionPanel
 									headcount={totalHeadcount}
@@ -773,7 +929,9 @@ function PostJobPage() {
 									shiftCount={shiftCountForPost}
 									onAddShift={addDraftShift}
 									onSubmit={submitNew}
-									submitDisabled={totalHeadcount <= 0}
+									submitDisabled={
+										totalHeadcount <= 0 || (backed && !agencyLinks.canPost)
+									}
 									compact
 								/>
 							</div>

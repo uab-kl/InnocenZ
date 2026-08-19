@@ -19,6 +19,7 @@ import {
 	SheetTitle,
 } from "@/components/ui/sheet";
 import { Switch } from "@/components/ui/switch";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { getErrorMessage } from "@/lib/utils";
 import { type CreateAdminInput, CreateAdminSchema } from "@/services/admin";
 
@@ -37,6 +38,7 @@ export function CreateAdminSheet({
 	isSubmitting,
 	error,
 }: CreateAdminSheetProps) {
+	const { t } = usePortalLocale();
 	const form = useForm({
 		defaultValues: {
 			email: "",
@@ -71,10 +73,10 @@ export function CreateAdminSheet({
 							<UserPlus className="h-5 w-5" />
 						</div>
 						<div className="space-y-1">
-							<SheetTitle className="text-xl">Create Admin User</SheetTitle>
-							<SheetDescription>
-								Add a new administrator to the admin table.
-							</SheetDescription>
+							<SheetTitle className="text-xl">
+								{t.admin.createAdminUser}
+							</SheetTitle>
+							<SheetDescription>{t.admin.createAdminHint}</SheetDescription>
 						</div>
 					</div>
 				</SheetHeader>
@@ -96,11 +98,11 @@ export function CreateAdminSheet({
 								return (
 									<Field data-invalid={isInvalid}>
 										<FieldLabel htmlFor="create-admin-display-name">
-											Display Name
+											{t.admin.colDisplayName}
 										</FieldLabel>
 										<Input
 											id="create-admin-display-name"
-											placeholder="Enter display name"
+											placeholder={t.admin.enterDisplayName}
 											value={field.state.value}
 											onBlur={field.handleBlur}
 											onChange={(event) =>
@@ -111,7 +113,7 @@ export function CreateAdminSheet({
 										/>
 										{isInvalid && (
 											<FieldError
-												errors={[{ message: "Display name is required" }]}
+												errors={[{ message: t.admin.displayNameRequired }]}
 											/>
 										)}
 									</Field>
@@ -128,7 +130,9 @@ export function CreateAdminSheet({
 
 								return (
 									<Field data-invalid={isInvalid}>
-										<FieldLabel htmlFor="create-admin-email">Email</FieldLabel>
+										<FieldLabel htmlFor="create-admin-email">
+											{t.admin.colEmail}
+										</FieldLabel>
 										<Input
 											id="create-admin-email"
 											type="email"
@@ -143,9 +147,7 @@ export function CreateAdminSheet({
 										/>
 										{isInvalid && (
 											<FieldError
-												errors={[
-													{ message: "Please enter a valid email address" },
-												]}
+												errors={[{ message: t.admin.invalidEmail }]}
 											/>
 										)}
 									</Field>
@@ -163,11 +165,11 @@ export function CreateAdminSheet({
 								return (
 									<Field data-invalid={isInvalid}>
 										<FieldLabel htmlFor="create-admin-password">
-											Password
+											{t.admin.password}
 										</FieldLabel>
 										<PasswordInput
 											id="create-admin-password"
-											placeholder="Minimum 6 characters"
+											placeholder={t.admin.minSixChars}
 											value={field.state.value}
 											onBlur={field.handleBlur}
 											onChange={(event) =>
@@ -179,9 +181,7 @@ export function CreateAdminSheet({
 										/>
 										{isInvalid && (
 											<FieldError
-												errors={[
-													{ message: "Password must be at least 6 characters" },
-												]}
+												errors={[{ message: t.admin.passwordMinSix }]}
 											/>
 										)}
 									</Field>
@@ -195,7 +195,7 @@ export function CreateAdminSheet({
 									<div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
 										<div className="space-y-1">
 											<FieldLabel htmlFor="create-admin-status">
-												Active Status
+												{t.admin.activeStatus}
 											</FieldLabel>
 											<p className="text-sm text-muted-foreground">
 												Set account as active or inactive.
@@ -208,7 +208,7 @@ export function CreateAdminSheet({
 												field.handleChange(checked ? "active" : "inactive")
 											}
 											disabled={isSubmitting}
-											aria-label="Toggle admin active status"
+											aria-label={t.admin.toggleAdminActive}
 										/>
 									</div>
 								</Field>
@@ -233,16 +233,16 @@ export function CreateAdminSheet({
 							onClick={() => handleOpenChange(false)}
 							disabled={isSubmitting}
 						>
-							Cancel
+							{t.admin.cancel}
 						</Button>
 						<Button type="submit" disabled={isSubmitting}>
 							{isSubmitting ? (
 								<>
 									<Loader2 className="mr-2 h-4 w-4 animate-spin" />
-									Creating...
+									{t.admin.creating}
 								</>
 							) : (
-								"Create Admin"
+								t.admin.createAdmin
 							)}
 						</Button>
 					</SheetFooter>

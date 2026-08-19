@@ -5,7 +5,7 @@ import { AgencyPrRepository } from './agency-pr.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { UserRepositoryClass } from '@/features/user/user.repository';
 import { UserProfileRepositoryClass } from '@/features/user/user-profile/user-profile.repository';
-import { notify } from '@/features/notification/notify';
+import { notify, notifyMany } from '@/features/notification/notify';
 import { Error } from '@/error/index';
 import { paramId } from '@/util/params';
 import { getActor } from '@/util/actor';
@@ -16,6 +16,7 @@ import {
   UpdateAgencySchema,
   AddAgencyMemberSchema,
   UpdateAgencyMemberSchema,
+  BroadcastToPrsSchema,
 } from '@/schema/agency.schema';
 import { AgencyFilter, AgencyUserSubRole, AgencyStatus, agencyUserSubRoleValues } from './agency.model';
 import { AgencyPrApproveStatus, agencyPrApproveStatusValues } from '@/features/pr-personnel/pr.model';
@@ -135,6 +136,93 @@ export class AgencyControllerClass {
    * Approvals — accept / decline a PR membership (`agency_pr`), not a `pr` row.
    * Body: `{ approveStatus: 'approved' | 'rejected', rejectReason?: string }`.
    */
+  /**
+   * POST /agency/:id/broadcast — send one notice to several of this agency's PRs.
+   *
+   * Recipients are named in the body, which is the whole reason this lives here
+   * and not on the notification router: that router promises in its own header
+   * that no route on it accepts a user id, and scopes everything by
+   * `req.user.id`. Taking recipients there would quietly retract that promise.
+   * Here the ids are checked against `:id`, which the scope guard has already
+   * proved the caller owns.
+   *
+   * All-or-nothing on membership. Addressing a PR who is not on the roster is a
+   * mistake worth reporting, not worth partially honouring: a caller who sees
+   * "sent" while two of five recipients were dropped has been told something
+   * false about who has been contacted.
+   */
+  async broadcastToPrs(req: Request, res: Response) {
+    try {
+      const agencyId = paramId(req.params.id);
+      if (!agencyId) {
+        return res
+          .status(400)
+          .json({ success: false, message: 'Agency id is required', data: null });
+      }
+
+      const agency = await this.agencyRepository.getById(agencyId);
+      if (!agency) {
+        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      }
+
+      const parsed = BroadcastToPrsSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res
+          .status(400)
+          .json({ success: false, message: parsed.error.issues[0]?.message, data: null });
+      }
+      const { prIds, title, body } = parsed.data;
+
+      const recipients = await this.agencyPrRepository.listApprovedUserIdsIn(agencyId, prIds);
+      const requested = new Set(prIds).size;
+      if (recipients.length !== requested) {
+        // Counts only — naming which ids failed would confirm to a prober which
+        // user ids are real, and the caller picked these off a list we gave them.
+        return res.status(403).json({
+          success: false,
+          message: `${requested - recipients.length} of ${requested} selected PRs are not approved members of this agency`,
+          data: null,
+        });
+      }
+
+      const actor = getActor(req);
+      const written = await notifyMany(recipients, {
+        kind: 'agency_broadcast',
+        title,
+        body,
+        // Attribution only — a broadcast has no object to open. See the kind's
+        // note in notification.model.ts.
+        payload: { agencyId },
+        actor,
+      });
+
+      // notify() swallows its own errors by design, so a short write is the only
+      // signal that anything went wrong. Reporting it beats a blanket "sent" —
+      // this endpoint exists because the UI already lied about delivery once.
+      if (written !== recipients.length) {
+        logger.error(
+          `[AgencyController.broadcastToPrs] agency ${agencyId}: wrote ${written} of ${recipients.length} notifications`,
+        );
+        return res.status(500).json({
+          success: false,
+          message: `Only ${written} of ${recipients.length} PRs were notified — please retry`,
+          data: { sent: written, requested: recipients.length },
+        });
+      }
+
+      return res.status(201).json({
+        success: true,
+        message: 'OK',
+        data: { sent: written, requested: recipients.length },
+      });
+    } catch (error) {
+      logger.error('[AgencyController.broadcastToPrs] Error:', error);
+      return res
+        .status(500)
+        .json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });
+    }
+  }
+
   async setAgencyPrApproval(req: Request, res: Response) {
     try {
       const agencyId = paramId(req.params.id);

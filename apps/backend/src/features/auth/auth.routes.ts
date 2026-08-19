@@ -4,10 +4,18 @@ import { uploadRegisterProfileImage } from '@/middlewares/upload-profile-image';
 import authenticateJWT from '@/middlewares/authenticate-jwt.js';
 import optionalAuthenticateJWT from '@/middlewares/optional-authenticate-jwt.js';
 import { env } from '@/env.js';
+import {
+  forgotPasswordLimiter,
+  forgotPasswordPerEmailLimiter,
+  loginLimiter,
+  otpSendLimiter,
+  otpSendPerPhoneLimiter,
+  resetPasswordLimiter,
+} from '@/middlewares/rate-limit.js';
 
 const router = Router();
 
-router.post('/login', authController.login.bind(authController));
+router.post('/login', loginLimiter, authController.login.bind(authController));
 
 router.get(
   '/org-member-invite',
@@ -117,19 +125,47 @@ router.get('/signup-packages', async (req, res) => {
  */
 router.post(
   '/otp/send',
+  otpSendLimiter,
+  otpSendPerPhoneLimiter,
   optionalAuthenticateJWT,
   otpController.send.bind(otpController),
 );
 router.post('/otp/verify', otpController.verify.bind(otpController));
 
-router.post('/forgot-password', authController.forgotPassword.bind(authController));
-router.post('/reset-password', authController.resetPassword.bind(authController));
+/**
+ * Rate limits run BEFORE the handler, so a throttled caller never reaches the
+ * account lookup. That ordering is what keeps the neutral "if that email is
+ * registered…" answer meaningful: the limiter must not become the side channel
+ * that the response body carefully avoids being.
+ */
+router.post(
+  '/forgot-password',
+  forgotPasswordLimiter,
+  forgotPasswordPerEmailLimiter,
+  authController.forgotPassword.bind(authController),
+);
+router.post(
+  '/reset-password',
+  resetPasswordLimiter,
+  authController.resetPassword.bind(authController),
+);
 /** PR mobile: reset password with WhatsApp OTP receipt (purpose=forgot_password). */
 router.post(
   '/password/reset-otp',
+  resetPasswordLimiter,
   authController.resetPasswordWithOtp.bind(authController),
 );
 router.get('/me', authenticateJWT, authController.me.bind(authController));
+/**
+ * Remember the caller's UI language, so the pick survives sign-out and follows
+ * the account to another device. Takes no user id — the controller reads it off
+ * the verified token — so this is self-only and needs no role guard.
+ */
+router.patch(
+  '/me/locale',
+  authenticateJWT,
+  authController.updateLocale.bind(authController),
+);
 router.post(
   '/password/change',
   authenticateJWT,

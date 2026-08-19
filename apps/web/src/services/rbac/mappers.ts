@@ -92,8 +92,7 @@ export function mapModule(
 		moduleId: module.id,
 		moduleName: module.moduleName,
 		moduleKey:
-			module.moduleKey ??
-			module.moduleName.toLowerCase().replace(/\s+/g, "_"),
+			module.moduleKey ?? module.moduleName.toLowerCase().replace(/\s+/g, "_"),
 		portalId: module.portalId ?? null,
 		portalCode: fromMap,
 		status: module.status as RbacModule["status"],

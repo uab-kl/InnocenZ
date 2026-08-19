@@ -524,9 +524,28 @@
 	transition: 0.18s;
 	color: #fff;
 	letter-spacing: 0.2px;
+	/* Chinese has no word boundaries, so a label may break between ANY two
+	   characters: "驳回" split into two stacked lines inside a narrow Reject
+	   button while the English "Reject" — one unbreakable word — did not. Every
+	   short CJK label on a fixed-width button has the same problem, so it is
+	   fixed once here rather than per button. */
+	white-space: nowrap;
 }
 .iz-btn:active {
 	transform: scale(0.975);
+}
+/*
+ * `.iz-btn` carried no disabled state at all, so a button mid-request looked
+ * exactly like one waiting to be pressed — the label changed to "Sending…" and
+ * nothing else did. The shadow goes too: the gold glow reads as "press me".
+ */
+.iz-btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+	box-shadow: none;
+}
+.iz-btn:disabled:active {
+	transform: none;
 }
 .iz-btn-primary {
 	background: var(--iz-grad-accent);
@@ -4963,7 +4982,11 @@
 }
 @media (min-width: 900px) {
 	.iz-post-job-layout {
-		grid-template-columns: minmax(0, 1fr) 260px;
+		/* 300, not 260: the "Send to" card lists agency names in this column, and
+		   at 260 a real one ("Why We Met Agency") truncated to "Why We Met Ag…" —
+		   an operator choosing between two agencies has to be able to read which
+		   is which. The extra 40px comes out of the composer, which is fluid. */
+		grid-template-columns: minmax(0, 1fr) 300px;
 	}
 }
 .iz-post-job-layout__aside {
@@ -4991,12 +5014,29 @@
 	padding: 0;
 	border-radius: 0;
 }
+/* Post Job "Send to", narrow-screen copy.
+ *
+ * The desktop control lives inside `.iz-post-job-layout__aside`, above the
+ * summary. That aside is hidden below 900px, so this second copy carries the
+ * picker on phones. Both are driven by the same state and exactly one is ever
+ * visible — the breakpoint below is the SAME 900px the aside uses, and the two
+ * must stay in step or the picker either disappears or renders twice.
+ */
+.iz-post-job-sendto--mobile {
+	display: none;
+}
+
 .iz-post-job-mobile-dock {
 	display: none;
 }
 @media (max-width: 899px) {
 	.iz-post-job-layout__aside {
 		display: none;
+	}
+	/* …so the picker's narrow-screen copy takes over here. Same breakpoint as
+	   the aside above, deliberately — see the class definition. */
+	.iz-post-job-sendto--mobile {
+		display: block;
 	}
 	.iz-post-job-layout__main {
 		padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px));
@@ -10722,6 +10762,54 @@ button.iz-pr-offer-row:hover {
 	box-shadow: 0 0 0 3px rgba(183, 156, 232, 0.12);
 }
 
+/*
+ * Multi-line input, matching `.iz-field input` exactly — same surface, radius,
+ * padding, type and focus ring.
+ *
+ * Opt-in by class rather than a bare `.iz-field textarea` element selector:
+ * eleven components already hand-roll a textarea in Tailwind utilities, and a
+ * class+element rule (0,1,1) outranks a utility class (0,1,0), so styling the
+ * element would have silently restyled all of them. Adopt it by deleting the
+ * local utilities, one component at a time.
+ */
+.iz-textarea {
+	width: 100%;
+	background: rgba(255, 255, 255, 0.03);
+	border: 1px solid var(--iz-line2);
+	border-radius: 13px;
+	padding: 13px;
+	color: var(--iz-txt);
+	font-size: 15px;
+	font-family: "Manrope", sans-serif;
+	line-height: 1.55;
+	/* Vertical only — horizontal resize escapes the sheet. */
+	resize: vertical;
+	min-height: 104px;
+	/* Named properties, never `transition: all`: only these two ever change. */
+	transition-property: border-color, box-shadow;
+	transition-duration: 0.15s;
+	transition-timing-function: ease-out;
+}
+.iz-textarea::placeholder {
+	color: var(--iz-muted);
+}
+.iz-textarea:focus {
+	outline: none;
+	border-color: var(--iz-gold-d);
+	box-shadow: 0 0 0 3px rgba(183, 156, 232, 0.12);
+}
+.iz-textarea:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+.iz-textarea--invalid {
+	border-color: var(--iz-red);
+}
+.iz-textarea--invalid:focus {
+	border-color: var(--iz-red);
+	box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.14);
+}
+
 .iz-divider {
 	height: 1px;
 	background: var(--iz-line);
@@ -12924,6 +13012,13 @@ button.iz-pr-offer-row:hover {
 	font-weight: 700;
 	color: var(--iz-amber);
 }
+/* The met-demand counterpart of __stats-open; only one of the two ever shows. */
+.iz-outlet-detail-group-head__stats-filled {
+	margin-left: 6px;
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--iz-green);
+}
 .iz-outlet-detail-shift-list {
 	display: flex;
 	flex-direction: column;
@@ -13067,6 +13162,13 @@ button.iz-pr-offer-row:hover {
 	font-size: 15px;
 	font-weight: 700;
 	color: var(--iz-amber);
+}
+/* Same slot as __open, opposite news — amber means "still needs people", green
+   means the demand is met. They never render together. */
+.iz-outlet-detail-metric__filled {
+	font-size: 15px;
+	font-weight: 700;
+	color: var(--iz-green);
 }
 .iz-outlet-detail-shift-card__preview {
 	margin-top: 10px;

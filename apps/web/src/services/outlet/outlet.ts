@@ -20,7 +20,7 @@ export async function fetchOutlets(
 	const queryString = buildQueryParams({
 		name: params.name,
 		status: params.status,
-		onboardedByAgencyId: params.onboardedByAgencyId,
+		linkedToAgencyId: params.linkedToAgencyId,
 		page: params.page,
 		pageSize: params.pageSize,
 	});
@@ -76,28 +76,6 @@ export async function updateOutlet(
 	const response = await client.put<OutletApiResponse>(
 		`/outlet/${id}`,
 		payload,
-	);
-	return response.data;
-}
-
-/**
- * Admin-only: link the venue to the agency that fulfils its PR requests
- * (`PATCH /outlet/:id/onboarding-agency`). Pass `null` to unlink.
- *
- * This is not part of `updateOutlet` on purpose — the server refuses
- * `onboardedByAgencyId` on `PUT /outlet/:id` because the venue's own owner can
- * reach that route. Until an outlet is linked, every Post Job attempt fails
- * with "This outlet has no onboarding agency to request PR from".
- */
-export async function setOutletOnboardingAgency(
-	id: string,
-	agencyId: string | null,
-	onRefreshFail: () => void,
-): Promise<OutletApiResponse> {
-	const client = getClient(onRefreshFail);
-	const response = await client.patch<OutletApiResponse>(
-		`/outlet/${id}/onboarding-agency`,
-		{ agencyId },
 	);
 	return response.data;
 }

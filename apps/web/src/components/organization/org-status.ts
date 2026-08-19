@@ -30,9 +30,7 @@ export const orgStatusBadgeColors: Record<OrgStatus, string> = {
 };
 
 /** True when the organisation is awaiting admin approval (login OK, portal limited). */
-export function isOrgPendingReview(
-	status: string | null | undefined,
-): boolean {
+export function isOrgPendingReview(status: string | null | undefined): boolean {
 	return (status ?? "").toLowerCase() === "pending_review";
 }
 

@@ -2,6 +2,8 @@ import { snapTierWage } from "@agency-portal/lib/agency-demo";
 import { cn } from "@agency-portal/lib/utils";
 import { Minus, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /** Display tier table money — comma thousands from 1,000 upward. */
 export function formatTierTableNumber(n: number): string {
@@ -236,6 +238,7 @@ export function TierPctStepper({
 	min?: number;
 	max?: number;
 }) {
+	const { t } = usePortalLocale();
 	const dec = () => onChange(Math.max(min, value - step));
 	const inc = () => onChange(Math.min(max, value + step));
 
@@ -245,7 +248,7 @@ export function TierPctStepper({
 				kind="dec"
 				onClick={dec}
 				disabled={disabled || value <= min}
-				label="Decrease"
+				label={t.workspace.decrease}
 			/>
 			<TierPctInput value={value} onChange={onChange} disabled={disabled} />
 			<span className="text-[9px] font-semibold text-[var(--iz-muted)]">%</span>
@@ -253,7 +256,7 @@ export function TierPctStepper({
 				kind="inc"
 				onClick={inc}
 				disabled={disabled || value >= max}
-				label="Increase"
+				label={t.workspace.increase}
 			/>
 		</div>
 	);
@@ -272,6 +275,7 @@ export function TierCountStepper({
 	max?: number;
 	min?: number;
 }) {
+	const { t } = usePortalLocale();
 	const dec = () => onChange(Math.max(min, value - 1));
 	const inc = () =>
 		onChange(max !== undefined ? Math.min(max, value + 1) : value + 1);
@@ -282,7 +286,7 @@ export function TierCountStepper({
 				kind="dec"
 				onClick={dec}
 				disabled={disabled || value <= min}
-				label="Decrease"
+				label={t.workspace.decrease}
 			/>
 			<TierCountInput
 				value={value}
@@ -294,7 +298,7 @@ export function TierCountStepper({
 				kind="inc"
 				onClick={inc}
 				disabled={disabled || (max !== undefined && value >= max)}
-				label="Increase"
+				label={t.workspace.increase}
 			/>
 		</div>
 	);
@@ -439,20 +443,24 @@ export function TierRatesTableLegend({
 }: {
 	standardShiftHours?: number | null;
 } = {}) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="border-t border-[var(--iz-line)] px-2 py-1.5 text-[10px] leading-snug text-[var(--iz-muted2)]">
-			<span className="text-[var(--iz-gold-l)]/90">Highlighted cells</span> are
-			editable · tap to change ·{" "}
-			<span className="text-[var(--iz-muted)]">dimmed cells</span> are read-only
+			<span className="text-[var(--iz-gold-l)]/90">
+				{t.workspace.highlightedCells}
+			</span>
+			{t.workspace.areEditableTapToChange}
+			<span className="text-[var(--iz-muted)]">{t.workspace.dimmedCells}</span>
+			{t.workspace.areReadOnly}
 			<div className="mt-1">
-				<span className="text-[var(--iz-muted)]">RM/HR</span> and{" "}
-				<span className="text-[var(--iz-muted)]">OT/HR</span> are worked out
-				from the daily wage
+				<span className="text-[var(--iz-muted)]">{t.outletDetail.colRmHr}</span>
+				{t.workspace.derivedAnd}
+				<span className="text-[var(--iz-muted)]">{t.outletDetail.colOtHr}</span>
+				{t.workspace.workedOutFromDailyWage}
 				{standardShiftHours
-					? ` over a ${standardShiftHours}-hour standard shift`
-					: " over each tier's standard shift"}{" "}
-				— OT is 1.5× the hourly rate. Both follow the shift you actually book: a
-				shorter shift makes every hour, and every overtime hour, worth more.
+					? fill(t.workspace.overStandardShift, { n: standardShiftHours })
+					: t.workspace.overEachTierShift}
+				{t.workspace.otRuleTail}
 			</div>
 		</div>
 	);

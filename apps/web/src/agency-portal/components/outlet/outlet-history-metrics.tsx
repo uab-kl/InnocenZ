@@ -8,6 +8,8 @@ import {
 import { shiftHistoryTotalReceived } from "@agency-portal/lib/shift-history-amounts";
 import { cn } from "@agency-portal/lib/utils";
 import { type ReactNode, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const METRIC_BY_ID = Object.fromEntries(
 	SHIFT_METRIC_DEFS.map((m) => [m.id, m]),
@@ -18,10 +20,11 @@ export { SHIFT_METRIC_DEFS };
 
 export function shiftMetricLabelText(
 	kind: ShiftMetricKind,
+	t: PortalTranslations,
 	total?: boolean,
 ): string {
-	const base = METRIC_BY_ID[kind].label;
-	return total ? `Total ${base.toLowerCase()}` : base;
+	const def = METRIC_BY_ID[kind];
+	return total ? def.totalLabel(t) : def.label(t);
 }
 
 /** Icon + word label — e.g. wine glass + “Received”. */
@@ -36,8 +39,10 @@ export function ShiftMetricIconLabel({
 	className?: string;
 	size?: "md" | "lg";
 }) {
-	const { Icon, label } = METRIC_BY_ID[kind];
-	const text = total ? `Total ${label.toLowerCase()}` : label;
+	const { t } = usePortalLocale();
+	const def = METRIC_BY_ID[kind];
+	const { Icon } = def;
+	const text = total ? def.totalLabel(t) : def.label(t);
 
 	return (
 		<span
@@ -127,6 +132,7 @@ export function ShiftTxnMetricsRow({
 
 /** Collapsible dropdown — explains each icon + label (all roles). */
 export function MetricIconGuide({ className }: { className?: string }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 
 	return (
@@ -150,7 +156,7 @@ export function MetricIconGuide({ className }: { className?: string }) {
 					aria-hidden
 				/>
 				<span className="iz-outlet-hist-metrics-guide__trigger-text">
-					Icon guide
+					{t.common.iconGuide}
 				</span>
 				<ChevronDown
 					className={cn(
@@ -168,7 +174,7 @@ export function MetricIconGuide({ className }: { className?: string }) {
 				hidden={!open}
 			>
 				<p className="iz-outlet-hist-metrics-guide__title">
-					What these icons mean
+					{t.history.whatTheseIconsMean}
 				</p>
 				<ul className="iz-outlet-hist-metrics-guide__list">
 					{SHIFT_METRIC_DEFS.map(({ id, Icon, label, hint }) => (
@@ -184,9 +190,9 @@ export function MetricIconGuide({ className }: { className?: string }) {
 									strokeWidth={2.1}
 									aria-hidden
 								/>
-								<span className="iz-shift-metric-label__text">{label}</span>
+								<span className="iz-shift-metric-label__text">{label(t)}</span>
 							</span>
-							<p className="iz-outlet-hist-metrics-guide__hint">{hint}</p>
+							<p className="iz-outlet-hist-metrics-guide__hint">{hint(t)}</p>
 						</li>
 					))}
 				</ul>

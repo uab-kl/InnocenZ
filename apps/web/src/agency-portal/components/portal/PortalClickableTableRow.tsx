@@ -22,9 +22,17 @@ type RowTarget =
 	  }
 	// Mirrors the Approvals route's own `Tab` union — a value missing here is a
 	// row that cannot deep-link to its tab, which is how MC/leave stayed absent.
+	//
+	// ⚠️ A HAND-COPIED FACT: this list and `Tab` in routes/agency/pending.tsx must
+	// be extended together. Adding a tab there and not here does not fail loudly —
+	// it fails only at the call site that links to the new tab, so the tab works
+	// everywhere except from the Today hub, which is the one place anyone would
+	// notice it was missing.
 	| {
 			to: "/agency/pending";
-			search?: { tab?: "signups" | "cutlost" | "leaves" };
+			search?: {
+				tab?: "signups" | "cutlost" | "leaves" | "outlet-linking";
+			};
 	  }
 	| { to: "/agency/roster" };
 

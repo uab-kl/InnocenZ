@@ -29,14 +29,19 @@ export const EMPTY_ORG_ADDRESS: OrgAddress = {
 	stateCode: "",
 };
 
-export function orgAddressFromRow(row: {
-	addressLine1?: string | null;
-	addressLine2?: string | null;
-	city?: string | null;
-	postcode?: string | null;
-	state?: string | null;
-	country?: string | null;
-} | null | undefined): OrgAddress {
+export function orgAddressFromRow(
+	row:
+		| {
+				addressLine1?: string | null;
+				addressLine2?: string | null;
+				city?: string | null;
+				postcode?: string | null;
+				state?: string | null;
+				country?: string | null;
+		  }
+		| null
+		| undefined,
+): OrgAddress {
 	if (!row) return { ...EMPTY_ORG_ADDRESS };
 	const state = row.state?.trim() ?? "";
 	return {
@@ -79,7 +84,9 @@ export function resolveOrgAddressForSave(a: OrgAddress): {
 }
 
 /** Display helper — join non-empty parts with commas. */
-export function joinOrgAddress(a: Partial<OrgAddress> | null | undefined): string {
+export function joinOrgAddress(
+	a: Partial<OrgAddress> | null | undefined,
+): string {
 	if (!a) return "";
 	return [
 		a.addressLine1,

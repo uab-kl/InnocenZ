@@ -316,11 +316,7 @@ function FlowDiagram() {
 					</circle>
 				))}
 				{Array.from({ length: 2 }).map((_, i) => (
-					<circle
-						key={`v${i}`}
-						r="2.5"
-						fill="#b67cff"
-					>
+					<circle key={`v${i}`} r="2.5" fill="#b67cff">
 						<animateMotion
 							dur="5s"
 							repeatCount="indefinite"

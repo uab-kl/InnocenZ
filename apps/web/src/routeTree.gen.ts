@@ -13,12 +13,14 @@ import { Route as IndexRouteImport } from './routes/index'
 import { Route as AdminRouteRouteImport } from './routes/admin/route'
 import { Route as AgencyRouteRouteImport } from './routes/agency/route'
 import { Route as DeleteAccountRouteImport } from './routes/delete-account'
+import { Route as ForgotPasswordRouteImport } from './routes/forgot-password'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as NoAccessRouteImport } from './routes/no-access'
 import { Route as NotFoundRouteImport } from './routes/not-found'
 import { Route as OutletRouteRouteImport } from './routes/outlet/route'
 import { Route as PolicyRouteImport } from './routes/policy'
 import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as SignupRouteImport } from './routes/signup'
 import { Route as AdminAuditLogRouteRouteImport } from './routes/admin/audit-log/route'
 import { Route as AdminBusinessRouteRouteImport } from './routes/admin/business/route'
@@ -92,6 +94,11 @@ const DeleteAccountRoute = DeleteAccountRouteImport.update({
   path: '/delete-account',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ForgotPasswordRoute = ForgotPasswordRouteImport.update({
+  id: '/forgot-password',
+  path: '/forgot-password',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
@@ -120,6 +127,11 @@ const PolicyRoute = PolicyRouteImport.update({
 const PrivacyRoute = PrivacyRouteImport.update({
   id: '/privacy',
   path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ResetPasswordRoute = ResetPasswordRouteImport.update({
+  id: '/reset-password',
+  path: '/reset-password',
   getParentRoute: () => rootRouteImport,
 } as any)
 const SignupRoute = SignupRouteImport.update({
@@ -396,11 +408,13 @@ export interface FileRoutesByFullPath {
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
   '/delete-account': typeof DeleteAccountRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
   '/policy': typeof PolicyRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
@@ -458,11 +472,13 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/admin': typeof AdminRouteRouteWithChildren
   '/delete-account': typeof DeleteAccountRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
   '/policy': typeof PolicyRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
   '/admin/rbac': typeof AdminRbacRouteRouteWithChildren
@@ -522,11 +538,13 @@ export interface FileRoutesById {
   '/agency': typeof AgencyRouteRouteWithChildren
   '/outlet': typeof OutletRouteRouteWithChildren
   '/delete-account': typeof DeleteAccountRoute
+  '/forgot-password': typeof ForgotPasswordRoute
   '/login': typeof LoginRoute
   '/no-access': typeof NoAccessRoute
   '/not-found': typeof NotFoundRoute
   '/policy': typeof PolicyRoute
   '/privacy': typeof PrivacyRoute
+  '/reset-password': typeof ResetPasswordRoute
   '/signup': typeof SignupRoute
   '/admin/audit-log': typeof AdminAuditLogRouteRouteWithChildren
   '/admin/business': typeof AdminBusinessRouteRouteWithChildren
@@ -588,11 +606,13 @@ export interface FileRouteTypes {
     | '/agency'
     | '/outlet'
     | '/delete-account'
+    | '/forgot-password'
     | '/login'
     | '/no-access'
     | '/not-found'
     | '/policy'
     | '/privacy'
+    | '/reset-password'
     | '/signup'
     | '/admin/audit-log'
     | '/admin/business'
@@ -650,11 +670,13 @@ export interface FileRouteTypes {
     | '/'
     | '/admin'
     | '/delete-account'
+    | '/forgot-password'
     | '/login'
     | '/no-access'
     | '/not-found'
     | '/policy'
     | '/privacy'
+    | '/reset-password'
     | '/signup'
     | '/admin/business'
     | '/admin/rbac'
@@ -713,11 +735,13 @@ export interface FileRouteTypes {
     | '/agency'
     | '/outlet'
     | '/delete-account'
+    | '/forgot-password'
     | '/login'
     | '/no-access'
     | '/not-found'
     | '/policy'
     | '/privacy'
+    | '/reset-password'
     | '/signup'
     | '/admin/audit-log'
     | '/admin/business'
@@ -778,11 +802,13 @@ export interface RootRouteChildren {
   AgencyRouteRoute: typeof AgencyRouteRouteWithChildren
   OutletRouteRoute: typeof OutletRouteRouteWithChildren
   DeleteAccountRoute: typeof DeleteAccountRoute
+  ForgotPasswordRoute: typeof ForgotPasswordRoute
   LoginRoute: typeof LoginRoute
   NoAccessRoute: typeof NoAccessRoute
   NotFoundRoute: typeof NotFoundRoute
   PolicyRoute: typeof PolicyRoute
   PrivacyRoute: typeof PrivacyRoute
+  ResetPasswordRoute: typeof ResetPasswordRoute
   SignupRoute: typeof SignupRoute
   InviteOrgMemberRoute: typeof InviteOrgMemberRoute
 }
@@ -815,6 +841,13 @@ declare module '@tanstack/react-router' {
       path: '/delete-account'
       fullPath: '/delete-account'
       preLoaderRoute: typeof DeleteAccountRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/forgot-password': {
+      id: '/forgot-password'
+      path: '/forgot-password'
+      fullPath: '/forgot-password'
+      preLoaderRoute: typeof ForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/login': {
@@ -857,6 +890,13 @@ declare module '@tanstack/react-router' {
       path: '/privacy'
       fullPath: '/privacy'
       preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/reset-password': {
+      id: '/reset-password'
+      path: '/reset-password'
+      fullPath: '/reset-password'
+      preLoaderRoute: typeof ResetPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/signup': {
@@ -1402,11 +1442,13 @@ const rootRouteChildren: RootRouteChildren = {
   AgencyRouteRoute: AgencyRouteRouteWithChildren,
   OutletRouteRoute: OutletRouteRouteWithChildren,
   DeleteAccountRoute: DeleteAccountRoute,
+  ForgotPasswordRoute: ForgotPasswordRoute,
   LoginRoute: LoginRoute,
   NoAccessRoute: NoAccessRoute,
   NotFoundRoute: NotFoundRoute,
   PolicyRoute: PolicyRoute,
   PrivacyRoute: PrivacyRoute,
+  ResetPasswordRoute: ResetPasswordRoute,
   SignupRoute: SignupRoute,
   InviteOrgMemberRoute: InviteOrgMemberRoute,
 }

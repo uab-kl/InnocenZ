@@ -11,6 +11,16 @@
  * Only rows that HAVE a comcard image are touched. A PR who never saved one is
  * already rendering the live collage and needs nothing.
  *
+ * That makes this the MIRROR of `backfill-comcards.ts`, and the two must not be
+ * confused for each other:
+ *
+ *   regenerate-comcards.ts  comcard_image IS NOT NULL  -> rebuild an existing card
+ *   backfill-comcards.ts    comcard_image IS NULL      -> create the missing card
+ *
+ * Reaching for this one to give a PR their FIRST comcard is the mistake the split
+ * exists to prevent: the `isNotNull` filter below skips exactly that population,
+ * silently, and the run reports success having done nothing for them.
+ *
  *   # report only (default) — lists who would be rebuilt, writes nothing
  *   npx tsx --tsconfig tsconfig.json src/scripts/regenerate-comcards.ts
  *
