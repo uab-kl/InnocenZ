@@ -352,6 +352,24 @@ export interface PR {
 }
 
 export interface ShiftRequest {
+	/**
+	 * Seats taken per tier bucket, counted by the server across EVERY agency the
+	 * shift was posted to. The outlet cannot derive this: a tier is a fact about a
+	 * PR's membership of an agency, which is not the outlet's to read. Absent on
+	 * demo shifts, where the local roster is the only truth there is.
+	 */
+	suppliedByTierBucket?: Record<string, number>;
+	/**
+	 * Seats taken in TOTAL, counted by the server across every agency the shift
+	 * was posted to (`GET /shift` → `staffedCount`).
+	 *
+	 * `prs` below is only what the CALLER can see, and `GET /shift-assignment` is
+	 * scoped to the caller's own agency — so on a shift shared between agencies
+	 * (0124) `prs.length` is that agency's contribution, not the shift's staffing.
+	 * Wherever the question is "how full is this shift", read this. Absent on demo
+	 * shifts, where the local roster is the only truth there is.
+	 */
+	suppliedTotal?: number;
 	id: string;
 	outletName: string;
 	date: string;
@@ -749,10 +767,6 @@ interface StoreState {
 	suspendAgencyPr: (prId: string) => void;
 	detachAgencyPr: (prId: string) => void;
 	requestAgencyPrDetach: (prId: string) => void;
-	broadcastAgencyPr: (
-		prIds: string[],
-		payload: { kind: "shift" | "message"; title: string; body: string },
-	) => void;
 	setAgencyPrKpiTier: (prId: string, tier: string) => void;
 	setAgencyPrTrainingTier: (prId: string, tier: string) => void;
 	updateAgencyPrProfile: (
@@ -4716,41 +4730,6 @@ export const useStore = create<StoreState>()(
 				get().toast(
 					`Detach request sent for ${pr.name} — InnocenZ admin will review`,
 					"info",
-				);
-			},
-			broadcastAgencyPr: (prIds, payload) => {
-				if (prIds.length === 0) return;
-				const names = get()
-					.agencyPRs.filter((p) => prIds.includes(p.id))
-					.map((p) => p.name)
-					.join(", ");
-				const verb = payload.kind === "shift" ? "Shift offer" : "Message";
-				const stamp = new Date().toLocaleString("en-MY", {
-					day: "numeric",
-					month: "short",
-					hour: "2-digit",
-					minute: "2-digit",
-				});
-				set((st) => ({
-					prNotifications: [
-						...prIds.map((id, i) => ({
-							id: `n-bcast-${Date.now()}-${i}-${id}`,
-							kind: (payload.kind === "shift"
-								? "assignment"
-								: "application") as PrNotification["kind"],
-							title: payload.title,
-							body: payload.body,
-							at: stamp,
-							read: false,
-							href: "/host",
-							prId: id,
-						})),
-						...st.prNotifications,
-					],
-				}));
-				get().toast(
-					`${verb} broadcast to ${prIds.length} PR${prIds.length !== 1 ? "s" : ""}: ${names}`,
-					"success",
 				);
 			},
 			setAgencyPrKpiTier: (prId, tier) => {

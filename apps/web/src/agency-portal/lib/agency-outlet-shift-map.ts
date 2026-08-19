@@ -21,6 +21,17 @@ import type { ShiftAssignment } from "@/services/shift-assignment";
  * of PRs actually rostered, on a screen whose roster-derived figures were right.
  * Never reintroduce a count taken from `shift.filled`; count assignments.
  *
+ * ⚠️ COUNTING THE ASSIGNMENTS YOU CAN SEE IS NOT COUNTING THE SHIFT.
+ * `GET /shift-assignment` is scoped to the CALLER's agency, and since 0124 one
+ * outlet shift can be posted to several agencies at once. So an agency counting
+ * the rows it can see counts only its OWN contribution: with Atlas filling one
+ * of a 2-slot shift, Atlas read 2/1 and Why We Met read 2/0 off the same shift,
+ * and Why We Met was offered a seat that was already taken. `GET /shift` ships
+ * `staffedCount` / `staffedBuckets` for exactly this — the totals across every
+ * invited agency — and they are what this screen must show. `prs` stays the
+ * caller's own ids: it answers "which of MY people are on this", which is a
+ * different question and the only one those ids can honestly answer.
+ *
  * `destination` is forced to "agency": every backend shift belongs to the
  * signed-in agency and is agency-visible. The backend has no
  * outlet/agency/both destination split — that is a demo-only concept.
@@ -47,7 +58,16 @@ export function outletShiftRequestFromBackend(
 		dateIso: shift.shiftDate,
 		shift: shift.slot ?? shift.eventName ?? "",
 		quantity: shift.quantity,
-		filled: staffing.length,
+		// Everyone on the shift, from every agency — see the warning above. Falls
+		// back to the local count only when the server did not send one: the
+		// backend THROWS rather than returning 0 if that count fails, precisely so
+		// a failure reads as "unknown" here instead of as "nobody is on it".
+		suppliedTotal: shift.staffedCount ?? staffing.length,
+		filled: shift.staffedCount ?? staffing.length,
+		// Seats taken per tier, again across every agency. The agency cannot derive
+		// this for a shift another agency helped fill: a tier is a fact about that
+		// PR's membership of THEIR agency, which this one cannot read.
+		suppliedByTierBucket: shift.staffedBuckets,
 		languages: shift.languages ?? "",
 		event: shift.eventName ?? "",
 		eventKind: shift.eventKind,

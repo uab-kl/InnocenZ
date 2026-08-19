@@ -25,16 +25,11 @@ import {
 import { OutletSection } from "@agency-portal/components/outlet/OutletSection";
 import { useAgencyPrs } from "@agency-portal/hooks/use-agency-prs";
 import { useOutletSwapMutations } from "@agency-portal/hooks/use-outlet-swap-mutations";
-import {
-	assignmentStatusFromRoster,
-	useRosterMutations,
-} from "@agency-portal/hooks/use-roster-mutations";
+import { useRosterMutations } from "@agency-portal/hooks/use-roster-mutations";
 import { useRosterSlots } from "@agency-portal/hooks/use-roster-slots";
 import { useSwapOutletTargets } from "@agency-portal/hooks/use-swap-outlet-targets";
 import {
 	type AgencyRosterSlot,
-	type RosterSlotStatus,
-	rosterPageDisplayStatus,
 	scopeToAgency,
 } from "@agency-portal/lib/agency-demo";
 import { getAgencyIdentity } from "@agency-portal/lib/agency-identity";
@@ -78,19 +73,8 @@ import {
 	Users,
 	X,
 } from "lucide-react";
-import {
-	type FormEvent,
-	useCallback,
-	useEffect,
-	useMemo,
-	useState,
-} from "react";
-
-const EDITABLE_STATUSES: RosterSlotStatus[] = [
-	"scheduled",
-	"on-duty",
-	"unavailable",
-];
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 type ViewMode = "live" | "planning";
 
@@ -101,6 +85,7 @@ export const Route = createFileRoute("/agency/roster")({
 });
 
 function AgencyRoster() {
+	const { t } = usePortalLocale();
 	const navigate = useNavigate({ from: Route.fullPath });
 	const { view } = Route.useSearch();
 	const viewMode: ViewMode = view ?? "live";
@@ -198,27 +183,31 @@ function AgencyRoster() {
 	// as being about swaps rather than about ids. *When a screen changes where its
 	// rows come from, every action keyed by row id has to move with them.*
 	const rosterMut = useRosterMutations();
-	const handleCancelSlot = (slotId: string) => rosterMut.cancel.mutate(slotId);
+	// No handleCancelSlot: the agency does not cancel a venue's shift, and the
+	// button that claimed to only ever wrote `cancelled` to the ASSIGNMENT —
+	// which is what Remove assignment already does honestly. See the note in the
+	// edit sheet.
 	const handleFlagNoShow = (slotId: string) =>
 		rosterMut.flagNoShow.mutate(slotId);
 	const handleFlagLate = (_slotId: string) => {
 		// There is still no backend field for 'late'. Say so, rather than writing
 		// to a store that does not hold this row — which is how it came to look
 		// like a working button in the first place.
-		toast("Late flags are not recorded yet", "warn");
+		toast(t.roster.lateFlagsNotRecorded, "warn");
 	};
-	const handleEditSave = (slotId: string, patch: Partial<AgencyRosterSlot>) => {
-		const status = patch.status
-			? assignmentStatusFromRoster(patch.status)
-			: undefined;
-		if (status) rosterMut.setStatus.mutate({ id: slotId, status });
-		// Only `status` has a backend write behind it. Anything else in the patch
-		// is discarded, so the edit sheet must not imply it was saved.
-		const unsaved = Object.keys(patch).filter((k) => k !== "status");
-		if (unsaved.length > 0) {
-			toast(`Not saved: ${unsaved.join(", ")} — only status persists`, "warn");
-		}
-	};
+	// No handleEditSave either, and this one was worse than dead — it was LOSSY.
+	//
+	// The sheet has had no status control for a while (see the note in it), so
+	// "Save changes" could only ever re-send the status the sheet was already
+	// showing. But that status is a PROJECTION: `rosterStatusFromAssignment` folds
+	// backend `completed` into the roster's "scheduled", and the write mapper
+	// turns "scheduled" back into `confirmed`. So pressing Save on a finished
+	// shift demoted `completed` → `confirmed` — and the weekly voucher job reads
+	// `completed` rows only, so a worked night quietly left payroll, from a button
+	// whose whole job was to change nothing.
+	//
+	// A sheet with no control over a field has no business writing that field. The
+	// footer is a plain Close now.
 
 	useEffect(() => {
 		syncLivePrCheckInToRoster();
@@ -423,7 +412,7 @@ function AgencyRoster() {
 					iconClassName="h-4 w-4 shrink-0 text-[var(--iz-gold-l)]"
 					className="font-sora text-lg font-extrabold tracking-tight text-[var(--iz-txt)] md:text-xl"
 				>
-					Roster
+					{t.nav.roster}
 				</TitleWithIcon>
 				{(outletRequestCount > 0 || swapCount > 0) && (
 					<div className="iz-roster-head-badges">
@@ -449,24 +438,24 @@ function AgencyRoster() {
 						className={viewMode === "live" ? "on live" : ""}
 						onClick={() => setViewMode("live")}
 					>
-						Live
+						{t.roster.live}
 					</button>
 					<button
 						type="button"
 						className={viewMode === "planning" ? "on plan" : ""}
 						onClick={() => setViewMode("planning")}
 					>
-						Planning
+						{t.roster.planning}
 					</button>
 				</div>
 				<div className="iz-roster-filters">
 					{viewMode === "live" ? (
 						<div
 							className="iz-roster-date-live"
-							aria-label="Date: Today (live view)"
+							aria-label={t.roster.dateTodayLive}
 						>
 							<Calendar className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
-							<span>Today</span>
+							<span>{t.common.today}</span>
 						</div>
 					) : (
 						<div className="flex min-w-0 flex-1 flex-wrap items-center gap-2">
@@ -475,8 +464,8 @@ function AgencyRoster() {
 								onChange={setPlanningDate}
 								rosterDates={dates}
 								weekly
-								placeholder="Pick week"
-								hint="Tap any day — selects that full week (Mon–Sun)."
+								placeholder={t.roster.pickWeek}
+								hint={t.roster.weekHint}
 							/>
 						</div>
 					)}
@@ -484,7 +473,7 @@ function AgencyRoster() {
 				{canAssign && (
 					<Link to="/agency/prs" className="iz-roster-pr-link">
 						<Users className="h-3.5 w-3.5" />
-						Manage PR
+						{t.nav.managePr}
 						<ChevronRight className="h-3.5 w-3.5" />
 					</Link>
 				)}
@@ -495,30 +484,30 @@ function AgencyRoster() {
 					<>
 						<div className="iz-roster-kpi">
 							<span className="n">{plannedCount}</span>
-							<LabelWithIcon label="Planned PRs" className="l" />
+							<LabelWithIcon label={t.roster.plannedPrs} className="l" />
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n">{activeCount}</span>
-							<LabelWithIcon label="Active PRs" className="l" />
+							<LabelWithIcon label={t.roster.activePrs} className="l" />
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n">{unavailableCount}</span>
-							<LabelWithIcon label="Unavailable PRs" className="l" />
+							<LabelWithIcon label={t.roster.unavailablePrs} className="l" />
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n gold">{formatRM(estPayoutLive)}</span>
-							<LabelWithIcon label="Est payout" className="l" />
+							<LabelWithIcon label={t.roster.estPayout} className="l" />
 						</div>
 					</>
 				) : (
 					<>
 						<div className="iz-roster-kpi">
 							<span className="n">{weekScheduled.length}</span>
-							<LabelWithIcon label="Shifts this week" className="l" />
+							<LabelWithIcon label={t.roster.shiftsThisWeek} className="l" />
 						</div>
 						<div className="iz-roster-kpi">
 							<span className="n gold">{formatRM(estLabour)}</span>
-							<LabelWithIcon label="Est labour cost" className="l" />
+							<LabelWithIcon label={t.roster.estLabourCost} className="l" />
 						</div>
 					</>
 				)}
@@ -527,7 +516,7 @@ function AgencyRoster() {
 			{viewMode === "live" && earlyReleasedAvailable.length > 0 && (
 				<div className="mb-3 mt-3 rounded-xl border border-[rgba(244,183,64,.28)] bg-[rgba(244,183,64,.08)] px-3 py-2.5">
 					<p className="text-xs font-semibold text-[var(--iz-amber)]">
-						Released early · available to reassign
+						{t.roster.releasedEarlyReassign}
 					</p>
 					<p className="iz-tiny iz-muted2 mt-1 leading-snug">
 						{earlyReleasedAvailable
@@ -549,7 +538,7 @@ function AgencyRoster() {
 						session keeps the old demo-fixture panel verbatim. Two components
 						rather than one fed from two sources — the backed one reports
 						positions recorded at check-in and check-out and says so, while the
-						demo one still presents a moving "Live GPS" that no stored data
+						demo one still presents a moving t.roster.liveGps that no stored data
 						supports.
 					*/}
 					{getAgencyIdentity() !== null ? (
@@ -616,7 +605,7 @@ function AgencyRoster() {
 
 			{canAssign && pendingPrSwaps.length > 0 && (
 				<OutletSection
-					title="PR swap requests"
+					title={t.roster.prSwapRequests}
 					hint={`${pendingPrSwaps.length} pending`}
 					className="!mt-4"
 				>
@@ -645,7 +634,8 @@ function AgencyRoster() {
 									)}
 								{swap.replacementDeclineReason && (
 									<p className="iz-tiny mt-1 text-[var(--iz-red)] line-clamp-2">
-										{swap.replacementPrName ?? "Replacement"} declined: &ldquo;
+										{swap.replacementPrName ?? t.roster.replacement} declined:
+										&ldquo;
 										{swap.replacementDeclineReason}&rdquo;
 									</p>
 								)}
@@ -656,7 +646,7 @@ function AgencyRoster() {
 											className="iz-btn iz-btn-soft flex-1 !py-1.5 !text-xs"
 											onClick={() => declinePrSwapRequest(swap.id)}
 										>
-											Decline
+											{t.common.decline}
 										</button>
 										<button
 											type="button"
@@ -666,7 +656,7 @@ function AgencyRoster() {
 												setReplacementPick(replacementCandidates[0]?.id ?? "");
 											}}
 										>
-											Pick replacement
+											{t.roster.pickReplacement}
 										</button>
 									</div>
 								)}
@@ -678,8 +668,8 @@ function AgencyRoster() {
 
 			{viewMode === "live" && (
 				<OutletSection
-					title="Shifts"
-					hint="Editable roster · synced with outlet floor"
+					title={t.roster.shifts}
+					hint={t.roster.shiftsHint}
 					className="!mt-4"
 				>
 					<RosterShiftFilters
@@ -722,10 +712,6 @@ function AgencyRoster() {
 					// the voucher for the same shift said "(Vicky) Victoria Tan Mei Lin".
 					prLabel={prLabelForSlot(editSlot)}
 					onClose={() => setEditId(null)}
-					onSave={(patch) => {
-						handleEditSave(editSlot.id, patch);
-						setEditId(null);
-					}}
 					swapPending={outletSwap.isPending}
 					swapError={outletSwap.errorMessage}
 					onRequestOutletSwap={(toShiftId, note) => {
@@ -757,10 +743,6 @@ function AgencyRoster() {
 						});
 						setEditId(null);
 					}}
-					onCancelShift={() => {
-						handleCancelSlot(editSlot.id);
-						setEditId(null);
-					}}
 					onUnassign={() => {
 						// Offered in both views for the same reason as the handlers above:
 						// the slot id is a backend shift_assignment id either way, so
@@ -781,7 +763,7 @@ function AgencyRoster() {
 			>
 				{swapToApprove && (
 					<>
-						<IzCardTitle>Assign replacement</IzCardTitle>
+						<IzCardTitle>{t.roster.assignReplacement}</IzCardTitle>
 						<p className="iz-tiny iz-muted mb-3">
 							{swapToApprove.requestingPrName} wants to leave{" "}
 							<strong className="text-[var(--iz-txt)]">
@@ -795,14 +777,14 @@ function AgencyRoster() {
 							replacement for their current slot.
 						</p>
 						<label className="iz-tiny iz-muted mb-1 block">
-							Replacement PR
+							{t.roster.replacementPr}
 						</label>
 						<IzSelect
 							value={replacementPick}
 							onChange={(e) => setReplacementPick(e.target.value)}
 							className="mb-4 w-full"
 						>
-							<option value="">Select PR…</option>
+							<option value="">{t.roster.selectPr}</option>
 							{/* One payee spelling, and no invented score: `p.rating` is the
 							    mapper's 0 placeholder on every backend PR, so this option
 							    used to read "Vicky · 0★ · Tier I". */}
@@ -828,7 +810,7 @@ function AgencyRoster() {
 								setReplacementPick("");
 							}}
 						>
-							Send offer to replacement
+							{t.roster.sendOfferToReplacement}
 						</button>
 					</>
 				)}
@@ -841,19 +823,16 @@ function EditRosterModal({
 	slot,
 	prLabel,
 	onClose,
-	onSave,
 	onRequestOutletSwap,
 	swapPending = false,
 	swapError = null,
 	onReassignToOpenShift,
-	onCancelShift,
 	onUnassign,
 }: {
 	slot: AgencyRosterSlot;
 	/** The PR named as the rest of the portal names them — see formatPayeeLabel. */
 	prLabel: string;
 	onClose: () => void;
-	onSave: (patch: Partial<AgencyRosterSlot>) => void;
 	/** `toShiftId` is the destination SHIFT, not an outlet — the swap record
 	 *  stores a shift id so approval knows exactly where to move the PR. */
 	onRequestOutletSwap: (toShiftId: string, note: string) => void;
@@ -862,27 +841,23 @@ function EditRosterModal({
 	/** The server's refusal text, shown in place rather than closing the sheet. */
 	swapError?: string | null;
 	onReassignToOpenShift: (target: AgencyOutletAvailableShift) => void;
-	onCancelShift: () => void;
-	/** Planning view only: hard-delete the assignment row (frees the slot). */
+	/**
+	 * Take the PR off this shift: hard-delete the assignment row so the slot
+	 * reopens. The ONLY destructive action the agency has here — cancelling the
+	 * shift itself is the outlet's, never this portal's.
+	 */
 	onUnassign?: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const shifts = useStore((s) => s.shifts);
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
-	const displayStatus = rosterPageDisplayStatus(slot.status);
-	const initialStatus = EDITABLE_STATUSES.includes(displayStatus)
-		? displayStatus
-		: "scheduled";
-	// Fixed, not editable: kept so saving preserves the slot's existing status
-	// rather than clearing it.
-	const status: RosterSlotStatus = initialStatus;
 	// The destination SHIFT id. Was an outlet name, which could not say which of
 	// a venue's shifts the PR was being moved to.
 	const [swapShiftId, setSwapShiftId] = useState("");
 	const [swapNote, setSwapNote] = useState("");
 	const [reassignShiftId, setReassignShiftId] = useState("");
 	const [busy, setBusy] = useState(false);
-	const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
 	const [unassignConfirmOpen, setUnassignConfirmOpen] = useState(false);
 	// Swap targets come from the backend: only outlets that exist and are
 	// actually running a shift on this slot's date. Sending a PR to a venue with
@@ -900,10 +875,27 @@ function EditRosterModal({
 	// not the shift the PR is being moved off.
 	const selectedSwapTarget = swapTargets.find((t) => t.shiftId === swapShiftId);
 	const releasedEarly = Boolean(slot.checkedOutAt);
+	// ── WHAT IS STILL CHANGEABLE ABOUT THIS SLOT ──────────────────────────────
+	// A shift that has already happened is a RECORD of a night worked, not a plan
+	// anybody can still edit. The assignment row holds the attendance stamps and
+	// the wage sealed at check-out, and the weekly voucher reads exactly those
+	// rows — so relocating the PR or deleting the row would rewrite money that is
+	// already counted, or ask someone to approve a move to a night that is over.
+	//
+	// Two conditions, because they are different facts: the DATE is behind us, or
+	// the PR has clocked in (on any date — the moment they are on the floor there
+	// is attendance to protect, and only a check-OUT used to stop this, which left
+	// the whole middle of a shift open).
+	//
+	// The server refuses both as well — `DELETE /shift-assignment/:id` and
+	// `POST /outlet-swap`. This is that same rule said early, so the sheet never
+	// offers what the API would refuse.
+	const shiftHasPassed = slot.dateIso < DEFAULT_ROSTER_DATE_ISO;
+	const slotIsHistory = shiftHasPassed || Boolean(slot.checkedInAt);
 	const canRequestSwap =
 		!releasedEarly &&
+		!slotIsHistory &&
 		(!slot.outletSwap || slot.outletSwap.status !== "pending_pr");
-	const canCancelShift = !slot.checkedOutAt;
 
 	const availableShifts = useMemo(
 		() =>
@@ -920,14 +912,6 @@ function EditRosterModal({
 	const selectedReassign = availableShifts.find(
 		(s) => s.id === reassignShiftId,
 	);
-
-	const handleSave = (e: FormEvent) => {
-		e.preventDefault();
-		if (busy) return;
-		setBusy(true);
-		// Status only — the shift's times belong to the outlet's posted job.
-		onSave({ status });
-	};
 
 	const handleSwap = () => {
 		if (busy || swapPending || !swapShiftId) return;
@@ -950,7 +934,7 @@ function EditRosterModal({
 				<div className="iz-sheet-head">
 					<div>
 						<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-							Reassign
+							{t.roster.reassign}
 						</p>
 						<h3>{prLabel}</h3>
 					</div>
@@ -959,7 +943,7 @@ function EditRosterModal({
 						className="iz-sheet-close"
 						onClick={onClose}
 						disabled={busy}
-						aria-label="Close"
+						aria-label={t.common.close}
 					>
 						<X className="h-4 w-4" />
 					</button>
@@ -989,11 +973,13 @@ function EditRosterModal({
 
 				{availableShifts.length === 0 ? (
 					<p className="iz-tiny iz-muted2 mt-4 rounded-lg border border-dashed border-[var(--iz-line)] px-3 py-4 text-center">
-						No open shifts at other outlets today.
+						{t.roster.noOpenShiftsOtherOutlets}
 					</p>
 				) : (
 					<div className="mt-4">
-						<span className="iz-field-label">Available shift today</span>
+						<span className="iz-field-label">
+							{t.roster.availableShiftToday}
+						</span>
 						<IzSelect
 							block
 							className="!text-sm"
@@ -1001,7 +987,7 @@ function EditRosterModal({
 							onChange={(e) => setReassignShiftId(e.target.value)}
 							disabled={busy}
 						>
-							<option value="">Select open shift…</option>
+							<option value="">{t.roster.selectOpenShift}</option>
 							{availableShifts.map((s) => (
 								<option key={s.id} value={s.id}>
 									{s.outlet} · {s.shift} · {s.openSlots} open · {s.event}
@@ -1024,7 +1010,7 @@ function EditRosterModal({
 						onClick={onClose}
 						disabled={busy}
 					>
-						Close
+						{t.common.close}
 					</button>
 					<button
 						type="button"
@@ -1032,7 +1018,7 @@ function EditRosterModal({
 						disabled={!selectedReassign || busy}
 						onClick={handleReassign}
 					>
-						{busy ? "Assigning…" : "Assign"}
+						{busy ? t.roster.assigning : t.roster.assign}
 					</button>
 				</div>
 			</IzSheet>
@@ -1041,11 +1027,11 @@ function EditRosterModal({
 
 	return (
 		<IzSheet open onClose={busy ? () => {} : onClose}>
-			<form onSubmit={handleSave}>
+			<div>
 				<div className="iz-sheet-head">
 					<div>
 						<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-							Edit shift
+							{t.roster.editShift}
 						</p>
 						<h3>{prLabel}</h3>
 					</div>
@@ -1054,7 +1040,7 @@ function EditRosterModal({
 						className="iz-sheet-close"
 						onClick={onClose}
 						disabled={busy}
-						aria-label="Close"
+						aria-label={t.common.close}
 					>
 						<X className="h-4 w-4" />
 					</button>
@@ -1073,8 +1059,9 @@ function EditRosterModal({
 
 				{/* No status control: "On duty" wrote the same `confirmed` as
 				    "Scheduled" (attendance comes from the PR's check-in timestamps),
-				    and "Unavailable" wrote `cancelled` — the same destructive write
-				    as Cancel Shift below, but without its confirmation step. */}
+				    and "Unavailable" wrote `cancelled` — a destructive write with no
+				    confirmation step. Nothing writes a status from this sheet at all
+				    now; see the note where handleEditSave used to be. */}
 
 				{/* Shift times are set by the outlet when it posts the job — the
 				    agency reassigns people, it does not reschedule a booked shift.
@@ -1085,13 +1072,13 @@ function EditRosterModal({
 					<div className="mt-4 rounded-xl border border-[rgba(124,107,255,.3)] bg-[rgba(124,107,255,.06)] p-3">
 						<div className="flex items-center gap-1.5 iz-tiny font-bold uppercase tracking-wide text-[var(--iz-violet)]">
 							<ArrowLeftRight className="h-3.5 w-3.5" />
-							Request outlet swap
+							{t.roster.requestOutletSwap}
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
 							{prLabel} must approve before the outlet changes.
 						</p>
 						<div className="mt-3">
-							<span className="iz-field-label">New shift</span>
+							<span className="iz-field-label">{t.roster.newShift}</span>
 							<IzSelect
 								block
 								className="!text-sm"
@@ -1106,12 +1093,12 @@ function EditRosterModal({
 							>
 								<option value="">
 									{swapTargetsLoading
-										? "Loading shifts…"
+										? t.roster.loadingShifts
 										: swapTargetsError
-											? "Could not load shifts"
+											? t.roster.couldNotLoadShifts
 											: swapTargets.length === 0
-												? "No other outlet has a shift on this day"
-												: "Select shift…"}
+												? t.roster.noOtherOutletShift
+												: t.roster.selectShift}
 								</option>
 								{/* A venue running two shifts that night appears twice — the
 								    window disambiguates them. Full shifts stay visible but
@@ -1140,10 +1127,10 @@ function EditRosterModal({
 							</IzSelect>
 							{selectedSwapTarget && (
 								<div className="iz-sheet-preview mt-2">
-									<div className="k">Shift they move to</div>
+									<div className="k">{t.roster.shiftTheyMoveTo}</div>
 									<div className="v">
 										{selectedSwapTarget.outletName} ·{" "}
-										{selectedSwapTarget.shiftWindow ?? "Window not set"}
+										{selectedSwapTarget.shiftWindow ?? t.roster.windowNotSet}
 									</div>
 									{selectedSwapTarget.eventName && (
 										<div className="iz-tiny iz-muted mt-0.5">
@@ -1163,12 +1150,14 @@ function EditRosterModal({
 							)}
 						</div>
 						<div className="mt-2">
-							<span className="iz-field-label">Note to PR (optional)</span>
+							<span className="iz-field-label">
+								{t.roster.noteToPrOptional}
+							</span>
 							<input
 								className="iz-field-input !text-sm"
 								value={swapNote}
 								onChange={(e) => setSwapNote(e.target.value)}
-								placeholder="Reason for relocation…"
+								placeholder={t.roster.relocationReasonPlaceholder}
 								disabled={busy || swapPending}
 							/>
 						</div>
@@ -1178,37 +1167,40 @@ function EditRosterModal({
 							disabled={!swapShiftId || busy || swapPending}
 							onClick={handleSwap}
 						>
-							{swapPending ? "Sending…" : "Send swap request to PR"}
+							{swapPending ? t.roster.sending : t.roster.sendSwapRequest}
 						</button>
 					</div>
 				)}
 
-				{canCancelShift && (
-					<div className="mt-4 rounded-xl border border-[rgba(255,117,117,.25)] bg-[rgba(255,117,117,.06)] p-3">
-						<div className="flex items-center gap-1.5 iz-tiny font-bold uppercase tracking-wide text-[var(--destructive)]">
-							<Trash2 className="h-3.5 w-3.5" />
-							Cancel shift
-						</div>
-						<p className="iz-tiny iz-muted mt-1">
-							Remove this assignment — {prLabel} will be notified and freed for{" "}
-							{slot.date}.
+				{/* There is no "Cancel shift" here anymore, and there must not be one
+				    again. An agency does not cancel a venue's shift — the shift is the
+				    OUTLET's, posted by them and withdrawn by them (shift.controller.ts
+				    `remove`, outlet-only). What the agency controls is which of its
+				    people fill it, and the one honest word for taking a PR off a shift
+				    is below.
+
+				    The button that used to sit here wrote `status: 'cancelled'` to the
+				    ASSIGNMENT — it never touched the shift — so it read as an authority
+				    the agency does not have while doing something else entirely, right
+				    above a second red button that did the thing its own body text
+				    described ("Remove this assignment — … will be notified and freed").
+				    Two destructive controls, one of them mislabelled as the other. */}
+
+				{slotIsHistory && (
+					<div className="mt-4 rounded-xl border border-[var(--iz-line)] px-3 py-2.5">
+						<p className="iz-tiny iz-muted leading-relaxed">
+							{shiftHasPassed
+								? t.roster.shiftAlreadyPassed
+								: t.roster.prAlreadyCheckedIn}
 						</p>
-						<button
-							type="button"
-							className="iz-btn iz-btn-danger mt-3 w-full !text-xs"
-							disabled={busy}
-							onClick={() => setCancelConfirmOpen(true)}
-						>
-							Cancel shift
-						</button>
 					</div>
 				)}
 
-				{onUnassign && (
+				{onUnassign && !slotIsHistory && (
 					<div className="mt-4 rounded-xl border border-[rgba(255,117,117,.25)] bg-[rgba(255,117,117,.06)] p-3">
 						<div className="flex items-center gap-1.5 iz-tiny font-bold uppercase tracking-wide text-[var(--destructive)]">
 							<Trash2 className="h-3.5 w-3.5" />
-							Remove assignment
+							{t.roster.removeAssignment}
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
 							Unassign {prLabel} from this shift. The assignment is deleted and
@@ -1221,11 +1213,16 @@ function EditRosterModal({
 							disabled={busy}
 							onClick={() => setUnassignConfirmOpen(true)}
 						>
-							Remove assignment
+							{t.roster.removeAssignment}
 						</button>
 					</div>
 				)}
 
+				{/* Close only. There is nothing here to "save": every control in this
+				    sheet acts the moment it is confirmed (swap request, remove), and
+				    the Save button that used to sit beside this one had no field to
+				    save — only a status it silently rounded. See handleEditSave's
+				    epitaph on the page above. */}
 				<div className="iz-sheet-actions">
 					<button
 						type="button"
@@ -1233,56 +1230,16 @@ function EditRosterModal({
 						onClick={onClose}
 						disabled={busy}
 					>
-						Close
-					</button>
-					<button
-						type="submit"
-						className="iz-btn iz-btn-primary flex-1 !py-3"
-						disabled={busy}
-					>
-						{busy ? "Saving…" : "Save changes"}
+						{t.common.close}
 					</button>
 				</div>
-			</form>
-
-			<IzSheet
-				open={cancelConfirmOpen}
-				onClose={() => !busy && setCancelConfirmOpen(false)}
-			>
-				<IzCardTitle>Cancel this shift?</IzCardTitle>
-				<p className="iz-tiny iz-muted mb-3">
-					{prLabel} at{" "}
-					<strong className="text-[var(--iz-txt)]">{slot.outlet}</strong> ·{" "}
-					{slot.date} · {slot.shift}. This cannot be undone.
-				</p>
-				<div className="flex gap-2">
-					<button
-						type="button"
-						className="iz-btn iz-btn-soft flex-1"
-						disabled={busy}
-						onClick={() => setCancelConfirmOpen(false)}
-					>
-						Keep shift
-					</button>
-					<button
-						type="button"
-						className="iz-btn iz-btn-danger flex-1"
-						disabled={busy}
-						onClick={() => {
-							setBusy(true);
-							onCancelShift();
-						}}
-					>
-						Cancel shift
-					</button>
-				</div>
-			</IzSheet>
+			</div>
 
 			<IzSheet
 				open={unassignConfirmOpen}
 				onClose={() => !busy && setUnassignConfirmOpen(false)}
 			>
-				<IzCardTitle>Remove this assignment?</IzCardTitle>
+				<IzCardTitle>{t.roster.removeThisAssignment}</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3">
 					{prLabel} at{" "}
 					<strong className="text-[var(--iz-txt)]">{slot.outlet}</strong> ·{" "}
@@ -1296,7 +1253,7 @@ function EditRosterModal({
 						disabled={busy}
 						onClick={() => setUnassignConfirmOpen(false)}
 					>
-						Keep assignment
+						{t.roster.keepAssignment}
 					</button>
 					<button
 						type="button"
@@ -1307,7 +1264,7 @@ function EditRosterModal({
 							onUnassign?.();
 						}}
 					>
-						Remove
+						{t.roster.remove}
 					</button>
 				</div>
 			</IzSheet>

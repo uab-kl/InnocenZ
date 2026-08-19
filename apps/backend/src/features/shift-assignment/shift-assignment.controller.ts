@@ -9,9 +9,11 @@ import {
   PrUnavailableError,
   NON_STAFFING_STATUSES,
 } from './shift-assignment.repository';
+import { ASSIGNABLE_SHIFT_STATUSES, type ShiftStatus } from '@/features/shift/shift.model';
 import { ShiftRepositoryClass } from '@/features/shift/shift.repository';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
+import { AgencyOutletRepository } from '@/features/agency/agency-outlet.repository';
 import { AgencyPrRepository } from '@/features/agency/agency-pr.repository';
 import { OutletMemberRepositoryClass } from '@/features/outlet/outlet-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -84,6 +86,24 @@ function isUniqueViolation(error: unknown): boolean {
   return e?.code === PG_UNIQUE_VIOLATION || e?.cause?.code === PG_UNIQUE_VIOLATION;
 }
 
+/**
+ * Why this shift cannot take anybody, or null when it can — the ONE place both
+ * seating lanes ask, so `create` and the re-staffing `update` cannot drift into
+ * two different ideas of which statuses are open for business.
+ *
+ * Says which state it is in and what would change it, because "cannot assign" on
+ * its own leaves the agency with nowhere to go: a draft is the OUTLET's to
+ * publish, and a sealed shift is nobody's to reopen.
+ */
+function shiftNotAssignableReason(status: ShiftStatus): string | null {
+  if (ASSIGNABLE_SHIFT_STATUSES.includes(status as (typeof ASSIGNABLE_SHIFT_STATUSES)[number])) {
+    return null;
+  }
+  return status === 'draft'
+    ? 'This shift is still a draft — the outlet has to publish it before anyone can be put on it.'
+    : 'This shift is sealed: its payroll is closed, so no one can be added to it now.';
+}
+
 /** Mine ownership: prefer assignment.user_id, fall back to legacy pr.id. */
 function ownsMineAssignment(
   existing: { prId: string; userId?: string | null },
@@ -117,6 +137,11 @@ export class ShiftAssignmentControllerClass {
     // (oldest) membership, which is a different agency's answer whenever the PR
     // is on more than one roster — so `create` reads the row directly.
     private agencyPrRepository: AgencyPrRepository,
+    // Assigning is a NEW commitment at a venue, so it needs the partnership to
+    // still be live — a question only `agency_outlet` answers. `shift_agency`
+    // says who was invited when the shift was posted and is never revoked, by
+    // design, so it cannot be asked this.
+    private agencyOutletRepository: AgencyOutletRepository,
   ) {}
 
   /**
@@ -1363,10 +1388,27 @@ export class ShiftAssignmentControllerClass {
         return res.status(403).json({ success: false, message: 'No agency associated with this account', data: null });
       }
 
-      const pr = await this.prRepository.getById(prId);
+      // Priced FOR the asking agency, and gated on that agency's own roster.
+      //
+      // ⚠️ This carried the same `pr.agencyId !== scope.agencyId` test that
+      // `create` had, and it is wrong for the same reason: `pr.agencyId` is one
+      // value on a person who holds an `agency_pr` row PER AGENCY, so it names
+      // whichever agency signed them first. The preview therefore 404'd for
+      // exactly the multi-roster PRs that assigning now accepts — the roster
+      // rendered that 404 as "rate unavailable" on a PR it was about to book.
+      //
+      // `agency_pr` is the authority, as it is in `create`: a person is on this
+      // agency's roster or they are not, and the tier that prices the shift is
+      // the one THIS agency grades them at.
+      const pr = await this.prRepository.getById(prId, scope.agencyId ?? undefined);
       if (!pr) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
-      if (!scope.isAdmin && pr.agencyId !== scope.agencyId) {
-        return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+      if (!scope.isAdmin) {
+        const onOurRoster = (await this.agencyPrRepository.listByUser(pr.userId)).some(
+          (row) => row.agencyId === scope.agencyId,
+        );
+        if (!onOurRoster) {
+          return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
+        }
       }
 
       // ⚠️ NOT `s.agencyId === scope.agencyId`. That column is the shift's ANCHOR —
@@ -1455,6 +1497,19 @@ export class ShiftAssignmentControllerClass {
         return res.status(404).json({ success: false, message: 'Shift not found', data: null });
       }
 
+      // IS THIS SHIFT OPEN FOR BUSINESS AT ALL? Asked before anything about the
+      // caller, because it is a fact about the shift and cheap to answer.
+      //
+      // ⚠️ Nothing here tested `shift.status` before, so a `draft` — a shift the
+      // outlet has not published and is still editing — took assignments, and so
+      // did a `sealed` one whose payroll had already closed. Both clients had
+      // guessed at a rule and guessed differently; the server, which is the only
+      // one that decides anything, had no rule at all.
+      const notAssignable = shiftNotAssignableReason(shift.status);
+      if (notAssignable) {
+        return res.status(400).json({ success: false, message: notAssignable, data: null });
+      }
+
       /**
        * WHO IS DOING THE ASSIGNING — the caller, not the shift's anchor.
        *
@@ -1470,11 +1525,64 @@ export class ShiftAssignmentControllerClass {
        */
       const actingAgencyId = scope.agencyId ?? shift.agencyId;
 
+      // IS THE PARTNERSHIP STILL LIVE? Being invited to the shift is not enough.
+      //
+      // `shift_agency` records who was invited when the shift was POSTED, and it
+      // is deliberately never revoked — that is what lets an agency finish PRs it
+      // already rostered after a venue ends the link (0127). But finishing
+      // existing work and taking on NEW work are different acts, and only the
+      // first survives the ending. Without this an ended partnership still let
+      // the agency staff fresh seats indefinitely, which made "ended" mean
+      // nothing on the one screen where it costs money.
+      //
+      // This is the caller `listApprovedOutletIdsForAgency` was written for and
+      // never had: `outlet.repository`'s own note says anything making a NEW
+      // commitment must read it, and until now nothing did.
+      if (scope.agencyId) {
+        const staffable =
+          await this.agencyOutletRepository.listApprovedOutletIdsForAgency(scope.agencyId);
+        if (!staffable.includes(shift.outletId)) {
+          // ⚠️ ONE EXCEPTION, and it is the whole point of the design: a shift
+          // this agency is ALREADY staffing stays fillable. Otherwise the guard
+          // would strand the very work it exists to protect — a PR no-shows on a
+          // shift the agency already holds, and the agency cannot put anyone in
+          // their place because the venue ended the link that morning. Backfilling
+          // a seat you already own is finishing, not starting.
+          //
+          // Scoped to THIS agency's rows: another agency's presence on a shared
+          // shift is not a licence for this one.
+          const ours = (await this.shiftAssignmentRepository.listByShift(shift.id)).some(
+            (row) =>
+              row.agencyId === scope.agencyId &&
+              !NON_STAFFING_STATUSES.includes(
+                row.status as (typeof NON_STAFFING_STATUSES)[number],
+              ),
+          );
+          if (!ours) {
+            return res.status(400).json({
+              success: false,
+              message:
+                'This venue is no longer partnered with your agency — you can finish shifts you are already staffing, but not take on new ones.',
+              data: null,
+            });
+          }
+        }
+      }
+
       // Resolve ops identity: prefer userId (ensure temporary pr bridge), else prId.
+      //
+      // ⚠️ RESOLVED FOR THE ACTING AGENCY. Without it both lookups fall back to
+      // the person's OLDEST `agency_pr` row, so `pr.tier` belonged to whichever
+      // agency signed them up first — and that same `pr` is handed to
+      // `resolveTierWageOutcome`, whose answer becomes `payAmount`. The SEAT was
+      // taken from the acting agency's tier while the WAGE was priced off a
+      // different agency's grade for the same person. Alice is tier_2 at Atlas
+      // and tier_1 at three others: every shift those three sold her was priced
+      // at Atlas's grade.
       let pr = parsed.data.prId
-        ? await this.prRepository.getById(parsed.data.prId)
+        ? await this.prRepository.getById(parsed.data.prId, actingAgencyId)
         : parsed.data.userId
-          ? await this.prRepository.getByUserId(parsed.data.userId)
+          ? await this.prRepository.getByUserId(parsed.data.userId, actingAgencyId)
           : null;
       if (!pr && parsed.data.userId) {
         pr = await this.prRepository.ensureOpsBridge({
@@ -1528,12 +1636,25 @@ export class ShiftAssignmentControllerClass {
       // Their status WITH THIS AGENCY is the agency's own fact, so it can be
       // stated plainly — unlike anything about the rosters they are on.
       if (membership.approveStatus !== 'approved') {
+        // ⚠️ The live `agency_pr_approve_status` enum has FIVE labels —
+        // pending, approved, rejected, leave_pending, left — while the model
+        // declares three, so TypeScript sees this as exhaustive when it is not.
+        // Everything that was not 'rejected' fell through to "awaiting your
+        // approval", which told an operator that a PR who had LEFT the agency
+        // was sitting in a queue, and sent them to Approvals to look for someone
+        // who will never appear there. Each state now says what is actually true
+        // and where the remedy is.
+        const status = membership.approveStatus as string;
         return res.status(400).json({
           success: false,
           message:
-            membership.approveStatus === 'rejected'
+            status === 'rejected'
               ? 'This PR was declined by your agency and cannot be assigned.'
-              : 'This PR is still awaiting your approval — approve them under Approvals before assigning a shift.',
+              : status === 'left'
+                ? 'This PR has left your agency — re-add them under Manage PR before assigning a shift.'
+                : status === 'leave_pending'
+                  ? 'This PR has asked to leave your agency — settle that under Approvals before assigning a shift.'
+                  : 'This PR is still awaiting your approval — approve them under Approvals before assigning a shift.',
           data: null,
         });
       }
@@ -1888,8 +2009,22 @@ export class ShiftAssignmentControllerClass {
         updatedBy: getActor(req),
       };
 
+      // The shift this row is going back onto, read ONCE: the status gate just
+      // below and the travel warning further down both want it, and it is the same
+      // row in the same request. Null when nobody is being seated.
+      const seatedShift = reStaffing ? await this.shiftRepository.getById(existing.shiftId) : null;
+
       let assignment: Awaited<ReturnType<ShiftAssignmentRepositoryClass['update']>>;
       if (reStaffing) {
+        // The same shift-status rule `create` applies, for the same reason: this
+        // branch puts a person back onto a shift, so it is a seating lane and has
+        // to refuse a draft or a sealed shift too. Asked ONLY when re-staffing —
+        // a note edit or a check-out stamp moves nobody, and on a sealed shift
+        // those are exactly the edits that legitimately still happen.
+        const blocked = seatedShift ? shiftNotAssignableReason(seatedShift.status) : null;
+        if (blocked) {
+          return res.status(400).json({ success: false, message: blocked, data: null });
+        }
         // Seat check AND write in ONE transaction, with the shift row locked.
         // The PR is named so the TIER mix is checked too, not just headcount:
         // without it, cancelling a Tier I, backfilling with another and then
@@ -1945,7 +2080,6 @@ export class ShiftAssignmentControllerClass {
       // about where anyone has to be.
       let travelWarning: string | null = null;
       if (reStaffing) {
-        const seatedShift = await this.shiftRepository.getById(existing.shiftId);
         if (seatedShift) {
           travelWarning = await travelWarningFor({
             shift: seatedShift,
@@ -1983,12 +2117,55 @@ export class ShiftAssignmentControllerClass {
         return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
       }
 
+      // Read the shift BEFORE the delete — the date it happened on is the whole
+      // question below, and the notify step at the bottom needs it either way.
+      const shift = await this.shiftRepository.getById(existing.shiftId);
+
+      // ── AN ASSIGNMENT ON A FINISHED SHIFT IS A RECORD, NOT A BOOKING ───────
+      // The row carries the attendance stamps and the wage sealed at check-out,
+      // and the weekly voucher job reads `shift_assignment` — so deleting one
+      // erases a shift somebody actually worked from the only place the money
+      // chain looks, with nothing left to rebuild it from. The counterpart rule
+      // already exists one layer up: an outlet cannot withdraw a posted shift
+      // once its date has arrived (shift.controller.ts remove).
+      //
+      // Two separate refusals, because they protect different things:
+      //   · a PAST date — the day is over, so there is no booking left to undo.
+      //   · an attendance STAMP on ANY date — someone clocked in, so the honest
+      //     correction is `cancelled` / `no_show`, which keeps the row and its
+      //     history instead of deleting the evidence.
+      // Undoing a mis-assignment stays available all through the shift's own day.
+      //
+      // Compared in the VENUE's timezone, not the server's, for the same reason
+      // the shift rule is: on a UTC host `new Date()` rolls the date eight hours
+      // early, which would reopen yesterday for a Kuala Lumpur agency at 08:00.
+      // Admin is exempt — support has to be able to clean up a bad row.
+      if (!scope.isAdmin) {
+        const todayIso = shiftDayKey(new Date());
+        const shiftIso = shift ? String(shift.shiftDate).slice(0, 10) : null;
+        if (shiftIso && shiftIso < todayIso) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'That shift has already passed — the assignment on it is the record of who worked, not a booking to undo. Mark it cancelled or no-show instead.',
+            data: null,
+          });
+        }
+        if (existing.checkInAt || existing.checkOutAt) {
+          return res.status(409).json({
+            success: false,
+            message:
+              'This PR has already clocked in on this shift — the assignment carries their attendance and their pay. Mark it cancelled or no-show instead.',
+            data: null,
+          });
+        }
+      }
+
       const removed = await this.shiftAssignmentRepository.remove(id);
       if (!removed) return res.status(404).json({ success: false, message: Error.NOT_FOUND, data: null });
 
       // Unassigning is a cancellation from the PR's side — the shift is simply
       // gone from their app, and until now nothing said so.
-      const shift = await this.shiftRepository.getById(existing.shiftId);
       await this.notifyPr({
         prId: existing.prId,
         kind: 'shift_cancelled',

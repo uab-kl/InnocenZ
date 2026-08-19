@@ -36,6 +36,8 @@ import {
 	Star,
 } from "lucide-react";
 import { type ReactNode, useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 type AgencyOutletDetailViewProps = {
 	summary: AgencyOutletSummary;
@@ -56,6 +58,7 @@ export function AgencyOutletDetailView({
 	onBack,
 	logo,
 }: AgencyOutletDetailViewProps) {
+	const { t } = usePortalLocale();
 	const shiftGroups = useMemo(
 		() => groupOutletShiftsTodayFuture(shifts, DEFAULT_ROSTER_DATE_ISO),
 		[shifts],
@@ -81,7 +84,7 @@ export function AgencyOutletDetailView({
 		<div className="iz-screen iz-outlet-detail-page">
 			<button type="button" className="iz-outlet-detail-back" onClick={onBack}>
 				<ArrowLeft className="h-4 w-4" />
-				Back to outlets
+				{t.outletDetail.backToOutlets}
 			</button>
 
 			<header className="iz-outlet-detail-head">
@@ -89,36 +92,59 @@ export function AgencyOutletDetailView({
 				<div className="min-w-0">
 					<h1 className="iz-outlet-detail-head__title">{summary.outlet}</h1>
 					<p className="iz-outlet-detail-head__meta">
-						Wage RM{headWage.toLocaleString("en-MY")}/shift · Drinks{" "}
-						{headDrinkPct}% · Tips {headTipPct}%
+						{fill(t.outletDetail.headMeta, {
+							wage: headWage.toLocaleString("en-MY"),
+							drinks: headDrinkPct,
+							tips: headTipPct,
+						})}
 					</p>
 				</div>
 			</header>
 
 			<div className="iz-outlet-detail-kpi-row">
 				<OutletDetailKpiCard
-					label="Events"
+					label={t.outletDetail.events}
 					value={String(shifts.length)}
 					tone="events"
 				/>
 				<OutletDetailKpiCard
-					label="Today"
+					label={t.outletDetail.today}
 					demand={todayOverview?.demand}
 					supplied={todayOverview?.supplied}
 					sub={
 						todayOverview
-							? `${todayOverview.eventCount} event${todayOverview.eventCount !== 1 ? "s" : ""}${todayOverview.openSlots > 0 ? ` · ${todayOverview.openSlots} open` : ""}`
+							? fill(
+									todayOverview.eventCount === 1
+										? t.outletDetail.eventCountOne
+										: t.outletDetail.eventCountMany,
+									{ n: todayOverview.eventCount },
+								) +
+								(todayOverview.openSlots > 0
+									? fill(t.outletDetail.openSuffix, {
+											n: todayOverview.openSlots,
+										})
+									: "")
 							: undefined
 					}
 					tone="today"
 				/>
 				<OutletDetailKpiCard
-					label="Future"
+					label={t.outletDetail.future}
 					demand={futureOverview?.demand}
 					supplied={futureOverview?.supplied}
 					sub={
 						futureOverview
-							? `${futureOverview.eventCount} event${futureOverview.eventCount !== 1 ? "s" : ""}${futureOverview.openSlots > 0 ? ` · ${futureOverview.openSlots} open` : ""}`
+							? fill(
+									futureOverview.eventCount === 1
+										? t.outletDetail.eventCountOne
+										: t.outletDetail.eventCountMany,
+									{ n: futureOverview.eventCount },
+								) +
+								(futureOverview.openSlots > 0
+									? fill(t.outletDetail.openSuffix, {
+											n: futureOverview.openSlots,
+										})
+									: "")
 							: undefined
 					}
 					tone="future"
@@ -129,10 +155,10 @@ export function AgencyOutletDetailView({
 				<div className="iz-outlet-detail-section__head">
 					<h2 className="iz-outlet-detail-section__title">
 						<Star className="h-4 w-4" aria-hidden />
-						Rates by PR tier
+						{t.outletDetail.ratesByPrTier}
 					</h2>
 					<span className="iz-outlet-detail-section__badge">
-						Read-only on agency
+						{t.outletDetail.readOnlyOnAgency}
 					</span>
 				</div>
 				<AgencyCommissionRulesPanel outlet={summary.outlet} tableOnly />
@@ -142,17 +168,23 @@ export function AgencyOutletDetailView({
 				<div className="iz-outlet-detail-section__head">
 					<h2 className="iz-outlet-detail-section__title">
 						<Briefcase className="h-4 w-4" aria-hidden />
-						Available shifts
+						{t.outletDetail.availableShifts}
 					</h2>
 				</div>
 				<p className="iz-outlet-detail-section__hint">
-					{shifts.length} listing{shifts.length !== 1 ? "s" : ""} · today and
-					future
+					{fill(t.outletDetail.todayAndFuture, {
+						listings: fill(
+							shifts.length === 1
+								? t.outletDetail.listingCountOne
+								: t.outletDetail.listingCountMany,
+							{ n: shifts.length },
+						),
+					})}
 				</p>
 
 				{shifts.length === 0 ? (
 					<div className="iz-outlet-detail-empty">
-						No open shifts match your filters.
+						{t.outletDetail.noOpenShiftsMatch}
 					</div>
 				) : (
 					<div className="iz-outlet-detail-shift-groups">
@@ -164,7 +196,7 @@ export function AgencyOutletDetailView({
 									</span>
 									<div className="iz-outlet-detail-group-head__stats">
 										<span className="iz-outlet-detail-group-head__stats-label">
-											Demand / supplied
+											{t.outletDetail.demandSupplied}
 										</span>
 										<span className="iz-outlet-detail-group-head__stats-value">
 											{group.demand}
@@ -174,10 +206,16 @@ export function AgencyOutletDetailView({
 											<span className="iz-outlet-detail-group-head__stats-supplied">
 												{group.supplied}
 											</span>
-											{group.openSlots > 0 && (
+											{group.openSlots > 0 ? (
 												<span className="iz-outlet-detail-group-head__stats-open">
 													· {group.openSlots} open
 												</span>
+											) : (
+												group.demand > 0 && (
+													<span className="iz-outlet-detail-group-head__stats-filled">
+														· {t.outletDetail.fullyStaffed}
+													</span>
+												)
 											)}
 										</span>
 									</div>
@@ -222,6 +260,7 @@ function OutletDetailKpiCard({
 	sub?: string;
 	tone: "events" | "today" | "future";
 }) {
+	const { t } = usePortalLocale();
 	const hasRatio =
 		demand != null && supplied != null && (demand > 0 || supplied > 0);
 
@@ -279,18 +318,32 @@ function OutletDemandSuppliedStat({
 	supplied: number;
 	openSlots?: number;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<div className="iz-outlet-detail-metric iz-outlet-detail-metric--demand">
-			<span className="iz-outlet-detail-metric__label">Demand / supplied</span>
+			<span className="iz-outlet-detail-metric__label">
+				{t.outletDetail.demandSupplied}
+			</span>
 			<span className="iz-outlet-detail-metric__nums">
 				<span>{demand}</span>
 				<span className="iz-outlet-detail-metric__sep">/</span>
 				<span className="iz-outlet-detail-metric__supplied">{supplied}</span>
 			</span>
-			{openSlots != null && openSlots > 0 && (
+			{/* A met demand says so out loud. This card used to show the open-slot
+			    line only while slots WERE open, so a fully staffed shift and a shift
+			    nobody had looked at yet differed by an absent line — and the shift
+			    was dropped from the list entirely anyway. "Fully staffed" is the
+			    answer to the question this screen is actually asked: did we fill it? */}
+			{openSlots != null && openSlots > 0 ? (
 				<span className="iz-outlet-detail-metric__open">
 					{openSlots} open slots
 				</span>
+			) : (
+				demand > 0 && (
+					<span className="iz-outlet-detail-metric__filled">
+						{t.outletDetail.fullyStaffed}
+					</span>
+				)
 			)}
 		</div>
 	);
@@ -310,6 +363,11 @@ function OutletShiftTierRequestTable({
 			shift.source === "posted" && shift.id.startsWith("posted-")
 				? shift.id.slice("posted-".length)
 				: shift.linkedShiftId;
+		// DEMO ONLY. On a real session this lookup finds nothing: `store.shifts` is
+		// the demo slice, while a backed row's id is a backend uuid — which is why
+		// `bookedPrIds` came back empty and the whole Supplied column read 0 with a
+		// PR plainly on the shift. `demandCut` / `releasedEarlyPrIds` have no
+		// backend column at all, so they are demo-only by nature.
 		const postedShift = postedShiftId
 			? shifts.find((s) => s.id === postedShiftId)
 			: undefined;
@@ -322,6 +380,12 @@ function OutletShiftTierRequestTable({
 			tierRates: shift.tierRates,
 			bookedPrIds,
 			agencyPRs,
+			// The real answer when there is one, and it WINS whole (see
+			// shiftTierStaffingByPayTier) — the server counts seats per tier across
+			// every agency on the shift, which no agency can do for itself: the PRs
+			// another agency sent are invisible here, and their tier is a fact about
+			// THAT agency's membership, not this one's.
+			suppliedByTierBucket: shift.suppliedByTierBucket,
 		});
 	}, [
 		shift.payTierRows,
@@ -330,6 +394,7 @@ function OutletShiftTierRequestTable({
 		shift.id,
 		shift.source,
 		shift.linkedShiftId,
+		shift.suppliedByTierBucket,
 		shifts,
 		agencyPRs,
 	]);
@@ -355,10 +420,11 @@ function OutletShiftTierRequestTable({
 }
 
 function ShiftSourceBadge({ shift }: { shift: AgencyOutletAvailableShift }) {
+	const { t } = usePortalLocale();
 	if (shift.source === "tied-offer") {
 		return (
 			<IzPill variant="violet" className="iz-outlet-detail-shift-badge">
-				Agency offer
+				{t.outletDetail.agencyOffer}
 			</IzPill>
 		);
 	}
@@ -377,7 +443,8 @@ function OutletShiftCardDetails({
 	shift: AgencyOutletAvailableShift;
 	showBriefingInSummary?: boolean;
 }) {
-	const eventType = outletShiftEventTypeLabel(shift);
+	const { t } = usePortalLocale();
+	const eventType = outletShiftEventTypeLabel(shift, t);
 	const isSpecialEvent = outletShiftIsSpecialEvent(shift);
 
 	return (
@@ -388,11 +455,11 @@ function OutletShiftCardDetails({
 					supplied={shift.suppliedSlots}
 					openSlots={shift.openSlots}
 				/>
-				<OutletShiftMetric label="Est. payout" tone="gold">
+				<OutletShiftMetric label={t.outletDetail.estPayout} tone="gold">
 					{formatOutletHistRm(shift.payEstimate)}
 				</OutletShiftMetric>
 				<OutletShiftMetric
-					label="Event type"
+					label={t.outletDetail.eventType}
 					tone={isSpecialEvent ? "gold" : "ink"}
 					title={eventType}
 				>
@@ -414,6 +481,7 @@ function OutletShiftTierPreview({
 }: {
 	shift: AgencyOutletAvailableShift;
 }) {
+	const { t } = usePortalLocale();
 	const tierRequest = formatPayTierRowsCompact(
 		resolveShiftPayTierRows({
 			payTierRows: shift.payTierRows,
@@ -489,6 +557,7 @@ function OutletDetailFutureShiftCard({
 }: {
 	shift: AgencyOutletAvailableShift;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<details className="iz-outlet-detail-shift-card iz-outlet-detail-shift-card--future group">
 			<summary>
