@@ -1,11 +1,13 @@
-import { useStore } from "@agency-portal/lib/store";
 import { publicAssetPath } from "@agency-portal/lib/public-asset";
+import { useStore } from "@agency-portal/lib/store";
 import { useQueryClient } from "@tanstack/react-query";
 import { Camera, Check, Loader2, User } from "lucide-react";
 import { useRef, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { uploadMyProfileImage } from "@/lib/auth/profile-api";
 import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 const ACCEPTED = "image/jpeg,image/png,image/webp";
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -16,6 +18,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
  * organisation logo on the hero.
  */
 export function AccountAvatarCard() {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const queryClient = useQueryClient();
 	const { data: me, isLoading } = useProfile();
@@ -36,11 +39,11 @@ export function AccountAvatarCard() {
 		e.target.value = "";
 		if (!file || !me?.id) return;
 		if (!ACCEPTED.split(",").includes(file.type)) {
-			toast("Only JPG, PNG, and WebP images are allowed", "warn");
+			toast(t.profile.onlyJpgPngWebp, "warn");
 			return;
 		}
 		if (file.size > MAX_BYTES) {
-			toast("Image must be under 5 MB", "warn");
+			toast(t.profile.imageUnder5Mb, "warn");
 			return;
 		}
 
@@ -54,10 +57,10 @@ export function AccountAvatarCard() {
 			setPreview(null);
 			URL.revokeObjectURL(objectUrl);
 			setJustUploaded(true);
-			toast("Photo uploaded successfully", "success");
+			toast(t.profile.photoUploaded, "success");
 		} catch (err) {
 			toast(
-				err instanceof Error ? err.message : "Could not upload profile photo",
+				err instanceof Error ? err.message : t.profile.couldNotUploadPhoto,
 				"warn",
 			);
 			setPreview(null);
@@ -98,9 +101,11 @@ export function AccountAvatarCard() {
 					)}
 				</div>
 				<div className="min-w-0 flex-1 basis-40">
-					<p className="text-sm font-semibold text-[var(--iz-txt)]">Your photo</p>
+					<p className="text-sm font-semibold text-[var(--iz-txt)]">
+						{t.profile.yourPhoto}
+					</p>
 					<p className="iz-tiny iz-muted mt-0.5">
-						Personal account avatar — not the organisation logo above.
+						{t.profile.personalAvatarHint}
 					</p>
 				</div>
 				{/* `.iz-btn` is width:100% by default — without auto/sm it crushes the copy. */}
@@ -111,7 +116,7 @@ export function AccountAvatarCard() {
 					onClick={() => fileRef.current?.click()}
 				>
 					<Camera className="h-3.5 w-3.5" />
-					{src ? "Change" : "Upload"}
+					{src ? t.profile.change : t.profile.upload}
 				</button>
 			</div>
 			{justUploaded && (

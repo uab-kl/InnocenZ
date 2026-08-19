@@ -35,9 +35,9 @@ export function PendingReviewBanner({
 			role="status"
 			className="mb-4 rounded-lg border border-amber-500/35 bg-amber-500/10 px-4 py-3 text-sm text-amber-100"
 		>
-			<span className="font-semibold text-amber-50">Pending review.</span>{" "}
-			Your {label} is awaiting InnocenZ admin approval. You can update your
-			profile here — other portal features unlock after approval.
+			<span className="font-semibold text-amber-50">Pending review.</span> Your{" "}
+			{label} is awaiting InnocenZ admin approval. You can update your profile
+			here — other portal features unlock after approval.
 		</div>
 	);
 }

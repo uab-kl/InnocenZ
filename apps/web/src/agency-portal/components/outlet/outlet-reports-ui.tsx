@@ -1,5 +1,7 @@
 import { formatRM } from "@agency-portal/components/iz/ui";
 import { cn } from "@agency-portal/lib/utils";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export function formatCompactRm(value: number): string {
 	if (value >= 1000) {
@@ -24,7 +26,10 @@ export function OutletReportTopPrCard({
 	topEarned: number;
 }) {
 	const pct = topEarned > 0 ? Math.round((earned / topEarned) * 100) : 0;
-	const pctLabel = rank === 1 ? "100% of top earner" : `${pct}% of top earner`;
+	const { t } = usePortalLocale();
+	const pctLabel = fill(t.reports.pctOfTopEarner, {
+		pct: rank === 1 ? 100 : pct,
+	});
 
 	return (
 		<article className="iz-outlet-report-pr-card">
@@ -32,7 +37,7 @@ export function OutletReportTopPrCard({
 				<div className="iz-outlet-report-pr-card__identity">
 					<span
 						className="iz-outlet-report-pr-rank"
-						aria-label={`Rank ${rank}`}
+						aria-label={fill(t.reports.rankLabel, { rank })}
 					>
 						{rank}
 					</span>

@@ -6,20 +6,20 @@
 import {
 	PRIVACY_CONTACT_LABEL,
 	PRIVACY_CONTACT_WHATSAPP,
-} from "@/lib/legal/privacy-policy"
+} from "@/lib/legal/privacy-policy";
 
-export const DELETE_ACCOUNT_EFFECTIVE_DATE = "7 August 2026"
-export const DELETE_ACCOUNT_LAST_UPDATED = "7 August 2026"
+export const DELETE_ACCOUNT_EFFECTIVE_DATE = "7 August 2026";
+export const DELETE_ACCOUNT_LAST_UPDATED = "7 August 2026";
 
 export type DeleteAccountSection = {
-	id: string
-	title: string
-	paragraphs: string[]
-	bullets?: string[]
-}
+	id: string;
+	title: string;
+	paragraphs: string[];
+	bullets?: string[];
+};
 
 export const deleteAccountIntro =
-	"InnocenZ lets PR (promoter / host) users delete their account from the mobile app. This page explains how deletion works, what is removed, and what may be retained for legal or payroll reasons — as required by Google Play and Apple App Store account-deletion policies."
+	"InnocenZ lets PR (promoter / host) users delete their account from the mobile app. This page explains how deletion works, what is removed, and what may be retained for legal or payroll reasons — as required by Google Play and Apple App Store account-deletion policies.";
 
 export const deleteAccountSections: DeleteAccountSection[] = [
 	{
@@ -81,4 +81,4 @@ export const deleteAccountSections: DeleteAccountSection[] = [
 			`For deletion or privacy questions: ${PRIVACY_CONTACT_LABEL} (${PRIVACY_CONTACT_WHATSAPP}). See also our Privacy Policy at /policy.`,
 		],
 	},
-]
+];

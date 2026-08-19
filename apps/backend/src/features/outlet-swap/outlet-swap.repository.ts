@@ -344,7 +344,17 @@ export class OutletSwapRepositoryClass {
             .where(
               and(
                 eq(AgencyPrTable.userId, assignment.userId ?? assignment.prId),
-                eq(AgencyPrTable.agencyId, toShift.agencyId),
+                // The SUPPLIER's grade for this PR, not the destination shift's
+                // anchor. A person holds an `agency_pr` row per agency and the
+                // tiers differ — Alice is tier_1 at Why We Met and tier_2 at
+                // Atlas — so reading the anchor graded the PR under an agency
+                // with no part in this booking.
+                //
+                // It must also match what the CREATE pre-check grades on, or the
+                // two disagree and the PR taps accept only to be told the
+                // destination tier is full — the refusal that pre-check exists
+                // to deliver before anyone is asked.
+                eq(AgencyPrTable.agencyId, assignment.agencyId),
               ),
             )
             .limit(1);
@@ -365,7 +375,22 @@ export class OutletSwapRepositoryClass {
           .update(ShiftAssignmentTable)
           .set({
             shiftId: request.toShiftId,
-            agencyId: toShift.agencyId,
+            // ⚠️ `agencyId` IS NOT REWRITTEN. Moving a PR to another shift does
+            // not change who supplied them.
+            //
+            // This used to set `toShift.agencyId` — the destination's ANCHOR —
+            // and was harmless only because the create gate happened to
+            // guarantee anchor === caller === supplier. The moment that gate
+            // correctly widened to `shift_agency` (a shared shift can be
+            // swapped into by any invited agency), this line became a live
+            // corruption: a Why We Met swap into an Atlas-anchored shift would
+            // flip the assignment's supplier to Atlas on the PR's approval.
+            //
+            // 0124 is explicit about the split — `shift_agency` is the
+            // INVITATION, `shift_assignment.agency_id` is the DELIVERY — and the
+            // delivery is exactly what payroll, floor sales and commission are
+            // computed from. Widening a gate can make a dormant write reachable;
+            // this is that write.
             updatedAt: now,
             updatedBy: respondedBy,
           })

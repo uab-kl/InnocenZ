@@ -159,7 +159,19 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, init?: RequestInit): Promise<T> {
+/**
+ * The call, plus anything the envelope carries ALONGSIDE `data`.
+ *
+ * `request` throws away everything but `data`, which is right for almost every
+ * call — but the server now sends advice next to the payload (a tight travel gap
+ * between two shifts), and advice dropped in the transport layer is advice nobody
+ * can choose to show. Only the calls with something to read use this; the rest keep
+ * the narrower shape rather than growing a field they ignore.
+ */
+async function requestEnvelope<T>(
+  path: string,
+  init?: RequestInit,
+): Promise<{ data: T; warning: string | null }> {
   let res: Response;
   try {
     res = await fetch(`${API_BASE}${path}`, {
@@ -169,7 +181,9 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   } catch {
     throw new ApiError(`Cannot reach the InnocenZ backend at ${API_BASE}. Is it running?`, 0);
   }
-  const body = (await res.json().catch(() => null)) as ApiEnvelope<T> | null;
+  const body = (await res.json().catch(() => null)) as
+    | (ApiEnvelope<T> & { warning?: string | null })
+    | null;
   if (!res.ok || !body?.success) {
     throw new ApiError(body?.message ?? `Request failed (${res.status})`, res.status, body?.data ?? null);
   }
@@ -178,7 +192,12 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   if (body.data && typeof body.data === 'object') {
     noteR2PublicUrl(body.data as { r2PublicUrl?: string | null });
   }
-  return body.data;
+  return { data: body.data, warning: body.warning ?? null };
+}
+
+async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const { data } = await requestEnvelope<T>(path, init);
+  return data;
 }
 
 export function login(identifier: string, password: string): Promise<LoginResult> {
@@ -1009,14 +1028,36 @@ export async function createMyVoucherExportTicket(
   };
 }
 
-/** The closed enum the backend writes — mirrors notification.model.ts. */
+/**
+ * The closed enum the backend writes — mirrors notification.model.ts.
+ *
+ * It had drifted to 6 of the backend's 16: every kind added since
+ * `agency_join_resolved` was missing, so a row the PR genuinely receives was
+ * typed as impossible here. Nothing filters on this union — the bell renders
+ * title/body for whatever arrives — so the drift cost no delivery, but it made
+ * the type a worse description of the wire than no type at all.
+ *
+ * Agency-addressed kinds are included: a PR never receives them, but this
+ * mirrors what the column can hold, not what this app expects to see.
+ */
 export type NotificationKind =
   | 'payment_voucher_issued'
   | 'payment_voucher_dispute_resolved'
   | 'overtime_pending_approval'
+  | 'overtime_decided'
   | 'shift_assigned'
   | 'shift_cancelled'
-  | 'agency_join_resolved';
+  | 'agency_join_resolved'
+  | 'pr_rating_low'
+  | 'cutlost_requested'
+  | 'cutlost_decided'
+  | 'shift_released_early'
+  | 'shift_cover_needed'
+  | 'pv_day_review_pending'
+  | 'leave_requested'
+  | 'leave_decided'
+  /** An agency broadcast — free text, nothing to open. */
+  | 'agency_broadcast';
 
 export type NotificationRecord = {
   id: string;
@@ -1291,17 +1332,27 @@ export function fetchMyOutletSwaps(accessToken: string): Promise<OutletSwapRecor
  * transaction. It can still refuse — 409 when the destination filled up while
  * this screen was open, or when the request was already answered — so the
  * caller must surface the message rather than assume success.
+ *
+ * On SUCCESS it can also carry `travelWarning`: the move is done, but the venue it
+ * moved you to may be too far from another shift you hold that day. That is advice
+ * for the person who has to make the trip — you — so it comes back rather than being
+ * decided for you. Null when the roster is comfortable, when either venue has no map
+ * pin, or when the backend predates the check.
  */
-export function approveOutletSwap(
+export async function approveOutletSwap(
   accessToken: string,
   swapId: string,
   note?: string,
-): Promise<OutletSwapRecord> {
-  return request<OutletSwapRecord>(`/outlet-swap/mine/${swapId}/approve`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify(note ? { note } : {}),
-  });
+): Promise<{ record: OutletSwapRecord; travelWarning: string | null }> {
+  const { data, warning } = await requestEnvelope<OutletSwapRecord>(
+    `/outlet-swap/mine/${swapId}/approve`,
+    {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify(note ? { note } : {}),
+    },
+  );
+  return { record: data, travelWarning: warning };
 }
 
 /** Turn the move down — the PR stays on their original shift. */

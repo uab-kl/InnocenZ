@@ -8,17 +8,27 @@ import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import { useStore } from "@agency-portal/lib/store";
 import { Check, ImageOff, Paperclip, Pencil, X } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	AgencyReceipt,
 	PaymentVoucherDispute,
 } from "@/services/payment-voucher";
 
-/** The PR app's own words for each bucket, so both sides read the same. */
-const COMPONENT_LABEL: Record<PaymentVoucherDispute["component"], string> = {
-	wages: "Daily wages",
-	drinks: "Drinks",
-	tips: "Tips",
-	others: "Others",
+/**
+ * The PR app's own words for each bucket, so both sides read the same.
+ *
+ * Dictionary KEYS — this is module scope, where the locale hook cannot run.
+ * Record keys stay the API's component values.
+ */
+const COMPONENT_LABEL: Record<
+	PaymentVoucherDispute["component"],
+	keyof PortalTranslations["money"]
+> = {
+	wages: "dailyWages",
+	drinks: "drinks",
+	tips: "tips",
+	others: "others",
 };
 
 function formatRM(value: string | null): string {
@@ -97,6 +107,7 @@ function disputedSubtotal(
  * venue AND the wrong check-in while looking authoritative.
  */
 function DisputeShiftFacts({ dispute }: { dispute: PaymentVoucherDispute }) {
+	const { t } = usePortalLocale();
 	const shifts = dispute.shifts ?? [];
 
 	if (shifts.length === 0) {
@@ -114,8 +125,8 @@ function DisputeShiftFacts({ dispute }: { dispute: PaymentVoucherDispute }) {
 				{shifts.length > 1
 					? `This claim covers the whole day — ${shifts.length} shifts worked`
 					: dispute.receiptId
-						? "The shift behind this figure"
-						: "This claim covers the whole day — 1 shift worked"}
+						? t.payroll.theShiftBehindFigure
+						: t.payroll.claimCoversWholeDay}
 			</p>
 			<div className="flex flex-col gap-1.5">
 				{shifts.map((shift) => (
@@ -146,6 +157,7 @@ function DisputeEvidence({
 	dispute: PaymentVoucherDispute;
 	receipts: AgencyReceipt[];
 }) {
+	const { t } = usePortalLocale();
 	const [openId, setOpenId] = useState<string | null>(null);
 	const matches = receiptsForDispute(dispute, receipts);
 
@@ -163,7 +175,7 @@ function DisputeEvidence({
 		<div className="mt-3 space-y-2">
 			<p className="iz-tiny iz-muted">
 				{matches.length === 1
-					? "The receipt"
+					? t.payroll.theReceipt
 					: `The ${matches.length} receipts`}{" "}
 				behind this figure — correct it here if the PR is right.
 			</p>
@@ -180,7 +192,7 @@ function DisputeEvidence({
 					>
 						<div className="flex flex-wrap items-center gap-2">
 							<span className="font-mono text-sm font-semibold">
-								{receipt.orderNo ?? "No order no"}
+								{receipt.orderNo ?? t.payroll.noOrderNo}
 							</span>
 							<span className="iz-tiny iz-muted2">{receipt.receiptNo}</span>
 							{/*
@@ -199,10 +211,10 @@ function DisputeEvidence({
 								}`}
 							>
 								{receipt.status === "pending"
-									? "Pending"
+									? t.receipts.pending
 									: receipt.status === "verified"
-										? "Verified"
-										: "Approved"}
+										? t.receipts.verified
+										: t.receipts.approved}
 							</span>
 							<span className="iz-tiny ml-auto font-mono">
 								{formatRM(disputedSubtotal(receipt, dispute).toFixed(2))}
@@ -241,7 +253,7 @@ function DisputeEvidence({
 								aria-expanded={editing}
 							>
 								<Pencil className="mr-1 h-3 w-3" />{" "}
-								{editing ? "Close editor" : "Edit receipt"}
+								{editing ? t.receipts.closeEditor : t.payroll.editReceipt}
 							</button>
 						)}
 						{editable && editing && (
@@ -277,6 +289,7 @@ function DisputeRow({
 	busy: boolean;
 	receipts: AgencyReceipt[];
 }) {
+	const { t } = usePortalLocale();
 	const [note, setNote] = useState("");
 	const [rejecting, setRejecting] = useState(false);
 	const proof = dispute.proofPhotos ?? [];
@@ -302,8 +315,8 @@ function DisputeRow({
 						{formatPayeeLabel(
 							dispute.voucher.prNickname,
 							dispute.voucher.prName,
-						) || "Unknown PR"}{" "}
-						· {COMPONENT_LABEL[dispute.component]}
+						) || t.receipts.unknownPr}{" "}
+						· {t.money[COMPONENT_LABEL[dispute.component]]}
 					</div>
 					<p className="iz-tiny iz-muted mt-0.5">
 						{formatDay(dispute.disputeDate)}
@@ -312,7 +325,7 @@ function DisputeRow({
 							: ""}
 					</p>
 				</div>
-				{/* The row used to hardcode "Open" — true only because the panel could
+				{/* The row used to hardcode t.payroll.open — true only because the panel could
 				    not fetch anything else. Now that settled claims are listed, the
 				    pill has to say which one this is. */}
 				{dispute.outcome ? (
@@ -326,13 +339,15 @@ function DisputeRow({
 						}`}
 					>
 						{dispute.outcome === "accepted"
-							? "Accepted"
+							? t.payroll.accepted
 							: dispute.outcome === "rejected"
 								? "Rejected"
-								: "Withdrawn"}
+								: t.payroll.withdrawn}
 					</span>
 				) : (
-					<span className="iz-pill iz-pill-amber !text-[10px]">Open</span>
+					<span className="iz-pill iz-pill-amber !text-[10px]">
+						{t.payroll.open}
+					</span>
 				)}
 			</div>
 
@@ -342,12 +357,14 @@ function DisputeRow({
 
 			<div className="mt-2 flex flex-wrap gap-4 text-sm">
 				<span>
-					<span className="iz-tiny iz-muted block">Voucher says</span>
+					<span className="iz-tiny iz-muted block">
+						{t.payroll.voucherSaysLabel}
+					</span>
 					<span className="font-mono">{formatRM(dispute.disputedAmount)}</span>
 				</span>
 				{dispute.claimedAmount !== null && (
 					<span>
-						<span className="iz-tiny iz-muted block">PR claims</span>
+						<span className="iz-tiny iz-muted block">{t.payroll.prClaims}</span>
 						<span className="font-mono">{formatRM(dispute.claimedAmount)}</span>
 					</span>
 				)}
@@ -355,7 +372,7 @@ function DisputeRow({
 
 			{dispute.reason && (
 				<p className="iz-tiny mt-2">
-					<span className="iz-muted">Reason: </span>
+					<span className="iz-muted">{t.payroll.reasonLabel} </span>
 					{dispute.reason}
 				</p>
 			)}
@@ -374,11 +391,13 @@ function DisputeRow({
 					<>
 						<ImageOff className="h-3.5 w-3.5 opacity-60" />
 						{/* Not a defect: a "missing record" claim has nothing to photograph. */}
-						<span className="iz-tiny iz-muted2">No proof attached</span>
+						<span className="iz-tiny iz-muted2">
+							{t.receipts.noProofAttached}
+						</span>
 					</>
 				)}
 			</div>
-			<ProofPhotos photos={proof} label="PR proof" />
+			<ProofPhotos photos={proof} label={t.payroll.prProof} />
 
 			<DisputeEvidence dispute={dispute} receipts={receipts} />
 
@@ -390,7 +409,7 @@ function DisputeRow({
 			{dispute.outcome ? (
 				dispute.resolutionNote && (
 					<p className="iz-tiny iz-muted mt-3">
-						<span className="iz-muted2">Told the PR: </span>
+						<span className="iz-muted2">{t.payroll.toldThePr} </span>
 						{dispute.resolutionNote}
 					</p>
 				)
@@ -399,7 +418,7 @@ function DisputeRow({
 					<textarea
 						className="iz-field-input mt-3 w-full"
 						rows={2}
-						placeholder="Note to the PR (required when rejecting)"
+						placeholder={t.payroll.noteToPrRequired}
 						value={note}
 						onChange={(e) => {
 							setNote(e.target.value);
@@ -487,6 +506,7 @@ export function DisputeQueuePanel({
 	weekStartIso: string;
 	weekEndIso: string;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	/**
 	 * EVERY dispute, not only the open ones.
@@ -599,13 +619,15 @@ export function DisputeQueuePanel({
 				Disputes{openCount > 0 ? ` (${openCount} open)` : ""}
 			</IzSectionLabel>
 			<IzCard>
-				{isLoading && <p className="iz-tiny iz-muted">Loading disputes…</p>}
+				{isLoading && (
+					<p className="iz-tiny iz-muted">{t.agencyHub.loadingDisputes}</p>
+				)}
 
 				{!isLoading && weekDisputes.length > 0 && (
 					<div className="mb-2.5 flex flex-wrap items-center gap-1.5">
 						{(
 							[
-								["open", "Open", openCount],
+								["open", t.payroll.open, openCount],
 								["resolved", "Resolved", resolvedCount],
 								["all", "All", weekDisputes.length],
 							] as [DisputeScope, string, number][]
@@ -626,8 +648,8 @@ export function DisputeQueuePanel({
 							className="iz-field-input ml-auto !h-8 !w-48 !text-[12px]"
 							value={search}
 							onChange={(e) => setSearch(e.target.value)}
-							placeholder="PR, day, reason…"
-							aria-label="Search disputes"
+							placeholder={t.payroll.searchDisputesPlaceholder}
+							aria-label={t.payroll.searchDisputes}
 						/>
 					</div>
 				)}
@@ -640,8 +662,7 @@ export function DisputeQueuePanel({
 				    a claim in another week from disappearing on the strength of it. */}
 				{!isLoading && weekDisputes.length === 0 && (
 					<p className="iz-tiny iz-muted">
-						Nothing disputed in this week. PRs raise these per day and per
-						component from their Payment screen.
+						{t.payroll.nothingDisputedThisWeek}
 					</p>
 				)}
 				{!isLoading && openElsewhere > 0 && (

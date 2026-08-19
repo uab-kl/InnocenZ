@@ -7,6 +7,7 @@ import { getActor } from '@/util/actor';
 import { logger } from '@/util/logger';
 import { OrgScope, resolveOrgScope } from '@/util/org-scope';
 import { BlockPrDaySchema, PrAvailabilityRangeSchema } from '@/schema/pr-availability.schema';
+import { PrAvailabilityWithPrType } from './pr-availability.model';
 import { PrAvailabilityRepositoryClass } from './pr-availability.repository';
 
 export class PrAvailabilityControllerClass {
@@ -172,29 +173,74 @@ export class PrAvailabilityControllerClass {
       // `undefined` to the set, and no calendar day ever matched it. The whole
       // committed-elsewhere feature was wired end to end and greyed nothing.
       const declared = new Set(rows.map((r) => `${r.userId}|${r.unavailableDate}`));
-      const derived = committedElsewhere
+      // Typed as the REAL row type on purpose. Every field a `pr_availability`
+      // row has must be present and of the right type here, and now the compiler
+      // is the one enforcing it — the previous version of this object type-checked
+      // happily while being null in five places.
+      //
+      // ⚠️ EVERY FIELD BELOW EXCEPT `reason` WAS `null`, AND THAT WAS THE BUG. The
+      // nulls were meant to make a derived entry look like a real row and did the
+      // exact opposite: `created_at`, `updated_at`, `created_by` and `updated_by`
+      // are all NOT NULL with defaults in the live schema (checked against
+      // information_schema, and no live row is null in any of them), and `prName`
+      // is coalesced to 'PR'. A genuine block therefore CANNOT be null in any of
+      // the five, so `row.createdAt === null` answered "is this a rival's booking?"
+      // with perfect accuracy — a cleaner probe than the one this merge exists to
+      // prevent.
+      //
+      // ⚠️ KEY ORDER IS PART OF THE SHAPE. `prName` goes LAST because the declared
+      // half is built as `{ ...row, prName }`, which appends it after the table's
+      // own columns. Placing it anywhere else here left `JSON.stringify` emitting
+      // two visibly different objects, and the raw response in a network tab
+      // separated the sets without a single value being read.
+      const derived: PrAvailabilityWithPrType[] = committedElsewhere
         .filter((c) => !declared.has(`${c.userId}|${c.date}`))
         .map((c) => ({
-          id: `derived-${String(c.userId)}-${String(c.date)}`,
-          userId: String(c.userId),
+          // Uuid-shaped and stable across polls; see `derivedBlockId`. The old
+          // value was the literal string `derived-<user>-<date>`.
+          id: c.id,
+          userId: c.userId,
           // The repository returns this column as `date`; the WIRE name is
           // `unavailableDate`, because that is what a real `pr_availability` row
           // is called and a derived block has to be indistinguishable from one.
-          unavailableDate: String(c.date),
-          // No reason, deliberately: a self-declared block often carries none either,
-          // so silence here is not a tell.
+          unavailableDate: c.date,
+          // The ONE field that stays null, and the only one that may: the column
+          // itself is nullable and most live declared rows are null in it, so a
+          // reader who finds no reason has learned nothing.
           reason: null,
-          // Shaped like a real row rather than a partial one. A consumer reading
-          // any of these off a genuine block and finding them missing here would
-          // have a second way to tell the two apart.
-          prName: null,
-          createdAt: null,
-          updatedAt: null,
-          createdBy: null,
-          updatedBy: null,
+          // When the day actually stopped being free, taken from the underlying
+          // assignment. Stable across requests, which `new Date()` would not be:
+          // derived rows advancing on every poll while declared ones stand still
+          // is the old null tell wearing a clock. These name no agency, no outlet
+          // and no shift — only an instant, which is exactly what a declared row's
+          // timestamps disclose about it too.
+          createdAt: c.createdAt,
+          updatedAt: c.updatedAt,
+          // The PR's OWN user id, which is what every real row here holds:
+          // `blockMine` is the only writer and stamps `getActor`, i.e. the
+          // signed-in PR. It is also the only safe answer — the literally truthful
+          // one, the rival agency's id, would not merely be a tell, it would hand
+          // over the exact fact being withheld.
+          createdBy: c.userId,
+          updatedBy: c.userId,
+          // Same expression the declared half renders (see `prDisplayNameSql`), so
+          // the two halves cannot disagree about what to call the same person.
+          prName: c.prName,
         }));
 
-      res.status(200).json({ success: true, message: 'OK', data: [...rows, ...derived] });
+      // ONE list, sorted as one. `[...rows, ...derived]` shipped every declared
+      // block ahead of every derived one, so POSITION answered the question the
+      // null fields used to: a 14 Aug row sitting after a 20 Aug row was a rival's
+      // booking, no field inspection required. Sorting both halves on the same key
+      // makes a row's index say nothing about where it came from.
+      const merged = [...rows, ...derived].sort(
+        (a, b) =>
+          a.unavailableDate.localeCompare(b.unavailableDate) ||
+          a.userId.localeCompare(b.userId) ||
+          a.id.localeCompare(b.id),
+      );
+
+      res.status(200).json({ success: true, message: 'OK', data: merged });
     } catch (error) {
       logger.error('[PrAvailabilityController.listForAgency] Error:', error);
       res.status(500).json({ success: false, message: Error.INTERNAL_SERVER_ERROR, data: null });

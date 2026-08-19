@@ -36,6 +36,9 @@ import {
 	type ShiftTierStaffing,
 } from "@agency-portal/lib/post-job-pay-tiers";
 import { cn } from "@agency-portal/lib/utils";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { tierLabel } from "@/lib/portal-i18n/language-label";
 
 function tierPctCell(
 	readOnly: boolean | undefined,
@@ -100,6 +103,7 @@ export function WorkspaceTierRatesEditor({
 
 	hideTargetSales?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const defaultOtAfterHours = resolveStandardShiftHours(
 		tierRates[OUTLET_BASE_TIER]?.otAfterHours,
 	);
@@ -163,52 +167,76 @@ export function WorkspaceTierRatesEditor({
 
 	const workspaceHeader = (
 		<>
-			<div className={tierTableHeadCell(undefined, true)}>Tier</div>
+			<div className={tierTableHeadCell(undefined, true)}>
+				{t.outletDetail.colTier}
+			</div>
 
-			<div className={tierTableHeadCell(undefined, true)}>Daily wages</div>
+			<div className={tierTableHeadCell(undefined, true)}>
+				{t.outletDetail.colDailyWages}
+			</div>
 
-			<div className={tierTableHeadCell("text-center")}>RM/HR</div>
+			<div className={tierTableHeadCell("text-center")}>
+				{t.outletDetail.colRmHr}
+			</div>
 
 			{!hideTargetSales && (
-				<div className={tierTableHeadCell(undefined, true)}>Target sales</div>
+				<div className={tierTableHeadCell(undefined, true)}>
+					{t.outletDetail.colTargetSales}
+				</div>
 			)}
 
 			<div className={tierTableHeadCell("text-center leading-tight", true)}>
-				HH Drinks
+				{t.outletDetail.colHhDrinks}
 			</div>
 
 			<div className={tierTableHeadCell("text-center leading-tight", true)}>
-				NH Drinks
+				{t.outletDetail.colNhDrinks}
 			</div>
 
-			<div className={tierTableHeadCell("text-center", true)}>Tips</div>
+			<div className={tierTableHeadCell("text-center", true)}>
+				{t.outletDetail.colTips}
+			</div>
 
-			<div className={tierTableHeadCell("text-center")}>OT/HR</div>
+			<div className={tierTableHeadCell("text-center")}>
+				{t.outletDetail.colOtHr}
+			</div>
 		</>
 	);
 
 	const legacyHeader = (
 		<>
-			<div className={tierTableHeadCell(undefined, true)}>Tier</div>
+			<div className={tierTableHeadCell(undefined, true)}>
+				{t.outletDetail.colTier}
+			</div>
 
-			<div className={tierTableHeadCell(undefined, true)}>Daily wages</div>
+			<div className={tierTableHeadCell(undefined, true)}>
+				{t.outletDetail.colDailyWages}
+			</div>
 
 			{!hideTargetSales && (
-				<div className={tierTableHeadCell(undefined, true)}>Target sales</div>
+				<div className={tierTableHeadCell(undefined, true)}>
+					{t.outletDetail.colTargetSales}
+				</div>
 			)}
 
-			<div className={tierTableHeadCell(undefined, true)}>Drinks & tips</div>
+			<div className={tierTableHeadCell(undefined, true)}>
+				{t.workspace.legacyDrinksTips}
+			</div>
 
 			{showTierStaffing ? (
 				<>
 					<div className={tierTableHeadCell("text-center", true)}>
-						Requested
+						{t.workspace.legacyRequested}
 					</div>
 
-					<div className={tierTableHeadCell("text-center", true)}>Supplied</div>
+					<div className={tierTableHeadCell("text-center", true)}>
+						{t.workspace.legacySupplied}
+					</div>
 				</>
 			) : (
-				<div className={tierTableHeadCell("text-center", true)}>OT after</div>
+				<div className={tierTableHeadCell("text-center", true)}>
+					{t.workspace.legacyOtAfter}
+				</div>
 			)}
 		</>
 	);
@@ -224,9 +252,12 @@ export function WorkspaceTierRatesEditor({
 
 		return (
 			<>
-				<div className={tierTableCell()} title={tier}>
+				<div
+					className={tierTableCell()}
+					title={tierLabel(postJobPayTierLabelForOutletTier(tier), t)}
+				>
 					<span className="text-xs font-semibold text-[var(--iz-txt)]">
-						{postJobPayTierLabelForOutletTier(tier)}
+						{tierLabel(postJobPayTierLabelForOutletTier(tier), t)}
 					</span>
 				</div>
 
@@ -236,7 +267,7 @@ export function WorkspaceTierRatesEditor({
 							? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 							: tierTableEditableCell()
 					}
-					title={readOnly ? undefined : "Tap to edit daily / shift pay"}
+					title={readOnly ? undefined : t.workspace.tapEditDailyPay}
 				>
 					<div className={fieldShell(undefined, true)}>
 						<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -253,7 +284,9 @@ export function WorkspaceTierRatesEditor({
 
 				<div
 					className={tierTableReadonlyCell("justify-center")}
-					title={`Derived from daily wages ÷ ${otAfterHours}h shift (default 6h)`}
+					title={fill(t.outletDetail.derivedFromDailyWages, {
+						hours: otAfterHours,
+					})}
 				>
 					<TierRmHrReadonly amount={tierBaseRmPerHour(hourlyRule)} />
 				</div>
@@ -265,7 +298,7 @@ export function WorkspaceTierRatesEditor({
 								? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 								: tierTableEditableCell()
 						}
-						title={readOnly ? undefined : "Tap to set target sales (optional)"}
+						title={readOnly ? undefined : t.workspace.tapSetTargetSales}
 					>
 						<div className={fieldShell(undefined, true)}>
 							<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -274,7 +307,7 @@ export function WorkspaceTierRatesEditor({
 
 							<TierMoneyInput
 								value={rates.targetSalesRm}
-								placeholder="Optional"
+								placeholder={t.workspace.optional}
 								disabled={readOnly}
 								onChange={(targetSalesRm) =>
 									onPatchTier(tier, { targetSalesRm })
@@ -291,7 +324,7 @@ export function WorkspaceTierRatesEditor({
 
 					(happyHourDrinkPct) => onPatchTier(tier, { happyHourDrinkPct }),
 
-					"Tap to edit happy-hour drink commission",
+					t.workspace.tapEditHappyHourCommission,
 				)}
 
 				{tierPctCell(
@@ -301,7 +334,7 @@ export function WorkspaceTierRatesEditor({
 
 					(drinkPct) => onPatchTier(tier, { drinkPct }),
 
-					"Tap to edit normal-hours drink commission",
+					t.workspace.tapEditNormalHoursCommission,
 				)}
 
 				{tierPctCell(
@@ -311,12 +344,12 @@ export function WorkspaceTierRatesEditor({
 
 					(tipPct) => onPatchTier(tier, { tipPct }),
 
-					"Tap to edit tips commission",
+					t.workspace.tapEditTipsCommission,
 				)}
 
 				<div
 					className={tierTableReadonlyCell("justify-center")}
-					title="OT hourly rate (1.5× RM/HR)"
+					title={t.outletDetail.otHourlyRate}
 				>
 					<TierRmHrReadonly amount={tierOtRmPerHour(hourlyRule)} />
 				</div>
@@ -329,9 +362,12 @@ export function WorkspaceTierRatesEditor({
 
 		return (
 			<>
-				<div className={tierTableCell()} title={tier}>
+				<div
+					className={tierTableCell()}
+					title={tierLabel(postJobPayTierLabelForOutletTier(tier), t)}
+				>
 					<span className="text-xs font-semibold text-[var(--iz-txt)]">
-						{postJobPayTierLabelForOutletTier(tier)}
+						{tierLabel(postJobPayTierLabelForOutletTier(tier), t)}
 					</span>
 				</div>
 
@@ -341,7 +377,7 @@ export function WorkspaceTierRatesEditor({
 							? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 							: tierTableEditableCell()
 					}
-					title={readOnly ? undefined : "Tap to edit pay per shift"}
+					title={readOnly ? undefined : t.workspace.tapEditPayPerShift}
 				>
 					<div className={fieldShell(undefined, true)}>
 						<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -363,7 +399,7 @@ export function WorkspaceTierRatesEditor({
 								? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 								: tierTableEditableCell()
 						}
-						title={readOnly ? undefined : "Tap to set target sales (optional)"}
+						title={readOnly ? undefined : t.workspace.tapSetTargetSales}
 					>
 						<div className={fieldShell(undefined, true)}>
 							<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -372,7 +408,7 @@ export function WorkspaceTierRatesEditor({
 
 							<TierMoneyInput
 								value={rates.targetSalesRm}
-								placeholder="Optional"
+								placeholder={t.workspace.optional}
 								disabled={readOnly}
 								onChange={(targetSalesRm) =>
 									onPatchTier(tier, { targetSalesRm })
@@ -388,13 +424,13 @@ export function WorkspaceTierRatesEditor({
 							? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 							: tierTableEditableCell()
 					}
-					title={
-						readOnly ? undefined : "Tap to edit drinks and tips commission"
-					}
+					title={readOnly ? undefined : t.workspace.tapEditDrinksTipsCommission}
 				>
 					<div className={cn(fieldShell("w-full justify-between", true))}>
 						<div className="flex min-w-0 items-center gap-0.5">
-							<span className="text-[9px] text-[var(--iz-muted)]">Dr</span>
+							<span className="text-[9px] text-[var(--iz-muted)]">
+								{t.workspace.legacyDr}
+							</span>
 
 							<TierPctInput
 								value={rates.drinkPct}
@@ -406,7 +442,9 @@ export function WorkspaceTierRatesEditor({
 						</div>
 
 						<div className="flex min-w-0 items-center gap-0.5">
-							<span className="text-[9px] text-[var(--iz-muted)]">Tip</span>
+							<span className="text-[9px] text-[var(--iz-muted)]">
+								{t.workspace.legacyTip}
+							</span>
 
 							<TierPctInput
 								value={rates.tipPct}
@@ -434,7 +472,7 @@ export function WorkspaceTierRatesEditor({
 									)
 								: tierTableEditableCell("justify-center")
 						}
-						title={readOnly ? undefined : "Tap to edit OT threshold"}
+						title={readOnly ? undefined : t.workspace.tapEditOtThreshold}
 					>
 						<div className="flex items-center justify-center gap-0.5">
 							<TierHoursInput
@@ -444,7 +482,9 @@ export function WorkspaceTierRatesEditor({
 								onChange={(otAfterHours) => onPatchTier(tier, { otAfterHours })}
 							/>
 
-							<span className="text-[9px] text-[var(--iz-muted)]">hrs</span>
+							<span className="text-[9px] text-[var(--iz-muted)]">
+								{t.workspace.legacyHrs}
+							</span>
 						</div>
 					</div>
 				)}
@@ -454,15 +494,15 @@ export function WorkspaceTierRatesEditor({
 
 	const workspaceCommissionRow = (
 		<>
-			<div className={tierTableCell()} title="Commission only">
+			<div className={tierTableCell()} title={t.outletDetail.commissionOnly}>
 				<span className="text-xs font-semibold text-[var(--iz-txt)]">
-					Commission only
+					{t.outletDetail.commissionOnly}
 				</span>
 			</div>
 
 			<div
 				className={tierTableReadonlyCell()}
-				title="Commission only — RM 0 shift pay"
+				title={t.outletDetail.commissionOnlyRm0}
 			>
 				<div className={fieldShell(undefined, true)}>
 					<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -485,7 +525,7 @@ export function WorkspaceTierRatesEditor({
 							? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 							: tierTableEditableCell()
 					}
-					title={readOnly ? undefined : "Tap to set target sales (optional)"}
+					title={readOnly ? undefined : t.workspace.tapSetTargetSales}
 				>
 					<div className={fieldShell(undefined, true)}>
 						<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -494,7 +534,7 @@ export function WorkspaceTierRatesEditor({
 
 						<TierMoneyInput
 							value={commissionOnlyRates.targetSalesRm}
-							placeholder="Optional"
+							placeholder={t.workspace.optional}
 							disabled={readOnly}
 							onChange={(targetSalesRm) =>
 								onPatchCommissionOnly({ targetSalesRm })
@@ -511,7 +551,7 @@ export function WorkspaceTierRatesEditor({
 
 				(happyHourDrinkPct) => onPatchCommissionOnly({ happyHourDrinkPct }),
 
-				"Tap to edit happy-hour drink commission",
+				t.workspace.tapEditHappyHourCommission,
 			)}
 
 			{tierPctCell(
@@ -521,7 +561,7 @@ export function WorkspaceTierRatesEditor({
 
 				(drinkPct) => onPatchCommissionOnly({ drinkPct }),
 
-				"Tap to edit normal-hours drink commission",
+				t.workspace.tapEditNormalHoursCommission,
 			)}
 
 			{tierPctCell(
@@ -531,12 +571,12 @@ export function WorkspaceTierRatesEditor({
 
 				(tipPct) => onPatchCommissionOnly({ tipPct }),
 
-				"Tap to edit tips commission",
+				t.workspace.tapEditTipsCommission,
 			)}
 
 			<div
 				className={tierTableReadonlyCell("justify-center")}
-				title="Not applicable"
+				title={t.outletDetail.notApplicable}
 			>
 				<span className="text-xs text-[var(--iz-muted)]">—</span>
 			</div>
@@ -545,15 +585,15 @@ export function WorkspaceTierRatesEditor({
 
 	const legacyCommissionRow = (
 		<>
-			<div className={tierTableCell()} title="Commission only">
+			<div className={tierTableCell()} title={t.outletDetail.commissionOnly}>
 				<span className="text-xs font-semibold text-[var(--iz-txt)]">
-					Commission only
+					{t.outletDetail.commissionOnly}
 				</span>
 			</div>
 
 			<div
 				className={tierTableReadonlyCell()}
-				title="Commission only — RM 0 shift pay"
+				title={t.outletDetail.commissionOnlyRm0}
 			>
 				<div className={fieldShell(undefined, true)}>
 					<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -572,7 +612,7 @@ export function WorkspaceTierRatesEditor({
 							? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 							: tierTableEditableCell()
 					}
-					title={readOnly ? undefined : "Tap to set target sales (optional)"}
+					title={readOnly ? undefined : t.workspace.tapSetTargetSales}
 				>
 					<div className={fieldShell(undefined, true)}>
 						<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -581,7 +621,7 @@ export function WorkspaceTierRatesEditor({
 
 						<TierMoneyInput
 							value={commissionOnlyRates.targetSalesRm}
-							placeholder="Optional"
+							placeholder={t.workspace.optional}
 							disabled={readOnly}
 							onChange={(targetSalesRm) =>
 								onPatchCommissionOnly({ targetSalesRm })
@@ -597,11 +637,13 @@ export function WorkspaceTierRatesEditor({
 						? tierTableCell("bg-black/15 text-[var(--iz-muted)]")
 						: tierTableEditableCell()
 				}
-				title={readOnly ? undefined : "Tap to edit drinks and tips commission"}
+				title={readOnly ? undefined : t.workspace.tapEditDrinksTipsCommission}
 			>
 				<div className={cn(fieldShell("w-full justify-between", true))}>
 					<div className="flex min-w-0 items-center gap-0.5">
-						<span className="text-[9px] text-[var(--iz-muted)]">Dr</span>
+						<span className="text-[9px] text-[var(--iz-muted)]">
+							{t.workspace.legacyDr}
+						</span>
 
 						<TierPctInput
 							value={commissionOnlyRates.drinkPct}
@@ -613,7 +655,9 @@ export function WorkspaceTierRatesEditor({
 					</div>
 
 					<div className="flex min-w-0 items-center gap-0.5">
-						<span className="text-[9px] text-[var(--iz-muted)]">Tip</span>
+						<span className="text-[9px] text-[var(--iz-muted)]">
+							{t.workspace.legacyTip}
+						</span>
 
 						<TierPctInput
 							value={commissionOnlyRates.tipPct}
@@ -635,7 +679,7 @@ export function WorkspaceTierRatesEditor({
 			) : (
 				<div
 					className={tierTableReadonlyCell("justify-center")}
-					title="Not applicable"
+					title={t.outletDetail.notApplicable}
 				>
 					<span className="text-xs text-[var(--iz-muted)]">—</span>
 				</div>

@@ -22,6 +22,9 @@ import { cn } from "@agency-portal/lib/utils";
 import { format, parseISO } from "date-fns";
 import { Crown, Star } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const AVATAR_COLORS = [
 	{ bg: "rgba(167, 139, 250, 0.35)", text: "#c4b5fd" },
@@ -48,16 +51,23 @@ function avatarStyle(name: string) {
 	return AVATAR_COLORS[h]!;
 }
 
-function formatLatestLabel(dateIso: string, dateDisplay: string) {
+function formatLatestLabel(
+	dateIso: string,
+	dateDisplay: string,
+	t: PortalTranslations,
+) {
 	if (/^\d{4}-\d{2}-\d{2}$/.test(dateIso)) {
 		try {
 			const d = parseISO(dateIso);
-			return `Latest ${format(d, "EEE")} · ${format(d, "d MMM")}`;
+			return fill(t.history.latestOn, {
+				day: format(d, "EEE"),
+				date: format(d, "d MMM"),
+			});
 		} catch {
 			/* use fallback */
 		}
 	}
-	return `Latest ${dateDisplay}`;
+	return fill(t.history.latestPlain, { date: dateDisplay });
 }
 
 function OutletPrAvatar({
@@ -137,6 +147,7 @@ function RatedStarRow({
 	size?: "sm" | "md";
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	const filled = Math.max(0, Math.min(RATED_STAR_SLOTS, Math.round(stars)));
 	const iconSize = size === "sm" ? "h-2.5 w-2.5" : "h-3.5 w-3.5";
 
@@ -147,7 +158,10 @@ function RatedStarRow({
 				size === "sm" && "iz-rated-stars--sm",
 				className,
 			)}
-			aria-label={`${filled} out of ${RATED_STAR_SLOTS} stars`}
+			aria-label={fill(t.history.starsOutOf, {
+				filled,
+				total: RATED_STAR_SLOTS,
+			})}
 		>
 			{Array.from({ length: RATED_STAR_SLOTS }).map((_, index) => {
 				const slot = index + 1;
@@ -182,10 +196,13 @@ export function OutletShiftLogRatingBlock({
 }: {
 	rating: OutletPrRating;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<section className="iz-outlet-shift-log-rating">
 			<div className="iz-outlet-shift-log-rating__head">
-				<span className="iz-outlet-shift-log-rating__label">Rating</span>
+				<span className="iz-outlet-shift-log-rating__label">
+					{t.history.rating}
+				</span>
 				{rating.date && (
 					<span className="iz-outlet-shift-log-rating__date">
 						{rating.date}
@@ -208,6 +225,7 @@ export function OutletShiftLogRatingBlock({
 }
 
 export function OutletShiftLogShiftCard({ row }: { row: ShiftHistoryRow }) {
+	const { t } = usePortalLocale();
 	const [openKind, setOpenKind] = useState<"received" | "payout" | null>(null);
 	const outletCommissionRules = useStore((s) => s.outletCommissionRules);
 	const agencyPRs = useStore((s) => s.agencyPRs);
@@ -258,7 +276,7 @@ export function OutletShiftLogShiftCard({ row }: { row: ShiftHistoryRow }) {
 					aria-expanded={openKind === "received"}
 				>
 					<span className="iz-outlet-shift-log-card__metric-label">
-						Total received
+						{t.history.metricTotalReceived}
 					</span>
 					<span className="iz-outlet-shift-log-card__metric-value">
 						{formatOutletHistRm(breakdown.totalReceived)}
@@ -275,7 +293,7 @@ export function OutletShiftLogShiftCard({ row }: { row: ShiftHistoryRow }) {
 					aria-expanded={openKind === "payout"}
 				>
 					<span className="iz-outlet-shift-log-card__metric-label">
-						Total payout
+						{t.history.metricTotalPayout}
 					</span>
 					<span className="iz-outlet-shift-log-card__metric-value">
 						{formatOutletHistRm(breakdown.totalPayout)}
@@ -313,6 +331,7 @@ export function OutletShiftLogSummaryCard({
 	drinkSalesRm?: number;
 	breakdown?: ShiftHistoryMoneyBreakdown;
 }) {
+	const { t } = usePortalLocale();
 	const [openKind, setOpenKind] = useState<"received" | "payout" | null>(null);
 	const received =
 		breakdown?.totalReceived ??
@@ -349,7 +368,7 @@ export function OutletShiftLogSummaryCard({
 					disabled={!breakdown}
 				>
 					<span className="iz-outlet-shift-log-summary__metric-label">
-						Total received
+						{t.history.metricTotalReceived}
 					</span>
 					<span className="iz-outlet-shift-log-summary__metric-value">
 						{formatOutletHistRm(received)}
@@ -367,7 +386,7 @@ export function OutletShiftLogSummaryCard({
 					disabled={!breakdown}
 				>
 					<span className="iz-outlet-shift-log-summary__metric-label">
-						Total payout
+						{t.history.metricTotalPayout}
 					</span>
 					<span className="iz-outlet-shift-log-summary__metric-value">
 						{formatOutletHistRm(payout)}
@@ -398,16 +417,24 @@ export function OutletPrHistoryCard({
 	portal?: "agency" | "outlet";
 	agencyPRs?: AgencyManagedPR[];
 }) {
+	const { t } = usePortalLocale();
 	const venueKind = portal === "agency" ? "outlet" : "agency";
 	const subtitle =
 		rollup.venues.length === 1
 			? rollup.venues[0]
 			: rollup.venues.length > 1
-				? `${rollup.venues.length} ${venueKind}s`
+				? fill(
+						venueKind === "outlet"
+							? t.history.outletCountMany
+							: t.history.agencyCountMany,
+						{ n: rollup.venues.length },
+					)
 				: "—";
 	const pct =
 		topPayout > 0 ? Math.round((rollup.totalPayout / topPayout) * 100) : 0;
-	const pctLabel = rank === 1 ? "100% of top earner" : `${pct}% of top earner`;
+	const pctLabel = fill(t.reports.pctOfTopEarner, {
+		pct: rank === 1 ? 100 : pct,
+	});
 
 	const content = (
 		<article className="iz-outlet-hist-card">
@@ -415,13 +442,16 @@ export function OutletPrHistoryCard({
 				<div className="iz-outlet-hist-card__identity">
 					<div className="iz-outlet-hist-avatar-wrap">
 						{rank === 1 ? (
-							<span className="iz-outlet-hist-crown" aria-label="Top earner">
+							<span
+								className="iz-outlet-hist-crown"
+								aria-label={t.history.topEarner}
+							>
 								<Crown className="h-2.5 w-2.5" strokeWidth={2.5} />
 							</span>
 						) : rank > 1 ? (
 							<span
 								className="iz-outlet-hist-rank-badge"
-								aria-label={`Rank ${rank}`}
+								aria-label={fill(t.reports.rankLabel, { rank })}
 							>
 								{rank}
 							</span>
@@ -444,10 +474,19 @@ export function OutletPrHistoryCard({
 				</div>
 				<div className="iz-outlet-hist-card__shifts">
 					<p className="iz-outlet-hist-card__shift-count">
-						{rollup.shiftCount} shift{rollup.shiftCount !== 1 ? "s" : ""}
+						{fill(
+							rollup.shiftCount === 1
+								? t.rosterGrid.shiftCountOne
+								: t.rosterGrid.shiftCountMany,
+							{ n: rollup.shiftCount },
+						)}
 					</p>
 					<p className="iz-outlet-hist-card__latest">
-						{formatLatestLabel(rollup.latestDateIso, rollup.latestDateDisplay)}
+						{formatLatestLabel(
+							rollup.latestDateIso,
+							rollup.latestDateDisplay,
+							t,
+						)}
 					</p>
 				</div>
 			</div>

@@ -1,5 +1,5 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery } from "@tanstack/react-query";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import axios from "axios";
 import { Check, Loader2, MailWarning } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
@@ -9,7 +9,9 @@ import { getPublicClient } from "@/lib/axios-v1";
 export const Route = createFileRoute("/invite/org-member")({
 	validateSearch: (search: Record<string, unknown>): { token?: string } => ({
 		token:
-			typeof search.token === "string" ? search.token.trim() || undefined : undefined,
+			typeof search.token === "string"
+				? search.token.trim() || undefined
+				: undefined,
 	}),
 	component: OrgMemberInvitePage,
 });
@@ -217,7 +219,8 @@ function OrgMemberInvitePage() {
 					) : (
 						<form className="space-y-3" onSubmit={onSubmit}>
 							<p className="text-sm text-muted-foreground">
-								Set up your account to accept. You can change the email if needed.
+								Set up your account to accept. You can change the email if
+								needed.
 							</p>
 							<label className="block space-y-1 text-sm">
 								<span className="font-medium">Name</span>
@@ -242,7 +245,10 @@ function OrgMemberInvitePage() {
 							</label>
 							<label className="block space-y-1 text-sm">
 								<span className="font-medium">
-									Phone <span className="font-normal text-muted-foreground">(optional)</span>
+									Phone{" "}
+									<span className="font-normal text-muted-foreground">
+										(optional)
+									</span>
 								</span>
 								<input
 									type="tel"

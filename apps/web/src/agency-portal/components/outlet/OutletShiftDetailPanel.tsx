@@ -13,6 +13,7 @@ import {
 } from "@agency-portal/components/outlet/outlet-portal-ui";
 import { WorkspaceTierRatesEditor } from "@agency-portal/components/outlet/WorkspaceTierRatesEditor";
 import { useOutletShiftActions } from "@agency-portal/hooks/use-outlet-shift-actions";
+import { useOutletWorkspace } from "@agency-portal/hooks/use-outlet-workspace";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -59,21 +60,44 @@ import {
 	Trash2,
 } from "lucide-react";
 import { useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
+/* Resolvers, not strings — module scope runs before any hook. The record
+ * KEYS are `shift.status`, the stored enum, and are untouched. */
 const STATUS_META = {
-	sealed: { tone: "iz-pill-ink", icon: Lock, label: "Sealed" },
-	confirmed: { tone: "iz-pill-green", icon: CheckCircle2, label: "Live" },
-	open: { tone: "iz-pill-amber", icon: PlayCircle, label: "Open" },
-	draft: { tone: "iz-pill-violet", icon: Clock, label: "Draft" },
+	sealed: {
+		tone: "iz-pill-ink",
+		icon: Lock,
+		label: (t: PortalTranslations) => t.today.statusSealed,
+	},
+	confirmed: {
+		tone: "iz-pill-green",
+		icon: CheckCircle2,
+		label: (t: PortalTranslations) => t.calendar.legendLive,
+	},
+	open: {
+		tone: "iz-pill-amber",
+		icon: PlayCircle,
+		label: (t: PortalTranslations) => t.calendar.legendOpen,
+	},
+	draft: {
+		tone: "iz-pill-violet",
+		icon: Clock,
+		label: (t: PortalTranslations) => t.calendar.legendDraft,
+	},
 } as const;
 
 export function OutletShiftStatusBadge({ shift }: { shift: ShiftRequest }) {
+	const { t } = usePortalLocale();
 	const meta = STATUS_META[shift.status] ?? STATUS_META.draft;
 	const StatusIcon = meta.icon;
 	return (
 		<span className={cn("iz-pill shrink-0 !py-0.5 !text-[9px]", meta.tone)}>
 			<StatusIcon className="mr-0.5 inline h-2.5 w-2.5" />
-			{meta.label}
+			{meta.label(t)}
 		</span>
 	);
 }
@@ -101,7 +125,21 @@ export function OutletShiftDetailPanel({
 	roster?: AgencyRosterSlot[];
 	agencyPrs?: AgencyManagedPR[];
 }) {
-	const outletWorkspace = useStore((s) => s.outletWorkspace);
+	const { t } = usePortalLocale();
+	// THE VENUE'S REAL RATE CARD, not the demo store's.
+	//
+	// The store slice is blank-to-placeholder on a real outlet session, and its
+	// placeholder ladder (RM 50/55/65/80, drink 0/1/2/3/4) is what this table showed
+	// for every tier the shift did not name — beside the shift's own Tier I at
+	// RM 500 / 10% / 15%, which made the card look half-broken rather than wrong.
+	// Post Job already picks the backed copy this way; the two screens must agree
+	// about what the venue charges.
+	const storeWorkspace = useStore((s) => s.outletWorkspace);
+	const backedWorkspace = useOutletWorkspace();
+	const outletWorkspace =
+		backedWorkspace.backed && backedWorkspace.workspace
+			? backedWorkspace.workspace
+			: storeWorkspace;
 	const storeAgencyPRs = useStore((s) => s.agencyPRs);
 	const storeRoster = useStore((s) => s.agencyRoster);
 	const agencyPRs = agencyPrsOverride ?? storeAgencyPRs;
@@ -163,12 +201,14 @@ export function OutletShiftDetailPanel({
 	);
 	const eventTypeLabel = formatShiftEventTypeSummary(
 		shift.eventKind ?? "normal",
+		t,
 		shift.specialEventType,
 		shift.customSpecialEventName,
 	);
 	const drinkPricingLabel = formatShiftDrinkPricingSummary(
 		shift,
 		outletWorkspace.drinkMenu ?? [],
+		t,
 	);
 	const tierRates = resolveShiftTierRates(shift, outletWorkspace);
 	const prTierById = Object.fromEntries(
@@ -244,8 +284,10 @@ export function OutletShiftDetailPanel({
 				tierRates,
 				bookedPrIds: outletShiftActivePrIds(shift),
 				agencyPRs,
+				suppliedByTierBucket: shift.suppliedByTierBucket,
 			}),
 		[
+			shift.suppliedByTierBucket,
 			shift.payTierRows,
 			shift.quantity,
 			shift.demandCut,
@@ -279,10 +321,18 @@ export function OutletShiftDetailPanel({
 	return (
 		<>
 			<div className="px-3.5 pb-3.5 pt-2">
-				{!staffingAgency && <p className="iz-tiny iz-muted2">{shift.shift}</p>}
-				<div className={cn(!staffingAgency && "mt-1", "space-y-0.5")}>
+				{/* The raw window used to print here whenever no agency was named —
+				    unreachable in practice, because the name always fell back to a
+				    demo literal. Now that an unnameable agency correctly renders
+				    nothing, this fired on real sessions and repeated the sheet
+				    header's own "10pm – 4am" as an unformatted "22:00 — 04:00"
+				    directly beneath it. The header already states the window, and a
+				    second copy in a different format reads as two different facts. */}
+				<div className="space-y-0.5">
 					<p className="iz-tiny iz-muted2">
-						<span className="text-[var(--iz-muted)]">Event type · </span>
+						<span className="text-[var(--iz-muted)]">
+							{t.today.eventTypePrefix}{" "}
+						</span>
 						{eventTypeLabel}
 					</p>
 					<p className="iz-tiny iz-muted2">
@@ -291,7 +341,7 @@ export function OutletShiftDetailPanel({
 							hash={OUTLET_SERVICE_ENTITLEMENT_SECTION_ID}
 							className="text-[var(--iz-muted)] underline-offset-2 transition-colors hover:text-[var(--iz-txt)] hover:underline"
 						>
-							Service Entitlement
+							{t.today.serviceEntitlement}
 						</Link>
 						<span className="text-[var(--iz-muted)]"> · </span>
 						{drinkPricingLabel}
@@ -315,8 +365,10 @@ export function OutletShiftDetailPanel({
 					<p className="iz-tiny iz-muted2 mt-0.5">
 						{shift.dressCode && (
 							<>
-								<span className="text-[var(--iz-muted)]">Dress Code: </span>
-								{shift.dressCode}
+								<span className="text-[var(--iz-muted)]">
+									{t.today.dressCodeLabel}{" "}
+								</span>
+								{dressCodeLabel(shift.dressCode, t)}
 							</>
 						)}
 						{shift.dressCode && staffingAgency ? " · " : null}
@@ -327,7 +379,7 @@ export function OutletShiftDetailPanel({
 				<div className="mt-3">
 					<div className="iz-outlet-shift-kpi-row">
 						<OutletStatChip
-							label="Demand / supplied"
+							label={t.calendar.demandSupplied}
 							value={`${staffingDemand} / ${supplied}`}
 							tone={demandTone}
 							onClick={() => {
@@ -337,20 +389,20 @@ export function OutletShiftDetailPanel({
 							}}
 						/>
 						<OutletTargetActualCard
-							label="Sales"
+							label={t.today.sales}
 							target={targetSales}
 							actual={displaySales}
 							onClick={hideCutlost ? scrollToOutletLiveSales : undefined}
 						/>
 						<OutletTargetActualCard
-							label="Labor cost"
+							label={t.today.laborCost}
 							target={targetCost}
 							actual={actualCost}
 							lowerIsBetter
 							onClick={hideCutlost ? scrollToOutletLaborCostReport : undefined}
 						/>
 						<OutletStatChip
-							label="Cutlost"
+							label={t.today.cutlost}
 							value={formatOutletShiftMetricAmount(cutLoss)}
 							tone={cutLoss > 0 ? "danger" : "neutral"}
 							onClick={scrollToCutlost}
@@ -363,7 +415,9 @@ export function OutletShiftDetailPanel({
 						Posted {shift.quantity}
 						{adjustmentsLabel ? ` · ${adjustmentsLabel}` : ""}
 						{bestEffortSaved > 0
-							? ` · Saved ${formatOutletShiftMetricAmount(bestEffortSaved)}`
+							? fill(t.today.savedAmount, {
+									amount: formatOutletShiftMetricAmount(bestEffortSaved),
+								})
 							: ""}
 					</p>
 				)}
@@ -392,7 +446,9 @@ export function OutletShiftDetailPanel({
 						<div className="mt-3 space-y-2">
 							<div className="flex items-center justify-between gap-2">
 								<p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--iz-muted2)]">
-									{showApplicantActions ? "Applicants" : "Requested PRs"}
+									{showApplicantActions
+										? t.today.applicants
+										: t.today.requestedPrs}
 								</p>
 								<IzPill variant="amber" className="!py-0.5 !text-[9px]">
 									{visibleApplicants.length} waiting
@@ -400,7 +456,7 @@ export function OutletShiftDetailPanel({
 							</div>
 							{!showApplicantActions && (
 								<p className="text-[10px] leading-snug text-[var(--iz-muted2)]">
-									Your agency approves or declines each request.
+									{t.today.agencyApproves}
 								</p>
 							)}
 							{visibleApplicants.map((a) =>
@@ -430,7 +486,7 @@ export function OutletShiftDetailPanel({
 											{a.rating > 0 ? ` · ${a.rating}★` : ""}
 										</span>
 										<IzPill variant="amber" className="!py-0.5 !text-[9px]">
-											Pending agency
+											{t.today.pendingAgency}
 										</IzPill>
 									</div>
 								),
@@ -442,13 +498,13 @@ export function OutletShiftDetailPanel({
 					<div className="mt-3">
 						<OutletShiftSalesPanel
 							shiftId={shift.id}
-							label="Log sales"
+							label={t.today.logSales}
 							collapsible
 						/>
 					</div>
 				)}
 				{canLogSales && shift.status === "sealed" && (
-					<p className="iz-tiny iz-muted mt-2">Sales locked after seal.</p>
+					<p className="iz-tiny iz-muted mt-2">{t.today.salesLocked}</p>
 				)}
 
 				<div className="mt-3 space-y-2">
@@ -458,8 +514,8 @@ export function OutletShiftDetailPanel({
 						shift.status !== "sealed" && (
 							<OutletActionButton
 								icon={Check}
-								title="Confirm staffing"
-								hint="Lock in PRs and mark this shift live"
+								title={t.today.confirmStaffing}
+								hint={t.today.confirmStaffingHint}
 								tone="green"
 								disabled={isConfirming}
 								onClick={() => confirmShift(shift.id)}
@@ -469,8 +525,8 @@ export function OutletShiftDetailPanel({
           {canSeal && shift.status === "confirmed" && (
             <OutletActionButton
               icon={Lock}
-              title="Seal shift"
-              hint="Finalize sales and send payroll to agencies"
+              title={t.today.sealShift}
+              hint={t.today.sealShiftHint}
               tone="gold"
               onClick={() => setSealOpen(true)}
             />
@@ -478,7 +534,7 @@ export function OutletShiftDetailPanel({
           */}
 					{shift.status === "sealed" && (
 						<div className="flex justify-center py-1">
-							<IzPill variant="green">Payroll sent · shift sealed</IzPill>
+							<IzPill variant="green">{t.today.payrollSent}</IzPill>
 						</div>
 					)}
 				</div>

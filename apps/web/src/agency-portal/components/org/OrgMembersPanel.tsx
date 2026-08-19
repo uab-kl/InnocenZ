@@ -21,6 +21,10 @@ import { Mail, Trash2, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { kickToLogin } from "@/lib/auth/guards";
 import { useProfile } from "@/lib/auth/use-profile";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { portalRoleLabel } from "@/lib/portal-i18n/portal-role-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import { fetchAgencyInviteRoles } from "@/services/agency";
 import { fetchOutletInviteRoles } from "@/services/outlet";
 
@@ -31,24 +35,29 @@ import { fetchOutletInviteRoles } from "@/services/outlet";
  * invite into — see `inviteOptions` — but it stays here because the role picker
  * on an existing member still has to offer it.
  */
+/*
+ * `label` is a RESOLVER FUNCTION of the dictionary, not a string and not a
+ * dictionary key. This constant is module-scope, so it is built before any hook
+ * can run and cannot read `t` directly. A key would type-check and then render
+ * "roleFinance" on screen — the same failure the payroll status chips had.
+ *
+ * `value` stays the backend sub-role enum: it is written by the invite and
+ * role-change calls and matched by `inferSubRole`, so it must not be touched.
+ */
 const FALLBACK_SUB_ROLES: Record<
 	OrgKind,
-	Array<{ value: string; label: string }>
+	Array<{ value: string; label: (t: PortalTranslations) => string }>
 > = {
 	agency: [
-		{ value: "owner", label: "Owner" },
-		{ value: "finance", label: "Finance" },
+		{ value: "owner", label: (t) => t.profile.roleOwner },
+		{ value: "finance", label: (t) => t.profile.roleFinance },
 	],
 	outlet: [
-		{ value: "owner", label: "Owner" },
-		{ value: "finance", label: "Finance" },
-		{ value: "operations_head", label: "Ops" },
+		{ value: "owner", label: (t) => t.profile.roleOwner },
+		{ value: "finance", label: (t) => t.profile.roleFinance },
+		{ value: "operations_head", label: (t) => t.profile.roleOps },
 	],
 };
-
-function formatRoleName(name: string) {
-	return name.replace(/_/g, " ");
-}
 
 function inferSubRole(kind: OrgKind, roleName: string): string {
 	const n = roleName
@@ -87,6 +96,7 @@ export function OrgMembersPanel({
 	orgId: string | null;
 	canManage: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const { data: me } = useProfile();
 	const { members, isLoading, addMember, changeMember, removeMember } =
@@ -131,7 +141,7 @@ export function OrgMembersPanel({
 				.filter((r) => r.value !== "owner")
 				.map((r) => ({
 					key: r.value,
-					label: r.label,
+					label: r.label(t),
 					roleId: null as string | null,
 					subRole: r.value,
 				}));
@@ -139,15 +149,17 @@ export function OrgMembersPanel({
 		return invitable
 			.slice()
 			.sort((a, b) =>
-				formatRoleName(a.roleName).localeCompare(formatRoleName(b.roleName)),
+				portalRoleLabel(a.roleName, t).localeCompare(
+					portalRoleLabel(b.roleName, t),
+				),
 			)
 			.map((r) => ({
 				key: r.roleId,
-				label: formatRoleName(r.roleName),
+				label: portalRoleLabel(r.roleName, t),
 				roleId: r.roleId as string,
 				subRole: inferSubRole(kind, r.roleName),
 			}));
-	}, [kind, portalRoles]);
+	}, [kind, portalRoles, t]);
 
 	const memberRoleOptions = useMemo(() => {
 		// Membership change still writes sub_role enum — one option per lane,
@@ -159,10 +171,10 @@ export function OrgMembersPanel({
 			);
 			return {
 				value: lane.value,
-				label: match ? formatRoleName(match.roleName) : lane.label,
+				label: match ? portalRoleLabel(match.roleName, t) : lane.label(t),
 			};
 		});
-	}, [kind, portalRoles]);
+	}, [kind, portalRoles, t]);
 
 	const labelForSubRole = (subRole: string) =>
 		memberRoleOptions.find((r) => r.value === subRole)?.label ?? subRole;
@@ -209,11 +221,11 @@ export function OrgMembersPanel({
 	const onAdd = async () => {
 		const trimmed = email.trim();
 		if (!trimmed) {
-			toast("Enter the person's email", "warn");
+			toast(t.profile.enterPersonEmail, "warn");
 			return;
 		}
 		if (!selected) {
-			toast("Pick a role for this invite", "warn");
+			toast(t.profile.pickRoleForInvite, "warn");
 			return;
 		}
 		try {
@@ -226,7 +238,7 @@ export function OrgMembersPanel({
 			const acceptUrl = result.acceptUrl;
 			toast(
 				result.message?.trim() ||
-					`Invitation sent to ${trimmed} — they must accept the email to join`,
+					fill(t.profile.invitationSent, { email: trimmed }),
 				"success",
 			);
 			setManualLink(
@@ -235,7 +247,7 @@ export function OrgMembersPanel({
 					: null,
 			);
 		} catch (error) {
-			toast(serverMessage(error, "Could not invite that person"), "warn");
+			toast(serverMessage(error, t.profile.couldNotInvite), "warn");
 		}
 	};
 
@@ -243,9 +255,12 @@ export function OrgMembersPanel({
 		if (subRole === member.subRole) return;
 		try {
 			await changeMember.mutateAsync({ memberId: member.id, subRole });
-			toast(`Role changed to ${labelForSubRole(subRole)}`, "success");
+			toast(
+				fill(t.profile.roleChangedTo, { role: labelForSubRole(subRole) }),
+				"success",
+			);
 		} catch (error) {
-			toast(serverMessage(error, "Could not change that role"), "warn");
+			toast(serverMessage(error, t.profile.couldNotChangeRole), "warn");
 		}
 	};
 
@@ -255,21 +270,25 @@ export function OrgMembersPanel({
 		try {
 			await removeMember.mutateAsync(member.id);
 			setMemberToRemove(null);
-			toast("Member removed", "success");
+			toast(t.profile.memberRemoved, "success");
 		} catch (error) {
 			setMemberToRemove(null);
-			toast(serverMessage(error, "Could not remove that member"), "warn");
+			toast(serverMessage(error, t.profile.couldNotRemoveMember), "warn");
 		}
 	};
 
 	return (
 		<>
-			<IzSectionLabel>Team · {members.length} member(s)</IzSectionLabel>
+			<IzSectionLabel>
+				{fill(t.profile.teamCount, { n: members.length })}
+			</IzSectionLabel>
 			<IzCard>
-				{isLoading && <p className="iz-tiny iz-muted2">Loading team…</p>}
+				{isLoading && (
+					<p className="iz-tiny iz-muted2">{t.profile.loadingTeam}</p>
+				)}
 
 				{!isLoading && members.length === 0 && (
-					<p className="iz-tiny iz-muted2">No team members yet.</p>
+					<p className="iz-tiny iz-muted2">{t.profile.noTeamMembers}</p>
 				)}
 
 				{members.map((member) => {
@@ -284,7 +303,7 @@ export function OrgMembersPanel({
 									{member.username || member.email || "—"}
 									{isSelf && (
 										<span className="iz-tiny iz-muted ml-1.5 font-medium">
-											(you)
+											{t.profile.you}
 										</span>
 									)}
 								</div>
@@ -305,7 +324,12 @@ export function OrgMembersPanel({
 										className="iz-field-input !w-auto !text-xs"
 										value={member.subRole}
 										onChange={(e) => void onChangeRole(member, e.target.value)}
-										aria-label={`Role for ${member.username || member.email || "member"}`}
+										aria-label={fill(t.profile.roleForMember, {
+											name:
+												member.username ||
+												member.email ||
+												t.profile.memberFallback,
+										})}
 									>
 										{assignableRoleOptions.map((role) => (
 											<option key={role.value} value={role.value}>
@@ -323,7 +347,12 @@ export function OrgMembersPanel({
 									<button
 										type="button"
 										className="iz-btn iz-btn-sm iz-btn-soft !inline-flex !h-8 !w-8 !items-center !justify-center !p-0"
-										aria-label={`Remove ${member.username || member.email || "member"}`}
+										aria-label={fill(t.profile.removeMemberAria, {
+											name:
+												member.username ||
+												member.email ||
+												t.profile.memberFallback,
+										})}
 										onClick={() => setMemberToRemove(member)}
 									>
 										<Trash2 className="h-3.5 w-3.5" />
@@ -343,16 +372,18 @@ export function OrgMembersPanel({
 			>
 				<AlertDialogContent>
 					<AlertDialogHeader>
-						<AlertDialogTitle>Remove team member?</AlertDialogTitle>
+						<AlertDialogTitle>
+							{t.profile.removeTeamMemberTitle}
+						</AlertDialogTitle>
 						<AlertDialogDescription>
 							{memberToRemove
 								? `Remove ${memberToRemove.username || memberToRemove.email || "this member"} from the team? They will lose portal access for this organisation.`
-								: "Remove this member from the team?"}
+								: t.profile.removeThisMemberConfirm}
 						</AlertDialogDescription>
 					</AlertDialogHeader>
 					<AlertDialogFooter>
 						<AlertDialogCancel disabled={removeMember.isPending}>
-							Cancel
+							{t.common.cancel}
 						</AlertDialogCancel>
 						<AlertDialogAction
 							className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
@@ -362,7 +393,7 @@ export function OrgMembersPanel({
 								void onRemove();
 							}}
 						>
-							{removeMember.isPending ? "Removing…" : "Remove"}
+							{removeMember.isPending ? t.profile.removing : t.profile.remove}
 						</AlertDialogAction>
 					</AlertDialogFooter>
 				</AlertDialogContent>
@@ -370,7 +401,7 @@ export function OrgMembersPanel({
 
 			{canManage && (
 				<>
-					<IzSectionLabel>Invite a team member</IzSectionLabel>
+					<IzSectionLabel>{t.profile.inviteTeamMember}</IzSectionLabel>
 					<IzCard>
 						<div className="flex flex-wrap items-center gap-2">
 							<span className="flex min-w-[200px] flex-1 items-center gap-2 rounded-lg border border-[var(--iz-line)] px-2.5">
@@ -380,14 +411,14 @@ export function OrgMembersPanel({
 									placeholder="person@example.com"
 									value={email}
 									onChange={(e) => setEmail(e.target.value)}
-									aria-label="Email of the person to invite"
+									aria-label={t.profile.emailOfPersonToInvite}
 								/>
 							</span>
 							<select
 								className="iz-field-input relative z-10 !w-auto min-w-[7.5rem] shrink-0 !text-xs capitalize"
 								value={selectedKey || inviteOptions[0]?.key || ""}
 								onChange={(e) => setSelectedKey(e.target.value)}
-								aria-label="Role for the new member"
+								aria-label={t.profile.roleForNewMember}
 								disabled={inviteOptions.length === 0}
 							>
 								{inviteOptions.map((role) => (
@@ -403,7 +434,7 @@ export function OrgMembersPanel({
 								onClick={() => void onAdd()}
 							>
 								<UserPlus className="h-3.5 w-3.5" />
-								{addMember.isPending ? "Sending…" : "Invite"}
+								{addMember.isPending ? t.profile.sending : t.profile.invite}
 							</button>
 						</div>
 						{rolesQuery.isError && (

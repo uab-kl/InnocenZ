@@ -45,7 +45,10 @@ import {
  * Mirrors mobile `pickActive` (active-shift.tsx) and the canonical
  * `shiftAssignmentStatusValues` in shift-assignment.model.ts.
  */
-export const NON_STAFFING_STATUSES = ['cancelled', 'no_show', 'leave_approved'] as const satisfies ReadonlyArray<ShiftAssignmentStatus>;
+// Defined on the model so a leaf can read it without a repo-to-repo import;
+// re-exported here because this path has many importers of long standing.
+import { NON_STAFFING_STATUSES } from './shift-assignment.model';
+export { NON_STAFFING_STATUSES };
 
 /**
  * A PR's display name: preferred nickname when set, otherwise legal name.
@@ -1267,6 +1270,37 @@ export class ShiftAssignmentRepositoryClass {
       }));
     } catch (error) {
       logger.error('[ShiftAssignmentRepository.listByIdsForPrs] Error:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * The venue pin for an outlet, by id — the travel-gap check needs it for a shift
+   * that has no assignment yet, which is exactly what
+   * `getOutletGeoFenceForAssignment` below cannot answer.
+   *
+   * lat/lng null means the outlet has never dropped its pin. That is "unknown", not
+   * "here": the caller must not read it as a distance of zero.
+   */
+  async getOutletPin(outletId: string): Promise<{
+    outletId: string;
+    lat: number | null;
+    lng: number | null;
+  } | null> {
+    try {
+      const [row] = await db
+        .select({ outletId: OutletTable.id, lat: OutletTable.lat, lng: OutletTable.lng })
+        .from(OutletTable)
+        .where(eq(OutletTable.id, outletId))
+        .limit(1);
+      if (!row) return null;
+      return {
+        outletId: row.outletId,
+        lat: row.lat === null ? null : Number(row.lat),
+        lng: row.lng === null ? null : Number(row.lng),
+      };
+    } catch (error) {
+      logger.error('[ShiftAssignmentRepository.getOutletPin] Error:', error);
       throw error;
     }
   }

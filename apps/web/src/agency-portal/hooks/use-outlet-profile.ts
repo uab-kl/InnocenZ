@@ -1,4 +1,10 @@
-import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
+import {
+	EMPTY_ORG_ADDRESS,
+	joinOrgAddress,
+	type OrgAddress,
+	orgAddressFromRow,
+	resolveOrgAddressForSave,
+} from "@agency-portal/lib/org-address";
 import {
 	BLANK_OUTLET_FINANCE_HEAD,
 	BLANK_OUTLET_OPS_HEAD,
@@ -6,19 +12,13 @@ import {
 	BLANK_OUTLET_SETTINGS,
 	type OutletSettings,
 } from "@agency-portal/lib/outlet-demo";
-import {
-	EMPTY_ORG_ADDRESS,
-	joinOrgAddress,
-	orgAddressFromRow,
-	resolveOrgAddressForSave,
-	type OrgAddress,
-} from "@agency-portal/lib/org-address";
+import { getOutletIdentity } from "@agency-portal/lib/outlet-identity";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
-import { useAuth } from "@/lib/auth-context";
 import { updateMyDisplayName } from "@/lib/auth/profile-api";
 import { profileQueryKey, useProfile } from "@/lib/auth/use-profile";
+import { useAuth } from "@/lib/auth-context";
 import {
 	fetchOutletById,
 	fetchOutletMembers,
@@ -137,8 +137,7 @@ export function useOutletProfile() {
 			ownerMember?.phoneNum?.trim() || me?.contactNo?.trim() || undefined;
 		if (mobile) overlay.mobile = mobile;
 
-		const email =
-			ownerMember?.email?.trim() || me?.email?.trim() || undefined;
+		const email = ownerMember?.email?.trim() || me?.email?.trim() || undefined;
 		if (email) overlay.email = email;
 
 		const logoUrl = apiAssetUrl(outlet?.logoImage);
@@ -229,8 +228,7 @@ export function useOutletProfile() {
 			} else if (payload.logoDataUrl?.startsWith("data:")) {
 				outletPatch.logoBase64 = payload.logoDataUrl;
 				outletPatch.logoFileName = payload.logoFileName || "logo.png";
-				outletPatch.logoContentType =
-					payload.logoContentType || "image/png";
+				outletPatch.logoContentType = payload.logoContentType || "image/png";
 			}
 
 			const outletPromise =
@@ -264,13 +262,9 @@ export function useOutletProfile() {
 		finance,
 		ops,
 		settings,
-		address: settings
-			? orgAddressFromRow(settings)
-			: { ...EMPTY_ORG_ADDRESS },
+		address: settings ? orgAddressFromRow(settings) : { ...EMPTY_ORG_ADDRESS },
 		isLoading:
-			outletQuery.isLoading ||
-			membersQuery.isLoading ||
-			(backed && !me),
+			outletQuery.isLoading || membersQuery.isLoading || (backed && !me),
 		save: saveMutation.mutateAsync,
 		isSaving: saveMutation.isPending,
 	};

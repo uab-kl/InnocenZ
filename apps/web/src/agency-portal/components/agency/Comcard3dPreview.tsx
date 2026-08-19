@@ -9,6 +9,7 @@ import { getComcardDemoStyle } from "@agency-portal/lib/comcard-demo";
 import { prPhotoSrc } from "@agency-portal/lib/public-asset";
 import { cn } from "@agency-portal/lib/utils";
 import type { ReactNode } from "react";
+import { COMCARD_LOCALE } from "@/lib/portal-i18n/comcard-locale";
 
 /** Languages the compact grid comcard shows before collapsing into "+N". */
 const MAX_CARD_LANGUAGES = 2;
@@ -360,14 +361,17 @@ export function Comcard3dPreviewVisual({
 			{showStats && (
 				<div className="iz-comcard-3d-preview-stats">
 					<ComcardStat
-						label="HEIGHT"
+						label={COMCARD_LOCALE.managePr.statHeight}
 						value={comcardMeasure(pr.height, " cm")}
 					/>
 					<ComcardStat
-						label="WEIGHT"
+						label={COMCARD_LOCALE.managePr.statWeight}
 						value={comcardMeasure(pr.weight, " kg")}
 					/>
-					<ComcardStat label="AGE" value={comcardMeasure(pr.age)} />
+					<ComcardStat
+						label={COMCARD_LOCALE.managePr.statAge}
+						value={comcardMeasure(pr.age)}
+					/>
 				</div>
 			)}
 			{showName && (

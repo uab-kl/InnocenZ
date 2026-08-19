@@ -25,8 +25,14 @@ const NON_STAFFING_STATUSES: readonly ShiftAssignmentStatus[] = [
 /**
  * Shift statuses an agency may staff. Drafts are not published yet and sealed
  * shifts are closed for payroll, so neither takes new PRs.
+ *
+ * ⚠️ EXPORTED because this is the client's half of a rule the SERVER owns
+ * (`ASSIGNABLE_SHIFT_STATUSES` in `shift.model.ts`), and every screen that offers
+ * a shift has to mirror the same list. The manual assign dialog had written its
+ * own version of this — "anything except sealed" — so it offered drafts this
+ * planner would never touch, and the two screens disagreed about the same shift.
  */
-const ASSIGNABLE_SHIFT_STATUSES: readonly Shift["status"][] = [
+export const ASSIGNABLE_SHIFT_STATUSES: readonly Shift["status"][] = [
 	"open",
 	"confirmed",
 ];
@@ -189,6 +195,84 @@ function askedByBucket(payTiers: ShiftPayTierDemand[] | undefined): {
 }
 
 /**
+ * Folds the server's cross-agency occupancy into the seats WE counted ourselves.
+ *
+ * `GET /shift-assignment` is scoped to the caller's agency — correctly, one
+ * agency must never read another's roster — so `ourBuckets` is only this
+ * agency's contribution. `GET /shift` therefore also ships `staffedCount` (the
+ * total across every agency) and `staffedBuckets` (that total split by tier).
+ *
+ * Both REPLACE our figures rather than adding to them: the server's numbers
+ * already include the rows we just counted, so adding would double-count every
+ * seat we filled ourselves and make a shift we staffed look overfull.
+ *
+ * The bucket LIST keeps ours and is topped up with the other agency's seats as
+ * anonymous entries — the quota must learn that a Tier I seat is gone, and must
+ * NOT learn who took it. Seats the buckets cannot account for (an untiered PR, or
+ * a backend that sent no buckets at all) are padded with `null`, because a seat
+ * we cannot name is still a seat nobody else can have.
+ *
+ * Same merge as `staffingByShift` in RosterBackendTimetable.tsx, kept as one
+ * function because those two disagreeing about one shift is exactly how the grid
+ * comes to offer a pairing the API refuses.
+ */
+/**
+ * ⚠️ EXPORTED because three places need it and three copies of one merge is how
+ * the tier bug happened in the first place — an agency's own seats were pushed
+ * in the raw `tier_1` vocabulary in one copy and the outlet-label vocabulary in
+ * another, so the agency that supplied a PR could double-book its own tier while
+ * every other agency saw the cap work. The planner, the roster timetable and the
+ * manual assign dialog must answer "how full is this shift, per tier" with one
+ * function or they will drift again.
+ */
+export function mergeCrossAgencyStaffing(
+	shift: Shift,
+	ourBuckets: (string | null)[],
+): { staffed: number; buckets: (string | null)[]; unknownBuckets: number } {
+	// Field absent (older backend, or a response cached before it existed): degrade
+	// to what we counted rather than to zero, which would read as an empty shift.
+	// Nothing is UNKNOWN here — we are not claiming to know about anyone else's
+	// seats, because we are not counting any.
+	if (shift.staffedCount === undefined) {
+		return {
+			staffed: ourBuckets.length,
+			buckets: ourBuckets,
+			unknownBuckets: 0,
+		};
+	}
+	const theirs = Math.max(0, shift.staffedCount - ourBuckets.length);
+	const theirBuckets: (string | null)[] = [];
+	for (const [bucket, count] of Object.entries(shift.staffedBuckets ?? {})) {
+		// Subtract the ones already in our own list — the server counted those too.
+		const ours = ourBuckets.filter((b) => b === bucket).length;
+		for (let i = 0; i < Math.max(0, count - ours); i += 1) {
+			theirBuckets.push(bucket);
+		}
+	}
+	// HOW MANY SEATS WE CANNOT NAME A TIER FOR — the count, not just the padding.
+	//
+	// This is the one number that says whether the tier half of the cap is worth
+	// anything on this shift. `staffedBuckets` going missing (an older backend, a
+	// stale cache, a server that stops sending the split) does not fail loudly: the
+	// total still arrives, every seat gets padded with an anonymous `null`, and each
+	// null lands in the "tiers the shift never named" bucket instead of the tier it
+	// really took. The named quotas then read fully open and the screen offers a
+	// Tier I seat another agency has already filled — the exact promise-then-409
+	// this module exists to prevent, now with the cap silently switched off.
+	//
+	// It is NOT the same as a `null` in `ourBuckets`: that PR is genuinely untiered,
+	// which is a fact, and the unnamed leftover is precisely where they belong. Only
+	// a seat we know is taken but cannot attribute is unknown.
+	const unknownBuckets = Math.max(0, theirs - theirBuckets.length);
+	while (theirBuckets.length < theirs) theirBuckets.push(null);
+	return {
+		staffed: shift.staffedCount,
+		buckets: [...ourBuckets, ...theirBuckets.slice(0, theirs)],
+		unknownBuckets,
+	};
+}
+
+/**
  * Open slots per shift = `quantity` minus the assignments still staffing it.
  * Shifts outside `targetDates`, unpublished/sealed shifts, and fully staffed
  * shifts are excluded.
@@ -215,15 +299,21 @@ export function findOpenShifts(params: {
 			bucketForPrTier(tierByPrId?.get(a.prId) ?? null),
 		]);
 	}
-	// CROSS-AGENCY OCCUPANCY OVERWRITES OUR OWN COUNT — it does not add to it.
-	// `assignments` holds only this agency's rows (that endpoint is scoped) and
-	// `staffedCount` already includes them, so adding would double-count every seat
-	// we filled ourselves. Applied AFTER the loop for exactly that reason.
+	// CROSS-AGENCY OCCUPANCY, TOTAL **AND** PER TIER. Applied after the loop so it
+	// overwrites our own count instead of adding to it — see mergeCrossAgencyStaffing.
 	//
-	// Without it the planner proposes PRs for seats another agency already filled,
-	// and each proposal 409s at Confirm with no explanation the user can act on.
+	// The total alone was not enough: with the buckets left un-merged, every NAMED
+	// tier on a shared shift read fully open to any agency that did not supply the
+	// existing assignment, so the planner proposed a Tier I for a Tier I seat another
+	// agency had already filled and each proposal 409'd at Confirm with no
+	// explanation the user could act on. The headcount capped; the mix did not.
 	for (const s of shifts) {
-		if (s.staffedCount !== undefined) staffedByShift.set(s.id, s.staffedCount);
+		const merged = mergeCrossAgencyStaffing(
+			s,
+			staffedBucketsByShift.get(s.id) ?? [],
+		);
+		staffedByShift.set(s.id, merged.staffed);
+		staffedBucketsByShift.set(s.id, merged.buckets);
 	}
 
 	return (
@@ -678,11 +768,18 @@ export function validateAutoAssignPairs(params: {
 		dates.add(date);
 		busyDatesByPr.set(a.prId, dates);
 	}
-	// The server's cross-agency total wins here too. This is the last gate before
-	// the write, so it is where a shared shift filling up should surface as a
-	// "shift-full" drop the agency can read — not as a 409 that looks like a fault.
+	// The server's cross-agency figures win here too — the total AND the buckets.
+	// This is the last gate before the write, so it is where a shared shift filling
+	// up should surface as a "shift-full" or "tier-full" drop the agency can read,
+	// not as a 409 that looks like a fault. Merging only the total left the mix half
+	// blind: the batch dropped nothing, and `TierFullError` came back per pair.
 	for (const s of shifts) {
-		if (s.staffedCount !== undefined) staffedByShift.set(s.id, s.staffedCount);
+		const merged = mergeCrossAgencyStaffing(
+			s,
+			staffedBucketsByShift.get(s.id) ?? [],
+		);
+		staffedByShift.set(s.id, merged.staffed);
+		staffedBucketsByShift.set(s.id, merged.buckets);
 	}
 
 	const valid: AutoAssignPair[] = [];
@@ -778,7 +875,13 @@ export type ShiftBlockReason =
 	 * that fallback used to be English prose baked in here, which put an
 	 * untranslatable sentence fragment inside a pure planning function.
 	 */
-	| { kind: "tier-full"; bucket: string | null; asked: number };
+	| { kind: "tier-full"; bucket: string | null; asked: number }
+	/**
+	 * The shift itself takes nobody — a `draft` the outlet has not published, or a
+	 * `sealed` shift whose payroll has closed. A fact about the SHIFT, so it is
+	 * true with no PR selected, which is why the callers treat it like `full`.
+	 */
+	| { kind: "not-assignable"; status: Shift["status"] };
 
 export function shiftBlockedFor(params: {
 	shift: Shift;
@@ -787,6 +890,12 @@ export function shiftBlockedFor(params: {
 	prTier: string | null;
 }): ShiftBlockReason | null {
 	const { shift, staffed, staffedTiers, prTier } = params;
+	// FIRST, because it outranks both of the others: a draft that is also full is
+	// not "fully staffed", it is unpublished, and telling the agency to look for
+	// another shift would send them off to solve the wrong problem.
+	if (!ASSIGNABLE_SHIFT_STATUSES.includes(shift.status)) {
+		return { kind: "not-assignable", status: shift.status };
+	}
 	if (staffed >= shift.quantity) {
 		return { kind: "full", staffed, quantity: shift.quantity };
 	}

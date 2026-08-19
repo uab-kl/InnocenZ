@@ -37,7 +37,6 @@ import {
 	ownedByAgency,
 } from "@agency-portal/lib/agency-demo";
 import {
-	AGENCY_PV_STATUS_LABELS,
 	agencyPvStatusLabel,
 	getAgencyManagedReceiptScans,
 	receiptsForPv,
@@ -99,6 +98,8 @@ import {
 	Shield,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 export const Route = createFileRoute("/agency/pv")({
 	component: AgencyPV,
 	validateSearch: (
@@ -226,12 +227,26 @@ function pvBelongsToPayrollWeek(
 	return false;
 }
 
-const PV_STATUS_FILTERS: { value: PvStatusFilter; label: string }[] = [
-	{ value: "all", label: "All" },
-	{ value: "PENDING_REVIEW", label: AGENCY_PV_STATUS_LABELS.PENDING_REVIEW },
-	{ value: "SENT", label: AGENCY_PV_STATUS_LABELS.SENT },
-	{ value: "DISPUTED", label: AGENCY_PV_STATUS_LABELS.DISPUTED },
-	{ value: "TO_PAY", label: "To pay" },
+/**
+ * `label` is a FUNCTION of the dictionary, not a string.
+ *
+ * This sits at module scope, where the locale hook cannot run, so it cannot
+ * hold finished copy. It also must not hold a dictionary KEY: a key is itself a
+ * `string`, so rendering one type-checks perfectly and ships "statusSent" to
+ * the screen — which is exactly what happened here. A resolver function cannot
+ * be rendered by accident; forgetting to call it is a type error.
+ *
+ * `value` stays the API's enum — it is what the chip writes to `?status=`.
+ */
+const PV_STATUS_FILTERS: {
+	value: PvStatusFilter;
+	label: (t: PortalTranslations) => string;
+}[] = [
+	{ value: "all", label: (t) => t.common.all },
+	{ value: "PENDING_REVIEW", label: (t) => t.payroll.statusPendingReview },
+	{ value: "SENT", label: (t) => t.payroll.statusSent },
+	{ value: "DISPUTED", label: (t) => t.payroll.statusDisputed },
+	{ value: "TO_PAY", label: (t) => t.payroll.statusSigned },
 ];
 
 function statusFiltersForWeek(tab: PayrollWeekTab) {
@@ -273,6 +288,7 @@ function pvOwnWeekLabel(pv: PrPaymentVoucher): string | null {
 const THIS_WEEK_STATUSES = LAST_WEEK_REVIEW_STATUSES;
 
 function AgencyPV() {
+	const { t } = usePortalLocale();
 	const navigate = useNavigate();
 	const {
 		status: statusFromSearch,
@@ -577,7 +593,7 @@ function AgencyPV() {
 	}, [weekTabPvs, agencyPRs]);
 
 	const activeWeekBilling = useMemo(
-		() => agencySubscriptionBillingForWeeklyPv(activeWeekStats.pvCount),
+		() => agencySubscriptionBillingForWeeklyPv(activeWeekStats.pvCount, t),
 		[activeWeekStats.pvCount],
 	);
 
@@ -745,7 +761,10 @@ function AgencyPV() {
 	if (detail) {
 		return (
 			<div className="iz-screen">
-				<AppTopbar onBack={() => setDetailId(null)} backLabel="PV list" />
+				<AppTopbar
+					onBack={() => setDetailId(null)}
+					backLabel={t.payroll.pvList}
+				/>
 				<PvDetail
 					pv={detail}
 					receiptScans={receiptsForPv(agencyReceiptScans, detail)}
@@ -758,17 +777,17 @@ function AgencyPV() {
 	return (
 		<div className="iz-screen">
 			<header>
-				<IzPageTitle>Payroll &amp; PV</IzPageTitle>
+				<IzPageTitle>{t.payroll.title}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">
-					{date} · {time} · Cycle{" "}
+					{date} · {time} · {t.history.cycleLabel}{" "}
 					<span className="text-[var(--iz-gold-l)]">{PAYROLL_CYCLE.range}</span>
 					<IzPill variant="violet" className="ml-1.5 !py-0 !text-[9px]">
-						Per-item calc
+						{t.payroll.perItemCalc}
 					</IzPill>
 				</p>
 				<p className="iz-tiny iz-muted2 mt-1">
-					{AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"]} · PR portal
-					signs · PR confirms weekly earnings
+					{AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)} ·{" "}
+					{t.payroll.signingChainHint}
 				</p>
 			</header>
 
@@ -790,44 +809,44 @@ function AgencyPV() {
 					className={`iz-payroll-tab${payrollWeekTab === "this_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("this_week")}
 				>
-					This Week
+					{t.payroll.thisWeek}
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("last_week")}
 				>
-					Last Week
+					{t.payroll.lastWeek}
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${payrollWeekTab === "last_last_week" ? " on" : ""}`}
 					onClick={() => selectPayrollWeekTab("last_last_week")}
 				>
-					Payment Week
+					{t.payroll.paymentWeek}
 				</button>
 			</div>
 
 			<p className="iz-tiny iz-muted2 mt-2">
 				{payrollWeekTab === "this_week"
-					? `${thisWeekBounds.cycle} · in progress · not yet closed`
+					? `${thisWeekBounds.cycle} · ${t.payroll.inProgressNotClosed}`
 					: payrollWeekTab === "last_week"
-						? `${lastWeekBounds.cycle} · pending PR review or dispute`
+						? `${lastWeekBounds.cycle} · ${t.payroll.pendingPrReviewOrDispute}`
 						: // Not a single week any more: this tab now also holds every
 							// SIGNED voucher from any week, so naming one date range would
 							// describe a list it no longer matches. Say what the list IS.
-							`Signed vouchers · ${lastLastWeekBounds.cycle} and earlier · ${
+							`${t.payroll.signedVouchersPrefix} · ${lastLastWeekBounds.cycle} ${t.payroll.andEarlier} · ${
 								unsignedPaymentWeekPvs.length > 0
-									? `${unsignedPaymentWeekPvs.length} not signed yet`
-									: "ready to pay"
+									? `${unsignedPaymentWeekPvs.length} ${t.payroll.notSignedYet}`
+									: t.payroll.readyToPay
 							}`}
 				{" · "}
-				{activeWeekStats.pvCount} PV{activeWeekStats.pvCount === 1 ? "" : "s"} ·{" "}
+				{activeWeekStats.pvCount} {t.agencyHome.pvs} ·{" "}
 				{activeWeekBilling.plan.label} · {activeWeekBilling.priceLabel}
 				{activeWeekBilling.plan.renegotiate && (
 					<span className="text-[var(--iz-amber)]">
 						{" "}
-						· contact admin for custom pricing
+						· {t.payroll.contactAdminPricing}
 					</span>
 				)}
 			</p>
@@ -847,7 +866,7 @@ function AgencyPV() {
 					<div className="n text-[var(--iz-gold-l)]">
 						{formatRM(activeWeekStats.pendingPayout)}
 					</div>
-					<IzKpiLabel>Pending Payout</IzKpiLabel>
+					<IzKpiLabel>{t.payroll.pendingPayout}</IzKpiLabel>
 				</div>
 			</div>
 
@@ -868,10 +887,10 @@ function AgencyPV() {
 					canMark={can("raisePv")}
 					weekLabel={
 						payrollWeekTab === "this_week"
-							? "this week"
+							? t.payroll.thisWeekLower
 							: payrollWeekTab === "last_week"
-								? "last week"
-								: "the payment week"
+								? t.payroll.lastWeekLower
+								: t.payroll.thePaymentWeek
 					}
 					weekStart={
 						payrollWeekTab === "this_week"
@@ -896,14 +915,14 @@ function AgencyPV() {
 					className={`iz-payroll-tab${pvSubTab === "vouchers" ? " on" : ""}`}
 					onClick={() => selectPvSubTab("vouchers")}
 				>
-					Payment Vouchers ({weekTabPvs.length})
+					{t.payroll.paymentVouchers} ({weekTabPvs.length})
 				</button>
 				<button
 					type="button"
 					className={`iz-payroll-tab${pvSubTab === "receipts" ? " on" : ""}`}
 					onClick={() => selectPvSubTab("receipts")}
 				>
-					Receipts ({activeWeekReceipts.length})
+					{t.receipts.receipts} ({activeWeekReceipts.length})
 				</button>
 				{/* Hidden on the PAYMENT week (owner's rule, 3 Aug 2026): by then every
 				    voucher is signed, and a signed voucher's figures are settled — a
@@ -923,14 +942,14 @@ function AgencyPV() {
 							className={`iz-payroll-tab${pvSubTab === "disputes" ? " on" : ""}`}
 							onClick={() => selectPvSubTab("disputes")}
 						>
-							Disputes ({weekOpenDisputes.length})
+							{t.agencyHome.disputes} ({weekOpenDisputes.length})
 						</button>
 						<button
 							type="button"
 							className={`iz-payroll-tab${pvSubTab === "overtime" ? " on" : ""}`}
 							onClick={() => selectPvSubTab("overtime")}
 						>
-							Overtime ({weekPendingOtClaims.length})
+							{t.payroll.overtime} ({weekPendingOtClaims.length})
 						</button>
 					</>
 				)}
@@ -950,7 +969,11 @@ function AgencyPV() {
 			)}
 
 			{pvSubTab === "vouchers" && (
-				<OutletSection title="Payment Vouchers" hint={activeWeekBounds.cycle}>
+				<OutletSection
+					title={t.payroll.paymentVouchers}
+					iconKey="Payment Vouchers"
+					hint={activeWeekBounds.cycle}
+				>
 					{payrollWeekTab === "last_last_week" && (
 						<IzCard
 							flat
@@ -958,20 +981,24 @@ function AgencyPV() {
 						>
 							<div className="iz-between">
 								<div>
-									<p className="iz-sm font-bold">Signed PVs · manual payment</p>
-									<p className="iz-tiny iz-muted mt-1">
-										Agency pays each PR individually after e-sign — no scheduled
-										auto-transfer.
+									<p className="iz-sm font-bold">
+										{t.payroll.signedPvsManualPayment}
 									</p>
+									{/* The "pays each PR individually — no scheduled auto-transfer"
+									    line was removed (owner's call, 17 Aug 2026): it describes
+									    how the product works rather than telling the agency
+									    anything actionable, and the counts line below already says
+									    what to do. */}
 									<p className="iz-tiny iz-muted2 mt-0.5">
-										{activeWeekStats.signedCount} signed · use <b>To pay</b> to
-										record each bank transfer ·{" "}
+										{activeWeekStats.signedCount} {t.payroll.signedCountSuffix}{" "}
+										· {t.payroll.use} <b>{t.payroll.toPay}</b>{" "}
+										{t.payroll.useToRecordTransfer} ·{" "}
 										<Link
 											to="/agency/history"
 											search={{ tab: "paid" }}
 											className="text-[var(--iz-gold-l)]"
 										>
-											{paid} paid in History
+											{paid} {t.payroll.paidInHistory}
 										</Link>
 									</p>
 								</div>
@@ -980,7 +1007,7 @@ function AgencyPV() {
 								</b>
 							</div>
 							<p className="iz-tiny iz-muted2 mt-2">
-								Duplicate payment blocked
+								{t.payroll.duplicatePaymentBlocked}
 							</p>
 						</IzCard>
 					)}
@@ -1014,7 +1041,7 @@ function AgencyPV() {
 										    Lin" there, for the same PR. */}
 											{resolvePvPrLabel(p, agencyPRs)} ·{" "}
 											{formatRM(getPvNetTotal(p))} ·{" "}
-											{agencyPvStatusLabel(p.status)}
+											{agencyPvStatusLabel(p.status, t)}
 										</li>
 									))}
 								</ul>
@@ -1024,19 +1051,19 @@ function AgencyPV() {
 						<IzCard flat className="!mb-2.5">
 							<div className="flex items-center gap-2 iz-tiny iz-muted">
 								<Filter className="h-3.5 w-3.5 shrink-0" />
-								Filter &amp; sort
+								{t.payroll.filterAndSort}
 								{hasActiveFilters && (
 									<button
 										type="button"
 										className="ml-auto text-[var(--iz-gold-l)]"
 										onClick={clearFilters}
 									>
-										Clear all
+										{t.payroll.clearAll}
 									</button>
 								)}
 							</div>
 
-							<p className="iz-filter-group-label">Status</p>
+							<p className="iz-filter-group-label">{t.table.status}</p>
 							<div className="iz-filter-chips">
 								{visibleStatusFilters.map((f) => {
 									const active = statusFilter === f.value;
@@ -1048,7 +1075,7 @@ function AgencyPV() {
 											className={`iz-filter-chip${active ? " on" : ""}`}
 											onClick={() => setStatusFilter(f.value)}
 										>
-											{f.label}
+											{f.label(t)}
 											<span className="iz-filter-chip__count">({count})</span>
 										</button>
 									);
@@ -1062,8 +1089,8 @@ function AgencyPV() {
 							<IzCard className="text-center">
 								<p className="iz-sm iz-muted">
 									{payrollWeekTab === "last_last_week"
-										? "No signed vouchers to pay this week"
-										: "No vouchers match these filters"}
+										? t.payroll.noSignedVouchersThisWeek
+										: t.payroll.noVouchersMatch}
 								</p>
 								{payrollWeekTab !== "last_last_week" && hasActiveFilters && (
 									<button
@@ -1071,7 +1098,7 @@ function AgencyPV() {
 										className="iz-chip mt-2"
 										onClick={clearFilters}
 									>
-										Clear filters
+										{t.payroll.clearFilters}
 									</button>
 								)}
 							</IzCard>
@@ -1120,12 +1147,14 @@ function AgencyPV() {
 									</div>
 									<div className="shrink-0 text-right">
 										<IzPill variant={statusPill(pv.status)}>
-											{agencyPvStatusLabel(pv.status)}
+											{agencyPvStatusLabel(pv.status, t)}
 										</IzPill>
 										<div className="iz-ledger font-sora mt-1.5 text-base font-bold">
 											{formatRM(getPvNetTotal(pv))}
 										</div>
-										<p className="iz-tiny iz-muted2 mt-0.5">Net payable</p>
+										<p className="iz-tiny iz-muted2 mt-0.5">
+											{t.payroll.netPayable}
+										</p>
 									</div>
 								</button>
 							))
@@ -1146,17 +1175,23 @@ function AgencyPV() {
 	);
 }
 
-function receiptScanStatusPill(scan: PrReceiptScan): {
+// Takes `t` rather than reading it itself: this is a plain helper, not a
+// component, so it cannot call the locale hook. Its only caller is a component
+// that already holds one.
+function receiptScanStatusPill(
+	scan: PrReceiptScan,
+	t: PortalTranslations,
+): {
 	variant: "green" | "amber" | "red" | "ink" | "violet" | "gold";
 	label: string;
 } {
 	if (scan.logSource === "manual") {
 		if (scan.agencyVerification === "pending")
-			return { variant: "amber", label: "VERIFY" };
+			return { variant: "amber", label: t.payroll.verify };
 		if (scan.agencyVerification === "approved")
-			return { variant: "green", label: "VERIFIED" };
+			return { variant: "green", label: t.payroll.verified };
 		if (scan.agencyVerification === "rejected")
-			return { variant: "ink", label: "REJECTED" };
+			return { variant: "ink", label: t.payroll.rejected };
 	}
 	const variant =
 		scan.status === "paid"
@@ -1179,11 +1214,12 @@ function ReceiptScanRow({
 	compact?: boolean;
 	onVerify?: (scanId: string, decision: "approved" | "rejected") => void;
 }) {
+	const { t } = usePortalLocale();
 	const [y, m, d] = scan.date;
 	const entry = receiptEntryMethod(scan);
 	const pendingSelfLog =
 		scan.logSource === "manual" && scan.agencyVerification === "pending";
-	const statusPill = receiptScanStatusPill(scan);
+	const statusPill = receiptScanStatusPill(scan, t);
 
 	const body = (
 		<IzCard
@@ -1195,7 +1231,7 @@ function ReceiptScanRow({
 					<div className="flex flex-wrap items-center gap-2">
 						<p className="font-sora text-sm font-bold">{scan.receiptRef}</p>
 						{scan.logSource === "manual" && (
-							<IzPill variant="amber">Self-log</IzPill>
+							<IzPill variant="amber">{t.agencyHub.selfLog}</IzPill>
 						)}
 					</div>
 					<p className="iz-tiny iz-muted2 mt-0.5 font-mono">{scan.id}</p>
@@ -1258,7 +1294,7 @@ function ReceiptScanRow({
 						className="iz-btn iz-btn-soft flex-1 !py-1.5 !text-xs"
 						onClick={() => onVerify(scan.id, "rejected")}
 					>
-						Reject
+						{t.common.reject}
 					</button>
 					<button
 						type="button"
@@ -1314,11 +1350,12 @@ function PvWorkflowRail({ status }: { status: PrPvStatus }) {
 }
 
 function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
+	const { t } = usePortalLocale();
 	const rows = [
-		{ label: "Daily wages", value: breakdown.wages },
-		{ label: "Drink commissions", value: breakdown.drinks },
-		{ label: "Tip commissions", value: breakdown.tips },
-		{ label: "Overtime (check-out)", value: breakdown.overtime },
+		{ label: t.money.dailyWages, value: breakdown.wages },
+		{ label: t.payroll.drinkCommissions, value: breakdown.drinks },
+		{ label: t.payroll.tipCommissions, value: breakdown.tips },
+		{ label: t.payroll.overtimeCheckOut, value: breakdown.overtime },
 	].filter((r) => r.value > 0);
 	if (breakdown.other > 0)
 		rows.push({ label: "Other", value: breakdown.other });
@@ -1334,7 +1371,7 @@ function PvBreakdownCard({ breakdown }: { breakdown: PvEarningsBreakdown }) {
 				</div>
 			))}
 			<div className="iz-v-sum tot">
-				<span>Subtotal</span>
+				<span>{t.payroll.subtotal}</span>
 				<b className="text-[var(--iz-gold)]">{formatRM(breakdown.total)}</b>
 			</div>
 		</IzCard>
@@ -1350,6 +1387,7 @@ function PvDetail({
 	receiptScans: PrReceiptScan[];
 	onClose: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const {
 		editLines,
 		sendToPr,
@@ -1442,13 +1480,13 @@ function PvDetail({
 		try {
 			await financeSign({ id: pv.id, signature: ink });
 			setSignOpen(false);
-			toast("Voucher signed — you can send it now", "success");
+			toast(t.payroll.voucherSignedCanSend, "success");
 		} catch (error) {
 			// The server's refusal verbatim: each one is a real rule (already sent,
 			// wrong role), not a generic failure the agency has to guess at.
 			setSignError(
 				(error as { response?: { data?: { message?: string } } } | null)
-					?.response?.data?.message ?? "Could not record that signature",
+					?.response?.data?.message ?? t.payroll.couldNotRecordSignature,
 			);
 		}
 	};
@@ -1481,7 +1519,7 @@ function PvDetail({
 			<div className="iz-pv-detail-bar mb-2.5">
 				<div className="iz-pv-detail-bar-main">
 					<IzPill variant={statusPill(pv.status)}>
-						{agencyPvStatusLabel(pv.status)}
+						{agencyPvStatusLabel(pv.status, t)}
 					</IzPill>
 					<span className="iz-pv-detail-id">{pv.id}</span>
 				</div>
@@ -1493,7 +1531,7 @@ function PvDetail({
 			<PvWorkflowRail status={pv.status} />
 
 			<IzCard flat className="mb-2">
-				<p className="iz-tiny iz-muted2">Dual-sign PV</p>
+				<p className="iz-tiny iz-muted2">{t.payroll.dualSignPv}</p>
 				<p className="iz-tiny mt-1">
 					1st · {FINANCE_HEAD_LABEL}:{" "}
 					<b className="text-[var(--iz-txt)]">{v.financeHeadName}</b>
@@ -1556,7 +1594,7 @@ function PvDetail({
 			{pv.status === "DISPUTED" && (
 				<IzCard flat className="mb-2 border-[var(--iz-red)]">
 					<p className="iz-tiny font-bold text-[var(--iz-red)]">
-						PR dispute — resolve within 7 days
+						{t.payroll.prDisputeResolveWithin}
 					</p>
 					{pv.disputedAt && (
 						<p className="iz-tiny iz-muted2 mt-0.5">Raised {pv.disputedAt}</p>
@@ -1566,7 +1604,7 @@ function PvDetail({
 							<Clock className="h-3 w-3" />
 							{disputeDays > 0
 								? `${disputeDays} day(s) left to adjust + re-send`
-								: "Past 7 days — follow up with PR directly"}
+								: t.payroll.past7DaysFollowUp}
 						</p>
 					)}
 					{pv.disputeUpdatedAt && (
@@ -1576,13 +1614,15 @@ function PvDetail({
 					)}
 					{pv.prDisputeReason && (
 						<div className="mt-2 rounded-[12px] border border-[rgba(255,107,107,.2)] bg-[rgba(0,0,0,.15)] p-3">
-							<p className="iz-tiny iz-muted2 tracking-wide">PR REASON</p>
+							<p className="iz-tiny iz-muted2 tracking-wide">
+								{t.payroll.prReason}
+							</p>
 							<p className="iz-sm mt-1 leading-relaxed">{pv.prDisputeReason}</p>
 						</div>
 					)}
 					{pv.disputeNote && (
 						<p className="iz-tiny iz-muted mt-2">
-							<b className="text-[var(--iz-muted)]">Agency note:</b>{" "}
+							<b className="text-[var(--iz-muted)]">{t.payroll.agencyNote}</b>{" "}
 							{pv.disputeNote}
 						</p>
 					)}
@@ -1593,7 +1633,7 @@ function PvDetail({
 
 			{receiptScans.length > 0 && (
 				<OutletSection
-					title="Receipt scans"
+					title={t.payroll.receiptScans}
 					hint={`${receiptScans.length} logged on this PV`}
 				>
 					{receiptScans.map((scan) => (
@@ -1604,8 +1644,8 @@ function PvDetail({
 
 			{pv.status === "DISPUTED" && rows.length > 0 && (
 				<OutletSection
-					title="Edit line items"
-					hint="Dispute resolution"
+					title={t.payroll.editLineItems}
+					hint={t.payroll.disputeResolution}
 					trailing={
 						<button
 							type="button"
@@ -1659,7 +1699,9 @@ function PvDetail({
 						))}
 						{editing && (
 							<div className="mt-2">
-								<label className="iz-tiny iz-muted">Deductions</label>
+								<label className="iz-tiny iz-muted">
+									{t.payroll.deductions}
+								</label>
 								<input
 									type="number"
 									className="mt-1 w-full rounded-xl border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-3 py-2 text-sm"
@@ -1671,7 +1713,7 @@ function PvDetail({
 									className="iz-btn iz-btn-primary mt-2 w-full"
 									onClick={saveEdit}
 								>
-									Save dispute edit
+									{t.payroll.saveDisputeEdit}
 								</button>
 							</div>
 						)}
@@ -1685,7 +1727,7 @@ function PvDetail({
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
 						downloadPvBreakdownPdf(displayPv, payee, [], pvIssuer);
-						toast("Official PV opened — use Print → Save as PDF", "success");
+						toast(t.payroll.officialPvOpened, "success");
 					}}
 				>
 					<FileText className="h-4 w-4 shrink-0" /> PDF
@@ -1695,7 +1737,7 @@ function PvDetail({
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
 						downloadPvBreakdownCsv(displayPv, payee, pvIssuer);
-						toast("Payment voucher Excel downloaded", "success");
+						toast(t.payroll.excelDownloaded, "success");
 					}}
 				>
 					<Sheet className="h-4 w-4 shrink-0" /> Excel
@@ -1717,7 +1759,7 @@ function PvDetail({
 							acc: payee.accountNo ?? "",
 							ic: payee.ic ?? pv.prIc ?? "",
 						});
-						toast("Payment receipt downloaded", "success");
+						toast(t.payroll.receiptDownloaded, "success");
 					}}
 				>
 					<Receipt className="h-4 w-4" /> Download payment receipt
@@ -1744,15 +1786,17 @@ function PvDetail({
 								so its figures can still move — a shift tonight, a receipt
 								tomorrow, a penalty recorded before the send. A signature
 								attests to a total, and there is no final total to attest to
-								yet. It appears under <b>Last Week</b> once the cycle closes,
-								and signs from there.
+								yet. It appears under <b>{t.payroll.lastWeek}</b> once the cycle
+								closes, and signs from there.
 							</p>
 						</div>
 					)}
 
 					{!financeSigned && !weekStillOpen && (
 						<div className="mt-2 rounded-xl border border-[rgba(232,194,122,.35)] p-3">
-							<p className="iz-sm font-bold">Finance signature required</p>
+							<p className="iz-sm font-bold">
+								{t.payroll.financeSignatureRequired}
+							</p>
 							<p className="iz-tiny iz-muted2 mt-0.5">
 								Sign to attest these figures. The PR counter-signs what you sign
 								here, so it comes before the voucher is sent.
@@ -1765,7 +1809,7 @@ function PvDetail({
 							{signOpen ? (
 								<div className="mt-2">
 									<PrSignaturePad
-										label="Draw your signature"
+										label={t.payroll.drawYourSignature}
 										onConfirm={() => {
 											/* the PNG is not persisted — strokes are */
 										}}
@@ -1787,7 +1831,7 @@ function PvDetail({
 									<div className="mt-2 flex h-14 items-end rounded-lg border border-[var(--iz-line)] bg-white/95 px-2 py-1">
 										<SignatureInkMark
 											ink={JSON.stringify(storedSignature)}
-											label="Your signature on file"
+											label={t.payroll.yourSignatureOnFile}
 											className="h-10 w-full"
 										/>
 									</div>
@@ -1798,7 +1842,9 @@ function PvDetail({
 										onClick={() => void handleFinanceSign(storedSignature)}
 									>
 										<Pencil className="h-4 w-4" />
-										{isSigning ? "Signing…" : "Sign with my signature"}
+										{isSigning
+											? t.payroll.signing
+											: t.payroll.signWithMySignature}
 									</button>
 									<button
 										type="button"
@@ -1898,7 +1944,7 @@ function PvDetail({
 			 */}
 			{pv.status === "SIGNED" && can("raisePv") && (
 				<div className="mt-2 rounded-xl border border-[rgba(93,217,160,.35)] p-3">
-					<p className="iz-sm font-bold">Record payment</p>
+					<p className="iz-sm font-bold">{t.payroll.recordPayment}</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">
 						Marks this voucher paid and moves it to History. The paid date is
 						stamped once — recording twice cannot re-date a transfer.
@@ -1906,10 +1952,10 @@ function PvDetail({
 					<input
 						type="text"
 						className="mt-2 w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] px-2 py-1.5 text-xs"
-						placeholder="Bank reference (optional)"
+						placeholder={t.payroll.bankReferenceOptional}
 						value={bankRef}
 						onChange={(e) => setBankRef(e.target.value)}
-						aria-label="Bank reference"
+						aria-label={t.payroll.bankReference}
 					/>
 					<button
 						type="button"
@@ -1949,7 +1995,7 @@ function PvDetail({
 			)}
 
 			<IzSheet open={overrideOpen} onClose={() => setOverrideOpen(false)}>
-				<IzCardTitle>Override signed PV</IzCardTitle>
+				<IzCardTitle>{t.payroll.overrideSignedPv}</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3">
 					Finance may override with a mandatory audit reason — PV re-opens for
 					PR review
@@ -1958,7 +2004,7 @@ function PvDetail({
 					className="iz-field-input min-h-[80px]"
 					value={overrideReason}
 					onChange={(e) => setOverrideReason(e.target.value)}
-					placeholder="Reason for override…"
+					placeholder={t.payroll.reasonForOverride}
 				/>
 				<button
 					type="button"

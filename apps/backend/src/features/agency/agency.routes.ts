@@ -136,6 +136,27 @@ router.post(
   agencyPenaltyRuleController.markCharged.bind(agencyPenaltyRuleController),
 );
 
+// Broadcast a notice to selected PRs on this agency's roster.
+//
+// Owner-only (`agencyOwnerOfParam`), not owner+finance: this speaks to workers
+// in the agency's name and is a roster action, not payroll bookkeeping.
+//
+// Scoped to `:id` for the reason repeated all over this file — a bare
+// `requireRole('agency')` passes every agency owner for EVERY agency. That
+// matters more here than on a read: the guard proves you own `:id`, and the
+// controller then proves every recipient in the BODY is on that agency's
+// roster. Neither check subsumes the other, exactly as with
+// `/:id/members/:memberId`.
+//
+// POST, never GET: it writes a row per recipient and must not be something a
+// page can do by loading.
+router.post(
+  '/:id/broadcast',
+  requireRole('admin', 'agency'),
+  agencyOwnerOfParam,
+  agencyController.broadcastToPrs.bind(agencyController),
+);
+
 // Approvals write path — membership by user_id (not deprecated pr.id).
 router.patch(
   '/:id/prs/:userId/approval',

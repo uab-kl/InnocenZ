@@ -2,6 +2,8 @@ import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-lin
 import { cn } from "@agency-portal/lib/utils";
 import { Building2, Check } from "lucide-react";
 import { useMemo } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /**
  * Which agencies this job goes to (`shift_agency`, migration 0124).
@@ -25,6 +27,7 @@ export function PostJobAgencyPicker({
 	value: string[];
 	onChange: (agencyIds: string[]) => void;
 }) {
+	const { t } = usePortalLocale();
 	// The SHARED hook, not a private query: the Post button and the Today banner
 	// gate on the same thing, and three copies of "is there an approved agency"
 	// is three chances for them to disagree.
@@ -49,14 +52,13 @@ export function PostJobAgencyPicker({
 	}, [approved, value]);
 
 	if (isLoading) {
-		return <p className="iz-tiny iz-muted">Loading agencies…</p>;
+		return <p className="iz-tiny iz-muted">{t.agencyLinks.loading}</p>;
 	}
 
 	if (approved.length === 0) {
 		return (
 			<p className="iz-tiny rounded-lg border border-dashed border-amber-300/40 bg-amber-300/5 px-2.5 py-2 text-amber-300">
-				No approved agency yet. Add one in Settings and wait for them to accept
-				— until then there is nobody to send this job to.
+				{t.postJob.noApprovedAgencyYet}
 			</p>
 		);
 	}
@@ -81,8 +83,8 @@ export function PostJobAgencyPicker({
 			<div className="flex items-baseline justify-between gap-2">
 				<p className="iz-tiny iz-muted">
 					{approved.length === 1
-						? "This shift goes to your only agency."
-						: "Choose who can fill this shift."}
+						? t.postJob.onlyAgency
+						: t.postJob.chooseWhoCanFill}
 				</p>
 				{/* Only worth offering once there is something to restore, and only
 				    when there is more than one agency to restore it to. */}
@@ -92,7 +94,7 @@ export function PostJobAgencyPicker({
 						className="iz-tiny shrink-0 underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
 						onClick={() => onChange(approved.map((a) => a.agencyId))}
 					>
-						Select all
+						{t.postJob.selectAll}
 					</button>
 				)}
 			</div>
@@ -111,10 +113,10 @@ export function PostJobAgencyPicker({
 							disabled={isLastSelected}
 							title={
 								isLastSelected
-									? "A shift has to go to at least one agency."
+									? t.postJob.atLeastOneAgency
 									: on
-										? `Don't send to ${link.agencyName}`
-										: `Also send to ${link.agencyName}`
+										? fill(t.postJob.dontSendTo, { name: link.agencyName })
+										: fill(t.postJob.alsoSendTo, { name: link.agencyName })
 							}
 							onClick={() => toggle(link.agencyId)}
 							className={cn(
@@ -150,8 +152,11 @@ export function PostJobAgencyPicker({
 
 			<p className="iz-tiny iz-muted">
 				{allSelected && approved.length > 1
-					? `All ${approved.length} agencies — any of them can fill these slots.`
-					: `Going to ${selected.length} of ${approved.length}.`}
+					? fill(t.postJob.allAgencies, { n: approved.length })
+					: fill(t.postJob.goingToSome, {
+							n: selected.length,
+							total: approved.length,
+						})}
 			</p>
 		</div>
 	);

@@ -2,10 +2,12 @@ import { OutletLogoTile } from "@agency-portal/components/agency/OutletLogoTile"
 import { IzPill } from "@agency-portal/components/iz/ui";
 import { useAgencyOutletLinks } from "@agency-portal/hooks/use-agency-outlet-links";
 import { cn } from "@agency-portal/lib/utils";
+import { useQuery } from "@tanstack/react-query";
 import {
 	Ban,
 	Calendar,
 	Check,
+	ChevronDown,
 	FileText,
 	Handshake,
 	History,
@@ -13,12 +15,15 @@ import {
 	X,
 } from "lucide-react";
 import { useState } from "react";
+import { kickToLogin } from "@/lib/auth/guards";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
 import { fill } from "@/lib/portal-i18n/fill";
 import type { PortalTranslations } from "@/lib/portal-i18n/translations";
-import type {
-	AgencyOutletApproveStatus,
-	AgencyOutletLink,
+import {
+	type AgencyOutletApproveStatus,
+	type AgencyOutletLink,
+	type AgencyOutletLinkEvent,
+	fetchOutletLinkHistory,
 } from "@/services/agency-outlet";
 
 /**
@@ -173,6 +178,13 @@ function ReturningPartnerNote({
 }) {
 	const { t } = usePortalLocale();
 	if (!link.endedAt) return null;
+	// ⚠️ NEVER ON A LIVE PARTNERSHIP. `endedAt` is the latest `ended` event for a
+	// link that has EVER ended, so a venue that was ended, asked again and was
+	// re-approved still carries one — and gating on it alone printed
+	// "they ended it" across a partnership currently running, on the approved
+	// tab. Past tense belongs to a past relationship; the current status is what
+	// says which one this is.
+	if (link.approveStatus === "approved") return null;
 
 	const endedOn = formatRequestedOn(link.endedAt);
 	if (!endedOn) return null;
@@ -207,6 +219,133 @@ function ReturningPartnerNote({
 		<div className="iz-tiny iz-muted mt-0.5 flex items-center gap-1">
 			<History className="h-3 w-3 shrink-0" />
 			<span className="truncate">{by ? `${worked} · ${by}` : worked}</span>
+		</div>
+	);
+}
+
+/**
+ * What one transition MEANS, in the agency's own words.
+ *
+ * Keyed on the PAIR, not just where it landed: `approved → ended` is a
+ * partnership that ran and is over, while `pending → ended` is a request the
+ * venue withdrew before anyone answered. Both are `ended` rows, and reading them
+ * as the same event would put a partnership in the log that never happened.
+ *
+ * `fromStatus === null` is the first event — the link did not exist yet — and
+ * `system` marks the migration backfill, so a carried-over partnership is never
+ * presented as something a person did.
+ */
+function eventLabel(
+	event: AgencyOutletLinkEvent,
+	t: PortalTranslations,
+): string {
+	if (event.actorSide === "system" && event.fromStatus === null) {
+		return t.approvals.evCarriedOver;
+	}
+	if (event.fromStatus === null) return t.approvals.evRequested;
+	switch (event.toStatus) {
+		case "pending":
+			return t.approvals.evAskedAgain;
+		case "approved":
+			return t.approvals.evApproved;
+		case "rejected":
+			return t.approvals.evDeclined;
+		default:
+			return event.fromStatus === "approved"
+				? t.approvals.evEnded
+				: t.approvals.evWithdrawn;
+	}
+}
+
+function actorLabel(
+	side: AgencyOutletLinkEvent["actorSide"],
+	t: PortalTranslations,
+): string | null {
+	if (side === "outlet") return t.approvals.bySideOutlet;
+	if (side === "agency") return t.approvals.bySideAgency;
+	// `admin` and `system` are deliberately unattributed — neither side did it,
+	// and naming a side that did not act is worse than naming none.
+	return null;
+}
+
+/**
+ * One partnership's whole timeline — `GET /links/:outletId/history`.
+ *
+ * Collapsed by default and fetched only once opened. The returning-partner line
+ * above already answers the common question ("have we worked together?") off
+ * rows the queue holds anyway; this answers the rare one — "when exactly did we
+ * stop, the FIRST time" — which is what gets asked in a payment dispute months
+ * later, and is unanswerable from the link row alone because a re-link
+ * overwrites its status.
+ */
+function LinkHistory({ outletId }: { outletId: string }) {
+	const { t } = usePortalLocale();
+	const [open, setOpen] = useState(false);
+	const query = useQuery({
+		queryKey: ["agency-outlet", "history", outletId],
+		queryFn: () => fetchOutletLinkHistory(outletId, kickToLogin),
+		// Nobody pays for a timeline they did not open — this pane re-renders on
+		// every row selection.
+		enabled: open,
+		staleTime: 60_000,
+	});
+	const events = query.data ?? [];
+
+	return (
+		<div className="rounded-xl border border-[var(--iz-line)] px-3.5 py-2.5">
+			<button
+				type="button"
+				className="flex w-full items-center gap-2 text-left"
+				onClick={() => setOpen((v) => !v)}
+				aria-expanded={open}
+			>
+				<History className="iz-muted h-3.5 w-3.5 shrink-0" />
+				<span className="iz-approvals-info-title !mb-0 flex-1">
+					{t.approvals.historyTitle}
+				</span>
+				<ChevronDown
+					className={cn(
+						"iz-muted h-4 w-4 shrink-0 transition-transform",
+						open && "rotate-180",
+					)}
+				/>
+			</button>
+
+			{open &&
+				(query.isLoading ? (
+					<p className="iz-tiny iz-muted mt-2">{t.common.loading}</p>
+				) : events.length === 0 ? (
+					<p className="iz-tiny iz-muted mt-2">{t.approvals.historyEmpty}</p>
+				) : (
+					<ol className="mt-2 flex flex-col gap-2">
+						{events.map((event) => {
+							const by = actorLabel(event.actorSide, t);
+							return (
+								<li key={event.id} className="flex gap-2.5">
+									<span
+										aria-hidden
+										className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--iz-gold)]/70"
+									/>
+									<div className="min-w-0">
+										<div className="text-sm leading-snug">
+											{eventLabel(event, t)}
+											{by && <span className="iz-muted"> · {by}</span>}
+										</div>
+										<div className="iz-tiny iz-muted2">
+											{formatRequestedOn(event.createdAt) ?? event.createdAt}
+										</div>
+										{/* Reject reasons and end notes both land here. */}
+										{event.reason && (
+											<div className="iz-tiny iz-muted mt-0.5 break-words">
+												{event.reason}
+											</div>
+										)}
+									</div>
+								</li>
+							);
+						})}
+					</ol>
+				))}
 		</div>
 	);
 }
@@ -438,10 +577,17 @@ export function OutletLinkingDetail({
 								: null
 						}
 					/>
+					{/* Same rule as the note above: a re-approved partnership still
+					    carries the date it ended once, and labelling a running
+					    relationship "Ended on" is simply false. */}
 					<DetailRow
 						icon={Ban}
 						label={t.approvals.endedOn}
-						value={link.endedAt ? formatRequestedOn(link.endedAt) : null}
+						value={
+							link.approveStatus !== "approved" && link.endedAt
+								? formatRequestedOn(link.endedAt)
+								: null
+						}
 					/>
 				</div>
 			</div>
@@ -451,6 +597,10 @@ export function OutletLinkingDetail({
 					{link.rejectReason}
 				</p>
 			)}
+
+			{/* Below the facts and above the decision: it is reference material, not
+			    something to read before every approval. */}
+			<LinkHistory outletId={link.outletId} />
 
 			{link.approveStatus === "pending" &&
 				(rejecting ? (

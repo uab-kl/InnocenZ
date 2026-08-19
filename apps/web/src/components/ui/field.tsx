@@ -179,9 +179,7 @@ function FieldSeparator({
 /** TanStack Form validators may return strings or `{ message }` — normalize both. */
 export type FieldErrorItem = { message?: string } | undefined;
 
-export function toFieldErrors(
-	errors: unknown[] | undefined,
-): FieldErrorItem[] {
+export function toFieldErrors(errors: unknown[] | undefined): FieldErrorItem[] {
 	if (!errors?.length) return [];
 	return errors.map((error) => {
 		if (typeof error === "string") return { message: error };
@@ -201,7 +199,12 @@ type FieldErrorProps = Omit<React.ComponentProps<"div">, "children"> & {
 	errors?: FieldErrorItem[];
 };
 
-function FieldError({ className, children, errors, ...props }: FieldErrorProps) {
+function FieldError({
+	className,
+	children,
+	errors,
+	...props
+}: FieldErrorProps) {
 	const content = useMemo(() => {
 		if (children) return children;
 		if (!errors?.length) return null;

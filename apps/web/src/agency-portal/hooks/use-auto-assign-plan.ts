@@ -144,6 +144,20 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 			weekAssignments: assignmentsQuery.data?.data ?? [],
 			prs: prsQuery.data?.data ?? [],
 			outletNameById: new Map(outlets.map((o) => [o.id, o.name])),
+			// The venue pins, so the planner can ask whether a PR could physically
+			// get from one to the next. `lat`/`lng` arrive as decimal STRINGS and an
+			// unpinned outlet sends null — kept as null rather than coerced, because
+			// Number(null) is 0, which is a real coordinate in the Gulf of Guinea.
+			outletPinById: new Map(
+				outlets.map((o) => [
+					o.id,
+					{
+						outletId: o.id,
+						lat: o.lat === null ? null : Number(o.lat),
+						lng: o.lng === null ? null : Number(o.lng),
+					},
+				]),
+			),
 			targetDates,
 			// Without this the planner proposes PRs on days they have blocked, and
 			// every one of those pairings 409s at Confirm — a preview that promises
@@ -200,6 +214,19 @@ export function useAutoAssignPlan(scope: AutoAssignScope = "today") {
 				// Needed to bucket each STAFFED seat by tier — without it the
 				// re-check cannot tell a full Tier I quota from a free one.
 				tierByPrId: new Map(freshPrs.data.map((p) => [p.id, p.tier])),
+				// The plan may have been built before the outlets query resolved, when
+				// the planner had no pins and could only fail open. This is the last
+				// chance to catch a trip nobody can make.
+				outletPinById: new Map(
+					(outletsQuery.data?.data ?? []).map((o) => [
+						o.id,
+						{
+							outletId: o.id,
+							lat: o.lat === null ? null : Number(o.lat),
+							lng: o.lng === null ? null : Number(o.lng),
+						},
+					]),
+				),
 			});
 
 			const failed: { pair: AutoAssignPair; message: string }[] = [];

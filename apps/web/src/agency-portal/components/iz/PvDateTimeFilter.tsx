@@ -3,6 +3,7 @@ import {
 	HistDateCalendar,
 } from "@agency-portal/components/iz/HistDateCalendar";
 import { IzTimeInput } from "@agency-portal/components/iz/ui";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 import {
 	dateFromIsoKey,
 	isoKeyFromDate,
@@ -23,6 +24,7 @@ function DatePickerField({
 	dateOptions?: { key: string; label: string }[];
 	defaultMonth?: Date;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const selectedLabel = dateOptions.find((o) => o.key === value)?.label;
@@ -62,7 +64,7 @@ function DatePickerField({
 				className={`iz-hist-picker iz-hist-picker-btn${compact ? " iz-hist-picker-sm" : ""}${open ? " open" : ""}`}
 				onClick={() => setOpen((o) => !o)}
 				aria-expanded={open}
-				aria-label="Choose date"
+				aria-label={t.history.chooseDate}
 			>
 				<Calendar className="h-4 w-4 shrink-0 text-[var(--iz-muted2)]" />
 				<span className={`iz-hist-picker-label${value ? "" : " iz-muted2"}`}>

@@ -211,9 +211,29 @@ export function rosterSlotsFromBackend(input: {
 		string,
 		{ lat: string | null; lng: string | null; geoFenceRadius: number | null }
 	>;
+	/**
+	 * Agency id -> name, so each slot can say WHO supplied its PR.
+	 *
+	 * Without it a slot carries only `shift_assignment.agency_id`, a uuid nothing
+	 * on the client can translate — the portal's only id-to-name table is demo
+	 * data. Every label therefore fell through to the demo literal "Atlas
+	 * Agency", telling a venue that a real company, possibly one it has never
+	 * worked with, had staffed its floor.
+	 *
+	 * Optional: a caller that cannot resolve names omits it, and a slot with no
+	 * name renders none — the honest answer, and the one `rosterSlotAgencyName`
+	 * now gives instead of reaching for the demo literal.
+	 */
+	agencyNameById?: Map<string, string>;
 }): AgencyRosterSlot[] {
-	const { shifts, assignments, prNameById, outletNameById, outletGeoById } =
-		input;
+	const {
+		shifts,
+		assignments,
+		prNameById,
+		outletNameById,
+		outletGeoById,
+		agencyNameById,
+	} = input;
 	const shiftById = new Map(shifts.map((s) => [s.id, s]));
 
 	const slots: AgencyRosterSlot[] = [];
@@ -254,6 +274,10 @@ export function rosterSlotsFromBackend(input: {
 			noShowFlag: a.status === "no_show" ? true : undefined,
 			cancelledAt: a.status === "cancelled" ? a.updatedAt : undefined,
 			agencyId: a.agencyId,
+			// The SUPPLIER of this PR, named. Resolved only when the caller could
+			// supply the map; otherwise left undefined so the label renders nothing
+			// rather than a demo company.
+			agencyName: a.agencyId ? agencyNameById?.get(a.agencyId) : undefined,
 		});
 	}
 	return slots;

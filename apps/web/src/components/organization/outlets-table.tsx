@@ -31,6 +31,8 @@ import {
 	TableHeader,
 	TableRow,
 } from "@/components/ui/table";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { formatDate, getErrorMessage } from "@/lib/utils";
 import type { Outlet, OutletPagination } from "@/services/outlet";
 import {
@@ -77,6 +79,7 @@ export function OutletsTable({
 	onSelect,
 	actionId,
 }: OutletsTableProps) {
+	const { t } = usePortalLocale();
 	const showLoading = isLoading && outlets.length === 0;
 
 	return (
@@ -85,15 +88,12 @@ export function OutletsTable({
 				<div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
 					<div>
 						<CardTitle className="flex items-center gap-2">
-							Outlet organizations
+							{t.admin.outletOrganizations}
 							{isFetching && !showLoading && (
 								<Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
 							)}
 						</CardTitle>
-						<CardDescription>
-							Click a row to open venue details. Review signup applications,
-							approve active outlets, or suspend venues.
-						</CardDescription>
+						<CardDescription>{t.admin.outletOrganizationsHint}</CardDescription>
 					</div>
 
 					<Select
@@ -102,11 +102,14 @@ export function OutletsTable({
 							onStatusFilterChange(value as OrgStatusFilter)
 						}
 					>
-						<SelectTrigger className="sm:w-48" aria-label="Filter by status">
-							<SelectValue placeholder="Filter by status" />
+						<SelectTrigger
+							className="sm:w-48"
+							aria-label={t.admin.filterByStatus}
+						>
+							<SelectValue placeholder={t.admin.filterByStatus} />
 						</SelectTrigger>
 						<SelectContent>
-							<SelectItem value="all">All Status</SelectItem>
+							<SelectItem value="all">{t.admin.allStatus}</SelectItem>
 							{ORG_STATUSES.map((status) => (
 								<SelectItem key={status} value={status}>
 									{orgStatusLabels[status]}
@@ -123,12 +126,16 @@ export function OutletsTable({
 						<TableHeader>
 							<TableRow>
 								<TableHead className="w-10" />
-								<TableHead>Name</TableHead>
-								<TableHead>Location</TableHead>
-								<TableHead>SSM / License</TableHead>
-								<TableHead className="w-[140px]">Status</TableHead>
-								<TableHead className="w-[140px]">Created</TableHead>
-								<TableHead className="w-[200px]">Actions</TableHead>
+								<TableHead>{t.admin.colName}</TableHead>
+								<TableHead>{t.admin.colLocation}</TableHead>
+								<TableHead>{t.admin.colSsmLicense}</TableHead>
+								<TableHead className="w-[140px]">{t.admin.colStatus}</TableHead>
+								<TableHead className="w-[140px]">
+									{t.admin.colCreated}
+								</TableHead>
+								<TableHead className="w-[200px]">
+									{t.admin.colActions}
+								</TableHead>
 							</TableRow>
 						</TableHeader>
 						<TableBody>
@@ -137,7 +144,7 @@ export function OutletsTable({
 									<TableCell colSpan={7} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Loader2 className="h-6 w-6 animate-spin" />
-											<span>Loading outlets…</span>
+											<span>{t.admin.loadingOutlets}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -147,14 +154,14 @@ export function OutletsTable({
 										<div className="flex flex-col items-center justify-center gap-3">
 											<AlertCircle className="h-8 w-8 text-destructive" />
 											<p className="font-medium text-destructive">
-												Failed to load outlets
+												{t.admin.failedToLoadOutlets}
 											</p>
 											<p className="text-sm text-muted-foreground">
 												{getErrorMessage(error)}
 											</p>
 											<Button variant="outline" size="sm" onClick={onRetry}>
 												<RefreshCw className="mr-2 h-4 w-4" />
-												Try Again
+												{t.admin.tryAgain}
 											</Button>
 										</div>
 									</TableCell>
@@ -164,7 +171,7 @@ export function OutletsTable({
 									<TableCell colSpan={7} className="h-32">
 										<div className="flex flex-col items-center justify-center gap-2 text-muted-foreground">
 											<Store className="h-6 w-6" />
-											<span>No outlets found</span>
+											<span>{t.admin.noOutletsFound}</span>
 										</div>
 									</TableCell>
 								</TableRow>
@@ -189,7 +196,7 @@ export function OutletsTable({
 													variant="ghost"
 													size="icon"
 													className="h-8 w-8"
-													aria-label="View outlet details"
+													aria-label={t.admin.viewOutletDetails}
 													onClick={(e) => {
 														e.stopPropagation();
 														onSelect(outlet);
@@ -299,7 +306,7 @@ export function OutletsTable({
 								disabled={!pagination.hasPrevPage || isFetching}
 								onClick={() => onPageChange(page - 1)}
 							>
-								Previous
+								{t.admin.previous}
 							</Button>
 							<span>
 								Page {pagination.page} of {pagination.totalPages}
@@ -310,7 +317,7 @@ export function OutletsTable({
 								disabled={!pagination.hasNextPage || isFetching}
 								onClick={() => onPageChange(page + 1)}
 							>
-								Next
+								{t.admin.next}
 							</Button>
 						</div>
 					</div>

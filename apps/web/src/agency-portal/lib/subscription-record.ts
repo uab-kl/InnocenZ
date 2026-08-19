@@ -1,4 +1,6 @@
 import { fmtDateLabelFromIso } from "@agency-portal/lib/pr-demo";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	MemberSubscription,
 	MemberSubscriptionStatus,
@@ -33,13 +35,28 @@ export interface SubscriptionRecordRow {
  */
 export const MEMBER_STATUS: Record<
 	MemberSubscriptionStatus,
-	{ label: string; tone: SubscriptionRecordRow["tone"] }
+	{
+		label: (t: PortalTranslations) => string;
+		tone: SubscriptionRecordRow["tone"];
+	}
 > = {
-	active: { label: "Active", tone: "green" },
-	past_due: { label: "Past due", tone: "amber" },
-	cancelled: { label: "Cancelled", tone: "ink" },
-	expired: { label: "Ended", tone: "ink" },
+	active: { label: (t) => t.subscription.statusActive, tone: "green" },
+	past_due: { label: (t) => t.subscription.statusPastDue, tone: "amber" },
+	cancelled: { label: (t) => t.subscription.statusCancelled, tone: "ink" },
+	expired: { label: (t) => t.subscription.statusEnded, tone: "ink" },
 };
+
+/**
+ * The billing cycle as a word. `sub.billingCycle` is the stored enum
+ * (weekly | monthly | annually); an unrecognised one falls through capitalised,
+ * the same contract as an unrecognised status.
+ */
+function cycleWord(cycle: string, t: PortalTranslations): string {
+	if (cycle === "weekly") return t.subscription.billedWeekly;
+	if (cycle === "monthly") return t.subscription.billedMonthly;
+	if (cycle === "annually") return t.subscription.billedAnnually;
+	return cycle.charAt(0).toUpperCase() + cycle.slice(1);
+}
 
 /**
  * `orgLabel` is the plan's owner as the screen names it — "InnocenZ Agency" or
@@ -49,25 +66,28 @@ export const MEMBER_STATUS: Record<
 export function subscriptionRecordFromMember(
 	sub: MemberSubscription,
 	orgLabel: string,
+	t: PortalTranslations,
 ): SubscriptionRecordRow {
-	const cycle =
-		sub.billingCycle.charAt(0).toUpperCase() + sub.billingCycle.slice(1);
+	const cycle = cycleWord(sub.billingCycle, t);
 	// An unrecognised status falls back to showing the raw value rather than
 	// guessing a tone — a new enum value must not silently render as paid.
 	const status = MEMBER_STATUS[sub.status] ?? {
-		label: sub.status,
+		label: () => sub.status,
 		tone: "ink" as const,
 	};
 	return {
 		id: sub.id,
 		title: `${sub.subscriberName?.trim() || orgLabel} · ${sub.planName}`,
 		detail: sub.endedAt
-			? `${cycle} billing · ended ${fmtDateLabelFromIso(sub.endedAt.slice(0, 10))}`
-			: `${cycle} billing`,
+			? fill(t.subscription.billingCycleEnded, {
+					cycle,
+					date: fmtDateLabelFromIso(sub.endedAt.slice(0, 10)),
+				})
+			: fill(t.subscription.billingCycleLine, { cycle }),
 		dateLabel: fmtDateLabelFromIso(sub.startedAt.slice(0, 10)),
 		// numeric over the wire; every display path needs a number.
 		amountRm: Number(sub.amount) || 0,
-		statusLabel: status.label,
+		statusLabel: status.label(t),
 		tone: status.tone,
 	};
 }
@@ -88,9 +108,10 @@ export function subscriptionRecordFromMember(
 export function planChangeRecordFromMember(
 	sub: MemberSubscription,
 	orgLabel: string,
+	t: PortalTranslations,
 ): SubscriptionRecordRow {
 	const status = MEMBER_STATUS[sub.status] ?? {
-		label: sub.status,
+		label: () => sub.status,
 		tone: "ink" as const,
 	};
 	const startIso = sub.startedAt.slice(0, 10);
@@ -98,14 +119,18 @@ export function planChangeRecordFromMember(
 	return {
 		id: sub.id,
 		title: `${sub.subscriberName?.trim() || orgLabel} · ${sub.planName}`,
-		dateLabel: `On ${fmtDateLabelFromIso(startIso)}`,
+		dateLabel: fill(t.subscription.onDate, {
+			date: fmtDateLabelFromIso(startIso),
+		}),
 		detail: !endIso
 			? ""
 			: endIso === startIso
-				? "switched away the same day"
-				: `until ${fmtDateLabelFromIso(endIso)}`,
+				? t.subscription.switchedSameDay
+				: fill(t.subscription.untilDate, {
+						date: fmtDateLabelFromIso(endIso),
+					}),
 		amountRm: Number(sub.amount) || 0,
-		statusLabel: status.label,
+		statusLabel: status.label(t),
 		tone: status.tone,
 	};
 }

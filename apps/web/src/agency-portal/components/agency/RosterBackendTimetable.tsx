@@ -11,6 +11,7 @@ import type {
 import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import {
 	bucketForPrTier,
+	mergeCrossAgencyStaffing,
 	type ShiftBlockReason,
 	shiftBlockedFor,
 	tierLabel,
@@ -28,6 +29,10 @@ import {
 	weekDayIsos,
 	weekRangeLabel,
 } from "@agency-portal/lib/roster-week-plan";
+import {
+	shiftBlockLong,
+	shiftBlockShort,
+} from "@agency-portal/lib/shift-block-label";
 import { hasShiftEnded } from "@agency-portal/lib/shift-window";
 import { cn } from "@agency-portal/lib/utils";
 import { useQuery } from "@tanstack/react-query";
@@ -271,7 +276,7 @@ export function RosterBackendTimetable({
 	const staffingByShift = useMemo(() => {
 		const map = new Map<
 			string,
-			{ staffed: number; tiers: (string | null)[] }
+			{ staffed: number; tiers: (string | null)[]; unknown?: number }
 		>();
 		for (const a of assignmentsQuery.data?.data ?? []) {
 			if (NON_STAFFING_ASSIGNMENT_STATUSES.includes(a.status)) continue;
@@ -304,25 +309,27 @@ export function RosterBackendTimetable({
 		// The tier list keeps ours and is topped up with the other agency's seats as
 		// anonymous entries — the quota needs to know a Tier I seat is gone, and must
 		// NOT learn who took it.
+		// ONE merge, shared with the auto-assign planner and the manual assign
+		// dialog. This used to be an inlined copy, and for a while there were
+		// three — which is exactly how the tier vocabularies drifted: one copy
+		// pushed the raw `tier_1` while the demand and the server buckets speak
+		// `Tier I`, so the agency that supplied a PR could double-book its own
+		// tier while every other agency saw the cap work. Three screens answering
+		// "how full is this shift, per tier" have to answer with one function.
 		for (const shift of shiftsQuery.data?.data ?? []) {
-			if (shift.staffedCount === undefined) continue;
 			const entry = map.get(shift.id) ?? { staffed: 0, tiers: [] };
-			const theirs = Math.max(0, shift.staffedCount - entry.staffed);
-			const ourTiers = [...entry.tiers];
-			const theirTiers: (string | null)[] = [];
-			for (const [bucket, count] of Object.entries(
-				shift.staffedBuckets ?? {},
-			)) {
-				const ours = ourTiers.filter((t) => t === bucket).length;
-				for (let i = 0; i < Math.max(0, count - ours); i++)
-					theirTiers.push(bucket);
-			}
-			// Whatever the buckets could not account for — an untiered seat, or a
-			// backend that sent no buckets — still occupies one.
-			while (theirTiers.length < theirs) theirTiers.push(null);
+			const merged = mergeCrossAgencyStaffing(shift, entry.tiers);
 			map.set(shift.id, {
-				staffed: shift.staffedCount,
-				tiers: [...ourTiers, ...theirTiers.slice(0, theirs)],
+				staffed: merged.staffed,
+				tiers: merged.buckets,
+				// SEATS WE KNOW ARE TAKEN BUT CANNOT NAME A TIER FOR. Carried rather
+				// than dropped because dropping it is what made the failure silent:
+				// with no tier split the anonymous seats land in the "tiers the shift
+				// never named" bucket, every named quota reads open, and the grid goes
+				// on greying rows out with exactly the same confidence it has when it
+				// really knows. Nothing here refuses on it — the server decides — but
+				// the sheet says so instead of quietly promising a seat.
+				unknown: merged.unknownBuckets,
 			});
 		}
 		return map;
@@ -691,7 +698,10 @@ function AssignBackendCellSheet({
 	pr: PrPersonnel;
 	dateIso: string;
 	shifts: Shift[];
-	staffingByShift: Map<string, { staffed: number; tiers: (string | null)[] }>;
+	staffingByShift: Map<
+		string,
+		{ staffed: number; tiers: (string | null)[]; unknown?: number }
+	>;
 	outletNameById: Map<string, string>;
 	onAssign: (
 		shiftId: string,
@@ -857,19 +867,7 @@ function AssignBackendCellSheet({
 										onClick={() => !blocked && setPickId(shift.id)}
 										disabled={busy || Boolean(blocked)}
 										aria-disabled={Boolean(blocked)}
-										title={
-											blocked?.kind === "full"
-												? fill(t.rosterGrid.fullyStaffedOf, {
-														staffed: blocked.staffed,
-														quantity: blocked.quantity,
-													})
-												: blocked
-													? fill(t.rosterGrid.noSeatLeftRequested, {
-															bucket: blocked.bucket ?? t.rosterGrid.thisTier,
-															asked: blocked.asked,
-														})
-													: undefined
-										}
+										title={blocked ? shiftBlockLong(blocked, t) : undefined}
 									>
 										<div className="min-w-0 flex-1 text-left">
 											<div className="flex flex-wrap items-center gap-1.5">
@@ -901,15 +899,11 @@ function AssignBackendCellSheet({
 													blocked ? "iz-muted2" : "text-[var(--iz-gold-l)]",
 												)}
 											>
-												{blocked?.kind === "full"
-													? t.rosterGrid.fullyStaffed
-													: blocked
-														? fill(t.rosterGrid.noSeatLeft, {
-																bucket: blocked.bucket ?? t.rosterGrid.thisTier,
-															})
-														: fill(t.rosterGrid.openCount, {
-																n: shift.quantity - staffed,
-															})}{" "}
+												{blocked
+													? shiftBlockShort(blocked, t)
+													: fill(t.rosterGrid.openCount, {
+															n: shift.quantity - staffed,
+														})}{" "}
 												·{" "}
 												{/* NOT `shift.payPerHour`: that is the shift's own
 												    figure and does not move when you pick a different
@@ -948,6 +942,26 @@ function AssignBackendCellSheet({
 					{error && (
 						<p className="iz-tiny mt-3 text-[var(--iz-danger,#dc2626)]">
 							{error}
+						</p>
+					)}
+
+					{/* THE TIER CHECK COULD NOT RUN ON THIS SHIFT — said out loud rather
+					    than assumed away.
+
+					    Every greyed card above is a promise that the ones left are
+					    assignable, and that promise rests on knowing which tier each
+					    taken seat consumed. When the server's split does not account for
+					    a cross-agency seat, the anonymous seats fall into the "tiers the
+					    shift never named" bucket, the named quotas read fully open, and
+					    the sheet goes on greying rows out with exactly the confidence it
+					    has when it really knows. Nothing is refused on it — the server
+					    is the authority and will 409 — but "we could not check" and "we
+					    checked and it is fine" must not look identical. */}
+					{(staffingByShift.get(picked?.id ?? "")?.unknown ?? 0) > 0 && (
+						<p className="iz-tiny iz-muted2 mt-3 leading-snug">
+							{fill(t.rosterGrid.tierSplitUnavailable, {
+								n: staffingByShift.get(picked?.id ?? "")?.unknown ?? 0,
+							})}
 						</p>
 					)}
 

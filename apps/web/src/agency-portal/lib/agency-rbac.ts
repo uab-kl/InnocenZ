@@ -5,13 +5,27 @@ import {
 	AGENCY_FEATURE_MODULE,
 	canModule,
 } from "@/lib/auth/module-permissions";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 /** Module 9 · Agency Owner vs Agency Finance */
 export type AgencySubRole = "agency_owner" | "agency_finance";
 
-export const AGENCY_SUB_ROLE_LABELS: Record<AgencySubRole, string> = {
-	agency_owner: "Agency Owner",
-	agency_finance: "Agency Finance",
+/**
+ * Resolvers, not strings — and deliberately not dictionary keys either.
+ *
+ * A key is itself a `string`, so a caller that renders the map value directly
+ * type-checks and ships the key name to the screen. That exact mistake put
+ * "statusSent" on the payroll filter chips. A function cannot be rendered by
+ * accident: forgetting to call it is a type error.
+ *
+ * Record keys stay the API's own sub-role values.
+ */
+export const AGENCY_SUB_ROLE_LABELS: Record<
+	AgencySubRole,
+	(t: PortalTranslations) => string
+> = {
+	agency_owner: (t) => t.roles.agencyOwner,
+	agency_finance: (t) => t.roles.agencyFinance,
 };
 
 type Permission =

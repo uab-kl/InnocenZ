@@ -9,6 +9,7 @@ import type {
 	SosIncident,
 } from "@agency-portal/lib/ops-notifications";
 import type { PrNotification } from "@agency-portal/lib/pr-features";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type PushEventType =
 	| "shift_assigned"
@@ -906,31 +907,49 @@ export function applyPushEvent(
 	return { prNotifications, opsNotifications };
 }
 
-export const OPS_KIND_LABEL: Record<OpsNotification["kind"], string> = {
-	sos: "SOS",
-	shift_assigned: "Assignment",
-	shift_edit: "Roster",
-	swap_update: "Swap",
-	check_in: "Check-in",
-	pv_ready: "PV",
-	pv_signed: "PV signed",
-	pv_paid: "Paid",
-	dispute_raised: "Dispute",
-	rating_prompt: "Rating",
-	reconciliation_due: "Reconciliation",
-	report_ready: "Report",
-	collection_reminder: "Invoice due",
-	special_service: "Job posting",
-	receipt_self_log: "Self-log",
-	dispute_resolved: "Dispute resolved",
-	overtime_pending: "Overtime",
-	agency_join_resolved: "Agency",
-	pr_rating_low: "Rating drop",
-	shift_cover_needed: "Cover needed",
-	pv_day_review_pending: "Day review",
-	leave_requested: "MC / leave",
-	leave_decided: "MC / leave",
-	unknown: "Update",
+/**
+ * Display label per notification kind.
+ *
+ * The values are RESOLVER FUNCTIONS of the dictionary, not strings and not
+ * dictionary keys. A key would be the tempting shape, but a key is itself a
+ * `string`, so a call site that renders the map entry raw type-checks perfectly
+ * and ships "kindPvSigned" to the screen — which is exactly what happened to
+ * the payroll status chips earlier in this work. Forgetting to call a function
+ * is a type error; forgetting to look up a key is not.
+ *
+ * The RECORD KEYS stay the backend's enum. They are matched against the `kind`
+ * the server sends, so translating them would break every lookup.
+ */
+export const OPS_KIND_LABEL: Record<
+	OpsNotification["kind"],
+	(t: PortalTranslations) => string
+> = {
+	sos: (t) => t.notifications.kindSos,
+	shift_assigned: (t) => t.notifications.kindShiftAssigned,
+	shift_edit: (t) => t.notifications.kindShiftEdit,
+	swap_update: (t) => t.notifications.kindSwapUpdate,
+	check_in: (t) => t.notifications.kindCheckIn,
+	pv_ready: (t) => t.notifications.kindPvReady,
+	pv_signed: (t) => t.notifications.kindPvSigned,
+	pv_paid: (t) => t.notifications.kindPvPaid,
+	dispute_raised: (t) => t.notifications.kindDisputeRaised,
+	rating_prompt: (t) => t.notifications.kindRatingPrompt,
+	reconciliation_due: (t) => t.notifications.kindReconciliationDue,
+	report_ready: (t) => t.notifications.kindReportReady,
+	collection_reminder: (t) => t.notifications.kindCollectionReminder,
+	special_service: (t) => t.notifications.kindSpecialService,
+	receipt_self_log: (t) => t.notifications.kindReceiptSelfLog,
+	dispute_resolved: (t) => t.notifications.kindDisputeResolved,
+	overtime_pending: (t) => t.notifications.kindOvertimePending,
+	agency_join_resolved: (t) => t.notifications.kindAgencyJoinResolved,
+	pr_rating_low: (t) => t.notifications.kindPrRatingLow,
+	shift_cover_needed: (t) => t.notifications.kindShiftCoverNeeded,
+	pv_day_review_pending: (t) => t.notifications.kindPvDayReviewPending,
+	// Requested and decided share one label on purpose: the row body already
+	// says which way it went, so the chip only names the topic.
+	leave_requested: (t) => t.notifications.kindLeave,
+	leave_decided: (t) => t.notifications.kindLeave,
+	unknown: (t) => t.notifications.kindUnknown,
 };
 
 export function isUrgentOpsKind(kind: OpsNotification["kind"]): boolean {

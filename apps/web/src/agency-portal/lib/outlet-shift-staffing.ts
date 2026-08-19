@@ -17,6 +17,8 @@ import { DEFAULT_PR_AGENCY_NAME } from "@agency-portal/lib/pr-demo";
 import type { ShiftRequest } from "@agency-portal/lib/store";
 
 export type ShiftDemandRow = {
+	/** Supplying agency. EMPTY when nothing names one — renderers must drop the
+	 * label and the "Agency" pill instead of drawing an empty line. */
 	source: string;
 	slots: number;
 };
@@ -32,6 +34,8 @@ export type ShiftStaffRow = {
 		| "Accepted"
 		| "Declined"
 		| "Pending agency";
+	/** EMPTY when nothing names this PR's agency — renderers must drop the
+	 * separator with it, never print a dangling "·". */
 	agencyLabel: string;
 	shiftTime: string;
 };
@@ -51,11 +55,38 @@ export function formatShiftTimeRange(shift: string): string {
 	return `${formatCalendarTimeShort(shiftStart)} – ${formatCalendarTimeShort(shiftEnd)}`;
 }
 
+/**
+ * The name to fall back on when NOTHING names the agency for a shift.
+ *
+ * A real outlet session gets nothing; only a demo session gets the demo
+ * company. Callers derive `realSession` from the presence of the backend roster
+ * prop — the same signal that decides whether the screen reads the backend or
+ * the demo store — so the two can never disagree.
+ */
+export function staffingFallbackAgencyName(realSession: boolean): string {
+	return realSession ? "" : DEFAULT_PR_AGENCY_NAME;
+}
+
+/**
+ * Which agency is supplying this shift, taken from the roster slot that names one.
+ *
+ * `fallback` is what shows when nothing names an agency: no roster slot matches
+ * the shift — the normal state of a posted shift nobody is assigned to yet — or
+ * the matched slot carries a real agency id this bundle cannot name.
+ *
+ * ⚠️ It used to default to `DEFAULT_PR_AGENCY_NAME`, which is "Atlas Agency",
+ * an ACTUAL agency on this platform, and every call site passes three
+ * arguments, so that default fired on every unassigned shift of every real
+ * outlet session (12 such shifts were live when this was found). This label is
+ * what the venue believes about who is sending it staff, so a confident wrong
+ * name is worse than none. The default is now nothing; a demo caller passes the
+ * demo name in explicitly via {@link staffingFallbackAgencyName}.
+ */
 export function agencyNameForShift(
 	shift: ShiftRequest,
 	roster: AgencyRosterSlot[],
 	dateIso: string,
-	fallback = DEFAULT_PR_AGENCY_NAME,
+	fallback = "",
 ): string {
 	const slots = roster.filter(
 		(s) =>
@@ -67,15 +98,22 @@ export function agencyNameForShift(
 	return slot ? rosterSlotAgencyName(slot, fallback) : fallback;
 }
 
+/** Agency behind one PR row. `linkedAgency` defaults to nothing for the same
+ * reason {@link agencyNameForShift}'s does — an unnamed agency must stay
+ * unnamed rather than resolve to a real competitor's name. Passing `""` through
+ * is safe: `managedPrAgencyLabel` only reaches the demo literal on `undefined`
+ * (it uses `??`), so an empty name stays empty. */
 export function prAgencyLabel(
 	prId: string,
 	roster: AgencyRosterSlot[],
-	linkedAgency = DEFAULT_PR_AGENCY_NAME,
+	linkedAgency = "",
 ): string {
 	return managedPrAgencyLabel(prId, roster, { agencyName: linkedAgency });
 }
 
-/** Posted demand — sourced from the outlet's linked agency. */
+/** Posted demand — sourced from the outlet's linked agency. `agencyName` may be
+ * empty (nothing named the agency); the slot count is still real, so the row
+ * stays and only its label drops. */
 export function shiftDemandBreakdown(
 	shift: ShiftRequest,
 	agencyName: string,

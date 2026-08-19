@@ -23,16 +23,21 @@ import {
 import { buildAgencyPayee } from "@agency-portal/lib/pv-template";
 import { useStore } from "@agency-portal/lib/store";
 import { FileText, Receipt, Sheet } from "lucide-react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
-function pvBreakdownDisplayRows(breakdown: PvEarningsBreakdown) {
+function pvBreakdownDisplayRows(
+	breakdown: PvEarningsBreakdown,
+	t: PortalTranslations,
+) {
 	const rows = [
-		{ label: "Daily wages", value: breakdown.wages },
-		{ label: "Drink commissions", value: breakdown.drinks },
-		{ label: "Tip commissions", value: breakdown.tips },
-		{ label: "Overtime (check-out)", value: breakdown.overtime },
+		{ label: t.money.dailyWages, value: breakdown.wages },
+		{ label: t.payroll.drinkCommissions, value: breakdown.drinks },
+		{ label: t.payroll.tipCommissions, value: breakdown.tips },
+		{ label: t.payroll.overtimeCheckOut, value: breakdown.overtime },
 	].filter((r) => r.value > 0);
 	if (breakdown.other > 0)
-		rows.push({ label: "Other", value: breakdown.other });
+		rows.push({ label: t.payroll.other, value: breakdown.other });
 	return rows;
 }
 
@@ -47,27 +52,28 @@ export function AgencyPaidPvDetail({
 	agencyPRs: AgencyManagedPR[];
 	onBack: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	// Same letterhead the live PV screen prints — one agency, one document.
 	const pvIssuer = usePvIssuer();
 	const payee = buildAgencyPayee(pv, agencyPRs);
 	const breakdown = summarizePv(pv);
-	const breakdownRows = pvBreakdownDisplayRows(breakdown);
+	const breakdownRows = pvBreakdownDisplayRows(breakdown, t);
 
 	return (
 		<div className="iz-screen">
-			<AppTopbar onBack={onBack} backLabel="Paid PVs" />
+			<AppTopbar onBack={onBack} backLabel={t.payroll.paidPvs} />
 			<div className="iz-pv-detail-bar mb-2.5">
 				<div className="iz-pv-detail-bar-main">
 					<IzPill variant={pvStatusPillVariant(pv.status)}>
-						{agencyPvStatusLabel(pv.status)}
+						{agencyPvStatusLabel(pv.status, t)}
 					</IzPill>
 					<span className="iz-pv-detail-id">{pv.id}</span>
 				</div>
 			</div>
 
 			<IzCard flat className="mb-2">
-				<p className="iz-tiny iz-muted2">4-part earnings breakdown</p>
+				<p className="iz-tiny iz-muted2">{t.payroll.fourPartBreakdown}</p>
 				{breakdownRows.map((r) => (
 					<div key={r.label} className="iz-v-sum">
 						<span className="iz-muted">{r.label}</span>
@@ -75,7 +81,7 @@ export function AgencyPaidPvDetail({
 					</div>
 				))}
 				<div className="iz-v-sum tot">
-					<span>Net paid</span>
+					<span>{t.payroll.netPaid}</span>
 					<b className="text-[var(--iz-gold)]">{formatRM(getPvNetTotal(pv))}</b>
 				</div>
 			</IzCard>
@@ -84,14 +90,15 @@ export function AgencyPaidPvDetail({
 
 			{receiptScans.length > 0 && (
 				<OutletSection
-					title="Receipt scans"
-					hint={`${receiptScans.length} on this PV`}
+					title={t.payroll.receiptScans}
+					hint={`${receiptScans.length} ${t.payroll.onThisPv}`}
 				>
 					{receiptScans.map((scan) => (
 						<IzCard key={scan.id} flat className="mb-2">
 							<p className="font-sora text-sm font-bold">{scan.receiptRef}</p>
 							<p className="iz-tiny iz-muted mt-0.5">
-								{scan.outlet} · {formatRM(scan.totalLogged)} logged
+								{scan.outlet} · {formatRM(scan.totalLogged)}{" "}
+								{t.payroll.loggedSuffix}
 							</p>
 						</IzCard>
 					))}
@@ -104,7 +111,7 @@ export function AgencyPaidPvDetail({
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
 						downloadPvBreakdownPdf(pv, payee, [], pvIssuer);
-						toast("Official PV opened — use Print → Save as PDF", "success");
+						toast(t.payroll.officialPvOpened, "success");
 					}}
 				>
 					<FileText className="h-4 w-4 shrink-0" /> PDF
@@ -114,7 +121,7 @@ export function AgencyPaidPvDetail({
 					className="iz-btn iz-btn-soft min-w-0 flex-1 !py-2.5 !text-xs"
 					onClick={() => {
 						downloadPvBreakdownCsv(pv, payee, pvIssuer);
-						toast("Payment voucher Excel downloaded", "success");
+						toast(t.payroll.excelDownloaded, "success");
 					}}
 				>
 					<Sheet className="h-4 w-4 shrink-0" /> Excel
@@ -131,10 +138,10 @@ export function AgencyPaidPvDetail({
 						acc: payee.accountNo ?? "",
 						ic: payee.ic ?? pv.prIc ?? "",
 					});
-					toast("Payment receipt downloaded", "success");
+					toast(t.payroll.receiptDownloaded, "success");
 				}}
 			>
-				<Receipt className="h-4 w-4" /> Download payment receipt
+				<Receipt className="h-4 w-4" /> {t.payroll.downloadPaymentReceipt}
 			</button>
 		</div>
 	);

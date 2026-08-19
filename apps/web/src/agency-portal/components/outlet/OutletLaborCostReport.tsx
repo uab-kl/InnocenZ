@@ -12,6 +12,8 @@ import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Check, ChevronDown, Minus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function formatReportRm(amount: number): string {
 	return Math.round(amount).toLocaleString("en-MY");
@@ -60,6 +62,7 @@ function ReportRow({
 	onToggle?: () => void;
 	hasChildren?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const variance = line.actualRm - line.budgetRm;
 	const favorable = isLaborVarianceFavorable(variance);
 	const isParent = line.depth === 0;
@@ -134,6 +137,7 @@ export function OutletLaborCostReport({
 	shift: ShiftRequest;
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const [open, setOpen] = useState(false);
@@ -166,8 +170,11 @@ export function OutletLaborCostReport({
 	return (
 		<OutletSection
 			id={OUTLET_LABOR_COST_SECTION_ID}
-			title="Labor cost"
-			hint={`${formatReportRm(report.totalActualRm)} actual · ${formatReportRm(report.totalBudgetRm)} target`}
+			title={t.today.laborCost}
+			hint={fill(t.today.actualVsTarget, {
+				actual: formatReportRm(report.totalActualRm),
+				target: formatReportRm(report.totalBudgetRm),
+			})}
 			collapsible
 			open={open}
 			onOpenChange={setOpen}
@@ -175,24 +182,28 @@ export function OutletLaborCostReport({
 		>
 			<div
 				className="iz-outlet-labor-report iz-outlet-labor-report--embedded"
-				aria-label="Labor cost report"
+				aria-label={t.today.laborCostReport}
 			>
 				<div className="iz-outlet-labor-report__kpis">
 					<div className="iz-outlet-labor-report__kpi">
-						<p className="iz-outlet-labor-report__kpi-label">Target</p>
+						<p className="iz-outlet-labor-report__kpi-label">
+							{t.today.target}
+						</p>
 						<p className="iz-outlet-labor-report__kpi-value iz-outlet-labor-report__kpi-value--target">
 							{formatReportRm(report.totalBudgetRm)}
 						</p>
 					</div>
 					<div className="iz-outlet-labor-report__kpi">
-						<p className="iz-outlet-labor-report__kpi-label">Actual</p>
+						<p className="iz-outlet-labor-report__kpi-label">
+							{t.today.actual}
+						</p>
 						<p className="iz-outlet-labor-report__kpi-value">
 							{formatReportRm(report.totalActualRm)}
 						</p>
 					</div>
 					<div className="iz-outlet-labor-report__kpi">
 						<p className="iz-outlet-labor-report__kpi-label">
-							Budget variance
+							{t.today.colBudgetVariance}
 							{totalFavorable && totalVariance !== 0 && (
 								<Check
 									className="iz-outlet-labor-report__kpi-check"
@@ -219,11 +230,11 @@ export function OutletLaborCostReport({
 					<table className="iz-outlet-labor-report__table">
 						<thead>
 							<tr>
-								<th scope="col">Item</th>
-								<th scope="col">Actual</th>
-								<th scope="col">Budget</th>
+								<th scope="col">{t.today.colItem}</th>
+								<th scope="col">{t.today.colActual}</th>
+								<th scope="col">{t.today.colBudget}</th>
 								<th scope="col" colSpan={3}>
-									Budget variance
+									{t.today.colBudgetVariance}
 								</th>
 							</tr>
 						</thead>

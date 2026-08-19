@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /** Vector ink — the shape `pr_signature` / `finance_head_signature` store. */
 export type SignatureInk = {
@@ -30,6 +31,7 @@ export function PrSignaturePad({
 	onConfirmInk,
 	onCancel,
 }: PrSignaturePadProps) {
+	const { t } = usePortalLocale();
 	const canvasRef = useRef<HTMLCanvasElement>(null);
 	const drawing = useRef(false);
 	const [hasInk, setHasInk] = useState(false);
@@ -130,7 +132,8 @@ export function PrSignaturePad({
 			{label && <p className="iz-tiny iz-muted mb-2">{label}</p>}
 			{signerName && (
 				<p className="iz-sm mb-2 font-semibold">
-					Sign as <span className="text-[var(--iz-gold-l)]">{signerName}</span>
+					{t.profile.signAs}{" "}
+					<span className="text-[var(--iz-gold-l)]">{signerName}</span>
 				</p>
 			)}
 			<div className="iz-pv-sign-canvas-wrap">
@@ -141,18 +144,16 @@ export function PrSignaturePad({
 					onPointerMove={onPointerMove}
 					onPointerUp={onPointerUp}
 					onPointerLeave={onPointerUp}
-					aria-label="Signature pad — draw with finger or mouse"
+					aria-label={t.profile.signaturePadAria}
 				/>
-				{!hasInk && (
-					<div className="iz-pv-sign-hint">Draw your signature here</div>
-				)}
+				{!hasInk && <div className="iz-pv-sign-hint">{t.profile.drawHere}</div>}
 			</div>
 			<p className="iz-tiny iz-muted2 mt-2 text-center">
-				Timestamp is recorded automatically when you confirm.
+				{t.profile.timestampAuto}
 			</p>
 			<div className="iz-pv-sign-actions mt-3">
 				<button type="button" className="iz-btn iz-btn-soft" onClick={clear}>
-					Clear
+					{t.profile.clear}
 				</button>
 				{onCancel && (
 					<button
@@ -160,7 +161,7 @@ export function PrSignaturePad({
 						className="iz-btn iz-btn-ghost"
 						onClick={onCancel}
 					>
-						Cancel
+						{t.common.cancel}
 					</button>
 				)}
 				<button
@@ -169,7 +170,7 @@ export function PrSignaturePad({
 					disabled={!hasInk}
 					onClick={confirm}
 				>
-					Confirm signature
+					{t.profile.confirmSignature}
 				</button>
 			</div>
 		</div>

@@ -24,8 +24,11 @@ import { ChevronLeft, ChevronRight, LogOut } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { apiAssetUrl } from "@/components/organization/details-sheet-parts";
 import { isOrgProfileOnly } from "@/components/organization/org-status";
+import { PortalLanguageSwitcher } from "@/components/portal-language-switcher";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { useProfile } from "@/lib/auth/use-profile";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type PortalKind = "agency" | "outlet";
 
@@ -79,11 +82,56 @@ const OUTLET_EXTRAS: ExtraNavItem[] = [
 	},
 ];
 
-function portalGreeting() {
+function portalGreeting(t: PortalTranslations) {
 	const h = new Date().getHours();
-	if (h < 12) return "Good morning";
-	if (h < 17) return "Good afternoon";
-	return "Good evening";
+	if (h < 12) return t.shell.goodMorning;
+	if (h < 17) return t.shell.goodAfternoon;
+	return t.shell.goodEvening;
+}
+
+/**
+ * English nav label -> dictionary key.
+ *
+ * The label is translated HERE, at the render boundary, rather than in
+ * `agency-rbac.ts` / `outlet-rbac.ts` where the items are declared. Those files
+ * feed the same string to `iconForNav(label)`, so a translated label there would
+ * silently lose every sidebar icon — the lookup would miss and fall through to
+ * its default. `to`, `icon` and `permission` therefore stay in English and
+ * routing/RBAC are untouched by language.
+ *
+ * The VALUES are `keyof t.nav`, so a typo in a key fails the build. The KEYS are
+ * plain strings that cannot be checked against the two rbac files; if a label is
+ * ever renamed there, `localiseNav` falls back to the original English rather
+ * than rendering `undefined` — the same non-throwing posture as `usePortalLocale`.
+ */
+const NAV_KEY_BY_LABEL: Record<string, keyof PortalTranslations["nav"]> = {
+	Today: "today",
+	Roster: "roster",
+	Approvals: "approvals",
+	Payroll: "payroll",
+	History: "history",
+	"Manage PR": "managePr",
+	"Manage Outlet": "manageOutlet",
+	Subscription: "subscription",
+	Settings: "settings",
+	"Post Job": "postJob",
+	"Calendar page": "calendarPage",
+	Ratings: "ratings",
+	Reports: "reports",
+	Workspace: "workspace",
+	Dashboard: "dashboard",
+};
+
+/**
+ * Applied to BOTH the sidebar and the mobile bottom nav. Translating at one of
+ * the two render sites would leave a portal whose sidebar and bottom bar are in
+ * different languages on the same screen.
+ */
+function localiseNav(items: NavItem[], t: PortalTranslations): NavItem[] {
+	return items.map((item) => {
+		const key = NAV_KEY_BY_LABEL[item.label];
+		return key ? { ...item, label: t.nav[key] } : item;
+	});
 }
 
 /**
@@ -189,6 +237,7 @@ function PortalSidebar({
 	onNavigate?: () => void;
 }) {
 	const { pathname } = useLocation();
+	const { t } = usePortalLocale();
 
 	return (
 		<aside className="iz-portal-sidebar">
@@ -198,7 +247,7 @@ function PortalSidebar({
 					<TitleWithIcon
 						icon={iconForNav(portal === "agency" ? "PR Agency" : "Outlet")}
 					>
-						{portal === "agency" ? "Agency portal" : "Outlet portal"}
+						{portal === "agency" ? t.shell.agencyPortal : t.shell.outletPortal}
 					</TitleWithIcon>
 				</p>
 			</div>
@@ -215,13 +264,20 @@ function PortalSidebar({
 			</nav>
 
 			<div className="iz-portal-sidebar-foot">
+				{/*
+				  Above Sign out, below the nav: the one spot in this rail that is
+				  not already occupied. The logo owns the top, the nav owns the
+				  middle, and the header's bell + avatar are in a different
+				  element entirely — so nothing here overlaps existing chrome.
+				*/}
+				<PortalLanguageSwitcher variant="sidebar" />
 				<button
 					type="button"
 					className="iz-portal-nav-link w-full"
 					onClick={signOutToWelcome}
 				>
 					<LogOut className="h-[18px] w-[18px] shrink-0" strokeWidth={1.8} />
-					<span>Sign out</span>
+					<span>{t.shell.signOut}</span>
 				</button>
 			</div>
 		</aside>
@@ -252,6 +308,7 @@ function PortalHeader({
 	demoData: boolean;
 }) {
 	const { pathname } = useLocation();
+	const { t } = usePortalLocale();
 	const onAgencyHome = portal === "agency" && isAgencyHomePath(pathname);
 	const onAgencyRoster = portal === "agency" && isAgencyRosterPath(pathname);
 	const showDatetime = onAgencyHome || onAgencyRoster;
@@ -263,7 +320,7 @@ function PortalHeader({
 		<header className="iz-portal-header">
 			<div className="min-w-0">
 				<h1 className="font-sora text-xl font-extrabold tracking-tight text-[var(--iz-txt)] md:text-2xl">
-					{portalGreeting()},{" "}
+					{portalGreeting(t)},{" "}
 					<span className="text-[var(--iz-gold-l)]">
 						{ownerName.trim() || orgName}
 					</span>
@@ -276,7 +333,7 @@ function PortalHeader({
 					) : (
 						<p className="iz-portal-header-datetime">
 							<span className="iz-tiny iz-muted2 uppercase tracking-widest">
-								Today
+								{t.common.today}
 							</span>
 							<span className="font-sora text-lg font-extrabold leading-snug text-[var(--iz-txt)]">
 								{date} · {time}
@@ -288,9 +345,9 @@ function PortalHeader({
 				{demoData && (
 					<span
 						className="iz-tiny rounded-full border border-[var(--iz-danger,#dc2626)] px-2 py-0.5 font-bold uppercase tracking-widest text-[var(--iz-danger,#dc2626)]"
-						title="Fixture data. This session was never authenticated against the backend, so nothing here is real and nothing you do will be saved."
+						title={t.shell.demoDataHint}
 					>
-						Demo data
+						{t.shell.demoData}
 					</span>
 				)}
 				<OpsNotificationBell portal={portal} />
@@ -298,7 +355,7 @@ function PortalHeader({
 					to={portalProfilePath(portal)}
 					className="iz-portal-header-profile"
 					title={`${ownerName} · ${subLabel}`}
-					aria-label={`Profile · ${ownerName}`}
+					aria-label={`${t.shell.profile} · ${ownerName}`}
 				>
 					<PortalAvatar
 						portal={portal}
@@ -330,6 +387,7 @@ export function PortalShell({
 	const outletOwner = useStore((s) => s.outletOwner);
 	const owner = portal === "agency" ? agencyOwner : outletOwner;
 	const orgName = owner.orgName;
+	const { t } = usePortalLocale();
 	const { data: me } = useProfile();
 	// Header chip is the signed-in person's photo (`user.profile_image`), not
 	// the organisation logo kept on outletOwner/agencyOwner.avatarPhoto.
@@ -337,8 +395,8 @@ export function PortalShell({
 
 	const subLabel =
 		portal === "agency"
-			? AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"]
-			: OUTLET_SUB_ROLE_LABELS[outletSubRole ?? "outlet_owner"];
+			? AGENCY_SUB_ROLE_LABELS[agencySubRole ?? "agency_owner"](t)
+			: OUTLET_SUB_ROLE_LABELS[outletSubRole ?? "outlet_owner"](t);
 
 	const orgProfileOnly =
 		getPortalSessionKind() === "real" &&
@@ -390,14 +448,14 @@ export function PortalShell({
 			data-portal={portal}
 			data-collapsed={collapsed ? "true" : undefined}
 		>
-			<PortalSidebar portal={portal} items={sidebarItems} />
+			<PortalSidebar portal={portal} items={localiseNav(sidebarItems, t)} />
 
 			<button
 				type="button"
 				className="iz-portal-collapse-toggle"
 				onClick={toggleCollapsed}
-				aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-				title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+				aria-label={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
+				title={collapsed ? t.shell.expandSidebar : t.shell.collapseSidebar}
 			>
 				{collapsed ? (
 					<ChevronRight className="h-4 w-4" strokeWidth={2} />
@@ -426,7 +484,7 @@ export function PortalShell({
 
 			{navItems.length > 0 && (
 				<div className="iz-portal-mobile-footer md:hidden">
-					<BottomNav items={navItems} />
+					<BottomNav items={localiseNav(navItems, t)} />
 				</div>
 			)}
 

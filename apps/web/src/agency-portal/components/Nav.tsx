@@ -14,6 +14,7 @@ import { Link, useLocation, useNavigate } from "@tanstack/react-router";
 import type { LucideIcon } from "lucide-react";
 import { ArrowLeft } from "lucide-react";
 import { lazy, type ReactNode, Suspense } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 // PR demo + notification bell live in a separate chunk so agency/outlet SSR
 // (and login recovery) never waits on that graph.
@@ -193,6 +194,7 @@ export function AppTopbar({
 
 	backClassName,
 }: AppTopbarProps) {
+	const { t } = usePortalLocale();
 	const { pathname } = useLocation();
 
 	const { role: prSubRole } = usePrPortalReady();
@@ -223,9 +225,9 @@ export function AppTopbar({
 
 	const displayLabel =
 		pathname.startsWith("/outlet") && outletSubRole
-			? OUTLET_SUB_ROLE_LABELS[outletSubRole]
+			? OUTLET_SUB_ROLE_LABELS[outletSubRole](t)
 			: pathname.startsWith("/agency") && agencySubRole
-				? AGENCY_SUB_ROLE_LABELS[agencySubRole]
+				? AGENCY_SUB_ROLE_LABELS[agencySubRole](t)
 				: meta.label;
 
 	const resolvedBackTo = backTo ?? getAutoBackTo(pathname);
@@ -263,7 +265,9 @@ export function AppTopbar({
 			{!isPortalShell && (
 				<>
 					{isPrPortal ? (
-						<Suspense fallback={<span className="iz-topbar-spacer" aria-hidden />}>
+						<Suspense
+							fallback={<span className="iz-topbar-spacer" aria-hidden />}
+						>
 							<PrPortalTopbar
 								prSubRole={prSubRole}
 								fallbackName={meta.name}

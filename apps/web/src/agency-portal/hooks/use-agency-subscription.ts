@@ -14,6 +14,9 @@ import {
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useAuth } from "@/lib/auth-context";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import {
 	type CreateAdminRequestInput,
 	createAdminRequest,
@@ -59,7 +62,10 @@ export interface AgencyRatePlan {
 	description: string;
 }
 
-function ratePlanFromBackend(sub: Subscription): AgencyRatePlan {
+function ratePlanFromBackend(
+	sub: Subscription,
+	t: PortalTranslations,
+): AgencyRatePlan {
 	const price = Number(sub.price);
 	const hasPrice = Number.isFinite(price) && price > 0;
 	const weekly = sub.billingCycle === "weekly";
@@ -69,10 +75,18 @@ function ratePlanFromBackend(sub: Subscription): AgencyRatePlan {
 		weeklyRm: weekly && hasPrice ? price : null,
 		// Non-weekly or zero-price plans show a label instead of a /week amount.
 		priceLabel: !hasPrice
-			? "Renegotiate Price"
+			? t.subscription.priceRenegotiate
 			: weekly
 				? null
-				: `RM ${price.toLocaleString()} / ${sub.billingCycle}`,
+				: fill(t.subscription.pricePerCycle, {
+						amount: price.toLocaleString(),
+						// The backend's own cycle word; not a UI label, so it is
+						// resolved rather than translated in place.
+						cycle:
+							sub.billingCycle === "weekly"
+								? t.subscription.billedWeekly
+								: t.subscription.billedMonthly,
+					}),
 		capacityLabel: sub.coverage ?? "—",
 		// The backend has no marketing blurb; the coverage carries the tier label.
 		description: "",
@@ -109,6 +123,7 @@ function compareAgencyRatePlans(a: AgencyRatePlan, b: AgencyRatePlan): number {
  * both behind one `agencyCollections` key split by a `kind` field.
  */
 export function useAgencySubscription() {
+	const { t } = usePortalLocale();
 	const { logout } = useAuth();
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
@@ -156,9 +171,9 @@ export function useAgencySubscription() {
 	const billingHistory = useMemo<SubscriptionRecordRow[]>(
 		() =>
 			sortMemberSubscriptions(memberQuery.data?.data ?? []).map((sub) =>
-				subscriptionRecordFromMember(sub, "InnocenZ Agency"),
+				subscriptionRecordFromMember(sub, "InnocenZ Agency", t),
 			),
-		[memberQuery.data],
+		[memberQuery.data, t],
 	);
 
 	/**
@@ -207,17 +222,19 @@ export function useAgencySubscription() {
 		() =>
 			sortMemberSubscriptions(historyQuery.data?.data ?? [])
 				.filter((sub) => sub.status !== "active")
-				.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Agency")),
-		[historyQuery.data],
+				.map((sub) => planChangeRecordFromMember(sub, "InnocenZ Agency", t)),
+		[historyQuery.data, t],
 	);
 
 	const plans = useMemo<AgencyRatePlan[]>(
 		() =>
 			(plansQuery.data?.data ?? [])
 				.filter((sub) => sub.subscriptionType === "agency")
-				.map(ratePlanFromBackend)
+				.map((sub) => ratePlanFromBackend(sub, t))
 				.sort(compareAgencyRatePlans),
-		[plansQuery.data],
+		// `t` is a dep: without it the rate card would keep whichever language was
+		// active when the memo last ran, so switching language left the prices behind.
+		[plansQuery.data, t],
 	);
 
 	const current = useMemo(

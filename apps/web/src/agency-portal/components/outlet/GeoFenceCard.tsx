@@ -6,30 +6,38 @@ import {
 import { useStore } from "@agency-portal/lib/store";
 import { Crosshair, MapPin, Search, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type { GeocodeCandidate } from "@/services/outlet";
 
 const MIN_RADIUS = 10;
 const MAX_RADIUS = 1000;
 
 /** ROOFTOP is a building; APPROXIMATE can be a whole suburb — worth flagging. */
-function precisionNote(precision: GeocodeCandidate["precision"]): {
+function precisionNote(
+	precision: GeocodeCandidate["precision"],
+	t: PortalTranslations,
+): {
 	label: string;
 	warn: boolean;
 } {
-	if (precision === "ROOFTOP") return { label: "Rooftop", warn: false };
+	if (precision === "ROOFTOP")
+		return { label: t.geofence.precisionRooftop, warn: false };
 	if (precision === "RANGE_INTERPOLATED")
-		return { label: "Interpolated", warn: false };
+		return { label: t.geofence.precisionInterpolated, warn: false };
 	if (precision === "GEOMETRIC_CENTER")
-		return { label: "Block centre", warn: true };
-	return { label: "Approximate — may be a whole area", warn: true };
+		return { label: t.geofence.precisionBlockCentre, warn: true };
+	return { label: t.geofence.precisionApproximate, warn: true };
 }
 
 /** Hairline rule with a centred word — ties the two lookup routes into one step. */
 function OrDivider() {
+	const { t } = usePortalLocale();
 	return (
 		<div className="flex items-center gap-3" aria-hidden="true">
 			<span className="h-px flex-1 bg-[var(--iz-line)]" />
-			<span className="iz-tiny iz-muted2">or</span>
+			<span className="iz-tiny iz-muted2">{t.geofence.or}</span>
 			<span className="h-px flex-1 bg-[var(--iz-line)]" />
 		</div>
 	);
@@ -49,6 +57,7 @@ function OrDivider() {
  * Owner-only, matching `outletOwnerOnly` on PATCH /outlet/:id/geo-fence.
  */
 export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const {
 		backed,
@@ -82,11 +91,10 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 	if (!backed)
 		return (
 			<>
-				<IzSectionLabel>Attendance</IzSectionLabel>
+				<IzSectionLabel>{t.geofence.attendance}</IzSectionLabel>
 				<IzCard>
 					<p className="iz-tiny iz-muted text-pretty rounded-[14px] border border-dashed border-[var(--iz-line)] px-3 py-2">
-						Demo session — sign in with a real outlet account to pin the venue
-						and switch on the check-in fence.
+						{t.geofence.demoSession}
 					</p>
 				</IzCard>
 			</>
@@ -106,15 +114,18 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 
 	const commit = async (lat: number, lng: number) => {
 		if (!radiusValid) {
-			toast(`Radius must be ${MIN_RADIUS}–${MAX_RADIUS} metres`, "warn");
+			toast(
+				fill(t.geofence.radiusMustBe, { min: MIN_RADIUS, max: MAX_RADIUS }),
+				"warn",
+			);
 			return;
 		}
 		try {
 			await save({ lat, lng, radius: radiusValue });
 			setRadiusDraft(null);
-			toast("Check-in pin saved", "success");
+			toast(t.geofence.pinSaved, "success");
 		} catch {
-			toast("Could not save the pin", "warn");
+			toast(t.geofence.couldNotSavePin, "warn");
 		}
 	};
 
@@ -123,20 +134,21 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 			await clearPin();
 			setConfirmingRemove(false);
 			setRadiusDraft(null);
-			toast("Check-in pin removed — this venue is no longer fenced", "success");
+			toast(t.geofence.pinRemoved, "success");
 		} catch {
-			toast("Could not remove the pin", "warn");
+			toast(t.geofence.couldNotRemovePin, "warn");
 		}
 	};
 
 	return (
 		<>
-			<IzSectionLabel>Attendance</IzSectionLabel>
+			<IzSectionLabel>{t.geofence.attendance}</IzSectionLabel>
 			<IzCard>
 				<div className="flex items-start justify-between gap-3">
 					<div className="min-w-0">
 						<div className="flex items-center gap-2 text-sm font-semibold">
-							<MapPin className="h-4 w-4 shrink-0" /> Check-in location
+							<MapPin className="h-4 w-4 shrink-0" />{" "}
+							{t.geofence.checkInLocation}
 						</div>
 						{/* Saving a pin is the fence master-switch. State it once — the
 						    colour carries the urgency, the sentence the consequence —
@@ -147,20 +159,24 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 							}`}
 						>
 							{pin
-								? `PRs must be within ${pin.radius} m of this pin to check in — anywhere further is refused.`
-								: "No pin yet — check-ins here are accepted from anywhere, unmeasured."}
+								? fill(t.geofence.withinMetres, { radius: pin.radius })
+								: t.geofence.noPinYet}
 						</p>
 					</div>
 					<span
 						className={`iz-pill !text-[10px] shrink-0 ${pin ? "iz-pill-green" : "iz-pill-amber"}`}
 					>
-						{isLoading ? "Loading" : pin ? "Fenced" : "Not set"}
+						{isLoading
+							? t.geofence.loading
+							: pin
+								? t.geofence.fenced
+								: t.geofence.notSet}
 					</span>
 				</div>
 
 				{!canEdit && (
 					<p className="iz-tiny iz-muted2 mt-3 text-pretty">
-						Only the outlet owner can change the check-in pin.
+						{t.geofence.onlyOwnerCanChange}
 					</p>
 				)}
 
@@ -169,7 +185,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 						<div>
 							<div className="flex flex-wrap items-end gap-3">
 								<label className="block">
-									<span className="iz-tiny iz-muted">Radius</span>
+									<span className="iz-tiny iz-muted">{t.geofence.radius}</span>
 									<div className="mt-1 flex items-center gap-2">
 										{/* `.iz-field-input` is width:100%, which outranks a bare
 										    `w-24` in the cascade — hence the `!`. */}
@@ -178,12 +194,14 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 												radiusValid ? "" : "!border-[var(--iz-red)]"
 											}`}
 											inputMode="numeric"
-											aria-label="Check-in radius in metres"
+											aria-label={t.geofence.radiusAria}
 											aria-invalid={!radiusValid}
 											value={radius}
 											onChange={(e) => setRadiusDraft(e.target.value)}
 										/>
-										<span className="iz-tiny iz-muted2">metres</span>
+										<span className="iz-tiny iz-muted2">
+											{t.geofence.metres}
+										</span>
 									</div>
 								</label>
 								{radiusChanged && (
@@ -193,23 +211,23 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 										disabled={isSaving}
 										onClick={() => void commit(pin.lat, pin.lng)}
 									>
-										{isSaving ? "Saving…" : "Update radius"}
+										{isSaving ? t.common.saving : t.geofence.updateRadius}
 									</button>
 								)}
 							</div>
 							{!radiusValid && (
 								<p className="iz-tiny mt-1.5 text-pretty text-[var(--iz-red)]">
-									Must be a whole number between {MIN_RADIUS} and {MAX_RADIUS}{" "}
-									metres.
+									{fill(t.geofence.radiusRange, {
+										min: MIN_RADIUS,
+										max: MAX_RADIUS,
+									})}
 								</p>
 							)}
 						</div>
 
 						<div className="space-y-3">
 							<p className="iz-tiny iz-muted2 text-pretty">
-								{pin
-									? "Move the pin by looking the address up again."
-									: "Find the venue's front door. Saving switches enforcement on immediately."}
+								{pin ? t.geofence.movePin : t.geofence.findFrontDoor}
 							</p>
 
 							{/* `!` throughout this card: the theme's `.iz-btn`/`.iz-btn-sm`/
@@ -222,7 +240,9 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 								onClick={() => void lookup()}
 							>
 								<Crosshair className="h-4 w-4" />
-								{isLookingUp ? "Looking up…" : "Find from venue address"}
+								{isLookingUp
+									? t.geofence.lookingUp
+									: t.geofence.findFromVenueAddress}
 							</button>
 
 							<OrDivider />
@@ -232,7 +252,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 							<div className="flex gap-2">
 								<input
 									className="iz-field-input min-w-0 flex-1"
-									placeholder="Search another address"
+									placeholder={t.geofence.searchAnotherAddress}
 									value={address}
 									onChange={(e) => setAddress(e.target.value)}
 								/>
@@ -242,7 +262,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 									disabled={isLookingUp || address.trim().length < 3}
 									onClick={() => void lookup(address)}
 								>
-									<Search className="h-4 w-4" /> Search
+									<Search className="h-4 w-4" /> {t.common.search}
 								</button>
 							</div>
 						</div>
@@ -257,13 +277,13 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 							<div className="space-y-2">
 								{searchedAddress && (
 									<p className="iz-tiny iz-muted2 text-pretty">
-										Searched: {searchedAddress}
+										{fill(t.geofence.searched, { address: searchedAddress })}
 									</p>
 								)}
 								{/* Panel radius sits above the 14px button it contains, so the
 								    corners nest rather than fight. */}
 								{candidates.map((candidate) => {
-									const note = precisionNote(candidate.precision);
+									const note = precisionNote(candidate.precision, t);
 									return (
 										<div
 											key={candidate.placeId}
@@ -285,7 +305,9 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 													void commit(candidate.lat, candidate.lng)
 												}
 											>
-												{isSaving ? "Saving…" : "Use this location"}
+												{isSaving
+													? t.common.saving
+													: t.geofence.useThisLocation}
 											</button>
 										</div>
 									);
@@ -299,8 +321,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 							(confirmingRemove ? (
 								<div className="rounded-2xl border border-[rgba(240,138,138,.35)] bg-[var(--iz-red-bg)] p-3">
 									<p className="iz-tiny text-pretty text-[var(--iz-red)]">
-										Remove the pin? Attendance verification switches off — every
-										check-in here is accepted again, from anywhere, unmeasured.
+										{t.geofence.removeConfirm}
 									</p>
 									<div className="mt-2 flex flex-wrap gap-2">
 										<button
@@ -309,7 +330,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 											disabled={isClearing}
 											onClick={() => setConfirmingRemove(false)}
 										>
-											Keep the pin
+											{t.geofence.keepThePin}
 										</button>
 										<button
 											type="button"
@@ -317,7 +338,9 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 											disabled={isClearing}
 											onClick={() => void removePin()}
 										>
-											{isClearing ? "Removing…" : "Yes, remove it"}
+											{isClearing
+												? t.geofence.removing
+												: t.geofence.yesRemoveIt}
 										</button>
 									</div>
 								</div>
@@ -327,7 +350,7 @@ export function GeoFenceCard({ canEdit }: { canEdit: boolean }) {
 									className="iz-btn iz-btn-ghost iz-btn-sm !w-full !text-[var(--iz-red)]"
 									onClick={() => setConfirmingRemove(true)}
 								>
-									<Trash2 className="h-4 w-4" /> Remove pin
+									<Trash2 className="h-4 w-4" /> {t.geofence.removePin}
 								</button>
 							))}
 					</div>

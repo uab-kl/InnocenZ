@@ -28,6 +28,7 @@ import {
 	type ShiftHistoryRow,
 	sortShiftHistoryDesc,
 } from "@agency-portal/lib/shift-history-utils";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const PV_COMMISSION_SCAN_PREFIX = "rc-pv-";
 const PAYROLL_SHIFT_ROW_PREFIX = "ap-shift-";
@@ -329,16 +330,32 @@ export function resolvePvPrId(
 }
 
 /** Agency payroll display labels — aligned with History / PV filter chips. */
-export const AGENCY_PV_STATUS_LABELS: Record<PrPvStatus, string> = {
-	PENDING_REVIEW: "Pending Agency Review",
-	SENT: "Pending PR Review",
-	SIGNED: "To pay",
-	DISPUTED: "Disputed",
-	PAID: "Paid",
+/**
+ * The agency's word for each PV state, keyed by the API's own enum value.
+ *
+ * Maps to dictionary KEYS, not finished strings: the enum value is what the
+ * filter chips put in the query string and what the server matches on, so it
+ * must never be translated — only the words beside it.
+ */
+export const AGENCY_PV_STATUS_LABELS: Record<
+	PrPvStatus,
+	keyof PortalTranslations["payroll"]
+> = {
+	PENDING_REVIEW: "statusPendingReview",
+	SENT: "statusSent",
+	SIGNED: "statusSigned",
+	DISPUTED: "statusDisputed",
+	PAID: "statusPaid",
 };
 
-export function agencyPvStatusLabel(status: PrPvStatus): string {
-	return AGENCY_PV_STATUS_LABELS[status] ?? pvStatusLabel(status);
+// `t` is REQUIRED, not optional with an English default: an optional parameter
+// would let a new call site compile while quietly rendering English.
+export function agencyPvStatusLabel(
+	status: PrPvStatus,
+	t: PortalTranslations,
+): string {
+	const key = AGENCY_PV_STATUS_LABELS[status];
+	return key ? t.payroll[key] : pvStatusLabel(status);
 }
 
 /**

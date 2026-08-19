@@ -54,6 +54,9 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 type Portal = "agency" | "outlet";
 type AgencyGroupBy = "pr" | "venue";
@@ -76,6 +79,7 @@ export function ShiftHistoryLog({
 	/** Live PR roster for avatars (profile → comcard). Falls back to demo store. */
 	agencyPRs?: AgencyManagedPR[];
 }) {
+	const { t } = usePortalLocale();
 	const [nameFilter, setNameFilter] = useState("");
 	const [dateRange, setDateRange] = useState({ from: "", to: "" });
 	const [thirdFilter, setThirdFilter] = useState("");
@@ -156,18 +160,19 @@ export function ShiftHistoryLog({
 	const subtitle =
 		subtitleOverride ??
 		(agencyByVenue
-			? "Agency ledger — one row per outlet with totals across PR shifts. Tap for PR breakdown."
+			? t.history.agencyLedgerTap
 			: portal === "agency"
-				? "Transaction log — one row per PR with totals across the filtered shifts. Tap for outlet breakdown."
-				: "Transaction log — one row per PR with totals across the filtered shifts.");
+				? t.history.txnLogAgencyTap
+				: t.history.txnLog);
 
-	const primaryLabel = agencyByVenue ? "OUTLET" : "NAME";
+	const primaryLabel = agencyByVenue ? t.history.colOutlet : t.history.colName;
 	const thirdLabel = agencyByVenue
-		? "PR"
+		? t.history.colPr
 		: portal === "agency"
-			? "OUTLET"
-			: "PR AGENCY";
-	const venueLabel = portal === "agency" ? "outlet" : "agency";
+			? t.history.colOutlet
+			: t.history.colPrAgency;
+	const venueLabel =
+		portal === "agency" ? t.history.venueOutlet : t.history.venueAgency;
 	const showPrDetail = !agencyByVenue;
 	const showVenueDetail = agencyByVenue;
 
@@ -277,8 +282,34 @@ export function ShiftHistoryLog({
 	);
 
 	const logCountLabel = agencyByVenue
-		? `${venueRollups.length} outlet${venueRollups.length !== 1 ? "s" : ""} · ${filtered.length} shift${filtered.length !== 1 ? "s" : ""}`
-		: `${prRollups.length} PR${prRollups.length !== 1 ? "s" : ""} · ${filtered.length} shift${filtered.length !== 1 ? "s" : ""}`;
+		? fill(t.history.countPair, {
+				a: fill(
+					venueRollups.length === 1
+						? t.history.outletCountOne
+						: t.history.outletCountMany,
+					{ n: venueRollups.length },
+				),
+				b: fill(
+					filtered.length === 1
+						? t.rosterGrid.shiftCountOne
+						: t.rosterGrid.shiftCountMany,
+					{ n: filtered.length },
+				),
+			})
+		: fill(t.history.countPair, {
+				a: fill(
+					prRollups.length === 1
+						? t.rosterGrid.prCountOne
+						: t.rosterGrid.prCountMany,
+					{ n: prRollups.length },
+				),
+				b: fill(
+					filtered.length === 1
+						? t.rosterGrid.shiftCountOne
+						: t.rosterGrid.shiftCountMany,
+					{ n: filtered.length },
+				),
+			});
 
 	const agencyName = rows[0]?.agencyName ?? "Atlas Agency";
 
@@ -292,15 +323,18 @@ export function ShiftHistoryLog({
 	return (
 		<div className={shellClass}>
 			{!embedded && portal === "agency" && (
-				<AppTopbar backTo="/agency" backLabel="Agency home" />
+				<AppTopbar backTo="/agency" backLabel={t.history.agencyHome} />
 			)}
 			{!embedded && (
 				<>
 					<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-						InnocenZ · {portal === "agency" ? "Agency" : "Outlet"}
+						InnocenZ ·{" "}
+						{portal === "agency"
+							? t.history.portalAgency
+							: t.history.portalOutlet}
 					</p>
 					<IzPageTitle size="xl" className="mx-0.5 mt-0.5">
-						History
+						{t.agencyMisc.history}
 					</IzPageTitle>
 				</>
 			)}
@@ -316,7 +350,7 @@ export function ShiftHistoryLog({
 						: "iz-txn-filter-heading mt-4"
 				}
 			>
-				<TitleWithIcon>Filter by</TitleWithIcon>
+				<TitleWithIcon>{t.history.filterBy}</TitleWithIcon>
 			</p>
 			<div
 				className={
@@ -330,11 +364,11 @@ export function ShiftHistoryLog({
 					options={
 						agencyByVenue
 							? [
-									{ value: "", label: "All outlets" },
+									{ value: "", label: t.filters.allOutlets },
 									...outlets.map((o) => ({ value: o, label: o })),
 								]
 							: [
-									{ value: "", label: "All names" },
+									{ value: "", label: t.history.allNames },
 									...prNames.map((n) => {
 										const row = rows.find((r) => r.prName === n);
 										return { value: row?.prId ?? n, label: n };
@@ -343,7 +377,7 @@ export function ShiftHistoryLog({
 					}
 				/>
 				<HistDateRangePickerField
-					label="DATE"
+					label={t.history.colDate}
 					range={dateRange}
 					onChange={setDateRange}
 					dateOptions={dateOptions}
@@ -355,7 +389,7 @@ export function ShiftHistoryLog({
 					options={
 						agencyByVenue
 							? [
-									{ value: "", label: "All PRs" },
+									{ value: "", label: t.filters.allPrs },
 									...prNames.map((n) => {
 										const row = rows.find((r) => r.prName === n);
 										return { value: row?.prId ?? n, label: n };
@@ -364,7 +398,10 @@ export function ShiftHistoryLog({
 							: [
 									{
 										value: "",
-										label: portal === "agency" ? "All outlets" : "All agencies",
+										label:
+											portal === "agency"
+												? t.filters.allOutlets
+												: t.history.allAgencies,
 									},
 									...thirdOptions.map((o) => ({ value: o, label: o })),
 								]
@@ -384,14 +421,16 @@ export function ShiftHistoryLog({
 				>
 					{outletStyleLayout ? (
 						<div className="iz-outlet-hist-section-label">
-							<TitleWithIcon>Transaction log</TitleWithIcon>
+							<TitleWithIcon>{t.history.transactionLog}</TitleWithIcon>
 						</div>
 					) : portal === "agency" ? (
 						<div className="iz-outlet-hist-section-label">
-							<TitleWithIcon>Transaction log</TitleWithIcon>
+							<TitleWithIcon>{t.history.transactionLog}</TitleWithIcon>
 						</div>
 					) : (
-						<IzSectionLabel className="!mb-0">Transaction log</IzSectionLabel>
+						<IzSectionLabel className="!mb-0">
+							{t.history.transactionLog}
+						</IzSectionLabel>
 					)}
 					<span
 						className={
@@ -415,7 +454,7 @@ export function ShiftHistoryLog({
 				{agencyByVenue ? (
 					venueRollups.length === 0 ? (
 						<IzCard className="text-center">
-							<p className="iz-sm iz-muted">No records match these filters</p>
+							<p className="iz-sm iz-muted">{t.history.noRecordsMatch}</p>
 						</IzCard>
 					) : (
 						venueRollups.map((rollup) => (
@@ -428,7 +467,7 @@ export function ShiftHistoryLog({
 					)
 				) : rankedPrRollups.length === 0 ? (
 					<IzCard className="text-center">
-						<p className="iz-sm iz-muted">No records match these filters</p>
+						<p className="iz-sm iz-muted">{t.history.noRecordsMatch}</p>
 					</IzCard>
 				) : outletStyleLayout ? (
 					rankedPrRollups.map((rollup, index) => (
@@ -449,6 +488,7 @@ export function ShiftHistoryLog({
 							key={rollup.prId}
 							rollup={rollup}
 							venueLabel={venueLabel}
+							portal={portal}
 							onTap={showPrDetail ? () => openPrDetail(rollup.prId) : undefined}
 						/>
 					))
@@ -474,8 +514,10 @@ export function ShiftHistoryLog({
 							</button>
 							<p className="iz-tiny iz-muted2 uppercase">
 								{portal === "outlet" || detailPrVenue
-									? `Shift log · ${detailPr.prName}`
-									: `Earned breakdown by ${venueLabel}`}
+									? fill(t.history.shiftLogFor, { name: detailPr.prName })
+									: fill(t.history.earnedBreakdownBy, {
+											venue: venueLabel,
+										})}
 							</p>
 							<h3>
 								{portal === "outlet"
@@ -487,7 +529,7 @@ export function ShiftHistoryLog({
 							type="button"
 							className="iz-sheet-close"
 							onClick={closePrDetail}
-							aria-label="Close"
+							aria-label={t.common.close}
 						>
 							<X className="h-4 w-4" />
 						</button>
@@ -551,12 +593,27 @@ export function ShiftHistoryLog({
 						<>
 							<IzCard flat className="!mb-3">
 								<p className="iz-tiny iz-muted">
-									{detailTotals.shiftCount} shift
-									{detailTotals.shiftCount !== 1 ? "s" : ""} in filtered log
+									{fill(t.history.shiftsInFilteredLog, {
+										shifts: fill(
+											detailTotals.shiftCount === 1
+												? t.rosterGrid.shiftCountOne
+												: t.rosterGrid.shiftCountMany,
+											{ n: detailTotals.shiftCount },
+										),
+									})}
 									{detailVenueRollups.length !== 1
-										? ` · ${detailVenueRollups.length} ${venueLabel}s`
+										? fill(t.history.venueSuffix, {
+												venue: fill(
+													portal === "agency"
+														? t.history.outletCountMany
+														: t.history.agencyCountMany,
+													{ n: detailVenueRollups.length },
+												),
+											})
 										: detailVenueRollups[0]
-											? ` · ${detailVenueRollups[0].venue}`
+											? fill(t.history.venueSuffix, {
+													venue: detailVenueRollups[0].venue,
+												})
 											: ""}
 								</p>
 								<ShiftHistoryExpandableMoneyBlock
@@ -566,7 +623,7 @@ export function ShiftHistoryLog({
 							</IzCard>
 
 							<p className="iz-tiny iz-muted2 mb-2">
-								Tap an outlet to see every shift
+								{t.history.tapOutletToSeeShifts}
 							</p>
 							<div className="space-y-2.5">
 								{detailVenueRollups.map((rollup) => (
@@ -606,7 +663,7 @@ export function ShiftHistoryLog({
 
 					{portal !== "outlet" && (
 						<p className="iz-tiny iz-muted2 mt-3 text-center">
-							Read-only · mirrored to outlet portal
+							{t.history.readOnlyMirrored}
 						</p>
 					)}
 				</IzSheet>
@@ -632,7 +689,7 @@ export function ShiftHistoryLog({
 							type="button"
 							className="iz-sheet-close"
 							onClick={() => setDetailVenue(null)}
-							aria-label="Close"
+							aria-label={t.common.close}
 						>
 							<X className="h-4 w-4" />
 						</button>
@@ -674,7 +731,7 @@ export function ShiftHistoryLog({
 					</div>
 
 					<p className="iz-tiny iz-muted2 mt-3 text-center">
-						Agency view · PR ↔ outlet shift history
+						{t.history.agencyViewHint}
 					</p>
 				</IzSheet>
 			)}
@@ -754,6 +811,7 @@ export function OutletPrShiftHistorySheet({
 	outletName: string;
 	agencyName?: string;
 }) {
+	const { t } = usePortalLocale();
 	const backend = useOutletHistory();
 	const demoShiftHistory = useStore((s) => s.shiftHistory) ?? [];
 	const demoRatings = useStore((s) => s.ratings);
@@ -824,7 +882,7 @@ export function OutletPrShiftHistorySheet({
 					type="button"
 					className="iz-sheet-close"
 					onClick={onClose}
-					aria-label="Close"
+					aria-label={t.common.close}
 				>
 					<X className="h-4 w-4" />
 				</button>
@@ -836,8 +894,11 @@ export function OutletPrShiftHistorySheet({
 					    which one it is, or an in-flight request reads as a verdict. */}
 					<p className="iz-sm iz-muted">
 						{backend.isLoading
-							? "Loading shift history…"
-							: `No shift history yet for ${prName} at ${outletName}`}
+							? t.history.loadingShiftHistory
+							: fill(t.history.noShiftHistoryForPrAt, {
+									pr: prName,
+									outlet: outletName,
+								})}
 					</p>
 				</IzCard>
 			) : (
@@ -867,14 +928,19 @@ export function OutletPrShiftHistorySheet({
 	);
 }
 
-function venueLatestMeta(rollup: { shifts: ShiftHistoryRow[] }) {
+function venueLatestMeta(
+	rollup: { shifts: ShiftHistoryRow[] },
+	t: PortalTranslations,
+) {
 	const latest = rollup.shifts.reduce(
 		(best, row) => (row.dateIso > best.dateIso ? row : best),
 		rollup.shifts[0],
 	);
 	const prNames = [...new Set(rollup.shifts.map((s) => s.prName))].sort();
 	const prSummary =
-		prNames.length <= 2 ? prNames.join(" · ") : `${prNames.length} PRs`;
+		prNames.length <= 2
+			? prNames.join(" · ")
+			: fill(t.history.prCountShort, { n: prNames.length });
 	return { latest, prSummary };
 }
 
@@ -885,7 +951,8 @@ function VenueHistoryCard({
 	rollup: ReturnType<typeof aggregateShiftHistoryByVenue>[number];
 	onTap?: () => void;
 }) {
-	const { latest, prSummary } = venueLatestMeta(rollup);
+	const { t } = usePortalLocale();
+	const { latest, prSummary } = venueLatestMeta(rollup, t);
 
 	const body = (
 		<>
@@ -936,16 +1003,24 @@ function VenueHistoryCard({
 function PrHistoryCard({
 	rollup,
 	venueLabel,
+	portal,
 	onTap,
 }: {
 	rollup: ShiftHistoryPrRollup;
 	venueLabel: string;
+	portal: Portal;
 	onTap?: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const venueSummary =
 		rollup.venues.length <= 2
 			? rollup.venues.join(" · ")
-			: `${rollup.venues.length} ${venueLabel}s`;
+			: fill(
+					portal === "agency"
+						? t.history.outletCountMany
+						: t.history.agencyCountMany,
+					{ n: rollup.venues.length },
+				);
 
 	const body = (
 		<>
@@ -1024,13 +1099,18 @@ function formatHistDateKey(
 function formatDateRangeLabel(
 	range: { from: string; to: string },
 	dateOptions: { key: string; label: string }[],
+	t: PortalTranslations,
 ) {
 	const labelFor = (key: string) => formatHistDateKey(key, dateOptions);
-	if (!range.from && !range.to) return "All dates";
+	if (!range.from && !range.to) return t.filters.allDates;
 	if (range.from && range.to)
-		return `${labelFor(range.from)} – ${labelFor(range.to)}`;
-	if (range.from) return `From ${labelFor(range.from)}`;
-	return `Until ${labelFor(range.to)}`;
+		return fill(t.history.rangeFromTo, {
+			from: labelFor(range.from),
+			to: labelFor(range.to),
+		});
+	if (range.from)
+		return fill(t.history.rangeFrom, { from: labelFor(range.from) });
+	return fill(t.history.rangeUntil, { to: labelFor(range.to) });
 }
 
 export function HistDateRangePickerField({
@@ -1044,11 +1124,12 @@ export function HistDateRangePickerField({
 	onChange: (range: { from: string; to: string }) => void;
 	dateOptions: { key: string; label: string }[];
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const [pickTarget, setPickTarget] = useState<"from" | "to">("from");
 	const rootRef = useRef<HTMLDivElement>(null);
 	const active = Boolean(range.from || range.to);
-	const displayLabel = formatDateRangeLabel(range, dateOptions);
+	const displayLabel = formatDateRangeLabel(range, dateOptions, t);
 	const selectedKey = pickTarget === "from" ? range.from : range.to;
 	const selected = dateFromKey(
 		selectedKey || (pickTarget === "to" ? range.from : ""),
@@ -1101,7 +1182,7 @@ export function HistDateRangePickerField({
 				className={`iz-hist-select-trigger sm${open ? " open" : ""}`}
 				onClick={() => setOpen((o) => !o)}
 				aria-expanded={open}
-				aria-label="Choose date range"
+				aria-label={t.history.chooseDateRange}
 			>
 				<span
 					className={`flex min-w-0 items-center gap-1.5 truncate${active ? "" : " iz-muted2"}`}
@@ -1114,7 +1195,7 @@ export function HistDateRangePickerField({
 						role="button"
 						tabIndex={0}
 						className="iz-hist-clear"
-						aria-label="Clear date range"
+						aria-label={t.history.clearDateRange}
 						onClick={(e) => {
 							e.stopPropagation();
 							onChange({ from: "", to: "" });
@@ -1154,9 +1235,11 @@ export function HistDateRangePickerField({
 									setViewMonth(dateFromKey(range.from) ?? viewMonth);
 							}}
 						>
-							<span className="iz-hist-range-target-label">From</span>
+							<span className="iz-hist-range-target-label">
+								{t.history.from}
+							</span>
 							<span className="iz-hist-range-target-value">
-								{range.from ? labelFor(range.from) : "Pick date"}
+								{range.from ? labelFor(range.from) : t.history.pickDate}
 							</span>
 						</button>
 						<button
@@ -1167,9 +1250,9 @@ export function HistDateRangePickerField({
 								if (range.to) setViewMonth(dateFromKey(range.to) ?? viewMonth);
 							}}
 						>
-							<span className="iz-hist-range-target-label">To</span>
+							<span className="iz-hist-range-target-label">{t.history.to}</span>
 							<span className="iz-hist-range-target-value">
-								{range.to ? labelFor(range.to) : "Pick date"}
+								{range.to ? labelFor(range.to) : t.history.pickDate}
 							</span>
 						</button>
 					</div>
@@ -1199,8 +1282,7 @@ export function HistDateRangePickerField({
 						}}
 					/>
 					<p className="iz-tiny iz-muted2 mt-1 px-1">
-						Pick From, then To. Any date up to today works — days without shifts
-						simply show no rows.
+						{t.history.pickFromThenTo}
 					</p>
 				</div>
 			)}
@@ -1219,6 +1301,7 @@ function HistDatePickerField({
 	onChange: (v: string) => void;
 	dateOptions: { key: string; label: string }[];
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const selectedLabel = dateOptions.find((o) => o.key === value)?.label;
@@ -1261,14 +1344,14 @@ function HistDatePickerField({
 				className={`iz-hist-select-trigger sm${open ? " open" : ""}`}
 				onClick={() => setOpen((o) => !o)}
 				aria-expanded={open}
-				aria-label="Choose date"
+				aria-label={t.history.chooseDate}
 			>
 				<span
 					className={`flex min-w-0 items-center gap-1.5 truncate${value ? "" : " iz-muted2"}`}
 				>
 					<CalendarIcon className="h-3.5 w-3.5 shrink-0 text-[var(--iz-gold-l)]" />
 					<span className="truncate">
-						{value ? (selectedLabel ?? value) : "All dates"}
+						{value ? (selectedLabel ?? value) : t.filters.allDates}
 					</span>
 				</span>
 				{value ? (
@@ -1276,7 +1359,7 @@ function HistDatePickerField({
 						role="button"
 						tabIndex={0}
 						className="iz-hist-clear"
-						aria-label="Clear date"
+						aria-label={t.history.clearDate}
 						onClick={(e) => {
 							e.stopPropagation();
 							onChange("");
@@ -1333,6 +1416,7 @@ export function HistSelectField({
 	options: { value: string; label: string }[];
 	icon?: ReactNode;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 
@@ -1347,7 +1431,9 @@ export function HistSelectField({
 	}, [open]);
 
 	const current =
-		options.find((o) => o.value === value)?.label ?? options[0]?.label ?? "Any";
+		options.find((o) => o.value === value)?.label ??
+		options[0]?.label ??
+		t.history.any;
 
 	return (
 		<div ref={rootRef} className="iz-hist-custom-select compact">

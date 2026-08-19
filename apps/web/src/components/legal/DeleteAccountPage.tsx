@@ -1,16 +1,16 @@
-import { Link } from "@tanstack/react-router"
-import { ArrowLeft } from "lucide-react"
-import { BrandLogo } from "@/components/landing/BrandLogo"
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+import { BrandLogo } from "@/components/landing/BrandLogo";
 import {
 	DELETE_ACCOUNT_EFFECTIVE_DATE,
 	DELETE_ACCOUNT_LAST_UPDATED,
 	deleteAccountIntro,
 	deleteAccountSections,
-} from "@/lib/legal/delete-account"
+} from "@/lib/legal/delete-account";
 import {
 	PRIVACY_CONTACT_LABEL,
 	PRIVACY_CONTACT_WHATSAPP,
-} from "@/lib/legal/privacy-policy"
+} from "@/lib/legal/privacy-policy";
 
 export function DeleteAccountPage() {
 	return (
@@ -96,5 +96,5 @@ export function DeleteAccountPage() {
 				</div>
 			</div>
 		</div>
-	)
+	);
 }

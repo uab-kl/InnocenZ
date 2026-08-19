@@ -9,6 +9,24 @@ export const shiftStatusValues = ['draft', 'open', 'confirmed', 'sealed'] as con
 export type ShiftStatus = (typeof shiftStatusValues)[number];
 export const shiftStatusEnum = MainSchema.enum('shift_status', shiftStatusValues);
 
+/**
+ * Shift statuses that may take a PR.
+ *
+ * A `draft` was never published — the outlet is still editing it, and seating
+ * someone notifies a PR, reserves their evening and prices a wage against a shift
+ * the venue has not agreed to yet. A `sealed` shift is closed for payroll, so a
+ * row added after the fact is money nobody has budgeted.
+ *
+ * ⚠️ Until this existed the assign lanes tested NO shift status at all, so both
+ * were accepted, and the two clients had each invented their own answer: the
+ * auto-assign planner allowed `open`/`confirmed`, the manual assign dialog allowed
+ * everything except `sealed`. **The API was looser than either of them.** That is
+ * the wrong direction for a disagreement — a client can only be wrong about what
+ * it OFFERS, while the server is what actually happens — so the rule lives here
+ * and the clients mirror it.
+ */
+export const ASSIGNABLE_SHIFT_STATUSES = ['open', 'confirmed'] as const satisfies ReadonlyArray<ShiftStatus>;
+
 // Mirrors the frontend ShiftEventKind.
 export const shiftEventKindValues = ['normal', 'special'] as const;
 export type ShiftEventKind = (typeof shiftEventKindValues)[number];

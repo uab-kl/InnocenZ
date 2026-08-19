@@ -24,6 +24,8 @@ import {
 } from "@agency-portal/lib/pr-demo";
 import { format } from "date-fns";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function pvIssuedDateIso(pv: PrPaymentVoucher): string {
 	const ms = parsePvIssuedMs(pv.issued);
@@ -44,6 +46,7 @@ export function AgencyPaidPvHistory({
 	initialPvId?: string;
 	onClearInitialPv?: () => void;
 }) {
+	const { t } = usePortalLocale();
 	const [detailId, setDetailId] = useState<string | null>(initialPvId ?? null);
 	const [outletFilter, setOutletFilter] = useState("");
 	const [prFilter, setPrFilter] = useState("");
@@ -124,47 +127,52 @@ export function AgencyPaidPvHistory({
 
 	return (
 		<>
-			<p className="iz-tiny iz-muted mt-1">
-				Completed payment vouchers — archived here after bank transfer. Tap a
-				row for PDF, Excel, or receipt.
-			</p>
+			<p className="iz-tiny iz-muted mt-1">{t.history.paidPvIntro}</p>
 
-			<p className="iz-txn-filter-heading mt-4">Filter by</p>
+			<p className="iz-txn-filter-heading mt-4">{t.history.filterBy}</p>
 			<div className="iz-txn-filters">
 				<HistSelectField
-					label="OUTLET"
+					label={t.history.colOutlet}
 					value={outletFilter}
 					onChange={setOutletFilter}
 					options={[
-						{ value: "", label: "All outlets" },
+						{ value: "", label: t.filters.allOutlets },
 						...outlets.map((o) => ({ value: o, label: o })),
 					]}
 				/>
 				<HistDateRangePickerField
-					label="DATE"
+					label={t.history.colDate}
 					range={dateRange}
 					onChange={setDateRange}
 					dateOptions={dateOptions}
 				/>
 				<HistSelectField
-					label="PR"
+					label={t.history.colPr}
 					value={prFilter}
 					onChange={setPrFilter}
 					options={[
-						{ value: "", label: "All PRs" },
+						{ value: "", label: t.filters.allPrs },
 						...prOptions.map((pr) => ({ value: pr.id, label: pr.name })),
 					]}
 				/>
 			</div>
 
 			<OutletSection
-				title="Paid payment vouchers"
-				hint={`${filtered.length} record${filtered.length !== 1 ? "s" : ""} · ${formatRM(totalPaid)} total`}
+				title={t.history.paidPvSectionTitle}
+				hint={fill(t.history.recordsAndTotal, {
+					records: fill(
+						filtered.length === 1
+							? t.history.recordCountOne
+							: t.history.recordCountMany,
+						{ n: filtered.length },
+					),
+					total: formatRM(totalPaid),
+				})}
 				className="!mt-4"
 			>
 				{filtered.length === 0 ? (
 					<IzCard className="text-center">
-						<p className="iz-sm iz-muted">No paid vouchers match this filter</p>
+						<p className="iz-sm iz-muted">{t.history.noPaidVouchersMatch}</p>
 					</IzCard>
 				) : (
 					<div className="space-y-2.5">
@@ -181,22 +189,30 @@ export function AgencyPaidPvHistory({
 										{resolvePvPrName(pv, agencyPRs)} · {pv.outlet}
 									</p>
 									{pv.prIc && <p className="iz-tiny iz-muted2">IC {pv.prIc}</p>}
-									<p className="iz-tiny iz-muted2 mt-0.5">Cycle: {pv.cycle}</p>
-									<p className="iz-tiny iz-muted2">Issued {pv.issued}</p>
+									<p className="iz-tiny iz-muted2 mt-0.5">
+										{t.history.cycleLabel}: {pv.cycle}
+									</p>
+									<p className="iz-tiny iz-muted2">
+										{t.history.issued} {pv.issued}
+									</p>
 									<p className="iz-tiny text-[var(--iz-gold-l)] mt-0.5">
-										Sales {formatRM(getPvSalesTotal(pv))}
+										{t.history.sales} {formatRM(getPvSalesTotal(pv))}
 									</p>
 								</div>
 								<div className="shrink-0 text-right">
-									<IzPill variant={pvStatusPillVariant(pv.status)}>Paid</IzPill>
+									<IzPill variant={pvStatusPillVariant(pv.status)}>
+										{t.history.paid}
+									</IzPill>
 									<div className="iz-ledger font-sora mt-1.5 text-base font-bold">
 										{formatRM(getPvNetTotal(pv))}
 									</div>
-									<p className="iz-tiny iz-muted2 mt-0.5">Net paid</p>
+									<p className="iz-tiny iz-muted2 mt-0.5">
+										{t.history.netPaid}
+									</p>
 									{pv.paidAt && (
 										<div className="mt-2.5 rounded-lg border border-[rgba(52,211,153,.28)] bg-[rgba(52,211,153,.1)] px-2.5 py-1.5 text-right">
 											<p className="iz-tiny font-semibold uppercase tracking-wide text-[var(--iz-green-l)]">
-												Date paid
+												{t.history.datePaid}
 											</p>
 											<p className="font-sora mt-0.5 text-sm font-bold leading-tight text-[var(--iz-txt)]">
 												{pv.paidAt}

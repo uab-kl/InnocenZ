@@ -6,6 +6,8 @@ import {
 import type { ShiftHistoryMoneyBreakdown } from "@agency-portal/lib/shift-history-amounts";
 import { cn } from "@agency-portal/lib/utils";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /** Clickable Total Received / Total Payout tiles with on-demand breakdown. */
 export function ShiftHistoryExpandableMoneyBlock({
@@ -15,6 +17,7 @@ export function ShiftHistoryExpandableMoneyBlock({
 	breakdown: ShiftHistoryMoneyBreakdown;
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
 	const [openKind, setOpenKind] = useState<HistoryMoneyKind | null>(null);
 
 	const toggle = (kind: HistoryMoneyKind) => {
@@ -35,7 +38,7 @@ export function ShiftHistoryExpandableMoneyBlock({
 					aria-expanded={openKind === "received"}
 				>
 					<span className="iz-outlet-shift-log-summary__metric-label">
-						Total received
+						{t.history.metricTotalReceived}
 					</span>
 					<span className="iz-outlet-shift-log-summary__metric-value">
 						{formatRM(breakdown.totalReceived)}
@@ -52,7 +55,7 @@ export function ShiftHistoryExpandableMoneyBlock({
 					aria-expanded={openKind === "payout"}
 				>
 					<span className="iz-outlet-shift-log-summary__metric-label">
-						Total payout
+						{t.history.metricTotalPayout}
 					</span>
 					<span className="iz-outlet-shift-log-summary__metric-value">
 						{formatRM(breakdown.totalPayout)}

@@ -35,8 +35,11 @@ interface MeRole {
 
 type PortalCode = "admin" | "agency" | "outlet";
 
-let portalCache: { token: string; portals: PortalCode[]; names: string[] } | null =
-	null;
+let portalCache: {
+	token: string;
+	portals: PortalCode[];
+	names: string[];
+} | null = null;
 
 export function clearPortalCache() {
 	portalCache = null;
@@ -104,7 +107,9 @@ async function signedInPortals(): Promise<{
 	const names = roles.map((r) => (r.roleName ?? "").toLowerCase());
 	const fromRolePortal = roles
 		.map((r) => r.portalCode)
-		.filter((p): p is PortalCode => p === "admin" || p === "agency" || p === "outlet");
+		.filter(
+			(p): p is PortalCode => p === "admin" || p === "agency" || p === "outlet",
+		);
 	const fromRoles = names
 		.map(portalFromRoleName)
 		.filter((p): p is PortalCode => p != null);
@@ -115,9 +120,7 @@ async function signedInPortals(): Promise<{
 	const portals = [...new Set([...fromRolePortal, ...fromApi, ...fromRoles])];
 	// Admin portal requires the canonical admin role — never via a stray portalCode.
 	const hasAdminRole = names.some((n) => n === "admin");
-	const gated = hasAdminRole
-		? portals
-		: portals.filter((p) => p !== "admin");
+	const gated = hasAdminRole ? portals : portals.filter((p) => p !== "admin");
 	portalCache = { token, portals: gated, names };
 	return { portals: gated, names };
 }

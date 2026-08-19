@@ -40,6 +40,7 @@ import { useStore } from "@agency-portal/lib/store";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 function formatFloorDrinks(floor: OutletPrLiveSales): string {
 	return floor.drinkSalesRm > 0 ? formatRM(floor.drinkSalesRm) : "—";
@@ -174,7 +175,10 @@ function WorkforceRow({
 export function LiveWorkforceTable({
 	dateIso = DEFAULT_ROSTER_DATE_ISO,
 	rosterLink = "/agency/roster",
-	title = "Live workforce",
+	// No default here: a default parameter cannot call a hook, and hard-coding
+	// English would make the panel the one untranslated heading on the screen.
+	// Resolved against the dictionary below, so callers can still override it.
+	title,
 	outletFilter,
 	linkPrProfiles = false,
 	hideHeaderLink = false,
@@ -190,6 +194,8 @@ export function LiveWorkforceTable({
 	embedded?: boolean;
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
+	const panelTitle = title ?? t.agencyHome.liveWorkforce;
 	// Agency portal — scope live workforce to PRs under the signed-in agency
 	// (ownership or dual-tied membership). Outlet live floor uses a separate component.
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
@@ -300,13 +306,13 @@ export function LiveWorkforceTable({
 
 	const headerLink = !hideHeaderLink && (
 		<Link to={rosterLink} className="iz-portal-hub-link">
-			Full roster <ChevronRight className="shrink-0" />
+			{t.agencyHome.fullRoster} <ChevronRight className="shrink-0" />
 		</Link>
 	);
 
 	const panelHead = (
 		<div className="iz-portal-panel-head">
-			<h3 className="font-sora text-base font-bold">{title}</h3>
+			<h3 className="font-sora text-base font-bold">{panelTitle}</h3>
 			{headerLink}
 		</div>
 	);
@@ -317,7 +323,7 @@ export function LiveWorkforceTable({
 				<>
 					{panelHead}
 					<p className="iz-tiny iz-muted px-4 py-6 text-center">
-						No PRs on floor right now.
+						{t.agencyHome.noPrsOnFloor}
 					</p>
 				</>
 			);
@@ -327,7 +333,7 @@ export function LiveWorkforceTable({
 			<section className={wrapClass}>
 				{panelHead}
 				<p className="iz-tiny iz-muted px-4 py-6 text-center">
-					No PRs on floor right now.
+					{t.agencyHome.noPrsOnFloor}
 				</p>
 			</section>
 		);

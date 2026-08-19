@@ -1,5 +1,7 @@
 import type { AgencyPenaltyRules } from "@agency-portal/lib/pr-penalties";
 import { cn } from "@agency-portal/lib/utils";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function NumInput({
 	value,
@@ -131,6 +133,7 @@ export function PenaltyRulesEditor({
 	onChange: (next: AgencyPenaltyRules) => void;
 	readOnly?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const patch = <K extends keyof AgencyPenaltyRules>(
 		key: K,
 		partial: Partial<AgencyPenaltyRules[K]>,
@@ -142,8 +145,8 @@ export function PenaltyRulesEditor({
 		<div className="flex flex-col gap-2.5">
 			<RuleRow
 				icon="📅"
-				title="Minimum shifts per week"
-				desc="Working fewer than this triggers a penalty — but only if you assigned at least this many."
+				title={t.penalties.minShiftsTitle}
+				desc={t.penalties.minShiftsDesc}
 				enabled={rules.minShiftsPerWeek.enabled}
 				onToggleEnabled={() =>
 					patch("minShiftsPerWeek", {
@@ -152,15 +155,15 @@ export function PenaltyRulesEditor({
 				}
 				readOnly={readOnly}
 			>
-				<Field label="Min / week">
+				<Field label={t.penalties.minPerWeek}>
 					<NumInput
 						value={rules.minShiftsPerWeek.minShiftsPerWeek}
 						onChange={(n) => patch("minShiftsPerWeek", { minShiftsPerWeek: n })}
-						suffix="shifts"
+						suffix={t.penalties.shiftsUnit}
 						readOnly={readOnly}
 					/>
 				</Field>
-				<Field label="Fine">
+				<Field label={t.penalties.fine}>
 					<NumInput
 						value={rules.minShiftsPerWeek.fineRm}
 						onChange={(n) => patch("minShiftsPerWeek", { fineRm: n })}
@@ -172,23 +175,23 @@ export function PenaltyRulesEditor({
 
 			<RuleRow
 				icon="🩺"
-				title="MC cap per month"
-				desc="A fine applies for each MC taken over the monthly cap."
+				title={t.penalties.mcCapTitle}
+				desc={t.penalties.mcCapDesc}
 				enabled={rules.maxMcPerMonth.enabled}
 				onToggleEnabled={() =>
 					patch("maxMcPerMonth", { enabled: !rules.maxMcPerMonth.enabled })
 				}
 				readOnly={readOnly}
 			>
-				<Field label="Max / month">
+				<Field label={t.penalties.maxPerMonth}>
 					<NumInput
 						value={rules.maxMcPerMonth.maxMcPerMonth}
 						onChange={(n) => patch("maxMcPerMonth", { maxMcPerMonth: n })}
-						suffix="MC"
+						suffix={t.penalties.mcUnit}
 						readOnly={readOnly}
 					/>
 				</Field>
-				<Field label="Fine / excess">
+				<Field label={t.penalties.finePerExcess}>
 					<NumInput
 						value={rules.maxMcPerMonth.finePerExcessRm}
 						onChange={(n) => patch("maxMcPerMonth", { finePerExcessRm: n })}
@@ -200,31 +203,31 @@ export function PenaltyRulesEditor({
 
 			<RuleRow
 				icon="⏰"
-				title="Lateness per week"
-				desc="Being late this many times in a week is fined."
+				title={t.penalties.latenessTitle}
+				desc={t.penalties.latenessDesc}
 				enabled={rules.latePerWeek.enabled}
 				onToggleEnabled={() =>
 					patch("latePerWeek", { enabled: !rules.latePerWeek.enabled })
 				}
 				readOnly={readOnly}
 			>
-				<Field label="Late / week">
+				<Field label={t.penalties.latePerWeek}>
 					<NumInput
 						value={rules.latePerWeek.maxLatePerWeek}
 						onChange={(n) => patch("latePerWeek", { maxLatePerWeek: n })}
-						suffix="times"
+						suffix={t.penalties.timesUnit}
 						readOnly={readOnly}
 					/>
 				</Field>
-				<Field label="Grace">
+				<Field label={t.penalties.grace}>
 					<NumInput
 						value={rules.latePerWeek.graceMinutes}
 						onChange={(n) => patch("latePerWeek", { graceMinutes: n })}
-						suffix="min"
+						suffix={t.penalties.minUnit}
 						readOnly={readOnly}
 					/>
 				</Field>
-				<Field label="Fine">
+				<Field label={t.penalties.fine}>
 					<NumInput
 						value={rules.latePerWeek.fineRm}
 						onChange={(n) => patch("latePerWeek", { fineRm: n })}
@@ -236,48 +239,48 @@ export function PenaltyRulesEditor({
 
 			<RuleRow
 				icon="🚫"
-				title="Shift cancellation"
-				desc="Cancelling a booked shift costs a share of that shift's daily wage."
+				title={t.penalties.cancellationTitle}
+				desc={t.penalties.cancellationDesc}
 				enabled={rules.cancellation.enabled}
 				onToggleEnabled={() =>
 					patch("cancellation", { enabled: !rules.cancellation.enabled })
 				}
 				readOnly={readOnly}
 			>
-				<Field label="Free cancel">
+				<Field label={t.penalties.freeCancel}>
 					<NumInput
 						value={rules.cancellation.freeCancelHours}
 						onChange={(n) => patch("cancellation", { freeCancelHours: n })}
 						prefix="≥"
-						suffix="h before"
+						suffix={t.penalties.hBefore}
 						width="w-10"
 						readOnly={readOnly}
 					/>
 				</Field>
-				<Field label="Short notice">
+				<Field label={t.penalties.shortNotice}>
 					<NumInput
 						value={rules.cancellation.shortNoticeHours}
 						onChange={(n) => patch("cancellation", { shortNoticeHours: n })}
 						prefix="≥"
-						suffix="h before"
+						suffix={t.penalties.hBefore}
 						width="w-10"
 						readOnly={readOnly}
 					/>
 				</Field>
-				<Field label="Short-notice charge">
+				<Field label={t.penalties.shortNoticeCharge}>
 					<NumInput
 						value={rules.cancellation.shortNoticePct}
 						onChange={(n) => patch("cancellation", { shortNoticePct: n })}
-						suffix="% wages"
+						suffix={t.penalties.pctWages}
 						width="w-10"
 						readOnly={readOnly}
 					/>
 				</Field>
-				<Field label="Late charge">
+				<Field label={t.penalties.lateCharge}>
 					<NumInput
 						value={rules.cancellation.lateCancelPct}
 						onChange={(n) => patch("cancellation", { lateCancelPct: n })}
-						suffix="% wages"
+						suffix={t.penalties.pctWages}
 						width="w-10"
 						readOnly={readOnly}
 					/>
@@ -288,25 +291,23 @@ export function PenaltyRulesEditor({
 			    read as independent numbers — they are boundaries of one scale, and
 			    setting short notice above free cancel would silently erase a band. */}
 			<p className="iz-tiny text-[var(--iz-muted)]">
-				Cancelling ≥ {rules.cancellation.freeCancelHours}h before is free ·{" "}
-				{rules.cancellation.shortNoticeHours}–
-				{rules.cancellation.freeCancelHours}h costs{" "}
-				{rules.cancellation.shortNoticePct}% · under{" "}
-				{rules.cancellation.shortNoticeHours}h costs{" "}
-				{rules.cancellation.lateCancelPct}% of the shift's daily wage.
+				{fill(t.penalties.cancellationBands, {
+					free: rules.cancellation.freeCancelHours,
+					short: rules.cancellation.shortNoticeHours,
+					shortPct: rules.cancellation.shortNoticePct,
+					latePct: rules.cancellation.lateCancelPct,
+				})}
 			</p>
 			{rules.cancellation.shortNoticeHours >=
 				rules.cancellation.freeCancelHours && (
 				<p className="iz-tiny text-[var(--iz-red,#e5484d)]">
-					Short notice must be fewer hours than free cancel, or the{" "}
-					{rules.cancellation.shortNoticePct}% band never applies.
+					{fill(t.penalties.shortNoticeOrderWarning, {
+						pct: rules.cancellation.shortNoticePct,
+					})}
 				</p>
 			)}
 
-			<p className="iz-tiny text-[var(--iz-muted)]">
-				Every enabled rule applies to all PRs. Fines apply per breach and deduct
-				from the next payment voucher. Set a fine to RM 0 for a warning only.
-			</p>
+			<p className="iz-tiny text-[var(--iz-muted)]">{t.penalties.footer}</p>
 		</div>
 	);
 }

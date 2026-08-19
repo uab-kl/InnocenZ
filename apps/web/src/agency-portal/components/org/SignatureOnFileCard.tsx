@@ -5,6 +5,8 @@ import { useMySignature } from "@agency-portal/hooks/use-my-signature";
 import { useStore } from "@agency-portal/lib/store";
 import { Pencil, Trash2 } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 /**
  * Record one signature, reuse it at signing time.
@@ -16,6 +18,7 @@ import { useState } from "react";
  * reading them.
  */
 export function SignatureOnFileCard() {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const { ink, isLoading, save, remove, isSaving } = useMySignature();
 	const [drawing, setDrawing] = useState(false);
@@ -28,41 +31,35 @@ export function SignatureOnFileCard() {
 		try {
 			await save(next);
 			setDrawing(false);
-			toast(
-				"Signature saved — vouchers can now be signed with one tap",
-				"success",
-			);
+			toast(t.profile.signatureSaved, "success");
 		} catch {
-			toast("Could not save that signature", "warn");
+			toast(t.profile.couldNotSaveSignature, "warn");
 		}
 	};
 
 	const onRemove = async () => {
 		try {
 			await remove();
-			toast("Signature removed", "success");
+			toast(t.profile.signatureRemoved, "success");
 		} catch {
-			toast("Could not remove that signature", "warn");
+			toast(t.profile.couldNotRemoveSignature, "warn");
 		}
 	};
 
 	return (
 		<>
-			<IzSectionLabel>Signature on file</IzSectionLabel>
+			<IzSectionLabel>{t.profile.signatureOnFile}</IzSectionLabel>
 			<IzCard>
-				<p className="iz-tiny iz-muted2 mb-2 pt-1">
-					Draw it once here, then sign a payment voucher with a single tap. You
-					still open and review each voucher — this only saves you redrawing.
-				</p>
+				<p className="iz-tiny iz-muted2 mb-2 pt-1">{t.profile.signatureHint}</p>
 
-				{isLoading && <p className="iz-tiny iz-muted2">Loading…</p>}
+				{isLoading && <p className="iz-tiny iz-muted2">{t.common.loading}</p>}
 
 				{!isLoading && !drawing && ink && (
 					<div className="flex items-center gap-3">
 						<div className="flex h-16 flex-1 items-end rounded-lg border border-[var(--iz-line)] bg-white/95 px-2 py-1">
 							<SignatureInkMark
 								ink={JSON.stringify(ink)}
-								label="Your signature on file"
+								label={t.profile.yourSignatureOnFile}
 								className="h-12 w-full"
 							/>
 						</div>
@@ -73,7 +70,7 @@ export function SignatureOnFileCard() {
 								disabled={isSaving}
 								onClick={() => setDrawing(true)}
 							>
-								<Pencil className="h-3.5 w-3.5" /> Replace
+								<Pencil className="h-3.5 w-3.5" /> {t.profile.replace}
 							</button>
 							<button
 								type="button"
@@ -81,7 +78,7 @@ export function SignatureOnFileCard() {
 								disabled={isSaving}
 								onClick={() => void onRemove()}
 							>
-								<Trash2 className="h-3.5 w-3.5" /> Remove
+								<Trash2 className="h-3.5 w-3.5" /> {t.profile.remove}
 							</button>
 						</div>
 					</div>
@@ -93,14 +90,14 @@ export function SignatureOnFileCard() {
 						className="iz-btn iz-btn-primary w-full"
 						onClick={() => setDrawing(true)}
 					>
-						<Pencil className="h-4 w-4" /> Record my signature
+						<Pencil className="h-4 w-4" /> {t.profile.recordMySignature}
 					</button>
 				)}
 
 				{drawing && (
 					<div className="mt-2">
 						<PrSignaturePad
-							label="Draw the signature you want kept on file"
+							label={t.profile.drawSignature}
 							onConfirm={() => {
 								/* the PNG is not persisted — strokes are */
 							}}

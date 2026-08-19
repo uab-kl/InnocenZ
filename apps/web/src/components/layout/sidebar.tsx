@@ -14,18 +14,24 @@ import {
 import { useSidebarBadges } from "@/hooks/use-sidebar-badges";
 import { useCurrentUser } from "@/lib/auth/use-current-user";
 import { LANDING_IMAGES } from "@/lib/landing-assets";
+import { adminNavLabel } from "@/lib/portal-i18n/admin-nav-label";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { cn } from "@/lib/utils";
 
-function isAdminUser(user: {
-	roles?: string[];
-	portals?: string[];
-} | null): boolean {
+function isAdminUser(
+	user: {
+		roles?: string[];
+		portals?: string[];
+	} | null,
+): boolean {
 	if (!user) return false;
 	if (user.portals?.includes("admin")) return true;
 	return (user.roles ?? []).some((r) => r.toLowerCase() === "admin");
 }
 
 export function Sidebar() {
+	const { t } = usePortalLocale();
 	const location = useLocation();
 	const { user } = useCurrentUser();
 	const { state } = useSidebar();
@@ -95,7 +101,7 @@ export function Sidebar() {
 			</SidebarHeader>
 
 			<SidebarContent className="px-2 py-3">
-				<nav aria-label="Admin navigation" className="space-y-5 pb-6">
+				<nav aria-label={t.admin.adminNavigation} className="space-y-5 pb-6">
 					{sidebarSections.map((section) => (
 						<SidebarSectionGroup
 							key={section.key}
@@ -127,6 +133,7 @@ function SidebarSectionGroup({
 	canAccess: (item: SidebarNavItem) => boolean;
 	badges: Record<string, number>;
 }) {
+	const { t } = usePortalLocale();
 	const visibleItems = section.items.filter(canAccess);
 
 	if (visibleItems.length === 0) return null;
@@ -135,7 +142,7 @@ function SidebarSectionGroup({
 		<div className="admin-sidebar-section">
 			{!collapsed && (
 				<div className="admin-sidebar-section-header pointer-events-none">
-					<span>{section.label}</span>
+					<span>{adminNavLabel(section.key, section.label, t)}</span>
 				</div>
 			)}
 
@@ -146,7 +153,9 @@ function SidebarSectionGroup({
 						<li key={item.key}>
 							<Link
 								to={item.href}
-								title={collapsed ? item.title : undefined}
+								title={
+									collapsed ? adminNavLabel(item.key, item.title, t) : undefined
+								}
 								className={cn(
 									"admin-sidebar-nav-item",
 									isActive(item.href) && "admin-sidebar-nav-item-active",
@@ -156,7 +165,9 @@ function SidebarSectionGroup({
 								<item.icon className="h-[22px] w-[22px] shrink-0" />
 								{!collapsed && (
 									<>
-										<span className="flex-1 truncate">{item.title}</span>
+										<span className="flex-1 truncate">
+											{adminNavLabel(item.key, item.title, t)}
+										</span>
 										{badge != null && badge > 0 && (
 											<span className="admin-sidebar-badge">{badge}</span>
 										)}
@@ -172,6 +183,7 @@ function SidebarSectionGroup({
 }
 
 function SidebarCollapseToggle() {
+	const { t } = usePortalLocale();
 	const { state, toggleSidebar } = useSidebar();
 	const collapsed = state === "collapsed";
 
@@ -180,7 +192,7 @@ function SidebarCollapseToggle() {
 			type="button"
 			onClick={toggleSidebar}
 			className="admin-sidebar-collapse-toggle"
-			aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+			aria-label={collapsed ? t.admin.expandSidebar : t.admin.collapseSidebar}
 		>
 			<ChevronLeft
 				className={cn(

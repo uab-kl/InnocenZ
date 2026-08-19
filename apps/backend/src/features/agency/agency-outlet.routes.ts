@@ -57,9 +57,13 @@ router.get(
   canDecideLinks,
   agencyOutletController.listForMyAgency.bind(agencyOutletController),
 );
-// Declared BEFORE `/links/:outletId` — Express matches in declaration order, so
-// a bare `:outletId` listed first would happily swallow the literal segment
-// "history" as an outlet id and 404 with nothing to explain why.
+// Declared before the parameterised routes for readability only.
+//
+// An earlier version of this comment claimed a bare `/links/:outletId` would
+// otherwise swallow "history" as an outlet id. That is FALSE — an Express path
+// parameter never spans a `/`, so `/links/:outletId` cannot match
+// `/links/<id>/history` at any declaration order. Corrected rather than deleted:
+// a plausible-sounding routing rule, once written down, gets copied.
 router.get(
   '/links/:outletId/history',
   canDecideLinks,

@@ -30,9 +30,12 @@ function formatShiftDay(ymd: string): string {
 export function OutletSwapRequests({
   swaps,
 }: {
-  swaps: Pick<OutletSwapsState, 'pending' | 'actionError' | 'busyId' | 'respond'>;
+  swaps: Pick<
+    OutletSwapsState,
+    'pending' | 'actionError' | 'travelWarning' | 'busyId' | 'respond'
+  >;
 }) {
-  const { pending, actionError, busyId, respond } = swaps;
+  const { pending, actionError, travelWarning, busyId, respond } = swaps;
   if (pending.length === 0) return null;
 
   return (
@@ -49,6 +52,10 @@ export function OutletSwapRequests({
         />
       ))}
       {actionError ? <Text style={styles.error}>{actionError}</Text> : null}
+      {/* Amber, not red, and it survives the list refresh: the swap LANDED. Sitting
+          under the same header as the error is deliberate — one place to look for
+          "what happened when I answered". */}
+      {travelWarning ? <Text style={styles.travelWarning}>{travelWarning}</Text> : null}
     </View>
   );
 }
@@ -153,4 +160,5 @@ const styles = StyleSheet.create({
   actions: { flexDirection: 'row', gap: 8, marginTop: 8 },
   action: { flex: 1 },
   error: { fontFamily: F.manrope, fontSize: 12, color: C.red },
+  travelWarning: { fontFamily: F.manrope, fontSize: 12, color: C.amber },
 });

@@ -1,3 +1,4 @@
+import { useOutletAgencyLinks } from "@agency-portal/hooks/use-outlet-agency-links";
 import type {
 	AgencyManagedPR,
 	AgencyRosterSlot,
@@ -97,6 +98,14 @@ export function useOutletToday(
 		staleTime: 60_000,
 	});
 
+	// Agency id -> name for this venue. Shares its query key with Settings and the
+	// Post Job picker, so it adds no request of its own.
+	const { links: agencyLinks } = useOutletAgencyLinks();
+	const agencyNameById = useMemo(
+		() => new Map(agencyLinks.map((l) => [l.agencyId, l.agencyName])),
+		[agencyLinks],
+	);
+
 	const { shifts, roster } = useMemo(() => {
 		if (!backed) return { shifts: [], roster: [] };
 		const backendShifts = shiftsQuery.data?.data ?? [];
@@ -119,9 +128,22 @@ export function useOutletToday(
 				outletNameById: new Map(
 					backendShifts.map((s) => [s.outletId, outletName]),
 				),
+				// WHO SUPPLIED EACH PR, named — from this venue's own agency links.
+				// Without it a slot carries a bare uuid, and the label chain used to
+				// answer that with the demo literal "Atlas Agency". These are exactly
+				// the agencies that can staff this venue, so the map covers every real
+				// case while disclosing nothing about anyone else.
+				agencyNameById,
 			}),
 		};
-	}, [backed, outletName, todayIso, shiftsQuery.data, assignmentsQuery.data]);
+	}, [
+		backed,
+		outletName,
+		todayIso,
+		shiftsQuery.data,
+		assignmentsQuery.data,
+		agencyNameById,
+	]);
 
 	const prs = useMemo<AgencyManagedPR[]>(
 		() => (backed ? (prsQuery.data?.data ?? []).map(managedPrFromBackend) : []),

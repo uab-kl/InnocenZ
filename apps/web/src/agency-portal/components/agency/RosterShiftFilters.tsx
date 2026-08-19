@@ -3,6 +3,7 @@ import { OUTLET_NAMES } from "@agency-portal/lib/agency-demo";
 import type { RosterShiftFilterState } from "@agency-portal/lib/roster-shift-filters";
 import { rosterShiftFiltersActive } from "@agency-portal/lib/roster-shift-filters";
 import { RotateCcw, Search } from "lucide-react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function RosterShiftFilters({
 	filters,
@@ -15,28 +16,29 @@ export function RosterShiftFilters({
 	resultCount: number;
 	totalCount: number;
 }) {
+	const { t } = usePortalLocale();
 	const active = rosterShiftFiltersActive(filters);
 
 	return (
 		<div className="iz-roster-shift-filters">
 			<div className="iz-roster-shift-filters-head">
 				<span className="iz-tiny font-semibold uppercase tracking-wider text-[#e8dff7]">
-					Filter shifts
+					{t.filters.filterShifts}
 				</span>
 				<span className="iz-tiny iz-muted">
-					{resultCount} of {totalCount}
+					{resultCount} {t.roster.countOf} {totalCount}
 				</span>
 			</div>
 
 			<div className="iz-roster-shift-filters-grid">
 				<label className="iz-roster-filter-field iz-roster-filter-field--search">
-					<span className="iz-roster-filter-label">Name</span>
+					<span className="iz-roster-filter-label">{t.filters.name}</span>
 					<span className="iz-roster-filter-input-wrap">
 						<Search className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted2)]" />
 						<input
 							type="search"
 							className="iz-roster-filter-input"
-							placeholder="Search"
+							placeholder={t.filters.search}
 							value={filters.nameQuery}
 							onChange={(e) => onChange({ nameQuery: e.target.value })}
 						/>
@@ -44,13 +46,13 @@ export function RosterShiftFilters({
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Outlet</span>
+					<span className="iz-roster-filter-label">{t.filters.outlet}</span>
 					<IzSelect
 						block
 						value={filters.outlet}
 						onChange={(e) => onChange({ outlet: e.target.value })}
 					>
-						<option value="">All outlets</option>
+						<option value="">{t.filters.allOutlets}</option>
 						{OUTLET_NAMES.map((o) => (
 							<option key={o} value={o}>
 								{o}
@@ -60,7 +62,7 @@ export function RosterShiftFilters({
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Status</span>
+					<span className="iz-roster-filter-label">{t.filters.status}</span>
 					<IzSelect
 						block
 						value={filters.status}
@@ -70,63 +72,67 @@ export function RosterShiftFilters({
 							})
 						}
 					>
-						<option value="">Any status</option>
-						<option value="on-duty">On duty</option>
-						<option value="scheduled">Scheduled</option>
-						<option value="swap-pending">Swap pending</option>
-						<option value="assignment-pending">Awaiting PR</option>
-						<option value="outlet-request-pending">Outlet request</option>
-						<option value="unavailable">Unavailable</option>
-						<option value="late">Late flag</option>
-						<option value="no-show">No-show flag</option>
+						<option value="">{t.filters.anyStatus}</option>
+						<option value="on-duty">{t.roster.onDuty}</option>
+						<option value="scheduled">{t.roster.scheduled}</option>
+						<option value="swap-pending">{t.rosterGrid.swapPending}</option>
+						<option value="assignment-pending">
+							{t.rosterGrid.awaitingPr}
+						</option>
+						<option value="outlet-request-pending">
+							{t.rosterGrid.outletRequest}
+						</option>
+						<option value="unavailable">{t.roster.unavailable}</option>
+						<option value="late">{t.rosterGrid.lateFlag}</option>
+						<option value="no-show">{t.rosterGrid.noShowFlag}</option>
 					</IzSelect>
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Start from</span>
+					<span className="iz-roster-filter-label">{t.filters.startFrom}</span>
 					<IzTimeInput
 						value={filters.startTime}
 						onChange={(v) => onChange({ startTime: v })}
 						showIcon={false}
 						className="iz-roster-filter-time"
-						placeholder="Start Time"
-						aria-label="Shift start from"
+						placeholder={t.filters.startTime}
+						aria-label={t.filters.shiftStartFrom}
 					/>
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">End by</span>
+					<span className="iz-roster-filter-label">{t.filters.endBy}</span>
 					<IzTimeInput
 						value={filters.endTime}
 						onChange={(v) => onChange({ endTime: v })}
 						showIcon={false}
-						placeholder="End Time"
+						placeholder={t.filters.endTime}
 						className="iz-roster-filter-time"
-						aria-label="Shift end by"
+						aria-label={t.filters.shiftEndBy}
 					/>
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Min payout (RM)</span>
+					<span className="iz-roster-filter-label">{t.filters.minPayout}</span>
 					<input
 						type="number"
 						min={0}
 						step={50}
 						className="iz-roster-filter-input iz-roster-filter-input--plain"
-						placeholder="e.g. 300"
+						placeholder={t.filters.egAmount300}
 						value={filters.payoutMin}
 						onChange={(e) => onChange({ payoutMin: e.target.value })}
 					/>
 				</label>
 
 				<label className="iz-roster-filter-field">
-					<span className="iz-roster-filter-label">Max payout (RM)</span>
+					<span className="iz-roster-filter-label">{t.filters.maxPayout}</span>
 					<input
 						type="number"
 						min={0}
 						step={50}
 						className="iz-roster-filter-input iz-roster-filter-input--plain"
-						placeholder="e.g. 500"
+						placeholder={t.filters.egAmount500}
 						value={filters.payoutMax}
 						onChange={(e) => onChange({ payoutMax: e.target.value })}
 					/>
@@ -150,7 +156,7 @@ export function RosterShiftFilters({
 					}
 				>
 					<RotateCcw className="h-3 w-3" />
-					Clear filters
+					{t.rosterGrid.clearFilters}
 				</button>
 			)}
 		</div>

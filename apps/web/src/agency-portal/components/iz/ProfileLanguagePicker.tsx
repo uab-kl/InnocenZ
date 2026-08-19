@@ -1,6 +1,8 @@
 import { PR_LANGUAGE_OPTIONS } from "@agency-portal/lib/pr-demo";
 import { Plus } from "lucide-react";
 import { useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { languageLabel } from "@/lib/portal-i18n/language-label";
 
 const PRESET_SET = new Set<string>(PR_LANGUAGE_OPTIONS);
 
@@ -13,12 +15,14 @@ function formatLanguageLabel(raw: string): string {
 export function ProfileLanguagePicker({
 	value,
 	onChange,
-	hint = "Tap to select languages shown to outlets.",
+	hint,
 }: {
 	value: string[];
 	onChange: (langs: string[]) => void;
 	hint?: string;
 }) {
+	const { t } = usePortalLocale();
+	const hintLabel = hint ?? t.managePr.tapToSelectLanguages;
 	const [otherInput, setOtherInput] = useState("");
 
 	const customLangs = useMemo(
@@ -45,7 +49,7 @@ export function ProfileLanguagePicker({
 
 	return (
 		<>
-			{hint ? <p className="iz-tiny iz-muted2 mb-2">{hint}</p> : null}
+			{hintLabel ? <p className="iz-tiny iz-muted2 mb-2">{hintLabel}</p> : null}
 			<div className="flex flex-wrap gap-1.5">
 				{PR_LANGUAGE_OPTIONS.map((lang) => {
 					const on = value.includes(lang);
@@ -56,7 +60,7 @@ export function ProfileLanguagePicker({
 							className={`iz-lang-pick${on ? " on" : ""}`}
 							onClick={() => toggle(lang)}
 						>
-							{lang}
+							{languageLabel(lang, t)}
 						</button>
 					);
 				})}

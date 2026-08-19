@@ -1,5 +1,5 @@
-import { createFileRoute } from "@tanstack/react-router"
-import { PrivacyPolicyPage } from "@/components/legal/PrivacyPolicyPage"
+import { createFileRoute } from "@tanstack/react-router";
+import { PrivacyPolicyPage } from "@/components/legal/PrivacyPolicyPage";
 
 export const Route = createFileRoute("/policy")({
 	head: () => ({
@@ -19,4 +19,4 @@ export const Route = createFileRoute("/policy")({
 		],
 	}),
 	component: PrivacyPolicyPage,
-})
+});

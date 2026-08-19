@@ -46,12 +46,15 @@ import {
 	isOrgPendingReview,
 	isOrgSuspended,
 } from "@/components/organization/org-status";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/agency/profile")({
 	component: AgencyProfile,
 });
 
 function AgencyProfile() {
+	const { t } = usePortalLocale();
 	const agencyOwner = useStore((s) => s.agencyOwner);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
 	const allAgencyPRs = useStore((s) => s.agencyPRs);
@@ -113,7 +116,7 @@ function AgencyProfile() {
 		[prPaymentVouchers, agencyPRs, payrollWeekStartIso],
 	);
 	const subscriptionBilling = useMemo(
-		() => agencySubscriptionBillingForWeeklyPv(issuedWeeklyPv),
+		() => agencySubscriptionBillingForWeeklyPv(issuedWeeklyPv, t),
 		[issuedWeeklyPv],
 	);
 	const avatarLetter =
@@ -185,11 +188,11 @@ function AgencyProfile() {
 		e.target.value = "";
 		if (!file || !editing) return;
 		if (!file.type.startsWith("image/")) {
-			toast("Please choose an image file", "warn");
+			toast(t.profile.chooseImageFile, "warn");
 			return;
 		}
 		if (file.size > 5 * 1024 * 1024) {
-			toast("Image must be under 5 MB", "warn");
+			toast(t.profile.imageUnder5Mb, "warn");
 			return;
 		}
 		const reader = new FileReader();
@@ -200,27 +203,27 @@ function AgencyProfile() {
 				contentType: file.type || "image/png",
 			});
 			setLogoCleared(false);
-			toast("Logo selected — tap Save to upload", "success");
+			toast(t.profile.logoSelected, "success");
 		};
 		reader.readAsDataURL(file);
 	};
 
 	const saveEdit = async () => {
 		if (!draft.orgName.trim()) {
-			toast("Enter organization name", "warn");
+			toast(t.profile.enterOrgName, "warn");
 			return;
 		}
 		if (!draft.ownerName.trim() || draft.ownerName.trim().length < 2) {
-			toast("Enter owner name (at least 2 characters)", "warn");
+			toast(t.profile.enterOwnerName, "warn");
 			return;
 		}
 		if (profile.backed && !addressDraft.addressLine1.trim()) {
-			toast("Enter address line 1", "warn");
+			toast(t.profile.enterAddressLine1, "warn");
 			return;
 		}
 		if (profile.backed) {
 			if (!canEdit) {
-				toast("Only the agency owner can edit this profile", "warn");
+				toast(t.profile.onlyOwnerCanEdit, "warn");
 				return;
 			}
 			setSaving(true);
@@ -262,10 +265,7 @@ function AgencyProfile() {
 						: err instanceof Error
 							? err.message
 							: "";
-				toast(
-					msg.trim() || "Could not save — the server refused the change",
-					"warn",
-				);
+				toast(msg.trim() || t.profile.couldNotSave, "warn");
 				setSaving(false);
 				return;
 			}
@@ -273,11 +273,11 @@ function AgencyProfile() {
 			setLogoMeta(null);
 			setLogoCleared(false);
 			setEditing(false);
-			toast("Agency profile saved", "success");
+			toast(t.profile.profileSaved, "success");
 			return;
 		}
 		if (!draft.mobile.trim()) {
-			toast("Enter mobile number", "warn");
+			toast(t.profile.enterMobile, "warn");
 			return;
 		}
 		const nextFinance = { ...financeDraft };
@@ -300,24 +300,22 @@ function AgencyProfile() {
 		});
 		if (inviteChanged && inviteEmail.trim()) {
 			toast(
-				`Finance Head invite for ${inviteEmail.trim()} is not sent — no invite is delivered yet`,
+				fill(t.profile.financeInviteNotSent, { email: inviteEmail.trim() }),
 				"warn",
 			);
 		}
 		setEditing(false);
-		toast("Settings saved", "success");
+		toast(t.profile.settingsSaved, "success");
 	};
 
 	if (!can("viewSettings")) {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>Access restricted</IzPageTitle>
+					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
-					<p className="iz-sm iz-muted">
-						You do not have access to agency settings.
-					</p>
+					<p className="iz-sm iz-muted">{t.profile.noAccess}</p>
 				</IzCard>
 			</div>
 		);
@@ -329,10 +327,10 @@ function AgencyProfile() {
 	return (
 		<div className="iz-screen">
 			<header>
-				<IzPageTitle>Settings</IzPageTitle>
+				<IzPageTitle>{t.agencyMisc.settings}</IzPageTitle>
 				{isFinanceReadOnly && !editing && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						Finance view — read-only · cannot edit owner settings
+						{t.profile.financeReadOnly}
 					</p>
 				)}
 			</header>
@@ -375,12 +373,14 @@ function AgencyProfile() {
 				>
 					<Shield className="h-3 w-3" />
 					{isOrgSuspended(orgStatus)
-						? "Suspended · profile only"
+						? t.profile.suspendedProfileOnly
 						: owner.accountActivated
-							? `Verified · ${subscriptionBilling.priceLabel} · usage-based weekly`
+							? fill(t.profile.verifiedUsageBased, {
+									price: subscriptionBilling.priceLabel,
+								})
 							: profile.backed || isOrgPendingReview(orgStatus)
-								? "Pending admin approval"
-								: "Pending OTP activation"}
+								? t.profile.pendingAdminApproval
+								: t.profile.pendingOtpActivation}
 				</div>
 				{editing && canEdit ? (
 					<ProfilePhotoActions
@@ -401,42 +401,42 @@ function AgencyProfile() {
 				)}
 			</div>
 
-			<IzSectionLabel>Owner information</IzSectionLabel>
+			<IzSectionLabel>{t.agencyMisc.ownerInformation}</IzSectionLabel>
 			<ProfileSectionCard editing={editing && canEdit}>
 				<ProfileSettingsField
 					icon={Building2}
-					label="Organization"
+					label={t.agencyMisc.organization}
 					value={owner.orgName}
 					onChange={(v) => update({ orgName: v })}
 					mode={fieldMode}
-					placeholder="Agency name"
+					placeholder={t.agencyMisc.agencyNamePlaceholder}
 				/>
 				<ProfileSettingsField
 					icon={User}
-					label="Owner name"
+					label={t.agencyMisc.ownerName}
 					value={owner.ownerName}
 					onChange={(v) => update({ ownerName: v })}
 					mode={fieldMode}
-					placeholder="Full name"
+					placeholder={t.agencyMisc.fullNamePlaceholder}
 				/>
 				<ProfileSettingsField
 					icon={Phone}
-					label="Mobile"
+					label={t.agencyMisc.mobile}
 					value={owner.mobile}
 					mode="locked"
-					hint="Change in Login & security"
+					hint={t.agencyMisc.changeInLoginSecurity}
 				/>
 				<ProfileSettingsField
 					icon={Mail}
-					label="Email"
+					label={t.agencyMisc.email}
 					value={owner.email}
 					mode="locked"
-					hint="Change in Login & security"
+					hint={t.agencyMisc.changeInLoginSecurity}
 				/>
 				{!profile.backed && (
 					<ProfileSettingsField
 						icon={Shield}
-						label="IC (for PV)"
+						label={t.agencyMisc.icForPv}
 						value={owner.ic}
 						onChange={(v) => update({ ic: v })}
 						mode={fieldMode}
@@ -462,14 +462,14 @@ function AgencyProfile() {
 			{/* Demo-only Finance Head form — real staff live in OrgMembersPanel. */}
 			{!profile.backed && (
 				<>
-					<IzSectionLabel>Finance Head · dual-sign PV</IzSectionLabel>
+					<IzSectionLabel>{t.agencyMisc.financeHeadDualSign}</IzSectionLabel>
 					<ProfileSectionCard editing={editing && canEdit}>
 						<p className="iz-tiny iz-muted mb-1 pt-2">
-							IC + e-signature auto-stamps every PV (1st of 2 sigs)
+							{t.profile.icAutoStamps}
 						</p>
 						<ProfileSettingsField
 							icon={User}
-							label="Name"
+							label={t.agencyMisc.name}
 							value={finance.name}
 							onChange={(v) => updateFinance({ name: v })}
 							mode={fieldMode}
@@ -483,24 +483,24 @@ function AgencyProfile() {
 						/>
 						<ProfileSettingsField
 							icon={Mail}
-							label="Email"
+							label={t.agencyMisc.email}
 							value={finance.email}
 							onChange={(v) => updateFinance({ email: v })}
 							mode={fieldMode}
 						/>
 						{finance.eSignatureStored && (
 							<p className="iz-tiny text-[var(--iz-green)] mt-2 mb-2">
-								E-signature on file ✓
+								{t.profile.eSignatureOnFile}
 							</p>
 						)}
 					</ProfileSectionCard>
 
 					{editing && canEdit && (
 						<>
-							<IzSectionLabel>Invite Finance Head</IzSectionLabel>
+							<IzSectionLabel>{t.agencyMisc.inviteFinanceHead}</IzSectionLabel>
 							<ProfileSectionCard editing>
 								<p className="iz-tiny iz-muted mb-2 pt-2">
-									Sub-role invite · requires IC + e-signature for dual-sign PV
+									{t.profile.subRoleInviteHint}
 								</p>
 								<input
 									className="iz-profile-field__input mb-3"
@@ -530,19 +530,16 @@ function AgencyProfile() {
 
 			{!editing && (
 				<>
-					<IzSectionLabel>Login &amp; security</IzSectionLabel>
+					<IzSectionLabel>{t.agencyMisc.loginAndSecurity}</IzSectionLabel>
 					<IzCard>
 						<AccountAvatarCard />
-						<p className="iz-tiny iz-muted mb-3">
-							Update password anytime. Email and mobile changes require OTP
-							verification.
-						</p>
+						<p className="iz-tiny iz-muted mb-3">{t.profile.passwordOtpHint}</p>
 						<button
 							type="button"
 							className="iz-btn iz-btn-primary w-full"
 							onClick={() => setSecurityOpen(true)}
 						>
-							Security settings
+							{t.profile.securitySettings}
 						</button>
 					</IzCard>
 				</>

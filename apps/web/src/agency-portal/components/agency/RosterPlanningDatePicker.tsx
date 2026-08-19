@@ -9,6 +9,7 @@ import { cn } from "@agency-portal/lib/utils";
 import { addDays } from "date-fns";
 import { Calendar, ChevronDown, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 function dateFromIso(iso: string): Date | undefined {
 	if (!iso) return undefined;
@@ -34,9 +35,9 @@ export function RosterPlanningDatePicker({
 	value,
 	onChange,
 	rosterDates = [],
-	placeholder = "Pick week",
+	placeholder,
 	allowClear = false,
-	hint = "Dots mark days with roster shifts.",
+	hint,
 	weekly = false,
 	className,
 }: {
@@ -50,6 +51,12 @@ export function RosterPlanningDatePicker({
 	weekly?: boolean;
 	className?: string;
 }) {
+	const { t } = usePortalLocale();
+	// Resolved here rather than as default PARAMETER values, which is where the
+	// English used to sit: a default arg is evaluated before any hook can run, so
+	// it cannot read the dictionary and silently shadowed the keys that existed.
+	const placeholderLabel = placeholder ?? t.roster.pickWeek;
+	const hintLabel = hint ?? t.rosterGrid.dotsMarkRosterDays;
 	const [open, setOpen] = useState(false);
 	const rootRef = useRef<HTMLDivElement>(null);
 	const selected = dateFromIso(value);
@@ -58,7 +65,7 @@ export function RosterPlanningDatePicker({
 		? weekly
 			? weekRangeLabel(rosterWeekStart(value))
 			: fmtDateLabelFromIso(value)
-		: placeholder;
+		: placeholderLabel;
 
 	const weekModifiers = useMemo(
 		() => ({
@@ -100,7 +107,7 @@ export function RosterPlanningDatePicker({
 						role="button"
 						tabIndex={0}
 						className="iz-hist-clear"
-						aria-label="Clear week"
+						aria-label={t.rosterGrid.clearWeek}
 						onClick={(e) => {
 							e.stopPropagation();
 							onChange("");
@@ -154,7 +161,9 @@ export function RosterPlanningDatePicker({
 							weekly && "iz-roster-planning-week-cal-picker",
 						)}
 					/>
-					{hint ? <p className="iz-tiny iz-muted2 mt-1 px-1">{hint}</p> : null}
+					{hintLabel ? (
+						<p className="iz-tiny iz-muted2 mt-1 px-1">{hintLabel}</p>
+					) : null}
 				</div>
 			)}
 		</div>

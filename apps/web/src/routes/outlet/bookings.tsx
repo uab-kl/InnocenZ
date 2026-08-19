@@ -57,6 +57,7 @@ import { Sparkles } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { getPortalSessionKind } from "@/lib/auth/agency-demo-session";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 type PostJobTab = "shifts" | "services";
 
@@ -396,8 +397,8 @@ function PostJobPage() {
 
 	const sectionDate =
 		draftShifts.length > 0
-			? formatJobDates(draftShifts[0].selectedDateIsos)
-			: formatJobDates(composer.selectedDateIsos);
+			? formatJobDates(draftShifts[0].selectedDateIsos, t)
+			: formatJobDates(composer.selectedDateIsos, t);
 
 	const totalHeadcount =
 		draftShifts.reduce((sum, s) => sum + s.quantity, 0) +
@@ -447,14 +448,21 @@ function PostJobPage() {
 		for (const s of expandedShifts) {
 			if (s.prIds.length > subscriptionPlan.prSelectMax) {
 				toast(
-					`Shift exceeds your plan — max ${subscriptionPlan.prSelectMax} named PRs per shift (${formatJobDate(s.jobDate)})`,
+					fill(t.postJob.shiftExceedsPlan, {
+						max: subscriptionPlan.prSelectMax,
+						date: formatJobDate(s.jobDate, t),
+					}),
 					"warn",
 				);
 				return;
 			}
 			if (s.quantity > subscriptionPlan.prPerDayMax) {
 				toast(
-					`People needed exceeds your ${subscriptionPlan.label} plan (${subscriptionPlan.prPerDayMax}/day) for ${formatJobDate(s.jobDate)}`,
+					fill(t.postJob.peopleExceedsPlan, {
+						plan: subscriptionPlan.label,
+						max: subscriptionPlan.prPerDayMax,
+						date: formatJobDate(s.jobDate, t),
+					}),
 					"warn",
 				);
 				return;
@@ -469,7 +477,12 @@ function PostJobPage() {
 			const existing = outletNamedPrCountForDate(capShifts, outletName, iso);
 			if (existing + total > subscriptionPlan.prPerDayMax) {
 				toast(
-					`Daily named-PR limit is ${subscriptionPlan.prPerDayMax} — ${existing} already named on ${iso}, cannot add ${total} more`,
+					fill(t.postJob.dailyNamedLimit, {
+						max: subscriptionPlan.prPerDayMax,
+						existing,
+						date: iso,
+						total,
+					}),
 					"warn",
 				);
 				return;
@@ -479,7 +492,12 @@ function PostJobPage() {
 			const existing = outletPrHeadcountForDate(capShifts, outletName, iso);
 			if (existing + total > subscriptionPlan.prPerDayMax) {
 				toast(
-					`Daily PR headcount limit is ${subscriptionPlan.prPerDayMax} — ${existing} already booked on ${iso}, cannot add ${total} more`,
+					fill(t.postJob.dailyHeadcountLimit, {
+						max: subscriptionPlan.prPerDayMax,
+						existing,
+						date: iso,
+						total,
+					}),
 					"warn",
 				);
 				return;
@@ -525,8 +543,8 @@ function PostJobPage() {
 		if (clash) {
 			const other = describeClashShift(clash.against);
 			const refusal: Record<typeof clash.kind, string> = {
-				duplicate: `You already have a shift ${other} — raise that shift's headcount instead of posting a second one for the same time`,
-				overlap: `This clashes with your shift ${other} — your shifts cannot overlap, so change this time or move that one first`,
+				duplicate: fill(t.postJob.duplicateShift, { other }),
+				overlap: fill(t.postJob.overlapShift, { other }),
 			};
 			toast(refusal[clash.kind], "warn");
 			return;
@@ -535,7 +553,7 @@ function PostJobPage() {
 		const postItems = expandedShifts.map((s) => ({
 			outletName,
 
-			date: formatJobDate(s.jobDate),
+			date: formatJobDate(s.jobDate, t),
 
 			dateIso: isoFromJobDate(s.jobDate),
 
@@ -602,7 +620,12 @@ function PostJobPage() {
 			postShifts(postItems, postAgencyIds)
 				.then(() => {
 					toast(
-						`Posted ${postItems.length} shift${postItems.length !== 1 ? "s" : ""}`,
+						fill(
+							postItems.length === 1
+								? t.postJob.postedShiftOne
+								: t.postJob.postedShiftMany,
+							{ n: postItems.length },
+						),
 						"success",
 					);
 					resetForm();
@@ -623,10 +646,7 @@ function PostJobPage() {
 		// demo store: it would list the shift as posted while nothing reached the
 		// database, and the row would evaporate on the next refresh.
 		if (getPortalSessionKind() === "real") {
-			toast(
-				"Your outlet session has expired — sign out and sign in again before posting",
-				"warn",
-			);
+			toast(t.postJob.sessionExpired, "warn");
 			return;
 		}
 
@@ -694,8 +714,8 @@ function PostJobPage() {
 				<div className="mt-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
 					<p className="text-sm font-semibold text-amber-300">
 						{agencyLinks.awaitingApproval
-							? "Waiting for an agency to accept you"
-							: "Link an agency before posting"}
+							? t.postJob.waitingForAgency
+							: t.postJob.linkAgencyBeforePosting}
 					</p>
 					<p className="iz-tiny iz-muted mt-1">
 						{agencyLinks.awaitingApproval
@@ -707,7 +727,7 @@ function PostJobPage() {
 							to="/outlet/settings"
 							className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
 						>
-							Go to Settings → Agencies
+							{t.postJob.goToSettingsAgencies}
 						</Link>
 					)}
 				</div>
@@ -795,7 +815,7 @@ function PostJobPage() {
 												<DraftShiftSummary
 													key={s.id}
 													shift={s}
-													title={`Shift ${i + 1}`}
+													title={fill(t.postJob.shiftN, { n: i + 1 })}
 													onEdit={() => setEditingShiftId(s.id)}
 													onRemove={() => removeDraftShift(s.id)}
 													showRemove
@@ -815,7 +835,9 @@ function PostJobPage() {
 						    visible. Real sessions only — a demo session has no links. */}
 						{backed && (
 							<div className="iz-post-job-sendto--mobile iz-post-job-summary-card mt-3">
-								<p className="iz-post-job-summary-card__title">Send to</p>
+								<p className="iz-post-job-summary-card__title">
+									{t.postJob.sendTo}
+								</p>
 								<PostJobAgencyPicker
 									value={postAgencyIds}
 									onChange={setPostAgencyIds}
@@ -837,7 +859,9 @@ function PostJobPage() {
 								   read as a floating label rather than the first of two
 								   blocks. */
 								<div className="iz-post-job-summary-card mb-3">
-									<p className="iz-post-job-summary-card__title">Send to</p>
+									<p className="iz-post-job-summary-card__title">
+										{t.postJob.sendTo}
+									</p>
 									<PostJobAgencyPicker
 										value={postAgencyIds}
 										onChange={setPostAgencyIds}

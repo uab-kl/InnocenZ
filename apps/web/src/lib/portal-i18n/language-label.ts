@@ -95,3 +95,22 @@ export function tierLabel(raw: string, t: PortalTranslations): string {
 	};
 	return map[raw.trim().toLowerCase()] ?? raw;
 }
+
+/**
+ * Display name for a dress code.
+ *
+ * `DRESS_CODE_OPTIONS` holds the STORED value — it is what a draft carries and
+ * what `POST /shift` receives as `dressCode` — so the option `value` must never
+ * change. Only the text shown inside the option does. Unknown codes (a custom
+ * one the operator typed) pass through as themselves.
+ */
+export function dressCodeLabel(raw: string, t: PortalTranslations): string {
+	const map: Record<string, string> = {
+		"black elegant": t.postJob.dcBlackElegant,
+		"cocktail attire": t.postJob.dcCocktailAttire,
+		"brand uniform": t.postJob.dcBrandUniform,
+		"smart casual": t.postJob.dcSmartCasual,
+		"formal gown": t.postJob.dcFormalGown,
+	};
+	return map[raw.trim().toLowerCase()] ?? raw;
+}

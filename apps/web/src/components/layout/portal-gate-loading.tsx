@@ -17,7 +17,9 @@ export function PortalGateLoading({
 		<div
 			className={cn(
 				"relative flex min-h-svh w-full flex-col items-center justify-center overflow-hidden px-6",
-				isPortal ? "bg-[#0e0a1a] text-white/70" : "bg-background text-muted-foreground",
+				isPortal
+					? "bg-[#0e0a1a] text-white/70"
+					: "bg-background text-muted-foreground",
 				className,
 			)}
 			role="status"
@@ -65,9 +67,7 @@ export function PortalGateLoading({
 					<span
 						className={cn(
 							"absolute inset-y-0 w-2/5 rounded-full animate-[iz-boot-bar_1.6s_ease-in-out_infinite]",
-							isPortal
-								? "bg-[#b79ce8]"
-								: "bg-primary",
+							isPortal ? "bg-[#b79ce8]" : "bg-primary",
 						)}
 					/>
 				</div>

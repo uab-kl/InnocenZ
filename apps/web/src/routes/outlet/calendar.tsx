@@ -8,6 +8,7 @@ import { useOutletToday } from "@agency-portal/hooks/use-outlet-today";
 import { useStore } from "@agency-portal/lib/store";
 import { useOutletCan } from "@agency-portal/lib/use-portal-can";
 import { createFileRoute } from "@tanstack/react-router";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 // Moved here from `/outlet/ratings`, which is what this screen used to answer
 // to. That path had never held ratings — the nav item pointed at it under the
@@ -22,6 +23,7 @@ export const Route = createFileRoute("/outlet/calendar")({
 const CALENDAR_WINDOW_DAYS = 90;
 
 function CalendarPage() {
+	const { t } = usePortalLocale();
 	const outletName = useStore((s) => s.outletWorkspace.outletName);
 	// A real session reads its shifts from the backend; demo sessions keep the
 	// demo store.
@@ -36,10 +38,10 @@ function CalendarPage() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>Calendar page</IzPageTitle>
+					<IzPageTitle>{t.calendar.pageTitle}</IzPageTitle>
 				</header>
 				<p className="iz-tiny iz-muted mt-4 rounded-xl border border-dashed border-[var(--iz-line)] px-4 py-6 text-center">
-					Your role cannot access upcoming shifts.
+					{t.calendar.noAccess}
 				</p>
 			</div>
 		);
@@ -49,8 +51,9 @@ function CalendarPage() {
 		<OutletPage>
 			<OutletPageHeader
 				eyebrow={outletName}
-				title="Calendar"
-				hint="Upcoming shifts — click a day to view details."
+				title={t.calendar.title}
+				iconKey="Calendar"
+				hint={t.calendar.subtitle}
 			/>
 
 			<OutletOperationsCalendar

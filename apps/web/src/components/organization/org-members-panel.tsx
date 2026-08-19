@@ -78,9 +78,7 @@ export function OrgMembersPanel({ orgId }: { orgId: string }) {
 						>
 							<div className="min-w-0 flex-1">
 								<div className="font-medium">
-									{member.name ||
-										member.nickname ||
-										member.userId.slice(0, 8)}
+									{member.name || member.nickname || member.userId.slice(0, 8)}
 								</div>
 								<div className="text-sm text-muted-foreground">
 									{[member.email, member.phoneNum]

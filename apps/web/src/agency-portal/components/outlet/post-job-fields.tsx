@@ -88,6 +88,10 @@ import { Link } from "@tanstack/react-router";
 import { addDays, format, startOfToday } from "date-fns";
 import { Check, Minus, Pencil, Plus, X } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { dressCodeLabel } from "@/lib/portal-i18n/language-label";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 const DEFAULT_DRAFT_TIER_BASE: OutletTierRateSettings = {
 	wagePerHour: 60,
@@ -384,18 +388,19 @@ export function estimateDraftShiftCost(
 export function formatDraftPrNames(
 	prIds: string[],
 	prs: { id: string; name: string }[],
+	t: PortalTranslations,
 ): string {
-	if (prIds.length === 0) return "None selected";
+	if (prIds.length === 0) return t.postJob.noneSelected;
 	return prIds.map((id) => prs.find((p) => p.id === id)?.name ?? id).join(", ");
 }
 
-export function formatJobDate(d: Date): string {
+export function formatJobDate(d: Date, t: PortalTranslations): string {
 	const today = startOfToday();
 	const day = new Date(d);
 	day.setHours(0, 0, 0, 0);
 	const diff = Math.round((day.getTime() - today.getTime()) / 86_400_000);
-	if (diff === 0) return "Tonight";
-	if (diff === 1) return "Tomorrow";
+	if (diff === 0) return t.postJob.tonight;
+	if (diff === 1) return t.postJob.tomorrow;
 	return format(d, "EEE d MMM");
 }
 
@@ -428,9 +433,14 @@ export function eachJobDateInRange(from: Date, to: Date): Date[] {
 	return dates;
 }
 
-export function formatJobDateRange(from: Date, to: Date): string {
-	if (isoFromJobDate(from) === isoFromJobDate(to)) return formatJobDate(from);
-	return `${formatJobDate(from)} → ${formatJobDate(to)}`;
+export function formatJobDateRange(
+	from: Date,
+	to: Date,
+	t: PortalTranslations,
+): string {
+	if (isoFromJobDate(from) === isoFromJobDate(to))
+		return formatJobDate(from, t);
+	return `${formatJobDate(from, t)} → ${formatJobDate(to, t)}`;
 }
 
 export function jobEndDateForSpan(from: Date, span: JobDateSpan): Date {
@@ -475,16 +485,16 @@ export function primaryJobDateFromIsos(isos: string[]): Date {
 	return sorted.length > 0 ? jobDateFromIso(sorted[0]) : startOfToday();
 }
 
-export function formatJobDates(isos: string[]): string {
+export function formatJobDates(isos: string[], t: PortalTranslations): string {
 	const sorted = sortJobDateIsos(isos);
-	if (sorted.length === 0) return "Pick dates";
+	if (sorted.length === 0) return t.postJob.pickDates;
 	if (sorted.length === 1) {
-		return formatJobDate(jobDateFromIso(sorted[0]));
+		return formatJobDate(jobDateFromIso(sorted[0]), t);
 	}
 	if (sorted.length <= 3) {
 		return sorted.map((iso) => format(jobDateFromIso(iso), "d MMM")).join(", ");
 	}
-	return `${sorted.length} dates`;
+	return fill(t.postJob.datesCount, { n: sorted.length });
 }
 
 export function starTierToMinRating(tier: number): number {
@@ -625,13 +635,14 @@ export function JobDatePicker({
 	layout?: "chip" | "field";
 	className?: string;
 }) {
-	const label = formatJobDate(value);
+	const { t } = usePortalLocale();
+	const label = formatJobDate(value, t);
 	const isPast = (date: Date) => date < startOfToday();
 
 	if (layout === "field") {
 		return (
 			<OutletDatePopoverField
-				label="Date"
+				label={t.postJob.date}
 				value={value}
 				displayLabel={label}
 				onChange={onChange}
@@ -663,6 +674,7 @@ export function JobDateRangePicker({
 	onChange: (patch: { jobDate: Date; jobEndDate: Date }) => void;
 	embedded?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const isPast = (date: Date) => date < startOfToday();
 
 	const applyRange = (from: Date, to: Date) => {
@@ -671,7 +683,7 @@ export function JobDateRangePicker({
 	};
 
 	const dayCount = eachJobDateInRange(jobDate, jobEndDate).length;
-	const rangeLabel = formatJobDateRange(jobDate, jobEndDate);
+	const rangeLabel = formatJobDateRange(jobDate, jobEndDate, t);
 
 	const content = (
 		<>
@@ -730,8 +742,9 @@ export function JobMultiDatePicker({
 	onChange: (isos: string[]) => void;
 	embedded?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	const isPast = (date: Date) => date < startOfToday();
-	const label = formatJobDates(selectedDateIsos);
+	const label = formatJobDates(selectedDateIsos, t);
 
 	const content = (
 		<>
@@ -804,6 +817,7 @@ function PostJobLanguagePicker({
 	onToggle: (lang: string) => void;
 	onAdd: (lang: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const [showOther, setShowOther] = useState(false);
 	const [otherInput, setOtherInput] = useState("");
 
@@ -825,7 +839,7 @@ function PostJobLanguagePicker({
 			<div className="flex w-full flex-wrap gap-1.5">
 				{options.length === 0 && !showOther && (
 					<span className="self-center text-[10px] text-[var(--iz-muted)]">
-						No languages on your PRs' profiles yet — add one with Others.
+						{t.postJob.noLanguagesOnProfiles}
 					</span>
 				)}
 				{options.map((l) => (
@@ -846,7 +860,7 @@ function PostJobLanguagePicker({
 					onClick={() => setShowOther((v) => !v)}
 					className={cn("iz-job-posting-type-pill", showOther && "is-active")}
 				>
-					+ Others
+					{t.postJob.plusOthers}
 				</button>
 			</div>
 			{showOther && (
@@ -856,8 +870,8 @@ function PostJobLanguagePicker({
 						value={otherInput}
 						maxLength={32}
 						autoFocus
-						placeholder="Name a language"
-						aria-label="Other preferred language"
+						placeholder={t.postJob.nameALanguage}
+						aria-label={t.postJob.otherPreferredLanguage}
 						className="iz-job-posting-control iz-job-posting-input min-w-0 flex-1 text-sm"
 						onChange={(e) => setOtherInput(e.target.value)}
 						onKeyDown={(e) => {
@@ -872,7 +886,7 @@ function PostJobLanguagePicker({
 						onClick={addOther}
 						className="iz-chip shrink-0 px-2.5 py-1.5 text-[11px] font-semibold text-[var(--iz-gold)]"
 					>
-						Add
+						{t.postJob.add}
 					</button>
 				</div>
 			)}
@@ -894,6 +908,7 @@ export function JobLanguagePicker({
 	/** Shown above the pills — say what picking a language does, and does not do. */
 	hint?: string;
 }) {
+	const { t } = usePortalLocale();
 	const toggle = (lang: string) => {
 		onSelectedChange(
 			selected.includes(lang)
@@ -923,7 +938,7 @@ export function JobLanguagePicker({
 	if (options.length === 0) {
 		return (
 			<p className="text-[11px] text-[var(--iz-muted)]">
-				No languages to choose from.
+				{t.postJob.noLanguagesToChoose}
 			</p>
 		);
 	}
@@ -1014,6 +1029,7 @@ export function ShiftTimePicker({
 	onChange: (v: string) => void;
 	layout?: "stacked" | "grid";
 }) {
+	const { t } = usePortalLocale();
 	const parts = useMemo(() => parseShiftTime(value), [value]);
 
 	const startField = (
@@ -1026,7 +1042,7 @@ export function ShiftTimePicker({
 					onChange(formatShiftTime({ ...parts, startH: h, startM: m }));
 				}}
 				className="iz-job-composer-slot w-full min-w-0"
-				aria-label="Start time"
+				aria-label={t.postJob.startTime}
 			/>
 		</div>
 	);
@@ -1041,7 +1057,7 @@ export function ShiftTimePicker({
 					onChange(formatShiftTime({ ...parts, endH: h, endM: m }));
 				}}
 				className="iz-job-composer-slot w-full min-w-0"
-				aria-label="End time"
+				aria-label={t.postJob.endTime}
 			/>
 		</div>
 	);
@@ -1050,11 +1066,11 @@ export function ShiftTimePicker({
 		return (
 			<div className="grid w-full grid-cols-2 gap-2.5">
 				<label className="flex min-w-0 flex-col gap-1">
-					<JobPostingMicroLabel>Start</JobPostingMicroLabel>
+					<JobPostingMicroLabel>{t.postJob.start}</JobPostingMicroLabel>
 					{startField}
 				</label>
 				<label className="flex min-w-0 flex-col gap-1">
-					<JobPostingMicroLabel>End</JobPostingMicroLabel>
+					<JobPostingMicroLabel>{t.postJob.end}</JobPostingMicroLabel>
 					{endField}
 				</label>
 			</div>
@@ -1065,7 +1081,7 @@ export function ShiftTimePicker({
 		<div className="flex w-full flex-col items-end gap-2">
 			<div className="flex items-center justify-end gap-2">
 				<span className="w-8 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-					Start
+					{t.postJob.start}
 				</span>
 				<IzTimeInput
 					value={hmFromParts(parts.startH, parts.startM)}
@@ -1075,12 +1091,12 @@ export function ShiftTimePicker({
 						onChange(formatShiftTime({ ...parts, startH: h, startM: m }));
 					}}
 					className="min-w-[8.5rem]"
-					aria-label="Start time"
+					aria-label={t.postJob.startTime}
 				/>
 			</div>
 			<div className="flex items-center justify-end gap-2">
 				<span className="w-8 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-					End
+					{t.postJob.end}
 				</span>
 				<IzTimeInput
 					value={hmFromParts(parts.endH, parts.endM)}
@@ -1090,7 +1106,7 @@ export function ShiftTimePicker({
 						onChange(formatShiftTime({ ...parts, endH: h, endM: m }));
 					}}
 					className="min-w-[8.5rem]"
-					aria-label="End time"
+					aria-label={t.postJob.endTime}
 				/>
 			</div>
 		</div>
@@ -1140,6 +1156,7 @@ export function DraftPrPicker({
 	dailyRemaining?: number;
 	poolHint?: string;
 }) {
+	const { t } = usePortalLocale();
 	const prs = useStore((s) => s.prs);
 	const toast = useStore((s) => s.toast);
 
@@ -1166,9 +1183,24 @@ export function DraftPrPicker({
 			toast(
 				maxSelect !== undefined
 					? dailyRemaining !== undefined && selected.length >= dailyRemaining
-						? `Daily PR limit — ${dailyRemaining} slot${dailyRemaining === 1 ? "" : "s"} left today on your plan`
-						: `Your plan allows ${selectCap} PR${selectCap !== 1 ? "s" : ""} per shift — remove one to add another`
-					: `This shift needs ${quantity} PR${quantity !== 1 ? "s" : ""} — remove one to add another`,
+						? fill(
+								dailyRemaining === 1
+									? t.postJob.dailyPrLimitOne
+									: t.postJob.dailyPrLimitMany,
+								{ n: dailyRemaining },
+							)
+						: fill(
+								selectCap === 1
+									? t.postJob.planAllowsPerShiftOne
+									: t.postJob.planAllowsPerShiftMany,
+								{ n: selectCap },
+							)
+					: fill(
+							quantity === 1
+								? t.postJob.shiftNeedsOne
+								: t.postJob.shiftNeedsMany,
+							{ n: quantity },
+						),
 				"warn",
 			);
 			return;
@@ -1190,7 +1222,7 @@ export function DraftPrPicker({
 						onClick={() => onSelectedChange([])}
 						className="iz-post-job-pr-clear text-[10px] font-semibold text-[var(--iz-gold)]"
 					>
-						Clear all
+						{t.postJob.clearAll}
 					</button>
 				) : (
 					<span className="iz-post-job-pr-clear" aria-hidden />
@@ -1199,7 +1231,7 @@ export function DraftPrPicker({
 			{poolHint && <p className="iz-post-job-pr-hint mb-2">{poolHint}</p>}
 			{candidates.length === 0 ? (
 				<p className="text-[11px] leading-snug text-[var(--iz-muted)]">
-					{emptyHint ?? "No PRs available to select."}
+					{emptyHint ?? t.postJob.noPrsAvailable}
 				</p>
 			) : (
 				<div className="iz-post-job-pr-scroll">
@@ -1231,7 +1263,7 @@ export function DraftPrPicker({
 									</div>
 									<div className="text-[10px] text-[var(--iz-violet-l)]">
 										{p.rating === null
-											? "Not rated yet"
+											? t.postJob.notRatedYet
 											: `${formatStars(p.rating)}★`}
 									</div>
 									<div
@@ -1244,10 +1276,10 @@ export function DraftPrPicker({
 									>
 										{on ? (
 											<>
-												<Check className="h-3 w-3" /> Selected
+												<Check className="h-3 w-3" /> {t.postJob.selectedCount}
 											</>
 										) : (
-											"Tap to add"
+											t.postJob.tapToAdd
 										)}
 									</div>
 								</button>
@@ -1329,11 +1361,16 @@ function DraftDrinkPricingSummary({
 	shift: DraftShift;
 	workspaceMenu?: OutletDrinkPrice[];
 }) {
+	const { t } = usePortalLocale();
 	const storeMenu = useStore((s) => s.outletWorkspace.drinkMenu ?? []);
 	return (
 		<SummaryLine
-			label="Prices"
-			value={formatShiftDrinkPricingSummary(shift, workspaceMenu ?? storeMenu)}
+			label={t.postJob.prices}
+			value={formatShiftDrinkPricingSummary(
+				shift,
+				workspaceMenu ?? storeMenu,
+				t,
+			)}
 		/>
 	);
 }
@@ -1354,6 +1391,7 @@ export function DraftShiftSummary({
 	/** The outlet's real price list on a backed session; omitted on demo ones. */
 	workspaceMenu?: OutletDrinkPrice[];
 }) {
+	const { t } = usePortalLocale();
 	const prs = useStore((s) => s.prs);
 
 	return (
@@ -1368,14 +1406,14 @@ export function DraftShiftSummary({
 						onClick={onEdit}
 						className="iz-chip flex items-center gap-1 px-2 py-1 text-[11px] font-semibold"
 					>
-						<Pencil className="h-3 w-3" /> Edit
+						<Pencil className="h-3 w-3" /> {t.postJob.edit}
 					</button>
 					{showRemove && onRemove && (
 						<button
 							type="button"
 							onClick={onRemove}
 							className="iz-chip flex h-6 w-6 items-center justify-center !p-0 text-[var(--iz-muted)]"
-							aria-label={`Remove ${title}`}
+							aria-label={fill(t.postJob.removeNamed, { name: title })}
 						>
 							<X className="h-3.5 w-3.5" />
 						</button>
@@ -1383,32 +1421,42 @@ export function DraftShiftSummary({
 				</div>
 			</div>
 			<SummaryLine
-				label="Date"
-				value={formatJobDates(shift.selectedDateIsos)}
+				label={t.postJob.date}
+				value={formatJobDates(shift.selectedDateIsos, t)}
 			/>
 			<SummaryLine
-				label="Event type"
+				label={t.postJob.eventType}
 				value={formatShiftEventTypeSummary(
 					shift.eventKind,
+					t,
 					shift.specialEventType,
 					shift.customSpecialEventName,
 				)}
 			/>
 			<DraftDrinkPricingSummary shift={shift} workspaceMenu={workspaceMenu} />
-			<SummaryLine label="Event" value={resolveDraftEventName(shift)} stacked />
-			<SummaryLine label="Time" value={shift.shiftTime} />
-			<SummaryLine label="People needed" value={String(shift.quantity)} />
 			<SummaryLine
-				label="PRs"
-				value={`${shift.prIds.length}/${shift.quantity} · ${formatDraftPrNames(shift.prIds, prs)}`}
+				label={t.postJob.event}
+				value={resolveDraftEventName(shift)}
+				stacked
+			/>
+			<SummaryLine label={t.postJob.time} value={shift.shiftTime} />
+			<SummaryLine
+				label={t.postJob.peopleNeeded}
+				value={String(shift.quantity)}
+			/>
+			<SummaryLine
+				label={t.postJob.prsUnit}
+				value={`${shift.prIds.length}/${shift.quantity} · ${formatDraftPrNames(shift.prIds, prs, t)}`}
 				stacked
 			/>
 			<SummaryLine
-				label="Languages"
+				label={t.postJob.languages}
 				value={buildLanguagesLabel(shift.langs, shift.otherLang) || "—"}
 			/>
 			<div className="border-b border-[var(--iz-line)] py-2.5 last:border-0">
-				<span className="text-xs text-[var(--iz-muted)]">Pay by PR tier</span>
+				<span className="text-xs text-[var(--iz-muted)]">
+					{t.postJob.payByPrTier}
+				</span>
 				<div className="mt-1.5 space-y-1">
 					{(shift.payTierRows ?? []).map((row) => (
 						<p
@@ -1421,8 +1469,11 @@ export function DraftShiftSummary({
 				</div>
 			</div>
 			<SummaryLine
-				label="Dress code"
-				value={formatDressCodeLabel(shift.dressCode, shift.customDressCode)}
+				label={t.postJob.dressCode}
+				value={dressCodeLabel(
+					formatDressCodeLabel(shift.dressCode, shift.customDressCode),
+					t,
+				)}
 			/>
 		</IzCard>
 	);
@@ -1468,6 +1519,7 @@ export function DraftShiftEditor({
 		"tierRates" | "commissionOnlyRates"
 	>;
 }) {
+	const { t } = usePortalLocale();
 	// Demo sessions have no backend pool, so the language options come from the
 	// demo roster instead. A real session passes `prCandidates` and ignores this.
 	const agencyPRs = useStore((s) => s.agencyPRs);
@@ -1566,14 +1618,17 @@ export function DraftShiftEditor({
 			: Math.min(subscriptionPlan.prSelectMax, namedPrRemaining);
 	const prPickerHint =
 		namedPrRemaining === 0
-			? `${subscriptionPlan.label} plan · daily limit of ${subscriptionPlan.prPerDayMax} named PRs reached for this date`
+			? fill(t.postJob.planDailyLimitReached, {
+					plan: subscriptionPlan.label,
+					max: subscriptionPlan.prPerDayMax,
+				})
 			: `${subscriptionPlan.label} plan · ${formatOutletPlanPrPickerRule(subscriptionPlan)} · ${namedPrRemaining} named PR slot${namedPrRemaining === 1 ? "" : "s"} left today`;
 
 	const maxPeople =
 		peopleRemaining !== undefined
 			? peopleRemaining
 			: subscriptionPlan.prPerDayMax;
-	const dateLabel = formatJobDates(shift.selectedDateIsos);
+	const dateLabel = formatJobDates(shift.selectedDateIsos, t);
 	const peopleNeededHint = formatOutletPlanDailyHeadcountHint(
 		subscriptionPlan,
 		maxPeople,
@@ -1698,7 +1753,7 @@ export function DraftShiftEditor({
 									onClick={onDone}
 									className="iz-chip px-2 py-1 text-[11px] font-semibold text-[var(--iz-gold)]"
 								>
-									Done
+									{t.postJob.done}
 								</button>
 							)}
 							{showRemove && onRemove && (
@@ -1706,7 +1761,7 @@ export function DraftShiftEditor({
 									type="button"
 									onClick={onRemove}
 									className="iz-chip flex h-6 w-6 items-center justify-center !p-0 text-[var(--iz-muted)]"
-									aria-label={`Remove ${title}`}
+									aria-label={fill(t.postJob.removeNamed, { name: title })}
 								>
 									<X className="h-3.5 w-3.5" />
 								</button>
@@ -1717,7 +1772,7 @@ export function DraftShiftEditor({
 			/>
 
 			<div className="mt-3 space-y-3">
-				<PostJobShiftField label="Date">
+				<PostJobShiftField label={t.postJob.date}>
 					<div className="iz-job-posting-control">
 						<JobMultiDatePicker
 							embedded
@@ -1727,7 +1782,7 @@ export function DraftShiftEditor({
 					</div>
 				</PostJobShiftField>
 
-				<PostJobShiftField label="Event type" layout="stack">
+				<PostJobShiftField label={t.postJob.eventType} layout="stack">
 					<div className="iz-post-job-event-type-grid">
 						{(Object.keys(SHIFT_EVENT_KIND_LABELS) as ShiftEventKind[]).map(
 							(kind) => (
@@ -1760,7 +1815,7 @@ export function DraftShiftEditor({
 										shift.eventKind === kind && "is-active",
 									)}
 								>
-									{SHIFT_EVENT_KIND_LABELS[kind]}
+									{SHIFT_EVENT_KIND_LABELS[kind](t)}
 								</button>
 							),
 						)}
@@ -1786,7 +1841,7 @@ export function DraftShiftEditor({
 											shift.specialEventType === option.id && "is-active",
 										)}
 									>
-										{option.label}
+										{option.label(t)}
 									</button>
 								))}
 							</IzHScroll>
@@ -1794,8 +1849,8 @@ export function DraftShiftEditor({
 								<input
 									type="text"
 									className="iz-job-posting-control iz-job-posting-input mt-2 block w-full min-w-0"
-									placeholder="Name your event type"
-									aria-label="Custom special event type"
+									placeholder={t.postJob.nameYourEventType}
+									aria-label={t.postJob.customSpecialEventType}
 									value={shift.customSpecialEventName ?? ""}
 									onChange={(e) =>
 										onChange({ customSpecialEventName: e.target.value })
@@ -1806,7 +1861,7 @@ export function DraftShiftEditor({
 					)}
 				</PostJobShiftField>
 
-				<PostJobShiftField label="Prices">
+				<PostJobShiftField label={t.postJob.prices}>
 					{shift.eventKind === "special" ? (
 						<div className="w-full min-w-0">
 							<p className="mb-2 text-[10px] text-[var(--iz-muted)]">
@@ -1826,7 +1881,7 @@ export function DraftShiftEditor({
 									})
 								}
 							>
-								Reset to workspace prices
+								{t.postJob.resetToWorkspacePrices}
 							</button>
 						</div>
 					) : (
@@ -1836,7 +1891,7 @@ export function DraftShiftEditor({
 							to="/outlet/workspace"
 							hash={OUTLET_PRICES_SECTION_ID}
 							className="iz-job-posting-control block w-full min-w-0 transition-opacity hover:opacity-80"
-							aria-label="Edit prices in Workspace"
+							aria-label={t.postJob.editPricesInWorkspace}
 						>
 							<PostJobLockedValue>
 								Follow Workspace
@@ -1849,7 +1904,7 @@ export function DraftShiftEditor({
 					)}
 				</PostJobShiftField>
 
-				<PostJobShiftField label="Event name">
+				<PostJobShiftField label={t.postJob.eventName}>
 					<PostJobEditableInputShell>
 						<JobEventInput
 							value={shift.event}
@@ -1862,7 +1917,7 @@ export function DraftShiftEditor({
 					</PostJobEditableInputShell>
 				</PostJobShiftField>
 
-				<PostJobShiftField label="Time">
+				<PostJobShiftField label={t.postJob.time}>
 					<ShiftTimePicker
 						value={shift.shiftTime}
 						onChange={(shiftTime) => onChange({ shiftTime })}
@@ -1870,14 +1925,14 @@ export function DraftShiftEditor({
 					/>
 				</PostJobShiftField>
 
-				<PostJobShiftField label="People needed">
+				<PostJobShiftField label={t.postJob.peopleNeeded}>
 					<div className="flex w-full flex-col gap-1">
 						<QuantityStepper
 							value={shift.quantity}
 							onChange={updatePeopleNeeded}
 							min={maxPeople > 0 ? 1 : 0}
 							max={maxPeople > 0 ? maxPeople : 0}
-							suffix="PRs"
+							suffix={t.postJob.prsUnit}
 						/>
 						<p className="text-[10px] text-[var(--iz-muted)]">
 							{peopleNeededHint}
@@ -1885,10 +1940,10 @@ export function DraftShiftEditor({
 					</div>
 				</PostJobShiftField>
 
-				<PostJobShiftField label="Preferred languages">
+				<PostJobShiftField label={t.postJob.preferredLanguages}>
 					<JobLanguagePicker
 						variant="postJob"
-						hint="Spoken by your PRs — a plus, not a requirement. PRs who don't speak these can still be assigned. Use Others for anything not listed."
+						hint={t.postJob.languagesHint}
 						options={pickerOptions}
 						selected={shift.langs}
 						onSelectedChange={(langs) => onChange({ langs })}
@@ -1942,13 +1997,13 @@ export function DraftShiftEditor({
 									});
 								}}
 							>
-								Reset to workspace rates
+								{t.postJob.resetToWorkspaceRates}
 							</button>
 						</div>
 					</div>
 				</div>
 
-				<PostJobShiftField label="Dress code">
+				<PostJobShiftField label={t.postJob.dressCode}>
 					<div className="flex w-full min-w-0 flex-col gap-2">
 						<div className="iz-job-posting-control">
 							<IzSelect
@@ -1971,18 +2026,18 @@ export function DraftShiftEditor({
 							>
 								{DRESS_CODE_OPTIONS.map((d) => (
 									<option key={d} value={d}>
-										{d}
+										{dressCodeLabel(d, t)}
 									</option>
 								))}
-								<option value={DRESS_CODE_OTHER_ID}>Other</option>
+								<option value={DRESS_CODE_OTHER_ID}>{t.postJob.other}</option>
 							</IzSelect>
 						</div>
 						{isOtherDressCode(shift.dressCode) && (
 							<input
 								type="text"
 								className="iz-job-posting-control iz-job-posting-input w-full min-w-0 text-sm"
-								placeholder="Name dress code"
-								aria-label="Custom dress code"
+								placeholder={t.postJob.nameDressCodeField}
+								aria-label={t.postJob.customDressCode}
 								value={shift.customDressCode ?? ""}
 								onChange={(e) => onChange({ customDressCode: e.target.value })}
 							/>
@@ -1991,7 +2046,7 @@ export function DraftShiftEditor({
 				</PostJobShiftField>
 
 				<PostJobShiftField
-					label="Select PRs"
+					label={t.postJob.selectPrs}
 					className="!mb-0 iz-post-job-pr-field"
 					layout="stack"
 				>

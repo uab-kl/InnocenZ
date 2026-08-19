@@ -5,6 +5,8 @@ import type {
 import { defaultOutletMenuItemName } from "@agency-portal/lib/outlet-demo";
 import { ArrowLeftRight, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 function DrinkPriceInput({
 	value,
@@ -62,7 +64,7 @@ export function OutletDrinkMenuEditor({
 	onChange,
 	readOnly,
 	category = "service",
-	itemLabel = "Service",
+	itemLabel,
 	onMoveItem,
 	moveHint,
 }: {
@@ -79,6 +81,10 @@ export function OutletDrinkMenuEditor({
 	/** Accessible label for the move control (e.g. "Move to Services"). */
 	moveHint?: string;
 }) {
+	const { t } = usePortalLocale();
+	// Default resolved here, not in the parameter list: a default parameter is
+	// evaluated before hooks run and cannot read `t`.
+	const label = itemLabel ?? t.workspace.service;
 	const updateDrink = (id: string, patch: Partial<OutletDrinkPrice>) => {
 		onChange(drinks.map((d) => (d.id === id ? { ...d, ...patch } : d)));
 	};
@@ -116,7 +122,7 @@ export function OutletDrinkMenuEditor({
 					<div key={drink.id} className="flex items-end gap-2">
 						<div className="min-w-0 flex-1">
 							<div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-								{itemLabel}
+								{label}
 							</div>
 							<input
 								type="text"
@@ -131,7 +137,7 @@ export function OutletDrinkMenuEditor({
 						</div>
 						<div className="w-24 shrink-0">
 							<div className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-								Price
+								{t.workspace.price}
 							</div>
 							<div className="flex items-center gap-1.5 rounded-xl border border-[var(--iz-line2)] bg-[rgba(255,255,255,0.03)] px-2.5 py-1.5">
 								<span className="text-[11px] font-semibold text-[var(--iz-muted)]">
@@ -150,7 +156,12 @@ export function OutletDrinkMenuEditor({
 								onClick={() => onMoveItem(drink.id)}
 								className="iz-chip flex h-[38px] w-[38px] shrink-0 items-center justify-center !p-0 text-[var(--iz-muted)]"
 								aria-label={
-									moveHint ? `${moveHint}: ${drinkName}` : `Move ${drinkName}`
+									moveHint
+										? fill(t.workspace.moveNamedTo, {
+												hint: moveHint,
+												name: drinkName,
+											})
+										: fill(t.workspace.moveNamed, { name: drinkName })
 								}
 								title={moveHint}
 							>
@@ -162,7 +173,7 @@ export function OutletDrinkMenuEditor({
 								type="button"
 								onClick={() => removeDrink(drink.id)}
 								className="iz-chip flex h-[38px] w-[38px] shrink-0 items-center justify-center !p-0 text-[var(--iz-red)]"
-								aria-label={`Remove ${drinkName}`}
+								aria-label={fill(t.workspace.removeNamed, { name: drinkName })}
 							>
 								<Trash2 className="h-3.5 w-3.5" />
 							</button>
@@ -176,7 +187,7 @@ export function OutletDrinkMenuEditor({
 					onClick={addDrink}
 					className="iz-chip w-full justify-center text-[11px]"
 				>
-					<Plus className="h-3.5 w-3.5" /> Add More
+					<Plus className="h-3.5 w-3.5" /> {t.workspace.addMore}
 				</button>
 			)}
 		</div>

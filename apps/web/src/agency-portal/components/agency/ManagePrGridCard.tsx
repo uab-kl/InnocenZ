@@ -8,6 +8,9 @@ import { formatPayeeLabel } from "@agency-portal/lib/agency-payroll";
 import type { getAgencyPrFlags } from "@agency-portal/lib/agency-pr-flags";
 import { cn } from "@agency-portal/lib/utils";
 import { Check, Star } from "lucide-react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { languageListLabel } from "@/lib/portal-i18n/language-label";
 
 /** Languages shown on the card before collapsing the rest into "+N more". */
 const MAX_CARD_LANGUAGES = 2;
@@ -36,6 +39,7 @@ export function ManagePrGridCard({
 	picked,
 	onActivate,
 }: ManagePrGridCardProps) {
+	const { t } = usePortalLocale();
 	const preview = toComcardPreview(pr);
 	// Two languages fit; the rest were silently dropped, so a PR who speaks five
 	// looked identical to one who speaks two. Say how many are hidden — the full
@@ -43,7 +47,7 @@ export function ManagePrGridCard({
 	// roster popover and the comcard card cannot each invent their own cap.
 	const cardLangs = splitCardLanguages(pr, MAX_CARD_LANGUAGES);
 	const hiddenLangCount = cardLangs.hidden;
-	const metaLine = [cardLangs.shown.join(" · "), pr.place]
+	const metaLine = [languageListLabel(cardLangs.shown, t), pr.place]
 		.filter(Boolean)
 		.join(" · ");
 	const paid = formatOutletHistRm(pr.totalPaid ?? 0);
@@ -86,7 +90,7 @@ export function ManagePrGridCard({
 					variant={active ? "green" : "ink"}
 					className="iz-pr-manage-card__status"
 				>
-					{active ? "Active" : "Inactive"}
+					{active ? t.managePr.active : t.managePr.inactive}
 				</IzPill>
 			</div>
 
@@ -116,7 +120,7 @@ export function ManagePrGridCard({
 					{hiddenLangCount > 0 && (
 						<span
 							className="iz-pr-manage-card__more-langs"
-							title={cardLangs.all.join(" · ")}
+							title={languageListLabel(cardLangs.all, t)}
 						>
 							+{hiddenLangCount}
 						</span>
@@ -130,22 +134,22 @@ export function ManagePrGridCard({
 					<div className="iz-pr-manage-card__flags">
 						{!active && (
 							<IzPill variant="ink" className="iz-pr-manage-card__flag">
-								Suspended
+								{t.managePr.flagSuspended}
 							</IzPill>
 						)}
 						{flags.warnLowAvg && active && (
 							<IzPill variant="amber" className="iz-pr-manage-card__flag">
-								Warn
+								{t.managePr.flagWarn}
 							</IzPill>
 						)}
 						{flags.suspendStreak && active && (
 							<IzPill variant="red" className="iz-pr-manage-card__flag">
-								Suspend
+								{t.managePr.flagSuspend}
 							</IzPill>
 						)}
 						{flags.tiedUnderOneYear && (
 							<IzPill variant="violet" className="iz-pr-manage-card__flag">
-								Tied
+								{t.managePr.flagTied}
 							</IzPill>
 						)}
 					</div>
@@ -153,13 +157,17 @@ export function ManagePrGridCard({
 
 				<div className="iz-pr-manage-card__metrics">
 					<div className="iz-pr-manage-card__metric">
-						<span className="iz-pr-manage-card__metric-label">Paid</span>
+						<span className="iz-pr-manage-card__metric-label">
+							{t.managePr.metricPaid}
+						</span>
 						<span className="iz-pr-manage-card__metric-value iz-pr-manage-card__metric-value--gold">
 							{paid}
 						</span>
 					</div>
 					<div className="iz-pr-manage-card__metric">
-						<span className="iz-pr-manage-card__metric-label">Att.</span>
+						<span className="iz-pr-manage-card__metric-label">
+							{t.managePr.metricAtt}
+						</span>
 						{/* Null = no concluded shift yet, which is NOT 0%. Printing 0
 						    here told the agency a PR had missed every shift on a
 						    roster they had never been scheduled on. */}
@@ -167,15 +175,20 @@ export function ManagePrGridCard({
 							className="iz-pr-manage-card__metric-value"
 							title={
 								pr.attendancePct === null
-									? "No completed or missed shifts yet"
-									: `${pr.checkIns} kept · ${pr.noShows} missed`
+									? t.managePr.noConcludedShifts
+									: fill(t.managePr.keptMissed, {
+											kept: pr.checkIns,
+											missed: pr.noShows,
+										})
 							}
 						>
 							{pr.attendancePct === null ? "—" : `${pr.attendancePct}%`}
 						</span>
 					</div>
 					<div className="iz-pr-manage-card__metric">
-						<span className="iz-pr-manage-card__metric-label">KPI</span>
+						<span className="iz-pr-manage-card__metric-label">
+							{t.managePr.metricKpi}
+						</span>
 						<span className="iz-pr-manage-card__metric-value">
 							{pr.kpiScore ?? "—"}
 						</span>

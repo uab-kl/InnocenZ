@@ -1,6 +1,6 @@
-import { Link } from "@tanstack/react-router"
-import { ArrowLeft } from "lucide-react"
-import { BrandLogo } from "@/components/landing/BrandLogo"
+import { Link } from "@tanstack/react-router";
+import { ArrowLeft } from "lucide-react";
+import { BrandLogo } from "@/components/landing/BrandLogo";
 import {
 	PRIVACY_CONTACT_LABEL,
 	PRIVACY_CONTACT_WHATSAPP,
@@ -8,7 +8,7 @@ import {
 	PRIVACY_POLICY_LAST_UPDATED,
 	privacyPolicyIntro,
 	privacyPolicySections,
-} from "@/lib/legal/privacy-policy"
+} from "@/lib/legal/privacy-policy";
 
 export function PrivacyPolicyPage() {
 	return (
@@ -89,5 +89,5 @@ export function PrivacyPolicyPage() {
 				</div>
 			</div>
 		</div>
-	)
+	);
 }

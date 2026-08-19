@@ -75,6 +75,16 @@ export const notificationKindValues = [
    * PR-addressed — one kind for both outcomes, like cutlost_decided.
    */
   'leave_decided',
+  /**
+   * An agency sent a free-text notice to PRs it selected off its own roster
+   * (migration 0126). PR-addressed, and the only kind here that is UNSOLICITED
+   * — every other one answers something that happened to the recipient.
+   *
+   * Carries no object id in `payload`, only `{ agencyId }` for attribution:
+   * there is nothing to open. A reader must route it to the inbox and must not
+   * try to resolve it to a shift or a voucher.
+   */
+  'agency_broadcast',
 ] as const;
 export type NotificationKind = (typeof notificationKindValues)[number];
 export const notificationKindEnum = MainSchema.enum('notification_kind', notificationKindValues);

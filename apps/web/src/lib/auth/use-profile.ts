@@ -20,6 +20,8 @@ interface MeResponse {
 	profileImage?: string | null;
 	r2PublicUrl?: string | null;
 	portals?: string[];
+	/** UI language saved on the account (migration 0122): "en" | "zh" | null. */
+	preferredLocale?: string | null;
 	roles: {
 		id: string;
 		roleName: string;
@@ -69,6 +71,7 @@ export async function fetchProfile(): Promise<User> {
 		contactNo: profile.phoneNum ?? "",
 		isActive: profile.status.toLowerCase() === "active",
 		profileImage: profile.profileImage ?? null,
+		preferredLocale: profile.preferredLocale ?? null,
 		roles: profile.roles.map((r) => r.roleName),
 		portals: profile.portals ?? [],
 		readPermission: profile.permissions

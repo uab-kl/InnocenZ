@@ -3,10 +3,12 @@ import { TitleWithIcon } from "@agency-portal/components/iz/TitleWithIcon";
 import { ChevronDown, iconForNav } from "@agency-portal/lib/lucide-label-icons";
 import { cn } from "@agency-portal/lib/utils";
 import { type ComponentType, type ReactNode, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 export function OutletSection({
 	id,
 	title,
+	iconKey,
 	icon: Icon,
 	brandMark = false,
 	hint,
@@ -21,6 +23,11 @@ export function OutletSection({
 }: {
 	id?: string;
 	title: string;
+	/**
+	 * The ENGLISH label to resolve the section icon from, when `title` is
+	 * translated. Defaults to `title` for the many callers still passing English.
+	 */
+	iconKey?: string;
 	icon?: ComponentType<{ className?: string }>;
 	/** Use the InnocenZ circular mark instead of a Lucide section icon. */
 	brandMark?: boolean;
@@ -45,7 +52,18 @@ export function OutletSection({
 		onOpenChange?.(resolved);
 	};
 
-	const SectionIcon = Icon ?? iconForNav(title);
+	const { t } = usePortalLocale();
+
+	/**
+	 * `iconKey` — NOT `title` — once a caller passes a translated title.
+	 *
+	 * `iconForNav` resolves its icon by the exact English word, so a caller that
+	 * localises `title` would silently lose its section icon: the lookup misses
+	 * and falls through to the default, with no error to say why. Callers that
+	 * translate their title pass the original English through `iconKey` (or an
+	 * explicit `icon`) to keep the glyph.
+	 */
+	const SectionIcon = Icon ?? iconForNav(iconKey ?? title);
 
 	const sectionTitle = brandMark ? (
 		<span className="iz-title-with-icon">
@@ -105,7 +123,7 @@ export function OutletSection({
 						<span className="iz-collapsible-section__hint">{hint}</span>
 					) : null}
 					<span className="iz-collapsible-section__action">
-						{open ? "Tap to collapse" : "Tap to expand"}
+						{open ? t.common.tapToCollapse : t.common.tapToExpand}
 					</span>
 				</span>
 				{trailing && (

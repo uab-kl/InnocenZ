@@ -159,31 +159,54 @@ export async function fetchShiftAssignments(
 	};
 }
 
+/**
+ * The assignment, plus whatever the server wants the agency to know about it.
+ *
+ * `travelWarning` is advice, never a failure: the assignment HAPPENED. The server
+ * refuses an overlap outright, but a too-short hop between two venues is only
+ * warned about, because the agency knows things the distance model does not.
+ * Folded onto the row rather than returned beside it so no existing caller has to
+ * change shape to keep reading the assignment.
+ */
+export type CreatedShiftAssignment = ShiftAssignment & {
+	travelWarning: string | null;
+};
+
 export async function createShiftAssignment(
 	input: CreateShiftAssignmentInput,
 	onRefreshFail: () => void,
-): Promise<ShiftAssignment> {
+): Promise<CreatedShiftAssignment> {
 	const client = getClient(onRefreshFail);
 	const response = await client.post<{
 		success: boolean;
 		message: string;
 		data: ShiftAssignment;
+		warning?: string | null;
 	}>("/shift-assignment", input);
-	return response.data.data;
+	return {
+		...response.data.data,
+		travelWarning: response.data.warning ?? null,
+	};
 }
 
 export async function updateShiftAssignment(
 	id: string,
 	input: UpdateShiftAssignmentInput,
 	onRefreshFail: () => void,
-): Promise<ShiftAssignment> {
+): Promise<CreatedShiftAssignment> {
 	const client = getClient(onRefreshFail);
 	const response = await client.put<{
 		success: boolean;
 		message: string;
 		data: ShiftAssignment;
+		warning?: string | null;
 	}>(`/shift-assignment/${id}`, input);
-	return response.data.data;
+	// Re-staffing a cancelled row seats a person exactly as `create` does, so the
+	// server prices the same trip and this lane must not drop the answer.
+	return {
+		...response.data.data,
+		travelWarning: response.data.warning ?? null,
+	};
 }
 
 /**

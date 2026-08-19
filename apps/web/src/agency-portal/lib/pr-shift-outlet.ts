@@ -1,6 +1,7 @@
 import {
 	type AgencyRosterSlot,
 	getOutletRule,
+	rosterSlotAgencyName,
 } from "@agency-portal/lib/agency-demo";
 import {
 	type GeoCoord,
@@ -8,10 +9,7 @@ import {
 	OUTLET_GPS,
 } from "@agency-portal/lib/gps-locations";
 import type { PrShiftOffer } from "@agency-portal/lib/pr-demo";
-import {
-	DEFAULT_PR_AGENCY_NAME,
-	formatRMPlain,
-} from "@agency-portal/lib/pr-demo";
+import { formatRMPlain } from "@agency-portal/lib/pr-demo";
 
 export type PrShiftOutletBrief = {
 	name: string;
@@ -75,17 +73,17 @@ export function getPrCheckInAssignmentLabel(
 	slot: AgencyRosterSlot | undefined,
 ): string {
 	if (!slot) return "Tonight's shift";
-	const agency =
-		slot.agencyAssignment?.agencyName ??
-		slot.outletSwap?.agencyName ??
-		DEFAULT_PR_AGENCY_NAME;
+	// Was a hand-rolled copy of `rosterSlotAgencyName`'s chain, minus its
+	// `agencyId` arm — so a REAL slot, which carries only an id, skipped straight
+	// to the demo literal and told the PR that Atlas had assigned them whoever
+	// actually booked them. Three copies of one rule are three places to fix it;
+	// this now calls the rule.
+	const agency = rosterSlotAgencyName(slot);
 	if (slot.status === "outlet-pending") {
 		return "Outlet requested you · pending agency & PR approval";
 	}
-	if (slot.status === "assignment-pending" || slot.status === "scheduled") {
-		return `Agency assigned · ${agency}`;
-	}
-	return `Agency assigned · ${agency}`;
+	// An unnamed agency drops the suffix rather than trailing a bare separator.
+	return agency ? `Agency assigned · ${agency}` : "Agency assigned";
 }
 
 export function getPrShiftOutletBrief(

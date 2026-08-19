@@ -11,6 +11,7 @@ import { nowAgencyDateTime } from "@agency-portal/lib/agency-demo";
 import { useStore } from "@agency-portal/lib/store";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 
 export const Route = createFileRoute("/outlet/")({
 	component: OutletHome,
@@ -51,20 +52,20 @@ function OutletHome() {
 				<div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/5 px-4 py-3">
 					<p className="text-sm font-semibold text-amber-300">
 						{agencyLinks.awaitingApproval
-							? "Waiting for an agency to accept you"
-							: "You have no agency yet"}
+							? t.postJob.waitingForAgency
+							: t.today.noAgencyYet}
 					</p>
 					<p className="iz-tiny iz-muted mt-1">
 						{agencyLinks.awaitingApproval
-							? "Your request is with the agency. As soon as one accepts, you can post shifts and they will staff them."
-							: "PR agencies fill your shifts, so this venue needs at least one before it can post a job."}
+							? t.today.requestWithAgency
+							: t.today.agenciesFillShifts}
 					</p>
 					{!agencyLinks.awaitingApproval && (
 						<Link
 							to="/outlet/settings"
 							className="iz-tiny mt-2 inline-block underline decoration-dotted underline-offset-2 hover:text-[var(--iz-gold)]"
 						>
-							Go to Settings → Agencies
+							{t.postJob.goToSettingsAgencies}
 						</Link>
 					)}
 				</div>

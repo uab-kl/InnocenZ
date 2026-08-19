@@ -25,25 +25,37 @@ import {
 	SlidersHorizontal,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 import type {
 	AgencyReceipt,
 	PaymentVoucherReceiptStatus,
 } from "@/services/payment-voucher";
 
-const SOURCE_LABEL: Record<AgencyReceipt["source"], string> = {
-	scan: "Scanned",
-	manual: "Self-logged",
-	checkin: "Check-in",
+// Dictionary KEYS, not finished strings: these sit at module scope, where the
+// locale hook cannot be called. The row component resolves them against its own
+// `t`. The record keys stay the API's values (`scan`, `manual`, `checkin`) —
+// those are data, not copy.
+const SOURCE_LABEL: Record<
+	AgencyReceipt["source"],
+	keyof PortalTranslations["receipts"]
+> = {
+	scan: "scanned",
+	manual: "selfLogged",
+	checkin: "checkIn",
 };
 
 /**
  * "Waiting on you", not "Pending" — the label states whose move it is. A pending
  * receipt is the reason a voucher will not send, so the word has to carry that.
  */
-const STATUS_LABEL: Record<PaymentVoucherReceiptStatus, string> = {
-	pending: "Waiting on you",
-	approved: "Approved",
-	verified: "Verified",
+const STATUS_LABEL: Record<
+	PaymentVoucherReceiptStatus,
+	keyof PortalTranslations["receipts"]
+> = {
+	pending: "waitingOnYou",
+	approved: "approved",
+	verified: "verified",
 };
 
 const STATUS_VARIANT: Record<
@@ -152,6 +164,7 @@ function ReceiptRow({
 	onReview: (status: "pending" | "approved") => void;
 	onOpenPv?: (voucherId: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	// Pending rows open themselves: the whole point of the row is the decision,
 	// and a decision behind a click is one the reviewer can walk past.
 	const [open, setOpen] = useState(receipt.status === "pending");
@@ -187,13 +200,13 @@ function ReceiptRow({
 								variant={receipt.source === "scan" ? "violet" : "amber"}
 								className="!text-[10px]"
 							>
-								{SOURCE_LABEL[receipt.source]}
+								{t.receipts[SOURCE_LABEL[receipt.source]]}
 							</IzPill>
 							<IzPill
 								variant={STATUS_VARIANT[receipt.status]}
 								className="!text-[10px]"
 							>
-								{STATUS_LABEL[receipt.status]}
+								{t.receipts[STATUS_LABEL[receipt.status]]}
 							</IzPill>
 						</div>
 						<p className="iz-tiny iz-muted mt-1">
@@ -201,7 +214,7 @@ function ReceiptRow({
 							    this row simply never read it. Shared formatter, so all three
 							    payee surfaces say the same thing. */}
 							{formatPayeeLabel(receipt.prNickname, receipt.prName) ||
-								"Unknown PR"}{" "}
+								t.receipts.unknownPr}{" "}
 							· {receiptOutlet(receipt)}
 							{receipt.orderNo ? ` · order ${receipt.orderNo}` : ""}
 						</p>
@@ -270,7 +283,7 @@ function ReceiptRow({
 
 					{receipt.note && (
 						<p className="iz-tiny mt-2">
-							<span className="iz-muted2">PR's note: </span>
+							<span className="iz-muted2">{t.receipts.prsNote} </span>
 							{receipt.note}
 						</p>
 					)}
@@ -279,7 +292,9 @@ function ReceiptRow({
 						{photos.length === 0 && (
 							<>
 								<ImageOff className="h-3.5 w-3.5 opacity-60" />
-								<span className="iz-tiny iz-muted2">No proof attached</span>
+								<span className="iz-tiny iz-muted2">
+									{t.receipts.noProofAttached}
+								</span>
 							</>
 						)}
 						{/* The SHARED viewer, same as the dispute queue and the verify
@@ -293,8 +308,8 @@ function ReceiptRow({
 					{receipt.status !== "pending" && (
 						<p className="iz-tiny iz-muted2 mt-2">
 							{receipt.reviewedBy
-								? `Reviewed by ${receipt.reviewedBy}`
-								: "Reviewed"}
+								? `${t.receipts.reviewedBy} ${receipt.reviewedBy}`
+								: t.receipts.reviewed}
 							{" · "}
 							{receipt.reviewedAt
 								? new Date(receipt.reviewedAt).toLocaleDateString("en-GB")
@@ -348,7 +363,7 @@ function ReceiptRow({
 								aria-expanded={editing}
 							>
 								<Pencil className="mr-1 h-3 w-3" />{" "}
-								{editing ? "Close editor" : "Edit"}
+								{editing ? t.receipts.closeEditor : "Edit"}
 							</button>
 						</div>
 					)}
@@ -386,6 +401,7 @@ export function AgencyReceiptsPanel({
 	/** Deep-linked receipt to scroll to — see the effect below. */
 	focusReceiptId?: string;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const canReview = useAgencyCan()("raisePv");
 	const {
@@ -520,19 +536,19 @@ export function AgencyReceiptsPanel({
 		} catch {
 			// The server's own words are rendered under the header; this is only the
 			// nudge that tells the reviewer to go read them.
-			toast("Could not record that decision", "warn");
+			toast(t.receipts.couldNotRecordDecision, "warn");
 		}
 	};
 
 	return (
 		<OutletSection
-			title="Receipts"
+			title={t.receipts.receipts}
 			icon={Receipt}
-			hint={`${weekReceipts.length} this week · ${formatRM(weekTotal)}`}
+			hint={`${weekReceipts.length} ${t.payroll.thisWeekSuffix} · ${formatRM(weekTotal)}`}
 		>
 			{isLoading && (
 				<IzCard flat>
-					<p className="iz-tiny iz-muted">Loading receipts…</p>
+					<p className="iz-tiny iz-muted">{t.receipts.loadingReceipts}</p>
 				</IzCard>
 			)}
 
@@ -551,7 +567,7 @@ export function AgencyReceiptsPanel({
 							<p className="font-sora text-lg font-extrabold">
 								{statusCounts.all}
 							</p>
-							<p className="iz-tiny iz-muted2">Receipts</p>
+							<p className="iz-tiny iz-muted2">{t.receipts.receipts}</p>
 						</IzCard>
 						<IzCard
 							flat
@@ -562,13 +578,13 @@ export function AgencyReceiptsPanel({
 							>
 								{statusCounts.pending}
 							</p>
-							<p className="iz-tiny iz-muted2">Waiting on you</p>
+							<p className="iz-tiny iz-muted2">{t.receipts.waitingOnYou}</p>
 						</IzCard>
 						<IzCard flat className="!mb-0">
 							<p className="iz-ledger font-sora text-lg font-extrabold">
 								{formatRM(weekTotal)}
 							</p>
-							<p className="iz-tiny iz-muted2">Commission logged</p>
+							<p className="iz-tiny iz-muted2">{t.receipts.commissionLogged}</p>
 						</IzCard>
 					</div>
 
@@ -599,10 +615,10 @@ export function AgencyReceiptsPanel({
 					<div className="mt-2 flex flex-wrap gap-1.5">
 						{(
 							[
-								["all", "All"],
-								["pending", "Waiting on you"],
-								["approved", "Approved"],
-								["verified", "Verified"],
+								["all", t.common.all],
+								["pending", t.receipts.waitingOnYou],
+								["approved", t.receipts.approved],
+								["verified", t.receipts.verified],
 							] as [StatusFilter, string][]
 						).map(([value, label]) => (
 							<button
@@ -625,10 +641,10 @@ export function AgencyReceiptsPanel({
 							<input
 								type="search"
 								className="w-full rounded-lg border border-[var(--iz-line)] bg-[var(--iz-bg2)] py-1.5 pr-2 pl-7 text-xs"
-								placeholder="Receipt no, order no, PR, outlet or item"
+								placeholder={t.receipts.searchPlaceholder}
 								value={search}
 								onChange={(e) => setSearch(e.target.value)}
-								aria-label="Search receipts"
+								aria-label={t.receipts.searchReceipts}
 							/>
 						</div>
 						<button
@@ -637,7 +653,7 @@ export function AgencyReceiptsPanel({
 							onClick={() => setShowFilters((v) => !v)}
 							aria-expanded={showFilters}
 						>
-							<SlidersHorizontal className="mr-1 h-3 w-3" /> Filters
+							<SlidersHorizontal className="mr-1 h-3 w-3" /> {t.payroll.filters}
 						</button>
 					</div>
 
@@ -649,7 +665,7 @@ export function AgencyReceiptsPanel({
 								value={prId}
 								onChange={(e) => setPrId(e.target.value)}
 							>
-								<option value="">All PRs</option>
+								<option value="">{t.receipts.allPrs}</option>
 								{prOptions.map(([id, name]) => (
 									<option key={id} value={id}>
 										{name}
@@ -662,7 +678,7 @@ export function AgencyReceiptsPanel({
 								value={outlet}
 								onChange={(e) => setOutlet(e.target.value)}
 							>
-								<option value="">All outlets</option>
+								<option value="">{t.receipts.allOutlets}</option>
 								{outletOptions.map((o) => (
 									<option key={o} value={o}>
 										{o}
@@ -677,10 +693,10 @@ export function AgencyReceiptsPanel({
 									setSource(e.target.value as "" | AgencyReceipt["source"])
 								}
 							>
-								<option value="">All entry methods</option>
-								<option value="scan">Scanned</option>
-								<option value="manual">Self-logged</option>
-								<option value="checkin">Check-in</option>
+								<option value="">{t.receipts.allEntryMethods}</option>
+								<option value="scan">{t.receipts.scanned}</option>
+								<option value="manual">{t.receipts.selfLogged}</option>
+								<option value="checkin">{t.receipts.checkIn}</option>
 							</IzSelect>
 							{filtersActive && (
 								<button
@@ -699,10 +715,10 @@ export function AgencyReceiptsPanel({
 							<IzCard className="text-center">
 								<p className="iz-sm iz-muted">
 									{receipts.length === 0
-										? "No receipts logged yet. PRs log these from their Payment screen as they work a shift."
+										? t.payroll.noReceiptsLoggedYet
 										: filtersActive || status !== "all"
-											? "No receipts match these filters."
-											: "No receipts logged in this payroll week."}
+											? t.receipts.noReceiptsMatch
+											: t.receipts.noReceiptsThisWeek}
 								</p>
 							</IzCard>
 						) : (

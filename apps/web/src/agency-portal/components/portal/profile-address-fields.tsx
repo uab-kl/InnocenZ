@@ -1,10 +1,10 @@
 import {
-	type OrgAddress,
-} from "@agency-portal/lib/org-address";
-import {
-	ProfileSettingsField,
 	type ProfileFieldMode,
+	ProfileSettingsField,
 } from "@agency-portal/components/portal/profile-settings-ui";
+import type { OrgAddress } from "@agency-portal/lib/org-address";
+import { Check, ChevronsUpDown, MapPin, Search } from "lucide-react";
+import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import {
 	Popover,
@@ -16,9 +16,9 @@ import {
 	listCities,
 	listStates,
 } from "@/lib/geo/country-state-city";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import { cn } from "@/lib/utils";
-import { Check, ChevronsUpDown, MapPin, Search } from "lucide-react";
-import { useState } from "react";
 
 /**
  * Address block matching signup: line1/line2/postcode text, Malaysia-locked
@@ -33,6 +33,7 @@ export function ProfileAddressFields({
 	onChange: (patch: Partial<OrgAddress>) => void;
 	mode: ProfileFieldMode;
 }) {
+	const { t } = usePortalLocale();
 	const states = listStates(DEFAULT_COUNTRY_CODE);
 	const cities = listCities(DEFAULT_COUNTRY_CODE, value.stateCode);
 	const stateLabel =
@@ -44,25 +45,25 @@ export function ProfileAddressFields({
 		<>
 			<ProfileSettingsField
 				icon={MapPin}
-				label="Address line 1"
+				label={t.profile.addressLine1}
 				value={value.addressLine1}
 				onChange={(v) => onChange({ addressLine1: v })}
 				mode={mode}
-				placeholder="Street address, building, unit"
+				placeholder={t.profile.addressLine1Hint}
 			/>
 			<ProfileSettingsField
 				icon={MapPin}
-				label="Address line 2"
+				label={t.profile.addressLine2}
 				value={value.addressLine2}
 				onChange={(v) => onChange({ addressLine2: v })}
 				mode={mode}
-				placeholder="Floor, suite, landmark"
+				placeholder={t.profile.addressLine2Hint}
 			/>
 			<div className="grid gap-0 sm:grid-cols-2">
 				{mode === "edit" && cities.length > 0 ? (
 					<ProfileGeoSelect
-						label="City"
-						placeholder="Select city"
+						label={t.profile.city}
+						placeholder={t.profile.selectCity}
 						value={value.city}
 						disabled={!value.stateCode}
 						options={cities.map((c) => ({
@@ -74,20 +75,20 @@ export function ProfileAddressFields({
 				) : (
 					<ProfileSettingsField
 						icon={MapPin}
-						label="City"
+						label={t.profile.city}
 						value={value.city}
 						onChange={(v) => onChange({ city: v })}
 						mode={mode}
 						placeholder={
 							mode === "edit" && !value.stateCode
-								? "Select state first"
-								: "Select city"
+								? t.profile.selectStateFirst
+								: t.profile.selectCity
 						}
 					/>
 				)}
 				<ProfileSettingsField
 					icon={MapPin}
-					label="Postcode"
+					label={t.profile.postcode}
 					value={value.postcode}
 					onChange={(v) => onChange({ postcode: v })}
 					mode={mode}
@@ -100,25 +101,23 @@ export function ProfileAddressFields({
 				>
 					<div className="iz-profile-field__label">
 						<MapPin className="h-3.5 w-3.5 shrink-0" aria-hidden />
-						<span>Country</span>
+						<span>{t.profile.country}</span>
 					</div>
 					{mode === "edit" ? (
 						<>
-							<p className="iz-profile-field__value">Malaysia</p>
-							<p className="iz-profile-field__hint">
-								We currently support Malaysia only.
-							</p>
+							<p className="iz-profile-field__value">{t.profile.malaysia}</p>
+							<p className="iz-profile-field__hint">{t.profile.malaysiaOnly}</p>
 						</>
 					) : (
 						<p className="iz-profile-field__value">
-							{value.country.trim() || "Malaysia"}
+							{value.country.trim() || t.profile.malaysia}
 						</p>
 					)}
 				</div>
 				{mode === "edit" ? (
 					<ProfileGeoSelect
-						label="State"
-						placeholder="Select state"
+						label={t.profile.state}
+						placeholder={t.profile.selectState}
 						value={value.stateCode}
 						options={states.map((s) => ({
 							value: s.isoCode,
@@ -127,8 +126,7 @@ export function ProfileAddressFields({
 						onChange={(stateCode) =>
 							onChange({
 								stateCode,
-								state:
-									states.find((s) => s.isoCode === stateCode)?.name ?? "",
+								state: states.find((s) => s.isoCode === stateCode)?.name ?? "",
 								city: "",
 							})
 						}
@@ -136,7 +134,7 @@ export function ProfileAddressFields({
 				) : (
 					<ProfileSettingsField
 						icon={MapPin}
-						label="State"
+						label={t.profile.state}
 						value={stateLabel}
 						mode={mode}
 					/>
@@ -161,6 +159,7 @@ function ProfileGeoSelect({
 	disabled?: boolean;
 	onChange: (value: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	const [query, setQuery] = useState("");
 	const selectedLabel =
@@ -205,9 +204,7 @@ function ProfileGeoSelect({
 							disabled && "opacity-50",
 						)}
 					>
-						<span className="truncate">
-							{selectedLabel || placeholder}
-						</span>
+						<span className="truncate">{selectedLabel || placeholder}</span>
 						<ChevronsUpDown
 							className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50"
 							aria-hidden
@@ -228,9 +225,9 @@ function ProfileGeoSelect({
 							<Input
 								value={query}
 								onChange={(event) => setQuery(event.target.value)}
-								placeholder="Search…"
+								placeholder={t.profile.searchEllipsis}
 								className="h-9 border-[var(--iz-line)] bg-[var(--iz-bg2)] pl-7"
-								aria-label="Search"
+								aria-label={t.profile.search}
 							/>
 						</div>
 					</div>
@@ -260,9 +257,7 @@ function ProfileGeoSelect({
 									<Check
 										className={cn(
 											"h-4 w-4 shrink-0",
-											value === option.value
-												? "opacity-100"
-												: "opacity-0",
+											value === option.value ? "opacity-100" : "opacity-0",
 										)}
 									/>
 									<span className="truncate">{option.label}</span>
@@ -271,7 +266,7 @@ function ProfileGeoSelect({
 						))}
 						{filtered.length === 0 ? (
 							<li className="iz-muted px-2 py-6 text-center text-sm">
-								No results found.
+								{t.profile.noResultsFound}
 							</li>
 						) : null}
 					</ul>

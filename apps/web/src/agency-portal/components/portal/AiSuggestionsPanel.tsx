@@ -6,6 +6,7 @@ import { useAutoAssignPlan } from "@agency-portal/hooks/use-auto-assign-plan";
 import { Link } from "@tanstack/react-router";
 import { ChevronRight, Layers } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /**
  * Home-screen action card: proposes which PRs to put on today's unfilled shifts
@@ -23,6 +24,14 @@ export function AiSuggestionsPanel() {
 	const { backed, plan, isLoading, isError, confirm } =
 		useAutoAssignPlan("today");
 	const [open, setOpen] = useState(false);
+	const { t, locale } = usePortalLocale();
+	/**
+	 * `plural` appends an "s", which is an English rule. Chinese measure words
+	 * ("名 PR", "个空缺岗位") never take a plural form, so the helper is applied
+	 * only when English is active — otherwise the panel would read "5 个空缺岗位s".
+	 */
+	const pl = (n: number, word: string) =>
+		locale === "en" ? plural(n, word) : word;
 
 	// Demo session: no backend roster to plan against, so just point at planning.
 	if (!backed) {
@@ -37,15 +46,15 @@ export function AiSuggestionsPanel() {
 						className="h-4 w-4 text-[var(--iz-violet)]"
 						strokeWidth={1.8}
 					/>
-					<span>AI suggestion</span>
+					<span>{t.agencyHome.aiSuggestion}</span>
 				</div>
 				<div className="iz-portal-ai-btn__body">
 					<div className="min-w-0 flex-1">
 						<div className="font-sora text-sm font-semibold leading-snug">
-							Open roster planning
+							{t.agencyHome.openRosterPlanning}
 						</div>
 						<p className="iz-tiny iz-muted mt-0.5">
-							Sign in to an agency to auto-assign
+							{t.agencyHome.signInToAutoAssign}
 						</p>
 					</div>
 					<ChevronRight className="h-4 w-4 shrink-0 text-[var(--iz-muted)]" />
@@ -57,27 +66,27 @@ export function AiSuggestionsPanel() {
 	const { openSlotCount } = plan;
 	const canAssign = plan.pairs.length > 0;
 
-	let title = "Assign available PR";
-	let desc = `${plan.pairs.length} ${plural(plan.pairs.length, "PR")} ready for ${openSlotCount} open ${plural(openSlotCount, "slot")} today`;
+	let title = t.agencyHome.assignAvailablePr;
+	let desc = `${plan.pairs.length} ${pl(plan.pairs.length, t.agencyHome.prUnit)} ${t.agencyHome.readyFor} ${openSlotCount} ${pl(openSlotCount, t.agencyHome.openSlotUnit)} ${t.agencyHome.todayWord}`;
 	if (isLoading) {
-		title = "Checking today's roster";
-		desc = "Loading shifts and available PRs";
+		title = t.agencyHome.checkingRoster;
+		desc = t.agencyHome.loadingShiftsAndPrs;
 	} else if (isError) {
-		title = "Roster unavailable";
-		desc = "Could not load shifts — try again shortly";
+		title = t.agencyHome.rosterUnavailable;
+		desc = t.agencyHome.couldNotLoadShifts;
 	} else if (openSlotCount === 0) {
-		title = "No open shifts today";
-		desc = "Every posted shift is fully staffed";
+		title = t.agencyHome.noOpenShiftsToday;
+		desc = t.agencyHome.everyShiftStaffed;
 	} else if (!canAssign) {
-		title = `${openSlotCount} open ${plural(openSlotCount, "slot")} today`;
+		title = `${openSlotCount} ${pl(openSlotCount, t.agencyHome.openSlotUnit)} ${t.agencyHome.todayWord}`;
 		// "No free PRs" was said even when ten PRs were idle and merely the wrong
 		// tier for what the shift asked for — which sends the agency hunting for
 		// staff it already has. The two situations have opposite remedies, so they
 		// get different sentences.
 		desc =
 			plan.tierBlockedCount > 0
-				? "Free PRs today are not the tiers these shifts asked for"
-				: "No free PRs — everyone is booked or inactive";
+				? t.agencyHome.freePrsWrongTier
+				: t.agencyHome.everyoneBookedOrInactive;
 	}
 
 	return (
@@ -93,7 +102,7 @@ export function AiSuggestionsPanel() {
 						className="h-4 w-4 text-[var(--iz-violet)]"
 						strokeWidth={1.8}
 					/>
-					<span>AI suggestion</span>
+					<span>{t.agencyHome.aiSuggestion}</span>
 				</div>
 				<div className="iz-portal-ai-btn__body">
 					<div className="min-w-0 flex-1">

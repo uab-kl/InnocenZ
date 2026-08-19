@@ -32,8 +32,15 @@ import { logger } from '@/util/logger';
  * for free. A delete would take the partnership's history with it — the thing
  * someone asks about months later when a payment is disputed — and would leave
  * a returning venue indistinguishable from one the agency has never heard of.
- * Every transition is written to `agency_outlet_event` in the SAME transaction
- * as the change, so a status can never exist without the event that made it.
+ * Every transition made THROUGH THIS CLASS is written to `agency_outlet_event`
+ * in the same transaction as the change, so a status cannot exist without the
+ * event that made it.
+ *
+ * ⚠️ That holds from 0127 onward and NOT retroactively. Links that changed hands
+ * before the log existed have no events for those transitions — one live link
+ * carries two real human decisions with nothing recorded — so an empty or short
+ * timeline is not evidence that nothing happened. Read a gap as "before the
+ * log", never as "no transition".
  */
 export class AgencyOutletRepository {
   /**
@@ -250,10 +257,20 @@ export class AgencyOutletRepository {
           // information that settles that decision (we worked together for
           // eight months; they left, or we did) is already in the event log,
           // and the only reason it was a hard decision is that nobody read it.
+          // ⚠️ EXCLUDES THE BACKFILL. Migration 0127 wrote one event per existing
+          // link stamped at that link's `updated_at`, and for links carried over
+          // by 0123 that instant is 0123's own INSERT — not the day anyone
+          // agreed to anything. Counting it made "Partner since" state a
+          // migration's clock as a business fact on 3 of 6 live links.
+          //
+          // A link whose only approval is the backfill now yields NULL, and the
+          // UI renders nothing: not knowing when a partnership began is the
+          // truth, and a blank invites the question that a wrong date suppresses.
           firstApprovedAt: sql<Date | null>`(
             SELECT ev."created_at" FROM "main"."agency_outlet_event" ev
             WHERE ev."agency_outlet_id" = ${AgencyOutletTable.id}
               AND ev."to_status" = 'approved'
+              AND ev."created_by" <> 'migration_0127'
             ORDER BY ev."created_at" ASC LIMIT 1
           )`,
           endedAt: sql<Date | null>`(
@@ -467,6 +484,20 @@ export class AgencyOutletRepository {
           );
         if (!before) return null;
 
+        // ⚠️ AN ENDED PARTNERSHIP CANNOT BE RE-OPENED FROM THIS SIDE.
+        //
+        // This endpoint SETTLES a request, and an ended link is not a request —
+        // it is a closed arrangement. Without this guard an agency could PATCH
+        // an `ended` link straight back to `approved`, restoring a partnership
+        // the VENUE closed, with no consent from the venue and nothing on the
+        // venue's screen to announce it.
+        //
+        // It mirrors the rule the outlet side already follows: coming back
+        // always needs the other party's yes. The venue re-requests from its own
+        // Settings, which puts the link to `pending` and hands the decision back
+        // to this endpoint — that is the only route in.
+        if (before.approveStatus === 'ended') return null;
+
         const [row] = await tx
           .update(AgencyOutletTable)
           .set({
@@ -481,14 +512,22 @@ export class AgencyOutletRepository {
           .where(eq(AgencyOutletTable.id, before.id))
           .returning();
 
-        await this.recordEvent(tx, {
-          agencyOutletId: before.id,
-          fromStatus: before.approveStatus,
-          toStatus: approveStatus,
-          actorSide: 'agency',
-          actor,
-          reason: approveStatus === 'rejected' ? rejectReason : null,
-        });
+        // Only a real TRANSITION is logged. A repeated PATCH — a client retry, a
+        // double submit, a script re-run — would otherwise append
+        // `approved → approved`, a transition that never happened, into a log
+        // whose whole value is that it did. `endLink` has this guard; this did
+        // not. The UPDATE above still runs, so re-sending a rejection with new
+        // wording refreshes the reason without inventing a decision.
+        if (before.approveStatus !== approveStatus) {
+          await this.recordEvent(tx, {
+            agencyOutletId: before.id,
+            fromStatus: before.approveStatus,
+            toStatus: approveStatus,
+            actorSide: 'agency',
+            actor,
+            reason: approveStatus === 'rejected' ? rejectReason : null,
+          });
+        }
         return row ?? null;
       });
     } catch (error) {

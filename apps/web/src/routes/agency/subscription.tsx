@@ -51,6 +51,12 @@ import {
 	Users,
 } from "lucide-react";
 import { useEffect, useMemo, useRef } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import {
+	planCapacityLabel,
+	planDescription,
+} from "@/lib/portal-i18n/plan-label";
 
 const CARD_LAST4 = "4242";
 
@@ -72,6 +78,7 @@ export const Route = createFileRoute("/agency/subscription")({
 });
 
 function AgencySubscription() {
+	const { t } = usePortalLocale();
 	const agencyOwner = useStore((s) => s.agencyOwner);
 	const agencySubRole = useStore((s) => s.agencySubRole);
 	const activeAgencyId = useStore((s) => s.activeAgencyId);
@@ -106,8 +113,10 @@ function AgencySubscription() {
 		[prPaymentVouchers, agencyPRs, payrollWeekStartIso],
 	);
 	const billing = useMemo(
-		() => agencySubscriptionBillingForWeeklyPv(issuedWeeklyPv),
-		[issuedWeeklyPv],
+		() => agencySubscriptionBillingForWeeklyPv(issuedWeeklyPv, t),
+		// `t` is load-bearing: without it the billing line keeps the language it
+		// was first computed in until the PV count happens to change.
+		[issuedWeeklyPv, t],
 	);
 
 	// Real login → rate card lists real backend plans; demo plans otherwise. The
@@ -201,6 +210,16 @@ function AgencySubscription() {
 	 * already open, and at most once per mount.
 	 */
 	const autoTierFiled = useRef(false);
+	/*
+	 * `t` is read here (for the toast) but deliberately NOT a dependency, so the
+	 * ignore below is the point rather than a silencer. This effect WRITES —
+	 * it files a Custom-price request with the admin. Re-running it because the
+	 * reader switched language would be a real fault, and the guard that makes
+	 * it at-most-once (`autoTierFiled`) is a ref, so it would not stop a re-run
+	 * on a fresh mount. The toast wording resolving one language late is the
+	 * cheaper of the two.
+	 */
+	// biome-ignore lint/correctness/useExhaustiveDependencies: see above — `t` must not re-trigger a write
 	useEffect(() => {
 		if (!sub.backed || !canEdit) return;
 		if (sub.weeklyPvCount === null || !sub.planCatalogReady) return;
@@ -216,8 +235,8 @@ function AgencySubscription() {
 			sub.notifyAdminForCustom(pv).then((r) => {
 				toast(
 					r.ok
-						? `${pv} PV this week — InnocenZ admin notified to negotiate your Custom price`
-						: (r.reason ?? "Could not notify InnocenZ admin — try again"),
+						? fill(t.subscription.pvThisWeekNegotiate, { n: pv })
+						: (r.reason ?? t.subscription.couldNotNotifyAdmin),
 					r.ok ? "success" : "warn",
 				);
 			});
@@ -245,7 +264,10 @@ function AgencySubscription() {
 			sub.applyAutoTier(banded.label, pv).then((r) => {
 				if (r.ok) {
 					toast(
-						`${pv} PV this week — your tier is now ${banded.label}`,
+						fill(t.subscription.pvThisWeekTierNow, {
+							n: pv,
+							plan: banded.label,
+						}),
 						"success",
 					);
 				}
@@ -257,12 +279,10 @@ function AgencySubscription() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>Access restricted</IzPageTitle>
+					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
-					<p className="iz-sm iz-muted">
-						You do not have access to subscription billing.
-					</p>
+					<p className="iz-sm iz-muted">{t.subscription.noAccess}</p>
 				</IzCard>
 			</div>
 		);
@@ -297,7 +317,7 @@ function AgencySubscription() {
 		? sub.currentAmountRm
 			? formatRM(sub.currentAmountRm)
 			: sub.onCustom
-				? "Awaiting price"
+				? t.subscription.awaitingPrice
 				: billing.priceLabel
 		: billing.priceLabel;
 
@@ -316,7 +336,7 @@ function AgencySubscription() {
 	 */
 	const billedCapacityLabel = sub.backed
 		? sub.onCustom
-			? "Priced per agency"
+			? t.subscription.pricedPerAgency
 			: (sub.plans.find((plan) => plan.label === sub.currentPlanName)
 					?.capacityLabel ?? billing.plan.capacityLabel)
 		: billing.plan.capacityLabel;
@@ -343,8 +363,8 @@ function AgencySubscription() {
 		sub.notifyAdminForCustom(pv).then((result) => {
 			toast(
 				result.ok
-					? "InnocenZ admin notified — they will quote your Custom price"
-					: (result.reason ?? "Could not notify InnocenZ admin — try again"),
+					? t.subscription.adminNotifiedWillQuote
+					: (result.reason ?? t.subscription.couldNotNotifyAdmin),
 				result.ok ? "success" : "warn",
 			);
 		});
@@ -356,8 +376,8 @@ function AgencySubscription() {
 		sub.requestLeaveCustom(banded.label, pv).then((result) => {
 			toast(
 				result.ok
-					? `Reset requested — InnocenZ admin will move you to ${banded.label} or cancel it. You stay on Custom until then.`
-					: (result.reason ?? "Could not send the request — try again"),
+					? fill(t.subscription.resetRequestedToast, { plan: banded.label })
+					: (result.reason ?? t.subscription.couldNotSendRequest),
 				result.ok ? "success" : "warn",
 			);
 		});
@@ -379,10 +399,14 @@ function AgencySubscription() {
 	const handleSettle = async (id: string, outletName: string) => {
 		try {
 			const res = await collections.settle(id);
-			toast(res.message || `${outletName} marked settled`, "success");
+			toast(
+				res.message ||
+					fill(t.subscription.markedSettled, { outlet: outletName }),
+				"success",
+			);
 		} catch {
 			toast(
-				`Could not update ${outletName}'s invoice — status unchanged`,
+				fill(t.subscription.couldNotUpdateInvoice, { outlet: outletName }),
 				"warn",
 			);
 		}
@@ -391,29 +415,36 @@ function AgencySubscription() {
 	return (
 		<div className="iz-screen">
 			<header>
-				<IzPageTitle>Subscription</IzPageTitle>
+				<IzPageTitle>{t.agencyMisc.subscription}</IzPageTitle>
 				<p className="iz-tiny iz-muted mt-0.5">{agencyOwner.orgName}</p>
 				{isFinanceReadOnly && (
 					<p className="iz-tiny iz-muted mt-2 rounded-lg border border-dashed border-[var(--iz-line)] px-2.5 py-1.5">
-						Finance view — read-only · contact owner to update card
+						{t.subscription.financeReadOnly}
 					</p>
 				)}
 			</header>
 
-			<IzSectionLabel>Usage-based · weekly</IzSectionLabel>
+			<IzSectionLabel>{t.agencyMisc.usageBasedWeekly}</IzSectionLabel>
 			<IzCard className="border-[rgba(57,217,138,.35)] bg-[rgba(57,217,138,.06)]">
 				<div className="flex flex-wrap items-start justify-between gap-3">
 					<div className="min-w-0">
 						<p className="iz-tiny iz-muted2">
-							Last payroll week · {payrollWeek.cycle}
+							{fill(t.subscription.lastPayrollWeek, {
+								cycle: payrollWeek.cycle,
+							})}
 						</p>
 						<p className="mt-1 font-sora text-base font-bold">
-							{issuedWeeklyPv} PV{issuedWeeklyPv === 1 ? "" : "s"} issued
+							{fill(
+								issuedWeeklyPv === 1
+									? t.subscription.pvIssuedOne
+									: t.subscription.pvIssuedMany,
+								{ n: issuedWeeklyPv },
+							)}
 						</p>
 						<p className="iz-tiny iz-muted mt-1">
 							{sub.backed && sub.onCustom
-								? "Custom is priced by InnocenZ admin — PV volume does not change it"
-								: "Tier auto-selected from weekly PV volume — no plan changes needed"}
+								? t.subscription.customPricedByAdmin
+								: t.subscription.tierAutoSelected}
 						</p>
 					</div>
 					<div className="text-right shrink-0">
@@ -425,12 +456,17 @@ function AgencySubscription() {
 					</div>
 				</div>
 				<p className="iz-tiny iz-muted2 mt-3 border-t border-[var(--iz-line)] pt-2">
-					Next weekly charge {renewalDate}
+					{fill(t.subscription.nextWeeklyCharge, { date: renewalDate })}
 					{sub.backed && sub.onCustom
-						? " · at the price agreed with InnocenZ admin"
+						? t.subscription.atAgreedPrice
 						: billing.plan.renegotiate
 							? " · contact InnocenZ admin for custom pricing"
-							: ` · ${billedPriceLabel} based on ${issuedWeeklyPv} PV${issuedWeeklyPv === 1 ? "" : "s"}`}
+							: fill(
+									issuedWeeklyPv === 1
+										? t.subscription.basedOnPvOne
+										: t.subscription.basedOnPvMany,
+									{ price: billedPriceLabel, n: issuedWeeklyPv },
+								)}
 				</p>
 			</IzCard>
 
@@ -443,32 +479,33 @@ function AgencySubscription() {
 			 */}
 			{sub.backed && sub.onCustom && (
 				<>
-					<IzSectionLabel>Negotiated tier</IzSectionLabel>
+					<IzSectionLabel>{t.agencyMisc.negotiatedTier}</IzSectionLabel>
 					<IzCard className="border-[rgba(139,124,246,.35)] bg-[rgba(139,124,246,.06)]">
 						<div className="flex flex-wrap items-start justify-between gap-3">
 							<div className="min-w-0">
 								<div className="flex flex-wrap items-center gap-2">
-									<p className="font-sora text-base font-bold">Custom</p>
-									<IzPill variant="violet">Negotiated</IzPill>
+									<p className="font-sora text-base font-bold">
+										{t.agencyMisc.custom}
+									</p>
+									<IzPill variant="violet">{t.agencyMisc.negotiated}</IzPill>
 									{/* Amber, and alongside — an agency on Custom with an open
 									    request is in both states at once. */}
 									{waitingOn && (
 										<IzPill variant="amber">
 											{sub.customRequestKind === "exit"
-												? "Reset · pending admin"
-												: "Price · pending admin"}
+												? t.subscription.resetPendingAdmin
+												: t.subscription.pricePendingAdmin}
 										</IzPill>
 									)}
 								</div>
 								<p className="iz-tiny iz-muted mt-1">
-									Priced for your agency by InnocenZ admin — it replaces the
-									rate card, so PV volume does not change what you pay.
+									{t.subscription.pricedForYourAgency}
 								</p>
 							</div>
 							<p className="shrink-0 text-lg font-bold text-[var(--iz-gold-l)]">
 								{sub.customAmountRm
 									? formatRM(sub.customAmountRm)
-									: "Awaiting price"}
+									: t.subscription.awaitingPrice}
 							</p>
 						</div>
 						{canEdit && (
@@ -476,8 +513,8 @@ function AgencySubscription() {
 								{waitingOn && (
 									<p className="iz-tiny iz-muted mt-3 border-t border-[var(--iz-line)] pt-2">
 										{sub.customRequestKind === "exit"
-											? "InnocenZ admin has your reset request — you stay on Custom at this price until they resolve or cancel it."
-											: "InnocenZ admin is negotiating your Custom price — nothing changes until they answer."}
+											? t.subscription.resetPending
+											: t.subscription.pricePending}
 									</p>
 								)}
 								{/*
@@ -505,13 +542,12 @@ function AgencySubscription() {
 											<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
 											<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
 												{sub.customRequestKind === "requote"
-													? "Renegotiating…"
-													: "Renegotiate price"}
+													? t.subscription.renegotiating
+													: t.subscription.renegotiatePrice}
 											</span>
 										</button>
 										<p className="iz-tiny iz-muted2 mt-1.5">
-											Ask InnocenZ admin for a different figure. Your current
-											price stands until they answer.
+											{t.subscription.askForDifferentFigure}
 										</p>
 									</div>
 									<div>
@@ -526,14 +562,12 @@ function AgencySubscription() {
 											<RotateCcw className="h-3.5 w-3.5 shrink-0 text-[var(--iz-muted)]" />
 											<span className="iz-tiny font-semibold">
 												{sub.customRequestKind === "exit"
-													? "Reset requested…"
-													: "Reset to normal subscription"}
+													? t.subscription.resetRequesting
+													: t.subscription.resetToNormal}
 											</span>
 										</button>
 										<p className="iz-tiny iz-muted2 mt-1.5">
-											Asks to leave Custom for the tier your weekly PVs fall
-											into. InnocenZ admin resolves or cancels it in Plan
-											Request — you stay on Custom until then.
+											{t.subscription.asksToLeaveCustom}
 										</p>
 									</div>
 								</div>
@@ -543,11 +577,11 @@ function AgencySubscription() {
 				</>
 			)}
 
-			<IzSectionLabel>Rate card</IzSectionLabel>
+			<IzSectionLabel>{t.agencyMisc.rateCard}</IzSectionLabel>
 			<p className="iz-tiny iz-muted2 -mt-1 mb-2">
 				{sub.backed
-					? "Your tier is chosen by the PVs you issue each payroll week — there is nothing to pick. Past 150 PV the rate card runs out and InnocenZ admin is notified to negotiate a Custom price."
-					: "Reference tiers — your charge each week follows PVs issued in that payroll week"}
+					? t.subscription.tierChosenByPv
+					: t.subscription.referenceTiers}
 			</p>
 			<div className="grid grid-cols-2 gap-2">
 				{ratePlans.map((plan) => {
@@ -560,7 +594,7 @@ function AgencySubscription() {
 						plan.priceLabel ??
 						(plan.weeklyRm != null
 							? formatRM(plan.weeklyRm)
-							: "Renegotiate Price");
+							: t.subscription.priceRenegotiate);
 					return (
 						<IzCard
 							key={plan.id}
@@ -574,13 +608,15 @@ function AgencySubscription() {
 								<div className="min-w-0">
 									<div className="flex flex-wrap items-center gap-2">
 										<p className="font-sora text-sm font-bold">{plan.label}</p>
-										{isBilledTier && <IzPill variant="green">Your tier</IzPill>}
+										{isBilledTier && (
+											<IzPill variant="green">{t.agencyMisc.yourTier}</IzPill>
+										)}
 									</div>
 									<p className="mt-1 text-lg font-bold text-[var(--iz-gold-l)]">
 										{priceDisplay}
 										{!plan.priceLabel && plan.weeklyRm != null && (
 											<span className="iz-tiny iz-muted font-normal">
-												/Week
+												{t.subscription.perWeek}
 											</span>
 										)}
 									</p>
@@ -589,12 +625,19 @@ function AgencySubscription() {
 									<div className="flex items-center gap-1.5 text-[var(--iz-txt)] sm:justify-end">
 										<Users className="h-4 w-4 text-[var(--iz-gold)]" />
 										<span className="font-sora text-sm font-bold">
-											{plan.capacityLabel}
+											{planCapacityLabel(
+												"agency",
+												plan.id,
+												plan.capacityLabel,
+												t,
+											)}
 										</span>
 									</div>
 								</div>
 							</div>
-							<p className="iz-tiny iz-muted mt-2">{plan.description}</p>
+							<p className="iz-tiny iz-muted mt-2">
+								{planDescription("agency", plan.id, plan.description, t)}
+							</p>
 							{/*
 							 * The ONE actionable tile on an otherwise read-only rate card.
 							 * Custom is the only band with no list price, so it is the only
@@ -603,6 +646,10 @@ function AgencySubscription() {
 							 * week to prove it. Every other tier is chosen by PV count alone,
 							 * which is why no other tile has a button.
 							 */}
+							{/* Compared against the LITERAL "Custom", not the translated word:
+							    `plan.label` is the plan's name as the backend sends it, so
+							    matching it against the dictionary would silently stop matching
+							    the moment the portal switched to Chinese. */}
 							{sub.backed &&
 								canEdit &&
 								plan.label === "Custom" &&
@@ -622,11 +669,10 @@ function AgencySubscription() {
 												</span>
 												<div className="min-w-0">
 													<p className="iz-tiny font-semibold text-[var(--iz-amber,#f4b740)]">
-														Requested · with InnocenZ admin
+														{t.subscription.requestedWithAdmin}
 													</p>
 													<p className="iz-tiny iz-muted2">
-														They are preparing your price — your current tier is
-														unchanged until then.
+														{t.subscription.preparingYourPrice}
 													</p>
 												</div>
 											</div>
@@ -635,7 +681,7 @@ function AgencySubscription() {
 											 * Styled to the tile it sits on rather than the neutral
 											 * soft button used elsewhere: Custom carries the violet
 											 * accent everywhere on this screen, and a grey button
-											 * under a violet "Renegotiate Price" read as disabled.
+											 * under a violet t.subscription.priceRenegotiate read as disabled.
 											 */
 											<button
 												type="button"
@@ -646,8 +692,8 @@ function AgencySubscription() {
 												<Sparkles className="h-3.5 w-3.5 shrink-0 text-[var(--iz-violet-l)]" />
 												<span className="iz-tiny font-semibold text-[var(--iz-violet-l)]">
 													{sub.isRequesting
-														? "Sending…"
-														: "Ask admin for a price"}
+														? t.subscription.sending
+														: t.subscription.askAdminForPrice}
 												</span>
 											</button>
 										)}
@@ -659,28 +705,28 @@ function AgencySubscription() {
 			</div>
 
 			<IzSectionLabel>
-				{sub.backed ? "Current subscription" : "Billing history"}
+				{sub.backed
+					? t.subscription.currentSubscription
+					: t.subscription.billingHistoryTitle}
 			</IzSectionLabel>
 			{sub.backed && (
 				<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-					What your agency is subscribed to with InnocenZ today. It records what
-					you subscribed to and when, so it does not say whether a given week
-					was paid.
+					{t.subscription.whatYouSubscribedTo}
 				</p>
 			)}
 			<div className="space-y-2">
 				{sub.backed && sub.isHistoryLoading ? (
 					<IzCard flat>
 						<p className="iz-tiny iz-muted text-center py-4">
-							Loading your subscription…
+							{t.subscription.loadingSubscription}
 						</p>
 					</IzCard>
 				) : billingHistory.length === 0 ? (
 					<IzCard flat>
 						<p className="iz-tiny iz-muted text-center py-4">
 							{sub.backed
-								? "No active subscription for this agency."
-								: "No subscription invoices yet."}
+								? t.subscription.noActiveSubscription
+								: t.subscription.noSubscriptionInvoices}
 						</p>
 					</IzCard>
 				) : (
@@ -693,11 +739,9 @@ function AgencySubscription() {
 
 			{sub.backed && (
 				<>
-					<IzSectionLabel>Payment history</IzSectionLabel>
+					<IzSectionLabel>{t.agencyMisc.paymentHistory}</IzSectionLabel>
 					<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-						One row per billing period — agencies are billed weekly, Sunday to
-						Saturday, the same week your payroll runs on. A period stays Unpaid
-						until InnocenZ marks the payment received.
+						{t.subscription.oneRowPerPeriod}
 					</p>
 					<PaymentHistoryList
 						invoices={sub.paymentHistory}
@@ -708,23 +752,21 @@ function AgencySubscription() {
 
 			{showCollections && (
 				<>
-					<IzSectionLabel>Collections · owed to you by outlets</IzSectionLabel>
+					<IzSectionLabel>{t.agencyMisc.collectionsOwedToYou}</IzSectionLabel>
 					<p className="iz-tiny iz-muted2 -mt-1 mb-2">
-						Money coming in, not the subscription above — one statement per
-						outlet per week, drafted from completed shifts. InnocenZ does not
-						move this money; you and the outlet settle it between yourselves.
+						{t.subscription.moneyComingIn}
 					</p>
 
 					<IzCard>
 						<div className="grid grid-cols-3 gap-2 text-center">
 							<div>
-								<p className="iz-tiny iz-muted2">Outstanding</p>
+								<p className="iz-tiny iz-muted2">{t.agencyMisc.outstanding}</p>
 								<p className="mt-1 font-sora text-base font-bold text-[var(--iz-gold-l)]">
 									{formatRM(collections.totals.outstandingRm)}
 								</p>
 							</div>
 							<div>
-								<p className="iz-tiny iz-muted2">Overdue</p>
+								<p className="iz-tiny iz-muted2">{t.agencyMisc.overdue}</p>
 								<p
 									className={`mt-1 font-sora text-base font-bold ${
 										collections.totals.overdueRm > 0
@@ -736,7 +778,7 @@ function AgencySubscription() {
 								</p>
 							</div>
 							<div>
-								<p className="iz-tiny iz-muted2">Settled</p>
+								<p className="iz-tiny iz-muted2">{t.agencyMisc.settled}</p>
 								<p className="mt-1 font-sora text-base font-bold">
 									{formatRM(collections.totals.settledRm)}
 								</p>
@@ -745,7 +787,7 @@ function AgencySubscription() {
 						{collections.totals.overdueRm > 0 && (
 							<p className="iz-tiny iz-muted mt-3 flex items-center gap-1.5 border-t border-[var(--iz-line)] pt-2">
 								<TriangleAlert className="h-3.5 w-3.5 shrink-0" />
-								Overdue is part of outstanding, not on top of it
+								{t.subscription.overduePartOfOutstanding}
 							</p>
 						)}
 					</IzCard>
@@ -793,15 +835,13 @@ function AgencySubscription() {
 						{collections.isLoading ? (
 							<IzCard flat>
 								<p className="iz-tiny iz-muted text-center py-4">
-									Loading collections…
+									{t.subscription.loadingCollections}
 								</p>
 							</IzCard>
 						) : collections.invoices.length === 0 ? (
 							<IzCard flat>
 								<p className="iz-tiny iz-muted text-center py-4">
-									Nothing here. Outlet billing is settled with the venue
-									directly, so the app no longer raises collections — this list
-									keeps past statements only.
+									{t.subscription.noCollections}
 								</p>
 							</IzCard>
 						) : (
@@ -821,9 +861,13 @@ function AgencySubscription() {
 													<p className="iz-tiny iz-muted">
 														{collectionWeekLabel(inv.weekStart, inv.weekEnd)}
 														{inv.settledAt
-															? ` · settled ${collectionStampLabel(inv.settledAt)}`
+															? fill(t.subscription.settledOn, {
+																	date: collectionStampLabel(inv.settledAt),
+																})
 															: inv.issuedAt
-																? ` · issued ${collectionStampLabel(inv.issuedAt)}`
+																? fill(t.subscription.issuedOn, {
+																		date: collectionStampLabel(inv.issuedAt),
+																	})
 																: ""}
 													</p>
 												</div>
@@ -834,7 +878,9 @@ function AgencySubscription() {
 												</p>
 												<div className="mt-1 flex items-center justify-end gap-1.5">
 													{inv.status === "settled" ? (
-														<IzPill variant="green">Settled</IzPill>
+														<IzPill variant="green">
+															{t.agencyMisc.settled}
+														</IzPill>
 													) : aging ? (
 														<IzPill variant={aging.variant}>
 															{aging.label}
@@ -850,7 +896,7 @@ function AgencySubscription() {
 														disabled={collections.isMutating}
 														onClick={() => handleSettle(inv.id, inv.outletName)}
 													>
-														Mark settled
+														{t.subscription.markSettled}
 													</button>
 												)}
 											</div>
@@ -864,13 +910,16 @@ function AgencySubscription() {
 			)}
 
 			<OutletSection
-				title="Payment method"
+				title={t.agencyMisc.paymentMethod}
 				hint={
 					sub.backed
 						? sub.card
 							? `${sub.card.brand} ···· ${sub.card.last4}${realRenewalLabel ? ` · next charge ${realRenewalLabel}` : ""}`
-							: "No card saved yet"
-						: `Visa ···· ${CARD_LAST4} · next charge ${renewalDate}`
+							: t.subscription.noCardSavedYet
+						: fill(t.subscription.visaNextCharge, {
+								last4: CARD_LAST4,
+								date: renewalDate,
+							})
 				}
 				collapsible
 				defaultOpen={false}
@@ -883,13 +932,16 @@ function AgencySubscription() {
 					canEdit={canEdit}
 					isLoading={sub.backed && sub.isCardLoading}
 					isSaving={sub.isSavingCard}
-					billedLabel={`Billed weekly from PV usage · current tier ${billedTierLabel} · ${billedPriceLabel}`}
+					billedLabel={fill(t.subscription.billedWeeklyFromUsage, {
+						tier: billedTierLabel,
+						price: billedPriceLabel,
+					})}
 					onSave={async (input) => {
 						const result = await sub.saveCard(input);
 						toast(
 							result.ok
-								? "Card saved for subscription billing"
-								: (result.reason ?? "Could not save the card — try again"),
+								? t.subscription.cardSaved
+								: (result.reason ?? t.subscription.couldNotSaveCard),
 							result.ok ? "success" : "warn",
 						);
 						return result.ok;
@@ -900,9 +952,11 @@ function AgencySubscription() {
 					<Calendar className="h-3.5 w-3.5" />
 					{sub.backed
 						? realRenewalLabel
-							? `Next weekly charge ${realRenewalLabel}`
-							: "No active subscription — nothing to charge"
-						: `Next weekly charge ${renewalDate}`}
+							? fill(t.subscription.nextWeeklyCharge, {
+									date: realRenewalLabel,
+								})
+							: t.subscription.nothingToCharge
+						: fill(t.subscription.nextWeeklyCharge, { date: renewalDate })}
 				</div>
 			</OutletSection>
 		</div>

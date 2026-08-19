@@ -78,6 +78,9 @@ import {
 	UserMinus,
 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import { languageLabel, raceLabel } from "@/lib/portal-i18n/language-label";
 
 /** How many shifts the card shows. Content, not styling — leave it at 3. */
 const SHIFT_HISTORY_ROWS = 3;
@@ -102,6 +105,7 @@ export const Route = createFileRoute("/agency/prs")({
 });
 
 function AgencyManagePRs() {
+	const { t } = usePortalLocale();
 	const { pr: prFromSearch } = Route.useSearch();
 	const navigate = useNavigate({ from: "/agency/prs" });
 	// Manage-PR reads real backend PRs (mapped to the demo shape) and writes the
@@ -229,11 +233,11 @@ function AgencyManagePRs() {
 		return (
 			<div className="iz-screen">
 				<header>
-					<IzPageTitle>Access restricted</IzPageTitle>
+					<IzPageTitle>{t.managePr.accessRestricted}</IzPageTitle>
 				</header>
 				<IzCard className="text-center">
 					<p className="iz-sm iz-muted">
-						Finance role cannot manage PR roster.
+						{t.managePr.financeCannotManageRoster}
 					</p>
 				</IzCard>
 			</div>
@@ -268,6 +272,18 @@ function AgencyManagePRs() {
 		setSelected(new Set(filtered.map((p) => p.id)));
 	};
 
+	// Name + id together, drawn from the SAME rows the cards render, so the
+	// broadcast sheet cannot list a different person than the one ticked. Built
+	// off `filtered` rather than `agencyPRs` for the same reason: a selection
+	// only ever comes from what is on screen.
+	const selectedRecipients = useMemo(
+		() =>
+			filtered
+				.filter((p) => selected.has(p.id))
+				.map((p) => ({ id: p.id, name: p.name })),
+		[filtered, selected],
+	);
+
 	const openBroadcast = () => {
 		if (!selectMode) {
 			setSelectMode(true);
@@ -285,10 +301,8 @@ function AgencyManagePRs() {
 		<div className="iz-screen">
 			<header className="iz-pr-manage-header">
 				<div className="min-w-0">
-					<IzPageTitle>Manage PR</IzPageTitle>
-					<p className="iz-tiny iz-muted mt-0.5">
-						Filter roster · bulk broadcast · auto-flags
-					</p>
+					<IzPageTitle>{t.managePr.title}</IzPageTitle>
+					<p className="iz-tiny iz-muted mt-0.5">{t.managePr.subtitle}</p>
 				</div>
 				<div className="iz-pr-manage-header__actions">
 					<button
@@ -300,7 +314,7 @@ function AgencyManagePRs() {
 						}}
 					>
 						<MousePointerClick className="h-4 w-4" />
-						{selectMode ? "Cancel" : "Select"}
+						{selectMode ? "Cancel" : t.managePr.select}
 					</button>
 					<button
 						type="button"
@@ -308,7 +322,7 @@ function AgencyManagePRs() {
 						onClick={openBroadcast}
 					>
 						<Megaphone className="h-4 w-4" />
-						Broadcast
+						{t.managePr.broadcast}
 					</button>
 				</div>
 			</header>
@@ -326,7 +340,7 @@ function AgencyManagePRs() {
 						}`}
 					/>
 					<b className="iz-tiny uppercase tracking-wide text-[var(--iz-red,#e5484d)]">
-						Recent penalties
+						{t.managePr.recentPenalties}
 					</b>
 					{backendProposals.backed
 						? backendProposals.count > 0 && (
@@ -349,17 +363,19 @@ function AgencyManagePRs() {
 				{penaltiesOpen && backendProposals.backed && (
 					<div className="mt-2 flex flex-col gap-1.5">
 						{backendProposals.isLoading && (
-							<p className="iz-sm iz-muted2">Loading penalties…</p>
+							<p className="iz-sm iz-muted2">{t.managePr.loadingPenalties}</p>
 						)}
 						{backendProposals.isError && (
 							<p className="iz-sm text-[var(--iz-red,#e5484d)]">
-								Could not load penalties — the proposals endpoint failed.
+								{t.managePr.penaltiesLoadFailed}
 							</p>
 						)}
 						{!backendProposals.isLoading &&
 							!backendProposals.isError &&
 							backendProposals.count === 0 && (
-								<p className="iz-sm iz-muted2">No active penalties.</p>
+								<p className="iz-sm iz-muted2">
+									{t.managePr.noActivePenalties}
+								</p>
 							)}
 						{backendProposals.proposals.map((p) => (
 							<div
@@ -393,7 +409,7 @@ function AgencyManagePRs() {
 					!backendProposals.backed &&
 					(penalizedPrs.length === 0 ? (
 						<p className="iz-sm iz-muted2 mt-2">
-							No active penalties this week.
+							{t.managePr.noActivePenaltiesThisWeek}
 						</p>
 					) : (
 						<div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -414,7 +430,7 @@ function AgencyManagePRs() {
 									<div className="flex items-center justify-between gap-2">
 										<b className="iz-sm text-[var(--iz-txt)]">{x.pr.name}</b>
 										<span className="iz-sm font-semibold tabular-nums text-[var(--iz-red,#e5484d)]">
-											{x.total > 0 ? `RM ${x.total}` : "Warning"}
+											{x.total > 0 ? `RM ${x.total}` : t.managePr.warning}
 										</span>
 									</div>
 									<div className="mt-1 flex flex-col gap-1">
@@ -456,17 +472,17 @@ function AgencyManagePRs() {
 						}`}
 					/>
 					<b className="iz-tiny uppercase tracking-wide">
-						Attendance and penalty rules
+						{t.managePr.attendanceAndPenaltyRules}
 					</b>
 					<span className="iz-tiny iz-muted2">
-						· Applies to every PR on the roster
+						{t.managePr.appliesToEveryPr}
 					</span>
 				</button>
 				{penaltyRulesOpen && !rawPenaltyRules && (
 					<p className="iz-sm mt-2 text-[var(--iz-red,#e5484d)]">
 						{backendPenalties.isError
 							? "Could not load penalty rules — the agency penalty-rules endpoint failed."
-							: "Loading penalty rules…"}
+							: t.managePr.loadingPenaltyRules}
 					</p>
 				)}
 				{penaltyRulesOpen && rawPenaltyRules && (
@@ -482,7 +498,7 @@ function AgencyManagePRs() {
 								// show a saved-looking change the backend never received.
 								if (backendPenalties.backed) {
 									backendPenalties.save(next).catch(() => {
-										toast("Could not save penalty rules", "warn");
+										toast(t.managePr.couldNotSavePenaltyRules, "warn");
 									});
 								} else {
 									saveDemoPenaltyRules(next);
@@ -495,13 +511,13 @@ function AgencyManagePRs() {
 
 			<IzCard flat className="iz-pr-manage-filters-card">
 				<div className="flex items-center gap-2 iz-sm iz-muted mb-2">
-					<Filter className="h-4 w-4 shrink-0" /> Filter PRs
+					<Filter className="h-4 w-4 shrink-0" /> {t.managePr.filterPrs}
 				</div>
 				<div className="iz-pr-manage-filters-inline">
 					<label className="iz-pr-manage-filter-chip">
 						<input
 							type="number"
-							placeholder="Min age"
+							placeholder={t.managePr.minAge}
 							className="iz-roster-filter-input iz-roster-filter-input--plain"
 							value={ageMin}
 							onChange={(e) => setAgeMin(e.target.value)}
@@ -513,7 +529,7 @@ function AgencyManagePRs() {
 							min={0}
 							max={5}
 							step={0.1}
-							placeholder="Min rating"
+							placeholder={t.managePr.minRating}
 							className="iz-roster-filter-input iz-roster-filter-input--plain"
 							value={ratingMin}
 							onChange={(e) => setRatingMin(e.target.value)}
@@ -522,7 +538,7 @@ function AgencyManagePRs() {
 					<label className="iz-pr-manage-filter-chip">
 						<input
 							type="number"
-							placeholder="Min years"
+							placeholder={t.managePr.minYears}
 							className="iz-roster-filter-input iz-roster-filter-input--plain"
 							value={expMin}
 							onChange={(e) => setExpMin(e.target.value)}
@@ -534,10 +550,10 @@ function AgencyManagePRs() {
 							value={lang}
 							onChange={(e) => setLang(e.target.value)}
 						>
-							<option value="">All languages</option>
+							<option value="">{t.managePr.allLanguages}</option>
 							{languages.map((l) => (
 								<option key={l} value={l}>
-									{l}
+									{languageLabel(l, t)}
 								</option>
 							))}
 						</IzSelect>
@@ -548,10 +564,10 @@ function AgencyManagePRs() {
 							value={race}
 							onChange={(e) => setRace(e.target.value)}
 						>
-							<option value="">All races</option>
+							<option value="">{t.managePr.allRaces}</option>
 							{races.map((r) => (
 								<option key={r} value={r}>
-									{r}
+									{raceLabel(r, t)}
 								</option>
 							))}
 						</IzSelect>
@@ -562,7 +578,7 @@ function AgencyManagePRs() {
 							value={place}
 							onChange={(e) => setPlace(e.target.value)}
 						>
-							<option value="">All places</option>
+							<option value="">{t.managePr.allPlaces}</option>
 							{places.map((pl) => (
 								<option key={pl} value={pl}>
 									{pl}
@@ -579,14 +595,14 @@ function AgencyManagePRs() {
 						{filtered.length} PR{filtered.length !== 1 ? "S" : ""}
 					</span>
 					<span className="iz-pr-manage-stats__active">
-						{activeCount} active
+						{activeCount} {t.managePr.active}
 					</span>
 				</div>
 				{selectMode && (
 					<p className="iz-tiny iz-muted2 mb-2">
 						{selected.size === 0
-							? "Tap PR cards to multi-select"
-							: `${selected.size} selected`}
+							? t.managePr.tapToMultiSelect
+							: fill(t.managePr.nSelected, { n: selected.size })}
 						{selected.size > 0 && (
 							<>
 								{" · "}
@@ -595,7 +611,7 @@ function AgencyManagePRs() {
 									className="iz-link !text-xs"
 									onClick={selectAllFiltered}
 								>
-									Select all
+									{t.managePr.selectAll}
 								</button>
 							</>
 						)}
@@ -607,8 +623,8 @@ function AgencyManagePRs() {
 						className="iz-btn iz-btn-primary mb-3 w-full !py-2.5 !text-xs"
 						onClick={() => setBroadcastOpen(true)}
 					>
-						<Megaphone className="h-3.5 w-3.5" /> Broadcast shift / message (
-						{selected.size})
+						<Megaphone className="h-3.5 w-3.5" />{" "}
+						{fill(t.managePr.broadcastMessage, { n: selected.size })}
 					</button>
 				)}
 				<div className="iz-pr-manage-grid">
@@ -642,7 +658,7 @@ function AgencyManagePRs() {
 			<AgencyBroadcastSheet
 				open={broadcastOpen}
 				onClose={() => setBroadcastOpen(false)}
-				prIds={[...selected]}
+				recipients={selectedRecipients}
 				onSent={finishBroadcast}
 			/>
 		</div>
@@ -737,6 +753,7 @@ function AgencyPrDetail({
 	onDetach: (prId: string) => void;
 	onRequestDetach: (prId: string) => void;
 }) {
+	const { t } = usePortalLocale();
 	const toast = useStore((s) => s.toast);
 	const penaltyRules = normalizePenaltyRules(
 		useStore((s) => s.agencyPenaltyRules),
@@ -817,24 +834,24 @@ function AgencyPrDetail({
 	const saveEdit = () => {
 		const name = draft.name.trim();
 		if (!name) {
-			toast("Enter floor nickname", "warn");
+			toast(t.managePr.enterFloorNickname, "warn");
 			return;
 		}
 		if (name.length < 2 || name.length > 20) {
-			toast("Floor nickname must be 2–20 characters", "warn");
+			toast(t.managePr.nicknameLength, "warn");
 			return;
 		}
 		const icName = draft.icName.trim();
 		if (!icName) {
-			toast("Enter legal IC name", "warn");
+			toast(t.managePr.enterLegalIcName, "warn");
 			return;
 		}
 		if (!draft.mobile.trim()) {
-			toast("Enter mobile number", "warn");
+			toast(t.managePr.enterMobile, "warn");
 			return;
 		}
 		if (draft.languages.length === 0) {
-			toast("Select at least one language", "warn");
+			toast(t.managePr.selectAtLeastOneLanguage, "warn");
 			return;
 		}
 		// A measurement the PR has not given is OMITTED, never clamped. This used to
@@ -913,11 +930,11 @@ function AgencyPrDetail({
 		<div className="iz-screen">
 			<AppTopbar
 				onBack={editing ? cancelEdit : onBack}
-				backLabel={editing ? "Cancel edit" : "PR list"}
+				backLabel={editing ? t.managePr.cancelEdit : t.managePr.prList}
 			/>
 			<header>
 				<p className="iz-tiny iz-muted2 uppercase tracking-widest">
-					Managed PR
+					{t.managePr.managedPr}
 				</p>
 				{/* The ONE payee formatter — "(Vicky) Victoria Tan Mei Lin". */}
 				<IzPageTitle>
@@ -928,19 +945,21 @@ function AgencyPrDetail({
 						variant={isAgencyPrActive(detail) ? "green" : "ink"}
 						className="!py-0.5 !text-[9px]"
 					>
-						{isAgencyPrActive(detail) ? "Active" : "Inactive"}
+						{isAgencyPrActive(detail) ? t.managePr.active : t.managePr.inactive}
 					</IzPill>
 					{/* Blank fields say so. "IC  · not rated yet" read as a broken line. */}
 					<p className="iz-tiny iz-muted">
 						IC {detail.ic || "—"} ·{" "}
 						{averageRating === null
-							? "not rated yet"
+							? t.managePr.notRatedYet
 							: `${formatStars(averageRating)} ★ avg`}
 					</p>
 				</div>
 			</header>
 			{editing && (
-				<span className="iz-pill iz-pill-amber mt-2 !text-[10px]">Editing</span>
+				<span className="iz-pill iz-pill-amber mt-2 !text-[10px]">
+					{t.managePr.editing}
+				</span>
 			)}
 
 			<IzCard
@@ -964,7 +983,9 @@ function AgencyPrDetail({
 						<div className="iz-between items-start gap-2">
 							{editing ? (
 								<div className="iz-field !mb-0 min-w-0 flex-1">
-									<label className="!text-[9px]">Floor nickname</label>
+									<label className="!text-[9px]">
+										{t.managePr.floorNickname}
+									</label>
 									<input
 										type="text"
 										value={draft.name}
@@ -985,7 +1006,8 @@ function AgencyPrDetail({
 						</div>
 						<p className="iz-tiny iz-muted mt-0.5">
 							KPI {display.kpiTier || "—"} ·{" "}
-							{display.languages.join(", ") || "No languages"}
+							{display.languages.map((l) => languageLabel(l, t)).join(", ") ||
+								t.managePr.noLanguages}
 						</p>
 					</div>
 				</div>
@@ -993,14 +1015,14 @@ function AgencyPrDetail({
 
 			<div className="iz-outlet-stat-strip mt-3">
 				<div className="iz-outlet-stat-cell">
-					<IzKpiLabel>Rating</IzKpiLabel>
+					<IzKpiLabel>{t.managePr.rating}</IzKpiLabel>
 					<div className="n text-[var(--iz-gold)]">
 						{formatStars(averageRating)}
 						{averageRating === null ? "" : "★"}
 					</div>
 				</div>
 				<div className="iz-outlet-stat-cell">
-					<IzKpiLabel>Attendance</IzKpiLabel>
+					<IzKpiLabel>{t.managePr.attendance}</IzKpiLabel>
 					{/* Em-dash, not 0% — see AgencyManagedPR.attendancePct. */}
 					<div className="n">
 						{detail.attendancePct === null ? "—" : `${detail.attendancePct}%`}
@@ -1011,7 +1033,7 @@ function AgencyPrDetail({
 					<div className="n">{detail.kpiScore}</div>
 				</div>
 				<div className="iz-outlet-stat-cell">
-					<IzKpiLabel>Paid</IzKpiLabel>
+					<IzKpiLabel>{t.managePr.paid}</IzKpiLabel>
 					{/* Only abbreviate once there are thousands to abbreviate. The
 					    unconditional "/1000 + k" was written against demo figures in
 					    the thousands; a real settled voucher of RM 268.33 rendered as
@@ -1024,10 +1046,10 @@ function AgencyPrDetail({
 				</div>
 			</div>
 
-			<IzSectionLabel>Penalties</IzSectionLabel>
+			<IzSectionLabel>{t.managePr.penalties}</IzSectionLabel>
 			<IzCard flat>
 				{penaltyBreaches.length === 0 ? (
-					<p className="iz-sm iz-muted">No active penalties.</p>
+					<p className="iz-sm iz-muted">{t.managePr.noActivePenalties}</p>
 				) : (
 					<div className="space-y-2">
 						<div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -1041,7 +1063,7 @@ function AgencyPrDetail({
 											{b.label}
 										</span>
 										<span className="shrink-0 text-sm font-semibold tabular-nums text-[var(--iz-red,#e5484d)]">
-											{b.fineRm > 0 ? `RM ${b.fineRm}` : "Warning"}
+											{b.fineRm > 0 ? `RM ${b.fineRm}` : t.managePr.warning}
 										</span>
 									</div>
 									<p className="iz-sm iz-muted mt-0.5">{b.detail}</p>
@@ -1051,7 +1073,7 @@ function AgencyPrDetail({
 						{penaltyTotalRm > 0 && (
 							<div className="flex items-center justify-between rounded-lg bg-[rgba(229,72,77,0.08)] px-2.5 py-2">
 								<span className="iz-sm font-semibold uppercase tracking-wide text-[var(--iz-red,#e5484d)]">
-									Pending deduction
+									{t.managePr.pendingDeduction}
 								</span>
 								<span className="text-base font-bold tabular-nums text-[var(--iz-red,#e5484d)]">
 									RM {penaltyTotalRm}
@@ -1061,15 +1083,16 @@ function AgencyPrDetail({
 					</div>
 				)}
 				<p className="iz-tiny iz-muted2 mt-2">
-					Preview only · {PR_PAY_CLASS_LABELS[prPayClass(detail)]} · not yet
-					deducted from payouts.
+					{fill(t.managePr.previewOnly, {
+						payClass: PR_PAY_CLASS_LABELS[prPayClass(detail)](t),
+					})}
 				</p>
 			</IzCard>
 
 			<IzSectionLabel>
 				{detail.comcardImageUrl ||
 				canGeneratePortfolioComcard(detail.portfolioPhotos ?? [])
-					? "Photo comcard"
+					? t.managePr.photoComcard
 					: "3D Comcard"}
 				{editing && (
 					<span className="ml-auto text-[var(--iz-gold-l)] normal-case tracking-normal">
@@ -1083,13 +1106,13 @@ function AgencyPrDetail({
 				{editing ? (
 					<div className="iz-comcard-edit">
 						<AgencyComcardInput
-							label="Height (cm)"
+							label={t.managePr.heightCm}
 							value={draft.height}
 							blankZero
 							onChange={(n) => setDraft((p) => ({ ...p, height: n }))}
 						/>
 						<AgencyComcardInput
-							label="Weight (kg)"
+							label={t.managePr.weightKg}
 							value={draft.weight}
 							blankZero
 							onChange={(n) => setDraft((p) => ({ ...p, weight: n }))}
@@ -1099,7 +1122,7 @@ function AgencyPrDetail({
 						    they just cannot author it. The hook drops any `age` in the
 						    patch and the server has no `dob` field to receive one. */}
 						<AgencyComcardInput
-							label="Age"
+							label={t.managePr.age}
 							value={draft.age}
 							blankZero
 							onChange={() => {}}
@@ -1113,7 +1136,7 @@ function AgencyPrDetail({
 
 			{(detail.portfolioPhotos?.some(Boolean) ?? false) && (
 				<>
-					<IzSectionLabel>Portfolio gallery</IzSectionLabel>
+					<IzSectionLabel>{t.managePr.portfolioGallery}</IzSectionLabel>
 					<IzCard>
 						<div className="grid grid-cols-4 gap-2">
 							{detail
@@ -1123,7 +1146,7 @@ function AgencyPrDetail({
 								))}
 						</div>
 						<p className="iz-tiny iz-muted2 mt-2">
-							Synced from PR profile · {detail.name}
+							{fill(t.managePr.syncedFromPrProfile, { name: detail.name })}
 						</p>
 					</IzCard>
 				</>
@@ -1131,7 +1154,7 @@ function AgencyPrDetail({
 
 			<div className="iz-pr-profile-fields">
 				<div>
-					<IzSectionLabel>Contact</IzSectionLabel>
+					<IzSectionLabel>{t.managePr.contact}</IzSectionLabel>
 					<IzCard
 						flat
 						className={editing ? "border-[rgba(217,185,122,.25)]" : undefined}
@@ -1139,7 +1162,7 @@ function AgencyPrDetail({
 						{editing ? (
 							<div className="space-y-2">
 								<div className="iz-field !mb-0">
-									<label>Legal IC name</label>
+									<label>{t.managePr.legalIcName}</label>
 									<input
 										value={draft.icName}
 										onChange={(e) =>
@@ -1148,7 +1171,7 @@ function AgencyPrDetail({
 									/>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>Mobile</label>
+									<label>{t.managePr.mobile}</label>
 									<input
 										value={draft.mobile}
 										onChange={(e) =>
@@ -1157,7 +1180,7 @@ function AgencyPrDetail({
 									/>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>Email</label>
+									<label>{t.managePr.email}</label>
 									<input
 										type="email"
 										value={draft.email}
@@ -1170,11 +1193,11 @@ function AgencyPrDetail({
 						) : (
 							<div className="iz-kv-list">
 								<div className="iz-v-sum">
-									<span className="iz-muted">Mobile</span>
+									<span className="iz-muted">{t.managePr.mobile}</span>
 									<b>{display.mobile || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">Email</span>
+									<span className="iz-muted">{t.managePr.email}</span>
 									<b>{display.email || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
@@ -1187,7 +1210,7 @@ function AgencyPrDetail({
 				</div>
 
 				<div>
-					<IzSectionLabel>Profile details</IzSectionLabel>
+					<IzSectionLabel>{t.managePr.profileDetails}</IzSectionLabel>
 					<IzCard
 						flat
 						className={editing ? "border-[rgba(217,185,122,.25)]" : undefined}
@@ -1195,7 +1218,7 @@ function AgencyPrDetail({
 						{editing ? (
 							<div className="space-y-2">
 								<div className="iz-field !mb-0">
-									<label>Race</label>
+									<label>{t.managePr.race}</label>
 									<input
 										value={draft.race}
 										onChange={(e) =>
@@ -1204,7 +1227,7 @@ function AgencyPrDetail({
 									/>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>Place</label>
+									<label>{t.managePr.place}</label>
 									<input
 										value={draft.place}
 										onChange={(e) =>
@@ -1213,12 +1236,12 @@ function AgencyPrDetail({
 									/>
 								</div>
 								<AgencyComcardInput
-									label="Years experience"
+									label={t.managePr.yearsExperience}
 									value={draft.yearsExp}
 									onChange={(n) => setDraft((p) => ({ ...p, yearsExp: n }))}
 								/>
 								<div className="iz-field !mb-0">
-									<label>KPI tier</label>
+									<label>{t.managePr.kpiTier}</label>
 									<IzSelect
 										value={draft.kpiTier}
 										onChange={(e) =>
@@ -1228,7 +1251,7 @@ function AgencyPrDetail({
 										{/* An ungraded PR must be able to STAY ungraded — without
 										    this option the select would silently settle on the
 										    first tier and save it. */}
-										<option value="">Not graded</option>
+										<option value="">{t.managePr.notGraded}</option>
 										{KPI_TIER_OPTIONS.map((tier) => (
 											<option key={tier} value={tier}>
 												Tier {tier}
@@ -1237,7 +1260,7 @@ function AgencyPrDetail({
 									</IzSelect>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>Training tier</label>
+									<label>{t.managePr.trainingTier}</label>
 									<IzSelect
 										value={draft.trainingLevel}
 										onChange={(e) =>
@@ -1252,7 +1275,7 @@ function AgencyPrDetail({
 									</IzSelect>
 								</div>
 								<div className="iz-field !mb-0">
-									<label>Pay class</label>
+									<label>{t.managePr.payClass}</label>
 									<IzSelect
 										value={draft.payClass}
 										onChange={(e) =>
@@ -1264,7 +1287,7 @@ function AgencyPrDetail({
 									>
 										{PR_PAY_CLASSES.map((cls) => (
 											<option key={cls} value={cls}>
-												{PR_PAY_CLASS_LABELS[cls]}
+												{PR_PAY_CLASS_LABELS[cls](t)}
 											</option>
 										))}
 									</IzSelect>
@@ -1273,28 +1296,28 @@ function AgencyPrDetail({
 						) : (
 							<div className="iz-kv-list">
 								<div className="iz-v-sum">
-									<span className="iz-muted">Race</span>
+									<span className="iz-muted">{t.managePr.race}</span>
 									<b>{display.race || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">Place</span>
+									<span className="iz-muted">{t.managePr.place}</span>
 									<b>{display.place || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">Experience</span>
-									<b>{display.yearsExp} yrs</b>
+									<span className="iz-muted">{t.managePr.experience}</span>
+									<b>{fill(t.managePr.yearsExp, { n: display.yearsExp })}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">KPI tier</span>
+									<span className="iz-muted">{t.managePr.kpiTier}</span>
 									<b>{display.kpiTier || "—"}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">Training tier</span>
+									<span className="iz-muted">{t.managePr.trainingTier}</span>
 									<b>{display.trainingLevel}</b>
 								</div>
 								<div className="iz-v-sum">
-									<span className="iz-muted">Pay class</span>
-									<b>{PR_PAY_CLASS_LABELS[display.payClass]}</b>
+									<span className="iz-muted">{t.managePr.payClass}</span>
+									<b>{PR_PAY_CLASS_LABELS[display.payClass](t)}</b>
 								</div>
 							</div>
 						)}
@@ -1302,7 +1325,7 @@ function AgencyPrDetail({
 				</div>
 			</div>
 
-			<IzSectionLabel>Languages</IzSectionLabel>
+			<IzSectionLabel>{t.managePr.languages}</IzSectionLabel>
 			<IzCard
 				flat
 				className={editing ? "border-[rgba(217,185,122,.25)]" : undefined}
@@ -1358,7 +1381,7 @@ function AgencyPrDetail({
 					)}
 
 					<OutletSection
-						title="Shift history"
+						title={t.managePr.shiftHistory}
 						hint={
 							shiftRows.length > SHIFT_HISTORY_ROWS
 								? `Last ${SHIFT_HISTORY_ROWS} of ${shiftRows.length}`
@@ -1401,14 +1424,17 @@ function AgencyPrDetail({
 							    omitted on purpose — see useAgencyPrShiftHistory. */}
 							{shiftRows.length === 0 && (
 								<p className="iz-tiny iz-muted">
-									{shiftHistoryLoading ? "Loading…" : "No shifts yet"}
+									{shiftHistoryLoading ? "Loading…" : t.managePr.noShiftsYet}
 								</p>
 							)}
 						</IzCard>
 					</OutletSection>
 
 					{(detail.payClassHistory?.length ?? 0) > 0 && (
-						<OutletSection title="Pay class history" hint="Audit trail">
+						<OutletSection
+							title={t.managePr.payClassHistory}
+							hint={t.managePr.auditTrail}
+						>
 							<IzCard flat>
 								{[...detail.payClassHistory!]
 									.sort((a, b) => (a.fromIso < b.fromIso ? 1 : -1))
@@ -1418,7 +1444,7 @@ function AgencyPrDetail({
 											className="iz-v-sum border-t border-[var(--iz-line)] py-1.5 first:border-0 first:pt-0"
 										>
 											<span className="iz-muted">From {c.fromIso}</span>
-											<b>{PR_PAY_CLASS_LABELS[c.payClass]}</b>
+											<b>{PR_PAY_CLASS_LABELS[c.payClass](t)}</b>
 										</div>
 									))}
 							</IzCard>
@@ -1426,7 +1452,7 @@ function AgencyPrDetail({
 					)}
 
 					<OutletSection
-						title="Ratings feed"
+						title={t.managePr.ratingsFeed}
 						hint={
 							ratingSummary.count > 0
 								? `${ratingSummary.count} rating${ratingSummary.count > 1 ? "s" : ""}`
@@ -1436,17 +1462,20 @@ function AgencyPrDetail({
 						<IzCard flat>
 							{ratingSummary.rows.slice(0, 3).map((r) => (
 								<p key={r.id} className="iz-tiny iz-muted py-1">
-									{r.stars}★ · {r.note || "No note"}
+									{r.stars}★ · {r.note || t.managePr.noNote}
 									{r.date ? ` · ${r.date}` : ""}
 								</p>
 							))}
 							{ratingSummary.count === 0 && (
-								<p className="iz-tiny iz-muted">No ratings yet</p>
+								<p className="iz-tiny iz-muted">{t.managePr.noRatingsYet}</p>
 							)}
 						</IzCard>
 					</OutletSection>
 
-					<OutletSection title="Agency actions" hint="Discipline">
+					<OutletSection
+						title={t.managePr.agencyActions}
+						hint={t.managePr.discipline}
+					>
 						<div className="grid grid-cols-2 gap-2">
 							<button
 								type="button"
@@ -1454,7 +1483,7 @@ function AgencyPrDetail({
 								disabled={detail.suspended}
 								onClick={() => setSuspendOpen(true)}
 							>
-								Suspend
+								{t.managePr.suspend}
 							</button>
 							<button
 								type="button"
@@ -1462,7 +1491,9 @@ function AgencyPrDetail({
 								onClick={() => setDetachOpen(true)}
 							>
 								<UserMinus className="h-3 w-3" />{" "}
-								{tiedUnderOneYear ? "Request detach" : "Detach"}
+								{tiedUnderOneYear
+									? t.managePr.requestDetach
+									: t.managePr.detach}
 							</button>
 						</div>
 					</OutletSection>
@@ -1493,7 +1524,7 @@ function AgencyPrDetail({
 						className="iz-btn iz-btn-primary"
 						onClick={startEdit}
 					>
-						<Pencil className="h-4 w-4" /> Edit profile
+						<Pencil className="h-4 w-4" /> {t.managePr.editProfile}
 					</button>
 				)}
 			</div>
@@ -1524,7 +1555,8 @@ function AgencyPrDetail({
 
 			<IzSheet open={detachOpen} onClose={() => setDetachOpen(false)}>
 				<IzCardTitle>
-					{tiedUnderOneYear ? "Request detach" : "Detach"} {detail.name}?
+					{tiedUnderOneYear ? t.managePr.requestDetach : t.managePr.detach}{" "}
+					{detail.name}?
 				</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3 leading-relaxed">
 					{tiedUnderOneYear ? (
@@ -1572,12 +1604,14 @@ function AgencyPrDetail({
 				open={payClassConfirm !== null}
 				onClose={() => setPayClassConfirm(null)}
 			>
-				<IzCardTitle>Change pay class?</IzCardTitle>
+				<IzCardTitle>{t.managePr.changePayClass}</IzCardTitle>
 				<p className="iz-tiny iz-muted mb-3 leading-relaxed">
 					{detail.name} moves from{" "}
-					<b>{PR_PAY_CLASS_LABELS[prPayClass(detail)]}</b> to{" "}
+					<b>{PR_PAY_CLASS_LABELS[prPayClass(detail)](t)}</b> to{" "}
 					<b>
-						{payClassConfirm ? PR_PAY_CLASS_LABELS[payClassConfirm.next] : ""}
+						{payClassConfirm
+							? PR_PAY_CLASS_LABELS[payClassConfirm.next](t)
+							: ""}
 					</b>
 					, effective {DEFAULT_ROSTER_DATE_ISO}. Shifts already worked or booked
 					keep their original pay; new shifts use the new class.

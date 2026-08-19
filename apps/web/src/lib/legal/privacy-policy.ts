@@ -3,19 +3,19 @@
  */
 
 export type PrivacySection = {
-	id: string
-	title: string
-	paragraphs: string[]
-	bullets?: string[]
-}
+	id: string;
+	title: string;
+	paragraphs: string[];
+	bullets?: string[];
+};
 
-export const PRIVACY_POLICY_EFFECTIVE_DATE = "4 August 2026"
-export const PRIVACY_POLICY_LAST_UPDATED = "4 August 2026"
-export const PRIVACY_CONTACT_WHATSAPP = "https://wa.me/60122190198"
-export const PRIVACY_CONTACT_LABEL = "WhatsApp +60 12-219 0198"
+export const PRIVACY_POLICY_EFFECTIVE_DATE = "4 August 2026";
+export const PRIVACY_POLICY_LAST_UPDATED = "4 August 2026";
+export const PRIVACY_CONTACT_WHATSAPP = "https://wa.me/60122190198";
+export const PRIVACY_CONTACT_LABEL = "WhatsApp +60 12-219 0198";
 
 export const privacyPolicyIntro =
-	"InnocenZ (“we”, “us”, or “our”) operates the InnocenZ web portals and the InnocenZ PR mobile application (together, the “Services”). This Privacy Policy explains how we collect, use, disclose, store, and protect personal data when you use our Services as an Outlet, PR Agency, PR (promoter / host), or Admin."
+	"InnocenZ (“we”, “us”, or “our”) operates the InnocenZ web portals and the InnocenZ PR mobile application (together, the “Services”). This Privacy Policy explains how we collect, use, disclose, store, and protect personal data when you use our Services as an Outlet, PR Agency, PR (promoter / host), or Admin.";
 
 export const privacyPolicySections: PrivacySection[] = [
 	{
@@ -125,4 +125,4 @@ export const privacyPolicySections: PrivacySection[] = [
 			"For privacy questions, access or deletion requests, or complaints about how we handle personal data, contact InnocenZ support via WhatsApp at +60 12-219 0198. We will respond within a reasonable time.",
 		],
 	},
-]
+];

@@ -106,6 +106,46 @@ export type AgencyPrEnriched = {
 };
 
 export class AgencyPrRepository {
+  /**
+   * Of `userIds`, the ones that are APPROVED members of `agencyId` — the
+   * subset an agency is allowed to address.
+   *
+   * The agency id comes from the route param the scope guard already checked,
+   * and the user ids come from the request body, so this is the only thing
+   * standing between "PRs I manage" and any user id the caller cares to type.
+   * A bare role check cannot do it: every agency owner passes `requireRole`,
+   * for every agency.
+   *
+   * Returns the intersection rather than a boolean so the caller can name how
+   * many were rejected instead of silently addressing the survivors — a
+   * broadcast that quietly drops recipients looks identical to one that worked.
+   *
+   * `pending` and `rejected` links are excluded on purpose: an applicant the
+   * agency has not accepted is not theirs to message.
+   */
+  async listApprovedUserIdsIn(agencyId: string, userIds: string[]): Promise<string[]> {
+    if (userIds.length === 0) return [];
+
+    try {
+      const rows = await db
+        .select({ userId: AgencyPrTable.userId })
+        .from(AgencyPrTable)
+        .where(
+          and(
+            eq(AgencyPrTable.agencyId, agencyId),
+            inArray(AgencyPrTable.userId, [...new Set(userIds)]),
+            eq(AgencyPrTable.approveStatus, 'approved'),
+          ),
+        );
+      return rows.map((row) => row.userId);
+    } catch (error) {
+      logger.error('[AgencyPrRepository.listApprovedUserIdsIn] Error:', error);
+      // Empty on failure, never the input: a thrown query must not degrade into
+      // "everyone passed the membership check".
+      return [];
+    }
+  }
+
   /** Every agency each of these user accounts is under. */
   async listLinksByUserIds(userIds: string[]): Promise<PrAgencyLink[]> {
     if (userIds.length === 0) return [];

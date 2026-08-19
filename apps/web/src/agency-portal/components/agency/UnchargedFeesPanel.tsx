@@ -3,6 +3,7 @@ import { useAgencyUncharged } from "@agency-portal/hooks/use-agency-uncharged";
 import { useStore } from "@agency-portal/lib/store";
 import { AlertTriangle, ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
 
 /**
  * Money this agency is owed and has not billed — the Finance head's reference.
@@ -33,6 +34,7 @@ export function UnchargedFeesPanel({
 	/** Human label for the selected week tab, e.g. "02 Aug – 08 Aug". */
 	weekLabel?: string;
 }) {
+	const { t } = usePortalLocale();
 	const {
 		backed,
 		cancellations,
@@ -78,16 +80,16 @@ export function UnchargedFeesPanel({
 					// nothing.
 					void sealWeek(weekStart, weekEnd)
 						.then((res) => toast(res.message, "success"))
-						.catch(() => toast("Could not record penalties", "warn"));
+						.catch(() => toast(t.payroll.couldNotRecordPenalties, "warn"));
 				}}
 				className="rounded-lg border border-[var(--iz-line2)] px-2 py-1 text-[11px] font-semibold text-[var(--iz-txt)] disabled:opacity-60"
 			>
-				{/* Names the week it will seal. "This week's penalties" was a lie on
+				{/* Names the week it will seal. t.payroll.thisWeeksPenalties was a lie on
 				    the Last Week tab: the button follows the tab, so on Last Week it
 				    sealed 02–08 Aug while calling it "this week". */}
 				{isSealing
-					? "Recording…"
-					: `Record penalties for ${weekLabel ?? "this week"}`}
+					? t.payroll.recording
+					: `${t.payroll.recordPenaltiesFor} ${weekLabel ?? t.payroll.thisWeekFallback}`}
 			</button>
 		) : null;
 
@@ -128,9 +130,11 @@ export function UnchargedFeesPanel({
 			<IzCard flat className="border-[var(--iz-line2)]">
 				<div className="flex flex-wrap items-center gap-1.5">
 					<b className="iz-tiny uppercase tracking-wide iz-muted">
-						Uncharged penalties &amp; fees
+						{t.payroll.unchargedPenaltiesFees}
 					</b>
-					<span className="iz-tiny iz-muted2">· nothing outstanding</span>
+					<span className="iz-tiny iz-muted2">
+						· {t.payroll.nothingOutstanding}
+					</span>
 					<span className="ml-auto">{sealButton}</span>
 				</div>
 			</IzCard>
@@ -416,19 +420,18 @@ export function UnchargedFeesPanel({
 												);
 											} else {
 												toast(
-													failed[0]?.reason ??
-														"Nothing was added — these may already be on a voucher.",
+													failed[0]?.reason ?? t.payroll.nothingWasAdded,
 													"warn",
 												);
 											}
 											setSelected(new Set());
 											setSelectedCharges(new Set());
 										})
-										.catch(() => toast("Could not add to the voucher", "warn"));
+										.catch(() => toast(t.payroll.couldNotAddToVoucher, "warn"));
 								}}
 								className="rounded-lg border border-[var(--iz-line2)] px-2.5 py-1.5 text-xs font-semibold text-[var(--iz-txt)] disabled:opacity-60"
 							>
-								{isMarking ? "Adding…" : "Add to voucher"}
+								{isMarking ? t.payroll.adding : t.payroll.addToVoucher}
 							</button>
 						</div>
 					)}

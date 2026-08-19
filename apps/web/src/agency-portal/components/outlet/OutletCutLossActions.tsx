@@ -22,14 +22,21 @@ import { useStore } from "@agency-portal/lib/store";
 import { cn } from "@agency-portal/lib/utils";
 import { Clock, Sparkles, TrendingDown, UserMinus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 function formatRm(amount: number): string {
 	return `RM ${Math.round(amount).toLocaleString("en-MY")}`;
 }
 
-function formatCutLossSavings(savings: number, cutLoss: number): string | null {
+function formatCutLossSavings(
+	savings: number,
+	cutLoss: number,
+	t: PortalTranslations,
+): string | null {
 	if (savings <= 0) return null;
-	if (cutLoss > 0 && savings >= cutLoss - 1) return "Clears cutlost";
+	if (cutLoss > 0 && savings >= cutLoss - 1) return t.today.clearsCutlost;
 	return `−${formatRm(savings)}`;
 }
 
@@ -45,6 +52,7 @@ export function OutletCutLossActions({
 	/** DOM id for scroll targets — unique per shift when inline in a list. */
 	sectionId?: string;
 }) {
+	const { t } = usePortalLocale();
 	const outletWorkspace = useStore((s) => s.outletWorkspace);
 	const agencyPRs = useStore((s) => s.agencyPRs);
 	const pendingCutlostRequests = useStore((s) => s.pendingCutlostRequests);
@@ -200,16 +208,25 @@ export function OutletCutLossActions({
 	);
 	const cutlostHint =
 		cutLoss > 0
-			? `${formatRm(cutLoss)} underfill cutlost · ${openSlots} open of ${demand} requested`
+			? fill(t.today.underfillCutlost, {
+					amount: formatRm(cutLoss),
+					open: openSlots,
+					demand,
+				})
 			: savedCredited > 0
-				? `No underfill · ${formatRm(savedCredited)} best-effort save (${bestEffortPct}% of ${formatRm(unusedWages)} unused)`
-				: "Cut open slots or release PRs early (best effort)";
+				? fill(t.today.noUnderfillLong, {
+						amount: formatRm(savedCredited),
+						pct: bestEffortPct,
+						unused: formatRm(unusedWages),
+					})
+				: t.today.cutOrRelease;
 
 	return (
 		<>
 			<OutletSection
 				id={sectionId}
-				title="Reduce cutlost"
+				title={t.outletHome.reduceCutlost}
+				iconKey={t.today.reduceCutlost}
 				hint={cutlostHint}
 				collapsible
 				open={open}
@@ -229,17 +246,14 @@ export function OutletCutLossActions({
 						)}
 						{pendingRequest && (
 							<IzPill variant="amber" className="shrink-0 !py-0.5 !text-[11px]">
-								Pending agency
+								{t.today.pendingAgency}
 							</IzPill>
 						)}
 					</span>
 				}
 			>
 				<p className="text-xs leading-snug text-[var(--iz-muted2)]">
-					Cutlost is planned wages for open (unfilled) seats only. Early
-					releases pay exact hours worked; commissions stay separate. Best
-					effort recovers {bestEffortPct}% of unused wages as savings — that
-					does not add to cutlost. Reductions need agency approval.
+					{fill(t.today.cutlostExplainer, { pct: bestEffortPct })}
 				</p>
 
 				{pendingRequest && (
@@ -262,11 +276,15 @@ export function OutletCutLossActions({
 							icon={TrendingDown}
 							title={
 								openSlots === 1
-									? "Cut 1 open slot"
-									: `Cut ${openSlots} open slots`
+									? t.today.cutOneSlot
+									: fill(t.today.cutNSlots, { n: openSlots })
 							}
-							detail={`~${formatRm(cutSlotsLabor)} off planned labor · ${openSlots} unfilled of ${demand} requested`}
-							savingsLabel={formatCutLossSavings(cutAllSavings, cutLoss)}
+							detail={fill(t.today.cutSlotsHint, {
+								amount: formatRm(cutSlotsLabor),
+								open: openSlots,
+								demand,
+							})}
+							savingsLabel={formatCutLossSavings(cutAllSavings, cutLoss, t)}
 							disabled={actionsLocked}
 							onClick={submitCutSlots}
 						/>
@@ -274,15 +292,22 @@ export function OutletCutLossActions({
 
 					<ModelRow
 						icon={Sparkles}
-						title="Best Effort Cut-Lost"
+						title={t.today.bestEffortCutLost}
 						detail={
 							supplied > 0
-								? `Release PRs early — pay hours worked; outlet keeps ${bestEffortPct}% of unused wages (${supplied} on shift).`
-								: `Release PRs early — pay hours worked; outlet keeps ${bestEffortPct}% of unused wages.`
+								? fill(t.today.bestEffortLong, {
+										pct: bestEffortPct,
+										supplied,
+									})
+								: fill(t.today.bestEffortShort, { pct: bestEffortPct })
 						}
 						savingsLabel={
 							bestEffortPlan
-								? formatCutLossSavings(bestEffortPlan.estimatedSavings, cutLoss)
+								? formatCutLossSavings(
+										bestEffortPlan.estimatedSavings,
+										cutLoss,
+										t,
+									)
 								: null
 						}
 						active={bestEffortOpen}
@@ -294,7 +319,7 @@ export function OutletCutLossActions({
 
 			<IzSheet open={bestEffortOpen} onClose={() => setBestEffortOpen(false)}>
 				<IzCardTitle className="flex items-center gap-2">
-					Best Effort Cut-Lost
+					{t.today.bestEffortCutLost}
 				</IzCardTitle>
 				<p className="iz-tiny iz-muted mt-1">
 					Optimized for {shift.event} — release PRs at current time (
@@ -305,8 +330,11 @@ export function OutletCutLossActions({
 				{bestEffortPlan ? (
 					<>
 						<p className="mt-4 font-sora text-2xl font-bold tabular-nums text-[var(--iz-green)]">
-							{formatCutLossSavings(bestEffortPlan.estimatedSavings, cutLoss) ??
-								formatRm(0)}
+							{formatCutLossSavings(
+								bestEffortPlan.estimatedSavings,
+								cutLoss,
+								t,
+							) ?? formatRm(0)}
 						</p>
 						<p className="iz-tiny iz-muted2 mt-0.5">
 							~{formatRm(bestEffortPlan.estimatedSavings)} save ({bestEffortPct}
@@ -322,7 +350,7 @@ export function OutletCutLossActions({
 						</div>
 						<div className="mt-3 space-y-1.5">
 							<p className="text-xs font-semibold uppercase tracking-wide text-[var(--iz-muted)]">
-								Why this mix
+								{t.today.whyThisMix}
 							</p>
 							{bestEffortPlan.rationale.map((line) => (
 								<p
@@ -339,13 +367,12 @@ export function OutletCutLossActions({
 							disabled={actionsLocked}
 							onClick={submitBestEffort}
 						>
-							Request agency approval
+							{t.today.requestAgencyApproval}
 						</button>
 					</>
 				) : (
 					<p className="iz-tiny iz-muted mt-4 text-center leading-snug">
-						No early-release savings plan could be calculated for this shift
-						right now.
+						{t.today.noSavingsPlan}
 					</p>
 				)}
 				<button
@@ -353,7 +380,7 @@ export function OutletCutLossActions({
 					className="iz-btn iz-btn-soft mt-2 w-full"
 					onClick={() => setBestEffortOpen(false)}
 				>
-					Cancel
+					{t.common.cancel}
 				</button>
 			</IzSheet>
 		</>
@@ -427,6 +454,7 @@ function ActionRow({
 	disabled?: boolean;
 	onClick: () => void;
 }) {
+	const { t } = usePortalLocale();
 	return (
 		<button
 			type="button"

@@ -62,7 +62,27 @@ export type PrInsertType = Omit<PrType, 'createdAt' | 'updatedAt'> & {
   updatedAt?: Date;
 };
 
-export const agencyPrApproveStatusValues = ['pending', 'approved', 'rejected'] as const;
+/**
+ * ⚠️ MATCHES THE LIVE ENUM, which has carried five labels for some time while
+ * this declared three. The DB is AHEAD of the model here, so widening it needs
+ * no migration — this is the model catching up.
+ *
+ * The drift was not harmless: it made TypeScript treat
+ * `status === 'rejected' ? … : 'awaiting approval'` as exhaustive, so a PR who
+ * had LEFT an agency was reported as "still awaiting your approval" and the
+ * operator was sent to a queue that could never contain them. A union narrower
+ * than the database is not a safe default — it turns a missing case into a
+ * confident wrong answer instead of a type error.
+ *
+ * Order mirrors the Postgres enum's own sort order.
+ */
+export const agencyPrApproveStatusValues = [
+  'pending',
+  'approved',
+  'rejected',
+  'leave_pending',
+  'left',
+] as const;
 export type AgencyPrApproveStatus = (typeof agencyPrApproveStatusValues)[number];
 export const agencyPrApproveStatusEnum = MainSchema.enum('agency_pr_approve_status', agencyPrApproveStatusValues);
 

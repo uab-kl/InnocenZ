@@ -26,6 +26,14 @@ export type OutletSwapsState = {
    * refused approval does not read as a broken screen.
    */
   actionError: string | null;
+  /**
+   * The swap WORKED, but the venue it moved you to is tight against another shift
+   * you hold — "which leaves 20 min to get between the two". Its own field, not
+   * folded into `actionError`: one says the move failed, the other says it landed
+   * and to plan the journey. Null when the roster is comfortable, and null too when
+   * a venue has no map pin, since nothing can be measured then.
+   */
+  travelWarning: string | null;
   /** Swap id currently being answered, so only that card shows a spinner. */
   busyId: string | null;
   respond: (swapId: string, accept: boolean) => Promise<void>;
@@ -42,6 +50,7 @@ export function useOutletSwaps(params?: {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [travelWarning, setTravelWarning] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
@@ -70,9 +79,16 @@ export function useOutletSwaps(params?: {
       if (!token || busyId) return;
       setBusyId(swapId);
       setActionError(null);
+      // Cleared on every answer: a warning about the LAST swap, left on screen
+      // beside a new one, reads as being about the new one.
+      setTravelWarning(null);
       try {
         if (accept) {
-          await approveOutletSwap(token, swapId);
+          const { travelWarning } = await approveOutletSwap(token, swapId);
+          // The swap SUCCEEDED — this is a caution, not an error, and it is kept
+          // apart from `actionError` for exactly that reason. It must not send
+          // anyone back to the card thinking the move failed.
+          setTravelWarning(travelWarning);
           // Approval repointed the assignment — the shift list is now stale.
           onChanged?.();
         } else {
@@ -91,5 +107,5 @@ export function useOutletSwaps(params?: {
     [token, busyId, refresh, onChanged],
   );
 
-  return { pending, loading, error, actionError, busyId, respond, refresh };
+  return { pending, loading, error, actionError, travelWarning, busyId, respond, refresh };
 }

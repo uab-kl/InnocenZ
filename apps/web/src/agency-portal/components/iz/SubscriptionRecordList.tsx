@@ -3,6 +3,8 @@ import type { SubscriptionRecordRow } from "@agency-portal/lib/subscription-reco
 import { format, parseISO } from "date-fns";
 import { ChevronDown, Receipt } from "lucide-react";
 import { useState } from "react";
+import { usePortalLocale } from "@/lib/portal-i18n/context";
+import { fill } from "@/lib/portal-i18n/fill";
 import type { SubscriptionInvoice } from "@/services/subscription-invoice";
 
 /** "1 Aug – 31 Aug 2026", with the year printed once. */
@@ -34,11 +36,12 @@ export function PaymentHistoryList({
 	invoices: SubscriptionInvoice[];
 	isLoading?: boolean;
 }) {
+	const { t } = usePortalLocale();
 	if (isLoading && invoices.length === 0) {
 		return (
 			<IzCard flat>
 				<p className="iz-tiny iz-muted py-4 text-center">
-					Loading payment history…
+					{t.subscription.loadingPaymentHistory}
 				</p>
 			</IzCard>
 		);
@@ -47,8 +50,7 @@ export function PaymentHistoryList({
 		return (
 			<IzCard flat>
 				<p className="iz-tiny iz-muted py-4 text-center">
-					No billing periods yet — the first one opens when your plan's period
-					starts.
+					{t.subscription.noBillingPeriods}
 				</p>
 			</IzCard>
 		);
@@ -61,7 +63,7 @@ export function PaymentHistoryList({
 			{unpaid.length === 0 ? (
 				<IzCard flat>
 					<p className="iz-tiny iz-muted py-4 text-center">
-						Nothing outstanding — every billing period so far is marked paid.
+						{t.subscription.nothingOutstanding}
 					</p>
 				</IzCard>
 			) : (
@@ -78,6 +80,7 @@ export function PaymentHistoryList({
 
 /** One billing period. Same card whether it is outstanding or settled. */
 function InvoiceCard({ invoice }: { invoice: SubscriptionInvoice }) {
+	const { t } = usePortalLocale();
 	const isPaid = invoice.status === "paid";
 	return (
 		<IzCard flat>
@@ -90,9 +93,11 @@ function InvoiceCard({ invoice }: { invoice: SubscriptionInvoice }) {
 						</p>
 						<p className="iz-tiny iz-muted">
 							{invoice.planName} ·{" "}
-							{invoice.billingCycle === "weekly" ? "Weekly" : "Monthly"}
+							{invoice.billingCycle === "weekly"
+								? t.subscription.billedWeekly
+								: t.subscription.billedMonthly}
 							{isPaid && invoice.paidAt
-								? ` · paid ${format(parseISO(invoice.paidAt), "d MMM yyyy")}`
+								? `${fill(t.subscription.paidOn, { date: format(parseISO(invoice.paidAt), "d MMM yyyy") })}`
 								: ""}
 						</p>
 					</div>
@@ -100,7 +105,7 @@ function InvoiceCard({ invoice }: { invoice: SubscriptionInvoice }) {
 				<div className="shrink-0 text-right">
 					<p className="iz-sm font-bold">{formatRM(Number(invoice.amount))}</p>
 					<IzPill variant={isPaid ? "green" : "amber"} className="!mt-1">
-						{isPaid ? "Paid" : "Unpaid"}
+						{isPaid ? t.subscription.statusPaid : t.subscription.statusUnpaid}
 					</IzPill>
 				</div>
 			</div>
@@ -123,6 +128,7 @@ function PaidPeriodsDisclosure({
 }: {
 	invoices: SubscriptionInvoice[];
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	if (invoices.length === 0) return null;
 	const total = invoices.reduce(
@@ -138,11 +144,14 @@ function PaidPeriodsDisclosure({
 				onClick={() => setOpen((prev) => !prev)}
 			>
 				<div className="min-w-0">
-					<p className="iz-sm font-semibold">Paid periods</p>
+					<p className="iz-sm font-semibold">{t.subscription.paidPeriods}</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">
-						{invoices.length} settled{" "}
-						{invoices.length === 1 ? "period" : "periods"} · {formatRM(total)}{" "}
-						paid to InnocenZ
+						{fill(
+							invoices.length === 1
+								? t.subscription.settledPeriodsOne
+								: t.subscription.settledPeriodsMany,
+							{ n: invoices.length, total: formatRM(total) },
+						)}
 					</p>
 				</div>
 				<ChevronDown
@@ -221,6 +230,7 @@ export function PastSubscriptionsDisclosure({
 }: {
 	rows: SubscriptionRecordRow[];
 }) {
+	const { t } = usePortalLocale();
 	const [open, setOpen] = useState(false);
 	if (rows.length === 0) return null;
 	return (
@@ -232,11 +242,16 @@ export function PastSubscriptionsDisclosure({
 				onClick={() => setOpen((prev) => !prev)}
 			>
 				<div className="min-w-0">
-					<p className="iz-sm font-semibold">Plan change history</p>
+					<p className="iz-sm font-semibold">
+						{t.subscription.planChangeHistory}
+					</p>
 					<p className="iz-tiny iz-muted2 mt-0.5">
-						{rows.length} {rows.length === 1 ? "plan" : "plans"} you were on
-						before · not billing. A switch closes one record and opens another,
-						so most of these ran for a day or less.
+						{fill(
+							rows.length === 1
+								? t.subscription.pastPlansOne
+								: t.subscription.pastPlansMany,
+							{ n: rows.length },
+						)}
 					</p>
 				</div>
 				<ChevronDown

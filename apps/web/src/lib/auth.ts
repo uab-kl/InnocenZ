@@ -9,6 +9,13 @@ export interface User {
 	/** Backend path e.g. /img/users/<id>.png — resolve with apiAssetUrl for display. */
 	profileImage?: string | null;
 	roles: string[];
+	/**
+	 * UI language saved on the ACCOUNT (migration 0122) — `en` | `zh`
+	 * (Simplified), or null when this person has never picked one. Read by
+	 * `PortalLocaleProvider`, which is what makes the choice survive a sign-out
+	 * and follow the account to another browser.
+	 */
+	preferredLocale?: string | null;
 	/** Portal codes from /auth/me (`admin` | `agency` | `outlet`). */
 	portals: string[];
 	readPermission: string[];
