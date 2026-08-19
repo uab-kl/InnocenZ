@@ -66,7 +66,27 @@ const OUTLET_META: Record<
 	},
 };
 
-const DEFAULT_META = OUTLET_META["Velvet 23"];
+/**
+ * What an outlet NOT in the demo table gets — which is every real venue.
+ *
+ * ⚠️ This was `OUTLET_META["Velvet 23"]`, so an unknown outlet was handed
+ * another venue's street address, dress code and ops contact. Paired with the
+ * `OUTLET_GPS[...] ?? OUTLET_GPS["Velvet 23"]` on the line below it, the brief
+ * would have told a PR to travel to the wrong building and given them a Google
+ * Maps link to prove it. A blank field reads as "not set yet"; a plausible
+ * wrong one reads as fact, and nobody checks a fact.
+ *
+ * Empty, not substituted. `getPrShiftOutletBrief` has NO callers today — this is
+ * defusing a landmine in code that is not wired, not fixing a live screen. The
+ * real decision is the same one `RosterAssignDialog` is waiting on: wire it
+ * against the outlet registry, or delete it.
+ */
+const DEFAULT_META = {
+	gradient: "linear-gradient(145deg,#1f2937 0%,#0f1419 50%,#374151 100%)",
+	street: "",
+	dressCode: "",
+	opsContact: "",
+};
 
 /** Check-in hero — agency assigns; outlets may request PRs but cannot assign directly. */
 export function getPrCheckInAssignmentLabel(

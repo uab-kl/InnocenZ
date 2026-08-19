@@ -599,9 +599,7 @@ const en = {
 		forOpen: "for",
 		openSlotUnit: "open slot",
 		week: "Week",
-		scheduled: "Scheduled",
-		pending: "Pending",
-		off: "Off",
+
 		awaitingOutlet: "Awaiting outlet",
 		swapArrow: "Swap",
 		/** "Open Vicky in Manage PR" — the name is inserted at the call site. */
@@ -862,7 +860,6 @@ const en = {
 		shiftsThisWeek: "Shifts this week",
 		estLabourCost: "Est labour cost",
 		liveGps: "Live GPS",
-		lateFlagsNotRecorded: "Late flags are not recorded yet",
 		prSwapRequests: "PR swap requests",
 		replacement: "Replacement",
 		shifts: "Shifts",
@@ -899,6 +896,8 @@ const en = {
 		noOpenShiftsOtherOutlets: "No open shifts at other outlets today.",
 		editShift: "Edit shift",
 		requestOutletSwap: "Request outlet swap",
+		/** The shift is over — the PR stamped out. Not a status, a stamp. */
+		checkedOut: "Checked out",
 		removeAssignment: "Remove assignment",
 		keepAssignment: "Keep assignment",
 		/** Why the edit sheet offers nothing to change on a night already worked. */
@@ -1182,6 +1181,11 @@ const en = {
 	 * `cap*` / `desc*` are the display-only copy beside each plan name.
 	 */
 	subscription: {
+		/* Aging buckets on an issued collection invoice — rendered by
+		   COLLECTION_AGING_PILL on BOTH the agency and outlet screens. */
+		agingCurrent: "Current",
+		agingDueSoon: "Due soon",
+		agingOverdue: "Overdue",
 		noAccess: "You do not have access to subscription billing.",
 		financeReadOnly: "Finance view — read-only · contact owner to update card",
 		lastPayrollWeek: "Last payroll week · {cycle}",
@@ -3243,9 +3247,7 @@ const zh: PortalTranslations = {
 		forOpen: "可填补",
 		openSlotUnit: "个空缺岗位",
 		week: "本周",
-		scheduled: "已排班",
-		pending: "待确认",
-		off: "休息",
+
 		awaitingOutlet: "待门店确认",
 		swapArrow: "调班",
 		openInManagePrPrefix: "在 PR 管理中打开",
@@ -3483,7 +3485,6 @@ const zh: PortalTranslations = {
 		shiftsThisWeek: "本周班次",
 		estLabourCost: "预计人力成本",
 		liveGps: "实时定位",
-		lateFlagsNotRecorded: "尚未记录迟到标记",
 		prSwapRequests: "PR 换班申请",
 		replacement: "替班人员",
 		shifts: "班次",
@@ -3520,6 +3521,7 @@ const zh: PortalTranslations = {
 		noOpenShiftsOtherOutlets: "今天其他门店没有空缺班次。",
 		editShift: "编辑班次",
 		requestOutletSwap: "申请换店",
+		checkedOut: "已签退",
 		removeAssignment: "移除排班",
 		keepAssignment: "保留排班",
 		shiftAlreadyPassed:
@@ -3746,6 +3748,9 @@ const zh: PortalTranslations = {
 		servant: "服务员",
 	},
 	subscription: {
+		agingCurrent: "未到期",
+		agingDueSoon: "即将到期",
+		agingOverdue: "已逾期",
 		noAccess: "你没有查看订阅账单的权限。",
 		financeReadOnly: "财务视图 —— 只读 · 如需更换银行卡请联系东主",
 		lastPayrollWeek: "上一个薪资周 · {cycle}",

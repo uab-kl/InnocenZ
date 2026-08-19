@@ -14789,6 +14789,32 @@ button.iz-pr-offer-row:hover {
 	color: var(--iz-violet);
 }
 
+/*
+ * Shift over, PR stamped out. Deliberately the quietest cell on the grid: it is
+ * the only state that needs nothing from anyone, so it recedes and lets the
+ * live and pending cells carry the colour. NOT --off, which is red and means a
+ * booking was called off.
+ */
+.iz-roster-week-cell--done {
+	background: rgba(255, 255, 255, 0.03);
+	border-color: var(--iz-line2);
+	opacity: 0.75;
+}
+
+.iz-roster-week-cell--done .status {
+	color: var(--iz-muted);
+}
+
+/* The live cell's own status colour — the background above was already here,
+   waiting for a mapping that never arrived. */
+.iz-roster-week-cell--live .status {
+	color: var(--iz-green);
+}
+
+.iz-roster-week-cell--swap .status {
+	color: var(--iz-violet-l);
+}
+
 .iz-roster-week-cell--off {
 	background: rgba(255, 117, 117, 0.08);
 	border-color: rgba(255, 117, 117, 0.25);

@@ -189,12 +189,6 @@ function AgencyRoster() {
 	// edit sheet.
 	const handleFlagNoShow = (slotId: string) =>
 		rosterMut.flagNoShow.mutate(slotId);
-	const handleFlagLate = (_slotId: string) => {
-		// There is still no backend field for 'late'. Say so, rather than writing
-		// to a store that does not hold this row — which is how it came to look
-		// like a working button in the first place.
-		toast(t.roster.lateFlagsNotRecorded, "warn");
-	};
 	// No handleEditSave either, and this one was worse than dead — it was LOSSY.
 	//
 	// The sheet has had no status control for a while (see the note in it), so
@@ -538,7 +532,7 @@ function AgencyRoster() {
 						session keeps the old demo-fixture panel verbatim. Two components
 						rather than one fed from two sources — the backed one reports
 						positions recorded at check-in and check-out and says so, while the
-						demo one still presents a moving t.roster.liveGps that no stored data
+						demo one still presents a moving "Live GPS" that no stored data
 						supports.
 					*/}
 					{getAgencyIdentity() !== null ? (
@@ -697,7 +691,6 @@ function AgencyRoster() {
 						commissionOnlyRates={outletWorkspace.commissionOnlyRates}
 						canAssign={canAssign}
 						onEdit={openEdit}
-						onFlagLate={handleFlagLate}
 						onFlagNoShow={handleFlagNoShow}
 						onCancelPrSwap={declinePrSwapRequest}
 					/>

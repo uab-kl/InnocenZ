@@ -883,7 +883,7 @@ function AgencySubscription() {
 														</IzPill>
 													) : aging ? (
 														<IzPill variant={aging.variant}>
-															{aging.label}
+															{aging.label(t)}
 														</IzPill>
 													) : (
 														<IzPill variant="ink">{inv.status}</IzPill>

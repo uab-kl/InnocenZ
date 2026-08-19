@@ -73,6 +73,20 @@ export function BottomNav({
 	);
 }
 
+/**
+ * The topbar identity when we do not yet know who is signed in.
+ *
+ * ⚠️ `name` is a FALLBACK, not a person. It read "Vicky", "Atlas Agency" and
+ * "Velvet 23" — three demo identities — and `displayName` below is
+ * `prDisplayName ?? meta.name`, where `prDisplayName` is a PR field. So every
+ * agency session that rendered this bar was greeted as **Atlas Agency** and
+ * every outlet session as **Velvet 23**, whoever they actually were. That is
+ * the failure `.cursor/rules/no-demo-data-on-real-sessions.mdc` exists to stop,
+ * and a name is the worst thing to guess: a wrong one is indistinguishable from
+ * a right one.
+ *
+ * A fallback may describe the ROLE. It may never name a company or a person.
+ */
 const ROLE_LABELS: Record<
 	string,
 	{ name: string; label: string; av: string; gradient: string }
@@ -85,23 +99,23 @@ const ROLE_LABELS: Record<
 	},
 
 	host_tied: {
-		name: "Vicky",
+		name: "PR",
 		label: "PR \u00b7 Agency-Tied",
-		av: "V",
+		av: "P",
 		gradient: "linear-gradient(135deg,#C99B4E,#8a5e22)",
 	},
 
 	agency: {
-		name: "Atlas Agency",
+		name: "Agency",
 		label: "PR Agency",
 		av: "A",
 		gradient: "var(--iz-grad)",
 	},
 
 	vendor: {
-		name: "Velvet 23",
+		name: "Outlet",
 		label: "Outlet",
-		av: "V",
+		av: "O",
 		gradient: "linear-gradient(135deg,#39D98A,#1f8f5c)",
 	},
 };

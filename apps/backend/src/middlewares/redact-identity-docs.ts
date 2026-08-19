@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
 import { authRepository } from '@/composition-root.js';
+import { portalRoleName } from '@/types/rbac-constant.js';
 
 /**
  * Marks a request as coming from an outlet and nothing more, so the response
@@ -35,9 +36,37 @@ export async function redactIdentityDocsForOutlet(
 
   try {
     const roles = await authRepository.getRolesForUserIds([user.id]);
-    const roleNames = roles.map((r) => r.roleName);
-    const privileged = roleNames.includes('admin') || roleNames.includes('agency');
-    req.redactIdentityDocs = !privileged && roleNames.includes('outlet');
+
+    /**
+     * ⚠️ MATCH ON THE PORTAL, NOT ON A ROLE NAME.
+     *
+     * This read `roleNames.includes('outlet')`, and `outlet` is the DEPRECATED,
+     * never-seeded role (see types/rbac-constant.ts). Real venue staff hold
+     * Owner / Finance / Ops Head / Director / Guarantor, which are per-PORTAL
+     * rows told apart by `portalCode` — so that condition was false for every
+     * live outlet account, `redactIdentityDocs` was never set, and the OWNER
+     * DECISION above was documented for three weeks without ever being
+     * enforced. A PR's IC number, date of birth, home address and both sides of
+     * their ID photo went to the venue in full.
+     *
+     * `require-sub-role.ts` was the only place that had this right, and this is
+     * deliberately the same shape: portal first, legacy role names as a fallback
+     * so an account seeded before the portal split still resolves.
+     */
+    const holdsPortal = (code: string) => roles.some((r) => r.portalCode === code);
+    const holdsRole = (...names: string[]) =>
+      roles.some((r) => names.includes(r.roleName));
+
+    const privileged =
+      holdsPortal('admin') ||
+      holdsPortal('agency') ||
+      holdsRole(portalRoleName.ADMIN, portalRoleName.AGENCY, 'agency_owner', 'agency_finance');
+
+    const isOutlet =
+      holdsPortal('outlet') ||
+      holdsRole(portalRoleName.OUTLET, 'outlet_owner', 'outlet_finance', 'outlet_ops');
+
+    req.redactIdentityDocs = !privileged && isOutlet;
   } catch {
     // Fail CLOSED: if we cannot prove the caller is allowed the documents, do
     // not send them.

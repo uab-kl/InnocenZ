@@ -287,7 +287,6 @@ export function RosterShiftTable({
 	commissionOnlyRates,
 	canAssign,
 	onEdit,
-	onFlagLate,
 	onFlagNoShow,
 	onCancelPrSwap,
 }: {
@@ -308,7 +307,6 @@ export function RosterShiftTable({
 	commissionOnlyRates?: CommissionOnlyRateSettings;
 	canAssign: boolean;
 	onEdit: (id: string) => void;
-	onFlagLate: (id: string) => void;
 	onFlagNoShow: (id: string) => void;
 	onCancelPrSwap: (swapId: string) => void;
 }) {
@@ -422,7 +420,6 @@ export function RosterShiftTable({
 									)}
 									canAssign={canAssign}
 									onEdit={onEdit}
-									onFlagLate={onFlagLate}
 									onFlagNoShow={onFlagNoShow}
 									onCancelPrSwap={onCancelPrSwap}
 									onOpenEarningsSheet={
@@ -464,7 +461,6 @@ export function RosterShiftTable({
 							)}
 							canAssign={canAssign}
 							onEdit={onEdit}
-							onFlagLate={onFlagLate}
 							onFlagNoShow={onFlagNoShow}
 							onCancelPrSwap={onCancelPrSwap}
 							onOpenEarningsSheet={
@@ -520,7 +516,6 @@ function RosterTableRow({
 	estPayout,
 	canAssign,
 	onEdit,
-	onFlagLate,
 	onFlagNoShow,
 	onCancelPrSwap,
 	onOpenEarningsSheet,
@@ -534,7 +529,6 @@ function RosterTableRow({
 	estPayout: number;
 	canAssign: boolean;
 	onEdit: (id: string) => void;
-	onFlagLate: (id: string) => void;
 	onFlagNoShow: (id: string) => void;
 	onCancelPrSwap: (swapId: string) => void;
 	onOpenEarningsSheet?: (
@@ -651,13 +645,7 @@ function RosterTableRow({
 						)}
 						{showFlags && (
 							<>
-								<button
-									type="button"
-									className={`iz-roster-mini-btn${slot.lateFlag ? " on" : ""}`}
-									onClick={() => onFlagLate(slot.id)}
-								>
-									{t.rosterGrid.late}
-								</button>
+								{/* No "Late" button — see the note on onFlagNoShow below. */}
 								<button
 									type="button"
 									className={`iz-roster-mini-btn${slot.noShowFlag ? " on" : ""}`}
@@ -693,7 +681,6 @@ function RosterShiftCard({
 	estPayout,
 	canAssign,
 	onEdit,
-	onFlagLate,
 	onFlagNoShow,
 	onCancelPrSwap,
 	onOpenEarningsSheet,
@@ -707,7 +694,6 @@ function RosterShiftCard({
 	estPayout: number;
 	canAssign: boolean;
 	onEdit: (id: string) => void;
-	onFlagLate: (id: string) => void;
 	onFlagNoShow: (id: string) => void;
 	onCancelPrSwap: (swapId: string) => void;
 	onOpenEarningsSheet?: (
@@ -822,13 +808,24 @@ function RosterShiftCard({
 						slot.status !== "unavailable" &&
 						slot.status !== "swap-pending" && (
 							<>
-								<button
-									type="button"
-									className={`iz-btn iz-roster-action-btn !text-xs ${slot.lateFlag ? "iz-btn-primary" : "iz-btn-ghost"}`}
-									onClick={() => onFlagLate(slot.id)}
-								>
-									{slot.lateFlag ? t.rosterGrid.lateDone : t.rosterGrid.late}
-								</button>
+								{/*
+								 * "Late" USED TO SIT HERE, and it did nothing.
+								 *
+								 * There is no backend field for lateness: nothing ever writes
+								 * `shift_assignment`, `slot.lateFlag` is populated only by the
+								 * demo seed, and the handler behind this button existed solely
+								 * to toast "Late flags are not recorded yet". A control whose
+								 * whole behaviour is to apologise is worse than no control —
+								 * it teaches the operator that they have recorded something.
+								 *
+								 * No-show below is the real one: it writes `status: 'no_show'`
+								 * through the API.
+								 *
+								 * If lateness is wanted, DERIVE it rather than reviving a flag
+								 * to click: the slot already carries `checkedInAt` and
+								 * `shiftStart`, so "late" is a comparison, not a decision — and
+								 * a derived one cannot drift from the attendance it describes.
+								 */}
 								<button
 									type="button"
 									className={`iz-btn iz-roster-action-btn !text-xs ${slot.noShowFlag ? "iz-btn-primary" : "iz-btn-ghost"}`}

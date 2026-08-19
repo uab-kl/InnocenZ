@@ -867,7 +867,7 @@ function OutletSubscriptionPage() {
 													</IzPill>
 												) : aging ? (
 													<IzPill variant={aging.variant} className="!mt-1">
-														{aging.label}
+														{aging.label(t)}
 													</IzPill>
 												) : (
 													<IzPill variant="ink" className="!mt-1">

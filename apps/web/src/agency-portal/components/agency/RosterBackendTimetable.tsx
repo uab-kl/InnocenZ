@@ -106,30 +106,90 @@ const NON_STAFFING_ASSIGNMENT_STATUSES: readonly ShiftAssignmentStatus[] = [
 	"leave_approved",
 ];
 
-// Dictionary KEYS — module scope, no hook available. Record keys stay the
-// API's slot-status values.
+/**
+ * Every slot status this grid can be handed, and what the cell shows for it.
+ *
+ * ⚠️ `Record<RosterSlotStatus, …>`, NOT `Record<string, …>`. That single
+ * difference is the whole bug this replaces. The old map keyed on `string` and
+ * listed three of the eight statuses, with a `?? scheduled` fallback under it —
+ * so `on-duty`, `en-route`, `swap-pending`, `outlet-pending` and
+ * `outlet-request-pending` all silently printed "Scheduled". A PR standing on
+ * the floor was drawn exactly like one who had not left home, and the giveaway
+ * sat in the stylesheet: `--live`, `--pending` and `--swap` were all defined and
+ * none of them was reachable. **A fallback over a partial map turns a missing
+ * case into a confident wrong answer; an exhaustive Record turns it into a
+ * compile error.** Add a status to `RosterSlotStatus` and this stops building
+ * until it is answered here, which is the point.
+ *
+ * Labels are RESOLVERS, not dictionary keys: a key is itself a `string`, so
+ * rendering the map value directly type-checks and ships the key name to screen.
+ * They are also the same labels `RosterShiftTable` uses for the same statuses —
+ * the grid and the table describe one roster, and two vocabularies for it drift
+ * the first time either is revised.
+ */
 const STATUS_CELL: Record<
-	string,
-	{ className: string; label: keyof PortalTranslations["rosterGrid"] }
+	RosterSlotStatus,
+	{ className: string; label: (t: PortalTranslations) => string }
 > = {
 	scheduled: {
 		className: "iz-roster-week-cell--scheduled",
-		label: "scheduled",
+		label: (t) => t.roster.scheduled,
+	},
+	// Demo-only: `rosterStatusFromAssignment` never returns it, because the
+	// backend has no "on the way" stamp. Reads as scheduled, like the table.
+	"en-route": {
+		className: "iz-roster-week-cell--scheduled",
+		label: (t) => t.roster.scheduled,
+	},
+	"on-duty": {
+		className: "iz-roster-week-cell--live",
+		label: (t) => t.roster.onDuty,
 	},
 	"assignment-pending": {
-		className: "iz-roster-week-cell--scheduled",
-		label: "pending",
+		className: "iz-roster-week-cell--pending",
+		label: (t) => t.rosterGrid.awaitingPr,
 	},
-	unavailable: { className: "iz-roster-week-cell--off", label: "off" },
+	"outlet-pending": {
+		className: "iz-roster-week-cell--pending",
+		label: (t) => t.rosterGrid.awaitingOutlet,
+	},
+	"outlet-request-pending": {
+		className: "iz-roster-week-cell--pending",
+		label: (t) => t.rosterGrid.outletRequest,
+	},
+	"swap-pending": {
+		className: "iz-roster-week-cell--swap",
+		label: (t) => t.rosterGrid.swapPending,
+	},
+	unavailable: {
+		className: "iz-roster-week-cell--off",
+		label: (t) => t.roster.unavailable,
+	},
 };
 
-function toneFor(status: RosterSlotStatus) {
-	return (
-		STATUS_CELL[status] ?? {
-			className: "iz-roster-week-cell--scheduled",
-			label: "scheduled" as const,
-		}
-	);
+/**
+ * A finished shift, which no STATUS can express.
+ *
+ * `RosterSlotStatus` has no "checked out" value, and it cannot get one cheaply:
+ * `rosterStatusFromAssignment` folds the backend's `completed` back into
+ * "scheduled". So the check-out STAMP is the only thing that knows the shift is
+ * over, and a cell reading "Scheduled" at 4am about a shift that ended at
+ * midnight is telling the agency the wrong story.
+ */
+const DONE_CELL = {
+	className: "iz-roster-week-cell--done",
+	label: (t: PortalTranslations) => t.roster.checkedOut,
+};
+
+function toneFor(slot: Pick<AgencyRosterSlot, "status" | "checkedOutAt">) {
+	// Stamped out wins over the status — EXCEPT when the row was cancelled or
+	// no-showed, where "Off" is the more important fact about the slot and a
+	// stamp may exist from before the decision.
+	if (slot.checkedOutAt && slot.status !== "unavailable") return DONE_CELL;
+	// No `??` fallback: the Record above is exhaustive over the key's own type,
+	// so there is nothing left to fall back to. Reintroducing one would restore
+	// exactly the silence this replaced.
+	return STATUS_CELL[slot.status];
 }
 
 type RosterBackendTimetableProps = {
@@ -517,7 +577,7 @@ export function RosterBackendTimetable({
 													return (
 														<td key={dateIso} className="iz-roster-week-td">
 															{daySlots.map((slot) => {
-																const tone = toneFor(slot.status);
+																const tone = toneFor(slot);
 																return (
 																	<button
 																		key={slot.id}
@@ -543,7 +603,7 @@ export function RosterBackendTimetable({
 																			{slot.shift || t.rosterGrid.shift}
 																		</span>
 																		<span className="status">
-																			{t.rosterGrid[tone.label]}
+																			{tone.label(t)}
 																		</span>
 																	</button>
 																);

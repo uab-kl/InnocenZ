@@ -322,7 +322,32 @@ Legend: **Verified** = reported working end-to-end · **Reported** = built but n
 
 ## 9. TO-DO (undone) — full backlog, prioritized
 
-### ▶ 🔴 Two server refusals are written but NOT yet proven live — restart the backend (19 Aug 2026)
+### ▶ 🔴 apps/web DOES NOT BUILD — a stale nested `@tanstack/router-core` (19 Aug 2026)
+
+`pnpm build` in `apps/web` dies with `MISSING_EXPORT` on `waitForRequest`,
+`disposeSsrResponseDetached`, `bindSsrResponseToRequest` and `_getRenderedMatches`. **Not caused by
+the `main` merge** — the pre-merge tree fails identically against the same `node_modules`, and
+neither side touched `package.json` or `pnpm-lock.yaml`. It also survived a `pnpm install`.
+
+The repo has TWO copies and the build resolves the wrong one:
+
+| location | version | has the four exports |
+|---|---|---|
+| `node_modules/@tanstack/router-core` | 1.171.24 | yes |
+| `apps/web/node_modules/@tanstack/router-core` | **1.171.15** | **no** |
+
+The nested copy is an EXACT pin (`"@tanstack/router-core": "1.171.15"`) inside
+`@tanstack/router-plugin` 1.168.32 and `@tanstack/router-generator`, so `pnpm install` will keep
+re-creating it. ⚠️ **The deeper cause is that `apps/web/package.json` pins most `@tanstack/*` to
+`"latest"`**, so they were resolved at different times and no longer agree: react-router 1.170.29,
+react-start 1.168.46, router-plugin 1.168.32, router-cli 1.167.19, ssr-query and devtools 1.167.1.
+A floating pin does not drift on its own — it drifts *per install*, so two machines can hold
+different trees from one lockfile-less range. Fix by bumping `@tanstack/router-plugin` /
+`router-cli` to a release whose pinned `router-core` matches 1.171.24, then pinning the whole
+`@tanstack/*` set to explicit versions. **Dev is unaffected** — Vite serves every route fine; this
+blocks the production build only.
+
+### ▶ ✅ PROVEN LIVE 19 Aug 2026 — the two shift-assignment refusals (was: not yet fired)
 
 `DELETE /shift-assignment/:id` now refuses an assignment on a past date, or one with a
 check-in/check-out stamp on any date; `POST /outlet-swap` refuses the same two. Both were
@@ -333,13 +358,26 @@ return 409 — it deletes a real assignment row, taking its attendance stamps an
 safe order is: restart the backend, THEN fire both. A refusal writes nothing, so once the code is
 live both probes are free (see the `prove-guards-live-without-writing` note).
 
-To prove it, as an agency owner token:
-- `DELETE /api/v1/shift-assignment/<an assignment on a date before today>` → **409**, message naming
-  cancel/no-show as the remedy. Re-read the row afterwards: it must still be there.
-- `POST /api/v1/outlet-swap` with an `assignmentId` on a past date → **409** "that shift has already
-  passed". Then `GET /outlet-swap` and confirm no `pending_pr` row was created.
-- A same-day assignment with no check-in must still DELETE cleanly — the rule must not have swallowed
-  the ordinary undo-a-mis-assignment case it was written to preserve.
+Fired against the live `innocenz-test` DB as `owner@atlas-agency.my`, after restarting the backend
+so the process definitely held the merged code. **Both refused, and both wrote nothing:**
+
+- `DELETE /shift-assignment/069a16ae…` (shift dated 2026-08-03) → **409** *"That shift has already
+  passed — the assignment on it is the record of who worked, not a booking to undo. Mark it
+  cancelled or no-show instead."* Re-read afterwards: the row is still there.
+- `POST /outlet-swap` `{assignmentId: 069a16ae…, toShiftId: 23c842b9…}` — both shifts on 2026-08-03,
+  so it clears the same-date check and reaches the new guard → **409** *"That shift has already
+  passed — there is nothing left to swap."* `GET /outlet-swap` afterwards: **0** rows for that
+  assignment, so no `pending_pr` was raised.
+
+⚠️ **STILL UNPROVEN: the check-in branch of both guards.** It refuses on `checkInAt`/`checkOutAt`
+regardless of date, and this DB currently has **zero** assignments dated today-or-later carrying a
+check-in stamp — so there was nothing to fire it at. Absent evidence about the instrument, not about
+the rule (see `absent-evidence-is-about-the-instrument`). Fire it the next time a PR checks in.
+
+Also still unfired, and deliberately: **a same-day assignment with no check-in must still DELETE
+cleanly.** That one is a real write against a shared DB, so it needs a row someone is willing to
+lose — the guard must not have swallowed the ordinary undo-a-mis-assignment case it was written to
+preserve.
 
 ### ▶ 🟡 `RosterAssignDialog` is an ORPHAN — decide: wire it, or delete it (19 Aug 2026)
 
@@ -1856,6 +1894,8 @@ teammate's kind when it is our own X16 work whose producer has vanished from `ap
 ---
 
 ## 10. Changelog (what changed / what's done — append newest at top)
+
+| 2026-08-19 | **Five defects behind one question — "does the roster cell ever say on-duty?" — and the answer was no, for any status.** **The grid could not show a PR on the floor.** `STATUS_CELL` in `RosterBackendTimetable` was typed `Record<string, …>`, listed 3 of the 8 `RosterSlotStatus` values, and sat above a `?? scheduled` fallback — so `on-duty`, `en-route`, `swap-pending`, `outlet-pending` and `outlet-request-pending` all printed **"Scheduled"**. `liveRosterStatus` had computed the right answer all along; the cell threw it away. The tell was in the stylesheet: `--live`, `--pending` and `--swap` were all defined and **none was reachable**. Now `Record<RosterSlotStatus, …>` — exhaustive, no fallback — with resolver labels shared with `RosterShiftTable` so the grid and the table speak one vocabulary, plus a new `--done` cell for a shift that is over (there is no "checked out" STATUS: `rosterStatusFromAssignment` folds `completed` back into `scheduled`, so the check-out STAMP is the only thing that knows). ⚠️ **A fallback over a partial map turns a missing case into a confident wrong answer; an exhaustive Record turns it into a compile error.** Proven, not assumed: deleting the `on-duty` entry now fails with `TS2741`. **Today was innocent** — `deriveLiveWorkforce` requires `dateIso === today` AND a real `checkedInAt`, so "0 PR on duty" on a day whose shifts are yesterday's is correct. **🔴 A PR's identity documents were reaching every venue.** `redact-identity-docs.ts` gated on `roleNames.includes('outlet')`, and `outlet` is the deprecated never-seeded role — real venue staff hold Owner/Finance/Ops, told apart by PORTAL. The condition was false for every live outlet account, so the flag was never set and the OWNER DECISION of 30 Jul was documented for three weeks without ever being enforced: IC number, DOB, home address, both ID photos, bank details and signature all went out in full. Now matches `portalCode` the way `require-sub-role.ts` always did. **Verified with three real logins on one endpoint** — outlet: every identity field redacted; agency and admin: idNo×7, dob×21, addresses, both ID photos, signature still present. (An earlier pass compared KEY SETS and found "nothing removed" — the helper nulls VALUES, so that instrument could not see the fix either way.) **A "Late" button that only apologised.** Two of them, wired to a handler whose whole body toasted "Late flags are not recorded yet" — no backend field exists and `slot.lateFlag` is written only by the demo seed. Removed, with the prop threaded through three components, the handler and the string. No-show stays; it writes. If lateness is wanted it should be DERIVED from `checkedInAt` vs `shiftStart`, never clicked. **Demo identities in the topbar.** `displayName = prDisplayName ?? meta.name` and `prDisplayName` is a PR field, so every agency session rendering that bar was greeted as **"Atlas Agency"** and every outlet as **"Velvet 23"**. Fallbacks name the ROLE now. **And an outlet brief that substituted another venue:** `DEFAULT_META = OUTLET_META["Velvet 23"]`, beside `OUTLET_GPS[...] ?? OUTLET_GPS["Velvet 23"]` — an unknown venue got Velvet 23's street, dress code and a Maps link to the wrong building. Blank now. `getPrShiftOutletBrief` has **no callers**, so that defused a landmine rather than fixing a screen — same wire-or-delete decision as `RosterAssignDialog`. **Last i18n holdout closed:** the collection aging pills (`Current` / `Due soon` / `Overdue`) were hardcoded on BOTH subscription screens — they escaped every sweep by living in a lib file instead of between JSX tags. web tsc unchanged at its 141 baseline, backend 0, 28/28 + 46/46. |
 
 | 2026-08-19 | **A shift vanished from Manage Outlet the moment it was fully staffed — so "we filled it" and "nobody asked" both rendered as an empty board.** Follow-on to the cross-agency count below, which made this visible immediately: as soon as supplied counted every agency, the 21 Aug Friday lounge hit 2/2 and BOTH portals dropped to *0 listings · No shifts match your filters*. The screen going blank was the only news that the job was done. **`shiftsFromPosted` no longer filters on `openSlots > 0`.** A fully staffed row stays, reading 2/2 · **Fully staffed** in green where an unfilled one reads *N open* in amber, on the shift card and the day-group header alike. What still NEEDS people is a different figure and keeps its own: `openShiftCount` is now `shifts.filter(openSlots > 0).length`, so the grid card's "N open shifts" cannot start counting finished work. The section is *Shifts & staffing*, not *Available shifts*, and the empty state says "No shifts match your filters." **`isUpcomingOutletShift` → `isOutletShiftOnOrAfterToday`.** It also required the shift's END to be ahead, so a 10:00–12:00 job dropped off by mid-afternoon — right for a board that only means "what can we still staff", wrong for one that also answers "did we fill today's demand", and wrong under a heading that says *today and future*. The rule is the date now; past DATES still go (that is History's, and the roster's read-only rules). `minutesOfDay` / `shiftEndMinutes` / `liveMinutesOfDay` and the `nowMinutes` injection went with it. **A screen cannot answer two questions if one of them makes rows disappear** — absence has to mean one thing. `agency-outlet-shifts.test.ts` moved with the contract: the "hides a filled post" and "drops today's ended shifts" tests now assert the opposite and check `openShiftCount` stays 0, plus three new ones covering `suppliedTotal` winning over visible `prs`, the fallback when the server sent no total, and the tier buckets riding through. 11 tests, all green; full `apps/web` suite 28/28. |
 
