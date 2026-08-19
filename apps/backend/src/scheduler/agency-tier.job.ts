@@ -9,6 +9,7 @@ import {
 } from '@/composition-root.js';
 import { applyPlanChangeToLedger } from '@/features/admin-request/apply-plan-change.js';
 import { agencyWeeklyPvCount } from '@/features/subscription/plan-limit.js';
+import { AgencyTable } from '@/features/agency/agency.model.js';
 import { MemberSubscriptionTable } from '@/features/member-subscription/member-subscription.model.js';
 import { SubscriptionTable } from '@/features/subscription/subscription.model.js';
 import { previousCompleteWeek } from '@/features/payment-voucher/payment-voucher-week.js';
@@ -171,6 +172,99 @@ async function runAgencyTier(): Promise<void> {
   // job is indistinguishable from one that stopped running.
   logger.info(
     `[agency-tier] week ${weekStart}..${weekEnd}: ${live.length} agency subscription(s) checked, ${moved} moved, ${flagged} past the rate card`,
+  );
+
+  /*
+   * Reporting only, and after the money work — so it is wrapped. The scheduler
+   * logs any throw as "agency-tier failed", which would make a re-pricing run
+   * that actually SUCCEEDED read as a failed one. A count nobody can take is
+   * not worth that.
+   */
+  try {
+    await reportPlanlessAgencies({
+      plannedIds: new Set(
+        live
+          .map((r) => r.subscriberId)
+          .filter((id): id is string => Boolean(id)),
+      ),
+      weekStart,
+      weekEnd,
+    });
+  } catch (error) {
+    logger.error('[agency-tier] planless-agency report failed:', error);
+  }
+}
+
+/**
+ * The agencies this job can never move: those holding no subscription row at
+ * all.
+ *
+ * The loop above works FROM `member_subscription`, so an agency with zero rows
+ * is not merely skipped — it is invisible to the rule. It is invisible to the
+ * agency's own Subscription screen too, whose auto-tier effect is guarded on
+ * `currentPlanName` being set. And enrolment happens in exactly one place,
+ * `enrollSignupPackage` at sign-up. So an agency created any OTHER way — a seed
+ * script, an admin, a migration — has no path onto a plan through any screen,
+ * and nothing anywhere says so out loud.
+ *
+ * This pass does not fix that, deliberately. Writing a plan here would bill an
+ * org that never subscribed, which is the same reason the loop above leaves
+ * them out. It makes them SAYABLE: an agency issuing vouchers with no plan is
+ * working unbilled and is the case worth a human's attention; one at zero PV is
+ * dormant, and is counted rather than named.
+ *
+ * The planned set is SUBTRACTED from the agency list rather than re-queried, so
+ * "holds a plan" cannot come to mean two different things inside one file.
+ *
+ * Exported for the same reason as `bandFor`: so it can be fired on its own,
+ * against the real database, without running the re-pricing loop that writes.
+ */
+export async function reportPlanlessAgencies(params: {
+  plannedIds: Set<string>;
+  weekStart: string;
+  weekEnd: string;
+}): Promise<void> {
+  // A pending_review / inactive / suspended agency without a plan is expected
+  // rather than a gap, so only live ones are asked about.
+  const agencies = await db
+    .select({ id: AgencyTable.id, name: AgencyTable.name })
+    .from(AgencyTable)
+    .where(eq(AgencyTable.status, 'active'));
+
+  const planless = agencies.filter((a) => !params.plannedIds.has(a.id));
+  if (planless.length === 0) return;
+
+  const working: string[] = [];
+  let dormant = 0;
+  let unknown = 0;
+  for (const agency of planless) {
+    const issued = await agencyWeeklyPvCount({
+      agencyId: agency.id,
+      weekStart: params.weekStart,
+    });
+    // -1 is the helper's READ FAILURE, not a quiet week. Folding it into
+    // `dormant` would turn a broken query into a reassuring number.
+    if (issued < 0) {
+      unknown += 1;
+      continue;
+    }
+    if (issued === 0) {
+      dormant += 1;
+      continue;
+    }
+    working.push(`${agency.name} (${issued} PV)`);
+  }
+
+  if (working.length > 0) {
+    logger.warn(
+      `[agency-tier] ${working.length} active agency(ies) issued PVs in ` +
+        `${params.weekStart}..${params.weekEnd} with NO subscription — working ` +
+        `unbilled, and no screen can put them on a plan: ${working.join(', ')}`,
+    );
+  }
+  logger.info(
+    `[agency-tier] ${planless.length} active agency(ies) hold no subscription ` +
+      `(${working.length} issuing PVs, ${dormant} dormant, ${unknown} count unavailable)`,
   );
 }
 

@@ -681,7 +681,7 @@ function AgencySubscription() {
 											 * Styled to the tile it sits on rather than the neutral
 											 * soft button used elsewhere: Custom carries the violet
 											 * accent everywhere on this screen, and a grey button
-											 * under a violet t.subscription.priceRenegotiate read as disabled.
+											 * under a violet "Renegotiate Price" read as disabled.
 											 */
 											<button
 												type="button"
@@ -725,7 +725,9 @@ function AgencySubscription() {
 					<IzCard flat>
 						<p className="iz-tiny iz-muted text-center py-4">
 							{sub.backed
-								? t.subscription.noActiveSubscription
+								? fill(t.subscription.noActiveSubscription, {
+										plan: billedTierLabel,
+									})
 								: t.subscription.noSubscriptionInvoices}
 						</p>
 					</IzCard>

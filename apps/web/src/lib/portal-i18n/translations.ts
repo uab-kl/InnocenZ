@@ -1232,7 +1232,8 @@ const en = {
 		whatYouSubscribedTo:
 			"What your agency is subscribed to with InnocenZ today. It records what you subscribed to and when, so it does not say whether a given week was paid.",
 		loadingSubscription: "Loading your subscription…",
-		noActiveSubscription: "No active subscription for this agency.",
+		noActiveSubscription:
+			"No plan has been assigned to this agency yet, so nothing has been billed. {plan} above is the tier your PV volume implies — not a plan you are paying for.",
 		noSubscriptionInvoices: "No subscription invoices yet.",
 		oneRowPerPeriod:
 			"One row per billing period — agencies are billed weekly, Sunday to Saturday, the same week your payroll runs on. A period stays Unpaid until InnocenZ marks the payment received.",
@@ -3794,7 +3795,8 @@ const zh: PortalTranslations = {
 		whatYouSubscribedTo:
 			"这是你的经纪公司目前在 InnocenZ 的订阅内容。它记录你订阅了什么以及订阅时间，并不表示某一周是否已付款。",
 		loadingSubscription: "正在加载你的订阅…",
-		noActiveSubscription: "此经纪公司没有生效中的订阅。",
+		noActiveSubscription:
+			"InnocenZ 尚未为你的经纪公司分配订阅方案，因此没有产生任何账单。上方的 {plan} 是根据 PV 用量推算出的级别，并非你正在支付的方案。",
 		noSubscriptionInvoices: "还没有订阅账单。",
 		oneRowPerPeriod:
 			"每个计费周期一行 —— 经纪公司按周计费，周日至周六，与你的薪资周一致。在 InnocenZ 确认收款前，该周期显示为未付款。",
