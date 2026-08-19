@@ -232,7 +232,6 @@ export async function reportPlanlessAgencies(params: {
     .where(eq(AgencyTable.status, 'active'));
 
   const planless = agencies.filter((a) => !params.plannedIds.has(a.id));
-  if (planless.length === 0) return;
 
   const working: string[] = [];
   let dormant = 0;
@@ -262,9 +261,16 @@ export async function reportPlanlessAgencies(params: {
         `unbilled, and no screen can put them on a plan: ${working.join(', ')}`,
     );
   }
+  // Logged at zero too, for the reason the run summary above gives: a check
+  // that says nothing when it finds nothing cannot be told apart from one that
+  // stopped running. The denominator is carried so the line proves what was
+  // actually examined.
   logger.info(
-    `[agency-tier] ${planless.length} active agency(ies) hold no subscription ` +
-      `(${working.length} issuing PVs, ${dormant} dormant, ${unknown} count unavailable)`,
+    `[agency-tier] ${planless.length} of ${agencies.length} active agency(ies) hold ` +
+      `no subscription` +
+      (planless.length > 0
+        ? ` (${working.length} issuing PVs, ${dormant} dormant, ${unknown} count unavailable)`
+        : ''),
   );
 }
 
