@@ -343,7 +343,15 @@ export function ImageLightbox({
     <Modal visible transparent animationType="fade" onRequestClose={onClose}>
       {/* Plain View, NOT a closing Pressable: the ✕ Return button is the ONE
           way out (owner's call) — plus the hardware back via onRequestClose. */}
-      <View style={s.backdrop}>
+      <View
+        style={s.backdrop}
+        // NATIVE (Expo on the phone): the gesture surface is the WHOLE viewer,
+        // same rule as web — in a natural pinch the thumb lands off the
+        // picture, and a frame-only responder never saw that finger. The
+        // ✕ Return and −/+ Pressables still win their own taps (deepest
+        // touchable claims the responder first).
+        {...(Platform.OS === 'web' ? {} : responder.panHandlers)}
+      >
         {/* The way OUT, stated. Red = close. */}
         <View style={s.topBar} ref={attachTopBar}>
           <Pressable style={s.returnBtn} onPress={onClose} hitSlop={8}>
@@ -362,9 +370,6 @@ export function ImageLightbox({
               ? ({ touchAction: 'none' } as unknown as ViewStyle)
               : null,
           ]}
-          // Web listens to the browser's own touch events (effect above) —
-          // running BOTH layers would double-handle every move.
-          {...(Platform.OS === 'web' ? {} : responder.panHandlers)}
           onLayout={(e) => {
             frameSize.current = {
               w: e.nativeEvent.layout.width,
