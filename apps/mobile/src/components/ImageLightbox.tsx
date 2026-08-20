@@ -255,16 +255,26 @@ export function ImageLightbox({
     let active = false;
 
     const onTouchStart = (ev: WebTouchEvent) => {
-      if (!node.contains?.(ev.target)) return;
-      active = true;
-      ev.preventDefault();
+      // TWO fingers anywhere = pinch. In a natural pinch the second finger
+      // lands wherever the hand is — usually OFF the picture — and requiring
+      // both fingers to start on the frame handed the gesture to the browser
+      // (owner's phone, 20 Aug 2026: "still can't 2 finger spread"). The
+      // viewer fills the screen, so any two-finger start can only mean zoom;
+      // nobody two-finger-taps the ✕ or −/+ buttons.
       if (ev.touches.length >= 2) {
+        active = true;
+        ev.preventDefault();
         pinch = { dist: touchDistance(ev.touches) || 1, scale: scaleRef.current };
         pan = null;
         movedHere = true;
-      } else {
-        movedHere = false;
+        return;
       }
+      // ONE finger: only the picture itself — a single finger on ✕ / −/+ must
+      // keep its native tap, or the buttons die.
+      if (!node.contains?.(ev.target)) return;
+      active = true;
+      ev.preventDefault();
+      movedHere = false;
     };
     const onTouchMove = (ev: WebTouchEvent) => {
       if (!active) return;
