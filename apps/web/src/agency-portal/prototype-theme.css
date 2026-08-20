@@ -13627,6 +13627,30 @@ button.iz-pr-offer-row:hover {
 .iz-roster-filterbar__time {
 	min-width: 108px;
 }
+
+/*
+ * `--fill`: every field shares the row.
+ *
+ * The default bar leaves its fields at `flex: 0 1 auto` and lets ONE of them —
+ * the free-text search, marked `--grow` — take the slack. A bar with no search
+ * field has nothing to absorb it, so Manage PR sat with six controls packed
+ * against the left edge and a third of the row empty, while its number inputs
+ * were clipped to "Min ag" by the fixed 92px `--num` width.
+ *
+ * The cap on selects has to be lifted here too: `max-width: 210px` exists to
+ * stop one long option pushing the row over, which is not a risk once the
+ * fields are sharing the width equally.
+ */
+.iz-roster-filterbar--fill .iz-roster-filterbar__field {
+	flex: 1 1 140px;
+}
+.iz-roster-filterbar--fill .iz-roster-filterbar__field .iz-select {
+	width: 100%;
+	max-width: none;
+}
+.iz-roster-filterbar--fill .iz-roster-filterbar__input--num {
+	width: 100%;
+}
 /* The date picker is a button, not an <input>, so it needs the select sizing
    spelled out to line up with the controls beside it. */
 .iz-roster-filterbar__date {

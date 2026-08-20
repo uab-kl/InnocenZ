@@ -542,7 +542,7 @@ function AgencyManagePRs() {
 			{/* The house filter bar — same one the roster tabs and Manage Outlet use.
 			    These were six placeholder-only boxes: the moment you picked a value the
 			    word telling you what it meant was replaced by the value itself. */}
-			<div className="iz-roster-filterbar">
+			<div className="iz-roster-filterbar iz-roster-filterbar--fill">
 				<div className="iz-roster-filterbar__head">
 					<span className="iz-roster-filterbar__title">
 						{t.managePr.filterPrs}
