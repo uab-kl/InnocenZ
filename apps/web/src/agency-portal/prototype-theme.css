@@ -11699,9 +11699,37 @@ button.iz-pr-offer-row:hover {
  * grid decide, so no future size bump can clip it again.
  */
 .iz-roster-planning-date .iz-hist-cal--popover {
+	/*
+	 * 390px because that is what the history calendar comes out at.
+	 *
+	 * Nothing sets its width — it is content-sized, and it happens to hold a
+	 * From/To row and month + year dropdowns, which push it to ~391px. The day
+	 * cells are `aspect-square w-full` inside a 7-column grid, so cell size is
+	 * nothing but width ÷ 7: 391px gave history 52px cells while this one, at
+	 * 306px, got 40px and read as the cramped version of the same calendar.
+	 *
+	 * So the number is derived, not picked: 7 × 52px of grid, plus the 12px
+	 * padding either side and the border. max-content keeps the floor honest if
+	 * the contents ever grow past it, which is what stopped Saturday being
+	 * sliced off in the first place.
+	 */
 	width: max-content;
-	min-width: 280px;
-	max-width: min(92vw, 340px);
+	min-width: 390px;
+	max-width: min(92vw, 430px);
+}
+
+/*
+ * Let the calendar FILL the popover, which is what makes the cells grow.
+ *
+ * Both calendars carry the same `--cell-size: 2rem`, so that variable was never
+ * the difference. This one’s root also carries Tailwind’s `w-fit`, so it shrank
+ * to 280px and its `aspect-square` cells came out at 40px; the history root has
+ * no `w-fit`, fills its 367px content box, and gets 52px cells from the same
+ * variable. Widening the popover alone did nothing for exactly this reason — a
+ * shrink-to-fit child does not care how much room it is given.
+ */
+.iz-roster-planning-date .iz-hist-cal--popover .rdp-root {
+	width: 100%;
 }
 
 /* Planning week picker — compact + equal columns + Mon–Sun week highlight */
