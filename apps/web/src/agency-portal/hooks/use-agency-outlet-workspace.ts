@@ -32,7 +32,11 @@ export function useAgencyOutletWorkspace(outletName: string) {
 	const { logout } = useAuth();
 	const identity = useMemo(() => getAgencyIdentity(), []);
 	const backed = identity !== null;
-	const { outlets, isLoading: outletsLoading } = useAgencyOutlets();
+	const {
+		outlets,
+		isLoading: outletsLoading,
+		isError: outletsError,
+	} = useAgencyOutlets();
 
 	const outletId = useMemo(
 		() => outlets.find((o) => outletMatches(o.name, outletName))?.id ?? null,
@@ -71,5 +75,20 @@ export function useAgencyOutletWorkspace(outletName: string) {
 		// all, so a still-loading directory counts as loading — never as "the
 		// outlet saved nothing".
 		isLoading: backed && (outletsLoading || query.isLoading),
+		/*
+		 * A FAILED read is not an empty one.
+		 *
+		 * Neither of these was exposed, so the panel had no way to tell them
+		 * apart: a request that errored fell through to "this outlet has not saved
+		 * its workspace rates yet", which is a statement about the outlet made on
+		 * the strength of a request that never answered.
+		 */
+		isError: backed && (outletsError || query.isError),
+		/*
+		 * Whether the outlet is in this agency’s approved directory at all. With no
+		 * id the workspace query is disabled and simply never runs — indistinguishable,
+		 * from the outside, from a venue that saved nothing.
+		 */
+		hasOutletId: outletId !== null,
 	};
 }

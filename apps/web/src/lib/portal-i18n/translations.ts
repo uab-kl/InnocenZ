@@ -1187,6 +1187,10 @@ const en = {
 			"Derived from daily wages ÷ {hours}h shift (default 6h)",
 		notApplicable: "Not applicable",
 		noWorkspaceRates: "This outlet has not saved its workspace rates yet.",
+		couldNotLoadRates:
+			"Could not load this outlet’s rates — the workspace request failed. Reload to try again.",
+		outletNotLinked:
+			"This venue is not one of your approved outlets, so its rates cannot be read here.",
 		syncedFromWorkspace: "{range} · synced from outlet workspace",
 		tier1: "Tier 1",
 		tier2: "Tier 2",
@@ -3796,6 +3800,8 @@ const zh: PortalTranslations = {
 		derivedFromDailyWages: "由日薪 ÷ {hours} 小时班次推算（默认 6 小时）",
 		notApplicable: "不适用",
 		noWorkspaceRates: "此门店尚未保存其工作区费率。",
+		couldNotLoadRates: "无法加载该门店的费率 —— 工作区请求失败。请刷新重试。",
+		outletNotLinked: "该场地不在您已审批的门店列表中，因此无法读取其费率。",
 		syncedFromWorkspace: "{range} · 已从门店工作区同步",
 		tier1: "等级 1",
 		tier2: "等级 2",
