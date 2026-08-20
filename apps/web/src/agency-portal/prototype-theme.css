@@ -14218,9 +14218,9 @@ button.iz-pr-offer-row:hover {
  * than fought with !important.
  */
 .iz-portal-main .iz-approvals-subfilter .iz-chip {
-	padding: 4px 10px;
+	padding: 5px 11px;
 	border-radius: 999px;
-	font-size: 11px;
+	font-size: 12px;
 	font-weight: 700;
 	letter-spacing: 0.2px;
 	line-height: 1.4;
