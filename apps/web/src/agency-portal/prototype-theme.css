@@ -19674,3 +19674,60 @@ html:has(.iz-pr-app) {
 .iz-portal > main .iz-data-table th {
 	font-size: 15px;
 }
+
+/*
+ * UNAVAILABLE AT THESE HOURS — this agency's PR cannot be booked then.
+ *
+ * ⚠️ Wears the SAME amber hatch as `--unavailable`, deliberately. The two states
+ * must look like one kind of thing: an agency should not be able to tell a day the
+ * PR blocked herself from hours she is spoken for, and a different treatment would
+ * separate them at a glance even after the wording was made identical.
+ *
+ * The ONE difference is structural and load-bearing: this sits UNDER a working
+ * assign button, because only these hours are gone and the rest of the day is
+ * genuinely bookable. A full-cell block would refuse in the interface exactly the
+ * bookings the window rule exists to allow.
+ *
+ * Times only. No agency, no venue — see the endpoint that feeds it.
+ */
+.iz-roster-week-busy {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 1px;
+	margin-top: 4px;
+	padding: 3px 4px;
+	border-radius: 5px;
+	background: repeating-linear-gradient(
+		135deg,
+		rgba(240, 180, 41, 0.16),
+		rgba(240, 180, 41, 0.16) 5px,
+		transparent 5px,
+		transparent 10px
+	);
+	border: 1px dashed rgba(240, 180, 41, 0.55);
+	color: var(--iz-amber, #f0b429);
+	/* One column of seven — a long window must not widen the grid. */
+	min-width: 0;
+	overflow: hidden;
+}
+
+.iz-roster-week-busy .status {
+	font-size: 9px;
+	font-weight: 700;
+	letter-spacing: 0.06em;
+	text-transform: uppercase;
+	line-height: 1.1;
+}
+
+.iz-roster-week-busy .time {
+	font-size: 10px;
+	font-weight: 600;
+	font-variant-numeric: tabular-nums;
+	line-height: 1.15;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	max-width: 100%;
+}

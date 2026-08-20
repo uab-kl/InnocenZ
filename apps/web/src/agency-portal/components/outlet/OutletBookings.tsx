@@ -28,7 +28,10 @@ import {
 import { outletShiftDisplayLiveSales } from "@agency-portal/lib/outlet-financial-sync";
 import { outletMatches } from "@agency-portal/lib/portal-sync";
 import { PR_AGENCY_TIED_OFFERS } from "@agency-portal/lib/pr-features";
-import { hasShiftEnded } from "@agency-portal/lib/shift-window";
+import {
+	hasShiftEnded,
+	shiftEndInstant,
+} from "@agency-portal/lib/shift-window";
 import { specialServicesForOutlet } from "@agency-portal/lib/special-service-actions";
 import { type ShiftRequest, useStore } from "@agency-portal/lib/store";
 import { ChevronDown } from "lucide-react";
@@ -102,7 +105,28 @@ export function OutletBookings({
 						s.shift,
 						now,
 					),
-			) ?? todays[0]
+			) ??
+			// ⚠️ NO FALLBACK TO AN ENDED SHIFT.
+			//
+			// This was `?? todays[0]`, which on a day whose shifts have all finished
+			// promoted the FIRST of them and captioned it as the live one: a venue
+			// whose 11:00–12:00 ended at noon was still being shown that shift, badged
+			// "Live", at half past seven in the evening — with its PR long since
+			// checked out. `todays[0]` is only a sensible answer while something is
+			// still running, and the `find` above already covers that case.
+			//
+			// Keeping a shift with NO window is deliberate: `hasShiftEnded` returns
+			// false when it cannot parse one, and a label-only shift ("Late night")
+			// has no end to be past. Better to leave that card up than to blank a
+			// venue's home page over a slot nobody gave a time to.
+			todays.find(
+				(s) =>
+					!shiftEndInstant(
+						resolveOutletShiftDateIso(s.date, s.dateIso, todayIso),
+						s.shift,
+					),
+			) ??
+			null
 		);
 	}, [visibleShifts]);
 
@@ -192,8 +216,18 @@ export function OutletBookings({
 							)}
 							<OutletShiftStatusBadge shift={s} />
 						</div>
+						{/*
+						 * The TIME, not just the day-label. `s.date` is a friendly string
+						 * ("Tonight", "Tomorrow"), so a card whose shift ran 11:00–12:00 read
+						 * simply "Tonight · 1/5 PRs" and the venue could not tell from its own
+						 * home page WHEN the shift was — the one fact this line exists to give.
+						 * `s.shift` has carried the window all along; it was only ever shown
+						 * once the card had been expanded.
+						 */}
 						<p className="iz-tiny iz-muted mt-0.5 truncate group-open:hidden">
-							{s.date} · {supplied}/{demand} PRs · {targetPay}
+							{s.date}
+							{s.shift ? ` · ${s.shift}` : ""} · {supplied}/{demand} PRs ·{" "}
+							{targetPay}
 							{salesTargets ? ` · ${salesTargets}` : ""} · RM{" "}
 							{displaySales.toLocaleString()} sales
 						</p>

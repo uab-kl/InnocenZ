@@ -145,6 +145,9 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
     id: v.voucherId,
     ref: pvRefForWeek(v.weekEnd, v.voucherId, v.voucherNo),
     weekLabel: formatRangeLabel(v.weekStart, v.weekEnd),
+    // Carried through so a two-voucher week is separable on the history list —
+    // the week label and the venue are identical on both rows.
+    agencyName: v.agencyName ?? null,
     outlet: outletLabel(v),
     shifts: countShifts(v.lines) || Math.max(1, new Set(lines.map((l) => l.date)).size),
     issued: issuedLabel(v),
@@ -161,8 +164,21 @@ export function historyVoucherToPayWeek(v: PrHistoryVoucher): HistPayWeek {
 export function historyVoucherToHistoryWeek(v: PrHistoryVoucher): DemoHistoryWeek {
   const range = formatRangeLabel(v.weekStart, v.weekEnd);
   return {
-    id: `week-${asIsoDate(v.weekStart) ?? v.voucherId}`,
-    title: `PAYROLL WEEK · ${range}`,
+    /*
+     * ⚠️ KEYED ON THE VOUCHER, NOT THE WEEK.
+     *
+     * This was `week-${weekStart}`. A PR on two rosters gets one voucher PER
+     * AGENCY for the same week, so both rows collapsed onto one id — duplicate
+     * React keys, and the expand/collapse state (which is keyed on this) toggled
+     * BOTH cards at once. The week still LABELS the card; the id has to be able
+     * to tell two vouchers apart.
+     */
+    id: `week-${asIsoDate(v.weekStart) ?? 'na'}-${v.voucherId}`,
+    // The agency leads the title when we know it: two cards for one week are
+    // otherwise identical down to the venue, with only the PV number differing.
+    title: v.agencyName
+      ? `PAYROLL WEEK · ${range} · ${v.agencyName}`
+      : `PAYROLL WEEK · ${range}`,
     kind: 'payroll',
     weekLabel: range,
     pvRef: pvRefForWeek(v.weekEnd, v.voucherId, v.voucherNo),

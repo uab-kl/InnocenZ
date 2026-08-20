@@ -152,11 +152,36 @@ export class AgencyPrRepository {
     }
   }
 
-  /** Every agency each of these user accounts is under. */
-  async listLinksByUserIds(userIds: string[]): Promise<PrAgencyLink[]> {
+  /**
+   * Every agency each of these user accounts is under.
+   *
+   * ⚠️ `agencyId` NARROWS THIS TO ONE AGENCY, and every non-admin caller must
+   * pass it. Unfiltered, this returns each PR's FULL roster membership — the name
+   * and code of every agency they work for, plus each agency's own private `tier`
+   * grading of them. Handed to an agency, that is a rival's identity attached to a
+   * shared PR, and a rival's pay grade for her.
+   *
+   * It also undoes the cross-agency anonymity the rest of the system rests on: the
+   * roster grid deliberately says only WHEN a shared PR is unavailable, and an
+   * unfiltered read here supplies the short list of WHO. The portal refuses to
+   * render a foreign tier anywhere else — see the note in `agency-outlet-shifts.ts`
+   * — so leaving this open contradicts a rule the codebase enforces everywhere.
+   *
+   * The PR's own `/mine/agencies*` routes call it unfiltered, correctly: those
+   * memberships are hers, and she may see all of them. Admin likewise, for the
+   * user-management screens. Nobody else.
+   */
+  async listLinksByUserIds(
+    userIds: string[],
+    options: { agencyId?: string } = {},
+  ): Promise<PrAgencyLink[]> {
     if (userIds.length === 0) return [];
 
     try {
+      const conditions = [inArray(AgencyPrTable.userId, userIds)];
+      if (options.agencyId) {
+        conditions.push(eq(AgencyPrTable.agencyId, options.agencyId));
+      }
       const rows = await db
         .select({
           userId: AgencyPrTable.userId,
@@ -168,7 +193,7 @@ export class AgencyPrRepository {
         })
         .from(AgencyPrTable)
         .innerJoin(AgencyTable, eq(AgencyTable.id, AgencyPrTable.agencyId))
-        .where(inArray(AgencyPrTable.userId, userIds))
+        .where(and(...conditions))
         .orderBy(AgencyTable.name);
 
       // `agency_pr` is unique on (agencyId, userId) — one row per link

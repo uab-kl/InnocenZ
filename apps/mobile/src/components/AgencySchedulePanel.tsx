@@ -280,7 +280,23 @@ export function AgencySchedulePanel() {
     }
   };
 
-  const agencyName = agencies[0]?.agencyName ?? me?.username ?? 'Agency';
+  /**
+   * The label for a shift nobody named — NOT a guess at who booked it.
+   *
+   * ⚠️ This used to be `agencies[0]?.agencyName`, hoisted once and stamped on
+   * every card below. A PR can be on several agencies' rosters at the same time
+   * (four of them, live, for one PR today), and this schedule merges all of their
+   * bookings into one list — so the first membership of an arbitrarily-ordered
+   * array named every shift on the screen, including the ones a DIFFERENT agency
+   * sold. The agency is a property of the ASSIGNMENT, and is now read off each
+   * row; see `agencyName` on the `/mine` payload.
+   *
+   * First-of-array survives only where it is not a coin toss: with exactly one
+   * membership, first-of-one is the answer. With two it was never a fallback,
+   * it was a wrong answer wearing a fallback's clothes.
+   */
+  const soleAgencyName = agencies.length === 1 ? agencies[0]?.agencyName : null;
+  const fallbackAgencyName = soleAgencyName ?? me?.username ?? 'Agency';
   const todayIso = ymdToIso(...today);
 
   const scheduleShifts = useMemo(
@@ -302,7 +318,10 @@ export function AgencySchedulePanel() {
           checkInAt: a.checkInAt,
           checkOutAt: a.checkOutAt,
           status: a.status,
-          agencyName,
+          // WHO BOOKED THIS ONE — off the assignment, not off the PR. Two agencies
+          // can appear in a single week of this list and each night belongs to the
+          // one that sold it.
+          agencyName: a.agencyName ?? fallbackAgencyName,
           // The night's identity — the timetable card renders it like the
           // Today section (picture + venue mark), owner's ask 20 Aug 2026.
           event: a.eventName ?? null,
@@ -310,7 +329,7 @@ export function AgencySchedulePanel() {
           logoPath: a.outletLogo ?? null,
           eventPhotoPath: a.templateCoverImage ?? null,
         })),
-    [assignments, agencyName],
+    [assignments, fallbackAgencyName],
   );
 
   const days = useMemo(

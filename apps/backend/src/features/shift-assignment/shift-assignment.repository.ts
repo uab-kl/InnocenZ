@@ -1158,6 +1158,9 @@ export class ShiftAssignmentRepositoryClass {
         outletLat: number | null;
         outletLng: number | null;
         outletGeoFenceRadiusM: number;
+        /** WHO booked this shift — see the agency join in `listMineAssignments`. */
+        agencyId: string;
+        agencyName: string | null;
       }
     >
   > {
@@ -1189,6 +1192,9 @@ export class ShiftAssignmentRepositoryClass {
         outletLat: number | null;
         outletLng: number | null;
         outletGeoFenceRadiusM: number;
+        /** WHO booked this shift — see the agency join in `listMineAssignments`. */
+        agencyId: string;
+        agencyName: string | null;
       }
     >
   > {
@@ -1217,6 +1223,9 @@ export class ShiftAssignmentRepositoryClass {
         outletLat: number | null;
         outletLng: number | null;
         outletGeoFenceRadiusM: number;
+        /** WHO booked this shift — see the agency join in `listMineAssignments`. */
+        agencyId: string;
+        agencyName: string | null;
       }
     >
   > {
@@ -1272,11 +1281,33 @@ export class ShiftAssignmentRepositoryClass {
           outletLat: OutletTable.lat,
           outletLng: OutletTable.lng,
           outletGeoFenceRadius: OutletTable.geoFenceRadius,
+          /*
+           * WHO BOOKED THIS SHIFT.
+           *
+           * One person can hold an `agency_pr` row per agency and be rostered by
+           * several of them at once — four of them, live, for one PR today. This
+           * feed merges all of that into ONE schedule, and until this join existed
+           * it did so with nothing on the row to say which agency each shift came
+           * from. The PR app had no choice but to guess, and guessed by taking the
+           * first of the PR's memberships and stamping it on every card, so a
+           * shift sold by one agency was displayed under another's name.
+           *
+           * Read through the assignment's OWN `agency_id` FK — never off the PR's
+           * membership list, which is a list precisely because it cannot answer
+           * "who booked this one". Same one-fact-one-place rule as the outlet
+           * logo and address above.
+           *
+           * A LEFT join, deliberately: `agency_id` is NOT NULL with an FK, so the
+           * row is always there, but a null name must degrade to an unlabelled
+           * card rather than dropping the PR's shift out of her own schedule.
+           */
+          agencyName: AgencyTable.name,
         })
         .from(ShiftAssignmentTable)
         .innerJoin(ShiftTable, eq(ShiftAssignmentTable.shiftId, ShiftTable.id))
         .leftJoin(OutletTable, eq(ShiftTable.outletId, OutletTable.id))
         .leftJoin(ShiftTemplateTable, eq(ShiftTemplateTable.id, ShiftTable.templateId))
+        .leftJoin(AgencyTable, eq(AgencyTable.id, ShiftAssignmentTable.agencyId))
         .where(ownership)
         .orderBy(ShiftTable.shiftDate);
       return rows.map((row) => {
@@ -1305,6 +1336,9 @@ export class ShiftAssignmentRepositoryClass {
           outletLat: row.outletLat === null ? null : Number(row.outletLat),
           outletLng: row.outletLng === null ? null : Number(row.outletLng),
           outletGeoFenceRadiusM: row.outletGeoFenceRadius ?? DEFAULT_GEOFENCE_RADIUS_M,
+          // `agencyId` comes through the spread of `row.assignment` above; only
+          // the joined NAME has to be added here.
+          agencyName: row.agencyName,
         };
       });
     } catch (error) {

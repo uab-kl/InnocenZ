@@ -30,6 +30,13 @@ export type HistPayWeek = {
   id: string;
   ref: string;
   weekLabel: string;
+  /**
+   * WHO PAID IT. A PR on two rosters gets one voucher per agency for the same
+   * week, and those two rows carry the same week label and often the same venue —
+   * so this is the only field telling them apart at a glance. Optional: demo rows
+   * and a not-yet-restarted backend have none.
+   */
+  agencyName?: string | null;
   outlet: string;
   shifts: number;
   issued: string;

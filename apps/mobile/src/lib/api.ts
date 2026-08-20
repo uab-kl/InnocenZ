@@ -952,6 +952,20 @@ export type ShiftAssignmentRecord = {
   outletLat: number | null;
   outletLng: number | null;
   outletGeoFenceRadiusM: number;
+  /**
+   * WHO BOOKED THIS SHIFT — the agency on the assignment itself.
+   *
+   * A PR can be on several agencies' rosters at once and this feed merges all of
+   * them into one schedule, so the agency is a fact about EACH shift, never about
+   * the PR. Reading it from the PR's membership list instead is what made every
+   * card show the same agency's name regardless of who actually sold the night.
+   *
+   * Optional because a backend that has not been restarted yet omits them; the
+   * card then falls back to an unlabelled source rather than naming the wrong
+   * agency — a missing label is recoverable, a confidently wrong one is not.
+   */
+  agencyId?: string | null;
+  agencyName?: string | null;
   /** This PR's tier (pr_tier enum), e.g. 'tier_5' / 'commission_only'. */
   tier: string;
   /** Resolved rate card for this PR's tier at this outlet, or null if unset. */
@@ -1436,6 +1450,20 @@ export type PrLineComponent =
 
 export type PrReceiptLine = {
   id: string;
+  /**
+   * WHICH VOUCHER THIS LINE IS ON — and so which agency owes it.
+   *
+   * The week MERGES every voucher in it, because a person works one week and
+   * wants to see one week. That merge is only safe while each row can still say
+   * whose it is: without this, anything acting ON a line — signing, disputing,
+   * calling a day verified — fell back to "the newest voucher" and silently
+   * pointed at one agency for a row belonging to the other.
+   *
+   * Optional so the app keeps working against a backend that has not restarted
+   * yet; treat an absent value as "cannot attribute" and fall back to the week's
+   * single voucher rather than guessing.
+   */
+  voucherId?: string | null;
   kind: PrReceiptKind;
   /**
    * The fine-grained component behind `kind`. Optional so the app keeps working
@@ -1522,6 +1550,12 @@ export type PrReceiptLine = {
  */
 export type PrWeekDispute = {
   id: string;
+  /**
+   * WHICH voucher this claim was raised against — see `PrReceiptLine.voucherId`.
+   * A merged week can hold two agencies' claims, and a withdrawal has to be
+   * routed back to the voucher that owns it.
+   */
+  voucherId?: string | null;
   /** The contested day, YYYY-MM-DD — pairs with `PrReceiptLine.lineDate`. */
   disputeDate: string;
   component: PrReceiptKind;
@@ -1742,8 +1776,21 @@ export type PrReceiptLineInput = {
   commission: number;
   lineDate?: string;
   outlet?: string;
-  /** For wages: the assignment id, so a repeated check-out never double-seals. */
+  /**
+   * For wages: the assignment id, so a repeated check-out never double-seals.
+   *
+   * ⚠️ NOT the way to say which shift a line belongs to — send `assignmentId`.
+   * A line arriving with a ref already on the draft comes back
+   * `200 Already sealed` with the EXISTING line, so a drink sent under a wage's
+   * ref is silently discarded.
+   */
   dedupeRef?: string;
+  /**
+   * WHICH SHIFT this was earned on — decides whose voucher the money lands on.
+   * A PR on two rosters can work both agencies in one day, so the date alone
+   * cannot answer it and the server refuses rather than guess.
+   */
+  assignmentId?: string;
   /** Proof photo(s) for a self-log (downscaled data URLs). Required for drinks. */
   proofPhotos?: string[];
 };
@@ -1767,6 +1814,13 @@ export function fetchMyLastWeek(accessToken: string): Promise<PrCurrentWeek> {
  */
 export type PrHistoryVoucher = {
   voucherId: string;
+  /**
+   * WHO PAID IT. Two vouchers for one week render with the same week label and
+   * often the same outlet label; without the agency the only thing telling them
+   * apart is the PV number, which says nothing about who owes what.
+   */
+  agencyId?: string | null;
+  agencyName?: string | null;
   /** The stored voucher number (0075) — print it rather than deriving one. */
   voucherNo?: string | null;
   weekStart: string | null;

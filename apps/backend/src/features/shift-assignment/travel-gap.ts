@@ -67,6 +67,20 @@ export interface NeighbourShift {
   outletLng: number | null;
   /** A real stamp beats the schedule — see `travelShortfall`. */
   checkOutAt: Date | string | null;
+  /**
+   * WHO holds this neighbour — and therefore both whether the agency being told
+   * about it may hear the details, and whether "too tight" is advice or a refusal.
+   *
+   * OWN shift     -> a WARNING that names the venue. The agency can see both
+   *                  bookings and knows things this model does not (the two venues
+   *                  share a car park, the PR lives upstairs), so it may assign
+   *                  anyway — the owner's rule of 17 Aug 2026, unchanged.
+   * FOREIGN shift -> a REFUSAL that says nothing. The agency cannot see the other
+   *                  booking at all, so it has nothing to exercise judgement WITH;
+   *                  an override here is not a decision, it is a guess that ends
+   *                  with a PR who does not arrive. See `foreignTravelBlock`.
+   */
+  agencyId: string;
 }
 
 export interface TravelShortfall {
@@ -161,6 +175,53 @@ export function travelShortfall(params: {
 export type HeldAssignment = NeighbourShift & { shiftId: string; status: string };
 
 /**
+ * The ONE sentence an agency hears when the PR cannot be where it wants them,
+ * and the reason is none of its business.
+ *
+ * ⚠️ DELIBERATELY THE SAME STRING FOR A DIRECT OVERLAP AND FOR A TRAVEL SHORTFALL.
+ * Two messages would separate "she is working at that exact hour" from "she is
+ * working near that hour, far away", and the second one leaks DISTANCE: an agency
+ * that could tell the two apart could walk a candidate time backwards until the
+ * refusal changed and read off roughly how far away the other venue is. One string
+ * says only what the asking agency is entitled to know — not now, try another time.
+ *
+ * It names no agency, no venue and no hour. It is deliberately NOT the
+ * self-declared-block wording either: that one claims the whole DAY is spoken for,
+ * which since the window rule is no longer true — the PR really is bookable later
+ * the same day, and telling an agency otherwise would cost the PR the work.
+ */
+export const PR_UNAVAILABLE_THEN =
+  'This PR is not available at that time — try another time, or pick someone else.';
+
+/**
+ * Is a shift held by ANOTHER agency too close to this one to be physical?
+ *
+ * The cross-agency half of the travel rule, and the replacement for the old
+ * "THE DAY BELONGS TO THE PR" guard, which took a PR off the market for every
+ * other agency for a whole CALENDAR DAY. That was far more than physics asks:
+ * a PR finishing an afternoon at one venue can plainly work a night at another,
+ * and the day rule refused all of it — costing the PR the shift and the second
+ * agency the booking (owner's change, 20 Aug 2026).
+ *
+ * What is left is exactly the part that IS physics: the other shift's own window,
+ * plus the time it takes to get from there to here. Anything outside that stays
+ * bookable by anyone.
+ *
+ * Returns true/false, never a reason — the caller has nothing to say beyond
+ * `PR_UNAVAILABLE_THEN`, and handing it a shortfall it must remember not to
+ * render is how the venue name escapes.
+ */
+export function foreignTravelBlock(params: {
+  shift: { shiftDate: string; slot: string | null } & VenuePin;
+  others: NeighbourShift[];
+  actingAgencyId: string;
+}): boolean {
+  const foreign = params.others.filter((o) => o.agencyId !== params.actingAgencyId);
+  if (foreign.length === 0) return false;
+  return travelShortfall({ shift: params.shift, others: foreign }) !== null;
+}
+
+/**
  * The travel warning for putting `prId` on `shift`, or null — the whole check,
  * end to end, for every lane that seats a PR.
  *
@@ -182,6 +243,18 @@ export type HeldAssignment = NeighbourShift & { shiftId: string; status: string 
 export async function travelWarningFor(params: {
   shift: { shiftDate: string; slot: string | null; outletId: string };
   prId: string;
+  /**
+   * WHOSE roster this advice is for. Only this agency's OWN shifts are compared.
+   *
+   * ⚠️ Without it this warning named a rival's venue and hours in plain text —
+   * `travelGapWarning` renders "this PR also works 15:00 - 04:00 at JK House" —
+   * which is the exact disclosure the refusals next to it are written to prevent.
+   * A tight turnaround against ANOTHER agency's booking is not advice at all: it
+   * is refused outright by `foreignTravelBlock` before the write, and there is
+   * nothing left for the agency to weigh. So foreign neighbours are dropped here
+   * rather than described.
+   */
+  actingAgencyId: string;
   /** Excluded from the comparison — the shift being seated is not its own neighbour. */
   excludeShiftId?: string;
   loadPin: (outletId: string) => Promise<VenuePin | null>;
@@ -203,6 +276,10 @@ export async function travelWarningFor(params: {
     const neighbours = held.filter(
       (a) =>
         a.shiftId !== params.excludeShiftId &&
+        // THIS AGENCY'S OWN SHIFTS ONLY — see `actingAgencyId` above. A foreign
+        // neighbour is already a refusal, and describing one here would hand over
+        // the venue and hours that refusal exists to withhold.
+        a.agencyId === params.actingAgencyId &&
         !NON_STAFFING_STATUSES.includes(a.status as (typeof NON_STAFFING_STATUSES)[number]),
     );
     return travelGapWarning(

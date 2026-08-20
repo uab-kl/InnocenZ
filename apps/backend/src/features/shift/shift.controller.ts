@@ -597,9 +597,33 @@ export class ShiftControllerClass {
               shiftsOverlap(nextDate, nextSlot, o.shiftDate, o.slot),
           );
           if (clash) {
+            /*
+             * ⚠️ WHOSE shift it collides with decides what may be SAID about it —
+             * and on THIS route the caller is the VENUE, so "own" means this
+             * venue's other shift, not this agency's.
+             *
+             * `listForPr` above carries no agency filter, and cannot: a person is
+             * in one place at a time whoever booked them. So on a shared shift the
+             * row it finds is routinely ANOTHER agency's booking at a THIRD venue,
+             * and the old message named it outright — "they already work
+             * 21:00 - 03:00 at JK House". That hands a venue a competitor's name,
+             * its trading hours, and by elimination the fact that a rival agency
+             * booked this PR: the exact disclosure the assign-side refusals were
+             * rewritten to prevent. The pointer was already in the codebase — the
+             * overlap helper's note says this guard "tests overlap the same way" —
+             * and the fix simply never crossed over.
+             *
+             * The foreign branch says only that the PR is not free then, and it
+             * must stay ONE string for every non-own cause: two distinguishable
+             * refusals let a caller walk the clock and read off where the other
+             * venue is.
+             */
+            const sameVenue = clash.outletId === existing.outletId;
             return res.status(400).json({
               success: false,
-              message: `That time clashes for a PR on this shift — they already work ${clash.slot ?? 'a shift'} at ${clash.outletName ?? 'another outlet'} that day. Move the other shift first, or unassign them here.`,
+              message: sameVenue
+                ? `That time clashes with another shift this PR works here (${clash.slot ?? 'a shift'}) — move that one first, or unassign them here.`
+                : 'A PR on this shift is not available at that time — pick another time, or unassign them here.',
               data: null,
             });
           }

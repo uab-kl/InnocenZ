@@ -22,4 +22,15 @@ router.get(
   prAvailabilityController.listForAgency.bind(prAvailabilityController),
 );
 
+// WHEN the roster is committed elsewhere — times only, no agency and no venue.
+//
+// ⚠️ Carries the SAME gate as `/` above, deliberately. It is a narrower read —
+// three columns, no reason, no names — but it still describes a PR's movements,
+// so an outlet is no more a reader here than there.
+router.get(
+  '/committed',
+  requireRole('admin', 'agency'),
+  prAvailabilityController.listCommittedForAgency.bind(prAvailabilityController),
+);
+
 export default router;

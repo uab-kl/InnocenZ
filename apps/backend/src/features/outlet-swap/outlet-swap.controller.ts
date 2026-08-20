@@ -358,6 +358,10 @@ export class OutletSwapControllerClass {
         ? await travelWarningFor({
             shift: toShift,
             prId: moved.userId ?? moved.prId,
+            // The moved assignment's own agency. Advice about a tight turnaround is
+            // only ever about ITS own roster — a booking another agency holds near
+            // the new slot is not this one's to be told about.
+            actingAgencyId: moved.agencyId,
             excludeShiftId: owned.toShiftId,
             loadPin: (outletId) => this.shiftAssignmentRepository.getOutletPin(outletId),
             loadAssignments: (prId) => this.shiftAssignmentRepository.listForPr(prId),

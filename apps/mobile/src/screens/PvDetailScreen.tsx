@@ -31,6 +31,7 @@ import { useSession } from '../lib/session';
 import {
   signMyVoucher,
   type PrCurrentWeek,
+  type PrReceiptLine,
   type PrReceiptSource,
 } from '../lib/api';
 import { usePrNav } from '../lib/pr-nav';
@@ -146,6 +147,65 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
   const hist = apiWeeks.find((p) => p.id === pvId);
   const histVoucher = apiVouchers.find((v) => v.voucherId === pvId) ?? null;
 
+  /**
+   * WHICH voucher this page is about — the id it was OPENED with, never "the
+   * newest one in the week".
+   *
+   * ⚠️ A PR on two rosters holds one voucher PER AGENCY for the same week, and
+   * `lastWeek` MERGES them: its `lines` are both agencies' lines and its `net` is
+   * both agencies' money. This page used to take `lastWeek.voucherId` — the
+   * newest — as its identity while rendering that merged total, so a PR opening
+   * Atlas's RM 1,000 voucher saw Why We Met's PV number, a RM 1,500 net and both
+   * agencies' receipts on one document, and signing sent RM 1,500 against a
+   * RM 500 voucher. The other voucher then had no route in at all.
+   *
+   * `vouchers[]` is the per-voucher truth (id, number, agency, net, status). The
+   * fallback to the merged week is for one-voucher weeks and for a backend that
+   * has not restarted yet — where "the week" and "this voucher" ARE the same
+   * thing and the old behaviour was already right.
+   */
+  const liveVoucher = lastWeek?.vouchers?.find((v) => v.id === pvId) ?? null;
+
+  /** Whose voucher this is — history row first, then the live week's own entry. */
+  const pvAgencyName = histVoucher?.agencyName ?? liveVoucher?.agencyName ?? null;
+
+  /**
+   * This voucher's OWN lines out of the merged week.
+   *
+   * Falls back to the whole set only when nothing can be attributed — an older
+   * backend that does not stamp `voucherId` on a line. It must never filter to
+   * empty on that path: showing no money at all is a worse lie than showing the
+   * week's.
+   */
+  const scopeLines = (lines: PrReceiptLine[], voucherId: string | null | undefined) => {
+    if (!voucherId) return lines;
+    const owned = lines.filter((l) => l.voucherId === voucherId);
+    return owned.length > 0 || lines.every((l) => l.voucherId) ? owned : lines;
+  };
+
+  /**
+   * ⚠️ THE CLAIMS MUST BE SCOPED TOO, not just the lines.
+   *
+   * `openDisputeKeys` reads `week.disputes`, and the merged week carries BOTH
+   * agencies' claims. Scoping only the lines left this document lighting up
+   * "Dispute open" — header pill, banner, and the disputable gating — because the
+   * OTHER agency's voucher had a claim on it. The PR would be told their Atlas
+   * payslip was under argument when the argument was with Why We Met.
+   *
+   * Same fallback shape as `scopeLines`: a backend that does not stamp
+   * `voucherId` on a dispute yet keeps the old week-wide behaviour rather than
+   * silently hiding a real open claim.
+   */
+  const scopeDisputes = (
+    disputes: NonNullable<PrCurrentWeek['disputes']>,
+    voucherId: string | null | undefined,
+  ) => {
+    if (!voucherId) return disputes;
+    return disputes.every((d) => d.voucherId)
+      ? disputes.filter((d) => d.voucherId === voucherId)
+      : disputes;
+  };
+
   /** Whatever voucher this page shows, in the shared week-grid shape. */
   const weekForGrid: PrCurrentWeek | null = histVoucher
     ? {
@@ -156,7 +216,18 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         status: histVoucher.status,
         lines: histVoucher.lines,
       }
-    : lastWeek;
+    : lastWeek
+      ? {
+          ...lastWeek,
+          voucherId: liveVoucher?.id ?? lastWeek.voucherId,
+          voucherNo: liveVoucher?.voucherNo ?? lastWeek.voucherNo,
+          // THIS agency's share, never the week's sum.
+          net: liveVoucher?.net ?? lastWeek.net,
+          status: liveVoucher?.status ?? lastWeek.status,
+          lines: scopeLines(lastWeek.lines ?? [], liveVoucher?.id),
+          disputes: scopeDisputes(lastWeek.disputes ?? [], liveVoucher?.id),
+        }
+      : null;
 
   const liveOutlets = useMemo(
     () =>
@@ -203,11 +274,15 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         statusLabel: hist.statusMeta,
       }
     : {
-        id: lastWeek?.voucherId ?? pvId,
+        // The id this page was OPENED with wins. `lastWeek.voucherId` is the
+        // week's NEWEST voucher, so on a two-agency week it renamed whichever
+        // document the PR actually tapped.
+        id: liveVoucher?.id ?? lastWeek?.voucherId ?? pvId,
         ref: liveRef,
         outlet: liveOutlet,
         weekLabel: weekRangeLabel(1),
-        net: Number(lastWeek?.net) || 0,
+        // This voucher's own net, not the week's sum across agencies.
+        net: Number(liveVoucher?.net ?? lastWeek?.net) || 0,
         status: 'awaiting_pr',
         statusLabel: 'Awaiting signature',
       };
@@ -226,11 +301,17 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    * History, so it was sealed on arrival and the PR had nowhere left to sign it.
    * Ask the voucher, never the screen it was opened from.
    */
+  //
+  // ⚠️ ASK THIS VOUCHER, not the week. `lastWeek.status` is the NEWEST voucher's,
+  // so on a two-agency week one agency signing sealed the other agency's document
+  // on screen — the PR was shown "Signed" over a voucher nobody had signed, and
+  // the pad was withdrawn.
+  const liveStatus = liveVoucher?.status ?? lastWeek?.status;
   const alreadySigned =
     (hist ? hist.status === 'signed' || hist.status === 'paid' : false) ||
     isSigned(pv.id) ||
-    lastWeek?.status === 'signed' ||
-    lastWeek?.status === 'paid';
+    liveStatus === 'signed' ||
+    liveStatus === 'paid';
 
   /**
    * Is this voucher actually waiting for THIS PR's signature?
@@ -244,7 +325,9 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    */
   const awaitingMySignature = histVoucher
     ? histVoucher.status === 'sent'
-    : lastWeek?.status === 'sent' || lastWeek?.status === 'awaiting_pr';
+    : // Per voucher, same reason as `alreadySigned`: with one agency `sent` and
+      // the other still `pending_review`, the week's status answered for both.
+      liveStatus === 'sent' || liveStatus === 'awaiting_pr';
 
   const [signed, setSigned] = useState(alreadySigned);
   // hist / lastWeek load async, so the seal must follow the data, not the
@@ -304,8 +387,16 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
    * the only source, so signing an awaiting voucher never reached the server
    * and the "signature" lived on this phone alone.
    */
+  //
+  // ⚠️ `lastWeek.voucherId === pvId` is the NEWEST voucher's id. On a two-agency
+  // week that made every OTHER voucher unreachable: the page opened, rendered,
+  // and then answered "This voucher is not on the server" — the only route in
+  // was the headline, so one agency's PV could never be signed at all. Matching
+  // against `vouchers[]` accepts any voucher the week actually holds.
   const backendPvId =
-    histVoucher?.voucherId ?? (lastWeek?.voucherId === pvId ? pvId : null);
+    histVoucher?.voucherId ??
+    liveVoucher?.id ??
+    (lastWeek?.voucherId === pvId ? pvId : null);
 
   const [signBusy, setSignBusy] = useState(false);
   const [sigInk, setSigInk] = useState<SignatureInk | null>(null);
@@ -401,7 +492,16 @@ export function PvDetailScreen({ pvId }: { pvId: string }) {
         <Pill variant={anyDisputed ? 'red' : isSealed ? (pv.status === 'paid' ? 'green' : 'amber') : 'amber'}>
           {anyDisputed ? 'Dispute open' : isSealed ? pv.statusLabel : 'Pending your review'}
         </Pill>
-        <Text style={styles.pvId}>{pv.ref}</Text>
+        {/*
+          * WHO IS PAYING THIS. A PR on two rosters gets one voucher per agency for
+          * the same week, and the two documents are otherwise near-identical —
+          * same week label, often the same venue — so without the agency the PR
+          * cannot tell which of them they are about to sign. Falls back to the PV
+          * number alone when the backend has not restarted yet.
+          */}
+        <Text style={styles.pvId}>
+          {pvAgencyName ? `${pvAgencyName} · ${pv.ref}` : pv.ref}
+        </Text>
       </View>
 
       {!isSealed && !anyDisputed && (

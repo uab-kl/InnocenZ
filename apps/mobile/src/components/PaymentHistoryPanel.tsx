@@ -571,6 +571,9 @@ function WeekCard({
             <Pill variant={week.status === 'paid' ? 'green' : 'amber'}>{statusLabel}</Pill>
           </View>
           <Text style={styles.cardSub} numberOfLines={1}>
+            {/* Agency FIRST: two vouchers for one week are otherwise identical
+                here down to the venue, with only the PV number differing. */}
+            {week.agencyName ? `${week.agencyName} · ` : ''}
             {week.ref} · {week.outlet}
           </Text>
           <Text style={styles.cardSub} numberOfLines={1}>

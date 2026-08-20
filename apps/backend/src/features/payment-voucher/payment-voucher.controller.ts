@@ -71,6 +71,7 @@ import {
   type ResolvedDrinkItem,
   ShiftAssignmentRepositoryClass,
 } from '@/features/shift-assignment/shift-assignment.repository';
+import { NON_STAFFING_STATUSES } from '@/features/shift-assignment/shift-assignment.model';
 import { PrRepositoryClass } from '@/features/pr-personnel/pr.repository';
 import { AgencyMemberRepositoryClass } from '@/features/agency/agency-member.repository';
 import { AuthRepositoryClass } from '@/features/auth/auth.repository';
@@ -284,6 +285,21 @@ function catalogueListName(kind: 'drinks' | 'tips'): string {
 
 type PrReceiptLineDTO = {
   id: string;
+  /**
+   * WHICH VOUCHER THIS LINE IS ON — and therefore which agency owes it.
+   *
+   * ⚠️ The PR's week MERGES every voucher in it (see `mergeWeekVouchers`), because
+   * a person works one week and wants to see one week. Without this field the
+   * merged list was unattributable: the phone could show the money but could not
+   * say whose it was, so it fell back to "the newest voucher" for every decision
+   * made ON a line — which document to sign, which voucher to file a dispute
+   * against, whether a day counts as verified. Each of those silently pointed at
+   * one agency while the row belonged to the other.
+   *
+   * A line already knows this — `payment_voucher_line.voucher_id` is its FK. It
+   * simply was not being carried to the client.
+   */
+  voucherId: string;
   kind: PrReceiptKind;
   /**
    * The FINE-GRAINED classification behind `kind`, which is deliberately coarse.
@@ -451,6 +467,8 @@ function toReceiptLineDTO(
   const receiptStatus = info?.status ?? null;
   return {
     id: line.id,
+    // Straight off the line's own FK — never inferred from the week's headline.
+    voucherId: line.voucherId,
     kind,
     // Column first, ref second — the same precedence `lineKind` uses, in the
     // one helper both directions of this classification share.
@@ -613,6 +631,85 @@ export class PaymentVoucherControllerClass {
   private async resolvePr(req: Request): Promise<PrType | null> {
     const userId = req.user?.id;
     return userId ? this.prRepository.getByUserId(userId) : null;
+  }
+
+  /**
+   * WHOSE VOUCHER DOES THIS MONEY BELONG ON — answered from the WORK, never from
+   * how long ago the PR joined somebody.
+   *
+   * ⚠️ `resolvePr` above deliberately takes no agency, and `loadPrimaryMembership`
+   * then falls back to the OLDEST `agency_pr` row. Its own comment sanctions that
+   * for "the PR's own /mine paths (no agency in play)" — but the money writers that
+   * used `pr.agencyId` are `/mine` paths with an agency very much in play, and this
+   * is what they got wrong:
+   *
+   *   Alice joined Atlas in July and Why We Met in August. She works a WWM shift
+   *   and checks out. The seal posted her wage with `agencyId: pr.agencyId` =
+   *   ATLAS, so RM 600 of Why We Met's money was drafted onto an ATLAS voucher.
+   *   At week close the generator then asked `existsForPrWeek(WWM, …)`, found
+   *   nothing — the money was filed under Atlas — and MINTED A SECOND VOUCHER
+   *   carrying the same wage line. One shift billed to two agencies, and her phone
+   *   (which sums across vouchers) showed RM 1,200 for a RM 600 night.
+   *
+   * The repository was never the fault: its lookups do carry the agency term. The
+   * VALUE arriving was wrong, which is why `tsc` and `check:drift` stayed green.
+   *
+   * Resolution order, most-evidenced first:
+   *   1. the assignment the caller named — check-out sends it as `dedupeRef`;
+   *   2. failing that, the PR's own bookings on the line's DATE, when they all
+   *      belong to one agency;
+   *   3. failing that, their single approved membership — correct by definition
+   *      when there is only one, and the reason nothing regresses for the ~48 PRs
+   *      on exactly one roster;
+   *   4. otherwise NULL, and the caller refuses. A guess here is indistinguishable
+   *      from a correct answer and silently moves somebody's pay.
+   */
+  private async resolveMoneyAgencyId(
+    pr: PrType,
+    opts: { assignmentRef?: string | null; lineDate?: string | null },
+  ): Promise<string | null> {
+    const ownsAssignment = (row: { prId?: string | null; userId?: string | null }) =>
+      (row.userId != null && pr.userId != null && row.userId === pr.userId) ||
+      row.prId === pr.id ||
+      (pr.userId != null && row.prId === pr.userId);
+
+    // 1. The assignment the client named. `dedupeRef` is a free-form string on the
+    //    schema, so it is only tried when it could BE an id — and the row is still
+    //    ownership-checked, because a ref is client input.
+    const ref = opts.assignmentRef?.trim();
+    if (ref && /^[0-9a-f-]{36}$/i.test(ref)) {
+      const assignment = await this.shiftAssignmentRepository.getById(ref);
+      if (assignment && ownsAssignment(assignment)) return assignment.agencyId;
+    }
+
+    const prKey = pr.userId ?? pr.id;
+
+    // 2. What the PR was actually doing that day. A manual self-log carries no
+    //    assignment, but it does carry a date, and a PR who worked one agency's
+    //    shift that day has already told us whose night it was.
+    if (opts.lineDate) {
+      const held = await this.shiftAssignmentRepository.listForPr(prKey);
+      const agenciesThatDay = new Set(
+        held
+          .filter((a) => a.shiftDate === opts.lineDate)
+          .filter(
+            (a) =>
+              !NON_STAFFING_STATUSES.includes(
+                a.status as (typeof NON_STAFFING_STATUSES)[number],
+              ),
+          )
+          .map((a) => a.agencyId),
+      );
+      if (agenciesThatDay.size === 1) return [...agenciesThatDay][0];
+      // Two agencies in one day is a LEGITIMATE roster since the window rule, so
+      // this is genuinely ambiguous rather than impossible — fall through.
+    }
+
+    // 3. Only one roster to be on.
+    const approved = await this.prRepository.listApprovedAgencyIds(prKey);
+    if (approved.length === 1) return approved[0];
+
+    return null;
   }
 
   /** Mine ownership: prefer voucher.user_id (0087), fall back to legacy pr.id. */
@@ -1312,6 +1409,13 @@ export class PaymentVoucherControllerClass {
     const rows = await this.paymentVoucherDisputeRepository.listForVoucher(voucherId);
     return rows.map((d) => ({
       id: d.id,
+      /**
+       * WHICH VOUCHER this claim was raised against — same reason lines carry it.
+       * A merged week can hold two agencies' disputes, and without this the app
+       * cannot tell whose claim it is looking at, nor route a withdrawal back to
+       * the voucher that owns it.
+       */
+      voucherId,
       disputeDate: d.disputeDate,
       component: d.component,
       reason: d.reason,
@@ -1670,6 +1774,13 @@ export class PaymentVoucherControllerClass {
         weeks.push({
           voucherId: v.id,
           voucherNo: v.voucherNo,
+          /**
+           * WHO PAID IT. Two vouchers for one week render with the same week label
+           * and often the same outlet label; before this the only thing telling
+           * them apart was the PV number, which says nothing about who owes what.
+           */
+          agencyId: v.agencyId,
+          agencyName: v.agencyName,
           weekStart: v.weekStart,
           weekEnd: v.weekEnd,
           net: v.net,
@@ -1719,10 +1830,38 @@ export class PaymentVoucherControllerClass {
         return res.status(400).json({ success: false, message: outOfWeek, data: null });
       }
 
+      // WHOSE money this is — from the shift, not from membership age. See
+      // `resolveMoneyAgencyId` for the fault this replaces.
+      //
+      // ⚠️ `assignmentId` FIRST, `dedupeRef` only as a fallback. The check-out
+      // seal has always sent the assignment as `dedupeRef` and keeps working
+      // through that path, but a MANUAL self-log sends no ref at all — it never
+      // had a field for one — so resolving from `dedupeRef` alone refused every
+      // free-amount tip a two-roster PR logged on a day they worked both
+      // agencies, which is precisely the person this whole change exists for.
+      // The fields cannot be merged: `dedupeRef` is the double-seal key, and a
+      // drink carrying a wage's ref is answered "already sealed" and dropped.
+      const moneyAgencyId = await this.resolveMoneyAgencyId(pr, {
+        assignmentRef: parsed.data.assignmentId ?? parsed.data.dedupeRef,
+        lineDate,
+      });
+      if (!moneyAgencyId) {
+        // 409, same family as the closed-week refusal below: well-formed and
+        // authorised, but it cannot be FILED. Refusing beats guessing — a wrong
+        // agency here is not a visible error, it is somebody's pay moved onto a
+        // stranger's voucher and the same shift billed twice at week close.
+        return res.status(409).json({
+          success: false,
+          message:
+            'We could not tell which agency this belongs to — open the shift from Today and log it there.',
+          data: null,
+        });
+      }
+
       const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
         prId: pr.id,
         userId: pr.userId,
-        agencyId: pr.agencyId,
+        agencyId: moneyAgencyId,
         prName: pr.name,
         prIc: pr.icNo,
         outlet: parsed.data.outlet ?? null,
@@ -1812,10 +1951,26 @@ export class PaymentVoucherControllerClass {
         return res.status(400).json({ success: false, message: outOfWeek, data: null });
       }
 
+      // Same rule as `addMyLine`, and this path has the BETTER evidence: a scanned
+      // or self-logged receipt carries a real `assignmentId` on the schema, not a
+      // dedupe ref that merely happens to be one.
+      const moneyAgencyId = await this.resolveMoneyAgencyId(pr, {
+        assignmentRef: parsed.data.assignmentId,
+        lineDate,
+      });
+      if (!moneyAgencyId) {
+        return res.status(409).json({
+          success: false,
+          message:
+            'We could not tell which agency this belongs to — open the shift from Today and log it there.',
+          data: null,
+        });
+      }
+
       const draftResult = await this.paymentVoucherRepository.getOrCreateCurrentWeekDraft({
         prId: pr.id,
         userId: pr.userId,
-        agencyId: pr.agencyId,
+        agencyId: moneyAgencyId,
         prName: pr.name,
         prIc: pr.icNo,
         outlet: parsed.data.outlet ?? null,
@@ -3404,6 +3559,36 @@ export class PaymentVoucherControllerClass {
       // The day has to be one this voucher actually covers, or a PR could raise
       // a claim against a date with nothing on it — and the baseline below would
       // silently compute as 0.00.
+      /*
+       * ⚠️ THE NAMED RECEIPT MUST BELONG TO THIS VOUCHER.
+       *
+       * `receiptId` is client input and was stored unchecked, while everything
+       * that READS it — `resolveDisputeItems`, `sumLinesFor` — is voucher-scoped.
+       * The two disagreeing is not a harmless mismatch, it is a silent one: a
+       * foreign receipt matches no line here, so the claim's baseline resolves to
+       * RM 0.00 and a dispute row is written against a voucher that has nothing to
+       * do with it, flipping THAT agency's voucher to `disputed` and blocking a
+       * signature over money it never owed. The agency that actually holds the
+       * contested receipt never hears about the claim at all.
+       *
+       * Reachable since a PR can hold two vouchers in one week and the phone
+       * merges them into one grid: tap a cell belonging to agency B, and the id
+       * sent alongside it came from B while the route names A. Refusing here is
+       * the same check `resolveDisputeItems` already performs on `lineId`.
+       */
+      if (parsed.data.receiptId) {
+        const owned = await this.paymentVoucherRepository.getReceiptWithVoucher(
+          parsed.data.receiptId,
+        );
+        if (!owned || owned.voucher.id !== voucherId) {
+          return res.status(400).json({
+            success: false,
+            message: 'That receipt is not on this voucher — reopen the day and try again.',
+            data: null,
+          });
+        }
+      }
+
       const covered = await this.paymentVoucherDisputeRepository.voucherHasDate(
         voucherId,
         disputeDate,

@@ -26,6 +26,7 @@ The owner's `InnocenZ_BuildSteps.xlsx` is the flow book (flows + where each stop
 - [A zero-count pay tier is a price, not a quota](zero-count-tier-is-a-price.md) — Post Job discarded a rate typed for a tier with 0 requested; persisting it alone would have made that tier unstaffable (`0 >= 0` reads as full)
 
 ### Access, scope and identity
+- [A privacy-worded refusal leaked the rival it hid](refusal-privacy-defeated-by-earlier-guard.md) — the guard 30 lines ABOVE it refused first and named the venue. Harden one refusal, walk every EARLIER one in the same handler. Also: `agencies[0]` on a feed that MERGES all agencies named shifts nobody at that agency booked
 
 - [Org scope guards](innocenz-org-scope-guards.md) — 🔴 a role guard that never checks the ORGANISATION is not a scope check; also: a zero result is evidence about the instrument, not proof of safety
 - [RBAC Portal → Role → Module C/R/U](innocenz-rbac-portal-cru.md) — 3 master portals, specialized roles, module_key + C/R/U only; migrate 0103 + seed/backfill

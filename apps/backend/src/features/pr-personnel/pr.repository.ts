@@ -336,6 +336,39 @@ export class PrRepositoryClass {
    * existence + enrichment check on `user`). `null` only if the account
    * itself is gone.
    */
+  /**
+   * Every agency this account is an APPROVED PR of — the honest plural form of the
+   * question `loadPrimaryMembership` answers by picking the oldest row.
+   *
+   * Exists so a caller that needs an agency but was given none can tell "there is
+   * exactly one, so the answer is not a guess" apart from "there are several, so
+   * refuse". The PV money writers use it as their last resort; without it their
+   * only options were the oldest membership — wrong for anyone on two rosters —
+   * or failing every single-agency PR along with them.
+   *
+   * `approved` ONLY. The live enum has five labels (pending, approved, rejected,
+   * leave_pending, left) and anything looser would count a roster the PR has LEFT
+   * as somewhere their pay may still be filed.
+   */
+  async listApprovedAgencyIds(userId: string): Promise<string[]> {
+    try {
+      const rows = await db
+        .select({ agencyId: AgencyPrTable.agencyId })
+        .from(AgencyPrTable)
+        .where(
+          and(eq(AgencyPrTable.userId, userId), eq(AgencyPrTable.approveStatus, 'approved')),
+        )
+        .orderBy(asc(AgencyPrTable.createdAt), asc(AgencyPrTable.id));
+      return [...new Set(rows.map((r) => r.agencyId))];
+    } catch (error) {
+      logger.error('[PrRepository.listApprovedAgencyIds] Error:', error);
+      // Empty, never a partial list: the caller reads `length === 1` as
+      // "unambiguous", and a truncated read would make an ambiguous case look
+      // certain — which is the exact failure this whole resolver exists to stop.
+      return [];
+    }
+  }
+
   async getByUserId(userId: string, agencyId?: string): Promise<PrType | null> {
     try {
       // `agencyId` decides WHICH membership the returned `pr` speaks for, and
