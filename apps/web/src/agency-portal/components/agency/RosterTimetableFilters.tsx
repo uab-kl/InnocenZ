@@ -161,6 +161,7 @@ export function RosterTimetableFilters({
 						 */}
 						<option value="">{t.filters.anyStatus}</option>
 						<option value="scheduled">{t.roster.scheduled}</option>
+						<option value="ended">{t.roster.ended}</option>
 						<option value="assignment-pending">
 							{t.rosterGrid.leaveAwaitingAgency}
 						</option>

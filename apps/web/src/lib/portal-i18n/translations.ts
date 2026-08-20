@@ -551,8 +551,11 @@ const en = {
 		everyone: "Everyone",
 		startFrom: "Start from",
 		endBy: "End by",
-		startTime: "Start Time",
-		endTime: "End Time",
+		/* Short on purpose: these sit inside a group already labelled "Shift
+		   time", separated by a dash, and "Start Time" clipped the picker's own
+		   80px label. */
+		startTime: "Start",
+		endTime: "End",
 		shiftStartFrom: "Shift start from",
 		shiftEndBy: "Shift end by",
 		minPayout: "Min payout (RM)",
@@ -882,6 +885,8 @@ const en = {
 		assign: "Assign",
 		onDuty: "On duty",
 		scheduled: "Scheduled",
+		/* The shift has finished — derived from the clock, never stored. */
+		ended: "Ended",
 		unavailable: "Unavailable",
 		newShift: "New shift",
 		loadingShifts: "Loading shifts…",
@@ -3232,8 +3237,8 @@ const zh: PortalTranslations = {
 		everyone: "全部人员",
 		startFrom: "开始时间不早于",
 		endBy: "结束时间不晚于",
-		startTime: "开始时间",
-		endTime: "结束时间",
+		startTime: "开始",
+		endTime: "结束",
 		shiftStartFrom: "班次开始时间不早于",
 		shiftEndBy: "班次结束时间不晚于",
 		minPayout: "最低支出（RM）",
@@ -3530,6 +3535,7 @@ const zh: PortalTranslations = {
 		assign: "指派",
 		onDuty: "在岗",
 		scheduled: "已排班",
+		ended: "已结束",
 		unavailable: "不可排班",
 		newShift: "新增班次",
 		loadingShifts: "正在加载班次…",

@@ -113,6 +113,7 @@ export function RosterShiftFilters({
 						<option value="">{t.filters.anyStatus}</option>
 						<option value="on-duty">{t.roster.onDuty}</option>
 						<option value="scheduled">{t.roster.scheduled}</option>
+						<option value="ended">{t.roster.ended}</option>
 						<option value="swap-pending">{t.rosterGrid.swapPending}</option>
 						<option value="assignment-pending">
 							{t.rosterGrid.leaveAwaitingAgency}

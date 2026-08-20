@@ -33,6 +33,7 @@ import {
 } from "@agency-portal/lib/pr-features";
 import { DEFAULT_ROSTER_DATE_ISO } from "@agency-portal/lib/roster-availability";
 import type { ShiftRequest } from "@agency-portal/lib/store";
+import type { PortalTranslations } from "@/lib/portal-i18n/translations";
 
 export type OutletShiftSource = "posted" | "tied-offer" | "assignment-pending";
 
@@ -150,7 +151,10 @@ function ymdToIso([y, m, d]: [number, number, number]) {
 
 type TierRatesContext = {
 	commissionRules: OutletCommissionRule[];
-	workspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	workspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 };
 
 function outletDefaultTierRates(outlet: string, ctx: TierRatesContext) {
@@ -510,7 +514,10 @@ export function buildAgencyOutletSummaries(input: {
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 }): AgencyOutletSummary[] {
 	const outlets = input.outlets ?? OUTLET_NAMES;
 	const tied = input.tiedOffers ?? PR_AGENCY_TIED_OFFERS;
@@ -657,9 +664,7 @@ function resolveShiftDateIso(shift: AgencyOutletAvailableShift): string {
  * the row's presence.
  */
 export function isOutletShiftOnOrAfterToday(
-	shift: Pick<AgencyOutletAvailableShift, "date" | "dateIso"> & {
-		shift?: string;
-	},
+	shift: { date: string; dateIso?: string; shift?: string },
 	todayIso: string = DEFAULT_ROSTER_DATE_ISO,
 ): boolean {
 	const dateIso = resolveOutletShiftDateIso(
@@ -681,7 +686,10 @@ export function listAvailableShiftsForEarlyReleaseReassign(input: {
 	dateIso?: string;
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 }): AgencyOutletAvailableShift[] {
 	const todayIso = input.todayIso ?? DEFAULT_ROSTER_DATE_ISO;
 	const dayIso = input.dateIso ?? todayIso;
@@ -1058,7 +1066,10 @@ export function outletHomeShiftRequests(input: {
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 }): ShiftRequest[] {
 	const todayIso = input.todayIso ?? DEFAULT_ROSTER_DATE_ISO;
 	const [summary] = buildAgencyOutletSummaries({
@@ -1083,7 +1094,10 @@ export function outletHomeShiftRequests(input: {
 			if (agencyPostedIds.has(shift.id)) return true;
 			return (
 				shift.status === "confirmed" &&
-				isOutletShiftOnOrAfterToday({ date: shift.date }, todayIso)
+				isOutletShiftOnOrAfterToday(
+					{ date: shift.date, dateIso: shift.dateIso },
+					todayIso,
+				)
 			);
 		})
 		.sort((a, b) => {
@@ -1105,7 +1119,10 @@ export type PlanningWeekOutletShiftInput = {
 	tiedOffers?: AgencyTiedOffer[];
 	todayIso?: string;
 	commissionRules?: OutletCommissionRule[];
-	outletWorkspace?: Pick<OutletWorkspaceSettings, "outletName" | "tierRates">;
+	outletWorkspace?: Pick<
+		OutletWorkspaceSettings,
+		"outletName" | "otAfterHours" | "tierRates"
+	>;
 };
 
 /** Outlet-posted / tied offers with open slots for each day in the planning week */

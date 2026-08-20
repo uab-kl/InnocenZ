@@ -254,6 +254,7 @@ const STATUS_LABEL: Record<
 	"on-duty": { label: (t) => t.roster.onDuty, variant: "green" },
 	"en-route": { label: (t) => t.roster.scheduled, variant: "ink" },
 	scheduled: { label: (t) => t.roster.scheduled, variant: "ink" },
+	ended: { label: (t) => t.roster.ended, variant: "ink" },
 	unavailable: { label: (t) => t.roster.unavailable, variant: "red" },
 	"swap-pending": { label: (t) => t.rosterGrid.swapPending, variant: "violet" },
 	"assignment-pending": {

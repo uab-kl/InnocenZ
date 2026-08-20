@@ -135,6 +135,11 @@ const STATUS_CELL: Record<
 		className: "iz-roster-week-cell--scheduled",
 		label: (t) => t.roster.scheduled,
 	},
+	// Past, and nothing else to say about it — drawn back, not as a live plan.
+	ended: {
+		className: "iz-roster-week-cell--ended",
+		label: (t) => t.roster.ended,
+	},
 	// Demo-only: `rosterStatusFromAssignment` never returns it, because the
 	// backend has no "on the way" stamp. Reads as scheduled, like the table.
 	"en-route": {

@@ -14938,6 +14938,10 @@ button.iz-pr-offer-row:hover {
 	white-space: nowrap;
 }
 
+/* Finished — pulled back so a past night stops competing with the live plan. */
+.iz-roster-week-cell--ended {
+	opacity: 0.62;
+}
 .iz-roster-week-cell--scheduled {
 	background: rgba(183, 156, 232, 0.12);
 	border-color: rgba(183, 156, 232, 0.35);
